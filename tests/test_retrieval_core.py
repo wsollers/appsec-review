@@ -144,7 +144,8 @@ def test_identity_and_location_contracts_reject_unsafe_or_ambiguous_values() -> 
     assert "do-not-return" not in json.dumps(sanitized) and sanitized["environment"]["API_TOKEN"] == "<redacted>"
     assert set(RelationKind) == {RelationKind(value) for value in (
         "DECLARES", "DEFINES", "REFERENCES", "CALLS", "CONTAINS", "GENERATED_FROM", "COMPILES_TO",
-        "LINKS_INTO", "DEPENDS_ON", "OBSERVED_AT", "DERIVED_FROM", "SUPPORTS", "CONTRADICTS")}
+        "LINKS_INTO", "DEPENDS_ON", "OBSERVED_AT", "DERIVED_FROM", "SUPPORTS", "CONTRADICTS",
+        "FLOWS_TO")}
 
 
 def test_search_filters_pagination_tamper_and_explicit_gaps(tmp_path: Path) -> None:
@@ -239,7 +240,7 @@ def test_mcp_core_parity_schema_serialization_and_live_stdio_smoke(tmp_path: Pat
     assert {item["name"] for item in TOOLS} == {
         "search", "find", "read_excerpt", "trace", "resolve_evidence", "coverage",
         "query_artifacts", "query_build_security", "query_ci_configuration", "query_codeql",
-        "query_owasp_workbench"}
+        "query_change_context", "query_owasp_workbench"}
     codeql = adapter.call("query_codeql", {"language": "cpp", "source_language": "C++",
                                             "build_unit": "native-main", "path": "src/auth.c"})
     assert [item["name"] for item in codeql["results"]] == ["cpp/unsafe-strcat"]

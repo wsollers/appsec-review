@@ -20,7 +20,7 @@ from .sources import GitSource
 
 
 TOOL_ID = "tool-git"
-ARGV_VERSION = "appsec-review/git-argv/1"
+ARGV_VERSION = "appsec-review/git-argv/2"
 _PROTECTED_CONFIG = (
     "-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null", "-c", "core.attributesFile=/dev/null",
     "-c", "core.pager=cat", "-c", "log.showSignature=false", "-c", "safe.directory=*",
@@ -109,6 +109,13 @@ class GitRunner:
 
     def tree(self) -> GitRun:
         return self.run("tree", ("ls-tree", "-r", "-z", "--full-tree", "HEAD"))
+
+    def file_history(self, index: int, path: str, max_count: int) -> GitRun:
+        """Zero-context first-parent patches of one file, following renames, for line regions."""
+        return self.run(f"lines-{index:05d}", (
+            "log", "--first-parent", "--diff-merges=first-parent", "--follow", "-M", "--unified=0",
+            "--no-ext-diff", "--no-textconv", "--no-mailmap", "--no-color", "--no-abbrev",
+            f"--max-count={max_count}", "--format=%x01%H", "HEAD", "--", path))
 
     def blame(self, index: int, path: str) -> GitRun:
         return self.run(f"blame-{index:05d}", (

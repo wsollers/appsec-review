@@ -20,6 +20,15 @@ Repository authority remains in [`../../AGENTS.md`](../../AGENTS.md). This page 
   signals for churn-led review prioritization; Perforce remains planned.
 - [`../operations/source-history-analysis.md`](../operations/source-history-analysis.md) — history
   job configuration, GitHub enrichment, image build, and recovery.
+- [`change-context-analysis.md`](change-context-analysis.md) — review-speed, deployment-proximity,
+  scope-sprawl, repeated-repair, test-churn, and ownership signals with a review-priority index.
+- [`../operations/change-context-analysis.md`](../operations/change-context-analysis.md) —
+  change-context sources, export pinning, configuration, and retrieval.
+- [`review-prioritization.md`](review-prioritization.md) — function-level cyclomatic and cognitive
+  complexity, import coupling, boundary/privilege/suppression heuristics, CodeQL source-to-sink
+  paths, and the LLM Prioritization Score.
+- [`../operations/review-prioritization.md`](../operations/review-prioritization.md) — prioritization
+  configuration, outputs, retrieval examples, and coverage limits.
 - [`cross-language-codeql.md`](cross-language-codeql.md) — cross-language CodeQL scope and integration design.
 - [`../SEI-CERT.md`](../SEI-CERT.md) — SEI CERT coverage overview, official-standard links, and status totals.
 - [`sei-cert-rule-pack.md`](sei-cert-rule-pack.md) — SEI CERT Semgrep/OpenGrep rule pack, CERT

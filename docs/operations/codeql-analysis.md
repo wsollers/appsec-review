@@ -67,7 +67,10 @@ checkpoints, or SARIF identities are framework-integrity failures and stop publi
 ## Evidence and retrieval
 
 SARIF 2.1 results, rule metadata, severities, fingerprints, suppressions, baseline state, locations,
-and code-flow steps are normalized into immutable `observations` shards. Exact path matches are
+and code-flow steps are normalized into immutable `observations` shards. Each step records its
+SARIF `code_flow` index (normalizer `appsec-review/codeql-sarif-normalizer/2`), so alternative paths
+for one result stay separable; `job_review_prioritization` keeps the shortest flow per source and
+sink as a verified semantic path. Exact path matches are
 distinguished from suffix matches; ambiguity and unmapped locations remain gaps. The publisher
 composes its manifest onto the current accepted manifest rather than replacing upstream evidence.
 

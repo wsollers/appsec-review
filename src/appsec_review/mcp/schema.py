@@ -8,7 +8,7 @@ from .owasp import QUERY_TOOL_SCHEMA
 
 
 IDENTITY = {"type": "string", "pattern": "^asr:[a-z][a-z0-9_]*:[0-9a-f]{64}$"}
-INDEX = {"type": "string", "enum": ["source", "observations", "components", "build", "artifacts", "build_security", "compiled", "analysis", "evidence", "history", "tags"]}
+INDEX = {"type": "string", "enum": ["source", "observations", "components", "build", "artifacts", "build_security", "compiled", "analysis", "evidence", "history", "tags", "priority"]}
 
 TOOLS: tuple[dict[str, Any], ...] = (
     {"name": "search", "description": "Full-text search accepted immutable evidence indexes.",
@@ -104,6 +104,20 @@ TOOLS: tuple[dict[str, Any], ...] = (
          "level": {"type": "string", "maxLength": 128},
          "path": {"type": "string", "maxLength": 4096},
          "shard": {"type": "string", "pattern": "^codeql-[A-Za-z0-9_.-]{1,120}$"},
+         "limit": {"type": "integer", "minimum": 1, "maximum": 100},
+         "cursor": {"type": "string", "maxLength": 4096},
+     }}},
+    {"name": "query_change_context", "description": "Query accepted change-context review-priority records in rank order; they order review work and are never findings.",
+     "inputSchema": {"type": "object", "additionalProperties": False, "properties": {
+         "scope": {"type": "string", "enum": ["file", "function", "component"]},
+         "path": {"type": "string", "maxLength": 4096},
+         "component": {"type": "string", "maxLength": 4096},
+         "signal": {"type": "string", "enum": ["fast_review_change_count", "stale_approval_change_count",
+                                               "unapproved_mainline_change_count", "off_hours_change_count",
+                                               "pre_deployment_change_count", "sprawling_change_count",
+                                               "repeated_repair_peak", "fix_on_fix_event_count",
+                                               "untested_production_change_count",
+                                               "lifetime_principal_author_share", "departed_dominant_owner"]},
          "limit": {"type": "integer", "minimum": 1, "maximum": 100},
          "cursor": {"type": "string", "maxLength": 4096},
      }}},

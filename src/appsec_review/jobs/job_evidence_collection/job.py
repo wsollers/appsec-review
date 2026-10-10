@@ -170,6 +170,7 @@ def _rule_pack_identity(unit: UnitContext, adapter: ToolAdapter) -> dict[str, An
         try:
             lock = json.loads((repository / "rules" / "semgrep" / "rules.lock.json").read_text(encoding="utf-8"))
             packs["semgrep-security-baseline"] = {"sha256": lock["files"]["security.yml"]["sha256"]}
+            packs["semgrep-review-signals"] = {"sha256": lock["files"]["review-signals.yml"]["sha256"]}
         except (OSError, KeyError, json.JSONDecodeError):
             packs["semgrep-security-baseline"] = {"verified": False}
     return {"rule_packs": packs} if packs else {}
@@ -185,9 +186,9 @@ def _prerequisites(unit: UnitContext, adapter: ToolAdapter, selection: Applicabi
         rules = repository / "rules" / "semgrep"
         try:
             lock = json.loads((rules / "rules.lock.json").read_text(encoding="utf-8"))
-            expected = lock["files"]["security.yml"]["sha256"]
-            verified = lock.get("schema") == "appsec-review/rule-bundle-lock/1" and file_sha256(
-                rules / "security.yml") == expected
+            verified = lock.get("schema") == "appsec-review/rule-bundle-lock/1" and all(
+                file_sha256(rules / name) == lock["files"][name]["sha256"]
+                for name in ("security.yml", "review-signals.yml"))
         except (OSError, KeyError, ValueError, json.JSONDecodeError):
             verified = False
         if not verified:
@@ -813,7 +814,8 @@ def build_job(*, executor_factory: ExecutorFactory | None = None, fail_tool: str
         static_tools = {tool_id: tool for tool_id, tool in catalog.tools.items()
                         if tool.metadata.get("static_adapter", True) is not False}
         paths = [root / "containers" / "catalog.toml", root / "containers" / "runtime-policy.toml",
-                 root / "rules" / "semgrep" / "security.yml", root / "rules" / "semgrep" / "rules.lock.json",
+                 root / "rules" / "semgrep" / "security.yml", root / "rules" / "semgrep" / "review-signals.yml",
+                 root / "rules" / "semgrep" / "rules.lock.json",
                  root / "rules" / "sei-cert" / "pack.lock.json",
                  root / "data" / "feeds" / "osv" / "current.json",
                  root / "data" / "feeds" / "grype" / "current.json",

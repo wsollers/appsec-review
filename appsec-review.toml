@@ -234,8 +234,11 @@ name = "source_history_analysis"
 workers = 1
 
 [jobs.job_source_history_analysis.settings]
-# Windows are anchored to the mainline (main, else master) snapshot commit time, never wall clock.
-window_days = 365
+# The window is M calendar months (UTC) ending at the mainline (main, else master) snapshot commit's
+# committer time, never wall clock. A start day missing from its month clamps to that month's end.
+history_window_months = 6
+# N: the hotspot index publishes the top N ranked files and the top N ranked symbols.
+hotspot_count = 10
 max_changes = 20000
 bulk_change_file_threshold = 500
 recency_half_life_days = 90
@@ -245,15 +248,55 @@ co_change_top_k = 10
 co_change_min_support = 3
 blame_max_files = 50
 blame_max_file_bytes = 1048576
+# Length of the SII file ranking copied into the accepted document for the analysis plan.
 ranking_top_n = 200
 fix_labels = ["bug", "fix", "regression"]
 security_labels = ["security", "vulnerability"]
 
-# Ranking is churn-led; other signals are published but carry no weight unless configured here.
-[jobs.job_source_history_analysis.settings.ranking_weights]
-churn_lines = 3
-recency_weighted_churn = 2
-change_count = 1
+[jobs.job_source_history_analysis.settings.fix_on_fix]
+# A later fix within this many days of an earlier fix on the same lines or function (14-30).
+interval_days = 30
+
+[jobs.job_source_history_analysis.settings.line_history]
+# Per-file zero-context patches for line regions; files beyond the bound are named gaps.
+max_files = 50
+max_file_bytes = 1048576
+
+[jobs.job_source_history_analysis.settings.symbols]
+# Tree-sitter function spans and complexity for the highest-churn rank-eligible files.
+enabled = true
+max_files = 200
+max_file_bytes = 1048576
+max_nodes_per_file = 200000
+
+[jobs.job_source_history_analysis.settings.sii]
+# Security Instability Index: 0-100 over min-max normalized metrics; see the architecture document.
+complexity_metric = "cyclomatic"
+tier_1_share = 0.05
+tier_2_share = 0.15
+
+[jobs.job_source_history_analysis.settings.sii.weights]
+relative_churn = 0.35
+revision_frequency = 0.25
+author_entropy = 0.15
+complexity = 0.25
+
+[jobs.job_source_history_analysis.settings.filters]
+# Files matching these POSIX globs keep their metrics but are excluded from ranking. A pattern
+# without "/" matches the file name at any depth; "**/" spans directories.
+generated = ["**/generated/**", "**/gen/**", "*.pb.go", "*_pb2.py", "*_pb2_grpc.py", "*.pb.cc", "*.pb.h",
+             "*.g.dart", "*.designer.cs", "*.min.js", "*.min.css", "*.map"]
+lockfile = ["package-lock.json", "npm-shrinkwrap.json", "yarn.lock", "pnpm-lock.yaml", "poetry.lock", "Pipfile.lock",
+            "uv.lock", "Cargo.lock", "go.sum", "composer.lock", "Gemfile.lock", "packages.lock.json",
+            "gradle.lockfile", "pubspec.lock", "mix.lock", "*.lock"]
+fixture = ["**/fixtures/**", "**/fixture/**", "**/testdata/**", "**/__snapshots__/**", "*.snap", "**/golden/**"]
+documentation = ["*.md", "*.rst", "*.adoc", "*.txt", "docs/**", "doc/**", "LICENSE*", "CHANGELOG*", "NOTICE*"]
+vendored = ["**/vendor/**", "**/third_party/**", "**/node_modules/**"]
+# Test paths are ranked like other code; they only classify production-to-test churn.
+test = ["**/test/**", "**/tests/**", "**/spec/**", "**/__tests__/**", "test_*", "*_test.*", "*.test.*", "*.spec.*",
+        "*Test.java", "*Tests.cs"]
+# A change whose subject names formatting is formatting churn only if |added - deleted| <= tolerance * max.
+formatting_balance_tolerance = 0.1
 
 [jobs.job_source_history_analysis.settings.git]
 enabled = true
@@ -283,12 +326,119 @@ workers = 1
 [jobs.job_source_history_analysis.steps.analyze.tasks.compute_signals]
 [jobs.job_source_history_analysis.steps.analyze.tasks.blame_age]
 [jobs.job_source_history_analysis.steps.analyze.tasks.co_change]
+[jobs.job_source_history_analysis.steps.analyze.tasks.line_history]
+[jobs.job_source_history_analysis.steps.analyze.tasks.symbol_spans]
+[jobs.job_source_history_analysis.steps.analyze.tasks.fix_on_fix]
+[jobs.job_source_history_analysis.steps.analyze.tasks.symbol_signals]
 [jobs.job_source_history_analysis.steps.analyze.tasks.rank]
 
 [jobs.job_source_history_analysis.steps.publish]
 workers = 1
 [jobs.job_source_history_analysis.steps.publish.tasks.index_history]
 [jobs.job_source_history_analysis.steps.publish.tasks.publish_handoff]
+
+[jobs.job_change_context_analysis]
+name = "change_context_analysis"
+workers = 1
+
+[jobs.job_change_context_analysis.settings]
+# Change-context priorities order review work; they are never findings. Missing or untrusted data is
+# a named gap and an unavailable metric, never zero.
+ranking_top_files = 200
+ranking_top_functions = 200
+ranking_top_components = 100
+supporting_change_limit = 20
+
+[jobs.job_change_context_analysis.settings.review]
+# "github_enrichment" reuses the accepted history job's GitHub facts; "export" reads a hash-pinned
+# appsec-review/review-records/1 file relative to the repository root; "none" disables review signals.
+source = "github_enrichment"
+export_path = ""
+export_sha256 = ""
+fast_review_seconds = 300
+
+[jobs.job_change_context_analysis.settings.schedule]
+# IANA zone used for off-hours classification. Empty means off-hours is unavailable, never inferred.
+time_zone = ""
+business_hours_start = "08:00"
+business_hours_end = "18:00"
+weekend_days = ["saturday", "sunday"]
+
+[jobs.job_change_context_analysis.settings.deployments]
+# Deployment proximity uses only actual deployment events (appsec-review/deployment-events/1).
+enabled = false
+export_path = ""
+export_sha256 = ""
+environments = ["production"]
+pre_deployment_window_hours = 24
+
+[jobs.job_change_context_analysis.settings.scope_sprawl]
+min_unrelated_groups = 3
+min_churn_lines = 400
+min_group_entropy = 0.5
+related_component_min_support = 3
+
+[jobs.job_change_context_analysis.settings.repeated_repairs]
+window_days = 60
+min_fix_changes = 4
+fix_on_fix_max_checks = 100
+
+[jobs.job_change_context_analysis.settings.test_association]
+enabled = true
+production_extensions = [".c", ".cc", ".cpp", ".cs", ".go", ".h", ".hpp", ".java", ".js", ".jsx", ".kt",
+                         ".php", ".py", ".rb", ".rs", ".scala", ".swift", ".ts", ".tsx"]
+test_patterns = ["test/**", "tests/**", "**/test/**", "**/tests/**", "**/__tests__/**", "**/test_*.py",
+                 "**/*_test.py", "**/*_test.go", "**/*Test.java", "**/*Tests.java", "**/*Tests.cs",
+                 "**/*.test.{js,jsx,ts,tsx}", "**/*.spec.{js,jsx,ts,tsx}", "**/*_spec.rb"]
+contract_patterns = ["**/*.proto", "**/*.graphql", "**/*.avsc", "**/openapi*.{json,yaml,yml}",
+                     "**/swagger*.{json,yaml,yml}"]
+min_production_churn_lines = 50
+
+[jobs.job_change_context_analysis.settings.ownership]
+dominant_owner_share = 0.5
+bus_factor_share = 0.5
+line_attribution_max_files = 50
+line_attribution_max_file_bytes = 1048576
+
+[jobs.job_change_context_analysis.settings.organization]
+# Departure comes only from an appsec-review/organization-membership/1 export, never Git inactivity.
+enabled = false
+export_path = ""
+export_sha256 = ""
+
+[jobs.job_change_context_analysis.settings.priority_weights]
+fast_review_change_count = 2
+stale_approval_change_count = 2
+unapproved_mainline_change_count = 3
+off_hours_change_count = 1
+pre_deployment_change_count = 2
+sprawling_change_count = 2
+repeated_repair_peak = 3
+fix_on_fix_event_count = 2
+untested_production_change_count = 2
+lifetime_principal_author_share = 1
+departed_dominant_owner = 3
+
+[jobs.job_change_context_analysis.steps.load]
+workers = 1
+[jobs.job_change_context_analysis.steps.load.tasks.accepted_history]
+[jobs.job_change_context_analysis.steps.load.tasks.external_sources]
+
+[jobs.job_change_context_analysis.steps.attribute]
+workers = 1
+[jobs.job_change_context_analysis.steps.attribute.tasks.line_attribution]
+[jobs.job_change_context_analysis.steps.attribute.tasks.fix_on_fix]
+
+[jobs.job_change_context_analysis.steps.analyze]
+workers = 1
+[jobs.job_change_context_analysis.steps.analyze.tasks.change_signals]
+[jobs.job_change_context_analysis.steps.analyze.tasks.unit_signals]
+[jobs.job_change_context_analysis.steps.analyze.tasks.rank]
+
+[jobs.job_change_context_analysis.steps.publish]
+workers = 1
+[jobs.job_change_context_analysis.steps.publish.tasks.index_change_context]
+[jobs.job_change_context_analysis.steps.publish.tasks.publish_handoff]
 
 [jobs.job_target_analysis_plan]
 name = "target_analysis_plan"
@@ -354,6 +504,88 @@ workers = 8
 [jobs.job_tree_sitter_ast.steps.acceptance]
 workers = 1
 [jobs.job_tree_sitter_ast.steps.acceptance.tasks.publish_handoff]
+
+[jobs.job_review_prioritization]
+name = "review_prioritization"
+workers = 1
+
+# Metrics and heuristics that order LLM review attention.  A high score means "review first"; it is
+# never a finding.  Missing coverage is a named gap.  See docs/architecture/review-prioritization.md.
+[jobs.job_review_prioritization.settings]
+max_files = 50000
+max_file_bytes = 2097152
+max_functions = 500000
+max_signals_per_file = 200
+max_import_records = 500000
+max_semantic_paths = 5000
+max_flow_steps_per_path = 128
+cyclomatic_thresholds = [10, 15]
+# Feature share_above_threshold uses this threshold; it must be listed in cyclomatic_thresholds.
+scored_threshold = 15
+# Count Rust `?` and Go `if err != nil { return }` as cyclomatic decisions (both or neither).
+count_error_propagation = true
+min_edge_confidence = 0.8
+custom_parsing_min_operations = 6
+custom_parsing_min_density = 0.5
+state_mutation_min_operations = 3
+# "run" normalizes over every scored item of a scope; "language" normalizes within each language.
+normalization_population = "run"
+
+[jobs.job_review_prioritization.settings.priority_weights]
+cyclomatic = 2
+cognitive = 2
+complexity_density = 1
+share_above_threshold = 1
+afferent_coupling = 1
+efferent_coupling = 1
+instability = 0
+suppression_density = 1
+ingress = 2
+sink = 2
+privilege_shift = 3
+sensitive_wrapper = 1
+state_mutation = 1
+custom_parsing = 1
+public_api = 1
+parser = 1
+validator = 0
+middleware = 1
+semantic_path = 3
+history_hotspot = 2
+
+[jobs.job_review_prioritization.settings.index]
+# A positive *_top_count selects that many items; 0 selects ceil(fraction x population).
+file_top_fraction = 0.25
+file_top_count = 0
+function_top_fraction = 0.10
+function_top_count = 0
+max_indexed_items = 5000
+max_evidence_links_per_item = 50
+max_graph_neighbors = 5000
+
+[jobs.job_review_prioritization.settings.sources]
+history = true
+semgrep = true
+codeql = true
+
+[jobs.job_review_prioritization.steps.load]
+workers = 1
+[jobs.job_review_prioritization.steps.load.tasks.accepted_inputs]
+
+[jobs.job_review_prioritization.steps.extract]
+workers = 1
+[jobs.job_review_prioritization.steps.extract.tasks.syntax_metrics]
+[jobs.job_review_prioritization.steps.extract.tasks.dependency_graph]
+[jobs.job_review_prioritization.steps.extract.tasks.semantic_evidence]
+
+[jobs.job_review_prioritization.steps.prioritize]
+workers = 1
+[jobs.job_review_prioritization.steps.prioritize.tasks.score]
+
+[jobs.job_review_prioritization.steps.publish]
+workers = 1
+[jobs.job_review_prioritization.steps.publish.tasks.index_priority]
+[jobs.job_review_prioritization.steps.publish.tasks.publish_handoff]
 
 [jobs.job_project_build]
 name = "project_build"

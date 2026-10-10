@@ -45,7 +45,15 @@ class EntityKind(StrEnum):
     FINDING_PACKAGE = "finding_package"
     CHANGE = "change"
     HISTORY_SIGNAL = "history_signal"
+    HOTSPOT = "hotspot"
+    CHANGE_CONTEXT_SIGNAL = "change_context_signal"
+    REVIEW_UNIT = "review_unit"
+    DEPLOYMENT_EVENT = "deployment_event"
     TAG_ASSIGNMENT = "tag_assignment"
+    PRIORITY_ITEM = "priority_item"
+    REVIEW_SIGNAL = "review_signal"
+    REVIEW_FLOW_STEP = "review_flow_step"
+    REVIEW_CONTEXT_FILE = "review_context_file"
 
 
 class RelationKind(StrEnum):
@@ -62,6 +70,7 @@ class RelationKind(StrEnum):
     DERIVED_FROM = "DERIVED_FROM"
     SUPPORTS = "SUPPORTS"
     CONTRADICTS = "CONTRADICTS"
+    FLOWS_TO = "FLOWS_TO"
 
 
 def canonical_json(value: Any) -> bytes:

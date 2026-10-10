@@ -65,7 +65,9 @@ Complete target files and raw scanner output are never placed in indexes or prom
 ## Rules, databases, CLI, and resume
 
 The repository-authored MIT Semgrep bundle lives under `rules/semgrep/`; `rules.lock.json` pins its
-SHA-256 and provenance. Semgrep and OpenGrep also run the SEI CERT rule pack from `rules/sei-cert/`
+SHA-256 and provenance. Semgrep runs both `security.yml` and the review-prioritization pattern pack
+`review-signals.yml`, whose matches `job_review_prioritization` consumes as observed-syntax signals
+(see [`review-prioritization.md`](review-prioritization.md)). Semgrep and OpenGrep also run the SEI CERT rule pack from `rules/sei-cert/`
 after verifying its rule files against `pack.lock.json`; a mismatch blocks both tools with an explicit
 gap. Their records carry the CERT mapping and source hash, and engine errors or skipped files become
 gaps. See [`sei-cert-rule-pack.md`](sei-cert-rule-pack.md). The adapters do not install PHP dependencies or invent project security

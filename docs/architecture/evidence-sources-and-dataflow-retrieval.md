@@ -125,6 +125,7 @@ regular expressions, globs, filesystem paths, or shell.
 | `query_build_security` | exists | build flags and hardening | compile unit, linked artifact, configuration | redacted flags only |
 | `query_ci_configuration` | exists | CI/CD | provider, workflow, job, rule | |
 | `query_owasp_workbench` | exists | OWASP controls | standard, control, disposition | |
+| `query_change_context` | exists | change context | scope, path, component, signal | review-priority order only, never findings; coverage rows returned as gaps |
 | `query_dataflow` | planned | dataflow and reachability | `summary(function)`, `paths(entrypoint\|source_class, sink)`, `guards(sink)`, `ranges(sink)`, `callers/callees(function, depth)`, `sarif_path(observation)`, `aliases(operand)` | paths expanded lazily, bounded count/depth; truncation is a gap |
 | `query_contracts` | planned | API/IDL contracts | entrypoint, route, RPC, message/field, handler symbol | returns `declared` vs `enforced` with linking evidence |
 | `query_deployment` | planned | deployment and exposure | service, image, artifact, exposure class | privileges, FS, network, size limits, auth placement |

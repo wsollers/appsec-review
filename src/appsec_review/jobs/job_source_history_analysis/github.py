@@ -2,8 +2,10 @@
 
 Only derived review-process facts are retained: whether a commit arrived through a pull request,
 whether someone other than the author approved it, whether the approval covered the merged head,
-whether the author merged it, and sanitized label names.  Titles, bodies, comments, and account
-names are never stored.  The repository identity and API host come only from central configuration.
+whether the author merged it, sanitized label names, and the review timeline (creation, merge,
+final-head commit time, and each other-reviewer approval's time and reviewed commit).  Titles,
+bodies, comments, and account names are never stored.  The repository identity and API host come
+only from central configuration.
 """
 
 from __future__ import annotations
@@ -21,6 +23,8 @@ from typing import Any
 Transport = Callable[[str, Mapping[str, str], int], tuple[int, Mapping[str, str], bytes]]
 _REPOSITORY = re.compile(r"[A-Za-z0-9_.-]{1,100}/[A-Za-z0-9_.-]{1,100}")
 _LABEL = re.compile(r"[^A-Za-z0-9 _.:/+-]")
+_TIMESTAMP = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})")
+_OBJECT_ID = re.compile(r"[0-9a-f]{40}|[0-9a-f]{64}")
 MAX_RESPONSE_BYTES = 4 * 1024 * 1024
 
 
@@ -93,6 +97,14 @@ def _labels(pull: Mapping[str, Any]) -> list[str]:
     return sorted(set(value for value in values if value))
 
 
+def _timestamp(value: Any) -> str | None:
+    return value if isinstance(value, str) and _TIMESTAMP.fullmatch(value) else None
+
+
+def _object_id(value: Any) -> str | None:
+    return value if isinstance(value, str) and _OBJECT_ID.fullmatch(value) else None
+
+
 def enrich(client: GitHubClient, snapshot_commit: str, commits: list[str]) -> dict[str, Any]:
     """Collect per-commit review facts newest-first until the request budget is spent."""
     repository = urllib.parse.quote(client.settings.repository, safe="/")
@@ -150,7 +162,18 @@ def _pull_facts(client: GitHubClient, repository: str, number: int, summary: Map
                  isinstance(item.get("user"), Mapping) and item["user"].get("login") != author]
     approved = bool(approvals)
     stale = approved and head is not None and all(item.get("commit_id") != head for item in approvals)
+    head_committed_at = None
+    if _object_id(head):
+        status, commit = client.get(f"/repos/{repository}/commits/{head}")
+        if status == 200 and isinstance(commit, Mapping) and isinstance(commit.get("commit"), Mapping):
+            committer = commit["commit"].get("committer")
+            head_committed_at = _timestamp(committer.get("date")) if isinstance(committer, Mapping) else None
+    timeline = sorted(({"submitted_at": _timestamp(item.get("submitted_at")), "commit_id": _object_id(item.get("commit_id"))}
+                       for item in approvals), key=lambda item: (item["submitted_at"] or "", item["commit_id"] or ""))
     return {"labels": labels, "approved_by_other": approved if reviews_known else None,
             "approval_stale": stale if reviews_known else None,
             "self_merged": (merged_by == author) if merged_by and author else None,
-            "review_bypass": (not approved or stale) if reviews_known else None}
+            "review_bypass": (not approved or stale) if reviews_known else None,
+            "created_at": _timestamp(summary.get("created_at")), "merged_at": _timestamp(summary.get("merged_at")),
+            "head_sha": _object_id(head), "head_committed_at": head_committed_at,
+            "approvals": timeline if reviews_known else None}

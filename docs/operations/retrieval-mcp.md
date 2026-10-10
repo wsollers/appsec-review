@@ -53,7 +53,21 @@ validator, batch, disposition, or shard and returns explicit pagination, truncat
 coverage gaps. A run without an accepted workbench manifest returns an availability gap, not an
 empty-coverage claim.
 
+`query_change_context` reads only the accepted `history/change-context` shard and returns
+change-context priority records in rank order, filtered by scope (`file`, `function`, `component`),
+exact path, component, or a non-zero signal. Every incomplete source (review records, deployments,
+schedule, test association, organization data, function attribution, fix-on-fix) is returned as a
+coverage gap. Records order review work and are never findings; see
+[`change-context-analysis.md`](change-context-analysis.md).
+
 `query_ci_configuration` reads only accepted `ci_*` observation shards and the canonical
 `ci_findings` evidence shard. Exact filters cover provider, pipeline, workflow, stage, job, step,
 tool, rule, category, canonical finding, and shard. Unavailable linter branches are returned as
 coverage gaps; the tool never scans the target tree or reads an evaluator guide.
+
+The `priority` index holds `job_review_prioritization` output: `priority_item` entities for the
+indexed top files and functions (full feature vector, percentiles, missing features, coverage, rank,
+and score) and `review_signal` entities for their linked evidence. Query it with the generic
+`search`, `find`, `trace`, and `coverage` tools and `"indexes": ["priority"]`. A ranked item orders
+review attention and is never a finding; examples are in
+[`review-prioritization.md`](review-prioritization.md).
