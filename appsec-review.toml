@@ -1116,7 +1116,7 @@ result_validator = "1"
 
 [jobs.job_owasp_control_assessment.settings.standards.ASVS]
 catalog_path = "data/reference/owasp/fixtures/asvs-5.0.0.json"
-catalog_sha256 = "81e598b97836a8195bdd9ad890c2ae607530452f5c9cf5da6e32c1740d6d0450"
+catalog_sha256 = "159fda7543e002118f9faef99a3388db9f9c714931965960010939fcea8701e9"
 version = "5.0.0"
 repository = "https://github.com/OWASP/ASVS"
 ref = "v5.0.0_release"
