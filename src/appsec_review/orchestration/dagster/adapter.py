@@ -171,6 +171,7 @@ def _build_dagster_graph(name: str, jobs: tuple[Job, ...], config: AppConfig,
                     "job_post_build_security_assessment", "job_owasp_control_assessment",
                     "job_ci_configuration_analysis", "job_tree_sitter_ast", "job_source_history_analysis",
                     "job_change_context_analysis", "job_review_prioritization", "job_security_tagging",
+                    "job_review_data_indexing", "job_review_package_assembly",
                 }
                 uses_target = selected.job_id in target_jobs
                 run_id = upstream.get("run_id") or tags.get("appsec/application_run_id")

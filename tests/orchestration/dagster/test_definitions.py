@@ -114,8 +114,9 @@ def test_definitions_reject_registry_config_drift(tmp_path: Path) -> None:
         build_definitions(_config(tmp_path, configured_job="job_other"), registry=_registry())
 
 
-@pytest.mark.parametrize("job_id", ["job_artifact_indexing", "job_artifact_security_analysis"])
-def test_artifact_jobs_receive_target_snapshot(tmp_path: Path, monkeypatch, job_id: str) -> None:
+@pytest.mark.parametrize("job_id", ["job_artifact_indexing", "job_artifact_security_analysis",
+                                    "job_review_data_indexing", "job_review_package_assembly"])
+def test_target_bound_jobs_receive_target_snapshot(tmp_path: Path, monkeypatch, job_id: str) -> None:
     target = tmp_path / "target"
     target.mkdir()
     monkeypatch.setenv("APPSEC_REVIEW_TARGET", str(target))
