@@ -602,7 +602,7 @@ max_run_files = 500000
 max_facts_per_product = 200000
 max_links_per_rule = 200000
 # High/Critical and unknown-severity lead menus are partitioned at this size and never truncated.
-menu_partition_size = 200
+menu_partition_size = 20
 max_build_exec_events = 20000
 max_commands_per_action = 64
 feed_max_age_days = 14

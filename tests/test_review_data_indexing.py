@@ -13,6 +13,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tomllib
 from typing import Any
 
 import pytest
@@ -37,6 +38,13 @@ ROOT = Path(__file__).resolve().parents[1]
 TOOL = ROOT / "containers" / "tools" / "sqlite-fts" / "sqlite_fts.py"
 SNAPSHOT = "target-sha256:" + "7" * 64
 SECRETS = ("supersecretvalue", "hunter2plaintext", "/tmp/evil.so", "/home/user/secret")
+
+
+def test_scanner_menu_partition_fits_review_package_page() -> None:
+    jobs = tomllib.loads((ROOT / "appsec-review.toml").read_text(encoding="utf-8"))["jobs"]
+    partition = jobs["job_review_data_indexing"]["settings"]["menu_partition_size"]
+    page = jobs["job_review_package_assembly"]["settings"]["max_page_size"]
+    assert 1 <= partition <= page <= 100
 
 
 def _configured(tmp_path: Path, extra: str = ""):
