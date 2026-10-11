@@ -108,8 +108,8 @@ def send(request: ModelRequest, *, timeout_seconds: int, binary: str = "claude",
         environment.pop("ANTHROPIC_API_KEY", None)
         environment.pop("ANTHROPIC_AUTH_TOKEN", None)
     argv = [executable, "-p", "--output-format", "json", "--no-session-persistence",
-            "--permission-mode", "bypassPermissions", "--model", request.model,
-            "--effort", request.reasoning, "--allowedTools", ""]
+            "--safe-mode", "--tools", "", "--model", request.model,
+            "--effort", request.reasoning]
     completed = subprocess.run(
         argv, input=json.dumps(prompt, sort_keys=True), text=True, encoding="utf-8",
         stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=timeout_seconds,
@@ -154,7 +154,7 @@ def models(names: Sequence[str], *, timeout_seconds: int, binary: str = "claude"
     result: dict[str, Any] = {}
     for name in names:
         argv = [executable, "-p", "--output-format", "json", "--no-session-persistence",
-                "--permission-mode", "bypassPermissions", "--model", name, "--allowedTools", "",
+                "--safe-mode", "--tools", "", "--model", name,
                 "--system-prompt", "Reply with the single word ok."]
         try:
             completed = subprocess.run(

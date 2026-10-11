@@ -14,8 +14,10 @@ Model settings and worker count are centralized under `[jobs.job_target_analysis
 in `appsec-review.toml`. Build-recipe inference is partitioned by language family and build system,
 then executed through the configured bounded worker pool. Every request composes the DevOps Engineer
 persona with a language-specialized Build Engineer role and only the build units in that partition.
-The shipped configuration uses the bounded Anthropic Messages adapter and requires
-`ANTHROPIC_API_KEY` at execution time. The runtime stores exact guidance and model identity beneath
+The shipped configuration uses the Claude CLI subscription transport. The CLI runs with
+`--safe-mode --tools ""`, so review inference cannot invoke built-in shell, file, or browser tools;
+its input is the bounded request assembled by the application. The runtime stores exact guidance
+and model identity beneath
 `runs/<run-id>/data/guidance/<sha256>/`, and logs only hashes, identity, counts, duration, retries,
 status, and token counts in the central log. Bounded raw provider responses—including rejected
 responses—are retained as run-owned diagnostic artifacts beside the inference task so malformed
