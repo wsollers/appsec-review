@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 import pytest
@@ -40,7 +40,8 @@ def _row(tool: str, kind: str, argv: Sequence[str], _workspace: Path, _directory
             "inputs": [], "outputs": [], "origin": origin, "mapping_confidence": 1.0}
 
 
-def _classify(name: str, _argv: Sequence[str]) -> ToolIdentity | None:
+def _classify(executable: str, _argv: Sequence[str]) -> ToolIdentity | None:
+    name = PurePosixPath(executable).name
     return ToolIdentity(name, "compiler") if name in {"cc", "clang"} else None
 
 
@@ -52,11 +53,11 @@ DESCRIPTOR = CapturedBuildDescriptor(
 )
 
 
-def _exec(executable: str, argv: Sequence[str], *, result: int = 0,
-          redacted_names: Sequence[str] = ()) -> dict[str, Any]:
-    return {"kind": "process_exec", "ordinal": 1, "executable": executable,
-            "argv": list(argv), "result": result, "envp_captured": True,
-            "envp_redacted_names": list(redacted_names)}
+def _exec(executable: str, argv: Sequence[str], *, result: int = 0, ordinal: int = 1,
+          truncated: bool = False, redacted_names: Sequence[str] = ()) -> dict[str, Any]:
+    return {"kind": "process_exec", "ordinal": ordinal, "executable": executable,
+            "argv": list(argv), "argv_truncated": truncated, "result": result,
+            "envp_captured": True, "envp_redacted_names": list(redacted_names)}
 
 
 def _call(tool: str, argv: Sequence[str]) -> dict[str, Any]:
@@ -123,6 +124,71 @@ def test_generic_reconciler_rejects_malformed_records_without_creating_claims(
     assert result.rows == ()
     assert result.facts["malformed_records"] == 3
     assert any("malformed" in gap for gap in result.gaps)
+
+
+def test_generic_reconciler_keeps_each_command_record_and_its_event_ordinals_apart(
+        tmp_path: Path) -> None:
+    first = Capture([_exec("/usr/bin/cc", ["cc", "--version"], ordinal=4)])
+    second = Capture([_exec("/usr/bin/cc", ["cc", "--version"], ordinal=9),
+                      _exec("/usr/bin/cc", ["/usr/bin/cc", "--version"], ordinal=12)],
+                     calls=[_call("cc", ["cc", "--version"])])
+    first.identity, second.identity = {"sha256": "1" * 64}, {"sha256": "2" * 64}
+    result = reconcile_captured_build([(1, first), (2, second)], tmp_path, ".", DESCRIPTOR)
+    # The same argv under two commands is two rows; ordinals resolve in the record each names.
+    assert [(row["evidence"]["capture_record_sha256"], row["evidence"]["process_exec"]["event_ordinals"],
+             row["origin"], row["mapping"]) for row in result.rows] == [
+        ("1" * 64, [4], "execution-capture:command-001:event-4", "syscall-process-exec"),
+        ("2" * 64, [9, 12], "execution-capture:command-002:event-9", "syscall-process-exec+tool-call")]
+    # A wrapper record reconciles only onto an exec of its own command.
+    only_exec = Capture([_exec("/usr/bin/cc", ["cc", "--version"])])
+    only_call = Capture([], calls=[_call("cc", ["cc", "--version"])])
+    result = reconcile_captured_build([(1, only_exec), (2, only_call)], tmp_path, ".", DESCRIPTOR)
+    assert [row["mapping"] for row in result.rows] == ["syscall-process-exec"]
+    assert result.facts["unreconciled_tool_calls"] == 1
+    # A launcher or proxy and the binary it starts are separate rows, so every ordinal resolves
+    # to the executable its row names; the wrapper record attaches to the image-owned one.
+    chained = Capture([_exec("/capture/wrappers/cc", ["cc", "-c", "a.c"], ordinal=1),
+                       _exec("/opt/proxy/cc", ["cc", "-c", "a.c"], ordinal=2),
+                       _exec("/usr/bin/cc", ["/usr/bin/cc", "-c", "a.c"], ordinal=3)],
+                      calls=[_call("cc", ["cc", "-c", "a.c"])])
+    result = reconcile_captured_build([(1, chained)], tmp_path, ".", DESCRIPTOR)
+    assert [(row["evidence"]["process_exec"]["executable"], row["evidence"]["process_exec"]["event_ordinals"],
+             row["mapping"]) for row in result.rows] == [
+        ("/capture/wrappers/cc", [1], "syscall-process-exec"),
+        ("/opt/proxy/cc", [2], "syscall-process-exec+tool-call"),
+        ("/usr/bin/cc", [3], "syscall-process-exec")]
+
+
+def test_generic_reconciler_never_takes_identity_from_argv0_or_a_missing_kernel_path(
+        tmp_path: Path) -> None:
+    complete = _exec("/usr/bin/cc", ["cc", "-c", "ok.c"])
+    capture = Capture([
+        _exec("", ["cc", "-c", "spoof.c"]),
+        _exec("/usr/bin/true", ["/usr/bin/cc", "-c", "spoof.c"]),
+        _exec("/workspace/tool.sh", ["cc", "-c", "spoof.c"]),
+        {key: value for key, value in complete.items() if key != "executable"},
+        {key: value for key, value in complete.items() if key != "result"},
+    ])
+    result = reconcile_captured_build([(1, capture)], tmp_path, ".", DESCRIPTOR)
+    assert result.rows == ()
+    # An event with no kernel path or no result is not an observed exec.
+    assert result.facts["malformed_records"] == 2
+    # An unclassified exec with no absolute path or below a build-writable mount is counted.
+    assert result.facts["untrusted_location_exec_events"] == 2
+
+
+def test_generic_reconciler_reports_a_truncated_tool_argv_instead_of_hashing_it(
+        tmp_path: Path) -> None:
+    capture = Capture([_exec("/usr/bin/cc", ["cc", "-c"], truncated=True),
+                       _exec("/usr/bin/make", ["make"], truncated=True),
+                       _exec("/usr/bin/clang", ["clang", "-c", "ok.c"])],
+                      calls=[_call("cc", ["cc", "-c"])])
+    result = reconcile_captured_build([(1, capture)], tmp_path, ".", DESCRIPTOR)
+    assert [row["tool"] for row in result.rows] == ["clang"]
+    assert result.facts["truncated_tool_exec_events"] == 1
+    assert result.facts["unreconciled_tool_calls"] == 1
+    assert ("1 toolchain process-exec events had truncated argv; their tool provenance is "
+            "unavailable") in result.gaps
 
 
 @pytest.mark.parametrize(("descriptor", "executable", "wrapper", "argv", "expected"), [

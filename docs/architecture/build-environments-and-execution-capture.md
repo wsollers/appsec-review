@@ -464,13 +464,25 @@ supplemental events, and scans retained streams, argv, and envp through gitleaks
 that record before it interprets any language-specific tool.
 
 `capture.py` owns the typed `CapturedBuildDescriptor` and `reconcile_captured_build` contract used
-by .NET, Go, native C/C++, and Rust. Successful process-exec is the sole authority that a tool ran.
-The generic reconciler attaches an optional wrapper record only after matching it to that exec,
+by .NET, native C/C++, and Rust; the Go adapter applies the same rules in its own loop. Successful
+process-exec is the sole authority that a tool ran. The descriptor classifies the event's
+kernel-resolved `executable` path; `argv[0]` is caller-chosen and never names the tool, and an event
+without a kernel path or a result is a malformed record, not an exec. A row belongs to the one
+capture record whose event ordinals identify it and to the one executable those events started,
+so the same argv observed under two commands, or through a proxy and the binary it starts, is
+separate rows, and a wrapper record reconciles only onto an exec of its own command. A classified exec
+whose argv was truncated at the capture limit is counted as `truncated_tool_exec_events` and named
+as a gap instead of being hashed. An unclassified exec whose path is relative, not normalized, or
+below a build-writable mount is counted as `untrusted_location_exec_events`. The generic reconciler
+attaches an optional wrapper record only after matching it to that exec,
 counts failed and redacted execs, redacted and unreconciled wrappers, connect and envp facts,
 malformed inputs, capture loss, and row truncation, and emits the same evidence and mapping shape
 for every descriptor. Build output, wrapper records, compile databases, and model text cannot create
-a tool row. The language descriptor supplies only the capture/provenance identities, executable and
-argv classifier, input/output mapping, link-kind selection, and mandatory-tool gap text. Recipe
+a tool row. The language descriptor supplies only the capture/provenance identities, executable-path
+and argv classifier, tool-call record selector, input/output mapping, link-kind selection, the
+mandatory-tool gap text, and an optional test for which rows of the mandatory kind are the mandatory
+work. The native and .NET descriptors still classify by executable name alone, so they do not yet
+exclude a PATH wrapper launcher or another build-writable path; Rust and Go do. Recipe
 validation, fixed command shaping, artifact classification, metadata, and analysis capabilities
 remain small language-adapter functions called by the generic build job; none may reimplement
 capture or reconciliation.
@@ -524,13 +536,29 @@ hashes of the normalized findings, the scanner execution receipt, and the gitlea
 `build` retrieval shard exposes only the record, event, and findings hashes, completeness, and
 finding count.
 
-Rust tool provenance is derived from the verified records, not from Cargo output. Only a successful
-process-exec event establishes that `rustc`, a C linker driver, a linker, an archiver, or a
-Cargo build script ran, including the toolchain compiler Cargo starts by absolute path. PATH
-tool-call records are reconciled onto an invocation the collector observed and add exit and stream
-identities; a launcher, a toolchain proxy, and the resolved binary collapse into one row. A
-tool-call record with no matching successful process-exec event never becomes an invocation, cannot
-satisfy a provenance check, and is reported as a gap. The former
+Rust tool provenance is derived from the verified records, not from Cargo output. Its one authority
+is a successful process-exec event whose kernel-resolved `executable` is an image-owned path. The
+build container's root filesystem is read-only, so the only places a build can write an executable
+are its mounts. An exec path that is relative, not normalized, or below `/workspace`, `/capture`,
+`/tmp`, `/dev`, `/proc`, `/run`, or `/var/tmp` is target-controlled: it is counted as
+`untrusted_location_exec_events` and never classified as `rustc`, a C driver, a linker, or an
+archiver, whatever its name or `argv[0]` claims. That rule also excludes the PATH wrapper
+launchers, so a wrapper that started is not evidence that the real tool did. A Cargo build script is
+the one tool recognized below the workspace, because Cargo compiles it there: a `build-script-*`
+executable counts only at a normalized `/workspace/.../build/<package>/` path, and its
+`code-generator` row records that target-built code ran as a build step, nothing more. The same
+name anywhere else is not classified.
+
+PATH tool-call records are reconciled onto an invocation the collector observed in the same command
+and add exit and stream identities. Each row names the one capture record and the one executable
+its event ordinals resolve to, so the `rustc -vV` query Cargo issues under both the metadata and
+the build command is two rows, and the rustup proxy and the toolchain compiler it starts are two
+rows. A tool-call record with no
+matching successful process-exec event, an exec redacted by the secret scan, and a toolchain exec
+whose argv was truncated at the capture limit are each a named gap; none becomes an invocation or
+satisfies a provenance check. The compiler check requires a compilation, not a compiler: only a
+`rustc` row that names a crate and an output location counts, so a version or target query does
+not. The former
 `RUSTC_WRAPPER`, linker, and archiver shims and the `Running` line parser were removed because they
 recorded nothing the syscall evidence lacks. Exact argv stays in the unit's protected compile
 commands; receipts keep argv hashes, the classified tool, mapped inputs and outputs, and the
@@ -542,8 +570,9 @@ Lost evidence is reported rather than reconstructed. Capture gaps appear in the 
 provenance and names a gap. A complete capture is also the authority for what did not run: `rustc`
 writes rlibs in-process and a library-only build never links, so the receipt records the observed
 tool kinds and an absent linker driver or archiver is a fact, not a gap. Absence becomes a named gap
-only when the capture lost evidence and `capture_linker` is set; an unobserved compiler is always a
-gap. When the scan redacts the top invocation, the protected command artifact stores the redacted
+only when the capture lost evidence and `capture_linker` is set; an unobserved compilation is always
+a gap. Every tool-provenance gap, including that one, makes `capture_provenance.complete` false.
+When the scan redacts the top invocation, the protected command artifact stores the redacted
 argv and environment instead of reintroducing them, and Cargo metadata that was truncated or
 redacted is a gap. A unit whose capture or tool provenance is incomplete is never checkpointed; a
 reused checkpoint re-verifies every retained capture against the scope and hashes its receipt

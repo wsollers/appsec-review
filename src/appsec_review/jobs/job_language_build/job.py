@@ -1018,7 +1018,10 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
             captured_link_rows(compile_rows, descriptor), str(recipe["build_dir"]))
         kinds = {str(row.get("tool_kind")) for row in compile_rows}
         capture_facts["observed_tool_kinds"] = sorted(kinds)
-        if descriptor.required_tool_kind and descriptor.required_tool_kind not in kinds:
+        required_execution = descriptor.required_execution or (lambda row: True)
+        if descriptor.required_tool_kind and not any(
+                row.get("tool_kind") == descriptor.required_tool_kind and required_execution(row)
+                for row in compile_rows):
             gap = str(descriptor.missing_tool_gap)
             gaps.append(gap)
             provenance_gaps.append(gap)

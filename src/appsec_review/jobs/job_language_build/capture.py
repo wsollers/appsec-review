@@ -11,6 +11,21 @@ from appsec_review.storage import canonical_json
 
 
 _REDACTED = "<redacted"
+# The build container's root filesystem is read-only: only these mounts are writable by the
+# build, so an executable below them is target-controlled and its name proves nothing.
+_WRITABLE_ROOTS = ("/workspace/", "/capture/", "/tmp/", "/dev/", "/proc/", "/run/", "/var/tmp/")
+
+
+def normalized_path(executable: str) -> bool:
+    """Whether an exec path is absolute and names exactly the file the kernel started."""
+    if not executable.startswith("/") or "\0" in executable:
+        return False
+    return not any(part in {"", ".", ".."} for part in executable.split("/")[1:])
+
+
+def image_owned(executable: str) -> bool:
+    """Whether an exec path names a file the build could not have written."""
+    return normalized_path(executable) and not (executable + "/").startswith(_WRITABLE_ROOTS)
 
 
 @dataclass(frozen=True, slots=True)
@@ -21,7 +36,10 @@ class ToolIdentity:
     kind: str
 
 
+# Called with the kernel-resolved executable path of a successful process-exec event.
 ToolClassifier = Callable[[str, Sequence[str]], ToolIdentity | None]
+# Called with the tool name a PATH tool-call record declares; it selects records to reconcile.
+RecordClassifier = Callable[[str, Sequence[str]], ToolIdentity | None]
 InvocationBuilder = Callable[
     [str, str, Sequence[str], Path, str, str], dict[str, Any]
 ]
@@ -40,6 +58,10 @@ class CapturedBuildDescriptor:
     link_kinds: frozenset[str] = frozenset()
     required_tool_kind: str | None = "compiler"
     missing_tool_gap: str | None = None
+    # Defaults to `classify_tool` for descriptors that classify by executable name alone.
+    classify_record: RecordClassifier | None = None
+    # Narrows which rows of the required kind are the required work, not a version query.
+    required_execution: Callable[[Mapping[str, Any]], bool] | None = None
 
     def __post_init__(self) -> None:
         if not self.family or not self.capture_identity or not self.provenance_schema:
@@ -98,15 +120,24 @@ def reconcile_captured_build(
         limits: ReconciliationLimits = ReconciliationLimits()) -> ReconciliationResult:
     """Reconcile all captured build tools through one syscall-authoritative algorithm.
 
-    A successful ``process_exec`` is the only event that can create a row. Wrapper records are
-    optional secondary evidence and are attached only after matching such a row. Invalid,
-    redacted, failed, capped, and unmatched inputs are counted and surfaced as gaps.
+    A successful ``process_exec`` is the only event that can create a row, and the descriptor
+    classifies its kernel-resolved executable path; ``argv[0]`` is caller-chosen and never
+    names the tool. Wrapper records are optional secondary evidence and are attached only
+    after matching such a row. Invalid, redacted, failed, truncated, capped, and unmatched
+    inputs are counted and surfaced as gaps.
     """
-    rows: dict[str, dict[str, Any]] = {}
+    # An invocation belongs to the one capture record whose event ordinals identify it and to
+    # the one executable those events started, so the same argv observed under two commands,
+    # or through a toolchain proxy and the binary it resolves to, is two rows.
+    rows: dict[tuple[int, str, str], dict[str, Any]] = {}
+    reconcilable: dict[tuple[int, str], list[dict[str, Any]]] = {}
+    classify_record = descriptor.classify_record or descriptor.classify_tool
     facts: dict[str, Any] = {
         "process_exec_events": 0,
         "failed_exec_events": 0,
         "redacted_exec_events": 0,
+        "untrusted_location_exec_events": 0,
+        "truncated_tool_exec_events": 0,
         "tool_call_records": 0,
         "redacted_tool_calls": 0,
         "unreconciled_tool_calls": 0,
@@ -157,12 +188,12 @@ def reconcile_captured_build(
                 continue
             facts["process_exec_events"] += 1
             argv = _argv(event.get("argv"))
-            executable_value = event.get("executable", "")
-            result = event.get("result", 0)
-            if argv is None or not isinstance(executable_value, str) or type(result) is not int:
+            executable = event.get("executable")
+            result = event.get("result")
+            # No kernel path or result: not an observed exec.
+            if argv is None or not isinstance(executable, str) or type(result) is not int:
                 facts["malformed_records"] += 1
                 continue
-            executable = executable_value
             if event.get("envp_captured") is True:
                 names = event.get("envp_redacted_names", ())
                 if not isinstance(names, Sequence) or isinstance(names, (str, bytes)):
@@ -176,12 +207,16 @@ def reconcile_captured_build(
             if result != 0:
                 facts["failed_exec_events"] += 1
                 continue
-            identity = descriptor.classify_tool(
-                PurePosixPath(executable or (argv[0] if argv else "")).name, argv
-            )
+            identity = descriptor.classify_tool(executable, argv)
             if identity is None:
+                if not image_owned(executable):
+                    facts["untrusted_location_exec_events"] += 1
                 continue
-            key = _identity_key(identity, argv)
+            if event.get("argv_truncated"):
+                facts["truncated_tool_exec_events"] += 1
+                continue
+            invocation = (ordinal, _identity_key(identity, argv))
+            key = (*invocation, executable)
             row = rows.get(key)
             if row is None:
                 if len(rows) >= limits.invocation_count:
@@ -201,6 +236,7 @@ def reconcile_captured_build(
                     },
                 }
                 rows[key] = row
+                reconcilable.setdefault(invocation, []).append(row)
             observed_exec = row["evidence"]["process_exec"]
             observed_exec["count"] += 1
             if len(observed_exec["event_ordinals"]) < limits.event_ordinals_per_invocation:
@@ -220,13 +256,16 @@ def reconcile_captured_build(
             if argv and argv[0].startswith(_REDACTED):
                 facts["redacted_tool_calls"] += 1
                 continue
-            identity = descriptor.classify_tool(PurePosixPath(tool).name, argv)
+            identity = classify_record(PurePosixPath(tool).name, argv)
             if identity is None:
                 continue
-            row = rows.get(_identity_key(identity, argv))
-            if row is None:
+            candidates = reconcilable.get((ordinal, _identity_key(identity, argv)))
+            if not candidates:
                 facts["unreconciled_tool_calls"] += 1
                 continue
+            # A wrapper runs the real tool from the image; its launcher only started the wrapper.
+            row = next((item for item in candidates
+                        if image_owned(item["evidence"]["process_exec"]["executable"])), candidates[0])
             if row["evidence"]["tool_call"] is None:
                 row["evidence"]["tool_call"] = _tool_call_evidence(call, document)
 
@@ -246,6 +285,11 @@ def reconcile_captured_build(
     if facts["redacted_tool_calls"]:
         gaps.append(
             f"{facts['redacted_tool_calls']} tool-call records were redacted by the secret scan"
+        )
+    if facts["truncated_tool_exec_events"]:
+        gaps.append(
+            f"{facts['truncated_tool_exec_events']} toolchain process-exec events had truncated "
+            "argv; their tool provenance is unavailable"
         )
     if facts["unreconciled_tool_calls"]:
         gaps.append(

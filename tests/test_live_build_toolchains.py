@@ -889,14 +889,20 @@ class _SecretEnvironmentExecutor(BuildContainerExecutor):
             argv, environment={**environment, "DISCORD_PUBLIC_KEY": SYNTHETIC_SECRET}, **options)
 
 
-def _live_rust_language_build(tmp_path: Path, *, secret: bool):
+def _live_rust_language_build(tmp_path: Path, shallow_root: Path, *, secret: bool):
     _profile("rust")
     text = (ROOT / "appsec-review.toml").read_text(encoding="utf-8")
+    # Docker Desktop on Windows rejects a bind-mount source more than 16 path components deep,
+    # and the per-command scan input sits ten components below the run root. Runs are therefore
+    # allocated directly below the pytest base directory instead of below this test's own one.
+    runtime = 'runs_dir = "runs"\ndata_dir = "data"\nmetadata_dir = "runs/metadata"\n'
+    assert text.count(runtime) == 1
+    text = text.replace(runtime, 'runs_dir = "."\ndata_dir = "data"\nmetadata_dir = "metadata"\n')
     if secret:
         names = '  "PIP_INDEX_URL",\n]'
         assert text.count(names) == 1
         text = text.replace(names, '  "PIP_INDEX_URL",\n  "DISCORD_PUBLIC_KEY",\n]')
-    config_path = tmp_path / "appsec-review.toml"
+    config_path = shallow_root / f"appsec-review-{tmp_path.name}.toml"
     config_path.write_text(text, encoding="utf-8")
     config = load_config(config_path)
     target = tmp_path / "target"
@@ -931,6 +937,7 @@ def _assert_live_rust_capture(config, run_root: Path, receipt) -> None:
     """Every Rust command carries a complete, hash-valid standardized capture with a real scan."""
     assert receipt["terminal_status"] == "SUCCEEDED", receipt["gaps"]
     assert receipt["gaps"] == []
+    assert receipt["capture_identity"] == rust.CAPTURE_IDENTITY
     assert [command["role"] for command in receipt["commands"]] == ["metadata", "build"]
     gitleaks = load_catalog(ROOT).tool("tool-gitleaks")
     for ordinal, command in enumerate(receipt["commands"], 1):
@@ -968,8 +975,10 @@ def _assert_live_rust_capture(config, run_root: Path, receipt) -> None:
     assert not tuple(run_root.rglob("trace.[0-9]*"))
 
 
-def test_live_rust_language_build_accepts_hash_verified_execution_capture(tmp_path: Path) -> None:
-    config, run_root, outcome, receipt = _live_rust_language_build(tmp_path, secret=False)
+def test_live_rust_language_build_accepts_hash_verified_execution_capture(
+        tmp_path: Path, tmp_path_factory: pytest.TempPathFactory) -> None:
+    config, run_root, outcome, receipt = _live_rust_language_build(
+        tmp_path, tmp_path_factory.getbasetemp(), secret=False)
     assert outcome["status"] == "SUCCEEDED", outcome
     _assert_live_rust_capture(config, run_root, receipt)
 
@@ -1008,17 +1017,53 @@ def test_live_rust_language_build_accepts_hash_verified_execution_capture(tmp_pa
     assert all(item["mapping"].startswith("syscall-process-exec") for item in rows)
     assert all(item["evidence"]["process_exec"]["count"] >= 1 for item in rows)
     assert all("argv" not in item and len(item["argv_sha256"]) == 64 for item in rows)
+    # Every published invocation is backed by successful syscall events that are really there,
+    # in the capture record the row names. Toolchain tools ran from image-owned paths; only a
+    # Cargo build script, which Cargo compiles into the target directory, ran from the workspace.
+    events_by_command = {index: {event["ordinal"]: event for event in _capture_events(run_root, command)}
+                         for index, command in enumerate(receipt["commands"], 1)}
+    records = {command["execution_capture"]["sha256"]: index
+               for index, command in enumerate(receipt["commands"], 1)}
+    for item in rows:
+        observed = item["evidence"]["process_exec"]
+        assert observed["count"] >= 1 and observed["event_ordinals"]
+        if item["tool_kind"] == "code-generator":
+            assert re.fullmatch(r"/workspace/rust/target/debug/build/[^/]+/build-script-[^/]+",
+                                observed["executable"]), observed["executable"]
+        else:
+            assert rust.image_owned(observed["executable"]), observed["executable"]
+        command_events = events_by_command[records[item["evidence"]["capture_record_sha256"]]]
+        for ordinal in observed["event_ordinals"]:
+            event = command_events[ordinal]
+            assert event["kind"] == "process_exec" and event["result"] == 0
+            assert event["executable"] == observed["executable"] and not event["argv_truncated"]
+    # Cargo queries the compiler under both commands; each query resolves in its own record.
+    assert {records[item["evidence"]["capture_record_sha256"]] for item in rows
+            if item["tool"] == "rustc"} == {1, 2}
+    # The PATH launchers started, and none of them was counted as the tool it launches.
+    launchers = [event for event in executed if event["executable"].startswith("/capture/wrappers/")]
+    assert {Path(event["executable"]).name for event in launchers} >= {"cargo", "cc"}
+    assert not any(item["evidence"]["process_exec"]["executable"].startswith("/capture/") for item in rows)
     assert receipt["link_database"]["relationship_count"] >= 1
     provenance = receipt["capture_provenance"]
     # rustc writes rlib archives in-process: the complete capture shows that no archiver ran.
     assert provenance["observed_tool_kinds"] == sorted(row_kinds) and "archiver" not in row_kinds
     assert provenance["complete"] is True and provenance["redacted_exec_events"] == 0
     assert provenance["envp_events"] > 0 and provenance["unreconciled_tool_calls"] == 0
+    assert provenance["truncated_tool_exec_events"] == 0 and provenance["malformed_records"] == 0
+    assert provenance["untrusted_location_exec_events"] >= len(launchers)
     assert not any(command["tool"] != "cargo" for command in receipt["commands"])
 
+    # A complete, gap-free unit is checkpointed.
+    checkpoints = [json.loads(path.read_text(encoding="utf-8")) for path in
+                   (config.runtime.metadata_dir / "language-builds").glob("*/accepted.json")]
+    assert [item["fingerprint"] for item in checkpoints].count(receipt["fingerprint"]) == 1
 
-def test_live_rust_language_build_detects_and_removes_an_envp_secret(tmp_path: Path) -> None:
-    config, run_root, outcome, receipt = _live_rust_language_build(tmp_path, secret=True)
+
+def test_live_rust_language_build_detects_and_removes_an_envp_secret(
+        tmp_path: Path, tmp_path_factory: pytest.TempPathFactory) -> None:
+    config, run_root, outcome, receipt = _live_rust_language_build(
+        tmp_path, tmp_path_factory.getbasetemp(), secret=True)
     assert outcome["status"] == "SUCCEEDED", outcome
     _assert_live_rust_capture(config, run_root, receipt)
     for command in receipt["commands"]:

@@ -14,6 +14,7 @@ from appsec_review.jobs.build_discovery import go_recipe_errors
 from appsec_review.storage import canonical_json, file_sha256
 
 from . import elf
+from .capture import image_owned
 
 
 CAPTURE_IDENTITY = "appsec-review/go-build-capture/3"
@@ -32,9 +33,6 @@ _NATIVE_TOOLS = {"as": "assembler", "ar": "archiver", "llvm-ar": "archiver", "ld
                  "ld.bfd": "linker", "ld.gold": "linker", "ld.lld": "linker", "lld": "linker",
                  "collect2": "linker", "mold": "linker", "protoc": "code-generator"}
 _COMPILE_ONLY = {"-c", "-E", "-S"}
-# The build container's root filesystem is read-only: only these mounts are writable by the
-# build, so an executable below them is target-controlled and its name proves nothing.
-_WRITABLE_ROOTS = ("/workspace/", "/capture/", "/tmp/", "/dev/", "/proc/", "/run/", "/var/tmp/")
 _INPUT_SUFFIXES = {".go", ".s", ".c", ".cc", ".cpp", ".cxx", ".h", ".hh", ".hpp", ".o", ".a", ".syso"}
 _INVOCATION_LIMIT = 16384
 _EVENT_ORDINAL_LIMIT = 8
@@ -210,15 +208,6 @@ def _native_kind(name: str, argv: Sequence[str]) -> str | None:
     if _C_DRIVER.fullmatch(name):
         return "compiler-driver" if _COMPILE_ONLY & set(argv[1:]) else "linker-driver"
     return None
-
-
-def image_owned(executable: str) -> bool:
-    """Whether an exec path names a file the build could not have written."""
-    if not executable.startswith("/") or "\0" in executable:
-        return False
-    if any(part in {"", ".", ".."} for part in executable.split("/")[1:]):
-        return False  # Only a normalized path names the file the kernel started.
-    return not (executable + "/").startswith(_WRITABLE_ROOTS)
 
 
 def tool_identity(executable: str, argv: Sequence[str]) -> tuple[str, str] | None:
