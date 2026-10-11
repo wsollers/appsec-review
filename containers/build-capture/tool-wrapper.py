@@ -93,7 +93,15 @@ record = {
 # orchestrator to copy and replace the completed subtree before scanning and retention; it will
 # immediately recreate the subtree with run-owner-only permissions.
 for path in (stdout_path, stderr_path, call_root / "record.json"):
-    path.chmod(0o666)
-call_root.chmod(0o777)
-call_root.parent.chmod(0o777)
+    try:
+        path.chmod(0o666)
+    except PermissionError:
+        # Docker Desktop can write a bind-mounted DrvFs file but refuse chmod on it.
+        # The host copies the completed subtree before retaining or verifying it.
+        pass
+for path in (call_root, call_root.parent):
+    try:
+        path.chmod(0o777)
+    except PermissionError:
+        pass
 raise SystemExit(return_code)
