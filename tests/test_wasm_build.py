@@ -115,6 +115,10 @@ def _accepted_project(config, target, calls):
 
 def test_wasm_producer_validation_and_output_classification(tmp_path: Path) -> None:
     config, _target = _fixture(tmp_path)
+    profiles = config.job("job_project_build").settings["profiles"]
+    # Rust-sourced Wasm recipes retain their Rust family image in the accepted
+    # dispatch; the separate Wasm profile alone cannot supply their toolchain.
+    assert profiles["rust"] == profiles["wasm"]
     assert isinstance(config.job("job_language_build").typed_settings, LanguageBuildSettings)
     graph = plan_jobs((build_language(executor_factory=lambda unit, profile: WasmExecutor([])),), config)
     assert graph.node("job_language_build.execute.wasm").dependencies == (
