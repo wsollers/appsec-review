@@ -194,7 +194,11 @@ def test_error_state_records_terminal_run_and_last_five_events(tmp_path: Path) -
             entries = [SimpleNamespace(event_log_entry=SimpleNamespace(
                 message=f"failure {index}\nmore detail",
                 dagster_event=SimpleNamespace(event_type_value="STEP_FAILURE",
-                                              step_key=f"step_{index}")))
+                                              step_key=f"step_{index}",
+                                              event_specific_data=SimpleNamespace(error=SimpleNamespace(
+                                                  message="Dagster wrapper", cause=SimpleNamespace(
+                                                      message=f"root cause {index}\nmore detail",
+                                                      cause=None))))))
                        for index in range(5, 0, -1)]
             return SimpleNamespace(records=entries)
 
@@ -203,6 +207,7 @@ def test_error_state_records_terminal_run_and_last_five_events(tmp_path: Path) -
     assert len(lines) == 6
     assert "status=FAILURE" in lines[0] and "application_run_id=app-run" in lines[0]
     assert "step=step_1" in lines[1] and "step=step_5" in lines[-1]
+    assert "root cause 1 more detail" in lines[1]
     assert all("\n" not in line for line in lines)
 
 

@@ -16,6 +16,14 @@ def _one_line(value: object, limit: int = 700) -> str:
     return " ".join(str(value).split())[:limit]
 
 
+def _event_message(entry) -> str:
+    event = entry.dagster_event
+    error = getattr(getattr(event, "event_specific_data", None), "error", None)
+    while error is not None and getattr(error, "cause", None) is not None:
+        error = error.cause
+    return _one_line(error.message if error is not None else entry.message)
+
+
 def record_error_state(instance, source_run_id: str, runs_dir: Path) -> Path:
     """Summarize a failed or canceled wave from bounded Dagster event records."""
     source = instance.get_run_by_id(source_run_id)
@@ -35,7 +43,7 @@ def record_error_state(instance, source_run_id: str, runs_dir: Path) -> Path:
         entry = record.event_log_entry
         event = entry.dagster_event
         lines.append(f"event={event.event_type_value} step={event.step_key or '-'} "
-                     f"message={_one_line(entry.message)}")
+                     f"message={_event_message(entry)}")
     if not events:
         lines.append("event=UNAVAILABLE step=- message=Dagster recorded no failure event")
     path = runs_dir / "metadata" / "dagster-error-state" / f"{source_run_id}.log"
