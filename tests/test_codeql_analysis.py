@@ -9,6 +9,7 @@ import json
 from pathlib import Path
 import threading
 import time
+import tomllib
 from types import MappingProxyType, SimpleNamespace
 
 import pytest
@@ -34,6 +35,12 @@ from appsec_review.storage import canonical_json
 
 IMAGE = "sha256:" + "1" * 64
 ROOT = Path(__file__).parents[1]
+
+
+def test_central_codeql_asset_lock_matches_tracked_lock() -> None:
+    config = tomllib.loads((ROOT / "appsec-review.toml").read_text(encoding="utf-8"))
+    expected = config["jobs"]["job_codeql_analysis"]["settings"]["asset_lock_sha256"]
+    assert expected == load_asset_lock(ROOT)["sha256"]
 
 
 def test_codeql_build_execution_uses_bridge_network(tmp_path: Path) -> None:
