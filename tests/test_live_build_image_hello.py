@@ -53,7 +53,8 @@ CASES = (
     HelloCase("python", {"hello.py": 'print("Hello World")\n'}, (("python", "hello.py"),)),
     HelloCase("php", {"hello.php": '<?php echo "Hello World\\n";\n'}, (("php", "hello.php"),)),
     HelloCase("wasm", {"hello.rs": 'fn main() { println!("Hello World"); }\n'},
-              (("rustc", "--target", "wasm32-wasip1", "hello.rs", "-o", "hello.wasm"),),
+              (("rustc", "--target", "wasm32-wasip1", "hello.rs", "-o", "hello.wasm"),
+               ("rustc", "--target", "wasm32-unknown-unknown", "hello.rs", "-o", "hello-unknown.wasm")),
               "hello.wasm"),
 )
 
@@ -115,9 +116,6 @@ def test_configured_build_image_captures_hello_world(tmp_path: Path, case: Hello
         if ordinal <= len(case.commands):
             assert verified.tool_calls, f"capture wrapper failure [{case.profile} {command[0]}]"
         assert verified.document["collector"]["image_id"] == profiles[case.profile].image_id
-        if (case.profile == "wasm" and result.exit_code != 0 and
-                "can't find crate for `std`" in _result_detail(result)):
-            pytest.xfail("configured Rust image lacks the wasm32-wasip1 standard library")
         assert result.exit_code == 0, f"target program failure [{case.profile} {command[0]}]: {_result_detail(result)}"
         if ordinal == len(case.commands) + int(case.output_command is not None):
             if case.profile != "wasm":
@@ -129,6 +127,7 @@ def test_configured_build_image_captures_hello_world(tmp_path: Path, case: Hello
             f"target artifact failure [{case.profile}]: {case.artifact}")
         if case.profile == "wasm":
             assert artifact.read_bytes()[:4] == b"\0asm"
+            assert (project / "hello-unknown.wasm").read_bytes()[:4] == b"\0asm"
     if capture_gaps:
         if (case.profile == "dotnet" and all(
                 gap.startswith("unparsed openat row:") or

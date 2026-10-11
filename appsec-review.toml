@@ -719,8 +719,8 @@ tag = "audit-buildenv-php:local"
 image_id = "sha256:e1e66dac01ef50a03f036a7983e432fca6c2957064f09926b20fff56c7041e30"
 user = "10001:10001"
 [jobs.job_project_build.settings.profiles.wasm]
-tag = "audit-buildenv-rust:local"
-image_id = "sha256:c8ce7e10708cc0b43cb15196abb289fff633da852ab2d7ac1144c0310bf0a5ed"
+tag = "audit-buildenv-rust-wasm:local"
+image_id = "sha256:fe5d9ff906a6413f9bf203f3958293c0da6b6f159d26936003e6f1f90f869438"
 user = "10001:10001"
 
 [jobs.job_project_build.steps.plan]
