@@ -404,12 +404,17 @@ def assemble_review_packages(core: RetrievalCore, *, max_page_size: int = 20) ->
 def publish_review_packages(core: RetrievalCore, *, max_page_size: int = 20) -> Path:
     packages, manifest = assemble_review_packages(core, max_page_size=max_page_size)
     destination = core.run_root / "data" / "review-packages" / manifest["content_sha256"]
-    if destination.exists():
+    if (destination / "manifest.json").exists():
         verify_review_packages(core, destination)
         return destination
-    destination.mkdir(parents=True)
+    destination.mkdir(parents=True, exist_ok=True)
     for item in packages:
-        atomic_json(destination / f"{item['package_id']}.json", item)
+        path = destination / f"{item['package_id']}.json"
+        if path.exists():
+            if path.read_bytes() != canonical_json(item) + b"\n":
+                raise ValueError("partial review package publication has changed bytes")
+        else:
+            atomic_json(path, item)
     atomic_json(destination / "manifest.json", manifest)
     verify_review_packages(core, destination)
     return destination

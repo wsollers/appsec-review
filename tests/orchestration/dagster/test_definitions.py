@@ -339,7 +339,7 @@ def test_wave1_exposes_real_producer_shard_topology() -> None:
     assert upstream("cpp_compiled_analysis__infer__projects") == {
         "cpp_compiled_analysis__begin", "cpp_compiled_analysis__catalog__projects"}
     cpp_barrier = upstream("cpp_compiled_analysis__acceptance__publish_handoff")
-    assert len(cpp_barrier) == 7  # claim plus six project-batched terminal branches
+    assert len(cpp_barrier) == 6  # claim plus five project-batched terminal branches
     post_build_barrier = upstream("post_build_security_assessment__publication__publish_handoff")
     assert len(post_build_barrier) == 2  # claim plus the generic accepted-unit index barrier
     barrier = upstream("evidence_collection__evidence_publication__assemble_manifest")
@@ -351,6 +351,10 @@ def test_wave1_exposes_real_producer_shard_topology() -> None:
     assert {"codeql_analysis__finalize", "owasp_control_assessment__finalize"} <= upstream(
         "review_prioritization__begin")
     assert "review_prioritization__finalize" in upstream("security_tagging__begin")
+    assert "security_tagging__finalize" in upstream("review_data_indexing__begin")
+    assert "review_data_indexing__finalize" in upstream("review_package_assembly__begin")
+    assert upstream("review_package_assembly__publication__publish_packages") == {
+        "review_package_assembly__begin"}
     assert upstream("review_prioritization__extract__semantic_evidence") >= {
         "review_prioritization__extract__syntax_metrics"}
 

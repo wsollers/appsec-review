@@ -19,6 +19,7 @@ RUN python -m pip install --no-cache-dir --upgrade "pip==25.0.1" \
     && python -m pip check
 
 COPY pyproject.toml appsec-review.toml ./
+COPY docs/schemas/review-packages.schema.json ./docs/schemas/review-packages.schema.json
 COPY src ./src
 COPY containers ./containers
 COPY data ./data

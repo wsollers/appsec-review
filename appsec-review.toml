@@ -650,6 +650,17 @@ workers = 1
 workers = 1
 [jobs.job_review_data_indexing.steps.publish.tasks.inventory_index]
 
+[jobs.job_review_package_assembly]
+name = "review_package_assembly"
+workers = 1
+
+[jobs.job_review_package_assembly.settings]
+max_page_size = 20
+
+[jobs.job_review_package_assembly.steps.publication]
+workers = 1
+[jobs.job_review_package_assembly.steps.publication.tasks.publish_packages]
+
 [jobs.job_project_build]
 name = "project_build"
 workers = 8

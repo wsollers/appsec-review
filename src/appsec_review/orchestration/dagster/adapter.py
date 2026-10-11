@@ -486,6 +486,9 @@ def build_definitions(
                             "job_target_analysis_plan")
             wave_jobs.append(registry.build("job_review_data_indexing"))
             wave_dependencies["job_review_data_indexing"] = (terminal,)
+        if "job_review_package_assembly" in registered:
+            wave_jobs.append(registry.build("job_review_package_assembly"))
+            wave_dependencies["job_review_package_assembly"] = ("job_review_data_indexing",)
         jobs.append(_build_dagster_graph("wave1_review", tuple(wave_jobs), config, runner_factory,
                                          job_dependencies=wave_dependencies))
     if {"job_review_intake", "job_target_catalog", "job_ci_configuration_analysis"} <= registered:

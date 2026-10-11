@@ -4,7 +4,7 @@ The job runs after every producer in the review graph. It reads only the accepte
 manifest, accepted handoffs and hash-verified run-owned artifacts; it never parses raw scanner
 output, IR or a CPG and never executes target code. It restores shards that an upstream manifest
 rewrite dropped, publishes typed link shards and one immutable shard per stage-1 query set, audits
-every emitted dataset against the declarations of every registered job, and publishes the
+every upstream dataset against its registered declaration, and publishes the
 inventory as an indexed, queryable dataset. An audit violation blocks index acceptance; the audit
 report remains on disk as run-owned evidence.
 """
@@ -51,9 +51,12 @@ Providers = Callable[[], tuple[tuple[str, ...], Mapping[str, Sequence[Any]], Map
 
 
 def registry_providers() -> tuple[tuple[str, ...], dict[str, tuple[Any, ...]], dict[str, tuple[str, ...]]]:
-    """Registered job ids plus each job's own dataset declarations and consumed upstream jobs."""
+    """Jobs in the accepted index stage, their datasets, and consumed upstream jobs."""
     from appsec_review.runtime.registry import builtin_registry
-    job_ids = builtin_registry().job_ids()
+    # Package assembly runs after this index is accepted. Auditing it here would put a false
+    # unavailable-package gap into every package assembled from this index.
+    job_ids = tuple(job_id for job_id in builtin_registry().job_ids()
+                    if job_id != "job_review_package_assembly")
     declarations: dict[str, tuple[Any, ...]] = {}
     consumes: dict[str, tuple[str, ...]] = {}
     for job_id in job_ids:
@@ -220,7 +223,8 @@ def build_job(*, providers: Providers = registry_providers,
             candidate = (run_root / str(shard["relative_path"])).resolve()
             if run_root.resolve() not in candidate.parents or file_sha256(candidate) != shard["sha256"]:
                 raise ValueError(f"restored shard failed verification: {'/'.join(shard_key(shard))}")
-        job_steps = _resolved_steps(run_root)
+        job_steps = {job_id: steps for job_id, steps in _resolved_steps(run_root).items()
+                     if job_id != "job_review_package_assembly"}
         feeds = feed_pins(unit.job.repository_root, _resolved_document(run_root),
                           int(settings_of(unit)["feed_max_age_days"]))
         mismatch = sorted(set(job_ids) ^ set(job_steps))

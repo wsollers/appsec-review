@@ -28,6 +28,7 @@ from appsec_review.retrieval import (
 )
 from appsec_review.retrieval.observations import SEVERITY_RULE, normalize_reported_severity
 from appsec_review.jobs.job_review_data_indexing import build_job
+from appsec_review.jobs.job_review_package_assembly import build_job as build_package_job
 from appsec_review.runtime.runner import JobRunner
 from appsec_review.storage import atomic_json, file_sha256
 
@@ -500,6 +501,37 @@ def test_metric_vectors_mark_missing_values_unknown_not_zero(accepted) -> None:
     assert metrics["cyclomatic_mean"]["gap_id"] == "cyclomatic_mean_not_produced_by_prioritization"
 
 
+def test_package_job_publishes_accepted_manifest_and_receipts(accepted) -> None:
+    config, run_id, run_root, target, ids, indexing, _executor = accepted
+    from appsec_review.review_packages import assemble_review_packages
+    seed_core = RetrievalCore(config.runtime.runs_dir, run_id)
+    seed_packages, seed_manifest = assemble_review_packages(seed_core)
+    partial = run_root / "data" / "review-packages" / seed_manifest["content_sha256"]
+    partial.mkdir(parents=True)
+    atomic_json(partial / f"{seed_packages[0]['package_id']}.json", seed_packages[0])
+    outcome = JobRunner(config).run(
+        build_package_job(), run_id=run_id, target_root=target, source_fingerprint=SNAPSHOT,
+        upstream_handoffs={"job_review_data_indexing": indexing["handoff_sha256"]})
+    assert outcome["handoff"]["status"] == "ACCEPTED"
+    result = outcome["result"]["outputs"]["publication.publish_packages"]
+    core = RetrievalCore(config.runtime.runs_dir, run_id)
+    from appsec_review.review_packages import verify_review_packages
+    manifest = verify_review_packages(core, run_root / result["package_directory"])
+    assert manifest["accepted_manifest_sha256"] == core.manifest_sha256
+    assert manifest["counts"]["finding_lead"] == 6
+    assert result["package_count"] == len(manifest["packages"])
+    assert result["coverage_gap_count"] == len(manifest["coverage_gaps"])
+    assert {item["path"] for item in outcome["handoff"]["artifacts"]} >= {
+        item["path"] for item in result["artifacts"]}
+    auth = next(json.loads((run_root / result["package_directory"] / f"{item['package_id']}.json").read_text())
+                for item in manifest["packages"]
+                if json.loads((run_root / result["package_directory"] / f"{item['package_id']}.json").read_text())
+                ["lead_menu"][0]["observation_id"] == ids["o1"])
+    assert auth["build_context"]["bindings"][0]["function_scope_id"] == ids["auth-function"]
+    assert auth["tag_context"]["cloud"]
+    assert auth["compiled_context"]
+
+
 def test_inventory_audit_matrices_links_and_fts_validation(accepted) -> None:
     config, run_id, _run_root, _target, ids, outcome, executor = accepted
     core = RetrievalCore(config.runtime.runs_dir, run_id)
@@ -516,6 +548,8 @@ def test_inventory_audit_matrices_links_and_fts_validation(accepted) -> None:
     assert self_row["index"]["hash_resolution"] == "accepted_manifest"
     unavailable = core.query_dataset_inventory(record_type="dataset", disposition="unavailable", limit=100)
     assert unavailable["results"] and all(item["payload"]["coverage"]["reason"] for item in unavailable["results"])
+    assert not any(item["payload"].get("job_id") == "job_review_package_assembly"
+                   for item in unavailable["results"])
     sources = []
     cursor = None
     while True:
@@ -708,5 +742,5 @@ def test_input_source_matrix_matches_design_document_and_registry() -> None:
     from appsec_review.runtime.registry import builtin_registry
     registered = set(builtin_registry().job_ids())
     named = {producer for _source, producers, *_ in input_matrix.INPUT_SOURCES for producer in producers}
-    assert registered - {"job_review_data_indexing"} <= named
+    assert registered - {"job_review_data_indexing", "job_review_package_assembly"} <= named
     assert {producer for producer in named if producer.startswith("job_")} <= registered

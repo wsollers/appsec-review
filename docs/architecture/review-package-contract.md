@@ -28,6 +28,14 @@ members, duplicate membership and disagreement with the accepted scanner-correla
 Coverage from accepted shards is copied as named gaps. Missing scanner-correlation facts or an
 audit failure block package publication rather than producing a clean empty menu.
 
+`job_review_package_assembly` is the terminal `wave1_review` job. It starts after the accepted
+`job_review_data_indexing` handoff and refuses a manifest from another producer. Its publication
+unit verifies the complete content-addressed package directory before the job handoff is accepted;
+that handoff records the hash of every package file. A later index publication requires a new
+package attempt against the new accepted manifest.
+The indexing inventory closes before package assembly and audits upstream producers only; it
+does not report the future package job as unavailable coverage.
+
 The schema carries typed metric vectors, evidence provenance, safe ordered build commands,
 classified environment facts, matching tag assignments, a package-local tag cloud, and Clang
 function-declaration references. The assembler resolves a lead to a unique accepted function

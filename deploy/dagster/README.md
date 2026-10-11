@@ -115,6 +115,7 @@ post_build_security_assessment + evidence_collection + artifact_security_analysi
   + tree_sitter_ast + codeql_analysis -> owasp_control_assessment
 codeql_analysis + owasp_control_assessment -> review_prioritization
 codeql_analysis + owasp_control_assessment + review_prioritization -> security_tagging
+security_tagging -> review_data_indexing -> review_package_assembly
 ```
 
 This is the Dagster-only composed topology. The direct CLI has a smaller linear graph documented in
@@ -150,6 +151,33 @@ A producer failure is not a clean scan and not a framework failure. It becomes a
 `BLOCKED`, `PARTIAL`, or `NOT_APPLICABLE` disposition, with bounded receipts and gaps, and can yield
 `COMPLETED_WITH_GAPS`. Hash, path, configuration, receipt, handoff, manifest, and index-integrity
 failures still fail the Dagster run.
+
+### Inspect published review packages
+
+After `wave1_review` succeeds, use the **application run id** in its Dagster tags (or the
+verification receipt). The terminal node `review_package_assembly__publication__publish_packages`
+records `package_directory`, `accepted_manifest_sha256`, counts, and `coverage_gap_count` in its
+application result under `runs/<application-run-id>/data/jobs/job_review_package_assembly/attempts/`.
+The directory is `runs/<application-run-id>/data/review-packages/<content-sha256>/`. Open its
+`manifest.json` for package IDs, hashes, counts, and run-wide gaps; open a listed package JSON for
+safe build command facts, function and build-action binding, source-local tags, Clang references,
+evidence provenance, and lead-specific gaps. These are review leads, not adjudicated findings.
+
+To validate a package directory against the current accepted manifest before use, run from the
+repository root in the same environment as the run:
+
+```powershell
+python -c "from pathlib import Path; from appsec_review.retrieval import RetrievalCore; from appsec_review.review_packages import verify_review_packages; run='APPLICATION_RUN_ID'; core=RetrievalCore(Path('runs'),run); print(verify_review_packages(core,Path('runs')/run/'data'/'review-packages'/'CONTENT_SHA256')['counts'])"
+```
+
+Use `appsec-review plan-resume --run-id <application-run-id> --target targets/appsec-multi-vuln`
+before a direct resume. For Dagster, launch `wave1_review` with
+`--tags '{"appsec/application_run_id":"<application-run-id>"}'` as described above. The package
+job reruns when its configuration, implementation, accepted indexing handoff, or source snapshot
+changes. Old content-addressed directories remain immutable. A new accepted manifest invalidates
+their current-use validation; inspect the newest accepted package attempt. An absent package
+directory or a failed package node is incomplete coverage, while the manifest's `coverage_gaps`
+enumerate producer and lead-context limits in an accepted package set.
 
 Stop containers without deleting persistent state:
 
