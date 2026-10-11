@@ -97,7 +97,7 @@ def test_scanner_execution_tokens_distinguish_equal_content_artifacts() -> None:
 
 
 def _fixture(tmp_path: Path, payload: bytes = b"\0asm\x01\0\0\0", *, disable_grype: bool = False,
-             duplicate_artifact: bool = False):
+             duplicate_artifact: bool = False, no_artifacts: bool = False):
     config_path = tmp_path / "appsec-review.toml"
     text = (ROOT / "appsec-review.toml").read_text(encoding="utf-8")
     if not disable_grype:
@@ -113,7 +113,7 @@ def _fixture(tmp_path: Path, payload: bytes = b"\0asm\x01\0\0\0", *, disable_gry
     artifact = {"path": produced.relative_to(run_root).as_posix(), "workspace_path": "build/module.wasm",
         "sha256": file_sha256(produced), "size_bytes": produced.stat().st_size, "kind": "wasm-module",
         "build_unit_id": "build-unit-fixture", "mapping": "exact-workspace-path", "mapping_confidence": 1.0}
-    artifacts = [artifact]
+    artifacts = [] if no_artifacts else [artifact]
     if duplicate_artifact:
         duplicate = run_root / "data" / "build" / "wasm" / "module-copy.wasm"
         duplicate.write_bytes(payload)
@@ -128,7 +128,7 @@ def _fixture(tmp_path: Path, payload: bytes = b"\0asm\x01\0\0\0", *, disable_gry
         index_path.relative_to(run_root).as_posix(), {"job": "job_language_build"}, (), "language-build")
     manifest_path = run_root / "data" / "indices" / "manifests" / "language-build.json"
     write_manifest(manifest_path, run_id=run_id, target_snapshot=fingerprint, target_root=target,
-                   indexes=[index_identity])
+                   indexes=[] if no_artifacts else [index_identity])
     manifest = {"path": manifest_path.relative_to(run_root).as_posix(),
                 "sha256": file_sha256(manifest_path), "size_bytes": manifest_path.stat().st_size}
     accepted_path = run_root / "data" / "upstream" / "accepted-language-builds.json"
@@ -137,7 +137,7 @@ def _fixture(tmp_path: Path, payload: bytes = b"\0asm\x01\0\0\0", *, disable_gry
         "source_fingerprint": fingerprint, "upstream_project_build_handoff_sha256": "c" * 64,
         "receipts": [{"build_unit_id": "build-unit-fixture", "family": "wasm", "fingerprint": "d" * 64,
                       "executor_identity": "fixture", "capture_identity": "fixture", "artifacts": artifacts}],
-        "gaps": []})
+        "gaps": ["no produced artifacts"] if no_artifacts else []})
     accepted = {"path": accepted_path.relative_to(run_root).as_posix(), "sha256": file_sha256(accepted_path),
                 "size_bytes": accepted_path.stat().st_size}
     handoff_path = run_root / "data" / "jobs" / "job_language_build" / "attempts" / "attempt_0001" / "handoff.json"
@@ -151,8 +151,8 @@ def _fixture(tmp_path: Path, payload: bytes = b"\0asm\x01\0\0\0", *, disable_gry
     indexing_summary_path = run_root / "data" / "upstream" / "accepted-artifact-index.json"
     atomic_json(indexing_summary_path, {"schema": "appsec-review/artifact-indexing/1",
         "source_fingerprint": fingerprint, "language_build_handoff_sha256": file_sha256(handoff_path),
-        "artifact_shard_count": 1, "reused_shard_count": 0,
-        "artifact_count": len(artifacts), "gaps": [],
+        "artifact_shard_count": 0 if no_artifacts else 1, "reused_shard_count": 0,
+        "artifact_count": len(artifacts), "gaps": ["no produced artifacts"] if no_artifacts else [],
         "index_manifest": manifest})
     indexing_summary = {"path": indexing_summary_path.relative_to(run_root).as_posix(),
         "sha256": file_sha256(indexing_summary_path), "size_bytes": indexing_summary_path.stat().st_size}
@@ -167,6 +167,16 @@ def _fixture(tmp_path: Path, payload: bytes = b"\0asm\x01\0\0\0", *, disable_gry
         "handoff_path": indexing_handoff_path.relative_to(run_root).as_posix(),
         "handoff_sha256": file_sha256(indexing_handoff_path)})
     return config, run_id, run_root, target, fingerprint, produced
+
+
+def test_no_artifacts_is_a_named_gap_with_verified_empty_index(tmp_path: Path) -> None:
+    config, run_id, run_root, target, fingerprint, _ = _fixture(tmp_path, no_artifacts=True)
+    outcome = GraphRunner(config, [build_job()]).run(
+        target_root=target, source_fingerprint=fingerprint, run_id=run_id)
+    assert outcome["status"] == "COMPLETED_WITH_GAPS"
+    accepted = load_accepted_artifact_security_analysis(run_root)
+    assert accepted["artifact_count"] == accepted["observation_count"] == 0
+    assert "no produced artifacts were available for artifact security analysis" in accepted["gaps"]
 
 
 def test_job_isolates_scanner_failure_retains_raw_output_and_indexes_siblings(tmp_path: Path) -> None:

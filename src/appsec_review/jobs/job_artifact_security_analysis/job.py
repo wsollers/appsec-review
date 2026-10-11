@@ -68,8 +68,7 @@ def _accepted_artifacts(run_root: Path) -> dict[str, Any]:
         raise FrameworkIntegrityError("accepted artifact-indexing manifest is unavailable")
     manifest_path = _safe_file(run_root, raw_manifest)
     manifest, _ = load_verified_manifest(run_root, manifest_path, str(raw_manifest["sha256"]))
-    if not any(item.get("name") == "artifacts" for item in manifest.get("indexes", ())):
-        raise FrameworkIntegrityError("accepted artifact-indexing manifest has no artifacts shard")
+    has_artifact_shard = any(item.get("name") == "artifacts" for item in manifest.get("indexes", ()))
     artifact_index = {"path": manifest_path.relative_to(run_root).as_posix(),
                       "sha256": str(raw_manifest["sha256"]),
                       "handoff_sha256": indexed["handoff_sha256"]}
@@ -94,10 +93,16 @@ def _accepted_artifacts(run_root: Path) -> dict[str, Any]:
                               "artifact_id": "artifact-" + hashlib.sha256(canonical_json(key)).hexdigest()[:24],
                               "verified_path": path.relative_to(run_root).as_posix()})
     artifacts.sort(key=lambda item: item["artifact_id"])
+    if not has_artifact_shard and (artifacts or indexed.get("artifact_count") != 0 or
+                                   indexed.get("artifact_shard_count") != 0):
+        raise FrameworkIntegrityError("accepted artifact-indexing manifest has no artifacts shard")
+    producer_gaps = [*accepted.get("gaps", ()), *indexed.get("gaps", ())]
+    if not artifacts:
+        producer_gaps.append("no produced artifacts were available for artifact security analysis")
     return {"source_fingerprint": accepted.get("source_fingerprint"),
             "language_build_handoff_sha256": accepted["language_build_handoff_sha256"],
             "artifact_index": artifact_index, "artifacts": artifacts,
-            "producer_gaps": list(accepted.get("gaps", ())) }
+            "producer_gaps": list(dict.fromkeys(producer_gaps)) }
 
 
 def _applicable(capability: str, classification: Mapping[str, Any]) -> bool:
@@ -289,14 +294,16 @@ def build_job(*, scanner_runner: ScannerRunner | None = None) -> Job:
                 return {"capability": capability, "observations": [], "observation_count": 0,
                         "gaps": [gap], "coverage_disposition": "CONFIGURED_DISABLED",
                         "terminal_status": "NOT_APPLICABLE"}
-            effective_runner = scanner_runner or (ContainerScannerRunner(
-                unit.job.repository_root, unit.job.run_root, unit.unit_root) if capability in ADAPTERS else None)
+            effective_runner = scanner_runner
             observations, gaps = [], []
             for artifact in loaded["artifacts"]:
                 path = _safe_file(unit.job.run_root, artifact)
                 classification = classify(path, artifact)
                 if not _applicable(capability, classification):
                     continue
+                if effective_runner is None and capability in ADAPTERS:
+                    effective_runner = ContainerScannerRunner(
+                        unit.job.repository_root, unit.job.run_root, unit.unit_root)
                 result = _scan_one(unit, artifact, capability, effective_runner)
                 observations.append(result)
                 gaps.extend(f"{artifact['artifact_id']}: {gap}" for gap in result["gaps"])
@@ -315,7 +322,8 @@ def build_job(*, scanner_runner: ScannerRunner | None = None) -> Job:
             parser_identity=PARSER_IDENTITY, normalizer_identity=NORMALIZER_IDENTITY,
             mapping_identity="exact-run-artifact/1", upstream_manifests=[loaded["artifact_index"]["sha256"]])
         path = unit.job.run_root / "data" / "indices" / "observations" / f"artifact-security-{fingerprint}.sqlite"
-        gaps = [gap for capability in CAPABILITIES for gap in unit.output(f"analyze.{capability}")["gaps"]]
+        gaps = [*loaded["producer_gaps"], *[gap for capability in CAPABILITIES
+                 for gap in unit.output(f"analyze.{capability}")["gaps"]]]
         if not path.is_file():
             builder = IndexBuilder(path, name="observations", fingerprint=fingerprint,
                                    target_snapshot=unit.job.source_fingerprint, shard_id="artifact-security")
