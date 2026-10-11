@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import replace
 import json
 from pathlib import Path
+import pytest
 
 from appsec_review.config import load_config
 from appsec_review.jobs.cataloging import source_fingerprint
@@ -10,6 +11,7 @@ from appsec_review.jobs.job_review_intake import build_job as build_intake
 from appsec_review.jobs.job_target_catalog import build_job as build_catalog
 from appsec_review.inference import ModelResult
 from appsec_review.jobs.job_target_analysis_plan import build_job, load_accepted_plan
+from appsec_review.jobs.job_target_analysis_plan.job import publish_guidance_bundle
 from appsec_review.jobs.job_target_analysis_plan.planning import (
     PLAN_SCHEMA, PROPOSAL_SCHEMA, deterministic_plan, summarize_catalog, validate_proposal,
 )
@@ -20,6 +22,22 @@ from appsec_review.runtime import GraphRunner, plan_jobs
 
 
 ROOT = Path(__file__).parents[1]
+
+
+def test_guidance_bundles_are_group_scoped_immutable_and_reusable(tmp_path: Path) -> None:
+    model = {"provider": "claude-cli", "model": "example", "reasoning": "low"}
+    arguments = {"persona": "persona", "role": "role", "guidance": "task", "model": model,
+                 "family": "native"}
+    cmake = publish_guidance_bundle(tmp_path, build_system="cmake", **arguments)
+    make = publish_guidance_bundle(tmp_path, build_system="make", **arguments)
+    assert cmake != make
+    assert publish_guidance_bundle(tmp_path, build_system="cmake", **arguments) == cmake
+    root = tmp_path / "data" / "guidance"
+    assert json.loads((root / cmake / "model-identity.json").read_text())["build_system"] == "cmake"
+    assert json.loads((root / make / "model-identity.json").read_text())["build_system"] == "make"
+    (root / cmake / "role.md").write_text("changed", encoding="utf-8")
+    with pytest.raises(ValueError, match="guidance bundle changed"):
+        publish_guidance_bundle(tmp_path, build_system="cmake", **arguments)
 
 
 def _fixture(tmp_path: Path, files: dict[str, str], *, model_enabled: bool = False):

@@ -40,6 +40,29 @@ TOPOLOGY = {
 }
 
 
+def publish_guidance_bundle(run_root: Path, *, persona: str, role: str, guidance: str,
+                            model: Mapping[str, Any], family: str, build_system: str) -> str:
+    """Write one immutable bundle per model and recipe group before inference uses it."""
+    identity = {"provider": str(model["provider"]), "model": str(model["model"]),
+                "reasoning": str(model["reasoning"]), "persona": "devops_engineer",
+                "role": f"build_engineer_{family}", "build_system": build_system}
+    content = (persona.encode("utf-8") + b"\0" + role.encode("utf-8") + b"\0" +
+               guidance.encode("utf-8") + b"\0" + canonical_json(identity))
+    guidance_sha = hashlib.sha256(content).hexdigest()
+    bundle_root = run_root / "data" / "guidance" / guidance_sha
+    files = {"persona.md": persona.encode("utf-8"), "role.md": role.encode("utf-8"),
+             "task.md": guidance.encode("utf-8"),
+             "model-identity.json": canonical_json({**identity, "guidance_sha256": guidance_sha})}
+    for name, payload in files.items():
+        path = bundle_root / name
+        if path.exists():
+            if path.read_bytes() != payload:
+                raise ValueError(f"accepted guidance bundle changed: {guidance_sha}/{name}")
+        else:
+            atomic_bytes(path, payload)
+    return guidance_sha
+
+
 def _artifact(unit: UnitContext, name: str, value: Mapping[str, Any]) -> dict[str, Any]:
     path = unit.job.attempt_root / "artifacts" / "analysis-plan" / name
     identity = write_json(path, value)
@@ -248,17 +271,9 @@ def build_job(*, infer: Infer | None = None, fail_task: str | None = None) -> Jo
             role_path = prompt_root / "roles" / f"build-engineer-{family}.md"
             role = role_path.read_text(encoding="utf-8")
             guidance_bytes = persona.encode() + b"\0" + role.encode() + b"\0" + guidance.encode()
-            guidance_sha = hashlib.sha256(guidance_bytes).hexdigest()
-            bundle_root = unit.job.run_root / "data" / "guidance" / guidance_sha
-            atomic_bytes(bundle_root / "persona.md", persona.encode("utf-8"))
-            atomic_bytes(bundle_root / "role.md", role.encode("utf-8"))
-            atomic_bytes(bundle_root / "task.md", guidance.encode("utf-8"))
-            atomic_json(bundle_root / "model-identity.json", {
-                "provider": str(model["provider"]), "model": str(model["model"]),
-                "reasoning": str(model["reasoning"]), "guidance_sha256": guidance_sha,
-                "persona": "devops_engineer", "role": f"build_engineer_{family}",
-                "build_system": build_system,
-            })
+            guidance_sha = publish_guidance_bundle(
+                unit.job.run_root, persona=persona, role=role, guidance=guidance,
+                model=model, family=family, build_system=build_system)
             paths = sorted({str(value["path"]) for build_unit in build_units
                             for value in (*build_unit.get("markers", ()),
                                           *build_unit.get("descriptor_package", {}).get("documents", ()))})
