@@ -42,6 +42,8 @@ services:
 
   code-location:
     <<: *dagster-service
+    group_add:
+      - "${APPSEC_DOCKER_GID:-0}"
     container_name: appsec-review-dagster-code-location
     build:
       context: ../..

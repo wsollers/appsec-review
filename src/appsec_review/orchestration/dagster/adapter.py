@@ -27,6 +27,7 @@ from appsec_review.runtime import Job, plan_jobs
 from appsec_review.jobs.cataloging import source_fingerprint
 from appsec_review.observability import PipelineLog, write_run_metrics
 from appsec_review.storage import atomic_json
+from .error_state import build_error_state_definitions
 
 RunnerFactory = Callable[[AppConfig], JobRunner]
 
@@ -349,6 +350,7 @@ def build_definitions(
 
     jobs = []
     schedules = []
+    sensors = []
     for job_id in registry.job_ids():
         job_config = config.job(job_id)
         if job_id == "job_tree_sitter_ast":
@@ -489,8 +491,12 @@ def build_definitions(
         if "job_review_package_assembly" in registered:
             wave_jobs.append(registry.build("job_review_package_assembly"))
             wave_dependencies["job_review_package_assembly"] = ("job_review_data_indexing",)
-        jobs.append(_build_dagster_graph("wave1_review", tuple(wave_jobs), config, runner_factory,
-                                         job_dependencies=wave_dependencies))
+        wave_job = _build_dagster_graph("wave1_review", tuple(wave_jobs), config, runner_factory,
+                                        job_dependencies=wave_dependencies)
+        jobs.append(wave_job)
+        error_job, error_sensors = build_error_state_definitions(wave_job, config.runtime.runs_dir)
+        jobs.append(error_job)
+        sensors.extend(error_sensors)
     if {"job_review_intake", "job_target_catalog", "job_ci_configuration_analysis"} <= registered:
         jobs.append(_build_dagster_graph(
             "ci_configuration_review",
@@ -522,4 +528,4 @@ def build_definitions(
             config, runner_factory, node_namespace="project_build_review",
             job_dependencies=project_dependencies,
         ))
-    return Definitions(jobs=jobs, schedules=schedules)
+    return Definitions(jobs=jobs, schedules=schedules, sensors=sensors)

@@ -30,6 +30,7 @@ query VerifyDeployment {
           executionTimezone
           scheduleState { status }
         }
+        sensors { name sensorState { status } }
       }
     }
     ... on PythonError { message }
@@ -81,7 +82,8 @@ def _workspace(url: str, document: dict) -> dict:
         raise SystemExit("Dagster code location appsec_review is not connected")
     jobs = sorted(item["name"] for item in location["pipelines"])
     schedules = sorted(location["schedules"], key=lambda item: item["name"])
-    composed = ["wave1_review"]
+    sensors = sorted(location["sensors"], key=lambda item: item["name"])
+    composed = ["wave1_review", "wave1_error_state"]
     if "job_ci_configuration_analysis" in document["jobs"]:
         composed.append("ci_configuration_review")
     if "job_project_build" in document["jobs"]:
@@ -96,17 +98,20 @@ def _workspace(url: str, document: dict) -> dict:
         } for value in document["jobs"].values() if "schedule" in value),
         key=lambda item: item["name"],
     )
-    if jobs != expected_jobs or schedules != expected_schedules:
+    expected_sensors = [{"name": name, "sensorState": {"status": "RUNNING"}}
+                        for name in ("wave1_canceled_state", "wave1_failure_state")]
+    if jobs != expected_jobs or schedules != expected_schedules or sensors != expected_sensors:
         raise SystemExit(
             "semantic definition mismatch: "
-            f"expected jobs={expected_jobs}, schedules={expected_schedules}; "
-            f"found jobs={jobs}, schedules={schedules}"
+            f"expected jobs={expected_jobs}, schedules={expected_schedules}, sensors={expected_sensors}; "
+            f"found jobs={jobs}, schedules={schedules}, sensors={sensors}"
         )
     return {
         "webserver": "healthy",
         "code_location": "appsec_review",
         "jobs": jobs,
         "schedules": schedules,
+        "sensors": sensors,
     }
 
 

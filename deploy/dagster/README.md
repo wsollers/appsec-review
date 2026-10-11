@@ -38,7 +38,9 @@ containers.
 
 Run these commands from the repository root. Bootstrap creates an ignored `.env` once and preserves
 its secret on later calls. On native Linux it also records the invoking operator's uid/gid so the
-code location does not leave root-owned files in the bind-mounted `runs/` and `data/` trees.
+code location does not leave root-owned files in the bind-mounted `runs/` and `data/` trees. It
+records the Docker socket group id and adds that supplemental group to the code location so tool
+containers remain usable.
 When central configuration selects `claude-cli`, bootstrap also records the resolved local CLI,
 configuration-directory, and state-file paths. Compose mounts those three paths read-only only into
 the code-location container and sets an isolated container home; subscription credentials are not
@@ -98,6 +100,23 @@ $dagsterRunId = [guid]::NewGuid().ToString()
 docker compose --env-file deploy/dagster/.env -f deploy/dagster/compose.yaml exec -T webserver dagster job launch -w /opt/dagster/home/workspace.yaml -l appsec_review -j wave1_review --run-id $dagsterRunId
 python deploy/dagster/bin/verify.py --run-id $dagsterRunId --evidence deploy/dagster/verification/wave1-live-acceptance.json
 ```
+
+For an operator launch from WSL, `review_run.py` generates and prints the Dagster UUID, launches
+`wave1_review`, and queries its live status. Keep the UUID for `status` or `watch`:
+
+```bash
+python3 deploy/dagster/bin/review_run.py submit
+python3 deploy/dagster/bin/review_run.py watch --run-id DAGSTER_UUID
+```
+
+Dagster's running failure and cancellation sensors launch `wave1_error_state` when the whole
+`wave1_review` run reaches either terminal state. That job queries up to five recent failure events
+through the Dagster instance API and writes
+`runs/metadata/dagster-error-state/<dagster-uuid>.log`. Its first line gives the Dagster and
+application run ids and terminal status; the following lines name the failed steps and messages.
+Use `python3 deploy/dagster/bin/review_run.py status --run-id DAGSTER_UUID` to query the live
+Dagster status and show the last lines of that file. The file can appear shortly after Dagster
+marks the source run terminal because the daemon launches the error-state job asynchronously.
 
 With the current registry, the cross-job dependencies are:
 

@@ -25,6 +25,9 @@ if hasattr(os, "getuid"):
     values: list[tuple[str, object]] = [
         ("APPSEC_UID", os.getuid()), ("APPSEC_GID", os.getgid()),
     ]
+    socket = Path("/var/run/docker.sock")
+    if socket.exists():
+        values.append(("APPSEC_DOCKER_GID", socket.stat().st_gid))
     claude = shutil.which("claude")
     config_dir = Path.home() / ".claude"
     state_file = Path.home() / ".claude.json"
@@ -42,5 +45,5 @@ if hasattr(os, "getuid"):
     if additions:
         with environment.open("a", encoding="utf-8") as stream:
             stream.write(("" if text.endswith("\n") else "\n") + "\n".join(additions) + "\n")
-        print("Recorded native-Linux operator and available Claude CLI bind paths.")
+        print("Recorded native-Linux operator, Docker socket group, and available Claude CLI bind paths.")
 print("Dagster deployment environment is ready.")

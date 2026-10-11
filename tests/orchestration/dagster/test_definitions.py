@@ -4,6 +4,7 @@ from pathlib import Path
 import os
 import threading
 import time
+from types import SimpleNamespace
 
 import pytest
 
@@ -11,6 +12,7 @@ dagster = pytest.importorskip("dagster")
 
 from appsec_review.orchestration.dagster import build_definitions
 from appsec_review.orchestration.dagster.adapter import _metadata_for_outcome
+from appsec_review.orchestration.dagster.error_state import record_error_state
 from appsec_review.runtime import Job, Unit, UnitExecutor
 from appsec_review.runtime.registry import JobRegistry
 from tests.capture_fakes import build_capture_toml
@@ -179,6 +181,31 @@ def test_application_failure_fails_dagster_run(tmp_path: Path) -> None:
                for event in result.all_node_events if event.is_step_failure)
 
 
+def test_error_state_records_terminal_run_and_last_five_events(tmp_path: Path) -> None:
+    class Instance:
+        def get_run_by_id(self, run_id):
+            assert run_id == "failed-run"
+            return SimpleNamespace(job_name="wave1_review", status=dagster.DagsterRunStatus.FAILURE,
+                                   tags={"appsec/application_run_id": "app-run"})
+
+        def get_records_for_run(self, run_id, **options):
+            assert run_id == "failed-run"
+            assert options["limit"] == 5 and options["ascending"] is False
+            entries = [SimpleNamespace(event_log_entry=SimpleNamespace(
+                message=f"failure {index}\nmore detail",
+                dagster_event=SimpleNamespace(event_type_value="STEP_FAILURE",
+                                              step_key=f"step_{index}")))
+                       for index in range(5, 0, -1)]
+            return SimpleNamespace(records=entries)
+
+    path = record_error_state(Instance(), "failed-run", tmp_path)
+    lines = path.read_text(encoding="utf-8").splitlines()
+    assert len(lines) == 6
+    assert "status=FAILURE" in lines[0] and "application_run_id=app-run" in lines[0]
+    assert "step=step_1" in lines[1] and "step=step_5" in lines[-1]
+    assert all("\n" not in line for line in lines)
+
+
 def test_metadata_maps_units_snapshots_counts_gaps_and_receipts(tmp_path: Path) -> None:
     attempt = tmp_path / "runs" / "test-run" / "attempt_0001"
     outcome = {
@@ -242,6 +269,9 @@ def test_production_schedule_is_midnight_utc_and_enabled() -> None:
     assert definitions.get_job_def("ci_configuration_analysis").name == "ci_configuration_analysis"
     assert definitions.get_job_def("ci_configuration_review").name == "ci_configuration_review"
     assert definitions.get_job_def("wave1_review").name == "wave1_review"
+    assert definitions.get_job_def("wave1_error_state").name == "wave1_error_state"
+    for name in ("wave1_failure_state", "wave1_canceled_state"):
+        assert definitions.get_sensor_def(name).default_status is dagster.DefaultSensorStatus.RUNNING
 
 
 def test_wave1_exposes_real_producer_shard_topology() -> None:
