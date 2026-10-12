@@ -1,0 +1,195 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://appsec-review.local/schemas/inference-security-review/finding-package.schema.json",
+  "title": "Final finding package",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "finding_package_id",
+    "claim_id",
+    "state",
+    "label",
+    "title",
+    "adjudication_id",
+    "direct_evidence",
+    "verification_review_id",
+    "scores",
+    "poc",
+    "attack_chains",
+    "remediation_inputs",
+    "independence",
+    "gaps",
+    "provenance"
+  ],
+  "properties": {
+    "schema": {
+      "const": "appsec-review/finding-package/1"
+    },
+    "finding_package_id": {
+      "$ref": "common.schema.json#/$defs/finding_package_id"
+    },
+    "claim_id": {
+      "$ref": "common.schema.json#/$defs/claim_id"
+    },
+    "state": {
+      "enum": [
+        "confirmed",
+        "supported"
+      ]
+    },
+    "label": {
+      "enum": [
+        "confirmed",
+        "not_independently_confirmed"
+      ]
+    },
+    "title": {
+      "$ref": "common.schema.json#/$defs/short_text"
+    },
+    "adjudication_id": {
+      "$ref": "common.schema.json#/$defs/adjudication_id"
+    },
+    "direct_evidence": {
+      "$ref": "common.schema.json#/$defs/relation_ids"
+    },
+    "verification_review_id": {
+      "oneOf": [
+        {
+          "$ref": "common.schema.json#/$defs/review_id"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "scores": {
+      "type": "array",
+      "items": {
+        "$ref": "common.schema.json#/$defs/score_id"
+      },
+      "maxItems": 16,
+      "uniqueItems": true
+    },
+    "poc": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status",
+            "result_id"
+          ],
+          "properties": {
+            "status": {
+              "$ref": "common.schema.json#/$defs/poc_status"
+            },
+            "result_id": {
+              "oneOf": [
+                {
+                  "$ref": "common.schema.json#/$defs/record_id"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "attack_chains": {
+      "type": "array",
+      "items": {
+        "$ref": "common.schema.json#/$defs/record_id"
+      },
+      "maxItems": 32,
+      "uniqueItems": true
+    },
+    "remediation_inputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "safe_regression_artifact"
+      ],
+      "properties": {
+        "safe_regression_artifact": {
+          "oneOf": [
+            {
+              "$ref": "common.schema.json#/$defs/record_id"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "independence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "independent",
+        "provider_distinct"
+      ],
+      "properties": {
+        "independent": {
+          "type": "boolean"
+        },
+        "provider_distinct": {
+          "type": "boolean"
+        }
+      }
+    },
+    "gaps": {
+      "$ref": "common.schema.json#/$defs/gap_ids"
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "run_manifest_sha256",
+        "ledger_head_sha256"
+      ],
+      "properties": {
+        "run_manifest_sha256": {
+          "$ref": "common.schema.json#/$defs/sha256"
+        },
+        "ledger_head_sha256": {
+          "$ref": "common.schema.json#/$defs/sha256"
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "state": {
+            "const": "confirmed"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "label": {
+            "const": "confirmed"
+          },
+          "verification_review_id": {
+            "$ref": "common.schema.json#/$defs/review_id"
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "label": {
+            "const": "not_independently_confirmed"
+          }
+        }
+      }
+    }
+  ]
+}

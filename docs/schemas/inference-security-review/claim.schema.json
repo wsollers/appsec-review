@@ -1,0 +1,177 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://appsec-review.local/schemas/inference-security-review/claim.schema.json",
+  "title": "Canonical claim record and projection view",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "claim_id",
+    "lane",
+    "package_id",
+    "affected_entities",
+    "weakness_cwe",
+    "security_predicate",
+    "preconditions",
+    "statement",
+    "state",
+    "duplicate_of",
+    "origin_cell_ids"
+  ],
+  "properties": {
+    "schema": {
+      "const": "appsec-review/claim/1"
+    },
+    "claim_id": {
+      "$ref": "common.schema.json#/$defs/claim_id"
+    },
+    "lane": {
+      "$ref": "common.schema.json#/$defs/lane"
+    },
+    "package_id": {
+      "$ref": "common.schema.json#/$defs/package_id"
+    },
+    "affected_entities": {
+      "$ref": "common.schema.json#/$defs/affected_entities"
+    },
+    "weakness_cwe": {
+      "oneOf": [
+        {
+          "$ref": "common.schema.json#/$defs/cwe"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "security_predicate": {
+      "$ref": "common.schema.json#/$defs/token"
+    },
+    "preconditions": {
+      "$ref": "common.schema.json#/$defs/preconditions"
+    },
+    "statement": {
+      "$ref": "common.schema.json#/$defs/text"
+    },
+    "state": {
+      "$ref": "common.schema.json#/$defs/claim_state"
+    },
+    "duplicate_of": {
+      "oneOf": [
+        {
+          "$ref": "common.schema.json#/$defs/claim_id"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "origin_cell_ids": {
+      "type": "array",
+      "items": {
+        "$ref": "common.schema.json#/$defs/cell_id"
+      },
+      "maxItems": 64,
+      "uniqueItems": true
+    },
+    "state_history": {
+      "type": "array",
+      "items": {
+        "$ref": "common.schema.json#/$defs/state_change"
+      },
+      "maxItems": 64
+    },
+    "proof_obligations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "predicate",
+          "status",
+          "evidence"
+        ],
+        "properties": {
+          "predicate": {
+            "$ref": "common.schema.json#/$defs/predicate"
+          },
+          "status": {
+            "enum": [
+              "satisfied",
+              "contradicted",
+              "unresolved_contradiction",
+              "unsatisfied"
+            ]
+          },
+          "evidence": {
+            "$ref": "common.schema.json#/$defs/relation_ids"
+          }
+        }
+      },
+      "maxItems": 16,
+      "uniqueItems": true
+    },
+    "relations": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "supports",
+        "contradicts",
+        "qualifies"
+      ],
+      "properties": {
+        "supports": {
+          "$ref": "common.schema.json#/$defs/relation_ids"
+        },
+        "contradicts": {
+          "$ref": "common.schema.json#/$defs/relation_ids"
+        },
+        "qualifies": {
+          "$ref": "common.schema.json#/$defs/relation_ids"
+        }
+      }
+    },
+    "verification_review_id": {
+      "oneOf": [
+        {
+          "$ref": "common.schema.json#/$defs/review_id"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "round_history": {
+      "type": "array",
+      "items": {
+        "$ref": "common.schema.json#/$defs/adjudication_id"
+      },
+      "maxItems": 64
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "state": {
+            "const": "duplicate"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "duplicate_of": {
+            "$ref": "common.schema.json#/$defs/claim_id"
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "duplicate_of": {
+            "type": "null"
+          }
+        }
+      }
+    }
+  ]
+}

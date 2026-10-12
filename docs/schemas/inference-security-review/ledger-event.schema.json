@@ -1,0 +1,399 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://appsec-review.local/schemas/inference-security-review/ledger-event.schema.json",
+  "title": "Append-only, hash-chained claim-ledger event",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "stream",
+    "sequence",
+    "prev_event_sha256",
+    "event_id",
+    "kind",
+    "subject_id",
+    "body"
+  ],
+  "properties": {
+    "schema": {
+      "const": "appsec-review/ledger-event/1"
+    },
+    "stream": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "sequence": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "prev_event_sha256": {
+      "oneOf": [
+        {
+          "$ref": "common.schema.json#/$defs/sha256"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "event_id": {
+      "$ref": "common.schema.json#/$defs/event_id"
+    },
+    "kind": {
+      "$ref": "common.schema.json#/$defs/event_kind"
+    },
+    "subject_id": {
+      "$ref": "common.schema.json#/$defs/record_id"
+    },
+    "body": {
+      "type": "object"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "claim_proposed"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "subject_id": {
+            "$ref": "common.schema.json#/$defs/claim_id"
+          },
+          "body": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "claim",
+              "round"
+            ],
+            "properties": {
+              "claim": {
+                "allOf": [
+                  {
+                    "$ref": "claim.schema.json"
+                  },
+                  {
+                    "properties": {
+                      "state": {
+                        "const": "proposed"
+                      },
+                      "duplicate_of": {
+                        "type": "null"
+                      }
+                    }
+                  }
+                ]
+              },
+              "round": {
+                "$ref": "common.schema.json#/$defs/round"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "relation_added"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "subject_id": {
+            "$ref": "common.schema.json#/$defs/relation_id"
+          },
+          "body": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "relation",
+              "round"
+            ],
+            "properties": {
+              "relation": {
+                "$ref": "evidence-relation.schema.json"
+              },
+              "round": {
+                "$ref": "common.schema.json#/$defs/round"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "evidence_request_opened"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "subject_id": {
+            "$ref": "common.schema.json#/$defs/evidence_request_id"
+          },
+          "body": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "claim_id",
+              "predicate",
+              "requested_kind",
+              "round",
+              "origin_cell_id"
+            ],
+            "properties": {
+              "claim_id": {
+                "$ref": "common.schema.json#/$defs/claim_id"
+              },
+              "predicate": {
+                "$ref": "common.schema.json#/$defs/predicate"
+              },
+              "requested_kind": {
+                "$ref": "common.schema.json#/$defs/token"
+              },
+              "round": {
+                "$ref": "common.schema.json#/$defs/round"
+              },
+              "origin_cell_id": {
+                "oneOf": [
+                  {
+                    "$ref": "common.schema.json#/$defs/cell_id"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "evidence_request_closed"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "subject_id": {
+            "$ref": "common.schema.json#/$defs/evidence_request_id"
+          },
+          "body": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "claim_id",
+              "outcome",
+              "reason",
+              "round"
+            ],
+            "properties": {
+              "claim_id": {
+                "$ref": "common.schema.json#/$defs/claim_id"
+              },
+              "outcome": {
+                "$ref": "common.schema.json#/$defs/evidence_request_outcome"
+              },
+              "reason": {
+                "$ref": "common.schema.json#/$defs/text"
+              },
+              "round": {
+                "$ref": "common.schema.json#/$defs/round"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "duplicate_marked"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "subject_id": {
+            "$ref": "common.schema.json#/$defs/claim_id"
+          },
+          "body": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "duplicate_of",
+              "reason",
+              "round"
+            ],
+            "properties": {
+              "duplicate_of": {
+                "$ref": "common.schema.json#/$defs/claim_id"
+              },
+              "reason": {
+                "$ref": "common.schema.json#/$defs/text"
+              },
+              "round": {
+                "$ref": "common.schema.json#/$defs/round"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "state_transition"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "subject_id": {
+            "$ref": "common.schema.json#/$defs/claim_id"
+          },
+          "body": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "from_state",
+              "to_state",
+              "reason",
+              "round",
+              "adjudication_id"
+            ],
+            "properties": {
+              "from_state": {
+                "$ref": "common.schema.json#/$defs/claim_state"
+              },
+              "to_state": {
+                "allOf": [
+                  {
+                    "$ref": "common.schema.json#/$defs/claim_state"
+                  },
+                  {
+                    "not": {
+                      "const": "duplicate"
+                    }
+                  }
+                ]
+              },
+              "reason": {
+                "$ref": "common.schema.json#/$defs/text"
+              },
+              "round": {
+                "$ref": "common.schema.json#/$defs/round"
+              },
+              "adjudication_id": {
+                "oneOf": [
+                  {
+                    "$ref": "common.schema.json#/$defs/adjudication_id"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "gap_recorded"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "subject_id": {
+            "$ref": "common.schema.json#/$defs/gap_id"
+          },
+          "body": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "gap"
+            ],
+            "properties": {
+              "gap": {
+                "$ref": "gap.schema.json"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "cell_terminal"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "subject_id": {
+            "$ref": "common.schema.json#/$defs/cell_id"
+          },
+          "body": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "cell"
+            ],
+            "properties": {
+              "cell": {
+                "$ref": "cell-record.schema.json"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "sequence": {
+            "const": 0
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "prev_event_sha256": {
+            "type": "null"
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "prev_event_sha256": {
+            "$ref": "common.schema.json#/$defs/sha256"
+          }
+        }
+      }
+    }
+  ]
+}

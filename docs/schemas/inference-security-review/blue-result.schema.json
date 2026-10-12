@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://appsec-review.local/schemas/inference-security-review/blue-result.schema.json",
+  "title": "Blue refuter final result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "claim_id",
+    "citations",
+    "proposed_relations",
+    "evidence_requests",
+    "rationale",
+    "task",
+    "disposition"
+  ],
+  "properties": {
+    "schema": {
+      "const": "appsec-review/blue-result/1"
+    },
+    "claim_id": {
+      "$ref": "common.schema.json#/$defs/claim_id"
+    },
+    "citations": {
+      "$ref": "common.schema.json#/$defs/predicate_citations"
+    },
+    "proposed_relations": {
+      "$ref": "common.schema.json#/$defs/proposed_relations"
+    },
+    "evidence_requests": {
+      "$ref": "common.schema.json#/$defs/evidence_requests"
+    },
+    "rationale": {
+      "$ref": "common.schema.json#/$defs/text"
+    },
+    "task": {
+      "$ref": "common.schema.json#/$defs/blue_task"
+    },
+    "disposition": {
+      "enum": [
+        "supports",
+        "contradicts",
+        "qualifies",
+        "unresolved"
+      ]
+    }
+  }
+}
