@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import PurePosixPath
 import re
@@ -90,6 +90,83 @@ class CodeQLCustomQuerySettings:
             raise ValueError("CodeQL custom query pack must contain files")
 
 
+_EXPORT_RULES_ROOT = ("rules", "codeql-graph-export")
+# C/C++ is the only language with a graph export pack in this change (code-graph plan D5).
+_EXPORT_LANGUAGES = frozenset({"cpp"})
+
+
+def _positive_int(value: object, field_name: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        raise ValueError(f"{field_name} must be a positive integer")
+    return value
+
+
+@dataclass(frozen=True, slots=True)
+class CodeQLExportQuerySettings:
+    """One repository-owned, hash-pinned graph export pack; equals ``export_query_packs.<lang>``."""
+
+    query_id: str
+    source_path: str
+    query_pack: str
+    query_pack_version: str
+    query_suite: str
+    query_suite_sha256: str
+    query_pack_sha256: str
+    tree_sha256: str
+    file_count: int
+    columns_path: str
+    columns_sha256: str
+    catalog_path: str
+    catalog_sha256: str
+
+    def __post_init__(self) -> None:
+        if not re.fullmatch(r"[a-z][a-z0-9-]{0,63}", self.query_id):
+            raise ValueError("CodeQL export query id is invalid")
+        for name, value in (("source", self.source_path), ("columns", self.columns_path),
+                            ("catalog", self.catalog_path)):
+            path = PurePosixPath(value)
+            if (path.is_absolute() or ".." in path.parts or
+                    path.parts[:2] != _EXPORT_RULES_ROOT or len(path.parts) < 3):
+                raise ValueError(f"CodeQL export {name} path must be under rules/codeql-graph-export/")
+        if not re.fullmatch(r"appsec-review/[a-z0-9-]+", self.query_pack):
+            raise ValueError("CodeQL export query pack name is invalid")
+        if not re.fullmatch(r"[0-9]+(?:\.[0-9]+){1,3}", self.query_pack_version):
+            raise ValueError("CodeQL export query pack version is invalid")
+        suite = PurePosixPath(self.query_suite)
+        if suite.is_absolute() or ".." in suite.parts or suite.suffix != ".qls":
+            raise ValueError("CodeQL export query suite is invalid")
+        for name, value in (("suite", self.query_suite_sha256), ("pack", self.query_pack_sha256),
+                            ("tree", self.tree_sha256), ("columns", self.columns_sha256),
+                            ("catalog", self.catalog_sha256)):
+            if not _SHA.fullmatch(value):
+                raise ValueError(f"CodeQL export {name} identity is invalid")
+        if isinstance(self.file_count, bool) or not isinstance(self.file_count, int) or self.file_count < 1:
+            raise ValueError("CodeQL export query pack must contain files")
+
+
+def _default_export_bounds() -> tuple[int, int, int]:
+    from appsec_review.graph.contract import GraphSettings
+
+    defaults = GraphSettings()
+    return (defaults.max_facts_per_family_per_scope, defaults.max_export_bytes,
+            defaults.export_timeout_seconds)
+
+
+@dataclass(frozen=True, slots=True)
+class CodeQLExportSettings:
+    """Bounds of the ``export`` step (``jobs.job_codeql_analysis.settings.export_queries``)."""
+
+    enabled: bool = True
+    row_limit: int = field(default_factory=lambda: _default_export_bounds()[0])
+    max_bytes: int = field(default_factory=lambda: _default_export_bounds()[1])
+    timeout_seconds: int = field(default_factory=lambda: _default_export_bounds()[2])
+
+    def __post_init__(self) -> None:
+        _strict_bool(self.enabled, "CodeQL export_queries.enabled")
+        for name in ("row_limit", "max_bytes", "timeout_seconds"):
+            _positive_int(getattr(self, name), f"CodeQL export_queries.{name}")
+
+
 @dataclass(frozen=True, slots=True)
 class CodeQLLanguageSettings:
     enabled: bool
@@ -107,6 +184,7 @@ class CodeQLLanguageSettings:
     prerequisites: tuple[str, ...]
     additional_queries: tuple[CodeQLPackQuerySettings, ...]
     custom_queries: tuple[CodeQLCustomQuerySettings, ...]
+    export_queries: tuple[CodeQLExportQuerySettings, ...] = ()
 
     def __post_init__(self) -> None:
         if not isinstance(self.mode, CodeQLExecutionMode):
@@ -132,6 +210,8 @@ class CodeQLLanguageSettings:
         query_ids = [item.query_id for item in (*self.additional_queries, *self.custom_queries)]
         if len(query_ids) != len(set(query_ids)) or "default" in query_ids:
             raise ValueError("CodeQL custom query ids must be unique and cannot be default")
+        if len(self.export_queries) > 1:
+            raise ValueError("CodeQL configures at most one graph export pack per language")
 
     @property
     def runtime_mode(self) -> str | None:
@@ -166,6 +246,12 @@ class CodeQLAnalysisSettings:
     ram_mb: int
     max_paths: int
     languages: Mapping[str, CodeQLLanguageSettings]
+    export_queries: CodeQLExportSettings = field(default_factory=CodeQLExportSettings)
+
+    @property
+    def export_timeout_seconds(self) -> int:
+        """Timeout of the runner ``export`` action (read by ``codeql.runtime.action_timeout``)."""
+        return self.export_queries.timeout_seconds
 
     def __post_init__(self) -> None:
         if self.enabled == (self.execution_mode is CodeQLExecutionMode.DISABLED):
@@ -201,6 +287,11 @@ class CodeQLAnalysisSettings:
         if not {"Cargo.toml", "Cargo.lock", "bundled-rust-indexer"}.issubset(
                 self.languages["rust"].prerequisites):
             raise ValueError("CodeQL Rust analyzer/Cargo prerequisites are incomplete")
+        if not isinstance(self.export_queries, CodeQLExportSettings):
+            raise ValueError("CodeQL export_queries settings are invalid")
+        exporting = {name for name, language in self.languages.items() if language.export_queries}
+        if not exporting <= _EXPORT_LANGUAGES:
+            raise ValueError("CodeQL graph export packs exist only for: " + ", ".join(sorted(_EXPORT_LANGUAGES)))
 
 
 def parse_codeql_settings(value: Mapping[str, Any]) -> CodeQLAnalysisSettings:
@@ -210,6 +301,7 @@ def parse_codeql_settings(value: Mapping[str, Any]) -> CodeQLAnalysisSettings:
         "concurrency", "inventory_timeout_seconds", "database_timeout_seconds",
         "query_timeout_seconds", "output_bytes", "database_file_limit", "database_bytes_limit",
         "sarif_bytes_limit", "result_limit", "threads", "ram_mb", "max_paths", "languages",
+        "export_queries",
     }
     unknown = set(value) - allowed
     if unknown:
@@ -231,7 +323,7 @@ def parse_codeql_settings(value: Mapping[str, Any]) -> CodeQLAnalysisSettings:
             "enabled", "mode", "platform", "extractor_tree_sha256", "extractor_file_count",
             "query_pack", "query_pack_version", "query_suite", "query_suite_sha256",
             "query_pack_sha256", "query_lock_sha256", "source_languages", "prerequisites",
-            "additional_queries", "custom_queries",
+            "additional_queries", "custom_queries", "export_queries",
         }
         language_unknown = set(raw) - language_allowed
         if language_unknown:
@@ -256,6 +348,11 @@ def parse_codeql_settings(value: Mapping[str, Any]) -> CodeQLAnalysisSettings:
             tree_sha256=str(item.get("tree_sha256", "")),
             file_count=int(item.get("file_count", 0)),
         ) for item in custom_value)
+        export_value = raw.get("export_queries", [])
+        if not isinstance(export_value, list) or any(not isinstance(item, Mapping)
+                                                     for item in export_value):
+            raise ValueError(f"CodeQL export queries must be an array of tables: {language}")
+        export_queries = tuple(_export_query(item, language) for item in export_value)
         additional_queries = tuple(CodeQLPackQuerySettings(
             query_id=str(item.get("query_id", "")), query_suite=str(item.get("query_suite", "")),
             query_suite_sha256=str(item.get("query_suite_sha256", "")),
@@ -277,6 +374,7 @@ def parse_codeql_settings(value: Mapping[str, Any]) -> CodeQLAnalysisSettings:
             prerequisites=tuple(str(item) for item in raw.get("prerequisites", ())),
             additional_queries=additional_queries,
             custom_queries=custom_queries,
+            export_queries=export_queries,
         )
     return CodeQLAnalysisSettings(
         enabled=enabled,
@@ -298,4 +396,35 @@ def parse_codeql_settings(value: Mapping[str, Any]) -> CodeQLAnalysisSettings:
         result_limit=int(value.get("result_limit", 0)), threads=int(value.get("threads", 0)),
         ram_mb=int(value.get("ram_mb", 0)), max_paths=int(value.get("max_paths", 0)),
         languages=MappingProxyType(languages),
+        export_queries=_export_settings(value.get("export_queries")),
     )
+
+
+_EXPORT_QUERY_FIELDS = tuple(CodeQLExportQuerySettings.__dataclass_fields__)
+
+
+def _export_query(item: Mapping[str, Any], language: str) -> CodeQLExportQuerySettings:
+    unknown = set(item) - set(_EXPORT_QUERY_FIELDS)
+    missing = set(_EXPORT_QUERY_FIELDS) - set(item)
+    if unknown or missing:
+        raise ValueError(f"CodeQL {language} export query fields differ from the contract: " +
+                         ", ".join(sorted(unknown | missing)))
+    values = {name: item[name] for name in _EXPORT_QUERY_FIELDS}
+    for name, value in values.items():
+        if name == "file_count":
+            continue
+        if not isinstance(value, str):
+            raise ValueError(f"CodeQL {language} export query {name} must be a string")
+    return CodeQLExportQuerySettings(**values)
+
+
+def _export_settings(value: object) -> CodeQLExportSettings:
+    if value is None:
+        return CodeQLExportSettings()
+    if not isinstance(value, Mapping):
+        raise ValueError("jobs.job_codeql_analysis.settings.export_queries must be a table")
+    unknown = set(value) - {"enabled", "row_limit", "max_bytes", "timeout_seconds"}
+    if unknown:
+        raise ValueError("jobs.job_codeql_analysis.settings.export_queries has unknown settings: " +
+                         ", ".join(sorted(unknown)))
+    return CodeQLExportSettings(**dict(value))

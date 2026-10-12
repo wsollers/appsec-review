@@ -405,3 +405,46 @@ def build_codeql_plan(*, source_fingerprint: str, files: Sequence[Mapping[str, A
         raise ValueError("CodeQL plan contains duplicate independent scope identities")
     return CodeQLPlan(PLAN_SCHEMA, source_fingerprint, inventory, ordered,
                       tuple(dict.fromkeys(gaps)), tuple(non_applicable), tuple(decisions))
+
+
+EXPORT_PLAN_SCHEMA = "appsec-review/codeql-graph-export-plan/1"
+
+
+def export_lock_mismatches(configured: Mapping[str, Sequence[Mapping[str, Any]]],
+                           lock: Mapping[str, Any]) -> tuple[str, ...]:
+    """Languages whose configured graph export packs differ from ``export_query_packs``.
+
+    ``configured`` maps every configured language to its ``export_queries`` entries as plain
+    mappings. The lock holds at most one export pack per language; a language without a lock
+    entry must configure none, and a locked pack must be configured exactly.
+    """
+    locked = lock.get("export_query_packs", {})
+    if not isinstance(locked, Mapping):
+        return tuple(sorted(configured))
+    languages = sorted(set(configured) | set(locked))
+    return tuple(language for language in languages
+                 if [dict(item) for item in configured.get(language, ())] !=
+                 ([dict(locked[language])] if isinstance(locked.get(language), Mapping) else []))
+
+
+def plan_graph_exports(scopes: Sequence[CodeQLScope], *, enabled: bool,
+                       export_languages: Iterable[str]) -> tuple[Mapping[str, str], ...]:
+    """Per-scope export disposition: ``PLANNED`` or ``NOT_APPLICABLE`` with a named reason.
+
+    A language without a hash-pinned export pack is not a failure of this change (only C/C++
+    ships a pack, plan decision 6). It stays a named disposition so downstream graph coverage for
+    that scope is reported unavailable, never clean.
+    """
+    available = frozenset(export_languages)
+    values = []
+    for scope in scopes:
+        if not enabled:
+            disposition, reason = "NOT_APPLICABLE", "graph export is disabled in central configuration"
+        elif scope.language not in available:
+            disposition, reason = ("NOT_APPLICABLE",
+                                   f"no hash-pinned CodeQL graph export pack for {scope.language}")
+        else:
+            disposition, reason = "PLANNED", ""
+        values.append({"schema": EXPORT_PLAN_SCHEMA, "scope_id": scope.scope_id,
+                       "language": scope.language, "disposition": disposition, "reason": reason})
+    return tuple(values)
