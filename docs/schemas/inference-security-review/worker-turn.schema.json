@@ -1,0 +1,793 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://appsec-review.local/schemas/inference-security-review/worker-turn.schema.json",
+  "title": "One model turn in a bounded cell loop (design R2)",
+  "$defs": {
+    "param_value": {
+      "oneOf": [
+        {
+          "type": "string",
+          "maxLength": 512
+        },
+        {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10000
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "maxItems": 32,
+          "uniqueItems": true
+        }
+      ]
+    },
+    "request": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "tool",
+            "params"
+          ],
+          "properties": {
+            "tool": {
+              "const": "search"
+            },
+            "params": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "query"
+              ],
+              "properties": {
+                "query": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "indexes": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "kinds": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "limit": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "cursor": {
+                  "$ref": "#/$defs/param_value"
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "tool",
+            "params"
+          ],
+          "properties": {
+            "tool": {
+              "const": "find"
+            },
+            "params": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [],
+              "properties": {
+                "identity": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "kind": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "name": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "path": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "indexes": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "limit": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "cursor": {
+                  "$ref": "#/$defs/param_value"
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "tool",
+            "params"
+          ],
+          "properties": {
+            "tool": {
+              "const": "read_excerpt"
+            },
+            "params": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "identity"
+              ],
+              "properties": {
+                "identity": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "context_lines": {
+                  "$ref": "#/$defs/param_value"
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "tool",
+            "params"
+          ],
+          "properties": {
+            "tool": {
+              "const": "trace"
+            },
+            "params": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "identity"
+              ],
+              "properties": {
+                "identity": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "relations": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "depth": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "limit": {
+                  "$ref": "#/$defs/param_value"
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "tool",
+            "params"
+          ],
+          "properties": {
+            "tool": {
+              "const": "resolve_evidence"
+            },
+            "params": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "identity"
+              ],
+              "properties": {
+                "identity": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "limit": {
+                  "$ref": "#/$defs/param_value"
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "tool",
+            "params"
+          ],
+          "properties": {
+            "tool": {
+              "const": "coverage"
+            },
+            "params": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [],
+              "properties": {
+                "indexes": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "limit": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "cursor": {
+                  "$ref": "#/$defs/param_value"
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "tool",
+            "params"
+          ],
+          "properties": {
+            "tool": {
+              "const": "query_artifacts"
+            },
+            "params": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [],
+              "properties": {
+                "artifact_identity": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "sha256": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "kind": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "format": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "language": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "runtime": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "platform": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "architecture": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "build_unit": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "project": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "component": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "producing_build_action": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "package": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "purl": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "scanner": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "tool": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "coverage_status": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "shard": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "limit": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "cursor": {
+                  "$ref": "#/$defs/param_value"
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "tool",
+            "params"
+          ],
+          "properties": {
+            "tool": {
+              "const": "query_build_security"
+            },
+            "params": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [],
+              "properties": {
+                "project": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "build_root": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "build_action": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "configuration": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "compile_unit": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "linked_artifact": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "producer": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "shard": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "limit": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "cursor": {
+                  "$ref": "#/$defs/param_value"
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "tool",
+            "params"
+          ],
+          "properties": {
+            "tool": {
+              "const": "query_ci_configuration"
+            },
+            "params": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [],
+              "properties": {
+                "provider": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "pipeline": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "workflow": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "stage": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "job": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "step": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "tool": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "rule": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "category": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "canonical_finding": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "shard": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "limit": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "cursor": {
+                  "$ref": "#/$defs/param_value"
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "tool",
+            "params"
+          ],
+          "properties": {
+            "tool": {
+              "const": "query_codeql"
+            },
+            "params": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [],
+              "properties": {
+                "language": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "source_language": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "scope": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "build_unit": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "rule": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "level": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "path": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "shard": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "limit": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "cursor": {
+                  "$ref": "#/$defs/param_value"
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "tool",
+            "params"
+          ],
+          "properties": {
+            "tool": {
+              "const": "query_change_context"
+            },
+            "params": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [],
+              "properties": {
+                "scope": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "path": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "component": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "signal": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "limit": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "cursor": {
+                  "$ref": "#/$defs/param_value"
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "tool",
+            "params"
+          ],
+          "properties": {
+            "tool": {
+              "const": "query_hotspots"
+            },
+            "params": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [],
+              "properties": {
+                "scope": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "path": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "min_score": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "limit": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "cursor": {
+                  "$ref": "#/$defs/param_value"
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "tool",
+            "params"
+          ],
+          "properties": {
+            "tool": {
+              "const": "query_precomputed"
+            },
+            "params": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "query_set"
+              ],
+              "properties": {
+                "query_set": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "subject": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "path": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "limit": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "cursor": {
+                  "$ref": "#/$defs/param_value"
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "tool",
+            "params"
+          ],
+          "properties": {
+            "tool": {
+              "const": "query_observations"
+            },
+            "params": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [],
+              "properties": {
+                "scanner": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "rule": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "severity": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "observation_class": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "suppressed": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "duplicate": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "source": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "artifact": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "path": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "start_line": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "end_line": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "shard": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "limit": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "cursor": {
+                  "$ref": "#/$defs/param_value"
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "tool",
+            "params"
+          ],
+          "properties": {
+            "tool": {
+              "const": "query_dataset_inventory"
+            },
+            "params": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [],
+              "properties": {
+                "record_type": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "job": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "family": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "disposition": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "coverage_state": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "sensitivity": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "cell_type": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "limit": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "cursor": {
+                  "$ref": "#/$defs/param_value"
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "tool",
+            "params"
+          ],
+          "properties": {
+            "tool": {
+              "const": "query_owasp_workbench"
+            },
+            "params": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [],
+              "properties": {
+                "family": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "standard": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "version": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "profile": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "control": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "component": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "project": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "evidence_mode": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "validator": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "batch": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "disposition": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "shard": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "limit": {
+                  "$ref": "#/$defs/param_value"
+                },
+                "cursor": {
+                  "$ref": "#/$defs/param_value"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "action",
+        "requests"
+      ],
+      "properties": {
+        "action": {
+          "const": "retrieve"
+        },
+        "requests": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/request"
+          },
+          "maxItems": 8,
+          "minItems": 1
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "action",
+        "result"
+      ],
+      "properties": {
+        "action": {
+          "const": "final"
+        },
+        "result": {
+          "type": "object",
+          "description": "Validated separately against the role's result schema."
+        }
+      }
+    }
+  ]
+}

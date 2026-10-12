@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://appsec-review.local/schemas/inference-security-review/verifier-result.schema.json",
+  "title": "Blind verifier final result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "claim_id",
+    "citations",
+    "proposed_relations",
+    "evidence_requests",
+    "rationale",
+    "proposed_disposition"
+  ],
+  "properties": {
+    "schema": {
+      "const": "appsec-review/verifier-result/1"
+    },
+    "claim_id": {
+      "$ref": "common.schema.json#/$defs/claim_id"
+    },
+    "citations": {
+      "$ref": "common.schema.json#/$defs/predicate_citations"
+    },
+    "proposed_relations": {
+      "$ref": "common.schema.json#/$defs/proposed_relations"
+    },
+    "evidence_requests": {
+      "$ref": "common.schema.json#/$defs/evidence_requests"
+    },
+    "rationale": {
+      "$ref": "common.schema.json#/$defs/text"
+    },
+    "proposed_disposition": {
+      "enum": [
+        "confirmed",
+        "supported",
+        "contradicted",
+        "not_reachable",
+        "not_exploitable_in_observed_configuration",
+        "insufficient_evidence"
+      ]
+    }
+  }
+}

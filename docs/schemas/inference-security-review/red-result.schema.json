@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://appsec-review.local/schemas/inference-security-review/red-result.schema.json",
+  "title": "Red cell final result: proposed claims only",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "claims"
+  ],
+  "properties": {
+    "schema": {
+      "const": "appsec-review/red-result/1"
+    },
+    "claims": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "claim_ref",
+          "affected_entities",
+          "weakness_cwe",
+          "security_predicate",
+          "preconditions",
+          "statement",
+          "citations",
+          "proposed_relations",
+          "evidence_requests"
+        ],
+        "properties": {
+          "claim_ref": {
+            "$ref": "common.schema.json#/$defs/token"
+          },
+          "affected_entities": {
+            "$ref": "common.schema.json#/$defs/affected_entities"
+          },
+          "weakness_cwe": {
+            "oneOf": [
+              {
+                "$ref": "common.schema.json#/$defs/cwe"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "security_predicate": {
+            "$ref": "common.schema.json#/$defs/token"
+          },
+          "preconditions": {
+            "$ref": "common.schema.json#/$defs/preconditions"
+          },
+          "statement": {
+            "$ref": "common.schema.json#/$defs/text"
+          },
+          "citations": {
+            "$ref": "common.schema.json#/$defs/predicate_citations"
+          },
+          "proposed_relations": {
+            "$ref": "common.schema.json#/$defs/proposed_relations"
+          },
+          "evidence_requests": {
+            "$ref": "common.schema.json#/$defs/evidence_requests"
+          }
+        }
+      },
+      "maxItems": 8
+    },
+    "notes": {
+      "$ref": "common.schema.json#/$defs/text"
+    }
+  }
+}
