@@ -35,6 +35,8 @@ Repository authority remains in [`../../AGENTS.md`](../../AGENTS.md). This page 
   mapping statuses, portability constraints, and evidence integration.
 - [`evidence-sources-and-dataflow-retrieval.md`](evidence-sources-and-dataflow-retrieval.md) — input
   inventory, authority classes, precomputed dataflow, model-facing formats, MCP tools, and job flow.
+- [`document-evidence-analysis.md`](document-evidence-analysis.md) — target document collection,
+  route and boundary analysis, inference access, and the finding handoff design.
 - [`telemetry.md`](telemetry.md) — structured event and redaction design.
 - [`windows-native-analysis-vm.md`](windows-native-analysis-vm.md) — proposed Windows-native analysis isolation.
 - [`inference-security-review.md`](inference-security-review.md) — near-terminal red/blue/verification,

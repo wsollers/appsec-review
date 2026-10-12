@@ -65,7 +65,7 @@ reused; a new copy of the same evidence is unnecessary.
 | OWASP applicability, controls, validators, dispositions | OWASP workbench | accepted workbench shards; `query_owasp_workbench` | cross-link controls to accepted findings, tests and source evidence without duplicating the workbench |
 | Security tags and review-priority scores | tagging and prioritization | `tags`, `priority`; `query_hotspots` | link tag rationale and ranked items to exact supporting identities and coverage gaps |
 | NVD, OSV, MITRE, CVE tool database and other reference feeds | third-party sync | verified global feed snapshots and metadata, outside the run manifest | pin feed snapshot per run; index advisory/weakness/technique facets and join them to observed target packages/findings |
-| API contracts, deployment topology, tests, docs, dynamic traces | bounded OpenAPI, test and doc records indexed; other formats planned or partly scanner-observed | `documents` and scattered source/scanner observations | add producer-specific indices when acquired; distinguish declared, intent, and observed evidence |
+| API contracts, deployment topology, tests, docs, dynamic traces | bounded OpenAPI, test and doc records indexed; exact route and boundary context derived; other formats planned or partly scanner-observed | `documents`, `precomputed/document_context`, and scattered source/scanner observations | distinguish declared, intent, computed, and observed evidence; derive route and boundary context without claiming enforcement |
 | Run logs, raw tool outputs, exact environment, model transcripts, credentials | runtime and tool jobs | protected run-owned artifacts | only sanitized status, hashes, durations, producer and coverage enter retrieval; never index secret or raw model content |
 
 ### Input-source and retrieval matrix
@@ -117,8 +117,8 @@ a silent allowlist. `query_precomputed` is abbreviated `QP`; existing generic `f
 | cve-bin-tool derived database; `job_third_party_data_sync.cve_bin_tool_db_build` | Binary-component advisory matching | Current global artifact; pin source NVD snapshot and database version | `reference_intelligence`, `dependency_advisories` | `QP` or typed reference query; no skill |
 | Materialized OpenAPI 3 JSON; `job_target_catalog` | Declared routes, methods and parameters | Current `documents`; enforcement still needs source/graph proof; other interface formats remain planned | `contract_enforcement`, `entrypoint_paths` | `search`, `find`, `read_excerpt`; no skill |
 | IaC, rendered Helm/Kustomize, proxy and runtime config; planned `job_deployment_topology` | Exposure, privileges and limits | Planned `deployment`; scanner observations alone are not topology | `deployment_exposure`, `ci_trust` | Planned `query_deployment` if typed exposure filters are needed; no skill |
-| Unit-test source and Postman collections; `job_target_catalog` | Developer intent and request examples | Current bounded `documents`; route mentions link to declared operations; assertions do not prove enforcement | `test_intent`, `review_package` nominations only | `search`, `find`, `read_excerpt`; no skill |
-| Markdown under `docs/`, including design, STRIDE and DFD; `job_target_catalog` | Stated architecture and trust boundaries | Current bounded `documents`; target text remains untrusted intent | `review_package` nominations only | `search`, `find`, `read_excerpt`; no skill |
+| Unit-test source and Postman collections; `job_target_catalog`, `job_review_data_indexing` | Developer intent and request examples | Current bounded `documents` and `document_context`; exact route joins are review context, assertions do not prove enforcement | Current `document_context`; later `review_package` nominations | `search`, `find`, `read_excerpt`, `query_precomputed`; no skill |
+| Markdown under `docs/`, including design, STRIDE and DFD; `job_target_catalog`, `job_review_data_indexing` | Stated architecture and trust boundaries | Current bounded `documents` and `document_context`; target text remains untrusted intent | Current `document_context`; later `review_package` nominations | `search`, `find`, `read_excerpt`, `query_precomputed`; no skill |
 | Target-owned agent guidance; planned doc index | Owner statements only, never instructions | Planned `docs` with `target_guidance` flag and quarantine | None beyond nomination | `search` only if scope permits; no skill |
 | Sanitized text/facet streams from accepted source, observations, contracts, docs, tests and feeds; `tool-sqlite-fts` image | Nominate exact identities for later resolution | Current in-process FTS5; registered image can build/validate bounded FTS5 document shards when a producer is wired | Safe term/facet dictionaries, corpus counts and entity→document links | Existing `search` then `find`/`read_excerpt`; no new MCP endpoint or skill |
 | Fuzz, runtime and authorized dynamic traces; future producer | Observed behavior and path validation | Planned run-owned `observations`/trace identities and coverage | `dataflow`, `entrypoint_paths`, `review_package` | Planned `query_observations`/typed trace query if acquired; no skill |
@@ -277,9 +277,10 @@ should reuse the current `IndexBuilder`, `IndexIdentity`, and accepted-manifest 
 | `history_context` | Git, review/deployment data, SII and change context | bounded change/owner/fix/test context per file or symbol | missing VCS/review metadata or attribution |
 | `control_evidence` | OWASP workbench, findings, validators | control→evidence/disposition links | assessment unavailable or validator gap |
 | `reference_intelligence` | pinned NVD/OSV/MITRE feeds | advisory, CWE, CAPEC, ATT&CK links relevant to target facts | feed freshness or identity mismatch |
+| `document_context` | accepted OpenAPI, Postman, unit-test, STRIDE and DFD records | exact method/route and trust-boundary groups with source identities | unsupported formats, unmatched declarations, bounded truncation; intent never proves enforcement |
 | `contract_enforcement` | future API/IDL contracts, handlers, validators | declaration→handler→enforcement chain | contract unavailable or declaration not enforced |
 | `deployment_exposure` | future topology, CI/build/artifact graph | service→image→binary→source and privilege/exposure | environment not captured or image not bound |
-| `test_intent` | future test/doc index, source symbols | test assertion and negative-case links | tests not indexed or not executed; intent is not enforcement |
+| `test_intent` | accepted document context and future source-symbol links | richer test assertion and negative-case links | tests are not executed; intent is not enforcement |
 | `review_package` | all accepted indices and products | compact evidence bundle for a bounded review question | every missing contributing lane and package truncation |
 
 The [inventory and first-stage batch](../tasks/review-data-indexing-prompt.md) enforces dataset
@@ -302,9 +303,9 @@ invalidate unrelated accepted sets.
 
 | Stage | Product sets | Prerequisite |
 |---|---|---|
-| 1: broad inventory | `build_provenance`, `artifact_inventory`, `dependency_advisories`, `scanner_correlation`, `ci_trust`, `history_context`, `control_evidence`, `reference_intelligence`, `symbol_links` | Existing accepted domain shards and pinned feed identities |
+| 1: broad inventory | `build_provenance`, `artifact_inventory`, `dependency_advisories`, `scanner_correlation`, `ci_trust`, `history_context`, `control_evidence`, `reference_intelligence`, `symbol_links`, `document_context` | Existing accepted domain shards and pinned feed identities |
 | 2: code graphs | `call_graph`, `control_flow`, `dataflow`, `sarif_correlation`, `ast_ir_cpg_mapping`, `guards_ranges`, `entrypoint_paths` | Bounded AST/IR/CPG export, source mappings and available analyzer evidence |
-| 3: review context | `hotspot_context`, `redacted_secret_exposure`, `contract_enforcement`, `deployment_exposure`, `test_intent`, `review_package` | Accepted upstream sets; contract/deployment/test sets stay unavailable until their own producers exist |
+| 3: review context | `hotspot_context`, `redacted_secret_exposure`, `contract_enforcement`, `deployment_exposure`, `test_intent`, `review_package` | Accepted upstream sets; richer contract/deployment/test semantics remain pending even though `document_context` is indexed |
 
 Within a stage, implement one complete producer→shard→manifest→MCP vertical slice before
 replicating the pattern. `review_package` is a compact composition of accepted identities,

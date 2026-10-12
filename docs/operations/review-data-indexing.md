@@ -17,6 +17,10 @@ accepted catalog manifest. This indexing job carries that shard forward and audi
 declaration. Use `search`, `find`, and `read_excerpt` with `index=documents` to inspect declared
 OpenAPI operations and target-owned test/document intent. Missing files and unsupported formats
 appear as coverage gaps; neither a design statement nor a test is observed enforcement.
+`precompute.document_context` groups exact method/route and trust-boundary identifiers from the
+accepted document shard. Query it with `query_precomputed(query_set="document_context")`; its facts
+are review context, and unmatched declarations or requests are named gaps, not findings. See the
+[document analysis design](../architecture/document-evidence-analysis.md).
 
 ## Steps
 
@@ -24,7 +28,7 @@ appear as coverage gaps; neither a design statement nor a test is observed enfor
 |---|---|---|
 | `load.accepted_inputs` | `accepted-inputs.json` | Verifies the accepted manifest and target snapshot, reads every registered job's accepted handoff, restores shards a producer published but a later manifest rewrite dropped, reports shard conflicts, reads resolved job topology, pins global reference feeds and records the OWASP workbench status. |
 | `links.cross_domain` | `links/links-*` shards | Five link families: `representation`, `finding_source`, `package_advisory`, `symbol_syntax`, `history_code`. Exact links need equal identity, hash or byte span; name/line/hash-only joins are separate ambiguous relations carrying their method and confidence. |
-| `precompute.<query_set>` | `precomputed/qs-<query_set>` shards | One immutable shard per stage-1 set: `build_provenance`, `artifact_inventory`, `dependency_advisories`, `scanner_correlation`, `ci_trust`, `history_context`, `control_evidence`, `reference_intelligence`, `symbol_links`. |
+| `precompute.<query_set>` | `precomputed/qs-<query_set>` shards | One immutable shard per stage-1 set: `build_provenance`, `artifact_inventory`, `dependency_advisories`, `scanner_correlation`, `ci_trust`, `history_context`, `control_evidence`, `reference_intelligence`, `symbol_links`, `document_context`. |
 | `fts.image_validation` | `data/indexing/fts/<attempt>/` | Offline cross-check of this job's shard text with the pinned `tool-sqlite-fts` image (see below). |
 | `audit.inventory` | `inventory.json` | Publication completeness audit. A violation fails the job and blocks index acceptance; the report stays on disk. |
 | `matrix.coverage` | `coverage-matrices.json` | Language, build-unit, producer/consumer and input-source matrices plus the graph-batch follow-up list. |

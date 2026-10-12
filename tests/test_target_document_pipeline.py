@@ -130,3 +130,42 @@ def test_review_data_indexing_carries_document_shard_and_audits_its_dataset(tmp_
     accepted_manifest = run_root / "data" / "indices" / "manifests"
     assert any("documents" in {index["name"] for index in load_verified_manifest(run_root, path)[0]["indexes"]}
                for path in accepted_manifest.glob("review-data-indexing-*.json"))
+
+
+def test_document_analysis_publishes_bounded_route_and_boundary_context(tmp_path: Path) -> None:
+    config, target, outcome, _run_root = _run(tmp_path, fts_disabled=True)
+    JobRunner(config).run(build_indexing(), run_id=outcome["run_id"], target_root=target,
+                          source_fingerprint=source_fingerprint(target))
+    core = RetrievalCore(config.runtime.runs_dir, outcome["run_id"])
+    rows = []
+    cursor = None
+    while True:
+        page = core.query_precomputed(query_set="document_context", limit=100, cursor=cursor)
+        rows.extend(page["results"])
+        cursor = page.get("next_cursor")
+        if not cursor:
+            break
+    assert rows
+    route = next(item for item in rows if item["payload"]["result"]["key"] == "GET /api/v1/orders/{id}")
+    assert route["payload"]["fact_type"] == "route_context"
+    assert route["payload"]["result"]["members"]["openapi"]
+    assert route["payload"]["result"]["members"]["postman"]
+    assert route["payload"]["authority"].startswith("computed from accepted")
+    assert "verify behavior" in route["payload"]["result"]["inference_use"]
+    boundary = next(item for item in rows if item["payload"]["result"]["key"] == "TB1")
+    assert boundary["payload"]["fact_type"] == "boundary_context"
+    assert boundary["payload"]["result"]["members"]["dfd"]
+    assert boundary["payload"]["result"]["members"]["threat_model"]
+
+
+def test_document_analysis_reports_missing_declaration_without_finding(tmp_path: Path) -> None:
+    config, target, outcome, _run_root = _run(tmp_path, openapi_source=True, fts_disabled=True)
+    JobRunner(config).run(build_indexing(), run_id=outcome["run_id"], target_root=target,
+                          source_fingerprint=source_fingerprint(target))
+    core = RetrievalCore(config.runtime.runs_dir, outcome["run_id"])
+    page = core.query_precomputed(query_set="document_context", limit=100)
+    routes = [item for item in page["results"] if item["payload"]["fact_type"] == "route_context"]
+    assert routes
+    assert all(item["payload"]["coverage_status"] == "partial" for item in routes)
+    assert any("no accepted OpenAPI declaration" in gap for item in routes for gap in item["payload"]["gaps"])
+    assert all(item["kind"] == "precomputed_fact" for item in routes)

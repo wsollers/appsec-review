@@ -165,10 +165,12 @@ def test_target_text_remains_data(tmp_path: Path) -> None:
 def test_document_sources_have_a_bounded_catalog_producer() -> None:
     sources = {source: (producers, state, endpoints)
                for source, producers, state, _query_sets, endpoints in INPUT_SOURCES}
-    for name in ("interface_contracts", "tests_and_fixtures", "docs_and_threat_models"):
-        assert sources[name][0] == ("job_target_catalog",)
+    assert sources["interface_contracts"] == (("job_target_catalog",), "extend",
+                                             ("search", "find", "read_excerpt"))
+    for name in ("tests_and_fixtures", "docs_and_threat_models"):
+        assert sources[name][0] == ("job_target_catalog", "job_review_data_indexing")
         assert sources[name][1] == "extend"
-        assert sources[name][2] == ("search", "find", "read_excerpt")
+        assert sources[name][2] == ("search", "find", "read_excerpt", "query_precomputed")
     inventory = [{"path": f"docs/{name}", "sha256": "a" * 64} for name in
                  ("design.md", "threat-model.md", "data-flow-diagram.md")]
     inventory += [{"path": "backend/openapi.ts", "sha256": "b" * 64},

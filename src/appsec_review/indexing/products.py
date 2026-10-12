@@ -29,7 +29,7 @@ from appsec_review.storage import file_sha256
 
 FIRST_STAGE_SETS = (
     "build_provenance", "artifact_inventory", "dependency_advisories", "scanner_correlation", "ci_trust",
-    "history_context", "control_evidence", "reference_intelligence", "symbol_links",
+    "history_context", "control_evidence", "reference_intelligence", "symbol_links", "document_context",
 )
 _CWE = re.compile(r"(?i)\bcwe[-_/ ]?0*(\d{1,5})\b")
 
@@ -866,6 +866,81 @@ def _build_symbol_links(context: ProductContext, selected: tuple[Mapping[str, An
     return _finish(derived, name)
 
 
+def _select_document_context(shards: ShardSet) -> tuple[Mapping[str, Any], ...]:
+    return shards.select(index="documents", job=CATALOG)
+
+
+def _build_document_context(context: ProductContext, selected: tuple[Mapping[str, Any], ...]) -> Derived:
+    """Join accepted declarations and intent by exact route or boundary keys.
+
+    These are navigation facts for a reviewer. A missing test or declaration is a
+    coverage question, and a matching test never proves that a control is enforced.
+    """
+    name = "document_context"
+    derived = Derived()
+    if not selected:
+        return _finish(derived, name, unavailable="no accepted target document shard")
+    shards = context.shards
+    rows = [row for row in shards.entities(selected, kinds=("document_record",))
+            if row.get("payload", {}).get("record_type") == "target_document"]
+    routes: dict[tuple[str, str], dict[str, list[Mapping[str, Any]]]] = defaultdict(lambda: defaultdict(list))
+    boundaries: dict[str, dict[str, list[Mapping[str, Any]]]] = defaultdict(lambda: defaultdict(list))
+    for row in rows:
+        payload = row["payload"]
+        fields = payload.get("fields") or {}
+        kind, subtype = payload.get("document_kind"), payload.get("subtype")
+        if subtype in {"operation", "request"} and kind in {"openapi", "postman", "unit_test"}:
+            method, route = fields.get("method"), fields.get("route")
+            if isinstance(method, str) and isinstance(route, str) and route.startswith("/"):
+                routes[(method, route)][str(kind)].append(row)
+        elif kind == "dfd" and subtype == "boundary" and isinstance(fields.get("boundary_id"), str):
+            boundaries[fields["boundary_id"]]["dfd"].append(row)
+        elif kind == "threat_model" and subtype == "threat":
+            for boundary in fields.get("boundaries", ()):
+                if isinstance(boundary, str):
+                    boundaries[boundary]["threat_model"].append(row)
+
+    subjects: list[tuple[str, str, Mapping[str, list[Mapping[str, Any]]]]] = [
+        ("route", f"{method} {route}", grouped) for (method, route), grouped in sorted(routes.items())
+    ] + [("boundary", boundary, grouped) for boundary, grouped in sorted(boundaries.items())]
+    upstream = _upstream(selected)
+    for subject_type, key, grouped in subjects[:context.max_facts]:
+        members = [row for kind in sorted(grouped) for row in sorted(grouped[kind], key=lambda item: item["identity"])]
+        anchor = next((row for row in members if row["payload"].get("document_kind") in {"openapi", "dfd"}),
+                      members[0])
+        gaps = []
+        if subject_type == "route" and not grouped.get("openapi"):
+            gaps.append("no accepted OpenAPI declaration for this request")
+        if subject_type == "boundary" and not grouped.get("dfd"):
+            gaps.append("no accepted DFD boundary for this threat")
+        record = fact(context.snapshot, name, context.rule_version,
+                      {"subject_type": subject_type, "key": key}, name=f"{subject_type} {key}",
+                      text=f"document context {subject_type} {key}",
+                      result={"subject_type": subject_type, "key": key,
+                              "members": {kind: [row["identity"] for row in grouped[kind]]
+                                          for kind in sorted(grouped)},
+                              "member_counts": {kind: len(grouped[kind]) for kind in sorted(grouped)},
+                              "inference_use": "review context only; verify behavior in source or run evidence"},
+                      basis="exact method and route or trust-boundary identifier in accepted target documents",
+                      upstream=upstream, subject_identity=anchor["identity"],
+                      subject_path=(anchor.get("location") or {}).get("path"),
+                      status="partial" if gaps else "complete", gaps=gaps, location=anchor.get("location"),
+                      fact_type=f"{subject_type}_context")
+        derived.entities.append(record)
+        for row in members[:32]:
+            derived.relate(RelationKind.DERIVED_FROM, record.identity.value, row["identity"],
+                           exact=True, confidence=1.0, method="document-key")
+        if len(members) > 32:
+            derived.gap(f"{subject_type} {key}: {len(members) - 32} document links exceeded the relation bound")
+        for gap in gaps:
+            derived.gap(f"{subject_type} {key}: {gap}")
+    if len(subjects) > context.max_facts:
+        derived.gap(f"truncated: {len(subjects) - context.max_facts} document subject(s) exceeded the fact bound")
+    for gap in _coverage_gaps(shards, selected):
+        derived.gap(gap)
+    return _finish(derived, name)
+
+
 PRODUCT_RULES: tuple[ProductRule, ...] = (
     ProductRule("build_provenance", "build-provenance/1", _select_build_provenance, _build_build_provenance,
                 links=("representation",)),
@@ -883,6 +958,7 @@ PRODUCT_RULES: tuple[ProductRule, ...] = (
                 _build_reference_intelligence, feeds=("mitre",)),
     ProductRule("symbol_links", "symbol-links/1", _select_symbol_links, _build_symbol_links,
                 links=("symbol_syntax",)),
+    ProductRule("document_context", "document-context/1", _select_document_context, _build_document_context),
 )
 assert tuple(rule.query_set for rule in PRODUCT_RULES) == FIRST_STAGE_SETS
 

@@ -652,6 +652,7 @@ workers = 1
 [jobs.job_review_data_indexing.steps.precompute.tasks.control_evidence]
 [jobs.job_review_data_indexing.steps.precompute.tasks.reference_intelligence]
 [jobs.job_review_data_indexing.steps.precompute.tasks.symbol_links]
+[jobs.job_review_data_indexing.steps.precompute.tasks.document_context]
 
 [jobs.job_review_data_indexing.steps.fts]
 workers = 1

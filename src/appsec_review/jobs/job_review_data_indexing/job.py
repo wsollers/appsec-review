@@ -43,7 +43,8 @@ JOB_ID = "job_review_data_indexing"
 SCHEMA = "appsec-review/review-data-indexing/1"
 INVENTORY_RULE = "appsec-review/dataset-inventory-index/1"
 PRODUCT_SETS = ("build_provenance", "artifact_inventory", "dependency_advisories", "scanner_correlation",
-                "ci_trust", "history_context", "control_evidence", "reference_intelligence", "symbol_links")
+                "ci_trust", "history_context", "control_evidence", "reference_intelligence", "symbol_links",
+                "document_context")
 TOPOLOGY = {"load": ("accepted_inputs",), "links": ("cross_domain",), "precompute": PRODUCT_SETS,
             "fts": ("image_validation",), "audit": ("inventory",), "matrix": ("coverage",),
             "publish": ("inventory_index",)}
@@ -562,7 +563,7 @@ GRAPH_FOLLOW_UP = (
     ("redacted_secret_exposure", "secret-scanner sink joins"),
     ("contract_enforcement", "interface-contract producer (planned)"),
     ("deployment_exposure", "deployment-topology producer (planned)"),
-    ("test_intent", "test/doc index producer (planned)"),
+    ("test_intent", "assertion semantics and negative-case links beyond document_context"),
 )
 
 
