@@ -232,6 +232,10 @@ the catalog does not classify is published with class `unclassified` and is neve
 | `guard_fact` | `{scope_id, sink_identity, condition_path, condition_start_byte, condition_end_byte}` |
 | `range_fact` | `{scope_id, sink_identity, operand_index}` |
 
+For the explicit `guard_state = none` fact, which has no condition, the condition fields are the
+sink's own path and byte span (`contract.none_guard_native`). This gives exactly one `none` fact
+per sink, distinct from every real condition.
+
 `scope_id` is the CodeQL scope identity (language + build unit + database identity), so a rebuilt
 database yields new facts and the old ones disappear with the old shard. Native CodeQL element
 ids, clangd USRs and IR register names never enter an identity or a payload; they stay in the

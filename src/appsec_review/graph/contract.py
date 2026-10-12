@@ -199,6 +199,18 @@ def fact_identity(family: Family | str, target_snapshot: str, native: Mapping[st
     return LogicalIdentity.derive(FAMILY_KINDS[family], target_snapshot, {name: native[name] for name in expected})
 
 
+def none_guard_native(scope_id: str, sink_identity: str, sink_path: str, sink_start_byte: int,
+                      sink_end_byte: int) -> dict[str, Any]:
+    """Native identity of the explicit ``guard_state = none`` fact for one sink.
+
+    A ``none`` fact has no condition, so its condition fields are the sink's own path and byte span.
+    This keeps exactly one ``none`` fact per sink and never collides with a real condition, which
+    cannot share the sink expression's exact span.
+    """
+    return {"scope_id": scope_id, "sink_identity": sink_identity, "condition_path": sink_path,
+            "condition_start_byte": sink_start_byte, "condition_end_byte": sink_end_byte}
+
+
 def mapped_predicates(family: Family | str, result: Mapping[str, Any]) -> frozenset[Predicate]:
     """Predicates a direct-eligible fact of ``family`` may satisfy, after the family's condition."""
     family = Family(family)

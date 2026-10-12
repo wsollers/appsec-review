@@ -186,3 +186,13 @@ def test_settings_defaults_bounds_and_unknown_keys() -> None:
         c.GraphSettings.from_mapping({"max_paths_per_sink": 0})
     with pytest.raises(c.GraphContractError):
         c.GraphSettings.from_mapping({"bogus": 1})
+
+
+def test_none_guard_identity_uses_the_sink_span() -> None:
+    sink = "asr:sink_site:" + SHA
+    native = c.none_guard_native("s", sink, "a.c", 1, 9)
+    identity = c.fact_identity(c.Family.GUARD_FACT, SNAPSHOT, native)
+    assert identity == c.fact_identity(c.Family.GUARD_FACT, SNAPSHOT, c.none_guard_native("s", sink, "a.c", 1, 9))
+    real = c.fact_identity(c.Family.GUARD_FACT, SNAPSHOT, {**native, "condition_start_byte": 3,
+                                                           "condition_end_byte": 7})
+    assert real != identity
