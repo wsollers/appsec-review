@@ -24,7 +24,7 @@ accepted-handoff format. The exact operator-visible distinction is documented in
 
 ## Registered jobs
 
-`runtime/registry.py` registers 23 jobs. Each has a `[jobs.<job_id>]` table in
+`runtime/registry.py` registers 25 jobs. Each has a `[jobs.<job_id>]` table in
 `appsec-review.toml`, and its Dagster job is named from that table's `name`.
 
 | Job | Purpose | Operations |

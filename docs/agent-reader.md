@@ -42,6 +42,7 @@ Operations, one page per job or service:
 - [`operations/owasp-control-assessment.md`](operations/owasp-control-assessment.md) — OWASP control assessment.
 - [`operations/review-prioritization.md`](operations/review-prioritization.md) — review prioritization.
 - [`operations/security-tagging.md`](operations/security-tagging.md) — security tagging.
+- [`operations/document-issue-analysis.md`](operations/document-issue-analysis.md) — source-mapped document candidate ledger.
 - [`operations/retrieval-mcp.md`](operations/retrieval-mcp.md) — local retrieval MCP gateway.
 - [`operations/metrics.md`](operations/metrics.md) — derived run metrics.
 

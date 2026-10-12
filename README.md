@@ -290,7 +290,7 @@ are recorded as coverage gaps.
 ## Sync third-party metadata
 
 Vulnerability and threat-reference data is fetched by `job_third_party_data_sync`. It refreshes
-four branches:
+six branches:
 
 | Branch | Publishes to | Contents |
 | --- | --- | --- |
@@ -298,6 +298,8 @@ four branches:
 | `osv_sync` | `data/feeds/osv/` | Configured OSV ecosystem archives plus a SQLite lookup index. |
 | `mitre_sync` | `data/feeds/mitre/` | Enterprise ATT&CK, CAPEC, and CWE (all three mandatory); Mobile and ICS ATT&CK are optional selections. |
 | `cve_bin_tool_db_build` | `data/feeds/cve-bin-tool/` | cve-bin-tool database built offline in Docker from the NVD snapshot above. |
+| `kev_sync` | `data/feeds/kev/` | CISA Known Exploited Vulnerabilities catalog and SQLite lookup index. |
+| `epss_sync` | `data/feeds/epss/` | FIRST daily EPSS scores and SQLite lookup index. |
 
 Each publication is an immutable, hash-manifested snapshot, and `current.json` moves only after
 validation. A failed refresh keeps the previous last-known-good snapshot. Host-level status
@@ -361,7 +363,7 @@ review_intake -> target_catalog -> source_history_analysis -> target_analysis_pl
   -> artifact_indexing -> artifact_security_analysis -> cpp_compiled_analysis
   -> cpp_symbol_index -> cpg_analysis -> evidence_collection
   -> change_context_analysis -> codeql_analysis -> review_prioritization
-  -> review_data_indexing -> review_package_assembly
+  -> review_data_indexing -> review_package_assembly -> document_issue_analysis
 ```
 
 Start a review from the repository root with the virtual environment active:
@@ -408,7 +410,8 @@ python -m appsec_review start --target targets/appsec-multi-vuln
 
 The direct graph leaves out CI configuration analysis, post-build security assessment, OWASP
 control assessment, and security tagging. Use Dagster's `wave1_review` job, which runs every
-registered job except `third_party_data_sync`, when you need those.
+registered review job except the standalone `inference_security_review`, when you need those.
+`third_party_data_sync` remains a separate scheduled metadata job.
 See [`docs/operations/wave1-review.md`](docs/operations/wave1-review.md).
 
 ## Run the Dagster deployment
@@ -441,7 +444,8 @@ Sync metadata through Dagster:
 ```bash
 dagsterRunId=$(python3 -c 'import uuid; print(uuid.uuid4())')
 docker compose --env-file deploy/dagster/.env -f deploy/dagster/compose.yaml exec -T webserver dagster job launch -w /opt/dagster/home/workspace.yaml -l appsec_review -j third_party_data_sync --run-id "$dagsterRunId"
-python deploy/dagster/bin/verify.py --run-id "$dagsterRunId" --evidence deploy/dagster/verification/live-acceptance.json
+# Wait for this run to finish in the Dagster console before verifying it.
+python deploy/dagster/bin/verify.py --run-id "$dagsterRunId" --evidence "runs/metadata/dagster-verification/$dagsterRunId.json"
 ```
 
 Launch the full review graph:
@@ -449,7 +453,8 @@ Launch the full review graph:
 ```bash
 dagsterRunId=$(python3 -c 'import uuid; print(uuid.uuid4())')
 docker compose --env-file deploy/dagster/.env -f deploy/dagster/compose.yaml exec -T webserver dagster job launch -w /opt/dagster/home/workspace.yaml -l appsec_review -j wave1_review --run-id "$dagsterRunId"
-python deploy/dagster/bin/verify.py --run-id "$dagsterRunId" --evidence deploy/dagster/verification/wave1-live-acceptance.json
+python3 deploy/dagster/bin/review_run.py watch --run-id "$dagsterRunId"
+python deploy/dagster/bin/verify.py --run-id "$dagsterRunId" --evidence "runs/metadata/dagster-verification/$dagsterRunId.json"
 ```
 
 After you change application code, rebuild and reload only the code location:

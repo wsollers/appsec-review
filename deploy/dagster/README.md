@@ -89,7 +89,8 @@ through the live Dagster instance and retains the Dagster id for terminal verifi
 ```powershell
 $dagsterRunId = [guid]::NewGuid().ToString()
 docker compose --env-file deploy/dagster/.env -f deploy/dagster/compose.yaml exec -T webserver dagster job launch -w /opt/dagster/home/workspace.yaml -l appsec_review -j third_party_data_sync --run-id $dagsterRunId
-python deploy/dagster/bin/verify.py --run-id $dagsterRunId --evidence deploy/dagster/verification/live-acceptance.json
+# Wait for this run to finish in the Dagster console before verifying it.
+python deploy/dagster/bin/verify.py --run-id $dagsterRunId --evidence "runs/metadata/dagster-verification/$dagsterRunId.json"
 ```
 
 Launch the deterministic review graph through the same live instance. After target planning, static
@@ -103,7 +104,8 @@ handoffs remain in the ignored `runs/` mount:
 ```powershell
 $dagsterRunId = [guid]::NewGuid().ToString()
 docker compose --env-file deploy/dagster/.env -f deploy/dagster/compose.yaml exec -T webserver dagster job launch -w /opt/dagster/home/workspace.yaml -l appsec_review -j wave1_review --run-id $dagsterRunId
-python deploy/dagster/bin/verify.py --run-id $dagsterRunId --evidence deploy/dagster/verification/wave1-live-acceptance.json
+python deploy/dagster/bin/review_run.py watch --run-id $dagsterRunId
+python deploy/dagster/bin/verify.py --run-id $dagsterRunId --evidence "runs/metadata/dagster-verification/$dagsterRunId.json"
 ```
 
 For an operator launch from WSL, `review_run.py` generates and prints the Dagster UUID, launches
@@ -145,11 +147,12 @@ post_build_security_assessment + evidence_collection + artifact_security_analysi
   + tree_sitter_ast + codeql_analysis -> owasp_control_assessment
 codeql_analysis + owasp_control_assessment -> review_prioritization
 codeql_analysis + owasp_control_assessment + review_prioritization -> security_tagging
-security_tagging -> review_data_indexing -> review_package_assembly
+security_tagging -> review_data_indexing -> review_package_assembly -> document_issue_analysis
 ```
 
-`wave1_review` contains every registered job except `third_party_data_sync`, and
-`review_package_assembly` is its single terminal job.
+`wave1_review` contains every registered job except the standalone
+`third_party_data_sync` and `inference_security_review` jobs, and
+`document_issue_analysis` is its single terminal job.
 
 This is the Dagster-only composed topology. The direct CLI has a smaller linear graph documented in
 [`docs/operations/wave1-review.md`](../../docs/operations/wave1-review.md).

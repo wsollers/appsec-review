@@ -19,7 +19,8 @@ control assessment, or security tagging, and `third_party_data_sync` runs separa
 run job_third_party_data_sync`). Both surfaces run change-context analysis after Tree-sitter AST
 production, review prioritization after CodeQL, review-package assembly after data indexing, and
 document issue analysis after package assembly. Use Dagster's
-`wave1_review`, which includes every registered job except `third_party_data_sync`, when its
+`wave1_review`, which includes every registered job except the standalone
+`third_party_data_sync` and `inference_security_review` jobs, when its
 additional branches are required. Dagster's current dependency graph is assembled from the registered,
 configured jobs and is summarized in [`../../deploy/dagster/README.md`](../../deploy/dagster/README.md).
 
