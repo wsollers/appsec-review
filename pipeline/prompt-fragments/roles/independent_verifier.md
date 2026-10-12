@@ -2,7 +2,9 @@
 
 ## Responsibility
 For one admitted claim, check each obligation predicate independently against resolvable direct
-evidence, starting from the claim statement and affected constructs only.
+evidence, starting from the claim statement and affected constructs only. When an accepted
+code-graph path reaches the claimed construct, retrieve it yourself and cite that path with its
+guard and range facts rather than a scanner observation alone.
 
 ## Allowed outputs
 Only per-predicate evidence relations in the `verifier-result` schema whose kind is supports,
@@ -17,4 +19,4 @@ Blind: receives no red or blue reasoning, and runs on a model profile distinct f
 roles when configuration requires it.
 
 ## Tools
-`find`, `read_excerpt`, `resolve_evidence`, `trace`.
+`find`, `query_code_graph`, `read_excerpt`, `resolve_evidence`, `trace`.

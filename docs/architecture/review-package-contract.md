@@ -1,12 +1,15 @@
 # Review package and finding-lead contract
 
-Status: implementation contract, schema version 3. Accepted-manifest scope assembly, lane A
+Status: implementation contract. Inference review packages are schema version 4
+(`appsec-review/review-package/4`, assembly rule `assemble-review-packages/4`); the catalog-derived
+document packages below stay at version 3. Accepted-manifest scope assembly, lane A
 finding-lead packages for every lead family, lane B review-unit ranking and hunt packages,
 membership audits and the package manifest are implemented in `src/appsec_review/review/`
 (`scope.py`, `lead_families.py`, `units.py`, `packages.py`, with pinned-feed reference context
 from `advisories.py` and `references.py`). The inference job consumes these packages
-(`job_inference_security_review`). Version 3 adds lead `advisory_context`, `advisory_summary`,
+(`job_inference_security_review`). Version 3 added lead `advisory_context`, `advisory_summary`,
 `weaknesses` and `admission_reasons`, and the `advisory_kev`/`advisory_epss` rank signals.
+Version 4 adds accepted code-graph context (see [Code-graph context](#code-graph-context-version-4)).
 
 This contract specializes [inference security review](inference-security-review.md). Its
 machine-checkable shape is [review-packages.schema.json](../schemas/review-packages.schema.json).
@@ -40,16 +43,45 @@ exact route registration is not proof of control enforcement.
 | `evidence`, `context` | Accepted observation, priority, CodeQL, source, build and precomputed shard identities; `find`, `trace`, `resolve_evidence`, `query_codeql`, `query_hotspots`, `query_precomputed`. A cited relation is a nomination until it resolves to a source line or hash-verified run artifact. |
 | `proof_obligations` | Deterministic rule table keyed by lead class and observed prerequisites: affected construct, input control, reachability, guard/configuration state, and impact. Missing predicates stay open; model prose cannot close them. |
 | `coverage_gaps` | Accepted index coverage, dataset inventory, query-set and language/build-unit cells; `coverage`, `query_dataset_inventory`. A failed, absent or skipped producer is a named gap. |
-| `retrieval` | Intersection of accepted package identities, available index names, query sets and configured caps. These are grants proposed by assembly, not an MCP authorization token. |
+| `retrieval` | Intersection of accepted package identities, available index names, query sets and configured caps, plus `graph_families` (v4): the code-graph families accepted for the package scope. These are grants proposed by assembly, not an MCP authorization token. |
 
 Each `context` entry is typed `{id, kind, role}`. `kind` is the retrieval entity kind of `id`.
 `role` is one of `source`, `artifact`, `component`, `build_unit`, `duplicate_of`, `flow`,
-`priority`, `history`, `hotspot` or `tag`. Bare identity lists are not accepted.
+`priority`, `history`, `hotspot`, `tag`, or (v4) `entry_point`, `sink`, `path`, `guard` and
+`range`. Bare identity lists are not accepted.
+
+### Code-graph context (version 4)
+
+`review/packages.py::GraphContext` reads the accepted `graph` shards
+([code-graph precomputation](code-graph-precomputation.md) section 7.5, rule
+`package-graph-context/1`). A graph shard applies to a package scope when it names the scope's
+build unit (shard producer `build_unit_id` or a fact's `scope.build_unit_id`) or holds a fact
+located in one of the scope's paths. A family is listed in `retrieval.graph_families` when an
+applying shard covers it in any state but `unavailable`.
+
+- Lane A: a lead package embeds every `dataflow_path` correlated with its observation by a
+  `DERIVED_FROM` relation whose state is `bridged` or `partial` (role `path`), that path's
+  `sink_site` (`sink`) and `entry_point` (`entry_point`), and the sink's `guard_fact` (`guard`)
+  and `range_fact` (`range`) facts. A `broken` correlation is never embedded.
+- Lane B: a hunt package embeds the unit's `sink_site` and `entry_point` identities, taken
+  round-robin by (role, class) in identity order within whatever `max_context_entries` leaves after
+  the unit's other context; the rest are counted in `omitted_context` with a `code_graph`
+  `truncated` gap.
+- `coverage_gaps` carry the scope's `code_graph` lane: `partial` for families covered only
+  partially and `unavailable` for families with no accepted coverage. Without any accepted `graph`
+  index every package carries a `code_graph` `missing` gap and the manifest a run-level one.
+- `retrieval.graph_families` also decides lane B strategies: `sink_site` provides
+  `source_sink_facts` (`sink_up`) and `entry_point` provides `entry_point_catalog` (`entry_down`)
+  for that package only (`guidance/routing.py::unit_sources`). Symbol links unlock no strategy.
+
+Graph context is a search aid. An embedded identity is evidence only when a cell cites it and
+`resolve_relation` re-resolves it under `evidence-admissibility/2`.
 
 `input_fingerprint` hashes canonical JSON of the accepted manifest hash, package scope, all
-sorted referenced shard hashes, lead IDs, rule versions (assembly, obligations, rank, every
-lead-family rule and the advisory-context rule), the CWE reference record (source, MITRE snapshot
-and gap) and resolved cap settings. `package_id` is `<kind>-<sha256>` over the
+sorted referenced shard hashes (including every applying graph shard), lead IDs, rule versions
+(assembly, obligations, rank, every lead-family rule, the advisory-context rule and the
+graph-context rule), the CWE reference record (source, MITRE snapshot and gap) and resolved cap
+settings. `package_id` is `<kind>-<sha256>` over the
 canonical package body without `package_id`. Arrays of IDs,
 evidence and gaps sort by stable identity; no timestamps or completion order enter identity.
 Reassembly from the same accepted inputs must produce byte-identical packages. The schema
