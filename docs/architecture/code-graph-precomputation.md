@@ -947,10 +947,178 @@ The six questions this plan raised were answered by accepting the plan's recomme
 ### Deliberately not done
 
 - No Joern exporter; `job_cpg_analysis` stays as is.
-- No LLVM pass; the IR shard remains a cross-check input only.
+- No LLVM pass in this batch; the IR shard remains a cross-check input only. The Clang second
+  producer phase (section 12) adds it after C9.
 - No `aliases` mode, no points-to facts.
 - No contract, deployment or test-intent promotion; `entry_point.exposure.contract_id` stays `null`.
 - No `hotspot_context` or `review_package` composition; they remain stage-3 follow-ups and will
   embed graph identities when built.
 - No new skill, persona or prompt authority: role prompt edits are one bounded sentence each.
 - No change to the predicate vocabulary (R4) or the adjudication table (R5).
+
+## 12. Phase 2: Clang second producer (after C9)
+
+Status: planned (user, 2026-10-12). It starts only after C9's offline and live acceptance pass.
+CodeQL stays the primary producer of every fact family. Clang and LLVM are the compiler of record
+for C/C++, so this phase uses them for what they do better:
+- exact locations through macro expansions;
+- an independent second opinion on guard and dominance facts, which today have none;
+- path-sensitive findings from the Clang Static Analyzer.
+
+Nothing here changes the model-facing surface: no new tool and no new fact family that workers cite.
+Clang facts enter the existing `graph` index as another producer (`clang-ast` or `llvm-ir`) and
+reach review only through the existing cross-check, eligibility and correlation rules. Joern stays
+out of scope.
+
+### 12.1 Why, and what Clang adds over the current extraction
+
+`job_cpp_compiled_analysis` already replays each accepted compile command with clang-18. It emits
+`-Xclang -ast-dump=json` and `-emit-llvm -S -g -O0`, but uses little of either:
+- IR is pattern-matched for `define` and direct `call` lines, and the `!dbg` metadata is discarded,
+  so every IR fact is TU-level and ambiguous.
+- From the AST, only call expressions are kept.
+
+The comparison in the review of this plan:
+- Clang gives spelling and expansion ranges for macros and templates, a source-level `clang::CFG`,
+  an IR-level `DominatorTree`, path-sensitive bug finding (the Static Analyzer), and later sanitizer
+  instrumentation.
+- Clang gives no interprocedural taint tracking and no maintained source/sink models. Those are
+  the reasons CodeQL stays primary.
+
+### 12.2 Chunks
+
+Each chunk follows `.claude/skills/parallel-implementation/SKILL.md`. K1, K2 and K4 can start in
+parallel; K3 needs K1; K5 is optional; K6 integrates.
+
+#### K1 Decode IR debug locations (exact IR facts)
+
+**Owned files:**
+- `containers/tools/native-cpp/native.py`: keep the `!dbg` and `!DILocation`/`!DISubprogram`
+  metadata in the IR artifact.
+- `src/appsec_review/jobs/job_cpp_compiled_analysis/job.py` (`_ir_index`): decode them.
+- `tests/test_cpp_ir_debug_locations.py`.
+- Recorded `.ll` fixtures under `tests/fixtures/native_ir/`.
+
+**Behavior:**
+- `ir_entity` and `CALLS` records gain exact source line and column locations from `DILocation`,
+  with mapping method `llvm-dilocation`.
+- A call without debug location keeps the TU-level ambiguous location.
+- C4's cross-check upgrades the IR method from `ir-name-same-tu` to span matching when both sides
+  are exact (a C4 rule-version bump, `graph-cross-check/2`, owned by K1).
+
+**Unit tests:**
+- A recorded `.ll` with known `DILocation`s yields exact call spans.
+- Inlined-at chains map to the outermost source call.
+- Missing `!dbg` stays ambiguous with a named reason.
+- Cross-check reaches `agree` by span on the native fixture, and stays `not_covered` without IR.
+
+#### K2 Macro-precise locations from the Clang AST
+
+**Owned files:**
+- `containers/tools/native-cpp/native.py`: AST dump for files that contain CodeQL-reported sinks
+  or conditions, using the accepted compile flags unchanged.
+- `src/appsec_review/graph/macro_map.py`.
+- `src/appsec_review/graph/normalize.py`: one hook that refines locations marked
+  `codeql-macro-expansion-site`.
+- `tests/graph/test_macro_map.py`.
+
+**Behavior:**
+- For a CodeQL location that falls in a macro expansion, find the Clang AST node with the same
+  expansion range, and take its spelling range when it lies in an accepted source file.
+- On a unique match, the location becomes exact with mapping method `clang-spelling-range`.
+- Otherwise it stays ambiguous, with the gap `macro_location_unresolved`.
+- This is the main lever for making guard conditions written as macros (`CHECK_LEN(n)`) eligible
+  as direct evidence.
+
+**Unit tests:**
+- A macro guard in the synthetic fixture becomes exact and eligible.
+- A nested macro resolves to the innermost spelling inside an accepted file.
+- A macro defined in a system header stays ambiguous.
+- Output is deterministic, and is byte-identical when no macro is present.
+
+#### K3 LLVM dominator cross-check for guard facts (needs K1)
+
+**Owned files:**
+- `containers/tools/native-cpp/` gains `dominators.py`, run as a pinned
+  `opt -passes='print<domtree>'` plus branch-condition extraction over the `-O0` IR. It must use
+  the image's clang-18/LLVM 18 toolchain, with no new network access.
+- `src/appsec_review/graph/crosscheck.py`: a guard branch under rule `graph-cross-check/2`.
+- `tests/graph/test_guard_crosscheck.py`.
+
+**Behavior:**
+- For each CodeQL `guard_fact`, check against the IR facts whether a branch whose condition maps
+  (by K1's exact location) to the same source condition dominates the sink's IR instruction.
+- Agreement gives `agree`; a dominating-versus-non-dominating conflict gives `disagree`, with a
+  `CONTRADICTS` relation and the fact made ineligible, exactly like call-site disagreement.
+- Range facts are cross-checked only for constant bounds the IR proves.
+- `-O0` limits this to what the unoptimized IR shows, which is the source-shaped control flow the
+  guard question needs.
+
+**Unit tests:**
+- A recorded dominator dump agrees on a dominating guard and on a `none` guard.
+- A synthetic conflict produces `disagree` and ineligibility.
+- A missing IR shard gives `not_covered`, and eligibility is unchanged.
+
+#### K4 Clang Static Analyzer and clang-tidy as a lane A producer
+
+**Owned files:**
+- A `tool-native-cpp` action, or a small `tool-clang-analyzer` image, running `clang --analyze`
+  (core, unix, security and alpha.security checkers chosen in TOML) and `clang-tidy` (bugprone,
+  cert, security checks) over the accepted compile commands, with SARIF output.
+- `src/appsec_review/jobs/job_evidence_collection/` adapter.
+- A new lead family `clang_analyzer` in `review/lead_families.py`, with its normalization rule.
+- TOML checker selection.
+- Tests.
+
+**Behavior:**
+- Analyzer path diagnostics become `tool_observation`s with flows. The existing SARIF correlation
+  and the `tool-rule-predicates` mapping treat them like CodeQL path observations, so a CSA path
+  that agrees with a CodeQL `dataflow_path` is independent support.
+- Lane A admits them by reported severity like every other family.
+
+**Unit tests:**
+- A recorded CSA SARIF for the native fixture normalizes to observations with flows.
+- Correlation bridges a CSA flow onto the CodeQL path.
+- Checker selection is typed and pinned.
+- An analyzer failure is a scope gap.
+- The membership audit covers the new family.
+
+#### K5 Bounded per-function CFG export (optional)
+
+Add `cfg_edges` and `dominators` queries to the C1 pack for functions that contain a sink, bounded
+by `GraphSettings`. Publish them as an internal `control_flow` family in the `graph` index that is
+not model-facing and not citable; it exists to support K3 and future checks. Skip this chunk
+unless K3 or a later rule needs CodeQL-side CFG detail beyond guards.
+
+#### K6 Integration and acceptance
+
+- **Offline end to end:** the native fixture through K1–K4, then `job_code_graph_index`, then
+  review. Assert:
+  - a macro guard is now direct-eligible (K2);
+  - guard facts carry `agree` from `llvm-ir` (K3);
+  - a CSA observation bridges to a CodeQL path and counts as independent support (K4).
+- **Live tier:** on the pinned images and the `appsec-multi-vuln` C/C++ workspace. It reports how
+  many facts each change turned eligible and the cross-check agreement rates.
+
+### 12.3 Contract and rule changes
+
+- `PRODUCERS` already includes `clang-ast` and `llvm-ir`; no contract enum changes are needed.
+- New rule versions:
+  - `graph-cross-check/2`, for IR span matching and the guard branch;
+  - the location mapping methods `llvm-dilocation` and `clang-spelling-range`;
+  - the lead family rule for `clang_analyzer`.
+
+  Each one changes the corresponding fingerprints, so only affected graph shards and review cells
+  rerun.
+- Admissibility is unchanged. A Clang fact is never direct evidence on its own, because Clang
+  publishes cross-checks and refined locations, not primary facts. CSA observations follow the
+  existing tool-observation rules.
+
+### 12.4 Open questions for this phase
+
+1. Should the Static Analyzer's `alpha.security.*` checkers be enabled? They are noisier but cover
+   more memory-safety cases.
+2. Should K4 run in `tool-native-cpp` or in a separate analyzer image?
+3. Should a K3 `disagree` on a guard make the fact ineligible, as in this plan, or only flag it
+   for the verifier?
+
