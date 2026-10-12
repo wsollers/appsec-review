@@ -214,16 +214,13 @@ class BuildContainerExecutor:
             raise ValueError("build working directory escaped the run-owned workspace")
         self._make_workspace_writable(root)
         bind_source = self._bind_source(root)
-        if self.profile.name == "android":
-            for name in ("android", "gradle"):
-                android_cache = root / ".appsec-cache" / name
-                android_cache.mkdir(parents=True, exist_ok=True)
-                android_cache.chmod(0o777)
         command = [
             "docker", "run", "--rm", "--network", "bridge", "--read-only",
             "--user", self.profile.user, "--cap-drop", "ALL",
             "--security-opt", "no-new-privileges", "--cpus", "2", "--memory", "4g",
-            "--pids-limit", "1024", "--tmpfs", "/tmp:rw,noexec,nosuid,size=1g",
+            "--pids-limit", "1024", "--tmpfs",
+            "/tmp:rw,noexec,nosuid,size=2g" if self.profile.name == "android"
+            else "/tmp:rw,noexec,nosuid,size=1g",
             "--workdir", f"/workspace/{working_directory}", "--mount",
             f"type=bind,src={bind_source},dst=/workspace",
             "--env", "HOME=/tmp", "--env", "LANG=C.UTF-8", "--env", "LC_ALL=C.UTF-8",
@@ -231,8 +228,8 @@ class BuildContainerExecutor:
         ]
         if self.profile.name == "android":
             command.extend((
-                "--env", "GRADLE_USER_HOME=/workspace/.appsec-cache/gradle",
-                "--env", "ANDROID_USER_HOME=/workspace/.appsec-cache/android",
+                "--env", "GRADLE_USER_HOME=/tmp/gradle",
+                "--env", "ANDROID_USER_HOME=/tmp/android",
             ))
         for key, value in sorted(environment.items()):
             command.extend(("--env", f"{key}={value}"))
