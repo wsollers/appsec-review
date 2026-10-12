@@ -37,8 +37,8 @@ The job follows these non-negotiable rules:
 
 Repository-agent authority lives in root `AGENTS.md`, and bounded agent procedures live under
 `skills/`. Shared review-worker rules live once in `pipeline/prompt-fragments/governing-rules.md`,
-with personas and roles under `pipeline/prompt-fragments/personas/` and
-`pipeline/prompt-fragments/roles/`; runtime configuration lives in `appsec-review.toml`. This design uses those rebuilt
+with personas, stack profiles, and roles under `pipeline/prompt-fragments/personas/`,
+`pipeline/prompt-fragments/stacks/`, and `pipeline/prompt-fragments/roles/`; runtime configuration lives in `appsec-review.toml`. This design uses those rebuilt
 sources directly and does not depend on or recover the archived process harness.
 
 ## Placement and consumers
@@ -81,13 +81,13 @@ chains. The two publication steps are deliberately serialized.
 ```mermaid
 flowchart TD
   A[accept immutable run/index manifest] --> B[assemble review scope and evidence map]
-  B --> C[assemble finding packages and hunt packages]
-  C --> D{{red discovery pool\nfan-out: package x role/persona}}
-  D --> E[normalize and deterministically merge hypotheses]
-  E --> F{{blue falsification pool\nfan-out: claim}}
-  E --> G{{blind independent verification pool\nfan-out: claim}}
-  F --> H[evidence-qualified adjudication and quorum]
-  G --> H
+  B --> C1[lane A: assemble finding-lead packages]
+  B --> C2[lane B: rank review units, assemble hunt packages]
+  C1 --> D1{{lane A review teams\n3 red, then 2 blue + 1 blind verifier per claim}}
+  C2 --> D2{{lane B review teams\n3 red, triage, then 2 blue + 1 blind verifier per claim}}
+  D1 --> E[merge claims across lanes deterministically]
+  D2 --> E
+  E --> H[evidence-qualified adjudication]
   H --> I{{independent scoring\nfan-out: adjudicated claim}}
   H --> J[High/Critical PoC eligibility and typed policy gate]
   J --> K{{benign PoC plan pool\nfan-out: eligible claim}}
@@ -99,13 +99,15 @@ flowchart TD
   M --> P
   O --> P
   P -->|bounded evidence deltas| Q{another round?}
-  Q -->|yes| C
+  Q -->|yes: variant hunts and deltas| C2
   Q -->|no| R[serialize final ledger and package manifests]
   R --> S[publish accepted handoff]
 ```
 
-Dagster owns stage dependencies, pool limits, unit retries, and selected re-execution of visible
-units. The bracketed fan-out boxes are, in slice 1, single visible units whose handlers run an
+Lanes A and B run fully in parallel and share one pool of review teams (see
+[Two-lane intake and review teams](#two-lane-intake-and-review-teams)). Dagster owns stage
+dependencies, pool limits, unit retries, and selected re-execution of visible units. The bracketed
+fan-out boxes are, in slice 1, single visible units whose handlers run an
 application-owned bounded cell executor, and the round loop is an in-application controller (see
 [R1](#r1-execution-model)); the current `ExecutionPlan` has no dynamic mapping or cycles. Application
 code owns immutable configuration, cell fingerprints, typed validation, deterministic merge,
@@ -193,8 +195,10 @@ protected artifacts; workers receive classified, redacted facts only.
 
 ### Discovery, merge, refutation, and verification
 
-The red discovery pool maps over hunt packages. `hypothesis_hunter` searches for novel conditions;
-`red_team_analyst` develops the attacker-controlled preconditions and explicit evidence requests
+Red cells run inside review teams in two lanes (see
+[Two-lane intake and review teams](#two-lane-intake-and-review-teams)). In lane B,
+`hypothesis_hunter` searches hunt packages for novel conditions. In lane A, `red_team_analyst`
+develops the attacker-controlled preconditions and explicit evidence requests
 for normalized leads. Both emit only `proposed` claims and evidence requests. They cannot set
 confirmation, severity, priority, exploitability, PoC eligibility, or chain state.
 
@@ -291,7 +295,16 @@ projection as one of the states above. Every duplicate points to one canonical c
 cell has one terminal record; every evidence request is satisfied, unsatisfied, superseded, or
 withdrawn; and every High/Critical-eligible finding has exactly one PoC eligibility record.
 
-## Roles, personas, and guidance composition
+## Roles, personas, stack profiles, and guidance composition
+
+A worker cell is the composition of three independent dimensions. Exactly one of each applies to
+every cell.
+
+| Dimension | Answers | Selected by | Carries authority? |
+|---|---|---|---|
+| **role** | What may this cell propose, refute, or decide? | the stage that launches the cell | yes: the authority ceiling, allowed outputs, and closed tool allowlist |
+| **persona** | Which security domain is this cell looking through? | deterministic taxonomy rollup ([Persona assignment](#persona-assignment)) | no |
+| **stack profile** | Which technology is this cell in? | deterministic component facts ([Stack profiles](#stack-profiles)) | no |
 
 Roles express responsibility and authority ceilings:
 
@@ -299,18 +312,114 @@ Roles express responsibility and authority ceilings:
 `independent_scorer`, `poc_designer`, `poc_verifier`, `attack_chain_analyst`,
 `finding_adjudicator`, and `completeness_reviewer`.
 
-Personas are optional technical viewpoints:
+Technology stacks are never roles. Folding them into roles would multiply authority rules by
+technology (red C++ role, blue C++ role, and so on). Personas and stack profiles are knowledge only.
+Each has exactly one value per cell, so neither enlarges the number of cells: combinations exist
+only in composed text, never as authored pairs. A role's authority ceiling always wins over a
+persona's or stack profile's content.
 
-`native_memory_safety`, `authentication_session`, `authorization_access_control`,
-`cryptography_data_protection`, `api_web`, `mobile_platform`, `build_supply_chain`,
-`deployment_operations`, and `business_logic_abuse_case`. These are the ids already used by
-`pipeline/guidance/registry.json`; `native_memory_safety` and `business_logic_abuse_case` must be
-added to it.
+### Personas
 
-Every worker cell has exactly one role and zero or one persona. Package routing may select a persona
-from deterministic component/evidence signals, but it must not create persona cross-products. The
-default MVP uses no persona except `native_memory_safety` and `api_web` where deterministic routing
-has positive evidence. A role's authority ceiling always wins over a persona's viewpoint.
+Persona files live under `pipeline/prompt-fragments/personas/<persona_id>.md`. Each persona is a
+carefully written domain specialist, not a single taxonomy entry. The security tag taxonomy
+([`security-tag-taxonomy.md`](security-tag-taxonomy.md)) rolls up into personas, and the personas
+partition it.
+
+| Persona | Primary taxonomy coverage (non-exhaustive; the `covers` front matter is authoritative) |
+|---|---|
+| `memory_safety_native` | CWE-119 family, integer overflow and undefined behaviour, `cert-c:*`, `cert-cpp:*`, `misra-*`, `func:exec:unmanaged-memory`, `func:exec:ffi`, native `func:exec:concurrency` |
+| `injection_interpreters` | CWE-78, CWE-79, CWE-89, CWE-94/95, `func:data:sql-query`, `orm`, `nosql-query`, `ldap-query`, `template-render`, `func:exec:shell`, `process-spawn`, `dynamic-eval` |
+| `parsing_deserialization` | CWE-502, CWE-611, CWE-1333, `func:data:parse-*`, `deserialize-native`, `archive-extract`, `regex` |
+| `authentication_session` | `func:authn:*`, `func:session:*`, CWE-287, CWE-347, CWE-352, ASVS v6, v7, v9, v10 |
+| `authorization_access_control` | `func:authz:*`, CWE-639, CWE-862, tenant scope, ASVS v8 |
+| `cryptography_data_protection` | `func:crypto:*`, `func:secrets:*`, `data:*`, CWE-327, CWE-798, sensitive data in `func:telemetry:*`, ASVS v11, v14, v16 |
+| `network_api_surface` | `func:net:*`, CWE-918, CORS and redirects, ASVS v4, v12, API Security Top 10 |
+| `filesystem_resources` | CWE-22, `func:fs:*`, `func:data:file-upload`, temporary files and permissions, resource exhaustion, ASVS v5 |
+| `business_logic_abuse` | ASVS v2 and workflow or state abuse; weakly routed, so used mainly in hunt panels |
+| `build_supply_chain` | `infra:supply:*`, `vuln:*`, SSDF, SLSA, Scorecard dependency checks |
+| `ci_cd_pipeline` | `infra:ci:*`, CI/CD Top 10, Scorecard workflow checks |
+| `cloud_container_deployment` | `infra:container:*`, `infra:kube:*`, `infra:iac:*`, `infra:cloud:*`, Kubernetes Pod Security Standards, Kubernetes Top 10, NIST SP 800-53 `infra` routes |
+| `mobile_platform` | `func:mobile:*`, MASVS |
+| `generalist` | fallback when no other persona's coverage matches; recorded as a routing gap |
+
+`ai_llm_integration` (`func:ai:*`) is reserved until a target requires it; until then `func:ai`
+routes to `generalist`. The existing registry personas migrate as follows:
+- `api_web` → `network_api_surface`;
+- `deployment_operations` → `cloud_container_deployment`;
+- `devops_engineer` stays the build-recipe viewpoint, outside this job.
+
+Each persona file has closed front matter followed by fixed sections:
+
+```markdown
+---
+id: memory_safety_native
+version: 1
+covers: ["cwe:119/*", "cwe:190", "func:exec:unmanaged-memory", "cert-c:arr*", ...]
+standards: ["cwe", "cert-c", "cert-cpp", "misra-c2012", "capec", "attack", "asvs5"]
+max_tokens: 1500
+---
+## Viewpoint            what this specialist cares about and why
+## Coverage             GENERATED at assembly; never hand-written in the file
+## Likely failure modes concrete code patterns, sources, sinks, and preconditions
+## Effective controls   what a real guard, bound, encoder, or check looks like
+## False positives      common non-issues and why they are not defects
+## Evidence by predicate what direct evidence for each R4 predicate looks like here
+## Hand-offs            adjacent concerns that belong to another persona
+```
+
+- **Generated coverage.** The coverage section is generated at assembly from the taxonomy and its
+  crosswalks: each covered tag is expanded into its CWE, CERT/MISRA, ASVS/MASVS, CAPEC, ATT&CK, and
+  NIST SP 800-53/SSDF items. The generated text is hash-pinned in the guidance bundle. A taxonomy
+  change therefore changes the bundle hash and invalidates the affected cells. Taxonomy lists are
+  never copied by hand into a persona file.
+- **Sections by role.** The assembler selects persona sections deterministically from the cell's
+  role. Red roles receive Viewpoint, Coverage, Likely failure modes, and Evidence by predicate.
+  Blue, verifier, and PoC verifier roles receive Viewpoint, Effective controls, False positives,
+  and Evidence by predicate. Red stays generative and blue stays skeptical without the persona
+  gaining any authority.
+- **Validator.** A persona that exceeds `max_tokens` fails validation. So does one that names a
+  tool, budget, severity, confirmation, claim state, or output field.
+
+#### Persona assignment
+
+A deterministic assignment rule (`persona-routing/1`) picks one primary persona per finding-lead
+package and per claim. It tries these bases in order and records the one that decided:
+
+1. the lead's normalized CWE, when it is in the CWE mapping;
+2. the `func:*`, `infra:*`, and `data:*` tags assigned at the lead or claim location;
+3. the component's tag cloud;
+4. `generalist`, with a `routing_gap`.
+
+A partition test enforces that every `cwe`, `func`, `infra`, and `data` tag in the taxonomy maps to
+exactly one primary persona. There are no orphans and no double claims. Hunt packages have no
+finding yet, so they use a panel instead (see [Review teams](#review-teams)).
+
+### Stack profiles
+
+Stack profile files live under `pipeline/prompt-fragments/stacks/<stack_id>.md`. They use the same
+front matter and validator as personas, and these sections:
+- Runtime and framework model;
+- Trust and interface layer;
+- Idiomatic security mechanisms;
+- Stack-specific pitfalls;
+- Build and deployment facts to check.
+
+| Stack profile | Selected when the component's accepted facts show |
+|---|---|
+| `cpp_rpc_service` | C/C++ plus `func:net:grpc` or an accepted protobuf, Thrift, or IDL interface. The profile covers generated stubs, message size and depth limits, authentication interceptors, deadlines, and arena/lifetime issues |
+| `cpp_native_service` | C/C++ server or library component without an RPC interface |
+| `c_systems_embedded` | C with freestanding, kernel, firmware, or no-libc build facts |
+| `jvm_service`, `dotnet_service`, `go_service`, `rust_service`, `python_service`, `node_web`, `php_web` | the matching `lang:*` and server/web `component` facts |
+| `android`, `ios` | mobile platform facts |
+| `wasm` | WebAssembly output-family build facts |
+| `ci_pipeline` | CI workflow subjects |
+| `iac_kubernetes` | container, Kubernetes, IaC, or cloud subjects |
+| `generic` | none of the above; recorded as a routing gap |
+
+Stack routing (`stack-routing/1`) uses accepted `lang`, `component`, build, and interface facts
+only. A cell's stack profile is the profile of the component that owns its package.
+
+### Guidance assembly
 
 Guidance is assembled in this order as separately delimited, hash-pinned sections:
 
@@ -318,21 +427,190 @@ Guidance is assembled in this order as separately delimited, hash-pinned section
    evidence rules, prompt-injection resistance, secrets/redaction, and universal claim limits.
 2. One role record: task responsibility, allowed outputs/transitions, prohibited decisions,
    independence requirements, and closed tool capabilities.
-3. Zero or one persona record: technical questions and failure modes to consider, with no authority,
+3. One persona record: the role-selected sections plus generated coverage. It makes no authority,
    tool, budget, or output changes.
-4. One task prompt: the bounded question for this package and stage, expected schema, and package
-   references; it does not repeat governing rules or central settings.
-5. A generated capability/budget receipt: resolved configuration and tool ids, supplied as trusted
+4. One stack profile record, with the same restrictions as the persona.
+5. One task prompt: the bounded question for this package and stage, expected schema, and package
+   references, including the lane B strategy question when one applies. It does not repeat
+   governing rules or central settings.
+6. A generated capability/budget receipt: resolved configuration and tool ids, supplied as trusted
    structured metadata rather than prose.
 
-Models, reasoning levels, token/query/time limits, worker counts, retries, rounds, active-claim and
-chain caps, pool assignments, and policy thresholds live only in central TOML. Prompt assembly
-fails before dispatch if sections conflict—for example, a persona requests confirmation while the
-role allows only hypotheses; a task requests a tool absent from the role; two sections define the
-same policy key; a role/persona pair is not allowlisted; or a task attempts to widen readable roots.
+Models, reasoning levels, token/query/time limits, worker counts, team counts, retries, rounds,
+active-claim and chain caps, pool assignments, and policy thresholds live only in central TOML.
+Prompt assembly fails before dispatch if sections conflict, for example when:
+- a persona requests confirmation while the role allows only hypotheses;
+- a task requests a tool absent from the role;
+- two sections define the same policy key;
+- a task attempts to widen readable roots.
+
 The resolved guidance bundle is canonicalized and stored once under
-`runs/<run-id>/data/guidance/<bundle-sha256>/`; every cell records the bundle and individual section
-hashes.
+`runs/<run-id>/data/guidance/<bundle-sha256>/`. Every cell records the bundle hash and each
+section's hash.
+
+## Two-lane intake and review teams
+
+The job runs two intake lanes, fully in parallel, that feed one shared claim back end.
+Normalization, blue refutation, blind verification, adjudication, scoring, PoC, and chains are the
+same code, schemas, and policy for both lanes. Only claim production, admission, triage, and
+budget accounting differ.
+
+```text
+Lane A (lead): admitted leads ─► finding-lead packages ─► team: 3 red ─┐
+                                                                         ├─► normalize ─► team: 2 blue ∥ 1 verifier ─► adjudicate ─► score ─► PoC/chains
+Lane B (hunt): ranked review units ─► hunt packages ─► team: 3 red ─► triage ┘
+                    ▲                                                                            │
+                    └──────────── round 1: variant hunts seeded by round-0 confirmed claims ◄────┘
+```
+
+### Lane A: lead review
+
+- **Admission.** Lane A admits every accepted lead whose normalized *reported* severity is
+  `critical`, `high`, or `unknown`, from **every** lead family:
+  - source SAST;
+  - CodeQL;
+  - artifact scanners;
+  - dependency advisories, using the advisory's own CVSS or severity;
+  - CI rules;
+  - post-build hardening;
+  - OWASP control failures.
+
+  Each family has a versioned normalization rule. Unknown severity is never treated as low.
+- **Reported severity orders work only.** It is a nomination, never an adjudicated severity. The
+  independent scorer assigns technical severity after adjudication, and only that score drives PoC
+  eligibility and reporting.
+- **Packages.** Each admitted lead gets exactly one finding-lead package. The membership audit of
+  the [review package contract](review-package-contract.md) applies to every admitted family.
+- **No triage.** Lane A has no triage gate: every claim from an admitted lead receives the full
+  blue and verifier treatment, up to `lead_max_claims_per_package`.
+
+### Lane B: open discovery
+
+- **Unit of work.** The unit of work is a ranked review unit: a component, trust boundary, or
+  function cluster. Units are ranked deterministically from accepted signals:
+  - review-prioritization LPS;
+  - source-history instability (SII);
+  - hotspots;
+  - security tag density;
+  - medium, low, and info leads, which also appear on the hunt menu as hints.
+
+  The top `hunt_max_units` units, by rank then `package_id`, receive hunt packages. Every other unit
+  is a `coverage_gap` with reason `below_hunt_cutoff`.
+- **Panel.** Each hunt package's three red cells use distinct (strategy, persona) pairs. They are
+  chosen by `hunt-panel/1` from the unit's tag cloud and from the data sources available.
+- **Strategies.** Strategies are task prompts, not roles; the red role is always
+  `hypothesis_hunter`.
+
+| Strategy | Bounded question | Requires |
+|---|---|---|
+| `variant` | "Claim X was confirmed; where else in this unit does the same pattern occur?" | a round-0 confirmed claim (round 1 only) |
+| `sink_up` | "Which dangerous sinks here take caller-controlled data, and what guards them?" | accepted source/sink facts or `symbol_links` |
+| `entry_down` | "Follow this entry point's inputs inward." | an accepted entry-point catalog (planned) |
+| `control_gap` | "This control failed or is missing here; what can an attacker do?" | an accepted OWASP workbench result |
+| `persona_sweep` | "Review this unit as the assigned specialist." | none |
+
+A strategy whose required source is unavailable is skipped with a `coverage_gap`. The panel falls
+back to `persona_sweep` with the next-ranked persona.
+
+- **Known claims.** Hunters receive the canonical ids and statements of claims already known in
+  their unit, never the reasoning behind them, so that they do not re-report them. A lane B claim
+  whose identity matches an existing claim becomes `duplicate`. Any new admissible evidence it
+  carries attaches to the canonical claim as a relation.
+- **Triage gate.** A lane B hypothesis passes deterministic gate checks:
+  - it cites only resolvable locations;
+  - it uses the closed R4 predicate and precondition vocabularies;
+  - it does not match an existing claim.
+
+  It is then admitted for blue and verifier review in deterministic order: the count of predicates
+  with direct support, descending, then claim id. Admission is capped at
+  `hunt_max_claims_per_package`. Each hypothesis that fails the gate is recorded as an
+  `evidence_gap` with its reason. Each one over the cap becomes `insufficient_evidence` with a
+  `budget_gap`.
+- **Coverage.** Lane B reports coverage as a unit × strategy × persona matrix whose cells are
+  `reviewed`, `gap`, or `not_launched`. Lane B can never conclude that a unit is free of defects,
+  only which lenses reviewed it.
+
+### Review teams
+
+The unit of review capacity is the **review team**: `red_per_team` (default 3) red cells,
+`blue_per_team` (default 2) blue cells, and `verifier_per_team` (default 1) independent verifier.
+
+- **One package per team.** A team takes one package and holds its worker slots until the blue and
+  verifier cells of every claim admitted from that package have finished. Inside the team, the
+  order is red, then package-local normalization (and triage in lane B), then blue and the
+  verifier concurrently, for each admitted claim. Adjudication runs afterwards over the claims
+  merged from all packages; it is deterministic and holds no team. The
+  `red_per_team` cells run once per package; the blue and verifier cells run once per admitted
+  claim.
+- **Distinct lenses.**
+  - *Lane A reds* use the lead's assigned persona with three lenses: the stack profile, attacker
+    preconditions, and the persona's likely failure modes.
+  - *Lane B reds* use the panel's distinct (strategy, persona) pairs.
+  - *The two blues* use the claim's persona and receive distinct task questions: one seeks an
+    effective guard or control (`blue_control`), the other seeks a reachability or configuration
+    break (`blue_reachability`). The blues never see each other's output.
+  - *The verifier* stays blind under [R6](#r6-independence).
+- **Concurrency.** `review_teams` (default 5) is the number of teams that may run at once on the
+  host. A local overlay commonly sets it to 1. Teams are slots in one application-owned
+  cross-process semaphore, built on the kernel file locks in `storage/lock.py` and held under the
+  run's data directory. Both lane units acquire teams from it, so `review_teams = 1` means exactly
+  one team on the machine regardless of how many Dagster units are active.
+- **Scheduling.** The scheduler is fair-share and work-conserving. The next free team goes to the
+  lane that has consumed the smaller fraction of its budget share. A lane with no queued packages
+  releases its unused share to the other lane. Packages within a lane are taken in canonical
+  order: by rank, then `package_id`.
+- **Semantics.** `review_teams` and pool limits are capacity, not semantics: they are excluded
+  from every cell fingerprint, so runs at different concurrency reuse each other's cells. Budgets,
+  team composition, caps, and lane shares are semantic: they decide what gets reviewed, and they
+  are part of the round and lane fingerprints.
+
+### Budgets
+
+Budgets are expressed per lane in team-packages, with cell-level caps beneath them:
+
+- `budget_team_packages` is the job total. `lead_budget_share` (default 0.5) splits it between the
+  lanes, and unused share flows to the other lane as described above.
+- Each cell is bounded by its model profile's turn, token, query, and timeout caps from
+  [R2](#r2-worker-transport-and-bounded-retrieval-loop).
+- `max_model_turns` and the token totals are hard job ceilings. Reaching any ceiling stops new team
+  launches. Every queued package then ends `not_launched` with a `budget_gap`.
+
+### Parallel lanes, rounds, and determinism
+
+Round 0 runs lane A and lane B fully in parallel. Variant hunts are not inserted while round 0 is
+running, because that would make *what gets reviewed under a budget* depend on timing. Round 1
+creates `variant` hunt packages from round 0's confirmed claims, in canonical order, and runs them
+under the remaining lane B budget. Package order, panel selection, triage, and team assignment are
+deterministic functions of accepted inputs and configuration. Only wall-clock interleaving varies,
+and nothing semantic depends on it.
+
+### Failure is a gap; integrity is not
+
+Every ordinary failure becomes a typed, recorded gap, and the job publishes with status
+`DEGRADED`. This covers:
+- a provider outage, timeout, crash, or invalid output after retries;
+- a team failure;
+- a tool error;
+- a missing upstream shard;
+- a failed strategy;
+- an entire lane failing.
+
+A model *requesting* a forbidden tool, path, or capability is expected adversarial input. It
+produces a cell `authority_error` gap and a security event, not a job failure.
+
+Only framework-integrity failures block publication:
+- a tampered or swapped manifest or shard;
+- a broken ledger hash chain;
+- a non-deterministic merge;
+- an identity collision;
+- the application *granting* an unauthorized capability;
+- a receipt that cannot be verified.
+
+Publishing in those cases could present corrupted or injected results as accepted.
+
+When the ratio of gapped to expected cells or packages exceeds `incomplete_gap_ratio`, the handoff
+carries `review_incomplete = true` with per-lane counts. It is still published, but no consumer may
+present it as a complete review.
 
 ## Delta-driven rounds and resumption
 
@@ -364,13 +642,15 @@ Termination occurs at the first applicable condition:
 Budget exhaustion and maximum rounds publish a degraded but complete accounting package; they do
 not imply a clean target. Framework-integrity failures still block acceptance.
 
-The unit of reuse is `claim × role × round × evidence_manifest`, refined by persona, guidance
+The unit of reuse is `claim × role × round × evidence_manifest`, refined by lane, persona, stack
+profile, strategy, guidance
 bundle, model identity, task schema, and policy where relevant. A cell fingerprint is the canonical
 hash of:
 
 ```text
 cell/v1(
-  run_input_manifest, package, canonical_claim, role, optional_persona,
+  run_input_manifest, lane, package, canonical_claim, role, persona, stack_profile,
+  optional_strategy, task_question,
   round_delta, readable_evidence_set, guidance_bundle, model_provider_version,
   tool_capabilities, budgets, output_schema, validator_version
 )
@@ -484,8 +764,7 @@ below are illustrative defaults, not runtime configuration added by this design 
 
 ```toml
 [orchestration.dagster.pools]
-inference_review = 8
-inference_verify = 4
+inference_teams = 2              # one per lane unit; model concurrency is set by review_teams
 inference_score = 4
 poc_plan = 2
 poc_isolated = 1
@@ -500,13 +779,28 @@ stable_rounds_required = 1
 max_active_claims = 500
 max_attack_chains = 50
 
+[jobs.job_inference_security_review.settings.teams]
+review_teams = 5                 # capacity only; local overlay commonly sets 1; not fingerprinted
+red_per_team = 3
+blue_per_team = 2
+verifier_per_team = 1
+
+[jobs.job_inference_security_review.settings.lanes]
+lead_admission = ["critical", "high", "unknown"]   # normalized reported severity, every lead family
+lead_budget_share = 0.5          # unused share flows to the other lane
+lead_max_claims_per_package = 3
+hunt_max_units = 50
+hunt_max_claims_per_package = 5
+hunt_panel_rule = "hunt-panel/1"
+incomplete_gap_ratio = 0.25      # above this, the handoff is marked review_incomplete
+
 [jobs.job_inference_security_review.settings.budgets]
-max_model_calls = 600
-max_input_tokens = 12000000
-max_output_tokens = 2400000
-max_retrieval_queries = 5000
-max_cost_usd = 250.0
-timeout_seconds = 14400
+budget_team_packages = 200       # split between lanes by lead_budget_share
+max_model_turns = 12000
+max_input_tokens = 60000000
+max_output_tokens = 6000000
+max_retrieval_queries = 40000
+timeout_seconds = 28800
 
 [jobs.job_inference_security_review.settings.retry]
 max_attempts = 2
@@ -522,12 +816,17 @@ reasoning = "high"
 max_input_tokens = 32000
 max_output_tokens = 8000
 max_queries = 40
-timeout_seconds = 180
+max_turns = 12
+timeout_seconds = 600
 
 [jobs.job_inference_security_review.settings.roles.independent_verifier]
 workers = 4
 model_profile = "default"
 require_distinct_from_roles = ["hypothesis_hunter", "red_team_analyst", "blue_team_refuter"]
+
+[jobs.job_inference_security_review.settings.routing]
+persona_rule = "persona-routing/1"
+stack_rule = "stack-routing/1"
 
 [jobs.job_inference_security_review.settings.scoring]
 enabled_providers = ["cvss_v4", "application_risk_matrix", "ssvc_decision"]
@@ -562,13 +861,13 @@ memory_mb = 1024
 timeout_seconds = 60
 scratch_mb = 256
 
-[jobs.job_inference_security_review.steps.discovery]
-workers = 8
-[jobs.job_inference_security_review.steps.discovery.tasks.red_cells]
+[jobs.job_inference_security_review.steps.lead_review]
+workers = 1
+[jobs.job_inference_security_review.steps.lead_review.tasks.teams]
 
-[jobs.job_inference_security_review.steps.blind_verify]
-workers = 4
-[jobs.job_inference_security_review.steps.blind_verify.tasks.verifier_cells]
+[jobs.job_inference_security_review.steps.hunt_review]
+workers = 1
+[jobs.job_inference_security_review.steps.hunt_review.tasks.teams]
 
 [jobs.job_inference_security_review.steps.publication]
 workers = 1
@@ -705,7 +1004,7 @@ in the record; displayed ids may use a collision-checked 24-byte prefix):
 |---|---|
 | `claim_id` | normalized affected entity/location set, weakness/mechanism, security predicate, preconditions, and scope—not worker wording |
 | `evidence_request_id` | claim, predicate/obligation, requested evidence kind, bounded scope, and originating round |
-| `review_id` | claim, role, optional persona, round, evidence manifest, guidance bundle, actor/model, and response hash |
+| `review_id` | claim, role, persona, stack profile, strategy, lane, round, evidence manifest, guidance bundle, actor/model, and response hash |
 | `adjudication_id` | claim, prior state, accepted support/contradiction relation ids, verification policy, and adjudicator policy hash |
 | `score_id` | claim adjudication, scorer, provider/interface/implementation, canonical inputs, environment, policy, and override head |
 | `poc_plan_id` | finding, eligibility, designer, strategy, canonical plan/artifact hashes, and policy version |
@@ -919,7 +1218,7 @@ The following documents are concise shape examples; hashes are shortened only fo
 |---|---|---|---|
 | review scope/evidence map | accepted pointer/manifest, all shard identities, scope policy, assembler/schema | all packages that reference changed scope/shards | unaffected upstream producers |
 | finding/hunt package | evidence map, entity set, lead/evidence relations, bounds, package schema | cells reading that package and their derived closure | unrelated packages |
-| role cell | package/claim, role/persona, round delta, evidence set, guidance/model/tools/budget/schema | that claim-role cell, merge/adjudication dependants | sibling role cells when their inputs are unchanged |
+| role cell | package/claim, role/persona/stack profile/strategy, round delta, evidence set, guidance/model/tools/budget/schema | that claim-role cell, merge/adjudication dependants | sibling role cells when their inputs are unchanged |
 | adjudication | normalized claim, accepted reviews/evidence relations, state policy | claim state, score, PoC eligibility, component chain edges, finding package | discovery for unchanged claim |
 | score | adjudication, evidence/environment, provider/version/config, scorer, score/override policy | score, priority, PoC eligibility, report projection | claim verification |
 | PoC eligibility/plan | adjudication, score predicates, authorization/policy, plan guidance | plan and attempts for that finding | claim state and unrelated scores |
@@ -935,7 +1234,8 @@ Errors are split so operators can distinguish an incomplete review from a compro
 | Class | Examples | Result |
 |---|---|---|
 | `integrity_error` | hash mismatch, accepted-pointer drift, shard identity mismatch, duplicate canonical id with unequal content, tampered receipt | fail job; no publication |
-| `authority_error` | target/evaluator-guide access, widened readable root, unapproved tool/capability, conflicting guidance, unauthorized transition | fail cell/job by scope; security event |
+| `authority_error` | model output requesting target/evaluator-guide access, a widened readable root, or an unapproved tool/capability; conflicting guidance; unauthorized transition | cell gap plus security event; the job fails only if the application granted the request (an `integrity_error`) |
+| `routing_gap` | no persona or stack profile matched, a hunt strategy's required source is unavailable, a unit is below the hunt cutoff | `generalist`/`generic` routing or a skipped lens; recorded in the coverage matrix |
 | `schema_error` | malformed worker output, unknown enum, missing required identity, oversize output | bounded repair/retry, then exact cell gap |
 | `worker_gap` | provider unavailable, timeout, crash, budget denial, canceled/not launched cell | gap; siblings continue |
 | `coverage_gap` | missing/unavailable producer shard, truncated query, unsupported language/platform, incomplete graph | ledger gap; never clean evidence |
@@ -992,7 +1292,8 @@ src/appsec_review/
 pipeline/
   prompt-fragments/governing-rules.md
   prompt-fragments/roles/*.md
-  prompt-fragments/personas/*.md
+  prompt-fragments/personas/*.md     # domain personas; taxonomy coverage generated at assembly
+  prompt-fragments/stacks/*.md       # stack profiles
   guidance/registry.json         # composed by the generalized owasp_workbench/guidance.py (R9)
   guidance/tasks/inference-security-review/*.md
 docs/schemas/inference-security-review/*.schema.json
@@ -1008,8 +1309,22 @@ or timeout setting is embedded in a prompt.
 
 ### Unit tests
 
-- Guidance assembly accepts exactly one role and zero/one persona, produces stable hashes, rejects
-  conflicting authority/tool/output/budget clauses, and excludes target guidance from every prompt.
+- Guidance assembly accepts exactly one role, one persona, and one stack profile; selects persona
+  sections by role; generates coverage from the taxonomy; produces stable hashes; rejects
+  conflicting authority/tool/output/budget clauses and over-budget or authority-bearing persona or
+  stack text; and excludes target guidance from every prompt.
+- The persona partition test proves that every `cwe`, `func`, `infra`, and `data` taxonomy tag routes
+  to exactly one primary persona. Persona, stack, and hunt-panel routing are deterministic, and
+  each records its deciding basis.
+- The lane A admission audit covers every lead family, including unknown severity. Lane B ranking,
+  cutoff gaps, triage ordering and caps, and the unit × strategy × persona coverage matrix are
+  exact.
+- The review-team semaphore admits at most `review_teams` concurrent teams across processes. The
+  scheduler is fair-share and work-conserving. Changing `review_teams` changes no cell
+  fingerprint.
+- A whole-lane failure publishes `DEGRADED` with gaps. `review_incomplete` is set above
+  `incomplete_gap_ratio`. A model requesting a forbidden capability yields a cell gap, while the
+  application granting one blocks publication.
 - Package and MCP capability builders reject arbitrary path, shell, SQL, regex, network, and
   evaluator/ground-truth scopes. Blind verifier packages exclude red/blue narratives and identities.
 - Evidence resolvers verify manifest membership, artifact/source hashes, locators, completeness,
@@ -1124,18 +1439,23 @@ adapter has no dynamic outputs, cannot express the round cycle, and assigns pool
   | Unit | Pool |
   |---|---|
   | `scope.accept_manifest`, `scope.assemble_scope` | `application` |
-  | `packages.assemble_packages` | `application` |
-  | `discovery.red_cells` | `inference_review` |
-  | `normalize.merge_hypotheses` | `application` |
-  | `refutation.blue_cells` | `inference_review` |
-  | `blind_verify.verifier_cells` | `inference_verify` |
+  | `packages.assemble_lead_packages`, `packages.assemble_hunt_packages` | `application` |
+  | `lead_review.teams` | `inference_teams` |
+  | `hunt_review.teams` | `inference_teams` |
+  | `merge.claims` | `application` |
   | `adjudicate.apply_policy` | `application` |
   | `scoring.score_claims` | `inference_score` |
   | `completeness.audit` | `application` |
   | `publication.publish_claim_ledger`, `publication.publish_handoff` | `lifecycle` |
 
-  `refutation.blue_cells` and `blind_verify.verifier_cells` both depend only on
-  `normalize.merge_hypotheses`. Step names must not be `verification`, `inference`, or any other
+  `lead_review.teams` depends only on lead packages, and `hunt_review.teams` only on hunt packages,
+  so the two lanes run in parallel. Each team handler runs red, package-local normalization, triage
+  (lane B only), and the blue and blind-verifier cells for one package, writing one receipt per
+  cell. `merge.claims` deduplicates across packages and lanes by canonical identity.
+  `adjudicate.apply_policy` then applies R5 to the merged set.
+  - The Dagster `inference_teams` pool limit is 2, one per lane unit. Actual model concurrency is
+    governed by the cross-process review-team semaphore, not by Dagster.
+  - Step names must not be `verification`, `inference`, or any other
   name `_pool_for` already maps to OWASP or C++ pools. Make `_pool_for` job-aware, or add explicit
   entries for these steps. Add the new pools to `[orchestration.dagster.pools]`.
 
@@ -1145,7 +1465,8 @@ Every inference transport grants the model no tools: `claude_cli.py` passes `--a
 and `anthropic_api.py` uses no agent tools. `ModelRequest` carries fields specific to build
 planning. Workers therefore cannot call MCP, and slice 1 does not expose MCP to them.
 
-- Add a sibling `ReviewModelRequest` in `inference/request.py` that carries role, persona,
+- Add a sibling `ReviewModelRequest` in `inference/request.py` that carries role, persona, stack
+  profile,
   guidance-bundle hash and text, task input, transcript turns, provider/model/reasoning, and token
   caps. `infer` dispatches it through the same provider table. Transports never receive
   build-only fields.
@@ -1260,6 +1581,15 @@ publication can label it. This is the slice 1 answer to open question 2.
   `model`, `reasoning`, token caps, `timeout_seconds`, `retries`) under
   `settings.models.<profile>`. Roles select a profile by name. Remove `max_cost_usd` until a
   per-model price table exists, because `ModelResult` reports tokens, not cost.
+- **Local overlay.** Configuration resolution is currently a single explicit file or the
+  repository default. `job_review_intake.resolve_layers` gains one optional local overlay file that
+  may set only an allowlist of capacity keys:
+  - `jobs.job_inference_security_review.settings.teams.review_teams`;
+  - `orchestration.dagster.pools.*`.
+
+  Any other key in the overlay is rejected. The overlay is frozen into `resolved.json` and the
+  configuration manifest with its own hash. Capacity keys are excluded from cell, lane, and round
+  fingerprints.
 - **Budgets.** Before launch, cells are ordered canonically. Each launch checks the job counters
   first. Cells left unlaunched when a budget is exhausted end `not_launched` with a `budget_gap`.
 - **Guidance.** Generalize `owasp_workbench/guidance.py` (`compose`, `pin_bundle`) into a shared
@@ -1282,15 +1612,23 @@ publication can label it. This is the slice 1 answer to open question 2.
 
 ### Slice 1 definition of done
 
-- An injected deterministic `Infer` double drives a fixture accepted index set. The fixture holds
-  two packages, one High/Critical source-SAST lead, one failing cell, and one contradicted claim.
-- The Dagster acceptance run shows every R1 unit.
+- An injected deterministic `Infer` double drives a fixture accepted index set. The fixture holds:
+  - lane A leads from two families, including one unknown-severity lead;
+  - two ranked lane B units, plus one unit below the cutoff;
+  - one failing cell;
+  - one contradicted claim;
+  - one lane B hypothesis that duplicates a lane A claim.
+- The Dagster acceptance run shows every R1 unit, with both lanes running in parallel. It passes
+  with `review_teams = 1` and with `review_teams = 5`, and both runs produce identical canonical
+  outputs.
+- Forcing an entire lane to fail publishes a `DEGRADED` handoff with gaps and
+  `review_incomplete = true`.
 - The handoff contains, in exact accounting:
   - one claim in each of `confirmed`, `supported`, `contradicted`, and `insufficient_evidence`;
   - one `duplicate`;
   - one cell `worker_gap`;
   - one budget `not_launched` cell.
-- Re-executing `blind_verify.verifier_cells` reuses every unchanged cell.
+- Re-executing `lead_review.teams` or `hunt_review.teams` reuses every unchanged cell.
 - Changing one evidence shard reruns only the dependent cells.
 - The isolation tests prove that the verifier request bytes contain no red/blue narrative, and that
   no capability reaches an evaluator root, a target-guidance file, or an arbitrary path.
@@ -1301,43 +1639,51 @@ publication can label it. This is the slice 1 answer to open question 2.
 
 1. Define closed claim/evidence/review/ledger/package schemas, canonical identities, append-only
    projection, exact accounting, and accepted-manifest reader.
-2. Add `job_inference_security_review` with visible scope/package, one red cell, deterministic merge,
-   one blind verifier cell, adjudication, one deterministic application-risk scorer, completeness,
+2. Add `job_inference_security_review` with visible scope/package units, the lane A review-team
+   unit, cross-lane merge, adjudication, one deterministic application-risk scorer, completeness,
    and serialized publication. Use injected workers for the first real Dagster acceptance.
 3. Expose only existing bounded retrieval-core/MCP tools under package capability tokens and add
    target-guide/evaluator-root isolation tests.
 4. Implement central TOML role/model/budget/round settings, immutable guidance bundles, conflict
    validation, cell fingerprints, and claim-level resume.
-5. Add blue refutation and pool fan-out/fan-in; prove evidence-qualified confirmation and
-   failure-as-gap with a mixed success/failure fixture.
+5. Add the full review team (3 red, 2 blue, 1 blind verifier), the cross-process team semaphore,
+   the fair-share scheduler, the local capacity overlay, and failure-as-gap with `DEGRADED` and
+   `review_incomplete`.
+6. Add persona and stack routing with the partition test, `generalist` and `generic` fallbacks, and
+   two reference files that set the quality bar: `memory_safety_native` and `cpp_rpc_service`.
+7. Add lane B: unit ranking and cutoff, hunt panels with `persona_sweep` and `sink_up`, the triage
+   gate, the coverage matrix, and parallel execution with lane A. Write the remaining personas and
+   stack profiles, each with fixtures.
 
-This slice produces real confirmed/supported/contradicted/insufficient finding packages and one
-score dimension. It does not execute PoCs and does not require advanced personas or resynthesis.
+This slice produces real confirmed, supported, contradicted, and insufficient finding packages from
+both lanes, and one score dimension. It does not execute PoCs, run variant hunts, or resynthesize.
 
 ### Vertical slice 2: scores and policy
 
-6. Add the scoring-provider registry, CVSS v4 conformance provider, normalized dimension records,
+8. Add the scoring-provider registry, CVSS v4 conformance provider, normalized dimension records,
    organization priority policy, configurable eligibility predicates, and override provenance.
-7. Add CVSS v3.1 compatibility, application matrix, and SSVC-style decision plugins only after the
+9. Add CVSS v3.1 compatibility, application matrix, and SSVC-style decision plugins only after the
    interface/parity tests are stable. Never block the MVP on every provider.
 
 ### Vertical slice 3: benign proof and chains
 
-8. Add PoC eligibility and policy-denied/plan-only operation first. Implement safe regression-plan
+10. Add PoC eligibility and policy-denied/plan-only operation first. Implement safe regression-plan
    generation and malicious-artifact rejection before any executor.
-9. Add the isolated executor for one strategy (sanitizer synthetic input), cleanup receipts, and an
+11. Add the isolated executor for one strategy (sanitizer synthetic input), cleanup receipts, and an
    independent verifier. Add other proof strategies one at a time behind policy and acceptance
    fixtures.
-10. Add chain composition from confirmed/qualified claims, all five continuity checks, independent
+12. Add chain composition from confirmed/qualified claims, all five continuity checks, independent
     refutation, separate chain scoring, and bounded publication.
 
 ### Vertical slice 4: completeness and advanced coverage
 
-11. Add delta-driven completeness audit, bounded resynthesis rounds, unsatisfiable evidence-request
+13. Add delta-driven completeness audit, bounded resynthesis rounds, unsatisfiable evidence-request
     detection, stable-round termination, and advanced selective invalidation.
-12. Add remaining domain personas only when fixtures show measurable coverage value. Do not add a
-    persona-role cross-product.
-13. Add more PoC strategy plugins, organization scoring plugins, and sophisticated chain search only
+14. Add round-1 `variant` hunts seeded by round-0 confirmed claims, and the `entry_down` and
+    `control_gap` strategies once their accepted sources exist. Add any persona beyond the
+    partition set (for example `ai_llm_integration`) only when fixtures show measurable coverage
+    value. Never add a persona-role cross-product.
+15. Add more PoC strategy plugins, organization scoring plugins, and sophisticated chain search only
     after the safety, accounting, and budget invariants remain green.
 
 ### Dependencies and current gaps
@@ -1374,7 +1720,7 @@ The following `old/` concepts were reviewed as untrusted design data and are not
 | attack-chain composition/refutation | weakest-link ceiling, deterministic ids, per-edge evidence, independent challenger, bounds | separate chain ledger, fixed kill-chain stage vocabulary, implicit `model_flow` support, no full continuity proof |
 | scoring/prioritization | verified claims only, pinned CVSS calculation/vector provenance | fixed 0–16 sum/P0 thresholds, CVSS overwrite, remediation embedded in scorer; replaced by provider protocol and separate dimensions |
 | PoC/fix pool | bounded per-finding work, static validation, deny-by-default, failure as gap | combined PoC/fix, Critical+reachable hardcoding, text-only deny list, no execution verification |
-| persona/role composition | governing/role/persona/task separation, hash-pinned composition, role ceiling | cached prompt layout and multi-registry complexity; use one role plus optional persona with conflict validation |
+| persona/role composition | governing/role/persona/task separation, hash-pinned composition, role ceiling | cached prompt layout and multi-registry complexity; use one role, one taxonomy-routed persona, and one stack profile with conflict validation |
 | completeness/resynthesis/rescope | explicit obligations/gaps, bounded iterations, dependency-based affected closure, predecessor hashes | synthetic claim generation from missing ids alone and job-route tables embedded in feedback |
 | rendezvous | wait-all accounting, terminal state for every instance, manifest derived from disk, single final publication | thousand-line in-process thread coordinator and one-rendezvous-per-host constraint; Dagster supplies scheduling/pools |
 | schemas and ADRs | closed enums, immutable hashes, state from structured fields, citable evidence records | stage-numbered duplicated schemas, mixed draft conventions, model prose carried as quasi-authority |
@@ -1398,6 +1744,6 @@ host execution of target outputs, production proofs, and text parsing to infer s
    only; see [R8](#r8-ledger-schemas-inputs-and-configuration).
 5. What freshness windows apply to CVE/exploitation intelligence, deployment configuration, and
    business-impact data?
-6. Should chain confirmation require a second verifier beyond the independent refuter for
+8. Should chain confirmation require a second verifier beyond the independent refuter for
    ship-blocking chains?
-7. Which exact downstream job names become stable when remediation and final publication are built?
+9. Which exact downstream job names become stable when remediation and final publication are built?

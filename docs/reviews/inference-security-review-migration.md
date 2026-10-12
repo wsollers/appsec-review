@@ -32,6 +32,9 @@ archived concepts map to the proposed
 
 ## Explicit gaps
 
+- The two-lane intake, review-team semaphore, local capacity overlay, taxonomy-routed persona
+  files, and stack profiles are designed but absent; the guidance registry still uses the
+  earlier persona ids.
 - Near-terminal inference-review worker skills and guidance bundles are absent from the rebuilt
   tree; the existing repository skills cover target planning, build-image repair, and post-build
   assessment only.
