@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-import hashlib
-import json
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
-from appsec_review.storage import atomic_bytes, atomic_json, canonical_json
+from appsec_review.guidance import compose as shared
 
 
 ROLES = {
@@ -19,19 +18,18 @@ PERSONAS = {
 
 
 def load_registry(repository_root: Path) -> dict[str, Any]:
-    path = Path(repository_root) / "pipeline" / "guidance" / "registry.json"
-    registry = json.loads(path.read_text(encoding="utf-8"))
-    if registry.get("schema") != "appsec-review/guidance-registry/1":
-        raise ValueError("unsupported guidance registry")
-    # This workbench owns and requires its bounded subset. The repository registry may also
-    # contain roles/personas for other jobs; those do not widen this workbench's allowlists.
+    # The shared loader validates the whole registry, including closed inference records. This
+    # workbench owns and requires its bounded subset; other jobs' roles and personas do not widen
+    # this workbench's allowlists.
+    registry = shared.load_registry(repository_root)
     if not ROLES <= set(registry.get("roles", {})) or not PERSONAS <= set(registry.get("personas", {})):
         raise ValueError("role/persona registry is incomplete")
-    for name, value in registry["roles"].items():
+    for name in sorted(ROLES):
+        value = registry["roles"][name]
         if set(value) != {"responsibility"} or not str(value["responsibility"]).strip():
             raise ValueError(f"role {name} repeats or widens shared authority")
-    for name, value in registry["personas"].items():
-        if set(value) != {"viewpoint"} or not str(value["viewpoint"]).strip():
+    for name in sorted(PERSONAS):
+        if not str(registry["personas"][name].get("viewpoint", "")).strip():
             raise ValueError(f"persona {name} repeats or widens shared authority")
     if set(registry.get("assignment", {})) != {"domain_persona"}:
         raise ValueError("guidance assignment policy is not deterministic")
@@ -58,8 +56,7 @@ def compose(repository_root: Path, *, role: str, persona: str | None,
     allowed_task = {"task_id", "question", "proof_obligations", "prohibited_claims"}
     if set(task) != allowed_task or not str(task["question"]).strip():
         raise ValueError("task prompt must contain only the bounded question contract")
-    governing_path = Path(repository_root) / "pipeline" / "prompt-fragments" / "governing-rules.md"
-    governing = governing_path.read_text(encoding="utf-8")
+    governing = shared.governing_rules(repository_root)
     role_text = str(registry["roles"][role]["responsibility"])
     persona_text = None if persona is None else str(registry["personas"][persona]["viewpoint"])
     bundle = {
@@ -70,16 +67,10 @@ def compose(repository_root: Path, *, role: str, persona: str | None,
         "persona": None if persona is None else {"id": persona, "text": persona_text},
         "task": dict(task),
     }
-    bundle["sha256"] = hashlib.sha256(canonical_json(bundle)).hexdigest()
+    bundle["sha256"] = shared.bundle_sha256(bundle)
     return bundle
 
 
 def pin_bundle(run_root: Path, bundle: Mapping[str, Any]) -> dict[str, str]:
-    identity = str(bundle.get("sha256", ""))
-    if len(identity) != 64:
-        raise ValueError("guidance bundle identity is invalid")
-    root = Path(run_root) / "data" / "guidance" / identity
-    atomic_json(root / "bundle.json", dict(bundle))
-    atomic_bytes(root / "governing-rules.md", str(bundle["governing_rules"]).encode("utf-8"))
-    return {"bundle_sha256": identity,
-            "path": (Path("data") / "guidance" / identity / "bundle.json").as_posix()}
+    return shared.pin_bundle(run_root, bundle,
+                             files={"governing-rules.md": str(bundle.get("governing_rules", ""))})
