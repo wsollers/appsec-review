@@ -26,7 +26,19 @@ agents that inspect or change the repository. It is not a prompt for review work
 
 - Repository-agent rules live only in root `AGENTS.md`.
 - `docs/agent-reader.md` is navigation only and must not introduce competing rules.
-- Bounded agent procedures live under `skills/` and are loaded only when relevant.
+- Skills live in exactly two separate locations, and neither may reference the other:
+  - **Development skills**, procedures for agents that develop this repository, live canonically
+    under `.claude/skills/<name>/SKILL.md` with `metadata.audience: repository-agent`. Jobs never
+    read them, and runtime images never contain them.
+  - `.agents/skills/` (read by Codex, Gemini CLI, Copilot and Cursor) holds only the
+    `repository-development-skills` pointer, which sends those agents to `.claude/skills/`. Never
+    copy a skill there or into `.github/`, `.gemini/`, `.codex/` or `.cursor/` skill directories.
+  - **Runtime skills**, bounded guidance that configured jobs send to model workers, live under
+    `pipeline/skills/<name>/SKILL.md` with `metadata.audience: runtime-worker`. Each is registered in
+    `pipeline/guidance/registry.json` under `runtime_skills` with the jobs allowed to load it, and
+    jobs load it only through `appsec_review.guidance.skills.load_runtime_skill`.
+  - There is no top-level `skills/` directory. `tests/test_skill_separation.py` enforces this
+    separation; never weaken it to make a change pass.
 - Shared review-worker behavior rules live once in
   `pipeline/prompt-fragments/governing-rules.md`.
 - Personas describe viewpoint, roles describe responsibility, and task prompts describe the
@@ -35,8 +47,8 @@ agents that inspect or change the repository. It is not a prompt for review work
   TOML configuration, not free-form prompts.
 - Each run stores its resolved immutable configuration under `runs/<run-id>/data/configuration/`
   and exact hash-pinned model guidance under `runs/<run-id>/data/guidance/<bundle-sha256>/`.
-- Repository guidance, target guidance, skills, and continuation prompts are never copied into a
-  review-worker prompt.
+- Repository guidance, target guidance, development skills, and continuation prompts are never
+  copied into a review-worker prompt. Only registered runtime skills reach a model worker.
 - Conflicting guidance fails assembly or validation; prompt ordering never resolves authority.
 
 ## Change discipline

@@ -1,0 +1,471 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://appsec-review.local/schemas/inference-security-review/score-package.schema.json",
+  "title": "Normalized independent score package",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "score_id",
+    "claim_id",
+    "adjudication_id",
+    "provider",
+    "provider_config_sha256",
+    "policy_sha256",
+    "native",
+    "native_result_sha256",
+    "technical_severity",
+    "exploitability_confidence",
+    "environmental_business_impact",
+    "remediation_priority",
+    "assumptions",
+    "missing_factors",
+    "evidence_relations",
+    "factor_citations",
+    "limitations",
+    "scorer",
+    "input_fingerprint",
+    "overrides"
+  ],
+  "properties": {
+    "schema": {
+      "const": "appsec-review/score-package/1"
+    },
+    "score_id": {
+      "$ref": "common.schema.json#/$defs/score_id"
+    },
+    "claim_id": {
+      "$ref": "common.schema.json#/$defs/claim_id"
+    },
+    "adjudication_id": {
+      "$ref": "common.schema.json#/$defs/adjudication_id"
+    },
+    "provider": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "interface",
+        "implementation"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "common.schema.json#/$defs/token"
+        },
+        "interface": {
+          "$ref": "common.schema.json#/$defs/short_text"
+        },
+        "implementation": {
+          "$ref": "common.schema.json#/$defs/short_text"
+        }
+      }
+    },
+    "provider_config_sha256": {
+      "$ref": "common.schema.json#/$defs/sha256"
+    },
+    "policy_sha256": {
+      "$ref": "common.schema.json#/$defs/sha256"
+    },
+    "native": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [],
+      "properties": {
+        "nomenclature": {
+          "$ref": "common.schema.json#/$defs/short_text"
+        },
+        "vector": {
+          "$ref": "common.schema.json#/$defs/short_text"
+        },
+        "score": {
+          "type": "number"
+        },
+        "rating": {
+          "$ref": "common.schema.json#/$defs/short_text"
+        },
+        "decision_path": {
+          "type": "array",
+          "items": {
+            "$ref": "common.schema.json#/$defs/token"
+          },
+          "maxItems": 32
+        },
+        "matrix_cell": {
+          "type": "array",
+          "items": {
+            "$ref": "common.schema.json#/$defs/token"
+          },
+          "maxItems": 8
+        }
+      }
+    },
+    "native_result_sha256": {
+      "$ref": "common.schema.json#/$defs/sha256"
+    },
+    "technical_severity": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "scale",
+            "rating"
+          ],
+          "properties": {
+            "scale": {
+              "$ref": "common.schema.json#/$defs/token"
+            },
+            "rating": {
+              "oneOf": [
+                {
+                  "$ref": "common.schema.json#/$defs/short_text"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "value": {
+              "type": [
+                "number",
+                "null"
+              ]
+            }
+          }
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "exploitability_confidence": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "scale",
+            "rating"
+          ],
+          "properties": {
+            "scale": {
+              "$ref": "common.schema.json#/$defs/token"
+            },
+            "rating": {
+              "oneOf": [
+                {
+                  "$ref": "common.schema.json#/$defs/short_text"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "value": {
+              "type": [
+                "number",
+                "null"
+              ]
+            }
+          }
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "environmental_business_impact": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "scale",
+            "rating"
+          ],
+          "properties": {
+            "scale": {
+              "$ref": "common.schema.json#/$defs/token"
+            },
+            "rating": {
+              "oneOf": [
+                {
+                  "$ref": "common.schema.json#/$defs/short_text"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "value": {
+              "type": [
+                "number",
+                "null"
+              ]
+            }
+          }
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "remediation_priority": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "scale",
+            "rating"
+          ],
+          "properties": {
+            "scale": {
+              "$ref": "common.schema.json#/$defs/token"
+            },
+            "rating": {
+              "oneOf": [
+                {
+                  "$ref": "common.schema.json#/$defs/short_text"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "value": {
+              "type": [
+                "number",
+                "null"
+              ]
+            }
+          }
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "assumptions": {
+      "type": "array",
+      "items": {
+        "$ref": "common.schema.json#/$defs/text"
+      },
+      "maxItems": 32,
+      "uniqueItems": true
+    },
+    "missing_factors": {
+      "type": "array",
+      "items": {
+        "$ref": "common.schema.json#/$defs/token"
+      },
+      "maxItems": 32,
+      "uniqueItems": true
+    },
+    "evidence_relations": {
+      "$ref": "common.schema.json#/$defs/relation_ids"
+    },
+    "factor_citations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "factor",
+          "evidence_relations"
+        ],
+        "properties": {
+          "factor": {
+            "$ref": "common.schema.json#/$defs/token"
+          },
+          "evidence_relations": {
+            "$ref": "common.schema.json#/$defs/relation_ids"
+          }
+        }
+      },
+      "maxItems": 32,
+      "uniqueItems": true
+    },
+    "limitations": {
+      "type": "array",
+      "items": {
+        "$ref": "common.schema.json#/$defs/text"
+      },
+      "maxItems": 32,
+      "uniqueItems": true
+    },
+    "scorer": {
+      "$ref": "common.schema.json#/$defs/actor_id"
+    },
+    "input_fingerprint": {
+      "$ref": "common.schema.json#/$defs/sha256"
+    },
+    "overrides": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "author",
+          "authority",
+          "reason",
+          "field",
+          "prior",
+          "replacement",
+          "scope",
+          "expires_at",
+          "policy_sha256"
+        ],
+        "properties": {
+          "author": {
+            "$ref": "common.schema.json#/$defs/actor_id"
+          },
+          "authority": {
+            "$ref": "common.schema.json#/$defs/token"
+          },
+          "reason": {
+            "$ref": "common.schema.json#/$defs/text"
+          },
+          "field": {
+            "$ref": "common.schema.json#/$defs/token"
+          },
+          "prior": {
+            "type": [
+              "string",
+              "number",
+              "null"
+            ]
+          },
+          "replacement": {
+            "type": [
+              "string",
+              "number",
+              "null"
+            ]
+          },
+          "scope": {
+            "$ref": "common.schema.json#/$defs/token"
+          },
+          "expires_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "policy_sha256": {
+            "$ref": "common.schema.json#/$defs/sha256"
+          }
+        }
+      },
+      "maxItems": 32
+    },
+    "reference_inputs": {
+      "description": "Labelled pinned-feed reference context about the lead advisory (NVD CVSS, CISA KEV, FIRST EPSS); never target evidence.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "label",
+        "reference_cvss",
+        "kev_listed",
+        "epss"
+      ],
+      "properties": {
+        "label": {
+          "const": "reference_context"
+        },
+        "reference_cvss": {
+          "type": "array",
+          "maxItems": 8,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "cve_id",
+              "version",
+              "vector",
+              "base_score"
+            ],
+            "properties": {
+              "cve_id": {
+                "type": "string",
+                "pattern": "^CVE-[0-9]{4}-[0-9]{4,}$"
+              },
+              "version": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 16
+              },
+              "vector": {
+                "type": "string",
+                "maxLength": 256
+              },
+              "base_score": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "minimum": 0,
+                "maximum": 10
+              }
+            }
+          }
+        },
+        "kev_listed": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "epss": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "cve_id",
+                "epss",
+                "percentile",
+                "score_date"
+              ],
+              "properties": {
+                "cve_id": {
+                  "type": "string",
+                  "pattern": "^CVE-[0-9]{4}-[0-9]{4,}$"
+                },
+                "epss": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "percentile": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "score_date": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "maxLength": 32
+                }
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://appsec-review.local/schemas/inference-security-review/gap.schema.json",
+  "title": "Typed gap or error record",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "gap_id",
+    "gap_class",
+    "subject_id",
+    "reason",
+    "predicate",
+    "round"
+  ],
+  "properties": {
+    "schema": {
+      "const": "appsec-review/gap/1"
+    },
+    "gap_id": {
+      "$ref": "common.schema.json#/$defs/gap_id"
+    },
+    "gap_class": {
+      "$ref": "common.schema.json#/$defs/gap_class"
+    },
+    "subject_id": {
+      "$ref": "common.schema.json#/$defs/short_text"
+    },
+    "reason": {
+      "$ref": "common.schema.json#/$defs/text"
+    },
+    "predicate": {
+      "oneOf": [
+        {
+          "$ref": "common.schema.json#/$defs/predicate"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "round": {
+      "$ref": "common.schema.json#/$defs/round"
+    }
+  }
+}

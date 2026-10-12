@@ -1,0 +1,142 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://appsec-review.local/schemas/inference-security-review/adjudication.schema.json",
+  "title": "Deterministic evidence-qualified adjudication (design R5)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "adjudication_id",
+    "claim_id",
+    "round",
+    "prior_state",
+    "new_state",
+    "rule",
+    "duplicate_of",
+    "predicates",
+    "independence",
+    "gap_ids",
+    "policy_sha256"
+  ],
+  "properties": {
+    "schema": {
+      "const": "appsec-review/adjudication/1"
+    },
+    "adjudication_id": {
+      "$ref": "common.schema.json#/$defs/adjudication_id"
+    },
+    "claim_id": {
+      "$ref": "common.schema.json#/$defs/claim_id"
+    },
+    "round": {
+      "$ref": "common.schema.json#/$defs/round"
+    },
+    "prior_state": {
+      "$ref": "common.schema.json#/$defs/claim_state"
+    },
+    "new_state": {
+      "$ref": "common.schema.json#/$defs/claim_state"
+    },
+    "rule": {
+      "enum": [
+        "duplicate",
+        "out_of_scope",
+        "unresolved_contradiction",
+        "direct_contradiction",
+        "confirmed",
+        "supported",
+        "insufficient_evidence"
+      ]
+    },
+    "duplicate_of": {
+      "oneOf": [
+        {
+          "$ref": "common.schema.json#/$defs/claim_id"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "predicates": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "predicate",
+          "required",
+          "status",
+          "support",
+          "contradict"
+        ],
+        "properties": {
+          "predicate": {
+            "$ref": "common.schema.json#/$defs/predicate"
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "status": {
+            "enum": [
+              "supported",
+              "contradicted",
+              "unresolved_contradiction",
+              "unsupported"
+            ]
+          },
+          "support": {
+            "$ref": "common.schema.json#/$defs/relation_ids"
+          },
+          "contradict": {
+            "$ref": "common.schema.json#/$defs/relation_ids"
+          }
+        }
+      },
+      "maxItems": 6,
+      "uniqueItems": true
+    },
+    "independence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "verifier_actor_id",
+        "independent",
+        "provider_distinct",
+        "reasons"
+      ],
+      "properties": {
+        "verifier_actor_id": {
+          "oneOf": [
+            {
+              "$ref": "common.schema.json#/$defs/actor_id"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "independent": {
+          "type": "boolean"
+        },
+        "provider_distinct": {
+          "type": "boolean"
+        },
+        "reasons": {
+          "type": "array",
+          "items": {
+            "$ref": "common.schema.json#/$defs/token"
+          },
+          "maxItems": 16,
+          "uniqueItems": true
+        }
+      }
+    },
+    "gap_ids": {
+      "$ref": "common.schema.json#/$defs/gap_ids"
+    },
+    "policy_sha256": {
+      "$ref": "common.schema.json#/$defs/sha256"
+    }
+  }
+}

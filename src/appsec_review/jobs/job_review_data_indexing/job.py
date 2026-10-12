@@ -54,10 +54,11 @@ Providers = Callable[[], tuple[tuple[str, ...], Mapping[str, Sequence[Any]], Map
 def registry_providers() -> tuple[tuple[str, ...], dict[str, tuple[Any, ...]], dict[str, tuple[str, ...]]]:
     """Jobs in the accepted index stage, their datasets, and consumed upstream jobs."""
     from appsec_review.runtime.registry import builtin_registry
-    # Package assembly runs after this index is accepted. Auditing it here would put a false
-    # unavailable-package gap into every package assembled from this index.
+    # These consumers run after the index is accepted. Auditing them here would put false
+    # unavailable-output gaps into the very manifest they consume.
     job_ids = tuple(job_id for job_id in builtin_registry().job_ids()
-                    if job_id not in {"job_review_package_assembly", "job_document_issue_analysis"})
+                    if job_id not in {"job_review_package_assembly", "job_document_issue_analysis",
+                                      "job_inference_security_review"})
     declarations: dict[str, tuple[Any, ...]] = {}
     consumes: dict[str, tuple[str, ...]] = {}
     for job_id in job_ids:
@@ -98,12 +99,22 @@ def _resolved_steps(run_root: Path) -> dict[str, list[str]]:
     return {job_id: list((value.get("steps") or {}).keys()) for job_id, value in sorted((document.get("jobs") or {}).items())}
 
 
-FEED_STEPS = {"nvd": "nvd_sync", "osv": "osv_sync", "mitre": "mitre_sync", "cve-bin-tool": "cve_bin_tool_db_build"}
+FEED_STEPS = {"nvd": "nvd_sync", "osv": "osv_sync", "mitre": "mitre_sync", "cve-bin-tool": "cve_bin_tool_db_build",
+              "kev": "kev_sync", "epss": "epss_sync"}
+# The index file each feed's snapshot manifest must hash for the feed to be pinned as queryable.
+FEED_INDEXES = {"nvd": "index/nvd.sqlite", "osv": "index/osv.sqlite", "mitre": "index/mitre.sqlite",
+                "kev": "index/kev.sqlite", "epss": "index/epss.sqlite"}
 
 
 def feed_pins(repository_root: Path, resolved: Mapping[str, Any], max_age_days: int,
-              now: datetime | None = None) -> dict[str, dict[str, Any]]:
-    """Pin each global reference feed's verified current snapshot into this run's inputs."""
+              now: datetime | None = None,
+              max_age_overrides: Mapping[str, int] | None = None) -> dict[str, dict[str, Any]]:
+    """Pin each global reference feed's verified current snapshot into this run's inputs.
+
+    A feed whose ``current.json``, manifest or any manifest-hashed file (including its
+    ``index/*.sqlite``) fails verification is ``unavailable``; one older than its freshness bound
+    (``max_age_overrides[feed]`` or ``max_age_days``) is pinned with ``stale: true``.
+    """
     from appsec_review.jobs.job_third_party_data_sync.publication import verify_current
     steps = ((resolved.get("jobs") or {}).get("job_third_party_data_sync") or {}).get("steps") or {}
     instant = now or datetime.now(timezone.utc)
@@ -123,6 +134,12 @@ def feed_pins(repository_root: Path, resolved: Mapping[str, Any], max_age_days: 
             pins[feed] = {"feed_id": feed, "status": "unavailable",
                           "reason": f"no verified current snapshot ({type(exc).__name__})"}
             continue
+        index = FEED_INDEXES.get(feed)
+        if index is not None and index not in (manifest.get("files") or {}):
+            pins[feed] = {"feed_id": feed, "status": "unavailable",
+                          "reason": f"the verified snapshot publishes no {index}"}
+            continue
+        bound = int((max_age_overrides or {}).get(feed, max_age_days))
         published = str(pointer.get("published_at") or "")
         try:
             age = (instant - datetime.fromisoformat(published.replace("Z", "+00:00"))).days
@@ -130,7 +147,7 @@ def feed_pins(repository_root: Path, resolved: Mapping[str, Any], max_age_days: 
             age = None
         pins[feed] = {"feed_id": feed, "status": "pinned", "snapshot_id": verified["snapshot_id"],
                       "manifest_sha256": verified["manifest_sha256"], "directory": verified["directory"],
-                      "published_at": published, "stale": age is None or age > max_age_days,
+                      "published_at": published, "stale": age is None or age > bound, "max_age_days": bound,
                       "files": {logical: (entry.get("sha256") if isinstance(entry, Mapping) else entry)
                                 for logical, entry in (manifest.get("files") or {}).items()}}
     return pins
@@ -225,9 +242,12 @@ def build_job(*, providers: Providers = registry_providers,
             if run_root.resolve() not in candidate.parents or file_sha256(candidate) != shard["sha256"]:
                 raise ValueError(f"restored shard failed verification: {'/'.join(shard_key(shard))}")
         job_steps = {job_id: steps for job_id, steps in _resolved_steps(run_root).items()
-                     if job_id not in {"job_review_package_assembly", "job_document_issue_analysis"}}
+                     if job_id not in {"job_review_package_assembly", "job_document_issue_analysis",
+                                       "job_inference_security_review"}}
         feeds = feed_pins(unit.job.repository_root, _resolved_document(run_root),
-                          int(settings_of(unit)["feed_max_age_days"]))
+                          int(settings_of(unit)["feed_max_age_days"]),
+                          max_age_overrides={str(key): int(value) for key, value in dict(
+                              settings_of(unit).get("feed_max_age_days_overrides") or {}).items()})
         mismatch = sorted(set(job_ids) ^ set(job_steps))
         document = {
             "schema": "appsec-review/review-data-indexing-inputs/1", "target_snapshot": manifest["target_snapshot"],

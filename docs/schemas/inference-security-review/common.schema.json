@@ -1,0 +1,672 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://appsec-review.local/schemas/inference-security-review/common.schema.json",
+  "title": "Shared definitions for the inference security review",
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "claim_id": {
+      "type": "string",
+      "pattern": "^claim-[0-9a-f]{64}$"
+    },
+    "relation_id": {
+      "type": "string",
+      "pattern": "^evrel-[0-9a-f]{64}$"
+    },
+    "evidence_request_id": {
+      "type": "string",
+      "pattern": "^evreq-[0-9a-f]{64}$"
+    },
+    "review_id": {
+      "type": "string",
+      "pattern": "^review-[0-9a-f]{64}$"
+    },
+    "adjudication_id": {
+      "type": "string",
+      "pattern": "^adjudication-[0-9a-f]{64}$"
+    },
+    "score_id": {
+      "type": "string",
+      "pattern": "^score-[0-9a-f]{64}$"
+    },
+    "cell_id": {
+      "type": "string",
+      "pattern": "^cell-[0-9a-f]{64}$"
+    },
+    "actor_id": {
+      "type": "string",
+      "pattern": "^actor-[0-9a-f]{64}$"
+    },
+    "gap_id": {
+      "type": "string",
+      "pattern": "^gap-[0-9a-f]{64}$"
+    },
+    "event_id": {
+      "type": "string",
+      "pattern": "^event-[0-9a-f]{64}$"
+    },
+    "finding_package_id": {
+      "type": "string",
+      "pattern": "^finding-[0-9a-f]{64}$"
+    },
+    "package_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,199}$"
+    },
+    "record_id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*-[0-9a-f]{64}$"
+    },
+    "entity_id": {
+      "type": "string",
+      "pattern": "^asr:[a-z][a-z0-9_]*:[0-9a-f]{64}$"
+    },
+    "token": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_.:/-]{0,127}$"
+    },
+    "cwe": {
+      "type": "string",
+      "pattern": "^CWE-[1-9][0-9]{0,5}$"
+    },
+    "short_text": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "text": {
+      "type": "string",
+      "maxLength": 2000
+    },
+    "round": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 64
+    },
+    "lane": {
+      "enum": [
+        "lead",
+        "hunt"
+      ]
+    },
+    "role": {
+      "enum": [
+        "hypothesis_hunter",
+        "red_team_analyst",
+        "blue_team_refuter",
+        "independent_verifier",
+        "independent_scorer",
+        "poc_designer",
+        "poc_verifier",
+        "attack_chain_analyst",
+        "finding_adjudicator",
+        "completeness_reviewer"
+      ]
+    },
+    "blue_task": {
+      "enum": [
+        "blue_control",
+        "blue_reachability"
+      ]
+    },
+    "hunt_strategy": {
+      "enum": [
+        "variant",
+        "sink_up",
+        "entry_down",
+        "control_gap",
+        "persona_sweep"
+      ]
+    },
+    "claim_state": {
+      "enum": [
+        "proposed",
+        "supported",
+        "confirmed",
+        "contradicted",
+        "not_reachable",
+        "not_exploitable_in_observed_configuration",
+        "insufficient_evidence",
+        "duplicate",
+        "out_of_scope",
+        "coverage_gap"
+      ]
+    },
+    "predicate": {
+      "enum": [
+        "affected_construct",
+        "attacker_input_control",
+        "source_to_sink_reachability",
+        "missing_or_ineffective_guard",
+        "configuration_enables",
+        "security_impact"
+      ]
+    },
+    "relation_kind": {
+      "enum": [
+        "supports",
+        "contradicts",
+        "duplicates",
+        "possible_duplicate",
+        "derives_from",
+        "supersedes",
+        "qualifies",
+        "component_of_chain",
+        "requests_evidence"
+      ]
+    },
+    "evidence_relation_kind": {
+      "enum": [
+        "supports",
+        "contradicts",
+        "qualifies"
+      ]
+    },
+    "admissibility": {
+      "enum": [
+        "direct",
+        "direct_for_mapped_predicate",
+        "indirect"
+      ]
+    },
+    "cell_status": {
+      "enum": [
+        "succeeded",
+        "failed",
+        "blocked",
+        "timed_out",
+        "canceled",
+        "invalid",
+        "not_launched"
+      ]
+    },
+    "gap_class": {
+      "enum": [
+        "integrity_error",
+        "authority_error",
+        "schema_error",
+        "worker_gap",
+        "coverage_gap",
+        "evidence_gap",
+        "independence_gap",
+        "score_gap",
+        "poc_policy_gap",
+        "poc_execution_gap",
+        "chain_gap",
+        "budget_gap",
+        "routing_gap",
+        "publication_error"
+      ]
+    },
+    "event_kind": {
+      "enum": [
+        "claim_proposed",
+        "relation_added",
+        "evidence_request_opened",
+        "evidence_request_closed",
+        "duplicate_marked",
+        "state_transition",
+        "gap_recorded",
+        "cell_terminal"
+      ]
+    },
+    "evidence_request_outcome": {
+      "enum": [
+        "satisfied",
+        "unsatisfied",
+        "superseded",
+        "withdrawn"
+      ]
+    },
+    "pool_outcome": {
+      "enum": [
+        "COMPLETE",
+        "DEGRADED",
+        "FAILED",
+        "CANCELED",
+        "EMPTY"
+      ]
+    },
+    "entity_kind": {
+      "enum": [
+        "source_file",
+        "source_span",
+        "symbol",
+        "component",
+        "project",
+        "build_action",
+        "compile_unit",
+        "object_file",
+        "library",
+        "executable",
+        "build_artifact",
+        "package",
+        "archive_member",
+        "bytecode_module",
+        "managed_assembly",
+        "wasm_module",
+        "ast_node",
+        "ir_entity",
+        "tool_observation",
+        "evidence_artifact",
+        "finding_package",
+        "change",
+        "history_signal",
+        "hotspot",
+        "change_context_signal",
+        "review_unit",
+        "deployment_event",
+        "tag_assignment",
+        "priority_item",
+        "review_signal",
+        "review_flow_step",
+        "review_context_file",
+        "precomputed_fact",
+        "dataset",
+        "dataset_audit",
+        "coverage_cell",
+        "dependency_package",
+        "advisory"
+      ]
+    },
+    "poc_status": {
+      "enum": [
+        "eligible",
+        "not_applicable",
+        "insufficient_evidence",
+        "unsafe_to_attempt",
+        "plan_generated",
+        "verification_succeeded",
+        "verification_failed",
+        "execution_unavailable",
+        "policy_denied"
+      ]
+    },
+    "entity_ids": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/entity_id"
+      },
+      "maxItems": 64,
+      "uniqueItems": true
+    },
+    "predicate_citations": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [],
+      "properties": {
+        "affected_construct": {
+          "$ref": "#/$defs/entity_ids"
+        },
+        "attacker_input_control": {
+          "$ref": "#/$defs/entity_ids"
+        },
+        "source_to_sink_reachability": {
+          "$ref": "#/$defs/entity_ids"
+        },
+        "missing_or_ineffective_guard": {
+          "$ref": "#/$defs/entity_ids"
+        },
+        "configuration_enables": {
+          "$ref": "#/$defs/entity_ids"
+        },
+        "security_impact": {
+          "$ref": "#/$defs/entity_ids"
+        }
+      },
+      "description": "Cited accepted logical identities per obligation predicate."
+    },
+    "proposed_relation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "predicate",
+        "kind",
+        "entity_id",
+        "rationale"
+      ],
+      "properties": {
+        "claim_ref": {
+          "$ref": "#/$defs/token"
+        },
+        "predicate": {
+          "$ref": "#/$defs/predicate"
+        },
+        "kind": {
+          "$ref": "#/$defs/evidence_relation_kind"
+        },
+        "entity_id": {
+          "$ref": "#/$defs/entity_id"
+        },
+        "rationale": {
+          "$ref": "#/$defs/text"
+        }
+      },
+      "description": "A model-proposed relation; it reaches the ledger only after R3 resolution."
+    },
+    "proposed_relations": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/proposed_relation"
+      },
+      "maxItems": 128,
+      "uniqueItems": true
+    },
+    "evidence_request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "predicate",
+        "requested_kind",
+        "anchors",
+        "question"
+      ],
+      "properties": {
+        "claim_ref": {
+          "$ref": "#/$defs/token"
+        },
+        "predicate": {
+          "$ref": "#/$defs/predicate"
+        },
+        "requested_kind": {
+          "$ref": "#/$defs/entity_kind"
+        },
+        "anchors": {
+          "$ref": "#/$defs/entity_ids"
+        },
+        "question": {
+          "$ref": "#/$defs/text"
+        }
+      }
+    },
+    "evidence_requests": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/evidence_request"
+      },
+      "maxItems": 32,
+      "uniqueItems": true
+    },
+    "preconditions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/token"
+      },
+      "maxItems": 32,
+      "uniqueItems": true
+    },
+    "affected_entities": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/entity_id"
+      },
+      "maxItems": 64,
+      "uniqueItems": true,
+      "minItems": 1
+    },
+    "relation_ids": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/relation_id"
+      },
+      "maxItems": 256,
+      "uniqueItems": true
+    },
+    "gap_ids": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/gap_id"
+      },
+      "maxItems": 256,
+      "uniqueItems": true
+    },
+    "state_change": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "from_state",
+        "to_state",
+        "round",
+        "reason",
+        "event_content_sha256",
+        "adjudication_id"
+      ],
+      "properties": {
+        "from_state": {
+          "$ref": "#/$defs/claim_state"
+        },
+        "to_state": {
+          "$ref": "#/$defs/claim_state"
+        },
+        "round": {
+          "$ref": "#/$defs/round"
+        },
+        "reason": {
+          "$ref": "#/$defs/text"
+        },
+        "event_content_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "adjudication_id": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/adjudication_id"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "claims_by_state": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "proposed",
+        "supported",
+        "confirmed",
+        "contradicted",
+        "not_reachable",
+        "not_exploitable_in_observed_configuration",
+        "insufficient_evidence",
+        "duplicate",
+        "out_of_scope",
+        "coverage_gap"
+      ],
+      "properties": {
+        "proposed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "supported": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "confirmed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "contradicted": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "not_reachable": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "not_exploitable_in_observed_configuration": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "insufficient_evidence": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "duplicate": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "out_of_scope": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "coverage_gap": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "cells_by_status": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "succeeded",
+        "failed",
+        "blocked",
+        "timed_out",
+        "canceled",
+        "invalid",
+        "not_launched"
+      ],
+      "properties": {
+        "succeeded": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "failed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "blocked": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "timed_out": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "canceled": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "invalid": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "not_launched": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "gaps_by_class": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "integrity_error",
+        "authority_error",
+        "schema_error",
+        "worker_gap",
+        "coverage_gap",
+        "evidence_gap",
+        "independence_gap",
+        "score_gap",
+        "poc_policy_gap",
+        "poc_execution_gap",
+        "chain_gap",
+        "budget_gap",
+        "routing_gap",
+        "publication_error"
+      ],
+      "properties": {
+        "integrity_error": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "authority_error": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "schema_error": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "worker_gap": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "coverage_gap": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "evidence_gap": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "independence_gap": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "score_gap": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "poc_policy_gap": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "poc_execution_gap": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "chain_gap": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "budget_gap": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "routing_gap": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "publication_error": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "requests_by_outcome": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "satisfied",
+        "unsatisfied",
+        "superseded",
+        "withdrawn"
+      ],
+      "properties": {
+        "satisfied": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "unsatisfied": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "superseded": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "withdrawn": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    }
+  }
+}

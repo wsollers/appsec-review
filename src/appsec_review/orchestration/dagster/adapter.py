@@ -102,8 +102,22 @@ def _node_name(job: Job, suffix: str, namespace: str = "") -> str:
     return f"{namespace}__{base}" if namespace else base
 
 
-def _pool_for(unit_id: str) -> str:
+# Job-specific step pools, consulted before the shared step-name heuristics below.
+_JOB_STEP_POOLS: Mapping[str, Mapping[str, str]] = {
+    "job_inference_security_review": {
+        "lead_review": "inference_teams",
+        "hunt_review": "inference_teams",
+        "scoring": "inference_score",
+        "publication": "lifecycle",
+    },
+}
+_JOB_DEFAULT_POOLS: Mapping[str, str] = {"job_inference_security_review": "application"}
+
+
+def _pool_for(unit_id: str, job_id: str | None = None) -> str:
     step = unit_id.split(".", 1)[0]
+    if job_id in _JOB_DEFAULT_POOLS and not unit_id.startswith("__"):
+        return _JOB_STEP_POOLS.get(job_id, {}).get(step, _JOB_DEFAULT_POOLS[job_id])
     if step == "validation":
         return "owasp_validator"
     if step in {"verification", "join"}:
@@ -219,8 +233,8 @@ def _build_dagster_graph(name: str, jobs: tuple[Job, ...], config: AppConfig,
 
             def make_unit(selected_job: Job, selected_unit, selected_ins: Mapping[str, In]):
                 @op(name=_node_name(selected_job, selected_unit.unit_id, node_namespace), ins=dict(selected_ins),
-                    out=Out(Nothing), tags={"appsec/pool": _pool_for(selected_unit.unit_id)},
-                    pool=_pool_for(selected_unit.unit_id),
+                    out=Out(Nothing), tags={"appsec/pool": _pool_for(selected_unit.unit_id, selected_job.job_id)},
+                    pool=_pool_for(selected_unit.unit_id, selected_job.job_id),
                     description=f"Execute or reuse {selected_job.job_id}.{selected_unit.unit_id}.")
                 def execute(context, claim, **_dependencies):
                     correlated = {**dict(claim), "orchestration": {

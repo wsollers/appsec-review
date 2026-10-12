@@ -1,0 +1,306 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://appsec-review.local/schemas/inference-security-review/handoff.schema.json",
+  "title": "Accepted job manifest and handoff",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "run_id",
+    "accepted_manifest_sha256",
+    "configuration_sha256",
+    "ledger_head_sha256",
+    "projection_sha256",
+    "status",
+    "accounting",
+    "shards",
+    "finding_packages",
+    "score_packages",
+    "gap_ids"
+  ],
+  "properties": {
+    "schema": {
+      "const": "appsec-review/inference-review-handoff/1"
+    },
+    "run_id": {
+      "$ref": "common.schema.json#/$defs/short_text"
+    },
+    "accepted_manifest_sha256": {
+      "$ref": "common.schema.json#/$defs/sha256"
+    },
+    "configuration_sha256": {
+      "$ref": "common.schema.json#/$defs/sha256"
+    },
+    "ledger_head_sha256": {
+      "$ref": "common.schema.json#/$defs/sha256"
+    },
+    "projection_sha256": {
+      "$ref": "common.schema.json#/$defs/sha256"
+    },
+    "status": {
+      "enum": [
+        "COMPLETE",
+        "DEGRADED",
+        "EMPTY"
+      ],
+      "description": "DEGRADED whenever any gap or failed lane is accounted; never a clean verdict."
+    },
+    "accounting": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "exact",
+        "outcome",
+        "review_incomplete",
+        "incomplete_gap_ratio",
+        "gap_ratio",
+        "claims_total",
+        "duplicate_proposals",
+        "claims_by_state",
+        "gaps_by_class",
+        "evidence_requests_by_outcome",
+        "lanes",
+        "violations"
+      ],
+      "properties": {
+        "exact": {
+          "const": true
+        },
+        "outcome": {
+          "$ref": "common.schema.json#/$defs/pool_outcome"
+        },
+        "review_incomplete": {
+          "type": "boolean"
+        },
+        "incomplete_gap_ratio": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "gap_ratio": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "claims_total": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "duplicate_proposals": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Proposals of a claim id that merged into an existing claim (identity-only claim ids); they are not claims of their own and are never in the duplicate state."
+        },
+        "claims_by_state": {
+          "$ref": "common.schema.json#/$defs/claims_by_state"
+        },
+        "gaps_by_class": {
+          "$ref": "common.schema.json#/$defs/gaps_by_class"
+        },
+        "evidence_requests_by_outcome": {
+          "$ref": "common.schema.json#/$defs/requests_by_outcome"
+        },
+        "lanes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "lane",
+              "outcome",
+              "claims_total",
+              "duplicate_proposals",
+              "claims_by_state",
+              "cells_expected",
+              "cells_by_status",
+              "cells_missing",
+              "packages_expected",
+              "gapped_cells",
+              "gapped_packages",
+              "gap_ratio",
+              "review_incomplete"
+            ],
+            "properties": {
+              "lane": {
+                "$ref": "common.schema.json#/$defs/lane"
+              },
+              "outcome": {
+                "$ref": "common.schema.json#/$defs/pool_outcome"
+              },
+              "claims_total": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "duplicate_proposals": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "claims_by_state": {
+                "$ref": "common.schema.json#/$defs/claims_by_state"
+              },
+              "cells_expected": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "cells_by_status": {
+                "$ref": "common.schema.json#/$defs/cells_by_status"
+              },
+              "cells_missing": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "packages_expected": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "gapped_cells": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "gapped_packages": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "gap_ratio": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "review_incomplete": {
+                "type": "boolean"
+              }
+            }
+          },
+          "maxItems": 2,
+          "minItems": 2
+        },
+        "violations": {
+          "type": "array",
+          "maxItems": 0
+        }
+      }
+    },
+    "shards": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "path",
+          "schema",
+          "sha256",
+          "rows"
+        ],
+        "properties": {
+          "path": {
+            "type": "string",
+            "pattern": "^(?!.*(^|/)[.][.]?(/|$))[A-Za-z0-9_.-]+(/[A-Za-z0-9_.-]+)*$",
+            "maxLength": 512
+          },
+          "schema": {
+            "$ref": "common.schema.json#/$defs/short_text"
+          },
+          "sha256": {
+            "$ref": "common.schema.json#/$defs/sha256"
+          },
+          "rows": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "maxItems": 4096,
+      "uniqueItems": true
+    },
+    "finding_packages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "finding_package_id",
+          "sha256"
+        ],
+        "properties": {
+          "finding_package_id": {
+            "$ref": "common.schema.json#/$defs/finding_package_id"
+          },
+          "sha256": {
+            "$ref": "common.schema.json#/$defs/sha256"
+          }
+        }
+      },
+      "maxItems": 10000,
+      "uniqueItems": true
+    },
+    "score_packages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "score_id",
+          "sha256"
+        ],
+        "properties": {
+          "score_id": {
+            "$ref": "common.schema.json#/$defs/score_id"
+          },
+          "sha256": {
+            "$ref": "common.schema.json#/$defs/sha256"
+          }
+        }
+      },
+      "maxItems": 10000,
+      "uniqueItems": true
+    },
+    "gap_ids": {
+      "type": "array",
+      "items": {
+        "$ref": "common.schema.json#/$defs/gap_id"
+      },
+      "maxItems": 100000,
+      "uniqueItems": true
+    },
+    "package_manifest_sha256": {
+      "$ref": "common.schema.json#/$defs/sha256"
+    },
+    "coverage_matrix": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256",
+        "rows"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "pattern": "^(?!.*(^|/)[.][.]?(/|$))[A-Za-z0-9_.-]+(/[A-Za-z0-9_.-]+)*$",
+          "maxLength": 512
+        },
+        "sha256": {
+          "$ref": "common.schema.json#/$defs/sha256"
+        },
+        "rows": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "possible_duplicates": {
+      "type": "array",
+      "maxItems": 10000,
+      "uniqueItems": true,
+      "items": {
+        "type": "array",
+        "minItems": 2,
+        "maxItems": 2,
+        "items": {
+          "$ref": "common.schema.json#/$defs/claim_id"
+        }
+      },
+      "description": "Distinct claim ids nominated as possible duplicates (R7); slice 1 never merges them."
+    }
+  }
+}

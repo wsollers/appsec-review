@@ -13,13 +13,15 @@ The unit graph is:
 nvd_sync:                  fetch -> process -> publish
 osv_sync:                  fetch -> index -> publish
 mitre_sync:                fetch -> normalize -> publish
+kev_sync:                  fetch -> normalize -> publish
+epss_sync:                 fetch -> normalize -> publish
 cve_bin_tool_db_build:     resolve_nvd_snapshot -> build -> publish
                                       ^
                                       |
                               nvd_sync.publish
 ```
 
-NVD, OSV, and MITRE are independent branches. The executor attempts every runnable unit even when
+NVD, OSV, MITRE, KEV, and EPSS are independent branches. The executor attempts every runnable unit even when
 another branch fails. Only units whose own dependency failed are marked `SKIPPED`; the job result
 and process status are `FAILED` when any unit failed or was skipped. Every task writes `status.json`
 and, on success, `result.json` beneath the execution attempt. These receipts contain stable unit,
@@ -41,6 +43,28 @@ All source selections, paths, worker counts, byte/record bounds, timeouts, tool 
 schedule live in `appsec-review.toml` under the semantic job/step/task hierarchy.
 
 - NVD bootstraps the official CVE 2.0 yearly feeds and then uses bounded last-modified API windows.
+  Every snapshot (manifest schema `nvd-snapshot-manifest/2`) also publishes `index/nvd.sqlite`, keyed
+  by CVE id with the English description, CWE weakness ids, CVSS metrics (family, version, vector,
+  base score, base severity), `vulnStatus`, published and last-modified timestamps, and the raw
+  record hash. It is built from the parent snapshot's index plus the new metadata layers (a `/1`
+  parent without an index is replayed from its whole layer chain); a later layer overrides an earlier
+  one unless its `last_modified` is older. Rows are inserted in CVE order into a fresh database, so
+  the same layers give the same bytes. The manifest's `files` entry hashes the index, so
+  `current.json` verification and per-run pinning cover it.
+- KEV downloads the CISA Known Exploited Vulnerabilities catalog JSON from `url` (host allowlist
+  `allowed_hosts`, default `www.cisa.gov`), bounded by `max_source_bytes` and `max_records`, with
+  `timeout_seconds` and an optional `sha256` pin. Normalization rejects a catalog without
+  `catalogVersion`/`dateReleased`/`vulnerabilities`, a declared `count` that disagrees, a malformed
+  or repeated `cveID`, or a non-ISO `dateAdded`/`dueDate`, and writes `index/kev.sqlite` (CVE id,
+  vendor/project, product, vulnerability name, date added, due date, known ransomware use, CWE ids,
+  catalog version).
+- EPSS downloads the FIRST daily `epss_scores-current.csv.gz` from `url` (host allowlist
+  `allowed_hosts`, default `epss.empiricalsecurity.com`), bounded by `max_source_bytes`,
+  `max_uncompressed_bytes` and `max_records`, with `timeout_seconds` and an optional `sha256` pin.
+  Normalization requires the `#model_version:...,score_date:...` comment line and the
+  `cve,epss,percentile` header, unique well-formed CVE ids, and probabilities in `[0, 1]`, and writes
+  `index/epss.sqlite` (CVE id, EPSS, percentile, score date, model version). The daily file changes
+  every day, so leave `sha256` unset unless a specific file must be reproduced.
 - OSV downloads only the explicitly configured ecosystem archives and builds a SQLite lookup index
   with configured result limits. Inference queries that index; it does not scan ZIP archives.
 - MITRE requires Enterprise ATT&CK, CAPEC, and CWE in `source_selections`; configuration that omits
@@ -51,10 +75,36 @@ schedule live in `appsec-review.toml` under the semantic job/step/task hierarchy
   pinned; CWE is currently unpinned, so its download is not hash-verified.
 - Every download has a transport bound, source URL, retrieval timestamp, size, and SHA-256. Archive
   expansion and record counts are bounded, and archive member paths are validated.
+- KEV and EPSS snapshot identities exclude retrieval timestamps and HTTP validators, so republishing
+  identical content yields the same content-addressed snapshot.
 
 Feed publications are immutable snapshot directories. A manifest hashes every published file, and
 `current.json` advances atomically only after full validation. A failed refresh leaves the prior
 last-known-good pointer unchanged.
+
+## Per-run pinning and freshness
+
+`job_review_data_indexing` pins each feed's verified current snapshot into the run
+(`feed_pins`, recorded in its `load.accepted_inputs` artifact). A feed is pinned only when its
+pointer, manifest, and every manifest-hashed file verify and the manifest hashes the feed's index
+(`index/nvd.sqlite`, `index/osv.sqlite`, `index/mitre.sqlite`, `index/kev.sqlite`,
+`index/epss.sqlite`); otherwise it is `unavailable` with a reason. A snapshot whose `published_at` is
+older than `feed_max_age_days` (default 14), or its entry in `feed_max_age_days_overrides`
+(`kev = 7`, `epss = 3`), is pinned with `stale: true`. Products that join a stale or unavailable feed
+record named gaps (`stale_feed`, `<feed>_stale_feed`, `<feed>_feed_unavailable`) and publish
+`stale`/`partial` coverage; they never publish an empty result as complete. The inference review
+validates claim CWEs only against a fresh pinned MITRE catalog and records a gap when it falls back.
+
+Every record from these feeds is reference context. A KEV listing, an EPSS score, or an NVD CVSS
+vector describes the advisory everywhere, not the target, and never satisfies a proof obligation.
+
+## Verification status
+
+The fetch, normalize, index, publish, verify and pinning code paths are tested offline with small
+fixture feed files (valid, malformed, oversize, hash mismatch, tampered index, stale), including
+NVD index determinism and override order. Real downloads from CISA, FIRST/Empirical Security, NVD,
+OSV, and MITRE are not exercised by tests; the configured URLs and the live formats (in particular
+the EPSS host and comment-line format, and the KEV field names) are unverified until a live run.
 
 ## Metadata placement
 

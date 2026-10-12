@@ -8,7 +8,7 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from .claude_cli import ModelOutputError, parse_model_payload
-from .request import ModelRequest, ModelResult
+from .request import ModelRequest, ModelResult, ReviewModelRequest, review_prompt
 
 
 _THINKING_BUDGETS = {"low": 1024, "medium": 2048, "high": 4096, "xhigh": 6144}
@@ -17,12 +17,33 @@ _THINKING_BUDGETS = {"low": 1024, "medium": 2048, "high": 4096, "xhigh": 6144}
 ENDPOINT = "https://api.anthropic.com/v1/messages"
 
 
-def send(request: ModelRequest, *, timeout_seconds: int, endpoint: str = ENDPOINT) -> ModelResult:
+def send(request: ModelRequest | ReviewModelRequest, *, timeout_seconds: int,
+         endpoint: str = ENDPOINT) -> ModelResult:
     """Anthropic Messages API transport; no SDK or agent tools are involved."""
     key = os.environ.get("ANTHROPIC_API_KEY")
     if not key:
         raise RuntimeError("ANTHROPIC_API_KEY is unavailable to the configured inference provider")
-    prompt = {
+    if isinstance(request, ReviewModelRequest):
+        # Hash-pinned guidance is the trusted system channel; task input and the
+        # application-mediated transcript are the untrusted user message.
+        prompt, system = review_prompt(request, include_guidance=False), request.guidance_text
+    else:
+        prompt, system = _plan_prompt(request), "\n\n".join(
+            part for part in (request.persona, request.role) if part)
+    budget = min(_THINKING_BUDGETS.get(request.reasoning, 2048),
+                 max(1024, request.max_output_tokens - 1024))
+    body: dict[str, Any] = {
+        "model": request.model, "max_tokens": request.max_output_tokens,
+        "messages": [{"role": "user", "content": json.dumps(prompt, sort_keys=True)}],
+        "thinking": {"type": "enabled", "budget_tokens": budget},
+    }
+    if system:
+        body["system"] = system
+    return _post(body, request.schema, key=key, endpoint=endpoint, timeout_seconds=timeout_seconds)
+
+
+def _plan_prompt(request: ModelRequest) -> dict[str, Any]:
+    prompt: dict[str, Any] = {
         "task": request.guidance, "response_schema": request.schema,
         "catalog_summary": request.summary,
         "allowlists": {"scanners": request.allowed_scanners,
@@ -38,16 +59,11 @@ def send(request: ModelRequest, *, timeout_seconds: int, endpoint: str = ENDPOIN
                             "rejected_response": request.prior_response,
                             "instruction": ("Return only one corrected JSON object. Its top-level "
                                             f"schema must be exactly {request.schema}.")}
-    budget = min(_THINKING_BUDGETS.get(request.reasoning, 2048),
-                 max(1024, request.max_output_tokens - 1024))
-    body: dict[str, Any] = {
-        "model": request.model, "max_tokens": request.max_output_tokens,
-        "messages": [{"role": "user", "content": json.dumps(prompt, sort_keys=True)}],
-        "thinking": {"type": "enabled", "budget_tokens": budget},
-    }
-    system = "\n\n".join(part for part in (request.persona, request.role) if part)
-    if system:
-        body["system"] = system
+    return prompt
+
+
+def _post(body: Mapping[str, Any], schema: str, *, key: str, endpoint: str,
+          timeout_seconds: int) -> ModelResult:
     encoded = json.dumps(body, separators=(",", ":")).encode("utf-8")
     http_request = Request(endpoint, data=encoded, method="POST", headers={
         "content-type": "application/json", "x-api-key": key,
@@ -69,11 +85,11 @@ def send(request: ModelRequest, *, timeout_seconds: int, endpoint: str = ENDPOIN
     text = "\n".join(str(item["text"]) for item in envelope.get("content", ())
                      if isinstance(item, Mapping) and item.get("type") == "text")
     try:
-        proposal = parse_model_payload(text, request.schema)
+        proposal = parse_model_payload(text, schema)
     except ModelOutputError as exc:
         stop_reason = str(envelope.get("stop_reason", "unknown"))
         raise ModelOutputError(
-            f"Anthropic response was not a complete {request.schema} object "
+            f"Anthropic response was not a complete {schema} object "
             f"(stop_reason={stop_reason}; parse_error={exc})",
             raw_response=raw.decode("utf-8", "replace"),
             rejected_output=text[:131072],

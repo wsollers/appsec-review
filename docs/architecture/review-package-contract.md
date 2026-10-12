@@ -1,80 +1,203 @@
-# Pre-adjudication review packages
+# Review package and finding-lead contract
 
-The sole machine-readable contract is [review-packages.schema.json](../schemas/review-packages.schema.json),
-version `appsec-review/review-package/3`. It defines `finding_lead`, `hunt`, and `document_hunt`
-packages. Reported
-scanner severity orders review; it is not an adjudicated technical severity. The separate
-post-adjudication finding package is defined in [inference security review](inference-security-review.md).
+Status: implementation contract, schema version 3. Accepted-manifest scope assembly, lane A
+finding-lead packages for every lead family, lane B review-unit ranking and hunt packages,
+membership audits and the package manifest are implemented in `src/appsec_review/review/`
+(`scope.py`, `lead_families.py`, `units.py`, `packages.py`, with pinned-feed reference context
+from `advisories.py` and `references.py`). The inference job consumes these packages
+(`job_inference_security_review`). Version 3 adds lead `advisory_context`, `advisory_summary`,
+`weaknesses` and `admission_reasons`, and the `advisory_kev`/`advisory_epss` rank signals.
 
-## Accepted inputs and deterministic assembly
+This contract specializes [inference security review](inference-security-review.md). Its
+machine-checkable shape is [review-packages.schema.json](../schemas/review-packages.schema.json).
+The broad [review-input-package.schema.json](../schemas/review-input-package.schema.json) exists
+but is not yet an assembler contract. Both package kinds here are pre-adjudication inputs: scanner
+severity is *reported* severity for ordering, never an adjudicated finding severity.
 
-`appsec_review.review_packages` resolves the accepted index pointer and verifies the manifest,
-source snapshot and every physical shard through `RetrievalCore`. It reads the accepted
-`scanner_correlation` lead, menu and audit facts directly from the pinned precomputed shard.
-Worker-facing MCP pagination is not used for exhaustive assembly. Each accepted source-SAST
-observation gets exactly one finding-lead package. The producer's High/Critical and unknown menus
-become bounded hunt partitions. Suppressed, duplicate and ambiguous-location leads retain their
-original observation identity and state.
+The same versioned schema also accepts the separate catalog-derived package producer
+`job_review_package_assembly`. Its `document_hunt` variant contains one accepted
+`document_context` route or boundary fact and bounded source-record grants, with no scanner lead.
+That producer also emits its earlier `finding_lead` and `hunt` shapes. The two producers have
+distinct content-addressed manifests (`review-package-manifest/2` for catalog packages and `/1`
+for inference packages), independent membership checks, and separate consumers. The document
+packages are consumed by `job_document_issue_analysis`, which publishes private candidates only;
+the inference job does not yet consume those document hunts. A declared route, test assertion, or
+exact route registration is not proof of control enforcement.
 
-Package identity is the SHA-256 of canonical package content excluding `package_id`. It includes
-the accepted manifest, sorted upstream shard identities, rule version, partition and lead identities.
-The run-owned package manifest records package hashes, accepted input hash, counts and gaps.
-Reassembly from the same accepted inputs is byte-identical. A changed accepted shard invalidates
-the manifest and package identities. `verify_review_packages` checks manifest and package bytes
-before consumption; a mismatch blocks use.
+## Source of each field
 
-The validator requires all accepted lead IDs in finding-lead packages exactly once and every
-High/Critical and unknown lead in a hunt menu. It rejects invented menu IDs, cross-component
-members, duplicate membership and disagreement with the accepted scanner-correlation audit.
-Every accepted `document_context` route or boundary fact has one `document_hunt` package with
-bounded source-record grants. These packages have no scanner lead and remain review questions;
-an unresolved implementation-component mapping is a named gap. Document-only package assembly
-may proceed without scanner-correlation facts, while recording their absence as a gap.
-Coverage from accepted shards is copied as named gaps. Missing scanner-correlation facts or an
-audit failure block package publication rather than producing a clean empty menu.
+| Contract field | Accepted source and current query |
+|---|---|
+| `run_id`, `manifest_sha256`, `target_snapshot` | `resolve_accepted_manifest` and `load_verified_manifest` in `retrieval/core.py` and `retrieval/index.py`; verify each shard and the source snapshot before assembly. |
+| `scope`, `source_ids`, `artifact_ids` | Catalog component, source, build-unit and artifact entities; `find`, `query_artifacts`. No synthetic trust boundary: use `null` until an accepted producer provides it. |
+| `lead_menu` | `review/lead_families.py`: one versioned rule per lead family (see gate 3). Source-SAST and CodeQL reuse `normalize_reported_severity` and the accepted `scanner_correlation` lead facts of `indexing/sast.py` for suppression, duplicate and flow identities. Each lead keeps its accepted identity, scanner, rule, bounded `message`, `rule_cwe`, native severity, reported severity, `severity_rule` and `severity_basis`. |
+| `lead_menu[].advisory_context` (lane A only) | `review/advisories.py` over the accepted `dependency_advisories` facts that cite the lead's observation: up to three advisories, each with the OSV summary, fixed versions and aliases; CVE ids; NVD records (status, dates, bounded description, CWEs, up to six CVSS metrics with family, version, vector, base score and severity); KEV entries (listed, date added, due date, ransomware use, name); EPSS entries (score, percentile, score date); per-join status; the snapshot id and staleness of each feed; and the fact's gaps. `null` when no accepted fact cites the lead. Reference context only (R3: indirect for every predicate). |
+| `lead_menu[].advisory_summary` | The compact form on every lead (the only advisory form on hunt menus): CVE ids, KEV flag (`null` when unknown), highest EPSS percentile and max CVSS base score; `null` without an advisory fact. |
+| `lead_menu[].weaknesses` | One block per CWE in `rule_cwe` (origin `rule`) and in the joined NVD records (origin `nvd`), at most eight: CWE id, name and abstraction from the run-pinned MITRE catalog (`source: mitre_catalog`), else from accepted `reference_intelligence` facts, else `unresolved`. |
+| `lead_menu[].admission_reasons` (lane A only) | `reported_severity` when the reported severity is admitted, `kev_listed` when the advisory is KEV-listed and `lead_admission_kev` is on. |
+| `lane`, `lead_family`, `rank` | `finding_lead` packages are lane `lead` with a non-null family and `rank: null`. `hunt` packages are lane `hunt` with `lead_family: null` and carry the unit's `review-unit-rank/2` rank and basis. |
+| `persona`, `stack_profile` | Always `null` at assembly. Routing fills them later; assembly never guesses them. |
+| `evidence`, `context` | Accepted observation, priority, CodeQL, source, build and precomputed shard identities; `find`, `trace`, `resolve_evidence`, `query_codeql`, `query_hotspots`, `query_precomputed`. A cited relation is a nomination until it resolves to a source line or hash-verified run artifact. |
+| `proof_obligations` | Deterministic rule table keyed by lead class and observed prerequisites: affected construct, input control, reachability, guard/configuration state, and impact. Missing predicates stay open; model prose cannot close them. |
+| `coverage_gaps` | Accepted index coverage, dataset inventory, query-set and language/build-unit cells; `coverage`, `query_dataset_inventory`. A failed, absent or skipped producer is a named gap. |
+| `retrieval` | Intersection of accepted package identities, available index names, query sets and configured caps. These are grants proposed by assembly, not an MCP authorization token. |
 
-`job_review_package_assembly` starts after the accepted
-`job_review_data_indexing` handoff and refuses a manifest from another producer. Its publication
-unit verifies the complete content-addressed package directory before the job handoff is accepted;
-that handoff records the hash of every package file. A later index publication requires a new
-package attempt against the new accepted manifest.
-The indexing inventory closes before package assembly and audits upstream producers only; it
-does not report the future package job as unavailable coverage.
-`job_document_issue_analysis` follows it in the CLI and Dagster wave. It verifies the accepted
-package handoff and reassembles the complete package manifest before source mapping. Its output
-is a private candidate ledger, not a post-adjudication finding package.
+Each `context` entry is typed `{id, kind, role}`. `kind` is the retrieval entity kind of `id`.
+`role` is one of `source`, `artifact`, `component`, `build_unit`, `duplicate_of`, `flow`,
+`priority`, `history`, `hotspot` or `tag`. Bare identity lists are not accepted.
 
-The schema carries typed metric vectors, evidence provenance, safe ordered build commands,
-classified environment facts, matching tag assignments, a package-local tag cloud, and Clang
-function-declaration references. The assembler resolves a lead to a unique accepted function
-span by source path, file hash and line. It includes that function's metric vector plus file-level
-metrics, excluding other functions in the same file. A missing or ambiguous span becomes a named
-gap. The tag cloud counts only assignments attached to the lead observation or its source file;
-it is not the run-wide display cloud. Each tag and Clang reference retains an accepted shard
-identity and a retrieval grant.
+`input_fingerprint` hashes canonical JSON of the accepted manifest hash, package scope, all
+sorted referenced shard hashes, lead IDs, rule versions (assembly, obligations, rank, every
+lead-family rule and the advisory-context rule), the CWE reference record (source, MITRE snapshot
+and gap) and resolved cap settings. `package_id` is `<kind>-<sha256>` over the
+canonical package body without `package_id`. Arrays of IDs,
+evidence and gaps sort by stable identity; no timestamps or completion order enter identity.
+Reassembly from the same accepted inputs must produce byte-identical packages. The schema
+closes object keys and bounds structural types; a semantic validator must additionally verify
+hashes, sorted uniqueness, cited identities, page/byte caps and membership invariants.
 
-Build commands are selected only when their safe source-input token names the lead's source
-file. Each lead has a binding to its resolved function span and matching build-action IDs; multiple
-actions are explicitly ambiguous. A file-level compile command applies to a function through its
-source file but does not establish runtime reachability or that a suspected issue is real. The
-Clang references identify accepted post-expansion AST declarations when their mapped lines fall
-inside the function span. They do not contain a full expanded function body; missing references
-are named gaps. The package carries bounded retrieval grants, not raw source, argv, environment
-values or scanner output. Empty context must not be interpreted as evidence of safety.
+## Assembly and admission gates
 
-## Worker access
+1. Resolve one accepted pointer and verify the run-owned handoff, manifest, target snapshot,
+   physical shards and embedded identities. A changed hash, escaped path, conflicting shard,
+   failed dataset publication audit or contradictory schema blocks package publication.
+   `scope.accept_manifest` uses `resolve_accepted_manifest` and `load_verified_manifest`,
+   re-checks each shard's row counts and snapshot against its embedded metadata, and raises
+   `IntegrityError` on any mismatch. `AcceptedScope.verify` re-hashes every shard before
+   assembly returns.
+2. Build the evidence map: available and missing coverage per producer, components, build
+   units, languages and reference-intelligence freshness. An absent producer shard is a
+   `missing` gap and a stale feed a `stale` gap, with ids from `make_id("gap", 1, ...)`. Then
+   normalize every accepted lead of every family with its versioned rule
+   `appsec-review/lead-family/<family>/<n>` (`/2` for `artifact_scanner` and
+   `dependency_advisory`, `/1` otherwise):
 
-`ScopedRetrievalMcpAdapter` verifies an HMAC capability on every call. The grant binds run and
-accepted manifest, package ID and hash, role, round, expiry, permitted tools, indexes, query sets,
-entity IDs and page bounds. It admits only exact-identity `find`, `read_excerpt`, and
-subject-scoped `query_precomputed`. It denies all other MCP tools. Cursor signatures
-bind the capability and query, so a cursor cannot be reused across packages or queries. Results
-with an entity identity outside the grant are rejected. The unrestricted
-`RetrievalMcpAdapter` remains an operator interface and must not be given to review workers.
+   | Family | Accepted records | Reported severity |
+   |---|---|---|
+   | `source_sast` | `tool_observation` classified `source_sast` | `normalize_reported_severity`; suppression, duplicate and flows from accepted `scanner_correlation` lead facts |
+   | `codeql` | CodeQL observations | the same rule; `security_severity` bands first |
+   | `artifact_scanner` | `job_artifact_security_analysis` observations | scanner CVSS band, else the pinned NVD CVSS band (basis `nvd-cvss-band`), else native label |
+   | `dependency_advisory` | dependency-class observations (OSV, Grype) | the advisory's own CVSS band, else the pinned NVD CVSS band (v4.0, v3.1, v3.0, then v2; basis `nvd-cvss-band`), else its severity label |
+   | `ci_rule` | `job_ci_configuration_analysis` observations | native label |
+   | `post_build_hardening` | deterministic `build_security` checks with status `FAIL` | native label if published, else `unknown` |
+   | `owasp_control` | `control_evidence` facts with status `not_satisfied` | native label if published, else `unknown` |
 
-The current slice does not start red, blue or verifier workers. Package assembly preserves
-suspicions, context and open proof obligations; it does not resolve whether a suspected issue is
-real. The red, blue and blind-verifier pools gather and challenge evidence, including applicable
-compiled views. Evidence-qualified adjudication then decides the claim state. A later inference
-handoff must project separate role views, grant bounded access to accepted compiled evidence,
-and seal blind-verifier output before adjudication.
+   A family whose accepted producer shard is absent is a `missing` gap, never an empty list.
+   Without an accepted `scanner_correlation` shard, duplicate state is recomputed with
+   `build_scanner_correlation`, suppression is `unknown`, and a `partial` gap is recorded. When
+   the shard is present, its lead facts must cover exactly the accepted source-SAST
+   observations and agree with the severity rule, and its audit counts per severity must match;
+   a contradiction is an integrity failure. The assembler enumerates accepted shards
+   exhaustively and never pages through a bounded MCP route such as `query_observations`.
+3. **Lane A.** Admit every lead whose reported severity is in `admit_severities` (default
+   `critical`, `high`, `unknown`) from every family, plus every lead whose advisory is KEV-listed
+   when `admit_kev` (`lanes.lead_admission_kev`, default `true`) is set, and create exactly one
+   `finding_lead` package per admitted lead, including suppressed, duplicate, unresolved-location and
+   unknown-severity records. Preserve the original identity and native severity.
+   Duplicate and suppression state is context, not a reason to remove the package.
+4. **Lane B.** Partition review units by accepted component, then accepted trust boundary if
+   known (none is accepted yet, so it is `null`), build unit and stable range of sorted source
+   paths (`unit_max_files`). Rank units by `review-unit-rank/2`: the sum of the available signals
+   in integer points 0–1000 (LPS, SII, hotspot, tag density, medium/low/info lead hints,
+   `advisory_kev` = 250 when any advisory lead in the unit is KEV-listed, and `advisory_epss` =
+   250 times the highest EPSS percentile), then the count of known signals, then unit key. A
+   missing signal is `unknown` with reason `producer_unavailable`, `no_record` or
+   `feed_unavailable`, never zero; a unit without advisory leads scores a true zero for both
+   advisory signals. The top `hunt_max_units` units receive hunt
+   packages; every other unit is a `skipped` gap with reason `below_hunt_cutoff`. A hunt menu
+   lists every lead of its unit by reported severity then identity, and embeds no source or raw
+   scanner output. Menus split into numbered partitions by `hunt_menu_partition_size` and then
+   by `max_package_bytes`; `next_partition` names the following partition key. Context beyond
+   `max_context_entries`, or beyond the byte bound of a single-lead package, is omitted with a
+   `truncated` gap and `omitted_context`. Leads are never truncated: a package that cannot fit
+   one lead without context blocks the membership gate with an integrity failure.
+5. Form the expected set `E` of all admitted leads (by severity or KEV listing), including
+   suppressed and duplicate IDs, and `F` from finding-lead packages. Require `E ⊆ F` per family and
+   severity, exactly one package
+   per ID, and no invented ID. Each hunted unit's partitions list every lead of the unit exactly
+   once; the leads of a unit below the cutoff are accounted for by its `below_hunt_cutoff` gap.
+   Any violation raises `IntegrityError`.
+6. Publish a run-owned manifest (`appsec-review/review-package-manifest/1`) listing every
+   package id, kind, lane, family, partition, SHA-256 and size; the accepted input shard hashes;
+   the evidence-map hash; the CWE reference record; ranked units with their basis and hunt state;
+   every gap; per-family and per-severity counts, including KEV-admitted leads; and both audits. `publish_packages` writes and verifies the bytes, and
+   the review job consumes the manifest only after `verify_package_manifest` succeeds. Producer
+   failure publishes explicit gaps; membership or integrity failure blocks the handoff.
+
+## Bounded retrieval and producer dependencies
+
+| Slice | Current accepted producer/index | Query or precompute | Missing dependency and required gap |
+|---|---|---|---|
+| All languages, source | target catalog `source`; Tree-sitter `analysis` where grammar/scope succeeds | `search`, `find`, `read_excerpt`, `trace`, `query_precomputed(symbol_links)` | Parse failure or unsupported grammar is per language/scope; no symbol/call graph inference from syntax alone. |
+| C/C++ build units | language build, compiled analysis, clangd symbols; `build`, `compiled`, `analysis` | `query_build_security`, `query_artifacts`, `symbol_links` | LLVM direct-call and Clang AST are partial. No Joern graph edge until a bounded, source-mapped export is accepted. |
+| Go, Java/Kotlin, C#, JavaScript/TypeScript, Python, Rust build units | accepted build/artifact shards; CodeQL `observations` only for successfully executed scopes | `query_artifacts`, `query_codeql`, `build_provenance`, `scanner_correlation` | Build/CodeQL absence is per unit and language. CodeQL path steps do not become general call/dataflow graph edges. |
+| PHP, shell and other catalog languages | source/Tree-sitter and applicable SAST observations | `query_observations`, `scanner_correlation`, `search` | CodeQL, compiled and symbol lanes unavailable unless a matching accepted shard exists. |
+| Cross-cutting build, CI, history, control and intelligence | accepted artifact, CI, history, priority, OWASP and pinned reference shards | `query_artifacts`, `query_ci_configuration`, `query_change_context`, `query_hotspots`; `query_precomputed` products `artifact_inventory`, `dependency_advisories`, `ci_trust`, `history_context`, `control_evidence`, `reference_intelligence` | Missing input/feed, stale feed or partial source yields a named query-set gap, not complete coverage. |
+
+`indexing/matrix.py` computes language and build-unit cells from accepted shards;
+`input_matrix.py` reconciles producer declarations against them. Stage-1 products are
+`build_provenance`, `artifact_inventory`, `dependency_advisories`, `scanner_correlation`,
+`ci_trust`, `history_context`, `control_evidence`, `reference_intelligence` and `symbol_links`.
+The five link families are `representation`, `finding_source`, `package_advisory`,
+`symbol_syntax` and `history_code`. The graph products `call_graph`, `control_flow`,
+`dataflow`, `sarif_correlation`, `ast_ir_cpg_mapping`, `guards_ranges`, `entrypoint_paths`,
+`hotspot_context` and `review_package` remain planned. `job_cpg_analysis` retains a Joern
+binary artifact, not accepted graph export. The optional SQLite FTS image validates a derived
+text stream; accepted in-process shards remain retrieval authority.
+
+## Role-specific views and capability enforcement
+
+The application creates a signed or MAC-protected, short-lived capability binding **run ID,
+manifest hash, package ID and hash, role, round, tool allowlist, index and query-set allowlists,
+entity scope, page/byte/depth caps and expiry**. MCP verifies the binding on every call before
+dispatch, then intersects request filters and result identities with the package grant. A cursor
+is bound to the same capability and query hash. The current `RetrievalMcpAdapter` checks tool
+names and argument keys but has no such role/package scope; this is planned work. Do not hand
+workers an unrestricted adapter while this gate is absent.
+
+| View | Package content | Tool reach |
+|---|---|---|
+| Red discovery (`hypothesis_hunter`, `red_team_analyst`) | Hunt slice and lead menu, accepted context and gaps; no adjudicated labels | Bounded `search`, `find`, `read_excerpt`, `trace`, `coverage`, `query_observations`, `query_precomputed` and relevant domain queries inside the package scope. |
+| Blue refutation | One normalized claim, original cited evidence, open obligations, relevant finding-lead package and scope; may seek counterevidence | Same bounded read routes for that claim's package, including contradicting evidence. No other claim transcript. |
+| Blind verifier | One normalized claim and original evidence IDs plus the minimum scope; no red/blue narratives, scores, dispositions or actor/cache IDs | Independent fresh retrieval context and the same read-only scope. Seal its result before joining red and blue records. |
+
+No role receives arbitrary filesystem paths, shell, SQL, regex, target guidance, evaluator roots,
+raw argv/environment, network access or writes. Current MCP routes on `main` are core search,
+find, excerpt, trace, resolve, coverage, artifact/build/CI/CodeQL/change/OWASP queries, and
+`query_hotspots`, `query_precomputed`, `query_observations` and `query_dataset_inventory`
+(`mcp/schema.py`). Add no graph query route before accepted graph shards exist.
+
+## Validation and Dagster handoff
+
+Fixtures should include two languages and two build units; accepted High/Critical, unknown,
+suppressed and duplicate SAST observations; a partial CodeQL scope; an unavailable Tree-sitter
+scope; an ambiguous source mapping; a stale feed; a CPG binary without graph export; and
+same-line contradictory evidence. Focused tests must prove schema rejection of extra fields,
+stable package hashes under shuffled input, exact High/Critical and unknown membership across
+partitions, unchanged lead IDs through suppression/deduplication, gap propagation, source-line
+resolution, manifest/hash tampering rejection, package-scoped MCP denial, blind-view isolation,
+cursor rebinding denial and reuse invalidation when one upstream shard changes. An empty query
+with partial coverage must remain a gap.
+
+Dagster should expose `accept_manifest → assemble_scope → assemble_packages → red fan-out →
+normalize → blue and blind-verifier fan-out → adjudicate → publish` as visible dependencies.
+Assembly and publication use immutable application attempts and a serialized accepted handoff;
+Dagster schedules and records node outcomes. Every expected worker cell has one terminal record.
+Ordinary producer/worker failures become scoped gaps; integrity and membership failures stop
+publication. Resume fingerprints depend on accepted manifest, package bytes, guidance and
+configuration so an upstream change invalidates only affected packages and worker cells.
+
+## Ordered implementation
+
+1. Done: schema version 3 (pinned-feed advisory context, weaknesses, KEV admission and advisory
+   rank signals on top of version 2), deterministic assembly over accepted shards for both lanes,
+   membership audits and manifest publication in `src/appsec_review/review/`. The fixture tests
+   live in `tests/review/`, and the fixture builder is `tests/fixtures/inference_review/builder.py`.
+2. Add the single Dagster handoff that consumes the verified package manifest, and prove one
+   complete lead and one hunt partition end to end.
+3. Add capability-scoped MCP dispatch and red, blue and blind projections; test denied cross-
+   package queries and sealed verifier independence before running workers.
+4. Add per-language/build-unit dependency selection and gap accounting; extend graph products
+   only after Joern/LLVM source-mapped export is accepted and tested.
+5. Add full inference fan-out, adjudication and downstream accepted finding publication using
+   the existing inference design's evidence and independence gates.

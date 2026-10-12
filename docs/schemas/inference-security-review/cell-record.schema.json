@@ -1,0 +1,120 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://appsec-review.local/schemas/inference-security-review/cell-record.schema.json",
+  "title": "Terminal record of one expected worker cell",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "cell_id",
+    "lane",
+    "package_id",
+    "role",
+    "persona",
+    "stack_profile",
+    "task",
+    "claim_id",
+    "status",
+    "attempts",
+    "gap_ids",
+    "receipt_sha256"
+  ],
+  "properties": {
+    "schema": {
+      "const": "appsec-review/cell-record/1"
+    },
+    "cell_id": {
+      "$ref": "common.schema.json#/$defs/cell_id"
+    },
+    "lane": {
+      "$ref": "common.schema.json#/$defs/lane"
+    },
+    "package_id": {
+      "$ref": "common.schema.json#/$defs/package_id"
+    },
+    "role": {
+      "$ref": "common.schema.json#/$defs/role"
+    },
+    "persona": {
+      "$ref": "common.schema.json#/$defs/token"
+    },
+    "stack_profile": {
+      "$ref": "common.schema.json#/$defs/token"
+    },
+    "task": {
+      "$ref": "common.schema.json#/$defs/token"
+    },
+    "claim_id": {
+      "oneOf": [
+        {
+          "$ref": "common.schema.json#/$defs/claim_id"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "status": {
+      "$ref": "common.schema.json#/$defs/cell_status"
+    },
+    "attempts": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 16
+    },
+    "gap_ids": {
+      "$ref": "common.schema.json#/$defs/gap_ids"
+    },
+    "receipt_sha256": {
+      "oneOf": [
+        {
+          "$ref": "common.schema.json#/$defs/sha256"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "not_launched"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "attempts": {
+            "const": 0
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "attempts": {
+            "minimum": 1
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "succeeded"
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "gap_ids": {
+            "minItems": 1
+          }
+        }
+      }
+    }
+  ]
+}

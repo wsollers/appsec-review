@@ -87,7 +87,7 @@ def test_repository_configuration_names_only_providers_the_preflight_can_check()
     required = configured_models(tomllib.loads((ROOT / "appsec-review.toml").read_text(encoding="utf-8")))
     assert {item["job_id"] for item in required} == {
         "job_target_analysis_plan", "job_project_build", "job_post_build_security_assessment",
-        "job_owasp_control_assessment"}
+        "job_owasp_control_assessment", "job_inference_security_review"}
     assert {item["provider"] for item in required} <= set(inference.MODEL_CHECKS) & set(inference.PROVIDERS)
 
 
@@ -102,7 +102,7 @@ def test_intake_confirms_every_configured_model_before_publishing(tmp_path: Path
     assert calls == [("claude-cli", ("claude-haiku-5-5",), 120)]
     document = _preflight(config, outcome["run_id"])
     assert document["schema"] == PREFLIGHT_SCHEMA and document["unavailable"] == []
-    assert len(document["required"]) == 4
+    assert len(document["required"]) == 5
     assert document["providers"]["claude-cli"]["models"]["claude-haiku-5-5"]["available"] is True
     assert document["providers"]["claude-cli"]["listed"] == ["claude-haiku-5-5"]
 
@@ -154,7 +154,7 @@ def test_an_unwired_intake_reports_that_no_check_ran(tmp_path: Path) -> None:
     result = json.loads(next((config.runtime.runs_dir / outcome["run_id"]).rglob(
         "attempts/*/result.json")).read_text(encoding="utf-8"))
     verify = result["outputs"]["model_preflight.verify_models"]
-    assert verify["terminal_status"] == "NOT_APPLICABLE" and len(verify["required"]) == 4
+    assert verify["terminal_status"] == "NOT_APPLICABLE" and len(verify["required"]) == 5
 
 
 def test_registry_wires_the_real_check_into_the_first_job_of_a_review(monkeypatch, tmp_path: Path) -> None:

@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://appsec-review.local/schemas/inference-security-review/evidence-relation.schema.json",
+  "title": "Resolved evidence relation (design R3)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "relation_id",
+    "claim_id",
+    "predicate",
+    "kind",
+    "entity_id",
+    "entity_kind",
+    "admissibility",
+    "shard_id",
+    "content_sha256",
+    "locator",
+    "complete",
+    "producing_cell_id",
+    "retrieval_receipt_sha256"
+  ],
+  "properties": {
+    "schema": {
+      "const": "appsec-review/evidence-relation/1"
+    },
+    "relation_id": {
+      "$ref": "common.schema.json#/$defs/relation_id"
+    },
+    "claim_id": {
+      "$ref": "common.schema.json#/$defs/claim_id"
+    },
+    "predicate": {
+      "$ref": "common.schema.json#/$defs/predicate"
+    },
+    "kind": {
+      "$ref": "common.schema.json#/$defs/evidence_relation_kind"
+    },
+    "entity_id": {
+      "$ref": "common.schema.json#/$defs/entity_id"
+    },
+    "entity_kind": {
+      "$ref": "common.schema.json#/$defs/entity_kind"
+    },
+    "admissibility": {
+      "$ref": "common.schema.json#/$defs/admissibility"
+    },
+    "shard_id": {
+      "$ref": "common.schema.json#/$defs/short_text"
+    },
+    "content_sha256": {
+      "$ref": "common.schema.json#/$defs/sha256"
+    },
+    "locator": {
+      "$ref": "common.schema.json#/$defs/short_text"
+    },
+    "complete": {
+      "type": "boolean"
+    },
+    "producing_cell_id": {
+      "$ref": "common.schema.json#/$defs/cell_id"
+    },
+    "retrieval_receipt_sha256": {
+      "oneOf": [
+        {
+          "$ref": "common.schema.json#/$defs/sha256"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  }
+}

@@ -32,6 +32,8 @@ FIRST_STAGE_SETS = (
     "history_context", "control_evidence", "reference_intelligence", "symbol_links", "document_context",
 )
 _CWE = re.compile(r"(?i)\bcwe[-_/ ]?0*(\d{1,5})\b")
+# A pinned reference feed older than its freshness bound makes the whole product's coverage stale.
+_STALE_GAP = re.compile(r"^(?:[a-z]+_)?stale_feed:")
 
 
 @dataclass(frozen=True, slots=True)
@@ -90,8 +92,10 @@ def _finish(derived: Derived, query_set: str, *, unavailable: str | None = None)
         derived.gap(f"no {query_set} fact was derivable: {reason}"[:400])
         derived.coverage.append((query_set, "partial", derived.gaps[-1]))
     else:
-        derived.coverage.append((query_set, "partial" if derived.gaps else "complete",
-                                 "; ".join(derived.gaps[:5])[:1000] or None))
+        stale = [gap for gap in derived.gaps if _STALE_GAP.match(gap)]
+        gaps = [*stale, *(gap for gap in derived.gaps if gap not in stale)]
+        derived.coverage.append((query_set, "stale" if stale else "partial" if derived.gaps else "complete",
+                                 "; ".join(gaps[:5])[:1000] or None))
     derived.count("facts", len(derived.entities))
     return derived
 
@@ -310,6 +314,93 @@ def _fixed_versions(raw: str, package: str) -> list[str]:
     return sorted(set(found))[:5]
 
 
+_CVE_ID = re.compile(r"^CVE-[0-9]{4}-[0-9]{4,}$")
+CVSS_VERSION_PREFERENCE = ("4.0", "3.1", "3.0", "2.0")
+REFERENCE_FEEDS = ("osv", "nvd", "kev", "epss")
+REFERENCE_FEED_FILES = {"osv": "index/osv.sqlite", "nvd": "index/nvd.sqlite", "kev": "index/kev.sqlite",
+                        "epss": "index/epss.sqlite"}
+_MAX_CVES = 4
+
+
+def advisory_cve_ids(advisory: str, aliases: Sequence[str]) -> list[str]:
+    """CVE ids of an advisory: the advisory id itself when it is a CVE, then its OSV aliases."""
+    found = [advisory] if _CVE_ID.fullmatch(advisory) else []
+    found.extend(item for item in aliases if isinstance(item, str) and _CVE_ID.fullmatch(item))
+    return sorted(set(found))
+
+
+def preferred_cvss(metrics: Sequence[Mapping[str, Any]]) -> Mapping[str, Any] | None:
+    """The NVD metric to band by: CVSS v4.0, then v3.1, then v3.0, then v2; primary source first."""
+    ranked = [item for item in metrics if isinstance(item, Mapping) and isinstance(item.get("base_score"), (int, float))
+              and str(item.get("version")) in CVSS_VERSION_PREFERENCE]
+    ranked.sort(key=lambda item: (CVSS_VERSION_PREFERENCE.index(str(item["version"])),
+                                  0 if "Primary" in str(item.get("family") or "") else 1,
+                                  -float(item["base_score"]), str(item.get("vector"))))
+    return ranked[0] if ranked else None
+
+
+def _reference_joins(context: ProductContext, databases: Mapping[str, sqlite3.Connection | None],
+                     feed_gaps: Mapping[str, str | None], cve_ids: Sequence[str]) -> tuple[dict[str, Any], list[str]]:
+    """Join CVE ids to the pinned NVD, KEV and EPSS indexes; every miss is a named per-join gap."""
+    from appsec_review.jobs.job_third_party_data_sync.steps.epss_sync.feed import lookup as epss_lookup
+    from appsec_review.jobs.job_third_party_data_sync.steps.kev_sync.feed import lookup as kev_lookup
+    from appsec_review.jobs.job_third_party_data_sync.steps.nvd_sync.index import lookup as nvd_lookup
+    gaps: list[str] = []
+    joined: dict[str, Any] = {"nvd": [], "kev": [], "epss": []}
+    status: dict[str, str] = {}
+    selected = list(cve_ids)[:_MAX_CVES]
+    if len(cve_ids) > _MAX_CVES:
+        gaps.append(f"truncated: {len(cve_ids) - _MAX_CVES} CVE alias(es) beyond the per-advisory bound")
+    for feed, lookup in (("nvd", nvd_lookup), ("kev", kev_lookup), ("epss", epss_lookup)):
+        database = databases.get(feed)
+        if not selected:
+            status[feed] = "no_cve_identity"
+            continue
+        if database is None:
+            status[feed] = "unavailable"
+            gaps.append(f"{feed}_feed_unavailable: {feed_gaps.get(feed)}")
+            continue
+        status[feed] = "joined"
+        if (context.feeds.get(feed) or {}).get("stale"):
+            status[feed] = "stale"
+            gaps.append(f"{feed}_stale_feed: the pinned {feed.upper()} snapshot is older than the configured "
+                        "freshness bound")
+        for cve in selected:
+            record = lookup(database, cve)
+            if feed == "kev":
+                joined["kev"].append({"cve_id": cve, "listed": record is not None,
+                                      **({key: record[key] for key in ("date_added", "due_date",
+                                                                       "known_ransomware_use", "vulnerability_name",
+                                                                       "catalog_version")} if record else {})})
+                continue
+            if record is None:
+                gaps.append(f"{feed}_identity_mismatch: {cve} is not present in the pinned {feed.upper()} snapshot")
+                continue
+            if feed == "epss":
+                joined["epss"].append({key: record[key] for key in ("cve_id", "epss", "percentile", "score_date",
+                                                                    "model_version")})
+                continue
+            if str(record.get("status") or "").lower() == "rejected":
+                gaps.append(f"nvd_rejected_cve: {cve} is Rejected in the pinned NVD snapshot")
+            joined["nvd"].append({"cve_id": cve, "status": record["status"], "published": record["published"],
+                                  "last_modified": record["last_modified"],
+                                  "description": (record["description_en"] or "")[:512] or None,
+                                  "cwes": list(record["weaknesses"])[:8], "cvss": list(record["cvss"])[:6],
+                                  "raw_sha256": record["raw_sha256"]})
+    listed = [item["listed"] for item in joined["kev"]]
+    percentiles = [float(item["percentile"]) for item in joined["epss"]]
+    cvss = [metric for item in joined["nvd"] for metric in item["cvss"]]
+    preferred = preferred_cvss(cvss)
+    summary = {"cve_ids": list(selected),
+               "kev_listed": True if any(listed) else (False if listed and status.get("kev") != "unavailable"
+                                                       else None),
+               "epss_max_percentile": max(percentiles) if percentiles else None,
+               "max_cvss": max((float(item["base_score"]) for item in cvss
+                                if isinstance(item.get("base_score"), (int, float))), default=None),
+               "preferred_cvss": dict(preferred) if preferred else None}
+    return {**joined, "join_status": status, "summary": summary}, gaps
+
+
 def _build_dependency_advisories(context: ProductContext, selected: tuple[Mapping[str, Any], ...]) -> Derived:
     derived, shards, name = Derived(), context.shards, "dependency_advisories"
     scanners = [shard for shard in selected if shard.get("shard_id") in {"osv_scanner", "grype", "syft",
@@ -317,8 +408,13 @@ def _build_dependency_advisories(context: ProductContext, selected: tuple[Mappin
     if not scanners:
         return _finish(derived, name, unavailable="dependency advisories are unavailable: no accepted dependency "
                                                   "scanner observation shards")
-    database, feed_gap = _feed_database(context, "osv", "index/osv.sqlite")
+    databases: dict[str, sqlite3.Connection | None] = {}
+    feed_gaps: dict[str, str | None] = {}
+    for feed_name in REFERENCE_FEEDS:
+        databases[feed_name], feed_gaps[feed_name] = _feed_database(context, feed_name, REFERENCE_FEED_FILES[feed_name])
+    database, feed_gap = databases["osv"], feed_gaps["osv"]
     feed = _feed_reference(context, "osv")
+    references = {feed_name: _feed_reference(context, feed_name) for feed_name in REFERENCE_FEEDS}
     grouped: dict[tuple[str, str | None, str | None, str], dict[str, Any]] = {}
     for row in shards.entities(selected, kinds=("tool_observation",)):
         for pair in advisory_pairs(row):
@@ -333,7 +429,7 @@ def _build_dependency_advisories(context: ProductContext, selected: tuple[Mappin
             package, version, purl, advisory = key
             versioned = bool(version or purl)
             gaps = [] if versioned else ["missing_version: the scanner reported a package name only"]
-            intelligence: dict[str, Any] = {"feed": feed, "advisory_known": None}
+            intelligence: dict[str, Any] = {"feed": feed, "advisory_known": None, "aliases": []}
             if database is None:
                 gaps.append(f"feed_unavailable: {feed_gap}")
             else:
@@ -356,32 +452,50 @@ def _build_dependency_advisories(context: ProductContext, selected: tuple[Mappin
                         gaps.append("uncertain_package_identity: the pinned advisory does not list this package name")
                 if feed.get("stale"):
                     gaps.append("stale_feed: the pinned OSV snapshot is older than the configured freshness bound")
+            cve_ids = advisory_cve_ids(advisory, intelligence["aliases"])
+            if not cve_ids:
+                gaps.append("no_cve_identity: neither the advisory id nor its OSV aliases name a CVE; NVD, KEV "
+                            "and EPSS were not joined")
+            joins, join_gaps = _reference_joins(context, databases, feed_gaps, cve_ids)
+            gaps.extend(join_gaps)
+            # The joins sit at the top of ``result`` so that nested CVSS metrics stay within the
+            # shard payload depth bound (retrieval sanitizes deeper values to "<truncated>").
+            reference = {"cve_ids": cve_ids, "nvd": joins["nvd"], "kev": joins["kev"], "epss": joins["epss"],
+                         "join_status": joins["join_status"], "reference_summary": joins["summary"],
+                         "feeds": references}
             subject = package_identity(context.snapshot, package, version, purl).value
             record_fact = fact(
                 context.snapshot, name, context.rule_version,
                 {"package": package, "version": version, "purl": purl, "advisory": advisory},
                 name=f"{package} {advisory}", text=f"dependency advisory {package} {version or ''} {advisory}",
                 subject_identity=subject, location=entry["location"], status="partial" if gaps else "complete",
-                gaps=gaps, basis="scanner-reported package/advisory match joined to the pinned advisory snapshot",
+                gaps=gaps, basis="scanner-reported package/advisory match joined to the pinned OSV snapshot and, by "
+                                 "CVE id from the advisory id or its OSV aliases, to the pinned NVD, KEV and EPSS "
+                                 "snapshots; every joined record is reference context, never target evidence",
                 upstream=_upstream((*scanners, *_link_shard(context, "package_advisory"))),
                 result={"package": package, "version": version, "purl": purl, "advisory": advisory,
                         "advisory_identity": advisory_identity(context.snapshot, advisory).value,
                         "severity": entry["severity"], "scanners": sorted(str(item) for item in entry["scanners"]),
                         "match_exact": versioned, "observations": sorted(set(entry["observations"]))[:8],
-                        "observation_count": len(set(entry["observations"])), "intelligence": intelligence})
+                        "observation_count": len(set(entry["observations"])), "intelligence": intelligence,
+                        **reference})
             derived.entities.append(record_fact)
             for observation in sorted(set(entry["observations"]))[:8]:
                 derived.relations.append(RelationRecord(RelationKind.DERIVED_FROM, record_fact.identity.value,
                                                         observation, True, 1.0, None, {"query_set": name}))
     finally:
-        if database is not None:
-            database.close()
+        for connection in databases.values():
+            if connection is not None:
+                connection.close()
     if len(grouped) > context.max_facts:
         derived.gap(f"truncated: {len(grouped) - context.max_facts} package/advisory pair(s) exceeded the fact bound")
-    if database is None:
-        derived.gap(f"feed_unavailable: {feed_gap}")
-    elif feed.get("stale"):
-        derived.gap("stale_feed: the pinned OSV snapshot is older than the configured freshness bound")
+    for feed_name in REFERENCE_FEEDS:
+        prefix = "" if feed_name == "osv" else f"{feed_name}_"
+        if databases[feed_name] is None:
+            derived.gap(f"{prefix}feed_unavailable: {feed_gaps[feed_name]}")
+        elif (context.feeds.get(feed_name) or {}).get("stale"):
+            derived.gap(f"{prefix}stale_feed: the pinned {feed_name.upper()} snapshot is older than the configured "
+                        "freshness bound")
     for gap in _coverage_gaps(shards, scanners):
         derived.gap(gap)
     return _finish(derived, name)
@@ -409,6 +523,16 @@ def cwe_ids(payload: Mapping[str, Any]) -> list[str]:
         properties = rule.get("properties")
         visit(properties.get("tags") if isinstance(properties, Mapping) else None)
     return sorted(set(found))
+
+
+def cwe_attributes(raw: Any) -> dict[str, str]:
+    """Bounded CWE attributes (``abstraction``, ``status``) the MITRE normalizer stored for a weakness."""
+    try:
+        value = json.loads(raw) if isinstance(raw, str) else {}
+    except ValueError:
+        return {}
+    return {key: str(value[key])[:64] for key in ("abstraction", "status")
+            if isinstance(value, Mapping) and isinstance(value.get(key), str)}
 
 
 def _select_reference(shards: ShardSet) -> tuple[Mapping[str, Any], ...]:
@@ -440,15 +564,16 @@ def _build_reference_intelligence(context: ProductContext, selected: tuple[Mappi
             if database is None:
                 gaps.append(f"feed_unavailable: {feed_gap}")
             else:
-                record = database.execute("SELECT source, object_type, name, modified FROM entry WHERE external_id = ? "
-                                          "ORDER BY source LIMIT 1", (cwe,)).fetchone()
+                record = database.execute("SELECT source, object_type, name, modified, raw_json FROM entry "
+                                          "WHERE external_id = ? ORDER BY source LIMIT 1", (cwe,)).fetchone()
                 if record is None:
                     weakness["known"] = False
                     gaps.append("identity_mismatch: weakness is not present in the pinned MITRE snapshot")
                 else:
                     weakness.update({"known": True, "name": str(record["name"] or "")[:256],
                                      "source": record["source"], "object_type": record["object_type"],
-                                     "modified": record["modified"]})
+                                     "modified": record["modified"],
+                                     "abstraction": cwe_attributes(record["raw_json"]).get("abstraction")})
                 if feed.get("stale"):
                     gaps.append("stale_feed: the pinned MITRE snapshot is older than the configured freshness bound")
             observations = sorted(set(entry["observations"]))
@@ -945,8 +1070,8 @@ PRODUCT_RULES: tuple[ProductRule, ...] = (
     ProductRule("build_provenance", "build-provenance/1", _select_build_provenance, _build_build_provenance,
                 links=("representation",)),
     ProductRule("artifact_inventory", "artifact-inventory/1", _select_artifact_inventory, _build_artifact_inventory),
-    ProductRule("dependency_advisories", "dependency-advisories/1", _select_dependency_advisories,
-                _build_dependency_advisories, links=("package_advisory",), feeds=("osv",)),
+    ProductRule("dependency_advisories", "dependency-advisories/2", _select_dependency_advisories,
+                _build_dependency_advisories, links=("package_advisory",), feeds=REFERENCE_FEEDS),
     ProductRule("scanner_correlation", "scanner-correlation/1", _select_scanner_correlation,
                 _build_scanner_correlation),
     ProductRule("ci_trust", "ci-trust/1", _select_ci_trust, _build_ci_trust),
@@ -954,7 +1079,7 @@ PRODUCT_RULES: tuple[ProductRule, ...] = (
                 links=("history_code",)),
     ProductRule("control_evidence", "control-evidence/1", _select_control_evidence, _build_control_evidence,
                 owasp=True),
-    ProductRule("reference_intelligence", "reference-intelligence/1", _select_reference,
+    ProductRule("reference_intelligence", "reference-intelligence/2", _select_reference,
                 _build_reference_intelligence, feeds=("mitre",)),
     ProductRule("symbol_links", "symbol-links/1", _select_symbol_links, _build_symbol_links,
                 links=("symbol_syntax",)),

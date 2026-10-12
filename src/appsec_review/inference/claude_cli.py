@@ -7,7 +7,7 @@ import shutil
 import subprocess
 from typing import Any, Mapping, Sequence
 
-from .request import ModelRequest, ModelResult
+from .request import ModelRequest, ModelResult, ReviewModelRequest, review_prompt
 
 
 class ModelOutputError(ValueError):
@@ -76,13 +76,20 @@ def parse_model_payload(raw: str, schema: str) -> Mapping[str, Any]:
     return next(iter(unique.values()))
 
 
-def send(request: ModelRequest, *, timeout_seconds: int, binary: str = "claude",
+def send(request: ModelRequest | ReviewModelRequest, *, timeout_seconds: int, binary: str = "claude",
          auth_mode: str = "subscription") -> ModelResult:
     """Operator-authenticated Claude CLI transport; the model is granted no tools."""
     executable = shutil.which(binary)
     if executable is None:
         raise FileNotFoundError(f"configured Claude CLI is unavailable: {binary}")
-    prompt = {
+    prompt = (review_prompt(request, include_guidance=True)
+              if isinstance(request, ReviewModelRequest) else _plan_prompt(request))
+    return _run(executable, prompt, request.schema, model=request.model, reasoning=request.reasoning,
+                timeout_seconds=timeout_seconds, auth_mode=auth_mode)
+
+
+def _plan_prompt(request: ModelRequest) -> dict[str, Any]:
+    prompt: dict[str, Any] = {
         "persona": request.persona,
         "role": request.role,
         "task": request.guidance,
@@ -103,13 +110,18 @@ def send(request: ModelRequest, *, timeout_seconds: int, binary: str = "claude",
                             "rejected_response": request.prior_response,
                             "instruction": ("Return only one corrected JSON object. Its top-level "
                                             f"schema must be exactly {request.schema}. Do not reinvestigate.")}
+    return prompt
+
+
+def _run(executable: str, prompt: Mapping[str, Any], schema: str, *, model: str, reasoning: str,
+         timeout_seconds: int, auth_mode: str) -> ModelResult:
     environment = dict(os.environ)
     if auth_mode == "subscription":
         environment.pop("ANTHROPIC_API_KEY", None)
         environment.pop("ANTHROPIC_AUTH_TOKEN", None)
     argv = [executable, "-p", "--output-format", "json", "--no-session-persistence",
-            "--safe-mode", "--tools", "", "--model", request.model,
-            "--effort", request.reasoning]
+            "--safe-mode", "--tools", "", "--allowedTools", "",
+            "--model", model, "--effort", reasoning]
     completed = subprocess.run(
         argv, input=json.dumps(prompt, sort_keys=True), text=True, encoding="utf-8",
         stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=timeout_seconds,
@@ -119,7 +131,7 @@ def send(request: ModelRequest, *, timeout_seconds: int, binary: str = "claude",
         error = completed.stderr.strip()[:4096]
         raise RuntimeError(f"Claude CLI exited {completed.returncode}: {error}")
     try:
-        proposal = parse_model_payload(completed.stdout, request.schema)
+        proposal = parse_model_payload(completed.stdout, schema)
     except ModelOutputError as exc:
         raw = completed.stdout[:2 * 1024 * 1024]
         try:
@@ -154,7 +166,7 @@ def models(names: Sequence[str], *, timeout_seconds: int, binary: str = "claude"
     result: dict[str, Any] = {}
     for name in names:
         argv = [executable, "-p", "--output-format", "json", "--no-session-persistence",
-                "--safe-mode", "--tools", "", "--model", name,
+                "--safe-mode", "--tools", "", "--allowedTools", "", "--model", name,
                 "--system-prompt", "Reply with the single word ok."]
         try:
             completed = subprocess.run(

@@ -36,7 +36,7 @@ def test_cli_transport_disables_tools_for_inference_and_preflight(monkeypatch) -
         calls.append(argv)
         assert argv[argv.index("--tools") + 1] == ""
         assert "--safe-mode" in argv
-        assert "--allowedTools" not in argv
+        assert argv[argv.index("--allowedTools") + 1] == ""
         assert "bypassPermissions" not in argv
         class Result:
             returncode = 0

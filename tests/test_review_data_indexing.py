@@ -587,7 +587,7 @@ def test_rerun_reuses_unchanged_products_and_rebuilds_only_changed_rule(accepted
     outputs = second["result"]["outputs"]
     assert all(outputs[f"precompute.{name}"]["reused"] for name in products.FIRST_STAGE_SETS)
     assert all(item["reused"] for item in outputs["links.cross_domain"]["links"])
-    changed = tuple(replace(rule, version="dependency-advisories/2") if rule.query_set == "dependency_advisories"
+    changed = tuple(replace(rule, version="dependency-advisories/99") if rule.query_set == "dependency_advisories"
                     else rule for rule in products.PRODUCT_RULES)
     monkeypatch.setattr(products, "PRODUCT_RULES", changed)
     third = _run(config, run_id, target, executor)["result"]["outputs"]
@@ -751,5 +751,5 @@ def test_input_source_matrix_matches_design_document_and_registry() -> None:
     from appsec_review.runtime.registry import builtin_registry
     registered = set(builtin_registry().job_ids())
     named = {producer for _source, producers, *_ in input_matrix.INPUT_SOURCES for producer in producers}
-    assert registered - {"job_review_data_indexing", "job_review_package_assembly"} <= named
+    assert registered - {"job_review_data_indexing", "job_review_package_assembly", "job_document_issue_analysis"} <= named
     assert {producer for producer in named if producer.startswith("job_")} <= registered

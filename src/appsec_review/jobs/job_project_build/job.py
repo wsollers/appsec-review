@@ -35,6 +35,7 @@ from appsec_review.storage import FileLock, atomic_bytes, atomic_json, canonical
 
 from .repair import REPAIR_SCHEMA, apply_repair, validate_repair_proposal
 from appsec_review.jobs.job_project_build.datasets import CONSUMES, DATASETS
+from appsec_review.guidance.skills import load_runtime_skill
 
 
 SCHEMA = "appsec-review/project-build-dispatch/2"
@@ -434,15 +435,12 @@ def _probe_diagnostics(unit: UnitContext, receipt: Mapping[str, Any]) -> dict[st
 
 def _repair_guidance(unit: UnitContext, family: str, model: Mapping[str, Any]) -> tuple[str, str, str, str]:
     repository = unit.job.repository_root
-    guidance_path = repository / "skills" / "build-image-repair" / "SKILL.md"
-    if not guidance_path.is_file():
-        guidance_path = Path(__file__).parents[4] / "skills" / "build-image-repair" / "SKILL.md"
     prompt_root = repository / "pipeline" / "prompt-fragments"
     if not prompt_root.is_dir():
         prompt_root = Path(__file__).parents[4] / "pipeline" / "prompt-fragments"
     persona = (prompt_root / "personas" / "devops-engineer.md").read_text(encoding="utf-8")
     role = (prompt_root / "roles" / f"build-engineer-{family}.md").read_text(encoding="utf-8")
-    guidance = guidance_path.read_text(encoding="utf-8")
+    guidance = load_runtime_skill(repository, "build-image-repair", job_id="job_project_build").text
     identity = hashlib.sha256(persona.encode() + b"\0" + role.encode() + b"\0" + guidance.encode()).hexdigest()
     bundle = unit.job.run_root / "data" / "guidance" / identity
     atomic_bytes(bundle / "persona.md", persona.encode("utf-8"))

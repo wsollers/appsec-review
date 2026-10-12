@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from enum import Enum
 import hashlib
 import json
+import os
 from pathlib import Path, PurePosixPath
 import re
 import tomllib
@@ -456,6 +457,14 @@ class JobConfig:
             raise KeyError(f"step is not configured: {self.job_id}.{step_id}") from exc
 
 
+# Jobs whose configuration is typed and validated before their runtime is registered. They are
+# kept out of ``AppConfig.jobs`` and the resolved ``jobs`` table, which must match the registry,
+# and are resolved under ``pending_jobs`` instead. Remove a job from here when it is registered.
+PENDING_JOBS: frozenset[str] = frozenset()
+OVERLAY_ENVIRONMENT = "APPSEC_REVIEW_CONFIG_OVERLAY"
+OVERLAY_LAYER = "capacity_overlay"
+
+
 @dataclass(frozen=True, slots=True)
 class AppConfig:
     source_path: Path
@@ -467,12 +476,80 @@ class AppConfig:
     jobs: Mapping[str, JobConfig]
     dagster: DagsterConfig = DagsterConfig()
     tools: ToolCapabilityConfig = ToolCapabilityConfig()
+    pending_jobs: Mapping[str, JobConfig] = MappingProxyType({})
+    overlay_path: Path | None = None
+    overlay_sha256: str | None = None
 
     def job(self, job_id: str) -> JobConfig:
         try:
-            return self.jobs[job_id]
+            return self.jobs[job_id] if job_id in self.jobs else self.pending_jobs[job_id]
         except KeyError as exc:
             raise KeyError(f"job is not configured: {job_id}") from exc
+
+    @property
+    def layers(self) -> tuple[Mapping[str, str], ...]:
+        """Configuration source layers in merge order, each with its own content hash."""
+        base = {"path": str(self.source_path), "sha256": self.source_sha256}
+        if self.overlay_path is None or self.overlay_sha256 is None:
+            return (base,)
+        return (base, {"path": str(self.overlay_path), "sha256": self.overlay_sha256, "layer": OVERLAY_LAYER})
+
+
+def overlay_capacity_keys(document: object) -> tuple[str, ...]:
+    """Validate a local capacity overlay and return the dotted keys it sets.
+
+    The overlay may set only ``CAPACITY_KEYS``: the inference review's team count and Dagster pool
+    limits. Every other key, and every empty table, is rejected.
+    """
+    from .inference_review import JOB_ID
+
+    def table(value: object, field: str, allowed: set[str] | None) -> Mapping[str, Any]:
+        if not isinstance(value, Mapping) or not value:
+            raise ValueError(f"configuration overlay {field or 'document'} must be a non-empty table")
+        unknown = set(value) - allowed if allowed is not None else set()
+        if unknown:
+            raise ValueError("configuration overlay may set only capacity keys; rejected: " +
+                             ", ".join(sorted(f"{field}.{key}" if field else str(key) for key in unknown)))
+        return value
+
+    root = table(document, "", {"jobs", "orchestration"})
+    keys: list[str] = []
+    if "jobs" in root:
+        jobs = table(root["jobs"], "jobs", {JOB_ID})
+        job = table(jobs[JOB_ID], f"jobs.{JOB_ID}", {"settings"})
+        settings = table(job["settings"], f"jobs.{JOB_ID}.settings", {"teams"})
+        teams = table(settings["teams"], f"jobs.{JOB_ID}.settings.teams", {"review_teams"})
+        if type(teams["review_teams"]) is not int:
+            raise ValueError("configuration overlay review_teams must be an integer")
+        keys.append(f"jobs.{JOB_ID}.settings.teams.review_teams")
+    if "orchestration" in root:
+        orchestration = table(root["orchestration"], "orchestration", {"dagster"})
+        dagster = table(orchestration["dagster"], "orchestration.dagster", {"pools"})
+        pools = table(dagster["pools"], "orchestration.dagster.pools", None)
+        for name, limit in sorted(pools.items()):
+            if not re.fullmatch(r"[a-z][a-z0-9_]{0,63}", str(name)) or type(limit) is not int:
+                raise ValueError(f"configuration overlay pool limit is invalid: {name}")
+            keys.append(f"orchestration.dagster.pools.{name}")
+    return tuple(keys)
+
+
+def _apply_overlay(document: dict[str, Any], overlay: Mapping[str, Any]) -> None:
+    from .inference_review import JOB_ID
+
+    if "jobs" in overlay:
+        job = document.get("jobs", {}).get(JOB_ID)
+        teams = job.get("settings", {}).get("teams") if isinstance(job, dict) else None
+        if not isinstance(teams, dict):
+            raise ValueError(f"configuration overlay sets review_teams but jobs.{JOB_ID}.settings.teams "
+                             "is not configured")
+        teams["review_teams"] = overlay["jobs"][JOB_ID]["settings"]["teams"]["review_teams"]
+    if "orchestration" in overlay:
+        orchestration = document.setdefault("orchestration", {})
+        dagster = orchestration.setdefault("dagster", {}) if isinstance(orchestration, dict) else None
+        pools = dagster.setdefault("pools", {}) if isinstance(dagster, dict) else None
+        if not isinstance(pools, dict):
+            raise ValueError("[orchestration.dagster.pools] must be a table")
+        pools.update(overlay["orchestration"]["dagster"]["pools"])
 
 
 def _path(root: Path, value: object, field: str) -> Path:
@@ -482,7 +559,7 @@ def _path(root: Path, value: object, field: str) -> Path:
     return (root / candidate).resolve() if not candidate.is_absolute() else candidate.resolve()
 
 
-def load_config(path: str | Path = "appsec-review.toml") -> AppConfig:
+def _config_source(path: str | Path) -> Path:
     raw = str(path)
     parsed = urlparse(raw)
     windows_path = bool(re.match(r"^[A-Za-z]:[\\/]", raw))
@@ -494,13 +571,38 @@ def load_config(path: str | Path = "appsec-review.toml") -> AppConfig:
             file_path = f"//{parsed.netloc}{file_path}"
         if len(file_path) >= 3 and file_path[0] == "/" and file_path[2] == ":":
             file_path = file_path[1:]
-        source = Path(file_path).resolve(strict=True)
-    else:
-        source = Path(path).resolve(strict=True)
+        return Path(file_path).resolve(strict=True)
+    return Path(path).resolve(strict=True)
+
+
+def load_config(path: str | Path = "appsec-review.toml", *, overlay: str | Path | None = None) -> AppConfig:
+    """Load the explicit (or repository default) configuration and an optional capacity overlay.
+
+    The overlay is ``overlay`` when given, otherwise the local path or file URI named by
+    ``APPSEC_REVIEW_CONFIG_OVERLAY`` when that variable is set and non-empty. It may set only
+    capacity keys (see ``overlay_capacity_keys``); it is merged before validation and frozen,
+    with its own hash, into the resolved configuration.
+    """
+    source = _config_source(path)
     repository_root = source.parent
     source_bytes = source.read_bytes()
     document = tomllib.loads(source_bytes.decode("utf-8"))
+    overlay_value = overlay if overlay is not None else (os.environ.get(OVERLAY_ENVIRONMENT) or None)
+    overlay_source: Path | None = None
+    overlay_sha256: str | None = None
+    overlay_record: dict[str, Any] | None = None
+    if overlay_value is not None:
+        overlay_source = _config_source(overlay_value)
+        overlay_bytes = overlay_source.read_bytes()
+        overlay_document = tomllib.loads(overlay_bytes.decode("utf-8"))
+        overlay_keys = overlay_capacity_keys(overlay_document)
+        _apply_overlay(document, overlay_document)
+        overlay_sha256 = hashlib.sha256(overlay_bytes).hexdigest()
+        overlay_record = {"layer": OVERLAY_LAYER, "path": str(overlay_source), "sha256": overlay_sha256,
+                          "keys": list(overlay_keys), "document": overlay_document}
     resolved_document = copy.deepcopy(document)
+    if overlay_record is not None:
+        resolved_document["configuration_overlay"] = overlay_record
 
     tools_value = document.get("tools", {})
     if not isinstance(tools_value, dict):
@@ -758,6 +860,9 @@ def load_config(path: str | Path = "appsec-review.toml") -> AppConfig:
             settings["execution_mode"] = typed_settings.execution_mode.value
             for language, language_settings in typed_settings.languages.items():
                 settings["languages"][language]["mode"] = language_settings.mode.value
+        elif job_id == "job_inference_security_review":
+            from .inference_review import parse_inference_review_settings
+            typed_settings = parse_inference_review_settings(settings)
         jobs[job_id] = JobConfig(
             job_id=job_id,
             name=str(value.get("name", "")),
@@ -782,6 +887,10 @@ def load_config(path: str | Path = "appsec-review.toml") -> AppConfig:
     resolved_document.setdefault("tools", {})["disable_grype"] = tool_capabilities.disable_grype
     for job_id, job in jobs.items():
         resolved_document["jobs"][job_id]["settings"] = copy.deepcopy(dict(job.settings))
+    pending = {job_id: jobs.pop(job_id) for job_id in sorted(PENDING_JOBS & set(jobs))}
+    if pending:
+        resolved_document["pending_jobs"] = {
+            job_id: resolved_document["jobs"].pop(job_id) for job_id in pending}
     resolved_json = (json.dumps(resolved_document, sort_keys=True, separators=(",", ":"),
                                 ensure_ascii=False) + "\n").encode("utf-8")
     return AppConfig(
@@ -796,4 +905,7 @@ def load_config(path: str | Path = "appsec-review.toml") -> AppConfig:
                               max_concurrent=int(dagster_value.get("max_concurrent", 8)),
                               pool_limits=MappingProxyType({str(key): int(value) for key, value in pools.items()})),
         tools=tool_capabilities,
+        pending_jobs=MappingProxyType(pending),
+        overlay_path=overlay_source,
+        overlay_sha256=overlay_sha256,
     )

@@ -46,7 +46,15 @@ class NvdClient:
 class FeedDownloader:
     def download(self, url, destination, *, max_bytes, allowed_hosts):
         destination.parent.mkdir(parents=True, exist_ok=True)
-        if "osv-vulnerabilities" in url:
+        if "cisa.gov" in url:
+            destination.write_text(json.dumps({"catalogVersion": "2026.10.07", "dateReleased": "2026-10-07T00:00:00Z",
+                "count": 1, "vulnerabilities": [{"cveID": "CVE-2026-1000", "vendorProject": "Fixture",
+                "product": "fixture", "vulnerabilityName": "Fixture flaw", "dateAdded": "2026-10-01",
+                "dueDate": "2026-10-22", "knownRansomwareCampaignUse": "Unknown"}]}), encoding="utf-8")
+        elif "epss" in url:
+            destination.write_bytes(gzip.compress(b"#model_version:v2025.03.14,score_date:2026-10-07T00:00:00Z\n"
+                                                  b"cve,epss,percentile\nCVE-2026-1000,0.5,0.99\n", mtime=0))
+        elif "osv-vulnerabilities" in url:
             with zipfile.ZipFile(destination, "w", compression=zipfile.ZIP_DEFLATED) as archive:
                 archive.writestr("PYSEC-2026-1.json", json.dumps({"id": "PYSEC-2026-1", "modified": "2026-01-01T00:00:00Z",
                     "aliases": ["CVE-2026-1000"], "affected": [{"package": {"ecosystem": "PyPI", "name": "fixture"}}]}))
@@ -85,21 +93,22 @@ def test_complete_job_runs_all_units_and_places_global_and_run_metadata(tmp_path
     instant = datetime(2026, 10, 8, tzinfo=timezone.utc)
     outcome = JobRunner(load_config(tmp_path / "appsec-review.toml")).run(
         build_job(client=NvdClient(), clock=lambda: instant, pause=lambda _: None,
-                  osv_downloader=FeedDownloader(), mitre_downloader=FeedDownloader(), cve_runner=cve_runner),
+                  osv_downloader=FeedDownloader(), mitre_downloader=FeedDownloader(), cve_runner=cve_runner,
+                  kev_downloader=FeedDownloader(), epss_downloader=FeedDownloader()),
         now=instant,
     )
 
     assert outcome["status"]["status"] == "SUCCEEDED"
     assert set(outcome["result"]["steps"].values()) == {"SUCCEEDED"}
-    assert len(outcome["result"]["units"]) == 12
+    assert len(outcome["result"]["units"]) == 18
     metadata = tmp_path / "runs" / "metadata"
     assert {path.name for path in (metadata / "feeds").glob("*.json")} == {
-        "nvd.json", "osv.json", "mitre.json", "cve-bin-tool.json"
+        "nvd.json", "osv.json", "mitre.json", "cve-bin-tool.json", "kev.json", "epss.json"
     }
     assert (metadata / "jobs" / "job_third_party_data_sync.json").is_file()
     attempt = Path(outcome["attempt_root"])
     assert (attempt / "result.json").is_file()
-    assert len(list((attempt / "steps").glob("*/tasks/*/status.json"))) == 12
+    assert len(list((attempt / "steps").glob("*/tasks/*/status.json"))) == 18
     settings = OsvSettings.from_mapping(tmp_path, load_config(tmp_path / "appsec-review.toml").job(
         "job_third_party_data_sync").step("osv_sync").settings)
     lookup = lookup_package(settings, "PyPI", "fixture", limit=1)

@@ -71,6 +71,10 @@ INPUT_SOURCES: tuple[tuple[str, tuple[str, ...], str, tuple[str, ...], tuple[str
      ("core", "query_precomputed")),
     ("nvd_feed", ("job_third_party_data_sync",), "global_unpinned", ("reference_intelligence", "dependency_advisories"),
      ("query_precomputed",)),
+    ("kev_feed", ("job_third_party_data_sync",), "global_unpinned", ("dependency_advisories",),
+     ("query_precomputed",)),
+    ("epss_feed", ("job_third_party_data_sync",), "global_unpinned", ("dependency_advisories",),
+     ("query_precomputed",)),
     ("osv_feed", ("job_third_party_data_sync",), "global_unpinned", ("reference_intelligence", "dependency_advisories"),
      ("query_precomputed",)),
     ("mitre_feed", ("job_third_party_data_sync",), "global_unpinned", ("reference_intelligence", "control_evidence"),
@@ -89,7 +93,7 @@ INPUT_SOURCES: tuple[tuple[str, tuple[str, ...], str, tuple[str, ...], tuple[str
     ("dynamic_traces", ("planned:future_dynamic_producer",), "planned", ("dataflow", "entrypoint_paths", "review_package"),
      ()),
     ("protected_runtime_material", ("runtime",), "protected", (), ("query_datasets", "coverage")),
-    ("review_decisions", ("planned:inference_publication",), "planned", ("review_package",), ()),
+    ("review_decisions", ("job_inference_security_review",), "extend", ("review_package",), ("coverage",)),
 )
 
 
@@ -103,7 +107,8 @@ def reconcile(registry_jobs: Iterable[str], jobs: Iterable[Mapping[str, Any]], r
         by_job.setdefault(str(row["job_id"]), []).append(row)
     discrepancies: list[str] = []
     named = {producer for _source, producers, *_ in INPUT_SOURCES for producer in producers}
-    for job_id in sorted(registered - named - {self_job}):
+    downstream_jobs = {"job_review_package_assembly", "job_document_issue_analysis"}
+    for job_id in sorted(registered - named - {self_job} - downstream_jobs):
         discrepancies.append(f"registered job {job_id} is absent from the input-source matrix")
     reconciled = []
     for source, producers, state, query_sets, endpoints in INPUT_SOURCES:

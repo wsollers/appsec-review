@@ -13,11 +13,12 @@ job and invalidates the transitive downstream closure. It never treats time as p
 The graph holds a kernel-backed per-run claim lock across planning and execution so two resume
 processes cannot claim the same run concurrently.
 
-The direct CLI currently exercises this mechanism with a linear 18-job review graph from
-`job_review_intake` through `job_review_package_assembly`. Dagster builds the broader, branched
+The direct CLI currently exercises this mechanism with a linear review graph from
+`job_review_intake` through `job_document_issue_analysis`. Dagster builds the broader, branched
 `wave1_review` topology from every registered and configured job except
-`job_third_party_data_sync`, adding the CI configuration, post-build, OWASP, and security-tagging
-jobs that are not in the direct graph. Both surfaces use the same semantic registry and
+`job_third_party_data_sync` and `job_inference_security_review`, adding the CI configuration,
+post-build, OWASP, and security-tagging jobs that are not in the direct graph. The inference
+security review runs as its own standalone Dagster job over the run's accepted index set. Both surfaces use the same semantic registry and
 accepted-handoff format. The exact operator-visible distinction is documented in
 [`../operations/wave1-review.md`](../operations/wave1-review.md).
 
@@ -28,7 +29,7 @@ accepted-handoff format. The exact operator-visible distinction is documented in
 
 | Job | Purpose | Operations |
 | --- | --- | --- |
-| `job_third_party_data_sync` | NVD, OSV, MITRE, and cve-bin-tool feed snapshots (scheduled, outside reviews) | [third-party-data-sync](../operations/third-party-data-sync.md) |
+| `job_third_party_data_sync` | NVD (with `index/nvd.sqlite`), OSV, MITRE, CISA KEV, FIRST EPSS and cve-bin-tool feed snapshots (scheduled, outside reviews) | [third-party-data-sync](../operations/third-party-data-sync.md) |
 | `job_review_intake` | Model preflight and review intake | [below](#inference-entry-point-and-model-preflight) |
 | `job_target_catalog` | Bounded target catalog and source index | [target-analysis-planning](../operations/target-analysis-planning.md) |
 | `job_source_history_analysis` | Git/GitHub history instability signals | [source-history-analysis](../operations/source-history-analysis.md) |
@@ -51,6 +52,8 @@ accepted-handoff format. The exact operator-visible distinction is documented in
 | `job_security_tagging` | Basis-qualified security tags | [security-tagging](../operations/security-tagging.md) |
 | `job_review_data_indexing` | Dataset inventory and publication audit | [review-data-indexing](../operations/review-data-indexing.md) |
 | `job_review_package_assembly` | Deterministic pre-adjudication lead and hunt packages | [review-package-contract](review-package-contract.md) |
+| `job_document_issue_analysis` | Private document candidate ledger with verified source mappings | [document-issue-analysis](../operations/document-issue-analysis.md) |
+| `job_inference_security_review` | Two-lane evidence-bound inference review (slice 1: claim ledger, adjudication, one scorer, accepted handoff) | [inference-security-review](inference-security-review.md) |
 
 Each orchestrated graph launch also publishes an immutable run-level orchestration receipt. This
 keeps the current Dagster run linked to the application run even when every job is reused and the
@@ -83,7 +86,12 @@ src/appsec_review/
   jobs/
     job_third_party_data_sync/
       steps/
-        nvd_sync/
+        nvd_sync/        fetch -> process -> publish
+        osv_sync/        fetch -> index -> publish
+        mitre_sync/      fetch -> normalize -> publish
+        kev_sync/        fetch -> normalize -> publish
+        epss_sync/       fetch -> normalize -> publish
+        cve_bin_tool_db_build/
 ```
 
 Stable hierarchy is `job -> step -> task`. Every identifier is a descriptive lowercase snake-case
@@ -167,8 +175,11 @@ while either skip remains explicit without becoming a gap or evidence of securit
 
 `job_third_party_data_sync.nvd_sync` is a standalone, network-enabled reference publisher. It bootstraps from the official
 NVD CVE 2.0 yearly feeds and then consumes bounded CVE API last-modified windows. Raw source bytes
-and a compact CVE metadata JSONL projection are stored as content-addressed gzip blobs. An immutable
-manifest links each snapshot to its parent; `current.json` advances only after complete validation.
+and a compact CVE metadata JSONL projection are stored as content-addressed gzip blobs. Each snapshot
+also publishes `index/nvd.sqlite`, a compact CVE-id lookup built deterministically from the parent
+index plus the new layers (a later `last_modified` overrides), hashed in the manifest's `files`. An
+immutable manifest links each snapshot to its parent; `current.json` advances only after complete
+validation.
 
 The schedule declaration is midnight UTC. Direct CLI invocations enter `JobRunner` with an explicit
 trigger:

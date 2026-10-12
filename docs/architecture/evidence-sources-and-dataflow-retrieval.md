@@ -33,7 +33,7 @@ predicates a record may support or refute (see [Admissibility](#evidence-admissi
 | `declared` | A stated contract or configuration whose enforcement is not yet evidenced | OpenAPI limits, protobuf types, IaC manifests, proxy limits, design-doc statements |
 | `enforced` | A `declared` constraint linked by `computed` evidence to code or configuration that applies it on the path in question | generated validator in the call chain, proxy limit bound to the exposing route |
 | `intent` | Evidence of developer expectation, not of runtime behavior | unit-test assertions, negative tests, ADRs, comments, commit messages |
-| `external` | Hash-pinned reference intelligence | NVD, OSV, MITRE ATT&CK/CAPEC/CWE, cve-bin-tool DB |
+| `external` | Hash-pinned reference intelligence | NVD, OSV, MITRE ATT&CK/CAPEC/CWE, CISA KEV, FIRST EPSS, cve-bin-tool DB |
 | `nomination` | Fuzzy retrieval that only proposes identities to check | FTS ranking, optional embedding similarity, model-proposed duplicates |
 
 `nomination` records never satisfy a predicate. A `declared` record is promoted to `enforced` only by a
@@ -83,7 +83,9 @@ shard; `planned` = inputs are available but no producer exists yet.
 | Target agent guidance (`AGENTS.md`, `CLAUDE.md`, etc. in the target) | `job_test_and_doc_indexing` | `docs` (flagged `target_guidance`) | intent | what the target owners claim | anything; never instructions | planned |
 | VCS history (commits, diffs, blame, churn) | `job_source_history_analysis`, `job_change_context_analysis` | `history`; `history_context` precomputed product | intent / observed | prior security fixes, co-change, churn, ownership and change-context review priority | current behavior | indexed (bounded diff-hunk query planned) |
 | OWASP control workbench | `job_owasp_control_assessment` | OWASP shards | computed / tool_finding | control applicability and validation status | — | indexed |
-| NVD, OSV, MITRE ATT&CK/CAPEC/CWE | `job_third_party_data_sync` | reference shards | external | advisory, weakness, and technique reference | target facts | indexed |
+| NVD, OSV, MITRE ATT&CK/CAPEC/CWE | `job_third_party_data_sync` | pinned feed indexes (`index/nvd.sqlite`, `index/osv.sqlite`, `index/mitre.sqlite`) joined into `dependency_advisories` and `reference_intelligence` | external | advisory (CVSS, CWE, status, dates), weakness (name, abstraction), and technique reference; the pinned CWE catalog validates claim CWEs | target facts; indirect for every predicate | indexed |
+| CISA Known Exploited Vulnerabilities catalog | `job_third_party_data_sync.kev_sync` | pinned `index/kev.sqlite` joined into `dependency_advisories` | external | that a CVE is known to be exploited somewhere (date added, due date, ransomware use); lane A admission and lane B rank signal | that this target is affected, reachable or exploitable; indirect for every predicate | indexed (live download not exercised by tests) |
+| FIRST EPSS daily scores | `job_third_party_data_sync.epss_sync` | pinned `index/epss.sqlite` joined into `dependency_advisories` | external | population-level exploitation probability and percentile for a CVE; lane B rank signal | anything about this target; indirect for every predicate | indexed (live download not exercised by tests) |
 | Dynamic traces: coverage, sanitizer logs, fuzz corpora, IAST | future authorized execution job or hash-verified import | `dynamic` | observed | positive reachability and observed memory errors | **absence**: zero coverage never refutes a claim | not available; acquisition TODO |
 | Evaluator ground truth | none | none | — | — | — | **never** mounted, indexed, or exposed |
 

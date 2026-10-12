@@ -1,6 +1,6 @@
 {
   "schema": "appsec-review/guidance-registry/1",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "roles": {
     "build_engineer_native": {"responsibility": "Produce bounded reproducible C/C++ and native build-system recipes."},
     "build_engineer_rust": {"responsibility": "Produce bounded reproducible Rust and Cargo build recipes."},
@@ -16,27 +16,68 @@
     "control_assessor": {"responsibility": "Assess assigned proof obligations and return observations with citations."},
     "evidence_verifier": {"responsibility": "Resolve cited observations to accepted source or run artifacts."},
     "independent_reviewer": {"responsibility": "Independently review elevated or ship-blocking proposed claims."},
-    "result_adjudicator": {"responsibility": "Apply deterministic acceptance rules while preserving disagreement."}
+    "result_adjudicator": {"responsibility": "Apply deterministic acceptance rules while preserving disagreement."},
+    "hypothesis_hunter": {"responsibility": "Propose evidence-cited hypotheses for one hunt package through one strategy lens.", "path": "pipeline/prompt-fragments/roles/hypothesis_hunter.md", "lens": "generative", "output_schema": "red-result", "outputs": ["proposed"], "prohibited": ["accept_claim", "assign_severity", "execute_code", "read_target_guidance", "refute_claim", "request_unlisted_tool", "see_other_cell_output", "set_claim_state", "widen_scope"], "tools": ["coverage", "find", "query_codeql", "query_hotspots", "query_observations", "query_owasp_workbench", "query_precomputed", "read_excerpt", "search", "trace"]},
+    "red_team_analyst": {"responsibility": "Propose evidence-cited claims for one admitted finding lead through one assigned lens.", "path": "pipeline/prompt-fragments/roles/red_team_analyst.md", "lens": "generative", "output_schema": "red-result", "outputs": ["proposed"], "prohibited": ["accept_claim", "assign_severity", "execute_code", "read_target_guidance", "refute_claim", "request_unlisted_tool", "see_other_cell_output", "set_claim_state", "widen_scope"], "tools": ["find", "query_build_security", "query_ci_configuration", "query_codeql", "query_observations", "read_excerpt", "search", "trace"]},
+    "blue_team_refuter": {"responsibility": "Seek resolvable evidence that one claim's predicates do not hold.", "path": "pipeline/prompt-fragments/roles/blue_team_refuter.md", "lens": "skeptical", "output_schema": "blue-result", "outputs": ["contradicts", "qualifies", "requests_evidence"], "prohibited": ["accept_claim", "assign_severity", "execute_code", "propose_claim", "read_target_guidance", "request_unlisted_tool", "see_other_cell_output", "see_red_reasoning", "set_claim_state", "widen_scope"], "tools": ["find", "query_artifacts", "query_build_security", "query_ci_configuration", "read_excerpt", "resolve_evidence", "trace"]},
+    "independent_verifier": {"responsibility": "Blindly check each predicate of one claim against resolvable direct evidence.", "path": "pipeline/prompt-fragments/roles/independent_verifier.md", "lens": "skeptical", "output_schema": "verifier-result", "outputs": ["supports", "contradicts", "qualifies", "requests_evidence"], "prohibited": ["accept_claim", "assign_severity", "execute_code", "propose_claim", "read_target_guidance", "request_unlisted_tool", "see_other_cell_output", "see_red_reasoning", "set_claim_state", "widen_scope"], "tools": ["find", "read_excerpt", "resolve_evidence", "trace"]},
+    "independent_scorer": {"responsibility": "Apply a configured deterministic scoring provider to one adjudicated claim.", "path": "pipeline/prompt-fragments/roles/independent_scorer.md", "lens": "skeptical", "output_schema": "score-package", "outputs": ["score"], "prohibited": ["accept_claim", "execute_code", "override_score", "propose_claim", "read_target_guidance", "refute_claim", "request_unlisted_tool", "set_claim_state", "widen_scope"], "tools": []},
+    "poc_designer": {"responsibility": "Design one benign, policy-bounded proof-of-trigger plan for one eligible finding.", "path": "pipeline/prompt-fragments/roles/poc_designer.md", "lens": "generative", "output_schema": "poc-plan", "outputs": ["poc_plan"], "prohibited": ["accept_claim", "assign_severity", "change_configuration", "execute_code", "read_target_guidance", "request_unlisted_tool", "set_claim_state", "widen_scope"], "tools": ["find", "query_artifacts", "query_build_security", "read_excerpt"]},
+    "poc_verifier": {"responsibility": "Check one proof-of-trigger result against its plan and run-owned artifacts.", "path": "pipeline/prompt-fragments/roles/poc_verifier.md", "lens": "skeptical", "output_schema": "poc-result", "outputs": ["poc_result", "supports", "contradicts", "requests_evidence"], "prohibited": ["accept_claim", "assign_severity", "execute_code", "propose_claim", "read_target_guidance", "request_unlisted_tool", "set_claim_state", "widen_scope"], "tools": ["query_artifacts", "read_excerpt", "resolve_evidence"]},
+    "attack_chain_analyst": {"responsibility": "Propose attack chains composed only of existing adjudicated claims.", "path": "pipeline/prompt-fragments/roles/attack_chain_analyst.md", "lens": "generative", "output_schema": "attack-chain", "outputs": ["attack_chain", "component_of_chain", "requests_evidence"], "prohibited": ["accept_claim", "assign_severity", "execute_code", "propose_claim", "read_target_guidance", "request_unlisted_tool", "set_claim_state", "widen_scope"], "tools": ["find", "read_excerpt", "resolve_evidence", "trace"]},
+    "finding_adjudicator": {"responsibility": "Apply the deterministic adjudication table to recorded evidence relations.", "path": "pipeline/prompt-fragments/roles/finding_adjudicator.md", "lens": "skeptical", "output_schema": "adjudication", "outputs": ["supported", "confirmed", "contradicted", "not_reachable", "not_exploitable_in_observed_configuration", "insufficient_evidence", "duplicate", "out_of_scope", "coverage_gap"], "prohibited": ["assign_severity", "execute_code", "override_score", "propose_claim", "read_target_guidance", "refute_claim", "request_unlisted_tool", "widen_scope"], "tools": []},
+    "completeness_reviewer": {"responsibility": "Identify review-coverage gaps across units, strategies, and personas.", "path": "pipeline/prompt-fragments/roles/completeness_reviewer.md", "lens": "generative", "output_schema": "completeness-result", "outputs": ["coverage_gap", "requests_evidence"], "prohibited": ["accept_claim", "assign_severity", "execute_code", "propose_claim", "read_target_guidance", "refute_claim", "request_unlisted_tool", "set_claim_state", "widen_scope"], "tools": ["coverage", "find", "query_dataset_inventory"]}
   },
   "personas": {
     "devops_engineer": {"viewpoint": "Reproducible automation, immutable containers, dependencies, CI behavior, and diagnosable operational failures."},
-    "authentication_session": {"viewpoint": "Authentication, session, and identity boundaries."},
-    "authorization_access_control": {"viewpoint": "Authorization and access-control boundaries."},
-    "cryptography_data_protection": {"viewpoint": "Cryptography, key handling, and data protection."},
+    "authentication_session": {"viewpoint": "Authentication, session, and identity boundaries.", "path": "pipeline/prompt-fragments/personas/authentication_session.md"},
+    "authorization_access_control": {"viewpoint": "Authorization and access-control boundaries.", "path": "pipeline/prompt-fragments/personas/authorization_access_control.md"},
+    "cryptography_data_protection": {"viewpoint": "Cryptography, key handling, and data protection.", "path": "pipeline/prompt-fragments/personas/cryptography_data_protection.md"},
     "api_web": {"viewpoint": "Web and API attack surfaces and protocol boundaries."},
-    "mobile_platform": {"viewpoint": "Android and iOS platform security behavior."},
-    "build_supply_chain": {"viewpoint": "Build provenance, dependency, and supply-chain integrity."},
-    "deployment_operations": {"viewpoint": "Deployment, configuration, and operational controls."}
+    "mobile_platform": {"viewpoint": "Android and iOS platform security behavior.", "path": "pipeline/prompt-fragments/personas/mobile_platform.md"},
+    "build_supply_chain": {"viewpoint": "Build provenance, dependency, and supply-chain integrity.", "path": "pipeline/prompt-fragments/personas/build_supply_chain.md"},
+    "deployment_operations": {"viewpoint": "Deployment, configuration, and operational controls."},
+    "memory_safety_native": {"path": "pipeline/prompt-fragments/personas/memory_safety_native.md"},
+    "injection_interpreters": {"path": "pipeline/prompt-fragments/personas/injection_interpreters.md"},
+    "parsing_deserialization": {"path": "pipeline/prompt-fragments/personas/parsing_deserialization.md"},
+    "network_api_surface": {"path": "pipeline/prompt-fragments/personas/network_api_surface.md"},
+    "filesystem_resources": {"path": "pipeline/prompt-fragments/personas/filesystem_resources.md"},
+    "business_logic_abuse": {"path": "pipeline/prompt-fragments/personas/business_logic_abuse.md"},
+    "ci_cd_pipeline": {"path": "pipeline/prompt-fragments/personas/ci_cd_pipeline.md"},
+    "cloud_container_deployment": {"path": "pipeline/prompt-fragments/personas/cloud_container_deployment.md"},
+    "generalist": {"path": "pipeline/prompt-fragments/personas/generalist.md"}
+  },
+  "stacks": {
+    "cpp_rpc_service": {"path": "pipeline/prompt-fragments/stacks/cpp_rpc_service.md"},
+    "cpp_native_service": {"path": "pipeline/prompt-fragments/stacks/cpp_native_service.md"},
+    "c_systems_embedded": {"path": "pipeline/prompt-fragments/stacks/c_systems_embedded.md"},
+    "jvm_service": {"path": "pipeline/prompt-fragments/stacks/jvm_service.md"},
+    "dotnet_service": {"path": "pipeline/prompt-fragments/stacks/dotnet_service.md"},
+    "go_service": {"path": "pipeline/prompt-fragments/stacks/go_service.md"},
+    "rust_service": {"path": "pipeline/prompt-fragments/stacks/rust_service.md"},
+    "python_service": {"path": "pipeline/prompt-fragments/stacks/python_service.md"},
+    "node_web": {"path": "pipeline/prompt-fragments/stacks/node_web.md"},
+    "php_web": {"path": "pipeline/prompt-fragments/stacks/php_web.md"},
+    "android": {"path": "pipeline/prompt-fragments/stacks/android.md"},
+    "ios": {"path": "pipeline/prompt-fragments/stacks/ios.md"},
+    "wasm": {"path": "pipeline/prompt-fragments/stacks/wasm.md"},
+    "ci_pipeline": {"path": "pipeline/prompt-fragments/stacks/ci_pipeline.md"},
+    "iac_kubernetes": {"path": "pipeline/prompt-fragments/stacks/iac_kubernetes.md"},
+    "generic": {"path": "pipeline/prompt-fragments/stacks/generic.md"}
+  },
+  "tasks": {
+    "inference-security-review": {"lead_red_stack": {"path": "pipeline/guidance/tasks/inference-security-review/lead_red_stack.md"}, "lead_red_preconditions": {"path": "pipeline/guidance/tasks/inference-security-review/lead_red_preconditions.md"}, "lead_red_failure_modes": {"path": "pipeline/guidance/tasks/inference-security-review/lead_red_failure_modes.md"}, "variant": {"path": "pipeline/guidance/tasks/inference-security-review/variant.md"}, "sink_up": {"path": "pipeline/guidance/tasks/inference-security-review/sink_up.md"}, "entry_down": {"path": "pipeline/guidance/tasks/inference-security-review/entry_down.md"}, "control_gap": {"path": "pipeline/guidance/tasks/inference-security-review/control_gap.md"}, "persona_sweep": {"path": "pipeline/guidance/tasks/inference-security-review/persona_sweep.md"}, "blue_control": {"path": "pipeline/guidance/tasks/inference-security-review/blue_control.md"}, "blue_reachability": {"path": "pipeline/guidance/tasks/inference-security-review/blue_reachability.md"}, "blind_verifier": {"path": "pipeline/guidance/tasks/inference-security-review/blind_verifier.md"}}
+  },
+  "persona_migrations": {
+    "api_web": "network_api_surface",
+    "deployment_operations": "cloud_container_deployment"
+  },
+  "runtime_skills": {
+    "build-image-repair": {"path": "pipeline/skills/build-image-repair/SKILL.md", "jobs": ["job_project_build"]},
+    "post-build-security-assessment": {"path": "pipeline/skills/post-build-security-assessment/SKILL.md", "jobs": ["job_post_build_security_assessment"]},
+    "target-analysis-planning": {"path": "pipeline/skills/target-analysis-planning/SKILL.md", "jobs": ["job_target_analysis_plan"]}
   },
   "assignment": {
-    "domain_persona": {
-      "authentication_session": "authentication_session",
-      "authorization_access_control": "authorization_access_control",
-      "cryptography_data_protection": "cryptography_data_protection",
-      "api_web": "api_web",
-      "mobile_platform": "mobile_platform",
-      "build_supply_chain": "build_supply_chain",
-      "deployment_operations": "deployment_operations"
-    }
+    "domain_persona": {"authentication_session": "authentication_session", "authorization_access_control": "authorization_access_control", "cryptography_data_protection": "cryptography_data_protection", "api_web": "api_web", "mobile_platform": "mobile_platform", "build_supply_chain": "build_supply_chain", "deployment_operations": "deployment_operations"}
   }
 }
