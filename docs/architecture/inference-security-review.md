@@ -187,9 +187,10 @@ The pre-adjudication input format is
 [`review-input-package.schema.json`](../schemas/review-input-package.schema.json) is not an
 assembler contract. The `finding_lead` and `hunt` variants carry accepted-manifest identity, lead membership,
 history/complexity metrics, safe build-command and environment facts, graph/evidence references,
-retrieval scope and gaps. The package assembler audits that every accepted High/Critical
-source-SAST observation is represented in both a finding-lead package and a hunt menu, even
-when suppressed or deduplicated. Reported scanner severity is a nomination signal, never
+retrieval scope and gaps. The package assembler audits that every lead admitted to lane A, from
+any family and including suppressed or deduplicated leads, has exactly one finding-lead package.
+Every hunt unit above the cutoff lists each of its leads exactly once in its menus. Leads in
+units below the cutoff are accounted for by that unit's `below_hunt_cutoff` gap. Reported scanner severity is a nomination signal, never
 adjudicated technical severity. Exact command lines, environment values and secrets remain
 protected artifacts; workers receive classified, redacted facts only.
 
