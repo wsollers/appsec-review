@@ -534,8 +534,8 @@ Lane B (hunt): ranked review units ─► hunt packages ─► team: 3 red ─�
 | Strategy | Bounded question | Requires |
 |---|---|---|
 | `variant` | "Claim X was confirmed; where else in this unit does the same pattern occur?" | a round-0 confirmed claim (round 1 only) |
-| `sink_up` | "Which dangerous sinks here take caller-controlled data, and what guards them?" | accepted source/sink facts or `symbol_links` |
-| `entry_down` | "Follow this entry point's inputs inward." | an accepted entry-point catalog (planned) |
+| `sink_up` | "Which dangerous sinks here take caller-controlled data, and what guards them?" | accepted source/sink facts or `symbol_links` today; after the code-graph batch, an accepted `sink_site` family for the unit's scope (`symbol_links` alone no longer unlocks it; see [code graph](code-graph-precomputation.md) open question 3) |
+| `entry_down` | "Follow this entry point's inputs inward." | an accepted `entry_point` family for the unit's scope (planned with the code-graph batch; never launched today) |
 | `control_gap` | "This control failed or is missing here; what can an attacker do?" | an accepted OWASP workbench result |
 | `persona_sweep` | "Review this unit as the assigned specialist." | none |
 
@@ -1544,7 +1544,8 @@ recorded as an `evidence_gap`, not as a relation.
 |---|---|
 | direct, when the entity is the construct named by the predicate | `source_span`, `ast_node`, `ir_entity`, `symbol`; build kinds (`build_action` through `wasm_module`); `evidence_artifact` |
 | direct only for the predicate the producing rule's versioned mapping names | `tool_observation` (SAST, CodeQL path, post-build, CI) |
-| indirect: may guide search, never satisfies an obligation | `hotspot`, `priority_item`, `history_signal`, `change`, `change_context_signal`, `review_signal`, `tag_assignment`, `review_unit`, reported scanner severity, model prose |
+| direct only for the predicate the graph-fact family's versioned mapping (`graph-fact-predicates/1`) names, and only when the **re-resolved** fact's `admissibility.direct_eligible` is `true` (every cited location exact, fact coverage complete, no cross-check disagreement, classified source/sink); planned with the code-graph batch | `call_site` and `sink_site` (`affected_construct`); `entry_point` (`attacker_input_control` for attacker-reachable source classes); `dataflow_path` (`source_to_sink_reachability`, and `attacker_input_control` when its source class is attacker-reachable); `guard_fact` and `range_fact` (`missing_or_ineffective_guard`, support or contradict) |
+| indirect: may guide search, never satisfies an obligation | `hotspot`, `priority_item`, `history_signal`, `change`, `change_context_signal`, `review_signal`, `tag_assignment`, `review_unit`, `flow_summary`, any graph kind whose `direct_eligible` is `false`, reported scanner severity, model prose |
 | indirect for **every** predicate: reference context (`review/evidence.py::REFERENCE_KINDS`) | `advisory`, `dependency_package` (a scanner-reported match), `precomputed_fact` (including `dependency_advisories` and `reference_intelligence` facts), and every OSV, NVD, CISA KEV, FIRST EPSS, and MITRE record they carry |
 
 Reference records describe an advisory or weakness everywhere, never this target. A dependency
@@ -1552,6 +1553,14 @@ claim still needs target evidence for `affected_construct`: the resolved package
 SBOM, lockfile, or artifact inventory (`package`, `archive_member`), which is direct. NVD CVSS, KEV,
 and EPSS can order work, inform workers, and enter scoring as labelled reference inputs; they never
 satisfy an obligation alone.
+
+Graph-fact admissibility (`evidence-admissibility/2`, planned) is decided from the fact the
+validator re-resolves through `find`, never from the model's copy: a citation whose resolved
+payload has `direct_eligible = false` is indirect whatever the model claims. Static absence of a
+graph fact is never a relation, so `not_reachable` stays unreachable through graph evidence; a
+`dominating` guard or a bounded range contradicts `missing_or_ineffective_guard` instead. The
+mapping, the eligibility rule and the tool that returns these kinds are specified in
+[`code-graph-precomputation.md`](code-graph-precomputation.md) sections 5 and 6.
 
 ### R4 Predicate vocabulary and obligations
 
@@ -1807,13 +1816,22 @@ both lanes, and one score dimension. It does not execute PoCs, run variant hunts
   evidence identities; abridged catalog/live-model gaps remain visible.
 - C++ compiled analysis must supply accepted build/AST/IR/binary shards. The separate pinned,
   licensed cross-language CodeQL job supplies database, SARIF, and observation shards when its
-  operator-provided image is present. Joern/CPG remains a gap; unavailable language scopes lower
-  evidence confidence truthfully.
+  operator-provided image is present. Joern/CPG remains a gap and is not a planned producer;
+  unavailable language scopes lower evidence confidence truthfully.
+- Direct evidence for `source_to_sink_reachability`, `attacker_input_control` and
+  `missing_or_ineffective_guard` currently comes only from CodeQL `tool_observation`s (the first
+  two, by `tool-rule-predicates/1`) and from source constructs the model cites; there is no
+  accepted call graph, sink/entry-point catalog, guard or range fact, so `entry_down` never
+  launches and `sink_up` runs on `symbol_links`. The code-graph batch
+  ([`code-graph-precomputation.md`](code-graph-precomputation.md)) supplies the `graph` index,
+  the `query_code_graph` tool, the `evidence-admissibility/2` rule and the package context that
+  close this gap; until it lands, lane B coverage records the missing families.
 - Post-build assessment must publish build-security shards with protected command references,
   binary identities, and gaps, without exposing exact sensitive arguments.
 - CI analysis must publish its accepted discovery, observation, correlation, and coverage shards.
 - Retrieval/MCP must support capability-scoped accepted-manifest views and evidence relation
-  resolution; no new arbitrary query surface is required.
+  resolution. The only new query surface is the typed, bounded `query_code_graph`; no arbitrary
+  query surface is required.
 - Finding-package and downstream remediation/publication jobs need the contracts in this document;
   until they exist, the inference job can publish its own accepted handoff but cannot complete the
   full terminal report path.

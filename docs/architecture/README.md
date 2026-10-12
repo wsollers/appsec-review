@@ -48,6 +48,10 @@ Repository authority remains in [`../../AGENTS.md`](../../AGENTS.md). This page 
   evidence, and lead-accounting contract.
 - [`indexing-and-query-reuse.md`](indexing-and-query-reuse.md) — review-data indexing and reusable
   query design.
+- [`code-graph-precomputation.md`](code-graph-precomputation.md) — the authoritative code-graph
+  strategy: CodeQL-first producers with C/C++ cross-checks, the `graph` index and
+  `query_code_graph` tool, fact families and R3 admissibility, job topology, language rollout,
+  and the parallel implementation and test plan.
 
 Operations pages not listed above:
 
