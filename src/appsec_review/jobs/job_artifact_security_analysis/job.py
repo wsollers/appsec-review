@@ -8,6 +8,7 @@ import json
 from pathlib import Path, PurePosixPath
 import time
 from typing import Any
+import xml.etree.ElementTree as ET
 
 from appsec_review.jobs.job_language_build import load_accepted_language_build
 from appsec_review.jobs.job_artifact_indexing import canonical_artifact_identity, load_accepted_artifact_index
@@ -24,7 +25,7 @@ from appsec_review.jobs.job_artifact_security_analysis.datasets import CONSUMES,
 
 SCHEMA = "appsec-review/artifact-security-analysis/1"
 OBSERVATION_SCHEMA = "appsec-review/artifact-security-observation/1"
-PARSER_IDENTITY = "appsec-review/artifact-security-parsers/1"
+PARSER_IDENTITY = "appsec-review/artifact-security-parsers/2"
 NORMALIZER_IDENTITY = "appsec-review/artifact-security-normalizer/1"
 CAPABILITIES = ("inventory", "native", "jvm", "packages", "wasm", "spotbugs", "blint", "syft", "grype", "osv")
 TOPOLOGY = {
@@ -185,6 +186,7 @@ def _scan_one(unit: UnitContext, artifact: Mapping[str, Any], capability: str,
     stderr = b""
     exit_code: int | None = 0
     timed_out = False
+    parser_payload: bytes | None = None
     execution_receipt: Mapping[str, Any] | None = None
     tool_identity: Mapping[str, Any] = (dict(resolved_tool_identity) if resolved_tool_identity else
         {"scanner": scanner_identity, "rules": scanner_identity, "image": None})
@@ -200,9 +202,16 @@ def _scan_one(unit: UnitContext, artifact: Mapping[str, Any], capability: str,
             raw = runner(capability, path, artifact, int(settings["timeout_seconds"]), int(settings["stream_limit_bytes"]))
             stdout, stderr = bytes(raw.get("stdout", b"")), bytes(raw.get("stderr", b""))
             exit_code, timed_out = raw.get("exit_code"), bool(raw.get("timed_out", False))
+            parser_payload = bytes(raw["payload"]) if "payload" in raw else None
             supplied = raw.get("observation")
-            observation = (supplied if isinstance(supplied, Mapping) else
-                           ADAPTERS[capability].parse(stdout))
+            if isinstance(supplied, Mapping):
+                observation = supplied
+            elif not timed_out and exit_code in ADAPTERS[capability].accepted_exit_codes and not raw.get("truncated"):
+                try:
+                    observation = ADAPTERS[capability].parse(
+                        parser_payload if parser_payload is not None else stdout)
+                except (ValueError, UnicodeError, ET.ParseError) as exc:
+                    gaps.append(f"{capability} scanner output could not be parsed: {type(exc).__name__}: {exc}")
             tool_identity = raw.get("tool_identity", tool_identity)
             receipt_value = raw.get("execution_receipt")
             execution_receipt = receipt_value if isinstance(receipt_value, Mapping) else None
@@ -221,6 +230,9 @@ def _scan_one(unit: UnitContext, artifact: Mapping[str, Any], capability: str,
     stream_limit, tail = int(settings["stream_limit_bytes"]), int(settings["diagnostic_tail_bytes"])
     stdout_identity = _stream(unit, root, "stdout.bin", stdout, stream_limit, tail)
     stderr_identity = _stream(unit, root, "stderr.bin", stderr, stream_limit, tail)
+    raw_artifacts = [stdout_identity, stderr_identity]
+    if parser_payload is not None:
+        raw_artifacts.append(_stream(unit, root, "parser-input.bin", parser_payload, stream_limit, tail))
     result = {"schema": OBSERVATION_SCHEMA, "fingerprint": fingerprint,
         "artifact_id": artifact["artifact_id"], "artifact": {key: artifact.get(key) for key in
             ("path", "workspace_path", "sha256", "size_bytes", "kind", "build_unit_id", "canonical_identity")},
@@ -231,7 +243,7 @@ def _scan_one(unit: UnitContext, artifact: Mapping[str, Any], capability: str,
             "capability": capability})).hexdigest(),
         "observation": observation, "gaps": gaps, "exit_code": exit_code, "timed_out": timed_out,
         "duration_ms": int((time.monotonic() - started) * 1000),
-        "raw_artifacts": [stdout_identity, stderr_identity], "execution_receipt": execution_receipt,
+        "raw_artifacts": raw_artifacts, "execution_receipt": execution_receipt,
         "reused": False,
         "terminal_status": "COMPLETED_WITH_GAPS" if gaps else "SUCCEEDED"}
     checkpoint.parent.mkdir(parents=True, exist_ok=True)

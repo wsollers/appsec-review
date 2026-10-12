@@ -183,6 +183,6 @@ class ContainerScannerRunner:
         payload = output.read_bytes() if output.is_file() else stdout
         return {"stdout": stdout, "stderr": stderr, "exit_code": result.exit_code,
             "timed_out": result.timed_out, "truncated": result.stdout_truncated or result.stderr_truncated,
-            "observation": adapter.parse(payload), "tool_identity": identity,
+            "payload": payload, "tool_identity": identity,
             "execution_receipt": {"path": result.receipt_path,
                                   "sha256": file_sha256(self.run_root / result.receipt_path)}}

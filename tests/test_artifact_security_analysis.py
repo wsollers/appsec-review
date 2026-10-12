@@ -96,6 +96,34 @@ def test_scanner_execution_tokens_distinguish_equal_content_artifacts() -> None:
     assert first != second
 
 
+def test_spotbugs_failed_or_malformed_output_is_a_retained_gap(tmp_path: Path) -> None:
+    for exit_code in (1, 0):
+        case = tmp_path / str(exit_code)
+        case.mkdir()
+        config, run_id, run_root, target, fingerprint, _ = _fixture(
+            case, payload=b"\xca\xfe\xba\xbe" + b"\0" * 32)
+
+        def scanner(capability, path, artifact, timeout, limit):
+            result = {"stdout": b"", "stderr": b"scanner failed" if exit_code else b"",
+                      "exit_code": exit_code if capability == "spotbugs" else 0,
+                      "observation": {} if capability != "spotbugs" else None,
+                      "tool_identity": {"scanner": capability, "image": "fixture", "rules": "fixture"}}
+            if capability == "spotbugs":
+                result["payload"] = b""
+            return result
+
+        outcome = GraphRunner(config, [build_job(scanner_runner=scanner)]).run(
+            target_root=target, source_fingerprint=fingerprint, run_id=run_id)
+        assert outcome["status"] == "COMPLETED_WITH_GAPS"
+        accepted = load_accepted_artifact_security_analysis(run_root)
+        assert accepted["capabilities"]["spotbugs"]["terminal_status"] == "COMPLETED_WITH_GAPS"
+        assert any(("scanner exited 1" if exit_code else "output could not be parsed") in gap
+                   for gap in accepted["capabilities"]["spotbugs"]["gaps"])
+        raw = list((run_root / "data" / "jobs" / "job_artifact_security_analysis" / "attempts").rglob(
+            "parser-input.bin"))
+        assert raw and raw[0].read_bytes() == b""
+
+
 def _fixture(tmp_path: Path, payload: bytes = b"\0asm\x01\0\0\0", *, disable_grype: bool = False,
              duplicate_artifact: bool = False, no_artifacts: bool = False):
     config_path = tmp_path / "appsec-review.toml"

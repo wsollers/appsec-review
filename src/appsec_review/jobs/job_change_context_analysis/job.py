@@ -12,7 +12,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from appsec_review.container_runtime import ContainerExecutor, load_catalog
 from appsec_review.jobs.job_source_history_analysis import load_accepted_history
 from appsec_review.jobs.job_source_history_analysis import signals as history_signals
-from appsec_review.jobs.job_source_history_analysis.git import GitRunner, parse_log
+from appsec_review.jobs.job_source_history_analysis.git import GitLimits, GitRunner, parse_log
 from appsec_review.jobs.job_source_history_analysis.sources import GitSource
 from appsec_review.retrieval import (
     EntityKind, EntityRecord, IndexBuilder, IndexIdentity, LogicalIdentity, RelationKind,
@@ -159,7 +159,10 @@ def build_job(*, executor_factory: ExecutorFactory | None = None) -> Job:
     def runner(unit: UnitContext) -> GitRunner:
         source = git_source(unit)
         assert source is not None
-        return GitRunner(factory(unit), unit.job.target_root or Path(), unit.unit_root / "scratch", source)
+        history_settings = _resolved_job_settings(unit.job.run_root, "job_source_history_analysis")
+        limits = GitLimits.from_settings(history_settings["git"])
+        return GitRunner(factory(unit), unit.job.target_root or Path(), unit.unit_root / "scratch", source,
+                         limits)
 
     def load_history(unit: UnitContext) -> Mapping[str, Any]:
         _settings(unit.job)
