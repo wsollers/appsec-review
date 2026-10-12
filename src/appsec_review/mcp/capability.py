@@ -9,15 +9,24 @@ import json
 import time
 from typing import Any, Mapping
 
+from appsec_review.graph.contract import GRAPH_INDEX, QUERY_CODE_GRAPH
 from appsec_review.mcp.adapter import RetrievalMcpAdapter
+from appsec_review.retrieval.graph import request_error as graph_request_error
 from appsec_review.retrieval.model import canonical_json
 
 
+_REVIEW_TOOLS = frozenset({"find", "read_excerpt", "query_precomputed", QUERY_CODE_GRAPH})
+# Canonical review roles (code-graph-precomputation.md 5.4) plus the earlier short aliases.
 _ROLE_TOOLS = {
-    "red": frozenset({"find", "read_excerpt", "query_precomputed"}),
-    "blue": frozenset({"find", "read_excerpt", "query_precomputed"}),
-    "verifier": frozenset({"find", "read_excerpt", "query_precomputed"}),
+    "hypothesis_hunter": _REVIEW_TOOLS,
+    "red_team_analyst": _REVIEW_TOOLS,
+    "blue_team_refuter": _REVIEW_TOOLS,
+    "independent_verifier": _REVIEW_TOOLS,
+    "red": _REVIEW_TOOLS,
+    "blue": _REVIEW_TOOLS,
+    "verifier": _REVIEW_TOOLS,
 }
+_GRAPH_ARGUMENTS = frozenset({"mode", "subject", "depth", "sink_class", "source_class", "limit", "cursor"})
 
 
 def _encode(value: bytes) -> str:
@@ -126,6 +135,12 @@ class ScopedRetrievalMcpAdapter:
                 raise ValueError("query is outside review package")
             if args.get("limit", 20) > grant["max_page_size"]:
                 raise ValueError("page exceeds review capability")
+        elif name == QUERY_CODE_GRAPH:
+            if (GRAPH_INDEX not in grant["indexes"] or args.get("subject") not in entities or
+                set(args) - _GRAPH_ARGUMENTS or graph_request_error(args)):
+                raise ValueError("query is outside review package")
+            if args.get("limit", 20) > grant["max_page_size"] or args.get("depth", 1) > grant["max_depth"]:
+                raise ValueError("page or depth exceeds review capability")
         page = 1
         if args.get("cursor") is not None:
             args["cursor"], page = self._unwrap_cursor(args["cursor"], name, arguments)

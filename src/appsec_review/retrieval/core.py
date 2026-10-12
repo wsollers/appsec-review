@@ -14,7 +14,7 @@ import re
 import sqlite3
 import time
 import uuid
-from typing import Any, Callable, Iterable, Mapping
+from typing import TYPE_CHECKING, Any, Callable, Iterable, Mapping
 
 from appsec_review.observability import PipelineLog
 from appsec_review.retrieval.index import INDEX_NAMES, load_verified_manifest
@@ -25,6 +25,9 @@ from appsec_review.retrieval.model import (
 )
 from appsec_review.retrieval.precomputed import FACT_SCHEMA, QUERY_SETS
 from appsec_review.storage import RunStore, file_sha256
+
+if TYPE_CHECKING:  # pragma: no cover - graph.contract imports retrieval.model, so it is loaded lazily
+    from appsec_review.graph.contract import GraphSettings
 
 
 RESPONSE_SCHEMA = "appsec-review/retrieval-response/1"
@@ -97,7 +100,8 @@ class RetrievalCore:
     """Read immutable shards for exactly one accepted run and manifest set."""
 
     def __init__(self, runs_dir: Path, run_id: str, *, manifest_sha256: str | None = None,
-                 limits: RetrievalLimits | None = None, clock: Callable[[], float] = time.monotonic):
+                 limits: RetrievalLimits | None = None, clock: Callable[[], float] = time.monotonic,
+                 graph_settings: GraphSettings | None = None):
         if not _RUN_ID.fullmatch(run_id):
             raise ValueError("invalid run id")
         self.run_root = RunStore(Path(runs_dir)).resolve(run_id)
@@ -110,6 +114,10 @@ class RetrievalCore:
         self.run_id = run_id
         self.target_root = Path(str(self.manifest["target_root"])).resolve()
         self.limits = limits or RetrievalLimits()
+        if graph_settings is None:
+            from appsec_review.graph.contract import GraphSettings
+            graph_settings = GraphSettings()
+        self.graph_settings = graph_settings
         self.clock = clock
         grouped: dict[str, list[Mapping[str, Any]]] = {}
         for item in self.manifest["indexes"]:
@@ -253,9 +261,12 @@ class RetrievalCore:
         }
         if has_more:
             response["pagination"]["next_cursor"] = self._cursor(offset + len(results), request_hash)
+        byte_gap = "response byte budget reached; trailing results were withheld (continue with the cursor)"
         while len(canonical_json(response)) > self.limits.max_response_bytes and response["results"]:
             response["results"].pop()
             response["truncated"] = True
+            if byte_gap not in response["coverage_gaps"]:
+                response["coverage_gaps"].append(byte_gap)
             response["pagination"]["next_cursor"] = self._cursor(offset + len(response["results"]), request_hash)
         if len(canonical_json(response)) > self.limits.max_response_bytes:
             response["coverage_gaps"] = ["response metadata exceeded byte budget"]
@@ -973,6 +984,15 @@ class RetrievalCore:
             found.sort(key=lambda item: item["identity"])
             return found[offset:offset + limit], gaps, len(found) > offset + limit, offset
         return self._execute("query_precomputed", parameters, operation)
+
+    def query_code_graph(
+        self, *, mode: str, subject: str, depth: int | None = None, sink_class: str | None = None,
+        source_class: str | None = None, limit: int = 20, cursor: str | None = None,
+    ) -> dict[str, Any]:
+        """Read accepted code-graph facts by mode and exact subject; see ``retrieval/graph.py``."""
+        from appsec_review.retrieval.graph import query_code_graph
+        return query_code_graph(self, self.graph_settings, mode=mode, subject=subject, depth=depth,
+                                sink_class=sink_class, source_class=source_class, limit=limit, cursor=cursor)
 
     def _lead_states(self, deadline: float) -> tuple[dict[str, Mapping[str, Any]], list[str]]:
         """Suppression and duplicate state from the accepted scanner_correlation lead facts."""
