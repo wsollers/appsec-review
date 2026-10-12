@@ -16,7 +16,8 @@ job and is exercised by `tests/review/` and the Dagster acceptance in
 | claim reviewer pools | merge | bounded in-unit cells keyed by `cell/v1` fingerprints behind visible Dagster units (design R1) | slice 1 implemented |
 | deterministic pool merge | port concept | `merge.claims` over reverified ledger shards; a merge that depends on shard order blocks publication | slice 1 implemented |
 | evidence-qualified quorum | replace | predicate/evidence/independence policy; no producer voting | slice 1 implemented (R4/R5/R6) |
-| `12-scoring-prioritization` and CVSS v4 calculation | replace/port | versioned `ScoringProvider` registry; `application_risk_matrix/1` only | slice 1 implemented for `application_risk_matrix/1`; CVSS v4 not started |
+| `12-scoring-prioritization` and CVSS v4 calculation | replace/port | versioned `ScoringProvider` registry; `application_risk_matrix/1` only, with labelled NVD CVSS/KEV/EPSS reference inputs and the KEV one-band confidence rule | slice 1 implemented for `application_risk_matrix/1` (reference inputs unit-tested; no acceptance claim reaches scoring with them); CVSS v4 not started |
+| CWE reference and advisory intelligence (no archived equivalent) | new | pinned MITRE CWE catalog for claim CWE validation and `weaknesses` blocks; `dependency_advisories/2` joins to pinned NVD (`index/nvd.sqlite`), CISA KEV and FIRST EPSS; lane A KEV admission; lane B KEV/EPSS rank signals | implemented; unit tests plus Dagster acceptance over offline fixture feeds published by the real sync code; live feed downloads unverified |
 | `12b-poc-and-fix` | replace | eligibility, typed policy, benign plan, isolated execution, independent verification, regression conversion | design only; execution disabled by default |
 | attack-chain composition/refutation | replace/port | single-ledger chain objects, five continuity dimensions, independent refutation, separate chain score | design only |
 | completeness audit/feedback, synthetic resynthesis, dynamic rescope | merge | `completeness.audit` exact accounting and the lane B coverage matrix (round 0); delta-driven rounds later | slice 1 accounting implemented; rounds design only |
@@ -41,9 +42,11 @@ job and is exercised by `tests/review/` and the Dagster acceptance in
 - Only round 0 runs. Evidence requests are recorded and closed `unsatisfied`; no resolution round,
   variant hunt, `entry_down`, or `control_gap` strategy exists, and `sink_up` needs an accepted
   `symbol_links` query set.
-- The accepted MITRE CWE reference shard is not produced yet; claim CWEs are validated against the
-  CWE ids named by accepted lead rules and the security-tagging crosswalk, with the missing
-  `reference_intelligence` producer recorded as a coverage gap.
+- Claim CWEs validate against the run-pinned MITRE CWE catalog. When it is unpinned, mismatched or
+  stale, validation falls back to the CWE ids named by accepted lead rules and the security-tagging
+  crosswalk, and a `reference:mitre_cwe` coverage gap is recorded. Live CISA KEV, FIRST EPSS, NVD
+  and MITRE downloads, and their current file formats, have not been exercised; tests use offline
+  fixture files.
 - Acceptance uses a scripted deterministic `Infer` double. Live-model acceptance, budgets and schema
   repair against a real provider, and a live Dagster/container deployment remain open.
 - Downstream remediation and final-publication consumers do not exist; the job publishes its own

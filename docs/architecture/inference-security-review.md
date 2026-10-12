@@ -474,12 +474,19 @@ Lane B (hunt): ranked review units ─► hunt packages ─► team: 3 red ─�
   - source SAST;
   - CodeQL;
   - artifact scanners;
-  - dependency advisories, using the advisory's own CVSS or severity;
+  - dependency advisories, using the advisory's own CVSS; when the scanner reports no CVSS, the
+    run-pinned NVD CVSS (v4.0, then v3.1, then v3.0, then v2) with severity basis `nvd-cvss-band`;
+    otherwise the advisory's severity label;
   - CI rules;
   - post-build hardening;
   - OWASP control failures.
 
-  Each family has a versioned normalization rule. Unknown severity is never treated as low.
+  Each family has a versioned normalization rule (`lead-family/dependency_advisory/2` and
+  `lead-family/artifact_scanner/2` add the NVD band). Unknown severity is never treated as low.
+  Lane A also admits every dependency or artifact-scanner lead whose advisory is listed in the
+  run-pinned CISA KEV catalog, whatever its reported severity (`lanes.lead_admission_kev`, default
+  `true`). Each lead package records its `admission_reasons` (`reported_severity`, `kev_listed`).
+  EPSS is context only and has no admission effect.
 - **Reported severity orders work only.** It is a nomination, never an adjudicated severity. The
   independent scorer assigns technical severity after adjudication, and only that score drives PoC
   eligibility and reporting.
@@ -496,7 +503,13 @@ Lane B (hunt): ranked review units ─► hunt packages ─► team: 3 red ─�
   - source-history instability (SII);
   - hotspots;
   - security tag density;
-  - medium, low, and info leads, which also appear on the hunt menu as hints.
+  - medium, low, and info leads, which also appear on the hunt menu as hints;
+  - advisory reference signals (`review-unit-rank/2`): `advisory_kev` is 250 points when any
+    dependency/artifact advisory in the unit is KEV-listed, and `advisory_epss` is the unit's highest
+    EPSS percentile times 250. A unit with no advisory lead scores a true zero; an advisory whose KEV
+    or EPSS feed was unavailable makes the signal `unknown` (`feed_unavailable`), never zero. Both
+    weights sit below a full LPS or SII signal (1000) because they order hunting and are not evidence
+    that the target is affected.
 
   The top `hunt_max_units` units, by rank then `package_id`, receive hunt packages. Every other unit
   is a `coverage_gap` with reason `below_hunt_cutoff`.
@@ -797,6 +810,7 @@ verifier_per_team = 1
 
 [jobs.job_inference_security_review.settings.lanes]
 lead_admission = ["critical", "high", "unknown"]   # normalized reported severity, every lead family
+lead_admission_kev = true        # KEV-listed advisory leads enter lane A whatever their severity
 lead_budget_share = 0.5          # unused share flows to the other lane
 lead_max_claims_per_package = 3
 hunt_max_units = 50
@@ -1516,6 +1530,13 @@ recorded as an `evidence_gap`, not as a relation.
 | direct, when the entity is the construct named by the predicate | `source_span`, `ast_node`, `ir_entity`, `symbol`; build kinds (`build_action` through `wasm_module`); `evidence_artifact` |
 | direct only for the predicate the producing rule's versioned mapping names | `tool_observation` (SAST, CodeQL path, post-build, CI) |
 | indirect: may guide search, never satisfies an obligation | `hotspot`, `priority_item`, `history_signal`, `change`, `change_context_signal`, `review_signal`, `tag_assignment`, `review_unit`, reported scanner severity, model prose |
+| indirect for **every** predicate: reference context (`review/evidence.py::REFERENCE_KINDS`) | `advisory`, `dependency_package` (a scanner-reported match), `precomputed_fact` (including `dependency_advisories` and `reference_intelligence` facts), and every OSV, NVD, CISA KEV, FIRST EPSS, and MITRE record they carry |
+
+Reference records describe an advisory or weakness everywhere, never this target. A dependency
+claim still needs target evidence for `affected_construct`: the resolved package version from an
+SBOM, lockfile, or artifact inventory (`package`, `archive_member`), which is direct. NVD CVSS, KEV,
+and EPSS can order work, inform workers, and enter scoring as labelled reference inputs; they never
+satisfy an obligation alone.
 
 ### R4 Predicate vocabulary and obligations
 
@@ -1568,8 +1589,9 @@ publication can label it. This is the slice 1 answer to open question 2.
 
 - Affected entities are accepted logical identities. A span is normalized to its enclosing
   `symbol` when an accepted symbol index covers it; otherwise it stays a `source_span`.
-- The weakness is a CWE id validated against the accepted MITRE CWE reference shard, with no
-  parent roll-up.
+- The weakness is a CWE id validated against the run-pinned MITRE CWE catalog (the `mitre_sync`
+  `cwe` source, `index/mitre.sqlite`, pinned by `job_review_data_indexing`), with no parent
+  roll-up. An id the catalog does not contain is dropped from identity with an `evidence_gap`.
 - Preconditions and the security predicate are enum members. Statement and mechanism prose are
   excluded from identity.
 - Near-duplicates under different CWEs remain separate claims linked by a `possible_duplicate`
@@ -1623,9 +1645,17 @@ publication can label it. This is the slice 1 answer to open question 2.
   - `impact_class`, from a TOML CWE→class table; an unmapped CWE gives a `null` rating plus
     `missing_factors`;
   - `exploitability_confidence`, derived from R5: `high` when confirmed, `medium` when supported.
+    When the claim's lead advisory is CISA KEV-listed, a claim that is already `supported` or
+    `confirmed` is raised one band (`medium` to `high`; `high` stays `high`), recorded as an
+    assumption and as `kev_adjusted` in the native result. KEV never makes an unsupported claim
+    scoreable.
 
   Only confirmed and supported claims are scored. Its actor is the deterministic
-  `independent_scorer` record.
+  `independent_scorer` record. `ScoreRequest` also carries labelled reference inputs taken from
+  the lane A lead packages that proposed the claim: `reference_cvss` (NVD CVSS vectors and base
+  scores), `kev_listed`, and `epss`. They are recorded in the score package's `reference_inputs`
+  and `assumptions`, enter the input fingerprint only when present, and do not set the band. No
+  CVSS provider exists yet; the vectors describe the advisory, not this target.
 - **Downstream.** Only `confirmed` claims are remediation-planning inputs by default. `supported`
   claims are published with an explicit "not independently confirmed" label (open question 4).
 
@@ -1684,9 +1714,24 @@ These record how slice 1 meets the decisions above where the decisions leave a c
   and no path, glob, or query-language parameter is ever grantable. The verifier's stored request
   bytes are checked for red and blue narratives; a reused verifier relies on its recorded check and
   fails closed when the narratives changed.
-- **CWE reference.** Until an accepted MITRE CWE reference shard exists, claim CWEs are validated
-  against the CWE ids named by accepted lead rules and the security-tagging crosswalk; the missing
-  `reference_intelligence` producer is a recorded coverage gap.
+- **CWE reference.** `mitre_sync` publishes the MITRE CWE catalog (kind `cwe`, v4.20) in
+  `index/mitre.sqlite`, with each weakness's name and abstraction, and `job_review_data_indexing`
+  pins that snapshot per run in its hash-bound `load.accepted_inputs` artifact. The package units
+  read the pin through the accepted index-set pointer, re-hash `index/mitre.sqlite` against it, open
+  it read-only, and validate claim CWEs against every catalog weakness (`review/references.py`). When
+  the pin is missing, mismatched, or stale, claim CWEs fall back to the narrower set named by
+  accepted lead rules and the security-tagging crosswalk, and the packages document, the unit gaps,
+  and a `coverage_gap` (`reference:mitre_cwe`) in the completeness ledger record it; the fallback is
+  never silent. Each lead with a CWE carries `weaknesses` blocks (CWE id, name, abstraction) from the
+  pinned catalog, else from accepted `reference_intelligence` facts.
+- **Advisory enrichment.** `dependency_advisories` (`dependency-advisories/2`) resolves each
+  advisory's CVE ids from the advisory id or its OSV aliases and joins the run-pinned NVD
+  (`index/nvd.sqlite`: CVSS, CWEs, description, `vulnStatus`, dates), KEV (`index/kev.sqlite`) and
+  EPSS (`index/epss.sqlite`) snapshots. Every join records its feed reference and its own gaps
+  (feed unavailable, identity mismatch, stale, rejected CVE, no CVE identity). Lane A lead packages
+  carry the bounded `advisory_context`; hunt menus carry the compact `advisory_summary` (CVE ids,
+  KEV flag, EPSS percentile, max CVSS). Real feed downloads are not exercised by tests; offline
+  fixture feeds go through the real normalize/index/publish code.
 
 ## Prioritized implementation plan
 
@@ -1798,7 +1843,13 @@ host execution of target outputs, production proofs, and text parsing to infer s
    planning, and how should internal reports label the latter? Slice 1 default: `confirmed`
    only; see [R8](#r8-ledger-schemas-inputs-and-configuration).
 5. What freshness windows apply to CVE/exploitation intelligence, deployment configuration, and
-   business-impact data?
+   business-impact data? Slice 1 default: `feed_max_age_days = 14` for every pinned feed, with
+   `feed_max_age_days_overrides = { kev = 7, epss = 3 }`; a stale MITRE catalog falls back for claim
+   CWE validation. Whether a stale KEV should still admit to lane A (it does today, with a
+   `stale_feed` gap) is open.
+6. Should EPSS ever affect lane A admission or scoring (for example a percentile threshold), or
+   stay rank and context only as in slice 1? Should a future `cvss_v4`/`cvss_v31_compat` provider
+   score target-specific vectors seeded from the NVD reference vector?
 8. Should chain confirmation require a second verifier beyond the independent refuter for
    ship-blocking chains?
 9. Which exact downstream job names become stable when remediation and final publication are built?

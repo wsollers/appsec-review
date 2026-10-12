@@ -29,7 +29,7 @@ accepted-handoff format. The exact operator-visible distinction is documented in
 
 | Job | Purpose | Operations |
 | --- | --- | --- |
-| `job_third_party_data_sync` | NVD, OSV, MITRE, and cve-bin-tool feed snapshots (scheduled, outside reviews) | [third-party-data-sync](../operations/third-party-data-sync.md) |
+| `job_third_party_data_sync` | NVD (with `index/nvd.sqlite`), OSV, MITRE, CISA KEV, FIRST EPSS and cve-bin-tool feed snapshots (scheduled, outside reviews) | [third-party-data-sync](../operations/third-party-data-sync.md) |
 | `job_review_intake` | Model preflight and review intake | [below](#inference-entry-point-and-model-preflight) |
 | `job_target_catalog` | Bounded target catalog and source index | [target-analysis-planning](../operations/target-analysis-planning.md) |
 | `job_source_history_analysis` | Git/GitHub history instability signals | [source-history-analysis](../operations/source-history-analysis.md) |
@@ -84,7 +84,12 @@ src/appsec_review/
   jobs/
     job_third_party_data_sync/
       steps/
-        nvd_sync/
+        nvd_sync/        fetch -> process -> publish
+        osv_sync/        fetch -> index -> publish
+        mitre_sync/      fetch -> normalize -> publish
+        kev_sync/        fetch -> normalize -> publish
+        epss_sync/       fetch -> normalize -> publish
+        cve_bin_tool_db_build/
 ```
 
 Stable hierarchy is `job -> step -> task`. Every identifier is a descriptive lowercase snake-case
@@ -168,8 +173,11 @@ while either skip remains explicit without becoming a gap or evidence of securit
 
 `job_third_party_data_sync.nvd_sync` is a standalone, network-enabled reference publisher. It bootstraps from the official
 NVD CVE 2.0 yearly feeds and then consumes bounded CVE API last-modified windows. Raw source bytes
-and a compact CVE metadata JSONL projection are stored as content-addressed gzip blobs. An immutable
-manifest links each snapshot to its parent; `current.json` advances only after complete validation.
+and a compact CVE metadata JSONL projection are stored as content-addressed gzip blobs. Each snapshot
+also publishes `index/nvd.sqlite`, a compact CVE-id lookup built deterministically from the parent
+index plus the new layers (a later `last_modified` overrides), hashed in the manifest's `files`. An
+immutable manifest links each snapshot to its parent; `current.json` advances only after complete
+validation.
 
 The schedule declaration is midnight UTC. Direct CLI invocations enter `JobRunner` with an explicit
 trigger:
