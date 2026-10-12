@@ -16,6 +16,7 @@ from uuid import uuid4
 
 from run_report import QUERY as RUNS_QUERY
 from verify import request_json
+from host import actual_platform, project_name, reject_other_deployments, validate_deployment
 
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -23,15 +24,6 @@ DEPLOYMENT = ROOT / "deploy" / "dagster"
 LOCK = ROOT / "runs" / "metadata" / "dagster-smoke.lock"
 TERMINAL = {"SUCCESS", "FAILURE", "CANCELED"}
 FEEDS = {"nvd_sync", "osv_sync", "mitre_sync", "kev_sync", "epss_sync", "cve_bin_tool_db_build"}
-
-
-def actual_platform() -> str:
-    if os.name == "nt":
-        return "windows"
-    release = Path("/proc/sys/kernel/osrelease")
-    if release.is_file() and "microsoft" in release.read_text(encoding="utf-8").lower():
-        return "wsl"
-    return "linux"
 
 
 def compose(platform: str) -> list[str]:
@@ -46,13 +38,12 @@ def run(command: list[str], *, capture: bool = False) -> subprocess.CompletedPro
 
 
 def check_config(platform: str) -> dict:
-    if actual_platform() != platform:
-        raise RuntimeError(f"requested {platform}, but this host is {actual_platform()}")
-    if not (DEPLOYMENT / ".env").is_file():
-        raise RuntimeError("run deploy/dagster/bin/bootstrap.py first")
+    validate_deployment(ROOT, DEPLOYMENT / ".env", platform)
     if not shutil.which("docker"):
         raise RuntimeError("Docker CLI is unavailable")
     document = json.loads(run(compose(platform) + ["config", "--format", "json"], capture=True).stdout)
+    if document["name"] != project_name(platform):
+        raise RuntimeError("Compose project identity does not match this host")
     services = document["services"]
     if set(services) != {"postgres", "code-location", "webserver", "daemon"}:
         raise RuntimeError("Compose service set changed")
@@ -61,6 +52,11 @@ def check_config(platform: str) -> dict:
     for target in ("/opt/app/runs", "/opt/app/data", "/var/run/docker.sock"):
         if target not in mounts:
             raise RuntimeError(f"missing code-location mount: {target}")
+    for target in ("/opt/app/runs", "/opt/app/data", "/opt/app/targets", "/opt/app/rules"):
+        source = str(mounts[target]["source"])
+        expected = str(ROOT / target.rsplit("/", 1)[-1])
+        if os.path.normcase(os.path.normpath(source)) != os.path.normcase(os.path.normpath(expected)):
+            raise RuntimeError(f"{target} must bind this host's checkout: {expected}")
     if platform == "windows":
         if any(services[name].get("user") != "0:0" for name in ("code-location", "webserver", "daemon")):
             raise RuntimeError("Windows services must ignore Linux uid/gid values in the shared environment")
@@ -77,6 +73,8 @@ def check_config(platform: str) -> dict:
             source = Path(mount["source"]) if mount else None
             if source is None or not (source.is_file() if kind == "file" else source.is_dir()):
                 raise RuntimeError(f"{target} must bind a real Linux {kind}")
+            if platform == "wsl" and not source.resolve().is_relative_to(Path.home().resolve()):
+                raise RuntimeError(f"{target} must be stored in the WSL home filesystem")
     return {"platform": platform, "services": sorted(services), "cli": "container" if platform == "windows" else "host-bind"}
 
 
@@ -130,6 +128,7 @@ def check_cli(platform: str) -> None:
 
 
 def live_stack(platform: str, url: str) -> None:
+    reject_other_deployments(platform)
     reject_contention(url, platform)
     run(compose(platform) + ["build", "code-location"])
     run(compose(platform) + ["up", "-d", "--wait"])

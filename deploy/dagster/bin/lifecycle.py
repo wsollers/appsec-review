@@ -8,6 +8,8 @@ from pathlib import Path
 import subprocess
 import sys
 
+from host import actual_platform, reject_other_deployments, validate_deployment
+
 
 deployment = Path(__file__).resolve().parents[1]
 repository = deployment.parents[1]
@@ -35,8 +37,10 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("action", choices=commands)
     args = parser.parse_args()
-    if not (deployment / ".env").exists():
-        raise SystemExit("run deploy/dagster/bin/bootstrap.py first")
+    platform = actual_platform()
+    validate_deployment(repository, deployment / ".env", platform)
+    if args.action in {"build", "start", "reload"}:
+        reject_other_deployments(platform)
     return subprocess.run(base + commands[args.action], cwd=repository, check=False).returncode
 
 

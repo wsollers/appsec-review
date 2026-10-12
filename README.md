@@ -416,11 +416,15 @@ See [`docs/operations/wave1-review.md`](docs/operations/wave1-review.md).
 
 ## Run the Dagster deployment
 
+Use `~/projects/appsec-review` for WSL and a native drive checkout for Windows. Each has its own
+Compose project, image, database, run data, targets, and Claude authentication. Stop the running
+stack before switching hosts; the lifecycle script rejects a second active appsec stack.
+
 On Linux or WSL 2, make sure `claude` is installed and signed in **before** bootstrap;
 the Linux Compose overlay requires the Claude paths, and bootstrap records its binary, `~/.claude`, and
 `~/.claude.json` paths in the ignored `deploy/dagster/.env`, together with your uid/gid so
-containers do not leave root-owned files in `runs/` and `data/`. Running bootstrap again keeps the existing secret and fills in only missing
-keys.
+containers do not leave root-owned files in `runs/` and `data/`. Running bootstrap again preserves
+the existing secret and refreshes the host-specific keys.
 
 ```bash
 python deploy/dagster/bin/bootstrap.py

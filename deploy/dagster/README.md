@@ -38,14 +38,17 @@ containers.
 
 ## Build, start, verify, and stop
 
-Run these commands from the repository root in Linux, WSL 2, or native Windows PowerShell. The
-lifecycle script selects the matching Compose overlay for the host.
-Bootstrap creates an ignored `.env` once and preserves
-its secret on later calls. On native Linux it also records the invoking operator's uid/gid so the
+Run these commands from a native checkout on each host: `~/projects/appsec-review` in WSL or a
+Windows drive checkout in PowerShell. Do not run the WSL deployment from `/mnt/c` or `/mnt/f`.
+Each checkout has its own ignored `.env`, `runs/`, `data/`, target files, Claude login, Compose
+project, image, PostgreSQL volume, and Dagster storage volume. The stacks share Docker Desktop's
+engine, so stop one before starting the other. The lifecycle and live smoke commands enforce this.
+Bootstrap preserves the existing database secret while refreshing host-specific paths and removing
+Linux-only settings from the Windows environment. On Linux and WSL it records the operator uid/gid so the
 code location does not leave root-owned files in the bind-mounted `runs/` and `data/` trees. It
 records the Docker socket group id and adds that supplemental group to the code location so tool
 containers remain usable.
-Bootstrap also records the resolved local Claude CLI binary, `~/.claude` directory, and
+Bootstrap also refreshes the resolved local Claude CLI binary, `~/.claude` directory, and
 `~/.claude.json` state file whenever all three exist, regardless of the configured provider.
 On Linux and WSL, `compose.claude.yaml` requires `APPSEC_CLAUDE_BINARY`,
 `APPSEC_CLAUDE_CONFIG_DIR`, and `APPSEC_CLAUDE_STATE_FILE`; install and sign in to `claude` before

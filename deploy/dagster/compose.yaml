@@ -1,4 +1,4 @@
-name: appsec-review-dagster
+name: ${APPSEC_COMPOSE_PROJECT:?Run deploy/dagster/bin/bootstrap.py first}
 
 x-dagster-environment: &dagster-environment
   DAGSTER_HOME: /opt/dagster/home
@@ -7,7 +7,7 @@ x-dagster-environment: &dagster-environment
   APPSEC_REVIEW_TARGET: ${APPSEC_REVIEW_TARGET:-/opt/app/targets/appsec-multi-vuln}
 
 x-dagster-service: &dagster-service
-  image: appsec-review-dagster:local
+  image: appsec-review-dagster:${APPSEC_DEPLOYMENT_PLATFORM:?Run deploy/dagster/bin/bootstrap.py first}
   user: "${APPSEC_UID:-0}:${APPSEC_GID:-0}"
   environment: *dagster-environment
   volumes:
@@ -44,7 +44,6 @@ services:
     <<: *dagster-service
     group_add:
       - "${APPSEC_DOCKER_GID:-0}"
-    container_name: appsec-review-dagster-code-location
     build:
       context: ../..
       dockerfile: deploy/dagster/Dockerfile
