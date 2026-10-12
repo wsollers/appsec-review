@@ -383,6 +383,11 @@ class RetrievalCore:
                             item = self._entity(row, index_name)
                             item["shard_id"] = shard.get("shard_id", "default")
                             found.append(item)
+                        gaps.extend(f"{index_name}/{shard.get('shard_id', 'default')}: {item['gap']}"
+                                    for item in database.execute(
+                            "SELECT gap FROM coverage WHERE gap IS NOT NULL AND status != 'complete'"))
+                    gaps.extend(f"{index_name}/{shard.get('shard_id', 'default')}: {gap}"
+                                for gap in shard.get("gaps", ()))
             found.sort(key=lambda item: (item["identity"], item["index"], item["shard_id"]))
             return found[offset:offset + limit], gaps, len(found) > offset + limit, offset
         return self._execute("find", parameters, operation)

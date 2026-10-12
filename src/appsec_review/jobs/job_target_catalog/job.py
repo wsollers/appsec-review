@@ -11,6 +11,9 @@ from typing import Any
 
 from appsec_review.jobs.cataloging import BUILD_FILES, PROJECT_FILES, inventory, write_json
 from appsec_review.jobs.build_discovery import descriptor_package, discover_build_units
+from appsec_review.indexing.target_documents import (
+    KINDS, InventoryIntegrityError, collect_target_documents, select_document_inventory,
+)
 from appsec_review.retrieval import (
     EntityKind, EntityRecord, IndexBuilder, IndexIdentity, LogicalIdentity, RelationKind,
     RelationRecord, SourceLocation, index_fingerprint, write_manifest,
@@ -24,7 +27,7 @@ TOPOLOGY = {
     "repository_discovery": ("partition_repository", "census_languages", "discover_projects"),
     "build_discovery": ("discover_build_systems", "discover_compile_commands", "catalog_build_targets"),
     "component_discovery": ("catalog_components", "catalog_dependencies"),
-    "retrieval_indexes": ("build_path_index", "build_symbol_index", "build_component_index"),
+    "retrieval_indexes": ("build_path_index", "build_symbol_index", "build_component_index", "build_target_documents"),
     "publish_catalog": ("validate_catalog", "publish_handoff"),
 }
 
@@ -285,10 +288,102 @@ def build_job(*, fail_task: str | None = None) -> Job:
         return {"artifact": _run_artifact(unit, path), "index_identity": index,
                 "item_count": len(items), "gaps": []}
 
+    def document_index(unit: UnitContext) -> Mapping[str, Any]:
+        maybe_fail(unit)
+        partition = unit.output("repository_discovery.partition_repository")
+        entries = select_document_inventory(partition["files"])
+        settings = unit.job.config.typed_settings
+        fingerprint = index_fingerprint(
+            name="documents", target_snapshot=unit.job.source_fingerprint,
+            producer_artifacts=[partition["artifact"]],
+            tool_identity={"producer": "job_target_catalog", "limits": {
+                "files": settings.max_files, "file_bytes": settings.max_file_bytes,
+                "records": settings.max_records}},
+            parser_identity="target-documents/1:" + hashlib.sha256(
+                Path(__file__).parents[2].joinpath("indexing", "target_documents.py").read_bytes()).hexdigest(),
+            normalizer_identity="retrieval-normalizer/1", mapping_identity="source-line-exact/1",
+        )
+        path = unit.job.run_root / "data" / "indices" / "documents" / f"{fingerprint}.sqlite"
+        result = collect_target_documents(
+            _target(unit), unit.job.source_fingerprint, entries,
+            max_files=settings.max_files, max_file_bytes=settings.max_file_bytes,
+            max_records=settings.max_records,
+        )
+        kinds = {entry["kind"] for entry in entries}
+        gaps = []
+        for kind in sorted(KINDS - kinds):
+            gaps.append(f"{kind}: no accepted target document")
+        gaps.extend(f"{item['path'] or '<inventory>'}: {item['reason']} ({item['detail']})"
+                    for item in result.gaps)
+        for item in partition["gaps"]:
+            gaps.append(f"source inventory {item['path']}: {item['reason']}")
+        if len(gaps) > 200:
+            omitted = len(gaps) - 200
+            gaps = [*gaps[:200], f"target document gaps truncated: {omitted} additional gap(s)"]
+        builder = IndexBuilder(path, name="documents", fingerprint=fingerprint,
+                               target_snapshot=unit.job.source_fingerprint)
+        identities: dict[str, str] = {}
+        line_offsets: dict[str, list[tuple[int, int]]] = {}
+        for record in result.records:
+            source_path = record["path"]
+            if source_path not in line_offsets:
+                target_root = _target(unit).resolve()
+                source = (target_root / source_path).resolve()
+                if target_root not in source.parents or not source.is_file():
+                    raise InventoryIntegrityError(f"accepted target source missing or escaped: {source_path}")
+                raw = source.read_bytes()
+                if hashlib.sha256(raw).hexdigest() != record["file_sha256"]:
+                    raise InventoryIntegrityError(f"accepted target source hash mismatch: {source_path}")
+                offsets = []
+                position = 0
+                for line in raw.splitlines(keepends=True):
+                    offsets.append((position, position + len(line)))
+                    position += len(line)
+                line_offsets[source_path] = offsets
+            offsets = line_offsets[source_path]
+            if not 1 <= record["line"] <= len(offsets):
+                raise ValueError(f"document source location cannot be resolved: {source_path}")
+            start, end = offsets[record["line"] - 1]
+            identity = LogicalIdentity.derive(EntityKind.DOCUMENT_RECORD, unit.job.source_fingerprint,
+                                              {"record_id": record["id"]})
+            identities[record["id"]] = identity.value
+            location = SourceLocation(
+                target_snapshot=unit.job.source_fingerprint, path=source_path,
+                file_sha256=record["file_sha256"], start_byte=start, end_byte=end,
+                start_line=record["line"], end_line=record["line"], start_column=1,
+                end_column=1, producer_location={"extractor": "target-documents/1", "line": record["line"]},
+                mapping_method="source-line-exact", confidence=1.0,
+            )
+            builder.add_entity(EntityRecord(
+                identity, record["id"], f"{record['kind']} {record['subtype']}: {record['text']}"[:256],
+                record["text"], {"record_type": "target_document", "document_kind": record["kind"],
+                                 "subtype": record["subtype"], "authority": record["authority"],
+                                 "fields": record["fields"]}, location,
+            ))
+        for link in result.links:
+            builder.add_relation(RelationRecord(
+                RelationKind.REFERENCES, identities[link["from"]], identities[link["to"]],
+                bool(link["exact"]), 1.0 if link["exact"] else 0.5,
+                payload={"relation": link["relation"], "authority": link["authority"]},
+            ))
+        for kind in sorted(KINDS):
+            count = sum(record["kind"] == kind for record in result.records)
+            builder.add_coverage(f"target-documents:{kind}",
+                                 "complete" if count and not gaps else "partial" if count else "unavailable",
+                                 gaps[0] if gaps else None)
+        builder.add_coverage("target-documents", "complete" if not gaps else "partial",
+                             "; ".join(gaps[:10])[:1000] if gaps else None)
+        sha = builder.build()
+        index = IndexIdentity("documents", "appsec-review/retrieval-index/2", sha, fingerprint,
+                              path.relative_to(unit.job.run_root).as_posix(),
+                              {"job": "job_target_catalog", "unit": unit.unit_id}, tuple(gaps))
+        return {"artifact": _run_artifact(unit, path), "index_identity": asdict(index),
+                "item_count": len(result.records), "link_count": len(result.links), "gaps": gaps}
+
     def validate_catalog(unit: UnitContext) -> Mapping[str, Any]:
         maybe_fail(unit)
         required = ("retrieval_indexes.build_path_index", "retrieval_indexes.build_symbol_index",
-                    "retrieval_indexes.build_component_index")
+                    "retrieval_indexes.build_component_index", "retrieval_indexes.build_target_documents")
         for dependency in required:
             artifact = unit.output(dependency)["artifact"]
             path = unit.job.run_root / artifact["path"]
@@ -306,7 +401,7 @@ def build_job(*, fail_task: str | None = None) -> Job:
             "build_discovery.discover_compile_commands", "build_discovery.catalog_build_targets",
             "component_discovery.catalog_components", "component_discovery.catalog_dependencies",
             "retrieval_indexes.build_path_index", "retrieval_indexes.build_symbol_index",
-            "retrieval_indexes.build_component_index")}
+            "retrieval_indexes.build_component_index", "retrieval_indexes.build_target_documents")}
         build_inputs = [unit.output("build_discovery.discover_build_systems")["artifact"],
                         unit.output("build_discovery.discover_compile_commands")["artifact"],
                         unit.output("build_discovery.catalog_build_targets")["artifact"]]
@@ -340,7 +435,7 @@ def build_job(*, fail_task: str | None = None) -> Job:
         indexes = [IndexIdentity(**{**unit.output(name)["index_identity"],
                                    "gaps": tuple(unit.output(name)["index_identity"].get("gaps", ()))})
                    for name in ("retrieval_indexes.build_path_index", "retrieval_indexes.build_symbol_index",
-                                "retrieval_indexes.build_component_index")]
+                                "retrieval_indexes.build_component_index", "retrieval_indexes.build_target_documents")]
         indexes.append(IndexIdentity(**{**build_identity, "gaps": tuple(build_gaps)}))
         manifest_path = unit.job.run_root / "data" / "indices" / "manifests" / f"catalog-{unit.job.attempt_id}.json"
         write_manifest(manifest_path, run_id=unit.job.run_id, target_snapshot=unit.job.source_fingerprint,
@@ -371,14 +466,17 @@ def build_job(*, fail_task: str | None = None) -> Job:
         u("retrieval_indexes.build_path_index", path_index, ("repository_discovery.partition_repository",)),
         u("retrieval_indexes.build_symbol_index", symbol_index, ("repository_discovery.partition_repository",)),
         u("retrieval_indexes.build_component_index", component_index, ("component_discovery.catalog_components",)),
-        u("publish_catalog.validate_catalog", validate_catalog, ("retrieval_indexes.build_path_index", "retrieval_indexes.build_symbol_index", "retrieval_indexes.build_component_index")),
+        u("retrieval_indexes.build_target_documents", document_index, ("repository_discovery.partition_repository",)),
+        u("publish_catalog.validate_catalog", validate_catalog, ("retrieval_indexes.build_path_index", "retrieval_indexes.build_symbol_index", "retrieval_indexes.build_component_index", "retrieval_indexes.build_target_documents")),
         u("publish_catalog.publish_handoff", publish, ("publish_catalog.validate_catalog",
           "build_discovery.catalog_build_targets", "component_discovery.catalog_dependencies",
           "repository_discovery.census_languages")),
     )
     implementation = hashlib.sha256(Path(__file__).read_bytes() +
         Path(__file__).parents[1].joinpath("cataloging.py").read_bytes() +
-        Path(__file__).parents[1].joinpath("build_discovery.py").read_bytes() + str(fail_task).encode()).hexdigest()
+        Path(__file__).parents[1].joinpath("build_discovery.py").read_bytes() +
+        Path(__file__).parents[2].joinpath("indexing", "target_documents.py").read_bytes() +
+        str(fail_task).encode()).hexdigest()
     validation = hashlib.sha256(Path(__file__).read_bytes() + b"validation").hexdigest()
     return Job("job_target_catalog", "target_catalog", UnitExecutor(units).execute,
                input_validators=(_validate_config,), schema_identity="appsec-review/target-catalog-job/1",

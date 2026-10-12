@@ -23,7 +23,7 @@ INDEX_NAMES = (
     "priority",
     "precomputed",
     "inventory",
-    "links",
+    "links", "documents",
 )
 
 

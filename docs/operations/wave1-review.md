@@ -22,6 +22,12 @@ production, review prioritization after CodeQL, and review-package assembly afte
 additional branches are required. Dagster's current dependency graph is assembled from the registered,
 configured jobs and is summarized in [`../../deploy/dagster/README.md`](../../deploy/dagster/README.md).
 
+On both surfaces, `target_catalog.retrieval_indexes.build_target_documents` starts after
+`target_catalog.repository_discovery.partition_repository`. It selects Markdown design and threat
+documents, materialized OpenAPI JSON, Postman collections, and unit-test source from that accepted
+hash-pinned inventory. The resulting `documents` shard is published with the catalog handoff and
+carried into review-data indexing. The bounds live in `[jobs.job_target_catalog.settings]`.
+
 In both surfaces, the application handoff is the checkpoint of record; Dagster metadata links to
 it but does not replace it. Target content, target guidance, configuration values, and generated
 evidence are data and cannot change worker authority or execution policy.

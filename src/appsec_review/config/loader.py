@@ -40,6 +40,21 @@ class RuntimeConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class TargetDocumentSettings:
+    max_files: int
+    max_file_bytes: int
+    max_records: int
+
+    def __post_init__(self) -> None:
+        if not 1 <= self.max_files <= 10_000:
+            raise ValueError("target document max_files is invalid")
+        if not 1 <= self.max_file_bytes <= 2 * 1024 * 1024:
+            raise ValueError("target document max_file_bytes is invalid")
+        if not 1 <= self.max_records <= 100_000:
+            raise ValueError("target document max_records is invalid")
+
+
+@dataclass(frozen=True, slots=True)
 class BuildCaptureConfig:
     """Resolved limits for kernel-observed build execution evidence."""
 
@@ -707,6 +722,14 @@ def load_config(path: str | Path = "appsec-review.toml") -> AppConfig:
                 ),
                 compiler_artifact_collection_mode=artifact_mode,
                 compiler_artifact_collection_overrides=artifact_overrides,
+            )
+        elif job_id == "job_target_catalog":
+            if set(settings) != {"max_document_files", "max_document_file_bytes", "max_document_records"}:
+                raise ValueError("jobs.job_target_catalog.settings must define document collection bounds")
+            typed_settings = TargetDocumentSettings(
+                max_files=int(settings["max_document_files"]),
+                max_file_bytes=int(settings["max_document_file_bytes"]),
+                max_records=int(settings["max_document_records"]),
             )
         elif job_id == "job_cpp_compiled_analysis":
             typed_settings = CppCompiledAnalysisSettings(lane=str(settings.get("lane", "")))

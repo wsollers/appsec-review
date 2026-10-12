@@ -11,6 +11,13 @@ configuration and hash-verified run-owned artifacts. It never parses raw scanner
 or a CPG, never runs target code, and never adds a search service. MCP reads only the accepted
 immutable shards it publishes.
 
+`job_target_catalog.retrieval_indexes.build_target_documents` runs earlier in both graphs. It
+consumes the catalog's hash-pinned file inventory and publishes the `documents` shard into the
+accepted catalog manifest. This indexing job carries that shard forward and audits its dataset
+declaration. Use `search`, `find`, and `read_excerpt` with `index=documents` to inspect declared
+OpenAPI operations and target-owned test/document intent. Missing files and unsupported formats
+appear as coverage gaps; neither a design statement nor a test is observed enforcement.
+
 ## Steps
 
 | Step.task | Output | Notes |

@@ -287,6 +287,7 @@ def test_wave1_exposes_real_producer_shard_topology() -> None:
     assert "dispatch_wave1_review" not in names
     expected = {
         "review_intake__begin", "target_catalog__begin", "target_analysis_plan__begin",
+        "target_catalog__retrieval_indexes__build_target_documents",
         "ci_configuration_analysis__ci_discovery__discover_definitions",
         "ci_configuration_analysis__ci_analysis__github_zizmor_scan",
         "ci_configuration_analysis__ci_observation_publication__github_zizmor_index",

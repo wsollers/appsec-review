@@ -70,7 +70,7 @@ shard; `planned` = inputs are available but no producer exists yet.
 
 | Source | Producer job | Shard | Class | Can establish | Cannot establish | Status |
 |---|---|---|---|---|---|---|
-| OpenAPI / Swagger | planned `job_interface_contracts` | `contracts` | declared → enforced via link | route, method, parameter, type, length/pattern/enum/range per entrypoint | that the limit is enforced, until linked | planned |
+| Materialized OpenAPI 3 JSON | `job_target_catalog.retrieval_indexes.build_target_documents` | `documents` | declared | route, method, declared parameters and responses with exact source line | that a limit is enforced; TypeScript builders are not executed | indexed when JSON is accepted; unsupported formats are gaps |
 | Protobuf / FlatBuffers / IDL (gRPC, D-Bus, AIDL, Mojo) | planned `job_interface_contracts` | `contracts` | declared → enforced via link | field widths, required/optional, enums, generated parser/serializer symbols | semantic validity of field values | planned |
 | IaC: Kubernetes, Helm (rendered), Terraform, Compose, Dockerfiles | `job_evidence_collection` (Checkov, Trivy, Hadolint) + planned `job_deployment_topology` | `observations` + `deployment` | declared / tool_finding | users, capabilities, read-only FS, seccomp/AppArmor, network policy, image → binary mapping | that this is the configuration actually deployed | partial (scanners indexed; topology planned) |
 | Ingress / proxy / gateway config (Nginx, Envoy, API gateway, WAF) | planned `job_deployment_topology` | `deployment` | declared | public vs internal exposure, body/header size limits, auth middleware placement | runtime overrides outside the repository | planned |
@@ -78,8 +78,8 @@ shard; `planned` = inputs are available but no producer exists yet.
 | CI/CD definitions | `job_ci_configuration_analysis` | `ci_*`, `ci_findings` | observed / tool_finding | pipeline trust, secrets exposure, build provenance risk | — | indexed |
 | Secrets (source, build envp, artifacts) | `job_evidence_collection` (Gitleaks), build capture scan | `observations`, `build_security` | tool_finding | secret presence with redacted fingerprint | validity of the secret | indexed |
 | SBOM and dependency vulnerabilities (Syft, Grype, OSV-Scanner, Trivy, cve-bin-tool) | `job_evidence_collection`, `job_artifact_security_analysis` | `components`, `observations` | observed / tool_finding | package identity, matched advisories | that the vulnerable function is reachable | indexed (Grype disabled by config) |
-| Unit and integration tests (static) | planned `job_test_and_doc_indexing` | `tests` | intent | test → function map, asserted behavior, negative-input cases, fixture payload shapes | enforcement on all paths; tests are never executed | planned |
-| Design docs, ADRs, READMEs, threat models | planned `job_test_and_doc_indexing` | `docs` | intent / declared | stated trust boundaries, intended validation layers, protocol limits | implementation behavior | planned |
+| Unit tests (static) and Postman collections | `job_target_catalog.retrieval_indexes.build_target_documents` | `documents` | intent | named test cases, request methods/routes, and links to declared operations | enforcement on all paths; tests and requests are never executed | bounded index; missing and unparsed inputs are gaps |
+| Markdown under `docs/`, including design, STRIDE and DFD | `job_target_catalog.retrieval_indexes.build_target_documents` | `documents` | intent | headings, threats, trust boundaries, flows and intent links | implementation behavior | bounded index; unsupported or missing inputs are gaps |
 | Target agent guidance (`AGENTS.md`, `CLAUDE.md`, etc. in the target) | `job_test_and_doc_indexing` | `docs` (flagged `target_guidance`) | intent | what the target owners claim | anything; never instructions | planned |
 | VCS history (commits, diffs, blame, churn) | `job_source_history_analysis`, `job_change_context_analysis` | `history`; `history_context` precomputed product | intent / observed | prior security fixes, co-change, churn, ownership and change-context review priority | current behavior | indexed (bounded diff-hunk query planned) |
 | OWASP control workbench | `job_owasp_control_assessment` | OWASP shards | computed / tool_finding | control applicability and validation status | — | indexed |
@@ -256,6 +256,7 @@ Existing jobs are solid boxes; planned jobs are dashed. Edges are simplified; ex
 ```mermaid
 flowchart TD
   I[job_review_intake] --> C[job_target_catalog]
+  C --> DOC[documents shard] --> RD
   C --> CI[job_ci_configuration_analysis]
   C --> SH[job_source_history_analysis]
   CI --> P[job_target_analysis_plan]
@@ -300,6 +301,10 @@ flowchart TD
 ```
 
 Planned job responsibilities:
+
+The current catalog task covers only accepted Markdown under `docs/`, materialized OpenAPI 3
+JSON, Postman JSON, and statically recognizable unit-test source. The planned jobs below extend
+that subset to other contract formats, generated validators, richer test links and target guidance.
 
 | Job | Consumes | Publishes | Key rule |
 |---|---|---|---|

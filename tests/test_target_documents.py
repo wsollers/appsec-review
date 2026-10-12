@@ -8,7 +8,7 @@ import shutil
 import pytest
 
 from appsec_review.indexing.input_matrix import INPUT_SOURCES
-from appsec_review.indexing.target_documents import InventoryIntegrityError, collect_target_documents
+from appsec_review.indexing.target_documents import InventoryIntegrityError, collect_target_documents, select_document_inventory
 
 
 FIXTURES = Path(__file__).parent / "fixtures" / "northwinds_documents"
@@ -100,6 +100,10 @@ def test_oversized_source_is_a_named_coverage_gap(tmp_path: Path) -> None:
     shutil.copy(FIXTURES / "design.md", tmp_path / "design.md")
     assert collect_target_documents(tmp_path, SNAPSHOT, _inventory(tmp_path, {"design.md": "design"}),
                                     max_file_bytes=10).gaps[0]["reason"] == "byte_limit"
+    accepted = _inventory(tmp_path, {"design.md": "design"})
+    (tmp_path / "design.md").write_text("changed" * 100, encoding="utf-8")
+    with pytest.raises(InventoryIntegrityError, match="hash mismatch"):
+        collect_target_documents(tmp_path, SNAPSHOT, accepted, max_file_bytes=10)
 
 
 def test_parse_and_record_limits_are_named_gaps(tmp_path: Path) -> None:
@@ -158,8 +162,16 @@ def test_target_text_remains_data(tmp_path: Path) -> None:
     assert not result.links
 
 
-def test_active_pipeline_still_marks_document_sources_planned() -> None:
-    states = {source: state for source, _producers, state, _query_sets, _endpoints in INPUT_SOURCES}
-    assert states["interface_contracts"] == "planned"
-    assert states["tests_and_fixtures"] == "planned"
-    assert states["docs_and_threat_models"] == "planned"
+def test_document_sources_have_a_bounded_catalog_producer() -> None:
+    sources = {source: (producers, state, endpoints)
+               for source, producers, state, _query_sets, endpoints in INPUT_SOURCES}
+    for name in ("interface_contracts", "tests_and_fixtures", "docs_and_threat_models"):
+        assert sources[name][0] == ("job_target_catalog",)
+        assert sources[name][1] == "extend"
+        assert sources[name][2] == ("search", "find", "read_excerpt")
+    inventory = [{"path": f"docs/{name}", "sha256": "a" * 64} for name in
+                 ("design.md", "threat-model.md", "data-flow-diagram.md")]
+    inventory += [{"path": "backend/openapi.ts", "sha256": "b" * 64},
+                  {"path": "tests/postman/collection.json", "sha256": "c" * 64},
+                  {"path": "backend/orders.test.ts", "sha256": "d" * 64}]
+    assert {item["kind"] for item in select_document_inventory(inventory)} == set(FILES.values())

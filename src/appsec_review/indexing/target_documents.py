@@ -39,6 +39,35 @@ class DocumentResult:
     gaps: tuple[dict[str, str], ...]
 
 
+def select_document_inventory(files: Iterable[Mapping[str, Any]]) -> tuple[dict[str, str], ...]:
+    """Classify only files already present in the accepted target catalog."""
+    selected: list[dict[str, str]] = []
+    for item in files:
+        path = normalize_relative_path(item["path"])
+        parts = tuple(part.lower() for part in Path(path).parts)
+        name = parts[-1]
+        suffix = Path(name).suffix.lower()
+        kind: str | None = None
+        if suffix == ".md" and "docs" in parts[:-1]:
+            if "threat" in name or "stride" in name:
+                kind = "threat_model"
+            elif "dfd" in name or "data-flow" in name or "data_flow" in name:
+                kind = "dfd"
+            else:
+                kind = "design"
+        elif suffix in {".json", ".ts"} and ("openapi" in name or "swagger" in name):
+            kind = "openapi"
+        elif suffix == ".json" and ("postman" in parts or "postman" in name):
+            kind = "postman"
+        elif (name.startswith("test_") and suffix == ".py") or re.search(
+            r"\.(?:test|spec)\.(?:[cm]?js|[cm]?ts|tsx|jsx|py)$", name
+        ):
+            kind = "unit_test"
+        if kind is not None:
+            selected.append({"path": path, "sha256": item["sha256"], "kind": kind})
+    return tuple(sorted(selected, key=lambda item: item["path"]))
+
+
 def _route(value: str) -> str:
     path = urlsplit(value.replace("{{baseUrl}}", "http://fixture.invalid")).path
     path = re.sub(r"/\{\{[^}]+\}\}", "/{id}", path)
@@ -89,6 +118,12 @@ def collect_target_documents(
         source = (root / path).resolve()
         if root not in source.parents or not source.is_file():
             raise InventoryIntegrityError(f"accepted target source missing or escaped: {path}")
+        digest = hashlib.sha256()
+        with source.open("rb") as stream:
+            for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                digest.update(chunk)
+        if digest.hexdigest() != sha:
+            raise InventoryIntegrityError(f"accepted target source hash mismatch: {path}")
         if source.stat().st_size > max_file_bytes:
             gaps.append({"path": path, "reason": "byte_limit", "detail": str(max_file_bytes)})
             continue

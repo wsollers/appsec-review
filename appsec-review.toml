@@ -201,6 +201,11 @@ workers = 1
 name = "target_catalog"
 workers = 1
 
+[jobs.job_target_catalog.settings]
+max_document_files = 128
+max_document_file_bytes = 256000
+max_document_records = 2000
+
 [jobs.job_target_catalog.steps.repository_discovery]
 workers = 1
 [jobs.job_target_catalog.steps.repository_discovery.tasks.partition_repository]
@@ -223,6 +228,7 @@ workers = 1
 [jobs.job_target_catalog.steps.retrieval_indexes.tasks.build_path_index]
 [jobs.job_target_catalog.steps.retrieval_indexes.tasks.build_symbol_index]
 [jobs.job_target_catalog.steps.retrieval_indexes.tasks.build_component_index]
+[jobs.job_target_catalog.steps.retrieval_indexes.tasks.build_target_documents]
 
 [jobs.job_target_catalog.steps.publish_catalog]
 workers = 1

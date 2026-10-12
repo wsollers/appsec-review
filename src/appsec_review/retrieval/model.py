@@ -54,6 +54,7 @@ class EntityKind(StrEnum):
     REVIEW_SIGNAL = "review_signal"
     REVIEW_FLOW_STEP = "review_flow_step"
     REVIEW_CONTEXT_FILE = "review_context_file"
+    DOCUMENT_RECORD = "document_record"
     PRECOMPUTED_FACT = "precomputed_fact"
     DATASET = "dataset"
     DATASET_AUDIT = "dataset_audit"
