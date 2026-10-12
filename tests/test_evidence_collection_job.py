@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import errno
 import json
 import os
 from pathlib import Path
@@ -256,7 +257,12 @@ def _symlink(pack: Path) -> None:
 
 
 def _fifo(pack: Path) -> None:
-    os.mkfifo(pack / "fixtures" / "c" / "pipe.c")
+    try:
+        os.mkfifo(pack / "fixtures" / "c" / "pipe.c")
+    except OSError as exc:
+        if exc.errno in {errno.ENOTSUP, errno.EOPNOTSUPP}:
+            pytest.skip("test filesystem does not support FIFOs")
+        raise
 
 
 def _duplicate_lock_key(pack: Path) -> None:

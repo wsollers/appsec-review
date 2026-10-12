@@ -14,6 +14,8 @@ import re
 import statistics
 from typing import Any
 
+from appsec_review.jobs.component_ownership import resolve_root_ownership
+
 from .filters import formatting_change, is_test_path, path_exclusion
 from .settings import FilterRules
 from .window import window_start as calendar_window_start
@@ -139,10 +141,7 @@ def classify(changes: list[Mapping[str, Any]], messages: Mapping[str, bytes], gi
 
 
 def _component_of(path: str, roots: list[tuple[str, str]]) -> str | None:
-    for root, component_id in roots:
-        if root in {"", "."} or path == root or path.startswith(root.rstrip("/") + "/"):
-            return component_id
-    return None
+    return resolve_root_ownership(path, roots)
 
 
 def component_roots(components: Iterable[Mapping[str, Any]]) -> list[tuple[str, str]]:
@@ -163,11 +162,13 @@ def compute_signals(changes: list[Mapping[str, Any]], classes: Mapping[str, Mapp
     """
     per_file: dict[str, dict[str, Any]] = defaultdict(lambda: {
         "changes": [], "ranking": [], "added": 0, "deleted": 0, "weighted": 0.0, "authors": defaultdict(int),
-        "fix": 0, "security": 0, "revert": 0, "bypass": 0, "times": [], "fix_times": [], "bulk": 0,
+        "fix": 0, "security": 0, "revert": 0, "bypass": 0, "unresolved": 0,
+        "times": [], "fix_times": [], "bulk": 0,
         "formatting": 0, "excluded_churn": 0, "test_touch": 0})
     per_component: dict[str, dict[str, Any]] = defaultdict(lambda: {
         "changes": set(), "added": 0, "deleted": 0, "weighted": 0.0, "authors": set(), "fix": set(),
-        "security": set(), "revert": set(), "bypass": set(), "files": set(), "production": 0, "test": 0})
+        "security": set(), "revert": set(), "bypass": set(), "unresolved": set(),
+        "files": set(), "production": 0, "test": 0})
     tests = {path: is_test_path(path, filters) for path in eligible}
     exclusions = {path: path_exclusion(path, filters) for path in eligible}
     for change in changes:
@@ -176,6 +177,7 @@ def compute_signals(changes: list[Mapping[str, Any]], classes: Mapping[str, Mapp
         decay = 0.5 ** (age_days / half_life_days)
         label = classes.get(change_id, {})
         bypass = bool(github.get(change_id, {}).get("review_bypass"))
+        unresolved = github.get(change_id, {}).get("review_bypass") is None
         excluded = "bulk" if change["bulk"] else "formatting" if label.get("formatting") else None
         touches_test = any(is_test_path(str(entry["path"]), filters) for entry in change["files"])
         touched: dict[str, list[int]] = defaultdict(lambda: [0, 0])
@@ -205,6 +207,7 @@ def compute_signals(changes: list[Mapping[str, Any]], classes: Mapping[str, Mapp
             item["security"] += bool(label.get("security_fix"))
             item["revert"] += bool(label.get("revert") or label.get("reverted_by"))
             item["bypass"] += bypass
+            item["unresolved"] += unresolved
             item["test_touch"] += touches_test
             component_id = _component_of(path, roots)
             if component_id is None or exclusions[path] is not None:
@@ -252,6 +255,7 @@ def compute_signals(changes: list[Mapping[str, Any]], classes: Mapping[str, Mapp
             "repeat_fix_count": sum(1 for earlier, later in zip(fix_times, fix_times[1:])
                                     if later - earlier <= fix_interval_days * DAY),
             "revert_count": item["revert"], "review_bypass_count": item["bypass"],
+            "review_bypass_unresolved_count": item["unresolved"],
             "bulk_change_count": item["bulk"], "formatting_change_count": item["formatting"],
             "excluded_churn_lines": item["excluded_churn"],
             "test_touch_change_count": None if tests[path] else item["test_touch"],
@@ -267,6 +271,7 @@ def compute_signals(changes: list[Mapping[str, Any]], classes: Mapping[str, Mapp
             "recency_weighted_churn": _round(item["weighted"]), "author_count": len(item["authors"]),
             "fix_change_count": len(item["fix"]), "security_fix_change_count": len(item["security"]),
             "revert_count": len(item["revert"]), "review_bypass_count": len(item["bypass"]),
+            "review_bypass_unresolved_count": len(item["unresolved"]),
             "file_count": len(item["files"]), "production_churn_lines": item["production"],
             "test_churn_lines": item["test"],
             "production_to_test_churn_ratio": _round(item["production"] / item["test"]) if item["test"] else None,
@@ -305,7 +310,9 @@ def co_change(changes: list[Mapping[str, Any]], classes: Mapping[str, Mapping[st
     for (left, right), support in pairs.items():
         if support < min_support:
             continue
-        cross = _component_of(left, roots) != _component_of(right, roots)
+        left_component, right_component = _component_of(left, roots), _component_of(right, roots)
+        cross = (left_component != right_component
+                 if left_component is not None and right_component is not None else None)
         partners[left].append({"path": right, "support": support,
                                "confidence": _round(support / totals[left]), "cross_component": cross})
         partners[right].append({"path": left, "support": support,

@@ -22,12 +22,15 @@ from appsec_review.jobs.job_source_history_analysis.git import (
 )
 from appsec_review.jobs.job_source_history_analysis.github import GitHubClient, GitHubSettings, enrich
 from appsec_review.jobs.job_source_history_analysis.hotspots import score as sii_score, tier_bounds
-from appsec_review.jobs.job_source_history_analysis.signals import classify, normalize
+from appsec_review.jobs.job_source_history_analysis.signals import classify, compute_signals, normalize
+from appsec_review.jobs.job_source_history_analysis.settings import FilterRules
 from appsec_review.jobs.job_source_history_analysis.sources import blob_id, history_identity, resolve_git_source
 from appsec_review.jobs.job_target_analysis_plan import build_job as build_plan, load_accepted_plan
 from appsec_review.jobs.job_target_catalog import build_job as build_catalog
 from appsec_review.retrieval import RetrievalCore
 from appsec_review.runtime import GraphRunner, plan_jobs
+from appsec_review.runtime.resume import job_config_sha256
+from appsec_review.storage import file_sha256
 
 
 ROOT = Path(__file__).parents[1]
@@ -170,6 +173,8 @@ class LocalDocker:
 
     def __call__(self, argv, timeout):
         argv = list(argv)
+        if argv[:2] == ["docker", "inspect"]:
+            return CommandOutcome(0, b'[{"Source":"/work","Destination":"/work"}]\n', b"")
         if argv[:3] == ["docker", "image", "inspect"]:
             pinned = load_catalog(ROOT).tool("tool-tree-sitter")
             if argv[3] == pinned.tag:
@@ -251,7 +256,9 @@ def git(repo: Path, *args: str, when: int | None = None, check: bool = True,
            "GIT_COMMITTER_NAME": "Dev One", "GIT_COMMITTER_EMAIL": "one@example.test"}
     if when is not None:
         env["GIT_AUTHOR_DATE"] = env["GIT_COMMITTER_DATE"] = f"@{when} +0000"
-    result = subprocess.run([GIT, *args], cwd=repo, env=env, capture_output=True, text=True, check=check)
+    # The fixture lives on a host bind mount in container runs, which can report a different owner.
+    result = subprocess.run([GIT, "-c", "safe.directory=*", *args], cwd=repo, env=env,
+                            capture_output=True, text=True, check=check)
     return result.stdout.strip()
 
 
@@ -966,12 +973,29 @@ def test_github_bound_exhaustion_never_reports_bypass_or_direct_push() -> None:
     assert "github_request_budget_exhausted" in result["gaps"]
     signals = compute_signals(
         [{"change_id": HEAD, "effective_time": T0, "bulk": False, "author": "author-0001",
-          "files": [{"current_path": "a.py", "added": 1, "deleted": 0}]}], {}, result["facts"],
+          "files": [{"path": "a.py", "current_path": "a.py", "added": 1, "deleted": 0}]}], {}, result["facts"],
         eligible={"a.py": {"line_count": 1}}, roots=[(".", "component:0001")], anchor_time=T0,
-        half_life_days=90, minor_author_share=0.05)
+        window_months=12, half_life_days=90, minor_author_share=0.05, fix_interval_days=30,
+        filters=FilterRules((), (), (), (), (), (), 0.05))
     assert signals["files"]["a.py"]["review_bypass_count"] == 0
     assert signals["files"]["a.py"]["review_bypass_unresolved_count"] == 1
     assert signals["components"]["component:0001"]["review_bypass_unresolved_count"] == 1
+
+
+def test_github_budget_exhaustion_at_head_commit_is_indeterminate() -> None:
+    pulls_path = f"/repos/acme/widget/commits/{HEAD}/pulls"
+    reviews_path = "/repos/acme/widget/pulls/7/reviews"
+    api = Paged({pulls_path: [[_pull(7, merge=HEAD)]], reviews_path: [[]]})
+
+    def transport(url, headers, timeout):
+        if url == f"{API}/repos/acme/widget/pulls/7":
+            return 200, {}, json.dumps({"head": {"sha": "b" * 40}}).encode()
+        return api(url, headers, timeout)
+
+    result = enrich(GitHubClient(_settings(max_requests=4), transport), HEAD, [HEAD])
+    fact = result["facts"][HEAD]
+    assert fact["status"] == "indeterminate" and fact["review_bypass"] is None
+    assert "github_request_budget_exhausted" in result["gaps"]
 
 
 def test_github_pagination_inputs_bind_job_identity(tmp_path: Path) -> None:

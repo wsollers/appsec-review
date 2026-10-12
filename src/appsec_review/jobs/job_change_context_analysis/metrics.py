@@ -16,6 +16,8 @@ import re
 import statistics
 from typing import Any
 
+from appsec_review.jobs.component_ownership import resolve_root_ownership
+
 from .settings import ChangeContextSettings, PRIORITY_SIGNALS
 
 
@@ -94,10 +96,7 @@ def test_subject(path: str) -> str:
 
 
 def component_of(path: str, roots: list[tuple[str, str]]) -> str | None:
-    for root, component_id in roots:
-        if root in {"", "."} or path == root or path.startswith(root.rstrip("/") + "/"):
-            return component_id
-    return None
+    return resolve_root_ownership(path, roots)
 
 
 def _zone_local(epoch: int, zone: tzinfo) -> datetime:

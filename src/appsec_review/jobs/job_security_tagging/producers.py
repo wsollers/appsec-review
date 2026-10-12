@@ -16,8 +16,9 @@ import sqlite3
 from typing import Any
 
 from appsec_review.jobs.cataloging import (
-    MANIFEST_ECOSYSTEMS, MANIFEST_SUFFIX_ECOSYSTEMS, SOURCE_ECOSYSTEMS, manifest_ecosystem, source_ecosystem,
+    MANIFEST_ECOSYSTEMS, MANIFEST_SUFFIX_ECOSYSTEMS, SOURCE_ECOSYSTEMS, manifest_ecosystem,
 )
+from appsec_review.jobs.component_ownership import Ownership, resolve_ownership
 from appsec_review.retrieval import EntityKind, LogicalIdentity
 from appsec_review.retrieval.core import resolve_accepted_manifest
 from appsec_review.retrieval.index import load_verified_manifest
@@ -117,24 +118,6 @@ def component_topology_sha256(components: Iterable[Mapping[str, Any]], rules: Ma
 
 
 @dataclass(frozen=True, slots=True)
-class Ownership:
-    """Which components a path is attributed to, and why.
-
-    ``component_ids`` are the components that receive the evidence (one when owned, several when
-    shared, none otherwise); ``candidates`` are every equally specific matching component.
-    """
-
-    status: str
-    basis: str
-    component_ids: tuple[str, ...] = ()
-    candidates: tuple[str, ...] = ()
-
-
-def _under(root: str, path: str) -> bool:
-    return root == "." or path == root or path.startswith(root.rstrip("/") + "/")
-
-
-@dataclass(frozen=True, slots=True)
 class Scope:
     """Subjects that every collector shares: the project and the cataloged components."""
 
@@ -143,39 +126,7 @@ class Scope:
     components: tuple[Mapping[str, Any], ...]
 
     def ownership(self, path: str | None) -> Ownership:
-        """Resolve a path to its deepest component root; ties are decided by manifest ecosystem only.
-
-        Component identifier order is never consulted: every equally deep candidate is considered.
-        """
-        if not path:
-            return Ownership("not_applicable", "no-path")
-        deepest: list[Mapping[str, Any]] = []
-        best = -1
-        for component in self.components:
-            root = str(component.get("root") or ".")
-            if not _under(root, path):
-                continue
-            depth = 0 if root == "." else len(PurePosixPath(root).parts)
-            if depth > best:
-                best, deepest = depth, [component]
-            elif depth == best:
-                deepest.append(component)
-        if not deepest:
-            return Ownership("unowned", "no-component-root")
-        candidates = tuple(sorted({str(item["component_id"]) for item in deepest}))
-        if len(candidates) == 1:
-            return Ownership("owned", "deepest-root", candidates, candidates)
-        manifests = sorted({str(item["component_id"]) for item in deepest if item.get("manifest") == path})
-        if len(manifests) == 1:
-            return Ownership("owned", "manifest-file", tuple(manifests), candidates)
-        ecosystem = source_ecosystem(path)
-        matches = tuple(sorted({str(item["component_id"]) for item in deepest
-                                if ecosystem is not None and item.get("ecosystem") == ecosystem}))
-        if len(matches) == 1:
-            return Ownership("owned", "manifest-ecosystem", matches, candidates)
-        if matches:
-            return Ownership("shared", "manifest-ecosystem", matches, candidates)
-        return Ownership("ambiguous", "no-ecosystem-match", (), candidates)
+        return resolve_ownership(path, self.components)
 
     def subjects(self, kind: str, logical_id: str, path: str | None = None, **extra: Any) -> list[dict[str, Any]]:
         """Return one subject per component the path resolves to, or one unassigned subject."""
@@ -405,4 +356,3 @@ def collect_coverage_gaps(indexes: AcceptedIndexes, scope: Scope, vocabulary: Vo
             evidence=[{"ref": f"manifest:{indexes.manifest_sha256}", "index": name, "missing": True,
                        "manifest_sha256": indexes.manifest_sha256}]))
     return records, notes
-

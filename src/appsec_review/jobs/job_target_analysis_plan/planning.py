@@ -8,6 +8,7 @@ from typing import Any
 
 from appsec_review.storage import canonical_json
 from appsec_review.jobs.build_discovery import BUILD_RECIPE_SCHEMA, validate_build_recipe
+from appsec_review.jobs.component_ownership import resolve_ownership
 
 
 PLAN_SCHEMA = "appsec-review/target-analysis-plan/1"
@@ -39,12 +40,11 @@ def _under(path: str, root: str) -> bool:
 
 def _component_paths(files: tuple[Mapping[str, Any], ...], components: tuple[Mapping[str, Any], ...]) -> dict[str, list[str]]:
     result: dict[str, list[str]] = {str(item["component_id"]): [] for item in components}
-    ordered = sorted(components, key=lambda item: (-len(PurePosixPath(str(item["root"])).parts), str(item["component_id"])))
     for item in files:
         path = str(item["path"])
-        owner = next((component for component in ordered if _under(path, str(component["root"]))), None)
-        if owner is not None:
-            result[str(owner["component_id"])].append(path)
+        decision = resolve_ownership(path, components)
+        for component_id in decision.component_ids:
+            result[component_id].append(path)
     return result
 
 

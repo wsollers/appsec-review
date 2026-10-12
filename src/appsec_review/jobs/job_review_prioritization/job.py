@@ -25,6 +25,7 @@ from appsec_review.retrieval.core import resolve_accepted_manifest
 from appsec_review.retrieval.index import load_verified_manifest
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from appsec_review.storage import atomic_json, canonical_json, file_sha256
+from appsec_review.jobs.component_ownership import resolve_root_ownership
 
 from . import scoring
 from .complexity import COGNITIVE_DEVIATIONS, COGNITIVE_IDENTITY, CYCLOMATIC_IDENTITY, file_summary, function_units
@@ -145,10 +146,7 @@ def _status(gaps: list[str]) -> str:
 
 
 def _component(path: str, roots: list[tuple[str, str]]) -> str | None:
-    for root, component in roots:
-        if root in {"", "."} or path == root or path.startswith(root.rstrip("/") + "/"):
-            return component
-    return None
+    return resolve_root_ownership(path, roots)
 
 
 def _load_inputs(run_root: Path) -> dict[str, Any]:

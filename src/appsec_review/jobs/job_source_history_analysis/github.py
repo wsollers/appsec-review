@@ -26,6 +26,7 @@ _REPOSITORY = re.compile(r"[A-Za-z0-9_.-]{1,100}/[A-Za-z0-9_.-]{1,100}")
 _LABEL = re.compile(r"[^A-Za-z0-9 _.:/+-]")
 _TIMESTAMP = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})")
 _OBJECT_ID = re.compile(r"[0-9a-f]{40}|[0-9a-f]{64}")
+_LINK = re.compile(r"<([^<>]+)>\s*;\s*([^,]+)")
 MAX_RESPONSE_BYTES = 4 * 1024 * 1024
 PAGINATION_IDENTITY = "appsec-review/github-link-pagination/1"
 
@@ -360,7 +361,13 @@ def _pull_facts(client: GitHubClient, repository: str, number: int, summary: Map
     stale = approved and head is not None and all(item.get("commit_id") != head for item in approvals)
     head_committed_at = None
     if _object_id(head):
-        status, commit = client.get(f"/repos/{repository}/commits/{head}")
+        try:
+            status, commit = client.get(f"/repos/{repository}/commits/{head}")
+        except BudgetExhausted as exc:
+            gap = "github_rate_limited" if str(exc) == "github_rate_limited" else "github_request_budget_exhausted"
+            return _indeterminate(gap, {**evidence, "head_commit": {"status": None}}, labels=labels,
+                                  approved_by_other=None, approval_stale=None, self_merged=self_merged)
+        evidence["head_commit"] = {"status": status}
         if status == 200 and isinstance(commit, Mapping) and isinstance(commit.get("commit"), Mapping):
             committer = commit["commit"].get("committer")
             head_committed_at = _timestamp(committer.get("date")) if isinstance(committer, Mapping) else None
