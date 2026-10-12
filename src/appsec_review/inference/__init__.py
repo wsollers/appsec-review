@@ -15,7 +15,7 @@ from typing import Any
 
 from . import anthropic_api, claude_cli, openai_api
 from .claude_cli import ModelOutputError, parse_model_payload
-from .request import Infer, ModelRequest, ModelResult
+from .request import Infer, ModelRequest, ModelResult, ReviewModelRequest
 
 
 PROVIDERS: dict[str, Infer] = {
@@ -24,8 +24,11 @@ PROVIDERS: dict[str, Infer] = {
 }
 
 
-def infer(request: ModelRequest, *, timeout_seconds: int) -> ModelResult:
-    """Send one bounded request to the provider it names and return the validated proposal."""
+def infer(request: ModelRequest | ReviewModelRequest, *, timeout_seconds: int) -> ModelResult:
+    """Send one bounded request to the provider it names and return the validated proposal.
+
+    A `ReviewModelRequest` is one review-cell turn; its validated proposal is the worker turn.
+    """
     try:
         send = PROVIDERS[request.provider]
     except KeyError as exc:
@@ -67,4 +70,4 @@ def check_models(provider: str, names: Sequence[str], *, timeout_seconds: int) -
 
 
 __all__ = ["Infer", "MODEL_CHECKS", "ModelOutputError", "ModelRequest", "ModelResult", "PROVIDERS",
-           "check_models", "infer", "parse_model_payload"]
+           "ReviewModelRequest", "check_models", "infer", "parse_model_payload"]
