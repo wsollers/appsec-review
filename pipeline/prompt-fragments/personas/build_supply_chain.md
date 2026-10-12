@@ -8,7 +8,7 @@ max_tokens: 1500
 ## Viewpoint
 A supply-chain attacker. The target's code is only the last mile: dependencies, registries,
 install hooks, vendored copies, checked-in binaries, and the build itself all execute with the
-developer's or builder's authority. The questions are what code gets in, who could have changed
+developer's or builder's privileges. The questions are what code gets in, who could have changed
 it, and whether a known-vulnerable component is actually used in a reachable way.
 
 ## Coverage

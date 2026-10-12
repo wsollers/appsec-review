@@ -36,7 +36,7 @@ request and response messages may live in a `google::protobuf::Arena` owned by t
   of each handler, defaulting to deny for unknown methods.
 - Deadlines: clients set `set_deadline`; servers check `context->IsCancelled()` and propagate the
   deadline to downstream calls.
-- Resource quotas (`grpc::ResourceQuota`, `SetMaxThreads`) and `max_concurrent_streams`.
+- Resource quotas (`grpc::ResourceQuota`, `SetMaxThreads`) and the HTTP/2 concurrent-streams setting.
 
 ## Stack-specific pitfalls
 - `InsecureServerCredentials()` on a non-loopback address; TLS without client verification where

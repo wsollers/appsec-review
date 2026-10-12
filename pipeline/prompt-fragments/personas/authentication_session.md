@@ -20,7 +20,7 @@ GENERATED
 - JWT: `alg: none` accepted, HS/RS confusion where the public key is used as an HMAC secret,
   `decode` instead of `verify`, missing `exp`/`aud`/`iss` checks, `kid` or `jku` from the token used
   to fetch keys.
-- OAuth/OIDC: missing `state` or PKCE, `redirect_uri` prefix matching, ID token accepted without
+- OAuth/OIDC: missing OAuth state parameter or PKCE, `redirect_uri` prefix matching, ID token accepted without
   nonce or audience check, access token from another client accepted as login.
 - SAML: signature verified on one assertion but attributes read from another (wrapping), comments
   splitting `NameID`, unsigned responses accepted.

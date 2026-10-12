@@ -172,6 +172,7 @@ def test_unknown_ids_fail(repo: Path, taxonomy, field: str, value: str, message:
 
 
 def test_missing_registered_fragment_fails(repo: Path, taxonomy) -> None:
+    (repo / "pipeline" / "prompt-fragments" / "personas" / "network_api_surface.md").unlink(missing_ok=True)
     with pytest.raises(GuidanceError, match="file is unavailable"):
         _compose(repo, taxonomy, persona="network_api_surface")
 

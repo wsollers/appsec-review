@@ -29,7 +29,7 @@ GENERATED
   stores without tenant filters, conversation logs with PII.
 - Model loading: `torch.load`, `pickle`-based checkpoints, or `trust_remote_code=True` on models
   from untrusted hubs.
-- Unbounded model or tool calls driven by user input (cost and availability abuse).
+- Unbounded model invocations or agent actions driven by user input (cost and availability abuse).
 
 ## Effective controls
 - Each boundary validates against an explicit schema and the receiving component authenticates

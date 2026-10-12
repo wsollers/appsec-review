@@ -21,7 +21,7 @@ GENERATED
 - Tenant scope: queries filtered by tenant in list endpoints but not in get, update, export, or
   background jobs; tenant id taken from the request body instead of the session.
 - Mass assignment: binding a whole request into an entity (`@ModelAttribute`, `Model.update(**body)`,
-  `Object.assign(user, req.body)`, Rails without strong parameters) so `role`, `ownerId`, or
+  `Object.assign(user, req.body)`, Rails without strong parameters) so a role attribute, `ownerId`, or
   `isAdmin` become writable.
 - Policy engines (OPA, Casbin, Cedar) called with attributes the client supplied, or whose
   failure path returns allow.

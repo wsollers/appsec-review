@@ -15,7 +15,7 @@ replaced by data corruption inside the sandbox.
 
 ## Trust and interface layer
 - Two directions of trust: the host passes untrusted data into the module through exports, and
-  the module calls host imports that carry the host's authority (filesystem preopens, network,
+  the module calls host imports that carry the host's privileges (filesystem preopens, network,
   DOM, JavaScript glue).
 - In browsers, the JavaScript glue (`*.js` emitted by Emscripten or wasm-bindgen) is part of the
   attack surface: strings and buffers cross by pointer and length.
@@ -46,5 +46,5 @@ replaced by data corruption inside the sandbox.
 - Toolchain and flags: Emscripten settings (`-sALLOW_MEMORY_GROWTH`, `-sMAXIMUM_MEMORY`,
   `-sEXPORTED_FUNCTIONS`), Rust target and `panic` strategy, optimization level.
 - Host runtime configuration: preopens, environment, network permissions, resource limits.
-- Which exports are reachable by untrusted callers and which imports grant authority.
+- Which exports are reachable by untrusted callers and which imports grant host capabilities.
 - Runtime version against advisories for JIT or sandbox escape issues.
