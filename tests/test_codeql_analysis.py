@@ -79,6 +79,8 @@ def test_codeql_build_execution_uses_bridge_network(tmp_path: Path) -> None:
         calls.append(tuple(argv))
         if argv[:3] == ("docker", "image", "inspect"):
             return 0, (IMAGE + "\n").encode(), b"", False
+        if "/opt/appsec/codeql_runner.py" in argv:
+            (tmp_path / "scratch" / "database-export").mkdir()
         return 0, b"ok", b"", False
 
     image = CodeQLImage("appsec-review/codeql-derived-image/2", "a" * 64, IMAGE, IMAGE,
@@ -87,10 +89,16 @@ def test_codeql_build_execution_uses_bridge_network(tmp_path: Path) -> None:
     settings = SimpleNamespace(inventory_timeout_seconds=30, database_timeout_seconds=30,
                                query_timeout_seconds=30, output_bytes=1024, threads=2, ram_mb=1024)
     result = CodeQLExecutor(image=image, run_root=tmp_path, settings=settings, runner=runner).execute(
-        "database", ("--language", "csharp"), scratch_root=tmp_path / "scratch")
-    command = next(call for call in calls if call[:2] == ("docker", "run"))
-    assert command[command.index("--network") + 1] == "bridge"
+        "database", ("--language", "csharp", "--database", "database"),
+        scratch_root=tmp_path / "scratch")
+    database_run = next(call for call in calls if "/opt/appsec/codeql_runner.py" in call)
+    assert database_run[database_run.index("--network") + 1] == "bridge"
+    assert "--staged-database" in database_run
+    assert any("type=volume,src=appsec-codeql-" in value and "dst=/scratch/database" in value
+               for value in database_run)
+    assert len([call for call in calls if call[:3] == ("docker", "volume", "rm")]) == 1
     assert result.limits["network"] == "bridge"
+    assert (tmp_path / "scratch" / "database").is_dir()
 
 
 def source(path: str, digest: str = "a" * 64) -> dict[str, object]:

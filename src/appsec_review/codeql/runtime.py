@@ -10,6 +10,7 @@ import re
 import shutil
 import time
 from typing import Any, Protocol
+from uuid import uuid4
 
 from appsec_review.container_runtime.build_executor import Runner, _run, resolve_host_bind_path
 from appsec_review.storage import atomic_json, bounded_file_lock, canonical_json, file_sha256
@@ -230,19 +231,67 @@ class CodeQLExecutor:
         timeout = ({"inventory": self.settings.inventory_timeout_seconds,
                     "database": self.settings.database_timeout_seconds,
                     "query": self.settings.query_timeout_seconds})[action]
+        database_name = None
+        volume_name = None
+        if action in {"database", "query"}:
+            # CodeQL's pool writes require local Linux filesystem semantics. Keep only the
+            # mutable database in a disposable Docker volume; the runner exports its bytes
+            # back into the run-owned bind mount for normal hashing and receipts.
+            try:
+                database_name = argv[argv.index("--database") + 1]
+            except (ValueError, IndexError) as exc:
+                raise ValueError("CodeQL database path is required") from exc
+            if not re.fullmatch(r"[a-z][a-z0-9-]*", database_name):
+                raise ValueError("CodeQL database path is invalid")
+            volume_name = f"appsec-codeql-{uuid4().hex}"
+        mounts = ["--mount", f"type=bind,src={effective},dst=/scratch"]
+        if volume_name is not None:
+            mounts.extend(("--mount", f"type=volume,src={volume_name},dst=/scratch/{database_name}"))
+            if action == "query":
+                mounts.extend(("--mount", f"type=bind,src={effective},dst=/source,readonly"))
         command = [
             "docker", "run", "--rm", "--network", "bridge", "--read-only",
             "--user", self.image.runtime_user, "--cap-drop", "ALL",
             "--security-opt", "no-new-privileges", "--cpus", str(self.settings.threads),
             "--memory", f"{self.settings.ram_mb + 1024}m", "--pids-limit", "2048",
-            "--tmpfs", "/tmp:rw,noexec,nosuid,size=2g", "--mount",
-            f"type=bind,src={effective},dst=/scratch", "--workdir", "/scratch",
+            "--tmpfs", "/tmp:rw,noexec,nosuid,size=2g", *mounts, "--workdir", "/scratch",
             "--env", "HOME=/tmp/codeql-home", "--env", "LANG=C.UTF-8", "--env", "LC_ALL=C.UTF-8",
             "--env", "TZ=UTC", "--entrypoint", "python3", self.image.image_id,
-            "/opt/appsec/codeql_runner.py", action, *argv,
+            "/opt/appsec/codeql_runner.py", action,
+            *(("--staged-database",) if volume_name is not None else ()), *argv,
         ]
         started, monotonic = _stamp(), time.monotonic()
-        code, stdout, stderr, timed_out = self.runner(command, timeout)
+        volume_created = False
+        try:
+            if volume_name is not None:
+                created = self.runner(("docker", "volume", "create",
+                    "--label", "appsec-review=codeql-scratch", volume_name), 60)
+                if created[3] or created[0] != 0:
+                    raise RuntimeError("CodeQL temporary database volume could not be created")
+                volume_created = True
+                initialized = self.runner(("docker", "run", "--rm", "--network", "none",
+                    "--read-only", "--user", "0:0", "--security-opt", "no-new-privileges",
+                    "--mount", f"type=volume,src={volume_name},dst=/scratch/{database_name}",
+                    "--entrypoint", "chown", self.image.image_id, self.image.runtime_user,
+                    f"/scratch/{database_name}"), 60)
+                if initialized[3] or initialized[0] != 0:
+                    raise RuntimeError("CodeQL temporary database volume could not be initialized")
+            code, stdout, stderr, timed_out = self.runner(command, timeout)
+        finally:
+            if volume_created:
+                removed = self.runner(("docker", "volume", "rm", volume_name), 60)
+                if removed[3] or removed[0] != 0:
+                    raise RuntimeError("CodeQL temporary database volume could not be removed")
+        if action == "database" and not timed_out and code == 0:
+            exported = scratch / "database-export"
+            database = scratch / str(database_name)
+            if (not exported.is_dir() or exported.is_symlink() or
+                    database.is_symlink() or database.is_file() or
+                    database.is_dir() and any(database.iterdir())):
+                raise RuntimeError("CodeQL temporary database export is incomplete")
+            if database.is_dir():
+                database.rmdir()
+            exported.rename(database)
         duration_ms, completed = max(0, int((time.monotonic() - monotonic) * 1000)), _stamp()
         log_root = scratch / "executions" / action
         log_root.mkdir(parents=True, exist_ok=True)
@@ -260,7 +309,8 @@ class CodeQLExecutor:
             {"network": "bridge", "root_filesystem": "read-only", "user": self.image.runtime_user,
              "cap_drop": ["ALL"], "no_new_privileges": True, "threads": self.settings.threads,
              "ram_mb": self.settings.ram_mb, "timeout_seconds": timeout,
-             "output_bytes": self.settings.output_bytes, "capture_mode": "head-tail"},
+             "output_bytes": self.settings.output_bytes, "capture_mode": "head-tail",
+             "database_storage": "disposable-docker-volume" if volume_name else "run-bind"},
         )
         atomic_json(log_root / "receipt.json", asdict(result))
         return result

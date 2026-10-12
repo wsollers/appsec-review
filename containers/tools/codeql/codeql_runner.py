@@ -8,6 +8,7 @@ import hashlib
 import json
 import os
 from pathlib import Path, PurePosixPath
+import shutil
 import subprocess
 import sys
 
@@ -65,6 +66,23 @@ def _tree(root: Path) -> tuple[str, int]:
         # Match the reviewed lock's `find ... | sort | sha256sum` identity without trusting mtimes.
         rows.append(f"{_sha256(path)}  {path.as_posix()}\n".encode())
     return hashlib.sha256(b"".join(rows)).hexdigest(), len(rows)
+
+
+def _copy_database_tree(source: Path, destination: Path) -> None:
+    if source.is_symlink() or not source.is_dir():
+        raise ValueError("CodeQL database source is invalid")
+    destination.mkdir(parents=True, exist_ok=True)
+    for path in sorted(source.rglob("*")):
+        if path.is_symlink():
+            raise ValueError("CodeQL database contains an unsupported symlink")
+        target = destination / path.relative_to(source)
+        if path.is_dir():
+            target.mkdir(parents=True, exist_ok=True)
+        elif path.is_file():
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(path, target)
+        else:
+            raise ValueError("CodeQL database contains an unsupported entry")
 
 
 def inventory(args: argparse.Namespace) -> None:
@@ -202,6 +220,11 @@ def database(args: argparse.Namespace) -> None:
                               "working_directory": command["working_directory"]})
         _run([CODEQL, "database", "finalize", "--threads", str(args.threads), "--ram", str(args.ram),
               str(database_path)], cwd=workspace, environment=environment)
+    if args.staged_database:
+        export = scratch / "database-export"
+        if export.exists() or export.is_symlink():
+            raise ValueError("CodeQL database export already exists")
+        _copy_database_tree(database_path, export)
     (scratch / "database-summary.json").write_text(json.dumps({
         "schema": "appsec-review/codeql-database-summary/2", "language": args.language,
         "mode": args.mode, "command_count": len(summaries), "commands": summaries,
@@ -215,6 +238,13 @@ def query(args: argparse.Namespace) -> None:
     output_path = (scratch / _safe_relative(args.output)).resolve()
     if scratch not in database_path.parents or scratch not in output_path.parents:
         raise ValueError("CodeQL query path escaped scratch")
+    if args.staged_database:
+        source_root = Path("/source").resolve(strict=True)
+        source = (source_root / _safe_relative(args.database)).resolve(strict=True)
+        if source_root not in source.parents or not source.is_dir() or source.is_symlink() or any(
+                path.is_symlink() for path in source.rglob("*")):
+            raise ValueError("CodeQL staged query database is invalid")
+        _copy_database_tree(source, database_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     if args.suite_path is not None:
         custom_root = Path("/opt/codeql/custom-queries").resolve(strict=True)
@@ -242,6 +272,7 @@ def parser() -> argparse.ArgumentParser:
     inventory_parser.add_argument("--output", required=True)
     inventory_parser.add_argument("--asset-lock", required=True)
     database_parser = sub.add_parser("database")
+    database_parser.add_argument("--staged-database", action="store_true")
     database_parser.add_argument("--mode", choices=("manual", "none"), required=True)
     database_parser.add_argument("--language", required=True)
     database_parser.add_argument("--replay")
@@ -251,6 +282,7 @@ def parser() -> argparse.ArgumentParser:
     database_parser.add_argument("--threads", type=int, required=True)
     database_parser.add_argument("--ram", type=int, required=True)
     query_parser = sub.add_parser("query")
+    query_parser.add_argument("--staged-database", action="store_true")
     query_parser.add_argument("--database", required=True)
     query_parser.add_argument("--output", required=True)
     query_parser.add_argument("--pack")
