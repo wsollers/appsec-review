@@ -140,3 +140,24 @@ def test_observations_without_flows_are_not_path_problems(tmp_path) -> None:
     fixture, (_, _, path), rows, _ = _setup(tmp_path, [{"key": "f", "flows": []}])
     result = correlate([path, *_setup_facts(fixture)], rows, sources=fixture.sources)
     assert result.correlations == () and result.relations == ()
+
+
+def test_flow_ending_at_the_sink_operand_bridges_a_whole_expression_sink(tmp_path) -> None:
+    """Real path-problem flows end at the argument; a sink located at the whole call still matches
+    through its exact ``result.operand`` span, without changing the sink's identity."""
+    from dataclasses import asdict, replace
+
+    fixture, (entry, operand_sink, _), rows, _ = _setup(tmp_path, [{"key": "op", "flows": BRIDGED}])
+    whole = fixture.location("src/io.c", "memcpy(out, buf, k)")
+    result_block = {**operand_sink.payload["result"],
+                    "operand": {"exact": True, "location": asdict(operand_sink.location)}}
+    sink = replace(operand_sink, location=whole, payload={**operand_sink.payload, "result": result_block})
+    path = fixture.path(entry, sink, PATH_STEPS)
+    result = correlate([path, entry, sink], rows, sources=fixture.sources)
+    [flow] = result.correlations
+    assert flow.state is CorrelationState.BRIDGED and flow.path == path.identity.value
+    inexact = {**result_block, "operand": {**result_block["operand"], "exact": False}}
+    unmatched = replace(sink, payload={**sink.payload, "result": inexact})
+    [flow] = correlate([fixture.path(entry, unmatched, PATH_STEPS), entry, unmatched], rows,
+                       sources=fixture.sources).correlations
+    assert flow.state is CorrelationState.BROKEN and flow.reason == "sink_unmatched"

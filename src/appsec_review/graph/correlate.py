@@ -7,7 +7,8 @@ facts and accepted CodeQL ``tool_observation`` rows (``observations`` shards, pa
 
 For each path-problem observation and each ``(code_flow, thread_flow)``:
 
-* the sink step must match a ``sink_site`` and the source step an ``entry_point`` by exact byte span
+* the sink step must match a ``sink_site`` (its own span or its exact ``result.operand`` span) and the
+  source step an ``entry_point`` by exact byte span
   (SARIF line/column mapped to bytes through the accepted source, end column exclusive);
 * candidate paths are the ``dataflow_path`` facts joining a matched entry point to a matched sink;
 * each intermediate step matches a path step by exact byte span, else by start line (ambiguous), else
@@ -116,6 +117,15 @@ def _fact_span(location: Mapping[str, Any] | Any) -> _Span | None:
     return _Span(str(get("path")), get("file_sha256"), get("start_byte"), get("end_byte"), int(get("start_line") or 0))
 
 
+def _sink_spans(fact: GraphFact) -> tuple[_Span | None, ...]:
+    result = fact.payload.get("result") if isinstance(fact.payload.get("result"), Mapping) else {}
+    operand = result.get("operand") if isinstance(result.get("operand"), Mapping) else {}
+    spans = [_fact_span(fact.location)]
+    if operand.get("exact") is True and isinstance(operand.get("location"), Mapping):
+        spans.append(_fact_span(operand["location"]))
+    return tuple(spans)
+
+
 def _match(step: _Span | None, candidate: _Span | None) -> str | None:
     if step is None or candidate is None or step.path != candidate.path:
         return None
@@ -199,7 +209,9 @@ def correlate(facts: Sequence[GraphFact], observations: Sequence[Mapping[str, An
     bytes by target-relative path. ``priority``: accepted ``review_signal`` and ``review_flow_step``
     rows, or ``None`` when the prioritization shard is not accepted (then no ``SAME_AS`` is emitted).
     """
-    sinks = sorted(((fact.identity.value, _fact_span(fact.location)) for fact in facts
+    # A path-problem flow usually ends at the sink's argument, not the whole sink expression, so a
+    # sink matches on its own span or on its exact operand span (``result.operand``).
+    sinks = sorted(((fact.identity.value, _sink_spans(fact)) for fact in facts
                     if fact.family is Family.SINK_SITE), key=lambda item: item[0])
     entries = sorted(((fact.identity.value, _fact_span(fact.location)) for fact in facts
                       if fact.family is Family.ENTRY_POINT), key=lambda item: item[0])
@@ -228,7 +240,8 @@ def correlate(facts: Sequence[GraphFact], observations: Sequence[Mapping[str, An
         for (code_flow, thread_flow), steps in sorted(groups.items()):
             first = _sarif_span(steps[0].get("location") or {}, sources)
             final = _sarif_span(steps[-1].get("location") or {}, sources)
-            matched_sinks = tuple(identity for identity, span in sinks if _match(final, span) == "span")
+            matched_sinks = tuple(identity for identity, spans in sinks
+                                  if any(_match(final, span) == "span" for span in spans))
             matched_entries = tuple(identity for identity, span in entries if _match(first, span) == "span")
             reason = None
             if final is None or final.start_byte is None or first is None or first.start_byte is None:

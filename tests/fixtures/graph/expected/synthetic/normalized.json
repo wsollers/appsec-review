@@ -4350,8 +4350,10 @@
    "name": "const char * operand 1 of send [unclassified]",
    "payload": {
     "admissibility": {
-     "direct_eligible": true,
-     "ineligibility_reasons": [],
+     "direct_eligible": false,
+     "ineligibility_reasons": [
+      "range_not_applicable"
+     ],
      "rule": "graph-fact-admissibility/1"
     },
     "authority": "computed from accepted run-owned evidence; a graph fact is not a tool finding",
@@ -4637,8 +4639,10 @@
    "name": "const char * operand 1 of strcpy [memory_write]",
    "payload": {
     "admissibility": {
-     "direct_eligible": true,
-     "ineligibility_reasons": [],
+     "direct_eligible": false,
+     "ineligibility_reasons": [
+      "range_not_applicable"
+     ],
      "rule": "graph-fact-admissibility/1"
     },
     "authority": "computed from accepted run-owned evidence; a graph fact is not a tool finding",
@@ -4851,8 +4855,10 @@
    "name": "const char[4] operand 0 of printf [format_string]",
    "payload": {
     "admissibility": {
-     "direct_eligible": true,
-     "ineligibility_reasons": [],
+     "direct_eligible": false,
+     "ineligibility_reasons": [
+      "range_not_applicable"
+     ],
      "rule": "graph-fact-admissibility/1"
     },
     "authority": "computed from accepted run-owned evidence; a graph fact is not a tool finding",

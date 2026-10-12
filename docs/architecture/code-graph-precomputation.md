@@ -267,7 +267,8 @@ protected raw export.
 condition or operand location is `exact` with `confidence = 1.0`, (b) `coverage_status =
 complete` for the fact (no truncated step list, neighbor list or path set *for this fact*),
 (c) `cross_check.state ∈ {agree, not_covered}`, and (d) for `sink_site`/`entry_point`/`dataflow_path`
-the class is not `unclassified`. Every false condition is named in `ineligibility_reasons`. The
+the class is not `unclassified`, and (e) for `range_fact` the operand has an applicable interval
+(a `not_applicable` operand, such as a pointer or floating value, gives `range_not_applicable`). Every false condition is named in `ineligibility_reasons`. The
 review validator re-checks the flag at citation time (section 6); a model cannot set it.
 
 ## 4. Fact families: semantics, producers, soundness gaps, predicates

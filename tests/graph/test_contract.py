@@ -196,3 +196,12 @@ def test_none_guard_identity_uses_the_sink_span() -> None:
     real = c.fact_identity(c.Family.GUARD_FACT, SNAPSHOT, {**native, "condition_start_byte": 3,
                                                            "condition_end_byte": 7})
     assert real != identity
+
+
+def test_range_fact_without_an_applicable_interval_is_never_direct() -> None:
+    applicable = _payload(c.Family.RANGE_FACT, result={"applicability": "applicable",
+                                                       "interval": {"lower": "0.0", "upper": "63.0"}})
+    assert applicable["admissibility"]["direct_eligible"] is True
+    for result in ({"applicability": "not_applicable", "interval": None}, {"interval": None}):
+        payload = _payload(c.Family.RANGE_FACT, result=result)
+        assert c.ineligibility_reasons(payload) == ("range_not_applicable",)

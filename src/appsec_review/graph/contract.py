@@ -241,6 +241,9 @@ def ineligibility_reasons(payload: Mapping[str, Any]) -> tuple[str, ...]:
         reasons.append("unclassified_sink")
     if family == Family.ENTRY_POINT.value and result.get("source_class", unclassified) == unclassified:
         reasons.append("unclassified_source")
+    if family == Family.RANGE_FACT.value and (result.get("applicability") == "not_applicable"
+                                              or result.get("interval", {}) is None):
+        reasons.append("range_not_applicable")
     if family == Family.DATAFLOW_PATH.value:
         source = result.get("source") if isinstance(result.get("source"), Mapping) else {}
         sink = result.get("sink") if isinstance(result.get("sink"), Mapping) else {}
