@@ -112,6 +112,7 @@ def test_negative_applicability_is_language_specific() -> None:
     assert not adapter_registry()["tool-pmd"].applicability(catalog).applicable
 
 
+@pytest.mark.requires_target("appsec-multi-vuln")
 def test_real_target_has_bounded_cpp_and_java_applicability() -> None:
     target = ROOT / "targets" / "appsec-multi-vuln"
     snapshot = inventory(target)

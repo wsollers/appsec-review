@@ -272,6 +272,7 @@ class _PinnedBaseImageResolver:
 
 
 def test_live_cpp_project_build_accepts_hash_verified_execution_capture(tmp_path: Path) -> None:
+    _profile("native")  # skips when the live native build image is absent
     config_path = tmp_path / "appsec-review.toml"
     config_path.write_text((ROOT / "appsec-review.toml").read_text(encoding="utf-8"),
                            encoding="utf-8")

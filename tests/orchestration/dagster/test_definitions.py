@@ -400,12 +400,48 @@ def test_wave1_exposes_real_producer_shard_topology() -> None:
     Path("/.dockerenv").exists() and not Path("/var/run/docker.sock").exists(),
     reason="the deployment-test container was not given a Docker engine",
 )
+def _missing_catalog_images() -> list[str]:
+    """Tool images the full wave-1 graph needs that this host cannot run."""
+    import shutil
+    import subprocess
+
+    from appsec_review.container_runtime.catalog import load_catalog
+
+    if shutil.which("docker") is None:
+        return ["docker"]
+    catalog = load_catalog(Path(__file__).resolve().parents[3])
+    missing = []
+    for tool_id, tool in sorted(catalog.tools.items()):
+        probe = subprocess.run(("docker", "image", "inspect", tool.tag), capture_output=True, timeout=60)
+        if probe.returncode != 0:
+            missing.append(tool_id)
+    return missing
+
+
 def test_wave1_dagster_path_runs_application_graph(tmp_path: Path, monkeypatch) -> None:
+    # Live tier: the real wave-1 graph runs every cataloged tool image. Skip, naming what is
+    # missing, rather than fail on hosts without the images.
+    missing = _missing_catalog_images()
+    if missing:
+        pytest.skip("live wave-1 run needs local tool images: " + ", ".join(missing))
     target = tmp_path / "target"
     target.mkdir()
     (target / "main.py").write_text("def main():\n    return 1\n", encoding="utf-8")
     monkeypatch.setenv("APPSEC_REVIEW_TARGET", str(target))
     config = Path(__file__).resolve().parents[3] / "appsec-review.toml"
+    # Keep run output under the test's temporary directory, never in the repository's runs/.
+    from dataclasses import replace
+
+    from appsec_review.orchestration.dagster import adapter
+
+    load = adapter.load_config
+
+    def isolated(source):
+        loaded = load(source)
+        runs = tmp_path / "runs"
+        return replace(loaded, runtime=replace(loaded.runtime, runs_dir=runs, metadata_dir=runs / "metadata"))
+
+    monkeypatch.setattr(adapter, "load_config", isolated)
     result = build_definitions(config).get_job_def("wave1_review").execute_in_process()
     assert result.success
     assert "evidence_collection__evidence_publication__assemble_manifest" in {

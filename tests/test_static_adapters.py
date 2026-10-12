@@ -94,6 +94,7 @@ def test_evidence_collapses_exact_duplicates_but_preserves_distinct_observations
     assert len({record["evidence_id"] for record in envelope["records"]}) == 2
 
 
+@pytest.mark.requires_target("appsec-multi-vuln")
 def test_checkov_typed_multi_vuln_scope_includes_supported_families_not_arbitrary_yaml() -> None:
     target = Path(__file__).parents[1] / "targets" / "appsec-multi-vuln"
     snapshot = inventory(target)
