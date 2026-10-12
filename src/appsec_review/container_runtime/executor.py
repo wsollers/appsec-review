@@ -84,7 +84,7 @@ class ExecutionResult:
 
 Runner = Callable[[Sequence[str], int], CommandOutcome]
 # ``docker run`` reports a process killed by a signal as 128 + signal number.
-FILE_SIZE_SIGNAL_EXIT = 128 + int(signal.SIGXFSZ)
+FILE_SIZE_SIGNAL_EXIT = 128 + int(getattr(signal, "SIGXFSZ", 25))
 
 
 def _stamp() -> str:
