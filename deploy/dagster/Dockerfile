@@ -44,6 +44,8 @@ RUN apt-get update \
 FROM runtime AS test
 RUN python -m pip install --no-cache-dir "pytest==8.4.2"
 COPY tests/__init__.py tests/capture_fakes.py ./tests/
+COPY tests/fixtures/reference_feeds.py ./tests/fixtures/
+COPY tests/fixtures/inference_review ./tests/fixtures/inference_review
 COPY tests/orchestration/dagster ./tests/orchestration/dagster
 RUN mkdir -p /opt/app/test/tmp
 CMD ["python", "-m", "pytest", "tests/orchestration/dagster"]
