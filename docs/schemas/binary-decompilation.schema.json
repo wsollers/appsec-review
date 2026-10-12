@@ -1,0 +1,159 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "appsec-review/binary-decompilation/1",
+  "title": "Binary decompilation publication manifest",
+  "description": "manifest.json of one publication under <data_dir>/binary-decompilation/<binary-sha256>/<identity-prefix>/. Every value derived from the binary is target-controlled data.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "identity", "provenance", "authority", "binary", "request", "tool", "settings",
+               "program", "coverage", "gaps", "datasets", "execution"],
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "count": {"type": "integer", "minimum": 0},
+    "dataset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256", "bytes", "records"],
+      "properties": {
+        "path": {"type": "string", "pattern": "^[a-z]+\\.jsonl?$"},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "bytes": {"$ref": "#/$defs/count"},
+        "records": {"$ref": "#/$defs/count"}
+      }
+    }
+  },
+  "properties": {
+    "schema": {"const": "appsec-review/binary-decompilation/1"},
+    "identity": {"$ref": "#/$defs/sha256"},
+    "provenance": {"const": "binary-derived"},
+    "authority": {"type": "string", "pattern": "never instructions"},
+    "binary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sha256", "bytes", "name"],
+      "properties": {
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "bytes": {"type": "integer", "minimum": 1},
+        "name": {"type": "string", "pattern": "^[A-Za-z0-9._-]{1,128}$"}
+      }
+    },
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "authorization", "processor", "compiler_spec", "loader"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"},
+        "authorization": {"type": "string", "minLength": 1},
+        "processor": {"type": ["string", "null"]},
+        "compiler_spec": {"type": ["string", "null"]},
+        "loader": {"type": ["string", "null"]}
+      }
+    },
+    "tool": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "version", "image_tag", "image_id", "ghidra_version", "export_schema"],
+      "properties": {
+        "id": {"const": "tool-ghidra"},
+        "version": {"type": "string"},
+        "image_tag": {"type": "string"},
+        "image_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "ghidra_version": {"type": "string"},
+        "export_schema": {"const": "appsec-review/ghidra-export/1"}
+      }
+    },
+    "settings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["analysis_timeout_seconds", "decompile_timeout_seconds", "max_functions",
+                   "max_function_bytes", "max_pcode_ops", "max_strings", "min_string_length"],
+      "patternProperties": {"^[a-z_]+$": {"type": "integer", "minimum": 1}}
+    },
+    "program": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "executable_format", "language", "compiler_spec", "compiler", "big_endian",
+                   "pointer_size", "image_base"],
+      "properties": {
+        "name": {"type": ["string", "null"]},
+        "executable_format": {"type": ["string", "null"]},
+        "language": {"type": ["string", "null"]},
+        "compiler_spec": {"type": ["string", "null"]},
+        "compiler": {"type": ["string", "null"]},
+        "big_endian": {"type": ["boolean", "null"]},
+        "pointer_size": {"type": ["integer", "null"]},
+        "image_base": {"type": ["string", "null"]}
+      }
+    },
+    "coverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["functions", "functions_not_exported", "decompile_status", "decompiled_functions",
+                   "decompilable_functions", "strings_not_exported", "analysis_timed_out", "managed_code",
+                   "pseudo_c_files", "pseudo_c_bytes", "pcode_files", "pcode_operations"],
+      "properties": {
+        "functions": {"$ref": "#/$defs/count"},
+        "functions_not_exported": {"$ref": "#/$defs/count"},
+        "decompile_status": {
+          "type": "object",
+          "additionalProperties": false,
+          "patternProperties": {
+            "^(ok|timeout|failed|skipped_thunk|unavailable)$": {"$ref": "#/$defs/count"}
+          }
+        },
+        "decompiled_functions": {"$ref": "#/$defs/count"},
+        "decompilable_functions": {"$ref": "#/$defs/count"},
+        "strings_not_exported": {"$ref": "#/$defs/count"},
+        "analysis_timed_out": {"type": "boolean"},
+        "managed_code": {"type": "boolean"},
+        "pseudo_c_files": {"$ref": "#/$defs/count"},
+        "pseudo_c_bytes": {"$ref": "#/$defs/count"},
+        "pcode_files": {"$ref": "#/$defs/count"},
+        "pcode_operations": {"$ref": "#/$defs/count"}
+      }
+    },
+    "gaps": {
+      "description": "Count of gap rows by kind. An empty object means the tool reported no gap; it does not mean the binary is free of weaknesses.",
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": {"^[a-z][a-z0-9_]{0,63}$": {"type": "integer", "minimum": 1}}
+    },
+    "datasets": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["functions", "calls", "imports", "exports", "strings", "gaps", "program"],
+      "properties": {
+        "functions": {"$ref": "#/$defs/dataset"},
+        "calls": {"$ref": "#/$defs/dataset"},
+        "imports": {"$ref": "#/$defs/dataset"},
+        "exports": {"$ref": "#/$defs/dataset"},
+        "strings": {"$ref": "#/$defs/dataset"},
+        "gaps": {"$ref": "#/$defs/dataset"},
+        "program": {"$ref": "#/$defs/dataset"}
+      }
+    },
+    "execution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["receipt", "receipt_sha256", "terminal_status", "exit_code", "limits"],
+      "properties": {
+        "receipt": {"const": "execution/execution.json"},
+        "receipt_sha256": {"$ref": "#/$defs/sha256"},
+        "terminal_status": {"const": "COMPLETED"},
+        "exit_code": {"const": 0},
+        "limits": {
+          "type": "object",
+          "required": ["network", "user", "root_filesystem", "cap_drop", "no_new_privileges", "memory",
+                       "cpus", "pids", "timeout_seconds"],
+          "properties": {
+            "network": {"const": "none"},
+            "user": {"const": "10001:10001"},
+            "root_filesystem": {"const": "read-only"},
+            "cap_drop": {"const": ["ALL"]},
+            "no_new_privileges": {"const": true}
+          }
+        }
+      }
+    }
+  }
+}

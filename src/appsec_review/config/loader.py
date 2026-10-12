@@ -14,6 +14,8 @@ from typing import Any, Mapping
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from urllib.parse import unquote, urlparse
 
+from .binary_decompilation import BinaryDecompilationSettings, parse_binary_decompilation
+
 
 class ProcessingMode(str, Enum):
     """Policy for build capture and compiler-artifact collection."""
@@ -479,6 +481,7 @@ class AppConfig:
     pending_jobs: Mapping[str, JobConfig] = MappingProxyType({})
     overlay_path: Path | None = None
     overlay_sha256: str | None = None
+    binary_decompilation: BinaryDecompilationSettings = BinaryDecompilationSettings()
 
     def job(self, job_id: str) -> JobConfig:
         try:
@@ -613,6 +616,7 @@ def load_config(path: str | Path = "appsec-review.toml", *, overlay: str | Path 
     tool_capabilities = ToolCapabilityConfig(disable_grype=disable_grype)
 
     build_capture = _build_capture(document.get("build_capture"), field="build_capture")
+    binary_decompilation = parse_binary_decompilation(document.get("binary_decompilation"), repository_root)
     resolved_document["build_capture"]["mode"] = build_capture.mode.value
 
     runtime_value = document.get("runtime")
@@ -908,4 +912,5 @@ def load_config(path: str | Path = "appsec-review.toml", *, overlay: str | Path 
         pending_jobs=MappingProxyType(pending),
         overlay_path=overlay_source,
         overlay_sha256=overlay_sha256,
+        binary_decompilation=binary_decompilation,
     )

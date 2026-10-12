@@ -37,6 +37,11 @@ Repository authority remains in [`../../AGENTS.md`](../../AGENTS.md). This page 
   inventory, authority classes, precomputed dataflow, model-facing formats, MCP tools, and job flow.
 - [`document-evidence-analysis.md`](document-evidence-analysis.md) — target document collection,
   route and boundary analysis, inference access, and the finding handoff design.
+- [`binary-decompilation.md`](binary-decompilation.md) — pre-run Ghidra decompilation of third-party
+  binaries: inputs, the hash-addressed publication store, gaps, how a review references a
+  publication, and the known-binary efficacy comparison.
+- [`../operations/binary-decompilation.md`](../operations/binary-decompilation.md) — registering a
+  binary, starting and verifying a decompilation, failures, and the efficacy command.
 - [`telemetry.md`](telemetry.md) — structured event and redaction design.
 - [`windows-native-analysis-vm.md`](windows-native-analysis-vm.md) — proposed Windows-native analysis isolation.
 - [`inference-security-review.md`](inference-security-review.md) — near-terminal red/blue/verification,

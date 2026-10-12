@@ -1,0 +1,20 @@
+#!/bin/sh
+# Deterministic offline version probe for the reviewed Ghidra closure. It reads the version from
+# the verified distribution and checks that the pieces a headless export needs are present. No
+# target is read and no analysis is started.
+set -eu
+root=/opt/ghidra
+properties="$root/Ghidra/application.properties"
+
+fail() {
+    echo "ghidra-version: $1" >&2
+    exit 1
+}
+
+version=$(sed -n 's/^application\.version=//p' "$properties" | tr -d '\r')
+[ -n "$version" ] || fail "application.properties declares no version"
+[ -x "$root/support/analyzeHeadless" ] || fail "analyzeHeadless is not executable"
+[ -x "$root/Ghidra/Features/Decompiler/os/linux_x86_64/decompile" ] || fail "the native decompiler is not executable"
+[ -r /opt/appsec/ghidra-scripts/AppsecExportProgram.java ] || fail "the export script is unreadable"
+"${JAVA_HOME}/bin/javac" -version >/dev/null 2>&1 || fail "the JDK compiler Ghidra needs for its export script is unavailable"
+echo "ghidra $version"

@@ -682,6 +682,22 @@ build_args = { TOOL_VERSION = "4.0.630", JOERN_SHA512 = "812cfd7bcc5cafc4d64c5cd
 purpose = "Offline C/C++ code property graph production with c2cpg and bounded export support; runtime availability is not CPG coverage."
 
 [[images]]
+id = "tool-ghidra"
+state = "enabled"
+kind = "tool"
+version = "12.1.4"
+tag = "appsec-review/tool-ghidra:12.1.4"
+context = "containers/tools/ghidra"
+dockerfile = "Dockerfile"
+dependencies = ["base-jre"]
+architectures = ["linux/amd64"]
+tool_manifest = "containers/tools/ghidra/tool.toml"
+assets_lock = "containers/tools/ghidra/assets.lock.json"
+build_contexts = { shared = "containers/tools/shared" }
+build_args = { TOOL_VERSION = "12.1.4" }
+purpose = "Offline headless disassembly and decompilation of one third-party binary into bounded structured exports; output is binary-derived evidence, not source coverage."
+
+[[images]]
 id = "tool-shellcheck"
 state = "enabled"
 kind = "tool"
