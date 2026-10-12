@@ -40,6 +40,7 @@ from appsec_review.review.packages import (
 from appsec_review.review.references import load_cwe_reference
 from appsec_review.review.scope import AcceptedScope, accept_manifest
 from appsec_review.review.teams import ReviewTeamSemaphore
+from appsec_review.review.scoring.evidence_source import AcceptedEvidenceSource
 from appsec_review.runtime import Job, Unit, UnitExecutor
 from appsec_review.runtime.units import UnitContext
 from appsec_review.storage import atomic_json, canonical_json, file_sha256
@@ -414,10 +415,16 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
             packages_doc = _read(unit.job.run_root, unit.output(f"packages.assemble_{lane}_packages")["artifact"])
             documents.update({work.package_id: work.document for work in package_works(unit.job.run_root,
                                                                                      packages_doc)})
+        scope = _scope(unit)
+        # Factors are derived only from accepted, re-resolved evidence and accepted tags.
+        evidence = AcceptedEvidenceSource(
+            RetrievalCore(Path(unit.job.run_root).parent, scope.run_id,
+                          manifest_sha256=scope.manifest_sha256), scope)
         document = stages.score_claims(adjudications["adjudications"], projection,
                                        settings.scoring.cwe_impact_classes, unit.unit_root / "scores", ledger_path,
                                        unit.unit_id, SchemaSet(repo(unit) / SCHEMA_DIRECTORY),
-                                       references=stages.claim_references(merged, documents))
+                                       references=stages.claim_references(merged, documents),
+                                       scoring=settings.scoring, evidence=evidence)
         gaps: list[str] = []
         return {"artifact": _write(unit, "scores.json", document),
                 "ledger_shard": _artifact(unit.job.run_root, ledger_path), "score_count": len(document["scores"]),
