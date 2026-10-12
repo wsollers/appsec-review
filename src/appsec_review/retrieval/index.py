@@ -24,6 +24,7 @@ INDEX_NAMES = (
     "precomputed",
     "inventory",
     "links", "documents",
+    "graph",
 )
 
 

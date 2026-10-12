@@ -923,26 +923,21 @@ and are listed as such.
 
 ## 11. Risks, open questions and what is deliberately not done
 
-### Open questions for the user
+### Decisions recorded (user, 2026-10-12)
 
-1. **Export mechanism inside the container.** `bqrs decode --format=json` per query (chosen; keeps
-   SARIF untouched and gives typed columns) versus emitting export results as SARIF `problem`
-   results through the existing `query` action (no runner change, but abuses SARIF and loses
-   columns). The plan assumes the first; a "no runner change" constraint flips it.
-2. **Attacker-reachable source classes.** The plan treats `remote`, `local_user`, `argv`,
-   `environment`, `file`, `ipc` as attacker-reachable for `attacker_input_control`, and
-   `internal`, `database` as not. A stricter policy (only `remote`) is a one-line catalog change
-   but changes which claims can confirm.
-3. **`sink_up` without sink facts.** The plan removes `symbol_links` as an alternative unlock for
-   `sink_up`. Keeping it preserves today's behavior for languages without graph facts at the cost
-   of running a sink-oriented strategy on data that has no sinks.
-4. **Verifier access to `query_code_graph`.** Granting it (chosen) lets the verifier re-derive a
-   path independently; refusing it keeps the verifier at `find`/`read_excerpt`/`trace` and makes
-   graph-based predicates confirmable only through red's citations plus `trace`.
-5. **Retiring the seven graph query sets from `query_precomputed`** (chosen) versus keeping them as
-   deprecated enum members that always return the gap "superseded by query_code_graph".
-6. **Per-language rollout gate.** Whether Java/JS/Python packs ship in the same change as C/C++
-   (one larger live-acceptance burden) or in follow-up changes each with its own recording.
+The six questions this plan raised were answered by accepting the plan's recommendation:
+
+1. **Export mechanism:** `bqrs decode --format=json` per query through a new runner `export`
+   action; SARIF stays untouched.
+2. **Attacker-reachable source classes:** `remote`, `local_user`, `argv`, `environment`, `file`,
+   `ipc`; `internal` and `database` are not. This is `ATTACKER_REACHABLE_SOURCES` in
+   `graph/contract.py`.
+3. **`sink_up` unlock:** `symbol_links` no longer unlocks `sink_up`; only accepted sink facts do.
+4. **Verifier access:** `independent_verifier` is granted `query_code_graph`.
+5. **Old graph query sets:** the seven sets are retired from `QUERY_SETS` and `query_precomputed`,
+   not kept as deprecated members.
+6. **Rollout gate:** C/C++ ships first; Java/Kotlin, JavaScript/TypeScript and Python packs follow
+   in separate changes, each with its own recorded fixtures.
 
 ### Deliberately not done
 

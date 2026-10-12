@@ -263,12 +263,20 @@
         "review_signal",
         "review_flow_step",
         "review_context_file",
+        "document_record",
         "precomputed_fact",
         "dataset",
         "dataset_audit",
         "coverage_cell",
         "dependency_package",
-        "advisory"
+        "advisory",
+        "call_site",
+        "sink_site",
+        "entry_point",
+        "flow_summary",
+        "dataflow_path",
+        "guard_fact",
+        "range_fact"
       ]
     },
     "poc_status": {

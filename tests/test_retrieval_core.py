@@ -161,7 +161,7 @@ def test_identity_and_location_contracts_reject_unsafe_or_ambiguous_values() -> 
     assert set(RelationKind) == {RelationKind(value) for value in (
         "DECLARES", "DEFINES", "REFERENCES", "CALLS", "CONTAINS", "GENERATED_FROM", "COMPILES_TO",
         "LINKS_INTO", "DEPENDS_ON", "OBSERVED_AT", "DERIVED_FROM", "SUPPORTS", "CONTRADICTS",
-        "FLOWS_TO", "SAME_AS", "AFFECTED_BY")}
+        "FLOWS_TO", "SAME_AS", "AFFECTED_BY", "GUARDS")}
 
 
 def test_precomputed_and_hotspot_queries_are_bounded_and_report_missing_sets(tmp_path: Path) -> None:

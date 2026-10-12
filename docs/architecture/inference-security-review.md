@@ -1883,9 +1883,9 @@ host execution of target outputs, production proofs, and text parsing to infer s
 6. Should EPSS ever affect lane A admission or scoring (for example a percentile threshold), or
    stay rank and context only as in slice 1? Should a future `cvss_v4`/`cvss_v31_compat` provider
    score target-specific vectors seeded from the NVD reference vector?
-8. Should chain confirmation require a second verifier beyond the independent refuter for
+7. Should chain confirmation require a second verifier beyond the independent refuter for
    ship-blocking chains?
-9. Which exact downstream job names become stable when remediation and final publication are built?
-10. TODO: should `security_predicate` become a closed `SecurityPredicate` vocabulary like the R4
+8. Which exact downstream job names become stable when remediation and final publication are built?
+9. TODO: should `security_predicate` become a closed `SecurityPredicate` vocabulary like the R4
     predicates and preconditions? Slice 1 keeps it a bounded snake_case token in claim identity
     because no vocabulary has been agreed and existing fixtures use free tokens.

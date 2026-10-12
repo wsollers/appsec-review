@@ -127,7 +127,7 @@ No live model has been run.
   - The `entry_down` and `control_gap` strategies' data sources.
   - The PoC lane, attack chains, and the CVSS v4, CVSS v3.1 and SSVC scorers.
   - The planned dataflow, call-graph, guard and entry-point queries.
-  - A closed `security_predicate` vocabulary (design open question 10).
+  - A closed `security_predicate` vocabulary (design open question 9).
   - Live-model acceptance.
 
 ## 7. Skill separation (follow-up)

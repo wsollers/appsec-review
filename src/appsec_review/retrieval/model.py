@@ -61,6 +61,14 @@ class EntityKind(StrEnum):
     COVERAGE_CELL = "coverage_cell"
     DEPENDENCY_PACKAGE = "dependency_package"
     ADVISORY = "advisory"
+    # Code-graph facts (docs/architecture/code-graph-precomputation.md, section 3.1).
+    CALL_SITE = "call_site"
+    SINK_SITE = "sink_site"
+    ENTRY_POINT = "entry_point"
+    FLOW_SUMMARY = "flow_summary"
+    DATAFLOW_PATH = "dataflow_path"
+    GUARD_FACT = "guard_fact"
+    RANGE_FACT = "range_fact"
 
 
 class RelationKind(StrEnum):
@@ -80,6 +88,7 @@ class RelationKind(StrEnum):
     FLOWS_TO = "FLOWS_TO"
     SAME_AS = "SAME_AS"
     AFFECTED_BY = "AFFECTED_BY"
+    GUARDS = "GUARDS"
 
 
 def canonical_json(value: Any) -> bytes:
