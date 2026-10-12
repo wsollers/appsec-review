@@ -31,7 +31,7 @@ are review context, and unmatched declarations or requests are named gaps, not f
 | `precompute.<query_set>` | `precomputed/qs-<query_set>` shards | One immutable shard per stage-1 set: `build_provenance`, `artifact_inventory`, `dependency_advisories`, `scanner_correlation`, `ci_trust`, `history_context`, `control_evidence`, `reference_intelligence`, `symbol_links`, `document_context`. |
 | `fts.image_validation` | `data/indexing/fts/<attempt>/` | Offline cross-check of this job's shard text with the pinned `tool-sqlite-fts` image (see below). |
 | `audit.inventory` | `inventory.json` | Publication completeness audit. A violation fails the job and blocks index acceptance; the report stays on disk. |
-| `matrix.coverage` | `coverage-matrices.json` | Language, build-unit, producer/consumer and input-source matrices plus the graph-batch follow-up list. |
+| `matrix.coverage` | `coverage-matrices.json` | Language, build-unit, producer/consumer and input-source matrices plus the follow-up query-set list. The `code_graph` lane is computed from accepted `graph` shards (see below). |
 | `publish.inventory_index` | `inventory/dataset-inventory` shard and manifest | Accepted manifest = upstream shards + restored shards + link, product and inventory shards. |
 
 All bounds are in `[jobs.job_review_data_indexing.settings]` in `appsec-review.toml`.
@@ -61,6 +61,28 @@ acceptance. A restored shard is recorded as a repair.
 When the audit fails, read `data/jobs/job_review_data_indexing/attempts/<attempt>/steps/audit/tasks/inventory/inventory.json`,
 fix the producer declaration or the producer, and resume the graph. Do not widen a declaration to
 silence an unknown output.
+
+## Code-graph coverage
+
+Code-graph facts are not precomputed query sets. The former `call_graph`, `control_flow`,
+`dataflow`, `sarif_correlation`, `ast_ir_cpg_mapping`, `guards_ranges` and `entrypoint_paths`
+sets are retired: `query_precomputed` rejects them as invalid, and graph facts are read through
+`query_code_graph` over the `graph` index
+([code-graph precomputation](../architecture/code-graph-precomputation.md)).
+
+This job only accounts for the graph. The `code_graph` lane of the language and build-unit
+matrices reads the accepted `graph` shards of `job_code_graph_index` (one per scope and fact
+family; the shard's producer names `family`, `language` and `scope_id` or `build_unit_id`) and
+their coverage rows. A family is `complete` only when every coverage row is complete; the lane is
+`complete` only when all seven families are. With no accepted `graph` shard (including while
+`job_code_graph_index` is not registered or did not run) the lane is `unavailable` and its basis
+says so; that is a coverage gap, never evidence that the code is clean. `cpg_graph` stays
+`unavailable`: a retained Joern CPG is not graph coverage.
+
+The `graph_follow_up` cells list the query sets this job does not produce (`hotspot_context`,
+`review_package`, `redacted_secret_exposure`, `contract_enforcement`, `deployment_exposure`,
+`test_intent`) with status `pending_follow_up`; `hotspot_context` and `review_package` also carry
+the per-language `code_graph` states they would compose.
 
 ## SAST lead menus
 

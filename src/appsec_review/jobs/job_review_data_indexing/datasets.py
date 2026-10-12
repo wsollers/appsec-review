@@ -10,11 +10,14 @@ from appsec_review.runtime.datasets import artifact_only, indexed
 
 
 _A = "data/jobs/job_review_data_indexing/attempts/*/steps"
+# job_code_graph_index is the planned code-graph producer (docs/architecture/code-graph-precomputation.md).
+# Until it is registered and accepted, its producer/consumer cell and the code_graph lane are unavailable.
 CONSUMES = (
     "job_review_intake", "job_target_catalog", "job_source_history_analysis", "job_target_analysis_plan",
     "job_tree_sitter_ast", "job_project_build", "job_language_build", "job_artifact_indexing",
     "job_artifact_security_analysis", "job_cpp_compiled_analysis", "job_cpp_symbol_index", "job_cpg_analysis",
     "job_evidence_collection", "job_change_context_analysis", "job_codeql_analysis", "job_review_prioritization",
+    "job_code_graph_index",
 )
 DATASETS = (
     artifact_only("accepted_input_summary", "load", "inventory", "appsec-review/review-data-indexing-inputs/1",
@@ -42,7 +45,8 @@ DATASETS = (
                   artifacts=(_A + "/audit/tasks/*/inventory.json",),
                   reason="every row is indexed in the dataset inventory shard"),
     artifact_only("coverage_matrices", "matrix", "inventory", "appsec-review/coverage-matrices/1",
-                  "Language, build-unit, producer/consumer and input-source reconciliation matrices.",
+                  "Language and build-unit matrices (including the code_graph lane over accepted graph shards), "
+                  "producer/consumer and input-source reconciliation matrices, and the follow-up query sets.",
                   artifacts=(_A + "/matrix/tasks/*/coverage-matrices.json",),
                   reason="every cell is indexed in the dataset inventory shard"),
     indexed("dataset_inventory", "publish", "inventory", "appsec-review/retrieval-index/2",

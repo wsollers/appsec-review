@@ -48,7 +48,7 @@ def _fixture(tmp_path: Path) -> tuple[Path, dict[str, str]]:
         "fact": LogicalIdentity.derive(EntityKind.IR_ENTITY, snapshot, {"native": "nonnull:1"}).value,
         "priority": LogicalIdentity.derive(EntityKind.PRIORITY_ITEM, snapshot, {"native": "auth-priority"}).value,
         "precomputed": LogicalIdentity.derive(EntityKind.PRECOMPUTED_FACT, snapshot,
-                                                {"set": "call_graph", "native": "auth-callees"}).value,
+                                                {"set": "symbol_links", "native": "auth-links"}).value,
     }
     location = SourceLocation(snapshot, "src/auth.c", source_sha, 0, source.stat().st_size, 1, 3, 1, 1,
                               {"native": "src/auth.c:1"}, "fixture-exact", 1.0)
@@ -122,11 +122,11 @@ def _fixture(tmp_path: Path) -> tuple[Path, dict[str, str]]:
                                                "score": 81.5, "features": {"history_hotspot": 70}}, location),
     ], [])
     build("precomputed", [
-        EntityRecord(LogicalIdentity.parse(ids["precomputed"]), "call_graph:authenticate",
-                     "authenticate callees", "precomputed call graph for authenticate",
-                     {"schema": FACT_SCHEMA, "query_set": "call_graph", "subject_identity": ids["symbol"],
-                      "subject_path": "src/auth.c", "result": {"callees": []}, "basis": "fixture"}, location),
-    ], [], shard_id="call-graph-fixture", query_set="call_graph")
+        EntityRecord(LogicalIdentity.parse(ids["precomputed"]), "symbol_links:authenticate",
+                     "authenticate symbol links", "precomputed symbol links for authenticate",
+                     {"schema": FACT_SCHEMA, "query_set": "symbol_links", "subject_identity": ids["symbol"],
+                      "subject_path": "src/auth.c", "result": {"calls_out": 0}, "basis": "fixture"}, location),
+    ], [], shard_id="symbol-links-fixture", query_set="symbol_links")
 
     manifest_path = run_root / "data" / "indices" / "manifests" / "fixture.json"
     write_manifest(manifest_path, run_id=RUN_ID, target_snapshot=snapshot, target_root=target, indexes=index_values)
@@ -170,12 +170,14 @@ def test_precomputed_and_hotspot_queries_are_bounded_and_report_missing_sets(tmp
     hotspot = core.query_hotspots(scope="file", path="src/auth.c", min_score=80)
     assert [item["identity"] for item in hotspot["results"]] == [ids["priority"]]
     assert core.query_hotspots(min_score=90)["results"] == []
-    facts = core.query_precomputed(query_set="call_graph", subject=ids["symbol"], path="src/auth.c")
+    facts = core.query_precomputed(query_set="symbol_links", subject=ids["symbol"], path="src/auth.c")
     assert [item["identity"] for item in facts["results"]] == [ids["precomputed"]]
-    absent = core.query_precomputed(query_set="dataflow", subject=ids["symbol"])
-    assert absent["results"] == [] and "accepted precomputed dataflow index is unavailable" in absent["coverage_gaps"]
-    with pytest.raises(ValueError, match="precomputed query set"):
-        core.query_precomputed(query_set="arbitrary")
+    absent = core.query_precomputed(query_set="history_context", subject=ids["symbol"])
+    assert absent["results"] == [] and \
+        "accepted precomputed history_context index is unavailable" in absent["coverage_gaps"]
+    for retired in ("arbitrary", "call_graph", "dataflow"):
+        with pytest.raises(ValueError, match="precomputed query set"):
+            core.query_precomputed(query_set=retired)
     with pytest.raises(ValueError, match="traversal"):
         core.query_hotspots(path="../outside")
 
@@ -296,7 +298,7 @@ def test_mcp_core_parity_schema_serialization_and_live_stdio_smoke(tmp_path: Pat
         ("resolve_evidence", {"identity": ids["observation"]}), ("coverage", {}),
         ("query_artifacts", {}), ("query_build_security", {}), ("query_codeql", {"language": "cpp"}),
         ("query_hotspots", {"scope": "file"}),
-        ("query_precomputed", {"query_set": "call_graph", "subject": ids["symbol"]}),
+        ("query_precomputed", {"query_set": "symbol_links", "subject": ids["symbol"]}),
         ("query_owasp_workbench", {}),
     ]
     process = subprocess.Popen(

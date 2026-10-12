@@ -24,6 +24,7 @@ from appsec_review.indexing.links import (
 )
 from appsec_review.indexing.store import ShardSet, digest
 from appsec_review.retrieval.model import RelationKind, RelationRecord
+from appsec_review.retrieval.precomputed import QUERY_SETS, RETIRED_GRAPH_SETS
 from appsec_review.storage import file_sha256
 
 
@@ -1086,6 +1087,8 @@ PRODUCT_RULES: tuple[ProductRule, ...] = (
     ProductRule("document_context", "document-context/1", _select_document_context, _build_document_context),
 )
 assert tuple(rule.query_set for rule in PRODUCT_RULES) == FIRST_STAGE_SETS
+# Stage-1 sets are live query sets; no retired graph set may come back as a product.
+assert set(FIRST_STAGE_SETS) <= set(QUERY_SETS) and not set(FIRST_STAGE_SETS) & set(RETIRED_GRAPH_SETS)
 
 
 def product_rule(query_set: str) -> ProductRule:

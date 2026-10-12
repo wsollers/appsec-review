@@ -104,7 +104,7 @@ a silent allowlist. `query_precomputed` is abbreviated `QP`; existing generic `f
 | LLVM IR, binary symbols, Infer output; `job_cpp_compiled_analysis` | Compiled direct calls, hardening and leads | Current partial IR (TU-level locations) and observations; cross-check input for `call_site` facts | `scanner_correlation`; cross-check of the `graph` index | `core`, `query_build_security`, `QP`; no skill |
 | clangd symbol graph; `job_cpp_symbol_index` | Definitions, references and direct calls | Current `analysis`; cross-check input for `call_site` facts and `SAME_AS` symbol links | `symbol_links`; cross-check of the `graph` index | `core`, `QP`; no skill |
 | Joern CPG; `job_cpg_analysis` | Retained CPG artifact | Binary artifact only; not a graph producer in the code-graph plan | none | `coverage` reports unavailable; no skill |
-| CodeQL database and SARIF paths; `job_codeql_analysis` | Analyzer leads, ordered flows, and the primary code-graph export (calls, sinks, entry points, summaries, paths, guards, ranges) | Current `observations`, priority flow steps; DB protected; export artifacts `artifact_only`; `graph` index via `job_code_graph_index` | `scanner_correlation`; `graph` index families | `query_codeql`, `query_code_graph`, `QP`; no skill |
+| CodeQL database and SARIF paths; `job_codeql_analysis`, planned `job_code_graph_index` | Analyzer leads, ordered flows, and the primary code-graph export (calls, sinks, entry points, summaries, paths, guards, ranges) | Current `observations`, priority flow steps; DB protected; export artifacts `artifact_only`; `graph` index via `job_code_graph_index` | `scanner_correlation`; `graph` index families | `query_codeql`, `query_code_graph`, `QP`; no skill |
 | Post-build flags, hardening and deterministic/model assessments; `job_post_build_security_assessment` | Artifact security posture | Current `build_security`; keep model judgment distinct from measured facts | `build_provenance`, `review_package` | `query_build_security`; existing `post-build-security-assessment` skill is operator-only |
 | CI definitions, permissions, triggers, steps and scanner results; `job_ci_configuration_analysis` | Workflow trust and build/deploy exposure | Current CI observations/evidence; extend typed trust edges | `ci_trust`, `scanner_correlation` | `query_ci_configuration`, `QP`; no skill |
 | Secret leads; Gitleaks and build-capture checks in `job_evidence_collection` | Identify possible credential exposure | Current observations; redacted fingerprint/location only; secret value protected | `redacted_secret_exposure`, `scanner_correlation` | `query_observations`, `QP`; no skill |
@@ -435,6 +435,10 @@ publishes the accepted inventory before `job_review_package_assembly`. Implement
 - **Language and build-unit matrices** are published as coverage cells: source and Tree-sitter per
   catalogued language; compiled/clangd only for C/C++ with accepted shards (partial extraction);
   Joern always `unavailable` (binary artifact only); CodeQL only where an accepted shard exists.
+  The `code_graph` lane reads only accepted `graph` shards of `job_code_graph_index` and their
+  per-family coverage rows: `complete` only when all seven fact families are complete,
+  `unavailable` (with the basis) when no accepted `graph` shard exists or every family is
+  unavailable, `partial` otherwise. Each cell lists its per-family states.
 - **SQLite FTS image.** The in-process FTS5 builder remains the only producer of accepted shards.
   `fts.image_validation` rebuilds this job's link and product shard text with the pinned
   `tool-sqlite-fts:1.0.0` image (image ID verified against the catalog pin, FTS5 probe, record
@@ -444,10 +448,12 @@ Remaining gaps after this batch:
 
 - No code-graph fact is produced: the `graph` index, `job_codeql_analysis` export step,
   `job_code_graph_index` and `query_code_graph` of
-  [`code-graph-precomputation.md`](code-graph-precomputation.md) are not implemented. Until that
-  batch lands, the matrix still publishes the retired set names as `pending_graph_batch`
-  follow-ups (`GRAPH_FOLLOW_UP` in `job_review_data_indexing/job.py`), and `hotspot_context`,
-  `redacted_secret_exposure` and `review_package` are not produced.
+  [`code-graph-precomputation.md`](code-graph-precomputation.md) are not implemented, so every
+  `code_graph` lane is `unavailable`. The seven graph query sets are retired from `QUERY_SETS`;
+  `query_precomputed` rejects their names as invalid. The follow-up list (`GRAPH_FOLLOW_UP` in
+  `job_review_data_indexing/job.py`) names only `hotspot_context`, `review_package`,
+  `redacted_secret_exposure`, `contract_enforcement`, `deployment_exposure` and `test_intent` as
+  `pending_follow_up`; the two graph-dependent rows carry the accepted `code_graph` lane states.
 - Joern CPG remains a binary artifact; no CPG graph coverage is claimed, and the code-graph plan
   does not use it.
 - Source-to-build-action mapping exists only through captured compile commands (`source_input`
