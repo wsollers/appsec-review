@@ -10,10 +10,10 @@ from typing import Any
 from appsec_review.config import RustBuildSettings
 from appsec_review.storage import canonical_json, file_sha256
 
-from .capture import CapturedBuildDescriptor, ToolIdentity
+from .capture import CapturedBuildDescriptor, ToolIdentity, image_owned, normalized_path
 
 
-CAPTURE_IDENTITY = "appsec-review/rust-cargo-build-capture/3"
+CAPTURE_IDENTITY = "appsec-review/rust-cargo-build-capture/4"
 _NAME = re.compile(r"[A-Za-z0-9_.-]{1,128}")
 _TARGET = re.compile(r"[A-Za-z0-9_.-]{1,128}")
 _FORBIDDEN = {"run", "test", "bench", "install", "fix", "miri"}
@@ -29,6 +29,9 @@ _LINKERS = {"ld", "ld.bfd", "ld.gold", "ld.lld", "lld", "rust-lld", "collect2", 
 _ARCHIVERS = {"ar", "llvm-ar"}
 _COMPILE_ONLY = {"-c", "-E", "-S"}
 _LINK_KINDS = ("linker-driver", "linker", "archiver")
+_BUILD_SCRIPT_NAMES = ("build-script-", "build_script_")
+# Cargo runs a package's build script from `<target-dir>/.../build/<package>-<hash>/`.
+_BUILD_SCRIPT_PATH = re.compile(r"/workspace/(?:[^/]+/)+build/[^/]+/build[-_]script[-_][^/]+")
 
 
 def validate_dispatch(dispatch: Mapping[str, Any], settings: RustBuildSettings) -> tuple[str, ...]:
@@ -188,10 +191,10 @@ def _mapped(workspace: Path, directory: str, value: str) -> dict[str, Any] | Non
 
 
 def tool_kind(name: str, argv: Sequence[str]) -> str | None:
-    """Classify one observed executable; unknown tools are not Rust build provenance."""
+    """The kind a tool name stands for; a name alone never establishes that the tool ran."""
     if name == "rustc":
         return "compiler"
-    if name.startswith(("build-script-", "build_script_")):
+    if name.startswith(_BUILD_SCRIPT_NAMES):
         return "code-generator"
     if name in _ARCHIVERS or name.endswith("-ar"):
         return "archiver"
@@ -223,10 +226,41 @@ def _row(name: str, kind: str, argv: Sequence[str], workspace: Path, directory: 
             "origin": origin, "mapping_confidence": 1.0}
 
 
-def _classify_tool(name: str, argv: Sequence[str]) -> ToolIdentity | None:
-    normalized = PurePosixPath(name).name
-    kind = tool_kind(normalized, argv)
-    return ToolIdentity(normalized, kind) if kind is not None else None
+def tool_identity(executable: str, argv: Sequence[str]) -> tuple[str, str] | None:
+    """Classify the kernel-resolved executable of one successful process-exec event.
+
+    `argv[0]` is caller-chosen and is never consulted. The compiler, C driver, linker, and
+    archiver count only at an image-owned path: a file below a mount the build can write,
+    including a capture wrapper launcher, is not evidence that a toolchain tool ran. A Cargo
+    build script is the one exception, because Cargo compiles it into the workspace target
+    directory. Its row records that target-built code ran as a build step and nothing else.
+    """
+    name = PurePosixPath(executable).name
+    if name.startswith(_BUILD_SCRIPT_NAMES):
+        scripted = normalized_path(executable) and _BUILD_SCRIPT_PATH.fullmatch(executable)
+        return (name, "code-generator") if scripted else None
+    if not image_owned(executable):
+        return None
+    kind = tool_kind(name, argv)
+    return (name, kind) if kind is not None else None
+
+
+def _classify_tool(executable: str, argv: Sequence[str]) -> ToolIdentity | None:
+    identity = tool_identity(executable, argv)
+    return ToolIdentity(*identity) if identity is not None else None
+
+
+def _classify_record(tool: str, argv: Sequence[str]) -> ToolIdentity | None:
+    """The kind a PATH tool-call record names; it selects records to reconcile, nothing more."""
+    kind = tool_kind(tool, argv)
+    return ToolIdentity(tool, kind) if kind is not None else None
+
+
+def _compiles(row: Mapping[str, Any]) -> bool:
+    # Cargo also starts rustc to report its version and target configuration; only an
+    # invocation that names a crate and an output location is a compilation.
+    argv = row.get("argv", ())
+    return row.get("tool") == "rustc" and "--crate-name" in argv and bool({"--out-dir", "-o"} & set(argv))
 
 
 CAPTURE_DESCRIPTOR = CapturedBuildDescriptor(
@@ -238,6 +272,8 @@ CAPTURE_DESCRIPTOR = CapturedBuildDescriptor(
     build_invocation=_row,
     link_kinds=frozenset(_LINK_KINDS),
     missing_tool_gap="Rust compiler execution was not observed in the standardized capture",
+    classify_record=_classify_record,
+    required_execution=_compiles,
 )
 
 

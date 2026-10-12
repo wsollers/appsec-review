@@ -80,13 +80,16 @@ def _metadata(working_directory: str) -> bytes:
 
 
 def rust_container(calls: list[tuple[str, ...]], *, leak: str | None = None,
-                   phantom_archiver: bool = False):
+                   phantom_archiver: bool = False, spoofed_toolchain: bool = False):
     """A Cargo build as the syscall collector and PATH wrappers would observe it."""
     def behavior(argv, workspace, working_directory, environment, container):
         calls.append(argv)
+        # The PATH launcher is a shell script below the writable capture mount.
         container.exec("/capture/wrappers/cargo", ["cargo", *argv[1:]])
         container.exec("/usr/local/cargo/bin/cargo", ["/usr/local/cargo/bin/cargo", *argv[1:]])
         container.tool_call("cargo", argv[1:], executable="/usr/local/cargo/bin/cargo")
+        # Cargo asks the compiler for its version under every command, with identical argv.
+        container.exec(f"{TOOLCHAIN}/rustc", [f"{TOOLCHAIN}/rustc", "-vV"])
         container.connect("192.0.2.10", 443)
         if argv[:2] == ("cargo", "metadata"):
             return 0, _metadata(working_directory), b""
@@ -102,12 +105,20 @@ def rust_container(calls: list[tuple[str, ...]], *, leak: str | None = None,
         (deps / "sample.o").write_bytes(b"object")
         (generated / "generated.rs").write_text("pub const GENERATED: bool = true;\n", encoding="utf-8")
         inherited = sorted(f"{key}={value}" for key, value in environment.items())
+        # A spoofed toolchain lives in the target-writable workspace under a toolchain-shaped path.
+        toolchain = f"{logical}/toolchain/bin" if spoofed_toolchain else TOOLCHAIN
+        compile_argv = ["--crate-name", "sample", f"{logical}/src/main.rs", "--crate-type", "bin",
+                        "--out-dir", f"{debug}/deps"]
         # Cargo starts the toolchain compiler by absolute path, which no PATH wrapper sees, and
         # exports a variable that only this later exec carries.
-        container.exec(f"{TOOLCHAIN}/rustc", [f"{TOOLCHAIN}/rustc", "--crate-name", "sample",
-            f"{logical}/src/main.rs", "--crate-type", "bin", "--out-dir", f"{debug}/deps"],
-            envp=[*inherited, f"GITHUB_TOKEN={NAMED_TOKEN}"])
+        container.exec(f"{toolchain}/rustc", [f"{toolchain}/rustc", *compile_argv],
+                       envp=[*inherited, f"GITHUB_TOKEN={NAMED_TOKEN}"])
         container.open(f"{logical}/src/main.rs")
+        if spoofed_toolchain:
+            # A target program may also claim any argv[0] it likes, or a build-script name.
+            container.exec(f"{logical}/tool.sh", [f"{TOOLCHAIN}/rustc", *compile_argv])
+            container.exec("./rustc", [f"{TOOLCHAIN}/rustc", *compile_argv])
+            container.exec("/tmp/build-script-build", [f"{TOOLCHAIN}/rustc", *compile_argv])
         link = ["-o", f"{debug}/sample", f"{debug}/deps/sample.o"]
         container.exec("/usr/local/bin/cc", ["cc", *link], succeeded=False)
         container.exec("/capture/wrappers/cc", ["cc", *link])
@@ -117,6 +128,7 @@ def rust_container(calls: list[tuple[str, ...]], *, leak: str | None = None,
         # A wrapper record alone, or beside only a failed exec, is not an observed execution.
         container.exec("/usr/bin/ar", ["ar", *archive], succeeded=not phantom_archiver)
         container.tool_call("ar", archive, executable="/usr/bin/ar")
+        # Cargo compiles a build script into the workspace target directory and runs it there.
         script = f"{logical}/target/debug/build/sample-hash/build-script-build"
         container.exec(script, [script],
                        envp=[*inherited, *([f"RELEASE_SIGNING_VALUE={leak}"] if leak else [])])
@@ -172,6 +184,20 @@ def _events(run_root: Path, command) -> list[dict]:
     return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
 
 
+def _version_queries(rows, run_root: Path, receipt) -> set[str]:
+    """Origins of the rows whose observed exec was only a `rustc -vV` version query."""
+    origins = set()
+    for index, command in enumerate(receipt["commands"], 1):
+        for event in _events(run_root, command):
+            if event["kind"] == "process_exec" and event["argv"][1:] == ["-vV"]:
+                origins.add(f"execution-capture:command-{index:03d}:event-{event['ordinal']}")
+    return origins & {item["origin"] for item in rows}
+
+
+def _checkpoints(config) -> tuple[Path, ...]:
+    return tuple((config.runtime.metadata_dir / "language-builds").glob("*/accepted.json"))
+
+
 def test_rust_option_validation_rejects_target_execution_and_accepts_bounded_choices() -> None:
     settings = RustBuildSettings("stable", None, "dev", (), True, True, True, 32768)
     dispatch = {"build_system": "cargo", "recipe": {"dependency_files": ["Cargo.toml", "Cargo.lock"],
@@ -182,14 +208,48 @@ def test_rust_option_validation_rejects_target_execution_and_accepts_bounded_cho
     assert any("unsupported" in gap for gap in rust.validate_dispatch(bad, settings))
 
 
-def test_rust_tool_classification_uses_the_observed_executable() -> None:
+def test_rust_tool_classification_uses_only_the_kernel_resolved_executable_path() -> None:
+    assert rust.tool_identity(f"{TOOLCHAIN}/rustc", ["rustc", "-vV"]) == ("rustc", "compiler")
+    assert rust.tool_identity("/usr/local/cargo/bin/rustc", ["rustc"]) == ("rustc", "compiler")
+    assert rust.tool_identity("/usr/bin/x86_64-linux-gnu-gcc-13", ["cc", "-o", "app", "main.o"]) == (
+        "x86_64-linux-gnu-gcc-13", "linker-driver")
+    assert rust.tool_identity("/usr/bin/cc", ["cc", "-c", "shim.c", "-o", "shim.o"]) == (
+        "cc", "compiler-driver")
+    assert rust.tool_identity(f"{TOOLCHAIN}/rust-lld", ["rust-lld", "-flavor", "gnu"]) == (
+        "rust-lld", "linker")
+    assert rust.tool_identity("/usr/bin/llvm-ar", ["llvm-ar", "crs", "libx.a"]) == ("llvm-ar", "archiver")
+    assert rust.tool_identity("/usr/bin/python3", ["python3", "tool-wrapper.py", "rustc"]) is None
+    assert rust.tool_identity("/usr/local/cargo/bin/cargo", ["cargo", "build"]) is None
+    # Nothing below a build-writable mount is a toolchain tool, whatever its path or argv[0] claims.
+    for executable in ("/capture/wrappers/rustc", "/capture/wrappers/cc", "/workspace/rust/toolchain/bin/rustc",
+                       f"/workspace{TOOLCHAIN}/rustc", "/tmp/cargo/bin/rustc", "/proc/self/fd/3",
+                       "/dev/shm/cc", "/usr/../workspace/rust/rustc", f"{TOOLCHAIN}/./rustc",
+                       "bin/rustc", "./rustc", "rustc", "", "/usr//bin/cc"):
+        assert rust.tool_identity(executable, [f"{TOOLCHAIN}/rustc", "--crate-name", "x"]) is None, executable
+    # A build script is target-built code that Cargo runs from its own build directory. It is
+    # recognized only there, and never as anything but a build script.
+    for executable in ("/workspace/rust/target/debug/build/sample-0123abcd/build-script-build",
+                       "/workspace/target/x86_64-unknown-linux-gnu/release/build/libc-9f/build_script_build-9f"):
+        name = executable.rsplit("/", 1)[1]
+        assert rust.tool_identity(executable, [f"{TOOLCHAIN}/rustc"]) == (name, "code-generator")
+    for executable in ("/usr/bin/build-script-build", "/tmp/build/x/build-script-build",
+                       "/workspace/rust/build-script-build", "/workspace/build/build-script-build",
+                       "/workspace/rust/target/debug/build/../build/x/build-script-build",
+                       "target/debug/build/x/build-script-build"):
+        assert rust.tool_identity(executable, [executable]) is None, executable
+    # A record's tool name only selects wrapper records to reconcile onto an observed exec.
     assert rust.tool_kind("rustc", ["rustc", "-vV"]) == "compiler"
-    assert rust.tool_kind("build-script-build", ["build-script-build"]) == "code-generator"
-    assert rust.tool_kind("x86_64-linux-gnu-gcc-13", ["cc", "-o", "app", "main.o"]) == "linker-driver"
-    assert rust.tool_kind("cc", ["cc", "-c", "shim.c", "-o", "shim.o"]) == "compiler-driver"
-    assert rust.tool_kind("rust-lld", ["rust-lld", "-flavor", "gnu"]) == "linker"
-    assert rust.tool_kind("llvm-ar", ["llvm-ar", "crs", "libx.a"]) == "archiver"
     assert rust.tool_kind("python3", ["python3", "tool-wrapper.py", "rustc"]) is None
+
+
+def test_rust_required_compiler_check_needs_a_compilation_not_a_version_query() -> None:
+    required = rust.CAPTURE_DESCRIPTOR.required_execution
+    assert required({"tool": "rustc", "argv": ["rustc", "--crate-name", "sample", "src/main.rs",
+                                               "--out-dir", "target/debug/deps"]})
+    assert not required({"tool": "rustc", "argv": ["rustc", "-vV"]})
+    assert not required({"tool": "rustc", "argv": ["rustc", "-", "--crate-name", "___",
+                                                   "--print=file-names"]})
+    assert not required({"tool": "cc", "argv": ["cc", "--crate-name", "x", "-o", "app"]})
 
 
 def test_rust_build_retains_streams_provenance_artifacts_metadata_and_sanitized_mcp(tmp_path: Path) -> None:
@@ -242,29 +302,57 @@ def test_rust_build_retains_streams_provenance_artifacts_metadata_and_sanitized_
         capture_root = (run_root / identity["path"]).parent
         assert not tuple(capture_root.glob("trace*")) and not (capture_root / ".secret-scan-input").exists()
 
-    # Tool provenance comes from standardized process-exec and tool-call records.
-    rows = {item["tool"]: item for item in receipt["tool_invocations"]}
-    assert {item["tool_kind"] for item in rows.values()} >= {
-        "compiler", "linker-driver", "archiver", "code-generator"}
+    # Tool provenance is derived from successful process-exec events at trusted paths.
+    invocations = receipt["tool_invocations"]
+    rows = {item["tool"]: item for item in invocations
+            if item["origin"] not in _version_queries(invocations, run_root, receipt)}
+    assert sorted(item["tool"] for item in invocations) == [
+        "ar", "build-script-build", "cc", "rustc", "rustc", "rustc"]
+    assert all(item["mapping"].startswith("syscall-process-exec") for item in invocations)
+    assert all(item["evidence"]["process_exec"]["count"] == 1 for item in invocations)
+    # The identical `rustc -vV` argv under two commands is two rows, each resolving in its own record.
+    events = {command["execution_capture"]["sha256"]: {event["ordinal"]: event for event in _events(run_root, command)}
+              for command in receipt["commands"]}
+    for item in invocations:
+        observed = item["evidence"]["process_exec"]
+        resolved = [events[item["evidence"]["capture_record_sha256"]][ordinal]
+                    for ordinal in observed["event_ordinals"]]
+        assert resolved and all(event["kind"] == "process_exec" and event["result"] == 0 and
+                                event["executable"] == observed["executable"] for event in resolved)
+    assert len({item["evidence"]["capture_record_sha256"] for item in invocations
+                if item["tool"] == "rustc"}) == 2
+    assert all(item["evidence"]["process_exec"]["executable"].startswith("/usr/")
+               for item in invocations if item["tool"] != "build-script-build")
+    assert set(rows) == {"ar", "build-script-build", "cc", "rustc"}
     assert rows["rustc"]["mapping"] == "syscall-process-exec"
     assert rows["rustc"]["evidence"]["tool_call"] is None
     assert rows["rustc"]["evidence"]["process_exec"]["executable"] == f"{TOOLCHAIN}/rustc"
+    # The launcher and the failed PATH probe are not counted with the real cc.
     assert rows["cc"]["mapping"] == "syscall-process-exec+tool-call"
-    assert rows["cc"]["evidence"]["process_exec"]["count"] == 2
+    assert rows["cc"]["tool_kind"] == "linker-driver"
+    assert rows["cc"]["evidence"]["process_exec"]["executable"] == "/usr/bin/cc"
     assert rows["cc"]["evidence"]["tool_call"]["exit_code"] == 0
     assert rows["ar"]["evidence"]["tool_call"]["sha256"]
     assert rows["build-script-build"]["mapping"] == "syscall-process-exec"
+    assert rows["build-script-build"]["tool_kind"] == "code-generator"
+    assert rows["build-script-build"]["evidence"]["process_exec"]["executable"] == (
+        "/workspace/rust/target/debug/build/sample-hash/build-script-build")
     assert all(item["evidence"]["capture_record_sha256"] ==
                receipt["commands"][1]["execution_capture"]["sha256"] for item in rows.values())
     provenance = receipt["capture_provenance"]
+    assert provenance["schema"] == "appsec-review/rust-capture-provenance/1"
     assert provenance["complete"] is True and provenance["command_count"] == 2
     assert provenance["failed_exec_events"] == 1 and provenance["redacted_exec_events"] == 0
+    assert provenance["untrusted_location_exec_events"] == 3  # two cargo launchers and the cc launcher
+    assert provenance["truncated_tool_exec_events"] == 0 and provenance["malformed_records"] == 0
     assert provenance["connect_events"] == 2 and provenance["unreconciled_tool_calls"] == 0
     assert provenance["observed_tool_kinds"] == ["archiver", "code-generator", "compiler", "linker-driver"]
+    assert len(_checkpoints(config)) == 1
 
     # Envp is captured on the later exec, and exact-name redaction removed its value.
     compiler = next(event for event in _events(run_root, receipt["commands"][1])
-                    if event["kind"] == "process_exec" and event["executable"].endswith("/rustc"))
+                    if event["kind"] == "process_exec" and event["executable"].endswith("/rustc")
+                    and "--crate-name" in event["argv"])
     assert {"name": "GITHUB_TOKEN", "redacted": True, "value": "<redacted>"} in compiler["envp"]
     assert {"name": "CARGO_TERM_COLOR", "redacted": False, "value": "never"} in compiler["envp"]
     assert provenance["envp_redacted_names"] == ["GITHUB_TOKEN"]
@@ -338,6 +426,66 @@ def test_rust_tool_call_without_a_successful_exec_is_never_tool_provenance(tmp_p
     assert not tuple((config.runtime.metadata_dir / "language-builds").glob("*/accepted.json"))
 
 
+def test_rust_secondary_evidence_cannot_satisfy_the_required_compiler_check(tmp_path: Path) -> None:
+    config, target = _fixture(tmp_path)
+    run_id, fingerprint = _accepted_project(config, target, [])
+    outcome = _language(config, target, fingerprint, run_id, lambda unit, profile: simulated_executor(
+        profile, rust_container([], spoofed_toolchain=True)))
+    assert outcome["status"] == "COMPLETED_WITH_GAPS"
+    run_root = config.runtime.runs_dir / run_id
+    receipt = _rust_receipt(config, run_id)
+    build = receipt["commands"][1]
+    # Everything short of a successful exec of the image-owned compiler is present: a
+    # toolchain-shaped path ran from the workspace, target programs used the real compiler path
+    # as argv[0], one of them is named like a build script, and the output binary exists.
+    assert build["execution_capture"]["complete"] is True
+    executed = [event for event in _events(run_root, build)
+                if event["kind"] == "process_exec" and event["result"] == 0]
+    assert any(event["executable"] == "/workspace/rust/toolchain/bin/rustc" for event in executed)
+    assert {event["executable"] for event in executed if event["argv"][0] == f"{TOOLCHAIN}/rustc"
+            and "--crate-name" in event["argv"]} == {
+        "/workspace/rust/tool.sh", "./rustc", "/tmp/build-script-build"}
+    assert any(item["kind"] == "executable" for item in receipt["artifacts"])
+    invocations = receipt["tool_invocations"]
+    assert {item["tool"] for item in invocations} == {"rustc", "cc", "ar", "build-script-build"}
+    # The real compiler did run, but only to report its version: an observed tool kind is not
+    # an observed compilation.
+    assert all(item["origin"] in _version_queries(invocations, run_root, receipt)
+               for item in invocations if item["tool"] == "rustc")
+    assert [item["evidence"]["process_exec"]["executable"] for item in invocations
+            if item["tool"] == "build-script-build"] == [
+        "/workspace/rust/target/debug/build/sample-hash/build-script-build"]
+    assert all(item["evidence"]["process_exec"]["executable"].startswith("/usr/")
+               for item in invocations if item["tool"] != "build-script-build")
+    provenance = receipt["capture_provenance"]
+    assert "compiler" in provenance["observed_tool_kinds"]
+    # Two cargo launchers, the cc launcher, and the four target-controlled compiler stand-ins.
+    assert provenance["untrusted_location_exec_events"] == 7 and provenance["complete"] is False
+    assert "Rust compiler execution was not observed in the standardized capture" in receipt["gaps"]
+    assert not _checkpoints(config)
+
+
+def test_rust_truncated_toolchain_argv_is_a_named_gap_not_a_hashed_command(tmp_path: Path) -> None:
+    config, target = _fixture(tmp_path, capture="event_count_limit = 250000\nargv_count_limit = 4")
+    run_id, fingerprint = _accepted_project(config, target, [])
+    outcome = _language(config, target, fingerprint, run_id, lambda unit, profile: simulated_executor(
+        profile, rust_container([])))
+    assert outcome["status"] == "COMPLETED_WITH_GAPS"
+    run_root = config.runtime.runs_dir / run_id
+    receipt = _rust_receipt(config, run_id)
+    invocations = receipt["tool_invocations"]
+    provenance = receipt["capture_provenance"]
+    # Only the compilation exceeds four arguments; its version queries and the link do not.
+    assert provenance["truncated_tool_exec_events"] == 1 and provenance["complete"] is False
+    assert all(item["origin"] in _version_queries(invocations, run_root, receipt)
+               for item in invocations if item["tool"] == "rustc")
+    assert "linker-driver" in provenance["observed_tool_kinds"]
+    assert ("1 toolchain process-exec events had truncated argv; their tool provenance is "
+            "unavailable") in receipt["gaps"]
+    assert "Rust compiler execution was not observed in the standardized capture" in receipt["gaps"]
+    assert not _checkpoints(config)
+
+
 def test_rust_invocation_secret_is_not_reintroduced_by_the_protected_command(tmp_path: Path) -> None:
     class SecretEnvironment:
         def __init__(self, inner):
@@ -364,7 +512,8 @@ def test_rust_invocation_secret_is_not_reintroduced_by_the_protected_command(tmp
     assert SYNTHETIC_SECRET not in _retained_text(run_root)
     # Every exec inherited the secret, so no tool provenance may be claimed.
     assert receipt["tool_invocations"] == []
-    assert any("Rust compiler execution was not observed" in gap for gap in receipt["gaps"])
+    assert "Rust compiler execution was not observed in the standardized capture" in receipt["gaps"]
+    assert receipt["capture_provenance"]["complete"] is False and not _checkpoints(config)
 
 
 def test_rust_scanner_failure_fails_closed_as_an_explicit_gap_and_is_not_checkpointed(tmp_path: Path) -> None:

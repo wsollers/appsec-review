@@ -10,7 +10,7 @@ from appsec_review.storage import canonical_json, file_sha256
 
 from .capture import CapturedBuildDescriptor, ToolIdentity
 
-CAPTURE_IDENTITY = "appsec-review/dotnet-build-capture/3"
+CAPTURE_IDENTITY = "appsec-review/dotnet-build-capture/4"
 _PROJECT_SUFFIXES = {".csproj", ".vbproj", ".fsproj"}
 _ASSEMBLY_SUFFIXES = {".dll", ".exe", ".netmodule", ".winmd"}
 _PACKAGE_SUFFIXES = {".nupkg", ".snupkg"}
