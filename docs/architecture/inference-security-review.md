@@ -33,8 +33,10 @@ The job follows these non-negotiable rules:
    verification. Proof-of-trigger execution is separately authorized and is never a prerequisite
    for truthful confirmation when the other evidence is sufficient.
 
-Repository-agent authority lives in root `AGENTS.md`; bounded review-worker procedures live under
-`skills/`; runtime configuration lives in `appsec-review.toml`. This design uses those rebuilt
+Repository-agent authority lives in root `AGENTS.md`, and bounded agent procedures live under
+`skills/`. Shared review-worker rules live once in `pipeline/prompt-fragments/governing-rules.md`,
+with personas and roles under `pipeline/prompt-fragments/personas/` and
+`pipeline/prompt-fragments/roles/`; runtime configuration lives in `appsec-review.toml`. This design uses those rebuilt
 sources directly and does not depend on or recover the archived process harness.
 
 ## Placement and consumers
@@ -512,7 +514,7 @@ retry_on_invalid_output = true
 backoff_seconds = [2, 10]
 
 [jobs.job_inference_security_review.settings.models.default]
-provider = "openai"
+provider = "claude-cli"
 model = "configured-review-model"
 reasoning = "high"
 max_input_tokens = 32000
@@ -983,8 +985,9 @@ src/appsec_review/
     publication.py
 pipeline/
   prompt-fragments/governing-rules.md
-  guidance/roles/*.md
-  guidance/personas/*.md
+  prompt-fragments/roles/*.md
+  prompt-fragments/personas/*.md
+  guidance/registry.json
   guidance/tasks/inference-security-review/*.md
 docs/schemas/inference-security-review/*.schema.json
 tests/review/

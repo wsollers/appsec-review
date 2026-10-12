@@ -188,7 +188,8 @@ evidence from the normalized events (`container_runtime/capture_files.py`):
    directory. A successful open uses the resolved path strace printed for the returned descriptor.
 2. **Response files.** For every successful exec, an `@file` argument that the same process then
    opened for reading is copied into `response-files/` in the capture *before* the secret scan, so
-   the scan covers its contents. A response file outside the workspace, removed before the
+   the scan covers its contents. Each snapshot is listed under the execution record's
+   `response_files.records` with schema `appsec-review/build-response-file/1`. A response file outside the workspace, removed before the
    snapshot, or over `response_file_bytes_limit` is a named coverage gap, as is reaching
    `response_file_count_limit`.
 3. **File inventory** (`files.jsonl`, schema `appsec-review/build-file-inventory/1`), built *after*
@@ -334,7 +335,7 @@ execution-capture/command-001/
 `record.json` uses `appsec-review/build-execution-record/1`. It binds run, job, attempt, build-unit,
 and family scope; collector and image identity; resolved limits; command outcome; syscall-event
 counts and hash; top streams; tool-call record hashes; gitleaks execution and finding hashes; and a
-coverage disposition. Syscall rows use `appsec-review/build-syscall-event/1`. Normalized secret
+coverage disposition. Syscall rows use `appsec-review/build-syscall-event/2`. Normalized secret
 findings use `appsec-review/build-capture-secret-findings/1`, and the scanner receipt uses
 `appsec-review/build-capture-secret-scan-execution/1`.
 
@@ -448,23 +449,24 @@ Composer lifecycle execution, or a phpize build because those specialized toolch
 on the validation host. Those absences remain named fixture-validation gaps, not evidence that the
 expected applicability is wrong or that the projects are clean.
 
-Adding a language or project type does not add another syscall parser, wrapper reconciler, or
-capture loop. It supplies a small descriptor/classifier/artifact policy, registers that descriptor
-with the shared reconciler when syscall-authoritative capture is required, and adds a parameterized
-fixture entry such as those above. Applicability classification, artifact expectations, and
-CodeQL capability are descriptor policy; capture collection and reconciliation remain shared.
+Adding a language or project type does not add another syscall parser or capture loop. It
+supplies a small descriptor/classifier/artifact policy, registers that descriptor with the shared
+reconciler when syscall-authoritative capture is required, and adds a parameterized fixture entry
+such as those above. Applicability classification, artifact expectations, and CodeQL capability
+are descriptor policy; capture collection remains shared.
 
 ## Generic captured-build extension contract
 
-The compiled-language path has one driver, one collector boundary, and one reconciliation
-algorithm. `job_language_build` passes each accepted argv to the shared container executor. The
+The compiled-language path has one driver and one collector boundary. `job_language_build` passes each accepted argv to the shared container executor. The
 executor applies the PATH wrappers, launches the arbitrary command under the syscall collector,
 retains complete stdout and stderr files, normalizes exec/exit/connect/envp and configured
 supplemental events, and scans retained streams, argv, and envp through gitleaks. The job verifies
 that record before it interprets any language-specific tool.
 
 `capture.py` owns the typed `CapturedBuildDescriptor` and `reconcile_captured_build` contract used
-by .NET, native C/C++, and Rust; the Go adapter applies the same rules in its own loop. Successful
+by .NET, native C/C++, and Rust (`CAPTURE_DESCRIPTORS`). Go uses the same executor, collector, and
+standardized capture records but reconciles them in `go.capture_invocations` (see
+[Go language-build integration](#go-language-build-integration)). Successful
 process-exec is the sole authority that a tool ran. The descriptor classifies the event's
 kernel-resolved `executable` path; `argv[0]` is caller-chosen and never names the tool, and an event
 without a kernel path or a result is a malformed record, not an exec. A row belongs to the one
@@ -667,8 +669,29 @@ backend, syscall/argv/envp/path/tool-call/stream/finding limits, envp enablement
 names. A job may override a bounded subset such as `event_count_limit`; omitted values inherit the
 global configuration. The resolved immutable configuration is copied into the run like every other
 job setting.
-The preceding conditional tri-state model is the intended extension to this ownership rule; its
-fields are not yet present in the typed schema.
+The conditional tri-state controls are typed fields of the same schema: `[build_capture] mode`
+(`required`, `auto`, or `disabled`; default `required`) and the `job_language_build`
+`compiler_artifact_collection_mode` setting, both validated by `config/loader.py` and frozen in the
+resolved run configuration.
+
+Global `[build_capture]` limits (shipped value; allowed range):
+
+| Key | Default | Range | Meaning |
+| --- | --- | --- | --- |
+| `event_count_limit` | 100000 | 1-10,000,000 | retained syscall events per command |
+| `argv_count_limit` | 256 | 1-4096 | retained argv entries per exec event |
+| `argument_bytes_limit` | 16384 | 1-1 MiB | retained bytes per argument |
+| `envp_count_limit` | 1024 | 1-16,384 | retained envp entries per exec event |
+| `envp_bytes_limit` | 131072 | 1-4 MiB | retained envp bytes per exec event |
+| `path_bytes_limit` | 4096 | 1-64 KiB | retained bytes per path field |
+| `tool_call_count_limit` | 10000 | 1-1,000,000 | retained PATH tool-call records per command |
+| `secret_finding_count_limit` | 1000 | 1-1,000,000 | retained normalized gitleaks findings |
+| `file_inventory_count_limit` | 1000000 | 1-10,000,000 | post-build file inventory rows |
+| `response_file_count_limit` | 10000 | 1-1,000,000 | snapshotted response files |
+| `response_file_bytes_limit` | 1048576 | 1-64 MiB | bytes per snapshotted response file |
+
+`backend` is `ptrace` or `ebpf`; `envp_redact_names` holds at most 256 unique exact names. Reaching
+a count limit is a named coverage gap.
 
 The main implementation surfaces are:
 
@@ -680,8 +703,8 @@ The main implementation surfaces are:
 - `src/appsec_review/container_runtime/build_capture.py` — normalization, execution record, and
   the shared record verifier;
 - `src/appsec_review/jobs/job_project_build/job.py` — project-build run integration;
-- `src/appsec_review/jobs/job_language_build/capture.py` — the typed descriptor and sole generic
-  successful-exec reconciliation algorithm;
+- `src/appsec_review/jobs/job_language_build/capture.py` — the typed descriptor and generic
+  successful-exec reconciliation used by native, Rust, and .NET (Go reconciles in `go.py`);
 - `src/appsec_review/jobs/job_language_build/job.py`, `native.py`, `go.py`, `rust.py`, and
   `dotnet.py` — shared routing plus language-specific recipes, classification, artifacts, and
   metadata;

@@ -6,8 +6,9 @@ fingerprinted SQLite/FTS shards; application jobs call `appsec_review.retrieval`
 
 ## Accepted index sets
 
-One run may contain source, observations, components, build, artifacts, build-security, compiled, analysis, and evidence
-shards. A producer rebuilds only the shards whose fingerprints change. A fingerprint binds the
+One run may contain `source`, `observations`, `components`, `build`, `artifacts`,
+`build_security`, `compiled`, `analysis`, `evidence`, `history`, `tags`, `priority`,
+`precomputed`, `inventory`, and `links` shards (`INDEX_NAMES` in `retrieval/index.py`). A producer rebuilds only the shards whose fingerprints change. A fingerprint binds the
 target snapshot, producer artifacts, tool/image/rule identity, parser and normalizer identities,
 mapping implementation, schema, and upstream manifests. Thus an observation change does not
 invalidate an unrelated compile or AST shard, while a composed evidence index or finding package
@@ -67,13 +68,17 @@ clean.
 ## Identity and location contract
 
 Logical identities are versioned hashes of entity kind, target snapshot, and producer-native
-identity. Supported kinds are source files and spans, symbols, components, projects, build actions,
-compile units, objects, libraries, executables, generic build artifacts, packages, archive members,
-bytecode modules, managed assemblies, WebAssembly modules, AST nodes, IR entities, tool observations,
-evidence artifacts, and finding packages. Relations use the fixed vocabulary `DECLARES`, `DEFINES`,
+identity. Supported kinds (`EntityKind` in `retrieval/model.py`) are `source_file`, `source_span`,
+`symbol`, `component`, `project`, `build_action`, `compile_unit`, `object_file`, `library`,
+`executable`, `build_artifact`, `package`, `archive_member`, `bytecode_module`, `managed_assembly`,
+`wasm_module`, `ast_node`, `ir_entity`, `tool_observation`, `evidence_artifact`,
+`finding_package`, `change`, `history_signal`, `hotspot`, `change_context_signal`, `review_unit`,
+`deployment_event`, `tag_assignment`, `priority_item`, `review_signal`, `review_flow_step`,
+`review_context_file`, `precomputed_fact`, `dataset`, `dataset_audit`, `coverage_cell`,
+`dependency_package`, and `advisory`. Relations use the fixed vocabulary `DECLARES`, `DEFINES`,
 `REFERENCES`, `CALLS`, `CONTAINS`, `GENERATED_FROM`, `COMPILES_TO`, `LINKS_INTO`, `DEPENDS_ON`,
-`OBSERVED_AT`, `DERIVED_FROM`, `SUPPORTS`, `CONTRADICTS`, and `FLOWS_TO` (ordered CodeQL
-flow steps).
+`OBSERVED_AT`, `DERIVED_FROM`, `SUPPORTS`, `CONTRADICTS`, `FLOWS_TO` (ordered CodeQL flow
+steps), `SAME_AS`, and `AFFECTED_BY`.
 
 A resolving source location binds the target snapshot, normalized relative path, file hash,
 byte/line/column span, producer-native location, mapping method, confidence, and ambiguity.

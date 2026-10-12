@@ -200,7 +200,7 @@ def test_generic_reconciler_reports_a_truncated_tool_argv_instead_of_hashing_it(
     (rust.CAPTURE_DESCRIPTOR, "/usr/bin/rustc",
      "rustc", ["rustc", "src/lib.rs", "-o", "target/lib.rlib"], "compiler"),
 ])
-def test_generic_reconciliation_contract_is_shared_by_all_captured_languages(
+def test_generic_reconciliation_contract_is_shared_by_all_descriptor_languages(
         tmp_path: Path, descriptor: CapturedBuildDescriptor, executable: str, wrapper: str,
         argv: list[str], expected: str) -> None:
     result = reconcile_captured_build(

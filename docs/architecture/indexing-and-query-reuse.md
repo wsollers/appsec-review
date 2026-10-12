@@ -126,9 +126,9 @@ a silent allowlist. `query_precomputed` is abbreviated `QP`; existing generic `f
 | Normalized claims, reviews, adjudication, PoC receipts and final finding packages; future inference/publication | Review decisions and final evidence | Planned typed ledgers; publish sanitized final findings only | `review_package` input is separate; final claim/evidence closure | `resolve_evidence` and scoped finding query when built; no worker skill |
 
 An MCP endpoint is justified only when `core`, an existing domain query, and `QP` cannot give a
-bounded typed answer. `query_observations` is the concrete missing endpoint for scanner severity,
-suppression, rule, provider and location filters; its design must keep tool findings distinct from
-confirmed findings. Other named planned endpoints above are conditional on their producers.
+bounded typed answer. `query_observations` (implemented) is the endpoint for scanner severity,
+suppression, rule, provider and location filters; it keeps tool findings distinct from confirmed
+findings. Other named planned endpoints above are conditional on their producers.
 Skills are operator procedures, not a way to provide target facts to review workers. New sources
 do not require new skills by default; add one only for a repeated operator workflow with its own
 validation steps. Worker access remains through accepted MCP indices and packages.
@@ -392,16 +392,16 @@ membership is validated by a deterministic publication job.
 
 The existing domain queries (`query_artifacts`, `query_build_security`,
 `query_ci_configuration`, `query_codeql`, `query_change_context`, and
-`query_owasp_workbench`) remain first-class access paths. The future dataset inventory should be
-discoverable through a bounded catalog query or an enriched `coverage` result; it must not require
-the model to guess index names or inspect raw run directories.
+`query_owasp_workbench`) remain first-class access paths. The dataset inventory is discoverable
+through the bounded `query_dataset_inventory` catalog query, so the model never guesses index
+names or inspects raw run directories.
 
 ## First indexing batch: implemented coverage
 
 `job_review_data_indexing` (operations: [`review-data-indexing.md`](../operations/review-data-indexing.md))
-closes the review graph. Implemented:
+publishes the accepted inventory before `job_review_package_assembly`. Implemented:
 
-- **Inventory and audit.** All 22 registered jobs declare datasets in their own `datasets.py`.
+- **Inventory and audit.** All 23 registered jobs declare datasets in their own `datasets.py`.
   The audit compares declarations with the resolved configuration, accepted handoffs, every
   accepted shard (recomputed counts) and the run-owned `data/` tree, plus runtime receipts,
   configuration, telemetry, guidance and manifests. Violations block acceptance. Shards a producer

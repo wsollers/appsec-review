@@ -25,10 +25,10 @@ agents that inspect or change the repository. It is not a prompt for review work
 ## AI guidance locations
 
 - Repository-agent rules live only in root `AGENTS.md`.
-- `docs/agent-reader.md`, when recreated, is navigation only and must not introduce competing rules.
+- `docs/agent-reader.md` is navigation only and must not introduce competing rules.
 - Bounded agent procedures live under `skills/` and are loaded only when relevant.
-- Shared review-worker behavior rules live once under
-  `pipeline/prompt-fragments/governing-rules.md` when that pipeline is rebuilt.
+- Shared review-worker behavior rules live once in
+  `pipeline/prompt-fragments/governing-rules.md`.
 - Personas describe viewpoint, roles describe responsibility, and task prompts describe the
   bounded question. They must not repeat or widen global authority.
 - Model, reasoning, budget, timeout, worker-pool, job, step, and task settings belong in the central

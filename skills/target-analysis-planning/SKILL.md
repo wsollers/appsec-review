@@ -33,7 +33,8 @@ run target-produced programs. `system_packages` describes dependencies for the r
 image; it does not install them.
 
 `source_dir`, `build_dir`, every `dependency_files` value, and every `expected_outputs` value are
-repository-relative paths. They must equal or remain beneath the exact build-unit root. In
+repository-relative paths. `source_dir` must equal the exact build-unit root; the others must
+equal or remain beneath it. In
 particular, do not emit an output such as `bin/app`; emit `<build-unit-root>/bin/app`. Build and
 CodeQL containers have network access so declared package-manager dependencies can be restored.
 Set `network_required` to true only when the descriptor package proves that project-image

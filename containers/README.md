@@ -1,8 +1,19 @@
 # Container packaging
 
-`catalog.toml` is the sole inventory for container packaging. It accounts for all 42 audited legacy
-image variants and four narrow shared runtime bases. An entry is always `enabled`, `deferred`,
-`replaced`, or `retired`; absence is not a decision.
+`catalog.toml` is the inventory for every image built by `build.py`. For the legacy audit it
+accounts for all 42 audited legacy image variants and four narrow shared runtime bases. An entry is
+always `enabled`, `deferred`, `replaced`, or `retired`; absence is not a decision.
+
+The catalog also enables tools that were not derived from the legacy archive: `tool-actionlint`,
+`tool-cppcheck`, `tool-native-cpp`, `tool-tree-sitter`, `tool-sqlite-fts`, `tool-git`, `tool-pmd`,
+`tool-opengrep`, `tool-infer`, `tool-clangd-indexer`, and `tool-joern`. In total it enables 28 tool
+images plus the four bases.
+
+CodeQL is the exception: its licensed source image is operator-provided and its derived
+`appsec-review-codeql:*` analysis images are built by the CodeQL job
+(`src/appsec_review/codeql/runtime.py`), so they are packaged outside the catalog as described in
+[`tools/codeql/README.md`](tools/codeql/README.md). The catalog keeps the legacy `audit-codeql`
+entry `deferred`.
 
 ## Build and validation
 
@@ -25,6 +36,12 @@ containers/build-all.ps1 smoke --all
 containers/build-all.ps1 security --all
 ```
 
+Running either launcher with no arguments means `build --all`. `list <ids>` restricts the listing
+and `list --json` prints machine-readable id, state, tag, and dependencies. `smoke` runs the startup
+version check; `smoke --functional` adds the fixture-based functional checks. Set
+`APPSEC_DOCKER_BIN` to use a Docker-compatible client other than `docker` for build, smoke, and
+security commands; the application runtime always invokes `docker`.
+
 Before each build, external artifacts are downloaded over HTTPS into an ignored `downloads/`
 directory and verified against the declared byte size and SHA-256 in `assets.lock.json`. Docker build
 steps run with networking disabled. Logs and the machine-readable summary are written under
@@ -32,12 +49,23 @@ steps run with networking disabled. Logs and the machine-readable summary are wr
 log paths. Any failed, blocked, or skipped image makes the command fail, including with
 `--continue-on-error`.
 
+Some locked assets cannot be downloaded by the launcher and must be placed in `downloads/` by hand
+before a build: the `tool-native-cpp` `.deb` closure (its lock URL is the archive root; see
+[`tools/native-cpp/README.md`](tools/native-cpp/README.md)) and the `tool-tree-sitter` wheels and
+parsers produced with `acquire_assets.py` (its lock lists no fetchable artifacts; see
+[`tools/tree-sitter/README.md`](tools/tree-sitter/README.md)). `tool-sqlite-fts` has no asset lock.
+
 ## Runtime boundary
 
 `runtime-policy.toml` is the packaging acceptance boundary: no network, non-root UID/GID 10001,
 read-only root, all capabilities dropped, `no-new-privileges`, bounded CPU/memory/PIDs/time/output,
 a read-only target mount, and one writable scratch mount. Image definitions package tools only.
 Application jobs own arguments and translate tool output into findings.
+
+A catalog entry may pin `image_id`; the application executor then refuses to run a local image
+whose id differs (`src/appsec_review/container_runtime/executor.py`). Every enabled tool is
+expected to have a static evidence-collection adapter unless its `tool.toml` sets
+`static_adapter = false`; tools with that opt-out are run by their own jobs instead.
 
 ## Updating a pin
 

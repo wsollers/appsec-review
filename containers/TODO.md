@@ -2,8 +2,12 @@
 
 - Build environments: split dependency resolution from offline analysis; pin each language closure;
   share only explicit LSP payload layers; add per-language compile and language-server fixtures.
-- Native analysis: split compiler tracing, CodeQL, and language-server extraction; remove the
-  archived omnibus inheritance; define independent output and failure contracts.
+- Native analysis: compiler tracing and C/C++ build/AST/IR/ELF evidence (`tool-native-cpp`), Infer
+  (`tool-infer`), C/C++ symbol indexing (`tool-clangd-indexer`), and CPG production (`tool-joern`)
+  are enabled narrow images, and CodeQL images are packaged outside the catalog
+  (`containers/tools/codeql/README.md`). Remaining: decide whether the other archived `audit-native`
+  capabilities (SVF, Ghidra, CodeChecker) earn a bounded image, then retire or replace the deferred
+  `audit-native`, `audit-codeql`, and `audit-lsp-vendor` catalog entries.
 - Binary analysis: add a specialized capability only when BLint/Syft/Grype/Trivy do not satisfy a
   job contract; prohibit curl-to-shell installers and duplicated scanners.
 - ScanCode: evaluate a fixed official release artifact or image, verify its license database and

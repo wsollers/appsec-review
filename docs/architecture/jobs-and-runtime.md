@@ -13,12 +13,44 @@ job and invalidates the transitive downstream closure. It never treats time as p
 The graph holds a kernel-backed per-run claim lock across planning and execution so two resume
 processes cannot claim the same run concurrently.
 
-The direct CLI currently exercises this mechanism with a linear review graph from
-`job_review_intake` through `job_evidence_collection`, followed by `job_change_context_analysis`. Dagster builds the broader, branched
-`wave1_review` topology from the registered and configured jobs, including CI configuration,
-tree-sitter, post-build, OWASP, and review-prioritization branches that are not in the direct graph. Both surfaces use the
-same semantic registry and accepted-handoff format. The exact operator-visible distinction is
-documented in [`../operations/wave1-review.md`](../operations/wave1-review.md).
+The direct CLI currently exercises this mechanism with a linear 18-job review graph from
+`job_review_intake` through `job_review_package_assembly`. Dagster builds the broader, branched
+`wave1_review` topology from every registered and configured job except
+`job_third_party_data_sync`, adding the CI configuration, post-build, OWASP, and security-tagging
+jobs that are not in the direct graph. Both surfaces use the same semantic registry and
+accepted-handoff format. The exact operator-visible distinction is documented in
+[`../operations/wave1-review.md`](../operations/wave1-review.md).
+
+## Registered jobs
+
+`runtime/registry.py` registers 23 jobs. Each has a `[jobs.<job_id>]` table in
+`appsec-review.toml`, and its Dagster job is named from that table's `name`.
+
+| Job | Purpose | Operations |
+| --- | --- | --- |
+| `job_third_party_data_sync` | NVD, OSV, MITRE, and cve-bin-tool feed snapshots (scheduled, outside reviews) | [third-party-data-sync](../operations/third-party-data-sync.md) |
+| `job_review_intake` | Model preflight and review intake | [below](#inference-entry-point-and-model-preflight) |
+| `job_target_catalog` | Bounded target catalog and source index | [target-analysis-planning](../operations/target-analysis-planning.md) |
+| `job_source_history_analysis` | Git/GitHub history instability signals | [source-history-analysis](../operations/source-history-analysis.md) |
+| `job_ci_configuration_analysis` | CI/CD configuration analysis | [ci-configuration-analysis](../operations/ci-configuration-analysis.md) |
+| `job_target_analysis_plan` | Scanner selection and build recipes | [target-analysis-planning](../operations/target-analysis-planning.md) |
+| `job_tree_sitter_ast` | Concrete syntax trees and AST shards | [tree-sitter-ast](../operations/tree-sitter-ast.md) |
+| `job_change_context_analysis` | Change-context signals | [change-context-analysis](../operations/change-context-analysis.md) |
+| `job_project_build` | Project images, probes, and image repair | [project-build](../operations/project-build.md) |
+| `job_language_build` | Generic language and WebAssembly builds | [language-build](../operations/language-build.md), [wasm-build](../operations/wasm-build.md) |
+| `job_artifact_indexing` | Produced-artifact index | [artifact-indexing](../operations/artifact-indexing.md) |
+| `job_artifact_security_analysis` | Produced-artifact security analysis | [artifact-security-analysis](../operations/artifact-security-analysis.md) |
+| `job_cpp_compiled_analysis` | C/C++ compiled analysis | [cpp-compiled-analysis](../operations/cpp-compiled-analysis.md) |
+| `job_cpp_symbol_index` | clangd symbol index | [cpp-index-jobs](../operations/cpp-index-jobs.md) |
+| `job_cpg_analysis` | Joern code property graph | [cpp-index-jobs](../operations/cpp-index-jobs.md) |
+| `job_post_build_security_assessment` | Build-hardening assessment | [post-build-security-assessment](../operations/post-build-security-assessment.md) |
+| `job_evidence_collection` | Deterministic static evidence | [static-analysis](../operations/static-analysis.md) |
+| `job_codeql_analysis` | Cross-language CodeQL | [codeql-analysis](../operations/codeql-analysis.md) |
+| `job_owasp_control_assessment` | OWASP control assessment | [owasp-control-assessment](../operations/owasp-control-assessment.md) |
+| `job_review_prioritization` | Function-level review prioritization | [review-prioritization](../operations/review-prioritization.md) |
+| `job_security_tagging` | Basis-qualified security tags | [security-tagging](../operations/security-tagging.md) |
+| `job_review_data_indexing` | Dataset inventory and publication audit | [review-data-indexing](../operations/review-data-indexing.md) |
+| `job_review_package_assembly` | Deterministic pre-adjudication lead and hunt packages | [review-package-contract](review-package-contract.md) |
 
 Each orchestrated graph launch also publishes an immutable run-level orchestration receipt. This
 keeps the current Dagster run linked to the application run even when every job is reused and the
@@ -161,8 +193,9 @@ handoffs. TOML controls the multiprocess executor and concurrency bounds.
 
 Dagster run UUIDs and application run ids are separate identities. The adapter passes the Dagster
 UUID into `JobRunner` as orchestration correlation, and the runner records it in terminal
-`status.json`. After a successful return, the adapter adds the application run and attempt ids to
-the Dagster run tags. This creates a checked bidirectional trace without allowing Dagster to write
+`status.json`. The adapter tags the Dagster run with `appsec/application_run_id` and
+`appsec/trigger` when it claims each attempt, and with `appsec/<job_id>/attempt` and
+`appsec/<job_id>/status` when each job finalizes. This creates a checked bidirectional trace without allowing Dagster to write
 application receipts or allocate application ids.
 
 Deployment layout and exact operator commands are documented in
@@ -178,6 +211,17 @@ builds a `ModelRequest` naming its configured provider and model and calls `infe
 package resolves the provider to one transport function (`anthropic-api` or `claude-cli`). Jobs
 receive `infer` as a parameter from the registry and never import a provider module, an SDK, or a
 provider endpoint. A test fails if any module outside the inference package does.
+
+The two transports grant the model no tools:
+
+- `claude-cli` runs the operator-authenticated `claude` binary as `claude -p --output-format json
+  --no-session-persistence --permission-mode bypassPermissions --model <model> --effort <reasoning>
+  --allowedTools ""`, sending the bounded JSON request on stdin. It removes `ANTHROPIC_API_KEY` and
+  `ANTHROPIC_AUTH_TOKEN` from the child environment so the CLI uses its subscription login.
+- `anthropic-api` posts to the Messages API with `ANTHROPIC_API_KEY` (missing key is an error) and
+  enables extended thinking. The configured `reasoning` maps to a thinking budget of 1024 (`low`),
+  2048 (`medium`, also the fallback), 4096 (`high`), or 6144 (`xhigh`) tokens, capped at
+  `max_output_tokens - 1024` and never below 1024.
 
 Every review graph starts with `job_review_intake`, whose first step is `model_preflight`:
 

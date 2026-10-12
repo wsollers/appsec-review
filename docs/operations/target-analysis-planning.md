@@ -14,9 +14,11 @@ Model settings and worker count are centralized under `[jobs.job_target_analysis
 in `appsec-review.toml`. Build-recipe inference is partitioned by language family and build system,
 then executed through the configured bounded worker pool. Every request composes the DevOps Engineer
 persona with a language-specialized Build Engineer role and only the build units in that partition.
-The shipped configuration uses the Claude CLI subscription transport. The CLI runs with
-`--safe-mode --tools ""`, so review inference cannot invoke built-in shell, file, or browser tools;
-its input is the bounded request assembled by the application. The runtime stores exact guidance
+The shipped configuration sets `provider = "claude-cli"`, which runs the operator-authenticated
+Claude CLI (`inference/claude_cli.py`) with `--safe-mode --tools ""` and removes
+`ANTHROPIC_API_KEY` and `ANTHROPIC_AUTH_TOKEN` from the child environment. Its input is the bounded
+request assembled by the application. `provider = "anthropic-api"` selects the alternative
+Anthropic Messages transport, which requires `ANTHROPIC_API_KEY`. The runtime stores exact guidance
 and model identity beneath
 `runs/<run-id>/data/guidance/<sha256>/`, and logs only hashes, identity, counts, duration, retries,
 status, and token counts in the central log. Bounded raw provider responses—including rejected
@@ -33,7 +35,20 @@ catalog and plan identities allow unaffected jobs and shards to be reused.
 The accepted plan is directly retrievable from the `analysis` index through the bounded MCP tools.
 No new glob, regex, SQL, shell, or filesystem endpoint is needed.
 
+The model sees only a bounded catalog summary (`appsec-review/target-analysis-summary/1`, written
+as `catalog-summary.json` beside the accepted plan). Its bounds are integers in
+`[jobs.job_target_analysis_plan.settings]`; a truncated summary is a named gap:
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `summary_max_items` | 2000 | maximum summarized catalog items; at least 1 |
+| `summary_max_bytes` | 524288 | maximum summary bytes; at least 1024 |
+| `summary_sample_per_prefix` | 20 | sampled files per path prefix; 1 to `summary_max_items` |
+
 ## Isolated project builds
+
+Steps, settings, recipe validation, repair, and recovery are summarized in
+[`project-build.md`](project-build.md).
 
 `job_project_build` consumes only the accepted, hash-verified plan. Each language family has four
 explicit phases: resolve or build its project image, publish its static-analysis dispatch, probe

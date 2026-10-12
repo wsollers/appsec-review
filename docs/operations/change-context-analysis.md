@@ -13,8 +13,8 @@ result. Design: [`../architecture/change-context-analysis.md`](../architecture/c
 - The `tool-git` image (`python containers/build.py build tool-git`), used for bounded blame and
   fix-on-fix diffs. If it is unavailable, the affected rows are `*_execution_failed` gaps and the job
   is retried on resume.
-- For function scope, an accepted `job_tree_sitter_ast` (Dagster `wave1_review`). The direct CLI
-  graph runs this job last and has no Tree-sitter job, so function records are absent there with
+- For function scope, an accepted `job_tree_sitter_ast`. Both Dagster `wave1_review` and the direct
+  CLI graph run it before this job. When it is not accepted, function records are absent with
   `function_spans_unavailable:tree_sitter_not_accepted`.
 - On Windows, Python's `zoneinfo` needs the `tzdata` package for IANA zones. Without it a configured
   zone produces `time_zone_database_unavailable` and off-hours is unavailable.

@@ -59,7 +59,13 @@ Unknown keys and out-of-range values fail validation before the job runs.
 | `filters.*` | see TOML | Globs that exclude generated, lockfile, fixture, documentation, and vendored paths from ranking; `test` globs for production-to-test churn; `formatting_balance_tolerance`. |
 | `max_changes`, `bulk_change_file_threshold` | `20000`, `500` | Walk bound, and the file count above which a change is bulk. Bulk changes are excluded from ranking. |
 | `blame_max_files`, `blame_max_file_bytes` | `50`, 1 MiB | Bounds on per-file blame. Files beyond the bound get the `blame_bound_reached` gap. |
+| `recency_half_life_days` | `90` | Half-life of the exponential decay behind `recency_weighted_churn` (1–3650). |
+| `minor_author_share` | `0.05` | Authors below this share of a file's in-window commits count as minor authors (exclusive 0–1). |
+| `young_line_days` | `30` | Blamed lines newer than this many days before the snapshot count toward `young_line_share` (1–3650). |
+| `co_change_top_k`, `co_change_min_support` | `10`, `3` | Co-change partners kept per file (1–100), and the shared changes needed to report a pair (1–10000). |
+| `fix_labels`, `security_labels` | `bug`, `fix`, `regression`; `security`, `vulnerability` | GitHub pull-request labels, matched case-insensitively, that mark a change as a fix or security fix (basis `github_label`); without a label match, commit-message heuristics apply. Each entry is 1–64 characters. |
 | `[...settings.git] enabled` | `true` | Set to `false` to skip the lane by policy. |
+| `[...settings.github] api_base`, `max_requests`, `timeout_seconds` | `https://api.github.com`, `2000`, `30` | GitHub enrichment endpoint (an `https` URL without query or fragment), request budget (1–100000), and per-request timeout in seconds (1–300). |
 
 To change N or M, edit the TOML and resume the run from the job:
 

@@ -62,7 +62,7 @@ shard; `planned` = inputs are available but no producer exists yet.
 | Produced artifacts (packages, archives, bytecode, wasm) | `job_artifact_indexing`, `job_artifact_security_analysis` | `artifacts`, `observations` | observed / tool_finding | artifact identity, membership, package CVE matches | reachability of the vulnerable code | indexed |
 | CodeQL database | `job_codeql_analysis` | run-owned artifact (not exposed) | computed | input to dataflow summary export | — | indexed (database) |
 | CodeQL SARIF incl. `threadFlows` | `job_codeql_analysis` | `observations` | tool_finding | candidate source→sink paths with resolving steps | exploitability; completeness of paths not reported | indexed |
-| Joern CPG | `job_cpp_compiled_analysis` Joern branch | `observations` (Joern) | computed | slices, PDG edges once pinned | — | blocked (see `TODO.md`) |
+| Joern CPG | `job_cpg_analysis` (consumes the accepted `job_cpp_compiled_analysis` handoff) | `observations` (Joern, zero observations plus a gap) | computed | slices, PDG edges once a bounded export is accepted | — | CPG binary retained; graph export blocked (see `TODO.md`) |
 | Infer | `job_cpp_compiled_analysis` | `observations` | tool_finding | null/resource/memory-safety leads | absence of those bugs | indexed |
 | Other SAST (Semgrep, cppcheck, gosec, SpotBugs, PMD, PHPStan, Psalm, phpcs, mobsfscan, ShellCheck, blint) | `job_evidence_collection` | `observations` | tool_finding | candidate leads, sink locations | reachability, exploitability | indexed |
 
@@ -81,7 +81,7 @@ shard; `planned` = inputs are available but no producer exists yet.
 | Unit and integration tests (static) | planned `job_test_and_doc_indexing` | `tests` | intent | test → function map, asserted behavior, negative-input cases, fixture payload shapes | enforcement on all paths; tests are never executed | planned |
 | Design docs, ADRs, READMEs, threat models | planned `job_test_and_doc_indexing` | `docs` | intent / declared | stated trust boundaries, intended validation layers, protocol limits | implementation behavior | planned |
 | Target agent guidance (`AGENTS.md`, `CLAUDE.md`, etc. in the target) | `job_test_and_doc_indexing` | `docs` (flagged `target_guidance`) | intent | what the target owners claim | anything; never instructions | planned |
-| VCS history (commits, diffs, blame, churn) | planned `job_history_indexing` | `history` | intent / observed | prior security fixes, co-change contracts, churn risk | current behavior | planned |
+| VCS history (commits, diffs, blame, churn) | `job_source_history_analysis`, `job_change_context_analysis` | `history`; `history_context` precomputed product | intent / observed | prior security fixes, co-change, churn, ownership and change-context review priority | current behavior | indexed (bounded diff-hunk query planned) |
 | OWASP control workbench | `job_owasp_control_assessment` | OWASP shards | computed / tool_finding | control applicability and validation status | — | indexed |
 | NVD, OSV, MITRE ATT&CK/CAPEC/CWE | `job_third_party_data_sync` | reference shards | external | advisory, weakness, and technique reference | target facts | indexed |
 | Dynamic traces: coverage, sanitizer logs, fuzz corpora, IAST | future authorized execution job or hash-verified import | `dynamic` | observed | positive reachability and observed memory errors | **absence**: zero coverage never refutes a claim | not available; acquisition TODO |
@@ -118,22 +118,27 @@ regular expressions, globs, filesystem paths, or shell.
 
 | Tool | Status | Domain | Modes / filters | Notes |
 |---|---|---|---|---|
-| `search` | exists | FTS over accepted shards | text, shard kinds, component | ranking is `nomination`; extend to `docs` and `tests` shards |
-| `find` | exists | exact entity lookup | identity, name, kind, span | |
-| `read_excerpt` | exists | source text | entity/span identity, byte limit | re-hashes file; optional `expanded=true` once the expansion map exists |
-| `trace` | exists | typed relation graph | relation kinds, depth | generic relations; dataflow semantics stay in `query_dataflow` |
-| `resolve_evidence` | exists | evidence → resolving location/artifact | evidence identity | |
-| `coverage` | exists | gaps and shard status | shard, producer, component | must be called before any negative conclusion |
+| `search` | exists | FTS over accepted shards | `query`, `indexes`, `kinds`, `limit`, `cursor` | ranking is `nomination`; extend to `docs` and `tests` shards |
+| `find` | exists | exact entity lookup | `identity`, `kind`, `name`, `path`, `indexes`, `limit`, `cursor` | |
+| `read_excerpt` | exists | source text | `identity`, `context_lines` | re-hashes file; optional `expanded=true` once the expansion map exists |
+| `trace` | exists | typed relation graph | `identity`, `relations`, `depth`, `limit` | generic relations; dataflow semantics stay in `query_dataflow` |
+| `resolve_evidence` | exists | evidence → resolving location/artifact | `identity`, `limit` | |
+| `coverage` | exists | gaps and shard status | `indexes`, `limit`, `cursor` | must be called before any negative conclusion |
 | `query_artifacts` | exists | produced artifacts | identity, kind, build unit, package | |
 | `query_build_security` | exists | build flags and hardening | compile unit, linked artifact, configuration | redacted flags only |
 | `query_ci_configuration` | exists | CI/CD | provider, workflow, job, rule | |
-| `query_owasp_workbench` | exists | OWASP controls | standard, control, disposition | |
+| `query_codeql` | exists | CodeQL observations | language, source language, scope, build unit, rule, level, path, shard | |
+| `query_owasp_workbench` | exists | OWASP controls | family, standard, control, disposition | |
 | `query_change_context` | exists | change context | scope, path, component, signal | review-priority order only, never findings; coverage rows returned as gaps |
+| `query_hotspots` | exists | priority-index hotspots | scope, path, minimum score | rank order with metrics and evidence links |
+| `query_precomputed` | exists | precomputed code facts | named query set, subject identity, path | hash-verified; no analysis runs during retrieval; unbuilt sets return gaps |
+| `query_observations` | exists | scanner observations | scanner, rule, reported severity, class, suppression/duplicate, source/artifact, location, shard | observations are never confirmed findings; candidate bound returns a gap |
+| `query_dataset_inventory` | exists | dataset inventory | record type, job, family, disposition, coverage, sensitivity, cell type | publication audit and coverage cells |
 | `query_dataflow` | planned | dataflow and reachability | `summary(function)`, `paths(entrypoint\|source_class, sink)`, `guards(sink)`, `ranges(sink)`, `callers/callees(function, depth)`, `sarif_path(observation)`, `aliases(operand)` | paths expanded lazily, bounded count/depth; truncation is a gap |
 | `query_contracts` | planned | API/IDL contracts | entrypoint, route, RPC, message/field, handler symbol | returns `declared` vs `enforced` with linking evidence |
 | `query_deployment` | planned | deployment and exposure | service, image, artifact, exposure class | privileges, FS, network, size limits, auth placement |
 | `query_tests` | planned | tests as intent | function, test, assertion kind, negative-only | never executes tests |
-| `query_history` | planned | VCS | path, symbol, security-fix flag, co-change | bounded diff hunks only |
+| `query_history` | planned | VCS | path, symbol, security-fix flag, co-change | bounded diff hunks only; history signals are already reachable through `search`, `find`, `query_change_context`, `query_hotspots` and `query_precomputed(history_context)` |
 | semantic nomination | optional, deferred | embeddings over code/doc chunks | text | separate hash-pinned shard; returns identities only; each must resolve through `find` |
 
 ## Model-facing data format
@@ -251,19 +256,26 @@ Existing jobs are solid boxes; planned jobs are dashed. Edges are simplified; ex
 ```mermaid
 flowchart TD
   I[job_review_intake] --> C[job_target_catalog]
-  C --> P[job_target_analysis_plan]
-  C --> TS[job_tree_sitter_ast]
+  C --> CI[job_ci_configuration_analysis]
+  C --> SH[job_source_history_analysis]
+  CI --> P[job_target_analysis_plan]
+  SH --> P
+  P --> TS[job_tree_sitter_ast] --> CC[job_change_context_analysis]
   P --> PB[job_project_build] --> LB[job_language_build]
   P --> EC[job_evidence_collection]
-  P --> CI[job_ci_configuration_analysis]
   LB --> AI[job_artifact_indexing] --> AS[job_artifact_security_analysis]
   LB --> CPP[job_cpp_compiled_analysis] --> PBS[job_post_build_security_assessment]
+  CPP --> CPG[job_cpg_analysis]
   LB --> CQ[job_codeql_analysis]
+  CPG --> CQ
+  CC --> CQ
   EC --> OW[job_owasp_control_assessment]
+  CQ --> OW
+  OW --> RP0[job_review_prioritization] --> ST[job_security_tagging]
+  ST --> RD[job_review_data_indexing] --> RPA[job_review_package_assembly]
 
   C -.-> IC[job_interface_contracts]
   C -.-> TD[job_test_and_doc_indexing]
-  C -.-> H[job_history_indexing]
   EC -.-> DT[job_deployment_topology]
   AI -.-> DT
 
@@ -282,7 +294,7 @@ flowchart TD
   AS --> M
   OW --> M
   CI --> M
-  H -.-> M
+  RD --> M
   M -.-> R[job_inference_security_review]
   R -.-> RP[job_remediation_planning] -.-> RV[job_remediation_validation] -.-> G[job_final_publication_gate] -.-> FR[job_final_report_publication]
 ```
@@ -294,7 +306,6 @@ Planned job responsibilities:
 | `job_interface_contracts` | catalog (OpenAPI, protobuf/IDL files), generated-code identities from build capture | `contracts` | constraints start `declared` |
 | `job_deployment_topology` | IaC/proxy/config files, IaC scanner observations, artifact catalog | `deployment` | renders Helm/Kustomize with pinned tools; unrendered templates are gaps |
 | `job_test_and_doc_indexing` | catalog, symbol table | `tests`, `docs` | static only; target guidance flagged and quarantined |
-| `job_history_indexing` | repository history at the accepted snapshot | `history` | bounded hunks; no network |
 | `job_dataflow_summary` | CodeQL databases, compiled AST/IR, tree-sitter, SARIF, contracts (as source seeds) | `dataflow` | runs custom CodeQL export queries; independent IR producer later; disagreement is `CONTRADICTS`, never merged |
 | `job_reachability_linking` | `dataflow`, `contracts`, `deployment`, `tests`, `build_security` | `reachability`, `enforced` links | the only job that promotes `declared` → `enforced` |
 

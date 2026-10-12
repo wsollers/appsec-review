@@ -1,5 +1,10 @@
 # Implementation prompt: source graphs and reusable review queries
 
+Status: not implemented. Its prerequisite, the review-data indexing batch, is implemented. Only the
+nine stage-1 sets are built (`FIRST_STAGE_SETS` in `indexing/products.py`); `query_precomputed`
+returns an unavailable gap for the graph and review-context sets. `job_cpg_analysis` retains a
+Joern CPG binary without graph export.
+
 Implement the graph and advanced query batch in
 [`indexing-and-query-reuse.md`](../architecture/indexing-and-query-reuse.md) after the dataset
 inventory and first-stage products in

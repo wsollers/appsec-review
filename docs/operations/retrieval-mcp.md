@@ -54,10 +54,16 @@ execute a target, or run caller-supplied SQL, regular expressions, globs, or she
 Missing scanner or shard coverage is reported as a gap.
 
 `query_owasp_workbench` is pinned to the MCP session's run and reads only that run's accepted OWASP
-shard manifest. It scopes by standard/version/profile, control, component, project, evidence mode,
-validator, batch, disposition, or shard and returns explicit pagination, truncation, ambiguity, and
-coverage gaps. A run without an accepted workbench manifest returns an availability gap, not an
+shard manifest. It scopes by shard `family` (`standards`, `component-classification`,
+`applicability`, `validation-work`, `control-result`, `finding-package`), standard/version/profile,
+control, component, project, evidence mode, validator, batch, disposition, or shard and returns
+explicit pagination, truncation, ambiguity, and coverage gaps. A run without an accepted workbench manifest returns an availability gap, not an
 empty-coverage claim.
+
+`query_codeql` reads only accepted `observations` shards whose shard id starts with `codeql-`.
+Exact filters cover CodeQL language, original source language, scope, build unit, rule, level,
+path, and shard. Missing CodeQL shards and non-complete shard coverage are returned as gaps; see
+[`codeql-analysis.md`](codeql-analysis.md).
 
 `query_change_context` reads only the accepted `history/change-context` shard and returns
 change-context priority records in rank order, filtered by scope (`file`, `function`, `component`),
@@ -99,6 +105,11 @@ line range. Each result carries the native severity, normalized value, normaliza
 rule (`appsec-review/reported-severity/1`) and its lead state. Results order by reported severity
 and are tool observations, never confirmed findings. Non-complete scanner coverage is returned as
 gaps; suppression and duplicate filters need the accepted `scanner_correlation` shard.
+
+The `links` index holds `job_review_data_indexing` cross-domain link shards in five families
+(`representation`, `finding_source`, `package_advisory`, `symbol_syntax`, `history_code`). Query it
+with `find` and `trace` and `"indexes": ["links"]`; non-exact joins remain separate ambiguous
+relations carrying their method and confidence.
 
 `query_dataset_inventory` is the bounded catalog of the accepted dataset inventory: one record per
 dataset (disposition, query route, exception reason, producer attempt and coverage), the

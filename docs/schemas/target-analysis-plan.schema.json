@@ -36,7 +36,18 @@
     "model": {
       "type": "object", "additionalProperties": false,
       "required": ["status", "proposal_sha256"],
-      "properties": {"status": {"type": "string"}, "proposal_sha256": {"type": ["string", "null"]}}
+      "properties": {
+        "status": {"enum": ["NOT_NEEDED", "DISABLED", "UNAVAILABLE", "ACCEPTED", "PARTIAL", "REJECTED", "FAILED"]},
+        "proposal_sha256": {"type": ["string", "null"]},
+        "groups": {
+          "description": "One entry per language-family/build-system inference partition, in sorted partition order; present only when recipe inference ran.",
+          "type": "array",
+          "items": {
+            "type": "object", "additionalProperties": false, "required": ["status"],
+            "properties": {"status": {"enum": ["ACCEPTED", "REJECTED", "FAILED", "BUDGET_EXCEEDED"]}}
+          }
+        }
+      }
     }
   }
 }

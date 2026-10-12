@@ -3,7 +3,7 @@
 `runs/<run-id>/data/logs/pipeline.jsonl` is the canonical append-only event stream. Every record uses
 `appsec-review/telemetry-event/1`, a contiguous sequence, stable event identity, UTC timestamp, and
 run/job/attempt/step/task correlation. Details may add Dagster run/node, producer/tool invocation,
-index shard, MCP session/invocation, future model invocation, or finding-package identities.
+index shard, MCP session/invocation, model invocation, or finding-package identities.
 
 The writer is process-safe and crash-recovering. It bounds depth, collection size, strings, and total
 record bytes. Credentials, secret-like values, prompts, responses, raw model output, source text,
@@ -19,8 +19,12 @@ Lifecycle families are:
 - `TOOL_INVOCATION_STARTED/COMPLETED` for scanners and external tools, with immutable tool identity,
   retry, duration, result/gap counts, truncation, disposition, and error class.
 - `MCP_TOOL_STARTED/COMPLETED` for transport calls and `RETRIEVAL_SUBOP_COMPLETED` for child spans.
-- `MODEL_CALL_STARTED/COMPLETED`, ready for later inference, with provider/model/reasoning identities,
-  guidance and request hashes, token/cache counts, duration, retry, status, and error class.
+- `MODEL_CALL_STARTED/COMPLETED` around inference calls (currently emitted by target analysis
+  planning, project-build image repair, and post-build security assessment), with
+  provider/model/reasoning identities, guidance and request hashes, token/cache counts, duration,
+  retry, status, and error class.
+- `DAGSTER_QUEUE_DELAY`, written by the Dagster adapter when it claims a job attempt, with the
+  Dagster run id and the delay in milliseconds since that Dagster run was created.
 - `PROJECT_IMAGE_BUILD_STARTED`, `PROJECT_IMAGE_BUILT|REUSED|BUILD_FAILED`, and
   `BUILD_PROBE_REUSED` record project-image and cross-run probe decisions by recipe and image
   identity. `PROJECT_IMAGE_REPAIR_ACCEPTED|FAILED|REUSED` records bounded repair disposition and

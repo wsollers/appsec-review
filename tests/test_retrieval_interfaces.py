@@ -28,3 +28,19 @@ def test_artifact_query_contract_is_bounded_and_transport_neutral() -> None:
         ArtifactQueryRequest(shard="bad/shard")
     with pytest.raises(ValueError, match="between 1 and 100"):
         ArtifactQueryRequest(limit=101)
+
+
+def test_published_mcp_tool_catalog_matches_the_server_tools() -> None:
+    import json
+    from pathlib import Path
+
+    from appsec_review.mcp.schema import TOOLS
+
+    catalog = json.loads((Path(__file__).resolve().parents[1] / "docs" / "schemas" /
+                          "retrieval-mcp-tools.json").read_text(encoding="utf-8"))
+    assert catalog["schema"] == "appsec-review/mcp-tool-catalog/1"
+    assert catalog["tools"] == [
+        {"name": tool["name"], "required": list(tool["inputSchema"].get("required", [])),
+         "properties": list(tool["inputSchema"]["properties"])}
+        for tool in TOOLS
+    ]

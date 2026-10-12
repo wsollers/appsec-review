@@ -80,7 +80,7 @@ packages, build artifacts, and tool observations.
 | --- | --- | --- |
 | `declared` | A manifest, SBOM entry, or import makes the capability available. No call site was resolved. | `func`, `infra`, `platform`, `data`, `surface`, `component`, `lang` |
 | `invoked` | A resolved call site, route registration, decorator, or configuration key exercises the capability. For declarative configuration (IaC, manifests, Dockerfiles, workflows), the parsed key or resource is the resolved site. | `func`, `infra`, `data`, `surface` |
-| `reported` | A scanner rule matched, through SARIF or another normalized observation. The match is unverified. | `cwe`, `cert-*`, `misra-*`, `vuln`, `scorecard`, `func`, `infra` (rule-defined capability matches) |
+| `reported` | A scanner rule matched, through SARIF or another normalized observation. The match is unverified. For `gap`, a producer or this job reported missing coverage. | `cwe`, `cert-*`, `misra-*`, `vuln`, `scorecard`, `func`, `infra` (rule-defined capability matches), `gap` |
 | `confirmed` | An adjudicated claim with resolving evidence, produced by the inference review or the workbench. | `cwe`, `cert-*`, `misra-*`, `vuln`, `capec`, `attack` |
 | `derived` | A crosswalk produced this tag from other assignments. It means "applicable" or "relevant to review". | `surface` (boundary tags only), `asvs5`, `masvs2`, `nist53r5`, `ssdf`, `k8s-pss`, `slsa1`, `top10-2025`, `api-top10-2023`, `cicd-top10`, `k8s-top10-2022`, `scorecard`, `cwe`, `capec`, `attack` |
 
@@ -101,11 +101,13 @@ Every namespace is registered with the following fields: its pinned catalog (or 
 repository-defined vocabularies), the catalog's canonical SHA-256, an ID normalizer, a rollup
 rule, and its allowed bases. An unregistered namespace fails validation. A registered namespace
 whose upstream catalog is not yet pinned is `proposed`. It is visible in this design but rejected
-at runtime.
+at runtime. The local vocabulary (`data/reference/taxonomy/vocabulary.json`), capability rules, and
+crosswalk are pinned by path and SHA-256 under `jobs.job_security_tagging.settings.taxonomy` in
+`appsec-review.toml`; a hash mismatch fails the job before any unit runs.
 
 | Family | Namespace | Catalog / authority | Pinned today |
 | --- | --- | --- | --- |
-| Code facts | `func`, `infra`, `platform`, `data`, `surface`, `component`, `lang`, `gap` | Local vocabulary file. `component` reuses the workbench `COMPONENT_ROLES`. | No (new local file) |
+| Code facts | `func`, `infra`, `platform`, `data`, `surface`, `component`, `lang`, `gap` | Local vocabulary file. `component` reuses the workbench `COMPONENT_ROLES`. | Yes (local file, SHA-256 pinned) |
 | Controls | `asvs5` | OWASP ASVS 5.0.0 | Yes (fixture only) |
 | Controls | `masvs2` | OWASP MASVS 2.1.0 | Yes (fixture only) |
 | Controls | `nist53r5` | NIST SP 800-53 Rev. 5 (OSCAL catalog) | Proposed |
@@ -116,9 +118,9 @@ at runtime.
 | Routing | `cicd-top10`, `k8s-top10-2022` | OWASP Top 10 CI/CD Security Risks, OWASP Kubernetes Top 10 (2022) | Proposed (routing context only) |
 | Checks | `scorecard` | OpenSSF Scorecard check names | Proposed |
 | Weakness | `cwe` | MITRE CWE 4.20 | Yes (`mitre_sync`) |
-| Weakness | `cert-c`, `cert-cpp` | SEI CERT C / C++ rule IDs | Partly (`rules/cpp-cert`) |
+| Weakness | `cert-c`, `cert-cpp` | SEI CERT C / C++ rule IDs | Partly (`rules/cpp-cert`, `rules/sei-cert`) |
 | Weakness | `misra-c2012`, `misra-cpp2023` | MISRA rule IDs only. The rule text is licensed and is never stored. | Proposed |
-| Weakness | `vuln` | Fixed local set over Grype/OSV advisory matches. Advisory IDs stay in evidence, never in tags. | No (new local file) |
+| Weakness | `vuln` | Fixed local set over Grype/OSV advisory matches. Advisory IDs stay in evidence, never in tags. | Yes (local file, SHA-256 pinned) |
 | Threat | `capec` | MITRE CAPEC 3.9 STIX | Yes (`mitre_sync`) |
 | Threat | `attack` | MITRE ATT&CK Enterprise 19.2 (Mobile/ICS optional) | Yes (`mitre_sync`) |
 
@@ -176,8 +178,9 @@ gives `invoked`.
 
 ### `component` and `lang`
 
-`component:<role>` reuses the 13 roles in `owasp_workbench.engine.COMPONENT_ROLES` verbatim, so
-the tag cloud and control applicability share one component vocabulary. `lang:<id>` uses the
+`component:<role>` reuses the 13 roles in `owasp_workbench.engine.COMPONENT_ROLES`, with `_`
+written as `-` to satisfy the tag grammar (for example, `component:application-api-server`), so the
+tag cloud and control applicability share one component vocabulary. `lang:<id>` uses the
 language identifiers of the tree-sitter and build adapters.
 
 ## 2. Assurance controls (`asvs5`, `masvs2`, `nist53r5`, `ssdf`)

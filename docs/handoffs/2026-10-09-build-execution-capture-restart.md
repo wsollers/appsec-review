@@ -1,5 +1,12 @@
 # Build execution capture restart handoff — 2026-10-09
 
+> **Historical snapshot (noted 2026-10-12).** This handoff records the state on 2026-10-09 and is
+> superseded by [`build-environments-and-execution-capture.md`](../architecture/build-environments-and-execution-capture.md)
+> and [`language-build.md`](../operations/language-build.md). Since then the syscall event schema is
+> `appsec-review/build-syscall-event/2`, tool streams are retained as complete files, and
+> `execute_captured` is integrated into project and language builds. Do not use this body as
+> current guidance.
+
 ## User objective
 
 Replace compiler-log inference with direct build execution evidence. `connect`/egress capture is

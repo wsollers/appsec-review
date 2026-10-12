@@ -10,7 +10,8 @@ Acquire on Linux using the digest-pinned base image, download the exact binary w
 grammar's upstream repository, release, license, generated library hash, and byte size.
 
 Review execution mounts the accepted target at `/target` read-only and a scope-specific scratch
-directory at `/scratch` while the image working directory remains `/work`. It uses `--network none`,
+directory at `/scratch`, and runs with working directory `/scratch` (the executor always passes
+`--workdir`, overriding the image's `WORKDIR /work`). It uses `--network none`,
 a read-only root filesystem, a non-root user,
 dropped capabilities, `no-new-privileges`, and configured CPU, memory, PID, timeout, and output
 bounds.

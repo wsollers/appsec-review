@@ -1,7 +1,7 @@
 # Operating review-data indexing
 
-`job_review_data_indexing` is the last job in the direct review graph (`appsec-review start`) and
-in the Dagster `wave1_review` graph, where it follows `job_security_tagging`. It accounts for every
+`job_review_data_indexing` precedes `job_review_package_assembly` in both the direct review graph
+(`appsec-review start`) and the Dagster `wave1_review` graph, where it follows `job_security_tagging`. It accounts for every
 dataset the run produced, restores shards a manifest rewrite dropped, publishes cross-domain links
 and the stage-1 precomputed query sets, and publishes the dataset inventory as an indexed dataset.
 The design is in [`indexing-and-query-reuse.md`](../architecture/indexing-and-query-reuse.md).

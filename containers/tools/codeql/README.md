@@ -22,7 +22,9 @@ docker image inspect audit-codeql:custom-2.27.0 --format "{{.Id}}"
 
 The resulting image id must equal `source_image.image_id` in `assets.lock.json` and
 `jobs.job_codeql_analysis.settings.source_image_id` in `appsec-review.toml`; the runtime refuses a
-source tag whose identity changed.
+source tag whose identity changed. The SHA-256 of `assets.lock.json` itself must equal
+`jobs.job_codeql_analysis.settings.asset_lock_sha256`; the job refuses to plan otherwise, so any
+lock change updates that setting in the same change.
 
 ## Derived analysis images
 

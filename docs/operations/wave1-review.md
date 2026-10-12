@@ -11,12 +11,15 @@ review_intake -> target_catalog -> source_history_analysis -> target_analysis_pl
   -> artifact_indexing -> artifact_security_analysis -> cpp_compiled_analysis
   -> cpp_symbol_index -> cpg_analysis -> evidence_collection
   -> change_context_analysis -> codeql_analysis -> review_prioritization
+  -> review_data_indexing -> review_package_assembly
 ```
 
-The direct graph does not include CI configuration analysis, post-build security assessment, or
-OWASP control assessment. Both surfaces run change-context analysis after Tree-sitter AST production
-and review prioritization after CodeQL. Use Dagster's `wave1_review` when its additional branches are
-required. Its current dependency graph is assembled from the registered,
+The direct graph does not include CI configuration analysis, post-build security assessment, OWASP
+control assessment, or security tagging, and `third_party_data_sync` runs separately (`appsec-review
+run job_third_party_data_sync`). Both surfaces run change-context analysis after Tree-sitter AST
+production, review prioritization after CodeQL, and review-package assembly after data indexing. Use Dagster's
+`wave1_review`, which includes every registered job except `third_party_data_sync`, when its
+additional branches are required. Dagster's current dependency graph is assembled from the registered,
 configured jobs and is summarized in [`../../deploy/dagster/README.md`](../../deploy/dagster/README.md).
 
 In both surfaces, the application handoff is the checkpoint of record; Dagster metadata links to

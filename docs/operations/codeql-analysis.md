@@ -45,14 +45,20 @@ The licensed base image is operator-provided. No proprietary payload is committe
 `audit-codeql:custom-2.27.0` source image adds the release-pinned CERT C++ coding-standards pack to
 that base. The reviewed asset lock pins the CLI, license, complete extractor trees,
 TypeScript/Rust analyzer prerequisites, default query packs, custom query trees, pack locks, and
-suites. A derived image layers that payload onto each accepted build image and runs as a distinct
-non-root user on Docker's bridge network so manual builds can restore declared dependencies,
+suites. `jobs.job_codeql_analysis.settings.asset_lock_sha256` in `appsec-review.toml` must equal
+the SHA-256 of `containers/tools/codeql/assets.lock.json`, and each configured query, additional,
+and custom suite must equal its locked entry; otherwise planning stops with a framework-integrity
+failure. Any change to the lock therefore updates `asset_lock_sha256` in the same change. A
+derived image layers that payload onto each accepted build image and runs as a distinct non-root
+user on Docker's bridge network so manual builds can restore declared dependencies,
 read-only root filesystem, dropped capabilities, bounded memory/CPU/PIDs, and bounded head/tail
 logs.
 
 Database and query checkpoints are separate. Each applicable scope runs a `default` query profile;
 C# and Rust also run independently hash-pinned `security-extended` profiles, and C/C++ runs the
-discovered `cert-cpp` custom profile. The C/C++ default profile uses
+discovered `cert-cpp` custom profile. `appsec-review.toml` also configures a Go `security-extended`
+additional query that the asset lock does not contain, so Go scopes fail the additional-suite
+equality check until the lock and configuration agree. The C/C++ default profile uses
 `cpp-code-scanning.qls`, while the custom profile uses `cert-cpp-default.qls`. Database identities
 exclude all query inputs, so a query-suite change reuses a verified database while a build recipe,
 dependency, environment,

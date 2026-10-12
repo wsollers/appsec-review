@@ -7,7 +7,8 @@ evidence collection) against a local target checkout. Every job writes immutable
 result.
 
 The repository is mid-rebuild. Repository-agent rules live in [`AGENTS.md`](AGENTS.md); navigation
-for the rest of the documentation is in [`docs/agent-reader.md`](docs/agent-reader.md).
+for the rest of the documentation is in [`docs/agent-reader.md`](docs/agent-reader.md), and the
+architecture index is [`docs/architecture/README.md`](docs/architecture/README.md).
 
 ## Contents
 
@@ -91,6 +92,13 @@ Install the optional Dagster extras only if you want to run the Dagster tests on
 
 ```bash
 python -m pip install -e ".[dagster]"
+```
+
+Install the `rulepacks` extra (PyYAML) to validate or evaluate the SEI CERT rule pack under
+`rules/sei-cert/`; without it the SEI CERT rule-pack tests are skipped:
+
+```bash
+python -m pip install -e ".[rulepacks]"
 ```
 
 Confirm the CLI loads the central configuration:
@@ -288,7 +296,7 @@ four branches:
 | --- | --- | --- |
 | `nvd_sync` | `data/feeds/nvd/` | NVD CVE 2.0 yearly feeds, then incremental last-modified windows. |
 | `osv_sync` | `data/feeds/osv/` | Configured OSV ecosystem archives plus a SQLite lookup index. |
-| `mitre_sync` | `data/feeds/mitre/` | Enterprise ATT&CK, CAPEC, and CWE (Mobile/ICS ATT&CK when selected). |
+| `mitre_sync` | `data/feeds/mitre/` | Enterprise ATT&CK, CAPEC, and CWE (all three mandatory); Mobile and ICS ATT&CK are optional selections. |
 | `cve_bin_tool_db_build` | `data/feeds/cve-bin-tool/` | cve-bin-tool database built offline in Docker from the NVD snapshot above. |
 
 Each publication is an immutable, hash-manifested snapshot, and `current.json` moves only after
@@ -335,16 +343,25 @@ python tools/publish_grype_snapshot.py --staging <grype-staging-dir>
 ```
 
 The staging directory must contain `latest.json`, `vulnerability-db.tar.zst`, and the imported
-`6/vulnerability.db` and `6/import.json`. The snapshot is written under `data/feeds/grype/`.
+`6/vulnerability.db` and `6/import.json`; the archive must match the listing's SHA-256 and the
+listing must be `active`. The snapshot is written under `--destination` (default
+`data/feeds/grype`). `--image` names the Grype tool image recorded in the manifest (default
+`appsec-review/tool-grype:0.119.0`); it must already exist locally, because the script reads its
+immutable image id with `docker image inspect`. Every snapshot manifest carries a fixed
+`acquisition_gaps` entry stating that the container updater's TLS verification failed and that the
+host fetched the official listing and archive and verified the published SHA-256.
 
 ## Run a review
 
 The direct CLI runs this linear graph:
 
 ```text
-review_intake -> target_catalog -> target_analysis_plan -> project_build -> language_build
+review_intake -> target_catalog -> source_history_analysis -> target_analysis_plan
+  -> tree_sitter_ast -> project_build -> language_build
   -> artifact_indexing -> artifact_security_analysis -> cpp_compiled_analysis
-  -> codeql_analysis -> evidence_collection
+  -> cpp_symbol_index -> cpg_analysis -> evidence_collection
+  -> change_context_analysis -> codeql_analysis -> review_prioritization
+  -> review_data_indexing -> review_package_assembly
 ```
 
 Start a review from the repository root with the virtual environment active:
@@ -372,6 +389,12 @@ appsec-review resume --run-id <run-id> --target targets/appsec-multi-vuln
 appsec-review resume --run-id <run-id> --target targets/appsec-multi-vuln --force-from job_target_catalog
 ```
 
+Other options: the global `--config <path-or-file-URI>` (before the subcommand) selects a
+configuration other than `appsec-review.toml`; `logs` also filters by `--step`, `--task`, and
+`--attempt`; `plan-resume` accepts the same `--force-from <job-id>` as `resume`; and
+`appsec-review run <job-id> [--run-id <run-id>] [--trigger manual|schedule]` dispatches one job,
+optionally into an existing run.
+
 Without installing the package, run the module from the source tree instead:
 
 ```bash
@@ -383,17 +406,17 @@ $env:PYTHONPATH = "src"
 python -m appsec_review start --target targets/appsec-multi-vuln
 ```
 
-The direct graph leaves out CI configuration analysis, tree-sitter AST, post-build security
-assessment, OWASP control assessment, and review prioritization. Use Dagster's `wave1_review` job
-when you need those.
+The direct graph leaves out CI configuration analysis, post-build security assessment, OWASP
+control assessment, and security tagging. Use Dagster's `wave1_review` job, which runs every
+registered job except `third_party_data_sync`, when you need those.
 See [`docs/operations/wave1-review.md`](docs/operations/wave1-review.md).
 
 ## Run the Dagster deployment
 
 Run on Linux or inside WSL 2. Make sure `claude` is installed and signed in **before** bootstrap;
-bootstrap records its binary, `~/.claude`, and `~/.claude.json` paths in the ignored
-`deploy/dagster/.env`, together with your uid/gid so containers do not leave root-owned files in
-`runs/` and `data/`. Running bootstrap again keeps the existing secret and fills in only missing
+Compose requires the Claude paths, and bootstrap records its binary, `~/.claude`, and
+`~/.claude.json` paths in the ignored `deploy/dagster/.env`, together with your uid/gid so
+containers do not leave root-owned files in `runs/` and `data/`. Running bootstrap again keeps the existing secret and fills in only missing
 keys.
 
 ```bash
@@ -481,11 +504,16 @@ docker run --rm appsec-review-dagster-test
 | `containers/` | Tool and base image definitions, pinned asset locks, build launchers. |
 | `deploy/dagster/` | Compose stack, bootstrap, lifecycle, and verification scripts. |
 | `tools/` | cve-bin-tool database builder and the Grype snapshot publisher. |
-| `data/reference/` | Committed reference fixtures (OWASP standards). |
+| `rules/` | Checked-in rules: SEI CERT and Semgrep packs, C++ CERT CodeQL mappings, PMD; mounted read-only in Dagster. |
+| `pipeline/` | Review-worker guidance: governing rules, personas, roles, and the guidance registry. |
+| `skills/` | Bounded agent procedures loaded only when relevant. |
+| `data/reference/` | Committed reference data (OWASP standards and the security-tag taxonomy). |
 | `data/feeds/` | Synced feed snapshots (local, ignored). |
 | `targets/` | Review target checkouts (local, ignored). |
 | `runs/` | Run receipts, logs, resolved configuration, and `runs/metadata/` host pointers (local). |
 | `docs/` | Architecture, operations, schemas, and reviews. Start at `docs/agent-reader.md`. |
+| `tests/` | The pytest suite. |
+| `test/tmp/` | Disposable pytest temporary and cache state (local). |
 
 An MCP stdio server for retrieval is installed as `appsec-review-mcp`; see
 [`docs/operations/retrieval-mcp.md`](docs/operations/retrieval-mcp.md).
