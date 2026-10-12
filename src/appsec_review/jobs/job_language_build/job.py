@@ -1047,6 +1047,8 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
                     row["inputs"] = list(metadata["inputs"])
                     row["outputs"] = list(metadata["outputs"])
                     row["metadata_origin"] = metadata["origin"]
+            normalized_links = _normalized_links(
+                captured_link_rows(compile_rows, descriptor), str(recipe["build_dir"]))
         elif family == "rust":
             # When evidence was lost, expected optional link stages remain explicitly unknown.
             if (any(gap.startswith(_CAPTURE_GAP) for gap in gaps) or provenance_gaps) and \

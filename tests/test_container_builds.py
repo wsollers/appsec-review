@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import threading
 import time
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -40,6 +41,27 @@ def test_dependency_order_puts_base_before_tool() -> None:
     catalog = container_build.load_catalog()
     order = container_build.dependency_order(["tool-gitleaks"], catalog)
     assert order == ["base-ubuntu", "tool-gitleaks"]
+
+
+def test_android_buildenv_is_hash_locked_and_registered_by_image_id() -> None:
+    catalog = container_build.load_catalog()
+    image = catalog["by_id"]["audit-buildenv-android"]
+    assert image["kind"] == "buildenv"
+    assert image["build_network"] == "default"
+    assert image["image_id"].startswith("sha256:") and len(image["image_id"]) == 71
+    lock_path = ROOT / image["assets_lock"]
+    lock = json.loads(lock_path.read_text(encoding="utf-8"))
+    assert {item["version"] for item in lock["artifacts"]} == {
+        "8.9", "15859902", "35_r02", "35.0.0", "37.0.1"}
+    assert all(len(item["sha256"]) == 64 and item["bytes"] > 0 for item in lock["artifacts"])
+    assert all(item["signature_verification"]["status"] in {
+        "verified", "not-performed", "not-published"} for item in lock["artifacts"])
+
+    with (ROOT / "appsec-review.toml").open("rb") as stream:
+        config = tomllib.load(stream)
+    profile = config["jobs"]["job_project_build"]["settings"]["profiles"]["android"]
+    assert profile == {"tag": image["tag"], "image_id": image["image_id"],
+                       "user": "10001:10001"}
 
 
 def test_continue_on_error_still_returns_failure(monkeypatch, tmp_path: Path) -> None:

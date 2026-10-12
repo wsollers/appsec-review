@@ -8,7 +8,7 @@
   "properties": {
     "schema": {"const": "appsec-review/build-recipe/1"},
     "build_unit_id": {"type": "string", "pattern": "^build-unit-[0-9a-f]{20}$"},
-    "image_profile": {"enum": ["native", "rust", "go", "java", "node", "dotnet", "python", "php", "wasm"]},
+    "image_profile": {"enum": ["native", "rust", "go", "java", "android", "node", "dotnet", "python", "php", "wasm"]},
     "source_dir": {"type": "string", "minLength": 1, "maxLength": 512},
     "build_dir": {"type": "string", "minLength": 1, "maxLength": 512},
     "system_packages": {"type": "array", "uniqueItems": true, "maxItems": 64, "items": {"type": "string", "maxLength": 128}},

@@ -292,6 +292,8 @@ def deterministic_plan(catalog: Mapping[str, Any], summary: Mapping[str, Any],
                                "build_unit_id": item["build_unit_id"],
                                "markers": list(item.get("markers", ())),
                                "descriptor_package": dict(item.get("descriptor_package", {})),
+                               "project_type": item.get("project_type", "generic"),
+                               "descriptor_facts": dict(item.get("descriptor_facts", {})),
                                "recipe": None, "requires_inference": True, "executable": False}
                               for item in catalog.get("build_units", ())],
             "compile_databases": compile_databases,

@@ -783,6 +783,10 @@ user = "10001:10001"
 tag = "audit-buildenv-java:local"
 image_id = "sha256:ef678af17b8ba67ed1f5ee0815ce6c47fce9f61f75a2dd4646dbe28c9c57e36b"
 user = "10001:10001"
+[jobs.job_project_build.settings.profiles.android]
+tag = "audit-buildenv-android:local"
+image_id = "sha256:a6a4105f8021f64ad5b4c9451b4b8f00cb0521322a4384163b71649145f89f45"
+user = "10001:10001"
 [jobs.job_project_build.settings.profiles.node]
 tag = "audit-buildenv-typescript:local"
 image_id = "sha256:67d1625340c935c54f966af7a08a689448c3cdacc111b0dc0ac317a6a89e5cd2"

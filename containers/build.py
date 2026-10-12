@@ -123,6 +123,13 @@ def validate(catalog: dict[str, Any]) -> list[str]:
             errors.append(f"{image_id}: moving latest base is prohibited")
         if not re.search(r"(?m)^USER\s+10001(?::10001)?\s*$", text):
             errors.append(f"{image_id}: final non-root USER 10001 is required")
+        build_network = item.get("build_network", "none")
+        if build_network not in {"none", "default"}:
+            errors.append(f"{image_id}: build_network must be none or default")
+        if item.get("kind") == "buildenv" and (
+                not isinstance(item.get("probe_argv"), list) or
+                not isinstance(item.get("probe_expect"), list)):
+            errors.append(f"{image_id}: buildenv probe contract is required")
         lock_name = item.get("assets_lock")
         if lock_name:
             lock_path = safe_path(lock_name)
@@ -245,16 +252,22 @@ def build_one(item: dict[str, Any], run_dir: Path) -> dict[str, Any]:
     image_id = item["id"]
     fetch_log = run_dir / "logs" / f"{image_id}.fetch.log"
     build_log = run_dir / "logs" / f"{image_id}.build.log"
+    context = safe_path(item["context"])
+    dockerfile = context / item["dockerfile"]
+    lock_path = safe_path(item["assets_lock"]) if item.get("assets_lock") else None
     result: dict[str, Any] = {
         "id": image_id, "tag": item["tag"], "status": "failed", "digest": None,
         "fetch_log": str(fetch_log.relative_to(ROOT)), "build_log": str(build_log.relative_to(ROOT)),
+        "dockerfile_sha256": hashlib.sha256(dockerfile.read_bytes()).hexdigest(),
+        "assets_lock_sha256": hashlib.sha256(lock_path.read_bytes()).hexdigest() if lock_path else None,
+        "base_identity": item.get("upstream"),
     }
     try:
         fetch_log.parent.mkdir(parents=True, exist_ok=True)
         with fetch_log.open("w", encoding="utf-8", newline="\n") as log:
             fetch_one(item, log)
-        context = safe_path(item["context"])
-        argv = [docker_binary(), "build", "--network=none", "--pull=false", "--file",
+        argv = [docker_binary(), "build", f"--network={item.get('build_network', 'none')}",
+                "--pull=false", "--file",
                 str(context / item["dockerfile"]), "--tag", item["tag"]]
         for key, value in sorted(item.get("build_args", {}).items()):
             argv += ["--build-arg", f"{key}={value}"]
@@ -362,17 +375,20 @@ def smoke(args: argparse.Namespace, catalog: dict[str, Any]) -> int:
         item = catalog["by_id"][image_id]
         if item["kind"] == "base":
             command = ["/usr/bin/id", "-u"]
-            expected = "10001"
+            expected = ["10001"]
+        elif item["kind"] == "buildenv":
+            command = list(item["probe_argv"])
+            expected = list(item["probe_expect"])
         else:
             with safe_path(item["tool_manifest"]).open("rb") as stream:
                 tool = tomllib.load(stream)
             command = tool["version_argv"]
-            expected = tool["version_expect"].format(version=tool["version"])
+            expected = [tool["version_expect"].format(version=tool["version"])]
         completed = subprocess.run(runtime_args(policy) + [item["tag"]] + command, cwd=ROOT,
                                    capture_output=True, text=True, encoding="utf-8", errors="replace",
                                    timeout=policy["timeout_seconds"], check=False)
         output = ((completed.stdout or "") + (completed.stderr or ""))[: policy["output_bytes"]]
-        ok = completed.returncode == 0 and expected in output
+        ok = completed.returncode == 0 and all(value in output for value in expected)
         print(f"{'PASSED' if ok else 'FAILED':7} {image_id} startup")
         failures += 0 if ok else 1
     if getattr(args, "functional", False):
@@ -389,6 +405,7 @@ def security_acceptance(args: argparse.Namespace, catalog: dict[str, Any]) -> in
     scratch = run_dir / "scratch"
     workspace.mkdir(parents=True)
     scratch.mkdir()
+    scratch.chmod(0o777)
     failures = 0
     results = []
     for image_id in ids:

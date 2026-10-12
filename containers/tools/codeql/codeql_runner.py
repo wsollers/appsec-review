@@ -48,6 +48,14 @@ def _environment() -> dict[str, str]:
     value = dict(os.environ)
     value.update({"HOME": "/tmp/codeql-home", "LANG": "C.UTF-8", "LC_ALL": "C.UTF-8", "TZ": "UTC"})
     Path(value["HOME"]).mkdir(parents=True, exist_ok=True)
+    if value.get("ANDROID_SDK_ROOT") or value.get("ANDROID_HOME"):
+        # Android's Gradle plugin needs mutable dependency and preference homes during the
+        # traced replay. Keep both under the run-owned scratch mount; the derived CodeQL image
+        # and its Android SDK remain immutable.
+        value["GRADLE_USER_HOME"] = "/scratch/.codeql-cache/gradle"
+        value["ANDROID_USER_HOME"] = "/scratch/.codeql-cache/android"
+        Path(value["GRADLE_USER_HOME"]).mkdir(parents=True, exist_ok=True)
+        Path(value["ANDROID_USER_HOME"]).mkdir(parents=True, exist_ok=True)
     return value
 
 

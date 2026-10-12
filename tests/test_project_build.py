@@ -5,12 +5,13 @@ import json
 import hashlib
 from pathlib import Path
 from types import SimpleNamespace
+import zipfile
 
 from appsec_review.config import ProcessingMode, load_config
 from appsec_review.container_runtime import BuildCommandResult, ProjectImage
 from appsec_review.jobs.cataloging import source_fingerprint
 from appsec_review.jobs.job_project_build import build_job as build_projects, load_accepted_builds
-from appsec_review.jobs.job_project_build.job import _probe_cache, _probe_environment
+from appsec_review.jobs.job_project_build.job import _probe_cache, _probe_environment, _validate_expected_outputs
 from appsec_review.jobs.job_review_intake import build_job as build_intake
 from appsec_review.jobs.job_target_catalog import build_job as build_catalog
 from appsec_review.inference import ModelResult
@@ -21,6 +22,25 @@ from appsec_review.runtime import GraphRunner, plan_jobs
 
 
 ROOT = Path(__file__).parents[1]
+
+
+def test_android_expected_output_requires_a_structurally_valid_apk(tmp_path: Path) -> None:
+    recipe = {"expected_outputs": ["app/build/outputs/apk/debug/app-debug.apk"]}
+    apk = tmp_path / recipe["expected_outputs"][0]
+    apk.parent.mkdir(parents=True)
+    assert _validate_expected_outputs(tmp_path, recipe) == [
+        "required build output is missing: app/build/outputs/apk/debug/app-debug.apk"]
+    apk.write_bytes(b"not a zip")
+    assert _validate_expected_outputs(tmp_path, recipe) == [
+        "required APK is not a valid ZIP archive: app/build/outputs/apk/debug/app-debug.apk"]
+    with zipfile.ZipFile(apk, "w") as archive:
+        archive.writestr("AndroidManifest.xml", b"manifest")
+    assert _validate_expected_outputs(tmp_path, recipe) == [
+        "required APK has invalid Android structure: app/build/outputs/apk/debug/app-debug.apk"]
+    with zipfile.ZipFile(apk, "w") as archive:
+        archive.writestr("AndroidManifest.xml", b"manifest")
+        archive.writestr("resources.arsc", b"resources")
+    assert _validate_expected_outputs(tmp_path, recipe) == []
 
 
 def test_build_capture_mode_changes_project_probe_checkpoint_identity(tmp_path: Path) -> None:

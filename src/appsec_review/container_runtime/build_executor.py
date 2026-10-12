@@ -166,9 +166,9 @@ class BuildContainerExecutor:
     """Run already-validated argv in an immutable build image with dependency egress."""
 
     CAPTURED_TOOLS = (
-        "ar", "c++", "cargo", "cc", "clang", "clang++", "cmake", "composer", "dotnet", "g++", "gcc",
-        "go", "jar", "java", "javac", "kotlinc", "ld", "make", "mvn", "ninja", "npm",
-        "php", "python", "python3", "rustc",
+        "aapt2", "apksigner", "ar", "c++", "cargo", "cc", "clang", "clang++", "cmake", "composer",
+        "d8", "dotnet", "g++", "gcc", "go", "gradle", "jar", "java", "javac", "kotlinc", "ld",
+        "make", "mvn", "ninja", "npm", "php", "python", "python3", "r8", "rustc", "zipalign",
     )
 
     def __init__(self, profile: BuildProfile, *, timeout_seconds: int, output_bytes: int,
@@ -214,6 +214,11 @@ class BuildContainerExecutor:
             raise ValueError("build working directory escaped the run-owned workspace")
         self._make_workspace_writable(root)
         bind_source = self._bind_source(root)
+        if self.profile.name == "android":
+            for name in ("android", "gradle"):
+                android_cache = root / ".appsec-cache" / name
+                android_cache.mkdir(parents=True, exist_ok=True)
+                android_cache.chmod(0o777)
         command = [
             "docker", "run", "--rm", "--network", "bridge", "--read-only",
             "--user", self.profile.user, "--cap-drop", "ALL",
@@ -224,6 +229,11 @@ class BuildContainerExecutor:
             "--env", "HOME=/tmp", "--env", "LANG=C.UTF-8", "--env", "LC_ALL=C.UTF-8",
             "--env", "TZ=UTC",
         ]
+        if self.profile.name == "android":
+            command.extend((
+                "--env", "GRADLE_USER_HOME=/workspace/.appsec-cache/gradle",
+                "--env", "ANDROID_USER_HOME=/workspace/.appsec-cache/android",
+            ))
         for key, value in sorted(environment.items()):
             command.extend(("--env", f"{key}={value}"))
         return root, command

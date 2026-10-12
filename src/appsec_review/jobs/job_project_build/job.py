@@ -7,6 +7,7 @@ from pathlib import Path, PurePosixPath
 import re
 import shutil
 import time
+import zipfile
 from typing import Any
 
 import appsec_review.applicability as applicability_contract
@@ -45,7 +46,7 @@ BUILD_FAMILIES = ("native", "rust", "go", "java", "node", "dotnet", "python", "p
 STATIC_LANES = ("global", *BUILD_FAMILIES)
 _IGNORED = {".git", ".hg", ".svn", "build", "target", "node_modules", "bin", "obj", ".gradle"}
 _ARTIFACT_SUFFIXES = {".o", ".obj", ".a", ".lib", ".so", ".dll", ".dylib", ".exe", ".wasm",
-                      ".class", ".jar", ".war", ".ear", ".rlib", ".rmeta", ".pdb"}
+                      ".class", ".jar", ".war", ".ear", ".rlib", ".rmeta", ".pdb", ".apk", ".dex"}
 _SECRET_KEY = re.compile(r"(SECRET|TOKEN|PASSWORD|PASSWD|API_KEY|PRIVATE_KEY|CREDENTIAL)", re.I)
 _BUILD_CAPABILITIES = {
     "native": ("build", "ast", "ir", "infer", "codeql", "joern", "binary"),
@@ -101,6 +102,8 @@ def _copy_source(unit: UnitContext, action: Mapping[str, Any], workspace: Path) 
 def _snapshot(root: Path, limit: int) -> dict[str, str]:
     result: dict[str, str] = {}
     for path in sorted(root.rglob("*")):
+        if ".appsec-cache" in path.parts:
+            continue
         try:
             if path.is_symlink() or not path.is_file():
                 continue
@@ -113,6 +116,13 @@ def _snapshot(root: Path, limit: int) -> dict[str, str]:
 
 
 def _kind(path: Path) -> str | None:
+    if path.suffix.lower() == ".apk":
+        return "android-apk"
+    if "build" in path.parts and "intermediates" in path.parts and path.suffix.lower() in {
+            ".xml", ".flat", ".pb", ".prof", ".map", ".json"}:
+        return "android-intermediate"
+    if "outputs" in path.parts and path.name == "output-metadata.json":
+        return "android-metadata"
     if path.suffix.lower() in _ARTIFACT_SUFFIXES:
         return path.suffix.lower().removeprefix(".") or "binary"
     try:
@@ -128,6 +138,8 @@ def _outputs(run_root: Path, workspace: Path, before: Mapping[str, str], limit: 
         if not path.is_file() or path.is_symlink():
             continue
         relative, digest = path.relative_to(workspace).as_posix(), file_sha256(path)
+        if ".appsec-cache" in path.parts:
+            continue
         kind = _kind(path)
         if kind is None or before.get(relative) == digest:
             continue
@@ -150,6 +162,31 @@ def _normalized_argv(recipe: Mapping[str, Any], argv: list[str]) -> tuple[str, .
             value = value[len(source_dir) + 1:]
         result.append(value)
     return tuple(result)
+
+
+def _validate_expected_outputs(workspace: Path, recipe: Mapping[str, Any]) -> list[str]:
+    gaps = []
+    root = workspace.resolve()
+    for relative in recipe.get("expected_outputs", ()):
+        path = (root / Path(*PurePosixPath(str(relative)).parts)).resolve()
+        if path != root and root not in path.parents:
+            raise ValueError("expected build output escaped the run-owned workspace")
+        if not path.exists() or path.is_symlink():
+            gaps.append(f"required build output is missing: {relative}")
+            continue
+        if path.suffix.lower() != ".apk":
+            continue
+        try:
+            with zipfile.ZipFile(path) as archive:
+                names = set(archive.namelist())
+                corrupt = archive.testzip()
+        except (OSError, zipfile.BadZipFile):
+            gaps.append(f"required APK is not a valid ZIP archive: {relative}")
+            continue
+        if path.stat().st_size <= 0 or corrupt is not None or not {
+                "AndroidManifest.xml", "resources.arsc"} <= names:
+            gaps.append(f"required APK has invalid Android structure: {relative}")
+    return gaps
 
 
 def _probe_environment(recipe: Mapping[str, Any]) -> dict[str, str]:
@@ -310,7 +347,7 @@ def _probe_one(unit: UnitContext, entry: Mapping[str, Any], executor_factory=Non
     for relative, digest in before.items():
         stat = (workspace / relative).stat()
         snapshot_files[relative] = {"sha256": digest, "size_bytes": stat.st_size, "mtime_ns": stat.st_mtime_ns}
-    profile = BuildProfile(str(action["family"]), str(image["image_tag"]), str(image["image_id"]), str(image["user"]))
+    profile = BuildProfile(str(image.get("family", action["family"])), str(image["image_tag"]), str(image["image_id"]), str(image["user"]))
     executor = executor_factory(unit, profile) if executor_factory else BuildContainerExecutor(
         profile, timeout_seconds=int(unit.job.config.settings["command_timeout_seconds"]),
         output_bytes=int(unit.job.config.settings["output_bytes"]))
@@ -388,6 +425,7 @@ def _probe_one(unit: UnitContext, entry: Mapping[str, Any], executor_factory=Non
     if source_fingerprint(unit.job.target_root or Path()) != unit.job.source_fingerprint:
         raise ValueError("target changed during isolated probe execution")
     artifacts = _outputs(unit.job.run_root, workspace, before, int(unit.job.config.settings["artifact_count_limit"]))
+    gaps.extend(_validate_expected_outputs(workspace, recipe))
     status = "FAILED" if gaps else "SUCCEEDED"
     receipt = {**base, "schema": SCHEMA, "executor_identity": EXECUTOR_IDENTITY,
                "recipe_identity": recipe_identity, "image_id": image["image_id"], "commands": command_receipts,
@@ -687,7 +725,8 @@ def _validate_config(context, _result) -> None:
     for step, tasks in task_sets.items():
         if tuple(context.config.step(step).tasks) != tasks:
             raise ValueError(f"project-build task order mismatch: {step}")
-    if set(profiles_from_settings(context.config.settings.get("profiles"))) != set(BUILD_FAMILIES):
+    profiles = set(profiles_from_settings(context.config.settings.get("profiles")))
+    if profiles != {*BUILD_FAMILIES, "android"}:
         raise ValueError("project-build profiles must cover every build family")
     if type(context.config.settings.get("force_buildability_probe")) is not bool:
         raise ValueError("force_buildability_probe must be boolean")
@@ -810,6 +849,31 @@ def _deterministic_jvm_recipe(unit: UnitContext, action: Mapping[str, Any]) -> M
         raise ValueError("deterministic JVM recipe is invalid: " + "; ".join(errors))
     return recipe
 
+def _deterministic_android_recipe(action: Mapping[str, Any]) -> Mapping[str, Any] | None:
+    facts = action.get("descriptor_facts", {})
+    if (action.get("family") != "java" or action.get("build_system") != "gradle" or
+            not isinstance(facts, Mapping) or facts.get("kind") != "android-gradle-application"):
+        return None
+    root = str(action["root"])
+    prefix = "" if root == "." else root + "/"
+    documents = action.get("descriptor_package", {}).get("documents", ())
+    dependencies = sorted({str(item["path"]) for item in documents if isinstance(item, Mapping)})
+    recipe = {
+        "schema": "appsec-review/build-recipe/1", "build_unit_id": action["build_unit_id"],
+        "image_profile": "android", "source_dir": root, "build_dir": prefix + "app/build",
+        "system_packages": [], "environment": {}, "dependency_files": dependencies,
+        "configure_commands": [],
+        "build_commands": [["gradle", "--no-daemon", ":app:assembleDebug"]],
+        "expected_outputs": [prefix + "app/build/outputs/apk/debug/app-debug.apk"],
+        "network_required": True,
+        "reason": "Deterministic Android application recipe derived from accepted com.android.application descriptors.",
+    }
+    errors = validate_build_recipe(recipe, action)
+    if errors:
+        raise ValueError("deterministic Android recipe is invalid: " + "; ".join(errors))
+    return recipe
+
+
 
 def build_job(*, executor_factory=None, image_resolver_factory=None,
               infer: Infer | None = None) -> Job:
@@ -836,7 +900,8 @@ def build_job(*, executor_factory=None, image_resolver_factory=None,
                 dependencies[owner].add(dependency)
         resolved_actions = []
         for item in actions:
-            deterministic = _deterministic_native_recipe(unit, item) or _deterministic_jvm_recipe(unit, item)
+            deterministic = (_deterministic_native_recipe(unit, item) or
+                             _deterministic_android_recipe(item) or _deterministic_jvm_recipe(unit, item))
             selected = deterministic if deterministic is not None else item.get("recipe")
             recipe_fields: dict[str, Any] = {}
             if isinstance(selected, Mapping):
@@ -846,6 +911,8 @@ def build_job(*, executor_factory=None, image_resolver_factory=None,
                     "requires_inference": False,
                     "recipe_provenance": (
                         "deterministic-cmake-marker" if deterministic is not None and item.get("family") == "native"
+                        else "deterministic-android-application" if deterministic is not None and
+                        item.get("descriptor_facts", {}).get("kind") == "android-gradle-application"
                         else "deterministic-jvm-source-set" if deterministic is not None
                         else "accepted-inference-default-image"),
                 }
@@ -890,10 +957,11 @@ def build_job(*, executor_factory=None, image_resolver_factory=None,
                     image_started = time.monotonic()
                     unit.job.events.write("PROJECT_IMAGE_BUILD_STARTED", unit_id=unit.unit_id,
                                           build_unit_id=action["build_unit_id"], family=family)
-                    image, stdout, stderr = resolver.resolve({**recipe, "build_system": action["build_system"]}, profiles[family])
+                    profile = profiles[str(recipe.get("image_profile", family))]
+                    image, stdout, stderr = resolver.resolve({**recipe, "build_system": action["build_system"]}, profile)
                     base_recipe_identity = image.recipe_identity
                     cached = _reuse_accepted_repair(unit, action, base_recipe_identity,
-                                                    resolver, profiles[family])
+                                                    resolver, profile)
                     if cached is not None:
                         action, value = cached
                         image = None
@@ -901,7 +969,7 @@ def build_job(*, executor_factory=None, image_resolver_factory=None,
                             build_unit_id=action["build_unit_id"], family=family,
                             recipe_identity=value["recipe_identity"], image_id=value["image_id"])
                     else:
-                        value = _image_dict(image, profiles[family].user)
+                        value = _image_dict(image, profile.user)
                     logs = unit.unit_root / str(action["build_unit_id"])
                     logs.mkdir(parents=True, exist_ok=True)
                     stream_limit = int(unit.job.config.settings["output_bytes"])
@@ -993,7 +1061,8 @@ def build_job(*, executor_factory=None, image_resolver_factory=None,
                         not isinstance(entry.get("action", {}).get("recipe"), Mapping)):
                     receipts.append(_probe_one(unit, entry, executor_factory))
                 else:
-                    receipts.append(_probe_with_repairs(unit, entry, profile=profiles[family],
+                    profile_name = str(entry["action"]["recipe"].get("image_profile", family))
+                    receipts.append(_probe_with_repairs(unit, entry, profile=profiles[profile_name],
                                                         resolver=resolver, infer=infer,
                                                         executor_factory=executor_factory))
             gaps = [f"{value['build_unit_id']}: {gap}" for value in receipts for gap in value["gaps"]]

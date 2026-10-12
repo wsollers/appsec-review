@@ -48,7 +48,7 @@ _SOURCE_MARKERS: dict[str, tuple[str, str]] = {
 }
 _CONTEXT_NAMES = {
     "README", "README.md", "README.rst", "Dockerfile", "build.sh", "build.ps1",
-    "gradle.properties", "settings.gradle", "settings.gradle.kts", "gradle.lockfile",
+    "build.gradle", "build.gradle.kts", "gradle.properties", "settings.gradle", "settings.gradle.kts", "gradle.lockfile",
     "maven-wrapper.properties", "gradle-wrapper.properties", "Cargo.lock",
     "package-lock.json", "pnpm-lock.yaml", "yarn.lock", "composer.lock", "requirements.txt",
     "poetry.lock", "Pipfile.lock", "pylock.toml", "setup.cfg",
@@ -64,6 +64,7 @@ _PROFILE_COMMANDS: dict[str, frozenset[str]] = {
     "rust": frozenset({"cargo", "rustc", "wasm-pack", "wasm-bindgen", "wasm-opt", "wasm-tools"}),
     "go": frozenset({"go"}),
     "java": frozenset({"mvn", "mvnw", "gradle", "gradlew", "javac", "kotlinc", "kapt", "jar", "protoc"}),
+    "android": frozenset({"gradle", "gradlew"}),
     "node": frozenset({"npm", "npx", "pnpm", "yarn", "node", "tsc", "asc", "wasm-opt", "wasm-tools"}),
     "dotnet": frozenset({"dotnet", "msbuild"}),
     "python": frozenset({"python", "python3", "pip", "pip3"}),
@@ -108,6 +109,15 @@ def discover_build_units(files: Sequence[Mapping[str, Any]]) -> list[dict[str, A
         key for key in tuple(groups) if key[2] in {"cmake", "autotools", "meson"}
     ]:
         groups.pop((root, family, "make"), None)
+    gradle_roots = [PurePosixPath(root) for root, family, system in groups
+                    if family == "java" and system == "gradle" and any(
+                        PurePosixPath(str(item["path"])).parent == PurePosixPath(root) and
+                        PurePosixPath(str(item["path"])).name in {"settings.gradle", "settings.gradle.kts"}
+                        for item in files)]
+    for root, family, system in tuple(groups):
+        path = PurePosixPath(root)
+        if family == "java" and system == "gradle" and any(parent != path and parent in path.parents for parent in gradle_roots):
+            groups.pop((root, family, system), None)
     descriptor_roots = [(PurePosixPath(root), family) for root, family, _system in groups]
     for item in files:
         path = PurePosixPath(str(item["path"]))
@@ -183,6 +193,29 @@ def descriptor_package(target_root: Path, unit: Mapping[str, Any], files: Sequen
                        "max_total_bytes": max_total_bytes, "actual_files": len(documents),
                        "actual_bytes": total}, "gaps": gaps}
 
+
+def android_descriptor_facts(package: Mapping[str, Any]) -> dict[str, Any] | None:
+    """Return bounded Android Gradle facts from accepted descriptor bytes."""
+    documents = package.get("documents", ())
+    texts = [str(item.get("content", "")) for item in documents if isinstance(item, Mapping)]
+    joined = "\n".join(texts)
+    if not re.search(
+            r"(?:id\s*\(\s*[\"']com\.android\.application[\"']\s*\)|id\s+[\"']com\.android\.application[\"'])",
+            joined):
+        return None
+
+    def match(pattern: str) -> str | None:
+        found = re.search(pattern, joined)
+        return found.group(1) if found else None
+
+    return {
+        "kind": "android-gradle-application",
+        "plugin_id": "com.android.application",
+        "plugin_version": match(r"com\.android\.application[\"']\s*\)?\s*version\s*[\"']([^\"']+)") or "declared-in-parent",
+        "compile_sdk": match(r"compileSdk\s*=\s*(\d+)"),
+        "target_sdk": match(r"targetSdk\s*=\s*(\d+)"),
+        "build_tools": match(r"buildToolsVersion\s*=\s*[\"']([^\"']+)"),
+    }
 
 def _relative(value: Any, *, allow_dot: bool = True) -> bool:
     if not isinstance(value, str) or not value or "\\" in value or value.startswith("/"):
@@ -291,7 +324,10 @@ def validate_build_recipe(recipe: Mapping[str, Any], unit: Mapping[str, Any]) ->
     if recipe.get("build_unit_id") != unit.get("build_unit_id"):
         errors.append("recipe build_unit_id does not match the accepted unit")
     profile = recipe.get("image_profile")
-    if profile != unit.get("family") or profile not in _PROFILE_COMMANDS:
+    android = unit.get("descriptor_facts", {}).get("kind") == "android-gradle-application"
+    if (profile not in _PROFILE_COMMANDS or
+            not (profile == unit.get("family") or
+                 (profile == "android" and unit.get("family") == "java" and android))):
         errors.append("recipe image_profile does not match the accepted unit family")
     root = str(unit.get("root", ""))
     for field in ("source_dir", "build_dir"):
@@ -369,6 +405,8 @@ def validate_build_recipe(recipe: Mapping[str, Any], unit: Mapping[str, Any]) ->
             if executable in {"gradle", "gradlew"}:
                 tasks = [value for value in lowered if not value.startswith("-")]
                 allowed_tasks = {"assemble", "classes", "jar", "war", "clean", "build"}
+                if profile == "android":
+                    allowed_tasks.add("assembledebug")
                 if any(value.rsplit(":", 1)[-1] not in allowed_tasks for value in tasks):
                     errors.append(f"{field}[{index}] Gradle task is not build-only")
                 if any(value.rsplit(":", 1)[-1] == "build" for value in tasks) and not any(

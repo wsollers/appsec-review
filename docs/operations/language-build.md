@@ -84,6 +84,20 @@ the pinned system Maven or Gradle in the verified image; repository wrapper payl
 executed. Maven commands must explicitly disable tests, and Gradle application/test/check tasks are
 rejected. Real builds remain non-root and may resolve declared dependencies over the network.
 
+Android application descriptors using `com.android.application` are a deterministic specialization
+of that JVM path. Nested Gradle modules collapse into the accepted root unit; bounded descriptor
+facts select the dedicated `android` profile and exact
+`gradle --no-daemon :app:assembleDebug` argv. The immutable profile is locked by image ID and
+contains JDK 17, Gradle 8.9, Android command-line tools, Platform 35, Build Tools 35.0.0, and
+platform-tools. Gradle and Android mutable homes live only in `.appsec-cache/` inside the run-owned
+workspace; this cache is excluded from snapshots and artifact catalogs. Successful acceptance
+requires a non-empty ZIP-valid APK containing `AndroidManifest.xml` and `resources.arsc`.
+Android intermediate and output metadata are cataloged without executing the application.
+
+The existing Java/Kotlin CodeQL path layers its pinned payload onto that accepted Android image;
+CodeQL is not installed in the build image. Manual replay receives fresh run-owned Gradle/Android
+caches, then the configured default and security-extended suites operate on the Java database.
+
 The adapter instruments available `javac`, `kotlinc`, annotation/code-generator, archiver, and
 related JVM tools and retains exact nested argv only in a protected trace. It catalogs class files,
 generated Java/Kotlin sources, resources and dependency metadata, Kotlin module/source-map data,

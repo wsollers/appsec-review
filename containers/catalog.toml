@@ -75,6 +75,29 @@ provenance = "Docker Hub official image, OCI manifest pinned by digest"
 signature_verification = "not-performed; manifest size and SHA-256 verified"
 
 [[images]]
+id = "audit-buildenv-android"
+state = "enabled"
+kind = "buildenv"
+version = "jdk17-gradle8.9-android35"
+tag = "audit-buildenv-android:local"
+image_id = "sha256:a6a4105f8021f64ad5b4c9451b4b8f00cb0521322a4384163b71649145f89f45"
+context = "containers/buildenv/android"
+dockerfile = "Dockerfile"
+dependencies = []
+architectures = ["linux/amd64"]
+assets_lock = "containers/buildenv/android/assets.lock.json"
+build_network = "default"
+upstream = "eclipse-temurin:17-jdk-noble@sha256:e1c09a9ee23feb81f94016547826c1e694086cd927356fb57fccc312fcc32f85"
+upstream_manifest_bytes = 1943
+upstream_manifest_sha256 = "e1c09a9ee23feb81f94016547826c1e694086cd927356fb57fccc312fcc32f85"
+license = "GPL-2.0-only WITH Classpath-exception-2.0, Apache-2.0, Android SDK License, and mixed Ubuntu packages"
+license_source = "Eclipse Temurin, Gradle, Android SDK, and Ubuntu package metadata"
+provenance = "Digest-pinned Eclipse Temurin linux/amd64 base plus hash-locked official Gradle and Android archives"
+signature_verification = "base manifest and downloaded archive SHA-256 values verified"
+probe_argv = ["/bin/sh", "-c", "java -version && GRADLE_USER_HOME=/tmp/gradle GRADLE_OPTS=-Dorg.gradle.native=false gradle --version && sdkmanager --version && test -f /opt/android-sdk/platforms/android-35/android.jar && test -x /opt/android-sdk/build-tools/35.0.0/aapt2 && test -x /opt/android-sdk/platform-tools/adb && id -u"]
+probe_expect = ["openjdk version \"17.", "Gradle 8.9", "10001"]
+purpose = "Pinned non-root Android Gradle application build and capture environment."
+[[images]]
 id = "audit-binary-analysis"
 state = "replaced"
 kind = "replacement"

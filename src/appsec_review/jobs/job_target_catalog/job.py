@@ -10,7 +10,7 @@ import re
 from typing import Any
 
 from appsec_review.jobs.cataloging import BUILD_FILES, PROJECT_FILES, inventory, write_json
-from appsec_review.jobs.build_discovery import descriptor_package, discover_build_units
+from appsec_review.jobs.build_discovery import android_descriptor_facts, descriptor_package, discover_build_units
 from appsec_review.indexing.target_documents import (
     KINDS, InventoryIntegrityError, collect_target_documents, select_document_inventory,
 )
@@ -135,8 +135,13 @@ def build_job(*, fail_task: str | None = None) -> Job:
         maybe_fail(unit)
         build_units = unit.output("build_discovery.discover_build_systems")["build_units"]
         files = unit.output("repository_discovery.partition_repository")["files"]
-        targets = [{**item, "descriptor_package": descriptor_package(_target(unit), item, files)}
-                   for item in build_units]
+        targets = []
+        for item in build_units:
+            package = descriptor_package(_target(unit), item, files)
+            facts = android_descriptor_facts(package)
+            targets.append({**item, "descriptor_package": package,
+                            "project_type": facts["kind"] if facts else "generic",
+                            "descriptor_facts": facts or {}})
         doc = {"schema": "appsec-review/build-targets/2", "targets": targets,
                "gaps": unit.output("build_discovery.discover_build_systems")["gaps"]}
         return {"artifact": _artifact(unit, "build-targets.json", doc), **doc}

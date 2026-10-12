@@ -4,7 +4,8 @@ import hashlib
 from pathlib import Path
 
 from appsec_review.jobs.build_discovery import (
-    BUILD_RECIPE_SCHEMA, descriptor_package, discover_build_units, normalize_build_recipe,
+    BUILD_RECIPE_SCHEMA, android_descriptor_facts, descriptor_package, discover_build_units,
+    normalize_build_recipe,
     validate_build_recipe,
 )
 
@@ -198,3 +199,54 @@ def test_dotnet_recipe_with_package_reference_requires_dependency_egress() -> No
         recipe, unit)
     recipe["network_required"] = True
     assert validate_build_recipe(recipe, unit) == []
+
+
+def test_android_gradle_application_is_one_descriptor_backed_build_unit(tmp_path: Path) -> None:
+    target = tmp_path / "target"
+    documents = {
+        "build.gradle.kts": 'plugins { id("com.android.application") version "8.7.3" apply false }\n',
+        "settings.gradle.kts": 'rootProject.name = "fixture"\ninclude(":app")\n',
+        "app/build.gradle.kts": """plugins { id(\"com.android.application\") }
+android {
+    compileSdk = 35
+    buildToolsVersion = \"35.0.0\"
+    defaultConfig { targetSdk = 35 }
+}
+""",
+        "gradle.properties": "org.gradle.daemon=false\n",
+    }
+    files = []
+    for relative, content in documents.items():
+        path = target / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+        files.append(_file(relative, content))
+
+    units = discover_build_units(files)
+    assert [(item["root"], item["family"], item["build_system"]) for item in units] == [
+        (".", "java", "gradle")]
+    unit = units[0]
+    package = descriptor_package(target, unit, files)
+    facts = android_descriptor_facts(package)
+    assert facts == {
+        "kind": "android-gradle-application", "plugin_id": "com.android.application",
+        "plugin_version": "8.7.3", "compile_sdk": "35", "target_sdk": "35",
+        "build_tools": "35.0.0",
+    }
+    unit["descriptor_package"] = package
+    unit["descriptor_facts"] = facts
+    recipe = {
+        "schema": BUILD_RECIPE_SCHEMA, "build_unit_id": unit["build_unit_id"],
+        "image_profile": "android", "source_dir": ".", "build_dir": "app/build",
+        "system_packages": [], "environment": {},
+        "dependency_files": sorted(item["path"] for item in package["documents"]),
+        "configure_commands": [],
+        "build_commands": [["gradle", "--no-daemon", ":app:assembleDebug"]],
+        "expected_outputs": ["app/build/outputs/apk/debug/app-debug.apk"],
+        "network_required": True, "reason": "descriptor-backed Android application",
+    }
+    assert validate_build_recipe(recipe, unit) == []
+
+    unit["descriptor_facts"] = {}
+    assert "recipe image_profile does not match the accepted unit family" in validate_build_recipe(
+        recipe, unit)
