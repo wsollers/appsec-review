@@ -59,6 +59,23 @@
       }
     ]
   },
+  "export_query_packs": {
+    "cpp": {
+      "query_id": "graph-export-cpp",
+      "source_path": "rules/codeql-graph-export/cpp",
+      "query_pack": "appsec-review/graph-export-cpp",
+      "query_pack_version": "1.0.0",
+      "query_suite": "graph-export.qls",
+      "query_suite_sha256": "4af4c3f7f908796b9d13103e53d7e23b1a57b70fedcbec9dbd440c8dedecf6af",
+      "query_pack_sha256": "fa9c3d02433ce3d96aa75d2fdce2a5259f05d208f3a77f4c404a916a68f6cab9",
+      "tree_sha256": "14a7890f8b858128f6fac5d181ac89c5062c2bd3e67ca009c454d2491bbea342",
+      "file_count": 10,
+      "columns_path": "rules/codeql-graph-export/columns.json",
+      "columns_sha256": "c45c27ee19b1ccd4d15b4b2308a9ace0a5545d38836f2c905d379f2e3e69dfe0",
+      "catalog_path": "rules/codeql-graph-export/catalog.json",
+      "catalog_sha256": "1a290cf270f5469f02aaf6c10432457101c128ec17a0b340272ccc6b1ef7a0a5"
+    }
+  },
   "custom_query_acquisition": {
     "release": "github/codeql-coding-standards@v2.62.0",
     "asset": "coding-standards-codeql-packs.zip",

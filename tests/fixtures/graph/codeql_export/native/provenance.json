@@ -1,0 +1,9 @@
+{
+  "schema": "appsec-review/graph-export-fixture-provenance/1",
+  "fixture": "native",
+  "recording": "hand-authored",
+  "live_refreshable": true,
+  "source_root": "../../../build_toolchains/native",
+  "export_directory": "exports",
+  "description": "Plausible appsec-review/codeql-graph-export/1 objects for tests/fixtures/build_toolchains/native, hand-authored because no pinned CodeQL image is available offline. tests/live/test_codeql_graph_export_live.py compares the live export's columns, rows, row_count and truncated with these files and fails with a diff until they are refreshed from a real run; when refreshed, set recording to 'live' and name the CodeQL version here. Until then bqrs_sha256 values are SHA-256 of the text 'hand-authored native bqrs <query_id>'."
+}

@@ -1,0 +1,1 @@
+{"bqrs_sha256":"a224a5df70046070218e810d7f15cc9c7d90fd8455aa30d79938882fbbe68bda","columns":["function_name","function_path","function_start_line","function_start_column","from_kind","from_index","from_name","to_kind","to_index","to_name","to_model","flow_kind"],"query_id":"flow_summaries","row_count":0,"rows":[],"schema":"appsec-review/codeql-graph-export/1","truncated":false}
