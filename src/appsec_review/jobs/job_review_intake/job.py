@@ -2,10 +2,13 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 import hashlib
+import json
 from pathlib import Path
 import tomllib
 from typing import Any
 
+from appsec_review.config.loader import OVERLAY_LAYER, PENDING_JOBS, overlay_capacity_keys
+from appsec_review.storage import file_sha256
 from appsec_review.jobs.cataloging import Bounds, inventory, source_fingerprint, write_json
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from appsec_review.jobs.job_review_intake.datasets import CONSUMES, DATASETS
@@ -54,7 +57,8 @@ def configured_models(document: Mapping[str, Any]) -> list[dict[str, Any]]:
 
     jobs = document.get("jobs", {})
     for job_id in sorted(jobs) if isinstance(jobs, Mapping) else ():
-        if isinstance(jobs[job_id], Mapping):
+        # A pending job is configured but not registered, so no run can use its models yet.
+        if isinstance(jobs[job_id], Mapping) and job_id not in PENDING_JOBS:
             walk(job_id, "settings", jobs[job_id].get("settings", {}))
     return found
 
@@ -105,8 +109,32 @@ def build_job(*, check_models: ModelCheck | None = None) -> Job:
         return manifest["sources"][0]
 
     def resolve_layers(unit: UnitContext) -> Mapping[str, Any]:
+        """The explicit or repository-default file, plus at most one local capacity overlay.
+
+        The overlay is chosen with the configuration (``load_config(overlay=...)`` or
+        ``APPSEC_REVIEW_CONFIG_OVERLAY``), merged before validation, frozen into ``resolved.json``,
+        and listed in the run's configuration manifest as its own hashed layer. It is verified here
+        against both records and re-checked against the capacity-key allowlist.
+        """
         source = unit.output("resolve_configuration.fetch_config")
-        return {"strategy": "single-explicit-or-repository-default", "layers": [source]}
+        configuration = unit.job.run_root / "data" / "configuration"
+        manifest = json.loads((configuration / "manifest.json").read_text(encoding="utf-8"))
+        if file_sha256(configuration / "resolved.json") != manifest.get("resolved_sha256"):
+            raise ValueError("run-owned resolved configuration hash mismatch")
+        record = json.loads((configuration / "resolved.json").read_text(encoding="utf-8")).get(
+            "configuration_overlay")
+        overlays = list(manifest["sources"][1:])
+        if record is None and not overlays:
+            return {"strategy": "single-explicit-or-repository-default", "layers": [source]}
+        if (record is None or len(overlays) != 1 or overlays[0].get("layer") != OVERLAY_LAYER or
+                overlays[0].get("sha256") != record.get("sha256") or
+                overlays[0].get("path") != record.get("path")):
+            raise ValueError("configuration overlay layer does not match the resolved configuration")
+        keys = list(overlay_capacity_keys(record.get("document")))
+        if keys != record.get("keys"):
+            raise ValueError("configuration overlay capacity keys do not match the resolved configuration")
+        return {"strategy": "explicit-or-repository-default-with-capacity-overlay",
+                "layers": [source, dict(overlays[0])], "capacity_keys": keys}
 
     def freeze_config(unit: UnitContext) -> Mapping[str, Any]:
         path = unit.job.run_root / "data" / "configuration" / "appsec-review.toml"
