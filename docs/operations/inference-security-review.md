@@ -170,6 +170,32 @@ and change the settings fingerprint. Changing them reorders units and moves the 
 which reassembles hunt packages. The rank rule stays `review-unit-rank/2` because the formula does
 not change.
 
+## Code-graph evidence
+
+When the run has accepted `graph` shards (`job_code_graph_index`; today C/C++ only):
+
+- **Packages.** Lead packages embed the `dataflow_path` facts correlated `bridged` or `partial`
+  with a CodeQL lead, with their sink, entry point, guards and ranges; hunt packages embed the
+  unit's sink and entry-point facts. `retrieval.graph_families` lists the accepted families and
+  `retrieval.graph_scopes` the CodeQL scope ids they belong to.
+- **Strategies.** A hunt unit with an accepted `sink_site` family launches `sink_up`; one with an
+  `entry_point` family launches `entry_down`. Without them the slot falls back to `persona_sweep`
+  with a `required_source_unavailable` gap.
+- **Capabilities.** `query_code_graph` is granted to the red, hunter, blue and verifier roles. A
+  cell receives and may cite graph rows of its package's `graph_scopes` and nothing from another
+  scope. `depth` is capped by `[jobs.job_code_graph_index.settings.graph].max_call_depth` as frozen
+  into the run.
+- **Evidence and scoring.** A cited graph fact counts as direct evidence only for its mapped
+  predicate and only when the re-resolved fact is `direct_eligible`. Scoring then reads
+  `taint_path = graph_dataflow_path`, `attacker_control` from the cited source class, and
+  `guard_absent = graph_fact`.
+- **Gaps.** Every non-complete graph `(scope, family)` row is a `code_graph` producer gap in the
+  evidence map, the packages and the completeness ledger; a run without a `graph` index records a
+  `code_graph` `missing` gap.
+
+`tests/integration/test_code_graph_end_to_end.py` exercises this path offline with an injected
+worker. No live model or live CodeQL export has run it.
+
 ## Outcomes
 
 - Ordinary failures, such as provider errors, timeouts, invalid output, a failed team or an entire

@@ -122,7 +122,16 @@ the accepted handoff in three places:
 A succeeded record carries `export_status`, `export_identity`, `export_reused`, `export_pack`,
 `export_manifest` and `export_files`, each `{path, sha256, size_bytes}`, plus row counts and
 `truncated_queries`. Other records carry `export_status` (`FAILED`, `SKIPPED` or
-`NOT_APPLICABLE`) and the gaps or reason.
+`NOT_APPLICABLE`) and the gaps or reason. The plan is `outputs["plan.inventory"].plan` in the
+handoff's `result.json`; `job_code_graph_index` reads the plan and `export.scopes` only through
+those handoff-bound identities, and checks the catalog it normalizes with against this job's
+configured `catalog_sha256` pin.
+
+Verification status: the export step runs offline in `tests/test_codeql_export_step.py` and, inside
+the real job with an injected executor, in `tests/integration/test_code_graph_end_to_end.py`. Both
+play back hand-authored recordings. The export queries have not yet run in the pinned CodeQL image;
+`tests/live/test_codeql_graph_export_live.py` and `tests/live/test_code_graph_live.py` are the
+operator tiers that will refresh and verify the recordings.
 
 ## Evidence and retrieval
 
@@ -131,8 +140,12 @@ and code-flow steps are normalized into immutable `observations` shards. Each st
 SARIF `code_flow` index (normalizer `appsec-review/codeql-sarif-normalizer/2`), so alternative paths
 for one result stay separable; `job_review_prioritization` keeps the shortest flow per source and
 sink as a verified semantic path. Exact path matches are
-distinguished from suffix matches; ambiguity and unmapped locations remain gaps. The publisher
-composes its manifest onto the current accepted manifest rather than replacing upstream evidence.
+distinguished from suffix matches; ambiguity and unmapped locations remain gaps. The publisher's
+manifest lists this job's own observation shards and references the current accepted manifest and
+the accepted sibling manifests as verified `upstream_manifests`; it does not copy their shards into
+its own list. Later publishers compose onto it, and shards it dropped from the accepted list are
+restored from their producers' accepted handoffs by `job_code_graph_index` (clangd, IR and AST
+shards) and `job_review_data_indexing` (every producer).
 
 Use the `query_codeql` MCP tool to filter accepted observations by language, original source
 language, scope, build unit, rule, severity, path, or CodeQL shard.
@@ -149,7 +162,10 @@ For a fresh `appsec-multi-vuln` run, verify:
 6. the accepted manifest contains profile-specific `codeql-*` observation shards;
 7. `query_codeql` returns the same accepted observations; and
 8. deployment verification reports per-language and per-profile execution, SARIF, observation,
-   and gap counts.
+   and gap counts; and
+9. every successful C/C++ database has a `SUCCEEDED` graph export whose manifest is bound to the
+   handoff, every other language reports `NOT_APPLICABLE`, and `tests/live/test_code_graph_live.py`
+   passes (not yet run).
 
 ## Live acceptance
 

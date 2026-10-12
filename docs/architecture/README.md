@@ -51,7 +51,9 @@ Repository authority remains in [`../../AGENTS.md`](../../AGENTS.md). This page 
 - [`code-graph-precomputation.md`](code-graph-precomputation.md) — the authoritative code-graph
   strategy: CodeQL-first producers with C/C++ cross-checks, the `graph` index and
   `query_code_graph` tool, fact families and R3 admissibility, job topology, language rollout,
-  and the parallel implementation and test plan.
+  and the parallel implementation and test plan (implemented through C9 for C/C++, offline-verified;
+  record in [`../reviews/code-graph-precomputation-implementation.md`](../reviews/code-graph-precomputation-implementation.md);
+  operations in [`../operations/code-graph-index.md`](../operations/code-graph-index.md)).
 
 Operations pages not listed above:
 
