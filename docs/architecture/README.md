@@ -42,3 +42,29 @@ Repository authority remains in [`../../AGENTS.md`](../../AGENTS.md). This page 
   quorum design.
 - [`review-package-contract.md`](review-package-contract.md) — versioned finding-lead and hunt
   package inputs, membership gates, retrieval scopes, and implementation dependencies.
+- [`indexing-and-query-reuse.md`](indexing-and-query-reuse.md) — review-data indexing and reusable
+  query design.
+
+Operations pages not listed above:
+
+- [`../operations/wave1-review.md`](../operations/wave1-review.md) — direct CLI and `wave1_review` scope.
+- [`../operations/third-party-data-sync.md`](../operations/third-party-data-sync.md) — feed synchronization.
+- [`../operations/target-analysis-planning.md`](../operations/target-analysis-planning.md) — analysis planning.
+- [`../operations/project-build.md`](../operations/project-build.md) — project-image resolution, probes, and repair.
+- [`../operations/ci-configuration-analysis.md`](../operations/ci-configuration-analysis.md) — CI/CD configuration analysis.
+- [`../operations/tree-sitter-ast.md`](../operations/tree-sitter-ast.md) — Tree-sitter image and AST shards.
+- [`../operations/artifact-indexing.md`](../operations/artifact-indexing.md) — produced-artifact indexing.
+- [`../operations/cpp-compiled-analysis.md`](../operations/cpp-compiled-analysis.md) and
+  [`../operations/cpp-index-jobs.md`](../operations/cpp-index-jobs.md) — C/C++ analysis, clangd, and Joern.
+- [`../operations/post-build-security-assessment.md`](../operations/post-build-security-assessment.md) — build-hardening assessment.
+- [`../operations/static-analysis.md`](../operations/static-analysis.md) — deterministic static evidence collection.
+- [`../operations/codeql-analysis.md`](../operations/codeql-analysis.md) — cross-language CodeQL.
+- [`../operations/owasp-control-assessment.md`](../operations/owasp-control-assessment.md) — OWASP control assessment.
+- [`../operations/security-tagging.md`](../operations/security-tagging.md) — security tagging.
+- [`../operations/review-data-indexing.md`](../operations/review-data-indexing.md) — dataset inventory and publication audit.
+- [`../operations/retrieval-mcp.md`](../operations/retrieval-mcp.md) — local retrieval MCP gateway.
+- [`../operations/sei-cert-rule-pack.md`](../operations/sei-cert-rule-pack.md) — SEI CERT rule-pack operation.
+
+Other records: decision and migration reviews in [`../reviews/`](../reviews/), implementation task
+prompts in [`../tasks/`](../tasks/), JSON schemas in [`../schemas/`](../schemas/), and the full
+documentation index in [`../agent-reader.md`](../agent-reader.md).
