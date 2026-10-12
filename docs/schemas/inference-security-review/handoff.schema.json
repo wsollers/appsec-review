@@ -11,6 +11,7 @@
     "configuration_sha256",
     "ledger_head_sha256",
     "projection_sha256",
+    "status",
     "accounting",
     "shards",
     "finding_packages",
@@ -36,6 +37,14 @@
     "projection_sha256": {
       "$ref": "common.schema.json#/$defs/sha256"
     },
+    "status": {
+      "enum": [
+        "COMPLETE",
+        "DEGRADED",
+        "EMPTY"
+      ],
+      "description": "DEGRADED whenever any gap or failed lane is accounted; never a clean verdict."
+    },
     "accounting": {
       "type": "object",
       "additionalProperties": false,
@@ -46,6 +55,7 @@
         "incomplete_gap_ratio",
         "gap_ratio",
         "claims_total",
+        "duplicate_proposals",
         "claims_by_state",
         "gaps_by_class",
         "evidence_requests_by_outcome",
@@ -76,6 +86,11 @@
           "type": "integer",
           "minimum": 0
         },
+        "duplicate_proposals": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Proposals of a claim id that merged into an existing claim (identity-only claim ids); they are not claims of their own and are never in the duplicate state."
+        },
         "claims_by_state": {
           "$ref": "common.schema.json#/$defs/claims_by_state"
         },
@@ -94,6 +109,7 @@
               "lane",
               "outcome",
               "claims_total",
+              "duplicate_proposals",
               "claims_by_state",
               "cells_expected",
               "cells_by_status",
@@ -112,6 +128,10 @@
                 "$ref": "common.schema.json#/$defs/pool_outcome"
               },
               "claims_total": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "duplicate_proposals": {
                 "type": "integer",
                 "minimum": 0
               },
@@ -241,6 +261,46 @@
       },
       "maxItems": 100000,
       "uniqueItems": true
+    },
+    "package_manifest_sha256": {
+      "$ref": "common.schema.json#/$defs/sha256"
+    },
+    "coverage_matrix": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256",
+        "rows"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "pattern": "^(?!.*(^|/)[.][.]?(/|$))[A-Za-z0-9_.-]+(/[A-Za-z0-9_.-]+)*$",
+          "maxLength": 512
+        },
+        "sha256": {
+          "$ref": "common.schema.json#/$defs/sha256"
+        },
+        "rows": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "possible_duplicates": {
+      "type": "array",
+      "maxItems": 10000,
+      "uniqueItems": true,
+      "items": {
+        "type": "array",
+        "minItems": 2,
+        "maxItems": 2,
+        "items": {
+          "$ref": "common.schema.json#/$defs/claim_id"
+        }
+      },
+      "description": "Distinct claim ids nominated as possible duplicates (R7); slice 1 never merges them."
     }
   }
 }

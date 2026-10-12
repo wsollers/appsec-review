@@ -61,9 +61,11 @@ class LaneAccounting:
     gap_ratio: float
     review_incomplete: bool
     outcome: PoolOutcome
+    duplicate_proposals: int = 0         # proposals this lane made of a claim id another proposal owns
 
     def to_json(self) -> dict[str, Any]:
         return {"lane": self.lane.value, "outcome": self.outcome.value, "claims_total": self.claims_total,
+                "duplicate_proposals": self.duplicate_proposals,
                 "claims_by_state": {state.value: self.claims_by_state[state] for state in ClaimState},
                 "cells_expected": self.cells_expected,
                 "cells_by_status": {status.value: self.cells_by_status[status] for status in CellStatus},
@@ -84,6 +86,7 @@ class Accounting:
     review_incomplete: bool
     outcome: PoolOutcome
     violations: tuple[Gap, ...]
+    duplicate_proposals: int = 0
 
     @property
     def exact(self) -> bool:
@@ -95,7 +98,7 @@ class Accounting:
     def to_json(self) -> dict[str, Any]:
         return {"exact": self.exact, "outcome": self.outcome.value, "review_incomplete": self.review_incomplete,
                 "incomplete_gap_ratio": self.incomplete_gap_ratio, "gap_ratio": self.gap_ratio,
-                "claims_total": self.claims_total,
+                "claims_total": self.claims_total, "duplicate_proposals": self.duplicate_proposals,
                 "claims_by_state": {state.value: self.claims_by_state[state] for state in ClaimState},
                 "gaps_by_class": {gap_class.value: self.gaps_by_class[gap_class] for gap_class in GapClass},
                 "evidence_requests_by_outcome": {
@@ -183,6 +186,7 @@ def exact_accounting(projection: Projection, expected_cells: Mapping[str, Lane],
             request_outcomes[request.outcomes[0]] += 1
 
     gapped_packages = {gap.subject_id for gap in projection.gaps if gap.subject_id in expected_packages}
+    duplicates = {lane: sum(view.duplicate_proposals[lane] for view in projection.claims.values()) for lane in Lane}
     lanes: list[LaneAccounting] = []
     for lane in Lane:
         lane_claims = Counter(claim.state for claim in claims.values() if claim.lane is lane)
@@ -207,7 +211,8 @@ def exact_accounting(projection: Projection, expected_cells: Mapping[str, Lane],
             lane, {state: lane_claims[state] for state in ClaimState}, claims_total, len(cell_ids),
             {status: statuses[status] for status in CellStatus}, missing, len(packages), gapped_cells,
             lane_gapped_packages, ratio, ratio > incomplete_gap_ratio,
-            _outcome(len(cell_ids), len(packages), statuses, gapped_cells + lane_gapped_packages)))
+            _outcome(len(cell_ids), len(packages), statuses, gapped_cells + lane_gapped_packages),
+            duplicates[lane]))
 
     total_claims = Counter(claim.state for claim in claims.values())
     if sum(lane.claims_total for lane in lanes) != len(claims) or sum(total_claims.values()) != len(claims):
@@ -225,4 +230,5 @@ def exact_accounting(projection: Projection, expected_cells: Mapping[str, Lane],
         review_incomplete=gap_ratio > incomplete_gap_ratio or any(lane.review_incomplete for lane in lanes),
         outcome=_combine([lane.outcome for lane in lanes]),
         violations=tuple(sorted(unique.values(), key=lambda gap: (gap.subject_id, gap.reason))),
+        duplicate_proposals=sum(duplicates.values()),
     )

@@ -8,8 +8,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Collection, Iterable
 
-from appsec_review.review.evidence import make_gap, satisfies
-from appsec_review.review.models import EvidenceRelation, Gap, GapClass, Predicate, RelationKind
+from appsec_review.review.evidence import satisfies
+from appsec_review.review.models import EvidenceRelation, Gap, GapClass, Predicate, RelationKind, make_gap
 
 
 @dataclass(frozen=True, slots=True)

@@ -27,7 +27,7 @@ import subprocess
 from typing import Any, Callable, Iterator, Mapping, Sequence
 
 from appsec_review.inference import ModelOutputError, ModelResult, ReviewModelRequest
-from appsec_review.retrieval.core import RetrievalGap
+from appsec_review.retrieval.core import RetrievalGap, RetrievalIntegrityError
 from appsec_review.review.capability import AuthorityDenied, CellCapability, TOOL_SCHEMAS
 from appsec_review.review.identity import make_id, sha256_hex
 from appsec_review.review.models import (
@@ -42,13 +42,22 @@ MAX_REQUESTS_PER_TURN = 16
 MAX_REPAIR_ERRORS = 20
 _LOGICAL_ID = re.compile(r"^asr:[a-z][a-z0-9_]*:[0-9a-f]{64}$")
 _ATTEMPT_FILE = re.compile(r"^attempt-([1-9][0-9]{0,5})\.json$")
-# `RetrievalCore` reports a tampered or mismatched shard as ValueError with these phrases. They are
-# framework-integrity failures, not tool gaps.
-_CORE_INTEGRITY_MESSAGES = ("integrity mismatch", "metadata mismatch", "isolation mismatch",
-                            "escapes run", "manifest pin")
+# Response fields that vary with wall-clock time; they never enter a receipt hash.
+_VOLATILE_RESPONSE_FIELDS = frozenset({"duration_ms"})
 
 Infer = Callable[..., ModelResult]
 ValidateFinal = Callable[[Mapping[str, Any]], Sequence[str]]
+
+
+class CellBudgetExceeded(Exception):
+    """Raised by an infer wrapper when a cell reaches its wall-clock deadline or token cap.
+
+    The cell ends ``timed_out`` with a ``budget_gap``; it is never retried.
+    """
+
+    def __init__(self, reason: str) -> None:
+        super().__init__(reason)
+        self.reason = str(reason)[:200]
 
 
 @dataclass(frozen=True, slots=True)
@@ -79,6 +88,9 @@ class CellSpec:
     timeout_seconds: int
     output_schema: str
     validator_version: str
+    # When set, replaces the whole-manifest and package identities in the fingerprint with the
+    # hash of the accepted shards and package content this cell can read (selective invalidation).
+    reuse_basis: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -95,11 +107,13 @@ class CellOutcome:
 def cell_fingerprint(spec: CellSpec, capability: CellCapability) -> str:
     """The `cell/v1` identity. Retry and concurrency settings are deliberately not inputs."""
     semantic = capability.semantic_body()
+    inputs: dict[str, Any] = ({"run_input_manifest": spec.manifest_sha256,
+                               "package": {"id": spec.package_id, "sha256": spec.package_sha256}}
+                              if spec.reuse_basis is None else {"reuse_basis": spec.reuse_basis})
     return make_id("cell", 1, {
         "schema": "cell/v1",
-        "run_input_manifest": spec.manifest_sha256,
+        **inputs,
         "lane": Lane(spec.lane).value,
-        "package": {"id": spec.package_id, "sha256": spec.package_sha256},
         "claim": spec.claim_id,
         "role": Role(spec.role).value,
         "persona": spec.persona,
@@ -257,6 +271,9 @@ def _run_attempt(spec: CellSpec, cell_id: str, number: int, *, infer: Infer, cor
             response = infer(request, timeout_seconds=spec.timeout_seconds)
         except IntegrityError:
             raise
+        except CellBudgetExceeded as exc:
+            attempt.end(CellStatus.TIMED_OUT, GapClass.BUDGET_GAP, f"cell_budget_exceeded:{exc.reason}")
+            return attempt
         except ModelOutputError:
             attempt.end(CellStatus.INVALID, GapClass.SCHEMA_ERROR, "model_output_unparseable")
             attempt.repair_errors = (f"the reply was not exactly one {TURN_SCHEMA} object",)
@@ -327,9 +344,9 @@ def _retrieve(spec: CellSpec, cell_id: str, attempt: _Attempt, capability: CellC
         response = getattr(core, decision.tool)(**dict(decision.parameters))
     except IntegrityError:
         raise
+    except RetrievalIntegrityError as exc:
+        raise IntegrityError(f"retrieval core integrity failure: {type(exc).__name__}") from exc
     except (RetrievalGap, ValueError, LookupError, OSError, RuntimeError, sqlite3.Error) as exc:
-        if isinstance(exc, ValueError) and any(text in str(exc) for text in _CORE_INTEGRITY_MESSAGES):
-            raise IntegrityError(f"retrieval core integrity failure: {type(exc).__name__}") from exc
         call.update(status="tool_error", error_class=type(exc).__name__)
         attempt.gaps.append(_gap(cell_id, spec, attempt.number, f"{turn}/{index}",
                                  GapClass.COVERAGE_GAP, f"tool_error:{decision.tool}:{type(exc).__name__}"))
@@ -340,7 +357,8 @@ def _retrieve(spec: CellSpec, cell_id: str, attempt: _Attempt, capability: CellC
     attempt.seen |= seen
     call.update(status="executed", result_count=len(bounded["results"]), withheld_count=withheld,
                 gap_count=len(bounded["coverage_gaps"]), truncated=bounded["truncated"],
-                response_sha256=sha256_hex(_plain(response)),
+                response_sha256=sha256_hex({key: value for key, value in _plain(response).items()
+                                            if key not in _VOLATILE_RESPONSE_FIELDS}),
                 bytes=len(json.dumps(bounded, sort_keys=True, default=str).encode()))
     return {"index": index, "status": "ok", **bounded}
 
@@ -431,6 +449,8 @@ def _plain(value: Any) -> Any:
 
 
 def _retryable(attempt: _Attempt, on_timeout: bool, on_provider: bool, on_invalid: bool) -> bool:
+    if attempt.reason.startswith("cell_budget_exceeded:"):
+        return False
     if attempt.status is CellStatus.TIMED_OUT:
         return on_timeout if attempt.gap_class is GapClass.WORKER_GAP else on_invalid
     if attempt.status is CellStatus.FAILED:
@@ -515,5 +535,5 @@ def _load_receipt(path: Path, cell_id: str, number: int) -> Mapping[str, Any]:
     return receipt
 
 
-__all__ = ["CellOutcome", "CellSpec", "EXECUTOR_VERSION", "RECEIPT_SCHEMA", "TURN_SCHEMA",
+__all__ = ["CellBudgetExceeded", "CellOutcome", "CellSpec", "EXECUTOR_VERSION", "RECEIPT_SCHEMA", "TURN_SCHEMA",
            "cell_fingerprint", "reuse_or_run", "run_cell"]

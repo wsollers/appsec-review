@@ -305,6 +305,7 @@ def test_handoff_accepts_exact_accounting_only(tmp_path: Path) -> None:
                                   incomplete_gap_ratio=0.25)
     handoff = {
         "schema": "appsec-review/inference-review-handoff/1", "run_id": "run-1", "accepted_manifest_sha256": SHA,
+        "status": "DEGRADED",
         "configuration_sha256": SHA, "ledger_head_sha256": projection.head, "projection_sha256": projection.sha256(),
         "accounting": accounting.to_json(), "shards": [{"path": "data/ledger/lead.jsonl", "schema":
                                                          "appsec-review/ledger-event/1", "sha256": SHA, "rows": 8}],
@@ -316,3 +317,6 @@ def test_handoff_accepts_exact_accounting_only(tmp_path: Path) -> None:
     with pytest.raises(ValidationError):
         validator("handoff").validate({**handoff, "accounting": broken.to_json()})
     assert not valid("handoff", {**handoff, "shards": [{"path": "../escape", "schema": "x", "sha256": SHA, "rows": 1}]})
+    assert not valid("handoff", {**handoff, "status": "CLEAN"})
+    assert accounting.to_json()["duplicate_proposals"] == 0
+    assert all("duplicate_proposals" in lane for lane in accounting.to_json()["lanes"])

@@ -8,9 +8,8 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from typing import Any, Mapping, Protocol, runtime_checkable
 
-from appsec_review.review.evidence import make_gap
 from appsec_review.review.identity import make_id, sha256_hex
-from appsec_review.review.models import ClaimState, Gap, GapClass
+from appsec_review.review.models import ClaimState, Gap, GapClass, make_gap
 
 INTERFACE_VERSION = "appsec-review/scoring-provider/1"
 SCORE_PACKAGE_SCHEMA = "appsec-review/score-package/1"

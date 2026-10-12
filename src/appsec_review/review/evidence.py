@@ -12,14 +12,14 @@ from typing import Any, Collection, Iterable, Mapping
 from appsec_review.retrieval.core import RetrievalCore
 from appsec_review.retrieval.model import EntityKind, LogicalIdentity
 from appsec_review.review.identity import make_id, sha256_hex
-from appsec_review.review.models import (
-    Admissibility, EvidenceRelation, Gap, GapClass, IntegrityError, Predicate, RelationKind,
+from appsec_review.review.models import (  # make_gap is re-exported for compatibility
+    MAX_GAP_REASON, Admissibility, EvidenceRelation, Gap, GapClass, IntegrityError, Predicate, RelationKind,
+    make_gap,
 )
 
 ADMISSIBILITY_RULES_VERSION = "evidence-admissibility/1"
 EVIDENCE_RELATION_KINDS = frozenset({RelationKind.SUPPORTS, RelationKind.CONTRADICTS, RelationKind.QUALIFIES})
 SATISFYING_ADMISSIBILITY = frozenset({Admissibility.DIRECT, Admissibility.DIRECT_FOR_MAPPED_PREDICATE})
-MAX_GAP_REASON = 256
 
 # R3: kinds that are direct evidence for the construct the predicate names.
 DIRECT_KINDS: frozenset[EntityKind] = frozenset({
@@ -40,15 +40,6 @@ INDIRECT_KINDS: frozenset[EntityKind] = frozenset({
 })
 _EVIDENCE_BEARING = frozenset({EntityKind.TOOL_OBSERVATION, EntityKind.EVIDENCE_ARTIFACT,
                                EntityKind.FINDING_PACKAGE})
-
-
-def make_gap(gap_class: GapClass, subject_id: str, reason: str, *, predicate: Predicate | None = None,
-             round: int = 0) -> Gap:
-    """Return a gap whose identity covers its class, subject, predicate, round, and bounded reason."""
-    bounded = " ".join(str(reason).split())[:MAX_GAP_REASON]
-    body = {"gap_class": GapClass(gap_class).value, "subject_id": subject_id, "reason": bounded,
-            "predicate": predicate.value if predicate is not None else None, "round": round}
-    return Gap(make_id("gap", 1, body), GapClass(gap_class), subject_id, bounded, predicate, round)
 
 
 def classify(entity_kind: EntityKind | str, predicate: Predicate,

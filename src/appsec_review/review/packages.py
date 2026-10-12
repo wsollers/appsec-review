@@ -86,6 +86,19 @@ class PackageSettings:
                 raise ValueError(f"{name} must be between 1 and {bound}")
 
     @classmethod
+    def from_review_settings(cls, settings: Any) -> "PackageSettings":
+        """Package settings from the central ``InferenceSecurityReviewSettings`` (the job's only source).
+
+        Admission is ``lanes.lead_admission``, the hunt cutoff ``lanes.hunt_max_units``, and the
+        assembly bounds ``packages.*``. The dataclass defaults exist for library and test use only.
+        """
+        bounds = settings.packages
+        return cls(admit_severities=tuple(settings.lanes.lead_admission),
+                   hunt_max_units=settings.lanes.hunt_max_units,
+                   **{item.name: getattr(bounds, item.name) for item in fields(cls)
+                      if item.name not in {"admit_severities", "hunt_max_units"}})
+
+    @classmethod
     def from_mapping(cls, value: Mapping[str, Any] | None) -> "PackageSettings":
         value = dict(value or {})
         known = {item.name for item in fields(cls)}

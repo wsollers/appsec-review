@@ -10,10 +10,10 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Collection, Iterable
 
-from appsec_review.review.evidence import make_gap, satisfies
+from appsec_review.review.evidence import satisfies
 from appsec_review.review.identity import make_id, sha256_hex
 from appsec_review.review.models import (
-    Claim, ClaimState, EvidenceRelation, Gap, GapClass, Predicate, RelationKind,
+    Claim, ClaimState, EvidenceRelation, Gap, GapClass, Predicate, RelationKind, make_gap,
 )
 from appsec_review.review import obligations
 

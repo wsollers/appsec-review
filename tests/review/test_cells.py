@@ -8,8 +8,9 @@ import pytest
 
 from appsec_review.inference import ModelOutputError, ModelResult, ReviewModelRequest
 from appsec_review.review.capability import CellCapability
+from appsec_review.retrieval.core import RetrievalIntegrityError
 from appsec_review.review.cells import (
-    TURN_SCHEMA, CellSpec, cell_fingerprint, reuse_or_run, run_cell,
+    TURN_SCHEMA, CellBudgetExceeded, CellSpec, cell_fingerprint, reuse_or_run, run_cell,
 )
 from appsec_review.review.models import CellStatus, GapClass, IntegrityError, Lane, Role
 
@@ -301,3 +302,53 @@ def test_retry_settings_do_not_change_the_cell_id(tmp_path: Path) -> None:
     one = run(tmp_path / "a", ScriptedInfer(final(LEAD)), max_attempts=1)
     three = run(tmp_path / "b", ScriptedInfer(final(LEAD)), max_attempts=3, retry_on_invalid_output=True)
     assert one.record.cell_id == three.record.cell_id
+
+
+def test_retrieval_integrity_errors_are_typed_and_block(tmp_path: Path) -> None:
+    class TamperedCore(FakeCore):
+        def search(self, **parameters):
+            raise RetrievalIntegrityError("index integrity mismatch: source")
+
+    infer = ScriptedInfer(retrieve({"tool": "search", "parameters": {"query": "memcpy"}}), final(LEAD))
+    with pytest.raises(IntegrityError):
+        run(tmp_path, infer, core=TamperedCore())
+
+    class MessageOnlyCore(FakeCore):
+        def search(self, **parameters):
+            raise ValueError("integrity mismatch mentioned by an ordinary tool error")
+
+    outcome = run(tmp_path / "plain", ScriptedInfer(retrieve({"tool": "search", "parameters": {"query": "memcpy"}}),
+                                                    final(LEAD)), core=MessageOnlyCore())
+    assert outcome.record.status is CellStatus.SUCCEEDED
+    assert [gap.gap_class for gap in outcome.gaps] == [GapClass.COVERAGE_GAP]
+
+
+def test_cell_budget_exceeded_times_out_with_a_budget_gap_and_is_never_retried(tmp_path: Path) -> None:
+    infer = ScriptedInfer(CellBudgetExceeded("cell_token_cap"), final(LEAD))
+    outcome = run(tmp_path, infer, max_attempts=3, retry_on_timeout=True, retry_on_invalid_output=True)
+    assert outcome.record.status is CellStatus.TIMED_OUT and outcome.record.attempts == 1
+    assert [(gap.gap_class, gap.reason) for gap in outcome.gaps] == [
+        (GapClass.BUDGET_GAP, "cell_budget_exceeded:cell_token_cap")]
+
+
+def test_reuse_basis_replaces_manifest_and_package_identity_in_the_fingerprint() -> None:
+    base = cell_fingerprint(spec(reuse_basis="9" * 64), capability())
+    moved = cell_fingerprint(spec(reuse_basis="9" * 64, manifest_sha256="7" * 64, package_id="package-2",
+                                  package_sha256="8" * 64),
+                             capability(manifest_sha256="7" * 64, package_id="package-2", package_sha256="8" * 64))
+    assert base == moved
+    assert cell_fingerprint(spec(reuse_basis="0" * 64), capability()) != base
+    assert cell_fingerprint(spec(), capability()) != base
+
+
+def test_receipt_hashes_ignore_response_wall_clock_fields(tmp_path: Path) -> None:
+    class SlowCore(FakeCore):
+        def _envelope(self, tool, results):
+            return {**super()._envelope(tool, results), "duration_ms": 917}
+
+    receipts = []
+    for name, core in (("fast", FakeCore()), ("slow", SlowCore())):
+        infer = ScriptedInfer(retrieve({"tool": "search", "parameters": {"query": "memcpy"}}), final(SPAN))
+        outcome = run(tmp_path / name, infer, core=core)
+        receipts.append(outcome.receipt_paths[0].read_bytes())
+    assert receipts[0] == receipts[1]
