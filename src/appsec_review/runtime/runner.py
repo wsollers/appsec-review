@@ -58,7 +58,7 @@ class JobRunner:
             "schema": "appsec-review/run-configuration/2",
             "source_sha256": self.config.source_sha256,
             "resolved_sha256": self.config.resolved_sha256,
-            "sources": [{"path": str(self.config.source_path), "sha256": self.config.source_sha256}],
+            "sources": [dict(layer) for layer in self.config.layers],
             "resolved": {"path": "resolved.json", "sha256": self.config.resolved_sha256},
         })
 

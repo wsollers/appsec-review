@@ -44,6 +44,8 @@ cpp_analysis = 6
 owasp_validator = 4
 owasp_verification = 2
 ci_linter = 8
+inference_teams = 2              # one per lane unit; model concurrency is set by review_teams
+inference_score = 4
 
 [jobs.job_third_party_data_sync]
 name = "third_party_data_sync"
@@ -1655,3 +1657,170 @@ workers = 2
 [jobs.job_security_tagging.steps.publication.tasks.publish_index]
 [jobs.job_security_tagging.steps.publication.tasks.publish_tag_cloud]
 [jobs.job_security_tagging.steps.publication.tasks.publish_handoff]
+
+# Near-terminal inference security review (docs/architecture/inference-security-review.md).
+# Typed and validated by config/inference_review.py. Not yet registered: the loader resolves it
+# under pending_jobs until the runtime job exists. teams.review_teams and the Dagster pool limits are
+# capacity, settable by a local overlay (APPSEC_REVIEW_CONFIG_OVERLAY) and never fingerprinted.
+[jobs.job_inference_security_review]
+name = "inference_security_review"
+workers = 8
+
+[jobs.job_inference_security_review.settings.rounds]
+max_rounds = 3
+stable_rounds_required = 1
+max_active_claims = 500
+max_attack_chains = 50
+
+[jobs.job_inference_security_review.settings.teams]
+review_teams = 5
+red_per_team = 3
+blue_per_team = 2
+verifier_per_team = 1
+
+[jobs.job_inference_security_review.settings.lanes]
+lead_admission = ["critical", "high", "unknown"]
+lead_budget_share = 0.5
+lead_max_claims_per_package = 3
+hunt_max_units = 50
+hunt_max_claims_per_package = 5
+hunt_panel_rule = "hunt-panel/1"
+incomplete_gap_ratio = 0.25
+
+[jobs.job_inference_security_review.settings.budgets]
+budget_team_packages = 200
+max_model_turns = 12000
+max_input_tokens = 60000000
+max_output_tokens = 6000000
+max_retrieval_queries = 40000
+timeout_seconds = 28800
+
+[jobs.job_inference_security_review.settings.retry]
+max_attempts = 2
+retry_on_timeout = true
+retry_on_provider_error = true
+retry_on_invalid_output = true
+backoff_seconds = [2, 10]
+
+[jobs.job_inference_security_review.settings.models.default]
+provider = "claude-cli"
+model = "claude-haiku-5-5"
+reasoning = "high"
+max_input_tokens = 32000
+max_output_tokens = 8000
+max_queries = 40
+max_turns = 12
+timeout_seconds = 600
+
+[jobs.job_inference_security_review.settings.roles.independent_verifier]
+workers = 4
+model_profile = "default"
+require_distinct_from_roles = ["hypothesis_hunter", "red_team_analyst", "blue_team_refuter"]
+
+[jobs.job_inference_security_review.settings.routing]
+persona_rule = "persona-routing/1"
+stack_rule = "stack-routing/1"
+
+[jobs.job_inference_security_review.settings.scoring]
+enabled_providers = ["cvss_v4", "application_risk_matrix", "ssvc_decision"]
+priority_policy = "organization_default/1"
+override_policy = "review_lead_only/1"
+
+[jobs.job_inference_security_review.settings.scoring.providers.cvss_v4]
+implementation = "first-reference-compatible/1"
+metric_groups = ["base", "threat", "environmental", "supplemental"]
+
+[jobs.job_inference_security_review.settings.scoring.providers.application_risk_matrix]
+implementation = "application_risk_matrix/1"
+
+# application_risk_matrix impact_class axis; an unmapped CWE scores null with missing_factors.
+[jobs.job_inference_security_review.settings.scoring.cwe_impact_classes]
+"CWE-22" = "high"
+"CWE-77" = "critical"
+"CWE-78" = "critical"
+"CWE-79" = "medium"
+"CWE-89" = "critical"
+"CWE-94" = "critical"
+"CWE-120" = "high"
+"CWE-190" = "medium"
+"CWE-200" = "medium"
+"CWE-209" = "low"
+"CWE-287" = "critical"
+"CWE-306" = "critical"
+"CWE-327" = "medium"
+"CWE-352" = "medium"
+"CWE-400" = "medium"
+"CWE-416" = "critical"
+"CWE-434" = "high"
+"CWE-476" = "medium"
+"CWE-502" = "critical"
+"CWE-601" = "low"
+"CWE-611" = "high"
+"CWE-787" = "critical"
+"CWE-798" = "high"
+"CWE-862" = "high"
+"CWE-863" = "high"
+"CWE-918" = "high"
+
+[jobs.job_inference_security_review.settings.poc]
+execution_enabled = false
+require_target_authorization = true
+require_isolation = true
+network = "none"
+read_only_target = true
+allow_host_execution = false
+allow_production_services = false
+allow_real_credentials = false
+allow_privileged_containers = false
+allow_docker_socket = false
+allow_deploy_sign_publish = false
+max_attempts_per_claim = 1
+cpu_limit = 1.0
+memory_mb = 1024
+timeout_seconds = 60
+scratch_mb = 256
+
+[[jobs.job_inference_security_review.settings.poc.eligibility_rules]]
+provider = "cvss_v4"
+field = "technical_severity.rating"
+operator = "in"
+values = ["HIGH", "CRITICAL"]
+
+[jobs.job_inference_security_review.steps.scope]
+workers = 1
+[jobs.job_inference_security_review.steps.scope.tasks.accept_manifest]
+[jobs.job_inference_security_review.steps.scope.tasks.assemble_scope]
+
+[jobs.job_inference_security_review.steps.packages]
+workers = 2
+[jobs.job_inference_security_review.steps.packages.tasks.assemble_lead_packages]
+[jobs.job_inference_security_review.steps.packages.tasks.assemble_hunt_packages]
+
+[jobs.job_inference_security_review.steps.lead_review]
+workers = 1
+[jobs.job_inference_security_review.steps.lead_review.tasks.teams]
+
+[jobs.job_inference_security_review.steps.hunt_review]
+workers = 1
+[jobs.job_inference_security_review.steps.hunt_review.tasks.teams]
+
+[jobs.job_inference_security_review.steps.merge]
+workers = 1
+[jobs.job_inference_security_review.steps.merge.tasks.claims]
+
+[jobs.job_inference_security_review.steps.adjudicate]
+workers = 1
+[jobs.job_inference_security_review.steps.adjudicate.tasks.apply_policy]
+
+[jobs.job_inference_security_review.steps.scoring]
+workers = 1
+[jobs.job_inference_security_review.steps.scoring.tasks.score_claims]
+
+[jobs.job_inference_security_review.steps.completeness]
+workers = 1
+[jobs.job_inference_security_review.steps.completeness.tasks.audit]
+
+[jobs.job_inference_security_review.steps.publication]
+workers = 1
+[jobs.job_inference_security_review.steps.publication.tasks.publish_claim_ledger]
+[jobs.job_inference_security_review.steps.publication.tasks.publish_handoff]
