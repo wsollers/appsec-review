@@ -13,6 +13,7 @@ Relevant bounded procedures and design references:
 - [`../pipeline/skills/build-image-repair/SKILL.md`](../pipeline/skills/build-image-repair/SKILL.md) — bounded apt-package proposals for failed project-build image probes.
 - [`../pipeline/skills/post-build-security-assessment/SKILL.md`](../pipeline/skills/post-build-security-assessment/SKILL.md) — bounded guidance for the post-build security inference task.
 - [`../.claude/skills/parallel-implementation/SKILL.md`](../.claude/skills/parallel-implementation/SKILL.md) — development skill (repository agents only) for splitting an approved design into parallel agent chunks and merging them.
+- [`../.agents/skills/repository-development-skills/SKILL.md`](../.agents/skills/repository-development-skills/SKILL.md) — pointer that sends Codex, Gemini CLI, Copilot and Cursor to the canonical `.claude/skills/`.
 - [`reviews/inference-security-review-implementation.md`](reviews/inference-security-review-implementation.md) — slice 1 implementation record: readiness decisions, partition, merges, reconciliations, verification, and outstanding work.
 - [`architecture/jobs-and-runtime.md`](architecture/jobs-and-runtime.md) — semantic jobs and orchestration.
 - [`architecture/build-environments-and-execution-capture.md`](architecture/build-environments-and-execution-capture.md) — shared capture architecture, conditional-control design status, and the pinned fixture matrix.

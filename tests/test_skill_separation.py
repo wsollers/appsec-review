@@ -8,13 +8,17 @@ import pytest
 
 from appsec_review.guidance import GuidanceError, load_registry, load_runtime_skill
 from appsec_review.guidance.skills import (
-    DEVELOPMENT_AUDIENCE, DEVELOPMENT_SKILLS_DIRECTORY, RUNTIME_AUDIENCE, RUNTIME_SKILLS_DIRECTORY,
-    front_matter, runtime_skill_records,
+    DEVELOPMENT_AUDIENCE, DEVELOPMENT_POINTER_DIRECTORY, DEVELOPMENT_POINTER_SKILL, DEVELOPMENT_SKILLS_DIRECTORY,
+    RUNTIME_AUDIENCE, RUNTIME_SKILLS_DIRECTORY, front_matter, runtime_skill_records,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
 RUNTIME = ROOT / RUNTIME_SKILLS_DIRECTORY
 DEVELOPMENT = ROOT / DEVELOPMENT_SKILLS_DIRECTORY
+POINTER = ROOT / DEVELOPMENT_POINTER_DIRECTORY
+# Skill locations other coding agents scan. They must stay empty so nothing drifts from the
+# canonical set; `.agents/skills` (read by Codex, Gemini CLI, Copilot and Cursor) holds one pointer.
+UNMANAGED_SKILL_LOCATIONS = (".github/skills", ".gemini/skills", ".codex/skills", ".cursor/skills", "skills")
 LOADER = ROOT / "src" / "appsec_review" / "guidance" / "skills.py"
 
 
@@ -22,8 +26,23 @@ def _skills(root: Path) -> dict[str, Path]:
     return {path.parent.name: path for path in sorted(root.glob("*/SKILL.md"))}
 
 
-def test_there_is_no_ambiguous_top_level_skills_directory() -> None:
-    assert not (ROOT / "skills").exists()
+def test_no_other_skill_locations_exist() -> None:
+    assert not [location for location in UNMANAGED_SKILL_LOCATIONS if (ROOT / location).exists()]
+
+
+def test_shared_agent_location_holds_only_the_pointer_to_the_canonical_set() -> None:
+    entries = sorted(path.name for path in POINTER.iterdir())
+    assert entries == [DEVELOPMENT_POINTER_SKILL]
+    files = sorted(path.relative_to(POINTER).as_posix() for path in POINTER.rglob("*") if path.is_file())
+    assert files == [f"{DEVELOPMENT_POINTER_SKILL}/SKILL.md"]
+    text = (POINTER / DEVELOPMENT_POINTER_SKILL / "SKILL.md").read_text(encoding="utf-8")
+    values = front_matter(text)
+    assert values["name"] == DEVELOPMENT_POINTER_SKILL and values["audience"] == DEVELOPMENT_AUDIENCE
+    assert f"`{DEVELOPMENT_SKILLS_DIRECTORY}/`" in text and "AGENTS.md" in text
+    # A pointer, not a copy: it names no individual skill, so it never needs refreshing.
+    assert not [name for name in _skills(DEVELOPMENT) if name in text]
+    assert len(text) < 2000
+    assert DEVELOPMENT_POINTER_SKILL not in _skills(DEVELOPMENT) and DEVELOPMENT_POINTER_SKILL not in _skills(RUNTIME)
 
 
 def test_runtime_skills_are_registered_runtime_worker_skills() -> None:
@@ -52,7 +71,7 @@ def test_pipeline_guidance_never_carries_repository_agent_material() -> None:
         if path.is_file():
             text = path.read_text(encoding="utf-8", errors="replace")
             assert f"audience: {DEVELOPMENT_AUDIENCE}" not in text, path
-            assert DEVELOPMENT_SKILLS_DIRECTORY not in text, path
+            assert DEVELOPMENT_SKILLS_DIRECTORY not in text and DEVELOPMENT_POINTER_DIRECTORY not in text, path
 
 
 def _string_constants(path: Path) -> list[str]:
@@ -66,15 +85,16 @@ def test_only_the_runtime_loader_names_skill_locations_in_application_code() -> 
         if path == LOADER:
             continue
         for value in _string_constants(path):
-            if ".claude" in value or value == "skills" or "skills/" in value:
+            if ".claude" in value or ".agents" in value or value == "skills" or "skills/" in value:
                 offenders.append(f"{path.relative_to(ROOT)}: {value!r}")
     assert not offenders, "application code must load skills only through guidance.skills: " + "; ".join(offenders)
 
 
 def test_runtime_images_never_receive_development_skills() -> None:
     dockerfile = (ROOT / "deploy" / "dagster" / "Dockerfile").read_text(encoding="utf-8")
-    assert ".claude" not in dockerfile and "COPY skills" not in dockerfile
-    assert ".claude" in (ROOT / ".dockerignore").read_text(encoding="utf-8").split()
+    assert ".claude" not in dockerfile and ".agents" not in dockerfile and "COPY skills" not in dockerfile
+    ignored = (ROOT / ".dockerignore").read_text(encoding="utf-8").split()
+    assert ".claude" in ignored and ".agents" in ignored
 
 
 def test_loader_rejects_development_unregistered_and_unauthorized_skills(tmp_path: Path) -> None:

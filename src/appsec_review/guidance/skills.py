@@ -4,7 +4,8 @@ Runtime skills live only under ``pipeline/skills/<name>/SKILL.md``, are register
 ``pipeline/guidance/registry.json`` under ``runtime_skills`` with the jobs allowed to load them, and
 declare ``audience: runtime-worker``. Repository-development skills live under ``.claude/skills/``
 with ``audience: repository-agent`` and are never readable through this module, so development
-procedures cannot reach a job's prompt.
+procedures cannot reach a job's prompt. ``.agents/skills/`` holds only one pointer skill that sends
+other coding agents to ``.claude/skills/``.
 """
 from __future__ import annotations
 
@@ -18,7 +19,10 @@ from .compose import load_registry
 from .fragments import GuidanceError
 
 RUNTIME_SKILLS_DIRECTORY = "pipeline/skills"
-DEVELOPMENT_SKILLS_DIRECTORY = ".claude/skills"
+DEVELOPMENT_SKILLS_DIRECTORY = ".claude/skills"  # canonical development skills
+# Entry point read by Codex, Gemini CLI, Copilot and Cursor; it only redirects to the canonical set.
+DEVELOPMENT_POINTER_DIRECTORY = ".agents/skills"
+DEVELOPMENT_POINTER_SKILL = "repository-development-skills"
 RUNTIME_AUDIENCE = "runtime-worker"
 DEVELOPMENT_AUDIENCE = "repository-agent"
 _NAME = re.compile(r"^[a-z][a-z0-9-]{0,63}$")
@@ -35,18 +39,37 @@ class RuntimeSkill:
 
 
 def front_matter(text: str) -> dict[str, str]:
-    """Closed ``key: value`` front matter shared by runtime and development skills."""
+    """Closed Agent Skills front matter: ``name``, ``description`` and ``metadata.audience``.
+
+    ``audience`` sits under the standard ``metadata`` map so tools that implement the shared Agent
+    Skills format (Claude Code, Codex, Gemini CLI, Copilot) accept the file unchanged.
+    """
     match = _FRONT_MATTER.match(text)
     if match is None:
         raise GuidanceError("skill front matter is missing")
     values: dict[str, str] = {}
-    for line in match.group("body").splitlines():
+    lines = match.group("body").splitlines()
+    index = 0
+    while index < len(lines):
+        line = lines[index]
         key, separator, value = line.partition(":")
-        if not separator or not key.strip() or key.strip() in values:
+        if line.startswith(" ") or not separator or not key.strip() or key in values:
             raise GuidanceError(f"skill front matter line is invalid: {line[:80]!r}")
-        values[key.strip()] = value.strip()
-    if set(values) != {"name", "description", "audience"}:
-        raise GuidanceError("skill front matter must contain exactly name, description, and audience")
+        if key == "metadata" and not value.strip():
+            nested = []
+            while index + 1 < len(lines) and lines[index + 1].startswith("  "):
+                index += 1
+                nested.append(lines[index])
+            if len(nested) != 1 or not nested[0].startswith("  audience:"):
+                raise GuidanceError("skill metadata must contain exactly audience")
+            values["audience"] = nested[0].partition(":")[2].strip()
+            values["metadata"] = ""
+        else:
+            values[key] = value.strip()
+        index += 1
+    values.pop("metadata", None)
+    if set(values) != {"name", "description", "audience"} or not all(values.values()):
+        raise GuidanceError("skill front matter must contain exactly name, description, and metadata.audience")
     return values
 
 

@@ -149,7 +149,13 @@ procedure could have reached job runs. Skills are now split:
 - the runtime image copies no development skills, and `.dockerignore` excludes `.claude`;
 - the loader rejects development, unregistered, unauthorized, wrong-audience and symlinked skills.
 
-Adding the `audience` line changed the three runtime skills' bytes. Their guidance hashes therefore
+Codex and Gemini CLI do not scan `.claude/skills/`; they, Copilot and Cursor read
+`.agents/skills/`. That location holds only a `repository-development-skills` pointer to the
+canonical `.claude/skills/`, so nothing there needs refreshing. The test also requires
+`.github/skills`, `.gemini/skills`, `.codex/skills` and `.cursor/skills` to stay absent. `audience`
+sits under the standard Agent Skills `metadata` map so those tools accept the files.
+
+Adding, then moving, the `audience` line changed the three runtime skills' bytes. Their guidance hashes therefore
 changed once, which invalidates cached model calls for those three jobs.
 
 ## 8. Reference-feed enrichment (follow-up)

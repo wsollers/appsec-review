@@ -1,7 +1,8 @@
 ---
 name: parallel-implementation
 description: Repository-agent procedure for turning an approved design into independent, parallel implementation chunks delegated to sub-agents, then merging and integrating them safely.
-audience: repository-agent
+metadata:
+  audience: repository-agent
 ---
 
 # Parallel implementation from a design

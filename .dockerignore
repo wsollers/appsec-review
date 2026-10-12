@@ -26,3 +26,4 @@ containers/tools/*/**
 !containers/tools/codeql/**
 !containers/tools/tree-sitter/assets.lock.json
 .claude
+.agents

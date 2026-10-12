@@ -1,7 +1,8 @@
 ---
 name: target-analysis-planning
 description: Resolve bounded ambiguity in an accepted target catalog into scanner and build-topology proposals.
-audience: runtime-worker
+metadata:
+  audience: runtime-worker
 ---
 
 # Target analysis planning

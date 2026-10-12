@@ -27,11 +27,14 @@ agents that inspect or change the repository. It is not a prompt for review work
 - Repository-agent rules live only in root `AGENTS.md`.
 - `docs/agent-reader.md` is navigation only and must not introduce competing rules.
 - Skills live in exactly two separate locations, and neither may reference the other:
-  - **Development skills**, procedures for agents that develop this repository, live under
-    `.claude/skills/<name>/SKILL.md` with `audience: repository-agent`. Jobs never read them, and
-    runtime images never contain them.
+  - **Development skills**, procedures for agents that develop this repository, live canonically
+    under `.claude/skills/<name>/SKILL.md` with `metadata.audience: repository-agent`. Jobs never
+    read them, and runtime images never contain them.
+  - `.agents/skills/` (read by Codex, Gemini CLI, Copilot and Cursor) holds only the
+    `repository-development-skills` pointer, which sends those agents to `.claude/skills/`. Never
+    copy a skill there or into `.github/`, `.gemini/`, `.codex/` or `.cursor/` skill directories.
   - **Runtime skills**, bounded guidance that configured jobs send to model workers, live under
-    `pipeline/skills/<name>/SKILL.md` with `audience: runtime-worker`. Each is registered in
+    `pipeline/skills/<name>/SKILL.md` with `metadata.audience: runtime-worker`. Each is registered in
     `pipeline/guidance/registry.json` under `runtime_skills` with the jobs allowed to load it, and
     jobs load it only through `appsec_review.guidance.skills.load_runtime_skill`.
   - There is no top-level `skills/` directory. `tests/test_skill_separation.py` enforces this

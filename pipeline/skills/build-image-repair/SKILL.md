@@ -1,7 +1,8 @@
 ---
 name: build-image-repair
 description: Propose bounded apt dependencies after an accepted build recipe fails in its isolated default image.
-audience: runtime-worker
+metadata:
+  audience: runtime-worker
 ---
 
 # Build image repair
