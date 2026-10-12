@@ -182,6 +182,22 @@
       ]
     },
     {
+      "name": "query_code_graph",
+      "required": [
+        "mode",
+        "subject"
+      ],
+      "properties": [
+        "mode",
+        "subject",
+        "depth",
+        "sink_class",
+        "source_class",
+        "limit",
+        "cursor"
+      ]
+    },
+    {
       "name": "query_observations",
       "required": [],
       "properties": [

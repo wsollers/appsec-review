@@ -18,7 +18,9 @@ import math
 import re
 from typing import Any, Mapping
 
+from appsec_review.graph.contract import GRAPH_INDEX, QUERY_CODE_GRAPH
 from appsec_review.mcp.schema import TOOLS
+from appsec_review.retrieval.graph import request_error as graph_request_error
 from appsec_review.retrieval.index import INDEX_NAMES
 from appsec_review.review.identity import sha256_hex
 from appsec_review.review.models import IntegrityError, Role
@@ -43,6 +45,7 @@ TOOL_INDEXES: Mapping[str, frozenset[str]] = {
     "query_precomputed": frozenset({"precomputed"}),
     "query_observations": frozenset({"observations", "precomputed"}),
     "query_dataset_inventory": frozenset({"inventory"}),
+    QUERY_CODE_GRAPH: frozenset({GRAPH_INDEX}),
 }
 INDEX_PARAMETER_TOOLS = frozenset({"search", "find", "coverage"})
 IDENTITY_TOOLS = frozenset({"read_excerpt", "trace", "resolve_evidence"})
@@ -192,6 +195,8 @@ class CellCapability:
         error = _schema_error(parameters, schema)
         if error:
             return deny("schema_violation", error)
+        if tool == QUERY_CODE_GRAPH and (error := graph_request_error(parameters)):
+            return deny("schema_violation", error)
         for key, value in parameters.items():
             for text in _strings(value):
                 if key in _PARAMETER_EXEMPT_FROM_TEXT_CHECK or (key in IDENTITY_PARAMETERS and
@@ -227,6 +232,8 @@ class CellCapability:
             if int(parameters.get("depth", 2)) > self.max_depth:
                 return deny("depth_cap_exceeded", "trace depth exceeds the cell depth cap")
             normalized.setdefault("depth", min(2, self.max_depth))
+        if tool == QUERY_CODE_GRAPH and int(parameters.get("depth", 1)) > self.max_depth:
+            return deny("depth_cap_exceeded", "graph closure depth exceeds the cell depth cap")
         if queries_used >= self.max_queries:
             return deny("query_cap_exceeded", "the cell query budget is exhausted")
         return Authorized(tool, normalized, sha256_hex({"tool": tool, "parameters": normalized}))
