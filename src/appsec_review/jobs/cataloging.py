@@ -18,6 +18,41 @@ PROJECT_FILES = {"pyproject.toml", "package.json", "pom.xml", "build.gradle", "b
                  "go.mod", "Cargo.toml", "Gemfile", "composer.json"}
 BUILD_FILES = {"Makefile", "CMakeLists.txt", "meson.build", "BUILD", "WORKSPACE", "Dockerfile"}
 
+# Ecosystem tables used to decide which of several components sharing one root owns a file.
+# Every project manifest the catalog recognizes (PROJECT_FILES by name, MANIFEST_SUFFIX_ECOSYSTEMS by
+# suffix) names exactly one ecosystem. A Visual Studio solution aggregates projects of any language,
+# so it is its own ecosystem that no source file belongs to.
+MANIFEST_ECOSYSTEMS: dict[str, str] = {
+    "pyproject.toml": "python", "package.json": "node", "pom.xml": "jvm", "build.gradle": "jvm",
+    "build.gradle.kts": "jvm", "go.mod": "go", "Cargo.toml": "rust", "Gemfile": "ruby",
+    "composer.json": "php",
+}
+MANIFEST_SUFFIX_ECOSYSTEMS: dict[str, str] = {
+    ".csproj": "dotnet", ".vcxproj": "native", ".sln": "msbuild-solution",
+}
+# Source suffixes (the keys of LANGUAGES that belong to a manifest ecosystem) mapped to that ecosystem.
+SOURCE_ECOSYSTEMS: dict[str, str] = {
+    ".py": "python", ".js": "node", ".ts": "node", ".tsx": "node", ".java": "jvm", ".kt": "jvm",
+    ".go": "go", ".rs": "rust", ".c": "native", ".h": "native", ".cc": "native", ".cpp": "native",
+    ".cs": "dotnet", ".rb": "ruby", ".php": "php",
+}
+PROJECT_FILE_SUFFIXES = frozenset(MANIFEST_SUFFIX_ECOSYSTEMS)
+
+
+def manifest_ecosystem(manifest: str | None) -> str | None:
+    """Return the ecosystem a cataloged project manifest declares, or ``None`` when unrecognized."""
+    if not manifest:
+        return None
+    path = Path(manifest)
+    return MANIFEST_ECOSYSTEMS.get(path.name) or MANIFEST_SUFFIX_ECOSYSTEMS.get(path.suffix.lower())
+
+
+def source_ecosystem(path: str | None) -> str | None:
+    """Return the manifest ecosystem a source path belongs to by suffix, or ``None`` when it has none."""
+    if not path:
+        return None
+    return SOURCE_ECOSYSTEMS.get(Path(path).suffix.lower())
+
 
 @dataclass(frozen=True, slots=True)
 class Bounds:

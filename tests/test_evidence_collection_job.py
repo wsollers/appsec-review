@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import hashlib
 import json
+import os
 from pathlib import Path
 import shutil
 
@@ -14,6 +16,7 @@ from appsec_review.jobs.job_evidence_collection import build_job, plan_applicabi
 from appsec_review.jobs.job_review_intake import build_job as build_intake
 from appsec_review.jobs.job_target_catalog import build_job as build_catalog
 from appsec_review.jobs.job_target_analysis_plan import build_job as build_analysis_plan
+from appsec_review.rulepacks.sei_cert.pack import PackVerificationError, verify_pack, write_lock
 from appsec_review.runtime import GraphRunner, JobRunner
 
 
@@ -197,6 +200,9 @@ def test_sei_cert_pack_runs_under_semgrep_and_opengrep_with_mapping_and_gaps(tmp
         assert any("absence of findings is not CERT conformance" in gap for gap in evidence["exclusions_and_gaps"])
         pack = evidence["tool"]["rule_packs"]["appsec-review/sei-cert"]
         assert pack["rule_files_sha256"] == lock["rule_files_sha256"] and pack["tree_sha256"] == lock["tree_sha256"]
+        assert pack["verified"] is True and pack["verified_scope"] == "complete-pack"
+        assert pack["rule_files_scope"].startswith("executable-rules-subset")
+        assert pack["tree_file_count"] == len(lock["files"])
         record = evidence["records"][0]
         assert record["native_rule_id"] == "appsec-review.sei-cert.cpp.err34-c.unchecked-conversion-function"
         assert record["rule_mapping"] == {"cert": "ERR34-C", "cert_url": "https://example.invalid/err34-c",
@@ -225,3 +231,153 @@ def test_sei_cert_pack_lock_mismatch_blocks_both_engines(tmp_path: Path) -> None
         assert any("SEI CERT rule pack is unavailable or does not match pack.lock.json" in gap
                    for gap in evidence["exclusions_and_gaps"])
         assert tool_id not in calls
+
+
+SEI_CERT_BLOCKED = "SEI CERT rule pack is unavailable or does not match pack.lock.json"
+
+
+def _append(relative: str, data: str = "\n"):
+    def mutate(pack: Path) -> None:
+        with (pack / relative).open("a", encoding="utf-8") as stream:
+            stream.write(data)
+    return mutate
+
+
+def _remove(relative: str):
+    return lambda pack: (pack / relative).unlink()
+
+
+def _add(relative: str, data: str = "{}\n"):
+    return lambda pack: (pack / relative).write_text(data, encoding="utf-8")
+
+
+def _symlink(pack: Path) -> None:
+    (pack / "mappings" / "c-alias.json").symlink_to("c.json")
+
+
+def _fifo(pack: Path) -> None:
+    os.mkfifo(pack / "fixtures" / "c" / "pipe.c")
+
+
+def _duplicate_lock_key(pack: Path) -> None:
+    lock = pack / "pack.lock.json"
+    text = lock.read_text(encoding="utf-8")
+    # json.loads would silently keep the last value; the strict verifier must reject the document.
+    lock.write_text(text.replace("{\n", '{\n  "schema": "appsec-review/sei-cert-rule-pack-lock/1",\n', 1),
+                    encoding="utf-8")
+
+
+PACK_MUTATIONS = {
+    "rule-changed": (_append("rules/c/msc30-c.yml", "# changed\n"), "locked file changed: rules/c/msc30-c.yml"),
+    "rule-removed": (_remove("rules/c/msc30-c.yml"), "locked file is missing: rules/c/msc30-c.yml"),
+    "rule-added": (_add("rules/c/extra.yml", "rules: []\n"),
+                   "unexpected file not recorded in pack.lock.json: rules/c/extra.yml"),
+    "mapping-changed": (_append("mappings/c.json"), "locked file changed: mappings/c.json"),
+    "mapping-removed": (_remove("mappings/c.json"), "locked file is missing: mappings/c.json"),
+    "mapping-added": (_add("mappings/extra.json"), "unexpected file not recorded in pack.lock.json: mappings/extra.json"),
+    "source-index-changed": (_append("sources/cert-source-index.json"),
+                             "locked file changed: sources/cert-source-index.json"),
+    "source-index-removed": (_remove("sources/cert-source-index.json"),
+                             "locked file is missing: sources/cert-source-index.json"),
+    "source-index-added": (_add("sources/extra.json"),
+                           "unexpected file not recorded in pack.lock.json: sources/extra.json"),
+    "fixture-changed": (_append("fixtures/c/msc30-c.c", "/* changed */\n"), "locked file changed: fixtures/c/msc30-c.c"),
+    "fixture-removed": (_remove("fixtures/c/msc30-c.c"), "locked file is missing: fixtures/c/msc30-c.c"),
+    "fixture-added": (_add("fixtures/c/extra.c", "int x;\n"),
+                      "unexpected file not recorded in pack.lock.json: fixtures/c/extra.c"),
+    "manifest-changed": (_append("pack.json"), "locked file changed: pack.json"),
+    "manifest-removed": (_remove("pack.json"), "pack.json is missing"),
+    "coverage-doc-changed": (_append("COVERAGE.md", "extra\n"), "locked file changed: COVERAGE.md"),
+    "coverage-doc-removed": (_remove("COVERAGE.md"), "locked file is missing: COVERAGE.md"),
+    "unexpected-root-file": (_add("NOTES.txt", "note\n"), "unexpected file not recorded in pack.lock.json: NOTES.txt"),
+    "symlink": (_symlink, "symlinks are not allowed in the pack: mappings/c-alias.json"),
+    "fifo": (_fifo, "non-regular file is not allowed in the pack: fixtures/c/pipe.c"),
+    "duplicate-lock-key": (_duplicate_lock_key, "pack.lock.json: duplicate JSON key 'schema'"),
+}
+
+
+def test_unmodified_sei_cert_pack_identity_labels_both_digests(tmp_path: Path) -> None:
+    pack = tmp_path / "sei-cert"
+    shutil.copytree(ROOT / "rules" / "sei-cert", pack)
+    lock_bytes = (pack / "pack.lock.json").read_bytes()
+    lock = json.loads(lock_bytes)
+    record = verify_pack(pack).as_record()
+    assert record["verified"] is True and record["verified_scope"] == "complete-pack"
+    assert record["tree_sha256"] == lock["tree_sha256"]
+    assert record["tree_scope"].startswith("complete-pack")
+    assert record["tree_file_count"] == len(lock["files"])
+    assert record["rule_files_sha256"] == lock["rule_files_sha256"] != record["tree_sha256"]
+    assert record["rule_files_scope"].startswith("executable-rules-subset")
+    assert record["rule_file_count"] == len(json.loads((pack / "pack.json").read_text(encoding="utf-8"))["rule_files"])
+    assert record["lock_sha256"] == hashlib.sha256(lock_bytes).hexdigest()
+    assert (record["id"], record["version"]) == (lock["pack"], lock["version"])
+
+
+@pytest.mark.parametrize("case", sorted(PACK_MUTATIONS))
+def test_sei_cert_pack_change_is_rejected_by_strict_verifier(tmp_path: Path, case: str) -> None:
+    pack = tmp_path / "sei-cert"
+    shutil.copytree(ROOT / "rules" / "sei-cert", pack)
+    mutate, message = PACK_MUTATIONS[case]
+    mutate(pack)
+    with pytest.raises(PackVerificationError) as raised:
+        verify_pack(pack)
+    assert message in raised.value.problems
+
+
+@pytest.mark.parametrize("case", sorted(PACK_MUTATIONS))
+def test_sei_cert_pack_change_blocks_both_engines(tmp_path: Path, case: str) -> None:
+    config, target = fixture(tmp_path)
+    PACK_MUTATIONS[case][0](tmp_path / "rules" / "sei-cert")
+    calls: list[str] = []
+    factory = lambda unit: FakeExecutor(unit.job.repository_root, unit.job.run_root, calls)
+    result = GraphRunner(config, [build_intake(), build_catalog(), build_analysis_plan(), build_job(
+        executor_factory=factory)]).run(target_root=target, source_fingerprint=source_fingerprint(target))
+    run_root = config.runtime.runs_dir / result["run_id"]
+    for tool_id in ("tool-semgrep", "tool-opengrep"):
+        item, evidence = _evidence(run_root, result, tool_id)
+        assert item["terminal_status"] == "BLOCKED"
+        assert any(SEI_CERT_BLOCKED in gap for gap in evidence["exclusions_and_gaps"])
+        assert evidence["tool"]["rule_packs"]["appsec-review/sei-cert"] == {"verified": False}
+        assert tool_id not in calls
+
+
+def test_sei_cert_pack_change_never_reuses_checkpoint_under_old_identity(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    config, target = fixture(tmp_path)
+    monkeypatch.setenv("APPSEC_REVIEW_CONFIG", str(tmp_path / "appsec-review.toml"))
+    pack = tmp_path / "rules" / "sei-cert"
+    fingerprint = source_fingerprint(target)
+    calls: list[str] = []
+    factory = lambda unit: FakeExecutor(unit.job.repository_root, unit.job.run_root, calls)
+    graph = lambda: GraphRunner(config, [build_intake(), build_catalog(), build_analysis_plan(), build_job(
+        executor_factory=factory)])
+    first = graph().run(target_root=target, source_fingerprint=fingerprint)
+    run_id = first["run_id"]
+    run_root = config.runtime.runs_dir / run_id
+    assert {"tool-semgrep", "tool-opengrep"} <= set(calls)
+    old = _evidence(run_root, first, "tool-semgrep")[1]["tool"]["rule_packs"]["appsec-review/sei-cert"]
+
+    # A locked mapping changes without re-locking: the job must re-run and block, not reuse.
+    _append("mappings/c.json")(pack)
+    before = len(calls)
+    blocked = graph().run(target_root=target, source_fingerprint=fingerprint, run_id=run_id)
+    assert blocked["decisions"][-1]["action"] != "REUSE"
+    for tool_id in ("tool-semgrep", "tool-opengrep"):
+        item, evidence = _evidence(run_root, blocked, tool_id)
+        assert item["terminal_status"] == "BLOCKED" and not item.get("checkpoint_reused")
+        assert evidence["tool"]["rule_packs"]["appsec-review/sei-cert"] == {"verified": False}
+    assert not {"tool-semgrep", "tool-opengrep"} & set(calls[before:])
+
+    # Re-locked, the pack verifies under a new complete-pack identity. The executable subset is
+    # unchanged, so only the complete-pack binding prevents reuse of the old scan checkpoint.
+    write_lock(pack)
+    before = len(calls)
+    relocked = graph().run(target_root=target, source_fingerprint=fingerprint, run_id=run_id)
+    assert {"tool-semgrep", "tool-opengrep"} <= set(calls[before:])
+    for tool_id in ("tool-semgrep", "tool-opengrep"):
+        item, evidence = _evidence(run_root, relocked, tool_id)
+        assert not item.get("checkpoint_reused")
+        new = evidence["tool"]["rule_packs"]["appsec-review/sei-cert"]
+        assert new["verified"] is True and new["tree_sha256"] != old["tree_sha256"]
+        assert new["rule_files_sha256"] == old["rule_files_sha256"]
+        assert new["lock_sha256"] != old["lock_sha256"]

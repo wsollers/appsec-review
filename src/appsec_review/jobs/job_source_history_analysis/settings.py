@@ -13,6 +13,7 @@ import re
 from typing import Any
 
 from .github import GitHubSettings
+from .git import GitLimits
 
 
 SII_METRICS = ("relative_churn", "revision_frequency", "author_entropy", "complexity")
@@ -80,6 +81,7 @@ class HistorySettings:
     sii: SiiSettings
     filters: FilterRules
     git_enabled: bool
+    git: Mapping[str, Any]
     github: Mapping[str, Any]
 
 
@@ -151,16 +153,19 @@ def parse_settings(settings: Mapping[str, Any]) -> HistorySettings:
     tolerance = _number(filters["formatting_balance_tolerance"], "filters.formatting_balance_tolerance")
     if not 0 <= tolerance < 1:
         raise ValueError("source history setting is invalid: filters.formatting_balance_tolerance")
-    git = _table(settings, "git", {"enabled"})
+    git = _table(settings, "git", {"enabled", "max_output_bytes", "max_record_bytes",
+                                   "max_message_bytes", "max_changed_paths"})
     if type(git["enabled"]) is not bool:
         raise ValueError("source history git settings are invalid")
+    GitLimits.from_settings(git)
     github = _table(settings, "github", {"enabled", "api_base", "repository", "token_env", "max_requests",
-                                         "timeout_seconds"})
+                                         "timeout_seconds", "per_page", "max_pages", "max_records"})
     if type(github["enabled"]) is not bool:
         raise ValueError("source history github settings are invalid")
     if github["enabled"]:
         GitHubSettings(str(github["api_base"]), str(github["repository"]), None,
-                       int(github["max_requests"]), int(github["timeout_seconds"]))
+                       int(github["max_requests"]), int(github["timeout_seconds"]),
+                       github["per_page"], github["max_pages"], github["max_records"])
         if not isinstance(github["token_env"], str) or not github["token_env"].isidentifier():
             raise ValueError("source history github token_env must name an environment variable")
     return HistorySettings(
@@ -175,5 +180,5 @@ def parse_settings(settings: Mapping[str, Any]) -> HistorySettings:
         sii=SiiSettings(parsed_weights, str(sii["complexity_metric"]), tier_1, tier_2),
         filters=FilterRules(**{name: _patterns(filters[name], f"filters.{name}") for name in (*FILTER_CATEGORIES, "test")},
                             formatting_balance_tolerance=tolerance),
-        git_enabled=git["enabled"], github=dict(github),
+        git_enabled=git["enabled"], git=dict(git), github=dict(github),
     )

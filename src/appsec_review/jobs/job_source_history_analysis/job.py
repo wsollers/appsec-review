@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterator, Mapping
+from contextlib import contextmanager
 from dataclasses import asdict
 import hashlib
 import json
@@ -17,11 +18,15 @@ from appsec_review.retrieval import (
 from appsec_review.retrieval.core import resolve_accepted_manifest
 from appsec_review.retrieval.index import load_verified_manifest
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
-from appsec_review.storage import atomic_bytes, atomic_json, canonical_json, file_sha256
+from appsec_review.storage import atomic_json, canonical_json, file_sha256
 
 from . import signals as history_signals
 from .filters import FILTER_IDENTITY, FORMATTING_IDENTITY
-from .git import ARGV_VERSION, TOOL_ID, GitRunner, parse_blame, parse_log, parse_messages, parse_tree
+from .git import (
+    ARGV_VERSION, CHUNK_BYTES, PARSER_IDENTITY, TOOL_ID, GitLimits, GitRunner,
+    HistoryBoundError, parse_blame, parse_log, parse_log_stream, parse_messages,
+    parse_messages_stream, parse_tree,
+)
 from .github import GitHubClient, GitHubSettings, Transport, enrich
 from .hotspots import SII_IDENTITY, TRANSFORMS, score as sii_score
 from .lines import FIX_ON_FIX_IDENTITY, LINE_HISTORY_IDENTITY, FileLines, attribute, fix_on_fix, parse_file_history
@@ -77,11 +82,70 @@ def _read(run_root: Path, identity: Mapping[str, Any]) -> Any:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def _read_bytes(run_root: Path, identity: Mapping[str, Any]) -> bytes:
-    path = (run_root / str(identity.get("path", ""))).resolve()
-    if run_root.resolve() not in path.parents or not path.is_file() or file_sha256(path) != identity.get("sha256"):
-        raise ValueError("source history raw artifact identity mismatch")
-    return path.read_bytes()
+class _VerifiedReader:
+    """Bounded chunk reads over a retained raw artifact whose SHA-256 is checked as it is consumed."""
+
+    def __init__(self, run_root: Path, identity: Mapping[str, Any]):
+        candidate = run_root / str(identity.get("path", ""))
+        path = candidate.resolve()
+        if (run_root.resolve() not in path.parents or candidate.is_symlink() or not path.is_file()
+                or path.stat().st_size != identity.get("size_bytes")):
+            raise ValueError("source history raw artifact identity mismatch")
+        self.expected = identity.get("sha256")
+        self.digest = hashlib.sha256()
+        self.stream = path.open("rb")
+
+    def read(self, size: int = -1) -> bytes:
+        if size is None or size < 0 or size > CHUNK_BYTES:
+            raise ValueError("source history raw artifacts are read in bounded chunks only")
+        data = self.stream.read(size)
+        self.digest.update(data)
+        return data
+
+    def finish(self) -> None:
+        try:
+            for chunk in iter(lambda: self.stream.read(CHUNK_BYTES), b""):
+                self.digest.update(chunk)
+        finally:
+            self.stream.close()
+        if self.digest.hexdigest() != self.expected:
+            raise ValueError("source history raw artifact identity mismatch")
+
+
+@contextmanager
+def _verified_stream(run_root: Path, identity: Mapping[str, Any]) -> Iterator[_VerifiedReader]:
+    """Yield a chunked reader; the artifact hash is verified over every byte when the block exits."""
+    reader = _VerifiedReader(run_root, identity)
+    try:
+        yield reader
+    finally:
+        reader.finish()
+
+
+def _retain(run_root: Path, source: Path, destination: Path, limit: int) -> dict[str, Any]:
+    """Stream a completed producer output into protected storage, hashing it without loading it."""
+    if source.is_symlink() or not source.is_file():
+        raise ValueError("git output is not a regular run-owned file")
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    temporary = destination.with_name(f".{destination.name}.tmp")
+    digest, size = hashlib.sha256(), 0
+    with source.open("rb") as reader, temporary.open("wb") as writer:
+        for chunk in iter(lambda: reader.read(CHUNK_BYTES), b""):
+            size += len(chunk)
+            if size > limit:
+                writer.close()
+                temporary.unlink()
+                raise HistoryBoundError("git_output_limit_reached")
+            digest.update(chunk)
+            writer.write(chunk)
+        writer.flush()
+        os.fsync(writer.fileno())
+    os.replace(temporary, destination)
+    source.unlink()
+    retained = _artifact(run_root, destination)
+    if retained["sha256"] != digest.hexdigest() or retained["size_bytes"] != size:
+        raise ValueError("retained git output changed while it was stored")
+    return retained
 
 
 def _accepted_handoff(run_root: Path, job_id: str) -> tuple[Mapping[str, Any], str]:
@@ -148,6 +212,12 @@ def _settings(context) -> HistorySettings:
     return parse_settings(context.config.settings)
 
 
+def _github_settings(github: Mapping[str, Any], token: str | None) -> GitHubSettings:
+    return GitHubSettings(str(github["api_base"]), str(github["repository"]), token,
+                          int(github["max_requests"]), int(github["timeout_seconds"]),
+                          github["per_page"], github["max_pages"], github["max_records"])
+
+
 def _validate(context, _result) -> None:
     if tuple(context.config.steps) != tuple(TOPOLOGY):
         raise ValueError("source history topology does not match configuration")
@@ -159,6 +229,10 @@ def _validate(context, _result) -> None:
 
 def _status(gaps: list[str]) -> str:
     return "PARTIAL" if gaps else "SUCCEEDED"
+
+
+def _limits(unit: UnitContext) -> GitLimits:
+    return GitLimits.from_settings(_settings(unit.job).git)
 
 
 def _ranking_candidates(files: Mapping[str, Mapping[str, Any]]) -> list[str]:
@@ -188,7 +262,8 @@ def build_job(*, executor_factory: ExecutorFactory | None = None,
         return binding["terminal_status"] not in SKIPPED and bool(binding.get("eligible"))
 
     def runner(unit: UnitContext) -> GitRunner:
-        return GitRunner(factory(unit), unit.job.target_root or Path(), unit.unit_root / "scratch", source_of(unit))
+        return GitRunner(factory(unit), unit.job.target_root or Path(), unit.unit_root / "scratch", source_of(unit),
+                         _limits(unit))
 
     def eligible_of(unit: UnitContext) -> Mapping[str, Mapping[str, Any]]:
         return unit.output("resolve_sources.bind_snapshot")["eligible"]
@@ -283,29 +358,66 @@ def build_job(*, executor_factory: ExecutorFactory | None = None,
         if not git_ready(unit):
             return {"terminal_status": "SKIPPED_NA", "gaps": [], "reason": "no_bound_history"}
         settings = _settings(unit.job)
+        limits = _limits(unit)
         git = runner(unit)
         count = settings.max_changes + 1
-        log_run, message_run = git.log(count), git.messages(count)
-        executions = [log_run.execution, message_run.execution]
-        failed = [name for name, run in (("log", log_run), ("messages", message_run))
-                  if run.exit_code != 0 or run.timed_out or run.output is None]
+        runs = (("log", git.log(count)), ("messages", git.messages(count)))
+        executions = [run.execution for _, run in runs]
+        limited = [name for name, run in runs if run.output_limit_reached]
+        failed = [name for name, run in runs if name not in limited and
+                  (run.exit_code != 0 or run.timed_out or run.output is None)]
+        if limited or failed:
+            for _, run in runs:
+                if run.output is not None:
+                    run.output.unlink(missing_ok=True)
+        if limited:
+            unit.job.events.write("SOURCE_HISTORY_RESOURCE_LIMIT_REACHED", producers=limited,
+                                  max_output_bytes=limits.max_output_bytes)
+            return {"terminal_status": "PARTIAL", "executions": executions, "resource_limits": limits.as_dict(),
+                    "resource_limit": {"disposition": "LIMIT_REACHED", "mechanism": "RLIMIT_FSIZE",
+                                       "producers": limited, "partial_output": "discarded"},
+                    "gaps": sorted([f"git_output_limit_reached:{name}" for name in limited] +
+                                   [f"git_execution_failed:{name}" for name in failed])}
         if failed:
             return {"terminal_status": "PARTIAL", "gaps": [f"git_execution_failed:{name}" for name in failed],
                     "executions": executions, "dispositions": [{"disposition": "GAP", "reason": "git_execution_failed"}]}
+        source = source_of(unit)
         raw = unit.unit_root / "protected"
-        atomic_bytes(raw / "log.bin", log_run.output or b"")
-        atomic_bytes(raw / "messages.bin", message_run.output or b"")
-        return {"raw_log": _artifact(unit.job.run_root, raw / "log.bin"),
-                "raw_messages": _artifact(unit.job.run_root, raw / "messages.bin"),
-                "executions": executions, "image_id": log_run.execution["image_id"],
-                "argv_version": ARGV_VERSION, "gaps": [], "terminal_status": "SUCCEEDED"}
+        retained: dict[str, dict[str, Any]] = {}
+        for name, run in runs:
+            assert run.output is not None
+            try:
+                artifact = _retain(unit.job.run_root, run.output, raw / f"{name}.bin", limits.max_output_bytes)
+            except HistoryBoundError as exc:
+                return {"terminal_status": "PARTIAL", "gaps": [f"{exc.gap}:{name}"], "executions": executions,
+                        "resource_limits": limits.as_dict()}
+            retained[name] = {**artifact, "execution": {
+                "status": "COMPLETED", "exit_code": run.exit_code, "image_id": run.execution["image_id"],
+                "argv_identity": run.execution["argv_identity"],
+                "file_size_limit_bytes": run.execution["file_size_limit_bytes"],
+                "receipt": _artifact(unit.job.run_root, unit.job.run_root / run.execution["receipt_path"])},
+                "source": {"snapshot_commit": source.snapshot_commit, "object_format": source.object_format,
+                           "history_identity": unit.output("resolve_sources.resolve_history_source")["identity"]}}
+        return {"raw_log": retained["log"], "raw_messages": retained["messages"],
+                "executions": executions, "image_id": runs[0][1].execution["image_id"],
+                "argv_version": ARGV_VERSION, "parser": PARSER_IDENTITY, "resource_limits": limits.as_dict(),
+                "gaps": [], "terminal_status": "SUCCEEDED"}
 
     def normalize(unit: UnitContext) -> Mapping[str, Any]:
         acquired = unit.output("acquire.git_history")
         if "raw_log" not in acquired:
             return {"terminal_status": acquired["terminal_status"], "gaps": list(acquired["gaps"]), "change_count": 0}
         settings = _settings(unit.job)
-        commits = parse_log(_read_bytes(unit.job.run_root, acquired["raw_log"]))
+        try:
+            with _verified_stream(unit.job.run_root, acquired["raw_log"]) as stream:
+                commits = parse_log_stream(stream, max_record_bytes=_limits(unit).max_record_bytes,
+                                           max_changed_paths=_limits(unit).max_changed_paths)
+        except HistoryBoundError as exc:
+            unit.job.events.write("SOURCE_HISTORY_RESOURCE_LIMIT_REACHED", producers=["log"], bound=exc.gap)
+            return {"terminal_status": "PARTIAL", "gaps": [exc.gap], "change_count": 0,
+                    "resource_limits": _limits(unit).as_dict(),
+                    "resource_limit": {"disposition": "LIMIT_REACHED", "mechanism": "bounded-record-parser",
+                                       "producers": ["log"], "partial_output": "rejected"}}
         normalized = history_signals.normalize(
             commits, current_paths=eligible_of(unit), shallow=source_of(unit).shallow,
             window_months=settings.history_window_months, max_changes=settings.max_changes,
@@ -329,15 +441,14 @@ def build_job(*, executor_factory: ExecutorFactory | None = None,
         if "artifact" not in normalized:
             return {"terminal_status": "SKIPPED_NA", "reason": "no_git_history", "gaps": [], "facts_count": 0}
         configured = _settings(unit.job).github
-        settings = GitHubSettings(str(configured["api_base"]), str(configured["repository"]),
-                                  os.environ.get(str(configured["token_env"])) or None,
-                                  int(configured["max_requests"]), int(configured["timeout_seconds"]))
+        settings = _github_settings(configured, os.environ.get(str(configured["token_env"])) or None)
         changes = _read(unit.job.run_root, normalized["artifact"])["changes"]
         result = enrich(GitHubClient(settings, github_transport), str(source_of(unit).snapshot_commit),
                         [str(item["change_id"]) for item in changes])
         document = {"schema": "appsec-review/source-history-github/1", "repository": settings.repository,
                     "api_base": settings.api_base, **result}
         output = {"artifact": _write(unit, "github-enrichment.json", document), "facts_count": len(result["facts"]),
+                  "indeterminate_count": result["indeterminate_count"], "pagination": result["pagination"],
                   "requests": result["requests"], "gaps": list(result["gaps"]),
                   "terminal_status": _status(list(result["gaps"]))}
         if result["retriable"]:
@@ -360,17 +471,21 @@ def build_job(*, executor_factory: ExecutorFactory | None = None,
             return {"terminal_status": "SKIPPED_NA", "gaps": []}
         settings = _settings(unit.job)
         changes = _read(unit.job.run_root, normalized["artifact"])
-        messages, gaps = parse_messages(
-            _read_bytes(unit.job.run_root, unit.output("acquire.git_history")["raw_messages"]),
-            changes["walked_commits"])
+        with _verified_stream(unit.job.run_root, unit.output("acquire.git_history")["raw_messages"]) as stream:
+            messages, gaps, oversized = parse_messages_stream(
+                stream, changes["walked_commits"], max_message_bytes=_limits(unit).max_message_bytes)
         classes = history_signals.classify(
             changes["changes"], messages, github_facts(unit), known_commits=changes["walked_commits"],
             fix_labels=settings.fix_labels, security_labels=settings.security_labels,
-            formatting_tolerance=settings.filters.formatting_balance_tolerance)
+            formatting_tolerance=settings.filters.formatting_balance_tolerance,
+            incomplete_messages=oversized)
         counts = {key: sum(1 for value in classes.values() if value.get(key))
                   for key in ("fix", "security_fix", "revert", "formatting")}
+        counts["message_incomplete"] = sum(1 for value in classes.values() if not value["message_complete"])
         document = {"schema": "appsec-review/source-history-classification/2",
-                    "rules": history_signals.RULES_IDENTITY, "formatting_rules": FORMATTING_IDENTITY, "classes": classes}
+                    "rules": history_signals.RULES_IDENTITY, "formatting_rules": FORMATTING_IDENTITY,
+                    "parser": PARSER_IDENTITY, "max_message_bytes": _limits(unit).max_message_bytes,
+                    "classes": classes}
         return {"artifact": _write(unit, "classification.json", document), "counts": counts,
                 "gaps": gaps, "terminal_status": _status(gaps)}
 

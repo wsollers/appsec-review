@@ -97,22 +97,24 @@ def normalize(commits: list[Mapping[str, Any]], *, current_paths: Iterable[str],
 
 def classify(changes: list[Mapping[str, Any]], messages: Mapping[str, bytes], github: Mapping[str, Mapping[str, Any]],
              *, known_commits: Iterable[str], fix_labels: Iterable[str], security_labels: Iterable[str],
-             formatting_tolerance: float) -> dict[str, dict[str, Any]]:
+             formatting_tolerance: float, incomplete_messages: Iterable[str] = ()) -> dict[str, dict[str, Any]]:
     """Return classification records keyed by change id; each label records its basis."""
     known = set(known_commits)
+    incomplete = set(incomplete_messages)
     fix_set = {label.lower() for label in fix_labels}
     security_set = {label.lower() for label in security_labels}
     result: dict[str, dict[str, Any]] = {}
     reverted_by: dict[str, str] = {}
     for change in changes:
         change_id = str(change["change_id"])
-        text = messages.get(change_id, b"")[:MAX_MESSAGE_BYTES].decode("utf-8", "replace")
+        text = messages.get(change_id, b"").decode("utf-8", "replace")
         subject = text.split("\n", 1)[0].strip()
         labels = set(github.get(change_id, {}).get("labels", ()))
         record: dict[str, Any] = {"fix": None, "security_fix": None, "revert": None, "reverts": None,
                                   "formatting": "heuristic" if formatting_change(subject, change["files"],
                                                                                  formatting_tolerance) else None,
-                                  "security_references": sorted({item.upper() for item in _SECURITY_ID.findall(text)})[:20]}
+                                  "security_references": sorted({item.upper() for item in _SECURITY_ID.findall(text)})[:20],
+                                  "message_complete": change_id in messages and change_id not in incomplete}
         trailer = _REVERT_TRAILER.search(text)
         if trailer and trailer.group(1) in known:
             record["revert"], record["reverts"] = "exact", trailer.group(1)
@@ -216,7 +218,8 @@ def compute_signals(changes: list[Mapping[str, Any]], classes: Mapping[str, Mapp
             component["test" if tests[path] else "production"] += added + deleted
             component["authors"].add(change["author"])
             for key, flag in (("fix", label.get("fix")), ("security", label.get("security_fix")),
-                              ("revert", label.get("revert") or label.get("reverted_by")), ("bypass", bypass)):
+                              ("revert", label.get("revert") or label.get("reverted_by")), ("bypass", bypass),
+                              ("unresolved", unresolved)):
                 if flag:
                     component[key].add(change_id)
     files: dict[str, dict[str, Any]] = {}

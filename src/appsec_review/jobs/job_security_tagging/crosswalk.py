@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -125,8 +125,11 @@ def _condition(condition: Mapping[str, Any], group: list[Mapping[str, Any]]) -> 
 def scope_key(scope: str, record: Mapping[str, Any]) -> str | None:
     subject = record["subject"]
     if scope == "same_subject":
-        return subject["logical_id"]
+        # The whole subject is the key: per-component records of one shared logical subject stay in
+        # separate groups, so no group ever has to pick one of several subjects.
+        return canonical_json(dict(subject)).decode()
     if scope == "component":
+        # Ambiguous or unowned evidence has no component and never joins a component group.
         return subject.get("component_id")
     if scope == "project":
         return subject.get("project_id")
@@ -137,9 +140,13 @@ def scope_key(scope: str, record: Mapping[str, Any]) -> str | None:
 
 
 def evaluate(crosswalk: Crosswalk, vocabulary: Vocabulary, records: Iterable[Mapping[str, Any]], *,
-             scope_subject: Callable[[str, str, list[Mapping[str, Any]]], Mapping[str, Any] | None]
+             scope_subject: Callable[[str, str, list[Mapping[str, Any]]], Sequence[Mapping[str, Any]]]
              ) -> list[dict[str, Any]]:
-    """Apply every rule once to observed assignments; derived inputs are never read."""
+    """Apply every rule once to observed assignments; derived inputs are never read.
+
+    ``scope_subject`` returns every subject a satisfied group resolves to (one per owning component
+    when evidence is shared) and an empty sequence when the group has no resolvable subject.
+    """
     observed = sorted((dict(record) for record in records if record["basis"] != "derived"),
                       key=lambda item: item["assignment_id"])
     derived: list[dict[str, Any]] = []
@@ -154,15 +161,14 @@ def evaluate(crosswalk: Crosswalk, vocabulary: Vocabulary, records: Iterable[Map
             matched = [_condition(condition, group) for condition in rule["when"]["all"]]
             if not all(matched):
                 continue
-            subject = scope_subject(rule["scope"], key, group)
-            if subject is None:
-                continue
+            subjects = scope_subject(rule["scope"], key, group)
             inputs = sorted({value for values in matched for value in values})
-            for tag in rule["emit"]:
-                derived.append(assignment(
-                    vocabulary=vocabulary, tag=tag, basis="derived", subject=subject,
-                    producer={"name": "tag-crosswalk", "rule_id": rule["id"], "source": rule["source"],
-                              "version": crosswalk.sha256},
-                    derived_from=inputs, crosswalk_rule=rule["id"], confidence="medium",
-                    crosswalk_sha256=crosswalk.sha256))
+            for subject in subjects:
+                for tag in rule["emit"]:
+                    derived.append(assignment(
+                        vocabulary=vocabulary, tag=tag, basis="derived", subject=subject,
+                        producer={"name": "tag-crosswalk", "rule_id": rule["id"], "source": rule["source"],
+                                  "version": crosswalk.sha256},
+                        derived_from=inputs, crosswalk_rule=rule["id"], confidence="medium",
+                        crosswalk_sha256=crosswalk.sha256))
     return derived
