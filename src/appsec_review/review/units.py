@@ -5,9 +5,11 @@ one (none does yet, so it is ``None``), then build unit, then a stable range of 
 paths. Units are ranked by ``review-unit-rank/2`` from the signals that are available: review
 prioritization (LPS), source-history instability (SII), hotspots, security-tag density,
 medium/low/info lead hints, and the reference context of the unit's dependency/artifact advisories:
-``advisory_kev`` (``KEV_POINTS`` when any advisory is KEV-listed) and ``advisory_epss`` (the highest
-EPSS percentile times ``EPSS_POINTS``). A missing signal, including an advisory whose KEV or EPSS
-feed was unavailable, is recorded as ``unknown``; it is never read as zero.
+``advisory_kev`` (``RankWeights.advisory_kev`` points when any advisory is KEV-listed) and
+``advisory_epss`` (the highest EPSS percentile times ``RankWeights.advisory_epss``). A missing signal,
+including an advisory whose KEV or EPSS feed was unavailable, is recorded as ``unknown``; it is never
+read as zero. Every weight comes from :class:`~appsec_review.review.ranking.RankWeights`
+(``settings.ranking``); the defaults reproduce the shipped ``review-unit-rank/2`` order exactly.
 Only the top ``hunt_max_units`` units receive hunt packages; every other unit is a coverage gap
 with reason ``below_hunt_cutoff``.
 """
@@ -21,16 +23,17 @@ from typing import Any
 
 from appsec_review.retrieval.model import LogicalIdentity
 from appsec_review.review.lead_families import ADVISORY_FAMILIES, Lead, LeadCollection
+from appsec_review.review.ranking import DEFAULT_RANK_WEIGHTS, MAX_SIGNAL_POINTS, RankWeights
 from appsec_review.review.scope import AcceptedScope, ScopeGap
 
 
 RANK_RULE = "appsec-review/review-unit-rank/2"
 SIGNALS = ("lps", "sii", "hotspot", "tag_density", "lead_hints", "advisory_kev", "advisory_epss")
-# Reference-context weights (points of the 0-1000 signal scale). KEV is a binary catalog fact; EPSS
-# percentile is scaled. Both are deliberately below a full LPS/SII signal: they order hunting, they
-# are not evidence that the target is affected.
-KEV_POINTS = 250
-EPSS_POINTS = 250
+# Default reference-context weights (points of the 0-1000 signal scale), kept as names for callers.
+# KEV is a binary catalog fact; EPSS percentile is scaled. Both are deliberately below a full LPS/SII
+# signal: they order hunting, they are not evidence that the target is affected.
+KEV_POINTS = DEFAULT_RANK_WEIGHTS.advisory_kev
+EPSS_POINTS = DEFAULT_RANK_WEIGHTS.advisory_epss
 CUTOFF_REASON = "below_hunt_cutoff"
 _UNLOCATED = "unlocated"
 # Ranked-selection producers publish only selected items: no record for a unit is unknown, not zero.
@@ -106,7 +109,7 @@ class RankedUnit:
                 "rule": RANK_RULE, "basis": [item.record() for item in self.unit.signals]}
 
 
-def _points(value: Any, scale: float) -> int | None:
+def _points(value: Any, scale: float, cap: int = MAX_SIGNAL_POINTS) -> int | None:
     if value is None or isinstance(value, bool):
         return None
     try:
@@ -115,18 +118,18 @@ def _points(value: Any, scale: float) -> int | None:
         return None
     if not math.isfinite(number) or number < 0:
         return None
-    return min(1000, int(round(number * scale)))
+    return min(cap, int(round(number * scale)))
 
 
-def _unit_score(value: Any) -> int | None:
-    """Scores in [0, 1] scale to 1000; scores in (1, 100] are percentages."""
+def _unit_score(value: Any, weight: int = MAX_SIGNAL_POINTS) -> int | None:
+    """Scores in [0, 1] scale to ``weight``; scores in (1, 100] are percentages of ``weight``."""
     if value is None or isinstance(value, bool):
         return None
     try:
         number = float(value)
     except (TypeError, ValueError):
         return None
-    return _points(number, 1000.0 if number <= 1.0 else 10.0)
+    return _points(number, float(weight) if number <= 1.0 else weight / 100, cap=weight)
 
 
 def _path(row: Mapping[str, Any]) -> str | None:
@@ -143,7 +146,8 @@ def _unit_key(component: str, boundary: str | None, build_unit: str | None, labe
     return f"unit:{component}:{boundary or '-'}:{build_unit or '-'}:{label}"
 
 
-def build_units(scope: AcceptedScope, collection: LeadCollection, *, unit_max_files: int) -> tuple[ReviewUnit, ...]:
+def build_units(scope: AcceptedScope, collection: LeadCollection, *, unit_max_files: int,
+                weights: RankWeights = DEFAULT_RANK_WEIGHTS) -> tuple[ReviewUnit, ...]:
     """Partition the accepted scope into review units with their signals, in key order."""
     if unit_max_files < 1:
         raise ValueError("unit_max_files must be positive")
@@ -168,7 +172,7 @@ def build_units(scope: AcceptedScope, collection: LeadCollection, *, unit_max_fi
     for lead in collection.leads:
         if lead.path is not None:
             by_path[lead.path].append(lead)
-    rows = _signal_rows(scope)
+    rows = _signal_rows(scope, weights)
     lead_families_available = any(collection.available.values())
     components = {item.component_id: item for item in scope.components}
     build_units = {item.build_unit_id: item for item in scope.build_units}
@@ -201,7 +205,9 @@ def build_units(scope: AcceptedScope, collection: LeadCollection, *, unit_max_fi
                 matched = [row for row in rows[signal] if row["path"] in member_set]
                 context.extend(context_entry(row["identity"], row["role"], row["shard_sha256"]) for row in matched)
                 if signal == "tag_density":
-                    value = min(1000, (len(matched) * 1000) // (4 * max(1, len(members)))) if members else None
+                    full = weights.tag_density_full_tags_per_file * max(1, len(members))
+                    value = (min(weights.tag_density, (len(matched) * weights.tag_density) // full)
+                             if members else None)
                     signals.append(Signal(signal, value, None if value is not None else "no_record"))
                     continue
                 values = [row["value"] for row in matched if row["value"] is not None]
@@ -209,11 +215,13 @@ def build_units(scope: AcceptedScope, collection: LeadCollection, *, unit_max_fi
             if lead_families_available:
                 hints = {severity: sum(1 for lead in leads if lead.reported_severity == severity)
                          for severity in ("medium", "low", "info")}
-                signals.append(Signal("lead_hints", min(1000, 100 * hints["medium"] + 30 * hints["low"]
-                                                         + 10 * hints["info"]), None))
+                signals.append(Signal("lead_hints", min(weights.lead_hints_max,
+                                                        weights.lead_hint_medium * hints["medium"]
+                                                        + weights.lead_hint_low * hints["low"]
+                                                        + weights.lead_hint_info * hints["info"]), None))
             else:
                 signals.append(Signal("lead_hints", None, "producer_unavailable"))
-            signals.extend(_advisory_signals(scope, leads))
+            signals.extend(_advisory_signals(scope, leads, weights))
             unique = {(item.role, item.id): item for item in context}
             units.append(ReviewUnit(
                 key=_unit_key(component_id, None, build_unit_id, label), component_id=component_id,
@@ -224,7 +232,8 @@ def build_units(scope: AcceptedScope, collection: LeadCollection, *, unit_max_fi
     return tuple(units)
 
 
-def _advisory_signals(scope: AcceptedScope, leads: Iterable[Lead]) -> tuple[Signal, Signal]:
+def _advisory_signals(scope: AcceptedScope, leads: Iterable[Lead],
+                      weights: RankWeights = DEFAULT_RANK_WEIGHTS) -> tuple[Signal, Signal]:
     """KEV and EPSS rank signals of a unit's advisory leads; a missing feed is unknown, not zero."""
     if not scope.producer("dependency_advisories").shards:
         return (Signal("advisory_kev", None, "producer_unavailable"),
@@ -239,24 +248,25 @@ def _advisory_signals(scope: AcceptedScope, leads: Iterable[Lead]) -> tuple[Sign
 
     listed = [lead.kev_listed for lead in advisory]
     if any(value is True for value in listed):
-        kev = Signal("advisory_kev", KEV_POINTS, None)
+        kev = Signal("advisory_kev", weights.advisory_kev, None)
     elif all(value is False for value in listed):
         kev = Signal("advisory_kev", 0, None)
     else:
         kev = Signal("advisory_kev", None, reason("kev"))
     percentiles = [value for value in (lead.epss_percentile for lead in advisory) if value is not None]
-    epss = (Signal("advisory_epss", _points(max(percentiles), EPSS_POINTS), None) if percentiles
+    epss = (Signal("advisory_epss", _points(max(percentiles), weights.advisory_epss), None) if percentiles
             else Signal("advisory_epss", None, reason("epss")))
     return kev, epss
 
 
-def _signal_rows(scope: AcceptedScope) -> dict[str, list[dict[str, Any]]]:
+def _signal_rows(scope: AcceptedScope, weights: RankWeights = DEFAULT_RANK_WEIGHTS
+                 ) -> dict[str, list[dict[str, Any]]]:
     rows: dict[str, list[dict[str, Any]]] = {signal: [] for signal in ("lps", "sii", "hotspot", "tag_density")}
     store = scope.store
     for shard in scope.producer("review_prioritization").shards:
         for row in store.entities((shard,), kinds=("priority_item",)):
             rows["lps"].append({"identity": row["identity"], "path": _path(row), "role": "priority",
-                                "value": _unit_score(row["payload"].get("score")),
+                                "value": _unit_score(row["payload"].get("score"), weights.lps),
                                 "shard_sha256": scope.shard_sha256(shard)})
     for shard in scope.producer("source_history").shards:
         for row in store.entities((shard,), kinds=("history_signal", "hotspot")):
@@ -264,10 +274,11 @@ def _signal_rows(scope: AcceptedScope) -> dict[str, list[dict[str, Any]]]:
             if row["kind"] == "history_signal" and native.startswith("file:"):
                 sii = row["payload"].get("sii") if isinstance(row["payload"].get("sii"), Mapping) else {}
                 rows["sii"].append({"identity": row["identity"], "path": _path(row), "role": "history",
-                                    "value": _unit_score(sii.get("score")), "shard_sha256": scope.shard_sha256(shard)})
+                                    "value": _unit_score(sii.get("score"), weights.sii),
+                                    "shard_sha256": scope.shard_sha256(shard)})
             elif row["kind"] == "hotspot":
                 rows["hotspot"].append({"identity": row["identity"], "path": _path(row), "role": "hotspot",
-                                        "value": _unit_score(row["payload"].get("score")),
+                                        "value": _unit_score(row["payload"].get("score"), weights.hotspot),
                                         "shard_sha256": scope.shard_sha256(shard)})
     for shard in scope.producer("security_tagging").shards:
         for row in store.entities((shard,), kinds=("tag_assignment",)):

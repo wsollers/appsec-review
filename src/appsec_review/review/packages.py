@@ -43,6 +43,7 @@ from appsec_review.review import advisories as advisory_reference
 from appsec_review.review.identity import sha256_hex
 from appsec_review.review.lead_families import FAMILIES, FAMILY_RULES, Lead, LeadCollection, collect_leads
 from appsec_review.review.models import IntegrityError, Predicate
+from appsec_review.review.ranking import DEFAULT_RANK_WEIGHTS, RankWeights
 from appsec_review.review.references import CweReference
 from appsec_review.review.scope import AcceptedScope, ScopeGap, sorted_gaps
 from appsec_review.review.units import (
@@ -94,8 +95,11 @@ class PackageSettings:
     max_page_size: int = 20
     max_pages: int = 5
     max_depth: int = 4
+    rank_weights: RankWeights = DEFAULT_RANK_WEIGHTS   # lane B rank weights (``settings.ranking``)
 
     def __post_init__(self) -> None:
+        if not isinstance(self.rank_weights, RankWeights):
+            raise ValueError("rank_weights must be RankWeights")
         admitted = tuple(self.admit_severities)
         if not admitted or len(set(admitted)) != len(admitted) or any(
                 item not in REPORTED_SEVERITIES for item in admitted):
@@ -119,15 +123,15 @@ class PackageSettings:
         """Package settings from the central ``InferenceSecurityReviewSettings`` (the job's only source).
 
         Admission is ``lanes.lead_admission`` plus ``lanes.lead_admission_kev``, the hunt cutoff
-        ``lanes.hunt_max_units``, and the assembly bounds ``packages.*``. The dataclass defaults
-        exist for library and test use only.
+        ``lanes.hunt_max_units``, the assembly bounds ``packages.*``, and the lane B rank weights
+        ``ranking``. The dataclass defaults exist for library and test use only.
         """
         bounds = settings.packages
         return cls(admit_severities=tuple(settings.lanes.lead_admission),
                    admit_kev=settings.lanes.lead_admission_kev,
-                   hunt_max_units=settings.lanes.hunt_max_units,
+                   hunt_max_units=settings.lanes.hunt_max_units, rank_weights=settings.ranking,
                    **{item.name: getattr(bounds, item.name) for item in fields(cls)
-                      if item.name not in {"admit_severities", "admit_kev", "hunt_max_units"}})
+                      if item.name not in {"admit_severities", "admit_kev", "hunt_max_units", "rank_weights"}})
 
     @classmethod
     def from_mapping(cls, value: Mapping[str, Any] | None) -> "PackageSettings":
@@ -138,6 +142,8 @@ class PackageSettings:
             raise ValueError(f"unknown package settings: {unknown}")
         if "admit_severities" in value:
             value["admit_severities"] = tuple(value["admit_severities"])
+        if "rank_weights" in value and not isinstance(value["rank_weights"], RankWeights):
+            value["rank_weights"] = RankWeights.from_mapping(value["rank_weights"], "rank_weights")
         return cls(**value)
 
     def record(self) -> dict[str, Any]:
@@ -670,7 +676,7 @@ def assemble_packages(scope: AcceptedScope, settings: PackageSettings | None = N
     packages = [assembler.finding_lead(lead) for lead in admitted]
     lane_a = audit_membership(collection, packages, settings.admit_severities, settings.admit_kev)
 
-    units = build_units(scope, collection, unit_max_files=settings.unit_max_files)
+    units = build_units(scope, collection, unit_max_files=settings.unit_max_files, weights=settings.rank_weights)
     ranked = rank_units(units)
     hunted, cutoff_gaps = select_hunts(ranked, settings.hunt_max_units)
     for item in hunted:

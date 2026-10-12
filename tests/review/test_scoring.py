@@ -87,7 +87,7 @@ def test_only_confirmed_and_supported_claims_are_scored(state: ClaimState) -> No
 
 
 def test_registry_scores_and_reports_unavailable_provider_as_gap() -> None:
-    registry = default_registry(TABLE)
+    registry = default_registry(TABLE, implementation="application_risk_matrix/1")
     assert isinstance(registry.score("application_risk_matrix", REQUEST), ScoreProviderResult)
     missing = registry.score("cvss_v4", REQUEST)
     assert isinstance(missing, Gap) and missing.gap_class is GapClass.SCORE_GAP

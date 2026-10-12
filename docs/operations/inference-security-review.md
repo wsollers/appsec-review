@@ -67,6 +67,109 @@ It is recorded as its own hashed layer in the run's configuration manifest. Capa
 from cell fingerprints, so runs with different team counts reuse each other's cells and produce
 identical canonical outputs.
 
+## Tuning scoring
+
+Scoring is deterministic and runs only on `confirmed` and `supported` claims. The default provider
+is `application_risk_matrix/2`. It rates `score-factors/1` factors, each derived from adjudicated,
+re-resolved evidence: `verification`, `taint_path`, `attacker_control`, `guard_absent`,
+`exposure`, `privilege`, `data_sensitivity`, `impact_class` and `threat` (KEV only). The design
+section "Evidence-derived scoring factors" lists every factor's scale and source. A factor with no
+evidence is listed in the score package's `missing_factors`, with its reason in
+`missing_factor_reasons`. It adds no points and is never read as a low value.
+
+The model lives under
+`[jobs.job_inference_security_review.settings.scoring.providers.application_risk_matrix]`:
+
+```toml
+[...providers.application_risk_matrix]
+implementation = "application_risk_matrix/2"     # or "application_risk_matrix/1" (no model tables)
+
+[...providers.application_risk_matrix.exploitability.points]
+verification = { supported = 20, confirmed = 40 }
+taint_path = { code_evidence = 10, tool_observation = 15, codeql_path_observation = 20, graph_dataflow_path = 25 }
+attacker_control = { internal = 0, direct_unclassified = 10, local = 15, remote = 25 }
+guard_absent = { code_evidence = 15, tool_observation = 15, graph_fact = 20 }
+exposure = { local = 0, internal_network = 5, public = 10 }
+
+[...providers.application_risk_matrix.exploitability.bands]
+medium = 40                                      # total >= medium -> medium; >= high -> high
+high = 75
+
+[...providers.application_risk_matrix.environmental.points]
+exposure = { local = 5, internal_network = 10, public = 30 }
+privilege = { sandboxed = 0, elevated = 25 }
+data_sensitivity = { sensitive = 20, secret = 30 }
+
+[...providers.application_risk_matrix.environmental.bands]
+medium = 25
+high = 50
+
+[...providers.application_risk_matrix.technical_severity]   # impact class x exploitability rating
+critical = { low = "medium", medium = "high", high = "critical" }
+high = { low = "low", medium = "medium", high = "high" }
+medium = { low = "low", medium = "low", high = "medium" }
+low = { low = "low", medium = "low", high = "low" }
+```
+
+How to tune it:
+
+- **Weight a factor differently.** Change its points. A factor table must list every value on the
+  factor's scale, and points must be integers in `[0, 1000]` that never decrease from the weakest
+  to the strongest value. A dimension you set replaces that dimension's default whole: an
+  `exploitability` or `environmental` table needs both `points` and `bands`, and its `points` must
+  list every factor you still want. An omitted `exploitability`, `environmental` or
+  `technical_severity` table keeps its default.
+- **Move the band edges.** Change `bands.medium` and `bands.high`. Both are inclusive thresholds
+  on the summed points, and `medium` must be below `high`.
+- **Change what a band means.** Edit `technical_severity`. Rows are impact classes and columns are
+  exploitability ratings; a band may never fall as either axis rises.
+- **Change a CWE's impact.** Edit `[...settings.scoring.cwe_impact_classes]`. The CWE class is one
+  factor among many: it sets the severity row, while exploitability comes from the evidence.
+
+`exploitability` may use `verification`, `taint_path`, `attacker_control`, `guard_absent`,
+`exposure` and `privilege`. `environmental` may use `exposure`, `privilege` and
+`data_sensitivity`. Validation rejects any other factor. `impact_class` sets the matrix row and
+never carries points. `threat` (KEV) applies its fixed one-band raise and never carries points.
+`epss` is not a factor: EPSS never changes a score and is not recorded in score packages.
+Validation rejects a non-monotone model at load time, so stronger evidence can never lower a
+rating.
+
+**What a scoring change invalidates.** The model and the CWE table enter the provider
+configuration hash, so a change gives new `score_id`s and invalidates score-dependent PoC
+eligibility and report projection. It does not rerun claim discovery or verification.
+
+## Tuning lane B ranking
+
+Lane B ranks review units by the sum of their known signal points (see the design section "Lane B:
+open discovery"). The top `lanes.hunt_max_units` units are hunted. Every weight is set in one
+table, and the checked-in values are the shipped defaults:
+
+```toml
+[jobs.job_inference_security_review.settings.ranking]
+lps = 1000                           # full review-prioritization (LPS) score
+sii = 1000                           # full source-history instability (SII) score
+hotspot = 1000                       # full hotspot score
+tag_density = 1000                   # tag density at tag_density_full_tags_per_file tags per file
+tag_density_full_tags_per_file = 4
+lead_hint_medium = 100               # per medium lead hint
+lead_hint_low = 30                   # per low lead hint
+lead_hint_info = 10                  # per info lead hint
+lead_hints_max = 1000                # cap on the summed lead hints
+advisory_kev = 250                   # any advisory in the unit is CISA KEV-listed
+advisory_epss = 250                  # times the unit's highest EPSS percentile
+```
+
+Every weight is an integer in `[0, 1000]`, except `tag_density_full_tags_per_file`, which is
+`[1, 1000]`. Unknown keys are rejected, and an omitted key keeps its default. A weight of `0`
+removes that signal's points from the score. The signal still counts as known for the tie-break
+and stays in each unit's rank basis. An unknown
+signal (a missing producer or feed) still contributes nothing, whatever its weight.
+
+The weights are semantic, not capacity: they are recorded in the package manifest's `settings`
+and change the settings fingerprint. Changing them reorders units and moves the hunt cutoff,
+which reassembles hunt packages. The rank rule stays `review-unit-rank/2` because the formula does
+not change.
+
 ## Outcomes
 
 - Ordinary failures, such as provider errors, timeouts, invalid output, a failed team or an entire

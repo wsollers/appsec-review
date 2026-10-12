@@ -15,6 +15,8 @@ from types import MappingProxyType
 from typing import Any, Mapping
 
 from appsec_review.review.models import Role
+from appsec_review.review.ranking import RankWeights
+from appsec_review.review.scoring.risk_model import DEFAULT_MODEL_DOCUMENT, DimensionModel, RiskModel
 
 
 JOB_ID = "job_inference_security_review"
@@ -26,6 +28,8 @@ SEMANTIC_VIEW_SCHEMA = "appsec-review/inference-review-semantic-settings/1"
 REPORTED_SEVERITIES = ("critical", "high", "medium", "low", "info", "unknown")
 REASONING_LEVELS = ("low", "medium", "high", "xhigh", "max")
 SCORING_PROVIDERS = ("cvss_v4", "cvss_v31_compat", "application_risk_matrix", "ssvc_decision")
+RISK_MATRIX_IMPLEMENTATIONS = ("application_risk_matrix/1", "application_risk_matrix/2")
+RISK_MODEL_KEYS = ("exploitability", "environmental", "technical_severity")
 CVSS_METRIC_GROUPS = ("base", "threat", "environmental", "supplemental")
 IMPACT_CLASSES = ("critical", "high", "medium", "low")
 ELIGIBILITY_OPERATORS = ("in",)
@@ -194,6 +198,8 @@ class RoutingSettings:
 class ScoringProviderSettings:
     implementation: str
     metric_groups: tuple[str, ...] = ()
+    # application_risk_matrix/2 only: the declarative exploitability/environmental/severity model.
+    model: RiskModel | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -247,6 +253,8 @@ class InferenceSecurityReviewSettings:
     routing: RoutingSettings
     scoring: ScoringSettings
     poc: PocSettings
+    # Lane B review-unit rank weights (``settings.ranking``); semantic, defaults reproduce rank/2.
+    ranking: RankWeights = RankWeights()
 
     def profile_for(self, role: Role) -> ModelProfileSettings:
         """The model profile a role uses; an unconfigured role uses ``default``."""
@@ -341,14 +349,25 @@ def _scoring(value: object) -> ScoringSettings:
         if name not in enabled:
             raise ValueError(f"{provider_field} configures a provider that is not enabled")
         is_cvss = name in {"cvss_v4", "cvss_v31_compat"}
+        is_matrix = name == "application_risk_matrix"
         provider = _table(provider_value, provider_field, {"implementation"},
-                          {"metric_groups"} if is_cvss else set())
+                          {"metric_groups"} if is_cvss else set(RISK_MODEL_KEYS) if is_matrix else set())
         groups = _choices(provider.get("metric_groups", ["base"] if is_cvss else []),
                           f"{provider_field}.metric_groups", CVSS_METRIC_GROUPS, empty=not is_cvss)
         if is_cvss and "base" not in groups:
             raise ValueError(f"{provider_field}.metric_groups must include base")
-        providers[name] = ScoringProviderSettings(
-            _str(provider["implementation"], f"{provider_field}.implementation", _RULE_ID), groups)
+        implementation = _str(provider["implementation"], f"{provider_field}.implementation", _RULE_ID)
+        model = None
+        if is_matrix:
+            if implementation not in RISK_MATRIX_IMPLEMENTATIONS:
+                raise ValueError(f"{provider_field}.implementation must be one of: "
+                                 f"{', '.join(RISK_MATRIX_IMPLEMENTATIONS)}")
+            if implementation == "application_risk_matrix/2":
+                model = _risk_model(provider, provider_field)
+            elif set(provider) & set(RISK_MODEL_KEYS):
+                raise ValueError(f"{provider_field}: application_risk_matrix/1 takes no "
+                                 f"{'/'.join(RISK_MODEL_KEYS)} tables")
+        providers[name] = ScoringProviderSettings(implementation, groups, model)
     classes_value = table["cwe_impact_classes"]
     if not isinstance(classes_value, Mapping):
         raise ValueError(f"{field}.cwe_impact_classes must be a table")
@@ -368,6 +387,28 @@ def _scoring(value: object) -> ScoringSettings:
         providers=MappingProxyType(providers),
         cwe_impact_classes=MappingProxyType(dict(sorted(classes.items()))),
     )
+
+
+def _risk_model(provider: Mapping[str, Any], field: str) -> RiskModel:
+    """``application_risk_matrix/2`` model; an absent table keeps its documented default whole."""
+    dimensions: dict[str, DimensionModel] = {}
+    for name in ("exploitability", "environmental"):
+        default = DEFAULT_MODEL_DOCUMENT[name]
+        value = _table(provider.get(name, default), f"{field}.{name}", {"points", "bands"})
+        points = value["points"]
+        if not isinstance(points, Mapping) or any(not isinstance(table, Mapping) for table in points.values()):
+            raise ValueError(f"{field}.{name}.points must be a table of factor tables")
+        try:
+            dimensions[name] = DimensionModel(name, points, value["bands"])
+        except ValueError as exc:
+            raise ValueError(f"{field}.{exc}") from exc
+    matrix = provider.get("technical_severity", DEFAULT_MODEL_DOCUMENT["technical_severity"])
+    if not isinstance(matrix, Mapping):
+        raise ValueError(f"{field}.technical_severity must be a table")
+    try:
+        return RiskModel(dimensions["exploitability"], dimensions["environmental"], matrix)
+    except ValueError as exc:
+        raise ValueError(f"{field}.{exc}") from exc
 
 
 _POC_DENY_ONLY = ("allow_host_execution", "allow_production_services", "allow_real_credentials",
@@ -426,7 +467,7 @@ def _poc(value: object, enabled_providers: tuple[str, ...]) -> PocSettings:
 def parse_inference_review_settings(value: Mapping[str, Any]) -> InferenceSecurityReviewSettings:
     """Validate ``jobs.job_inference_security_review.settings`` into frozen typed settings."""
     settings = _table(value, _PREFIX, {"rounds", "teams", "lanes", "packages", "budgets", "retry", "models",
-                                       "roles", "routing", "scoring", "poc"})
+                                       "roles", "routing", "scoring", "poc"}, {"ranking"})
 
     field = f"{_PREFIX}.rounds"
     rounds_value = _table(settings["rounds"], field, {"max_rounds", "stable_rounds_required",
@@ -527,4 +568,5 @@ def parse_inference_review_settings(value: Mapping[str, Any]) -> InferenceSecuri
         rounds=rounds, teams=teams, lanes=lanes, packages=packages, budgets=budgets, retry=retry,
         models=MappingProxyType(models), roles=MappingProxyType(roles), routing=routing,
         scoring=scoring, poc=_poc(settings["poc"], scoring.enabled_providers),
+        ranking=RankWeights.from_mapping(settings.get("ranking", {}), f"{_PREFIX}.ranking"),
     )

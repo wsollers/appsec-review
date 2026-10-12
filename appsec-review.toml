@@ -1779,6 +1779,22 @@ hunt_max_claims_per_package = 5
 hunt_panel_rule = "hunt-panel/1"
 incomplete_gap_ratio = 0.25
 
+# Lane B review-unit rank weights (review-unit-rank/2), in points of the 0-1000 signal scale. These
+# defaults are the shipped rank; changing one reorders units and the hunt cutoff. See
+# docs/operations/inference-security-review.md "Tuning lane B ranking".
+[jobs.job_inference_security_review.settings.ranking]
+lps = 1000                           # full review-prioritization (LPS) score
+sii = 1000                           # full source-history instability (SII) score
+hotspot = 1000                       # full hotspot score
+tag_density = 1000                   # tag density at tag_density_full_tags_per_file tags per file
+tag_density_full_tags_per_file = 4
+lead_hint_medium = 100               # per medium lead hint
+lead_hint_low = 30                   # per low lead hint
+lead_hint_info = 10                  # per info lead hint
+lead_hints_max = 1000                # cap on the summed lead hints
+advisory_kev = 250                   # any advisory in the unit is CISA KEV-listed
+advisory_epss = 250                  # times the unit's highest EPSS percentile
+
 # Package assembly bounds; admission and the hunt cutoff are lanes.lead_admission and lanes.hunt_max_units.
 [jobs.job_inference_security_review.settings.packages]
 hunt_menu_partition_size = 25
@@ -1832,10 +1848,41 @@ override_policy = "review_lead_only/1"
 implementation = "first-reference-compatible/1"
 metric_groups = ["base", "threat", "environmental", "supplemental"]
 
+# application_risk_matrix/2 rates score-factors/1 evidence factors. Points are summed per dimension
+# (a missing factor adds nothing) and must not decrease along a factor's scale. Replacing a table
+# replaces it whole. See docs/operations/inference-security-review.md "Tuning scoring".
 [jobs.job_inference_security_review.settings.scoring.providers.application_risk_matrix]
-implementation = "application_risk_matrix/1"
+implementation = "application_risk_matrix/2"
 
-# application_risk_matrix impact_class axis; an unmapped CWE scores null with missing_factors.
+[jobs.job_inference_security_review.settings.scoring.providers.application_risk_matrix.exploitability.points]
+verification = { supported = 20, confirmed = 40 }
+taint_path = { code_evidence = 10, tool_observation = 15, codeql_path_observation = 20, graph_dataflow_path = 25 }
+attacker_control = { internal = 0, direct_unclassified = 10, local = 15, remote = 25 }
+guard_absent = { code_evidence = 15, tool_observation = 15, graph_fact = 20 }
+exposure = { local = 0, internal_network = 5, public = 10 }
+
+[jobs.job_inference_security_review.settings.scoring.providers.application_risk_matrix.exploitability.bands]
+medium = 40
+high = 75
+
+[jobs.job_inference_security_review.settings.scoring.providers.application_risk_matrix.environmental.points]
+exposure = { local = 5, internal_network = 10, public = 30 }
+privilege = { sandboxed = 0, elevated = 25 }
+data_sensitivity = { sensitive = 20, secret = 30 }
+
+[jobs.job_inference_security_review.settings.scoring.providers.application_risk_matrix.environmental.bands]
+medium = 25
+high = 50
+
+# Technical severity: impact class (row) x exploitability rating (column) -> band.
+[jobs.job_inference_security_review.settings.scoring.providers.application_risk_matrix.technical_severity]
+critical = { low = "medium", medium = "high", high = "critical" }
+high = { low = "low", medium = "medium", high = "high" }
+medium = { low = "low", medium = "low", high = "medium" }
+low = { low = "low", medium = "low", high = "low" }
+
+# The impact_class factor: one factor among many, not the whole score. An unmapped CWE leaves
+# technical severity null with impact_class in missing_factors.
 [jobs.job_inference_security_review.settings.scoring.cwe_impact_classes]
 "CWE-22" = "high"
 "CWE-77" = "critical"

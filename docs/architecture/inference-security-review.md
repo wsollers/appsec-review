@@ -524,6 +524,27 @@ Lane B (hunt): ranked review units ─► hunt packages ─► team: 3 red ─�
     weights sit below a full LPS or SII signal (1000) because they order hunting and are not evidence
     that the target is affected.
 
+  A unit's rank score is the sum of its known signal points, ties broken by the count of known
+  signals and then by unit key. Every weight is configurable (decision B2) in the typed, validated
+  table `[jobs.job_inference_security_review.settings.ranking]` (`review/ranking.py::RankWeights`).
+  Unknown keys are rejected, and every weight is an integer in `[0, 1000]`. The defaults are the
+  shipped `review-unit-rank/2` values and reproduce its order byte for byte:
+
+  | Key | Default | Signal points |
+  |---|---|---|
+  | `lps`, `sii`, `hotspot` | 1000 each | producer score in [0, 1] (or a percentage) times the weight, capped at the weight |
+  | `tag_density` | 1000 | `tags x weight / (tag_density_full_tags_per_file x member files)`, capped at the weight |
+  | `tag_density_full_tags_per_file` | 4 | tags per member file that earn the full `tag_density` weight |
+  | `lead_hint_medium`, `lead_hint_low`, `lead_hint_info` | 100, 30, 10 | per medium/low/info lead hint |
+  | `lead_hints_max` | 1000 | cap on the summed lead hints |
+  | `advisory_kev` | 250 | any advisory in the unit is KEV-listed |
+  | `advisory_epss` | 250 | times the unit's highest EPSS percentile |
+
+  The weights reach `review/units.py` through `PackageSettings.rank_weights`. They are recorded in
+  the package manifest's `settings` and are semantic settings, so they enter every fingerprint
+  derived from the settings. Changing a weight changes the order, not the rule, so `RANK_RULE`
+  stays `review-unit-rank/2`.
+
   The top `hunt_max_units` units, by rank then `package_id`, receive hunt packages. Every other unit
   is a `coverage_gap` with reason `below_hunt_cutoff`.
 - **Panel.** Each hunt package's three red cells use distinct (strategy, persona) pairs. They are
@@ -766,7 +787,8 @@ Initial providers are:
   metrics; supplemental metrics do not change the score.
 - `cvss_v31_compat`, an explicitly labeled compatibility provider that retains its v3.1 vector and
   must never masquerade as v4.
-- `application_risk_matrix`, a versioned configurable matrix with named axes and lookup table.
+- `application_risk_matrix`, a versioned configurable model over evidence-derived factors (see
+  [Evidence-derived scoring factors](#evidence-derived-scoring-factors-score-factors1)).
 - `ssvc_decision`, an SSVC-style decision-tree result with decision path and outcome, not a numeric
   severity.
 - organization plugins loaded from a closed registry, with signed/pinned package identity and no
@@ -792,6 +814,86 @@ thresholds, optionally let CVSS overwrite severity, and carried remediation prop
 record. That mixed technical severity, confidence, exposure, remediation, and provider semantics.
 The new provider boundary retains the useful hash-pinned calculator provenance while separating
 native provider output from organization policy and remediation.
+
+### Evidence-derived scoring factors (`score-factors/1`)
+
+Decision B1 (user, 2026-10-12): a score must reflect the adjudicated evidence, not only the CWE
+class and whether the claim is confirmed or supported. `review/scoring/factors.py` derives a closed
+set of factors per scored claim. Each factor is computed deterministically from inputs that
+adjudication already accepted:
+
+- the claim's counted supporting relations (R3/R5);
+- the entities those relations cite, re-resolved by the scoring stage against the accepted
+  manifest and accepted only when the content hash equals the relation's `content_sha256`;
+- accepted security-tag assignments on the affected entities or their component;
+- the claim's CWE and the labelled KEV reference input.
+
+Model prose, reported scanner severity and FIRST EPSS have no field in the factor input. A factor
+never promotes a claim: only `confirmed` and `supported` claims are scored, and contradicting
+relations never set a factor.
+
+| Factor | Closed scale (weakest first) | Derived from | Cites |
+|---|---|---|---|
+| `verification` | `supported`, `confirmed` | the R5 claim state | adjudication id |
+| `taint_path` | `code_evidence`, `tool_observation`, `codeql_path_observation`, `graph_dataflow_path` | counted direct support on `source_to_sink_reachability`; strongest cited kind wins (a CodeQL path-problem observation needs its re-resolved payload) | relation ids and entity ids |
+| `attacker_control` | `internal`, `direct_unclassified`, `local`, `remote` | `source_class` of re-resolved `entry_point`/`dataflow_path` facts (`remote`; `local_user`/`argv`/`environment`/`file`/`ipc` are `local`; `database`/`internal` are `internal`), else `direct_unclassified` for other direct support on `attacker_input_control`; best class wins | relation ids and entity ids of the winning class |
+| `guard_absent` | `code_evidence`, `tool_observation`, `graph_fact` | counted direct support on `missing_or_ineffective_guard` (`guard_fact`/`range_fact` are `graph_fact`) | relation ids and entity ids |
+| `exposure` | `local`, `internal_network`, `public` | accepted `surface:entry:*` tags (`http-public`, `cloud-public`, `mobile-deeplink`, `ci-untrusted` are `public`; `http-internal`, `rpc`, `message-consumer` are `internal_network`; `cli`, `env-config`, `file-input`, `local-ipc` are `local`) | tag assignment ids |
+| `privilege` | `sandboxed`, `elevated` | accepted `surface:priv:*` tags (`elevated`, `host`, `cluster-admin`, `cloud-admin`, `ci-write` are `elevated`) | tag assignment ids |
+| `data_sensitivity` | `sensitive`, `secret` | accepted `data:*` tags (`credential`, `key-material`, `session-token` are `secret`; `pii`, `financial`, `health` are `sensitive`) | tag assignment ids |
+| `impact_class` | `low`, `medium`, `high`, `critical` | the configured CWE table: one factor among many | `cwe_impact_classes.<CWE>` |
+| `threat` | `not_listed`, `kev_listed` | the lead advisory's CISA KEV listing only | `kev_listed` reference input |
+
+A tag applies when its subject is an affected or cited entity (`entity`), or when it belongs to
+the same component as one (`component`). Only `declared`, `invoked` and `derived` bases count. A
+factor with no qualifying evidence is listed in `missing_factors` with a reason in
+`missing_factor_reasons`. Graph kinds do not exist in most runs yet. When they are absent, the
+factor is a named gap, never the lowest value.
+
+Extraction is pluggable. `FactorRegistry` maps each factor id to its extractor. A provider
+declares `consumed_factors`, and `scoring.score_claims` asks the registry for exactly those. A new
+factor or provider needs no change to the stage. A provider that consumes no factors (such as
+`application_risk_matrix/1`) receives a request that canonicalizes exactly as before.
+
+`application_risk_matrix/2` is the default provider (`providers.application_risk_matrix.implementation`).
+It rates the factors with a declarative model held in TOML and validated in
+`config/inference_review.py`. The model keeps the four dimensions separate:
+
+- **`exploitability_confidence`** (scale `exploitability_evidence/1`, `low`/`medium`/`high`). The
+  provider sums the configured points of the present `verification`, `taint_path`,
+  `attacker_control`, `guard_absent` and `exposure` values (`privilege` may also be configured)
+  and maps the total at the `bands.medium` and `bands.high` thresholds. A missing factor adds
+  nothing. KEV keeps its one-band rule: a KEV-listed lead raises an already scored claim one
+  band, recorded as an assumption and as `kev_adjusted`.
+- **`technical_severity`** (scale `application_risk_matrix/2`). It looks up `impact_class` against
+  the exploitability rating in the configured matrix. It is `null` when the CWE is absent or
+  unmapped.
+- **`environmental_business_impact`** (scale `environmental_exposure/1`). It uses points for
+  `exposure`, `privilege` and `data_sensitivity` and is produced only when at least one of them
+  is present.
+- **`remediation_priority`** stays `null` because no priority policy implementation is registered.
+
+Validation rejects a model that is not monotone. Points must be non-negative integers that never
+decrease along a factor's scale, and the severity matrix must never decrease along either axis.
+Stronger evidence therefore never lowers a rating. `impact_class` and `threat` may not carry
+points, and `epss` is not a factor. The defaults rate a confirmed claim with the minimum direct
+evidence (verification 40, taint 10, control 10, guard 15 = 75) as `high`, as
+`application_risk_matrix/1` did. A supported claim reaches `medium` only with real path, control
+or guard evidence.
+
+EPSS never affects a score (decision 6). The stage does not pass it, and
+`application_risk_matrix/2` excludes it from its input fingerprint and writes
+`reference_inputs.epss = null`. Varying EPSS leaves every score package byte-identical. The model
+and the CWE table enter `provider_config_sha256`, and the factor set enters the input
+fingerprint. Retuning either changes `score_id`.
+
+`application_risk_matrix/1` stays selectable (`implementation = "application_risk_matrix/1"`, with
+no model tables) so that ratings can be compared across a rollout or rolled back. It rates only
+the CWE table and the claim state, so it does not satisfy B1 and is not the default.
+
+Score packages are `appsec-review/score-package/2`. They add `factors` (factor, scale, value,
+detail), `missing_factor_reasons`, and populated `factor_citations` (relation ids, entity ids, tag
+assignment ids and reference/configuration ids per factor).
 
 ## Central TOML
 
@@ -882,6 +984,16 @@ override_policy = "review_lead_only/1"
 [jobs.job_inference_security_review.settings.scoring.providers.cvss_v4]
 implementation = "first-reference-compatible/1"
 metric_groups = ["base", "threat", "environmental", "supplemental"]
+
+# Model tables (exploitability, environmental, technical_severity) are described under
+# "Evidence-derived scoring factors"; appsec-review.toml holds the full defaults.
+[jobs.job_inference_security_review.settings.scoring.providers.application_risk_matrix]
+implementation = "application_risk_matrix/2"
+
+# Every lane B rank weight; see "Lane B: open discovery".
+[jobs.job_inference_security_review.settings.ranking]
+advisory_kev = 250
+advisory_epss = 250
 
 [[jobs.job_inference_security_review.settings.poc.eligibility_rules]]
 provider = "cvss_v4"
@@ -1183,7 +1295,7 @@ The following documents are concise shape examples; hashes are shortened only fo
 
 ```json
 {
-  "schema": "appsec-review/score-package/1",
+  "schema": "appsec-review/score-package/2",
   "score_id": "score-0fe2...",
   "claim_id": "claim-9a31...",
   "provider": {"id": "cvss_v4", "interface": "1", "implementation": "first-compatible/1"},
@@ -1199,7 +1311,13 @@ The following documents are concise shape examples; hashes are shortened only fo
   "remediation_priority": null,
   "assumptions": ["deployed route matches accepted configuration shard"],
   "missing_factors": ["business_asset_criticality"],
+  "missing_factor_reasons": [{"factor": "business_asset_criticality", "reason": "no deployment data"}],
   "evidence_relations": ["evrel-51...", "evrel-c2..."],
+  "factors": [{"factor": "taint_path", "scale": "score-factors/1:taint_path",
+               "value": "graph_dataflow_path", "detail": {"entity_kind": ["dataflow_path"]}}],
+  "factor_citations": [{"factor": "taint_path", "evidence_relations": ["evrel-c2..."],
+                        "entities": ["asr:dataflow_path:7d1e..."], "tag_assignments": [],
+                        "references": []}],
   "scorer": "actor-independent-scorer-02",
   "input_fingerprint": "sha256:44a1...",
   "overrides": []
@@ -1551,8 +1669,8 @@ recorded as an `evidence_gap`, not as a relation.
 Reference records describe an advisory or weakness everywhere, never this target. A dependency
 claim still needs target evidence for `affected_construct`: the resolved package version from an
 SBOM, lockfile, or artifact inventory (`package`, `archive_member`), which is direct. NVD CVSS, KEV,
-and EPSS can order work, inform workers, and enter scoring as labelled reference inputs; they never
-satisfy an obligation alone.
+and EPSS can order work and inform workers. NVD CVSS and KEV also enter scoring as labelled
+reference inputs; EPSS never does. None of them satisfies an obligation alone.
 
 Graph-fact admissibility (`evidence-admissibility/2`, planned) is decided from the fact the
 validator re-resolves through `find`, never from the model's copy: a citation whose resolved
@@ -1664,22 +1782,29 @@ publication can label it. This is the slice 1 answer to open question 2.
   fields that the conflict validator reads. Add the task prompts under
   `pipeline/guidance/tasks/inference-security-review/`, and expand `governing-rules.md` only for
   rules shared with OWASP workers.
-- **Scoring.** The slice 1 scorer is `application_risk_matrix/1`, which is fully deterministic. It
-  has two axes:
-  - `impact_class`, from a TOML CWE→class table; an unmapped CWE gives a `null` rating plus
-    `missing_factors`;
-  - `exploitability_confidence`, derived from R5: `high` when confirmed, `medium` when supported.
-    When the claim's lead advisory is CISA KEV-listed, a claim that is already `supported` or
-    `confirmed` is raised one band (`medium` to `high`; `high` stays `high`), recorded as an
-    assumption and as `kev_adjusted` in the native result. KEV never makes an unsupported claim
-    scoreable.
+- **Scoring.** The default scorer is `application_risk_matrix/2`, which is fully deterministic.
+  It rates the `score-factors/1` evidence factors (see
+  [Evidence-derived scoring factors](#evidence-derived-scoring-factors-score-factors1)) with a
+  configured, monotone model:
+  - `impact_class` comes from a TOML CWE→class table and is one factor among many. An unmapped CWE
+    leaves technical severity `null` and lists `impact_class` in `missing_factors`.
+  - `exploitability_confidence` sums the points of the verification, taint path, attacker control,
+    guard and exposure factors. When the claim's lead advisory is CISA KEV-listed, a claim that is
+    already `supported` or `confirmed` is raised one band, recorded as an assumption and as
+    `kev_adjusted` in the native result. KEV never makes an unsupported claim scoreable.
+  - `environmental_business_impact` is produced only from accepted exposure, privilege and
+    data-sensitivity tags.
 
-  Only confirmed and supported claims are scored. Its actor is the deterministic
-  `independent_scorer` record. `ScoreRequest` also carries labelled reference inputs taken from
-  the lane A lead packages that proposed the claim: `reference_cvss` (NVD CVSS vectors and base
-  scores), `kev_listed`, and `epss`. They are recorded in the score package's `reference_inputs`
-  and `assumptions`, enter the input fingerprint only when present, and do not set the band. No
-  CVSS provider exists yet; the vectors describe the advisory, not this target.
+  `application_risk_matrix/1` (CWE table x R5 state: `high` when confirmed, `medium` when
+  supported) stays selectable for comparison.
+
+  Only confirmed and supported claims are scored. Each provider implementation has its own
+  deterministic `independent_scorer` actor. `ScoreRequest` also carries labelled reference inputs
+  taken from the lane A lead packages that proposed the claim: `reference_cvss` (NVD CVSS vectors
+  and base scores) and `kev_listed`. They are recorded in the score package's `reference_inputs`
+  and `assumptions`, enter the input fingerprint only when present, and do not set a band beyond
+  the KEV rule. EPSS is never passed to scoring. No CVSS provider exists yet; the vectors describe
+  the advisory, not this target.
 - **Downstream.** Only `confirmed` claims are remediation-planning inputs by default. `supported`
   claims are published with an explicit "not independently confirmed" label (open question 4).
 

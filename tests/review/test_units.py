@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 import random
 
@@ -7,10 +8,12 @@ import pytest
 
 from appsec_review.review.lead_families import collect_leads
 from appsec_review.review.packages import PackageSettings, assemble_packages
+from appsec_review.review.ranking import RankWeights
 from appsec_review.review.scope import accept_manifest
 from appsec_review.review.units import (
-    CUTOFF_REASON, EPSS_POINTS, KEV_POINTS, build_units, rank_units, select_hunts,
+    CUTOFF_REASON, EPSS_POINTS, KEV_POINTS, RANK_RULE, build_units, rank_units, select_hunts,
 )
+from appsec_review.storage.atomic import canonical_json
 from tests.fixtures.inference_review.builder import build_accepted_index_set
 
 
@@ -122,3 +125,77 @@ def test_kev_and_epss_signals_raise_a_unit_rank(tmp_path: Path) -> None:
                     if item.unit.key == SVC)
     assert _signals(svc(unlisted))["advisory_kev"].value == 0
     assert svc(listed).score - svc(unlisted).score == KEV_POINTS
+
+
+# ------------------------------------------------------------------------------------------------ rank weights
+
+
+# sha256 of the canonical rank records (plus unit keys) that review-unit-rank/2 produced for the
+# fixture before its weights became configurable (commit 4e7fa2c). Defaults must reproduce them.
+SHIPPED_RANK_SHA256 = {1: "8e8f38143c07e9d84a43b0c5ae764f617c964d6839d783c6d4c954c90ee05a76",
+                       200: "75502dac91b7a75570e963a2e7d36c33f24ba29ba897e91f003e9f6f17fc71cd"}
+
+
+def _rank_sha256(scope, unit_max_files: int, weights=None) -> str:
+    kwargs = {} if weights is None else {"weights": weights}
+    ranked = rank_units(build_units(scope, collect_leads(scope), unit_max_files=unit_max_files, **kwargs))
+    return hashlib.sha256(canonical_json([item.rank_record() | {"key": item.unit.key} for item in ranked])).hexdigest()
+
+
+@pytest.mark.parametrize("unit_max_files", [1, 200])
+def test_default_rank_weights_reproduce_the_shipped_rank_byte_for_byte(scope, unit_max_files) -> None:
+    assert _rank_sha256(scope, unit_max_files) == SHIPPED_RANK_SHA256[unit_max_files]
+    assert _rank_sha256(scope, unit_max_files, RankWeights()) == SHIPPED_RANK_SHA256[unit_max_files]
+    assert (KEV_POINTS, EPSS_POINTS) == (RankWeights().advisory_kev, RankWeights().advisory_epss) == (250, 250)
+    assert RANK_RULE == "appsec-review/review-unit-rank/2"
+
+
+def test_changed_rank_weights_reorder_units_deterministically(scope) -> None:
+    hints_first = RankWeights(lps=0, sii=0, hotspot=0, tag_density=0)
+    units = build_units(scope, collect_leads(scope), unit_max_files=200, weights=hints_first)
+    ranked = rank_units(units)
+    assert ranked[0].unit.key == SVC and [item.unit.key for item in ranked].index(NATIVE) > 0
+    shuffled = list(units)
+    random.Random(11).shuffle(shuffled)
+    assert rank_units(shuffled) == ranked
+    native = _signals(next(item.unit for item in ranked if item.unit.key == NATIVE))
+    assert (native["lps"].value, native["sii"].value, native["hotspot"].value,
+            native["tag_density"].value) == (0, 0, 0, 0)
+
+    def signals(key, weights):
+        return _signals(next(item for item in build_units(scope, collect_leads(scope), unit_max_files=200,
+                                                          weights=weights) if item.key == key))
+
+    scaled = signals(NATIVE, RankWeights(lps=500, tag_density_full_tags_per_file=2))
+    assert scaled["lps"].value == 275 and scaled["tag_density"].value == 250
+    svc = signals(SVC, RankWeights(lead_hint_medium=7, lead_hint_low=1, advisory_epss=1000))
+    assert svc["lead_hints"].value == 7 + 1 + 1 and svc["advisory_epss"].value == 970
+    assert signals(SVC, RankWeights(lead_hints_max=50))["lead_hints"].value == 50
+
+
+def test_rank_weights_flow_from_package_settings_into_the_hunt_cutoff(scope) -> None:
+    default = assemble_packages(scope, PackageSettings(hunt_max_units=1))
+    tuned = assemble_packages(scope, PackageSettings(hunt_max_units=1,
+                                                     rank_weights=RankWeights(lps=0, sii=0, hotspot=0, tag_density=0)))
+    assert {item.unit_key for item in default.packages if item.kind == "hunt"} == {NATIVE}
+    assert {item.unit_key for item in tuned.packages if item.kind == "hunt"} == {SVC}
+    assert default.manifest["settings"]["rank_weights"] == RankWeights().record()
+    assert tuned.manifest["settings"]["rank_weights"]["lps"] == 0
+    assert default.manifest["content_sha256"] != tuned.manifest["content_sha256"]
+    assert PackageSettings.from_mapping({"rank_weights": {"advisory_kev": 500}}).rank_weights == RankWeights(
+        advisory_kev=500)
+
+
+@pytest.mark.parametrize("value, message", [
+    ({"lps": 1001}, "ranking.lps must be an integer between 0 and 1000"),
+    ({"advisory_kev": -1}, "advisory_kev must be an integer"),
+    ({"lead_hint_low": 1.5}, "lead_hint_low must be an integer"),
+    ({"lead_hint_low": True}, "lead_hint_low must be an integer"),
+    ({"tag_density_full_tags_per_file": 0}, "tag_density_full_tags_per_file must be an integer between 1"),
+    ({"epss": 10}, "ranking has unknown settings: epss"),
+])
+def test_invalid_rank_weights_are_rejected(value, message) -> None:
+    with pytest.raises(ValueError, match=message):
+        RankWeights.from_mapping(value)
+    with pytest.raises(ValueError):
+        PackageSettings.from_mapping({"rank_weights": value})

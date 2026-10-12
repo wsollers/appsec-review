@@ -158,7 +158,7 @@ def _claim() -> dict:
 
 def _score() -> dict:
     return {
-        "schema": "appsec-review/score-package/1", "score_id": ident("score"), "claim_id": ident("claim"),
+        "schema": "appsec-review/score-package/2", "score_id": ident("score"), "claim_id": ident("claim"),
         "adjudication_id": ident("adjudication"),
         "provider": {"id": "cvss_v4", "interface": "appsec-review/scoring-provider/1", "implementation": "first-compatible/1"},
         "provider_config_sha256": SHA, "policy_sha256": SHA,
@@ -171,9 +171,24 @@ def _score() -> dict:
         "assumptions": ["deployed route matches accepted configuration shard"],
         "missing_factors": ["business_asset_criticality"],
         "evidence_relations": [ident("evidence_relation", "51"), ident("evidence_relation", "c2")],
-        "factor_citations": [], "limitations": [], "scorer": ident("actor", "scorer"),
+        "factor_citations": [{"factor": "taint_path", "evidence_relations": [ident("evidence_relation", "c2")],
+                              "entities": ["asr:dataflow_path:" + SHA], "tag_assignments": [], "references": []}],
+        "factors": [{"factor": "taint_path", "scale": "score-factors/1:taint_path", "value": "graph_dataflow_path",
+                     "detail": {"entity_kind": ["dataflow_path"]}}],
+        "missing_factor_reasons": [{"factor": "business_asset_criticality", "reason": "no deployment data"}],
+        "limitations": [], "scorer": ident("actor", "scorer"),
         "input_fingerprint": SHA, "overrides": [],
     }
+
+
+def test_score_package_2_rejects_version_1_and_malformed_factors() -> None:
+    assert not valid("score-package", {**_score(), "schema": "appsec-review/score-package/1"})
+    factor = _score()["factors"][0]
+    assert not valid("score-package", {**_score(), "factors": [{**factor, "detail": {"entity_kind": "dataflow_path"}}]})
+    assert not valid("score-package", {**_score(), "factors": [{**factor, "points": 3}]})
+    citation = _score()["factor_citations"][0]
+    assert not valid("score-package", {**_score(), "factor_citations": [{**citation, "evidence_relations": ["x"]}]})
+    assert not valid("score-package", {**_score(), "missing_factor_reasons": [{"factor": "threat"}]})
 
 
 def _finding() -> dict:
