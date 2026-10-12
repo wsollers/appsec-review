@@ -47,6 +47,7 @@ Repository authority remains in [`../../AGENTS.md`](../../AGENTS.md). This page 
 
 Operations pages not listed above:
 
+- [`../operations/inference-security-review.md`](../operations/inference-security-review.md) — inference review model selection and upgrade, capacity overlay, and outcomes.
 - [`../operations/wave1-review.md`](../operations/wave1-review.md) — direct CLI and `wave1_review` scope.
 - [`../operations/third-party-data-sync.md`](../operations/third-party-data-sync.md) — feed synchronization.
 - [`../operations/target-analysis-planning.md`](../operations/target-analysis-planning.md) — analysis planning.
