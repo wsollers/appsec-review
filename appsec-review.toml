@@ -1339,6 +1339,48 @@ workers = 1
 [jobs.job_codeql_analysis.steps.acceptance.tasks.publish_handoff]
 
 
+# Code-graph index (docs/architecture/code-graph-precomputation.md D4 and section 7): normalizes the
+# accepted CodeQL graph exports into one `graph` shard per (scope, fact family), cross-checks call
+# sites against the scope's own clangd/IR/AST shards and correlates SARIF code flows. The bounds
+# below are the GraphSettings contract (graph/contract.py) and must stay within its validation.
+[jobs.job_code_graph_index]
+name = "code_graph_index"
+workers = 2
+
+[jobs.job_code_graph_index.settings]
+# Concurrent CodeQL scopes per unit.
+workers = 2
+
+[jobs.job_code_graph_index.settings.graph]
+max_call_depth = 3
+max_neighbors_per_function = 200
+max_paths_per_sink = 8
+max_path_steps = 40
+max_guards_per_sink = 16
+max_facts_per_family_per_scope = 200000
+max_export_bytes = 268435456
+export_timeout_seconds = 1800
+
+[jobs.job_code_graph_index.steps.load]
+workers = 1
+[jobs.job_code_graph_index.steps.load.tasks.accepted_inputs]
+
+[jobs.job_code_graph_index.steps.normalize]
+workers = 1
+[jobs.job_code_graph_index.steps.normalize.tasks.scopes]
+
+[jobs.job_code_graph_index.steps.crosscheck]
+workers = 1
+[jobs.job_code_graph_index.steps.crosscheck.tasks.scopes]
+
+[jobs.job_code_graph_index.steps.correlate]
+workers = 1
+[jobs.job_code_graph_index.steps.correlate.tasks.scopes]
+
+[jobs.job_code_graph_index.steps.acceptance]
+workers = 1
+[jobs.job_code_graph_index.steps.acceptance.tasks.publish_handoff]
+
 [jobs.job_cpp_symbol_index]
 name = "cpp_symbol_index"
 workers = 2

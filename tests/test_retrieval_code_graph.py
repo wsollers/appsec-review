@@ -187,15 +187,26 @@ def build_graph_run(tmp_path: Path, *, omit: Iterable[str] = ()) -> tuple[Path, 
             "partial", "unresolved indirect calls present"),
         c.Family.SINK_SITE: (list(sinks.values()), [
             _relation(RelationKind.CONTAINS, record.payload["result"]["enclosing_function"]["symbol"],
-                      record.identity.value) for record in sinks.values()], "complete", None),
+                      record.identity.value) for record in sinks.values()] + [
+            # graph-sarif-correlation/1: a flow whose sink matched but no path joins it hangs on the sink.
+            RelationRecord(RelationKind.DERIVED_FROM, ids["sink_memcpy"], ids["obs_broken"], False, 0.0,
+                           "code_flow 0.0 broken (no_path)", {
+                               "rule": "graph-sarif-correlation/1", "state": "broken", "code_flows": [
+                                   {"code_flow": 0, "thread_flow": 0, "state": "broken", "matched_steps": [],
+                                    "ambiguous_steps": [], "unmatched_steps": [0, 1], "reason": "no_path"}]})],
+            "complete", None),
         c.Family.ENTRY_POINT: (list(entries.values()), [
             _relation(RelationKind.CONTAINS, record.payload["result"]["enclosing_function"]["symbol"],
                       record.identity.value) for record in entries.values()], "complete", None),
         c.Family.DATAFLOW_PATH: (list(paths.values()), [
-            _relation(RelationKind.DERIVED_FROM, ids["path_remote"], ids["obs_bridged"], code_flow=0,
-                      matched_steps=3, ambiguous_steps=0, unmatched_steps=0, state="bridged"),
-            _relation(RelationKind.DERIVED_FROM, ids["path_internal"], ids["obs_broken"], code_flow=0,
-                      matched_steps=1, ambiguous_steps=0, unmatched_steps=2, state="broken")], "complete", None),
+            # graph-sarif-correlation/1 (graph/correlate.py): one relation per (path, observation) listing
+            # every correlated code flow in order.
+            _relation(RelationKind.DERIVED_FROM, ids["path_remote"], ids["obs_bridged"],
+                      rule="graph-sarif-correlation/1", state="bridged", code_flows=[
+                          {"code_flow": 0, "thread_flow": 0, "state": "bridged",
+                           "matched_steps": [{"ordinal": n, "path_step": n, "method": "sarif-step-byte-span"}
+                                             for n in range(3)],
+                           "ambiguous_steps": [], "unmatched_steps": []}])], "complete", None),
         c.Family.GUARD_FACT: (list(guards.values()), [
             _relation(RelationKind.GUARDS, record.identity.value, ids["sink_memcpy"]) for record in guards.values()],
             "complete", None),
