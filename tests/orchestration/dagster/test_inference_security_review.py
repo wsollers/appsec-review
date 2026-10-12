@@ -188,6 +188,7 @@ def test_slice1_acceptance_both_lanes_parallel_and_capacity_invariant(tmp_path: 
 
     _assert_verifier_blind(logs)
     _assert_capabilities_isolated(fixture, attempt)
+    _assert_reference_enrichment(fixture, attempt)
     first = _canonical(attempt)
 
     # Same accepted inputs, five review teams through the capacity overlay: identical canonical outputs.
@@ -239,6 +240,32 @@ def test_slice1_acceptance_both_lanes_parallel_and_capacity_invariant(tmp_path: 
     with pytest.raises(ValueError):
         runner.finalize_attempt(job, claim)
     assert latest.read_bytes() == accepted_before
+
+
+def _assert_reference_enrichment(fixture, attempt: Path) -> None:
+    """Pinned MITRE validates claim CWEs; advisory leads carry NVD+KEV+EPSS context and stale-feed gaps."""
+    schema = json.loads((ROOT / "docs" / "schemas" / "review-packages.schema.json").read_text())
+    validator = Draft202012Validator(schema)
+    leads, hunts = [], []
+    for lane in ("lead", "hunt"):
+        document = _json(_unit(attempt, f"packages.assemble_{lane}_packages") / f"{lane}-packages.json")
+        assert document["cwe_reference"]["source"] == "mitre_catalog" and document["cwe_reference"]["gap"] is None
+        assert {"CWE-120", "CWE-89", "CWE-416"} <= set(document["accepted_cwe_ids"])
+        for item in document["packages"]:
+            package = _json(fixture.run_root / item["path"])
+            validator.validate(package)
+            (leads if lane == "lead" else hunts).extend(package["lead_menu"])
+    enriched = [lead for lead in leads if lead["advisory_context"]
+                and any(advisory["nvd"] and advisory["nvd"][0]["cvss"] for advisory in lead["advisory_context"]["advisories"])
+                and lead["advisory_context"]["summary"]["kev_listed"] is True
+                and lead["advisory_context"]["summary"]["epss_percentile"] is not None]
+    assert [lead["observation_id"] for lead in enriched] == [fixture.ids["dep_high"]]
+    assert any(gap.startswith("stale_feed:") for lead in leads if lead["advisory_context"]
+               for advisory in lead["advisory_context"]["advisories"] for gap in advisory["gaps"])
+    assert any(weakness["source"] == "mitre_catalog" and weakness["abstraction"] for lead in leads
+               for weakness in lead["weaknesses"])
+    compact = [lead["advisory_summary"] for lead in hunts if lead["advisory_summary"]]
+    assert compact and all(set(item) == {"cve_ids", "kev_listed", "epss_percentile", "max_cvss"} for item in compact)
 
 
 def _assert_verifier_blind(logs: Path) -> None:

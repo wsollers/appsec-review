@@ -128,7 +128,7 @@ def test_indirect_and_unlisted_kinds_never_satisfy(kind: EntityKind) -> None:
 def test_r3_indirect_kinds_are_exactly_listed() -> None:
     assert {kind.value for kind in INDIRECT_KINDS} == {
         "hotspot", "priority_item", "history_signal", "change", "change_context_signal", "review_signal",
-        "tag_assignment", "review_unit"}
+        "tag_assignment", "review_unit", "advisory", "dependency_package", "precomputed_fact"}
     assert not (INDIRECT_KINDS & DIRECT_KINDS) and not (MAPPED_KINDS & DIRECT_KINDS)
     assert {EntityKind.BUILD_ACTION, EntityKind.WASM_MODULE, EntityKind.EVIDENCE_ARTIFACT} <= DIRECT_KINDS
 
@@ -232,3 +232,15 @@ def test_relation_kind_must_be_evidence_bearing(accepted) -> None:
     runs, ids, _ = accepted
     with pytest.raises(ValueError):
         _resolve(RetrievalCore(runs, RUN_ID), ids["span"], kind=RelationKind.DUPLICATES)
+
+
+@pytest.mark.parametrize("kind", ["advisory", "dependency_package", "precomputed_fact"])
+def test_reference_context_kinds_are_indirect_for_every_predicate_even_when_mapped(kind: str) -> None:
+    """NVD/KEV/EPSS/OSV reference records never satisfy an obligation alone (design R3)."""
+    from appsec_review.review.evidence import REFERENCE_KINDS
+    assert EntityKind(kind) in REFERENCE_KINDS and EntityKind(kind) not in DIRECT_KINDS
+    every = tuple(Predicate)
+    assert {classify(kind, predicate, every) for predicate in Predicate} == {Admissibility.INDIRECT}
+    # Target evidence of the resolved package (SBOM/lockfile/artifact inventory) stays direct.
+    assert classify("package", Predicate.AFFECTED_CONSTRUCT) is Admissibility.DIRECT
+    assert classify("archive_member", Predicate.AFFECTED_CONSTRUCT) is Admissibility.DIRECT

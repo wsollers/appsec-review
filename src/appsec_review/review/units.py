@@ -2,9 +2,12 @@
 
 A review unit is an accepted component, then its trust boundary when an accepted producer names
 one (none does yet, so it is ``None``), then build unit, then a stable range of sorted source
-paths. Units are ranked by ``review-unit-rank/1`` from the signals that are available: review
-prioritization (LPS), source-history instability (SII), hotspots, security-tag density and
-medium/low/info lead hints. A missing signal is recorded as ``unknown``; it is never read as zero.
+paths. Units are ranked by ``review-unit-rank/2`` from the signals that are available: review
+prioritization (LPS), source-history instability (SII), hotspots, security-tag density,
+medium/low/info lead hints, and the reference context of the unit's dependency/artifact advisories:
+``advisory_kev`` (``KEV_POINTS`` when any advisory is KEV-listed) and ``advisory_epss`` (the highest
+EPSS percentile times ``EPSS_POINTS``). A missing signal, including an advisory whose KEV or EPSS
+feed was unavailable, is recorded as ``unknown``; it is never read as zero.
 Only the top ``hunt_max_units`` units receive hunt packages; every other unit is a coverage gap
 with reason ``below_hunt_cutoff``.
 """
@@ -17,12 +20,17 @@ import math
 from typing import Any
 
 from appsec_review.retrieval.model import LogicalIdentity
-from appsec_review.review.lead_families import Lead, LeadCollection
+from appsec_review.review.lead_families import ADVISORY_FAMILIES, Lead, LeadCollection
 from appsec_review.review.scope import AcceptedScope, ScopeGap
 
 
-RANK_RULE = "appsec-review/review-unit-rank/1"
-SIGNALS = ("lps", "sii", "hotspot", "tag_density", "lead_hints")
+RANK_RULE = "appsec-review/review-unit-rank/2"
+SIGNALS = ("lps", "sii", "hotspot", "tag_density", "lead_hints", "advisory_kev", "advisory_epss")
+# Reference-context weights (points of the 0-1000 signal scale). KEV is a binary catalog fact; EPSS
+# percentile is scaled. Both are deliberately below a full LPS/SII signal: they order hunting, they
+# are not evidence that the target is affected.
+KEV_POINTS = 250
+EPSS_POINTS = 250
 CUTOFF_REASON = "below_hunt_cutoff"
 _UNLOCATED = "unlocated"
 # Ranked-selection producers publish only selected items: no record for a unit is unknown, not zero.
@@ -51,7 +59,7 @@ def context_entry(identity: str, role: str, shard_sha256: str | None = None) -> 
 class Signal:
     signal: str
     value: int | None                 # integer points in [0, 1000]; None when unknown
-    reason: str | None                # None, "producer_unavailable" or "no_record"
+    reason: str | None                # None, "producer_unavailable", "no_record" or "feed_unavailable"
 
     @property
     def state(self) -> str:
@@ -205,6 +213,7 @@ def build_units(scope: AcceptedScope, collection: LeadCollection, *, unit_max_fi
                                                          + 10 * hints["info"]), None))
             else:
                 signals.append(Signal("lead_hints", None, "producer_unavailable"))
+            signals.extend(_advisory_signals(scope, leads))
             unique = {(item.role, item.id): item for item in context}
             units.append(ReviewUnit(
                 key=_unit_key(component_id, None, build_unit_id, label), component_id=component_id,
@@ -213,6 +222,32 @@ def build_units(scope: AcceptedScope, collection: LeadCollection, *, unit_max_fi
                 context=tuple(unique[key] for key in sorted(unique)), signals=tuple(signals)))
     units.sort(key=lambda item: item.key)
     return tuple(units)
+
+
+def _advisory_signals(scope: AcceptedScope, leads: Iterable[Lead]) -> tuple[Signal, Signal]:
+    """KEV and EPSS rank signals of a unit's advisory leads; a missing feed is unknown, not zero."""
+    if not scope.producer("dependency_advisories").shards:
+        return (Signal("advisory_kev", None, "producer_unavailable"),
+                Signal("advisory_epss", None, "producer_unavailable"))
+    advisory = [lead for lead in leads if lead.family in ADVISORY_FAMILIES]
+    if not advisory:
+        return Signal("advisory_kev", 0, None), Signal("advisory_epss", 0, None)
+    def reason(feed: str) -> str:
+        missing = any(lead.advisory is None or any(item["joins"][feed] == "unavailable"
+                                                   for item in lead.advisory["advisories"]) for lead in advisory)
+        return "feed_unavailable" if missing else "no_record"
+
+    listed = [lead.kev_listed for lead in advisory]
+    if any(value is True for value in listed):
+        kev = Signal("advisory_kev", KEV_POINTS, None)
+    elif all(value is False for value in listed):
+        kev = Signal("advisory_kev", 0, None)
+    else:
+        kev = Signal("advisory_kev", None, reason("kev"))
+    percentiles = [value for value in (lead.epss_percentile for lead in advisory) if value is not None]
+    epss = (Signal("advisory_epss", _points(max(percentiles), EPSS_POINTS), None) if percentiles
+            else Signal("advisory_epss", None, reason("epss")))
+    return kev, epss
 
 
 def _signal_rows(scope: AcceptedScope) -> dict[str, list[dict[str, Any]]]:

@@ -9,7 +9,10 @@ max_tokens: 400
 The package holds one admitted finding lead. Through the stack profile lens, decide whether the
 reported location is a real weakness in this runtime, framework, and build: which idiomatic
 mechanism should apply here, is it present on this path, and does a stack-specific pitfall make
-the reported behaviour reachable?
+the reported behaviour reachable? For a dependency or artifact advisory lead the package carries
+advisory context from pinned feeds (NVD CVSS vector and weakness ids, CISA KEV listing, EPSS
+percentile, OSV fixed versions). Treat it as reference context about the advisory: establish the
+resolved version and any reachable use of the affected API from target evidence.
 
 ## Expected result
 Zero or more claims in the role's result schema. For every claim, give per-predicate evidence that

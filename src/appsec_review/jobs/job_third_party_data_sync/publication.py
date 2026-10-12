@@ -142,9 +142,13 @@ def verify_snapshot_directory(directory: Path, manifest: Mapping[str, Any]) -> d
     return {"snapshot_id": manifest["snapshot_id"], "verified_files": checked}
 
 
+POINTER_SCHEMAS = ("appsec-review/feed-pointer/1", "appsec-review/nvd-current-pointer/1")
+
+
 def verify_current(root: Path, expected_feed: str) -> dict[str, Any]:
+    """Verify ``current.json`` and every file its snapshot manifest hashes (read-only)."""
     pointer = json.loads((root / "current.json").read_text(encoding="utf-8"))
-    if pointer.get("schema") != "appsec-review/feed-pointer/1" or pointer.get("feed_id") != expected_feed:
+    if pointer.get("schema") not in POINTER_SCHEMAS or pointer.get("feed_id") != expected_feed:
         raise ValueError(f"invalid {expected_feed} current pointer")
     directory = require_beneath(root, root / "snapshots" / pointer["snapshot_id"], "snapshot")
     manifest_path = directory / "manifest.json"

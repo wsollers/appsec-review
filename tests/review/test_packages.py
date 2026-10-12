@@ -56,7 +56,7 @@ def test_lane_a_admits_exactly_critical_high_and_unknown_across_families(fixture
     assert (unknown["reported_severity"], unknown["native_severity"]) == ("unknown", "SEVERE-ISH")
     dependency = _finding(assembly, fixture, "dep_high")["lead_menu"][0]
     assert (dependency["reported_severity"], dependency["severity_basis"]) == ("high", "advisory-cvss-band")
-    assert dependency["rule_cwe"] == ["CWE-400"] and dependency["severity_rule"].endswith("/dependency_advisory/1")
+    assert dependency["rule_cwe"] == ["CWE-400"] and dependency["severity_rule"].endswith("/dependency_advisory/2")
     codeql = _finding(assembly, fixture, "codeql_high")["lead_menu"][0]
     assert codeql["reported_severity"] == "high" and codeql["lead_family"] == "codeql"
 

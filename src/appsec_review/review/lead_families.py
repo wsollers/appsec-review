@@ -7,8 +7,10 @@ absent yields a coverage gap, never an empty (clean) lead list.
 
 Families: source SAST and CodeQL reuse ``retrieval.observations`` normalization and the accepted
 ``scanner_correlation`` lead facts of ``indexing/sast.py``; artifact scanners; dependency
-advisories (the advisory's own CVSS or severity); CI rules; post-build hardening checks; OWASP
-control failures.
+advisories (the advisory's own CVSS; else the pinned NVD CVSS, preferring v4.0, then v3.1, v3.0
+and v2, with basis ``nvd-cvss-band``; else the advisory's severity label); CI rules; post-build
+hardening checks; OWASP control failures. Dependency and artifact-scanner leads carry the bounded
+``advisory_context`` of ``review.advisories`` (reference context only).
 """
 from __future__ import annotations
 
@@ -27,6 +29,7 @@ from appsec_review.retrieval.model import EntityKind, LogicalIdentity
 from appsec_review.retrieval.observations import (
     SEVERITY_ORDER, SEVERITY_RULE, classify, normalize_reported_severity, rule_of, scanner_of,
 )
+from appsec_review.review import advisories as advisory_reference
 from appsec_review.review.models import IntegrityError
 from appsec_review.review.scope import AcceptedScope, ScopeGap, sorted_gaps
 
@@ -34,6 +37,10 @@ from appsec_review.review.scope import AcceptedScope, ScopeGap, sorted_gaps
 FAMILIES = ("source_sast", "codeql", "artifact_scanner", "dependency_advisory", "ci_rule",
             "post_build_hardening", "owasp_control")
 FAMILY_RULES = {family: f"appsec-review/lead-family/{family}/1" for family in FAMILIES}
+# Families whose versioned rule consults the pinned NVD CVSS when the scanner reports none.
+FAMILY_RULES.update({family: f"appsec-review/lead-family/{family}/2"
+                     for family in ("artifact_scanner", "dependency_advisory")})
+ADVISORY_FAMILIES = frozenset({"artifact_scanner", "dependency_advisory"})
 # Producer whose accepted shard must exist for the family to have coverage.
 FAMILY_PRODUCERS = {
     "source_sast": ("source_sast",), "codeql": ("codeql",), "artifact_scanner": ("artifact_scanner",),
@@ -79,6 +86,16 @@ class Lead:
     flow_ids: tuple[str, ...] = ()
     related: tuple[tuple[str, str], ...] = ()     # (identity, role) from accepted relations
     component_hint: str | None = None
+    # Bounded reference context from the accepted dependency_advisories facts (review.advisories).
+    advisory: Mapping[str, Any] | None = field(default=None, compare=False, hash=False)
+
+    @property
+    def kev_listed(self) -> bool | None:
+        return advisory_reference.kev_listed(self.advisory)
+
+    @property
+    def epss_percentile(self) -> float | None:
+        return advisory_reference.epss_percentile(self.advisory)
 
     @property
     def severity_rule(self) -> str:
@@ -136,8 +153,13 @@ def _first(payload: Mapping[str, Any], keys: Iterable[str]) -> Any:
     return None
 
 
-def severity_for(family: str, payload: Mapping[str, Any]) -> tuple[str, str | None, str]:
-    """Return ``(reported, native, basis)`` under the family's versioned rule."""
+def severity_for(family: str, payload: Mapping[str, Any],
+                 advisory: Mapping[str, Any] | None = None) -> tuple[str, str | None, str]:
+    """Return ``(reported, native, basis)`` under the family's versioned rule.
+
+    ``advisory`` is the lead's ``advisory_context``; its preferred NVD CVSS sets the reported
+    severity of a dependency or artifact-scanner lead only when the scanner reported no CVSS.
+    """
     if family in {"source_sast", "codeql", "ci_rule"}:
         value = normalize_reported_severity(payload)
         return value["value"], value["native"], value["basis"]
@@ -148,6 +170,9 @@ def severity_for(family: str, payload: Mapping[str, Any]) -> tuple[str, str | No
             if score is not None:
                 return _band(score), str(_first(source, ("cvss_score", "cvss_base_score", "cvss",
                                                          "security_severity"))), "advisory-cvss-band"
+        nvd = advisory_reference.nvd_severity(advisory)
+        if nvd is not None:
+            return _band(nvd[0]), nvd[1][:128], "nvd-cvss-band"
         for source in (payload, nested):
             native = _first(source, ("advisory_severity", "native_severity", "severity", "level"))
             if native is not None:
@@ -300,6 +325,7 @@ def collect_leads(scope: AcceptedScope) -> LeadCollection:
 
     observation_shards = scope.select(lambda shard: shard["name"] == "observations")
     relations = _relations(scope, observation_shards)
+    advisory_facts = advisory_reference.advisory_facts(scope)
     states, audit, correlation_shards = _correlation_leads(scope, gaps) if (
         available["source_sast"] or available["codeql"]) else ({}, None, ())
     sast_classified: dict[str, str] = {}
@@ -312,7 +338,9 @@ def collect_leads(scope: AcceptedScope) -> LeadCollection:
                 non_lead[classify(row["payload"])] += 1
                 continue
             payload = row["payload"]
-            reported, native, basis = severity_for(family, payload)
+            context = (advisory_reference.context_for(advisory_facts.get(row["identity"]))
+                       if family in ADVISORY_FAMILIES else None)
+            reported, native, basis = severity_for(family, payload, context)
             path, line, exact = _location(row)
             state = states.get(row["identity"], {}) if family in {"source_sast", "codeql"} else {}
             if row["identity"] in sast_classified and states:
@@ -332,7 +360,7 @@ def collect_leads(scope: AcceptedScope) -> LeadCollection:
                 suppression_status=str(state.get("suppression_status") or "unknown"),
                 duplicate_of=state.get("duplicate_of") if isinstance(state.get("duplicate_of"), str) else None,
                 flow_ids=tuple(sorted(str(item) for item in state.get("flow_ids") or ())),
-                related=related))
+                related=related, advisory=context))
 
     for shard in scope.producer("post_build_hardening").shards:
         for row in scope.store.entities((shard,), kinds=("tool_observation",)):

@@ -293,3 +293,13 @@ def test_pool_mapping_is_job_aware() -> None:
         assert _pool_for("__begin", job_id) == "lifecycle"
         assert _pool_for("publication.publish_handoff", job_id) == "application"
         assert _pool_for("scoring.score_claims", job_id) == "application"
+
+
+def test_kev_lane_a_admission_is_typed_and_defaults_on(tmp_path: Path) -> None:
+    assert _settings(load_config(ROOT / "appsec-review.toml")).lanes.lead_admission_kev is True
+    disabled = _variant(tmp_path / "off", ("lead_admission_kev = true", "lead_admission_kev = false"))
+    assert _settings(disabled).lanes.lead_admission_kev is False
+    omitted = _variant(tmp_path / "omitted", ("lead_admission_kev = true\n", ""))
+    assert _settings(omitted).lanes.lead_admission_kev is True
+    with pytest.raises(ValueError, match="lead_admission_kev must be a Boolean"):
+        _variant(tmp_path / "bad", ("lead_admission_kev = true", 'lead_admission_kev = "yes"'))

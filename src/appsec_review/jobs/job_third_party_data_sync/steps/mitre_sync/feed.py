@@ -160,8 +160,13 @@ def normalize(settings: MitreSettings, fetched: Mapping[str, Any], work: Path) -
                     if local not in ("Weakness", "Category", "View") or "ID" not in element.attrib:
                         continue
                     identifier = ("CWE-" if local == "Weakness" else f"CWE-{local.upper()}-") + element.attrib["ID"]
+                    # Weakness abstraction (Pillar/Class/Base/Variant) and status travel as bounded attributes.
+                    attributes = {key.lower(): str(element.attrib[key])[:64] for key in ("Abstraction", "Status")
+                                  if key in element.attrib}
                     connection.execute("INSERT OR REPLACE INTO entry VALUES (?, ?, ?, ?, ?, ?, ?)",
-                                       (name, identifier, local.lower(), element.attrib.get("Name"), None, None, None))
+                                       (name, identifier, local.lower(), element.attrib.get("Name"), None, None,
+                                        json.dumps(attributes, sort_keys=True, separators=(",", ":"))
+                                        if attributes else None))
                     source_count += 1
             total += source_count
             if total > settings.max_records:

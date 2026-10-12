@@ -114,6 +114,9 @@ class LaneSettings:
     hunt_max_claims_per_package: int
     hunt_panel_rule: str
     incomplete_gap_ratio: float
+    # Lane A also admits every KEV-listed advisory lead, whatever its reported severity. EPSS is
+    # context only and has no admission effect.
+    lead_admission_kev: bool = True
 
     def __post_init__(self) -> None:
         if "unknown" not in self.lead_admission:
@@ -449,7 +452,7 @@ def parse_inference_review_settings(value: Mapping[str, Any]) -> InferenceSecuri
     field = f"{_PREFIX}.lanes"
     lanes_value = _table(settings["lanes"], field, {
         "lead_admission", "lead_budget_share", "lead_max_claims_per_package", "hunt_max_units",
-        "hunt_max_claims_per_package", "hunt_panel_rule", "incomplete_gap_ratio"})
+        "hunt_max_claims_per_package", "hunt_panel_rule", "incomplete_gap_ratio"}, {"lead_admission_kev"})
     lanes = LaneSettings(
         lead_admission=_choices(lanes_value["lead_admission"], f"{field}.lead_admission", REPORTED_SEVERITIES),
         lead_budget_share=_ratio(lanes_value["lead_budget_share"], f"{field}.lead_budget_share"),
@@ -460,6 +463,7 @@ def parse_inference_review_settings(value: Mapping[str, Any]) -> InferenceSecuri
                                          f"{field}.hunt_max_claims_per_package", 1, 100),
         hunt_panel_rule=_str(lanes_value["hunt_panel_rule"], f"{field}.hunt_panel_rule", _RULE_ID),
         incomplete_gap_ratio=_ratio(lanes_value["incomplete_gap_ratio"], f"{field}.incomplete_gap_ratio"),
+        lead_admission_kev=_bool(lanes_value.get("lead_admission_kev", True), f"{field}.lead_admission_kev"),
     )
 
     field = f"{_PREFIX}.packages"

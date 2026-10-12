@@ -64,7 +64,7 @@ reused; a new copy of the same evidence is unnecessary.
 | Commits, diffs, blame, reviews, deployments, ownership, SII, change context | history and change-context jobs | `history`, `priority`; `query_change_context` | index bounded review-unit links, exact fixes and ownership; leave raw diffs protected when large |
 | OWASP applicability, controls, validators, dispositions | OWASP workbench | accepted workbench shards; `query_owasp_workbench` | cross-link controls to accepted findings, tests and source evidence without duplicating the workbench |
 | Security tags and review-priority scores | tagging and prioritization | `tags`, `priority`; `query_hotspots` | link tag rationale and ranked items to exact supporting identities and coverage gaps |
-| NVD, OSV, MITRE, CVE tool database and other reference feeds | third-party sync | verified global feed snapshots and metadata, outside the run manifest | pin feed snapshot per run; index advisory/weakness/technique facets and join them to observed target packages/findings |
+| NVD, OSV, MITRE, CISA KEV, FIRST EPSS, CVE tool database and other reference feeds | third-party sync | verified global feed snapshots with hash-pinned `index/*.sqlite` lookups (`nvd`, `osv`, `mitre`, `kev`, `epss`), outside the run manifest | pin feed snapshot per run with per-feed freshness bounds; join advisory/weakness facets to observed target packages/findings as reference context, never as target evidence |
 | API contracts, deployment topology, tests, docs, dynamic traces | planned or partly scanner-observed | scattered source/scanner observations only | add producer-specific indices when acquired; distinguish declared, intent, and observed evidence |
 | Run logs, raw tool outputs, exact environment, model transcripts, credentials | runtime and tool jobs | protected run-owned artifacts | only sanitized status, hashes, durations, producer and coverage enter retrieval; never index secret or raw model content |
 
@@ -111,9 +111,11 @@ a silent allowlist. `query_precomputed` is abbreviated `QP`; existing generic `f
 | Blint binary scan; `job_evidence_collection` | Binary hardening leads | Current observations; link exact produced artifact | `scanner_correlation`, `artifact_inventory` | `query_artifacts`, `query_observations`; no skill |
 | OWASP catalogs, applicability, validators and assessments; `job_owasp_control_assessment` | Control coverage and evidence obligations | Current workbench shards; extend links to findings/tests | `control_evidence`, `review_package` | `query_owasp_workbench`, `QP`; no skill |
 | Taxonomy, crosswalk and assignments; `job_security_tagging` | Security facets and review routing | Current `tags`; retain assignment basis and gaps | `scanner_correlation`, `hotspot_context` | `core`, `QP`; no skill |
-| NVD feed; `job_third_party_data_sync.nvd_sync` | CVE/CVSS/advisory reference | Current global snapshot; pin version per run and join to packages | `reference_intelligence`, `dependency_advisories` | `QP` or typed reference query if exact filters exceed it; no skill |
+| NVD feed; `job_third_party_data_sync.nvd_sync` | CVE/CVSS/advisory reference | Current: hash-pinned `index/nvd.sqlite` (CVE id → description, CWE ids, CVSS metrics, `vulnStatus`, dates, raw hash) built deterministically from the metadata layers; pinned per run and joined by CVE id | `dependency_advisories` (implemented), `reference_intelligence` | `QP` or typed reference query if exact filters exceed it; no skill |
+| CISA KEV catalog; `job_third_party_data_sync.kev_sync` | Known-exploited listing | Current: hash-pinned `index/kev.sqlite` (CVE id, vendor/product, name, date added, due date, ransomware use, catalog version); pinned per run (freshness 7 days) | `dependency_advisories` (implemented); lane A KEV admission and lane B rank | `QP`; no skill |
+| FIRST EPSS daily scores; `job_third_party_data_sync.epss_sync` | Exploitation probability | Current: hash-pinned `index/epss.sqlite` (CVE id, EPSS, percentile, score date, model version); pinned per run (freshness 3 days) | `dependency_advisories` (implemented); lane B rank | `QP`; no skill |
 | OSV feed; `job_third_party_data_sync.osv_sync` | Package advisory reference | Current global snapshot; pin version per run and join PURLs/versions | `reference_intelligence`, `dependency_advisories` | `QP` or typed reference query; no skill |
-| MITRE ATT&CK, CAPEC and CWE; `job_third_party_data_sync.mitre_sync` | Weakness/technique context | Current global snapshot; pin version per run and join exact mappings | `reference_intelligence`, `control_evidence` | `QP` or typed reference query; no skill |
+| MITRE ATT&CK, CAPEC and CWE; `job_third_party_data_sync.mitre_sync` | Weakness/technique context | Current global snapshot with `index/mitre.sqlite` (CWE weaknesses carry name, abstraction, status); pinned per run; the inference review validates claim CWEs against the pinned catalog | `reference_intelligence`, `control_evidence` | `QP` or typed reference query; no skill |
 | cve-bin-tool derived database; `job_third_party_data_sync.cve_bin_tool_db_build` | Binary-component advisory matching | Current global artifact; pin source NVD snapshot and database version | `reference_intelligence`, `dependency_advisories` | `QP` or typed reference query; no skill |
 | API/IDL contracts, schemas and generated validators; planned `job_interface_contracts` | Declared routes, fields and bounds | Planned `contracts`; enforcement only with source/graph proof | `contract_enforcement`, `entrypoint_paths` | Planned `query_contracts` if `QP`/`core` cannot filter routes/fields; no skill |
 | IaC, rendered Helm/Kustomize, proxy and runtime config; planned `job_deployment_topology` | Exposure, privileges and limits | Planned `deployment`; scanner observations alone are not topology | `deployment_exposure`, `ci_trust` | Planned `query_deployment` if typed exposure filters are needed; no skill |
@@ -270,13 +272,13 @@ should reuse the current `IndexBuilder`, `IndexIdentity`, and accepted-manifest 
 |---|---|---|---|
 | `build_provenance` | capture, plans, compiled and artifact indices | source/build action/compiler flags class/artifact chain | missing capture, non-replayable build, redacted exact argv |
 | `artifact_inventory` | build and artifact indices, SBOM | package/member/binary inventory by build unit | unrecognized format or truncated extraction |
-| `dependency_advisories` | SBOM, scanner output, pinned OSV/NVD/CVE snapshots | package/version→advisory matches with evidence and fix range | stale feed, uncertain package identity, missing version |
+| `dependency_advisories` | SBOM, scanner output, pinned OSV, NVD, KEV and EPSS snapshots (`dependency-advisories/2`) | package/version→advisory matches with evidence and fix range; CVE ids from the advisory id or OSV aliases joined to NVD (CVSS, CWEs, description, status, dates), KEV (listed, date added, due date, ransomware use) and EPSS (score, percentile, date), each with its feed reference | per feed and per join: feed unavailable, identity mismatch, stale feed, rejected CVE, no CVE identity; uncertain package identity, missing version. Joins are bounded (4 CVEs per advisory); a failed join publishes `partial`, never a complete empty fact |
 | `scanner_correlation` | SAST, artifact scanners, CodeQL, suppression and tags | deduplicated leads with independent supporting observations | conflicting locations or rules, unavailable scanners |
 | `ci_trust` | CI graph, build artifacts, deployment metadata | untrusted trigger→permission/secret/build/deploy paths | dynamic expression or external workflow |
 | `redacted_secret_exposure` | secret scanners and safe build/CI facts | location, sink and redacted fingerprint only | scanner unavailable; never return secret bytes |
 | `history_context` | Git, review/deployment data, SII and change context | bounded change/owner/fix/test context per file or symbol | missing VCS/review metadata or attribution |
 | `control_evidence` | OWASP workbench, findings, validators | control→evidence/disposition links | assessment unavailable or validator gap |
-| `reference_intelligence` | pinned NVD/OSV/MITRE feeds | advisory, CWE, CAPEC, ATT&CK links relevant to target facts | feed freshness or identity mismatch |
+| `reference_intelligence` | pinned MITRE feed (`reference-intelligence/2`) | CWE identities of accepted observations joined to the pinned catalog with name and abstraction | feed freshness or identity mismatch; CAPEC/ATT&CK relationships not normalized |
 | `contract_enforcement` | future API/IDL contracts, handlers, validators | declaration→handler→enforcement chain | contract unavailable or declaration not enforced |
 | `deployment_exposure` | future topology, CI/build/artifact graph | service→image→binary→source and privilege/exposure | environment not captured or image not bound |
 | `test_intent` | future test/doc index, source symbols | test assertion and negative-case links | tests not indexed or not executed; intent is not enforcement |
@@ -444,7 +446,11 @@ Remaining gaps after this batch:
 - CI facts carry no build-unit, artifact or deployment identity, so `ci_trust` cannot link CI to
   build or deployment; dynamic expressions and external workflows are unresolved.
 - Reference feeds are pinned per run only when a verified `current.json` snapshot exists under the
-  configured feed root; CAPEC/ATT&CK relationships are not normalized.
+  configured feed root and its manifest hashes the feed's `index/*.sqlite`; a snapshot older than
+  `feed_max_age_days` (or its `feed_max_age_days_overrides` entry: `kev = 7`, `epss = 3`) is pinned
+  as stale and every joining product records a `stale_feed` gap and `stale` coverage. CAPEC/ATT&CK
+  relationships are not normalized. NVD `vulnStatus` is recorded, but CVE "disputed" tags are not
+  captured by the index.
 - Inline suppression state comes from accepted prioritization syntax facts (bounded per file); a
   suppression directive with block or declaration scope is reported as `possibly_suppressed`.
 - `cyclomatic_mean` is not produced by `job_review_prioritization` and is always `unavailable`.

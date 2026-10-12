@@ -359,6 +359,113 @@
         }
       },
       "maxItems": 32
+    },
+    "reference_inputs": {
+      "description": "Labelled pinned-feed reference context about the lead advisory (NVD CVSS, CISA KEV, FIRST EPSS); never target evidence.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "label",
+        "reference_cvss",
+        "kev_listed",
+        "epss"
+      ],
+      "properties": {
+        "label": {
+          "const": "reference_context"
+        },
+        "reference_cvss": {
+          "type": "array",
+          "maxItems": 8,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "cve_id",
+              "version",
+              "vector",
+              "base_score"
+            ],
+            "properties": {
+              "cve_id": {
+                "type": "string",
+                "pattern": "^CVE-[0-9]{4}-[0-9]{4,}$"
+              },
+              "version": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 16
+              },
+              "vector": {
+                "type": "string",
+                "maxLength": 256
+              },
+              "base_score": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "minimum": 0,
+                "maximum": 10
+              }
+            }
+          }
+        },
+        "kev_listed": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "epss": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "cve_id",
+                "epss",
+                "percentile",
+                "score_date"
+              ],
+              "properties": {
+                "cve_id": {
+                  "type": "string",
+                  "pattern": "^CVE-[0-9]{4}-[0-9]{4,}$"
+                },
+                "epss": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "percentile": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "score_date": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "maxLength": 32
+                }
+              }
+            }
+          ]
+        }
+      }
     }
   }
 }

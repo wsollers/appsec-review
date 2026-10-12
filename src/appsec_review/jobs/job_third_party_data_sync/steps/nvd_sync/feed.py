@@ -17,12 +17,16 @@ import urllib.parse
 import urllib.request
 import uuid
 
+from appsec_review.jobs.job_third_party_data_sync.publication import verify_snapshot_directory
+from appsec_review.jobs.job_third_party_data_sync.steps.nvd_sync import index as nvd_index
 from appsec_review.jobs.job_third_party_data_sync.steps.nvd_sync.models import NvdSettings
 from appsec_review.storage import FileLock, atomic_json, file_sha256
 from appsec_review.storage.atomic import canonical_json
 
 
-MANIFEST_SCHEMA = "appsec-review/nvd-snapshot-manifest/1"
+MANIFEST_SCHEMA = "appsec-review/nvd-snapshot-manifest/2"
+# /1 manifests (no ``files``/``index``) remain valid parents of a /2 chain; they publish no index.
+MANIFEST_SCHEMAS = ("appsec-review/nvd-snapshot-manifest/1", MANIFEST_SCHEMA)
 POINTER_SCHEMA = "appsec-review/nvd-current-pointer/1"
 API_BASE = "https://services.nvd.nist.gov/rest/json/cves/2.0"
 FEED_BASE = "https://nvd.nist.gov/feeds/json/cve/2.0"
@@ -266,12 +270,47 @@ class NvdPublisher:
     def _snapshot_id(manifest: Mapping[str, Any]) -> str:
         return "sha256-" + hashlib.sha256(canonical_json(manifest)).hexdigest()[:16]
 
-    def _publish(self, manifest: dict[str, Any]) -> dict[str, Any]:
+    def _index(self, staging: Path, layers: list[Path], base: Path | None) -> tuple[Path, dict[str, Any]]:
+        path = staging / "index" / "nvd.sqlite"
+        summary = nvd_index.build_index(path, layers, base=base)
+        return path, {"files": {nvd_index.LOGICAL_PATH: {"sha256": file_sha256(path),
+                                                         "size_bytes": path.stat().st_size}},
+                      "index": summary}
+
+    @staticmethod
+    def _metadata_paths(manifest: Mapping[str, Any]) -> list[str]:
+        return [record["metadata_blob"]["path"] for layer in manifest.get("layers", [])
+                for record in layer.get("pages", [layer])]
+
+    def _chain(self, snapshot_id: str | None) -> list[dict[str, Any]]:
+        """Manifests from the root bootstrap to ``snapshot_id``, oldest first."""
+        chain: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        while snapshot_id:
+            if snapshot_id in seen:
+                raise ValueError("NVD snapshot parent cycle")
+            seen.add(snapshot_id)
+            manifest = json.loads((self.root / "snapshots" / snapshot_id / "manifest.json").read_text(encoding="utf-8"))
+            chain.append(manifest)
+            snapshot_id = manifest.get("parent_snapshot_id")
+        return list(reversed(chain))
+
+    def _parent_index(self, parent: Mapping[str, Any]) -> Path | None:
+        entry = (parent.get("files") or {}).get(nvd_index.LOGICAL_PATH)
+        path = self.root / "snapshots" / str(parent["snapshot_id"]) / nvd_index.LOGICAL_PATH
+        if not isinstance(entry, Mapping) or not path.is_file() or file_sha256(path) != entry.get("sha256"):
+            return None
+        return path
+
+    def _publish(self, manifest: dict[str, Any], index_path: Path) -> dict[str, Any]:
         snapshot_id = self._snapshot_id(manifest)
         signed = {**manifest, "snapshot_id": snapshot_id}
         directory = self.root / "snapshots" / snapshot_id
         directory.mkdir(parents=True, exist_ok=False)
+        (directory / "index").mkdir()
+        os.replace(index_path, directory / nvd_index.LOGICAL_PATH)
         atomic_json(directory / "manifest.json", signed)
+        verify_snapshot_directory(directory, signed)
         pointer = {
             "schema": POINTER_SCHEMA,
             "feed_id": "nvd",
@@ -283,7 +322,7 @@ class NvdPublisher:
         atomic_json(self.root / "current.json", pointer)
         return pointer
 
-    def _bootstrap(self, staging: Path, api_key: str | None) -> dict[str, Any]:
+    def _bootstrap(self, staging: Path, api_key: str | None) -> tuple[Path, dict[str, Any]]:
         instant = self.clock()
         layers = []
         all_ids: set[str] = set()
@@ -317,7 +356,10 @@ class NvdPublisher:
                 "raw_blob": self._put_blob(raw_path, ".json.gz"),
                 "metadata_blob": self._put_blob(metadata_path, ".metadata.jsonl.gz"),
             })
-        return {
+        index_path, index_fields = self._index(
+            staging, [self.root / layer["metadata_blob"]["path"] for layer in layers], None)
+        return index_path, {
+            **index_fields,
             "schema": MANIFEST_SCHEMA,
             "feed_id": "nvd",
             "feed_schema": "NVD_CVE/2.0",
@@ -340,7 +382,8 @@ class NvdPublisher:
         })
         return f"{API_BASE}?{query}"
 
-    def _incremental(self, staging: Path, current: Mapping[str, Any], api_key: str | None) -> dict[str, Any]:
+    def _incremental(self, staging: Path, current: Mapping[str, Any], api_key: str | None
+                     ) -> tuple[Path, dict[str, Any]]:
         manifest_path = self.root / "snapshots" / str(current["snapshot_id"]) / "manifest.json"
         if file_sha256(manifest_path) != current["manifest_sha256"]:
             raise ValueError("current NVD manifest hash mismatch")
@@ -397,7 +440,16 @@ class NvdPublisher:
             window_start = window_end
             if window_start < finish:
                 self.pause(delay)
-        return {
+        new_layers = [self.root / path for path in self._metadata_paths({"layers": layers})]
+        base = self._parent_index(parent)
+        if base is None:      # a /1 parent or a missing parent index: replay the whole chain
+            replay = [self.root / path for manifest in self._chain(str(current["snapshot_id"]))
+                      for path in self._metadata_paths(manifest)]
+            index_path, index_fields = self._index(staging, replay + new_layers, None)
+        else:
+            index_path, index_fields = self._index(staging, new_layers, base)
+        return index_path, {
+            **index_fields,
             "schema": MANIFEST_SCHEMA,
             "feed_id": "nvd",
             "feed_schema": "NVD_CVE/2.0",
@@ -427,9 +479,9 @@ class NvdPublisher:
                 atomic_json(attempt_path, {"attempt_id": attempt_id, "status": "RUNNING",
                                            "coordinator_id": coordinator_id,
                                            "input_snapshot_id": current.get("snapshot_id") if current else None})
-                manifest = (self._incremental(staging, current, api_key) if current
-                            else self._bootstrap(staging, api_key))
-                pointer = self._publish(manifest)
+                index_path, manifest = (self._incremental(staging, current, api_key) if current
+                                        else self._bootstrap(staging, api_key))
+                pointer = self._publish(manifest, index_path)
                 atomic_json(attempt_path, {"attempt_id": attempt_id, "status": "COMPLETE",
                                            "coordinator_id": coordinator_id, "published": pointer})
                 return pointer
@@ -455,13 +507,17 @@ class NvdPublisher:
             seen.add(snapshot_id)
             manifest_path = self.root / "snapshots" / snapshot_id / "manifest.json"
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-            if manifest.get("schema") != MANIFEST_SCHEMA or manifest.get("snapshot_id") != snapshot_id:
+            if manifest.get("schema") not in MANIFEST_SCHEMAS or manifest.get("snapshot_id") != snapshot_id:
                 raise ValueError("invalid NVD snapshot manifest")
             if snapshot_id == current["snapshot_id"] and file_sha256(manifest_path) != current["manifest_sha256"]:
                 raise ValueError("NVD current manifest hash mismatch")
             unsigned = {key: value for key, value in manifest.items() if key != "snapshot_id"}
             if self._snapshot_id(unsigned) != snapshot_id:
                 raise ValueError("NVD snapshot identity mismatch")
+            if snapshot_id == current["snapshot_id"]:
+                if nvd_index.LOGICAL_PATH not in (manifest.get("files") or {}):
+                    raise ValueError("current NVD snapshot publishes no CVE index")
+                verify_snapshot_directory(manifest_path.parent, manifest)
             for layer in manifest.get("layers", []):
                 records = layer.get("pages", [layer])
                 for record in records:
@@ -473,4 +529,7 @@ class NvdPublisher:
                         if file_sha256(path) != blob["sha256"] or path.stat().st_size != blob["size_bytes"]:
                             raise ValueError("NVD blob integrity mismatch")
             snapshot_id = manifest.get("parent_snapshot_id")
-        return {"snapshot_id": current["snapshot_id"], "chain_length": len(seen), "cursor": current["cursor"]}
+        head = json.loads((self.root / "snapshots" / current["snapshot_id"] / "manifest.json").read_text(encoding="utf-8"))
+        return {"snapshot_id": current["snapshot_id"], "chain_length": len(seen), "cursor": current["cursor"],
+                "index": {"path": nvd_index.LOGICAL_PATH, "sha256": head["files"][nvd_index.LOGICAL_PATH]["sha256"],
+                          "record_count": head["index"]["record_count"]}}

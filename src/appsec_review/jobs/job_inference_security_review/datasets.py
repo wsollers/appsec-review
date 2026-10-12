@@ -14,7 +14,7 @@ _A = _J + "/attempts/*"
 # The single input is the accepted run/index manifest; its producer handoff is the data-indexing job.
 CONSUMES = ("job_review_data_indexing",)
 DATASETS = (
-    artifact_only("review_packages", "packages", "inference_review", "appsec-review/review-package/2",
+    artifact_only("review_packages", "packages", "inference_review", "appsec-review/review-package/3",
                   "Lane A finding-lead and lane B hunt packages with their verified package manifest.",
                   artifacts=(_A + "/steps/packages/**",),
                   reason="packages are run-owned review inputs bound to one accepted manifest; consumers read "

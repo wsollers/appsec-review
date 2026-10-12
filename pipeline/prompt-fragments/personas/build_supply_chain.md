@@ -28,7 +28,11 @@ GENERATED
   pointing at personal forks.
 - Checked-in binaries, jars, `.so`/`.dll`, or minified bundles with no source or provenance.
 - Known-vulnerable versions: an advisory matches the resolved version, and the vulnerable function
-  or configuration is used by the application.
+  or configuration is used by the application. A dependency lead may arrive with advisory reference
+  context from pinned feeds: the OSV summary and fixed versions, the NVD scoring vector and weakness
+  ids, a CISA Known Exploited Vulnerabilities listing, and an EPSS exploitation probability. That
+  context describes the advisory everywhere, not this target; it says where to look, never that the
+  resolved version is affected or the vulnerable code is reached here.
 - Abandoned or typosquatted packages; update bots auto-merging major versions.
 
 ## Effective controls
@@ -41,7 +45,8 @@ GENERATED
   consumption.
 
 ## False positives
-- An advisory for a function, transport, or platform the application never calls or builds.
+- An advisory for a function, transport, or platform the application never calls or builds, even
+  when it is listed as exploited elsewhere or has a large exploitation probability.
 - Dev-only or test-only dependencies absent from shipped artifacts.
 - Version ranges in a library's manifest when the consuming application pins via its own lockfile.
 - Vendored code identical to a patched upstream release.

@@ -48,7 +48,8 @@ def test_default_config_declares_midnight_nvd_schedule() -> None:
     assert config.job("job_project_build").build_capture.event_count_limit == 250000
     assert config.job("job_language_build").build_capture.event_count_limit == 250000
     assert config.job("job_codeql_analysis").build_capture == config.build_capture
-    assert set(job.steps) == {"nvd_sync", "osv_sync", "mitre_sync", "cve_bin_tool_db_build"}
+    assert set(job.steps) == {"nvd_sync", "osv_sync", "mitre_sync", "cve_bin_tool_db_build", "kev_sync", "epss_sync"}
+    assert tuple(job.step("kev_sync").tasks) == tuple(job.step("epss_sync").tasks) == ("fetch", "normalize", "publish")
     assert tuple(job.step("nvd_sync").tasks) == ("fetch", "process", "publish")
     assert tuple(job.step("osv_sync").tasks) == ("fetch", "index", "publish")
     assert tuple(job.step("mitre_sync").tasks) == ("fetch", "normalize", "publish")

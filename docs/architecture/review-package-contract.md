@@ -1,10 +1,12 @@
 # Review package and finding-lead contract
 
-Status: implementation contract, schema version 2. Accepted-manifest scope assembly, lane A
+Status: implementation contract, schema version 3. Accepted-manifest scope assembly, lane A
 finding-lead packages for every lead family, lane B review-unit ranking and hunt packages,
 membership audits and the package manifest are implemented in `src/appsec_review/review/`
-(`scope.py`, `lead_families.py`, `units.py`, `packages.py`). Worker scope enforcement and the
-inference job that consumes these packages are not implemented yet.
+(`scope.py`, `lead_families.py`, `units.py`, `packages.py`, with pinned-feed reference context
+from `advisories.py` and `references.py`). The inference job consumes these packages
+(`job_inference_security_review`). Version 3 adds lead `advisory_context`, `advisory_summary`,
+`weaknesses` and `admission_reasons`, and the `advisory_kev`/`advisory_epss` rank signals.
 
 This contract specializes [inference security review](inference-security-review.md). Its
 machine-checkable shape is [review-packages.schema.json](../schemas/review-packages.schema.json).
@@ -19,7 +21,11 @@ severity is *reported* severity for ordering, never an adjudicated finding sever
 | `run_id`, `manifest_sha256`, `target_snapshot` | `resolve_accepted_manifest` and `load_verified_manifest` in `retrieval/core.py` and `retrieval/index.py`; verify each shard and the source snapshot before assembly. |
 | `scope`, `source_ids`, `artifact_ids` | Catalog component, source, build-unit and artifact entities; `find`, `query_artifacts`. No synthetic trust boundary: use `null` until an accepted producer provides it. |
 | `lead_menu` | `review/lead_families.py`: one versioned rule per lead family (see gate 3). Source-SAST and CodeQL reuse `normalize_reported_severity` and the accepted `scanner_correlation` lead facts of `indexing/sast.py` for suppression, duplicate and flow identities. Each lead keeps its accepted identity, scanner, rule, bounded `message`, `rule_cwe`, native severity, reported severity, `severity_rule` and `severity_basis`. |
-| `lane`, `lead_family`, `rank` | `finding_lead` packages are lane `lead` with a non-null family and `rank: null`. `hunt` packages are lane `hunt` with `lead_family: null` and carry the unit's `review-unit-rank/1` rank and basis. |
+| `lead_menu[].advisory_context` (lane A only) | `review/advisories.py` over the accepted `dependency_advisories` facts that cite the lead's observation: up to three advisories, each with the OSV summary, fixed versions and aliases; CVE ids; NVD records (status, dates, bounded description, CWEs, up to six CVSS metrics with family, version, vector, base score and severity); KEV entries (listed, date added, due date, ransomware use, name); EPSS entries (score, percentile, score date); per-join status; the snapshot id and staleness of each feed; and the fact's gaps. `null` when no accepted fact cites the lead. Reference context only (R3: indirect for every predicate). |
+| `lead_menu[].advisory_summary` | The compact form on every lead (the only advisory form on hunt menus): CVE ids, KEV flag (`null` when unknown), highest EPSS percentile and max CVSS base score; `null` without an advisory fact. |
+| `lead_menu[].weaknesses` | One block per CWE in `rule_cwe` (origin `rule`) and in the joined NVD records (origin `nvd`), at most eight: CWE id, name and abstraction from the run-pinned MITRE catalog (`source: mitre_catalog`), else from accepted `reference_intelligence` facts, else `unresolved`. |
+| `lead_menu[].admission_reasons` (lane A only) | `reported_severity` when the reported severity is admitted, `kev_listed` when the advisory is KEV-listed and `lead_admission_kev` is on. |
+| `lane`, `lead_family`, `rank` | `finding_lead` packages are lane `lead` with a non-null family and `rank: null`. `hunt` packages are lane `hunt` with `lead_family: null` and carry the unit's `review-unit-rank/2` rank and basis. |
 | `persona`, `stack_profile` | Always `null` at assembly. Routing fills them later; assembly never guesses them. |
 | `evidence`, `context` | Accepted observation, priority, CodeQL, source, build and precomputed shard identities; `find`, `trace`, `resolve_evidence`, `query_codeql`, `query_hotspots`, `query_precomputed`. A cited relation is a nomination until it resolves to a source line or hash-verified run artifact. |
 | `proof_obligations` | Deterministic rule table keyed by lead class and observed prerequisites: affected construct, input control, reachability, guard/configuration state, and impact. Missing predicates stay open; model prose cannot close them. |
@@ -31,8 +37,9 @@ Each `context` entry is typed `{id, kind, role}`. `kind` is the retrieval entity
 `priority`, `history`, `hotspot` or `tag`. Bare identity lists are not accepted.
 
 `input_fingerprint` hashes canonical JSON of the accepted manifest hash, package scope, all
-sorted referenced shard hashes, lead IDs, rule versions (assembly, obligations, rank and every
-lead-family rule) and resolved cap settings. `package_id` is `<kind>-<sha256>` over the
+sorted referenced shard hashes, lead IDs, rule versions (assembly, obligations, rank, every
+lead-family rule and the advisory-context rule), the CWE reference record (source, MITRE snapshot
+and gap) and resolved cap settings. `package_id` is `<kind>-<sha256>` over the
 canonical package body without `package_id`. Arrays of IDs,
 evidence and gaps sort by stable identity; no timestamps or completion order enter identity.
 Reassembly from the same accepted inputs must produce byte-identical packages. The schema
@@ -52,14 +59,15 @@ hashes, sorted uniqueness, cited identities, page/byte caps and membership invar
    units, languages and reference-intelligence freshness. An absent producer shard is a
    `missing` gap and a stale feed a `stale` gap, with ids from `make_id("gap", 1, ...)`. Then
    normalize every accepted lead of every family with its versioned rule
-   `appsec-review/lead-family/<family>/1`:
+   `appsec-review/lead-family/<family>/<n>` (`/2` for `artifact_scanner` and
+   `dependency_advisory`, `/1` otherwise):
 
    | Family | Accepted records | Reported severity |
    |---|---|---|
    | `source_sast` | `tool_observation` classified `source_sast` | `normalize_reported_severity`; suppression, duplicate and flows from accepted `scanner_correlation` lead facts |
    | `codeql` | CodeQL observations | the same rule; `security_severity` bands first |
-   | `artifact_scanner` | `job_artifact_security_analysis` observations | CVSS band, else native label |
-   | `dependency_advisory` | dependency-class observations (OSV, Grype) | the advisory's own CVSS band, else its severity label |
+   | `artifact_scanner` | `job_artifact_security_analysis` observations | scanner CVSS band, else the pinned NVD CVSS band (basis `nvd-cvss-band`), else native label |
+   | `dependency_advisory` | dependency-class observations (OSV, Grype) | the advisory's own CVSS band, else the pinned NVD CVSS band (v4.0, v3.1, v3.0, then v2; basis `nvd-cvss-band`), else its severity label |
    | `ci_rule` | `job_ci_configuration_analysis` observations | native label |
    | `post_build_hardening` | deterministic `build_security` checks with status `FAIL` | native label if published, else `unknown` |
    | `owasp_control` | `control_evidence` facts with status `not_satisfied` | native label if published, else `unknown` |
@@ -72,16 +80,20 @@ hashes, sorted uniqueness, cited identities, page/byte caps and membership invar
    a contradiction is an integrity failure. The assembler enumerates accepted shards
    exhaustively and never pages through a bounded MCP route such as `query_observations`.
 3. **Lane A.** Admit every lead whose reported severity is in `admit_severities` (default
-   `critical`, `high`, `unknown`) from every family, and create exactly one `finding_lead`
-   package per admitted lead, including suppressed, duplicate, unresolved-location and
+   `critical`, `high`, `unknown`) from every family, plus every lead whose advisory is KEV-listed
+   when `admit_kev` (`lanes.lead_admission_kev`, default `true`) is set, and create exactly one
+   `finding_lead` package per admitted lead, including suppressed, duplicate, unresolved-location and
    unknown-severity records. Preserve the original identity and native severity.
    Duplicate and suppression state is context, not a reason to remove the package.
 4. **Lane B.** Partition review units by accepted component, then accepted trust boundary if
    known (none is accepted yet, so it is `null`), build unit and stable range of sorted source
-   paths (`unit_max_files`). Rank units by `review-unit-rank/1`: the sum of the available signals
-   in integer points 0–1000 (LPS, SII, hotspot, tag density, and medium/low/info lead hints), then
-   the count of known signals, then unit key. A missing signal is `unknown` with reason
-   `producer_unavailable` or `no_record`, never zero. The top `hunt_max_units` units receive hunt
+   paths (`unit_max_files`). Rank units by `review-unit-rank/2`: the sum of the available signals
+   in integer points 0–1000 (LPS, SII, hotspot, tag density, medium/low/info lead hints,
+   `advisory_kev` = 250 when any advisory lead in the unit is KEV-listed, and `advisory_epss` =
+   250 times the highest EPSS percentile), then the count of known signals, then unit key. A
+   missing signal is `unknown` with reason `producer_unavailable`, `no_record` or
+   `feed_unavailable`, never zero; a unit without advisory leads scores a true zero for both
+   advisory signals. The top `hunt_max_units` units receive hunt
    packages; every other unit is a `skipped` gap with reason `below_hunt_cutoff`. A hunt menu
    lists every lead of its unit by reported severity then identity, and embeds no source or raw
    scanner output. Menus split into numbered partitions by `hunt_menu_partition_size` and then
@@ -89,15 +101,16 @@ hashes, sorted uniqueness, cited identities, page/byte caps and membership invar
    `max_context_entries`, or beyond the byte bound of a single-lead package, is omitted with a
    `truncated` gap and `omitted_context`. Leads are never truncated: a package that cannot fit
    one lead without context blocks the membership gate with an integrity failure.
-5. Form the expected set `E` of all admitted leads, including suppressed and duplicate IDs, and
-   `F` from finding-lead packages. Require `E ⊆ F` per family and severity, exactly one package
+5. Form the expected set `E` of all admitted leads (by severity or KEV listing), including
+   suppressed and duplicate IDs, and `F` from finding-lead packages. Require `E ⊆ F` per family and
+   severity, exactly one package
    per ID, and no invented ID. Each hunted unit's partitions list every lead of the unit exactly
    once; the leads of a unit below the cutoff are accounted for by its `below_hunt_cutoff` gap.
    Any violation raises `IntegrityError`.
 6. Publish a run-owned manifest (`appsec-review/review-package-manifest/1`) listing every
    package id, kind, lane, family, partition, SHA-256 and size; the accepted input shard hashes;
-   the evidence-map hash; ranked units with their basis and hunt state; every gap; per-family and
-   per-severity counts; and both audits. `publish_packages` writes and verifies the bytes, and
+   the evidence-map hash; the CWE reference record; ranked units with their basis and hunt state;
+   every gap; per-family and per-severity counts, including KEV-admitted leads; and both audits. `publish_packages` writes and verifies the bytes, and
    the review job consumes the manifest only after `verify_package_manifest` succeeds. Producer
    failure publishes explicit gaps; membership or integrity failure blocks the handoff.
 
@@ -166,7 +179,8 @@ configuration so an upstream change invalidates only affected packages and worke
 
 ## Ordered implementation
 
-1. Done: schema version 2, deterministic assembly over accepted shards for both lanes,
+1. Done: schema version 3 (pinned-feed advisory context, weaknesses, KEV admission and advisory
+   rank signals on top of version 2), deterministic assembly over accepted shards for both lanes,
    membership audits and manifest publication in `src/appsec_review/review/`. The fixture tests
    live in `tests/review/`, and the fixture builder is `tests/fixtures/inference_review/builder.py`.
 2. Add the single Dagster handoff that consumes the verified package manifest, and prove one

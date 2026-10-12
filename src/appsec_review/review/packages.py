@@ -1,9 +1,14 @@
 """Deterministic review-package assembly and membership audits (contract gates 3-6).
 
 Lane A: every accepted lead of every family whose normalized reported severity is in the admitted
-list (default critical, high, unknown) gets exactly one ``finding_lead`` package, including
-suppressed and duplicate leads. Lane B: ranked review units above the cutoff get ``hunt``
-packages whose lead menus list every lead in the unit, partitioned and never truncated.
+list (default critical, high, unknown), and every KEV-listed advisory lead when
+``admit_kev`` is set, gets exactly one ``finding_lead`` package, including suppressed and
+duplicate leads; each lead records its ``admission_reasons``. Lane B: ranked review units above
+the cutoff get ``hunt`` packages whose lead menus list every lead in the unit, partitioned and never
+truncated. Lane A leads carry the bounded ``advisory_context``; hunt-menu leads carry the compact
+``advisory_summary``; every lead with a CWE carries ``weaknesses`` blocks (CWE id, name,
+abstraction) from the run-pinned MITRE catalog or, failing that, the accepted
+``reference_intelligence`` facts.
 
 Packages are canonical JSON. ``package_id`` is the kind plus the SHA-256 of the canonical body
 without ``package_id``; arrays sort by stable identity; nothing time- or order-dependent enters a
@@ -23,9 +28,11 @@ from typing import Any
 from appsec_review.indexing.store import ShardSet
 from appsec_review.retrieval.model import LogicalIdentity
 from appsec_review.retrieval.observations import REPORTED_SEVERITIES, SEVERITY_ORDER
+from appsec_review.review import advisories as advisory_reference
 from appsec_review.review.identity import sha256_hex
 from appsec_review.review.lead_families import FAMILIES, FAMILY_RULES, Lead, LeadCollection, collect_leads
 from appsec_review.review.models import IntegrityError, Predicate
+from appsec_review.review.references import CweReference
 from appsec_review.review.scope import AcceptedScope, ScopeGap, sorted_gaps
 from appsec_review.review.units import (
     RANK_RULE, ContextEntry, RankedUnit, build_units, context_entry, rank_units, select_hunts,
@@ -34,8 +41,9 @@ from appsec_review.storage import atomic_bytes, file_sha256
 from appsec_review.storage.atomic import canonical_json
 
 
-PACKAGE_SCHEMA = "appsec-review/review-package/2"
-ASSEMBLY_RULE = "appsec-review/assemble-review-packages/2"
+PACKAGE_SCHEMA = "appsec-review/review-package/3"
+ASSEMBLY_RULE = "appsec-review/assemble-review-packages/3"
+MAX_WEAKNESSES = 8
 MANIFEST_SCHEMA = "appsec-review/review-package-manifest/1"
 OBLIGATION_RULE = "appsec-review/package-obligations/1"
 SUPPRESSION_STATES = ("suppressed", "possibly_suppressed", "not_suppressed", "unknown")
@@ -59,6 +67,7 @@ OBLIGATIONS: Mapping[str, tuple[Predicate, ...]] = {
 @dataclass(frozen=True, slots=True)
 class PackageSettings:
     admit_severities: tuple[str, ...] = ("critical", "high", "unknown")
+    admit_kev: bool = True
     hunt_max_units: int = 8
     hunt_menu_partition_size: int = 25
     unit_max_files: int = 200
@@ -74,6 +83,8 @@ class PackageSettings:
                 item not in REPORTED_SEVERITIES for item in admitted):
             raise ValueError("admit_severities must be distinct normalized reported severities")
         object.__setattr__(self, "admit_severities", tuple(sorted(admitted, key=SEVERITY_ORDER.__getitem__)))
+        if not isinstance(self.admit_kev, bool):
+            raise ValueError("admit_kev must be a Boolean")
         for name in ("hunt_menu_partition_size", "unit_max_files", "max_context_entries", "max_package_bytes"):
             value = getattr(self, name)
             if isinstance(value, bool) or not isinstance(value, int) or value < 1:
@@ -89,14 +100,16 @@ class PackageSettings:
     def from_review_settings(cls, settings: Any) -> "PackageSettings":
         """Package settings from the central ``InferenceSecurityReviewSettings`` (the job's only source).
 
-        Admission is ``lanes.lead_admission``, the hunt cutoff ``lanes.hunt_max_units``, and the
-        assembly bounds ``packages.*``. The dataclass defaults exist for library and test use only.
+        Admission is ``lanes.lead_admission`` plus ``lanes.lead_admission_kev``, the hunt cutoff
+        ``lanes.hunt_max_units``, and the assembly bounds ``packages.*``. The dataclass defaults
+        exist for library and test use only.
         """
         bounds = settings.packages
         return cls(admit_severities=tuple(settings.lanes.lead_admission),
+                   admit_kev=settings.lanes.lead_admission_kev,
                    hunt_max_units=settings.lanes.hunt_max_units,
                    **{item.name: getattr(bounds, item.name) for item in fields(cls)
-                      if item.name not in {"admit_severities", "hunt_max_units"}})
+                      if item.name not in {"admit_severities", "admit_kev", "hunt_max_units"}})
 
     @classmethod
     def from_mapping(cls, value: Mapping[str, Any] | None) -> "PackageSettings":
@@ -148,11 +161,25 @@ class Assembly:
         return canonical_json(self.manifest)
 
 
-def lead_record(lead: Lead, component_id: str, build_unit_id: str | None) -> dict[str, Any]:
+def admission_reasons(lead: Lead, settings: PackageSettings) -> list[str]:
+    """Why lane A admits ``lead``: its reported severity, a KEV listing, both, or nothing."""
+    reasons = ["reported_severity"] if lead.reported_severity in settings.admit_severities else []
+    if settings.admit_kev and lead.kev_listed is True:
+        reasons.append("kev_listed")
+    return reasons
+
+
+def lead_record(lead: Lead, component_id: str, build_unit_id: str | None, *,
+                weaknesses: list[dict[str, Any]] | None = None,
+                admission: list[str] | None = None) -> dict[str, Any]:
+    """One lead-menu entry; ``admission`` is given only for lane A, which also gets the full context."""
     duplicate = lead.duplicate_of
     if duplicate is not None:
         LogicalIdentity.parse(duplicate)
-    return {
+    lane_a: dict[str, Any] = {} if admission is None else {"admission_reasons": list(admission),
+                                                            "advisory_context": lead.advisory}
+    return {**lane_a, "weaknesses": list(weaknesses or ()),
+            "advisory_summary": advisory_reference.summary_of(lead.advisory),
         "observation_id": lead.observation_id, "lead_family": lead.family, "scanner": lead.scanner,
         "rule_id": lead.rule_id, "message": lead.message, "rule_cwe": list(lead.rule_cwe),
         "native_severity": lead.native_severity, "reported_severity": lead.reported_severity,
@@ -175,12 +202,35 @@ def _evidence(lead: Lead) -> dict[str, Any]:
 
 
 class _Assembler:
-    def __init__(self, scope: AcceptedScope, settings: PackageSettings, collection: LeadCollection):
+    def __init__(self, scope: AcceptedScope, settings: PackageSettings, collection: LeadCollection,
+                 cwe_reference: CweReference | None = None):
         self.scope = scope
         self.settings = settings
         self.collection = collection
         self.correlation_hashes = tuple(sorted(str(item["sha256"]) for item in collection.correlation_shards))
         self.extra_gaps: list[ScopeGap] = []
+        self.cwe_reference = cwe_reference
+        self.reference_weaknesses = _reference_weaknesses(scope)
+
+    def weaknesses(self, lead: Lead) -> list[dict[str, Any]]:
+        """Weakness blocks for the lead's rule CWEs and its advisories' NVD CWEs (bounded)."""
+        origins: dict[str, str] = {cwe: "rule" for cwe in lead.rule_cwe}
+        for cwe in advisory_reference.nvd_cwes(lead.advisory):
+            origins.setdefault(cwe, "nvd")
+        blocks = []
+        for cwe in sorted(origins, key=lambda value: int(value[4:]))[:MAX_WEAKNESSES]:
+            entry = self.cwe_reference.lookup(cwe) if self.cwe_reference is not None else None
+            if entry is not None:
+                blocks.append({"cwe_id": cwe, "name": entry.name, "abstraction": entry.abstraction,
+                               "source": "mitre_catalog", "origin": origins[cwe]})
+            elif cwe in self.reference_weaknesses:
+                name, abstraction = self.reference_weaknesses[cwe]
+                blocks.append({"cwe_id": cwe, "name": name, "abstraction": abstraction,
+                               "source": "reference_intelligence", "origin": origins[cwe]})
+            else:
+                blocks.append({"cwe_id": cwe, "name": None, "abstraction": None, "source": "unresolved",
+                               "origin": origins[cwe]})
+        return blocks
 
     def _locate(self, lead: Lead) -> tuple[str, str | None, Any, Any]:
         component = self.scope.component_for(lead.path)
@@ -218,7 +268,9 @@ class _Assembler:
         fingerprint = sha256_hex({
             "manifest_sha256": self.scope.manifest_sha256, "scope": dict(scope_record), "shards": shard_hashes,
             "lead_ids": lead_ids, "rules": {"assembly": ASSEMBLY_RULE, "obligations": OBLIGATION_RULE,
-                                            "rank": RANK_RULE, "families": FAMILY_RULES},
+                                            "rank": RANK_RULE, "families": FAMILY_RULES,
+                                            "advisory_context": advisory_reference.CONTEXT_RULE},
+            "cwe_reference": self.cwe_reference.record() if self.cwe_reference is not None else None,
             "caps": self.settings.record()})
         body = {
             "schema": PACKAGE_SCHEMA, "kind": kind, "lane": "lead" if kind == "finding_lead" else "hunt",
@@ -227,7 +279,9 @@ class _Assembler:
             "assembly_rule": ASSEMBLY_RULE, "scope": dict(scope_record),
             "partition": {"number": partition[0], "count": partition[1]}, "rank": rank,
             "persona": None, "stack_profile": None,
-            "lead_menu": [lead_record(*item) for item in leads],
+            "lead_menu": [lead_record(*item, weaknesses=self.weaknesses(item[0]),
+                                      admission=admission_reasons(item[0], self.settings)
+                                      if kind == "finding_lead" else None) for item in leads],
             "evidence": sorted((_evidence(item[0]) for item in leads), key=lambda value: value["entity_id"]),
             "context": [item.record() for item in context],
             "proof_obligations": sorted(item.value for item in obligations),
@@ -330,10 +384,15 @@ class _Assembler:
 
 
 def audit_membership(collection: LeadCollection, packages: Iterable[Package],
-                     admit: Iterable[str]) -> dict[str, Any]:
-    """Gate 5 for lane A: E ⊆ F per family and severity, exactly once, with no invented lead."""
+                     admit: Iterable[str], admit_kev: bool = False) -> dict[str, Any]:
+    """Gate 5 for lane A: E ⊆ F per family and severity, exactly once, with no invented lead.
+
+    ``E`` holds every lead whose reported severity is admitted and, with ``admit_kev``, every
+    KEV-listed lead whatever its reported severity.
+    """
     admitted = set(admit)
-    expected = {lead.observation_id: lead for lead in collection.leads if lead.reported_severity in admitted}
+    expected = {lead.observation_id: lead for lead in collection.leads
+                if lead.reported_severity in admitted or (admit_kev and lead.kev_listed is True)}
     seen: Counter[str] = Counter()
     for package in packages:
         if package.kind == "finding_lead":
@@ -345,9 +404,10 @@ def audit_membership(collection: LeadCollection, packages: Iterable[Package],
         raise IntegrityError(f"lane A membership audit failed: missing={missing[:5]} repeated={repeated[:5]} "
                              f"invented={invented[:5]}")
     by_cell: dict[str, dict[str, dict[str, int]]] = {}
+    severities = admitted | {lead.reported_severity for lead in expected.values()}
     for family in FAMILIES:
         by_cell[family] = {}
-        for severity in sorted(admitted, key=SEVERITY_ORDER.__getitem__):
+        for severity in sorted(severities, key=SEVERITY_ORDER.__getitem__):
             members = [key for key, lead in expected.items() if lead.family == family and lead.reported_severity == severity]
             packaged = sum(seen[key] for key in members)
             if packaged != len(members):
@@ -355,7 +415,8 @@ def audit_membership(collection: LeadCollection, packages: Iterable[Package],
             by_cell[family][severity] = len(members)
     return {"status": "passed", "expected": len(expected), "packaged": sum(seen.values()), "by_family": by_cell,
             "suppressed": sum(1 for lead in expected.values() if lead.suppression_status == "suppressed"),
-            "duplicates": sum(1 for lead in expected.values() if lead.duplicate_of)}
+            "duplicates": sum(1 for lead in expected.values() if lead.duplicate_of),
+            "kev_admitted": sum(1 for lead in expected.values() if lead.reported_severity not in admitted)}
 
 
 def audit_hunts(hunted: Iterable[RankedUnit], packages: Iterable[Package]) -> dict[str, Any]:
@@ -377,17 +438,22 @@ def audit_hunts(hunted: Iterable[RankedUnit], packages: Iterable[Package]) -> di
 
 
 def assemble_packages(scope: AcceptedScope, settings: PackageSettings | None = None, *,
-                      collection: LeadCollection | None = None) -> Assembly:
-    """Assemble both lanes and the package manifest; raises on any membership or integrity failure."""
+                      collection: LeadCollection | None = None,
+                      cwe_reference: CweReference | None = None) -> Assembly:
+    """Assemble both lanes and the package manifest; raises on any membership or integrity failure.
+
+    ``cwe_reference`` is the run-pinned MITRE CWE catalog (``review.references``); without it,
+    weakness names come from the accepted ``reference_intelligence`` facts or stay unresolved.
+    """
     settings = settings or PackageSettings()
     collection = collection if collection is not None else collect_leads(scope)
     collection = LeadCollection(tuple(sorted(collection.leads, key=lambda lead: lead.observation_id)),
                                 collection.gaps, collection.available, collection.correlation_audit,
                                 collection.correlation_shards, collection.non_lead_counts)
-    assembler = _Assembler(scope, settings, collection)
-    admitted = [lead for lead in collection.leads if lead.reported_severity in settings.admit_severities]
+    assembler = _Assembler(scope, settings, collection, cwe_reference)
+    admitted = [lead for lead in collection.leads if admission_reasons(lead, settings)]
     packages = [assembler.finding_lead(lead) for lead in admitted]
-    lane_a = audit_membership(collection, packages, settings.admit_severities)
+    lane_a = audit_membership(collection, packages, settings.admit_severities, settings.admit_kev)
 
     units = build_units(scope, collection, unit_max_files=settings.unit_max_files)
     ranked = rank_units(units)
@@ -409,6 +475,8 @@ def assemble_packages(scope: AcceptedScope, settings: PackageSettings | None = N
     admitted_counts = {family: {severity: sum(1 for lead in admitted if lead.family == family
                                               and lead.reported_severity == severity)
                                 for severity in settings.admit_severities} for family in FAMILIES}
+    kev_admitted = {family: sum(1 for lead in admitted if lead.family == family
+                                and lead.reported_severity not in settings.admit_severities) for family in FAMILIES}
     document: dict[str, Any] = {
         "schema": MANIFEST_SCHEMA, "assembly_rule": ASSEMBLY_RULE, "package_schema": PACKAGE_SCHEMA,
         "run_id": scope.run_id, "manifest_sha256": scope.manifest_sha256, "target_snapshot": scope.target_snapshot,
@@ -420,7 +488,8 @@ def assemble_packages(scope: AcceptedScope, settings: PackageSettings | None = N
                    "lead_count": len(item.unit.leads), "package_ids": sorted(unit_packages.get(item.unit.key, ()))}
                   for item in ranked],
         "gaps": [gap.record() for gap in gaps],
-        "counts": {"leads": collection.counts(), "admitted": admitted_counts,
+        "cwe_reference": cwe_reference.record() if cwe_reference is not None else None,
+        "counts": {"leads": collection.counts(), "admitted": admitted_counts, "kev_admitted": kev_admitted,
                    "non_lead_observations": dict(collection.non_lead_counts),
                    "packages": {"finding_lead": sum(1 for item in packages if item.kind == "finding_lead"),
                                 "hunt": sum(1 for item in packages if item.kind == "hunt")},
@@ -430,6 +499,19 @@ def assemble_packages(scope: AcceptedScope, settings: PackageSettings | None = N
     }
     document["content_sha256"] = sha256_hex(document)
     return Assembly(tuple(packages), document, gaps)
+
+
+def _reference_weaknesses(scope: AcceptedScope) -> dict[str, tuple[str | None, str | None]]:
+    """CWE id -> (name, abstraction) from accepted ``reference_intelligence`` facts."""
+    found: dict[str, tuple[str | None, str | None]] = {}
+    for row in scope.store.entities(scope.producer("reference_intelligence").shards, kinds=("precomputed_fact",)):
+        result = row["payload"].get("result") or {}
+        weakness = result.get("weakness") if isinstance(result.get("weakness"), Mapping) else {}
+        cwe = result.get("weakness_id")
+        if isinstance(cwe, str) and weakness.get("known"):
+            name, abstraction = weakness.get("name"), weakness.get("abstraction")
+            found[cwe] = (str(name)[:256] if name else None, str(abstraction)[:64] if abstraction else None)
+    return dict(sorted(found.items()))
 
 
 def publish_packages(assembly: Assembly, out_dir: Path) -> Path:
