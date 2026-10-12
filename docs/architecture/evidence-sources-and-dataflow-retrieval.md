@@ -4,7 +4,13 @@ Status: design for implementation planning. Rows marked `indexed` exist in the p
 `blocked` and `planned` rows are not implemented by this document.
 For the current producer inventory and reusable index boundaries, see
 [`indexing-and-query-reuse.md`](indexing-and-query-reuse.md). This older planning inventory may
-describe jobs that have since been rebuilt.
+describe jobs that have since been rebuilt. The code-graph part of this design (call graph,
+summaries, source/sink catalog, paths, guards, ranges, SARIF correlation and the model-facing
+graph query) is now decided by [`code-graph-precomputation.md`](code-graph-precomputation.md);
+the `query_dataflow` tool and `job_dataflow_summary`/`job_reachability_linking` jobs planned
+here are superseded by `query_code_graph`, the `job_codeql_analysis` export step and
+`job_code_graph_index`. The authority classes, interface/deployment inventory and contract and
+deployment plans below remain this document's content.
 
 This design states how every available input reaches review workers. It extends
 [`python-and-retrieval.md`](python-and-retrieval.md) (shards, identities, MCP boundary) and
@@ -99,14 +105,8 @@ dataflow summaries.
 |---|---|---|---|---|
 | Symbol table and cross-references | Clang AST, tree-sitter, CodeQL, ELF | `compiled`, `analysis` | definitions, declarations, references, overload/instantiation identities | unparsed TUs, unmapped generated code |
 | Macro/template expansion map | preprocessed source, Clang AST | `compiled` | expanded span ↔ original span ↔ macro/template origin | expansions over size bound |
-| Call graph | CodeQL, Clang AST, IR | `dataflow` | direct edges; resolved virtual/function-pointer edges with resolution method | every unresolved indirect call site, listed |
-| Function dataflow summaries | CodeQL dataflow export (primary); IR/SVF (later, independent) | `dataflow` | param/global/`*param.field` (depth ≤ 2) → return/out-param/global/internal sink, with sanitizer and guard references | k-limit truncation, unmodeled externals, inline asm, recursion collapsed |
-| Source/sink/sanitizer catalog | CodeQL models, curated rule packs, contracts | `dataflow` | classified API sites with CWE family and argument position | unclassified external calls |
-| Entrypoint → sink reachability index | summaries + call graph + contracts + deployment | `reachability` | (entrypoint, sink, path id, hop count, guard ids, sanitizer ids, exposure) | path count and depth limits; "not found within coverage" only |
-| Guard and dominator facts | IR/AST CFG, CodeQL guards | `dataflow` | condition → dominated sinks, branch polarity, source span | non-exact source mapping from optimized IR |
-| Range facts at sinks | CodeQL range analysis, IR | `dataflow` | operand interval with signedness and width, conversion sites | unbounded/unknown ranges stated, not omitted |
-| Points-to / aliasing | IR + SVF (later) | `aliasing` | may/must alias sets for sink operands | analysis budget exhaustion |
-| SARIF ↔ graph correlation | SARIF `threadFlows` + call graph | `dataflow` | each tool path step mapped to graph nodes; bridged or broken hops | steps that do not resolve |
+| Code-graph families: `call_site`, `sink_site`, `entry_point`, `flow_summary`, `dataflow_path`, `guard_fact`, `range_fact`, plus SARIF ↔ path correlation | CodeQL export pack (primary, every CodeQL language); clangd, LLVM IR and Clang AST as C/C++ cross-checks | `graph` | as specified in [`code-graph-precomputation.md`](code-graph-precomputation.md) section 4 | per-scope, per-family coverage; unresolved indirect calls listed; omitted paths counted; `unknown` ranges stated; cross-check disagreement published as `CONTRADICTS`, never merged |
+| Points-to / aliasing | not planned in the code-graph batch | — | — | out of scope ([code graph](code-graph-precomputation.md) section 8) |
 | Contract ↔ handler map | contracts + symbol table + generated code | `contracts` | route/RPC → handler symbol → generated validator symbols; `declared`/`enforced` status | handlers matched only by name are non-exact |
 | Deployment ↔ artifact map | deployment + artifacts + build | `deployment` | service → image → binary → build unit; exposure; privileges; size limits | images not built in this run |
 | Test ↔ function map | tests + symbol table | `tests` | test → exercised symbols, assertion kind, negative-case flag | dynamic dispatch in test harnesses |
@@ -136,7 +136,7 @@ regular expressions, globs, filesystem paths, or shell.
 | `query_precomputed` | exists | precomputed code facts | named query set, subject identity, path | hash-verified; no analysis runs during retrieval; unbuilt sets return gaps |
 | `query_observations` | exists | scanner observations | scanner, rule, reported severity, class, suppression/duplicate, source/artifact, location, shard | observations are never confirmed findings; candidate bound returns a gap |
 | `query_dataset_inventory` | exists | dataset inventory | record type, job, family, disposition, coverage, sensitivity, cell type | publication audit and coverage cells |
-| `query_dataflow` | planned | dataflow and reachability | `summary(function)`, `paths(entrypoint\|source_class, sink)`, `guards(sink)`, `ranges(sink)`, `callers/callees(function, depth)`, `sarif_path(observation)`, `aliases(operand)` | paths expanded lazily, bounded count/depth; truncation is a gap |
+| `query_code_graph` | planned (replaces the earlier `query_dataflow` sketch) | code-graph facts over the `graph` index | modes `callers`, `callees`, `sinks`, `entry_points`, `paths`, `guards`, `ranges`, `summary`, `sarif_path`; exact `subject` identity; closed `sink_class`/`source_class`; bounded `depth` | specified in [`code-graph-precomputation.md`](code-graph-precomputation.md) section 5; no `aliases` mode |
 | `query_contracts` | planned | API/IDL contracts | entrypoint, route, RPC, message/field, handler symbol | returns `declared` vs `enforced` with linking evidence |
 | `query_deployment` | planned | deployment and exposure | service, image, artifact, exposure class | privileges, FS, network, size limits, auth placement |
 | `query_tests` | planned | tests as intent | function, test, assertion kind, negative-only | never executes tests |
@@ -176,36 +176,16 @@ Every tool response uses the existing retrieval envelope. Workers see:
 6. **Size budgets are explicit.** Each tool has per-record and per-response byte limits in central
    TOML. Exceeding them truncates deterministically and records a gap.
 
-### Example: `query_dataflow` `paths` record
+### Example: a code-graph path
 
-```json
-{
-  "kind": "dataflow_path",
-  "authority": "computed",
-  "producer": "codeql-dataflow-export",
-  "path_id": "asr:dataflow_path:…",
-  "entrypoint": {"symbol": "asr:symbol:…", "display": "handle_packet", "contract": "asr:contract:… (declared)"},
-  "sink": {"symbol": "asr:symbol:…", "display": "memcpy", "argument": 2, "cwe_family": "CWE-787",
-           "location": {"path": "net/packet.c", "line": 142, "exact": true}},
-  "steps": [
-    {"n": 1, "location": {"path": "net/packet.c", "line": 88}, "role": "source", "operand": "len",
-     "type": "uint16_t", "range": {"interval": "[0,65535]", "signed": false, "producer": "codeql-range"}},
-    {"n": 2, "location": {"path": "net/packet.c", "line": 95}, "role": "arith", "operand": "len",
-     "type": "int (promoted)", "range": {"interval": "[-14,65521]", "signed": true}},
-    {"n": 3, "location": {"path": "net/packet.c", "line": 142}, "role": "sink_conversion",
-     "operand": "len", "type": "size_t", "conversion": "signed_to_unsigned",
-     "range": {"interval": "unknown", "reason": "negative inputs wrap"}}
-  ],
-  "guards": [{"guard": "asr:guard:…", "condition": "len > 128", "dominates_sink": true,
-              "excludes": "len > 128", "does_not_exclude": "len < 0"}],
-  "sanitizers": [],
-  "dest_buffer": {"origin": "stack", "size_bytes": 64, "producer": "clang-ast"},
-  "gaps": []
-}
-```
-
-The `guards` and `range` fields make the signed/unsigned defect visible as data. Without them a
-model could treat `len > 128` as a sufficient bound.
+The authoritative record shape is the `appsec-review/graph-fact/1` payload in
+[`code-graph-precomputation.md`](code-graph-precomputation.md) sections 3.4 and 4.5: a
+`dataflow_path` entity whose steps each carry a full source location, whose `guards` reference
+separate `guard_fact` entities (dominance state and polarity) and whose sink's `range_fact`
+states the operand interval, signedness and conversion chain, with `unknown` stated rather than
+omitted. The intent of the earlier sketch here is unchanged: the guard and range facts make a
+signed/unsigned defect visible as data, so that a model cannot treat `len > 128` as a sufficient
+bound without a `range_fact` that says so.
 
 ### Packages
 
@@ -243,10 +223,10 @@ restrict tools per role; package scope restricts identities.
 
 | Role | Receives | Tools | Typical first queries |
 |---|---|---|---|
-| Triage (finding-package mode of `red_team_analyst`) | finding package | all read tools, scoped to the package | `query_dataflow.sarif_path`, `guards`, `ranges`, `query_build_security` |
-| `hypothesis_hunter` | hunt package | all read tools, scoped to the component | `query_deployment` exposure, `query_contracts`, `query_dataflow.paths`, `query_history` security fixes |
-| `red_team_analyst` | finding or hunt package | all read tools | `paths`, `contracts`, `query_tests` (fixture shapes) |
-| `blue_team_refuter` | normalized claim + evidence + obligations | all read tools | `guards`, `ranges`, `aliases`, `query_contracts` (enforced only), `query_deployment`, `coverage` |
+| Triage (finding-package mode of `red_team_analyst`) | finding package | all read tools, scoped to the package | `query_code_graph` `sarif_path`, `guards`, `ranges`; `query_build_security` |
+| `hypothesis_hunter` | hunt package | all read tools, scoped to the component | `query_deployment` exposure, `query_contracts`, `query_code_graph` `sinks`/`entry_points`/`paths`, `query_history` security fixes |
+| `red_team_analyst` | finding or hunt package | all read tools | `query_code_graph` `paths`, `contracts`, `query_tests` (fixture shapes) |
+| `blue_team_refuter` | normalized claim + evidence + obligations | all read tools | `query_code_graph` `guards` and `ranges`, `query_contracts` (enforced only), `query_deployment`, `coverage` |
 | `independent_verifier` | normalized claim + original evidence only | all read tools, no access to red/blue records | independently re-derives the path and guards |
 | `finding_adjudicator` | deterministic policy, no tools | — | applies the admissibility table above |
 
@@ -313,22 +293,25 @@ that subset to other contract formats, generated validators, richer test links a
 | `job_interface_contracts` | catalog (OpenAPI, protobuf/IDL files), generated-code identities from build capture | `contracts` | constraints start `declared` |
 | `job_deployment_topology` | IaC/proxy/config files, IaC scanner observations, artifact catalog | `deployment` | renders Helm/Kustomize with pinned tools; unrendered templates are gaps |
 | `job_test_and_doc_indexing` | catalog, symbol table | `tests`, `docs` | static only; target guidance flagged and quarantined |
-| `job_dataflow_summary` | CodeQL databases, compiled AST/IR, tree-sitter, SARIF, contracts (as source seeds) | `dataflow` | runs custom CodeQL export queries; independent IR producer later; disagreement is `CONTRADICTS`, never merged |
-| `job_reachability_linking` | `dataflow`, `contracts`, `deployment`, `tests`, `build_security` | `reachability`, `enforced` links | the only job that promotes `declared` → `enforced` |
+| `job_codeql_analysis` `export.scopes` and `job_code_graph_index` (replace the `job_dataflow_summary` box in the diagram) | accepted CodeQL databases and observations, clangd, Clang AST, LLVM IR, Tree-sitter, prioritization flow steps | `graph` | CodeQL-first export; C/C++ cross-checks; disagreement is `CONTRADICTS`, never merged; see [`code-graph-precomputation.md`](code-graph-precomputation.md) |
+| `job_reachability_linking` (replaces the `RX` box; still planned) | `graph`, `contracts`, `deployment`, `tests`, `build_security` | `enforced` links, `entry_point.exposure.contract_id` | the only job that promotes `declared` → `enforced`; it joins onto `graph` facts rather than publishing its own path index |
 
-Invalidation follows existing fingerprint rules: a contract change rebuilds `contracts` and
-`reachability`, not `dataflow`; a CodeQL query-pack change rebuilds `dataflow` and `reachability`,
-not the CodeQL database or Clang outputs; a doc change rebuilds only `docs`.
+Invalidation follows existing fingerprint rules: a contract change rebuilds `contracts` and the
+enforced links, not `graph`; an export-pack or catalog change rebuilds `graph` shards, not the
+CodeQL database or Clang outputs; a doc change rebuilds only `docs`.
 
 ## Implementation order
 
-1. `query_dataflow` over CodeQL exports for C/C++ only: call graph, summaries, guards, ranges,
-   unresolved indirect calls, SARIF correlation. Fixture: the Linux calibration workspace.
+1. The code-graph batch of [`code-graph-precomputation.md`](code-graph-precomputation.md)
+   (C/C++ first, then Java/Kotlin, JavaScript/TypeScript, Python), which supersedes the former
+   `query_dataflow` item.
 2. `job_interface_contracts` and `job_deployment_topology` with `declared` records, plus
    `query_contracts` and `query_deployment`.
-3. `job_reachability_linking` with `enforced` promotion and entrypoint → sink index.
-4. Finding/hunt package assembly from these shards inside `job_inference_security_review`.
+3. `job_reachability_linking` with `enforced` promotion joined onto `graph` entry points.
+4. Finding/hunt package assembly from these shards inside `job_inference_security_review`
+   (graph context is already part of item 1).
 5. `tests`, `docs`, `history` shards and FTS extension.
-6. Independent IR/SVF producer and `aliases` mode; Joern once its closure is pinned.
+6. Independent IR/SVF producer, alias facts, and Joern: only as additional producers into the
+   `graph` index with their own cross-check state, and only once their exporters exist.
 7. Optional embedding nomination shard, only if fixtures show recall gains over FTS.
 8. Dynamic evidence import once an authorized acquisition path exists.
