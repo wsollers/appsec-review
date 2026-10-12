@@ -33,6 +33,14 @@ RUN python -m pip install --no-cache-dir --no-build-isolation --no-deps . \
 
 COPY deploy/dagster/dagster.yaml deploy/dagster/workspace.yaml /opt/dagster/home/
 
+FROM runtime AS runtime-windows
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends nodejs npm \
+    && rm -rf /var/lib/apt/lists/* \
+    && npm install --prefix /opt/claude --no-audit --no-fund @anthropic-ai/claude-code@2.1.282 \
+    && ln -s /opt/claude/node_modules/.bin/claude /usr/local/bin/claude \
+    && claude --version
+
 FROM runtime AS test
 RUN python -m pip install --no-cache-dir "pytest==8.4.2"
 COPY tests/__init__.py tests/capture_fakes.py ./tests/

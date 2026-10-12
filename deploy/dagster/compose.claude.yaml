@@ -1,0 +1,6 @@
+services:
+  code-location:
+    volumes:
+      - ${APPSEC_CLAUDE_BINARY:?Set the Linux Claude CLI path}:/usr/local/bin/claude:ro
+      - ${APPSEC_CLAUDE_CONFIG_DIR:?Set the Linux Claude configuration directory}:/tmp/.claude:ro
+      - ${APPSEC_CLAUDE_STATE_FILE:?Set the Linux Claude state file}:/tmp/.claude.json:ro

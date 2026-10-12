@@ -38,8 +38,8 @@ containers.
 
 ## Build, start, verify, and stop
 
-Run these commands from the repository root in Linux or WSL 2. When `.env` contains Linux Claude
-paths, invoke Compose from that same Linux environment so the binary and credentials mount as files.
+Run these commands from the repository root in Linux, WSL 2, or native Windows PowerShell. The
+lifecycle script selects the matching Compose overlay for the host.
 Bootstrap creates an ignored `.env` once and preserves
 its secret on later calls. On native Linux it also records the invoking operator's uid/gid so the
 code location does not leave root-owned files in the bind-mounted `runs/` and `data/` trees. It
@@ -47,11 +47,18 @@ records the Docker socket group id and adds that supplemental group to the code 
 containers remain usable.
 Bootstrap also records the resolved local Claude CLI binary, `~/.claude` directory, and
 `~/.claude.json` state file whenever all three exist, regardless of the configured provider.
-`compose.yaml` requires `APPSEC_CLAUDE_BINARY`, `APPSEC_CLAUDE_CONFIG_DIR`, and
-`APPSEC_CLAUDE_STATE_FILE` unconditionally, so install and sign in to `claude` before bootstrap or
-set them by hand. Compose mounts those three paths read-only only into the code-location container
-and sets an isolated container home; subscription credentials are not copied into the image,
-repository, or `.env`.
+On Linux and WSL, `compose.claude.yaml` requires `APPSEC_CLAUDE_BINARY`,
+`APPSEC_CLAUDE_CONFIG_DIR`, and `APPSEC_CLAUDE_STATE_FILE`; install and sign in to `claude` before
+bootstrap or set them by hand. It mounts those paths read-only into the code location. On native
+Windows, `compose.windows.yaml` installs the pinned Linux Claude CLI in the code-location image
+and persists its login in the `claude-home` Docker volume. After starting, sign in with:
+
+```powershell
+docker compose --env-file deploy/dagster/.env -f deploy/dagster/compose.yaml -f deploy/dagster/compose.windows.yaml exec code-location claude auth login
+```
+
+Choose the Claude subscription login. The Windows host's Claude login is separate from this
+container login; neither is copied into the image or repository.
 For a bounded acceptance target already beneath the read-only `targets/` mount, set
 `APPSEC_REVIEW_TARGET` to its container path for the lifecycle and launch commands; otherwise the
 deployment defaults to `/opt/app/targets/appsec-multi-vuln`.
@@ -73,7 +80,7 @@ workspace reconnected:
 
 ```bash
 python deploy/dagster/bin/lifecycle.py build
-docker compose --env-file deploy/dagster/.env -f deploy/dagster/compose.yaml up -d --no-deps --force-recreate --wait code-location
+python deploy/dagster/bin/lifecycle.py reload
 python deploy/dagster/bin/verify.py
 ```
 
@@ -246,8 +253,33 @@ For diagnostics:
 ```bash
 python deploy/dagster/bin/lifecycle.py logs
 python deploy/dagster/bin/run_report.py --stale-seconds 3600
-docker compose --env-file deploy/dagster/.env -f deploy/dagster/compose.yaml config
+python deploy/dagster/bin/lifecycle.py config
 ```
+
+## Serial smoke tests
+
+Run each platform on that actual host: `windows` from native PowerShell, `wsl` from a WSL shell,
+and `linux` from a native Linux shell. A Windows machine running WSL can exercise two cases; it
+cannot claim native Linux coverage. Run one case at a time against the shared Compose project.
+
+```text
+python deploy/dagster/bin/smoke.py --platform windows --mode config
+python deploy/dagster/bin/smoke.py --platform windows --mode live
+python deploy/dagster/bin/smoke.py --platform windows --mode feeds
+```
+
+Replace `windows` with `wsl` or `linux` on the corresponding host. `config` validates resolved
+Compose services, mounts, and Claude CLI placement without changing the deployment. `live` builds
+and starts the stack, checks CLI version and subscription authentication, and verifies the connected
+Dagster workspace. `feeds` does the same, then launches **one** `third_party_data_sync` Dagster run,
+waits for it to finish, and verifies all six published branches (NVD, OSV, MITRE, KEV, EPSS, and
+cve-bin-tool) against the run receipts and current pointers. It writes a verifier report under
+`runs/metadata/dagster-smoke/<platform>/<Dagster UUID>.json`.
+
+Live modes hold a shared lock under `runs/metadata/` and refuse to start while Dagster has any
+non-terminal run. Do not schedule the three platform cases or feed cases concurrently. If a smoke
+process dies, inspect its Dagster run and the lock owner before removing the stale lock. Live feed
+mode makes real network requests and may take hours on a first NVD bootstrap.
 
 To close specifically enumerated non-terminal records during an authorized recovery, use the
 supported Dagster GraphQL termination API and retain the default host-level recovery receipt under
@@ -290,11 +322,13 @@ limit and is bounded only by `max_concurrent`.
 
 `deploy/dagster/.env` (from bootstrap; see `.env.example`) supplies Compose interpolation:
 `DAGSTER_POSTGRES_PASSWORD`, `APPSEC_UID`/`APPSEC_GID`, `APPSEC_REVIEW_TARGET`, the three
-`APPSEC_CLAUDE_*` bind paths, and optionally `ANTHROPIC_API_KEY`. Compose passes
+`APPSEC_CLAUDE_*` bind paths for Linux/WSL, and optionally `ANTHROPIC_API_KEY`. Compose passes
 `ANTHROPIC_API_KEY` (empty by default) only to the code location; it is used only by models
 configured with `provider = "anthropic-api"`, and the `claude-cli` transport removes it from the
 CLI's environment. `APPSEC_REVIEW_CONFIG` is fixed to `/opt/app/appsec-review.toml` by
-`compose.yaml` and the image; the adapter loads that file to build the definitions.
+`compose.yaml` and the image; the adapter loads that file to build the definitions. On Windows,
+the subscription CLI login persists in a named Docker volume and must be completed once after the
+first start.
 
 ## Tests
 

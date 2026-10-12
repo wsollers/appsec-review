@@ -1,0 +1,17 @@
+services:
+  code-location:
+    user: "0:0"
+    build:
+      target: runtime-windows
+    environment:
+      HOME: /var/claude-home
+      DISABLE_AUTOUPDATER: "1"
+    volumes:
+      - claude-home:/var/claude-home
+  webserver:
+    user: "0:0"
+  daemon:
+    user: "0:0"
+
+volumes:
+  claude-home:

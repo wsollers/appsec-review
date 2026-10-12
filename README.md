@@ -45,7 +45,7 @@ All runtime settings (models, timeouts, worker counts, schedules, feed sources) 
 | --- | --- | --- | --- |
 | Linux | Supported | Supported | Supported |
 | Windows through WSL 2 | Supported | Supported | Supported (recommended on Windows) |
-| Native Windows (PowerShell) | Supported | Supported | Not supported out of the box (see below) |
+| Native Windows (PowerShell) | Supported | Supported | Supported with container Claude sign-in |
 
 The pipeline is a Linux x86-64 execution vertical: builds, scanners, and CodeQL all run in Linux
 containers. On a Windows machine, WSL 2 is the most direct route.
@@ -207,9 +207,9 @@ Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
 
 Native Windows limitations:
 
-- The Dagster Compose file mounts a **Linux** Claude CLI binary, configuration directory, and state
-  file into the code-location container, and `deploy/dagster/bin/bootstrap.py` records those paths
-  (and the operator uid/gid) only on a POSIX host. Use WSL 2 for the Dagster deployment.
+- Native Windows Dagster uses a Linux Claude CLI installed inside its code-location image. Sign in
+  once inside that container; its Claude home persists in a Docker volume. The Windows host Claude
+  login is separate.
 - The direct CLI and `containers/build-all.ps1` work from PowerShell, with Docker Desktop running
   the Linux containers.
 - Windows-native target analysis is design work only; see
@@ -416,8 +416,8 @@ See [`docs/operations/wave1-review.md`](docs/operations/wave1-review.md).
 
 ## Run the Dagster deployment
 
-Run on Linux or inside WSL 2. Make sure `claude` is installed and signed in **before** bootstrap;
-Compose requires the Claude paths, and bootstrap records its binary, `~/.claude`, and
+On Linux or WSL 2, make sure `claude` is installed and signed in **before** bootstrap;
+the Linux Compose overlay requires the Claude paths, and bootstrap records its binary, `~/.claude`, and
 `~/.claude.json` paths in the ignored `deploy/dagster/.env`, together with your uid/gid so
 containers do not leave root-owned files in `runs/` and `data/`. Running bootstrap again keeps the existing secret and fills in only missing
 keys.
@@ -429,6 +429,11 @@ python deploy/dagster/bin/lifecycle.py start
 python deploy/dagster/bin/lifecycle.py status
 python deploy/dagster/bin/verify.py
 ```
+
+On native Windows, run the same commands in PowerShell, then sign in to the container CLI with
+`docker compose --env-file deploy/dagster/.env -f deploy/dagster/compose.yaml -f deploy/dagster/compose.windows.yaml exec code-location claude auth login`.
+The [serial smoke runner](deploy/dagster/README.md#serial-smoke-tests) verifies this login without
+printing its credentials.
 
 The console is at <http://localhost:3000> (bound to `127.0.0.1` only). `targets/` is mounted
 read-only, and the default review target is `/opt/app/targets/appsec-multi-vuln`. To review a
@@ -442,11 +447,11 @@ APPSEC_REVIEW_TARGET=/opt/app/targets/<your-target>
 Sync metadata through Dagster:
 
 ```bash
-dagsterRunId=$(python3 -c 'import uuid; print(uuid.uuid4())')
-docker compose --env-file deploy/dagster/.env -f deploy/dagster/compose.yaml exec -T webserver dagster job launch -w /opt/dagster/home/workspace.yaml -l appsec_review -j third_party_data_sync --run-id "$dagsterRunId"
-# Wait for this run to finish in the Dagster console before verifying it.
-python deploy/dagster/bin/verify.py --run-id "$dagsterRunId" --evidence "runs/metadata/dagster-verification/$dagsterRunId.json"
+python deploy/dagster/bin/smoke.py --platform linux --mode feeds
 ```
+
+Use `--platform wsl` from WSL or `--platform windows` from native PowerShell. The smoke runner
+checks for active runs and executes one live sync at a time.
 
 Launch the full review graph:
 
@@ -461,7 +466,7 @@ After you change application code, rebuild and reload only the code location:
 
 ```bash
 python deploy/dagster/bin/lifecycle.py build
-docker compose --env-file deploy/dagster/.env -f deploy/dagster/compose.yaml up -d --no-deps --force-recreate --wait code-location
+python deploy/dagster/bin/lifecycle.py reload
 python deploy/dagster/bin/verify.py
 ```
 

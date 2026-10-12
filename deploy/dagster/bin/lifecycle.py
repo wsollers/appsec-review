@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -18,9 +19,12 @@ base = [
     "-f",
     str(deployment / "compose.yaml"),
 ]
+base.extend(["-f", str(deployment / ("compose.windows.yaml" if os.name == "nt" else "compose.claude.yaml"))])
 commands = {
+    "config": ["config"],
     "build": ["build"],
     "start": ["up", "-d", "--wait"],
+    "reload": ["up", "-d", "--no-deps", "--force-recreate", "--wait", "code-location"],
     "status": ["ps"],
     "logs": ["logs", "--tail", "100"],
     "stop": ["stop"],
