@@ -17,5 +17,5 @@ guidance, or run code.
 Never sees red reasoning or the sibling blue cell; the two blue questions stay disjoint.
 
 ## Tools
-`find`, `query_artifacts`, `query_build_security`, `query_ci_configuration`, `read_excerpt`,
-`resolve_evidence`, `trace`.
+`find`, `query_artifacts`, `query_build_security`, `query_ci_configuration`, `query_code_graph`,
+`read_excerpt`, `resolve_evidence`, `trace`.

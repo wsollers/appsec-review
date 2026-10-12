@@ -15,17 +15,20 @@ import hashlib
 import json
 from pathlib import Path, PurePosixPath
 import re
-from typing import Any, Callable, Mapping, Sequence
+from typing import Any, Callable, Iterable, Mapping, Sequence
 
 from appsec_review.config.inference_review import (
     JOB_ID, InferenceSecurityReviewSettings, semantic_settings_sha256,
 )
+from appsec_review.graph.contract import ADMISSIBILITY_RULE as GRAPH_FACT_ADMISSIBILITY_RULE, FACT_PREDICATES_RULE
 from appsec_review.guidance import load_persona_covers, load_registry
 from appsec_review.guidance.coverage import crosswalk_tags
+from appsec_review.guidance.routing import unit_sources
 from appsec_review.indexing.store import open_shard
 from appsec_review.jobs.job_security_tagging.crosswalk import load_crosswalk
 from appsec_review.jobs.job_security_tagging.taxonomy import load_vocabulary
 from appsec_review.retrieval.core import RetrievalCore
+from appsec_review.review import obligations
 from appsec_review.review.budget import JobBudget
 from appsec_review.review.claims import normalize_cwe
 from appsec_review.review.identity import sha256_hex
@@ -163,6 +166,31 @@ def _taxonomy(repository_root: Path):
     return vocabulary, crosswalk
 
 
+def run_sources(query_sets: Iterable[str]) -> tuple[str, ...]:
+    """Hunt-strategy data sources available to every unit of the run.
+
+    Only ``control_evidence`` is run-wide (``owasp_workbench``). Sink facts and the entry-point
+    catalog are per unit: :func:`available_sources` adds them from the package's accepted graph
+    families. Symbol links unlock no strategy.
+    """
+    return ("owasp_workbench",) if "control_evidence" in set(query_sets) else ()
+
+
+def available_sources(query_sets: Iterable[str], graph_families: Iterable[str]) -> tuple[str, ...]:
+    """``source_sink_facts`` when the unit's scope has an accepted ``sink_site`` family and
+    ``entry_point_catalog`` when it has an accepted ``entry_point`` family, plus the run sources."""
+    return unit_sources(run_sources(query_sets), graph_families)
+
+
+# Rule versions that decide which evidence a cell's citations may satisfy; part of every package's
+# reuse basis so a change to graph admissibility invalidates reuse of the cells it affects.
+EVIDENCE_RULES = {"rule_predicates": RULE_PREDICATES_VERSION,
+                  "admissibility": obligations.ADMISSIBILITY_RULES_VERSION,
+                  "graph_fact_predicates": FACT_PREDICATES_RULE,
+                  "graph_fact_admissibility": GRAPH_FACT_ADMISSIBILITY_RULE,
+                  "obligation_policy_sha256": obligations.POLICY_SHA256}
+
+
 def package_works(run_root: Path, packages_doc: Mapping[str, Any]) -> list[PackageWork]:
     """The lane's verified packages as team work items."""
     works = []
@@ -199,8 +227,7 @@ def review_context(*, run_root: Path, run_id: str, attempt_root: Path, repositor
         source_languages=dict(scope_out["source_languages"]),
         build_unit_languages={key: tuple(value) for key, value in scope_out["build_unit_languages"].items()},
         index_names=tuple(sorted({str(shard["name"]) for shard in core.manifest["indexes"]})),
-        available_sources=tuple(sorted(({"symbol_links"} if "symbol_links" in query_sets else set()) |
-                                       ({"owasp_workbench"} if "control_evidence" in query_sets else set()))),
+        available_sources=run_sources(query_sets),
         max_page_size=settings.packages.max_page_size, max_depth=settings.packages.max_depth)
 
 
@@ -274,7 +301,7 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
                 shards = sorted({label for identity in entities[package.package_id]
                                  for label in membership.get(identity, ())})
                 basis = sha256_hex({"package": sanitized, "shards": shards, "assembly": ASSEMBLY_RULE,
-                                    "rule_predicates": RULE_PREDICATES_VERSION})
+                                    **EVIDENCE_RULES})
                 records.append({"package_id": package.package_id, "kind": package.kind, "lane": lane.value,
                                 "sha256": package.sha256, "unit_key": package.unit_key, "rank": list(rank),
                                 "basis": basis, "dependency_shards": shards,

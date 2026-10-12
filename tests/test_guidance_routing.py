@@ -114,7 +114,7 @@ UNIT = {"func:exec:unmanaged-memory": 5, "func:exec:shell": 2, "func:net:http-ro
 
 
 def test_panel_round_zero_uses_available_strategies_and_ranked_personas() -> None:
-    panel = hunt_panel(PERSONAS, unit_tags=UNIT, available_sources=["symbol_links"])
+    panel = hunt_panel(PERSONAS, unit_tags=UNIT, available_sources=["source_sink_facts"])
     assert [(cell["strategy"], cell["persona"]) for cell in panel["cells"]] == [
         ("sink_up", "memory_safety_native"),
         ("persona_sweep", "injection_interpreters"),
@@ -138,10 +138,10 @@ def test_panel_is_deterministic_under_input_order() -> None:
 
 
 def test_panel_variant_only_in_later_rounds() -> None:
-    round_zero = hunt_panel(PERSONAS, unit_tags=UNIT, available_sources=["confirmed_claims", "symbol_links"])
+    round_zero = hunt_panel(PERSONAS, unit_tags=UNIT, available_sources=["confirmed_claims", "source_sink_facts"])
     assert "variant" not in [cell["strategy"] for cell in round_zero["cells"]]
     assert all(gap["strategy"] != "variant" for gap in round_zero["gaps"])
-    round_one = hunt_panel(PERSONAS, unit_tags=UNIT, available_sources=["confirmed_claims", "symbol_links"],
+    round_one = hunt_panel(PERSONAS, unit_tags=UNIT, available_sources=["confirmed_claims", "source_sink_facts"],
                            round_index=1)
     assert [cell["strategy"] for cell in round_one["cells"]] == ["variant", "sink_up", "persona_sweep"]
     missing = hunt_panel(PERSONAS, unit_tags=UNIT, available_sources=[], round_index=1)
@@ -157,7 +157,7 @@ def test_panel_fallback_personas_and_generalist_gap() -> None:
     assert panel["routing_gap"] is True
     # One persona still yields distinct pairs when every slot has a different strategy.
     tiny = hunt_panel({"generalist": ()}, unit_tags={},
-                      available_sources=["symbol_links", "entry_point_catalog", "owasp_workbench"])
+                      available_sources=["source_sink_facts", "entry_point_catalog", "owasp_workbench"])
     assert [(cell["strategy"], cell["persona"]) for cell in tiny["cells"]] == [
         ("sink_up", "generalist"), ("entry_down", "generalist"), ("control_gap", "generalist")]
 
@@ -167,6 +167,9 @@ def test_panel_rejects_impossible_or_unknown_inputs() -> None:
         hunt_panel({"generalist": ()}, unit_tags={}, available_sources=[])
     with pytest.raises(GuidanceError, match="unknown"):
         hunt_panel(PERSONAS, unit_tags=UNIT, available_sources=["runtime_traces"])
+    # Symbol links carry no source or sink fact; only accepted sink facts unlock sink_up.
+    with pytest.raises(GuidanceError, match="unknown"):
+        hunt_panel(PERSONAS, unit_tags=UNIT, available_sources=["symbol_links"])
 
 
 # --------------------------------------------------------------------------------------------- partition

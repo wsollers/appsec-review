@@ -27,6 +27,7 @@ from typing import Any, Callable, Iterable, Mapping, Sequence
 
 from appsec_review.config.inference_review import InferenceSecurityReviewSettings, ModelProfileSettings
 from appsec_review.guidance import compose_bundle, hunt_panel, pin_bundle, render_prompt, route_persona, route_stack
+from appsec_review.guidance.routing import unit_sources
 from appsec_review.inference import ModelResult, ReviewModelRequest
 from appsec_review.retrieval.index import INDEX_NAMES
 from appsec_review.review.budget import JobBudget
@@ -441,7 +442,9 @@ def route(ctx: ReviewContext, work: PackageWork) -> dict[str, Any]:
             gaps.append(make_gap(GapClass.ROUTING_GAP, f"{work.package_id}:routing:persona",
                                  persona.get("reason", "")))
     else:
-        panel = hunt_panel(ctx.covers, unit_tags=tags, available_sources=ctx.available_sources)
+        # Graph-backed strategies unlock per unit, from the families accepted for the package scope.
+        sources = unit_sources(ctx.available_sources, (document.get("retrieval") or {}).get("graph_families", ()))
+        panel = hunt_panel(ctx.covers, unit_tags=tags, available_sources=sources)
         routing.update(persona=panel["cells"][0]["persona"], panel=panel["cells"], panel_rule=panel["rule"])
         for item in panel["gaps"]:
             gaps.append(make_gap(GapClass.COVERAGE_GAP, f"{work.package_id}:strategy:{item['strategy']}",
