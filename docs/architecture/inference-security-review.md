@@ -1,7 +1,9 @@
 # Near-terminal inference security review
 
-Status: design approved for implementation planning; runtime jobs are not implemented by this
-document.
+Status: design approved; vertical slice 1 is ready for development under the binding decisions in
+[Implementation readiness decisions](#implementation-readiness-decisions). Where an earlier section
+and that section differ for slice 1, the readiness decisions govern. Runtime jobs are not
+implemented by this document.
 
 ## Purpose and governing decisions
 
@@ -102,7 +104,10 @@ flowchart TD
   R --> S[publish accepted handoff]
 ```
 
-Dagster owns fan-out/fan-in, pool limits, retries, timeouts, and selected re-execution. Application
+Dagster owns stage dependencies, pool limits, unit retries, and selected re-execution of visible
+units. The bracketed fan-out boxes are, in slice 1, single visible units whose handlers run an
+application-owned bounded cell executor, and the round loop is an in-application controller (see
+[R1](#r1-execution-model)); the current `ExecutionPlan` has no dynamic mapping or cycles. Application
 code owns immutable configuration, cell fingerprints, typed validation, deterministic merge,
 ledger transitions, evidence resolution, safety policy, receipts, and accepted publication.
 Suggested Dagster pools are `inference_review`, `inference_verify`, `inference_score`,
@@ -175,8 +180,10 @@ freshness, and exact retrieval scopes. It never infers that an unavailable shard
 Packages are independently fingerprinted and size-limited. Oversized scopes split deterministically
 by component, trust boundary, and stable entity range. Truncation creates a coverage gap.
 The pre-adjudication input format is
-[`review-input-package.schema.json`](../schemas/review-input-package.schema.json); its
-`finding_lead` and `hunt` variants carry accepted-manifest identity, lead membership,
+[`review-packages.schema.json`](../schemas/review-packages.schema.json) as specialized by the
+[review package contract](review-package-contract.md); the broader
+[`review-input-package.schema.json`](../schemas/review-input-package.schema.json) is not an
+assembler contract. The `finding_lead` and `hunt` variants carry accepted-manifest identity, lead membership,
 history/complexity metrics, safe build-command and environment facts, graph/evidence references,
 retrieval scope and gaps. The package assembler audits that every accepted High/Critical
 source-SAST observation is represented in both a finding-lead package and a hunt menu, even
@@ -295,12 +302,14 @@ Roles express responsibility and authority ceilings:
 Personas are optional technical viewpoints:
 
 `native_memory_safety`, `authentication_session`, `authorization_access_control`,
-`cryptography_data_protection`, `web_api`, `mobile_platform`, `build_supply_chain`,
-`ci_cd_deployment`, and `business_logic_abuse_case`.
+`cryptography_data_protection`, `api_web`, `mobile_platform`, `build_supply_chain`,
+`deployment_operations`, and `business_logic_abuse_case`. These are the ids already used by
+`pipeline/guidance/registry.json`; `native_memory_safety` and `business_logic_abuse_case` must be
+added to it.
 
 Every worker cell has exactly one role and zero or one persona. Package routing may select a persona
 from deterministic component/evidence signals, but it must not create persona cross-products. The
-default MVP uses no persona except `native_memory_safety` and `web_api` where deterministic routing
+default MVP uses no persona except `native_memory_safety` and `api_web` where deterministic routing
 has positive evidence. A role's authority ceiling always wins over a persona's viewpoint.
 
 Guidance is assembled in this order as separately delimited, hash-pinned sections:
@@ -553,18 +562,18 @@ memory_mb = 1024
 timeout_seconds = 60
 scratch_mb = 256
 
-[jobs.job_inference_security_review.steps.hypothesis_discovery]
+[jobs.job_inference_security_review.steps.discovery]
 workers = 8
-[jobs.job_inference_security_review.steps.hypothesis_discovery.tasks.review_packages]
+[jobs.job_inference_security_review.steps.discovery.tasks.red_cells]
 
-[jobs.job_inference_security_review.steps.independent_verification]
+[jobs.job_inference_security_review.steps.blind_verify]
 workers = 4
-[jobs.job_inference_security_review.steps.independent_verification.tasks.verify_claims]
+[jobs.job_inference_security_review.steps.blind_verify.tasks.verifier_cells]
 
-[jobs.job_inference_security_review.steps.manifest_publication]
+[jobs.job_inference_security_review.steps.publication]
 workers = 1
-[jobs.job_inference_security_review.steps.manifest_publication.tasks.publish_claim_ledger]
-[jobs.job_inference_security_review.steps.manifest_publication.tasks.publish_handoff]
+[jobs.job_inference_security_review.steps.publication.tasks.publish_claim_ledger]
+[jobs.job_inference_security_review.steps.publication.tasks.publish_handoff]
 ```
 
 ## Benign proof-of-trigger lane
@@ -704,6 +713,11 @@ in the record; displayed ids may use a collision-checked 24-byte prefix):
 | `poc_result_id` | attempt, execution/cleanup receipts, signals, controls, verifier, and disposition |
 | `attack_chain_id` | ordered component claim ids plus canonical edge identities, objective, and observed deployment identity |
 | `finding_package_id` | confirmed/supported adjudication, accepted score package set, PoC status/result, chain memberships, and publication policy |
+| `evidence_relation_id` (`evrel-`) | claim, predicate, relation kind, cited logical identity, resolved content hash and locator, producing cell, and retrieval receipt hash |
+| `cell_id` | cell fingerprint (`cell/v1`); attempts add a monotonic attempt number |
+| `actor_id` | role, cell id, provider, model, and conversation identity; never reused across cells |
+| `gap_id` | gap class, subject identity (claim, package, cell, shard, or request), predicate when applicable, and round |
+| `event_id` | ledger stream, sequence number, previous event hash, and canonical event body |
 
 The ledger stores append-only events and a deterministic current projection. Relations are typed
 `supports`, `contradicts`, `duplicates`, `derives_from`, `supersedes`, `qualifies`,
@@ -945,7 +959,8 @@ src/appsec_review/
     models.py                    # claim/relation/review/package types
     identity.py                  # canonical ids and canonical JSON
     ledger.py                    # append-only events and projections
-    guidance.py                  # bundle assembly/conflict validation
+    obligations.py               # predicate vocabulary and obligation rules (R4)
+    cells.py                     # bounded cell executor and retrieval loop (R1, R2)
     packages.py                  # evidence-map/finding/hunt packages
     adjudication.py              # evidence-qualified state policy
     rounds.py                    # delta controller and termination
@@ -978,7 +993,7 @@ pipeline/
   prompt-fragments/governing-rules.md
   prompt-fragments/roles/*.md
   prompt-fragments/personas/*.md
-  guidance/registry.json
+  guidance/registry.json         # composed by the generalized owasp_workbench/guidance.py (R9)
   guidance/tasks/inference-security-review/*.md
 docs/schemas/inference-security-review/*.schema.json
 tests/review/
@@ -1083,6 +1098,203 @@ A later live-model acceptance repeats the same fixture with pinned guidance/mode
 verifies budgets and schema repair. Live PoC execution remains disabled until the isolation runner
 and policy-denial suite pass on the deployment host.
 
+## Implementation readiness decisions
+
+Readiness review, 2026-10-12. The authority model, invariants, lifecycle, scoring boundary, PoC
+safety posture, and test plan are sufficient. Slice 1 was not startable as written: eight
+contracts were missing or contradicted the current runtime. The decisions below close them for
+slice 1 and bind its implementation. Values marked *default* are configuration, not code.
+
+### R1 Execution model
+
+The runtime `ExecutionPlan` (`runtime/plan.py`) is a static DAG of `step.task` units. The Dagster
+adapter has no dynamic outputs, cannot express the round cycle, and assigns pools by step name in
+`orchestration/dagster/adapter.py::_pool_for`.
+
+- Each fan-out stage is one visible unit. Its handler runs a bounded in-unit cell executor that
+  writes one receipt per cell under the unit root and reuses a receipt whose `cell/v1` fingerprint
+  and validator still match. `job_tree_sitter_ast` `parse.dynamic_scopes` is the precedent. Cell
+  concurrency is the step's configured `workers`; Dagster pool limits cap concurrent units.
+- Slice 1 runs round 0 only. Slice 4 adds `rounds.controller`, an in-unit loop that re-invokes the
+  stage functions over the delta closure. It does not use Dagster cycles.
+- "Selected re-execution" means re-executing a visible unit. Cell-level reuse comes from the
+  fingerprint check, not from Dagster.
+- Slice 1 unit ids, in dependency order:
+
+  | Unit | Pool |
+  |---|---|
+  | `scope.accept_manifest`, `scope.assemble_scope` | `application` |
+  | `packages.assemble_packages` | `application` |
+  | `discovery.red_cells` | `inference_review` |
+  | `normalize.merge_hypotheses` | `application` |
+  | `refutation.blue_cells` | `inference_review` |
+  | `blind_verify.verifier_cells` | `inference_verify` |
+  | `adjudicate.apply_policy` | `application` |
+  | `scoring.score_claims` | `inference_score` |
+  | `completeness.audit` | `application` |
+  | `publication.publish_claim_ledger`, `publication.publish_handoff` | `lifecycle` |
+
+  `refutation.blue_cells` and `blind_verify.verifier_cells` both depend only on
+  `normalize.merge_hypotheses`. Step names must not be `verification`, `inference`, or any other
+  name `_pool_for` already maps to OWASP or C++ pools. Make `_pool_for` job-aware, or add explicit
+  entries for these steps. Add the new pools to `[orchestration.dagster.pools]`.
+
+### R2 Worker transport and bounded retrieval loop
+
+Every inference transport grants the model no tools: `claude_cli.py` passes `--allowedTools ""`,
+and `anthropic_api.py` uses no agent tools. `ModelRequest` carries fields specific to build
+planning. Workers therefore cannot call MCP, and slice 1 does not expose MCP to them.
+
+- Add a sibling `ReviewModelRequest` in `inference/request.py` that carries role, persona,
+  guidance-bundle hash and text, task input, transcript turns, provider/model/reasoning, and token
+  caps. `infer` dispatches it through the same provider table. Transports never receive
+  build-only fields.
+- A cell is an application-mediated loop. Each model turn returns exactly one closed object:
+  `{"action": "retrieve", "requests": [...]}` or `{"action": "final", "result": {...}}`.
+  Each request names a tool from the role's allowlist and that tool's schema parameters from
+  `docs/schemas/retrieval-mcp-tools.json`.
+- The application validates each request against the cell capability, runs it in-process through
+  `RetrievalCore` (not over MCP stdio), and returns bounded rows with their identities in the next
+  turn. The loop counts against the profile's `max_queries`, token, and timeout caps. When a cap
+  is reached, the next turn must be `final` or the cell ends `timed_out`/`invalid` with a gap.
+- The capability is an in-process frozen record bound by hash to run, manifest, package, role,
+  round, tool, index, and entity scope, plus caps. A MAC-protected token is required only if MCP
+  is later exposed to workers (see the [review package contract](review-package-contract.md)).
+- A `final` result may cite only identities returned in this cell's own retrieval transcript or
+  supplied in its package. Any other citation is a `schema_error`.
+
+### R3 Evidence relations and "direct" evidence
+
+An evidence relation is the only way a model citation reaches the ledger. The validator
+re-resolves the cited `LogicalIdentity` through `find`/`read_excerpt`/`resolve_evidence` against
+the accepted manifest. It records the shard, content hash, locator, completeness, and the cell's
+retrieval receipt hash, then derives `evidence_relation_id`. A citation that cannot be resolved is
+recorded as an `evidence_gap`, not as a relation.
+
+| Admissibility | Cited entity kinds (`retrieval/model.py::EntityKind`) |
+|---|---|
+| direct, when the entity is the construct named by the predicate | `source_span`, `ast_node`, `ir_entity`, `symbol`; build kinds (`build_action` through `wasm_module`); `evidence_artifact` |
+| direct only for the predicate the producing rule's versioned mapping names | `tool_observation` (SAST, CodeQL path, post-build, CI) |
+| indirect: may guide search, never satisfies an obligation | `hotspot`, `priority_item`, `history_signal`, `change`, `change_context_signal`, `review_signal`, `tag_assignment`, `review_unit`, reported scanner severity, model prose |
+
+### R4 Predicate vocabulary and obligations
+
+Slice 1 has a closed predicate enum (`obligation-rules/1`, in `review/obligations.py`):
+`affected_construct`, `attacker_input_control`, `source_to_sink_reachability`,
+`missing_or_ineffective_guard`, `configuration_enables`, and `security_impact`. Every claim
+requires the first four and `security_impact`. `configuration_enables` is also required when any
+precondition is configuration-scoped. Preconditions use a closed vocabulary (`preconditions/1`)
+owned by the same module. The rules are application policy, not prompt text. A change to them
+changes the adjudication policy hash.
+
+### R5 Adjudication decision table
+
+`adjudicate.apply_policy` evaluates each canonical claim in canonical id order. The first matching
+row wins.
+
+1. Equal canonical identity with an earlier claim → `duplicate`.
+2. Every affected entity lies outside the package scope or accepted components → `out_of_scope`.
+3. A required predicate has both direct support and direct contradiction → `insufficient_evidence`
+   with an `unresolved_contradiction` evidence gap. Slice 1 does not rank integrity classes.
+4. Direct contradiction, and no direct support, on `source_to_sink_reachability` →
+   `not_reachable`; on `configuration_enables` → `not_exploitable_in_observed_configuration`; on
+   any other required predicate → `contradicted`.
+5. Every required predicate has direct support and R6 independence holds → `confirmed`.
+6. At least one required predicate has direct support → `supported`.
+7. Otherwise → `insufficient_evidence`. This includes a claim whose verifier cell failed; the
+   claim links that cell's `worker_gap`.
+
+`coverage_gap` is never assigned to a proposed claim. It is the terminal record for scope
+obligations, such as a package or hunt partition that produced no completed cell. Every claim
+receives a blind verifier cell in slice 1, so confirmation does not depend on severity, which is
+only known after scoring.
+
+### R6 Independence
+
+A verifier result is independent only when all of these hold:
+
+- its `actor_id` differs from every red and blue actor on the claim;
+- it ran in a fresh conversation with no `prior_response` and no shared cache entry;
+- its input excluded red/blue narratives, dispositions, and actor ids (asserted against the
+  stored request bytes);
+- for every required predicate, at least one supporting relation came from its own retrieval
+  receipts. It may re-resolve the same entity red cited.
+
+Distinct provider or model family is *default* not required, because only `claude-cli` is
+configured today. Each finding package records `independence.provider_distinct`, so that
+publication can label it. This is the slice 1 answer to open question 2.
+
+### R7 Claim identity normalization
+
+- Affected entities are accepted logical identities. A span is normalized to its enclosing
+  `symbol` when an accepted symbol index covers it; otherwise it stays a `source_span`.
+- The weakness is a CWE id validated against the accepted MITRE CWE reference shard, with no
+  parent roll-up.
+- Preconditions and the security predicate are enum members. Statement and mechanism prose are
+  excluded from identity.
+- Near-duplicates under different CWEs remain separate claims linked by a `possible_duplicate`
+  nomination for later review. They are not merged in slice 1.
+
+### R8 Ledger, schemas, inputs, and configuration
+
+- **Ledger storage.** Each unit writes its events as an immutable JSONL shard under its unit root.
+  Each event carries `sequence`, `prev_event_sha256`, and `event_id`.
+  `publication.publish_claim_ledger` merges the shards in canonical order (claim id, then event
+  kind, then relation id), verifies every chain, and writes the ledger head and projection. The
+  projection is a pure function of the events. Resume reuses unit receipts through the existing
+  runtime checkpoint mechanism.
+- **Schemas to write first.** Write these under `docs/schemas/inference-security-review/`, before
+  handlers: `ledger-event`, `claim`, `evidence-relation`, `cell-record` (terminal status and
+  attempts), `gap`, `worker-turn` (retrieve/final), `red-result`, `blue-result`,
+  `verifier-result`, `adjudication`, `score-package`, `finding-package`, and the job
+  manifest/handoff. Each role's `final.result` schema is the only output that role can produce;
+  the allowed transitions follow from it.
+- **Input.** The input is the accepted index set at `runs/<run-id>/data/indices/accepted.json`
+  (`appsec-review/accepted-index-set/1`, resolved by `retrieval/core.py::resolve_accepted_manifest`).
+  Slice 1 implements review-package-contract assembly steps 1–6 inside `scope.*` and
+  `packages.*`; no separate assembler job exists. Hunt-package launch order is `package_id`
+  order. Review-prioritization signals may reorder launches later, but they never change
+  membership.
+- **Configuration.** Add a typed `InferenceSecurityReviewSettings` to `config/loader.py` that
+  rejects unknown keys. Model profiles use the existing `settings.model` field shape (`provider`,
+  `model`, `reasoning`, token caps, `timeout_seconds`, `retries`) under
+  `settings.models.<profile>`. Roles select a profile by name. Remove `max_cost_usd` until a
+  per-model price table exists, because `ModelResult` reports tokens, not cost.
+- **Budgets.** Before launch, cells are ordered canonically. Each launch checks the job counters
+  first. Cells left unlaunched when a budget is exhausted end `not_launched` with a `budget_gap`.
+- **Guidance.** Generalize `owasp_workbench/guidance.py` (`compose`, `pin_bundle`) into a shared
+  module rather than writing a second composer. Add the ten inference roles to
+  `pipeline/guidance/registry.json` as new ids; do not reuse the OWASP `independent_reviewer` or
+  `result_adjudicator`. Give each role record closed `tools`, `output_schema`, and `prohibited`
+  fields that the conflict validator reads. Add the task prompts under
+  `pipeline/guidance/tasks/inference-security-review/`, and expand `governing-rules.md` only for
+  rules shared with OWASP workers.
+- **Scoring.** The slice 1 scorer is `application_risk_matrix/1`, which is fully deterministic. It
+  has two axes:
+  - `impact_class`, from a TOML CWE→class table; an unmapped CWE gives a `null` rating plus
+    `missing_factors`;
+  - `exploitability_confidence`, derived from R5: `high` when confirmed, `medium` when supported.
+
+  Only confirmed and supported claims are scored. Its actor is the deterministic
+  `independent_scorer` record.
+- **Downstream.** Only `confirmed` claims are remediation-planning inputs by default. `supported`
+  claims are published with an explicit "not independently confirmed" label (open question 4).
+
+### Slice 1 definition of done
+
+- An injected deterministic `Infer` double drives a fixture accepted index set. The fixture holds
+  two packages, one High/Critical source-SAST lead, one failing cell, and one contradicted claim.
+- The Dagster acceptance run shows every R1 unit.
+- The handoff contains, in exact accounting:
+  - one claim in each of `confirmed`, `supported`, `contradicted`, and `insufficient_evidence`;
+  - one `duplicate`;
+  - one cell `worker_gap`;
+  - one budget `not_launched` cell.
+- Re-executing `blind_verify.verifier_cells` reuses every unchanged cell.
+- Changing one evidence shard reruns only the dependent cells.
+- The isolation tests prove that the verifier request bytes contain no red/blue narrative, and that
+  no capability reaches an evaluator root, a target-guidance file, or an arbitrary path.
+
 ## Prioritized implementation plan
 
 ### Vertical slice 1: minimum viable terminal review
@@ -1178,11 +1390,12 @@ host execution of target outputs, production proofs, and text parsing to infer s
    SSVC-style outputs disagree? The design requires an explicit policy but does not choose it.
 2. Must every High/Critical verifier use a different model provider/family, or is a different actor,
    fresh context, blind input, and independently gathered evidence sufficient when provider choice
-   is constrained?
+   is constrained? Slice 1 default: not required; see [R6](#r6-independence).
 3. What trusted operator workflow issues and revokes target-specific PoC authorization receipts,
    and what environments will initially host the isolated executor?
 4. Which finding states (`confirmed` only, or narrowly qualified `supported`) may enter remediation
-   planning, and how should internal reports label the latter?
+   planning, and how should internal reports label the latter? Slice 1 default: `confirmed`
+   only; see [R8](#r8-ledger-schemas-inputs-and-configuration).
 5. What freshness windows apply to CVE/exploitation intelligence, deployment configuration, and
    business-impact data?
 6. Should chain confirmation require a second verifier beyond the independent refuter for

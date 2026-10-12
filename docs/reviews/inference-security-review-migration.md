@@ -10,7 +10,7 @@ archived concepts map to the proposed
 | `07-hypothesis-discovery`, `07-red-team-adversarial` | replace | scope/package assembly, `hypothesis_hunter`, `red_team_analyst`, normalized claim shards | design only |
 | `08-blue-team-refutation` | replace | claim-level blind-safe blue falsification cells | design only |
 | `09-independent-verification` | replace | blind verifier cells plus deterministic evidence-qualified adjudication | design only |
-| claim reviewer pools | merge | Dagster dynamic cells keyed by claim × role × round × manifest | design only |
+| claim reviewer pools | merge | bounded in-unit cells keyed by claim × role × round × manifest behind visible Dagster units (design R1) | design only |
 | deterministic pool merge | port concept | deterministic normalized merge over reverified cell receipts | design only |
 | evidence-qualified quorum | replace | predicate/evidence/independence policy; no producer voting | design only |
 | `12-scoring-prioritization` and CVSS v4 calculation | replace/port | versioned `ScoringProvider` registry; retain standard-vector provenance | design only |
@@ -18,7 +18,7 @@ archived concepts map to the proposed
 | attack-chain composition/refutation | replace/port | single-ledger chain objects, five continuity dimensions, independent refutation, separate chain score | design only |
 | completeness audit/feedback, synthetic resynthesis, dynamic rescope | merge | delta-driven bounded rounds and dependency-based selective invalidation | design only |
 | persona/role prompt composition | replace/port | one role plus zero/one persona, immutable bundle hashes, conflict validation | design only |
-| pool rendezvous | replace | Dagster pools/dynamic mapping plus application-owned terminal receipts and serialized manifest publication | design only |
+| pool rendezvous | replace | Dagster pools over visible units, an in-unit cell executor, application-owned terminal receipts and serialized manifest publication | design only |
 | archived claim/chain/PoC/scoring schemas | replace | closed schemas under `docs/schemas/inference-security-review/` | pending implementation |
 
 ## Required implementation work
