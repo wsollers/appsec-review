@@ -46,6 +46,14 @@ class RetrievalGap(RuntimeError):
     """A truthful unavailability result, not evidence of an empty target."""
 
 
+class RetrievalIntegrityError(ValueError):
+    """An accepted pointer, manifest, or shard failed an integrity or isolation check.
+
+    It subclasses ``ValueError`` for existing callers; review code treats it as a framework-integrity
+    failure, never as a tool gap.
+    """
+
+
 class ShardGroup(tuple):
     """Tuple of accepted shards with mapping compatibility for a single legacy shard."""
 
@@ -69,19 +77,19 @@ def resolve_accepted_manifest(run_root: Path) -> tuple[Path, str]:
     if pointer.get("schema") != "appsec-review/accepted-index-set/1":
         raise RetrievalGap("accepted index pointer schema is unsupported")
     if pointer.get("run_id") != run_root.name:
-        raise ValueError("accepted index pointer run isolation mismatch")
+        raise RetrievalIntegrityError("accepted index pointer run isolation mismatch")
     handoff_path = (run_root / str(pointer.get("handoff_path", ""))).resolve()
     manifest_path = (run_root / str(pointer.get("manifest_path", ""))).resolve()
     if run_root not in handoff_path.parents or run_root not in manifest_path.parents:
-        raise ValueError("accepted index pointer escapes run")
+        raise RetrievalIntegrityError("accepted index pointer escapes run")
     if file_sha256(handoff_path) != pointer.get("handoff_sha256"):
-        raise ValueError("accepted handoff integrity mismatch")
+        raise RetrievalIntegrityError("accepted handoff integrity mismatch")
     handoff = json.loads(handoff_path.read_text(encoding="utf-8"))
     if handoff.get("status") != "ACCEPTED" or handoff.get("schema") != "appsec-review/job-handoff/1":
         raise RetrievalGap("index producer handoff is not accepted")
     manifest_sha = str(pointer.get("manifest_sha256", ""))
     if not _artifact_in_handoff(handoff, manifest_path.relative_to(run_root).as_posix(), manifest_sha):
-        raise ValueError("accepted manifest is not bound to its producer handoff")
+        raise RetrievalIntegrityError("accepted manifest is not bound to its producer handoff")
     return manifest_path, manifest_sha
 
 
@@ -95,10 +103,10 @@ class RetrievalCore:
         self.run_root = RunStore(Path(runs_dir)).resolve(run_id)
         manifest_path, accepted_sha = resolve_accepted_manifest(self.run_root)
         if manifest_sha256 is not None and not hmac.compare_digest(accepted_sha, manifest_sha256):
-            raise ValueError("MCP session manifest pin does not match accepted index set")
+            raise RetrievalIntegrityError("MCP session manifest pin does not match accepted index set")
         self.manifest, self.manifest_sha256 = load_verified_manifest(self.run_root, manifest_path, accepted_sha)
         if self.manifest.get("run_id") != run_id:
-            raise ValueError("manifest run isolation mismatch")
+            raise RetrievalIntegrityError("manifest run isolation mismatch")
         self.run_id = run_id
         self.target_root = Path(str(self.manifest["target_root"])).resolve()
         self.limits = limits or RetrievalLimits()
@@ -146,7 +154,7 @@ class RetrievalCore:
         if self.run_root not in path.parents or not path.is_file():
             raise ValueError(f"index is unavailable: {name}")
         if not hmac.compare_digest(file_sha256(path), str(identity["sha256"])):
-            raise ValueError(f"index integrity mismatch: {name}")
+            raise RetrievalIntegrityError(f"index integrity mismatch: {name}")
         uri = f"file:{path.as_posix()}?mode=ro&immutable=1"
         database = sqlite3.connect(uri, uri=True, timeout=0.1)
         database.row_factory = sqlite3.Row
@@ -156,7 +164,7 @@ class RetrievalCore:
                 metadata.get("shard_id", "default")) != (
                 identity["schema"], name, identity["fingerprint"], identity.get("shard_id", "default")):
             database.close()
-            raise ValueError(f"index metadata mismatch: {name}/{identity.get('shard_id', 'default')}")
+            raise RetrievalIntegrityError(f"index metadata mismatch: {name}/{identity.get('shard_id', 'default')}")
         database.set_progress_handler(lambda: 1 if self.clock() > deadline else 0, 1000)
         return database
 

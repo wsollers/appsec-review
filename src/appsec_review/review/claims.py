@@ -11,9 +11,8 @@ import re
 from typing import Callable, Collection, Iterable, Sequence
 
 from appsec_review.retrieval.model import EntityKind, LogicalIdentity
-from appsec_review.review.evidence import make_gap
 from appsec_review.review.identity import make_id
-from appsec_review.review.models import Claim, Gap, GapClass, Lane
+from appsec_review.review.models import Claim, Gap, GapClass, Lane, make_gap
 from appsec_review.review.obligations import parse_precondition
 
 CLAIM_IDENTITY_VERSION = 1

@@ -16,14 +16,15 @@ processes cannot claim the same run concurrently.
 The direct CLI currently exercises this mechanism with a linear 17-job review graph from
 `job_review_intake` through `job_review_data_indexing`. Dagster builds the broader, branched
 `wave1_review` topology from every registered and configured job except
-`job_third_party_data_sync`, adding the CI configuration, post-build, OWASP, and security-tagging
-jobs that are not in the direct graph. Both surfaces use the same semantic registry and
+`job_third_party_data_sync` and `job_inference_security_review`, adding the CI configuration,
+post-build, OWASP, and security-tagging jobs that are not in the direct graph. The inference
+security review runs as its own standalone Dagster job over the run's accepted index set. Both surfaces use the same semantic registry and
 accepted-handoff format. The exact operator-visible distinction is documented in
 [`../operations/wave1-review.md`](../operations/wave1-review.md).
 
 ## Registered jobs
 
-`runtime/registry.py` registers 22 jobs. Each has a `[jobs.<job_id>]` table in
+`runtime/registry.py` registers 23 jobs. Each has a `[jobs.<job_id>]` table in
 `appsec-review.toml`, and its Dagster job is named from that table's `name`.
 
 | Job | Purpose | Operations |
@@ -50,6 +51,7 @@ accepted-handoff format. The exact operator-visible distinction is documented in
 | `job_review_prioritization` | Function-level review prioritization | [review-prioritization](../operations/review-prioritization.md) |
 | `job_security_tagging` | Basis-qualified security tags | [security-tagging](../operations/security-tagging.md) |
 | `job_review_data_indexing` | Dataset inventory and publication audit | [review-data-indexing](../operations/review-data-indexing.md) |
+| `job_inference_security_review` | Two-lane evidence-bound inference review (slice 1: claim ledger, adjudication, one scorer, accepted handoff) | [inference-security-review](inference-security-review.md) |
 
 Each orchestrated graph launch also publishes an immutable run-level orchestration receipt. This
 keeps the current Dagster run linked to the application run even when every job is reused and the

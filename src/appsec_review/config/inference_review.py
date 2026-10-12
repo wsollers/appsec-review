@@ -126,6 +126,20 @@ class LaneSettings:
 
 
 @dataclass(frozen=True, slots=True)
+class PackageAssemblySettings:
+    """Package assembly bounds (review-package contract gates 3-6); admission and the hunt cutoff
+    come from ``lanes.lead_admission`` and ``lanes.hunt_max_units``."""
+
+    hunt_menu_partition_size: int
+    unit_max_files: int
+    max_context_entries: int
+    max_package_bytes: int
+    max_page_size: int
+    max_pages: int
+    max_depth: int
+
+
+@dataclass(frozen=True, slots=True)
 class BudgetSettings:
     budget_team_packages: int
     max_model_turns: int
@@ -222,6 +236,7 @@ class InferenceSecurityReviewSettings:
     rounds: RoundSettings
     teams: TeamSettings
     lanes: LaneSettings
+    packages: PackageAssemblySettings
     budgets: BudgetSettings
     retry: RetrySettings
     models: Mapping[str, ModelProfileSettings]
@@ -407,8 +422,8 @@ def _poc(value: object, enabled_providers: tuple[str, ...]) -> PocSettings:
 
 def parse_inference_review_settings(value: Mapping[str, Any]) -> InferenceSecurityReviewSettings:
     """Validate ``jobs.job_inference_security_review.settings`` into frozen typed settings."""
-    settings = _table(value, _PREFIX, {"rounds", "teams", "lanes", "budgets", "retry", "models", "roles",
-                                       "routing", "scoring", "poc"})
+    settings = _table(value, _PREFIX, {"rounds", "teams", "lanes", "packages", "budgets", "retry", "models",
+                                       "roles", "routing", "scoring", "poc"})
 
     field = f"{_PREFIX}.rounds"
     rounds_value = _table(settings["rounds"], field, {"max_rounds", "stable_rounds_required",
@@ -445,6 +460,21 @@ def parse_inference_review_settings(value: Mapping[str, Any]) -> InferenceSecuri
                                          f"{field}.hunt_max_claims_per_package", 1, 100),
         hunt_panel_rule=_str(lanes_value["hunt_panel_rule"], f"{field}.hunt_panel_rule", _RULE_ID),
         incomplete_gap_ratio=_ratio(lanes_value["incomplete_gap_ratio"], f"{field}.incomplete_gap_ratio"),
+    )
+
+    field = f"{_PREFIX}.packages"
+    packages_value = _table(settings["packages"], field, {
+        "hunt_menu_partition_size", "unit_max_files", "max_context_entries", "max_package_bytes",
+        "max_page_size", "max_pages", "max_depth"})
+    packages = PackageAssemblySettings(
+        hunt_menu_partition_size=_int(packages_value["hunt_menu_partition_size"],
+                                      f"{field}.hunt_menu_partition_size", 1, 10_000),
+        unit_max_files=_int(packages_value["unit_max_files"], f"{field}.unit_max_files", 1, 100_000),
+        max_context_entries=_int(packages_value["max_context_entries"], f"{field}.max_context_entries", 1, 10_000),
+        max_package_bytes=_int(packages_value["max_package_bytes"], f"{field}.max_package_bytes", 1, 16 * 1024 * 1024),
+        max_page_size=_int(packages_value["max_page_size"], f"{field}.max_page_size", 1, 100),
+        max_pages=_int(packages_value["max_pages"], f"{field}.max_pages", 1, 100),
+        max_depth=_int(packages_value["max_depth"], f"{field}.max_depth", 1, 8),
     )
 
     field = f"{_PREFIX}.budgets"
@@ -490,7 +520,7 @@ def parse_inference_review_settings(value: Mapping[str, Any]) -> InferenceSecuri
 
     scoring = _scoring(settings["scoring"])
     return InferenceSecurityReviewSettings(
-        rounds=rounds, teams=teams, lanes=lanes, budgets=budgets, retry=retry,
+        rounds=rounds, teams=teams, lanes=lanes, packages=packages, budgets=budgets, retry=retry,
         models=MappingProxyType(models), roles=MappingProxyType(roles), routing=routing,
         scoring=scoring, poc=_poc(settings["poc"], scoring.enabled_providers),
     )

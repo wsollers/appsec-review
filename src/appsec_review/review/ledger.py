@@ -379,6 +379,20 @@ class ClaimView:
     claim: Claim                         # current state and duplicate_of
     history: tuple[StateChange, ...]
     proposal_sha256s: tuple[str, ...]
+    # Lane of every proposal of this claim id, sorted; more than one entry means duplicate proposals
+    # that merged into this claim (lead lane wins, then lowest package_id).
+    proposal_lanes: tuple[Lane, ...] = ()
+
+    @property
+    def duplicate_proposals(self) -> dict[Lane, int]:
+        """Proposals beyond the canonical one, counted by the lane that made them."""
+        counts = {lane: 0 for lane in Lane}
+        remaining = list(self.proposal_lanes)
+        if self.claim.lane in remaining:
+            remaining.remove(self.claim.lane)
+        for lane in remaining:
+            counts[lane] += 1
+        return counts
 
 
 @dataclass(frozen=True, slots=True)
@@ -521,7 +535,8 @@ def project(events: Iterable[Mapping[str, Any]]) -> Projection:
     for claim_id, items in proposals.items():
         claim, event_ids = _merge_proposals(items)
         state, duplicate_of, history = _walk(claim_id, transitions.pop(claim_id, []))
-        claims[claim_id] = ClaimView(replace(claim, state=state, duplicate_of=duplicate_of), history, event_ids)
+        claims[claim_id] = ClaimView(replace(claim, state=state, duplicate_of=duplicate_of), history, event_ids,
+                                     tuple(sorted((item.lane for item, _ in items), key=_LANE_ORDER.__getitem__)))
     if transitions:
         raise IntegrityError(f"state transition for unknown claim: {sorted(transitions)[0]}")
     by_claim: dict[str, list[EvidenceRelation]] = defaultdict(list)

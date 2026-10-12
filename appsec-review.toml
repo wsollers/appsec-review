@@ -1687,6 +1687,16 @@ hunt_max_claims_per_package = 5
 hunt_panel_rule = "hunt-panel/1"
 incomplete_gap_ratio = 0.25
 
+# Package assembly bounds; admission and the hunt cutoff are lanes.lead_admission and lanes.hunt_max_units.
+[jobs.job_inference_security_review.settings.packages]
+hunt_menu_partition_size = 25
+unit_max_files = 200
+max_context_entries = 64
+max_package_bytes = 65536
+max_page_size = 20
+max_pages = 5
+max_depth = 4
+
 [jobs.job_inference_security_review.settings.budgets]
 budget_team_packages = 200
 max_model_turns = 12000

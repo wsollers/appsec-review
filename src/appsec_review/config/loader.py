@@ -433,7 +433,7 @@ class JobConfig:
 # Jobs whose configuration is typed and validated before their runtime is registered. They are
 # kept out of ``AppConfig.jobs`` and the resolved ``jobs`` table, which must match the registry,
 # and are resolved under ``pending_jobs`` instead. Remove a job from here when it is registered.
-PENDING_JOBS = frozenset({"job_inference_security_review"})
+PENDING_JOBS: frozenset[str] = frozenset()
 OVERLAY_ENVIRONMENT = "APPSEC_REVIEW_CONFIG_OVERLAY"
 OVERLAY_LAYER = "capacity_overlay"
 

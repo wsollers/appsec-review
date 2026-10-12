@@ -117,3 +117,11 @@ def test_processes_never_overspend_the_budget(tmp_path: Path) -> None:
     snapshot = JobBudget(tmp_path, _limits(budget_team_packages=50)).snapshot()
     assert sum(snapshot.team_packages.values()) == 50
     assert snapshot.model_turns == 120
+
+
+def test_team_package_ceiling_stops_teams_but_not_cells_of_launched_teams(tmp_path: Path) -> None:
+    budget = JobBudget(tmp_path / "budget", _limits(budget_team_packages=1, max_model_turns=3))
+    assert budget.reserve(Lane.LEAD) and not budget.can_launch()
+    assert budget.usage_exhausted() is None and budget.cell_launch_allowed()
+    budget.charge(model_turns=3)
+    assert budget.usage_exhausted() == "max_model_turns" and not budget.cell_launch_allowed()

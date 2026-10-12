@@ -8,6 +8,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import StrEnum
 
+from appsec_review.review.identity import make_id
+
+MAX_GAP_REASON = 256
+
 
 class Lane(StrEnum):
     LEAD = "lead"      # lane A: admitted reported critical/high/unknown leads
@@ -143,6 +147,15 @@ class Gap:
     reason: str                      # bounded, redacted; machines use gap_class only
     predicate: Predicate | None = None
     round: int = 0
+
+
+def make_gap(gap_class: GapClass, subject_id: str, reason: str, *, predicate: Predicate | None = None,
+             round: int = 0) -> Gap:
+    """Return a gap whose identity covers its class, subject, predicate, round, and bounded reason."""
+    bounded = " ".join(str(reason).split())[:MAX_GAP_REASON]
+    body = {"gap_class": GapClass(gap_class).value, "subject_id": subject_id, "reason": bounded,
+            "predicate": predicate.value if predicate is not None else None, "round": round}
+    return Gap(make_id("gap", 1, body), GapClass(gap_class), subject_id, bounded, predicate, round)
 
 
 @dataclass(frozen=True, slots=True)

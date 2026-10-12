@@ -8,6 +8,7 @@ from .codeql import (
 
 from .inference_review import (
     CAPACITY_KEYS, BudgetSettings, InferenceSecurityReviewSettings, LaneSettings, ModelProfileSettings,
+    PackageAssemblySettings,
     PocEligibilityRule, PocSettings, RetrySettings, RoleSettings, RoundSettings, RoutingSettings,
     ScoringProviderSettings, ScoringSettings, TeamSettings, parse_inference_review_settings,
     semantic_settings_sha256, semantic_settings_view,
@@ -25,7 +26,7 @@ __all__ = [
     "PhpBuildSettings", "ProcessingMode", "PythonBuildSettings", "RustBuildSettings", "ScheduleConfig", "StepConfig", "TaskConfig", "ToolCapabilityConfig",
     "WasmBuildSettings", "WasmProducerSettings", "load_config", "parse_codeql_settings",
     "BudgetSettings", "CAPACITY_KEYS", "InferenceSecurityReviewSettings", "LaneSettings", "ModelProfileSettings",
-    "OVERLAY_ENVIRONMENT", "PENDING_JOBS", "PocEligibilityRule", "PocSettings", "RetrySettings", "RoleSettings",
+    "OVERLAY_ENVIRONMENT", "PENDING_JOBS", "PackageAssemblySettings", "PocEligibilityRule", "PocSettings", "RetrySettings", "RoleSettings",
     "RoundSettings", "RoutingSettings", "ScoringProviderSettings", "ScoringSettings", "TeamSettings",
     "overlay_capacity_keys", "parse_inference_review_settings", "semantic_settings_sha256",
     "semantic_settings_view",

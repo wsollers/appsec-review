@@ -87,7 +87,7 @@ INPUT_SOURCES: tuple[tuple[str, tuple[str, ...], str, tuple[str, ...], tuple[str
     ("dynamic_traces", ("planned:future_dynamic_producer",), "planned", ("dataflow", "entrypoint_paths", "review_package"),
      ()),
     ("protected_runtime_material", ("runtime",), "protected", (), ("query_datasets", "coverage")),
-    ("review_decisions", ("planned:inference_publication",), "planned", ("review_package",), ()),
+    ("review_decisions", ("job_inference_security_review",), "extend", ("review_package",), ("coverage",)),
 )
 
 

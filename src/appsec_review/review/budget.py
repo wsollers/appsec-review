@@ -102,8 +102,26 @@ class JobBudget:
         return self._transact(mutate)[0]
 
     def can_launch(self) -> bool:
-        """Whether a new cell may start; checked before every launch."""
+        """Whether a new team may start; checked before every team launch."""
         return self._transact(lambda state: None)[1]["exhausted"] is None
+
+    def usage_exhausted(self) -> str | None:
+        """The first usage or wall-clock ceiling reached, ignoring ``budget_team_packages``.
+
+        A team already launched keeps launching its own cells after the team-package ceiling is
+        reached; any turn, token, query, or wall-clock ceiling stops new cell launches.
+        """
+        state = self._transact(lambda state: None)[1]
+        for counter, ceiling in _CEILINGS:
+            if state[counter] >= getattr(self.limits, ceiling):
+                return ceiling
+        if self.clock() - state["started_at"] >= self.limits.timeout_seconds:
+            return "timeout_seconds"
+        return None
+
+    def cell_launch_allowed(self) -> bool:
+        """Whether a new cell inside a launched team may start; checked before every cell launch."""
+        return self.usage_exhausted() is None
 
     def charge(self, *, model_turns: int = 0, input_tokens: int = 0, output_tokens: int = 0,
                retrieval_queries: int = 0) -> str | None:
