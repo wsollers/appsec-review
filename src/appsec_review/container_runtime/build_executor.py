@@ -219,7 +219,7 @@ class BuildContainerExecutor:
             "--user", self.profile.user, "--cap-drop", "ALL",
             "--security-opt", "no-new-privileges", "--cpus", "2", "--memory", "4g",
             "--pids-limit", "1024", "--tmpfs",
-            "/tmp:rw,noexec,nosuid,size=2g" if self.profile.name == "android"
+            "/tmp:rw,exec,nosuid,size=2g" if self.profile.name == "android"
             else "/tmp:rw,noexec,nosuid,size=1g",
             "--workdir", f"/workspace/{working_directory}", "--mount",
             f"type=bind,src={bind_source},dst=/workspace",
