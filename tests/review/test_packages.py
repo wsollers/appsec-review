@@ -102,7 +102,9 @@ def test_every_package_validates_against_the_v2_schema_and_extra_fields_are_reje
         validator.validate(document)
         assert document["package_id"] == package.package_id
         assert document["persona"] is None and document["stack_profile"] is None
-    finding = next(item.document() for item in assembly.packages if item.kind == "finding_lead")
+    # Choose by content, not by hash order: the mutations need a lead with context entries.
+    finding = next(item.document() for item in assembly.packages
+                   if item.kind == "finding_lead" and item.document()["context"])
     hunt = next(item.document() for item in assembly.packages if item.kind == "hunt")
     mutations = [
         lambda value: value.update(extra=1),

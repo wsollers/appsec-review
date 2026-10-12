@@ -152,3 +152,41 @@ procedure could have reached job runs. Skills are now split:
 Adding the `audience` line changed the three runtime skills' bytes. Their guidance hashes therefore
 changed once, which invalidates cached model calls for those three jobs.
 
+## 8. Reference-feed enrichment (follow-up)
+
+One agent implemented pinned reference-feed enrichment (merge `a3db635`).
+
+**Data flow:**
+- **MITRE.** Claim CWEs validate against the run's pinned MITRE CWE catalog. An unpinned,
+  mismatched or stale catalog falls back to rule and crosswalk CWEs, with a recorded
+  `reference:mitre_cwe` gap.
+- **NVD.** `nvd_sync` publishes a hash-pinned `index/nvd.sqlite`.
+- **KEV and EPSS.** New `kev_sync` and `epss_sync` steps publish `index/kev.sqlite` and
+  `index/epss.sqlite`, and feed pinning enforces a freshness bound for each feed.
+- **Product.** `dependency_advisories/2` joins NVD, KEV and EPSS by CVE id, recording gaps for each
+  join.
+- **Packages.** Package schema /3 carries `advisory_context`, `advisory_summary` and `weaknesses`.
+- **Lane A.** Admission takes NVD's CVSS band when the scanner gave none, and admits KEV-listed
+  advisories. This is configured by `lanes.lead_admission_kev`, which defaults to true.
+- **Lane B.** Ranking gains KEV and EPSS signals.
+- **Scorer.** It receives `reference_cvss`, `kev_listed` and `epss` as labelled reference inputs.
+- **Evidence status.** Advisory records are INDIRECT evidence for every predicate.
+
+**Fixed at merge:**
+- **Input-source matrix.** The docs gained KEV and EPSS rows without matching `INPUT_SOURCES`
+  entries in code; the entries were added.
+- **"Flaky" package-schema test.** It was deterministic and order-dependent. It picked the first
+  finding package by hash, which after schema /3 had an empty `context` list. It now picks by
+  content.
+
+**Not exercised live.** The feed URLs and formats are configured but have never been fetched. This
+covers the EPSS host and comment-line format, and the KEV field names. All feed tests use offline
+fixtures through the real normalize, index and publish code.
+
+**Open items:**
+- A stale KEV feed still admits to lane A, with a gap.
+- Only NVD `vulnStatus` is captured; CVE "disputed" tags are not.
+- Reference scorer inputs come only from lane A packages.
+- The failing wave-1 Dagster tests write run directories into the repository `runs/` directory.
+  This was already the case before this work and should be fixed separately.
+
