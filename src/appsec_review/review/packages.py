@@ -13,7 +13,8 @@ abstraction) from the run-pinned MITRE catalog or, failing that, the accepted
 Schema v4 adds accepted code-graph context (docs/architecture/code-graph-precomputation.md section
 7.5): ``context`` roles ``entry_point``, ``sink``, ``path``, ``guard`` and ``range``;
 ``retrieval.graph_families`` naming the graph families accepted (any coverage state but
-``unavailable``) for the package scope; and ``code_graph`` coverage gaps for the scope's graph
+``unavailable``) for the package scope; ``retrieval.graph_scopes`` naming the CodeQL scope ids of
+those facts, which bound the scope-checked graph grant of every cell capability for the package; and ``code_graph`` coverage gaps for the scope's graph
 lane. A lead package embeds the ``dataflow_path`` facts correlated ``bridged`` or ``partial`` with
 its observation, their sink and entry point, and the sink's ``guard_fact``/``range_fact`` facts. A
 hunt package embeds, per unit, ``sink_site`` and ``entry_point`` identities taken round-robin by
@@ -246,6 +247,7 @@ class _GraphShard:
     families: frozenset[str]
     build_unit_ids: frozenset[str]
     paths: frozenset[str]
+    scope_ids: frozenset[str]          # CodeQL scope ids of the shard (producer and fact payloads)
     state: str                         # complete | partial | unavailable
     reason: str | None
 
@@ -299,6 +301,9 @@ class GraphContext:
             families: set[str] = set()
             units: set[str] = set()
             paths: set[str] = set()
+            scope_ids: set[str] = set()
+            if isinstance(producer.get("scope_id"), str) and producer["scope_id"]:
+                scope_ids.add(str(producer["scope_id"]))
             if producer.get("family") in family_names:
                 families.add(str(producer["family"]))
             if isinstance(producer.get("build_unit_id"), str) and producer["build_unit_id"]:
@@ -312,6 +317,9 @@ class GraphContext:
                 unit = _nested(payload, "scope", "build_unit_id")
                 if isinstance(unit, str) and unit:
                     units.add(unit)
+                scope_id = _nested(payload, "scope", "scope_id")
+                if isinstance(scope_id, str) and scope_id:
+                    scope_ids.add(scope_id)
                 if path:
                     paths.add(str(path))
                 klass = (result.get("sink_class") if kind == "sink_site" else
@@ -323,7 +331,8 @@ class GraphContext:
                     _identity_or_none(_nested(result, "source", "entry_point")), sha)
             state, reason = _shard_state(store.coverage((shard,)))
             self.shards.append(_GraphShard(f"{shard['name']}/{shard.get('shard_id', 'default')}", sha,
-                                           frozenset(families), frozenset(units), frozenset(paths), state, reason))
+                                           frozenset(families), frozenset(units), frozenset(paths),
+                                           frozenset(scope_ids), state, reason))
         for relation in store.relations(shards, kinds=("DERIVED_FROM",)):
             source = self.facts.get(str(relation["source_id"]))
             if (source is not None and source.kind == "dataflow_path"
@@ -334,6 +343,15 @@ class GraphContext:
         members = set(paths)
         return [item for item in self.shards
                 if (build_unit_id is not None and build_unit_id in item.build_unit_ids) or item.paths & members]
+
+    def scopes(self, build_unit_id: str | None, paths: Iterable[str]) -> list[str]:
+        """CodeQL scope ids whose accepted (not ``unavailable``) graph facts apply to a package scope.
+
+        These become ``retrieval.graph_scopes``: a review cell may receive and cite graph rows whose
+        own ``scope.scope_id`` is listed, and nothing from any other scope.
+        """
+        return sorted({scope_id for item in self.applying(build_unit_id, paths) if item.state != "unavailable"
+                       for scope_id in item.scope_ids})
 
     def families(self, build_unit_id: str | None, paths: Iterable[str], subject: str
                  ) -> tuple[list[str], list[str], list[ScopeGap]]:
@@ -458,7 +476,7 @@ class _Assembler:
                partition: tuple[int, int], rank: Mapping[str, Any] | None, menu: list[tuple[Lead, str, str | None]],
                context: list[ContextEntry], obligations: Iterable[Predicate], gaps: Iterable[ScopeGap],
                truncation: Mapping[str, Any], graph_families: Iterable[str] = (),
-               graph_shards: Iterable[str] = ()) -> tuple[str, bytes]:
+               graph_shards: Iterable[str] = (), graph_scopes: Iterable[str] = ()) -> tuple[str, bytes]:
         leads = sorted(menu, key=lambda item: (SEVERITY_ORDER[item[0].reported_severity], item[0].observation_id))
         lead_ids = sorted(item[0].observation_id for item in leads)
         entities = sorted({*lead_ids, *scope_record["source_ids"], *scope_record["artifact_ids"],
@@ -468,7 +486,8 @@ class _Assembler:
                                *(self.correlation_hashes if any(item[0].family in {"source_sast", "codeql"}
                                                                 for item in leads) else ())})
         retrieval = {"indexes": list(self.scope.index_names), "query_sets": list(self.scope.query_sets),
-                     "graph_families": sorted(set(graph_families)), "entity_ids": entities, "max_page_size": self.settings.max_page_size,
+                     "graph_families": sorted(set(graph_families)), "graph_scopes": sorted(set(graph_scopes)),
+                     "entity_ids": entities, "max_page_size": self.settings.max_page_size,
                      "max_pages": self.settings.max_pages, "max_depth": self.settings.max_depth}
         fingerprint = sha256_hex({
             "manifest_sha256": self.scope.manifest_sha256, "scope": dict(scope_record), "shards": shard_hashes,
@@ -535,7 +554,8 @@ class _Assembler:
                 kind="finding_lead", lead_family=lead.family, scope_record=scope_record, partition=(0, 1), rank=None,
                 menu=[(lead, component_id, unit_id)], context=capped, obligations=OBLIGATIONS[lead.family],
                 gaps=gaps, truncation={"omitted_leads": 0, "omitted_context": omitted, "next_partition": None},
-                graph_families=families, graph_shards=graph_shards)
+                graph_families=families, graph_shards=graph_shards,
+                graph_scopes=self.graph.scopes(unit_id, (lead.path,) if lead.path else ()))
             if len(body) <= self.settings.max_package_bytes:
                 break
             if not capped:
@@ -565,6 +585,7 @@ class _Assembler:
                                  f"{graph_omitted} graph context entr{'y' if graph_omitted == 1 else 'ies'} "
                                  f"exceeded max_context_entries={bound}"))
         families, graph_shards, graph_gaps = self.graph.families(unit.build_unit_id, unit.paths, unit.key)
+        graph_scopes = self.graph.scopes(unit.build_unit_id, unit.paths)
         missing = [gap for gap in (*self.scope.gaps, *self.collection.gaps) if gap.state == "missing"]
         scope_record = {"component_id": unit.component_id, "trust_boundary_id": unit.trust_boundary_id,
                         "build_unit_id": unit.build_unit_id, "source_ids": list(unit.source_ids),
@@ -580,7 +601,7 @@ class _Assembler:
                 partition=(number, count), rank=rank, menu=chunk, context=context, obligations=OBLIGATIONS["hunt"],
                 gaps=[*gaps, *graph_gaps, *missing], truncation={"omitted_leads": 0, "omitted_context": omitted,
                                                                  "next_partition": following},
-                graph_families=families, graph_shards=graph_shards)
+                graph_families=families, graph_shards=graph_shards, graph_scopes=graph_scopes)
 
         def split(chunk: list) -> list[list]:
             _identity, body = render(chunk, 99_998, 99_999)  # widest numbering bounds the final size
@@ -687,10 +708,8 @@ def assemble_packages(scope: AcceptedScope, settings: PackageSettings | None = N
         raise IntegrityError("package identity collision")
     scope.verify()
 
-    graph_gaps = () if assembler.graph.available else (ScopeGap(
-        GRAPH_PRODUCER, "run", "missing", "no accepted graph index in the accepted index set; its coverage is "
-                                          "unknown, not clean"),)
-    gaps = sorted_gaps((*scope.gaps, *collection.gaps, *cutoff_gaps, *assembler.extra_gaps, *graph_gaps))
+    # A missing graph index is already the scope's ``code_graph`` producer gap (review/scope.py).
+    gaps = sorted_gaps((*scope.gaps, *collection.gaps, *cutoff_gaps, *assembler.extra_gaps))
     hunted_keys = {item.unit.key for item in hunted}
     unit_packages: dict[str, list[str]] = defaultdict(list)
     for package in packages:

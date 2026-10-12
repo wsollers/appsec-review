@@ -179,7 +179,15 @@ def test_rerun_reuses_every_scope_checkpoint(published) -> None:
     assert second["status"]["attempt_id"] != first["status"]["attempt_id"]
 
 
-def test_catalog_change_rebuilds_only_graph_shards(published, tmp_path: Path) -> None:
+def _changed_catalog(tmp_path: Path) -> Path:
+    catalog = json.loads(CATALOG_PATH.read_text(encoding="utf-8"))
+    catalog["revision"] = int(catalog["revision"]) + 1
+    changed = tmp_path / "catalog.json"
+    changed.write_text(json.dumps(catalog, indent=2), encoding="utf-8")
+    return changed
+
+
+def test_catalog_change_rebuilds_only_graph_shards(published, tmp_path: Path, monkeypatch) -> None:
     staged, _ = published
     document = _manifest(staged)
     graph_before = {item["shard_id"]: item["sha256"] for item in _graph(document)}
@@ -189,10 +197,10 @@ def test_catalog_change_rebuilds_only_graph_shards(published, tmp_path: Path) ->
                           for scope in SUCCEEDED_SCOPES}
     export_files = {path: file_sha256(path) for scope in SUCCEEDED_SCOPES
                     for path in staged.export_dir(scope).iterdir()}
-    catalog = json.loads(CATALOG_PATH.read_text(encoding="utf-8"))
-    catalog["revision"] = int(catalog["revision"]) + 1
-    changed = tmp_path / "catalog.json"
-    changed.write_text(json.dumps(catalog, indent=2), encoding="utf-8")
+    changed = _changed_catalog(tmp_path)
+    # A run configured with the revised catalog: its CodeQL export pin names the new catalog hash.
+    monkeypatch.setattr("appsec_review.jobs.job_code_graph_index.job.catalog_pins",
+                        lambda document: {"cpp": frozenset({file_sha256(changed)})})
     outputs = _outputs(_run(staged, build_job(catalog_path=changed)))
     assert outputs["load.accepted_inputs"]["reused_count"] == 0
     assert len(outputs["normalize.scopes"]["scopes"]) == 2
@@ -207,6 +215,17 @@ def test_catalog_change_rebuilds_only_graph_shards(published, tmp_path: Path) ->
     assert {scope: file_sha256(staged.export_dir(scope).parent / "export-checkpoint.json")
             for scope in SUCCEEDED_SCOPES} == export_checkpoints
     assert {path: file_sha256(path) for path in export_files} == export_files
+
+
+def test_a_catalog_other_than_the_configured_codeql_pin_fails_the_load_unit(staged: Staged, tmp_path: Path) -> None:
+    # The run-bound jobs.job_codeql_analysis.settings.languages.cpp.export_queries.catalog_sha256 pins
+    # the repository catalog; a different catalog would classify facts under rules the run never pinned.
+    with pytest.raises(RuntimeError, match="partial failure"):
+        _run(staged, build_job(catalog_path=_changed_catalog(tmp_path)))
+    attempt = next((staged.run_root / "data" / "jobs" / JOB_ID / "attempts").iterdir())
+    status = json.loads((attempt / "steps" / "load" / "tasks" / "accepted_inputs" / "status.json").read_text())
+    assert status["status"] == "FAILED" and status["error"]["type"] == "IntegrityError"
+    assert accepted_handoff(staged.run_root, JOB_ID) is None
 
 
 @pytest.mark.parametrize("victim", ["call_sites.json", "export-manifest.json"])

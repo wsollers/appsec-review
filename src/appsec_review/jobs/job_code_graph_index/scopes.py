@@ -23,7 +23,7 @@ from appsec_review.graph.contract import (
 from appsec_review.graph.correlate import CORRELATION_RULE
 from appsec_review.graph.crosscheck import SourceFile
 from appsec_review.graph.normalize import COLUMNS_PATH, CoverageRow
-from appsec_review.indexing.store import ShardSet, accepted_handoff, open_shard, shard_key
+from appsec_review.indexing.store import ShardSet, accepted_handoff, handoff_manifests, open_shard, shard_key
 from appsec_review.jobs.job_codeql_analysis.job import GRAPH_EXPORTS_SCHEMA
 from appsec_review.retrieval import (
     EntityRecord, IndexBuilder, IndexIdentity, LogicalIdentity, RelationKind, RelationRecord, SourceLocation,
@@ -228,6 +228,34 @@ def secondary_producer(shard: Mapping[str, Any]) -> Producer | None:
     if producer.get("job") == "job_cpp_compiled_analysis" and producer.get("branch") == "ast":
         return Producer.CLANG_AST
     return None
+
+
+SECONDARY_JOBS = ("job_cpp_symbol_index", "job_cpp_compiled_analysis")
+
+
+def restored_secondary(run_root: Path, present: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """clangd, IR and AST shards an accepted producer published but the accepted manifest dropped.
+
+    ``job_codeql_analysis`` publishes a manifest of its own shards only (its siblings are referenced
+    as verified upstream manifests, not composed), so by the time this job runs the accepted manifest
+    no longer lists the C/C++ secondary shards. They are taken back from the producers' own accepted
+    handoffs, whose manifests are re-verified, exactly as ``job_review_data_indexing`` restores dropped
+    shards; only shards the handoff's own job produced are eligible.
+    """
+    by_key = {shard_key(item) for item in present}
+    restored: dict[tuple[str, str], dict[str, Any]] = {}
+    for job_id in SECONDARY_JOBS:
+        accepted = accepted_handoff(run_root, job_id)
+        if accepted is None:
+            continue
+        for manifest in handoff_manifests(run_root, accepted.handoff):
+            for shard in manifest["document"].get("indexes", ()):
+                if (shard.get("producer") or {}).get("job") != job_id or secondary_producer(shard) is None:
+                    continue
+                key = shard_key(shard)
+                if key not in by_key and key not in restored:
+                    restored[key] = dict(shard)
+    return [restored[key] for key in sorted(restored)]
 
 
 def assign_secondary(run_root: Path, shards: Iterable[Mapping[str, Any]],
