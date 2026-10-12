@@ -170,6 +170,50 @@ workers = 1
 [jobs.job_third_party_data_sync.steps.cve_bin_tool_db_build.tasks.publish]
 workers = 1
 
+# CISA Known Exploited Vulnerabilities catalog. Reference context only: a listing never establishes
+# that the target is affected. Pin `sha256` to require an exact catalog file.
+[jobs.job_third_party_data_sync.steps.kev_sync]
+workers = 1
+
+[jobs.job_third_party_data_sync.steps.kev_sync.settings]
+feed_root = "data/feeds/kev"
+url = "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"
+allowed_hosts = ["www.cisa.gov"]
+max_source_bytes = 33554432
+max_records = 50000
+timeout_seconds = 120
+
+[jobs.job_third_party_data_sync.steps.kev_sync.tasks.fetch]
+workers = 1
+
+[jobs.job_third_party_data_sync.steps.kev_sync.tasks.normalize]
+workers = 1
+
+[jobs.job_third_party_data_sync.steps.kev_sync.tasks.publish]
+workers = 1
+
+# FIRST EPSS daily scores (gzip CSV). Reference context only; never target evidence.
+[jobs.job_third_party_data_sync.steps.epss_sync]
+workers = 1
+
+[jobs.job_third_party_data_sync.steps.epss_sync.settings]
+feed_root = "data/feeds/epss"
+url = "https://epss.empiricalsecurity.com/epss_scores-current.csv.gz"
+allowed_hosts = ["epss.empiricalsecurity.com"]
+max_source_bytes = 67108864
+max_uncompressed_bytes = 268435456
+max_records = 1000000
+timeout_seconds = 120
+
+[jobs.job_third_party_data_sync.steps.epss_sync.tasks.fetch]
+workers = 1
+
+[jobs.job_third_party_data_sync.steps.epss_sync.tasks.normalize]
+workers = 1
+
+[jobs.job_third_party_data_sync.steps.epss_sync.tasks.publish]
+workers = 1
+
 [jobs.job_review_intake]
 name = "review_intake"
 workers = 1
@@ -608,6 +652,9 @@ menu_partition_size = 200
 max_build_exec_events = 20000
 max_commands_per_action = 64
 feed_max_age_days = 14
+# Per-feed freshness bounds that override feed_max_age_days; a pinned snapshot older than its bound
+# is pinned as stale and every product joining it records a stale_feed gap.
+feed_max_age_days_overrides = { kev = 7, epss = 3 }
 # Offline cross-check of this job's published shard text with the pinned tool-sqlite-fts image:
 # "disabled", "optional" (record a named gap when the image is unavailable) or "required" (fail).
 # The image output is a validation receipt only; MCP reads only accepted in-process shards.

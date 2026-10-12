@@ -8,6 +8,8 @@ from typing import Any
 
 from appsec_review.jobs.job_third_party_data_sync.publication import HttpDownloader, publish_metadata, stamp
 from appsec_review.jobs.job_third_party_data_sync.steps.cve_bin_tool_db_build import database as cve_db
+from appsec_review.jobs.job_third_party_data_sync.steps.epss_sync import feed as epss_feed
+from appsec_review.jobs.job_third_party_data_sync.steps.kev_sync import feed as kev_feed
 from appsec_review.jobs.job_third_party_data_sync.steps.mitre_sync import feed as mitre_feed
 from appsec_review.jobs.job_third_party_data_sync.steps.nvd_sync.feed import NvdClient, NvdPublisher
 from appsec_review.jobs.job_third_party_data_sync.steps.nvd_sync.models import NvdSettings
@@ -21,6 +23,8 @@ TOPOLOGY = {
     "osv_sync": ("fetch", "index", "publish"),
     "mitre_sync": ("fetch", "normalize", "publish"),
     "cve_bin_tool_db_build": ("resolve_nvd_snapshot", "build", "publish"),
+    "kev_sync": ("fetch", "normalize", "publish"),
+    "epss_sync": ("fetch", "normalize", "publish"),
 }
 
 
@@ -34,6 +38,14 @@ def _osv(context: JobContext) -> osv_feed.OsvSettings:
 
 def _mitre(context: JobContext) -> mitre_feed.MitreSettings:
     return mitre_feed.MitreSettings.from_mapping(context.repository_root, context.config.step("mitre_sync").settings)
+
+
+def _kev(context: JobContext) -> kev_feed.KevSettings:
+    return kev_feed.KevSettings.from_mapping(context.repository_root, context.config.step("kev_sync").settings)
+
+
+def _epss(context: JobContext) -> epss_feed.EpssSettings:
+    return epss_feed.EpssSettings.from_mapping(context.repository_root, context.config.step("epss_sync").settings)
 
 
 def _cve(context: JobContext) -> cve_db.CveBinToolSettings:
@@ -59,7 +71,8 @@ def validate_input(context: JobContext, result: Mapping[str, Any] | None) -> Non
     data_root = (context.repository_root / "data").resolve()
     for label, path in (("NVD feed_root", _nvd(context).feed_root), ("OSV feed_root", _osv(context).feed_root),
                         ("MITRE feed_root", _mitre(context).feed_root),
-                        ("cve-bin-tool feed_root", _cve(context).feed_root)):
+                        ("cve-bin-tool feed_root", _cve(context).feed_root),
+                        ("KEV feed_root", _kev(context).feed_root), ("EPSS feed_root", _epss(context).feed_root)):
         _inside(data_root, path, label)
     _inside(context.run_root.parent, context.metadata_root, "metadata_root")
 
@@ -88,6 +101,8 @@ def build_job(
     pause: Callable[[float], None] | None = None,
     osv_downloader: HttpDownloader | None = None,
     mitre_downloader: HttpDownloader | None = None,
+    kev_downloader: HttpDownloader | None = None,
+    epss_downloader: HttpDownloader | None = None,
     cve_runner: Callable[[cve_db.CveBinToolSettings, Path, Path], Mapping[str, str]] | None = None,
 ) -> Job:
     def nvd_fetch(unit: UnitContext) -> Mapping[str, Any]:
@@ -145,6 +160,32 @@ def build_job(
         return {"schema": "appsec-review/mitre-publication/1", "pointer": pointer, "identity": identity,
                 "metadata_path": str(path)}
 
+    def reference_feed(feed_id: str, module: Any, settings_of: Callable[[JobContext], Any],
+                       downloader: HttpDownloader | None) -> tuple[Callable, Callable, Callable]:
+        step = f"{feed_id}_sync"
+
+        def fetch(unit: UnitContext) -> Mapping[str, Any]:
+            return module.fetch(settings_of(unit.job), unit.unit_root / "work", downloader)
+
+        def normalize(unit: UnitContext) -> Mapping[str, Any]:
+            return module.normalize(settings_of(unit.job), unit.output(f"{step}.fetch"), unit.unit_root / "work")
+
+        def publish(unit: UnitContext) -> Mapping[str, Any]:
+            settings = settings_of(unit.job)
+            pointer = module.publish(settings, unit.output(f"{step}.fetch"), unit.output(f"{step}.normalize"))
+            identity = module.verify(settings)
+            path = publish_metadata(unit.job.metadata_root, "feeds", feed_id, {
+                "schema": "appsec-review/global-feed-metadata/1", "feed_id": feed_id, "updated_at": stamp(),
+                "run_id": unit.job.run_id, "attempt_id": unit.job.attempt_id, "pointer": pointer,
+                "identity": identity,
+            })
+            return {"schema": f"appsec-review/{feed_id}-publication/1", "pointer": pointer, "identity": identity,
+                    "metadata_path": str(path)}
+        return fetch, normalize, publish
+
+    kev_fetch, kev_normalize, kev_publish = reference_feed("kev", kev_feed, _kev, kev_downloader)
+    epss_fetch, epss_normalize, epss_publish = reference_feed("epss", epss_feed, _epss, epss_downloader)
+
     def cve_resolve(unit: UnitContext) -> Mapping[str, Any]:
         nvd_identity = unit.output("nvd_sync.publish")["identity"]
         return cve_db.resolve_nvd_snapshot(_nvd(unit.job).feed_root, nvd_identity)
@@ -169,18 +210,28 @@ def build_job(
         Unit("nvd_sync.fetch", nvd_fetch, output_validators=(_schema("appsec-review/nvd-current-pointer/1"),)),
         Unit("osv_sync.fetch", osv_fetch, output_validators=(_schema("appsec-review/osv-fetch/1"),)),
         Unit("mitre_sync.fetch", mitre_fetch, output_validators=(_schema("appsec-review/mitre-fetch/1"),)),
+        Unit("kev_sync.fetch", kev_fetch, output_validators=(_schema("appsec-review/kev-fetch/1"),)),
+        Unit("epss_sync.fetch", epss_fetch, output_validators=(_schema("appsec-review/epss-fetch/1"),)),
         Unit("nvd_sync.process", nvd_process, ("nvd_sync.fetch",),
              output_validators=(_schema("appsec-review/nvd-process/1"),)),
         Unit("osv_sync.index", osv_index, ("osv_sync.fetch",),
              output_validators=(_schema("appsec-review/osv-index/1"),)),
         Unit("mitre_sync.normalize", mitre_normalize, ("mitre_sync.fetch",),
              output_validators=(_schema("appsec-review/mitre-normalize/1"),)),
+        Unit("kev_sync.normalize", kev_normalize, ("kev_sync.fetch",),
+             output_validators=(_schema("appsec-review/kev-normalize/1"),)),
+        Unit("epss_sync.normalize", epss_normalize, ("epss_sync.fetch",),
+             output_validators=(_schema("appsec-review/epss-normalize/1"),)),
         Unit("nvd_sync.publish", nvd_publish, ("nvd_sync.process",),
              output_validators=(_schema("appsec-review/nvd-publication/1"),)),
         Unit("osv_sync.publish", osv_publish, ("osv_sync.index",),
              output_validators=(_schema("appsec-review/osv-publication/1"),)),
         Unit("mitre_sync.publish", mitre_publish, ("mitre_sync.normalize",),
              output_validators=(_schema("appsec-review/mitre-publication/1"),)),
+        Unit("kev_sync.publish", kev_publish, ("kev_sync.normalize",),
+             output_validators=(_schema("appsec-review/kev-publication/1"),)),
+        Unit("epss_sync.publish", epss_publish, ("epss_sync.normalize",),
+             output_validators=(_schema("appsec-review/epss-publication/1"),)),
         Unit("cve_bin_tool_db_build.resolve_nvd_snapshot", cve_resolve, ("nvd_sync.publish",),
              output_validators=(_schema("appsec-review/resolved-nvd-snapshot/1"),)),
         Unit("cve_bin_tool_db_build.build", cve_build, ("cve_bin_tool_db_build.resolve_nvd_snapshot",),
