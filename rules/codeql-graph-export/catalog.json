@@ -1,0 +1,525 @@
+{
+  "schema": "appsec-review/graph-catalog/1",
+  "revision": 1,
+  "attacker_reachable_sources": [
+    "argv",
+    "environment",
+    "file",
+    "ipc",
+    "local_user",
+    "remote"
+  ],
+  "languages": {
+    "cpp": {
+      "model_library": "codeql/cpp-all",
+      "export_pack": "appsec-review/graph-export-cpp",
+      "sinks": [
+        {
+          "rule_id": "cpp.sink.api.strcpy",
+          "match": {
+            "api": "strcpy",
+            "declared_in": [
+              "cstring",
+              "string.h"
+            ],
+            "argument_index": 1
+          },
+          "sink_class": "memory_write",
+          "cwe_family": "CWE-120"
+        },
+        {
+          "rule_id": "cpp.sink.api.strcat",
+          "match": {
+            "api": "strcat",
+            "declared_in": [
+              "cstring",
+              "string.h"
+            ],
+            "argument_index": 1
+          },
+          "sink_class": "memory_write",
+          "cwe_family": "CWE-120"
+        },
+        {
+          "rule_id": "cpp.sink.api.strncpy",
+          "match": {
+            "api": "strncpy",
+            "declared_in": [
+              "cstring",
+              "string.h"
+            ],
+            "argument_index": 2
+          },
+          "sink_class": "memory_write",
+          "cwe_family": "CWE-805"
+        },
+        {
+          "rule_id": "cpp.sink.api.strncat",
+          "match": {
+            "api": "strncat",
+            "declared_in": [
+              "cstring",
+              "string.h"
+            ],
+            "argument_index": 2
+          },
+          "sink_class": "memory_write",
+          "cwe_family": "CWE-805"
+        },
+        {
+          "rule_id": "cpp.sink.api.memcpy",
+          "match": {
+            "api": "memcpy",
+            "declared_in": [
+              "cstring",
+              "string.h"
+            ],
+            "argument_index": 2
+          },
+          "sink_class": "memory_write",
+          "cwe_family": "CWE-805"
+        },
+        {
+          "rule_id": "cpp.sink.api.memmove",
+          "match": {
+            "api": "memmove",
+            "declared_in": [
+              "cstring",
+              "string.h"
+            ],
+            "argument_index": 2
+          },
+          "sink_class": "memory_write",
+          "cwe_family": "CWE-805"
+        },
+        {
+          "rule_id": "cpp.sink.api.memset",
+          "match": {
+            "api": "memset",
+            "declared_in": [
+              "cstring",
+              "string.h"
+            ],
+            "argument_index": 2
+          },
+          "sink_class": "memory_write",
+          "cwe_family": "CWE-805"
+        },
+        {
+          "rule_id": "cpp.sink.api.gets",
+          "match": {
+            "api": "gets",
+            "declared_in": [
+              "cstdio",
+              "stdio.h"
+            ],
+            "argument_index": 0
+          },
+          "sink_class": "memory_write",
+          "cwe_family": "CWE-120"
+        },
+        {
+          "rule_id": "cpp.sink.api.system",
+          "match": {
+            "api": "system",
+            "declared_in": [
+              "cstdlib",
+              "stdlib.h"
+            ],
+            "argument_index": 0
+          },
+          "sink_class": "command_execution",
+          "cwe_family": "CWE-78"
+        },
+        {
+          "rule_id": "cpp.sink.api.popen",
+          "match": {
+            "api": "popen",
+            "declared_in": [
+              "cstdio",
+              "stdio.h"
+            ],
+            "argument_index": 0
+          },
+          "sink_class": "command_execution",
+          "cwe_family": "CWE-78"
+        },
+        {
+          "rule_id": "cpp.sink.api.execv",
+          "match": {
+            "api": "execv",
+            "declared_in": [
+              "unistd.h"
+            ],
+            "argument_index": 0
+          },
+          "sink_class": "command_execution",
+          "cwe_family": "CWE-78"
+        },
+        {
+          "rule_id": "cpp.sink.api.execvp",
+          "match": {
+            "api": "execvp",
+            "declared_in": [
+              "unistd.h"
+            ],
+            "argument_index": 0
+          },
+          "sink_class": "command_execution",
+          "cwe_family": "CWE-78"
+        },
+        {
+          "rule_id": "cpp.sink.api.fopen",
+          "match": {
+            "api": "fopen",
+            "declared_in": [
+              "cstdio",
+              "stdio.h"
+            ],
+            "argument_index": 0
+          },
+          "sink_class": "path_access",
+          "cwe_family": "CWE-22"
+        },
+        {
+          "rule_id": "cpp.sink.api.open",
+          "match": {
+            "api": "open",
+            "declared_in": [
+              "fcntl.h"
+            ],
+            "argument_index": 0
+          },
+          "sink_class": "path_access",
+          "cwe_family": "CWE-22"
+        },
+        {
+          "rule_id": "cpp.sink.api.unlink",
+          "match": {
+            "api": "unlink",
+            "declared_in": [
+              "unistd.h"
+            ],
+            "argument_index": 0
+          },
+          "sink_class": "path_access",
+          "cwe_family": "CWE-22"
+        },
+        {
+          "rule_id": "cpp.sink.api.sqlite3_exec",
+          "match": {
+            "api": "sqlite3_exec",
+            "declared_in": [
+              "sqlite3.h"
+            ],
+            "argument_index": 1
+          },
+          "sink_class": "sql_query",
+          "cwe_family": "CWE-89"
+        },
+        {
+          "rule_id": "cpp.sink.api.mysql_query",
+          "match": {
+            "api": "mysql_query",
+            "declared_in": [
+              "mysql.h"
+            ],
+            "argument_index": 1
+          },
+          "sink_class": "sql_query",
+          "cwe_family": "CWE-89"
+        },
+        {
+          "rule_id": "cpp.sink.api.dlopen",
+          "match": {
+            "api": "dlopen",
+            "declared_in": [
+              "dlfcn.h"
+            ],
+            "argument_index": 0
+          },
+          "sink_class": "code_injection",
+          "cwe_family": "CWE-114"
+        },
+        {
+          "rule_id": "cpp.sink.api.syslog",
+          "match": {
+            "api": "syslog",
+            "declared_in": [
+              "syslog.h"
+            ],
+            "argument_index": 1
+          },
+          "sink_class": "log_output",
+          "cwe_family": "CWE-117"
+        },
+        {
+          "rule_id": "cpp.sink.api.rand",
+          "match": {
+            "api": "rand",
+            "declared_in": [
+              "cstdlib",
+              "stdlib.h"
+            ],
+            "argument_index": -1
+          },
+          "sink_class": "crypto_misuse",
+          "cwe_family": "CWE-338"
+        },
+        {
+          "rule_id": "cpp.sink.model.formattingfunction",
+          "match": {
+            "model": "FormattingFunction"
+          },
+          "sink_class": "format_string",
+          "cwe_family": "CWE-134"
+        },
+        {
+          "rule_id": "cpp.sink.model.allocationfunction",
+          "match": {
+            "model": "AllocationFunction"
+          },
+          "sink_class": "allocation_size",
+          "cwe_family": "CWE-789"
+        },
+        {
+          "rule_id": "cpp.sink.model.arrayfunction.output",
+          "match": {
+            "model": "ArrayFunction.output"
+          },
+          "sink_class": "memory_write",
+          "cwe_family": "CWE-787"
+        },
+        {
+          "rule_id": "cpp.sink.model.commandexecutionfunction",
+          "match": {
+            "model": "CommandExecutionFunction"
+          },
+          "sink_class": "command_execution",
+          "cwe_family": "CWE-78"
+        },
+        {
+          "rule_id": "cpp.sink.model.arrayexprwrite",
+          "match": {
+            "model": "ArrayExprWrite"
+          },
+          "sink_class": "memory_write",
+          "cwe_family": "CWE-787"
+        }
+      ],
+      "sources": [
+        {
+          "rule_id": "cpp.source.api.getenv",
+          "match": {
+            "api": "getenv",
+            "declared_in": [
+              "cstdlib",
+              "stdlib.h"
+            ],
+            "index": -1
+          },
+          "source_class": "environment"
+        },
+        {
+          "rule_id": "cpp.source.api.secure_getenv",
+          "match": {
+            "api": "secure_getenv",
+            "declared_in": [
+              "cstdlib",
+              "stdlib.h"
+            ],
+            "index": -1
+          },
+          "source_class": "environment"
+        },
+        {
+          "rule_id": "cpp.source.api.fgets",
+          "match": {
+            "api": "fgets",
+            "declared_in": [
+              "cstdio",
+              "stdio.h"
+            ],
+            "index": 0
+          },
+          "source_class": "file"
+        },
+        {
+          "rule_id": "cpp.source.api.fread",
+          "match": {
+            "api": "fread",
+            "declared_in": [
+              "cstdio",
+              "stdio.h"
+            ],
+            "index": 0
+          },
+          "source_class": "file"
+        },
+        {
+          "rule_id": "cpp.source.api.read",
+          "match": {
+            "api": "read",
+            "declared_in": [
+              "unistd.h"
+            ],
+            "index": 1
+          },
+          "source_class": "file"
+        },
+        {
+          "rule_id": "cpp.source.api.recv",
+          "match": {
+            "api": "recv",
+            "declared_in": [
+              "socket.h"
+            ],
+            "index": 1
+          },
+          "source_class": "remote"
+        },
+        {
+          "rule_id": "cpp.source.api.recvfrom",
+          "match": {
+            "api": "recvfrom",
+            "declared_in": [
+              "socket.h"
+            ],
+            "index": 1
+          },
+          "source_class": "remote"
+        },
+        {
+          "rule_id": "cpp.source.api.getchar",
+          "match": {
+            "api": "getchar",
+            "declared_in": [
+              "cstdio",
+              "stdio.h"
+            ],
+            "index": -1
+          },
+          "source_class": "local_user"
+        },
+        {
+          "rule_id": "cpp.source.api.msgrcv",
+          "match": {
+            "api": "msgrcv",
+            "declared_in": [
+              "msg.h"
+            ],
+            "index": 1
+          },
+          "source_class": "ipc"
+        },
+        {
+          "rule_id": "cpp.source.api.mq_receive",
+          "match": {
+            "api": "mq_receive",
+            "declared_in": [
+              "mqueue.h"
+            ],
+            "index": 1
+          },
+          "source_class": "ipc"
+        },
+        {
+          "rule_id": "cpp.source.api.sqlite3_column_text",
+          "match": {
+            "api": "sqlite3_column_text",
+            "declared_in": [
+              "sqlite3.h"
+            ],
+            "index": -1
+          },
+          "source_class": "database"
+        },
+        {
+          "rule_id": "cpp.source.api.mysql_fetch_row",
+          "match": {
+            "api": "mysql_fetch_row",
+            "declared_in": [
+              "mysql.h"
+            ],
+            "index": -1
+          },
+          "source_class": "database"
+        },
+        {
+          "rule_id": "cpp.source.model.argv",
+          "match": {
+            "model": "LocalFlowSource",
+            "source_type": "a command-line argument"
+          },
+          "source_class": "argv"
+        },
+        {
+          "rule_id": "cpp.source.model.environment",
+          "match": {
+            "model": "LocalFlowSource",
+            "source_type": "an environment variable"
+          },
+          "source_class": "environment"
+        },
+        {
+          "rule_id": "cpp.source.model.remote",
+          "match": {
+            "model": "RemoteFlowSource"
+          },
+          "source_class": "remote"
+        },
+        {
+          "rule_id": "cpp.source.model.local",
+          "match": {
+            "model": "LocalFlowSource"
+          },
+          "source_class": "local_user"
+        }
+      ],
+      "sanitizers": [
+        {
+          "rule_id": "cpp.sanitizer.realpath",
+          "api": "realpath",
+          "declared_in": [
+            "cstdlib",
+            "stdlib.h"
+          ],
+          "applies_to": [
+            "path_access"
+          ]
+        },
+        {
+          "rule_id": "cpp.sanitizer.canonicalize_file_name",
+          "api": "canonicalize_file_name",
+          "declared_in": [
+            "cstdlib",
+            "stdlib.h"
+          ],
+          "applies_to": [
+            "path_access"
+          ]
+        },
+        {
+          "rule_id": "cpp.sanitizer.mysql_real_escape_string",
+          "api": "mysql_real_escape_string",
+          "declared_in": [
+            "mysql.h"
+          ],
+          "applies_to": [
+            "sql_query"
+          ]
+        },
+        {
+          "rule_id": "cpp.sanitizer.sqlite3_bind_text",
+          "api": "sqlite3_bind_text",
+          "declared_in": [
+            "sqlite3.h"
+          ],
+          "applies_to": [
+            "sql_query"
+          ]
+        }
+      ]
+    }
+  }
+}

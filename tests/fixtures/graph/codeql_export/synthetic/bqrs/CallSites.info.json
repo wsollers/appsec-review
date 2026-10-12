@@ -1,0 +1,85 @@
+{
+ "result-sets": [
+  {
+   "name": "call_sites",
+   "rows": 17,
+   "columns": [
+    {
+     "name": "caller_name",
+     "kind": "String"
+    },
+    {
+     "name": "caller_path",
+     "kind": "String"
+    },
+    {
+     "name": "caller_start_line",
+     "kind": "Integer"
+    },
+    {
+     "name": "caller_start_column",
+     "kind": "Integer"
+    },
+    {
+     "name": "call_path",
+     "kind": "String"
+    },
+    {
+     "name": "call_start_line",
+     "kind": "Integer"
+    },
+    {
+     "name": "call_start_column",
+     "kind": "Integer"
+    },
+    {
+     "name": "call_end_line",
+     "kind": "Integer"
+    },
+    {
+     "name": "call_end_column",
+     "kind": "Integer"
+    },
+    {
+     "name": "callee_name",
+     "kind": "String"
+    },
+    {
+     "name": "callee_declared_in",
+     "kind": "String"
+    },
+    {
+     "name": "callee_path",
+     "kind": "String"
+    },
+    {
+     "name": "callee_start_line",
+     "kind": "Integer"
+    },
+    {
+     "name": "callee_start_column",
+     "kind": "Integer"
+    },
+    {
+     "name": "dispatch",
+     "kind": "String"
+    },
+    {
+     "name": "candidate_count",
+     "kind": "Integer"
+    },
+    {
+     "name": "argument_count",
+     "kind": "Integer"
+    },
+    {
+     "name": "in_loop",
+     "kind": "String"
+    }
+   ]
+  }
+ ],
+ "compatible-query-kinds": [
+  "Table"
+ ]
+}
