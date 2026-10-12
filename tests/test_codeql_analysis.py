@@ -39,8 +39,13 @@ ROOT = Path(__file__).parents[1]
 
 def test_central_codeql_asset_lock_matches_tracked_lock() -> None:
     config = tomllib.loads((ROOT / "appsec-review.toml").read_text(encoding="utf-8"))
-    expected = config["jobs"]["job_codeql_analysis"]["settings"]["asset_lock_sha256"]
-    assert expected == load_asset_lock(ROOT)["sha256"]
+    settings = config["jobs"]["job_codeql_analysis"]["settings"]
+    lock = load_asset_lock(ROOT)
+    assert settings["asset_lock_sha256"] == lock["sha256"]
+    for language, configured in settings["languages"].items():
+        locked = lock["query_packs"][language]
+        assert configured.get("additional_queries", []) == locked.get("additional_suites", [])
+        assert configured.get("custom_queries", []) == lock.get("custom_query_packs", {}).get(language, [])
 
 
 def test_codeql_build_execution_uses_bridge_network(tmp_path: Path) -> None:
