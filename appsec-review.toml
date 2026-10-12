@@ -925,7 +925,7 @@ workers = 8
 catalog_parser_identity = "appsec-review/produced-artifact-catalog/1"
 member_extractor_identity = "appsec-review/accepted-archive-member-manifest/1"
 member_parser_identity = "appsec-review/archive-member-normalizer/1"
-relationship_parser_identity = "appsec-review/produced-artifact-relations/1"
+relationship_parser_identity = "appsec-review/produced-artifact-relations/2"
 normalizer_identity = "appsec-review/produced-artifact-normalizer/1"
 mapping_identity = "appsec-review/receipt-workspace-mapping/1"
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 from concurrent.futures import ThreadPoolExecutor
 import json
 from pathlib import Path
+import sqlite3
 
 import pytest
 
@@ -54,7 +55,7 @@ workers = 8
 catalog_parser_identity = "appsec-review/produced-artifact-catalog/1"
 member_extractor_identity = "appsec-review/accepted-archive-member-manifest/1"
 member_parser_identity = "appsec-review/archive-member-normalizer/1"
-relationship_parser_identity = "appsec-review/produced-artifact-relations/1"
+relationship_parser_identity = "appsec-review/produced-artifact-relations/2"
 normalizer_identity = "appsec-review/artifact-normalizer/1"
 mapping_identity = "appsec-review/receipt-workspace-mapping/1"
 [jobs.job_artifact_indexing.steps.load]
@@ -233,6 +234,48 @@ def test_fingerprints_bind_relevant_inputs_but_not_scanner_or_mcp_identity() -> 
     assert first == artifact_index_fingerprint(**arguments)
     assert first != artifact_index_fingerprint(**{**arguments, "extractor_identity": "extractor/2"})
     assert "scanner" not in json.dumps(arguments) and "mcp" not in json.dumps(arguments)
+
+
+@pytest.mark.parametrize("family, observation_count", (("rust", 3), ("native", 3),
+                                                       ("native", 501)))
+def test_repeated_link_observations_produce_one_relation_with_provenance(
+    tmp_path: Path, family: str, observation_count: int,
+) -> None:
+    config, target, snapshot, run_root, receipts, accepted_path, handoff_path, latest = _seed(tmp_path)
+    receipt = receipts[0]
+    receipt["family"] = family
+    source, output = receipt["artifacts"]
+    base_tools = ("cc", "collect2", "rust-lld") if family == "rust" else ("cc", "collect2", "ld")
+    tools = (*base_tools, *(f"ld-{index}" for index in range(3, observation_count)))
+    receipt["tool_invocations"] = [{
+        "tool": tool, "tool_kind": "linker-driver" if index == 0 else "linker",
+        "origin": f"execution-capture:command-001:event-{index}",
+        "mapping_confidence": 1.0,
+        "outputs": [{"workspace_path": output["workspace_path"], "sha256": output["sha256"]}],
+        "inputs": [{"workspace_path": source["workspace_path"], "sha256": source["sha256"],
+                    "mapping_confidence": 1.0}],
+    } for index, tool in enumerate(tools)]
+    _publish_changed_language_receipts(run_root, receipts, accepted_path, handoff_path, latest)
+
+    GraphRunner(config, [build_job()]).run(target_root=target, source_fingerprint=snapshot,
+                                            run_id=RUN_ID)
+    output_id = canonical_artifact_identity(snapshot, receipt["build_unit_id"], output).value
+    shard_id = f"relations-{output_id.rsplit(':', 1)[-1][:24]}"
+    shard = next(item for item in RetrievalCore(config.runtime.runs_dir, RUN_ID).manifest["indexes"]
+                 if item["shard_id"] == shard_id)
+    with sqlite3.connect(run_root / shard["relative_path"]) as database:
+        rows = database.execute("SELECT payload_json FROM relations WHERE kind='LINKS_INTO'").fetchall()
+        declared = json.loads(database.execute(
+            "SELECT value FROM metadata WHERE key='relation_kind_counts'").fetchone()[0])
+    assert len(rows) == declared["LINKS_INTO"] == 1
+    payload = json.loads(rows[0][0])
+    observations = payload["observations"]
+    assert payload["observation_count"] == observation_count
+    assert [item["tool"] for item in observations] == list(tools[:500])
+    assert [item["invocation_index"] for item in observations] == list(range(min(observation_count, 500)))
+    gaps = load_accepted_artifact_index(run_root)["gaps"]
+    assert any("link provenance exceeds 500 observations" in gap for gap in gaps) == (
+        observation_count > 500)
 
 
 def test_mixed_language_partition_resume_selective_invalidation_and_retrieval(tmp_path: Path) -> None:

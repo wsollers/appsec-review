@@ -34,9 +34,10 @@ from appsec_review.jobs.job_artifact_indexing.datasets import CONSUMES, DATASETS
 SCHEMA = "appsec-review/artifact-indexing/1"
 CATALOG_PARSER = "appsec-review/produced-artifact-catalog/1"
 MEMBER_EXTRACTOR = "appsec-review/accepted-archive-member-manifest/1"
-RELATION_NORMALIZER = "appsec-review/produced-artifact-relations/1"
+RELATION_NORMALIZER = "appsec-review/produced-artifact-relations/2"
 MAPPING_IDENTITY = "appsec-review/receipt-workspace-mapping/1"
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
+_MAX_LINK_OBSERVATIONS = 500  # Retrieval payload sanitization keeps at most 500 list items.
 _RECEIPT_SCHEMAS = {
     "appsec-review/language-build-receipt/1",
     "appsec-review/wasm-build-receipt/1",
@@ -480,6 +481,8 @@ def _relationships(unit: UnitContext) -> Mapping[str, Any]:
                                    target_snapshot=unit.job.source_fingerprint, shard_id=shard_id)
             target = str(artifact["canonical_identity"])
             mapped_actions: set[str] = set()
+            link_relations: dict[str, RelationRecord] = {}
+            link_observations: dict[str, list[dict[str, Any]]] = defaultdict(list)
             for row in receipt.get("relationships", ()):
                 if (not isinstance(row, Mapping) or row.get("artifact_sha256") != artifact["sha256"] or
                         str(row.get("command_id", "")) not in actions):
@@ -492,7 +495,7 @@ def _relationships(unit: UnitContext) -> Mapping[str, Any]:
                     action.value, False, confidence, "producer supplied bounded build attribution",
                     {"mapping": row.get("mapping")}))
                 mapped_actions.add(command_id)
-            for invocation in receipt.get("tool_invocations", ()):
+            for invocation_index, invocation in enumerate(receipt.get("tool_invocations", ())):
                 if not isinstance(invocation, Mapping):
                     continue
                 outputs = invocation.get("outputs", ())
@@ -511,7 +514,7 @@ def _relationships(unit: UnitContext) -> Mapping[str, Any]:
                     mapped_actions.add(parent)
                 if str(invocation.get("tool_kind", "")) in {"linker", "linker-driver", "archiver",
                                                                  "compiler-driver-link"}:
-                    for raw_input in invocation.get("inputs", ()):
+                    for input_index, raw_input in enumerate(invocation.get("inputs", ())):
                         if not isinstance(raw_input, Mapping):
                             continue
                         source = artifacts_by_path.get(str(raw_input.get("workspace_path", "")))
@@ -519,10 +522,33 @@ def _relationships(unit: UnitContext) -> Mapping[str, Any]:
                             source = artifacts_by_hash.get(str(raw_input["sha256"]))
                         if source is not None:
                             exact = raw_input.get("mapping_confidence") == 1.0
-                            builder.add_relation(RelationRecord(RelationKind.LINKS_INTO,
+                            relation = RelationRecord(RelationKind.LINKS_INTO,
                                 str(source["canonical_identity"]), target, exact,
                                 1.0 if exact else float(raw_input.get("mapping_confidence", 0.5)),
-                                None if exact else "link input mapping was heuristic"))
+                                None if exact else "link input mapping was heuristic")
+                            previous = link_relations.get(relation.relation_id)
+                            if previous is None or relation.confidence > previous.confidence:
+                                link_relations[relation.relation_id] = relation
+                            link_observations[relation.relation_id].append({
+                                "invocation_index": invocation_index, "input_index": input_index,
+                                "origin": str(invocation.get("origin", "")),
+                                "tool": str(invocation.get("tool", "")),
+                                "confidence": relation.confidence,
+                            })
+            for relation_id in sorted(link_relations):
+                relation = link_relations[relation_id]
+                observations = link_observations[relation_id]
+                if len(observations) > _MAX_LINK_OBSERVATIONS:
+                    artifact_gaps.append(
+                        f"{artifact['workspace_path']}: link provenance exceeds "
+                        f"{_MAX_LINK_OBSERVATIONS} observations for {relation_id}")
+                builder.add_relation(RelationRecord(
+                    relation.kind, relation.source_id, relation.target_id, relation.exact,
+                    relation.confidence, relation.ambiguity,
+                    {"build_unit_id": receipt["build_unit_id"],
+                     "observation_count": len(observations),
+                     "observations": observations[:_MAX_LINK_OBSERVATIONS]},
+                ))
             if not mapped_actions and actions:
                 ambiguity = "receipt did not attribute the artifact to a unique producing action"
                 for command_id in sorted(actions):
