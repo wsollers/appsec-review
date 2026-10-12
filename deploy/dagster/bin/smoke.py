@@ -119,7 +119,8 @@ def reject_contention(url: str, platform: str) -> None:
 def check_cli(platform: str) -> None:
     prefix = compose(platform) + ["exec", "-T", "code-location"]
     run(prefix + ["claude", "--version"])
-    auth = run(prefix + ["claude", "auth", "status"], capture=True)
+    # Match the model transport: an optional API key must not mask subscription state.
+    auth = run(prefix + ["env", "-u", "ANTHROPIC_API_KEY", "claude", "auth", "status"], capture=True)
     try:
         status = json.loads(auth.stdout)
     except json.JSONDecodeError as error:

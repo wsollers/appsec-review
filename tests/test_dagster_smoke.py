@@ -47,12 +47,16 @@ def test_active_run_gate_includes_queued_runs(monkeypatch) -> None:
 def test_cli_smoke_requires_subscription_auth(monkeypatch) -> None:
     import json
 
+    commands = []
+
     def fake_run(command, *, capture=False):
+        commands.append(command)
         return type("Result", (), {"stdout": json.dumps({"loggedIn": True, "authMethod": "api_key"})})()
 
     monkeypatch.setattr(smoke, "run", fake_run)
     with pytest.raises(RuntimeError, match="subscription login"):
         smoke.check_cli("windows")
+    assert commands[-1][-6:] == ["env", "-u", "ANTHROPIC_API_KEY", "claude", "auth", "status"]
 
 
 def test_feed_smoke_checks_every_publication(tmp_path: Path, monkeypatch) -> None:
