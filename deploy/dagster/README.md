@@ -203,13 +203,16 @@ failures still fail the Dagster run.
 ### Inspect published review packages
 
 After `wave1_review` succeeds, use the **application run id** in its Dagster tags (or the
-verification receipt). The terminal node `review_package_assembly__publication__publish_packages`
+verification receipt). The package node `review_package_assembly__publication__publish_packages`
 records `package_directory`, `accepted_manifest_sha256`, counts, and `coverage_gap_count` in its
 application result under `runs/<application-run-id>/data/jobs/job_review_package_assembly/attempts/`.
 The directory is `runs/<application-run-id>/data/review-packages/<content-sha256>/`. Open its
 `manifest.json` for package IDs, hashes, counts, and run-wide gaps; open a listed package JSON for
 safe build command facts, function and build-action binding, source-local tags, Clang references,
 evidence provenance, and lead-specific gaps. These are review leads, not adjudicated findings.
+The terminal `document_issue_analysis__analysis__map_and_adjudicate` node records a private
+candidate ledger under `data/document-issues/<content-sha256>/ledger.json`. A source mapping is
+a navigation result; its empty finding and scoring lists do not mean the target is clean.
 
 To validate a package directory against the current accepted manifest before use, run from the
 repository root in the same environment as the run:

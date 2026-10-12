@@ -57,7 +57,7 @@ def registry_providers() -> tuple[tuple[str, ...], dict[str, tuple[Any, ...]], d
     # Package assembly runs after this index is accepted. Auditing it here would put a false
     # unavailable-package gap into every package assembled from this index.
     job_ids = tuple(job_id for job_id in builtin_registry().job_ids()
-                    if job_id != "job_review_package_assembly")
+                    if job_id not in {"job_review_package_assembly", "job_document_issue_analysis"})
     declarations: dict[str, tuple[Any, ...]] = {}
     consumes: dict[str, tuple[str, ...]] = {}
     for job_id in job_ids:
@@ -225,7 +225,7 @@ def build_job(*, providers: Providers = registry_providers,
             if run_root.resolve() not in candidate.parents or file_sha256(candidate) != shard["sha256"]:
                 raise ValueError(f"restored shard failed verification: {'/'.join(shard_key(shard))}")
         job_steps = {job_id: steps for job_id, steps in _resolved_steps(run_root).items()
-                     if job_id != "job_review_package_assembly"}
+                     if job_id not in {"job_review_package_assembly", "job_document_issue_analysis"}}
         feeds = feed_pins(unit.job.repository_root, _resolved_document(run_root),
                           int(settings_of(unit)["feed_max_age_days"]))
         mismatch = sorted(set(job_ids) ^ set(job_steps))

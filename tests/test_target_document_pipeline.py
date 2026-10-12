@@ -15,6 +15,9 @@ from appsec_review.jobs.job_review_data_indexing import build_job as build_index
 from appsec_review.retrieval import RetrievalCore
 from appsec_review.retrieval.index import load_verified_manifest
 from appsec_review.review_packages import assemble_review_packages, publish_review_packages, verify_review_packages
+from appsec_review.document_issues import adjudicate, analyze_document_hunts
+from appsec_review.jobs.job_document_issue_analysis import build_job as build_document_issues
+from appsec_review.jobs.job_review_package_assembly import build_job as build_packages
 from appsec_review.mcp.adapter import RetrievalMcpAdapter
 from appsec_review.mcp.capability import ScopedRetrievalMcpAdapter, issue_capability
 from appsec_review.runtime import GraphRunner
@@ -25,7 +28,8 @@ ROOT = Path(__file__).parents[1]
 FIXTURES = ROOT / "tests" / "fixtures" / "northwinds_documents"
 
 
-def _run(tmp_path: Path, *, openapi_source: bool = False, fts_disabled: bool = False):
+def _run(tmp_path: Path, *, openapi_source: bool = False, fts_disabled: bool = False,
+         implementation: bool = False, duplicate_route: bool = False):
     config_path = tmp_path / "appsec-review.toml"
     config_text = (ROOT / "appsec-review.toml").read_text(encoding="utf-8")
     if fts_disabled:
@@ -46,6 +50,12 @@ def _run(tmp_path: Path, *, openapi_source: bool = False, fts_disabled: bool = F
         destination_path = target / destination
         destination_path.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(FIXTURES / source, destination_path)
+    if implementation:
+        path = target / "backend" / "orders.routes.ts"
+        shutil.copyfile(FIXTURES / "orders.routes.ts", path)
+    if duplicate_route:
+        (target / "backend" / "duplicate.routes.ts").write_text(
+            "router.get('/api/v1/orders/:id', handler);\n", encoding="utf-8")
     outcome = GraphRunner(config, [build_intake(), build_catalog()]).run(
         target_root=target, source_fingerprint=source_fingerprint(target))
     run_root = config.runtime.runs_dir / outcome["run_id"]
@@ -109,6 +119,7 @@ def test_cli_start_graph_includes_document_collection_task(tmp_path: Path, monke
     class CapturedGraph:
         def __init__(self, _config, jobs):
             captured["catalog"] = next(job for job in jobs if job.job_id == "job_target_catalog")
+            captured["job_ids"] = [job.job_id for job in jobs]
 
         def run(self, **_kwargs):
             return {"run_id": "fixture", "status": "SUCCEEDED", "decisions": [], "jobs": {}}
@@ -118,6 +129,7 @@ def test_cli_start_graph_includes_document_collection_task(tmp_path: Path, monke
     assert cli.main(["--config", str(config_path), "start", "--target", str(target)]) == 0
     assert "retrieval_indexes.build_target_documents" in {
         unit.unit_id for unit in captured["catalog"].units}
+    assert captured["job_ids"][-2:] == ["job_review_package_assembly", "job_document_issue_analysis"]
 
 
 def test_review_data_indexing_carries_document_shard_and_audits_its_dataset(tmp_path: Path) -> None:
@@ -201,3 +213,74 @@ def test_document_hunts_grant_only_accepted_context_and_sources(tmp_path: Path) 
     assert scoped.call("query_precomputed", {"query_set": "document_context", "subject": subject,
                                               "limit": 5})["results"]
     assert verify_review_packages(core, publish_review_packages(core)) == manifest
+
+
+def test_document_issue_path_keeps_claims_private_and_resolves_source(tmp_path: Path) -> None:
+    config, target, outcome, run_root = _run(tmp_path, fts_disabled=True, implementation=True)
+    fingerprint = source_fingerprint(target)
+    runner = JobRunner(config)
+    runner.run(build_indexing(), run_id=outcome["run_id"], target_root=target,
+               source_fingerprint=fingerprint)
+    runner.run(build_packages(), run_id=outcome["run_id"], target_root=target,
+               source_fingerprint=fingerprint)
+    runner.run(build_document_issues(), run_id=outcome["run_id"], target_root=target,
+               source_fingerprint=fingerprint)
+    ledgers = list((run_root / "data" / "document-issues").glob("*/ledger.json"))
+    assert len(ledgers) == 1
+    ledger = json.loads(ledgers[0].read_text(encoding="utf-8"))
+    assert ledger["findings"] == ledger["scoring_inputs"] == []
+    route = next(item for item in ledger["candidates"] if item["subject"] == "route:GET /api/v1/orders/{id}")
+    assert route["mapping_status"] == "unique"
+    assert route["state"] == "insufficient_evidence"
+    assert route["implementation_evidence"][0]["path"] == "backend/orders.routes.ts"
+    assert any(item["mapping_status"] == "unmapped" for item in ledger["candidates"])
+    assert any(item["subject"].startswith("boundary:") and item["mapping_status"] == "unmapped"
+               for item in ledger["candidates"])
+
+    # A security claim must carry distinct proof lines and independent review decisions.
+    core = RetrievalCore(config.runtime.runs_dir, outcome["run_id"])
+    proof = dict(route["implementation_evidence"][0], line=5)
+    proposed = {**route, "proof_evidence": [proof]}
+    proof_ref = f"{proof['entity_id']}:{proof['line']}"
+    red = {"decision": "supported", "security_claim": "Order responses expose INTERNAL_SECRET",
+           "evidence_refs": [proof_ref]}
+    blue = {"decision": "not_refuted", "evidence_refs": [proof_ref],
+            "unresolved_refutations": []}
+    verifier = {"decision": "independently_supported", "security_claim": red["security_claim"],
+                "evidence_refs": [proof_ref]}
+    assert adjudicate(proposed, core=core, red=red, blue=blue)["state"] == "insufficient_evidence"
+    assert adjudicate(proposed, core=core, red=red, blue={**blue, "unresolved_refutations": ["guard unknown"]},
+                      verifier=verifier)["state"] == "insufficient_evidence"
+    assert adjudicate(proposed, core=core, red=red, blue=blue, verifier=verifier)["state"] == "supported"
+    # The assertion above proves the gate, not a vulnerability in Northwind.
+
+
+def test_document_issue_analysis_rejects_changed_source(tmp_path: Path) -> None:
+    import pytest
+
+    config, target, outcome, _ = _run(tmp_path, fts_disabled=True, implementation=True)
+    fingerprint = source_fingerprint(target)
+    runner = JobRunner(config)
+    runner.run(build_indexing(), run_id=outcome["run_id"], target_root=target,
+               source_fingerprint=fingerprint)
+    core = RetrievalCore(config.runtime.runs_dir, outcome["run_id"])
+    directory = publish_review_packages(core)
+    path = target / "backend" / "orders.routes.ts"
+    path.write_text(path.read_text(encoding="utf-8") + "\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="accepted source bytes changed"):
+        analyze_document_hunts(core, directory)
+
+
+def test_document_issue_mapping_preserves_ambiguity(tmp_path: Path) -> None:
+    config, target, outcome, _ = _run(tmp_path, fts_disabled=True,
+                                      implementation=True, duplicate_route=True)
+    fingerprint = source_fingerprint(target)
+    JobRunner(config).run(build_indexing(), run_id=outcome["run_id"], target_root=target,
+                          source_fingerprint=fingerprint)
+    core = RetrievalCore(config.runtime.runs_dir, outcome["run_id"])
+    ledger = analyze_document_hunts(core, publish_review_packages(core))
+    route = next(item for item in ledger["candidates"] if item["subject"] == "route:GET /api/v1/orders/{id}")
+    assert route["mapping_status"] == "ambiguous"
+    assert len(route["implementation_evidence"]) == 2
+    assert route["state"] == "insufficient_evidence"
+    assert any("implementation mapping ambiguous" in gap["reason"] for gap in route["coverage_gaps"])

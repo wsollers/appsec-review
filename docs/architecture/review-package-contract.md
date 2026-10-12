@@ -33,13 +33,16 @@ may proceed without scanner-correlation facts, while recording their absence as 
 Coverage from accepted shards is copied as named gaps. Missing scanner-correlation facts or an
 audit failure block package publication rather than producing a clean empty menu.
 
-`job_review_package_assembly` is the terminal `wave1_review` job. It starts after the accepted
+`job_review_package_assembly` starts after the accepted
 `job_review_data_indexing` handoff and refuses a manifest from another producer. Its publication
 unit verifies the complete content-addressed package directory before the job handoff is accepted;
 that handoff records the hash of every package file. A later index publication requires a new
 package attempt against the new accepted manifest.
 The indexing inventory closes before package assembly and audits upstream producers only; it
 does not report the future package job as unavailable coverage.
+`job_document_issue_analysis` follows it in the CLI and Dagster wave. It verifies the accepted
+package handoff and reassembles the complete package manifest before source mapping. Its output
+is a private candidate ledger, not a post-adjudication finding package.
 
 The schema carries typed metric vectors, evidence provenance, safe ordered build commands,
 classified environment facts, matching tag assignments, a package-local tag cloud, and Clang

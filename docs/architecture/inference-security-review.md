@@ -1,7 +1,9 @@
 # Near-terminal inference security review
 
-Status: design approved for implementation planning; runtime jobs are not implemented by this
-document.
+Status: design approved for implementation planning. The preceding
+`job_document_issue_analysis` publishes a private, hash-pinned candidate ledger, but the
+red/blue/verifier pools, accepted finding packages, score indexes, and final publication in this
+document are not yet implemented.
 
 ## Purpose and governing decisions
 

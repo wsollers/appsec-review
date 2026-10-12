@@ -681,6 +681,18 @@ max_page_size = 20
 workers = 1
 [jobs.job_review_package_assembly.steps.publication.tasks.publish_packages]
 
+[jobs.job_document_issue_analysis]
+name = "document_issue_analysis"
+workers = 1
+
+[jobs.job_document_issue_analysis.settings]
+max_source_files = 20000
+max_source_file_bytes = 1048576
+
+[jobs.job_document_issue_analysis.steps.analysis]
+workers = 1
+[jobs.job_document_issue_analysis.steps.analysis.tasks.map_and_adjudicate]
+
 [jobs.job_project_build]
 name = "project_build"
 workers = 8

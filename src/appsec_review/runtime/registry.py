@@ -56,6 +56,7 @@ def builtin_registry() -> JobRegistry:
     from appsec_review.jobs.job_review_prioritization import build_job as build_review_prioritization
     from appsec_review.jobs.job_review_data_indexing import build_job as build_review_data_indexing
     from appsec_review.jobs.job_review_package_assembly import build_job as build_review_package_assembly
+    from appsec_review.jobs.job_document_issue_analysis import build_job as build_document_issue_analysis
 
     registry = JobRegistry()
     registry.register("job_review_intake", lambda: build_intake(check_models=check_models))
@@ -84,4 +85,5 @@ def builtin_registry() -> JobRegistry:
     registry.register("job_review_prioritization", build_review_prioritization)
     registry.register("job_review_data_indexing", build_review_data_indexing)
     registry.register("job_review_package_assembly", build_review_package_assembly)
+    registry.register("job_document_issue_analysis", build_document_issue_analysis)
     return registry

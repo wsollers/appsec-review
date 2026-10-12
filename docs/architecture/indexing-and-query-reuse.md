@@ -2,9 +2,10 @@
 
 Status: design plus first-batch implementation. The dataset inventory and audit, cross-domain links,
 stage-1 precomputed sets, `query_observations` and `query_dataset_inventory` are implemented by
-`job_review_data_indexing` (see [First indexing batch](#first-indexing-batch-implemented-coverage));
-graph exports, graph products and review packages remain the dependent batch. A missing product
-is reported as unavailable.
+`job_review_data_indexing` (see [First indexing batch](#first-indexing-batch-implemented-coverage)).
+Review packages and a private document candidate ledger now follow the accepted index.
+Finding and scoring retrieval indexes remain dependent work. A missing product is reported as
+unavailable.
 This document describes review-worker evidence, not instructions to review workers.
 
 ## Goal and authority

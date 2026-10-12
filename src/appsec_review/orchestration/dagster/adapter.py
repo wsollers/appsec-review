@@ -171,7 +171,7 @@ def _build_dagster_graph(name: str, jobs: tuple[Job, ...], config: AppConfig,
                     "job_post_build_security_assessment", "job_owasp_control_assessment",
                     "job_ci_configuration_analysis", "job_tree_sitter_ast", "job_source_history_analysis",
                     "job_change_context_analysis", "job_review_prioritization", "job_security_tagging",
-                    "job_review_data_indexing", "job_review_package_assembly",
+                    "job_review_data_indexing", "job_review_package_assembly", "job_document_issue_analysis",
                 }
                 uses_target = selected.job_id in target_jobs
                 run_id = upstream.get("run_id") or tags.get("appsec/application_run_id")
@@ -492,6 +492,9 @@ def build_definitions(
         if "job_review_package_assembly" in registered:
             wave_jobs.append(registry.build("job_review_package_assembly"))
             wave_dependencies["job_review_package_assembly"] = ("job_review_data_indexing",)
+        if "job_document_issue_analysis" in registered:
+            wave_jobs.append(registry.build("job_document_issue_analysis"))
+            wave_dependencies["job_document_issue_analysis"] = ("job_review_package_assembly",)
         wave_job = _build_dagster_graph("wave1_review", tuple(wave_jobs), config, runner_factory,
                                         job_dependencies=wave_dependencies)
         jobs.append(wave_job)

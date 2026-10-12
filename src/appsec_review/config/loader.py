@@ -55,6 +55,18 @@ class TargetDocumentSettings:
 
 
 @dataclass(frozen=True, slots=True)
+class DocumentIssueSettings:
+    max_source_files: int
+    max_source_file_bytes: int
+
+    def __post_init__(self) -> None:
+        if not 1 <= self.max_source_files <= 100_000:
+            raise ValueError("document issue max_source_files is invalid")
+        if not 1 <= self.max_source_file_bytes <= 16 * 1024 * 1024:
+            raise ValueError("document issue max_source_file_bytes is invalid")
+
+
+@dataclass(frozen=True, slots=True)
 class BuildCaptureConfig:
     """Resolved limits for kernel-observed build execution evidence."""
 
@@ -730,6 +742,13 @@ def load_config(path: str | Path = "appsec-review.toml") -> AppConfig:
                 max_files=int(settings["max_document_files"]),
                 max_file_bytes=int(settings["max_document_file_bytes"]),
                 max_records=int(settings["max_document_records"]),
+            )
+        elif job_id == "job_document_issue_analysis":
+            if set(settings) != {"max_source_files", "max_source_file_bytes"}:
+                raise ValueError("jobs.job_document_issue_analysis.settings must define source bounds")
+            typed_settings = DocumentIssueSettings(
+                max_source_files=settings["max_source_files"],
+                max_source_file_bytes=settings["max_source_file_bytes"],
             )
         elif job_id == "job_cpp_compiled_analysis":
             typed_settings = CppCompiledAnalysisSettings(lane=str(settings.get("lane", "")))

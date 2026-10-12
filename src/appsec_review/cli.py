@@ -128,7 +128,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 registry.build("job_codeql_analysis"),
                 registry.build("job_review_prioritization"),
                 registry.build("job_review_data_indexing"),
-                registry.build("job_review_package_assembly")]
+                registry.build("job_review_package_assembly"),
+                registry.build("job_document_issue_analysis")]
         fingerprint = source_fingerprint(args.target)
         graph = GraphRunner(config, jobs)
         if args.command == "plan-resume":

@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Private document issue ledger",
+  "type": "object",
+  "required": ["schema", "rule", "run_id", "accepted_manifest_sha256", "review_package_manifest_sha256", "target_snapshot", "candidates", "findings", "scoring_inputs", "counts", "content_sha256"],
+  "properties": {
+    "schema": {"const": "appsec-review/document-issue-ledger/1"},
+    "rule": {"const": "appsec-review/document-source-mapping/1"},
+    "run_id": {"type": "string"},
+    "accepted_manifest_sha256": {"$ref": "#/$defs/sha256"},
+    "review_package_manifest_sha256": {"$ref": "#/$defs/sha256"},
+    "target_snapshot": {"type": "string"},
+    "candidates": {"type": "array", "items": {"$ref": "#/$defs/candidate"}},
+    "findings": {"type": "array"},
+    "scoring_inputs": {"type": "array"},
+    "counts": {"type": "object", "required": ["candidates", "supported", "unmapped", "ambiguous"], "additionalProperties": {"type": "integer", "minimum": 0}},
+    "content_sha256": {"$ref": "#/$defs/sha256"}
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "evidence": {
+      "type": "object",
+      "required": ["entity_id", "shard_id", "shard_sha256", "path", "file_sha256", "line", "resolution"],
+      "properties": {
+        "entity_id": {"type": "string"}, "shard_id": {"type": "string"},
+        "shard_sha256": {"$ref": "#/$defs/sha256"}, "path": {"type": "string"},
+        "file_sha256": {"$ref": "#/$defs/sha256"}, "line": {"type": "integer", "minimum": 1},
+        "resolution": {"const": "source_line"}
+      }, "additionalProperties": false
+    },
+    "candidate": {
+      "type": "object",
+      "required": ["candidate_id", "package_id", "subject", "mapping_status", "implementation_evidence", "proof_evidence", "document_evidence", "proof_obligations", "coverage_gaps", "hypothesis", "state"],
+      "properties": {
+        "candidate_id": {"$ref": "#/$defs/sha256"}, "package_id": {"type": "string"},
+        "subject": {"type": "string"},
+        "mapping_status": {"enum": ["unique", "ambiguous", "unmapped"]},
+        "implementation_evidence": {"type": "array", "items": {"$ref": "#/$defs/evidence"}},
+        "proof_evidence": {"type": "array", "items": {"$ref": "#/$defs/evidence"}},
+        "document_evidence": {"type": "array", "items": {"type": "object"}},
+        "proof_obligations": {"type": "array", "items": {"type": "string"}},
+        "coverage_gaps": {"type": "array", "items": {"type": "object"}},
+        "hypothesis": {"type": "string"},
+        "state": {"enum": ["insufficient_evidence", "supported"]}
+      }, "additionalProperties": false
+    }
+  }
+}
