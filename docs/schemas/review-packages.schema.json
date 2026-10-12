@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://appsec-review.local/schemas/review-packages.schema.json",
-  "title": "Pre-adjudication review package contract, version 1",
+  "title": "Pre-adjudication review package contract, version 2",
   "oneOf": [
     { "$ref": "#/$defs/finding_lead" },
     { "$ref": "#/$defs/hunt" }
@@ -10,15 +10,19 @@
     "sha": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
     "identity": { "type": "string", "pattern": "^asr:[a-z][a-z0-9_]*:[0-9a-f]{64}$" },
     "identities": { "type": "array", "items": { "$ref": "#/$defs/identity" }, "uniqueItems": true },
+    "lead_family": {
+      "enum": ["source_sast", "codeql", "artifact_scanner", "dependency_advisory", "ci_rule", "post_build_hardening", "owasp_control"]
+    },
+    "severity": { "enum": ["critical", "high", "medium", "low", "info", "unknown"] },
     "gap": {
       "type": "object", "additionalProperties": false,
       "required": ["gap_id", "producer", "scope", "state", "reason"],
       "properties": {
-        "gap_id": { "type": "string", "minLength": 1 },
+        "gap_id": { "type": "string", "pattern": "^gap-[0-9a-f]{64}$" },
         "producer": { "type": "string", "minLength": 1 },
         "scope": { "type": "string", "minLength": 1 },
         "state": { "enum": ["missing", "skipped", "failed", "unavailable", "partial", "stale", "ambiguous", "truncated"] },
-        "reason": { "type": "string", "minLength": 1 }
+        "reason": { "type": "string", "minLength": 1, "maxLength": 1000 }
       }
     },
     "evidence": {
@@ -32,17 +36,31 @@
         "resolution": { "enum": ["source_line", "run_artifact", "unresolved"] }
       }
     },
+    "context": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "kind", "role"],
+      "properties": {
+        "id": { "$ref": "#/$defs/identity" },
+        "kind": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+        "role": { "enum": ["source", "artifact", "component", "build_unit", "duplicate_of", "flow", "priority", "history", "hotspot", "tag"] }
+      }
+    },
     "lead": {
       "type": "object", "additionalProperties": false,
-      "required": ["observation_id", "scanner", "rule_id", "native_severity", "reported_severity", "severity_rule", "component_id", "suppression_status", "duplicate_of", "location_exact"],
+      "required": ["observation_id", "lead_family", "scanner", "rule_id", "message", "rule_cwe", "native_severity", "reported_severity", "severity_rule", "severity_basis", "component_id", "build_unit_id", "suppression_status", "duplicate_of", "location_exact", "flow_ids"],
       "properties": {
         "observation_id": { "$ref": "#/$defs/identity" },
+        "lead_family": { "$ref": "#/$defs/lead_family" },
         "scanner": { "type": "string", "minLength": 1 },
         "rule_id": { "type": "string", "minLength": 1 },
-        "native_severity": { "type": ["string", "null"] },
-        "reported_severity": { "enum": ["critical", "high", "medium", "low", "info", "unknown"] },
-        "severity_rule": { "type": "string", "minLength": 1 },
+        "message": { "type": ["string", "null"], "maxLength": 1024 },
+        "rule_cwe": { "type": "array", "items": { "type": "string", "pattern": "^CWE-[0-9]{1,5}$" }, "uniqueItems": true },
+        "native_severity": { "type": ["string", "null"], "maxLength": 128 },
+        "reported_severity": { "$ref": "#/$defs/severity" },
+        "severity_rule": { "type": "string", "pattern": "^appsec-review/lead-family/[a-z_]+/[0-9]+$" },
+        "severity_basis": { "type": "string", "minLength": 1 },
         "component_id": { "type": "string", "minLength": 1 },
+        "build_unit_id": { "type": ["string", "null"], "minLength": 1 },
         "suppression_status": { "enum": ["suppressed", "possibly_suppressed", "not_suppressed", "unknown"] },
         "duplicate_of": { "oneOf": [{ "$ref": "#/$defs/identity" }, { "type": "null" }] },
         "location_exact": { "type": "boolean" },
@@ -61,6 +79,29 @@
         "artifact_ids": { "$ref": "#/$defs/identities" }
       }
     },
+    "rank": {
+      "type": "object", "additionalProperties": false,
+      "required": ["position", "unit_count", "score", "rule", "basis"],
+      "properties": {
+        "position": { "type": "integer", "minimum": 1 },
+        "unit_count": { "type": "integer", "minimum": 1 },
+        "score": { "type": "integer", "minimum": 0 },
+        "rule": { "const": "appsec-review/review-unit-rank/1" },
+        "basis": {
+          "type": "array", "minItems": 5, "maxItems": 5,
+          "items": {
+            "type": "object", "additionalProperties": false,
+            "required": ["signal", "value", "state", "reason"],
+            "properties": {
+              "signal": { "enum": ["lps", "sii", "hotspot", "tag_density", "lead_hints"] },
+              "value": { "type": ["integer", "null"], "minimum": 0, "maximum": 1000 },
+              "state": { "enum": ["available", "unknown"] },
+              "reason": { "enum": [null, "producer_unavailable", "no_record"] }
+            }
+          }
+        }
+      }
+    },
     "retrieval": {
       "type": "object", "additionalProperties": false,
       "required": ["indexes", "query_sets", "entity_ids", "max_page_size", "max_pages", "max_depth"],
@@ -75,21 +116,37 @@
     },
     "base": {
       "type": "object", "additionalProperties": false,
-      "required": ["schema", "kind", "package_id", "run_id", "manifest_sha256", "target_snapshot", "input_fingerprint", "assembly_rule", "scope", "lead_menu", "evidence", "context_ids", "proof_obligations", "retrieval", "coverage_gaps", "truncation"],
+      "required": ["schema", "kind", "lane", "lead_family", "package_id", "run_id", "manifest_sha256", "target_snapshot", "input_fingerprint", "assembly_rule", "scope", "partition", "rank", "persona", "stack_profile", "lead_menu", "evidence", "context", "proof_obligations", "retrieval", "coverage_gaps", "truncation"],
       "properties": {
-        "schema": { "const": "appsec-review/review-package/1" },
+        "schema": { "const": "appsec-review/review-package/2" },
         "kind": { "enum": ["finding_lead", "hunt"] },
-        "package_id": { "type": "string", "minLength": 1 },
+        "lane": { "enum": ["lead", "hunt"] },
+        "lead_family": { "oneOf": [{ "$ref": "#/$defs/lead_family" }, { "type": "null" }] },
+        "package_id": { "type": "string", "pattern": "^(finding_lead|hunt)-[0-9a-f]{64}$" },
         "run_id": { "type": "string", "minLength": 1 },
         "manifest_sha256": { "$ref": "#/$defs/sha" },
         "target_snapshot": { "type": "string", "minLength": 1 },
         "input_fingerprint": { "$ref": "#/$defs/sha" },
-        "assembly_rule": { "const": "appsec-review/assemble-review-packages/1" },
+        "assembly_rule": { "const": "appsec-review/assemble-review-packages/2" },
         "scope": { "$ref": "#/$defs/scope" },
+        "partition": {
+          "type": "object", "additionalProperties": false,
+          "required": ["number", "count"],
+          "properties": {
+            "number": { "type": "integer", "minimum": 0 },
+            "count": { "type": "integer", "minimum": 1 }
+          }
+        },
+        "rank": { "oneOf": [{ "$ref": "#/$defs/rank" }, { "type": "null" }] },
+        "persona": { "type": ["string", "null"], "minLength": 1 },
+        "stack_profile": { "type": ["string", "null"], "minLength": 1 },
         "lead_menu": { "type": "array", "items": { "$ref": "#/$defs/lead" } },
         "evidence": { "type": "array", "items": { "$ref": "#/$defs/evidence" } },
-        "context_ids": { "$ref": "#/$defs/identities" },
-        "proof_obligations": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },
+        "context": { "type": "array", "items": { "$ref": "#/$defs/context" } },
+        "proof_obligations": {
+          "type": "array", "uniqueItems": true,
+          "items": { "enum": ["affected_construct", "attacker_input_control", "source_to_sink_reachability", "missing_or_ineffective_guard", "configuration_enables", "security_impact"] }
+        },
         "retrieval": { "$ref": "#/$defs/retrieval" },
         "coverage_gaps": { "type": "array", "items": { "$ref": "#/$defs/gap" } },
         "truncation": {
@@ -105,12 +162,25 @@
     },
     "finding_lead": {
       "allOf": [{ "$ref": "#/$defs/base" }, {
-        "properties": { "kind": { "const": "finding_lead" }, "lead_menu": { "minItems": 1, "maxItems": 1 } }
+        "properties": {
+          "kind": { "const": "finding_lead" },
+          "lane": { "const": "lead" },
+          "lead_family": { "$ref": "#/$defs/lead_family" },
+          "rank": { "type": "null" },
+          "partition": { "properties": { "number": { "const": 0 }, "count": { "const": 1 } } },
+          "lead_menu": { "minItems": 1, "maxItems": 1 },
+          "truncation": { "properties": { "omitted_leads": { "const": 0 }, "next_partition": { "type": "null" } } }
+        }
       }]
     },
     "hunt": {
       "allOf": [{ "$ref": "#/$defs/base" }, {
-        "properties": { "kind": { "const": "hunt" } }
+        "properties": {
+          "kind": { "const": "hunt" },
+          "lane": { "const": "hunt" },
+          "lead_family": { "type": "null" },
+          "rank": { "$ref": "#/$defs/rank" }
+        }
       }]
     }
   }
