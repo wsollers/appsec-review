@@ -1,17 +1,13 @@
 # Review package and finding-lead contract
 
-Status: implementation contract proposed on local `main` at `3db440f9`; no review-package
-assembler, worker scope enforcement, or inference job is implemented here. The locally cached
-`origin/design/indexing-query-mcp` ref is `77932f6d` (PR #103 merge, including `f17963d1`).
-The local `origin/main` also remains `3db440f9`. A remote check failed because GitHub was
-unreachable, so this document does not assert GitHub's current `main` state. Reconcile refs
-before integrating code. The older `design/indexing-query-mcp` local branch points to
-`594e7ab9`, before PR #103.
+Status: implementation contract. The indexing and query work this contract builds on is merged
+to `main` (`c7a0ded`). No review-package assembler, worker scope enforcement, or inference job
+that consumes these packages is implemented yet.
 
 This contract specializes [inference security review](inference-security-review.md). Its
 machine-checkable shape is [review-packages.schema.json](../schemas/review-packages.schema.json).
-The broad `review-input-package.schema.json` exists only at the cached design ref and is not
-yet an assembler contract. Both package kinds here are pre-adjudication inputs: scanner
+The broad [review-input-package.schema.json](../schemas/review-input-package.schema.json) exists
+but is not yet an assembler contract. Both package kinds here are pre-adjudication inputs: scanner
 severity is *reported* severity for ordering, never an adjudicated finding severity.
 
 ## Source of each field
@@ -20,10 +16,10 @@ severity is *reported* severity for ordering, never an adjudicated finding sever
 |---|---|
 | `run_id`, `manifest_sha256`, `target_snapshot` | `resolve_accepted_manifest` and `load_verified_manifest` in `retrieval/core.py` and `retrieval/index.py`; verify each shard and the source snapshot before assembly. |
 | `scope`, `source_ids`, `artifact_ids` | Catalog component, source, build-unit and artifact entities; `find`, `query_artifacts`. No synthetic trust boundary: use `null` until an accepted producer provides it. |
-| `lead_menu` | Cached branch `indexing/sast.py::build_scanner_correlation`: accepted `tool_observation` rows classified as `source_sast`, with native severity, `normalize_reported_severity`, rule, suppression, duplicate and flow identities. `query_observations` and `query_precomputed(scanner_correlation)` expose the accepted records on that branch. |
+| `lead_menu` | `indexing/sast.py::build_scanner_correlation`: accepted `tool_observation` rows classified as `source_sast`, with native severity, `normalize_reported_severity`, rule, suppression, duplicate and flow identities. `query_observations` and `query_precomputed(scanner_correlation)` expose the accepted records. |
 | `evidence`, `context_ids` | Accepted observation, priority, CodeQL, source, build and precomputed shard identities; `find`, `trace`, `resolve_evidence`, `query_codeql`, `query_hotspots`, `query_precomputed`. A cited relation is a nomination until it resolves to a source line or hash-verified run artifact. |
 | `proof_obligations` | Deterministic rule table keyed by lead class and observed prerequisites: affected construct, input control, reachability, guard/configuration state, and impact. Missing predicates stay open; model prose cannot close them. |
-| `coverage_gaps` | Accepted index coverage, dataset inventory, query-set and language/build-unit cells; `coverage`, `query_dataset_inventory` on the cached design ref. A failed, absent or skipped producer is a named gap. |
+| `coverage_gaps` | Accepted index coverage, dataset inventory, query-set and language/build-unit cells; `coverage`, `query_dataset_inventory`. A failed, absent or skipped producer is a named gap. |
 | `retrieval` | Intersection of accepted package identities, available index names, query sets and configured caps. These are grants proposed by assembly, not an MCP authorization token. |
 
 `input_fingerprint` hashes canonical JSON of the accepted manifest hash, package scope, all
@@ -61,7 +57,7 @@ hashes, sorted uniqueness, cited identities, page/byte caps and membership invar
    The review job consumes this manifest only after it verifies all package bytes. Producer
    failure may publish explicit gaps; membership or integrity failure blocks the handoff.
 
-The cached branch already implements the lead facts and partitioned High/Critical and unknown
+`main` already implements the lead facts and partitioned High/Critical and unknown
 menus in `indexing/sast.py`; it raises `LeadAuditError` if accepted observations disappear from
 those menus. It does **not** implement steps 3–6 for review packages. Its `query_observations`
 has a candidate bound and can return a gap instead of a complete page; the assembler must use
@@ -72,14 +68,14 @@ an MCP endpoint and assume an empty result is complete.
 
 | Slice | Current accepted producer/index | Query or precompute | Missing dependency and required gap |
 |---|---|---|---|
-| All languages, source | target catalog `source`; Tree-sitter `analysis` where grammar/scope succeeds | `search`, `find`, `read_excerpt`, `trace`, `symbol_links` on cached branch | Parse failure or unsupported grammar is per language/scope; no symbol/call graph inference from syntax alone. |
+| All languages, source | target catalog `source`; Tree-sitter `analysis` where grammar/scope succeeds | `search`, `find`, `read_excerpt`, `trace`, `query_precomputed(symbol_links)` | Parse failure or unsupported grammar is per language/scope; no symbol/call graph inference from syntax alone. |
 | C/C++ build units | language build, compiled analysis, clangd symbols; `build`, `compiled`, `analysis` | `query_build_security`, `query_artifacts`, `symbol_links` | LLVM direct-call and Clang AST are partial. No Joern graph edge until a bounded, source-mapped export is accepted. |
 | Go, Java/Kotlin, C#, JavaScript/TypeScript, Python, Rust build units | accepted build/artifact shards; CodeQL `observations` only for successfully executed scopes | `query_artifacts`, `query_codeql`, `build_provenance`, `scanner_correlation` | Build/CodeQL absence is per unit and language. CodeQL path steps do not become general call/dataflow graph edges. |
 | PHP, shell and other catalog languages | source/Tree-sitter and applicable SAST observations | `query_observations`, `scanner_correlation`, `search` | CodeQL, compiled and symbol lanes unavailable unless a matching accepted shard exists. |
-| Cross-cutting build, CI, history, control and intelligence | accepted artifact, CI, history, priority, OWASP and pinned reference shards | `query_artifacts`, `query_ci_configuration`, `query_change_context`, `query_hotspots`; cached branch products `artifact_inventory`, `dependency_advisories`, `ci_trust`, `history_context`, `control_evidence`, `reference_intelligence` | Missing input/feed, stale feed or partial source yields a named query-set gap, not complete coverage. |
+| Cross-cutting build, CI, history, control and intelligence | accepted artifact, CI, history, priority, OWASP and pinned reference shards | `query_artifacts`, `query_ci_configuration`, `query_change_context`, `query_hotspots`; `query_precomputed` products `artifact_inventory`, `dependency_advisories`, `ci_trust`, `history_context`, `control_evidence`, `reference_intelligence` | Missing input/feed, stale feed or partial source yields a named query-set gap, not complete coverage. |
 
-The cached branch's `matrix.py` computes language and build-unit cells from accepted shards;
-`input_matrix.py` reconciles producer declarations against them. Stage-1 products there are
+`indexing/matrix.py` computes language and build-unit cells from accepted shards;
+`input_matrix.py` reconciles producer declarations against them. Stage-1 products are
 `build_provenance`, `artifact_inventory`, `dependency_advisories`, `scanner_correlation`,
 `ci_trust`, `history_context`, `control_evidence`, `reference_intelligence` and `symbol_links`.
 The five link families are `representation`, `finding_source`, `package_advisory`,
@@ -107,9 +103,9 @@ workers an unrestricted adapter while this gate is absent.
 
 No role receives arbitrary filesystem paths, shell, SQL, regex, target guidance, evaluator roots,
 raw argv/environment, network access or writes. Current MCP routes on `main` are core search,
-find, excerpt, trace, resolve, coverage and artifact/build/CI/CodeQL/change/OWASP queries.
-`query_hotspots`, `query_precomputed`, `query_observations` and `query_dataset_inventory` exist
-only at the cached design ref. Add no graph query route before accepted graph shards exist.
+find, excerpt, trace, resolve, coverage, artifact/build/CI/CodeQL/change/OWASP queries, and
+`query_hotspots`, `query_precomputed`, `query_observations` and `query_dataset_inventory`
+(`mcp/schema.py`). Add no graph query route before accepted graph shards exist.
 
 ## Validation and Dagster handoff
 

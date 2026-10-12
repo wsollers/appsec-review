@@ -116,3 +116,13 @@ unavailable, their absence is an evidence-retention gap rather than current acce
 `tool-cve-bin-tool` remains deferred. Its NVD-derived offline database contract is now implemented,
 but the catalog's GPL policy decision is still unresolved. Enabling its scan adapter before that
 decision would weaken the recorded acceptance contract.
+
+## Status update (2026-10-12)
+
+The counts above describe the 2026-10-08 acceptance. The catalog has since grown to 28 enabled tool
+images plus the four bases, adding tools not derived from the legacy archive (see
+`containers/README.md`). Not every enabled tool has an asset lock: `tool-sqlite-fts` packages a
+repository-owned script on `base-python` and has none. `job_evidence_collection` now registers 20
+adapters, including `tool-opengrep` for the SEI CERT rule pack; the eight tools whose `tool.toml`
+sets `static_adapter = false` are run by their own jobs. The registry-equality rule above still
+applies to the remaining tools. No live acceptance of the added tools is recorded here.

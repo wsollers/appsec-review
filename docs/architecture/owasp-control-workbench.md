@@ -64,7 +64,8 @@ evidence. Conflicts and dissent remain in the joined result.
 - Role responsibilities and optional domain viewpoints: `pipeline/guidance/registry.json`.
 - Bounded questions: generated task records inside finding packages.
 - Model, reasoning, token budgets, timeouts, retries, batch/component limits, worker counts, pool
-  concurrency, and selected profiles: `appsec-review.toml`.
+  concurrency, and selected profiles: `appsec-review.toml` (settings table in
+  [`../operations/owasp-control-assessment.md`](../operations/owasp-control-assessment.md#settings)).
 - Exact composed bundles: `runs/<run-id>/data/guidance/<bundle-sha256>/`.
 
 Role/persona entries cannot carry authority fields. Assignment deterministically chooses one role

@@ -9,10 +9,12 @@ accepted handoffs and manifests.
 
 The Compose project contains PostgreSQL, a gRPC code location, the webserver, and the daemon. Only
 the web console is published, on `127.0.0.1:3000`. The repository's `runs/` and `data/` directories
-are mounted into the code-location container, and `targets/` is mounted read-only for review jobs;
-PostgreSQL and Dagster compute logs use named volumes.
-The code location alone receives the Docker socket and client needed to execute the pinned,
-network-disabled cve-bin-tool database builder. Do not expose the code location to untrusted code.
+are mounted into the Dagster containers, and `targets/` and `rules/` (the checked-in rule packs) are
+mounted read-only; PostgreSQL and Dagster compute logs use named volumes.
+The code location alone receives the host Docker socket. Every containerized step uses it: scanner
+and tool images, project-image probes and builds, language builds, CodeQL, and the network-disabled
+cve-bin-tool database builder. Socket access is equivalent to host root, so do not expose the code
+location to untrusted code.
 
 ## Windows host WSL memory limit
 
@@ -39,10 +41,13 @@ containers.
 Run these commands from the repository root. Bootstrap creates an ignored `.env` once and preserves
 its secret on later calls. On native Linux it also records the invoking operator's uid/gid so the
 code location does not leave root-owned files in the bind-mounted `runs/` and `data/` trees.
-When central configuration selects `claude-cli`, bootstrap also records the resolved local CLI,
-configuration-directory, and state-file paths. Compose mounts those three paths read-only only into
-the code-location container and sets an isolated container home; subscription credentials are not
-copied into the image, repository, or `.env`.
+Bootstrap also records the resolved local Claude CLI binary, `~/.claude` directory, and
+`~/.claude.json` state file whenever all three exist, regardless of the configured provider.
+`compose.yaml` requires `APPSEC_CLAUDE_BINARY`, `APPSEC_CLAUDE_CONFIG_DIR`, and
+`APPSEC_CLAUDE_STATE_FILE` unconditionally, so install and sign in to `claude` before bootstrap or
+set them by hand. Compose mounts those three paths read-only only into the code-location container
+and sets an isolated container home; subscription credentials are not copied into the image,
+repository, or `.env`.
 For a bounded acceptance target already beneath the read-only `targets/` mount, set
 `APPSEC_REVIEW_TARGET` to its container path for the lifecycle and launch commands; otherwise the
 deployment defaults to `/opt/app/targets/appsec-multi-vuln`.
@@ -99,6 +104,10 @@ docker compose --env-file deploy/dagster/.env -f deploy/dagster/compose.yaml exe
 python deploy/dagster/bin/verify.py --run-id $dagsterRunId --evidence deploy/dagster/verification/wave1-live-acceptance.json
 ```
 
+For a `wave1_review` run, repeat `--required-family <family>` (for example `native` or `dotnet`)
+to require zero-gap `SUCCEEDED` language-build receipts for that family and resolve their
+retained capture artifacts; the verifier fails if any such receipt is missing, failed, or gapped.
+
 With the current registry, the cross-job dependencies are:
 
 ```text
@@ -107,18 +116,35 @@ target_catalog -> source_history_analysis -> target_analysis_plan
 target_analysis_plan -> tree_sitter_ast -> change_context_analysis
 target_analysis_plan -> project_build -> language_build -> artifact_indexing -> artifact_security_analysis
 language_build -> cpp_compiled_analysis -> post_build_security_assessment
+cpp_compiled_analysis -> cpp_symbol_index
+cpp_compiled_analysis -> cpg_analysis
 target_analysis_plan -> evidence_collection
 language_build + artifact_indexing + artifact_security_analysis + cpp_compiled_analysis
-  + post_build_security_assessment + evidence_collection + tree_sitter_ast
-  + change_context_analysis -> codeql_analysis
+  + cpp_symbol_index + cpg_analysis + post_build_security_assessment + evidence_collection
+  + tree_sitter_ast + change_context_analysis -> codeql_analysis
 post_build_security_assessment + evidence_collection + artifact_security_analysis
   + tree_sitter_ast + codeql_analysis -> owasp_control_assessment
 codeql_analysis + owasp_control_assessment -> review_prioritization
 codeql_analysis + owasp_control_assessment + review_prioritization -> security_tagging
+security_tagging -> review_data_indexing
 ```
+
+`wave1_review` contains every registered job except `third_party_data_sync`, and
+`review_data_indexing` is its single terminal job.
 
 This is the Dagster-only composed topology. The direct CLI has a smaller linear graph documented in
 [`docs/operations/wave1-review.md`](../../docs/operations/wave1-review.md).
+
+The code location also defines:
+
+- one Dagster job per registered semantic job, named from that job's `name` in
+  `appsec-review.toml` (for example `target_catalog` or `codeql_analysis`), with its nodes
+  namespaced `standalone__`; a standalone launch joins the application run named by its
+  `appsec/application_run_id` tag, and its input validators require that run's accepted upstream
+  handoffs;
+- `ci_configuration_review`: `review_intake -> target_catalog -> ci_configuration_analysis`;
+- `project_build_review`: `review_intake -> target_catalog -> target_analysis_plan ->
+  project_build -> language_build -> artifact_indexing -> artifact_security_analysis`.
 
 The configured schedule and a manual launch enter the same generated semantic DAG. Schedule cron,
 time zone, and enabled state come only from
@@ -127,9 +153,11 @@ time zone, and enabled state come only from
 
 Dagster and the application intentionally allocate different run ids. Dagster uses its UUID for
 control-plane history. `JobRunner` allocates the date/serial application id used by immutable
-receipts. On success the Dagster run receives `appsec/application_run_id` and
-`appsec/application_attempt_id` tags plus structured output metadata for all unit statuses,
-snapshots, counts, gaps, and receipt paths. The application `status.json` contains the reverse
+receipts. When each job attempt is claimed, the Dagster run receives `appsec/application_run_id`
+and `appsec/trigger` tags; when each job finalizes, it receives `appsec/<job_id>/attempt` and
+`appsec/<job_id>/status` tags. The application attempt id also appears in node output metadata
+(`application_attempt_id`), alongside structured metadata for unit statuses, snapshots, counts,
+gaps, and receipt paths. The application `status.json` contains the reverse
 `orchestration.system=dagster` and `orchestration.run_id=<Dagster UUID>` link. The verification
 command validates both directions rather than inferring success from one system alone.
 
@@ -138,8 +166,10 @@ collection and project-build processing both start from the accepted target-anal
 language-build execution waits for accepted project-build probes while its source and WebAssembly
 lanes remain independent; C++ analysis waits for its native receipts; and post-build security waits
 for the accepted C++ analysis handoff. Cross-language CodeQL then consumes the accepted catalog,
-language-build, artifact, C++, post-build, static-evidence, and tree-sitter publications so its
-manifest is the final composed retrieval view before OWASP. Each evidence
+language-build, artifact, C++ (including the clangd and Joern indexes), post-build,
+static-evidence, tree-sitter, and change-context publications. Its manifest is the composed
+retrieval view consumed by OWASP; review prioritization and security tagging publish further
+shards after it, and `review_data_indexing` audits the final accepted view. Each evidence
 branch has scan, normalize, and producer-owned index nodes. Its cheap manifest barrier waits for a
 truthful terminal disposition from every static branch, verifies every immutable shard, and then
 publication moves the accepted pointer. OWASP assessment waits for both the static-evidence and
@@ -179,6 +209,38 @@ Use `--policy MARK_AS_CANCELED_IMMEDIATELY` only for a stale/orphaned record who
 can no longer acknowledge safe termination; the receipt records that policy.
 
 Do not use `down --volumes` during normal operation; that deletes the Dagster and PostgreSQL state.
+
+## Executor and pools
+
+`[orchestration.dagster]` in `appsec-review.toml` sets `executor` (only `multiprocess` is
+accepted) and `max_concurrent` (1 to 64, default 8) for every generated job.
+`[orchestration.dagster.pools]` sets a per-pool limit (1 to 64), applied as a tag concurrency
+limit on `appsec/pool`. The adapter assigns each node a pool from its unit id:
+
+| Pool | Nodes |
+| --- | --- |
+| `lifecycle` | Per-job begin and finalize nodes, and `__`-prefixed units. |
+| `owasp_validator` | `validation.*` units. |
+| `owasp_verification` | `verification.*` and `join.*` units. |
+| `cpp_build` | `prepare`, `configure`, `compile`, `catalog`, `image`, `probe`, and `execute` steps. |
+| `cpp_analysis` | `compiled`, `ast`, `ir`, `codeql`, `joern`, `binary`, `provenance`, `inspection`, `deterministic`, and `inference` steps. |
+| `ci_linter` | `*_scan` tasks under `ci_analysis`. |
+| `scanner` | Other `*_scan` tasks. |
+| `index` | `*_index` tasks. |
+| `application` | Everything else. |
+
+The checked-in configuration limits every pool except `application`, which has no configured
+limit and is bounded only by `max_concurrent`.
+
+## Environment variables
+
+`deploy/dagster/.env` (from bootstrap; see `.env.example`) supplies Compose interpolation:
+`DAGSTER_POSTGRES_PASSWORD`, `APPSEC_UID`/`APPSEC_GID`, `APPSEC_REVIEW_TARGET`, the three
+`APPSEC_CLAUDE_*` bind paths, and optionally `ANTHROPIC_API_KEY`. Compose passes
+`ANTHROPIC_API_KEY` (empty by default) only to the code location; it is used only by models
+configured with `provider = "anthropic-api"`, and the `claude-cli` transport removes it from the
+CLI's environment. `APPSEC_REVIEW_CONFIG` is fixed to `/opt/app/appsec-review.toml` by
+`compose.yaml` and the image; the adapter loads that file to build the definitions.
 
 ## Tests
 

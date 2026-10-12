@@ -4,7 +4,8 @@
 [security tag taxonomy](../architecture/security-tag-taxonomy.md) to code subjects. It reads only
 the accepted retrieval manifest (`data/indices/accepted.json`), never the target tree. In the
 `wave1_review` Dagster graph it runs after `codeql_analysis`, the last retrieval-manifest publisher,
-and after `owasp_control_assessment`, so it is the wave's single terminal job.
+and after `owasp_control_assessment` and `job_review_prioritization` when those are registered.
+`job_review_data_indexing` follows it as the wave's single terminal job.
 Run it standalone only after an accepted manifest exists; without one the input validator fails the
 job.
 
@@ -12,6 +13,13 @@ The vocabulary, capability rules, and crosswalk are pinned by path and SHA-256 u
 `jobs.job_security_tagging.settings.taxonomy` in `appsec-review.toml`. Editing any of the three
 files without updating its pinned hash fails the job before any unit runs. A namespace marked
 `proposed` in the vocabulary cannot be emitted until its catalog is pinned.
+
+Two bounds sit beside the taxonomy pins in `jobs.job_security_tagging.settings`:
+
+| Key | Default | Allowed | Effect when exceeded |
+|---|---|---|---|
+| `max_entities_per_shard` | 50000 | 1 to 1,000,000 | entities read per accepted shard; reaching it records a named gap |
+| `max_assignments` | 500000 | 1 to 2,000,000 | assignments per collector; exceeding it fails that collector |
 
 Check these outputs after a run:
 
@@ -34,9 +42,12 @@ Reading the results:
   the job publishes no security findings itself.
 - Every `gap:*` tag and every entry in the handoff `gaps` list is missing coverage. An empty region
   of the tag cloud is never evidence that the target is clean.
-- The job completes with gaps by design while invoked capability detection, the run-pinned MITRE
-  crosswalk, and the feed-backed rollups remain unimplemented. Each of these is named in the
-  handoff.
+- The job completes with gaps by design. Its standing gaps are: invoked capability detection (`func`
+  tags come from package inventory only), the upstream CWE->CAPEC->ATT&CK crosswalk (deferred until
+  the MITRE feed is pinned into the run), and the unimplemented `taint_path`, `iac_resource`,
+  `k8s_object`, and `container_stage` crosswalk scopes. The feed-backed rollups add the `rollup_gap`
+  notes declared on their namespaces in `data/reference/taxonomy/vocabulary.json`. Each is named in
+  the handoff.
 
 A re-run in the same application run produces the same assignment set for the same accepted
 manifest and pinned taxonomy, and replaces earlier tag shards in the accepted manifest instead of

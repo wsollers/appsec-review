@@ -20,7 +20,10 @@ official SEI repository (cmu-sei/secure-coding-standards, pinned commit)
 
 `pack.json` names every file, pins both engines, and defines the portable-syntax and value
 vocabularies. `pack.lock.json` hashes every pack file; any file it does not name, or any changed
-file, fails validation and blocks execution in the evidence job.
+file, fails validation and blocks execution in the evidence job. The source index and the
+multivuln expectations in `multivuln.json` follow
+[`../schemas/sei-cert-source-index.schema.json`](../schemas/sei-cert-source-index.schema.json) and
+[`../schemas/sei-cert-multivuln-expectations.schema.json`](../schemas/sei-cert-multivuln-expectations.schema.json).
 
 ## Directory and naming conventions
 
@@ -88,7 +91,9 @@ Exception handling is one of `excluded-by-rule` (tested by an `exception:` fixtu
 
 Source facts that the index preserves instead of hiding: the draft Android standard reuses `DRD25`
 for two rules (keyed `DRD25@CRP` and `DRD25@MSC`); SER12-J names its exception `SER12-EX0`; and the
-CERT C++ standard lists 80 CERT C rules as also applying to C++ and 23 as not applying.
+CERT C++ standard lists 80 of the 122 indexed CERT C rules as also applying to C++. The generator
+records only that "also apply" list, so the remaining 42 have `applies_to_cpp: false` because the
+C++ standard does not list them, not because it states that they do not apply.
 
 ## Portable syntax requirements
 

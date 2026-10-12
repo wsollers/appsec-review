@@ -5,11 +5,12 @@ current execution implementations include Linux native, Rust/Cargo, JVM/Java/Kot
 Node/JavaScript/TypeScript, Python packaging, PHP/Composer, Linux-capable .NET SDK projects and
 solutions, and WebAssembly output producers. Accepted Windows-only and .NET Framework projects
 publish explicit `NOT_APPLICABLE` receipts.
-Native, Go, Rust, and .NET commands share one captured-build driver, executor/collector boundary,
-and successful-exec reconciliation implementation. Their descriptors classify observed tools and
-map language-specific inputs, outputs, artifacts, and metadata; they do not own copies of capture
-or wrapper reconciliation. Operators should treat a new per-language trace parser or reconciler as
-an architectural regression.
+Native, Rust, and .NET commands share one captured-build driver and the generic
+`reconcile_captured_build` successful-exec reconciliation through `CapturedBuildDescriptor`
+instances; the descriptors classify observed tools and map language-specific inputs, outputs,
+artifacts, and metadata. Go runs under the same executor/collector boundary and standardized
+syscall capture records but reconciles them in its own `go.capture_invocations`, with the same
+authority rule: only successful process-exec events establish that a tool ran.
 
 ## Conditional-capture operator flow
 
@@ -220,6 +221,40 @@ upstream handoff are unchanged and every retained artifact still verifies.
 Inspect `data/logs/pipeline.jsonl` for `LANGUAGE_BUILD_STARTED`, `BUILD_COMMAND_COMPLETED`,
 `LANGUAGE_BUILD_COMPLETED`, and `LANGUAGE_BUILD_REUSED`. Events intentionally contain identities,
 counts, dispositions, gap counts, and durations—not command text or environment values.
+
+## Settings reference
+
+`[jobs.job_language_build.settings]` is validated by `config/loader.py`; unknown keys fail
+loading. Values below are the shipped `appsec-review.toml` defaults. Global capture limits live in
+`[build_capture]` (see the configuration section of
+[`../architecture/build-environments-and-execution-capture.md`](../architecture/build-environments-and-execution-capture.md));
+`settings.build_capture` overrides a subset for this job (shipped: `event_count_limit = 250000`).
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `command_timeout_seconds` | 600 | per-command timeout; positive |
+| `output_bytes` | 8388608 | in-memory stream preview only; complete files are retained |
+| `artifact_count_limit` | 10000 | cataloged artifacts per unit; positive |
+| `compiler_artifact_collection_mode` | `required` | `required`, `auto`, or `disabled` |
+| `compiler_artifact_collection_overrides` | native/go/dotnet/rust `required` | per-family mode for `native`, `go`, `dotnet`, `node`, `python`, `rust`, `php`, `java`, `wasm` |
+
+Per-family tables. `diagnostic_tail_bytes` (shipped 32768) bounds the on-demand failure-tail read;
+it is 0-1 MiB for Go, Python, Rust, PHP, and Node and positive for JVM:
+
+| Table | Keys (shipped value) | Constraints |
+| --- | --- | --- |
+| `go` | `offline` (false), `package_catalog` (true), `inspect_build_id` (true) | Booleans |
+| `python` | `frontend` (`pip`), `require_locked_dependencies` (false), `offline` (false), `capture_native_tools` (true) | `frontend` is `build`, `pip`, or `setuptools` |
+| `dotnet` | `require_locked_restore` (false), `capture_msbuild_diagnostics` (true), `generated_sources` (true), `allow_publish`/`allow_pack`/`allow_aot` (true) | validator requires the first three as shipped |
+| `rust` | `toolchain` (`stable`), optional `target`, `profile` (`dev`), `features` ([]), `locked` (false), `offline` (false), `capture_linker` (true) | names match `[A-Za-z0-9_.-]{1,64}` |
+| `php` | `composer_plugins` (`disabled`), `composer_scripts` (`sandboxed`), `require_lockfile` (false) | policies are `disabled` or `sandboxed` |
+| `node` | `package_managers`, `require_lockfile` (false), `network` (`allowed`), `lifecycle_scripts` (`sandboxed`), `capture_source_maps` (true) | validator accepts only the shipped values |
+| `jvm` | `trace_bytes` (8388608), `provenance_count_limit` (20000), `diagnostic_tail_bytes`, `system_path`, `tool_paths` table | limits positive; paths absolute; `tool_paths` names exactly `javac`, `kotlinc`, `kapt`, `ksp`, `java`, `jar`, `javadoc`, `protoc` |
+| `wasm` | `workspace_file_limit` (100000), `producers.<name>` with `families`, `tools`, `indicators` arrays | at least one producer; limit positive |
+
+The WebAssembly adapter reuses the job-level timeout, `output_bytes`, and `artifact_count_limit`.
+Project images, probes, and recipes come from `job_project_build`; see
+[`project-build.md`](project-build.md).
 
 ## Live acceptance
 

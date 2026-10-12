@@ -46,3 +46,26 @@ and retains 26 explicit coverage gaps. It also records checkpoint reuse, exact p
 per-profile counts, PHP/WebAssembly non-applicability, the accepted manifest identity, and the
 resolving run-owned receipts. Go remains an honest gap because its exact accepted recipes did not
 compile source; C# and Rust were excluded at planning by their recorded prerequisites.
+
+`artifact-security-live-acceptance.json` records `project_build_review` Dagster run
+`4280d496-0c2a-4225-b23e-886660d27841` (117 successful steps) for application run
+`2026-10-08-0084`. It retains intake-through-language-build receipts plus the artifact-indexing
+shard counts and per-capability artifact-security statuses; that run ended `COMPLETED_WITH_GAPS`.
+
+`ci-configuration-live-acceptance.json` records `ci_configuration_review` Dagster run
+`e975066a-01da-4eeb-98bf-b19e581d1caf` (77 successful steps) for application run
+`2026-10-08-0036`: per-provider CI definition counts, shard and finding counts, and partial
+coverage with its recorded gaps.
+
+`codeql-live-acceptance.json` records an earlier C/C++-only CodeQL acceptance inside
+`wave1_review` Dagster run `300b7227-7033-4b1a-a1a1-560f5e7e0f11` (276 successful steps) for
+application run `2026-10-08-0090`. That graph predates the cross-language `job_codeql_analysis`
+job; CodeQL then ran as a branch of `job_cpp_compiled_analysis`.
+
+`codeql-retrieval-acceptance.json` (`appsec-review/codeql-retrieval-acceptance/1`) records Dagster
+run `a36271d5-8a3c-4f58-bb46-f8e58df1cf13` for application run `2026-10-08-0091`, selected through
+`cpp_compiled_analysis__finalize`. It binds the CodeQL database, query, SARIF, and observation-index
+identities to retrieval results (search, find, excerpt, evidence, and trace) that resolve one
+finding to an exact source path and line.
+
+All four are historical evidence for their exact runs and trees, like the reports above.

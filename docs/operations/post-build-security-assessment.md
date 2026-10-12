@@ -15,6 +15,10 @@ bounded redacted form. The record binds run, target snapshot, project, build roo
 action and compile-unit identities, tool/image identity, working directory, sanitized environment
 facts, inputs, outputs and hashes, timing/status when observable, and the producing job/task.
 
+Per project, the job's task directories under the attempt hold `build-command-provenance.json`
+(`appsec-review/build-command-provenance/1`) and `binary-inspections.json`
+(`appsec-review/binary-inspection-set/1`, whose `records` are `appsec-review/binary-inspection/1`).
+
 Do not copy protected command artifacts into tickets, logs, prompts, or MCP responses. They may
 contain credentials passed by a target build. Central events intentionally contain identities and
 counts only.
@@ -32,6 +36,8 @@ receives only structured normalized flags, topology, deterministic results, and 
 Every proposed observation must cite supplied evidence identities. The validator confirms it only
 when deterministic evidence is failing, refutes it when deterministic evidence passes, and leaves
 unknown evidence unvalidated. Provider failures and budget overflow complete with explicit gaps.
+The model must answer with an `appsec-review/build-security-inference-proposal/1` object; the
+validated outcome is written to `inference-results.json` (`appsec-review/build-security-inference/1`).
 
 ## Retrieval and resume
 
