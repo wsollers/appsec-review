@@ -38,7 +38,9 @@ containers.
 
 ## Build, start, verify, and stop
 
-Run these commands from the repository root. Bootstrap creates an ignored `.env` once and preserves
+Run these commands from the repository root in Linux or WSL 2. When `.env` contains Linux Claude
+paths, invoke Compose from that same Linux environment so the binary and credentials mount as files.
+Bootstrap creates an ignored `.env` once and preserves
 its secret on later calls. On native Linux it also records the invoking operator's uid/gid so the
 code location does not leave root-owned files in the bind-mounted `runs/` and `data/` trees. It
 records the Docker socket group id and adds that supplemental group to the code location so tool
@@ -54,7 +56,7 @@ For a bounded acceptance target already beneath the read-only `targets/` mount, 
 `APPSEC_REVIEW_TARGET` to its container path for the lifecycle and launch commands; otherwise the
 deployment defaults to `/opt/app/targets/appsec-multi-vuln`.
 
-```powershell
+```bash
 python deploy/dagster/bin/bootstrap.py
 python deploy/dagster/bin/lifecycle.py build
 python deploy/dagster/bin/lifecycle.py start
@@ -69,7 +71,7 @@ HTTP endpoint and GraphQL workspace, then compares the connected jobs and schedu
 Rebuild and reload only the code location after an application change, then prove that the
 workspace reconnected:
 
-```powershell
+```bash
 python deploy/dagster/bin/lifecycle.py build
 docker compose --env-file deploy/dagster/.env -f deploy/dagster/compose.yaml up -d --no-deps --force-recreate --wait code-location
 python deploy/dagster/bin/verify.py
@@ -78,7 +80,7 @@ python deploy/dagster/bin/verify.py
 Use the code-location CLI as a non-executing manual smoke check. It imports the same definitions
 served to the webserver and prints the discovered semantic jobs:
 
-```powershell
+```bash
 docker compose --env-file deploy/dagster/.env -f deploy/dagster/compose.yaml exec code-location dagster job list --module-name appsec_review.orchestration.dagster.definitions
 ```
 
@@ -86,8 +88,8 @@ Launch `third_party_data_sync` manually from the console only when a real extern
 intended; it performs network, filesystem, and isolated Docker work. The following command launches
 through the live Dagster instance and retains the Dagster id for terminal verification:
 
-```powershell
-$dagsterRunId = [guid]::NewGuid().ToString()
+```bash
+dagsterRunId=$(python3 -c 'import uuid; print(uuid.uuid4())')
 docker compose --env-file deploy/dagster/.env -f deploy/dagster/compose.yaml exec -T webserver dagster job launch -w /opt/dagster/home/workspace.yaml -l appsec_review -j third_party_data_sync --run-id $dagsterRunId
 # Wait for this run to finish in the Dagster console before verifying it.
 python deploy/dagster/bin/verify.py --run-id $dagsterRunId --evidence "runs/metadata/dagster-verification/$dagsterRunId.json"
@@ -101,8 +103,8 @@ binary inspection, deterministic checks, and immutable `build_security` shards r
 the retained `wave1_review` job. Its target mount is read-only, while application receipts and
 handoffs remain in the ignored `runs/` mount:
 
-```powershell
-$dagsterRunId = [guid]::NewGuid().ToString()
+```bash
+dagsterRunId=$(python3 -c 'import uuid; print(uuid.uuid4())')
 docker compose --env-file deploy/dagster/.env -f deploy/dagster/compose.yaml exec -T webserver dagster job launch -w /opt/dagster/home/workspace.yaml -l appsec_review -j wave1_review --run-id $dagsterRunId
 python deploy/dagster/bin/review_run.py watch --run-id $dagsterRunId
 python deploy/dagster/bin/verify.py --run-id $dagsterRunId --evidence "runs/metadata/dagster-verification/$dagsterRunId.json"
@@ -220,7 +222,7 @@ a navigation result; its empty finding and scoring lists do not mean the target 
 To validate a package directory against the current accepted manifest before use, run from the
 repository root in the same environment as the run:
 
-```powershell
+```bash
 python -c "from pathlib import Path; from appsec_review.retrieval import RetrievalCore; from appsec_review.review_packages import verify_review_packages; run='APPLICATION_RUN_ID'; core=RetrievalCore(Path('runs'),run); print(verify_review_packages(core,Path('runs')/run/'data'/'review-packages'/'CONTENT_SHA256')['counts'])"
 ```
 
@@ -235,13 +237,13 @@ enumerate producer and lead-context limits in an accepted package set.
 
 Stop containers without deleting persistent state:
 
-```powershell
+```bash
 python deploy/dagster/bin/lifecycle.py stop
 ```
 
 For diagnostics:
 
-```powershell
+```bash
 python deploy/dagster/bin/lifecycle.py logs
 python deploy/dagster/bin/run_report.py --stale-seconds 3600
 docker compose --env-file deploy/dagster/.env -f deploy/dagster/compose.yaml config
@@ -251,7 +253,7 @@ To close specifically enumerated non-terminal records during an authorized recov
 supported Dagster GraphQL termination API and retain the default host-level recovery receipt under
 `runs/metadata/dagster-recovery/`:
 
-```powershell
+```bash
 python deploy/dagster/bin/recover_runs.py --reason "authorized deployment recovery" --run-id <enumerated-id>
 ```
 
@@ -299,7 +301,7 @@ CLI's environment. `APPSEC_REVIEW_CONFIG` is fixed to `/opt/app/appsec-review.to
 Run the full repository suite on the host. It skips only the optional Dagster tests when that
 dependency is absent. Then run the deployment-specific suite in the pinned image:
 
-```powershell
+```bash
 python -m pytest -q
 docker build --file deploy/dagster/Dockerfile --target test --tag appsec-review-dagster-test .
 docker run --rm appsec-review-dagster-test

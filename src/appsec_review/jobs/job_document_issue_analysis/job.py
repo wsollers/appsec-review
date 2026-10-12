@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -19,6 +20,14 @@ from .datasets import CONSUMES, DATASETS
 
 
 JOB_ID = "job_document_issue_analysis"
+
+
+def _schema_path() -> Path:
+    relative = Path("docs/schemas/document-issue-ledger.schema.json")
+    source = Path(__file__).resolve().parents[4] / relative
+    if source.is_file():
+        return source
+    return Path(os.environ.get("APPSEC_REVIEW_CONFIG", "appsec-review.toml")).resolve().parent / relative
 
 
 def _validate_config(context, _result) -> None:
@@ -71,7 +80,7 @@ def build_job() -> Job:
         ledger = analyze_document_hunts(core, directory,
             max_files=unit.job.config.settings["max_source_files"],
             max_file_bytes=unit.job.config.settings["max_source_file_bytes"])
-        schema_path = Path(__file__).parents[4] / "docs" / "schemas" / "document-issue-ledger.schema.json"
+        schema_path = _schema_path()
         schema = json.loads(schema_path.read_text(encoding="utf-8"))
         Draft202012Validator(schema).validate(ledger)
         path = run_root / "data" / "document-issues" / ledger["content_sha256"] / "ledger.json"
@@ -92,7 +101,7 @@ def build_job() -> Job:
     units = (Unit("analysis.map_and_adjudicate", analyze, output_validators=(_validate_output,)),)
     sources = [Path(__file__), Path(__file__).with_name("datasets.py"),
                Path(__file__).parents[2] / "document_issues.py",
-               Path(__file__).parents[4] / "docs" / "schemas" / "document-issue-ledger.schema.json"]
+               _schema_path()]
     identity = hashlib.sha256(b"".join(path.read_bytes() for path in sources)).hexdigest()
     return Job(JOB_ID, "document_issue_analysis", UnitExecutor(units).execute,
                input_validators=(_validate_config,), schema_identity=SCHEMA,

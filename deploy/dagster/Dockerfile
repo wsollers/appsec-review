@@ -19,7 +19,7 @@ RUN python -m pip install --no-cache-dir --upgrade "pip==25.0.1" \
     && python -m pip check
 
 COPY pyproject.toml appsec-review.toml ./
-COPY docs/schemas/review-packages.schema.json ./docs/schemas/review-packages.schema.json
+COPY docs/schemas/ ./docs/schemas/
 COPY src ./src
 COPY containers ./containers
 COPY data ./data
@@ -28,7 +28,8 @@ COPY rules ./rules
 COPY tools/cve-bin-tool ./tools/cve-bin-tool
 RUN python -m pip install --no-cache-dir --no-build-isolation --no-deps . \
     && mkdir -p /opt/dagster/home /var/dagster/compute-logs /var/dagster/artifacts /opt/app/runs /opt/app/data \
-    && chmod 1777 /opt/dagster/home /var/dagster
+    && chmod 1777 /opt/dagster/home /var/dagster \
+    && python -c "from appsec_review.orchestration.dagster.definitions import defs; defs.get_job_def('wave1_review')"
 
 COPY deploy/dagster/dagster.yaml deploy/dagster/workspace.yaml /opt/dagster/home/
 

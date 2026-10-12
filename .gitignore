@@ -82,6 +82,9 @@ images/audit-buildenv-java/jdtls.tar.gz
 /data/feeds/grype/
 # Mutable MITRE ATT&CK/CAPEC feed state (see docs/mitre-feed.md); never committed.
 /data/feeds/mitre/
+# Mutable KEV and EPSS snapshots are local reference data, never repository source.
+/data/feeds/kev/
+/data/feeds/epss/
 
 # Host-local seeds and keys (dependency DB seeds, demo HMAC key): never source.
 .artifacts/
