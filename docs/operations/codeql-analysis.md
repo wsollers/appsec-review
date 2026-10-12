@@ -70,6 +70,60 @@ Ordinary producer failures are accepted as scope-local coverage gaps. A sibling 
 Changed accepted handoffs, source bytes, protected argv, image identities, database manifests,
 checkpoints, or SARIF identities are framework-integrity failures and stop publication.
 
+## Graph export step
+
+The `export` step (unit `export.scopes`) runs the repository-owned, hash-pinned graph export pack
+on each successful database. It depends on `database.scopes` only, so query and export failures
+never invalidate each other. Its design is
+[code-graph precomputation](../architecture/code-graph-precomputation.md) section 7. Only C/C++
+has a pack in this change. Every other language records the export disposition `NOT_APPLICABLE`
+with the reason "no hash-pinned CodeQL graph export pack for `<language>`". This is a named
+disposition, not a failure and not a clean result.
+
+Configuration lives in `appsec-review.toml`:
+
+- `[jobs.job_codeql_analysis.settings.export_queries]` sets `enabled`, `row_limit` (rows decoded
+  per export query), `max_bytes` (total export bytes per scope) and `timeout_seconds` (the runner
+  `export` action). The defaults equal the `GraphSettings` contract: 200000, 268435456 and 1800.
+- `[[jobs.job_codeql_analysis.settings.languages.cpp.export_queries]]` must equal
+  `export_query_packs.cpp` in `containers/tools/codeql/assets.lock.json` field for field. At most
+  one pack is allowed per language, and only `cpp` may declare one. Planning stops with a
+  framework-integrity failure when any language's block differs from its lock entry. The export
+  unit then rechecks the asset-lock hash, the pack tree hash and file count, `qlpack.yml`, the
+  suite, `columns.json` and `catalog.json` in the repository before it runs anything.
+
+For each exportable scope, the job stages scratch under `data/codeql/scopes/<scope-id>/export/`.
+The scratch holds a disposable database copy, the pack, `columns.json` and the asset lock. The
+runner verifies them against the lock again, inside a `--network none` container, and writes
+`exports/<query_id>.json` plus `exports/export-manifest.json`. The scratch is then deleted.
+`load_graph_exports` re-verifies the directory against its manifest and the export contract. The
+manifest's language, pack identity and bounds must equal the configuration.
+
+The export checkpoint is `export-checkpoint.json`
+(`appsec-review/codeql-export-checkpoint/1`). Its identity binds the database identity and tree,
+the export pack entry without the catalog, the manifest schema, the bounds and the runner hash.
+A database, pack, bound or runner change reruns the export only. A query-suite or catalog change
+does not. On reuse the exports are re-verified, and a changed, extra or missing export file is a
+framework-integrity failure. A timeout, a non-zero exit or an invalid fresh export is a scope gap.
+A failed database is the gap "export skipped because database creation failed". A truncated query
+is a named gap. Any of these gaps makes the step's `terminal_status` `COMPLETED_WITH_GAPS`, while
+sibling scopes keep their exports.
+
+Raw exports are the `codeql_graph_export` dataset (`artifact_only`). Their rows hold CodeQL
+internal ids and are never served; `job_code_graph_index` normalizes them. Consumers find them in
+the accepted handoff in three places:
+
+- `outputs["export.scopes"].artifact` points to `artifacts/codeql/graph-exports.json`
+  (`appsec-review/codeql-graph-exports/1`), with one record per scope.
+- The `graph_exports` list in the acceptance summary (`outputs["acceptance.publish_handoff"].artifact`)
+  holds the same records.
+- Every export manifest and file appears with its SHA-256 in the handoff `artifacts`.
+
+A succeeded record carries `export_status`, `export_identity`, `export_reused`, `export_pack`,
+`export_manifest` and `export_files`, each `{path, sha256, size_bytes}`, plus row counts and
+`truncated_queries`. Other records carry `export_status` (`FAILED`, `SKIPPED` or
+`NOT_APPLICABLE`) and the gaps or reason.
+
 ## Evidence and retrieval
 
 SARIF 2.1 results, rule metadata, severities, fingerprints, suppressions, baseline state, locations,

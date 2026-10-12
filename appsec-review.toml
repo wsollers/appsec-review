@@ -1142,6 +1142,15 @@ threads = 2
 ram_mb = 4096
 max_paths = 4
 
+# Graph export step (docs/architecture/code-graph-precomputation.md section 7.1). The bounds equal
+# the GraphSettings contract defaults: rows decoded per export query, total export bytes per scope,
+# and the runner `export` action timeout.
+[jobs.job_codeql_analysis.settings.export_queries]
+enabled = true
+row_limit = 200000
+max_bytes = 268435456
+timeout_seconds = 1800
+
 [jobs.job_codeql_analysis.settings.languages.cpp]
 enabled = true
 mode = "build"
@@ -1168,6 +1177,22 @@ query_pack_sha256 = "730390d903f2fd6806569cf00e8ae4e86a84dcc5acdd1e4019510b633a2
 query_lock_sha256 = "a4027ef1fb800f5c637f23acec2ac9b67177aaafa7fc7e997c40cbd64076c1b6"
 tree_sha256 = "f6bf41273faaaa58c43ef6825ae77090fb0dfac65eee4cfe423613153b591231"
 file_count = 1971
+
+# Must equal export_query_packs.cpp in containers/tools/codeql/assets.lock.json.
+[[jobs.job_codeql_analysis.settings.languages.cpp.export_queries]]
+query_id = "graph-export-cpp"
+source_path = "rules/codeql-graph-export/cpp"
+query_pack = "appsec-review/graph-export-cpp"
+query_pack_version = "1.0.0"
+query_suite = "graph-export.qls"
+query_suite_sha256 = "4af4c3f7f908796b9d13103e53d7e23b1a57b70fedcbec9dbd440c8dedecf6af"
+query_pack_sha256 = "fa9c3d02433ce3d96aa75d2fdce2a5259f05d208f3a77f4c404a916a68f6cab9"
+tree_sha256 = "14a7890f8b858128f6fac5d181ac89c5062c2bd3e67ca009c454d2491bbea342"
+file_count = 10
+columns_path = "rules/codeql-graph-export/columns.json"
+columns_sha256 = "c45c27ee19b1ccd4d15b4b2308a9ace0a5545d38836f2c905d379f2e3e69dfe0"
+catalog_path = "rules/codeql-graph-export/catalog.json"
+catalog_sha256 = "1a290cf270f5469f02aaf6c10432457101c128ec17a0b340272ccc6b1ef7a0a5"
 
 [jobs.job_codeql_analysis.settings.languages.go]
 enabled = true
@@ -1300,6 +1325,10 @@ workers = 2
 [jobs.job_codeql_analysis.steps.query]
 workers = 2
 [jobs.job_codeql_analysis.steps.query.tasks.scopes]
+
+[jobs.job_codeql_analysis.steps.export]
+workers = 2
+[jobs.job_codeql_analysis.steps.export.tasks.scopes]
 
 [jobs.job_codeql_analysis.steps.normalize]
 workers = 2
