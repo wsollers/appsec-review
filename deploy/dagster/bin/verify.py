@@ -701,7 +701,8 @@ def _run(url: str, run_id: str, repository: Path, document: dict,
     result = json.loads(result_path.read_text(encoding="utf-8"))
     if status.get("status") != "SUCCEEDED" or result.get("status") != "SUCCEEDED":
         raise SystemExit(f"application receipts are not successful: status={status}, result={result}")
-    if status.get("orchestration") != {"system": "dagster", "run_id": run_id}:
+    if status.get("orchestration") != {"system": "dagster", "run_id": run_id,
+                                       "node": "standalone__third_party_data_sync__begin"}:
         raise SystemExit("application status receipt does not link to the Dagster run")
 
     configured = document["jobs"][job_id]
