@@ -34,6 +34,7 @@ from appsec_review.review.models import IntegrityError, Lane, Predicate
 from appsec_review.review.packages import (
     ASSEMBLY_RULE, PackageSettings, assemble_packages, publish_packages, verify_package_manifest,
 )
+from appsec_review.review.references import load_cwe_reference
 from appsec_review.review.scope import AcceptedScope, accept_manifest
 from appsec_review.review.teams import ReviewTeamSemaphore
 from appsec_review.runtime import Job, Unit, UnitExecutor
@@ -242,7 +243,11 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
         def handler(unit: UnitContext) -> Mapping[str, Any]:
             scope = _scope(unit)
             settings = _settings(unit)
-            assembly = assemble_packages(scope, PackageSettings.from_review_settings(settings))
+            # Claim CWEs validate against the run-pinned MITRE CWE catalog; an unpinned, mismatched or
+            # stale catalog falls back to the rule/crosswalk CWE set with a recorded coverage gap.
+            reference = load_cwe_reference(unit.job.run_root)
+            assembly = assemble_packages(scope, PackageSettings.from_review_settings(settings),
+                                         cwe_reference=reference)
             manifest_path = publish_packages(assembly, unit.unit_root / "assembly")
             excluded = _excluded(scope)
             mine = [package for package in assembly.packages if package.lane == lane.value]
@@ -251,10 +256,12 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
             membership = _membership(scope, {item for values in entities.values() for item in values})
             positions = {unit_row["unit_key"]: unit_row["position"] for unit_row in assembly.manifest["units"]}
             leads = [lead for package in assembly.packages for lead in package.document()["lead_menu"]]
-            cwe_ids = {normalize_cwe(cwe) for lead in leads for cwe in lead.get("rule_cwe", ())}
+            fallback = {normalize_cwe(cwe) for lead in leads for cwe in lead.get("rule_cwe", ())}
             _vocabulary, crosswalk = _taxonomy(repo(unit))
-            cwe_ids |= {normalize_cwe(tag.split(":", 1)[1]) for tag in crosswalk_tags(crosswalk)
-                        if tag.startswith("cwe:")}
+            fallback |= {normalize_cwe(tag.split(":", 1)[1]) for tag in crosswalk_tags(crosswalk)
+                         if tag.startswith("cwe:")}
+            reference = reference.with_fallback(frozenset(item for item in fallback if item))
+            cwe_ids = set(reference.accepted_ids)
             records = []
             for package in mine:
                 document = package.document()
@@ -282,6 +289,7 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
                                 for item in Lane},
                 "packages": sorted(records, key=lambda item: (item["rank"], item["package_id"])),
                 "accepted_cwe_ids": sorted(item for item in cwe_ids if item),
+                "cwe_reference": reference.record(),
                 "rule_predicates": {lead["observation_id"]: [item.value for item in
                                                              TOOL_RULE_PREDICATES.get(lead["lead_family"], ())]
                                     for lead in sorted(leads, key=lambda item: item["observation_id"])},
@@ -289,6 +297,9 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
                           for row in assembly.manifest["units"]],
             }
             gaps = [f"{gap.producer}:{gap.scope}: {gap.state}" for gap in assembly.gaps]
+            if reference.gap:
+                gaps.insert(0, f"cwe_reference: {reference.gap}; claim CWEs validate against the "
+                               f"{len(cwe_ids)} rule/crosswalk CWE ids only")
             unit.job.events.write("INFERENCE_REVIEW_PACKAGES_ASSEMBLED", lane=lane.value, package_count=len(records))
             return {"artifact": _write(unit, f"{lane.value}-packages.json", document),
                     "package_count": len(records), "gaps": gaps[:200], "terminal_status": _status(gaps)}
@@ -370,9 +381,16 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
         adjudications = _read(unit.job.run_root, unit.output("adjudicate.apply_policy")["artifact"])
         projection = project(stages.merge_verified(shard_paths(unit, LEDGER_UNITS[:3])).events)
         ledger_path = unit.unit_root / "ledger.jsonl"
+        merged = _read(unit.job.run_root, unit.output("merge.claims")["artifact"])
+        documents = {}
+        for lane in ("lead", "hunt"):
+            packages_doc = _read(unit.job.run_root, unit.output(f"packages.assemble_{lane}_packages")["artifact"])
+            documents.update({work.package_id: work.document for work in package_works(unit.job.run_root,
+                                                                                     packages_doc)})
         document = stages.score_claims(adjudications["adjudications"], projection,
                                        settings.scoring.cwe_impact_classes, unit.unit_root / "scores", ledger_path,
-                                       unit.unit_id, SchemaSet(repo(unit) / SCHEMA_DIRECTORY))
+                                       unit.unit_id, SchemaSet(repo(unit) / SCHEMA_DIRECTORY),
+                                       references=stages.claim_references(merged, documents))
         gaps: list[str] = []
         return {"artifact": _write(unit, "scores.json", document),
                 "ledger_shard": _artifact(unit.job.run_root, ledger_path), "score_count": len(document["scores"]),
@@ -384,7 +402,8 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
         packages = _read(unit.job.run_root, unit.output("packages.assemble_hunt_packages")["artifact"])
         ledger_path = unit.unit_root / "ledger.jsonl"
         writer = LedgerWriter(ledger_path, unit.unit_id)
-        for gap in stages.completeness_gaps(packages["units"], unit.output("scope.assemble_scope")["scope_gaps"]):
+        for gap in stages.completeness_gaps(packages["units"], unit.output("scope.assemble_scope")["scope_gaps"],
+                                            packages.get("cwe_reference")):
             writer.record_gap(gap)
         writer.seal()
         paths = shard_paths(unit, LEDGER_UNITS[:4]) + [ledger_path]

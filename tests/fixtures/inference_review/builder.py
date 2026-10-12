@@ -4,7 +4,12 @@ The run holds two languages (Python, C) in two components and two build units; s
 leads that are High, Critical, unknown-severity, suppressed, duplicate, unlocated, medium and low;
 one CodeQL lead; two dependency advisories; two CI rule findings; review-prioritization, history,
 hotspot and tag signals; an accepted ``scanner_correlation`` shard built by ``indexing/sast.py``;
-and a stale ``dependency_advisories`` feed. Artifact-scanner, post-build hardening and OWASP
+and ``dependency_advisories`` and ``reference_intelligence`` shards built by the real
+``indexing/products.py`` rules over pinned fixture reference feeds (OSV, NVD, KEV, EPSS, MITRE)
+published offline through the real sync code (``tests/fixtures/reference_feeds.py``). By default
+the OSV feed is stale; ``dep_high`` (GHSA-aaaa-bbbb-cccc, alias CVE-2026-0001) is enriched with NVD
+CVSS v3.1 and v4.0, a KEV listing and EPSS; ``dep_low`` (GHSA-dddd-eeee-ffff, alias CVE-2026-0002)
+resolves to a Rejected NVD record with no CVSS. Artifact-scanner, post-build hardening and OWASP
 control producers are absent, so their lead families must surface as coverage gaps.
 
 Usage::
@@ -15,7 +20,9 @@ Usage::
     fixture.ids["sast_critical"]                              # logical identity of a named lead
 
 ``omit`` drops named shards (see ``SHARDS``) before the manifest is written; ``seed`` shuffles
-entity insertion order, which must not change any shard or package byte.
+entity insertion order, which must not change any shard or package byte. ``omit_feeds`` leaves a
+reference feed unpublished (unavailable) and ``stale_feeds`` pins a feed older than its freshness
+bound; ``kev_cves``, ``nvd_records`` and ``mitre_weaknesses`` replace the fixture feed contents.
 """
 from __future__ import annotations
 
@@ -24,7 +31,9 @@ import random
 from pathlib import Path
 from typing import Any, Iterable
 
+from appsec_review.indexing import products
 from appsec_review.indexing.derive import publish_derived
+from appsec_review.indexing.store import ShardSet
 from appsec_review.indexing.products_base import AcceptedShards, to_derived
 from appsec_review.indexing.sast import build_scanner_correlation
 from appsec_review.retrieval import (
@@ -33,12 +42,44 @@ from appsec_review.retrieval import (
 )
 from appsec_review.retrieval.precomputed import FACT_SCHEMA
 from appsec_review.storage import atomic_json, file_sha256
+from tests.fixtures import reference_feeds as feeds
 
 
 RUN_ID = "2026-10-12-0001"
 SNAPSHOT = "target-sha256:" + "7" * 64
 SHARDS = ("source", "components", "build", "semgrep", "opengrep", "codeql", "osv", "ci", "priority", "history",
-          "tags", "scanner_correlation", "dependency_advisories")
+          "tags", "scanner_correlation", "dependency_advisories", "reference_intelligence")
+FEEDS = ("osv", "nvd", "kev", "epss", "mitre")
+FEED_OVERRIDES = {"kev": 7, "epss": 3}
+V31 = {"version": "3.1", "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H", "baseScore": 7.5,
+       "baseSeverity": "HIGH"}
+V40 = {"version": "4.0", "vectorString": "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:N/VI:N/VA:H/SC:N/SI:N/SA:N",
+       "baseScore": 8.7, "baseSeverity": "HIGH"}
+NVD_RECORDS = (
+    feeds.nvd_vulnerability("CVE-2026-0001", cwes=["CWE-400"], description="requests unbounded resource consumption",
+                            metrics={"cvssMetricV31": [V31], "cvssMetricV40": [V40]}),
+    feeds.nvd_vulnerability("CVE-2026-0002", status="Rejected", description="** REJECT ** duplicate"),
+)
+KEV_CVES = ("CVE-2026-0001",)
+EPSS_ROWS = (("CVE-2026-0001", 0.42, 0.97), ("CVE-2026-0002", 0.001, 0.05))
+MITRE_WEAKNESSES = {
+    "CWE-78": ("Improper Neutralization of Special Elements used in an OS Command", "Base"),
+    "CWE-89": ("Improper Neutralization of Special Elements used in an SQL Command", "Base"),
+    "CWE-120": ("Buffer Copy without Checking Size of Input", "Base"),
+    "CWE-190": ("Integer Overflow or Wraparound", "Base"),
+    "CWE-400": ("Uncontrolled Resource Consumption", "Class"),
+    "CWE-416": ("Use After Free", "Variant"),
+    "CWE-787": ("Out-of-bounds Write", "Base"),
+}
+OSV_RECORDS = (
+    {"id": "GHSA-aaaa-bbbb-cccc", "modified": "2026-02-01T00:00:00Z", "published": "2026-01-01T00:00:00Z",
+     "summary": "requests resource exhaustion", "aliases": ["CVE-2026-0001"],
+     "affected": [{"package": {"ecosystem": "PyPI", "name": "requests"},
+                   "ranges": [{"type": "ECOSYSTEM", "events": [{"introduced": "0"}, {"fixed": "2.31.0"}]}]}]},
+    {"id": "GHSA-dddd-eeee-ffff", "modified": "2026-02-01T00:00:00Z", "published": "2026-01-01T00:00:00Z",
+     "summary": "requests header leak", "aliases": ["CVE-2026-0002"],
+     "affected": [{"package": {"ecosystem": "PyPI", "name": "requests"}}]},
+)
 FILES = {
     "svc/api/handler.py": ("Python", "import db\ndef get(q):\n    return db.raw(q)\n    print(q)\n"),
     "svc/api/util.py": ("Python", "assert True\n"),
@@ -58,18 +99,57 @@ class FixtureRun:
     snapshot: str
     ids: dict[str, str] = field(default_factory=dict)
     shards: tuple[str, ...] = ()
+    feed_pins: dict[str, Any] = field(default_factory=dict)
 
 
 def _identity(kind: EntityKind, native: Any) -> str:
     return LogicalIdentity.derive(kind, SNAPSHOT, {"native": native}).value
 
 
+def publish_feeds(base: Path, *, omit_feeds: Iterable[str] = (), stale_feeds: Iterable[str] = ("osv",),
+                  kev_cves: Iterable[str] = KEV_CVES, nvd_records: Iterable[dict] = NVD_RECORDS,
+                  mitre_weaknesses: dict[str, tuple[str, str]] | None = None) -> dict[str, dict[str, Any]]:
+    """Publish the fixture reference feeds under ``base/feeds`` and pin them as the indexing job does."""
+    omit_feeds, stale_feeds = frozenset(omit_feeds), frozenset(stale_feeds)
+    unknown = (omit_feeds | stale_feeds) - set(FEEDS)
+    if unknown:
+        raise ValueError(f"unknown fixture feeds: {sorted(unknown)}")
+    root, work = Path(base) / "feeds", Path(base) / "feed-work"
+    roots = {feed: root / feed for feed in FEEDS}
+    publishers = {
+        "osv": lambda: feeds.publish_osv(roots["osv"], list(OSV_RECORDS), work / "osv"),
+        "nvd": lambda: feeds.publish_nvd(roots["nvd"], [dict(item) for item in nvd_records]),
+        "kev": lambda: feeds.publish_kev(roots["kev"], feeds.kev_document(
+            [feeds.kev_entry(cve) for cve in kev_cves]), work / "kev"),
+        "epss": lambda: feeds.publish_epss(roots["epss"], feeds.epss_bytes(EPSS_ROWS), work / "epss"),
+        "mitre": lambda: feeds.publish_mitre(roots["mitre"], dict(mitre_weaknesses or MITRE_WEAKNESSES), work / "mitre"),
+    }
+    for feed in FEEDS:
+        if feed in omit_feeds:
+            continue
+        publishers[feed]()
+        age = 30 if feed in stale_feeds else 1
+        feeds.set_published_at(roots[feed], (feeds.FIXED_NOW.replace(day=12) - _days(age)).isoformat()
+                               .replace("+00:00", "Z"))
+    return feeds.pin_feeds(Path(base), roots, overrides=FEED_OVERRIDES)
+
+
+def _days(count: int):
+    from datetime import timedelta
+    return timedelta(days=count)
+
+
 def build_accepted_index_set(base: Path, *, run_id: str = RUN_ID, omit: Iterable[str] = (),
-                             seed: int | None = None, history_change_count: int = 9) -> FixtureRun:
+                             seed: int | None = None, history_change_count: int = 9,
+                             omit_feeds: Iterable[str] = (), stale_feeds: Iterable[str] = ("osv",),
+                             kev_cves: Iterable[str] = KEV_CVES, nvd_records: Iterable[dict] = NVD_RECORDS,
+                             mitre_weaknesses: dict[str, tuple[str, str]] | None = None,
+                             advisory_extra: dict[str, dict[str, Any]] | None = None) -> FixtureRun:
     omit = frozenset(omit)
     unknown = omit - set(SHARDS)
     if unknown:
         raise ValueError(f"unknown fixture shards: {sorted(unknown)}")
+    advisory_extra = dict(advisory_extra or {})
     runs_dir = Path(base) / "runs"
     run_root = runs_dir / run_id
     target = Path(base) / "target"
@@ -174,9 +254,11 @@ def build_accepted_index_set(base: Path, *, run_id: str = RUN_ID, omit: Iterable
                              "message": f"requests is affected by {advisory_id}", **extra},
                             location("svc/api/handler.py", 1))
     shard("osv", "observations", "osv_scanner", {**evidence, "producer": "tool-osv-scanner"},
-          [advisory("dep_high", "GHSA-aaaa-bbbb-cccc", cvss_score=7.5, native_severity="MODERATE",
-                    aliases=["CVE-2026-0001"], cwe_ids=["CWE-400"]),
-           advisory("dep_low", "GHSA-dddd-eeee-ffff", native_severity="LOW")])
+          [advisory("dep_high", "GHSA-aaaa-bbbb-cccc", **{"cvss_score": 7.5, "native_severity": "MODERATE",
+                                                          "aliases": ["CVE-2026-0001"], "cwe_ids": ["CWE-400"],
+                                                          **advisory_extra.get("dep_high", {})}),
+           advisory("dep_low", "GHSA-dddd-eeee-ffff", **{"native_severity": "LOW",
+                                                         **advisory_extra.get("dep_low", {})})])
 
     def ci(key: str, rule: str, severity: str, line: int) -> EntityRecord:
         ids[key] = _identity(EntityKind.TOOL_OBSERVATION, key)
@@ -217,16 +299,33 @@ def build_accepted_index_set(base: Path, *, run_id: str = RUN_ID, omit: Iterable
                                  location(path, 1)))
     shard("tags", "tags", "security-domain", {"job": "job_security_tagging", "family": "security_domain"}, tags)
 
-    ids["advisory_fact"] = LogicalIdentity.derive(EntityKind.PRECOMPUTED_FACT, SNAPSHOT,
-                                                  {"query_set": "dependency_advisories", "key": "requests"}).value
-    shard("dependency_advisories", "precomputed", "dependency-advisories",
-          {"job": "job_review_data_indexing", "query_set": "dependency_advisories"},
-          [EntityRecord(LogicalIdentity.parse(ids["advisory_fact"]), "requests", "requests advisories",
-                        "dependency advisory requests",
-                        {"schema": FACT_SCHEMA, "query_set": "dependency_advisories", "fact_type": "fact",
-                         "result": {"package": "requests", "advisory": "GHSA-aaaa-bbbb-cccc"}, "basis": "fixture"})],
-          coverage=("dependency_advisories", "stale",
-                    "stale_feed: the pinned OSV snapshot is older than the configured freshness bound"))
+    pins = publish_feeds(base, omit_feeds=omit_feeds, stale_feeds=stale_feeds, kev_cves=kev_cves,
+                         nvd_records=nvd_records, mitre_weaknesses=mitre_weaknesses)
+
+    def product(key: str, query_set: str, shard_id: str) -> None:
+        if key in omit:
+            return
+        rule = products.product_rule(query_set)
+        store = ShardSet(run_root, [asdict(item) for item in identities])
+        context = products.ProductContext(run_root, SNAPSHOT, store, {}, {feed: pins[feed] for feed in rule.feeds},
+                                          {}, 10_000, rule.version)
+        selected = rule.select(store)
+        derived = rule.build(context, selected)
+        if query_set == "dependency_advisories":
+            ids["advisory_fact"] = next(item.identity.value for item in derived.entities
+                                        if item.payload["result"]["advisory"] == "GHSA-aaaa-bbbb-cccc")
+        document = publish_derived(
+            run_root, index="precomputed", shard_id=shard_id, job_id="job_review_data_indexing", unit_id="fixture",
+            rule=query_set, rule_version=rule.version, snapshot=SNAPSHOT,
+            inputs={"shards": ShardSet.identities(selected),
+                    "feeds": {feed: pins[feed].get("manifest_sha256") for feed in rule.feeds}},
+            build=lambda: derived, producer={"query_set": query_set})
+        raw = document["index_identity"]
+        identities.append(IndexIdentity(**{**raw, "gaps": tuple(raw.get("gaps", ()))}))
+        published.append(key)
+
+    product("dependency_advisories", "dependency_advisories", "dependency-advisories")
+    product("reference_intelligence", "reference_intelligence", "reference-intelligence")
 
     if "scanner_correlation" not in omit:
         syntax_files = {
@@ -254,15 +353,22 @@ def build_accepted_index_set(base: Path, *, run_id: str = RUN_ID, omit: Iterable
     manifest_path = run_root / "data" / "indices" / "manifests" / "fixture.json"
     write_manifest(manifest_path, run_id=run_id, target_snapshot=SNAPSHOT, target_root=target, indexes=identities)
     manifest = {"path": manifest_path.relative_to(run_root).as_posix(), "sha256": file_sha256(manifest_path)}
-    handoff_path = run_root / "data" / "jobs" / "job_review_data_indexing" / "attempts" / "attempt_0001" / "handoff.json"
+    attempt = run_root / "data" / "jobs" / "job_review_data_indexing" / "attempts" / "attempt_0001"
+    inputs_path = attempt / "steps" / "load" / "tasks" / "accepted_inputs" / "accepted-inputs.json"
+    atomic_json(inputs_path, {"schema": "appsec-review/review-data-indexing-inputs/1", "target_snapshot": SNAPSHOT,
+                              "feeds": pins})
+    inputs_artifact = {"path": inputs_path.relative_to(run_root).as_posix(), "sha256": file_sha256(inputs_path),
+                       "size_bytes": inputs_path.stat().st_size}
+    handoff_path = attempt / "handoff.json"
     atomic_json(handoff_path, {"schema": "appsec-review/job-handoff/1", "job_id": "job_review_data_indexing",
                                "attempt_id": "attempt_0001", "status": "ACCEPTED", "completion_status": "SUCCEEDED",
-                               "artifacts": [manifest], "outputs": {}, "source_fingerprint": SNAPSHOT})
+                               "artifacts": [manifest], "outputs": {"load.accepted_inputs": {"artifact": inputs_artifact}},
+                               "source_fingerprint": SNAPSHOT})
     atomic_json(run_root / "data" / "indices" / "accepted.json", {
         "schema": "appsec-review/accepted-index-set/1", "run_id": run_id,
         "handoff_path": handoff_path.relative_to(run_root).as_posix(), "handoff_sha256": file_sha256(handoff_path),
         "manifest_path": manifest["path"], "manifest_sha256": manifest["sha256"]})
-    return FixtureRun(runs_dir, run_root, run_id, target, SNAPSHOT, ids, tuple(published))
+    return FixtureRun(runs_dir, run_root, run_id, target, SNAPSHOT, ids, tuple(published), pins)
 
 
 def shard_path(fixture: FixtureRun, name: str, shard_id: str) -> Path:

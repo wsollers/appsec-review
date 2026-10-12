@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
 from appsec_review.review import adjudication as r5
+from appsec_review.review import advisories as advisory_reference
 from appsec_review.review.accounting import Accounting, PoolOutcome, exact_accounting
 from appsec_review.review.adjudication import Adjudication, adjudicate
 from appsec_review.review.claims import possible_duplicates
@@ -171,14 +172,53 @@ def score_package_json(result: ScoreProviderResult) -> dict[str, Any]:
             "assumptions": list(result.assumptions), "missing_factors": list(result.missing_factors),
             "evidence_relations": list(result.evidence_relations), "factor_citations": [],
             "limitations": ["application_risk_matrix/1 rates impact from a configured CWE table only; it is not "
-                            "a CVSS score and does not assess environment or business impact"],
+                            "a CVSS score and does not assess environment or business impact",
+                            "reference_inputs are pinned-feed context (NVD CVSS, CISA KEV, FIRST EPSS) about the "
+                            "advisory, not about this target; they are recorded, not scored"],
             "scorer": result.scorer_actor_id, "input_fingerprint": result.input_fingerprint,
-            "overrides": [dict(item) for item in result.overrides]}
+            "overrides": [dict(item) for item in result.overrides],
+            **({"reference_inputs": dict(result.reference_inputs)} if result.reference_inputs else {})}
+
+
+def claim_references(merged: Mapping[str, Any], documents: Mapping[str, Mapping[str, Any]]
+                     ) -> dict[str, dict[str, Any]]:
+    """Labelled reference scoring inputs per claim, from the lane A lead packages that proposed it.
+
+    Only a finding-lead package names the single lead a claim was raised from; a hunt menu lists many
+    leads, so hunt proposals contribute nothing. Several proposing lead packages are merged
+    deterministically (union of CVSS vectors, KEV listed if any is, highest EPSS percentile).
+    """
+    found: dict[str, dict[str, Any]] = {}
+    for claim_id, package_ids in sorted(merged.get("proposal_packages", {}).items()):
+        cvss: dict[tuple, dict[str, Any]] = {}
+        kev: list[bool | None] = []
+        epss: list[dict[str, Any]] = []
+        for package_id in sorted(package_ids):
+            document = documents.get(package_id) or {}
+            if document.get("kind") != "finding_lead":
+                continue
+            for lead in document.get("lead_menu", ()):
+                inputs = advisory_reference.reference_inputs(lead.get("advisory_context"))
+                for item in inputs["reference_cvss"]:
+                    cvss[(item["cve_id"], item["version"], item["vector"])] = item
+                if lead.get("advisory_context"):
+                    kev.append(inputs["kev_listed"])
+                if inputs["epss"]:
+                    epss.append(inputs["epss"])
+        if not cvss and not kev and not epss:
+            continue
+        found[claim_id] = {
+            "reference_cvss": [cvss[key] for key in sorted(cvss, key=lambda value: tuple(map(str, value)))][:8],
+            "kev_listed": True if any(item is True for item in kev) else (
+                False if kev and all(item is False for item in kev) else None),
+            "epss": max(epss, key=lambda item: (item.get("percentile") or 0.0, str(item.get("cve_id"))))
+            if epss else None}
+    return found
 
 
 def score_claims(adjudications: Sequence[Mapping[str, Any]], projection: Projection,
                  cwe_impact_classes: Mapping[str, str], out_dir: Path, ledger_path: Path, stream: str,
-                 schemas: SchemaSet) -> dict[str, Any]:
+                 schemas: SchemaSet, references: Mapping[str, Mapping[str, Any]] | None = None) -> dict[str, Any]:
     registry = default_registry(cwe_impact_classes)
     writer = LedgerWriter(ledger_path, stream)
     scores: list[dict[str, Any]] = []
@@ -188,10 +228,13 @@ def score_claims(adjudications: Sequence[Mapping[str, Any]], projection: Project
             continue
         claim = projection.claims[record["claim_id"]].claim
         supporting = sorted({relation for item in record["predicates"] for relation in item["supporting"]})
+        reference = (references or {}).get(claim.claim_id) or {}
         request = ScoreRequest(claim_id=claim.claim_id, adjudication_id=record["adjudication_id"], claim_state=state,
                                weakness_cwe=claim.weakness_cwe, evidence_relation_ids=tuple(supporting),
                                environment_sha256=None, policy_sha256=record["policy_sha256"],
-                               scorer_actor_id=SCORER_ACTOR)
+                               scorer_actor_id=SCORER_ACTOR,
+                               reference_cvss=tuple(dict(item) for item in reference.get("reference_cvss", ())),
+                               kev_listed=reference.get("kev_listed"), epss=reference.get("epss"))
         outcome = registry.score("application_risk_matrix", request)
         if isinstance(outcome, Gap):
             writer.record_gap(outcome)
@@ -229,11 +272,17 @@ def coverage_matrix(hunt_lane: Mapping[str, Any], units: Iterable[Mapping[str, A
             "statement": "lane B reports which lenses reviewed each unit; it never concludes a unit is free of defects"}
 
 
-def completeness_gaps(units: Iterable[Mapping[str, Any]], scope_gaps: Iterable[Mapping[str, Any]]) -> list[Gap]:
+def completeness_gaps(units: Iterable[Mapping[str, Any]], scope_gaps: Iterable[Mapping[str, Any]],
+                      cwe_reference: Mapping[str, Any] | None = None) -> list[Gap]:
     gaps = [make_gap(GapClass.COVERAGE_GAP, str(unit["unit_key"]), "below_hunt_cutoff")
             for unit in units if not unit.get("hunted")]
     gaps.extend(make_gap(GapClass.COVERAGE_GAP, f"producer:{gap['producer']}:{gap['scope']}",
                          f"{gap['state']}: {gap['reason']}") for gap in scope_gaps)
+    if cwe_reference and cwe_reference.get("gap"):
+        # Claim CWEs were validated against the narrower rule/crosswalk set; never silently.
+        gaps.append(make_gap(GapClass.COVERAGE_GAP, "reference:mitre_cwe",
+                             f"{cwe_reference['gap']}; claim CWE validation fell back to "
+                             f"{cwe_reference.get('accepted_count', 0)} rule/crosswalk CWE ids"))
     return sorted({gap.gap_id: gap for gap in gaps}.values(), key=lambda gap: gap.gap_id)
 
 

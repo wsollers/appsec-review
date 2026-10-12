@@ -6,6 +6,7 @@ Providers emit one normalized four-dimension package. Dimensions a provider does
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
+import json
 from typing import Any, Mapping, Protocol, runtime_checkable
 
 from appsec_review.review.identity import make_id, sha256_hex
@@ -29,12 +30,30 @@ class ScoreRequest:
     environment_sha256: str | None
     policy_sha256: str
     scorer_actor_id: str
+    # Labelled reference inputs from pinned feeds (NVD CVSS vectors, CISA KEV, FIRST EPSS). They describe
+    # the advisory a lead came from, not the target; providers record them and may use them only as
+    # documented (application_risk_matrix: KEV raises exploitability confidence one band).
+    reference_cvss: tuple[Mapping[str, Any], ...] = ()
+    kev_listed: bool | None = None
+    epss: Mapping[str, Any] | None = None
 
     def canonical(self) -> dict[str, Any]:
         value = asdict(self)
         value["claim_state"] = ClaimState(self.claim_state).value
         value["evidence_relation_ids"] = sorted(set(self.evidence_relation_ids))
+        # Absent reference inputs leave the canonical request (and every fingerprint) unchanged.
+        value["reference_cvss"] = sorted((dict(item) for item in self.reference_cvss),
+                                         key=lambda item: json.dumps(item, sort_keys=True, default=str))
+        value["epss"] = dict(self.epss) if self.epss is not None else None
+        for key, empty in (("reference_cvss", []), ("kev_listed", None), ("epss", None)):
+            if value[key] == empty:
+                del value[key]
         return value
+
+    def reference_inputs(self) -> dict[str, Any]:
+        canonical = self.canonical()
+        return {"label": "reference_context", "reference_cvss": canonical.get("reference_cvss", []),
+                "kev_listed": self.kev_listed, "epss": canonical.get("epss")}
 
     @property
     def fingerprint(self) -> str:
@@ -76,6 +95,7 @@ class ScoreProviderResult:
     assumptions: tuple[str, ...] = field(default_factory=tuple)
     missing_factors: tuple[str, ...] = field(default_factory=tuple)
     overrides: tuple[Mapping[str, Any], ...] = field(default_factory=tuple)
+    reference_inputs: Mapping[str, Any] = field(default_factory=dict)
     schema: str = SCORE_PACKAGE_SCHEMA
 
 

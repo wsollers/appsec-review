@@ -24,7 +24,7 @@ def test_accept_manifest_builds_a_deterministic_evidence_map(tmp_path: Path) -> 
     assert {item["build_unit_id"]: item["languages"] for item in evidence["build_units"]} == {
         "native-main": ["C"], "py-svc": ["Python"]}
     assert evidence["languages"] == {"C": 2, "Python": 2, "YAML": 1}
-    assert evidence["reference_freshness"] == {"dependency_advisories": "stale", "reference_intelligence": "missing"}
+    assert evidence["reference_freshness"] == {"dependency_advisories": "stale", "reference_intelligence": "partial"}
     assert {"artifact_scanner", "post_build_hardening", "control_evidence"} <= set(evidence["missing"])
     assert {"source_sast", "codeql", "ci_configuration", "scanner_correlation"} <= set(evidence["available"])
     assert scope.component_for("native/src/io.c").component_id == "component:0002"

@@ -8,7 +8,9 @@ import pytest
 from appsec_review.review.lead_families import collect_leads
 from appsec_review.review.packages import PackageSettings, assemble_packages
 from appsec_review.review.scope import accept_manifest
-from appsec_review.review.units import CUTOFF_REASON, build_units, rank_units, select_hunts
+from appsec_review.review.units import (
+    CUTOFF_REASON, EPSS_POINTS, KEV_POINTS, build_units, rank_units, select_hunts,
+)
 from tests.fixtures.inference_review.builder import build_accepted_index_set
 
 
@@ -55,7 +57,12 @@ def test_rank_is_deterministic_and_records_its_basis(scope) -> None:
     assert (svc["sii"].value, svc["sii"].state, svc["sii"].reason) == (None, "unknown", "no_record")
     record = ranked[0].rank_record()
     assert record["position"] == 1 and record["unit_count"] == 4
-    assert [item["signal"] for item in record["basis"]] == ["lps", "sii", "hotspot", "tag_density", "lead_hints"]
+    assert [item["signal"] for item in record["basis"]] == ["lps", "sii", "hotspot", "tag_density", "lead_hints",
+                                                             "advisory_kev", "advisory_epss"]
+    # The native unit has no advisory lead: a true zero. The svc unit's requests advisory is KEV-listed
+    # (CVE-2026-0001) with EPSS percentile 0.97.
+    assert (native["advisory_kev"].value, native["advisory_epss"].value) == (0, 0)
+    assert svc["advisory_kev"].value == KEV_POINTS and svc["advisory_epss"].value == round(0.97 * EPSS_POINTS)
 
 
 def test_missing_signal_producers_are_unknown_not_zero(tmp_path: Path) -> None:
@@ -91,3 +98,27 @@ def test_units_below_cutoff_become_named_gaps(scope) -> None:
                                                                "component", "build_unit"}
     # Lane A is unaffected by the hunt cutoff.
     assert assembly.manifest["audit"]["lane_a"]["expected"] == 9
+
+
+def test_advisory_rank_signals_are_unknown_when_feeds_are_missing_not_zero(tmp_path: Path) -> None:
+    scope = accept_manifest(build_accepted_index_set(tmp_path / "a", omit_feeds=("kev", "epss")).run_root)
+    svc = _signals(next(unit for unit in build_units(scope, collect_leads(scope), unit_max_files=200)
+                        if unit.key == SVC))
+    assert (svc["advisory_kev"].value, svc["advisory_kev"].reason) == (None, "feed_unavailable")
+    assert (svc["advisory_epss"].value, svc["advisory_epss"].reason) == (None, "feed_unavailable")
+
+    scope = accept_manifest(build_accepted_index_set(tmp_path / "b", omit=("dependency_advisories",)).run_root)
+    for unit in build_units(scope, collect_leads(scope), unit_max_files=200):
+        signals = _signals(unit)
+        assert signals["advisory_kev"].reason == signals["advisory_epss"].reason == "producer_unavailable"
+
+
+def test_kev_and_epss_signals_raise_a_unit_rank(tmp_path: Path) -> None:
+    listed = accept_manifest(build_accepted_index_set(tmp_path / "listed").run_root)
+    unlisted = accept_manifest(build_accepted_index_set(tmp_path / "unlisted", kev_cves=("CVE-2026-9999",)).run_root)
+
+    def svc(scope):
+        return next(item.unit for item in rank_units(build_units(scope, collect_leads(scope), unit_max_files=200))
+                    if item.unit.key == SVC)
+    assert _signals(svc(unlisted))["advisory_kev"].value == 0
+    assert svc(listed).score - svc(unlisted).score == KEV_POINTS

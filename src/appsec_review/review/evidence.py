@@ -17,7 +17,7 @@ from appsec_review.review.models import (  # make_gap is re-exported for compati
     make_gap,
 )
 
-ADMISSIBILITY_RULES_VERSION = "evidence-admissibility/1"
+ADMISSIBILITY_RULES_VERSION = "evidence-admissibility/1"  # reference kinds were already indirect by default deny
 EVIDENCE_RELATION_KINDS = frozenset({RelationKind.SUPPORTS, RelationKind.CONTRADICTS, RelationKind.QUALIFIES})
 SATISFYING_ADMISSIBILITY = frozenset({Admissibility.DIRECT, Admissibility.DIRECT_FOR_MAPPED_PREDICATE})
 
@@ -38,6 +38,17 @@ INDIRECT_KINDS: frozenset[EntityKind] = frozenset({
     EntityKind.CHANGE_CONTEXT_SIGNAL, EntityKind.REVIEW_SIGNAL, EntityKind.TAG_ASSIGNMENT,
     EntityKind.REVIEW_UNIT,
 })
+# R3: reference context. OSV, NVD, CISA KEV and FIRST EPSS records (advisories, the scanner-reported
+# dependency identities they are matched to, and the precomputed facts that join them to pinned
+# feeds, such as ``dependency_advisories`` and ``reference_intelligence``) describe an advisory or a
+# weakness in general, never this target. They are INDIRECT for every predicate: they may guide
+# search and scoring context but never satisfy an obligation alone. A dependency claim still needs
+# target evidence, e.g. the resolved package version from an SBOM, lockfile or artifact inventory
+# (``package``/``archive_member`` entities, which are direct for ``affected_construct``).
+REFERENCE_KINDS: frozenset[EntityKind] = frozenset({
+    EntityKind.ADVISORY, EntityKind.DEPENDENCY_PACKAGE, EntityKind.PRECOMPUTED_FACT,
+})
+INDIRECT_KINDS = INDIRECT_KINDS | REFERENCE_KINDS
 _EVIDENCE_BEARING = frozenset({EntityKind.TOOL_OBSERVATION, EntityKind.EVIDENCE_ARTIFACT,
                                EntityKind.FINDING_PACKAGE})
 
@@ -51,6 +62,8 @@ def classify(entity_kind: EntityKind | str, predicate: Predicate,
     """
     kind = EntityKind(entity_kind)
     predicate = Predicate(predicate)
+    if kind in REFERENCE_KINDS:            # reference context: indirect for every predicate
+        return Admissibility.INDIRECT
     if kind in DIRECT_KINDS:
         return Admissibility.DIRECT
     if kind in MAPPED_KINDS:

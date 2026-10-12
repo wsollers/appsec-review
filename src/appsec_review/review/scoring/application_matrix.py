@@ -1,9 +1,13 @@
 """``application_risk_matrix/1``: the deterministic slice 1 scoring provider (design R8).
 
 Axes are ``impact_class`` (from a configured CWE table, no parent roll-up) and
-``exploitability_confidence`` (``high`` when confirmed, ``medium`` when supported). The matrix band
-is reported as technical severity on this provider's own scale; environmental impact and
-remediation priority are not produced.
+``exploitability_confidence`` (``high`` when confirmed, ``medium`` when supported). A claim that is
+already ``supported`` or ``confirmed`` and whose lead advisory is CISA KEV-listed has its
+exploitability confidence raised one band (``medium`` -> ``high``; ``high`` stays ``high``), recorded
+as an assumption; KEV never makes an unsupported claim scoreable. NVD CVSS vectors and EPSS are
+recorded as labelled reference inputs and do not change the band. The matrix band is reported as
+technical severity on this provider's own scale; environmental impact and remediation priority are
+not produced.
 """
 from __future__ import annotations
 
@@ -84,6 +88,17 @@ class ApplicationRiskMatrixProvider:
         if not validation.valid:
             raise ValueError("; ".join(validation.errors))
         confidence = CONFIDENCE_BY_STATE[ClaimState(request.claim_state)]
+        assumptions: list[str] = []
+        kev_raised = request.kev_listed is True and confidence != CONFIDENCE_LEVELS[-1]
+        if kev_raised:
+            confidence = CONFIDENCE_LEVELS[CONFIDENCE_LEVELS.index(confidence) + 1]
+            assumptions.append("CISA KEV lists the lead advisory as exploited in the wild; exploitability "
+                               "confidence raised one band for this already-supported claim")
+        if request.reference_cvss:
+            assumptions.append("NVD CVSS vectors recorded as reference inputs; they describe the advisory, not "
+                               "this target, and do not set the band")
+        if request.epss is not None:
+            assumptions.append("FIRST EPSS recorded as a reference input; it does not set the band")
         impact = self._table.get(request.weakness_cwe) if request.weakness_cwe is not None else None
         band = self._matrix[impact][confidence] if impact is not None else None
         missing = ["weakness_cwe"] if request.weakness_cwe is None else (
@@ -93,6 +108,7 @@ class ApplicationRiskMatrixProvider:
             "axes": {"impact_class": impact, "exploitability_confidence": confidence},
             "cell": [impact, confidence] if impact is not None else None,
             "band": band,
+            **({"kev_adjusted": True} if kev_raised else {}),
         }
         native_sha256 = sha256_hex(native)
         fingerprint = input_fingerprint(self, self.provider_config_sha256, request)
@@ -110,4 +126,7 @@ class ApplicationRiskMatrixProvider:
             environmental_business_impact=None, remediation_priority=None,
             evidence_relations=tuple(sorted(set(request.evidence_relation_ids))),
             missing_factors=tuple(sorted([*missing, *UNPRODUCED_DIMENSIONS])),
+            assumptions=tuple(assumptions),
+            reference_inputs=request.reference_inputs() if (request.reference_cvss or request.kev_listed is not None
+                                                            or request.epss is not None) else {},
         )

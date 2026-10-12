@@ -1727,6 +1727,8 @@ verifier_per_team = 1
 
 [jobs.job_inference_security_review.settings.lanes]
 lead_admission = ["critical", "high", "unknown"]
+# KEV-listed advisory leads enter lane A whatever their reported severity (EPSS is context only).
+lead_admission_kev = true
 lead_budget_share = 0.5
 lead_max_claims_per_package = 3
 hunt_max_units = 50

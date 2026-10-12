@@ -435,7 +435,7 @@ def test_rerun_reuses_unchanged_products_and_rebuilds_only_changed_rule(accepted
     outputs = second["result"]["outputs"]
     assert all(outputs[f"precompute.{name}"]["reused"] for name in products.FIRST_STAGE_SETS)
     assert all(item["reused"] for item in outputs["links.cross_domain"]["links"])
-    changed = tuple(replace(rule, version="dependency-advisories/2") if rule.query_set == "dependency_advisories"
+    changed = tuple(replace(rule, version="dependency-advisories/99") if rule.query_set == "dependency_advisories"
                     else rule for rule in products.PRODUCT_RULES)
     monkeypatch.setattr(products, "PRODUCT_RULES", changed)
     third = _run(config, run_id, target, executor)["result"]["outputs"]
