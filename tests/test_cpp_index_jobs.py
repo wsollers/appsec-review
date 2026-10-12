@@ -14,9 +14,10 @@ from types import SimpleNamespace
 
 import pytest
 
+from appsec_review.config import load_config
 from appsec_review.container_runtime.executor import ExecutionResult
 from appsec_review.jobs.cpp_index_scopes import accepted_cpp_scopes, container_compile_database
-from appsec_review.jobs.job_cpg_analysis import JOERN_GAP, build_job as build_cpg
+from appsec_review.jobs.job_cpg_analysis import JOERN_DISABLED, JOERN_GAP, build_job as build_cpg
 from appsec_review.jobs.job_cpp_compiled_analysis import build_job as build_cpp
 from appsec_review.jobs.job_cpp_symbol_index import build_job as build_symbols
 from appsec_review.jobs.job_cpp_symbol_index.clangd_yaml import parse_documents
@@ -118,8 +119,18 @@ class IndexExecutor:
                                relative(receipt))
 
 
-def _accepted_cpp(tmp_path: Path, *, max_cpg_bytes: int | None = None):
+def _with_joern(tmp_path: Path, enabled: bool):
+    path = tmp_path / "appsec-review.toml"
+    text = path.read_text(encoding="utf-8")
+    path.write_text(text.replace("enabled = false\n# Joern is memory-heavy",
+                                 f"enabled = {str(enabled).lower()}\n# Joern is memory-heavy"), encoding="utf-8")
+    return load_config(path)
+
+
+def _accepted_cpp(tmp_path: Path, *, max_cpg_bytes: int | None = None, joern: bool = True):
     config, target = _fixture(tmp_path)
+    # Joern is off by default; the CPG tests below exercise the explicitly enabled path.
+    config = _with_joern(tmp_path, joern)
     if max_cpg_bytes is not None:
         config = _with_cpg_limit(tmp_path, max_cpg_bytes)
     run_id, fingerprint = _accepted_project(config, target, [])
@@ -198,6 +209,21 @@ def test_cpg_job_retains_the_cpg_but_claims_no_coverage(tmp_path: Path) -> None:
     assert _rows(run_root, identity, "SELECT status, gap FROM coverage") == [("unavailable", JOERN_GAP)]
     ((payload,),) = _rows(run_root, identity, "SELECT payload_json FROM entities")
     assert json.loads(payload)["status"] == "BLOCKED" and json.loads(payload)["cpg"] == scope["cpg"]
+
+
+def test_cpg_job_is_disabled_by_default_and_runs_no_joern(tmp_path: Path) -> None:
+    assert "enabled = false\n# Joern is memory-heavy" in (Path(__file__).parents[1] / "appsec-review.toml").read_text()
+    config, target, run_id, fingerprint = _accepted_cpp(tmp_path, joern=False)
+    calls: list[str] = []
+    outcome = _run(config, target, run_id, fingerprint,
+                   build_cpg(executor_factory=lambda unit: IndexExecutor(unit.job.run_root, calls)))
+    generated = _outputs(outcome, "job_cpg_analysis")["generate.scopes"]
+    assert calls == [] and generated["scopes"] == [] and generated["disabled"]
+    assert generated["terminal_status"] == "COMPLETED_WITH_GAPS"
+    assert all(JOERN_DISABLED in gap for gap in generated["gaps"] if gap.split(": ", 1)[0] in generated["disabled"])
+    published = _outputs(outcome, "job_cpg_analysis")["acceptance.publish_handoff"]
+    assert published["counts"]["cpgs_generated"] == 0 and published["counts"]["disabled_scopes"] == len(
+        generated["disabled"])
 
 
 def test_failed_c2cpg_is_a_named_gap_without_a_cpg(tmp_path: Path) -> None:

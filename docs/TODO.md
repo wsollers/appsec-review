@@ -292,6 +292,11 @@ invalidation and required reuse across unrelated languages, projects, scopes, an
 
 ## Joern bounded export and acceptance
 
+**Deprecated (2026-10-12).** Joern is off by default (`jobs.job_cpg_analysis.settings.enabled =
+false`). CodeQL is the code-graph producer, with Clang/LLVM cross-checks; see "Why Joern is
+deprecated" in `docs/architecture/code-graph-precomputation.md`. The items below are kept for
+reference only and are not planned.
+
 Done:
 
 - the pinned, reviewed, offline Joern/c2cpg runtime closure (`tool-joern`);

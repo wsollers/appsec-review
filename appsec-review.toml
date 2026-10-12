@@ -1368,6 +1368,10 @@ name = "cpg_analysis"
 workers = 1
 
 [jobs.job_cpg_analysis.settings]
+# Joern is deprecated and off by default: no review fact depends on it (CodeQL is the code-graph
+# producer, with Clang/LLVM cross-checks). When disabled, every scope publishes an unavailable
+# coverage row and no Joern container runs. See docs/architecture/code-graph-precomputation.md.
+enabled = false
 # Joern is memory-heavy; scopes run one at a time until a per-tool resource profile is reviewed.
 workers = 1
 max_cpg_bytes = 2147483648

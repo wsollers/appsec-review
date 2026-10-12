@@ -101,9 +101,57 @@ Disagreement representation (never silently merged, never dropped):
   `producer = clangd` (or `llvm-ir`), `dispatch = secondary_only`, `direct_eligible = false`.
   Missing coverage on the CodeQL side is reported as the fact's gap, never as "CodeQL says no call".
 
-Joern is **not** a producer in this plan. `job_cpg_analysis` keeps retaining the CPG and publishing
-its `BLOCKED` shard; the `cpg_graph` matrix lane stays `unavailable`. LLVM IR extension (CFG,
-def-use, guards) is explicitly out of scope (section 9).
+Joern is **not** a producer in this plan, and it is deprecated (see "Why Joern is deprecated"
+below). `job_cpg_analysis` stays registered but does not run Joern unless
+`jobs.job_cpg_analysis.settings.enabled = true`; the default is `false`. The `cpg_graph` matrix lane
+stays `unavailable`. LLVM IR extension (CFG, def-use, guards) is out of scope for this batch and is
+planned as the Clang second producer phase (section 12).
+
+#### Producer comparison: CodeQL and Clang/LLVM for C/C++
+
+This table records what each producer can provide for the facts the review needs. The **Status**
+column is updated whenever a phase lands (see section 12, K6). CodeQL stays primary because it is
+the only producer with interprocedural taint tracking and maintained source and sink models.
+
+| Capability | CodeQL | Clang AST / LLVM IR (with full extraction) | Status in this repository |
+|---|---|---|---|
+| Full typed AST | Yes; the C/C++ extractor runs a full compiler frontend over the traced build | Yes, from the actual compiler of record | CodeQL: exported facts only. Clang: call expressions only |
+| Macro and template precision | Good, but locations collapse to the macro expansion site | Best: separate spelling and expansion ranges, exact instantiations | Macro conditions are inexact until K2 |
+| CFG, basic blocks, dominance | Yes (`ControlFlowNode`, `BasicBlock`, `dominates`/`postDominates`) | Yes (`clang::CFG`; LLVM `DominatorTree` with `!dbg` mapping) | Guard facts from CodeQL; LLVM dominators planned (K3); bounded CFG export optional (K5) |
+| Guard conditions tied to a sink | Yes (`GuardCondition` with polarity) | Derived from dominators plus branch conditions | CodeQL `guard_fact`; LLVM cross-check planned (K3) |
+| SSA and an intermediate representation | Yes (`semmle.code.cpp.ir`) | Yes (LLVM IR is SSA) | IR is indexed by text matching; `!dbg` decoding planned (K1) |
+| Call graph with virtual dispatch | Yes, resolved and modeled | Direct calls from AST/clangd; virtual calls need extra analysis | CodeQL `call_site`; clangd, IR and AST cross-check |
+| Interprocedural dataflow and taint | Yes, global taint tracking with path graphs | No (would need PhASAR, SVF or a new analyzer) | CodeQL `dataflow_path` |
+| Modeled sources and sinks | Yes, maintained libraries | No | CodeQL plus the graph catalog |
+| Value ranges | `SimpleRangeAnalysis` (deliberately simple) | `LazyValueInfo`/`ScalarEvolution`, weak at `-O0` | CodeQL `range_fact`; unknown bounds are gaps |
+| Path-sensitive bug finding | No | Yes (Clang Static Analyzer) | Planned as a lane A producer (K4) |
+| What the optimizer does (UB exploitation, inlining) | No | Yes, at real optimization levels | Not planned |
+| Sanitizer and runtime instrumentation | No | Yes (ASan/UBSan) | Reserved for the PoC lane |
+
+#### Why Joern is deprecated
+
+Joern was meant to supply a code property graph (AST, CFG and PDG in one graph). It is deprecated
+because nothing in the review depends on it, and finishing it would duplicate CodeQL:
+1. **It produces nothing usable today.** `job_cpg_analysis` runs `c2cpg` and keeps `cpg.bin` as a
+   hash-identified artifact, but there is no exporter, source mapping, slicing, fixtures or security
+   acceptance. Every scope publishes a `BLOCKED` shard with zero observations.
+2. **CodeQL already covers the same ground.** The CodeQL database holds the AST, CFG, SSA and data
+   dependence in relational form, with taint tracking and source/sink models that Joern's C/C++
+   frontend would need us to build.
+3. **The independent second opinion comes from Clang/LLVM instead.** The compiler of record is
+   more authoritative for C/C++ than a second third-party parser.
+4. **Running it costs resources for no evidence.** Joern needs far more than 1 GiB per scope at
+   scale, and the image carries license-attribution work for bundled JARs.
+
+So `jobs.job_cpg_analysis.settings.enabled` defaults to `false`. When disabled:
+- no Joern container runs;
+- every accepted C/C++ scope publishes an `unavailable` coverage row whose reason names the
+  setting;
+- the job still produces an accepted handoff, so the graph topology and accounting are unchanged.
+
+Setting it to `true` restores the previous behaviour: the CPG is retained as evidence and the shard
+is still `BLOCKED`. Removing the job and image entirely is a later clean-up once no run depends on
+a retained CPG.
 
 ### D2 Retrieval surface: one new typed tool, `query_code_graph`; graph families leave `query_precomputed`
 
@@ -1090,7 +1138,7 @@ by `GraphSettings`. Publish them as an internal `control_flow` family in the `gr
 not model-facing and not citable; it exists to support K3 and future checks. Skip this chunk
 unless K3 or a later rule needs CodeQL-side CFG detail beyond guards.
 
-#### K6 Integration and acceptance
+#### K6 Integration, acceptance and documentation truth-up
 
 - **Offline end to end:** the native fixture through K1–K4, then `job_code_graph_index`, then
   review. Assert:
@@ -1099,6 +1147,18 @@ unless K3 or a later rule needs CodeQL-side CFG detail beyond guards.
   - a CSA observation bridges to a CodeQL path and counts as independent support (K4).
 - **Live tier:** on the pinned images and the `appsec-multi-vuln` C/C++ workspace. It reports how
   many facts each change turned eligible and the cross-check agreement rates.
+- **Documentation truth-up (required to finish the phase):**
+  - update the producer comparison table's **Status** column in section D1 to what is implemented
+    and tested;
+  - mark section 12 as implemented, recording deviations;
+  - update `docs/operations/cpp-compiled-analysis.md` (IR debug locations, AST macro mapping,
+    dominator output), `docs/operations/cpp-index-jobs.md`, `docs/operations/static-analysis.md` (the
+    Clang Static Analyzer producer) and `docs/operations/code-graph-index.md` (new producers and
+    cross-check rules);
+  - update R3/"Dependencies and current gaps" in `inference-security-review.md` if eligibility
+    behaviour changed;
+  - write an implementation record under `docs/reviews/`, in the style of
+    `inference-security-review-implementation.md`.
 
 ### 12.3 Contract and rule changes
 
