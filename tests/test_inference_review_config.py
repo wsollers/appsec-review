@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from appsec_review.config import (
-    CAPACITY_KEYS, InferenceSecurityReviewSettings, load_config, overlay_capacity_keys,
+    CAPACITY_KEYS, PENDING_JOBS, InferenceSecurityReviewSettings, load_config, overlay_capacity_keys,
     semantic_settings_sha256, semantic_settings_view,
 )
 from appsec_review.config.loader import OVERLAY_ENVIRONMENT
@@ -75,17 +75,21 @@ def test_repository_defaults_load_as_typed_frozen_settings() -> None:
     assert "max_cost_usd" not in json.dumps(settings.as_document())
 
 
-def test_unregistered_job_is_resolved_as_pending_and_kept_out_of_the_registry_set() -> None:
+def test_registered_job_is_resolved_with_the_registry_set_and_package_bounds() -> None:
     from appsec_review.runtime.registry import builtin_registry
 
     config = load_config(ROOT / "appsec-review.toml")
-    assert JOB not in config.jobs and JOB in config.pending_jobs
+    assert JOB in config.jobs and not config.pending_jobs and not PENDING_JOBS
     assert set(config.jobs) == set(builtin_registry().job_ids())
     resolved = json.loads(config.resolved_json)
-    assert JOB not in resolved["jobs"]
-    assert resolved["pending_jobs"][JOB]["settings"]["teams"]["review_teams"] == 5
+    assert "pending_jobs" not in resolved
+    assert resolved["jobs"][JOB]["settings"]["teams"]["review_teams"] == 5
     assert tuple(config.job(JOB).steps) == ("scope", "packages", "lead_review", "hunt_review", "merge",
                                             "adjudicate", "scoring", "completeness", "publication")
+    from appsec_review.review.packages import PackageSettings
+    packages = PackageSettings.from_review_settings(_settings(config))
+    assert packages.admit_severities == ("critical", "high", "unknown")
+    assert (packages.hunt_max_units, packages.hunt_menu_partition_size, packages.max_package_bytes) == (50, 25, 65536)
 
 
 # ---------------------------------------------------------------- rejection
@@ -172,7 +176,7 @@ def test_capacity_overlay_is_merged_frozen_and_hashed_as_its_own_layer(tmp_path:
     assert resolved["configuration_overlay"]["keys"] == [
         f"jobs.{JOB}.settings.teams.review_teams", "orchestration.dagster.pools.inference_teams",
         "orchestration.dagster.pools.scanner"]
-    assert resolved["pending_jobs"][JOB]["settings"]["teams"]["review_teams"] == 1
+    assert resolved["jobs"][JOB]["settings"]["teams"]["review_teams"] == 1
     assert resolved["orchestration"]["dagster"]["pools"]["inference_teams"] == 1
     assert config.resolved_sha256 != base.resolved_sha256
     assert "configuration_overlay" not in json.loads(base.resolved_json)

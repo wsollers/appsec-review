@@ -1,9 +1,12 @@
 # Near-terminal inference security review
 
-Status: design approved; vertical slice 1 is ready for development under the binding decisions in
-[Implementation readiness decisions](#implementation-readiness-decisions). Where an earlier section
-and that section differ for slice 1, the readiness decisions govern. Runtime jobs are not
-implemented by this document.
+Status: design approved; vertical slice 1 is implemented as the registered
+`job_inference_security_review` (`src/appsec_review/jobs/job_inference_security_review/`) under the
+binding decisions in [Implementation readiness decisions](#implementation-readiness-decisions), and
+its definition of done passes with an injected deterministic `Infer` double
+([slice 1 implementation notes](#slice-1-implementation-notes)). Where an earlier section and that
+section differ for slice 1, the readiness decisions govern. Slices 2-4 (CVSS and policy scoring,
+PoC, chains, rounds and variant hunts) remain design only, and no live-model acceptance has run.
 
 ## Purpose and governing decisions
 
@@ -514,9 +517,15 @@ A strategy whose required source is unavailable is skipped with a `coverage_gap`
 back to `persona_sweep` with the next-ranked persona.
 
 - **Known claims.** Hunters receive the canonical ids and statements of claims already known in
-  their unit, never the reasoning behind them, so that they do not re-report them. A lane B claim
-  whose identity matches an existing claim becomes `duplicate`. Any new admissible evidence it
-  carries attaches to the canonical claim as a relation.
+  their unit, never the reasoning behind them, so that they do not re-report them. Claim ids are
+  identity-only (lane, package and statement are excluded), so a lane B proposal whose identity
+  matches an existing claim is a *duplicate proposal*: it merges into the existing claim (the lead
+  lane wins, then the lowest `package_id`; origin cells are combined), any new admissible evidence it
+  carries attaches to that claim as relations, and accounting counts it per lane as
+  `duplicate_proposals`. The `duplicate` claim state is reserved for distinct claim ids judged
+  equivalent; in slice 1 such near-duplicates stay separate claims nominated as
+  `possible_duplicates` (R7). In round 0 the two lanes run in parallel, so hunters receive no lane A
+  claims and the gate's "existing claim" check is package-local.
 - **Triage gate.** A lane B hypothesis passes deterministic gate checks:
   - it cites only resolvable locations;
   - it uses the closed R4 predicate and precondition vocabularies;
@@ -794,6 +803,15 @@ hunt_max_units = 50
 hunt_max_claims_per_package = 5
 hunt_panel_rule = "hunt-panel/1"
 incomplete_gap_ratio = 0.25      # above this, the handoff is marked review_incomplete
+
+[jobs.job_inference_security_review.settings.packages]
+hunt_menu_partition_size = 25    # package assembly bounds; admission and cutoff come from lanes
+unit_max_files = 200
+max_context_entries = 64
+max_package_bytes = 65536
+max_page_size = 20
+max_pages = 5
+max_depth = 4
 
 [jobs.job_inference_security_review.settings.budgets]
 budget_team_packages = 200       # split between lanes by lead_budget_share
@@ -1626,13 +1644,49 @@ publication can label it. This is the slice 1 answer to open question 2.
   `review_incomplete = true`.
 - The handoff contains, in exact accounting:
   - one claim in each of `confirmed`, `supported`, `contradicted`, and `insufficient_evidence`;
-  - one `duplicate`;
+  - one duplicate proposal (lane B finding a lane A claim);
   - one cell `worker_gap`;
   - one budget `not_launched` cell.
 - Re-executing `lead_review.teams` or `hunt_review.teams` reuses every unchanged cell.
 - Changing one evidence shard reruns only the dependent cells.
 - The isolation tests prove that the verifier request bytes contain no red/blue narrative, and that
   no capability reaches an evaluator root, a target-guidance file, or an arbitrary path.
+
+### Slice 1 implementation notes
+
+These record how slice 1 meets the decisions above where the decisions leave a choice open.
+
+- **Units and lanes.** The twelve R1 units are visible Dagster ops. Each lane unit launches one team
+  per package under the run-wide review-team semaphore and the attempt's `JobBudget`. Team-package
+  allocation is the `FairShareScheduler` run over both lanes' declared queue lengths, so unused
+  share flows to the other lane deterministically; each lane also publishes its queue state as a
+  small file under the attempt (`lanes/<lane>.json`), and a declared queue that disagrees with the
+  accepted package manifest is an integrity failure. The team-package ceiling stops new teams; the
+  turn, token, query and wall-clock ceilings stop new cells. Each cell also has a wall-clock deadline
+  (its model profile's `timeout_seconds`) and a per-turn token cap (its profile's token caps); either
+  ends the cell `timed_out` with a `budget_gap` and is never retried.
+- **Selective invalidation.** A cell fingerprint binds a *reuse basis* in place of the whole
+  manifest and package ids: the hash of the package content without run/manifest identities plus
+  the accepted shards (`name/shard@sha256`) that hold any entity in the package's capability scope.
+  Changing one shard therefore reruns only the cells of packages that can read it.
+- **Evidence.** A tool observation is direct evidence only for the predicates of the versioned
+  `tool-rule-predicates/1` mapping (for example `affected_construct` for source SAST,
+  `affected_construct` and `source_to_sink_reachability` for CodeQL). Red relations may support or
+  qualify, blue relations may contradict or qualify, and verifier relations may do any of the three;
+  anything else is a `schema_error`. A relation carries the producing cell's receipt hash only when
+  the cell retrieved the cited identity itself, which is what R6 checks.
+- **State paths.** Adjudication writes `proposed → supported → confirmed`, and routes
+  `not_reachable` and `not_exploitable_in_observed_configuration` through `supported`, because the
+  lifecycle only permits those states from `supported`.
+- **Isolation.** A manifest, shard path, or source path naming an evaluator root fails
+  `scope.accept_manifest`. Target guidance files (`AGENTS.md`, `CLAUDE.md`, Copilot and Cursor rule
+  files) are removed from every capability's entity scope, capabilities grant exact entities only,
+  and no path, glob, or query-language parameter is ever grantable. The verifier's stored request
+  bytes are checked for red and blue narratives; a reused verifier relies on its recorded check and
+  fails closed when the narratives changed.
+- **CWE reference.** Until an accepted MITRE CWE reference shard exists, claim CWEs are validated
+  against the CWE ids named by accepted lead rules and the security-tagging crosswalk; the missing
+  `reference_intelligence` producer is a recorded coverage gap.
 
 ## Prioritized implementation plan
 
@@ -1748,3 +1802,6 @@ host execution of target outputs, production proofs, and text parsing to infer s
 8. Should chain confirmation require a second verifier beyond the independent refuter for
    ship-blocking chains?
 9. Which exact downstream job names become stable when remediation and final publication are built?
+10. TODO: should `security_predicate` become a closed `SecurityPredicate` vocabulary like the R4
+    predicates and preconditions? Slice 1 keeps it a bounded snake_case token in claim identity
+    because no vocabulary has been agreed and existing fixtures use free tokens.

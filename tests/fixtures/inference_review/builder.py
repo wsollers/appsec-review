@@ -65,7 +65,7 @@ def _identity(kind: EntityKind, native: Any) -> str:
 
 
 def build_accepted_index_set(base: Path, *, run_id: str = RUN_ID, omit: Iterable[str] = (),
-                             seed: int | None = None) -> FixtureRun:
+                             seed: int | None = None, history_change_count: int = 9) -> FixtureRun:
     omit = frozenset(omit)
     unknown = omit - set(SHARDS)
     if unknown:
@@ -203,7 +203,7 @@ def build_accepted_index_set(base: Path, *, run_id: str = RUN_ID, omit: Iterable
     ids["hotspot:parse"] = _identity(EntityKind.HOTSPOT, "hotspot:file:native/src/parse.c")
     shard("history", "history", "git-history", {"job": "job_source_history_analysis", "vcs": "git"}, [
         EntityRecord(LogicalIdentity.parse(ids["history:parse"]), "file:native/src/parse.c", "parse.c", "history",
-                     {"change_count": 9, "sii": {"rank": 1, "tier": 1, "score": 0.9}},
+                     {"change_count": history_change_count, "sii": {"rank": 1, "tier": 1, "score": 0.9}},
                      location("native/src/parse.c", 1)),
         EntityRecord(LogicalIdentity.parse(ids["hotspot:parse"]), "hotspot:file:native/src/parse.c", "parse.c",
                      "hotspot", {"rank": 1, "tier": 1, "score": 0.8}, location("native/src/parse.c", 1))])
