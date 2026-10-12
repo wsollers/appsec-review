@@ -26,9 +26,11 @@ from appsec_review.codeql.runtime import (
     tree_manifest,
 )
 from appsec_review.jobs.job_codeql_analysis.job import (
+    FrameworkIntegrityError,
     _database_identity,
     _query_identity,
     _query_profiles,
+    _validate_scope_assets,
 )
 from appsec_review.storage import canonical_json
 
@@ -46,6 +48,28 @@ def test_central_codeql_asset_lock_matches_tracked_lock() -> None:
         locked = lock["query_packs"][language]
         assert configured.get("additional_queries", []) == locked.get("additional_suites", [])
         assert configured.get("custom_queries", []) == lock.get("custom_query_packs", {}).get(language, [])
+
+
+def test_go_extended_suite_missing_from_lock_reproduces_review_failure() -> None:
+    config = tomllib.loads((ROOT / "appsec-review.toml").read_text(encoding="utf-8"))
+    settings = parse_codeql_settings(config["jobs"]["job_codeql_analysis"]["settings"])
+    lock = load_asset_lock(ROOT)
+    scope = build_codeql_plan(
+        source_fingerprint="f" * 64, files=[source("go/main.go")],
+        receipts=[receipt("go", "go", "build-unit-aaaaaaaaaaaaaaaaaaaa")],
+        supported_extractors={"go"}, source_image_id=IMAGE,
+    ).scopes[0]
+    assert scope.language == "go"
+    assert [query.query_id for query in settings.languages["go"].additional_queries] == [
+        "security-extended"]
+    _validate_scope_assets(scope, settings, lock)
+
+    go_without_extended = dict(lock["query_packs"]["go"])
+    go_without_extended.pop("additional_suites")
+    broken_lock = {**lock, "query_packs": {**lock["query_packs"], "go": go_without_extended}}
+    with pytest.raises(FrameworkIntegrityError,
+                       match="CodeQL go additional query assets differ from the lock"):
+        _validate_scope_assets(scope, settings, broken_lock)
 
 
 def test_codeql_build_execution_uses_bridge_network(tmp_path: Path) -> None:

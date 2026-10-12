@@ -681,6 +681,34 @@ def _validate_config(context, _result) -> None:
             raise ValueError(f"CodeQL analysis task configuration mismatch: {step}")
 
 
+def _validate_scope_assets(scope: CodeQLScope, settings: CodeQLAnalysisSettings,
+                           lock: Mapping[str, Any]) -> None:
+    configured = settings.languages.get(scope.language)
+    if (configured is None or
+            configured.runtime_mode is not None and configured.runtime_mode != scope.mode):
+        raise FrameworkIntegrityError(f"CodeQL {scope.language} mode differs from central configuration")
+    locked = lock["query_packs"].get(scope.language)
+    if not isinstance(locked, Mapping) or any((
+        configured.query_pack != locked["name"],
+        configured.query_pack_version != locked["version"],
+        configured.query_suite != locked["suite"],
+        configured.query_suite_sha256 != locked["suite_sha256"],
+        configured.query_pack_sha256 != locked["qlpack_sha256"],
+        configured.query_lock_sha256 != locked["lock_sha256"],
+    )):
+        raise FrameworkIntegrityError(f"CodeQL {scope.language} query assets differ from the lock")
+    locked_custom = lock.get("custom_query_packs", {}).get(scope.language, [])
+    locked_additional = locked.get("additional_suites", [])
+    configured_additional = [asdict(item) for item in configured.additional_queries]
+    if configured_additional != locked_additional:
+        raise FrameworkIntegrityError(
+            f"CodeQL {scope.language} additional query assets differ from the lock")
+    configured_custom = [asdict(item) for item in configured.custom_queries]
+    if configured_custom != locked_custom:
+        raise FrameworkIntegrityError(
+            f"CodeQL {scope.language} custom query assets differ from the lock")
+
+
 def build_job() -> Job:
     def plan(unit: UnitContext) -> Mapping[str, Any]:
         settings = _settings(unit)
@@ -731,30 +759,7 @@ def build_job() -> Job:
                 tuple(dict.fromkeys([*runtime_gaps, *planned.gaps])), planned.non_applicable,
                 planned.decisions)
         for scope in planned.scopes:
-            configured = settings.languages.get(scope.language)
-            if (configured is None or
-                    configured.runtime_mode is not None and configured.runtime_mode != scope.mode):
-                raise FrameworkIntegrityError(f"CodeQL {scope.language} mode differs from central configuration")
-            locked = lock["query_packs"].get(scope.language)
-            if not isinstance(locked, Mapping) or any((
-                configured.query_pack != locked["name"],
-                configured.query_pack_version != locked["version"],
-                configured.query_suite != locked["suite"],
-                configured.query_suite_sha256 != locked["suite_sha256"],
-                configured.query_pack_sha256 != locked["qlpack_sha256"],
-                configured.query_lock_sha256 != locked["lock_sha256"],
-            )):
-                raise FrameworkIntegrityError(f"CodeQL {scope.language} query assets differ from the lock")
-            locked_custom = lock.get("custom_query_packs", {}).get(scope.language, [])
-            locked_additional = locked.get("additional_suites", [])
-            configured_additional = [asdict(item) for item in configured.additional_queries]
-            if configured_additional != locked_additional:
-                raise FrameworkIntegrityError(
-                    f"CodeQL {scope.language} additional query assets differ from the lock")
-            configured_custom = [asdict(item) for item in configured.custom_queries]
-            if configured_custom != locked_custom:
-                raise FrameworkIntegrityError(
-                    f"CodeQL {scope.language} custom query assets differ from the lock")
+            _validate_scope_assets(scope, settings, lock)
         plan_path = unit.job.attempt_root / "artifacts" / "codeql" / "plan.json"
         upstream_handoffs, upstream_manifests = {}, []
         for job_id in ("job_target_catalog", "job_language_build", "job_artifact_indexing",
