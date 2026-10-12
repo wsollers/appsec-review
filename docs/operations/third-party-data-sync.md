@@ -29,8 +29,11 @@ The cve-bin-tool builder resolves and re-hashes the exact NVD snapshot published
 replays those already-downloaded NVD layers in order, and runs cve-bin-tool 3.4 in a pinned-base
 container with networking disabled. It never invokes an NVD downloader. The image is built from
 `tools/cve-bin-tool/`; its resulting image id and tool version are recorded in the database
-manifest. Scanning consumers must still treat CVE matches as applicability leads rather than
-findings.
+manifest. When the configured `image` tag is missing locally, the step runs `docker build` on
+`build_context` first; that build installs cve-bin-tool from PyPI and needs network access.
+`build_timeout_seconds` (default 1800) bounds the image build and `run_timeout_seconds` (default
+3600) bounds the networkless database build container. Scanning consumers must still treat CVE
+matches as applicability leads rather than findings.
 
 ## Source and resource policy
 
@@ -40,8 +43,12 @@ schedule live in `appsec-review.toml` under the semantic job/step/task hierarchy
 - NVD bootstraps the official CVE 2.0 yearly feeds and then uses bounded last-modified API windows.
 - OSV downloads only the explicitly configured ecosystem archives and builds a SQLite lookup index
   with configured result limits. Inference queries that index; it does not scan ZIP archives.
-- MITRE includes Enterprise ATT&CK, CAPEC, and CWE by default. Mobile and ICS ATT&CK remain fully
-  configured but become active only when added to `source_selections`.
+- MITRE requires Enterprise ATT&CK, CAPEC, and CWE in `source_selections`; configuration that omits
+  any of them is rejected. Mobile and ICS ATT&CK are optional: they remain fully configured but
+  become active only when added to `source_selections`.
+- Each MITRE source may carry an optional `sha256` pin; a downloaded file that does not match fails
+  the fetch. Without a pin the hash is recorded but not verified. The ATT&CK and CAPEC sources are
+  pinned; CWE is currently unpinned, so its download is not hash-verified.
 - Every download has a transport bound, source URL, retrieval timestamp, size, and SHA-256. Archive
   expansion and record counts are bounded, and archive member paths are validated.
 

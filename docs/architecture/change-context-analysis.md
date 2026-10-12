@@ -35,9 +35,10 @@ job_target_catalog -> job_source_history_analysis -> job_target_analysis_plan ->
 
 In Dagster's `wave1_review` the job follows `job_tree_sitter_ast` and precedes
 `job_codeql_analysis`, which composes its manifest like other siblings; security tagging lists it
-among its fallback predecessors. The direct CLI graph runs it last, after
-`job_evidence_collection`; that graph has no Tree-sitter job, so function-level attribution there is
-the named gap `function_spans_unavailable:tree_sitter_not_accepted`.
+among its fallback predecessors. The direct CLI graph includes `job_tree_sitter_ast` and runs this
+job after `job_evidence_collection`, followed by `job_codeql_analysis`, `job_review_prioritization`,
+and `job_review_data_indexing`. When Tree-sitter is not accepted, function-level attribution is the
+named gap `function_spans_unavailable:tree_sitter_not_accepted`.
 
 The job does not rescan Git or re-derive history calculations. It consumes, through hash-verified
 accepted handoffs:

@@ -682,11 +682,12 @@ def _run(url: str, run_id: str, repository: Path, document: dict,
         }
     if run.get("pipelineName") != "third_party_data_sync":
         raise SystemExit(f"unsupported Dagster acceptance job: {run.get('pipelineName')}")
-    attempt_id = tags.get("appsec/application_attempt_id")
+    job_id = "job_third_party_data_sync"
+    # The adapter tags each finalized job's attempt; application_attempt_id is op metadata only.
+    attempt_id = tags.get(f"appsec/{job_id}/attempt")
     if not application_run_id or not attempt_id:
         raise SystemExit("Dagster run does not contain application correlation tags")
 
-    job_id = "job_third_party_data_sync"
     runs_dir = repository / document["runtime"]["runs_dir"]
     attempt = runs_dir / application_run_id / "data" / "jobs" / job_id / "attempts" / attempt_id
     status_path = attempt / "status.json"

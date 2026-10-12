@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 
-from appsec_review.jobs.job_language_build import dotnet, go, native, rust
+from appsec_review.jobs.job_language_build import dotnet, native, rust
 from appsec_review.jobs.job_language_build.capture import (
     CapturedBuildDescriptor,
     ReconciliationLimits,
@@ -133,10 +133,8 @@ def test_generic_reconciler_rejects_malformed_records_without_creating_claims(
      "clang", ["clang", "-c", "main.c", "-o", "main.o"], "compiler"),
     (rust.CAPTURE_DESCRIPTOR, "/usr/bin/rustc",
      "rustc", ["rustc", "src/lib.rs", "-o", "target/lib.rlib"], "compiler"),
-    (go.CAPTURE_DESCRIPTOR, "/usr/local/go/pkg/tool/linux_amd64/compile",
-     "compile", ["compile", "-o", "/tmp/main.a", "main.go"], "compiler"),
 ])
-def test_generic_reconciliation_contract_is_shared_by_all_captured_languages(
+def test_generic_reconciliation_contract_is_shared_by_all_descriptor_languages(
         tmp_path: Path, descriptor: CapturedBuildDescriptor, executable: str, wrapper: str,
         argv: list[str], expected: str) -> None:
     result = reconcile_captured_build(
