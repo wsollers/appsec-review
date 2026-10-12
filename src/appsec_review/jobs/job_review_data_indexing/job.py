@@ -453,9 +453,8 @@ def build_job(*, providers: Providers = registry_providers,
                     "build_units": matrix.build_unit_matrix(view.store),
                     "producer_consumer": matrix.producer_consumer_matrix(jobs, document["consumes"]),
                     "input_sources": reconciled, "input_source_discrepancies": discrepancies,
-                    "query_sets": product_status,
-                    "graph_follow_up": [{"query_set": name, "status": "pending_graph_batch", "missing_prerequisite": reason}
-                                        for name, reason in GRAPH_FOLLOW_UP]}
+                    "query_sets": product_status}
+        matrices["graph_follow_up"] = graph_follow_up(matrices["languages"])
         path = unit.unit_root / "coverage-matrices.json"
         atomic_json(path, matrices)
         return {"artifact": _artifact(unit.job.run_root, path), "language_count": len(matrices["languages"]),
@@ -570,21 +569,38 @@ def build_job(*, providers: Providers = registry_providers,
                datasets=DATASETS, consumes=CONSUMES)
 
 
+# Query sets this job does not produce: the stage-3 compositions over accepted graph families and
+# the sets whose producer is planned. Graph facts themselves are not query sets (they are the
+# ``graph`` index of job_code_graph_index), so the retired graph set names never appear here.
 GRAPH_FOLLOW_UP = (
-    ("call_graph", "bounded Joern/LLVM call export with source maps"),
-    ("control_flow", "LLVM basic blocks/CFG and Joern CFG export"),
-    ("dataflow", "Joern PDG and LLVM def-use export"),
-    ("sarif_correlation", "graph nodes to correlate ordered CodeQL steps against"),
-    ("ast_ir_cpg_mapping", "debug/source maps across Clang AST, LLVM IR and Joern"),
-    ("guards_ranges", "CFG dominators and LLVM value ranges"),
-    ("entrypoint_paths", "ingress catalog plus call/dataflow graphs"),
-    ("hotspot_context", "accepted graph products joined to priority items"),
-    ("review_package", "graph products; package assembler and schema validation"),
+    ("hotspot_context", "stage-3 composition of priority items with accepted graph families"),
+    ("review_package", "stage-3 package composition over accepted indices, including graph families"),
     ("redacted_secret_exposure", "secret-scanner sink joins"),
     ("contract_enforcement", "interface-contract producer (planned)"),
     ("deployment_exposure", "deployment-topology producer (planned)"),
     ("test_intent", "assertion semantics and negative-case links beyond document_context"),
 )
+GRAPH_DEPENDENT = frozenset({"hotspot_context", "review_package"})
+FOLLOW_UP_STATUS = "pending_follow_up"
+
+
+def graph_follow_up(languages: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """Follow-up rows; graph-dependent sets carry the accepted ``code_graph`` lane states."""
+    by_state: dict[str, list[str]] = {"complete": [], "partial": [], "unavailable": []}
+    for row in languages:
+        state = str(row.get("lanes", {}).get("code_graph", {}).get("state", "unavailable"))
+        by_state.setdefault(state, []).append(str(row.get("language")))
+    accepted = sorted(by_state["complete"] + by_state["partial"])
+    rows = []
+    for name, reason in GRAPH_FOLLOW_UP:
+        item: dict[str, Any] = {"query_set": name, "status": FOLLOW_UP_STATUS, "missing_prerequisite": reason}
+        if name in GRAPH_DEPENDENT:
+            item["graph_coverage"] = {state: sorted(values) for state, values in sorted(by_state.items())}
+            if not accepted:
+                item["missing_prerequisite"] = (f"{reason}; no language has accepted graph coverage "
+                                                f"({matrix.GRAPH_JOB} not run, unregistered or unavailable)")
+        rows.append(item)
+    return rows
 
 
 def _self_rows(run_id: str, snapshot: str, product_outputs: Sequence[Mapping[str, Any]],
