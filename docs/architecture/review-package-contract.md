@@ -1,7 +1,8 @@
 # Pre-adjudication review packages
 
 The sole machine-readable contract is [review-packages.schema.json](../schemas/review-packages.schema.json),
-version `appsec-review/review-package/2`. It defines `finding_lead` and `hunt` packages. Reported
+version `appsec-review/review-package/3`. It defines `finding_lead`, `hunt`, and `document_hunt`
+packages. Reported
 scanner severity orders review; it is not an adjudicated technical severity. The separate
 post-adjudication finding package is defined in [inference security review](inference-security-review.md).
 
@@ -25,6 +26,10 @@ before consumption; a mismatch blocks use.
 The validator requires all accepted lead IDs in finding-lead packages exactly once and every
 High/Critical and unknown lead in a hunt menu. It rejects invented menu IDs, cross-component
 members, duplicate membership and disagreement with the accepted scanner-correlation audit.
+Every accepted `document_context` route or boundary fact has one `document_hunt` package with
+bounded source-record grants. These packages have no scanner lead and remain review questions;
+an unresolved implementation-component mapping is a named gap. Document-only package assembly
+may proceed without scanner-correlation facts, while recording their absence as a gap.
 Coverage from accepted shards is copied as named gaps. Missing scanner-correlation facts or an
 audit failure block package publication rather than producing a clean empty menu.
 

@@ -373,7 +373,8 @@ def test_review_packages_keep_complete_membership_and_detect_tampering(accepted)
         ids[key] for key in ("o1", "o2", "o3", "o4", "o5", "o6")}
     assert {lead["observation_id"] for item in hunts for lead in item["lead_menu"]} == {
         ids[key] for key in ("o1", "o2", "o3", "o5", "o6")}
-    assert manifest["counts"] == {"finding_lead": 6, "hunt": len(hunts), "high_critical": 4, "unknown": 1}
+    assert manifest["counts"] == {"finding_lead": 6, "hunt": len(hunts), "document_hunt": 0,
+                                  "high_critical": 4, "unknown": 1}
     assert any(gap["state"] == "partial" for gap in manifest["coverage_gaps"])
     assert any(item["metrics"] for item in packages)
     assert any(item["build_context"]["command_facts"] for item in packages)
@@ -390,7 +391,7 @@ def test_review_packages_keep_complete_membership_and_detect_tampering(accepted)
     assert util["build_context"]["bindings"][0]["function_scope_id"] is None
     assert any(gap["producer"] == "function_scope" for gap in util["coverage_gaps"])
     assert assemble_review_packages(core, max_page_size=20) == (packages, manifest)
-    expected = {"all": {item["lead_menu"][0]["observation_id"] for item in finding},
+    expected = {"all": {item["lead_menu"][0]["observation_id"] for item in finding}, "documents": set(),
                 "high_critical": {lead["observation_id"] for item in hunts for lead in item["lead_menu"]
                                   if lead["reported_severity"] in {"high", "critical"}},
                 "unknown": {lead["observation_id"] for item in hunts for lead in item["lead_menu"]

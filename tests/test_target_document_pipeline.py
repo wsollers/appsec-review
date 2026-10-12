@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 import shutil
 
@@ -13,6 +14,9 @@ from appsec_review.jobs.job_target_catalog import build_job as build_catalog
 from appsec_review.jobs.job_review_data_indexing import build_job as build_indexing
 from appsec_review.retrieval import RetrievalCore
 from appsec_review.retrieval.index import load_verified_manifest
+from appsec_review.review_packages import assemble_review_packages, publish_review_packages, verify_review_packages
+from appsec_review.mcp.adapter import RetrievalMcpAdapter
+from appsec_review.mcp.capability import ScopedRetrievalMcpAdapter, issue_capability
 from appsec_review.runtime import GraphRunner
 from appsec_review.runtime.runner import JobRunner
 
@@ -169,3 +173,31 @@ def test_document_analysis_reports_missing_declaration_without_finding(tmp_path:
     assert all(item["payload"]["coverage_status"] == "partial" for item in routes)
     assert any("no accepted OpenAPI declaration" in gap for item in routes for gap in item["payload"]["gaps"])
     assert all(item["kind"] == "precomputed_fact" for item in routes)
+
+
+def test_document_hunts_grant_only_accepted_context_and_sources(tmp_path: Path) -> None:
+    config, target, outcome, _run_root = _run(tmp_path, fts_disabled=True)
+    JobRunner(config).run(build_indexing(), run_id=outcome["run_id"], target_root=target,
+                          source_fingerprint=source_fingerprint(target))
+    core = RetrievalCore(config.runtime.runs_dir, outcome["run_id"])
+    packages, manifest = assemble_review_packages(core)
+    hunts = [item for item in packages if item["kind"] == "document_hunt"]
+    assert hunts and manifest["counts"]["document_hunt"] == len(hunts)
+    assert all(not item["lead_menu"] for item in hunts)
+    selected = next(item for item in hunts if item["scope"]["partition_key"] ==
+                    "route:GET /api/v1/orders/{id}")
+    assert selected["retrieval"]["query_sets"] == ["document_context"]
+    assert any(gap["producer"] == "document_context" and "component" in gap["reason"]
+               for gap in selected["coverage_gaps"])
+    secret = b"document-package-capability-secret-32"
+    token = issue_capability(selected, role="red", round_id="1", secret=secret,
+                             expires_at=int(datetime.now(timezone.utc).timestamp()) + 300)
+    scoped = ScopedRetrievalMcpAdapter(RetrievalMcpAdapter(core), selected, capability=token,
+                                       secret=secret, role="red", round_id="1")
+    nominated = next(item["entity_id"] for item in selected["evidence"] if item["relation"] == "nominates")
+    fact = scoped.call("find", {"identity": nominated})["results"][0]
+    subject = fact["payload"]["subject_identity"]
+    assert scoped.call("find", {"identity": subject})["results"]
+    assert scoped.call("query_precomputed", {"query_set": "document_context", "subject": subject,
+                                              "limit": 5})["results"]
+    assert verify_review_packages(core, publish_review_packages(core)) == manifest

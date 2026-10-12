@@ -1,10 +1,11 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://appsec-review.local/schemas/review-packages.schema.json",
-  "title": "Pre-adjudication review package contract, version 2",
+  "title": "Pre-adjudication review package contract, version 3",
   "oneOf": [
     { "$ref": "#/$defs/finding_lead" },
-    { "$ref": "#/$defs/hunt" }
+    { "$ref": "#/$defs/hunt" },
+    { "$ref": "#/$defs/document_hunt" }
   ],
   "$defs": {
     "sha": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
@@ -142,14 +143,14 @@
       "type": "object", "additionalProperties": false,
       "required": ["schema", "kind", "package_id", "run_id", "manifest_sha256", "target_snapshot", "input_fingerprint", "assembly_rule", "scope", "lead_menu", "evidence", "context_ids", "metrics", "build_context", "tag_context", "compiled_context", "proof_obligations", "retrieval", "coverage_gaps", "truncation"],
       "properties": {
-        "schema": { "const": "appsec-review/review-package/2" },
-        "kind": { "enum": ["finding_lead", "hunt"] },
+        "schema": { "const": "appsec-review/review-package/3" },
+        "kind": { "enum": ["finding_lead", "hunt", "document_hunt"] },
         "package_id": { "type": "string", "minLength": 1 },
         "run_id": { "type": "string", "minLength": 1 },
         "manifest_sha256": { "$ref": "#/$defs/sha" },
         "target_snapshot": { "type": "string", "minLength": 1 },
         "input_fingerprint": { "$ref": "#/$defs/sha" },
-        "assembly_rule": { "const": "appsec-review/assemble-review-packages/2" },
+        "assembly_rule": { "const": "appsec-review/assemble-review-packages/3" },
         "scope": { "$ref": "#/$defs/scope" },
         "lead_menu": { "type": "array", "items": { "$ref": "#/$defs/lead" } },
         "evidence": { "type": "array", "items": { "$ref": "#/$defs/evidence" } },
@@ -180,6 +181,12 @@
     "hunt": {
       "allOf": [{ "$ref": "#/$defs/base" }, {
         "properties": { "kind": { "const": "hunt" } }
+      }]
+    },
+    "document_hunt": {
+      "allOf": [{ "$ref": "#/$defs/base" }, {
+        "properties": { "kind": { "const": "document_hunt" }, "lead_menu": { "maxItems": 0 },
+          "evidence": { "minItems": 1 }, "context_ids": { "minItems": 1 } }
       }]
     }
   }

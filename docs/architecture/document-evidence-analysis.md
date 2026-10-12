@@ -6,8 +6,8 @@ Target-owned design docs, STRIDE models, DFDs, OpenAPI, Postman collections, and
 reviewers discover routes, trust boundaries, and intended controls. They are untrusted target data.
 The system must preserve their exact source identity and distinguish a declaration or test from
 observed enforcement. This design extends the accepted document collection path with a bounded
-analysis product that inference can query. It also defines the later finding handoff; the inference
-and final finding jobs described below are not implemented by this slice.
+analysis product and bounded document-hunt packages that inference can consume. It also defines
+the later finding handoff; inference and final finding jobs described below are not implemented.
 
 ## Current data flow
 
@@ -17,7 +17,7 @@ flowchart LR
   C --> D[documents shard: records, source lines, route and boundary links]
   D --> A[job_review_data_indexing: document_context]
   A --> I[accepted precomputed shard and query_precomputed]
-  I -. planned package context .-> P[job_review_package_assembly: scanner leads]
+  I --> P[job_review_package_assembly: scanner leads and document hunts]
   I -. planned .-> R[job_inference_security_review]
   P -. planned .-> R
   R -. planned .-> J[adjudicated finding packages]
@@ -43,6 +43,16 @@ The dataset inventory audits both the original `target_documents` shard and the 
 `precomputed_products` shard. Product fingerprints bind rule version, bounds, accepted shard
 hashes, and target snapshot. A later accepted input creates a new product identity.
 
+`job_review_package_assembly` publishes one `document_hunt` package per accepted route or
+boundary context fact. It grants the fact and at most 64 exact source-record identities through
+the scoped retrieval capability, with an explicit truncation gap for any omitted context. The
+package has no scanner lead, uses a synthetic document-corpus scope, and carries a gap until an
+implementation component is resolved. Its `nominates` evidence is a computed review question,
+not a finding. Package membership is audited against every accepted document-context fact and
+hash-verified on read. Document hunts can be assembled when scanner correlation is unavailable;
+that absence is recorded as a separate gap. The package format is
+`appsec-review/review-package/3`.
+
 ## Inference and findings design
 
 The next inference job should consume the accepted index manifest and verified review packages.
@@ -67,9 +77,9 @@ context, severity policy, and remediation work without reinterpreting the adjudi
 
 1. Link declared operations to actual route handlers and guards using accepted source/AST facts.
    An exact name match alone is only a candidate link; absent or ambiguous source mapping is a gap.
-2. Extend review-package nomination to include bounded document-context identities relevant to
-   each source or scanner lead, and a separate hunt package for document-only questions. Keep
-   package retrieval grants scoped to those identities.
+2. Link document hunts to exact source components and attach relevant document-context identities
+   to scanner-lead packages when an implementation route mapping resolves. Keep ambiguous or
+   missing mappings as gaps and retrieval grants scoped to those identities.
 3. Implement `job_inference_security_review`, its claim ledger, deterministic adjudication, and
    final finding/enrichment publication as specified in the inference design. No current job
    promotes document-context facts to confirmed findings.

@@ -42,7 +42,7 @@ Repository authority remains in [`../../AGENTS.md`](../../AGENTS.md). This page 
 - [`inference-security-review.md`](inference-security-review.md) — near-terminal red/blue/verification,
   evidence-qualified adjudication, independent scoring, benign proof-of-trigger, attack-chain, and
   quorum design.
-- [`review-package-contract.md`](review-package-contract.md) — versioned finding-lead and hunt
+- [`review-package-contract.md`](review-package-contract.md) — versioned finding-lead, scanner hunt, and document hunt
   package inputs, membership gates, retrieval scopes, and implementation dependencies.
 - [`red-discovery-output.md`](red-discovery-output.md) — red-pool proposal, taint-path, chain-seed,
   evidence, and lead-accounting contract.

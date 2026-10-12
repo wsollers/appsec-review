@@ -17,9 +17,9 @@ from appsec_review.retrieval.model import LogicalIdentity, canonical_json
 from appsec_review.storage import atomic_json, file_sha256
 
 
-SCHEMA = "appsec-review/review-package/2"
-ASSEMBLY_RULE = "appsec-review/assemble-review-packages/2"
-MANIFEST_SCHEMA = "appsec-review/review-package-manifest/1"
+SCHEMA = "appsec-review/review-package/3"
+ASSEMBLY_RULE = "appsec-review/assemble-review-packages/3"
+MANIFEST_SCHEMA = "appsec-review/review-package-manifest/2"
 _MENU_SEVERITIES = {"high_critical": {"critical", "high"}, "unknown": {"unknown"}}
 
 def _schema_path() -> Path:
@@ -40,7 +40,8 @@ def _digest(value: Any) -> str:
 
 
 def _identity(package: Mapping[str, Any]) -> str:
-    return f"{package['kind']}-{_digest({key: value for key, value in package.items() if key != 'package_id'})}"
+    prefix = "d" if package["kind"] == "document_hunt" else package["kind"]
+    return f"{prefix}-{_digest({key: value for key, value in package.items() if key != 'package_id'})}"
 
 
 def _facts(view: AcceptedShards, query_set: str) -> list[tuple[Mapping[str, Any], Any]]:
@@ -80,6 +81,43 @@ def _lead(value: Mapping[str, Any]) -> dict[str, Any]:
             "location": {key: location[key] for key in ("mapping_method", "source_path", "file_sha256",
                                                       "start_line", "end_line") if key in location},
             "flow_ids": sorted(value["flow_ids"])}
+
+
+def _document_hunt(core: RetrievalCore, row: Any, members: list[Any], gaps: list[dict[str, str]],
+                   omitted: int, max_page_size: int) -> dict[str, Any]:
+    result = row.payload["result"]
+    partition = f"{result['subject_type']}:{result['key']}"
+    context_ids = sorted({row.identity, *(item.identity for item in members)})
+    evidence = [{"entity_id": row.identity, "relation": "nominates", "shard_id": row.shard_id,
+                 "shard_sha256": row.shard_sha256, "resolution": "unresolved"}]
+    evidence.extend({"entity_id": item.identity, "relation": "qualifies", "shard_id": item.shard_id,
+                     "shard_sha256": item.shard_sha256,
+                     "resolution": "source_line" if item.location else "unresolved"} for item in members)
+    inputs = sorted({(item["name"], item.get("shard_id", "default"), item["sha256"])
+                     for item in core.manifest["indexes"]})
+    package = {"schema": SCHEMA, "kind": "document_hunt", "run_id": core.run_id,
+               "manifest_sha256": core.manifest_sha256, "target_snapshot": core.manifest["target_snapshot"],
+               "input_fingerprint": _digest([core.manifest_sha256, inputs, partition, context_ids, ASSEMBLY_RULE]),
+               "assembly_rule": ASSEMBLY_RULE,
+               "scope": {"component_id": "document-corpus", "trust_boundary_id":
+                         result["key"] if result["subject_type"] == "boundary" else None,
+                         "build_unit_id": None, "partition_key": partition, "source_ids": [], "artifact_ids": []},
+               "lead_menu": [], "evidence": sorted(evidence, key=lambda item: item["entity_id"]),
+               "context_ids": context_ids, "metrics": [],
+               "build_context": {"action_ids": [], "artifact_ids": [], "command_facts": [],
+                                 "environment_facts": [], "bindings": []},
+               "tag_context": {"assignments": [], "cloud": []}, "compiled_context": [],
+               "proof_obligations": ["resolve affected construct", "establish input control",
+                                     "establish reachability", "evaluate guards and configuration", "establish impact"],
+               "retrieval": {"indexes": [name for name in ("documents", "precomputed", "source")
+                                         if name in core.indexes],
+                             "query_sets": ["document_context"], "entity_ids": context_ids,
+                             "max_page_size": max_page_size, "max_pages": 5, "max_depth": 2,
+                             "max_response_bytes": 131072},
+               "coverage_gaps": sorted(gaps, key=lambda item: item["gap_id"]),
+               "truncation": {"omitted_leads": 0, "omitted_context": omitted, "next_partition": None}}
+    package["package_id"] = _identity(package)
+    return package
 
 
 def _package(core: RetrievalCore, *, kind: str, partition: str, leads: list[dict[str, Any]],
@@ -122,10 +160,11 @@ def _package(core: RetrievalCore, *, kind: str, partition: str, leads: list[dict
 
 
 def validate_packages(core: RetrievalCore, packages: list[Mapping[str, Any]],
-                      expected: Mapping[str, set[str]], audit: Mapping[str, Any]) -> None:
+                      expected: Mapping[str, set[str]], audit: Mapping[str, Any] | None) -> None:
     """Verify bytes, stable identity, provenance and complete lead/menu membership."""
     ids: set[str] = set()
     finding: Counter[str] = Counter()
+    document_hunts: list[str] = []
     hunt: dict[str, set[str]] = {key: set() for key in _MENU_SEVERITIES}
     for package in packages:
         _CONTRACT.validate(package)
@@ -137,8 +176,16 @@ def validate_packages(core: RetrievalCore, packages: list[Mapping[str, Any]],
             raise ValueError("review package identity mismatch")
         ids.add(package["package_id"])
         leads = package["lead_menu"]
-        if not leads or (package["kind"] == "finding_lead" and len(leads) != 1):
+        if ((package["kind"] == "document_hunt" and leads) or
+                (package["kind"] != "document_hunt" and
+                 (not leads or (package["kind"] == "finding_lead" and len(leads) != 1)))):
             raise ValueError("review package lead bounds failed")
+        if package["kind"] == "document_hunt":
+            nominations = [item["entity_id"] for item in package["evidence"] if item["relation"] == "nominates"]
+            if (len(nominations) != 1 or nominations[0] not in expected["documents"] or
+                    nominations[0] not in package["context_ids"]):
+                raise ValueError("document hunt nomination mismatch")
+            document_hunts.append(nominations[0])
         if any(item["component_id"] != package["scope"]["component_id"] for item in leads):
             raise ValueError("review package component mismatch")
         if [item["observation_id"] for item in leads] != sorted({item["observation_id"] for item in leads}):
@@ -157,16 +204,24 @@ def validate_packages(core: RetrievalCore, packages: list[Mapping[str, Any]],
         for evidence in package["evidence"]:
             if evidence["shard_sha256"] not in {item["sha256"] for item in core.manifest["indexes"]}:
                 raise ValueError("review package evidence shard mismatch")
+            if package["kind"] == "document_hunt" and evidence["entity_id"] not in grant:
+                raise ValueError("document hunt evidence is outside its retrieval grant")
+    if len(document_hunts) != len(set(document_hunts)) or set(document_hunts) != expected["documents"]:
+        raise ValueError("document hunt membership mismatch")
     if any(count != 1 for count in finding.values()) or set(finding) != expected["all"]:
         raise ValueError("finding-lead membership mismatch")
     for menu in _MENU_SEVERITIES:
         if hunt[menu] != expected[menu]:
             raise ValueError(f"{menu} hunt membership mismatch")
-    counts = audit.get("counts", {})
-    if (audit.get("status") != "passed" or counts.get("source_sast_observations") != len(finding)
-            or counts.get("high_critical") != len(expected["high_critical"])
-            or counts.get("unknown_severity") != len(expected["unknown"])):
-        raise ValueError("scanner-correlation audit mismatch")
+    if audit is None:
+        if expected["all"] or not expected["documents"]:
+            raise ValueError("scanner-correlation audit is unavailable")
+    else:
+        counts = audit.get("counts", {})
+        if (audit.get("status") != "passed" or counts.get("source_sast_observations") != len(finding)
+                or counts.get("high_critical") != len(expected["high_critical"])
+                or counts.get("unknown_severity") != len(expected["unknown"])):
+            raise ValueError("scanner-correlation audit mismatch")
 
 
 def assemble_review_packages(core: RetrievalCore, *, max_page_size: int = 20) -> tuple[list[dict[str, Any]], dict[str, Any]]:
@@ -174,8 +229,10 @@ def assemble_review_packages(core: RetrievalCore, *, max_page_size: int = 20) ->
         raise ValueError("invalid package page bound")
     view = AcceptedShards(core.run_root, core.manifest["indexes"], core.manifest["target_snapshot"])
     facts = _facts(view, "scanner_correlation")
-    if not facts:
-        raise ValueError("accepted scanner-correlation facts are unavailable")
+    document_facts = [(payload, row) for payload, row in _facts(view, "document_context")
+                      if payload.get("fact_type") in {"route_context", "boundary_context"}]
+    if not facts and not document_facts:
+        raise ValueError("accepted scanner or document review facts are unavailable")
     leads: dict[str, tuple[dict[str, Any], Any]] = {}
     menus: list[Mapping[str, Any]] = []
     audits: list[Mapping[str, Any]] = []
@@ -190,11 +247,15 @@ def assemble_review_packages(core: RetrievalCore, *, max_page_size: int = 20) ->
             menus.append(result)
         elif kind == "audit":
             audits.append(result)
-    if len(audits) != 1:
+    if facts and len(audits) != 1:
         raise ValueError("scanner-correlation membership audit missing or duplicated")
     expected = {"all": set(leads), **{menu: {identity for identity, (lead, _) in leads.items()
                                               if lead["reported_severity"] in severities}
                                      for menu, severities in _MENU_SEVERITIES.items()}}
+    if len(document_facts) > 2_000:
+        raise ValueError("document review subjects exceed the package bound")
+    expected["documents"] = {row.identity for _payload, row in document_facts}
+    document_rows = {row.identity: row for row in view.entities(view.select("documents"), ("document_record",))}
     listed: dict[str, list[str]] = {menu: [] for menu in _MENU_SEVERITIES}
     for menu in menus:
         kind = menu["menu"]
@@ -209,6 +270,9 @@ def assemble_review_packages(core: RetrievalCore, *, max_page_size: int = 20) ->
         if len(identities) != len(set(identities)) or set(identities) != expected[kind]:
             raise ValueError(f"{kind} scanner menu membership mismatch")
     gaps = _coverage_gaps(view)
+    if not facts:
+        gaps.append(_gap("scanner_correlation", "source_sast", "unavailable",
+                         "no accepted scanner-correlation facts; document hunts have no scanner lead"))
     source_by_path: dict[str, list[str]] = {}
     for row in view.entities(view.select("source"), ("source_file",)):
         if row.location:
@@ -387,12 +451,35 @@ def assemble_review_packages(core: RetrievalCore, *, max_page_size: int = 20) ->
                                  metrics=metrics, build_context=build, source_ids=sources,
                                  context_ids=sorted({*(row.identity for _, row in chunk), *refs}),
                                  tag_context=tags, compiled_context=compiled))
-    validate_packages(core, packages, expected, audits[0])
+    for payload, row in sorted(document_facts, key=lambda pair: pair[1].identity):
+        result = payload["result"]
+        named = result.get("members") or {}
+        if not isinstance(named, Mapping):
+            raise ValueError("document context member map is invalid")
+        member_ids = sorted({identity for values in named.values() for identity in values})
+        if any(identity not in document_rows for identity in member_ids):
+            raise ValueError("document context references an unaccepted source record")
+        anchor = payload.get("subject_identity")
+        if anchor not in document_rows or anchor not in member_ids:
+            raise ValueError("document context source anchor is unresolved")
+        selected_ids = sorted({anchor, *[identity for identity in member_ids if identity != anchor][:63]})
+        selected = [document_rows[identity] for identity in selected_ids]
+        omitted = len(member_ids) - len(selected)
+        local_gaps = [_gap("document_context", row.identity, "partial", str(reason))
+                      for reason in payload.get("gaps", ())]
+        if omitted:
+            local_gaps.append(_gap("document_context", row.identity, "truncated",
+                                   f"{omitted} document source record(s) exceeded the package grant bound"))
+        local_gaps.append(_gap("document_context", row.identity, "unavailable",
+                               "route or boundary has not been mapped to a unique implementation component"))
+        packages.append(_document_hunt(core, row, selected, [*gaps, *local_gaps], omitted, max_page_size))
+    validate_packages(core, packages, expected, audits[0] if audits else None)
     manifest = {"schema": MANIFEST_SCHEMA, "run_id": core.run_id, "accepted_manifest_sha256": core.manifest_sha256,
                 "assembly_rule": ASSEMBLY_RULE, "max_page_size": max_page_size,
                 "packages": [{"package_id": item["package_id"],
                     "sha256": _digest(item), "kind": item["kind"]} for item in packages],
                 "counts": {"finding_lead": len(leads), "hunt": len(menus),
+                           "document_hunt": len(document_facts),
                            "high_critical": len(expected["high_critical"]), "unknown": len(expected["unknown"])},
                 "coverage_gaps": sorted({gap["gap_id"]: gap for item in packages
                                          for gap in item["coverage_gaps"]}.values(),
@@ -426,6 +513,8 @@ def verify_review_packages(core: RetrievalCore, directory: Path) -> dict[str, An
         raise ValueError("review package directory escapes its run")
     manifest_path = directory / "manifest.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if manifest.get("schema") != MANIFEST_SCHEMA:
+        raise ValueError("review package manifest schema mismatch")
     if manifest_path.read_bytes() != canonical_json(manifest) + b"\n":
         raise ValueError("review package manifest byte integrity mismatch")
     digest = manifest.pop("content_sha256", None)

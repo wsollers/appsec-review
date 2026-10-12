@@ -164,19 +164,22 @@ embedded shard identity. It emits a deterministic evidence map of available cove
 coverage, components, trust boundaries, build/deployment identities, external-intelligence
 freshness, and exact retrieval scopes. It never infers that an unavailable shard is clean.
 
-`assemble_review_packages` creates two bounded package kinds:
+`assemble_review_packages` creates three bounded package kinds:
 
 - A **finding package** groups one normalized upstream lead with its source/artifact identities,
   original evidence, known supporting and contradicting relations, proof obligations, coverage,
   and allowed retrieval scope.
 - A **hunt package** groups an evidence-map slice by component/trust boundary and includes bounded
   lead summaries as a menu rather than a search limit. It contains identities, not a source dump.
+- A **document hunt package** grants one accepted route or trust-boundary context fact and bounded
+  source-record identities, with no scanner lead. It nominates a question, not a finding.
 
 Packages are independently fingerprinted and size-limited. Oversized scopes split deterministically
 by component, trust boundary, and stable entity range. Truncation creates a coverage gap.
 The pre-adjudication input format is
 [`review-packages.schema.json`](../schemas/review-packages.schema.json); its
-`finding_lead` and `hunt` variants carry accepted-manifest identity, lead membership,
+`finding_lead`, `hunt`, and `document_hunt` variants carry accepted-manifest identity, lead membership
+where applicable,
 history/complexity metrics, safe build-command and environment facts, graph/evidence references,
 retrieval scope and gaps. The package assembler audits that every accepted High/Critical
 source-SAST observation is represented in both a finding-lead package and a hunt menu, even
