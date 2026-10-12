@@ -29,6 +29,7 @@ _LANGUAGE_SUFFIXES: Mapping[str, frozenset[str]] = {
 }
 _COMPILED_FAMILIES = {"native": "cpp", "go": "go", "java": "java", "dotnet": "csharp"}
 _SOURCE_FAMILIES = {"node": "javascript", "python": "python", "rust": "rust"}
+_NATIVE_COMPONENT_FAMILIES = frozenset({"node", "python"})
 _DOTNET_UNSUPPORTED = {".vb": "Visual Basic", ".fs": "F#", ".fsx": "F#"}
 _WORKFLOW_PREFIXES = (".github/workflows/",)
 _WORKFLOW_SUFFIXES = {".yml", ".yaml"}
@@ -58,6 +59,16 @@ def _files_for(files: Sequence[Mapping[str, Any]], root: str,
                 raise ValueError("CodeQL source scope is missing an accepted file hash")
             selected.append({"path": path, "sha256": digest, "size_bytes": int(raw.get("size_bytes", 0))})
     return tuple(sorted(selected, key=lambda item: item["path"]))
+
+
+def _language_files(files: Sequence[Mapping[str, Any]], root: str,
+                    language: str) -> tuple[dict[str, Any], ...]:
+    selected = _files_for(files, root, _LANGUAGE_SUFFIXES[language])
+    if language != "java":
+        return selected
+    return tuple(item for item in selected
+                 if not PurePosixPath(item["path"]).name.endswith(".gradle.kts")
+                 and PurePosixPath(item["path"]).name != "settings.gradle.kts")
 
 
 def _source_labels(language: str, files: Sequence[Mapping[str, Any]]) -> set[str]:
@@ -255,9 +266,41 @@ def build_codeql_plan(*, source_fingerprint: str, files: Sequence[Mapping[str, A
         seen_build_units.add(build_unit)
         language = _COMPILED_FAMILIES.get(family) or _SOURCE_FAMILIES[family]
         root = _path(receipt.get("root"))
-        selected = _files_for(normalized_files, root, _LANGUAGE_SUFFIXES[language])
+        selected = _language_files(normalized_files, root, language)
         if not selected:
             continue
+        if family in _NATIVE_COMPONENT_FAMILIES:
+            native_files = _files_for(normalized_files, root, _LANGUAGE_SUFFIXES["cpp"])
+            if native_files:
+                native_decision = _decide(
+                    project_id=build_unit, language="cpp", family="native", root=root,
+                    files=native_files, material=True, capabilities=("codeql-build",),
+                    language_modes=modes, configuration_sha256=configuration_sha256)
+                decisions.append(native_decision.as_dict())
+                if native_decision.action is ApplicabilityAction.SKIP:
+                    non_applicable.append({
+                        "language": "cpp", "status": native_decision.disposition.value,
+                        "reason": native_decision.reason_code.value,
+                    })
+                    covered_paths.update(item["path"] for item in native_files)
+                elif native_decision.action is ApplicabilityAction.GAP:
+                    gaps.append(f"{build_unit}/cpp: {native_decision.reason_code.value}")
+                    covered_paths.update(item["path"] for item in native_files)
+                elif "cpp" not in inventory:
+                    gaps.append(
+                        f"{build_unit}/cpp: pinned runtime did not report the required extractor")
+                elif receipt.get("terminal_status") != "SUCCEEDED" or not receipt.get("workspace"):
+                    gaps.append(
+                        f"{build_unit}/cpp: no successful accepted materialized environment")
+                elif replay_commands(receipt) is None:
+                    gaps.append(
+                        f"{build_unit}/cpp: accepted compiled build has no exact replayable command set")
+                else:
+                    scopes.append(_scope(
+                        language="cpp", source_languages=_source_labels("cpp", native_files),
+                        mode="manual", root=root, files=native_files, receipt=receipt,
+                        environment_identity=_environment_identity(receipt)))
+                    covered_paths.update(item["path"] for item in native_files)
         decision = _decide(
             project_id=build_unit, language=language, family=family, root=root,
             files=selected, material=True,
@@ -273,6 +316,7 @@ def build_codeql_plan(*, source_fingerprint: str, files: Sequence[Mapping[str, A
             gaps.append(f"{build_unit}/{language}: {decision.reason_code.value}")
             covered_paths.update(item["path"] for item in selected)
             continue
+        covered_paths.update(item["path"] for item in selected)
         if language not in inventory:
             gaps.append(f"{build_unit}/{language}: pinned runtime did not report the required extractor")
             continue
@@ -294,11 +338,8 @@ def build_codeql_plan(*, source_fingerprint: str, files: Sequence[Mapping[str, A
         source_languages = _source_labels(language, selected)
         mode = "manual" if selected_mode == "build" else "none"
         scopes.append(_scope(language=language, source_languages=source_languages, mode=mode,
-                             root=root, files=selected,
-                             receipt=receipt if selected_mode == "build" else None,
-                             environment_identity=(_environment_identity(receipt) if selected_mode == "build"
-                                                   else source_image_id.removeprefix("sha256:"))))
-        covered_paths.update(item["path"] for item in selected)
+                             root=root, files=selected, receipt=receipt,
+                             environment_identity=_environment_identity(receipt)))
 
     # Source/no-build languages remain applicable even when language_build had no command-bearing
     # receipt. Prefer accepted project roots; Python and loose source fall back to one repository

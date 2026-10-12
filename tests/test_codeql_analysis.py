@@ -201,6 +201,35 @@ def test_manual_requires_commands_but_source_modes_prohibit_them() -> None:
                for gap in plan.gaps)
 
 
+def test_python_native_extension_partitions_source_and_native_once() -> None:
+    unit = receipt("python", "pkg", "build-unit-aaaaaaaaaaaaaaaaaaaa")
+    plan = build_codeql_plan(
+        source_fingerprint="f" * 64,
+        files=[source("pkg/setup.py"), source("pkg/src/extension.c")],
+        receipts=[unit], supported_extractors={"python", "cpp"}, source_image_id=IMAGE,
+    )
+    assert [(item.language, item.mode, item.build_unit_id) for item in plan.scopes] == [
+        ("cpp", "manual", unit["build_unit_id"]),
+        ("python", "none", unit["build_unit_id"]),
+    ]
+    assigned = [record["path"] for item in plan.scopes for record in item.files]
+    assert sorted(assigned) == ["pkg/setup.py", "pkg/src/extension.c"]
+    assert len(assigned) == len(set(assigned))
+
+
+def test_node_native_failure_does_not_mask_source_scope() -> None:
+    unit = receipt("node", "addon", "build-unit-bbbbbbbbbbbbbbbbbbbb", commands=[])
+    plan = build_codeql_plan(
+        source_fingerprint="f" * 64,
+        files=[source("addon/index.js"), source("addon/src/addon.cc")],
+        receipts=[unit], supported_extractors={"javascript", "cpp"}, source_image_id=IMAGE,
+    )
+    assert [(item.language, item.mode) for item in plan.scopes] == [("javascript", "none")]
+    assert [item["path"] for item in plan.scopes[0].files] == ["addon/index.js"]
+    assert any("build-unit-bbbbbbbbbbbbbbbbbbbb/cpp" in gap and
+               "no exact replayable command set" in gap for gap in plan.gaps)
+
+
 def test_java_commands_without_roles_derive_order_from_accepted_recipe() -> None:
     java = receipt("java", "jvm", "build-unit-aaaaaaaaaaaaaaaaaaaa",
                    commands=[{"ordinal": 1}, {"ordinal": 2}])
@@ -212,6 +241,20 @@ def test_java_commands_without_roles_derive_order_from_accepted_recipe() -> None
     )
     assert len(plan.scopes) == 1
     assert plan.scopes[0].source_languages == ("Java", "Kotlin")
+
+
+def test_android_gradle_scripts_do_not_invent_kotlin_source_coverage() -> None:
+    plan = build_codeql_plan(
+        source_fingerprint="f" * 64,
+        files=[source("android/app/src/main/java/example/Main.java"),
+               source("android/app/build.gradle.kts"),
+               source("android/settings.gradle.kts")],
+        receipts=[receipt("java", "android", "build-unit-androidandroidandroid")],
+        supported_extractors={"java"}, source_image_id=IMAGE,
+    )
+    assert plan.scopes[0].source_languages == ("Java",)
+    assert [item["path"] for item in plan.scopes[0].files] == [
+        "android/app/src/main/java/example/Main.java"]
 
 
 def test_replay_commands_ignores_labeled_catalog_commands() -> None:
