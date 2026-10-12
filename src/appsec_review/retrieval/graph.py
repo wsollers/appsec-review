@@ -173,7 +173,10 @@ class _GraphQuery:
             if self.mode in DEPTH_MODES:
                 rows, truncated = self._closure(family_dbs, deadline, bound)
             elif self.mode is Mode.SARIF_PATH:
-                rows = self._sarif(family_dbs, deadline, bound)
+                # Broken correlations hang on the sink_site (no path joins the flow's endpoints).
+                sink_dbs = [(shard, database) for shard, database in other_dbs
+                            if (shard.get("producer") or {}).get("family") == Family.SINK_SITE.value]
+                rows = self._sarif(family_dbs + sink_dbs, deadline, bound)
             else:
                 rows = self._select(family_dbs, deadline, bound)
         page = rows[offset:offset + limit]
@@ -275,36 +278,66 @@ class _GraphQuery:
 
     # -- SARIF correlation ----------------------------------------------------------------------
     def _sarif(self, databases, deadline: float, bound: int) -> list[dict[str, Any]]:
+        """One row per correlated code flow (``graph-sarif-correlation/1``).
+
+        ``job_code_graph_index`` publishes one ``DERIVED_FROM`` relation per (path, observation) whose
+        payload lists every correlated code flow in order (``code_flows``), and, for a flow whose sink
+        matched but no path joins it, a ``DERIVED_FROM`` from the ``sink_site`` with state ``broken``.
+        Each bridged or partial code flow becomes one ``dataflow_path`` row; partial and broken flows are
+        named gaps, and a broken flow never yields a path row.
+        """
+        from appsec_review.graph.correlate import CORRELATION_RULE
+
         sql = ("SELECT e.*, l.*, r.relation_id AS correlation_id, r.exact AS correlation_exact, "
-               "r.ambiguity AS correlation_ambiguity, r.payload_json AS correlation_json, "
-               f"COALESCE(CAST(json_extract(r.payload_json, '$.code_flow') AS INTEGER), {_LAST}) AS sort_key "
+               "r.ambiguity AS correlation_ambiguity, r.payload_json AS correlation_json, 0 AS sort_key "
                "FROM relations r JOIN entities e ON e.identity = r.source_id "
                "LEFT JOIN locations l ON l.entity_id = e.identity "
-               "WHERE r.kind = ? AND r.target_id = ? AND e.kind = ? ORDER BY sort_key, e.identity LIMIT ?")
-        found: list[tuple[int, str, str, dict[str, Any]]] = []
+               "WHERE r.kind = ? AND r.target_id = ? AND e.kind IN (?, ?) "
+               "AND json_extract(r.payload_json, '$.rule') = ? ORDER BY e.identity LIMIT ?")
+        found: list[tuple[int, int, str, str, dict[str, Any]]] = []
         correlations = 0
         for shard, database in databases:
             self.core._check_deadline(deadline)
             for row in database.execute(sql, (RelationKind.DERIVED_FROM.value, self.subject,
-                                              Family.DATAFLOW_PATH.value, bound)):
+                                              Family.DATAFLOW_PATH.value, Family.SINK_SITE.value, CORRELATION_RULE,
+                                              bound)):
                 correlations += 1
-                correlation = self.core._safe_payload(json.loads(row["correlation_json"]))
-                state = correlation.get("state") if isinstance(correlation, Mapping) else None
-                if state != "bridged":
-                    self.gaps.append(f"sarif correlation code_flow {correlation.get('code_flow')} is {state or 'unknown'}"
-                                     f": matched {correlation.get('matched_steps')}, ambiguous "
-                                     f"{correlation.get('ambiguous_steps')}, unmatched {correlation.get('unmatched_steps')}")
-                if state == "broken":
+                relation = self.core._safe_payload(json.loads(row["correlation_json"]))
+                flows = relation.get("code_flows") if isinstance(relation, Mapping) else None
+                if not isinstance(flows, list) or not flows:
+                    self.gaps.append(f"sarif correlation {row['correlation_id']} lists no code flows")
                     continue
-                item = self._row(row, shard, correlation={
-                    "relation_id": row["correlation_id"], "exact": bool(row["correlation_exact"]),
-                    "ambiguity": row["correlation_ambiguity"], **correlation})
-                found.append((int(row["sort_key"]), row["identity"], item["shard_id"], item))
+                for flow in flows:
+                    if not isinstance(flow, Mapping):
+                        continue
+                    code_flow, thread_flow = flow.get("code_flow"), flow.get("thread_flow", 0)
+                    state = flow.get("state")
+                    if row["kind"] != Family.DATAFLOW_PATH.value:
+                        state = "broken"
+                    if state != "bridged":
+                        counts = {name: len(flow.get(name) or ()) if isinstance(flow.get(name), list)
+                                  else flow.get(name) for name in ("matched_steps", "ambiguous_steps",
+                                                                   "unmatched_steps")}
+                        self.gaps.append(
+                            f"sarif correlation code_flow {code_flow} is {state or 'unknown'} (thread_flow "
+                            f"{thread_flow}): matched {counts['matched_steps']}, ambiguous "
+                            f"{counts['ambiguous_steps']}, unmatched {counts['unmatched_steps']}"
+                            + (f"; reason {flow['reason']}" if flow.get("reason") else ""))
+                    if state not in {"bridged", "partial"}:
+                        continue
+                    item = self._row(row, shard, correlation={
+                        "relation_id": row["correlation_id"],
+                        "exact": bool(row["correlation_exact"]) and state == "bridged",
+                        "ambiguity": row["correlation_ambiguity"], "rule": relation.get("rule"),
+                        "relation_state": relation.get("state"), **dict(flow)})
+                    found.append((int(code_flow) if isinstance(code_flow, int) else _LAST,
+                                  int(thread_flow) if isinstance(thread_flow, int) else _LAST,
+                                  row["identity"], item["shard_id"], item))
         if not correlations:
             self.gaps.append("no accepted SARIF correlation exists for this observation; its CodeQL flow is not "
                              "bridged to a graph path")
-        found.sort(key=lambda item: item[:3])
-        return [item[3] for item in found[:bound]]
+        found.sort(key=lambda item: item[:4])
+        return [item[4] for item in found[:bound]]
 
     # -- callers / callees closure --------------------------------------------------------------
     def _closure(self, databases, deadline: float, bound: int) -> tuple[list[dict[str, Any]], bool]:
