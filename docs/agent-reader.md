@@ -12,6 +12,8 @@ Relevant bounded procedures and design references:
 - [`../skills/target-analysis-planning/SKILL.md`](../skills/target-analysis-planning/SKILL.md) — model-side proposal constraints for target analysis ambiguity.
 - [`../skills/build-image-repair/SKILL.md`](../skills/build-image-repair/SKILL.md) — bounded apt-package proposals for failed project-build image probes.
 - [`../skills/post-build-security-assessment/SKILL.md`](../skills/post-build-security-assessment/SKILL.md) — bounded guidance for the post-build security inference task.
+- [`../skills/parallel-implementation/SKILL.md`](../skills/parallel-implementation/SKILL.md) — repository-agent procedure for splitting an approved design into parallel agent chunks and merging them.
+- [`reviews/inference-security-review-implementation.md`](reviews/inference-security-review-implementation.md) — slice 1 implementation record: readiness decisions, partition, merges, reconciliations, verification, and outstanding work.
 - [`architecture/jobs-and-runtime.md`](architecture/jobs-and-runtime.md) — semantic jobs and orchestration.
 - [`architecture/build-environments-and-execution-capture.md`](architecture/build-environments-and-execution-capture.md) — shared capture architecture, conditional-control design status, and the pinned fixture matrix.
 - [`operations/language-build.md`](operations/language-build.md) — operator behavior for generic language builds and conditional applicability.
