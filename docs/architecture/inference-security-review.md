@@ -1878,11 +1878,12 @@ host execution of target outputs, production proofs, and text parsing to infer s
 5. What freshness windows apply to CVE/exploitation intelligence, deployment configuration, and
    business-impact data? Slice 1 default: `feed_max_age_days = 14` for every pinned feed, with
    `feed_max_age_days_overrides = { kev = 7, epss = 3 }`; a stale MITRE catalog falls back for claim
-   CWE validation. Whether a stale KEV should still admit to lane A (it does today, with a
-   `stale_feed` gap) is open.
-6. Should EPSS ever affect lane A admission or scoring (for example a percentile threshold), or
-   stay rank and context only as in slice 1? Should a future `cvss_v4`/`cvss_v31_compat` provider
-   score target-specific vectors seeded from the NVD reference vector?
+   CWE validation. **Decided (user, 2026-10-12):** a stale KEV feed still admits KEV-listed leads to
+   lane A. The staleness is recorded as a `stale_feed` gap and the review proceeds.
+6. **Decided (user, 2026-10-12):** EPSS is used only for lane B ranking and as package context. It
+   never affects lane A admission or any score. Still open: should a future
+   `cvss_v4`/`cvss_v31_compat` provider score target-specific vectors seeded from the NVD
+   reference vector?
 7. Should chain confirmation require a second verifier beyond the independent refuter for
    ship-blocking chains?
 8. Which exact downstream job names become stable when remediation and final publication are built?
