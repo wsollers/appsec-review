@@ -1256,11 +1256,18 @@ unless K3 or a later rule needs CodeQL-side CFG detail beyond guards.
   publishes cross-checks and refined locations, not primary facts. CSA observations follow the
   existing tool-observation rules.
 
-### 12.4 Open questions for this phase
+### 12.4 Decisions for this phase (user, 2026-10-12)
 
-1. Should the Static Analyzer's `alpha.security.*` checkers be enabled? They are noisier but cover
-   more memory-safety cases.
-2. Should K4 run in `tool-native-cpp` or in a separate analyzer image?
-3. Should a K3 `disagree` on a guard make the fact ineligible, as in this plan, or only flag it
-   for the verifier?
+1. **Static Analyzer `alpha.security.*` checkers:** enabled. Their findings are normalized to
+   `medium` reported severity, so they appear on lane B hunt menus instead of being admitted to
+   lane A.
+2. **Where K4 runs:** in a separate `tool-clang-analyzer` image. Changing analyzer checkers then
+   never changes the identity of `tool-native-cpp`, the compile-replay image every C/C++ fact
+   depends on.
+3. **K3 guard disagreement:** makes the guard fact ineligible, the same rule as call-site
+   disagreement. The verifier sees the `CONTRADICTS` relation either way.
 
+### 12.5 Joern removal
+
+If no run enables `jobs.job_cpg_analysis.settings.enabled` within one release cycle after this phase,
+remove `job_cpg_analysis` and `tool-joern` entirely rather than carrying them.

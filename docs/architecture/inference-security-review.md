@@ -1995,30 +1995,58 @@ full repository/evidence dumps, target-guide access, evaluator ground truth, per
 separate lifecycle/chain ledgers, fixed scoring arithmetic, combined score/remediation/PoC/fix records,
 host execution of target outputs, production proofs, and text parsing to infer state.
 
-## Open questions
+## Decisions and open questions
 
-1. Which organization policy is authoritative for ship-blocking when CVSS, application risk, and
-   SSVC-style outputs disagree? The design requires an explicit policy but does not choose it.
-2. Must every High/Critical verifier use a different model provider/family, or is a different actor,
-   fresh context, blind input, and independently gathered evidence sufficient when provider choice
-   is constrained? Slice 1 default: not required; see [R6](#r6-independence).
-3. What trusted operator workflow issues and revokes target-specific PoC authorization receipts,
-   and what environments will initially host the isolated executor?
-4. Which finding states (`confirmed` only, or narrowly qualified `supported`) may enter remediation
-   planning, and how should internal reports label the latter? Slice 1 default: `confirmed`
-   only; see [R8](#r8-ledger-schemas-inputs-and-configuration).
-5. What freshness windows apply to CVE/exploitation intelligence, deployment configuration, and
-   business-impact data? Slice 1 default: `feed_max_age_days = 14` for every pinned feed, with
-   `feed_max_age_days_overrides = { kev = 7, epss = 3 }`; a stale MITRE catalog falls back for claim
-   CWE validation. **Decided (user, 2026-10-12):** a stale KEV feed still admits KEV-listed leads to
-   lane A. The staleness is recorded as a `stale_feed` gap and the review proceeds.
-6. **Decided (user, 2026-10-12):** EPSS is used only for lane B ranking and as package context. It
-   never affects lane A admission or any score. Still open: should a future
-   `cvss_v4`/`cvss_v31_compat` provider score target-specific vectors seeded from the NVD
-   reference vector?
-7. Should chain confirmation require a second verifier beyond the independent refuter for
-   ship-blocking chains?
-8. Which exact downstream job names become stable when remediation and final publication are built?
-9. TODO: should `security_predicate` become a closed `SecurityPredicate` vocabulary like the R4
-    predicates and preconditions? Slice 1 keeps it a bounded snake_case token in claim identity
-    because no vocabulary has been agreed and existing fixtures use free tokens.
+Decisions were recorded by the user on 2026-10-12. "Implementation" names where the decision is or
+will be enforced in code.
+
+1. **Ship-blocking policy — decided.** One versioned policy, `ship-block-policy/1`. A finding is
+   ship-blocking when it is `confirmed` and either `application_risk_matrix/2` rates its technical
+   severity `high` or `critical`, or it is a confirmed dependency finding listed in KEV. CVSS and
+   SSVC outputs are displayed alongside but never decide. A `supported` finding never blocks; when
+   it would otherwise qualify, it is flagged `needs_verification`. When a ship-blocking finding was
+   verified by the same model as its red cells (see 2), it is published as
+   `ship_blocking_pending_distinct_verification` instead of `ship_blocking`.
+2. **Verifier independence — decided.** A different provider is not required. For ship-blocking
+   candidates the verifier must use a different model profile than the red cells, so their errors
+   are less correlated. `provider_distinct` is still recorded, and provider distinctness becomes
+   required once a second provider is configured. This refines [R6](#r6-independence).
+3. **PoC authorization and executor host — to be determined.** It remains open which trusted
+   operator workflow issues and revokes target-specific PoC authorization receipts, and which
+   environment will host the isolated executor. Until it is decided, the PoC lane is plan-only and
+   no execution path is built.
+4. **Remediation intake — decided.** Only `confirmed` findings enter remediation planning.
+   `supported` findings are published in a separate verification backlog, labelled unconfirmed.
+5. **Freshness windows — decided.**
+   - Feeds keep `feed_max_age_days = 14`, with overrides `{ kev = 7, epss = 3 }`.
+   - A stale MITRE catalog falls back for claim CWE validation and records a gap.
+   - A stale KEV feed still admits KEV-listed leads to lane A, with a `stale_feed` gap.
+   - Deployment configuration must come from the run's own snapshot; external deployment data
+     expires after 7 days.
+   - Business-impact data expires after 90 days.
+   - Enforcement for deployment and business-impact data comes when their producers exist.
+6. **EPSS — decided.** EPSS is used only for lane B ranking and as package context. It never affects
+   lane A admission or any score. Still open: should a future `cvss_v4`/`cvss_v31_compat` provider
+   score target-specific vectors seeded from the NVD reference vector?
+7. **Chain verification — decided.** Ship-blocking chains get an independent verifier focused on
+   the chain's weakest link, in addition to the refuter. Other chains keep the refuter alone. This
+   is implemented with the attack-chain slice.
+8. **Downstream job names — decided.** The names are `job_remediation_planning`,
+   `job_remediation_validation`, `job_final_publication_gate` and `job_final_report_publication`,
+   as in [Placement and consumers](#placement-and-consumers). They are registered as planned
+   producers so later work does not rename them.
+9. **`security_predicate` vocabulary — decided.** `security_predicate` becomes a closed,
+   versioned `SecurityPredicate` vocabulary, rolled up from the taxonomy's weakness classes, with
+   `other` plus a gap for anything unmapped. Because it is part of claim identity, the change
+   alters claim ids once.
+10. **Red output contract — decided.** `red-discovery-result/1` ([red discovery output
+    contract](red-discovery-output.md)) is the single output contract for `hypothesis_hunter` and
+    `red_team_analyst`. `red-result/1` is retired. Its taint-path hops may cite accepted
+    `query_code_graph` facts.
+11. **CWE impact class — decided.** The `application_risk_matrix/2` impact class is derived from the
+    pinned MITRE CWE catalog's common consequences (confidentiality, integrity and availability
+    scopes), with an explicit override table for exceptions. It replaces the hand-maintained table.
+12. **Live verification gate — decided.** Findings are not relied on until the live tiers pass on
+    the deployment host: the CodeQL graph export, the NVD/KEV/EPSS/MITRE feed syncs, and a live
+    inference run that includes `job_code_graph_index`. A failure there is treated as a bug, not a
+    design change.
