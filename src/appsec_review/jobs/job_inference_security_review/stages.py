@@ -23,7 +23,10 @@ from appsec_review.review.ledger import (
 from appsec_review.review.models import (
     ClaimState, Gap, GapClass, IntegrityError, Lane, make_gap,
 )
-from appsec_review.review.scoring import default_registry
+from appsec_review.review.scoring import (
+    consumed_factors, default_factor_registry, default_registry, registry_from_settings,
+)
+from appsec_review.review.scoring.factors import EvidenceSource, FactorSet, factor_input
 from appsec_review.review.scoring.interface import ScoreProviderResult, ScoreRequest
 from appsec_review.storage import atomic_bytes, atomic_json, canonical_json, file_sha256
 
@@ -32,7 +35,12 @@ from .schemas import SchemaSet
 HANDOFF_SCHEMA = "appsec-review/inference-review-handoff/1"
 FINDING_SCHEMA = "appsec-review/finding-package/1"
 COVERAGE_SCHEMA = "appsec-review/inference-review-coverage-matrix/1"
-SCORER_ACTOR = make_id("actor", 1, {"role": "independent_scorer", "provider": "application_risk_matrix/1"})
+def scorer_actor(implementation: str) -> str:
+    """The deterministic ``independent_scorer`` actor of one provider implementation."""
+    return make_id("actor", 1, {"role": "independent_scorer", "provider": implementation})
+
+
+SCORER_ACTOR = scorer_actor("application_risk_matrix/1")
 # PROPOSED -> final state; confirmation and the R5 row-4 reachability/configuration states pass through
 # ``supported`` because the condition is established before policy or contradiction narrows it.
 TRANSITION_PATHS: Mapping[ClaimState, tuple[ClaimState, ...]] = {
@@ -148,6 +156,19 @@ def apply_policy(merged: Mapping[str, Any], projection: Projection, ledger_path:
 # scoring.score_claims
 
 
+_REFERENCE_LIMITATION = ("reference_inputs are pinned-feed context (NVD CVSS, CISA KEV) about the advisory, not "
+                         "about this target; FIRST EPSS is never a scoring input")
+LIMITATIONS: Mapping[str, tuple[str, ...]] = {
+    "application_risk_matrix/1": (
+        "application_risk_matrix/1 rates impact from a configured CWE table only; it is not a CVSS score and "
+        "does not assess environment or business impact", _REFERENCE_LIMITATION),
+    "application_risk_matrix/2": (
+        "application_risk_matrix/2 rates configured score-factors/1 evidence factors with a configured model; "
+        "it is not a CVSS score", "environmental_business_impact reflects accepted security tags (exposure, "
+        "privilege, data sensitivity), not deployment or business data", _REFERENCE_LIMITATION),
+}
+
+
 def score_package_json(result: ScoreProviderResult) -> dict[str, Any]:
     native = dict(result.native)
     rendered: dict[str, Any] = {"nomenclature": str(native.get("matrix", result.implementation_version))}
@@ -159,6 +180,17 @@ def score_package_json(result: ScoreProviderResult) -> dict[str, Any]:
     def dimension(value) -> dict[str, Any] | None:
         return None if value is None else {"scale": value.scale, "rating": value.rating, "value": value.value}
 
+    factors = result.factors or FactorSet((), ())
+    citations = []
+    for item in factors.values:
+        by_kind: dict[str, list[str]] = defaultdict(list)
+        for citation in item.citations:
+            by_kind[citation.kind.value].append(citation.id)
+        citations.append({"factor": item.factor.value, "evidence_relations": sorted(by_kind["evidence_relation"]),
+                          "entities": sorted(by_kind["entity"]), "tag_assignments": sorted(by_kind["tag_assignment"]),
+                          "references": sorted(by_kind["adjudication"] + by_kind["reference_input"]
+                                               + by_kind["configuration"])})
+    limitations = LIMITATIONS.get(result.implementation_version, ())
     return {"schema": result.schema, "score_id": result.score_id, "claim_id": result.claim_id,
             "adjudication_id": result.adjudication_id,
             "provider": {"id": result.provider_id, "interface": result.interface_version,
@@ -170,11 +202,12 @@ def score_package_json(result: ScoreProviderResult) -> dict[str, Any]:
             "environmental_business_impact": dimension(result.environmental_business_impact),
             "remediation_priority": dimension(result.remediation_priority),
             "assumptions": list(result.assumptions), "missing_factors": list(result.missing_factors),
-            "evidence_relations": list(result.evidence_relations), "factor_citations": [],
-            "limitations": ["application_risk_matrix/1 rates impact from a configured CWE table only; it is not "
-                            "a CVSS score and does not assess environment or business impact",
-                            "reference_inputs are pinned-feed context (NVD CVSS, CISA KEV, FIRST EPSS) about the "
-                            "advisory, not about this target; they are recorded, not scored"],
+            "evidence_relations": list(result.evidence_relations), "factor_citations": citations,
+            "factors": [{"factor": item.factor.value, "scale": item.scale, "value": item.value,
+                         "detail": item.record()["detail"]} for item in factors.values],
+            "missing_factor_reasons": [{"factor": factor, "reason": reason}
+                                       for factor, reason in result.missing_factor_reasons],
+            "limitations": list(limitations),
             "scorer": result.scorer_actor_id, "input_fingerprint": result.input_fingerprint,
             "overrides": [dict(item) for item in result.overrides],
             **({"reference_inputs": dict(result.reference_inputs)} if result.reference_inputs else {})}
@@ -218,8 +251,21 @@ def claim_references(merged: Mapping[str, Any], documents: Mapping[str, Mapping[
 
 def score_claims(adjudications: Sequence[Mapping[str, Any]], projection: Projection,
                  cwe_impact_classes: Mapping[str, str], out_dir: Path, ledger_path: Path, stream: str,
-                 schemas: SchemaSet, references: Mapping[str, Mapping[str, Any]] | None = None) -> dict[str, Any]:
-    registry = default_registry(cwe_impact_classes)
+                 schemas: SchemaSet, references: Mapping[str, Mapping[str, Any]] | None = None, *,
+                 scoring: Any | None = None, evidence: EvidenceSource | None = None) -> dict[str, Any]:
+    """Score every confirmed or supported claim with every registered provider.
+
+    ``scoring`` is the job's ``ScoringSettings``; it selects the enabled provider implementations and
+    their models (without it, ``application_risk_matrix`` runs at its default implementation and
+    model over ``cwe_impact_classes``). Each provider receives exactly the ``score-factors/1``
+    factors it declares, extracted from the claim's counted supporting relations; ``evidence``
+    re-resolves their cited entities and supplies accepted tags, and without it payload- and
+    tag-derived factors are missing with a reason. FIRST EPSS from ``references`` is dropped here:
+    it is never a scoring input.
+    """
+    table = scoring.cwe_impact_classes if scoring is not None else cwe_impact_classes
+    registry = registry_from_settings(scoring) if scoring is not None else default_registry(table)
+    factor_registry = default_factor_registry(table)
     writer = LedgerWriter(ledger_path, stream)
     scores: list[dict[str, Any]] = []
     for record in adjudications:
@@ -229,25 +275,34 @@ def score_claims(adjudications: Sequence[Mapping[str, Any]], projection: Project
         claim = projection.claims[record["claim_id"]].claim
         supporting = sorted({relation for item in record["predicates"] for relation in item["supporting"]})
         reference = (references or {}).get(claim.claim_id) or {}
-        request = ScoreRequest(claim_id=claim.claim_id, adjudication_id=record["adjudication_id"], claim_state=state,
-                               weakness_cwe=claim.weakness_cwe, evidence_relation_ids=tuple(supporting),
-                               environment_sha256=None, policy_sha256=record["policy_sha256"],
-                               scorer_actor_id=SCORER_ACTOR,
-                               reference_cvss=tuple(dict(item) for item in reference.get("reference_cvss", ())),
-                               kev_listed=reference.get("kev_listed"), epss=reference.get("epss"))
-        outcome = registry.score("application_risk_matrix", request)
-        if isinstance(outcome, Gap):
-            writer.record_gap(outcome)
-            continue
-        package = score_package_json(outcome)
-        schemas.validate("score-package", package)
-        path = Path(out_dir) / f"{package['score_id']}.json"
-        atomic_bytes(path, canonical_json(package))
-        scores.append({"score_id": package["score_id"], "claim_id": claim.claim_id, "sha256": file_sha256(path),
-                       "file": path.name, "band": package["native"].get("rating"),
-                       "missing_factors": package["missing_factors"]})
+        data = factor_input(claim_id=claim.claim_id, adjudication_id=record["adjudication_id"], claim_state=state,
+                            weakness_cwe=claim.weakness_cwe, affected_entities=claim.affected_entities,
+                            predicates=record["predicates"], relations=projection.relations.get(claim.claim_id, ()),
+                            source=evidence, kev_listed=reference.get("kev_listed"))
+        for provider_id in registry.ids():
+            provider = registry.get(provider_id)
+            wanted = consumed_factors(provider)
+            request = ScoreRequest(
+                claim_id=claim.claim_id, adjudication_id=record["adjudication_id"], claim_state=state,
+                weakness_cwe=claim.weakness_cwe, evidence_relation_ids=tuple(supporting), environment_sha256=None,
+                policy_sha256=record["policy_sha256"], scorer_actor_id=scorer_actor(provider.implementation_version),
+                reference_cvss=tuple(dict(item) for item in reference.get("reference_cvss", ())),
+                kev_listed=reference.get("kev_listed"),
+                factors=factor_registry.extract(data, wanted) if wanted else None)
+            outcome = registry.score(provider_id, request)
+            if isinstance(outcome, Gap):
+                writer.record_gap(outcome)
+                continue
+            package = score_package_json(outcome)
+            schemas.validate("score-package", package)
+            path = Path(out_dir) / f"{package['score_id']}.json"
+            atomic_bytes(path, canonical_json(package))
+            scores.append({"score_id": package["score_id"], "claim_id": claim.claim_id, "sha256": file_sha256(path),
+                           "file": path.name, "provider": outcome.implementation_version,
+                           "band": package["native"].get("rating"), "missing_factors": package["missing_factors"]})
     receipt = writer.seal()
-    return {"schema": "appsec-review/inference-review-scores/1", "provider": "application_risk_matrix/1",
+    implementations = sorted(registry.get(item).implementation_version for item in registry.ids())
+    return {"schema": "appsec-review/inference-review-scores/2", "providers": implementations,
             "scores": sorted(scores, key=lambda item: item["score_id"]),
             "ledger_shard": {"events": receipt.event_count, "sha256": file_sha256(ledger_path)}}
 
@@ -415,4 +470,5 @@ def verify_receipts(projection: Projection, receipts_root: Path) -> int:
 
 
 __all__ = ["apply_policy", "audit", "build_handoff", "coverage_matrix", "completeness_gaps", "finding_packages",
-           "merge_claims", "merge_verified", "score_claims", "shard_records", "verify_receipts", "write_ledger"]
+           "merge_claims", "merge_verified", "score_claims", "scorer_actor", "shard_records", "verify_receipts",
+           "write_ledger"]

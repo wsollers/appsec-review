@@ -22,6 +22,8 @@
     "missing_factors",
     "evidence_relations",
     "factor_citations",
+    "factors",
+    "missing_factor_reasons",
     "limitations",
     "scorer",
     "input_fingerprint",
@@ -29,7 +31,7 @@
   ],
   "properties": {
     "schema": {
-      "const": "appsec-review/score-package/1"
+      "const": "appsec-review/score-package/2"
     },
     "score_id": {
       "$ref": "common.schema.json#/$defs/score_id"
@@ -266,13 +268,17 @@
       "$ref": "common.schema.json#/$defs/relation_ids"
     },
     "factor_citations": {
+      "description": "Per present score-factors/1 factor, the adjudicated evidence it was derived from.",
       "type": "array",
       "items": {
         "type": "object",
         "additionalProperties": false,
         "required": [
           "factor",
-          "evidence_relations"
+          "evidence_relations",
+          "entities",
+          "tag_assignments",
+          "references"
         ],
         "properties": {
           "factor": {
@@ -280,6 +286,89 @@
           },
           "evidence_relations": {
             "$ref": "common.schema.json#/$defs/relation_ids"
+          },
+          "entities": {
+            "type": "array",
+            "items": {
+              "$ref": "common.schema.json#/$defs/short_text"
+            },
+            "maxItems": 256,
+            "uniqueItems": true
+          },
+          "tag_assignments": {
+            "type": "array",
+            "items": {
+              "$ref": "common.schema.json#/$defs/short_text"
+            },
+            "maxItems": 256,
+            "uniqueItems": true
+          },
+          "references": {
+            "type": "array",
+            "items": {
+              "$ref": "common.schema.json#/$defs/short_text"
+            },
+            "maxItems": 32,
+            "uniqueItems": true
+          }
+        }
+      },
+      "maxItems": 32,
+      "uniqueItems": true
+    },
+    "factors": {
+      "description": "score-factors/1 values the provider consumed; each is on a closed scale and cited in factor_citations.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "factor",
+          "scale",
+          "value",
+          "detail"
+        ],
+        "properties": {
+          "factor": {
+            "$ref": "common.schema.json#/$defs/token"
+          },
+          "scale": {
+            "$ref": "common.schema.json#/$defs/token"
+          },
+          "value": {
+            "$ref": "common.schema.json#/$defs/token"
+          },
+          "detail": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "array",
+              "maxItems": 32,
+              "items": {
+                "$ref": "common.schema.json#/$defs/short_text"
+              }
+            }
+          }
+        }
+      },
+      "maxItems": 32,
+      "uniqueItems": true
+    },
+    "missing_factor_reasons": {
+      "description": "Why each missing factor or unproduced dimension is absent; absence is a gap, never a low value.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "factor",
+          "reason"
+        ],
+        "properties": {
+          "factor": {
+            "$ref": "common.schema.json#/$defs/token"
+          },
+          "reason": {
+            "$ref": "common.schema.json#/$defs/text"
           }
         }
       },
@@ -361,7 +450,7 @@
       "maxItems": 32
     },
     "reference_inputs": {
-      "description": "Labelled pinned-feed reference context about the lead advisory (NVD CVSS, CISA KEV, FIRST EPSS); never target evidence.",
+      "description": "Labelled pinned-feed reference context about the lead advisory (NVD CVSS, CISA KEV); never target evidence. epss is always null in packages from the scoring stage: EPSS is never a scoring input.",
       "type": "object",
       "additionalProperties": false,
       "required": [
