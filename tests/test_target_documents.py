@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from hashlib import sha256
+import json
 from pathlib import Path
 import shutil
 
@@ -63,6 +64,21 @@ def test_northwind_contracts_intent_and_resolving_source_identity() -> None:
     assert all(link["from"] in ids and link["to"] in ids and link["authority"] == "intent"
                for link in result.links)
     assert {link["relation"] for link in result.links} == {"mentions_route", "mentions_boundary"}
+    linked = {endpoint for link in result.links for endpoint in (link["from"], link["to"])}
+    for record in result.records:
+        if record["id"] not in linked:
+            continue
+        source_line = (FIXTURES / record["path"]).read_text(encoding="utf-8").splitlines()[record["line"] - 1]
+        if record["subtype"] == "operation":
+            assert source_line.strip().startswith(f'"{record["fields"]["method"].lower()}":')
+        elif record["kind"] == "postman":
+            assert '"raw":' in source_line
+        elif record["subtype"] == "threat":
+            assert record["fields"]["threat_id"] in source_line
+        elif record["subtype"] == "boundary":
+            assert record["fields"]["boundary_id"] in source_line
+        else:
+            assert record["fields"]["route"].split("/{", 1)[0] in source_line
 
 
 def test_accepted_inventory_integrity_failures_stop_collection(tmp_path: Path) -> None:
@@ -114,6 +130,23 @@ def test_typescript_openapi_source_is_not_executed_or_misreported_as_parsed() ->
                                       _inventory(FIXTURES, {"openapi.ts": "openapi"}))
     assert result.records == ()
     assert result.gaps[0]["reason"] == "unsupported_format"
+
+
+def test_duplicate_postman_urls_resolve_to_distinct_request_lines(tmp_path: Path) -> None:
+    collection = {"item": [
+        {"name": "first", "request": {"method": "GET", "url": {"raw": "{{baseUrl}}/api/v1/orders/10248"}}},
+        {"name": "second", "request": {"method": "GET", "url": {"raw": "{{baseUrl}}/api/v1/orders/10248"}}},
+    ]}
+    (tmp_path / "postman.json").write_text(json.dumps(collection, indent=2), encoding="utf-8")
+    result = collect_target_documents(tmp_path, SNAPSHOT, _inventory(tmp_path, {"postman.json": "postman"}))
+    assert not result.gaps
+    requests = [record for record in result.records if record["subtype"] == "request"]
+    assert len(requests) == 2
+    assert requests[0]["line"] < requests[1]["line"]
+    assert requests[0]["id"] != requests[1]["id"]
+    source_lines = (tmp_path / "postman.json").read_text(encoding="utf-8").splitlines()
+    assert all('"raw": "{{baseUrl}}/api/v1/orders/10248"' in source_lines[record["line"] - 1]
+               for record in requests)
 
 
 def test_target_text_remains_data(tmp_path: Path) -> None:

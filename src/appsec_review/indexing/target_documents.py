@@ -178,6 +178,7 @@ def collect_target_documents(
                 if not isinstance(document, dict) or not isinstance(document.get("item"), list):
                     gaps.append({"path": path, "reason": "parse_error", "detail": "invalid Postman collection"})
                     continue
+                url_occurrences: dict[str, int] = {}
                 def walk(items: list[Any], depth: int = 0) -> None:
                     if depth > 12:
                         gaps.append({"path": path, "reason": "depth_limit", "detail": "Postman nesting"})
@@ -196,8 +197,12 @@ def collect_target_documents(
                         if method not in METHODS or not isinstance(raw_url, str):
                             continue
                         route = _route(raw_url)
-                        line = next((i for i, value in enumerate(lines, 1)
-                                     if json.dumps(raw_url) in value), None)
+                        key = "raw" if isinstance(url, dict) else "url"
+                        marker = json.dumps(key) + ": " + json.dumps(raw_url)
+                        matches = [i for i, value in enumerate(lines, 1) if value.lstrip().startswith(marker)]
+                        occurrence = url_occurrences.get(marker, 0)
+                        line = matches[occurrence] if occurrence < len(matches) else None
+                        url_occurrences[marker] = occurrence + 1
                         if line is None:
                             gaps.append({"path": path, "reason": "unresolved_span", "detail": f"{method} {route}"})
                             continue
