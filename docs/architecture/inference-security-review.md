@@ -38,8 +38,9 @@ The job follows these non-negotiable rules:
    verification. Proof-of-trigger execution is separately authorized and is never a prerequisite
    for truthful confirmation when the other evidence is sufficient.
 
-Repository-agent authority lives in root `AGENTS.md`, and bounded agent procedures live under
-`skills/`. Shared review-worker rules live once in `pipeline/prompt-fragments/governing-rules.md`,
+Repository-agent authority lives in root `AGENTS.md`. Development skills live under
+`.claude/skills/` and never reach a job. Runtime skills live under `pipeline/skills/` and are
+loaded only through the registered runtime-skill loader; this job uses none. Shared review-worker rules live once in `pipeline/prompt-fragments/governing-rules.md`,
 with personas, stack profiles, and roles under `pipeline/prompt-fragments/personas/`,
 `pipeline/prompt-fragments/stacks/`, and `pipeline/prompt-fragments/roles/`; runtime configuration lives in `appsec-review.toml`. This design uses those rebuilt
 sources directly and does not depend on or recover the archived process harness.

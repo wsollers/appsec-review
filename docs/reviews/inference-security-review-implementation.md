@@ -5,7 +5,7 @@ Record of the 2026-10-12 work on branch `ccr-67a0aeda-uyt6x6`. It took the
 for planning" to a registered, tested slice 1 of `job_inference_security_review`. This is a
 historical and decision record. The design and the
 [operations page](../operations/inference-security-review.md) remain the current authority. The
-reusable procedure is in [`skills/parallel-implementation`](../../skills/parallel-implementation/SKILL.md).
+reusable procedure is in the development skill [`.claude/skills/parallel-implementation`](../../.claude/skills/parallel-implementation/SKILL.md).
 
 ## 1. Readiness review
 
@@ -129,3 +129,26 @@ No live model has been run.
   - The planned dataflow, call-graph, guard and entry-point queries.
   - A closed `security_predicate` vocabulary (design open question 10).
   - Live-model acceptance.
+
+## 7. Skill separation (follow-up)
+
+The procedure from this work was first committed under the old top-level `skills/` directory. Three
+jobs loaded runtime guidance from that directory, and the Dagster image copied it, so a development
+procedure could have reached job runs. Skills are now split:
+- development skills live in `.claude/skills/` (`audience: repository-agent`);
+- runtime skills live in `pipeline/skills/` (`audience: runtime-worker`). They are registered with
+  their allowed jobs in `pipeline/guidance/registry.json` and loaded only through
+  `guidance.skills.load_runtime_skill`.
+
+`tests/test_skill_separation.py` enforces:
+- there is no top-level `skills/` directory;
+- runtime skills match the registry and carry the runtime audience;
+- development skills are never registered and carry the development audience;
+- `pipeline/` carries no development material;
+- application code names no skill location outside the loader;
+- the runtime image copies no development skills, and `.dockerignore` excludes `.claude`;
+- the loader rejects development, unregistered, unauthorized, wrong-audience and symlinked skills.
+
+Adding the `audience` line changed the three runtime skills' bytes. Their guidance hashes therefore
+changed once, which invalidates cached model calls for those three jobs.
+

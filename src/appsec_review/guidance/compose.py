@@ -52,7 +52,7 @@ PROHIBITED_DECISIONS = frozenset({
     "read_target_guidance", "execute_code", "change_configuration", "override_score",
 })
 REGISTRY_KEYS = frozenset({"schema", "version", "roles", "personas", "stacks", "tasks", "assignment",
-                           "persona_migrations"})
+                           "persona_migrations", "runtime_skills"})
 TASK_INPUT_FORBIDDEN = frozenset({"readable_roots", "tools", "granted_tools", "authority", "role", "persona",
                                   "stack", "model", "model_profile", "budget", "permissions"})
 _KEY = re.compile(r"^[a-z][a-z0-9_]*$")

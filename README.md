@@ -505,8 +505,8 @@ docker run --rm appsec-review-dagster-test
 | `deploy/dagster/` | Compose stack, bootstrap, lifecycle, and verification scripts. |
 | `tools/` | cve-bin-tool database builder and the Grype snapshot publisher. |
 | `rules/` | Checked-in rules: SEI CERT and Semgrep packs, C++ CERT CodeQL mappings, PMD; mounted read-only in Dagster. |
-| `pipeline/` | Review-worker guidance: governing rules, personas, roles, and the guidance registry. |
-| `skills/` | Bounded agent procedures loaded only when relevant. |
+| `pipeline/` | Review-worker guidance: governing rules, personas, stacks, roles, tasks, the guidance registry, and registered runtime skills (`pipeline/skills/`). |
+| `.claude/skills/` | Development skills for agents working on this repository; never loaded by jobs or shipped in runtime images. |
 | `data/reference/` | Committed reference data (OWASP standards and the security-tag taxonomy). |
 | `data/feeds/` | Synced feed snapshots (local, ignored). |
 | `targets/` | Review target checkouts (local, ignored). |

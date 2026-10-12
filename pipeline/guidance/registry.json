@@ -72,6 +72,11 @@
     "api_web": "network_api_surface",
     "deployment_operations": "cloud_container_deployment"
   },
+  "runtime_skills": {
+    "build-image-repair": {"path": "pipeline/skills/build-image-repair/SKILL.md", "jobs": ["job_project_build"]},
+    "post-build-security-assessment": {"path": "pipeline/skills/post-build-security-assessment/SKILL.md", "jobs": ["job_post_build_security_assessment"]},
+    "target-analysis-planning": {"path": "pipeline/skills/target-analysis-planning/SKILL.md", "jobs": ["job_target_analysis_plan"]}
+  },
   "assignment": {
     "domain_persona": {"authentication_session": "authentication_session", "authorization_access_control": "authorization_access_control", "cryptography_data_protection": "cryptography_data_protection", "api_web": "api_web", "mobile_platform": "mobile_platform", "build_supply_chain": "build_supply_chain", "deployment_operations": "deployment_operations"}
   }

@@ -11,12 +11,13 @@ from .fragments import (
     parse_fragment, parse_task,
 )
 from .routing import hunt_panel, partition_check, route_persona, route_stack
+from .skills import RuntimeSkill, load_runtime_skill
 
 
 __all__ = [
     "BUNDLE_SCHEMA", "PERSONA_SECTIONS", "PERSONA_VIEWS", "STACK_SECTIONS", "Fragment", "GuidanceError",
-    "TaskPrompt", "bundle_sha256", "compose_bundle", "expand_coverage", "governing_rules", "hunt_panel",
-    "load_fragment", "load_persona_covers", "load_registry", "load_task", "load_tool_names", "parse_fragment",
+    "RuntimeSkill", "TaskPrompt", "bundle_sha256", "compose_bundle", "expand_coverage", "governing_rules", "hunt_panel",
+    "load_fragment", "load_persona_covers", "load_registry", "load_runtime_skill", "load_task", "load_tool_names", "parse_fragment",
     "parse_task", "partition_check", "pin_bundle", "render_prompt", "route_persona", "route_stack",
     "validate_registry", "verify_bundle",
 ]

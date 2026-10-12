@@ -56,7 +56,7 @@ secret-like environment names are rejected.
 Each unseen recipe is probed against the default family image first. If it fails and the model is
 enabled, the job copies the exact generated Dockerfile and bounded diagnostics into
 `repair-NNN/` under the probe task, sends an `appsec-review/build-image-repair-request/1` summary
-with the `skills/build-image-repair/SKILL.md` guidance, and accepts only an
+with the runtime skill `pipeline/skills/build-image-repair/SKILL.md` guidance, and accepts only an
 `appsec-review/build-image-repair/1` proposal: a new, unique apt package set (1-64 packages) and a
 reason. Commands, paths, environment, dependency files, outputs, base image, and container policy
 cannot change. Each attempt rebuilds the image, re-probes it, and is recorded with its outcome;

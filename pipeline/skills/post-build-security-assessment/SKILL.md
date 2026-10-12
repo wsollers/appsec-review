@@ -1,6 +1,7 @@
 ---
 name: post-build-security-assessment
 description: Bounded guidance used by the post-build security inference task.
+audience: runtime-worker
 ---
 
 # Post-build security inference

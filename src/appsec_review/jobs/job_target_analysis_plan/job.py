@@ -31,6 +31,7 @@ from .planning import (
     validate_plan, validate_proposal,
 )
 from appsec_review.jobs.job_target_analysis_plan.datasets import CONSUMES, DATASETS
+from appsec_review.guidance.skills import load_runtime_skill
 
 
 TOPOLOGY = {
@@ -230,10 +231,8 @@ def build_job(*, infer: Infer | None = None, fail_task: str | None = None) -> Jo
                     "terminal_status": "COMPLETED_WITH_GAPS"}
         catalog = unit.output("catalog_summary.load_accepted_catalog")["catalog"]
         summary = unit.output("catalog_summary.summarize_components")["summary"]
-        guidance_path = unit.job.repository_root / "skills" / "target-analysis-planning" / "SKILL.md"
-        if not guidance_path.is_file():
-            guidance_path = Path(__file__).parents[4] / "skills" / "target-analysis-planning" / "SKILL.md"
-        guidance = guidance_path.read_text(encoding="utf-8")
+        guidance = load_runtime_skill(unit.job.repository_root, "target-analysis-planning",
+                                      job_id="job_target_analysis_plan").text
         prompt_root = unit.job.repository_root / "pipeline" / "prompt-fragments"
         if not prompt_root.is_dir():
             prompt_root = Path(__file__).parents[4] / "pipeline" / "prompt-fragments"

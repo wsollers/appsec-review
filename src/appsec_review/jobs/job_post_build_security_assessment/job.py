@@ -26,6 +26,7 @@ from .assessment import (
     normalize_action, shard_fingerprint, validate_inference,
 )
 from appsec_review.jobs.job_post_build_security_assessment.datasets import CONSUMES, DATASETS
+from appsec_review.guidance.skills import load_runtime_skill
 
 PROJECT_TASKS = ("native_units",)
 TOPOLOGY = {
@@ -418,8 +419,8 @@ def build_job(*, infer: Infer | None = None) -> Job:
             inspection_value = _stage_case(unit, "inspection", case_id)
             deterministic_value = _stage_case(unit, "deterministic", case_id)
             settings = unit.job.config.settings["model"]
-            guidance_path = unit.job.repository_root / "skills" / "post-build-security-assessment" / "SKILL.md"
-            guidance = guidance_path.read_text(encoding="utf-8") if guidance_path.is_file() else GUIDANCE_IDENTITY
+            guidance = load_runtime_skill(unit.job.repository_root, "post-build-security-assessment",
+                                          job_id="job_post_build_security_assessment").text
             guidance_sha = hashlib.sha256(guidance.encode()).hexdigest()
             bundle = unit.job.run_root / "data" / "guidance" / guidance_sha
             atomic_bytes(bundle / "SKILL.md", guidance.encode())

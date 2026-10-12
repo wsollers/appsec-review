@@ -9,10 +9,10 @@ Relevant bounded procedures and design references:
 - [`operations/inference-security-review.md`](operations/inference-security-review.md) — model selection and upgrade, local capacity overlay, and outcomes for the inference security review; design in [`architecture/inference-security-review.md`](architecture/inference-security-review.md).
 - [`operations/review-data-indexing.md`](operations/review-data-indexing.md) — dataset inventory and publication audit, lead menus, stage-1 products, and offline FTS validation; design in [`architecture/indexing-and-query-reuse.md`](architecture/indexing-and-query-reuse.md).
 - [`../deploy/dagster/README.md`](../deploy/dagster/README.md) — deployment lifecycle and live verification.
-- [`../skills/target-analysis-planning/SKILL.md`](../skills/target-analysis-planning/SKILL.md) — model-side proposal constraints for target analysis ambiguity.
-- [`../skills/build-image-repair/SKILL.md`](../skills/build-image-repair/SKILL.md) — bounded apt-package proposals for failed project-build image probes.
-- [`../skills/post-build-security-assessment/SKILL.md`](../skills/post-build-security-assessment/SKILL.md) — bounded guidance for the post-build security inference task.
-- [`../skills/parallel-implementation/SKILL.md`](../skills/parallel-implementation/SKILL.md) — repository-agent procedure for splitting an approved design into parallel agent chunks and merging them.
+- [`../pipeline/skills/target-analysis-planning/SKILL.md`](../pipeline/skills/target-analysis-planning/SKILL.md) — model-side proposal constraints for target analysis ambiguity.
+- [`../pipeline/skills/build-image-repair/SKILL.md`](../pipeline/skills/build-image-repair/SKILL.md) — bounded apt-package proposals for failed project-build image probes.
+- [`../pipeline/skills/post-build-security-assessment/SKILL.md`](../pipeline/skills/post-build-security-assessment/SKILL.md) — bounded guidance for the post-build security inference task.
+- [`../.claude/skills/parallel-implementation/SKILL.md`](../.claude/skills/parallel-implementation/SKILL.md) — development skill (repository agents only) for splitting an approved design into parallel agent chunks and merging them.
 - [`reviews/inference-security-review-implementation.md`](reviews/inference-security-review-implementation.md) — slice 1 implementation record: readiness decisions, partition, merges, reconciliations, verification, and outstanding work.
 - [`architecture/jobs-and-runtime.md`](architecture/jobs-and-runtime.md) — semantic jobs and orchestration.
 - [`architecture/build-environments-and-execution-capture.md`](architecture/build-environments-and-execution-capture.md) — shared capture architecture, conditional-control design status, and the pinned fixture matrix.
