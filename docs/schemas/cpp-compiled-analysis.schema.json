@@ -8,12 +8,14 @@
   "properties": {
     "schema": {"const": "appsec-review/cpp-compiled-analysis/2"},
     "project_count": {"type": "integer", "minimum": 0},
-    "branch_count": {"const": 7},
+    "branch_count": {"const": 5, "description": "len(BRANCHES): compiled, ast, ir, infer, binary"},
     "physical_shard_count": {"type": "integer", "minimum": 0},
     "gaps": {"type": "array", "maxItems": 256, "items": {"type": "string", "maxLength": 4096}},
     "dispositions": {
       "type": "object",
-      "additionalProperties": {"enum": ["SUCCEEDED", "COMPLETED_WITH_GAPS", "FAILED_AS_GAP", "BLOCKED_BY_CONFIGURE", "BLOCKED_BY_COMPILE", "INVALID_COMPILE_DATABASE"]}
+      "description": "Per-project branch status keyed '<case-id>:<branch>'; a blocked or failed upstream case is recorded as COMPLETED_WITH_GAPS with its gap.",
+      "propertyNames": {"pattern": ":(compiled|ast|ir|infer|binary)$"},
+      "additionalProperties": {"enum": ["SUCCEEDED", "COMPLETED_WITH_GAPS"]}
     }
   }
 }

@@ -81,6 +81,14 @@ Bulk products live under ignored `runs/<run-id>/`. Accepted `build`, `compiled`,
 `read_excerpt`, `trace`, `resolve_evidence`, and `coverage` interfaces. Build artifacts and tool
 observations are evidence, not adjudicated findings.
 
+The acceptance task writes `cpp-compiled-summary.json` (schema
+`appsec-review/cpp-compiled-analysis/2`, described by
+[`../schemas/cpp-compiled-analysis.schema.json`](../schemas/cpp-compiled-analysis.schema.json)).
+It records `branch_count` 5 and one `<case-id>:<branch>` disposition per project and branch, either
+`SUCCEEDED` or `COMPLETED_WITH_GAPS`; a project blocked upstream is recorded as
+`COMPLETED_WITH_GAPS` with its named gap. With no accepted native project the plan step is
+`NOT_APPLICABLE` and the disposition map is empty.
+
 Resume the same application run. Completed unit receipts and immutable fingerprinted shards are
 reused. Generic build reuse is decided upstream from source, recipe, dependency, image, probe,
 executor, capture, and handoff identities. An Infer image or adapter change affects Infer
