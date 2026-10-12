@@ -5,8 +5,10 @@ docs/architecture/code-graph-precomputation.md (D4, sections 7.1 to 7.4) is norm
 ``load.accepted_inputs``
     Reads the accepted ``job_codeql_analysis`` handoff and the accepted retrieval manifest, verifies
     every succeeded scope's export directory against the export-manifest identity bound to that
-    handoff (a mismatch is an :class:`IntegrityError`), assigns each clangd/IR/AST shard to exactly one
-    CodeQL scope, computes every scope's checkpoint identity and reuses verified checkpoints.
+    handoff (a mismatch is an :class:`IntegrityError`), checks the graph catalog against the run-bound
+    CodeQL export pin, restores clangd/IR/AST shards the accepted manifest dropped from their producers'
+    verified handoffs, assigns each clangd/IR/AST shard to exactly one CodeQL scope, computes every
+    scope's checkpoint identity and reuses verified checkpoints.
 ``normalize.scopes``
     ``graph.normalize.normalize_scope`` per scope that needs a rebuild.
 ``crosscheck.scopes``
@@ -35,6 +37,7 @@ from appsec_review.graph.contract import Coverage, Family, GraphSettings, Produc
 from appsec_review.graph.correlate import correlate
 from appsec_review.graph.crosscheck import CrossCheckInputs, cross_check, read_secondary
 from appsec_review.graph.normalize import COLUMNS_PATH, EXPORT_UPSTREAM_INDEX, normalize_scope
+from appsec_review.graph.settings import RunConfigurationError, catalog_pins, run_configuration
 from appsec_review.indexing.store import ShardSet
 from appsec_review.retrieval import IndexIdentity, write_manifest
 from appsec_review.retrieval.core import resolve_accepted_manifest
@@ -88,6 +91,33 @@ def _validate(context, _result) -> None:
     GraphSettings.from_mapping(context.config.settings.get("graph"))
 
 
+def verify_catalog_pin(run_root: Path, current: Catalog, scopes: list[Mapping[str, Any]]) -> None:
+    """The catalog read here must be the one the run's CodeQL export configuration pins.
+
+    ``jobs.job_codeql_analysis.settings.languages.<language>.export_queries.catalog_sha256`` in the
+    run-bound resolved configuration names the catalog every succeeded export was verified against
+    (``_verify_export_sources``). A different catalog here would classify facts under rules the run
+    never pinned, so any mismatch, or a run without a bound configuration, is an integrity error.
+    """
+    exported = sorted({str(scope["language"]) for scope in scopes if scope["export_status"] == s.SUCCEEDED})
+    if not exported:
+        return
+    try:
+        document = run_configuration(run_root)
+    except RunConfigurationError as error:
+        raise IntegrityError(str(error)) from error
+    if document is None:
+        raise IntegrityError("the run has no bound configuration; the graph catalog pin cannot be verified")
+    pins = catalog_pins(document)
+    for language in exported:
+        pinned = pins.get(language, frozenset())
+        if current.sha256 not in pinned:
+            raise IntegrityError(
+                f"graph catalog {current.sha256} differs from the {language} pin in "
+                f"jobs.job_codeql_analysis.settings.languages.{language}.export_queries.catalog_sha256 "
+                f"({', '.join(sorted(pinned)) or 'none configured'})")
+
+
 def build_job(*, catalog_path: Path | None = None) -> Job:
     """Build the job; ``catalog_path`` overrides the repository catalog (tests only)."""
 
@@ -112,10 +142,12 @@ def build_job(*, catalog_path: Path | None = None) -> Job:
         manifest, _ = load_verified_manifest(run_root, manifest_path, manifest_sha)
         shard_set = ShardSet(run_root, manifest["indexes"])
         current = catalog()
+        verify_catalog_pin(run_root, current, codeql["scopes"])
         columns = hashlib.sha256(COLUMNS_PATH.read_bytes()).hexdigest()
         tool_version = s.codeql_version(run_root)
         implementation = s.implementation_identity()
-        secondary = s.assign_secondary(run_root, shard_set.shards, codeql["scopes"])
+        restored = s.restored_secondary(run_root, shard_set.shards)
+        secondary = s.assign_secondary(run_root, [*shard_set.shards, *restored], codeql["scopes"])
         priority = s.priority_shards(shard_set) or None
         values: list[dict[str, Any]] = []
         for record in codeql["scopes"]:
@@ -136,14 +168,14 @@ def build_job(*, catalog_path: Path | None = None) -> Job:
             "accepted_manifest": {"path": manifest_path.relative_to(run_root).as_posix(), "sha256": manifest_sha},
             "catalog": {"sha256": current.sha256, "version": current.version, "revision": current.revision},
             "columns_sha256": columns, "settings": asdict(settings), "tool_version": tool_version,
-            "implementation": implementation, "scopes": values}
+            "implementation": implementation, "restored_secondary": restored, "scopes": values}
         summary = unit.unit_root / "code-graph-inputs.json"
         atomic_json(summary, {**document, "scopes": [
             {key: scope[key] for key in ("scope_id", "language", "build_unit_id", "export_status", "identity")}
             | {"reused": scope["reused"] is not None} for scope in values]})
         unit.job.events.write("CODE_GRAPH_INPUTS_LOADED", scope_count=len(values),
                               reused_count=sum(scope["reused"] is not None for scope in values),
-                              catalog_sha256=current.sha256)
+                              restored_secondary_count=len(restored), catalog_sha256=current.sha256)
         return {**document, "artifact": s.artifact(run_root, summary), "scope_count": len(values),
                 "reused_count": sum(scope["reused"] is not None for scope in values), "gaps": [],
                 "terminal_status": "SUCCEEDED" if values else "NOT_APPLICABLE"}
@@ -286,8 +318,13 @@ def build_job(*, catalog_path: Path | None = None) -> Job:
         run_root = unit.job.run_root
         upstream_path, upstream_sha = resolve_accepted_manifest(run_root)
         upstream, _ = load_verified_manifest(run_root, upstream_path, upstream_sha)
+        # Secondary shards the accepted manifest had dropped were consumed from their producers' own
+        # verified handoffs; this manifest composes them back so every consumed shard stays resolvable.
+        restored = [item for item in loaded.get("restored_secondary", ())
+                    if (str(item["name"]), str(item.get("shard_id", "default"))) not in {
+                        (str(entry["name"]), str(entry.get("shard_id", "default"))) for entry in upstream["indexes"]}]
         present = {(str(item["name"]), str(item.get("shard_id", "default")), str(item["sha256"]))
-                   for item in upstream["indexes"]}
+                   for item in (*upstream["indexes"], *restored)}
         consumed = {(shard["name"], shard["shard_id"], shard["sha256"])
                     for scope in loaded["scopes"] for values in (
                         *scope["inputs"]["secondary"].values(), scope["inputs"]["observations"],
@@ -296,8 +333,8 @@ def build_job(*, catalog_path: Path | None = None) -> Job:
         if missing:
             raise IntegrityError("the accepted manifest no longer holds the shards this graph was built from: "
                                  + ", ".join(f"{name}/{shard_id}" for name, shard_id, _ in missing[:10]))
-        base = [IndexIdentity(**{**item, "gaps": tuple(item.get("gaps", ()))}) for item in upstream["indexes"]
-                if (item.get("producer") or {}).get("job") != JOB_ID]
+        base = [IndexIdentity(**{**item, "gaps": tuple(item.get("gaps", ()))})
+                for item in (*upstream["indexes"], *restored) if (item.get("producer") or {}).get("job") != JOB_ID]
         indexes = [IndexIdentity(**{**shard, "gaps": tuple(shard.get("gaps", ()))})
                    for scope in published["scopes"] for shard in scope["shards"]]
         manifest_path = run_root / "data" / "indices" / "manifests" / f"code-graph-{unit.job.attempt_id}.json"

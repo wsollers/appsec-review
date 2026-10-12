@@ -1798,6 +1798,7 @@
         "indexes",
         "query_sets",
         "graph_families",
+        "graph_scopes",
         "entity_ids",
         "max_page_size",
         "max_pages",
@@ -1832,6 +1833,15 @@
             ]
           },
           "uniqueItems": true
+        },
+        "graph_scopes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[!-~]{1,256}$"
+          },
+          "uniqueItems": true,
+          "description": "CodeQL scope ids whose accepted graph facts belong to this package scope; a review cell may receive and cite graph rows of exactly these scopes."
         },
         "entity_ids": {
           "$ref": "#/$defs/inference_identities"

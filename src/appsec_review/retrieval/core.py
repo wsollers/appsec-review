@@ -115,8 +115,13 @@ class RetrievalCore:
         self.target_root = Path(str(self.manifest["target_root"])).resolve()
         self.limits = limits or RetrievalLimits()
         if graph_settings is None:
-            from appsec_review.graph.contract import GraphSettings
-            graph_settings = GraphSettings()
+            # The run-bound jobs.job_code_graph_index.settings.graph bounds, so review cells and MCP
+            # sessions use the caps the run was configured with; contract defaults when unconfigured.
+            from appsec_review.graph.settings import RunConfigurationError, run_graph_settings
+            try:
+                graph_settings = run_graph_settings(self.run_root)
+            except RunConfigurationError as exc:
+                raise RetrievalIntegrityError(str(exc)) from exc
         self.graph_settings = graph_settings
         self.clock = clock
         grouped: dict[str, list[Mapping[str, Any]]] = {}

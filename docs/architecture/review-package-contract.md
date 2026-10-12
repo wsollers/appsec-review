@@ -43,7 +43,7 @@ exact route registration is not proof of control enforcement.
 | `evidence`, `context` | Accepted observation, priority, CodeQL, source, build and precomputed shard identities; `find`, `trace`, `resolve_evidence`, `query_codeql`, `query_hotspots`, `query_precomputed`. A cited relation is a nomination until it resolves to a source line or hash-verified run artifact. |
 | `proof_obligations` | Deterministic rule table keyed by lead class and observed prerequisites: affected construct, input control, reachability, guard/configuration state, and impact. Missing predicates stay open; model prose cannot close them. |
 | `coverage_gaps` | Accepted index coverage, dataset inventory, query-set and language/build-unit cells; `coverage`, `query_dataset_inventory`. A failed, absent or skipped producer is a named gap. |
-| `retrieval` | Intersection of accepted package identities, available index names, query sets and configured caps, plus `graph_families` (v4): the code-graph families accepted for the package scope. These are grants proposed by assembly, not an MCP authorization token. |
+| `retrieval` | Intersection of accepted package identities, available index names, query sets and configured caps, plus `graph_families` (v4): the code-graph families accepted for the package scope, and `graph_scopes` (v4): the CodeQL scope ids of those facts, which bound every capability's scope-checked graph grant. These are grants proposed by assembly, not an MCP authorization token. |
 
 Each `context` entry is typed `{id, kind, role}`. `kind` is the retrieval entity kind of `id`.
 `role` is one of `source`, `artifact`, `component`, `build_unit`, `duplicate_of`, `flow`,
@@ -69,10 +69,17 @@ applying shard covers it in any state but `unavailable`.
   `truncated` gap.
 - `coverage_gaps` carry the scope's `code_graph` lane: `partial` for families covered only
   partially and `unavailable` for families with no accepted coverage. Without any accepted `graph`
-  index every package carries a `code_graph` `missing` gap and the manifest a run-level one.
+  index every package carries a `code_graph` `missing` gap, and the accepted scope's `code_graph`
+  producer (`review/scope.py`) adds the run-level one.
 - `retrieval.graph_families` also decides lane B strategies: `sink_site` provides
   `source_sink_facts` (`sink_up`) and `entry_point` provides `entry_point_catalog` (`entry_down`)
   for that package only (`guidance/routing.py::unit_sources`). Symbol links unlock no strategy.
+
+- `retrieval.graph_scopes` lists the CodeQL `scope_id`s of the applying shards that are not
+  `unavailable`. A review cell's `CellCapability` and the scoped MCP adapter accept a `graph` row
+  outside the package's exact `entity_ids` only when the row's accepted `payload.scope.scope_id` is
+  listed; the row and the graph identities its payload references then become addressable and
+  citable by that cell. Rows of every other scope are withheld. There is no kind-wide grant.
 
 Graph context is a search aid. An embedded identity is evidence only when a cell cites it and
 `resolve_relation` re-resolves it under `evidence-admissibility/2`.
@@ -161,8 +168,8 @@ hashes, sorted uniqueness, cited identities, page/byte caps and membership invar
 | Slice | Current accepted producer/index | Query or precompute | Missing dependency and required gap |
 |---|---|---|---|
 | All languages, source | target catalog `source`; Tree-sitter `analysis` where grammar/scope succeeds | `search`, `find`, `read_excerpt`, `trace`, `query_precomputed(symbol_links)` | Parse failure or unsupported grammar is per language/scope; no symbol/call graph inference from syntax alone. |
-| C/C++ build units | language build, compiled analysis, clangd symbols; `build`, `compiled`, `analysis` | `query_build_security`, `query_artifacts`, `symbol_links` | LLVM direct-call and Clang AST are partial. No Joern graph edge until a bounded, source-mapped export is accepted. |
-| Go, Java/Kotlin, C#, JavaScript/TypeScript, Python, Rust build units | accepted build/artifact shards; CodeQL `observations` only for successfully executed scopes | `query_artifacts`, `query_codeql`, `build_provenance`, `scanner_correlation` | Build/CodeQL absence is per unit and language. CodeQL path steps do not become general call/dataflow graph edges. |
+| C/C++ build units | language build, compiled analysis, clangd symbols; `build`, `compiled`, `analysis`; CodeQL graph exports normalized by `job_code_graph_index` into `graph` | `query_build_security`, `query_artifacts`, `symbol_links`, `query_code_graph` | Graph families are per CodeQL scope and family, with `complete`/`partial`/`unavailable` rows. LLVM direct-call and Clang AST are cross-check inputs only. Joern is deprecated and disabled by default (`unavailable` rows). |
+| Go, Java/Kotlin, C#, JavaScript/TypeScript, Python, Rust build units | accepted build/artifact shards; CodeQL `observations` only for successfully executed scopes | `query_artifacts`, `query_codeql`, `build_provenance`, `scanner_correlation` | Build/CodeQL absence is per unit and language. No graph export pack exists yet, so every graph family is `unavailable` for these scopes; CodeQL path steps do not become general call/dataflow graph edges. |
 | PHP, shell and other catalog languages | source/Tree-sitter and applicable SAST observations | `query_observations`, `scanner_correlation`, `search` | CodeQL, compiled and symbol lanes unavailable unless a matching accepted shard exists. |
 | Cross-cutting build, CI, history, control and intelligence | accepted artifact, CI, history, priority, OWASP and pinned reference shards | `query_artifacts`, `query_ci_configuration`, `query_change_context`, `query_hotspots`; `query_precomputed` products `artifact_inventory`, `dependency_advisories`, `ci_trust`, `history_context`, `control_evidence`, `reference_intelligence` | Missing input/feed, stale feed or partial source yields a named query-set gap, not complete coverage. |
 
@@ -171,10 +178,12 @@ hashes, sorted uniqueness, cited identities, page/byte caps and membership invar
 `build_provenance`, `artifact_inventory`, `dependency_advisories`, `scanner_correlation`,
 `ci_trust`, `history_context`, `control_evidence`, `reference_intelligence` and `symbol_links`.
 The five link families are `representation`, `finding_source`, `package_advisory`,
-`symbol_syntax` and `history_code`. The graph products `call_graph`, `control_flow`,
-`dataflow`, `sarif_correlation`, `ast_ir_cpg_mapping`, `guards_ranges`, `entrypoint_paths`,
-`hotspot_context` and `review_package` remain planned. `job_cpg_analysis` retains a Joern
-binary artifact, not accepted graph export. The optional SQLite FTS image validates a derived
+`symbol_syntax` and `history_code`. The seven former graph query sets (`call_graph`,
+`control_flow`, `dataflow`, `sarif_correlation`, `ast_ir_cpg_mapping`, `guards_ranges`,
+`entrypoint_paths`) are retired: code-graph facts live in the `graph` index and are read through
+`query_code_graph` ([code-graph precomputation](code-graph-precomputation.md)). `hotspot_context`
+and `review_package` remain planned stage-3 products. `job_cpg_analysis` is deprecated and runs no
+Joern unless explicitly enabled. The optional SQLite FTS image validates a derived
 text stream; accepted in-process shards remain retrieval authority.
 
 ## Role-specific views and capability enforcement
@@ -183,9 +192,10 @@ The application creates a signed or MAC-protected, short-lived capability bindin
 manifest hash, package ID and hash, role, round, tool allowlist, index and query-set allowlists,
 entity scope, page/byte/depth caps and expiry**. MCP verifies the binding on every call before
 dispatch, then intersects request filters and result identities with the package grant. A cursor
-is bound to the same capability and query hash. The current `RetrievalMcpAdapter` checks tool
-names and argument keys but has no such role/package scope; this is planned work. Do not hand
-workers an unrestricted adapter while this gate is absent.
+is bound to the same capability and query hash. `mcp/capability.py::ScopedRetrievalMcpAdapter`
+implements this gate over the unrestricted `RetrievalMcpAdapter`, and review cells use the
+equivalent in-process `review/capability.py::CellCapability`. Both apply the package's
+`graph_scopes` grant to `query_code_graph` rows. Never hand workers the unrestricted adapter.
 
 | View | Package content | Tool reach |
 |---|---|---|
@@ -196,8 +206,10 @@ workers an unrestricted adapter while this gate is absent.
 No role receives arbitrary filesystem paths, shell, SQL, regex, target guidance, evaluator roots,
 raw argv/environment, network access or writes. Current MCP routes on `main` are core search,
 find, excerpt, trace, resolve, coverage, artifact/build/CI/CodeQL/change/OWASP queries, and
-`query_hotspots`, `query_precomputed`, `query_observations` and `query_dataset_inventory`
-(`mcp/schema.py`). Add no graph query route before accepted graph shards exist.
+`query_hotspots`, `query_precomputed`, `query_observations`, `query_dataset_inventory` and
+`query_code_graph` (`mcp/schema.py`). `query_code_graph` is the only graph route: closed modes and
+exact subject identities over accepted, hash-verified `graph` shards, with caps from the run-bound
+`jobs.job_code_graph_index.settings.graph`.
 
 ## Validation and Dagster handoff
 
@@ -221,15 +233,18 @@ configuration so an upstream change invalidates only affected packages and worke
 
 ## Ordered implementation
 
-1. Done: schema version 3 (pinned-feed advisory context, weaknesses, KEV admission and advisory
-   rank signals on top of version 2), deterministic assembly over accepted shards for both lanes,
-   membership audits and manifest publication in `src/appsec_review/review/`. The fixture tests
-   live in `tests/review/`, and the fixture builder is `tests/fixtures/inference_review/builder.py`.
-2. Add the single Dagster handoff that consumes the verified package manifest, and prove one
-   complete lead and one hunt partition end to end.
-3. Add capability-scoped MCP dispatch and red, blue and blind projections; test denied cross-
-   package queries and sealed verifier independence before running workers.
-4. Add per-language/build-unit dependency selection and gap accounting; extend graph products
-   only after Joern/LLVM source-mapped export is accepted and tested.
-5. Add full inference fan-out, adjudication and downstream accepted finding publication using
-   the existing inference design's evidence and independence gates.
+1. Done: schema version 4 (code-graph context roles, `retrieval.graph_families` and
+   `retrieval.graph_scopes` on top of version 3's pinned-feed advisory context, weaknesses, KEV
+   admission and advisory rank signals), deterministic assembly over accepted shards for both
+   lanes, membership audits and manifest publication in `src/appsec_review/review/`. The fixture
+   tests live in `tests/review/`, and the fixture builder is
+   `tests/fixtures/inference_review/builder.py`.
+2. Done: `job_inference_security_review` consumes the verified package manifest; the Dagster
+   acceptance and `tests/integration/test_code_graph_end_to_end.py` run lead and hunt packages end
+   to end.
+3. Done: capability-scoped dispatch (in-process `CellCapability`, `ScopedRetrievalMcpAdapter`) and
+   red, blue and blind projections, with denied cross-package and cross-scope queries tested.
+4. Partly done: C/C++ graph facts come from CodeQL exports (`graph` index). Per-language export
+   packs, and per-language/build-unit dependency selection, remain open.
+5. Partly done: inference fan-out and adjudication exist (slice 1); downstream accepted finding
+   publication remains open.

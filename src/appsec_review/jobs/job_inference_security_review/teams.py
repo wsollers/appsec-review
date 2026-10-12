@@ -255,6 +255,7 @@ def _cell(ctx: ReviewContext, work: PackageWork, routing: Mapping[str, Any], *, 
         run_id=ctx.run_id, manifest_sha256=ctx.core.manifest_sha256, package_id=work.package_id,
         package_sha256=work.sha256, role=role, round=0, tools=tools,
         indexes=tuple(name for name in ctx.index_names if name in INDEX_NAMES), entities=work.entities,
+        graph_scopes=tuple((work.document.get("retrieval") or {}).get("graph_scopes", ())),
         max_queries=max(1, profile.max_queries), max_turns=profile.max_turns,
         page_size=min(100, ctx.max_page_size), max_depth=min(8, ctx.max_depth), max_result_bytes=MAX_RESULT_BYTES)
     stack = str(routing["stack"])

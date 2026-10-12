@@ -6,10 +6,11 @@ import base64
 import hashlib
 import hmac
 import json
+import re
 import time
 from typing import Any, Mapping
 
-from appsec_review.graph.contract import GRAPH_INDEX, QUERY_CODE_GRAPH
+from appsec_review.graph.contract import FAMILY_KINDS, GRAPH_INDEX, QUERY_CODE_GRAPH
 from appsec_review.mcp.adapter import RetrievalMcpAdapter
 from appsec_review.retrieval.graph import request_error as graph_request_error
 from appsec_review.retrieval.model import canonical_json
@@ -27,6 +28,26 @@ _ROLE_TOOLS = {
     "verifier": _REVIEW_TOOLS,
 }
 _GRAPH_ARGUMENTS = frozenset({"mode", "subject", "depth", "sink_class", "source_class", "limit", "cursor"})
+# Graph-shard entity kinds (the seven fact families and the CodeQL-export symbols); see
+# review/capability.py ``GRAPH_ROW_KINDS``. Each carries the CodeQL ``payload.scope.scope_id``.
+_GRAPH_ROW_KINDS = frozenset({*(kind.value for kind in FAMILY_KINDS.values()), "symbol"})
+_LOGICAL_ID = re.compile(r"^asr:[a-z][a-z0-9_]*:[0-9a-f]{64}$")
+
+
+def _graph_scopes(package: Mapping[str, Any]) -> list[str]:
+    return sorted(str(item) for item in package["retrieval"].get("graph_scopes", ()))
+
+
+def _identities(value: Any):
+    if isinstance(value, str):
+        if _LOGICAL_ID.fullmatch(value):
+            yield value
+    elif isinstance(value, Mapping):
+        for child in value.values():
+            yield from _identities(child)
+    elif isinstance(value, (list, tuple)):
+        for child in value:
+            yield from _identities(child)
 
 
 def _encode(value: bytes) -> str:
@@ -46,7 +67,7 @@ def issue_capability(package: Mapping[str, Any], *, role: str, round_id: str, se
             "package_sha256": hashlib.sha256(canonical_json(package)).hexdigest(),
             "role": role, "round_id": round_id, "tools": sorted(_ROLE_TOOLS[role]),
             "indexes": package["retrieval"]["indexes"], "query_sets": package["retrieval"]["query_sets"],
-            "entity_ids": package["retrieval"]["entity_ids"],
+            "entity_ids": package["retrieval"]["entity_ids"], "graph_scopes": _graph_scopes(package),
             "max_page_size": package["retrieval"]["max_page_size"],
             "max_pages": package["retrieval"]["max_pages"],
             "max_depth": package["retrieval"]["max_depth"],
@@ -66,6 +87,8 @@ class ScopedRetrievalMcpAdapter:
         self._adapter, self._package = adapter, package
         self._capability, self._secret = capability, secret
         self._role, self._round_id = role, round_id
+        # Identities this session received in scope-checked graph rows (see ``_graph_row``).
+        self._granted: set[str] = set()
 
     def _grant(self) -> Mapping[str, Any]:
         try:
@@ -87,6 +110,7 @@ class ScopedRetrievalMcpAdapter:
             grant.get("package_sha256") != hashlib.sha256(canonical_json(package)).hexdigest() or
             set(grant.get("tools", ())) != _ROLE_TOOLS.get(self._role) or
             grant.get("entity_ids") != package["retrieval"]["entity_ids"] or
+            grant.get("graph_scopes") != _graph_scopes(package) or
             grant.get("indexes") != package["retrieval"]["indexes"] or
             grant.get("query_sets") != package["retrieval"]["query_sets"] or
             grant.get("max_page_size") != package["retrieval"]["max_page_size"] or
@@ -95,6 +119,18 @@ class ScopedRetrievalMcpAdapter:
             grant.get("max_response_bytes") != package["retrieval"]["max_response_bytes"]):
             raise ValueError("review capability binding mismatch")
         return grant
+
+    @staticmethod
+    def _graph_row(item: Any, grant: Mapping[str, Any]) -> bool:
+        if not isinstance(item, Mapping) or not grant.get("graph_scopes") or item.get("index") != GRAPH_INDEX:
+            return False
+        identity, kind = item.get("identity"), item.get("kind")
+        if kind not in _GRAPH_ROW_KINDS or not isinstance(identity, str) or not _LOGICAL_ID.fullmatch(identity) \
+                or not identity.startswith(f"asr:{kind}:"):
+            return False
+        payload = item.get("payload")
+        scope = payload.get("scope") if isinstance(payload, Mapping) else None
+        return isinstance(scope, Mapping) and scope.get("scope_id") in grant["graph_scopes"]
 
     def _unwrap_cursor(self, cursor: str, name: str, arguments: Mapping[str, Any]) -> tuple[str, int]:
         try:
@@ -125,7 +161,7 @@ class ScopedRetrievalMcpAdapter:
         if name not in grant["tools"] or not isinstance(arguments, Mapping):
             raise ValueError("tool is outside review capability")
         args = dict(arguments)
-        entities = set(grant["entity_ids"])
+        entities = set(grant["entity_ids"]) | self._granted
         if name in {"find", "read_excerpt"}:
             if args.get("identity") not in entities or set(args) - ({"identity", "context_lines"} if name == "read_excerpt" else {"identity"}):
                 raise ValueError("entity is outside review package")
@@ -149,9 +185,17 @@ class ScopedRetrievalMcpAdapter:
         result = self._adapter.call(name, args)
         if len(canonical_json(result)) > grant["max_response_bytes"]:
             raise ValueError("retrieval response exceeds review capability")
-        # Refuse publication if a producer result contains a different top-level identity.
-        if any(item.get("identity") not in entities for item in result.get("results", ())):
-            raise ValueError("retrieval result escaped review package")
+        # Refuse publication if a producer result contains a different top-level identity, unless it is
+        # a graph row of a CodeQL scope the package grants (never a kind-wide or cross-scope grant).
+        granted: set[str] = set()
+        for item in result.get("results", ()):
+            if self._graph_row(item, grant):
+                granted.add(item["identity"])
+                granted.update(identity for identity in _identities(item.get("payload"))
+                               if identity.split(":", 2)[1] in _GRAPH_ROW_KINDS)
+            elif item.get("identity") not in entities:
+                raise ValueError("retrieval result escaped review package")
+        self._granted |= granted
         next_cursor = result.get("pagination", {}).get("next_cursor")
         if next_cursor:
             result["pagination"]["next_cursor"] = self._wrap_cursor(next_cursor, name, arguments, page + 1)

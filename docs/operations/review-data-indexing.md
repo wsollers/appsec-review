@@ -1,7 +1,8 @@
 # Operating review-data indexing
 
 `job_review_data_indexing` precedes `job_review_package_assembly` in both the direct review graph
-(`appsec-review start`) and the Dagster `wave1_review` graph, where it follows `job_security_tagging`. It accounts for every
+(`appsec-review start`) and the Dagster `wave1_review` graph. It follows `job_code_graph_index` in
+both, and `job_security_tagging` in Dagster. It accounts for every
 dataset the run produced, restores shards a manifest rewrite dropped, publishes cross-domain links
 and the stage-1 precomputed query sets, and publishes the dataset inventory as an indexed dataset.
 The design is in [`indexing-and-query-reuse.md`](../architecture/indexing-and-query-reuse.md).
@@ -76,8 +77,19 @@ family; the shard's producer names `family`, `language` and `scope_id` or `build
 their coverage rows. A family is `complete` only when every coverage row is complete; the lane is
 `complete` only when all seven families are. With no accepted `graph` shard (including while
 `job_code_graph_index` is not registered or did not run) the lane is `unavailable` and its basis
-says so; that is a coverage gap, never evidence that the code is clean. `cpg_graph` stays
-`unavailable`: a retained Joern CPG is not graph coverage.
+says so; that is a coverage gap, never evidence that the code is clean. A language without a
+CodeQL graph export pack (every language but C/C++ today) has `graph` shards whose rows are all
+`unavailable`, so its lane is `unavailable` with the basis "every fact family unavailable".
+`cpg_graph` stays `unavailable`: Joern is deprecated and disabled by default, and a retained Joern
+CPG is not graph coverage.
+
+The inventory audit accounts for `job_code_graph_index` like any producer: its `code_graph_facts`
+shards (including coverage-only `unavailable` ones) and its `artifact_only` stage, checkpoint and
+summary files, and `job_codeql_analysis`'s `codeql_graph_export` directory. Because
+`job_codeql_analysis` rewrites the accepted manifest to its own shards, `load.accepted_inputs`
+restores every dropped shard from its producer's accepted handoff (`restored_shards`).
+`tests/integration/test_code_graph_end_to_end.py` runs this job after the real CodeQL and graph
+jobs and checks the Python `code_graph` lane.
 
 The `graph_follow_up` cells list the query sets this job does not produce (`hotspot_context`,
 `review_package`, `redacted_secret_exposure`, `contract_enforcement`, `deployment_exposure`,

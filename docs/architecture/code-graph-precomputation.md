@@ -1,7 +1,15 @@
 # Code-graph precomputation for direct review evidence
 
-Status: approved strategy and implementation/test plan; nothing in this document is implemented
-yet. It is the single authority for "item 2": precomputing code-graph facts so that the inference
+Status: implemented through C9 (integration and acceptance) for C/C++, offline-verified. The
+CodeQL export pack, the export step, `job_code_graph_index`, `query_code_graph`, graph
+admissibility, package v4 graph context, the `code_graph` lane and the scoring factors run end to
+end in `tests/integration/test_code_graph_end_to_end.py` against recorded exports. Live-unverified:
+the export queries have never run in the pinned CodeQL image, so the recordings are hand-authored
+(section 10, "C9 Integration and acceptance"); Java/Kotlin, JavaScript/TypeScript and Python packs
+are not written; section 12 (Clang second producer) is planned, not started. The implementation
+record is [`../reviews/code-graph-precomputation-implementation.md`](../reviews/code-graph-precomputation-implementation.md).
+
+This document is the single authority for "item 2": precomputing code-graph facts so that the inference
 review can obtain **direct** evidence for `source_to_sink_reachability`,
 `attacker_input_control` and `missing_or_ineffective_guard` instead of relying on tool
 observations and model prose. It resolves the conflict between the Joern/LLVM `query_precomputed`
@@ -17,46 +25,41 @@ is data with a producer, a resolving location and named gaps.
 
 ## 1. Current producer reality
 
-Every decision below is grounded in what the code does today, not in what earlier designs hoped a
-producer would do. The table names the file that establishes each fact.
+The decisions below were grounded in what the code did before this plan. This section now records
+what the code does after C9; where a row changed, the pre-plan state is named in the row. The file
+in the last column establishes each fact.
 
-| Producer | What it publishes today | What it cannot give the review | Established by |
+| Producer | What it publishes | What it cannot give the review | Established by |
 |---|---|---|---|
-| `job_codeql_analysis` | One immutable database per accepted scope and language (`data/codeql/scopes/<scope-id>/database`), one SARIF per query profile, normalized `observations` shards whose results keep ordered `code_flow`/`thread_flow` steps with source-resolved locations. Live acceptance: C/C++ 2/2, Java/Kotlin 7/7, JavaScript/TypeScript 12/12, Python 8/8, Actions 1/1 scopes succeeded; Go 0/7 (accepted recipes never compiled); C# and Rust are planning gaps; PHP is `NOT_APPLICABLE`. Executor actions are only `inventory`, `database` and `query`; `query` emits SARIF through a pinned `--suite` or `--suite-path` with `--max-paths 4`. A custom C/C++ pack (`cert-cpp`) is already hash-pinned and executed as an extra profile, so the hash-pinned custom-pack path exists. | No call graph, summaries, guards, ranges or entry-point catalog: only path-problem results that a shipped query happened to report, capped at four paths per result. | `jobs/job_codeql_analysis/job.py` (`_query_profiles`, `_query_one`), `codeql/runtime.py::CodeQLExecutor.execute`, `jobs/job_codeql_analysis/sarif.py`, `containers/tools/codeql/assets.lock.json` (`custom_query_packs = ["cpp"]`), `docs/operations/codeql-analysis.md` |
-| `job_cpg_analysis` (Joern) | Runs `c2cpg` per accepted C/C++ scope and retains `cpg.bin` as a hash-identified artifact; publishes a `BLOCKED` `observations` shard with zero observations and `unavailable` coverage. No exporter, no source mapping, no fixtures. | Nothing retrievable. A retained binary is not graph coverage. | `jobs/job_cpg_analysis/job.py` (`JOERN_GAP`), `indexing/matrix.py` (`cpg_graph` lane is always `unavailable`), `docs/TODO.md` "Joern bounded export and acceptance" |
-| `job_cpp_compiled_analysis` LLVM IR branch | Replays each TU with `-emit-llvm -S -g -O0`, then indexes `define` lines as `ir_entity` and uniquely resolvable direct `call @name` lines as exact `CALLS`. Basic blocks and instructions are only counted. Every IR entity's location is the whole TU, marked `ambiguous=True`, method `debug-or-tu-fallback`; the `!dbg` metadata the replay produces is never read. | CFG, def-use, dominators, guards, ranges, source-exact locations, indirect/virtual dispatch. | `jobs/job_cpp_compiled_analysis/job.py::_ir_index`, `containers/tools/native-cpp/native.py:154` |
-| `job_cpp_compiled_analysis` Clang AST branch | Bounded JSON AST walk (≤ 4096 declarations per TU) indexing `FunctionDecl`, `CXXMethodDecl`, `CallExpr`, `DeclRefExpr` and a few other kinds as `ast_node` with line/column locations. | Resolved callee identity for calls (only `referencedDecl` payload), CFG, dataflow. | `jobs/job_cpp_compiled_analysis/job.py::_ast_index` |
-| `job_cpp_symbol_index` (clangd) | `symbol` entities with exact locations (`clangd-uri-exact-path`), aggregated `CALLS`/`REFERENCES` edges between accepted symbols with occurrence counts and bounded locations; external symbols counted, not indexed. | Dispatch method, dataflow, guards. | `jobs/job_cpp_symbol_index/`, `docs/operations/cpp-index-jobs.md` |
-| `job_tree_sitter_ast` | Concrete syntax nodes with exact spans for every supported grammar. | Semantic symbols, resolved calls, dataflow. | `docs/architecture/tree-sitter-ast.md` |
-| `job_review_prioritization` | `review_flow_step` entities with `FLOWS_TO` relations for the shortest CodeQL path per source/sink (`codeql-semantic-paths` shard). | General graph edges; it reuses CodeQL SARIF only. | `docs/architecture/review-prioritization.md` "CodeQL source-to-sink paths" |
-| `job_review_data_indexing` | Stage-1 `precomputed` products including `symbol_links` (symbol → syntax node links plus `calls_in`/`calls_out` counts); every graph set is published as a `pending_graph_batch` follow-up. | Any graph fact. | `indexing/products.py` (`FIRST_STAGE_SETS`), `jobs/job_review_data_indexing/job.py::GRAPH_FOLLOW_UP` |
+| `job_codeql_analysis` | One immutable database per accepted scope and language, one SARIF per query profile, normalized `observations` shards with ordered `code_flow`/`thread_flow` steps. Executor actions are `inventory`, `database`, `query` and, since C1/C2, `export`: the `export.scopes` unit runs the hash-pinned `rules/codeql-graph-export/cpp` pack per successful C/C++ database and retains bounded JSON exports plus `export-manifest.json` under `data/codeql/scopes/<scope-id>/exports` (dataset `codeql_graph_export`, `artifact_only`). Languages without a pinned export pack record `NOT_APPLICABLE`. Its publication writes a manifest of its own shards only and references sibling manifests as verified upstream manifests (it does not compose their shards). Live acceptance before this plan: C/C++ 2/2, Java/Kotlin 7/7, JavaScript/TypeScript 12/12, Python 8/8, Actions 1/1; Go 0/7; C# and Rust planning gaps; PHP `NOT_APPLICABLE`. | Export packs exist for C/C++ only. The export queries have not run in the pinned image (recordings are hand-authored). | `jobs/job_codeql_analysis/job.py` (`_export_one`, `_verify_export_sources`), `codeql/runtime.py`, `containers/tools/codeql/codeql_runner.py`, `docs/operations/codeql-analysis.md` |
+| `job_code_graph_index` (new, C5) | One `graph` shard per `(CodeQL scope, family)` with a coverage row each; normalized (C3), cross-checked against clangd/IR/AST (C4) and SARIF-correlated (C4) facts; `unavailable` coverage-only shards for scopes without a usable export. Restores clangd/IR/AST shards the CodeQL manifest rewrite dropped from their producers' accepted handoffs (C9). | Facts for languages without an export pack; anything CodeQL's models do not cover. | `jobs/job_code_graph_index/`, `docs/operations/code-graph-index.md` |
+| `job_cpg_analysis` (Joern) | Deprecated and disabled by default (`jobs.job_cpg_analysis.settings.enabled = false`): no container runs and every accepted C/C++ scope publishes an `unavailable` coverage row naming the setting. When enabled it retains `cpg.bin` and publishes a `BLOCKED` shard with zero observations, as before. | Nothing retrievable. | `jobs/job_cpg_analysis/job.py` (`JOERN_DISABLED`, `JOERN_GAP`), `indexing/matrix.py` (`cpg_graph` lane always `unavailable`) |
+| `job_cpp_compiled_analysis` LLVM IR branch | Unchanged: `define` lines as `ir_entity`, uniquely resolvable direct `call @name` as exact `CALLS`; TU-level ambiguous locations. Used as a C4 cross-check input (`ir-name-same-tu`). | CFG, def-use, dominators, guards, ranges, source-exact locations (section 12, K1/K3). | `jobs/job_cpp_compiled_analysis/job.py::_ir_index` |
+| `job_cpp_compiled_analysis` Clang AST branch | Unchanged: bounded JSON AST walk; `CallExpr` nodes are a C4 cross-check input. | Resolved callee identity, CFG, dataflow, macro spelling ranges (section 12, K2). | `jobs/job_cpp_compiled_analysis/job.py::_ast_index` |
+| `job_cpp_symbol_index` (clangd) | Unchanged: `symbol` entities and aggregated `CALLS`/`REFERENCES` edges; the primary C4 cross-check input for `call_site`. | Dispatch method, dataflow, guards. | `jobs/job_cpp_symbol_index/`, `docs/operations/cpp-index-jobs.md` |
+| `job_tree_sitter_ast` | Concrete syntax nodes with exact spans. | Semantic symbols, resolved calls, dataflow. | `docs/architecture/tree-sitter-ast.md` |
+| `job_review_prioritization` | `review_flow_step` entities with `FLOWS_TO` relations (`codeql-semantic-paths`); C4 links them `SAME_AS` onto correlated path steps. | General graph edges. | `docs/architecture/review-prioritization.md` |
+| `job_review_data_indexing` | Stage-1 `precomputed` products; the seven graph query sets are retired from `QUERY_SETS` (before this plan every graph set was a `pending_graph_batch` follow-up). The `code_graph` matrix lane is computed from accepted `graph` coverage, and follow-ups name only the stage-3 and planned sets. | Any graph fact (they live in the `graph` index). | `indexing/matrix.py`, `retrieval/precomputed.py`, `jobs/job_review_data_indexing/job.py::graph_follow_up` |
 
-Retrieval and review facts that constrain the design:
+Retrieval and review facts after C9 (pre-plan state in parentheses):
 
-- `query_precomputed(query_set, subject?, path?, limit?, cursor?)` is the only product query. `path`
-  is in `review/capability.py::FORBIDDEN_PARAMETERS`, so a review cell can address a product only by
-  exact subject identity. The tool has no direction, depth, mode or class filter
-  (`retrieval/core.py::query_precomputed`, `mcp/schema.py`).
-- `trace` expands relations in both directions across every granted index, with no directional or
-  per-kind semantics and a flat result bound (`retrieval/core.py::trace`).
-- `precomputed_fact` is in `review/evidence.py::REFERENCE_KINDS`: **indirect for every predicate**.
-  A graph fact published as a `precomputed_fact` can never satisfy an obligation, whatever its
-  content. The only entity kinds that can satisfy an obligation are the `DIRECT_KINDS` constructs
-  and `tool_observation` for the predicates in
-  `jobs/job_inference_security_review/job.py::TOOL_RULE_PREDICATES` (`codeql` →
-  `affected_construct`, `source_to_sink_reachability`).
-- `guidance/routing.py::STRATEGY_SOURCES` already unlocks `sink_up` from `source_sink_facts` or
-  `symbol_links`, and `entry_down` from `entry_point_catalog`. The job computes `available_sources`
-  only from `symbol_links` and `control_evidence` (`job_inference_security_review/job.py`), so
-  `entry_down` is never launched today and `sink_up` runs on symbol links that contain no source or
-  sink facts.
-- Role tool allowlists are in `pipeline/guidance/registry.json`; `independent_verifier` has only
-  `find`, `read_excerpt`, `resolve_evidence`, `trace`, and `blue_team_refuter` lacks
-  `query_precomputed`. A second, narrower allowlist exists in `mcp/capability.py::_ROLE_TOOLS` for
-  the (not yet used) MAC-protected MCP token.
-- Review packages carry typed `context` entries whose `role` vocabulary is `source`, `artifact`,
-  `component`, `build_unit`, `duplicate_of`, `flow`, `priority`, `history`, `hotspot`, `tag`
-  (`review-packages.schema.json` v3, `review/packages.py`).
+- `query_code_graph(mode, subject, depth?, sink_class?, source_class?, limit?, cursor?)` reads the
+  accepted `graph` index (before: `query_precomputed` was the only product query and had no
+  direction, depth or class filter). Its caps come from the run-bound
+  `jobs.job_code_graph_index.settings.graph` (`graph/settings.py`).
+- `precomputed_fact` stays in `review/evidence.py::REFERENCE_KINDS`. Graph kinds are direct only for
+  the predicates `graph-fact-predicates/1` maps, when the re-resolved fact is `direct_eligible`
+  (`evidence-admissibility/2`; before: only `DIRECT_KINDS` constructs and mapped CodeQL
+  `tool_observation`s could satisfy an obligation).
+- `guidance/routing.py::STRATEGY_SOURCES` unlocks `sink_up` only from `source_sink_facts` and
+  `entry_down` from `entry_point_catalog`; the job derives both per unit from the package's accepted
+  graph families (before: `entry_down` never launched and `sink_up` ran on `symbol_links`).
+- `query_code_graph` is granted to `hypothesis_hunter`, `red_team_analyst`, `blue_team_refuter` and
+  `independent_verifier` in `pipeline/guidance/registry.json` and `mcp/capability.py::_ROLE_TOOLS`.
+  A cell receives graph rows outside its exact package entities only for the CodeQL scopes listed
+  in the package's `retrieval.graph_scopes` (C9).
+- Review packages are schema v4: `context` roles add `entry_point`, `sink`, `path`, `guard`,
+  `range`; `retrieval` adds `graph_families` and `graph_scopes` (before: v3).
 
 ## 2. Decisions
 
@@ -127,6 +130,12 @@ the only producer with interprocedural taint tracking and maintained source and 
 | Path-sensitive bug finding | No | Yes (Clang Static Analyzer) | Planned as a lane A producer (K4) |
 | What the optimizer does (UB exploitation, inlining) | No | Yes, at real optimization levels | Not planned |
 | Sanitizer and runtime instrumentation | No | Yes (ASan/UBSan) | Reserved for the PoC lane |
+
+Status as of C9: every "CodeQL `<family>`" entry above is implemented and verified offline through
+the real normalizer, cross-checker, correlator, graph job and review against hand-authored
+recordings. None has yet been produced by the export pack in the pinned CodeQL image, so the
+column describes code that exists, not facts observed on a real database. The Clang/LLVM entries
+are unchanged until section 12 lands.
 
 #### Why Joern is deprecated
 
@@ -536,6 +545,10 @@ A subject kind the mode does not accept is a `schema_violation` denial, not an e
   predicate from its own retrieval). `mcp/capability.py::_ROLE_TOOLS` gets the same addition.
 - Package `retrieval.query_sets` is complemented by `retrieval.graph_families` listing the families
   accepted for the package's scope, so a cell knows what it may ask before spending queries.
+- (C9) Package `retrieval.graph_scopes` lists the CodeQL scope ids of those facts. A cell (and a
+  scoped MCP session) may receive and cite a `graph` row outside its exact package entities only
+  when the row's accepted `payload.scope.scope_id` is listed; the identities such a row references
+  become addressable. Rows of any other scope are withheld.
 
 ### 5.5 Mapping to EntityKinds and RelationKinds
 
@@ -751,6 +764,11 @@ one shared contract first, then independently owned chunks in isolated worktrees
 integration chunk. Every chunk runs its tests with a unique `--basetemp=test/tmp/<chunk>`, commits
 but does not push, and reports branch, commits, public API, tests, deviations and concerns.
 Agent reports are data. Product choices in section 11 go to the user before C0 is committed.
+
+Status: implemented. C0 through C9 are merged; merge commits, reconciliations and verification
+results are in [`../reviews/code-graph-precomputation-implementation.md`](../reviews/code-graph-precomputation-implementation.md).
+The chunk texts below are the plan as briefed; deviations are listed in "Deviations from the
+plan" and "Integration notes" after C9.
 
 ### C0 Shared contract (written by the integrating agent, committed before any chunk starts)
 
@@ -974,6 +992,69 @@ and reports per-language export/gap counts into the verification JSON.
 Regression: the full suite compared against the base commit; only pre-existing failures may remain
 and are listed as such.
 
+**As implemented.** The offline test runs the real `job_codeql_analysis` units (plan, database,
+query, export, normalize, publish) with an injected executor and image resolver; the accepted
+target catalog, language-build receipts and protected replay are injected at their loaders, and the
+plan itself is the real `build_codeql_plan`. It asserts everything above plus: the CodeQL result and
+handoff expose `plan.inventory.plan` and `export.scopes` bound to the handoff; package build-unit
+ids equal the `build_unit_id` the graph shards publish; the verifier's own `query_code_graph`
+retrieval yields direct `dataflow_path` support on `attacker_input_control`; the score package
+carries `taint_path = graph_dataflow_path`, `attacker_control = local` (`environment` source class)
+and `guard_absent = graph_fact`; the `sink_up` hunter's graph queries execute with nothing withheld;
+the review completeness ledger and the indexing language matrix both name the `code_graph` lane as
+unavailable for Python; and the default `job_cpg_analysis` publishes `unavailable` rows and runs no
+container. The claim is `supported`, not `confirmed`: every role uses one model profile, so the
+verifier is not provider-independent, and no graph family satisfies `security_impact`. The live
+tier exists and skips without the image; `deploy/dagster/verification/code-graph-acceptance.json`
+is not written, because no live run has happened.
+
+#### Deviations from the plan
+
+- **Correlation at the sink operand (C4, `1fa580e`).** Real path-problem flows end at the
+  sink's argument, not the call: a flow's final step matches a `sink_site` on its own span or on
+  its exact `result.operand` span. Sink identities are unchanged.
+- **Ranges (C3/C0, `1fa580e`).** A `range_fact` whose operand has no applicable interval (pointer
+  or floating value) carries `range_not_applicable` and is never direct evidence (section 3.4 (e)).
+- **None-guard identity (C0/C1, `eb6042f`).** The `guard_state = none` fact's condition fields are
+  the sink's own path and byte span (`contract.none_guard_native`).
+- **Correlation format (C4/C6, merge `e7d561d`).** C4 publishes one `DERIVED_FROM` relation per
+  `(dataflow_path, tool_observation)` whose payload lists every correlated code flow in order
+  (`code_flows`), plus a `broken` `DERIVED_FROM` from the `sink_site` when a flow's sink matched
+  but no path joins it. C6's `sarif_path` reader was aligned to that format in the C5 merge.
+- **Joern (`140256c`).** Deprecated and disabled by default instead of left as is (D1).
+- **Package schema v4 gained `retrieval.graph_scopes` (C9).** Required for the capability grant
+  below; v4 had not been released, so the version was not bumped.
+
+#### Integration notes (C9)
+
+- **Scope-bound graph grants.** Cells were issued capabilities with exact package entities only, so
+  every `query_code_graph` row outside the package context was withheld. Packages now publish
+  `retrieval.graph_scopes` (the CodeQL scope ids of the applying, not-`unavailable` graph shards).
+  `CellCapability.graph_scopes` and the scoped MCP adapter accept a graph-index row of a graph kind
+  (or a CodeQL-export `symbol`) only when its accepted `payload.scope.scope_id` is listed; such a
+  row and the graph identities its payload references become addressable and citable. There is no
+  kind-wide prefix grant and no cross-scope grant.
+- **Configured caps.** `RetrievalCore` reads `jobs.job_code_graph_index.settings.graph` from the
+  run-bound resolved configuration (`graph/settings.py`), so review cells, scoring and MCP sessions
+  enforce the configured `max_call_depth`; defaults apply only when the run binds no such table.
+- **Catalog pin.** `job_code_graph_index` fails its load unit with an `IntegrityError` unless the
+  catalog equals `jobs.job_codeql_analysis.settings.languages.<language>.export_queries.catalog_sha256`
+  of the run-bound configuration for every exported language.
+- **Dropped secondary shards.** `job_codeql_analysis` publishes a manifest of its own shards only,
+  so clangd/IR/AST shards were invisible to the graph job in a real run and cross-check was always
+  `not_covered`. The graph job now restores them from the accepted `job_cpp_symbol_index` and
+  `job_cpp_compiled_analysis` handoffs (re-verified manifests, producer job checked), as
+  `job_review_data_indexing` does, and composes them into its manifest.
+- **Evidence map.** `review/scope.py` names the `code_graph` producer, so the evidence map,
+  package gaps and the completeness ledger list every non-complete `(scope, family)` row; the
+  package-level duplicate "missing" gap was removed.
+- **CLI.** `start`, `resume` and `--force-from` include `job_code_graph_index` between
+  `job_review_prioritization` and `job_review_data_indexing`.
+- **Verified, no change needed.** Package build-unit ids (target catalog `build_unit_id`) equal the
+  CodeQL scope `build_unit_id` the graph shards publish; both come from build discovery's
+  `build-unit-<20 hex>` identity. The real CodeQL result and handoff expose what the graph job
+  reads.
+
 ## 11. Risks, open questions and what is deliberately not done
 
 ### Decisions recorded (user, 2026-10-12)
@@ -994,7 +1075,7 @@ The six questions this plan raised were answered by accepting the plan's recomme
 
 ### Deliberately not done
 
-- No Joern exporter; `job_cpg_analysis` stays as is.
+- No Joern exporter; `job_cpg_analysis` is deprecated and disabled by default (D1, "Why Joern is deprecated").
 - No LLVM pass in this batch; the IR shard remains a cross-check input only. The Clang second
   producer phase (section 12) adds it after C9.
 - No `aliases` mode, no points-to facts.
@@ -1006,7 +1087,8 @@ The six questions this plan raised were answered by accepting the plan's recomme
 
 ## 12. Phase 2: Clang second producer (after C9)
 
-Status: planned (user, 2026-10-12). It starts only after C9's offline and live acceptance pass.
+Status: planned (user, 2026-10-12). It starts only after C9's offline and live acceptance pass; C9's
+offline acceptance passes, and the live tier has not yet run (see the implementation record).
 CodeQL stays the primary producer of every fact family. Clang and LLVM are the compiler of record
 for C/C++, so this phase uses them for what they do better:
 - exact locations through macro expansions;

@@ -13,6 +13,20 @@ from appsec_review.runtime import GraphRunner
 from appsec_review.jobs.cataloging import source_fingerprint
 
 
+# The deterministic review graph in execution order; ``start``, ``resume`` and ``--force-from`` all
+# use it. ``job_code_graph_index`` consumes CodeQL and prioritization output and must precede the
+# indexing job that accounts for it.
+GRAPH_JOB_IDS = ("job_review_intake", "job_target_catalog", "job_source_history_analysis",
+                 "job_target_analysis_plan", "job_tree_sitter_ast",
+                 "job_project_build", "job_language_build", "job_artifact_indexing",
+                 "job_artifact_security_analysis",
+                 "job_cpp_compiled_analysis", "job_cpp_symbol_index", "job_cpg_analysis",
+                 "job_evidence_collection", "job_change_context_analysis", "job_codeql_analysis",
+                 "job_review_prioritization", "job_code_graph_index", "job_review_data_indexing")
+# Consumers of the accepted index that run after the resumable graph.
+POST_INDEX_JOB_IDS = ("job_review_package_assembly", "job_document_issue_analysis")
+
+
 def parser() -> argparse.ArgumentParser:
     root = argparse.ArgumentParser(prog="appsec-review")
     root.add_argument("--config", default="appsec-review.toml",
@@ -30,19 +44,12 @@ def parser() -> argparse.ArgumentParser:
     plan = commands.add_parser("plan-resume", help="explain review resume decisions")
     plan.add_argument("--run-id", required=True)
     plan.add_argument("--target", type=Path, required=True)
-    graph_job_ids = ("job_review_intake", "job_target_catalog", "job_source_history_analysis",
-                     "job_target_analysis_plan", "job_tree_sitter_ast",
-                     "job_project_build", "job_language_build", "job_artifact_indexing",
-                     "job_artifact_security_analysis",
-                     "job_cpp_compiled_analysis", "job_cpp_symbol_index", "job_cpg_analysis",
-                     "job_evidence_collection", "job_change_context_analysis", "job_codeql_analysis",
-                     "job_review_prioritization", "job_review_data_indexing")
-    plan.add_argument("--force-from", choices=graph_job_ids)
+    plan.add_argument("--force-from", choices=GRAPH_JOB_IDS)
 
     resume = commands.add_parser("resume", help="resume the deterministic review graph")
     resume.add_argument("--run-id", required=True)
     resume.add_argument("--target", type=Path, required=True)
-    resume.add_argument("--force-from", choices=graph_job_ids)
+    resume.add_argument("--force-from", choices=GRAPH_JOB_IDS)
 
     tools = commands.add_parser("plan-tools", help="list planned static-tool applicability")
     tools.add_argument("--run-id", required=True)
@@ -113,23 +120,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if args.command in {"start", "plan-resume", "resume"}:
         registry = builtin_registry()
-        jobs = [registry.build("job_review_intake"), registry.build("job_target_catalog"),
-                registry.build("job_source_history_analysis"),
-                registry.build("job_target_analysis_plan"), registry.build("job_tree_sitter_ast"),
-                registry.build("job_project_build"),
-                registry.build("job_language_build"),
-                registry.build("job_artifact_indexing"),
-                registry.build("job_artifact_security_analysis"),
-                registry.build("job_cpp_compiled_analysis"),
-                registry.build("job_cpp_symbol_index"),
-                registry.build("job_cpg_analysis"),
-                registry.build("job_evidence_collection"),
-                registry.build("job_change_context_analysis"),
-                registry.build("job_codeql_analysis"),
-                registry.build("job_review_prioritization"),
-                registry.build("job_review_data_indexing"),
-                registry.build("job_review_package_assembly"),
-                registry.build("job_document_issue_analysis")]
+        jobs = [registry.build(job_id) for job_id in (*GRAPH_JOB_IDS, *POST_INDEX_JOB_IDS)]
         fingerprint = source_fingerprint(args.target)
         graph = GraphRunner(config, jobs)
         if args.command == "plan-resume":
