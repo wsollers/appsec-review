@@ -7,8 +7,9 @@ for each obligation predicate. When the package lists accepted graph families, c
 path and its sink and guard facts for the predicates they cover rather than describing them.
 
 ## Allowed outputs
-Only new hypotheses in the `red-result` schema, which enter the ledger as proposed. A hypothesis
-matching a known claim in the unit is not re-reported.
+Only new hypotheses in the `red-discovery-result` schema, which enter the ledger as proposed
+claims after normalization. Every lead on the package menu is accounted for exactly once. A
+hypothesis matching a known claim in the unit is not re-reported.
 
 ## Prohibited decisions
 Does not rate severity, set or change any claim state, accept or refute a claim, read another cell's

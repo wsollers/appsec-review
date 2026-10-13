@@ -17,8 +17,8 @@ from appsec_review.review.ledger import EventKind, EvidenceRequestOutcome, merge
 from tests.review.test_ledger import cell_id, entity, write_sample
 
 ROOT = Path(__file__).resolve().parents[2] / "docs" / "schemas" / "inference-security-review"
-NAMES = ("common", "ledger-event", "claim", "evidence-relation", "cell-record", "gap", "worker-turn", "red-result",
-         "blue-result", "verifier-result", "adjudication", "score-package", "finding-package", "handoff")
+NAMES = ("common", "ledger-event", "claim", "evidence-relation", "cell-record", "gap", "worker-turn",
+         "red-discovery-result", "blue-result", "verifier-result", "adjudication", "score-package", "finding-package", "handoff")
 SCHEMAS = {name: json.loads((ROOT / f"{name}.schema.json").read_text()) for name in NAMES}
 REGISTRY = Registry().with_resources(
     (schema["$id"], Resource.from_contents(schema)) for schema in SCHEMAS.values())
@@ -104,10 +104,22 @@ def test_objects_closed_strings_and_arrays_bounded(name: str) -> None:
     ("hunt_strategy", models.HuntStrategy), ("claim_state", models.ClaimState), ("predicate", models.Predicate),
     ("relation_kind", models.RelationKind), ("admissibility", models.Admissibility),
     ("cell_status", models.CellStatus), ("gap_class", models.GapClass), ("event_kind", EventKind),
+    ("security_predicate", models.SecurityPredicate),
     ("evidence_request_outcome", EvidenceRequestOutcome), ("pool_outcome", PoolOutcome),
     ("entity_kind", EntityKind)])
 def test_enums_match_python_contract(definition: str, enum) -> None:
     assert DEFS[definition]["enum"] == [member.value for member in enum]
+
+
+def test_security_predicate_fields_use_the_closed_vocabulary() -> None:
+    reference = "common.schema.json#/$defs/security_predicate"
+    assert SCHEMAS["claim"]["properties"]["security_predicate"] == {"$ref": reference}
+    proposal = SCHEMAS["red-discovery-result"]["$defs"]["proposal"]["properties"]
+    assert proposal["security_predicate"] == {"$ref": reference}
+    assert "red-result.schema.json" not in {path.name for path in ROOT.glob("*.schema.json")}
+    assert models.SECURITY_PREDICATES_VERSION == "security-predicates/1"
+    assert set(models.SECURITY_PREDICATE_CWE_ROLLUP.values()) <= set(models.SecurityPredicate)
+    assert models.SecurityPredicate.OTHER not in set(models.SECURITY_PREDICATE_CWE_ROLLUP.values())
 
 
 def test_derived_vocabularies_are_subsets() -> None:
@@ -231,28 +243,48 @@ def _citations() -> dict:
 
 
 def _red() -> dict:
-    return {"schema": "appsec-review/red-result/1", "claims": [{
-        "claim_ref": "c1", "affected_entities": [entity("span")], "weakness_cwe": "CWE-120",
-        "security_predicate": "memory_corruption", "preconditions": ["attacker_controls_request_field"],
-        "statement": "copy without bound", "citations": _citations(),
-        "proposed_relations": [{"predicate": "affected_construct", "kind": "supports", "entity_id": entity("span"),
-                                "rationale": "the copy"}],
-        "evidence_requests": [{"predicate": "configuration_enables", "requested_kind": "build_action",
-                               "anchors": [entity("span")], "question": "is the guard compiled in?"}]}]}
+    return {
+        "schema": "appsec-review/red-discovery-result/1", "package": {"basis_sha256": SHA},
+        "role": "red_team_analyst", "round_id": "0", "result_status": "completed",
+        "lead_accounting": [{"observation_id": entity("lead"), "outcome": "proposal", "proposal_ids": ["c1"],
+                             "gap_ids": [], "reason": "developed"}],
+        "proposals": [{
+            "local_id": "c1", "source_lead_ids": [entity("lead")], "affected_entities": [entity("span")],
+            "statement": "copy without bound", "mechanism": "strcpy into a fixed buffer",
+            "weakness": {"namespace": "CWE", "id": "CWE-120"}, "security_predicate": "memory_corruption",
+            "attacker_entry": {"entity_id": None, "control": "request field",
+                               "preconditions": ["attacker_controls_request_field"]},
+            "trigger": "send a long field", "suspected_consequence": "stack overwrite", "assumptions": [],
+            "evidence_ids": ["e1"], "counterevidence_ids": [], "obligation_ids": [], "taint_path_ids": []}],
+        "proof_obligations": [], "taint_paths": [], "chain_seeds": [],
+        "evidence_refs": [{"local_id": "e1", "entity_id": entity("span"), "shard_id": None, "shard_sha256": None,
+                           "relation": "supports", "predicate": "affected_construct",
+                           "locator": {"kind": "unresolved", "reason": "re-resolved by the validator"}}],
+        "evidence_requests": [{"local_id": "r1", "proposal_id": "c1", "predicate": "configuration_enables",
+                               "requested_kind": "build_provenance", "scope_entity_ids": [entity("span")],
+                               "reason": "is the guard compiled in?"}],
+        "gaps": []}
 
 
-def test_red_result_cannot_set_state_or_severity() -> None:
-    validator("red-result").validate(_red())
+def test_red_discovery_result_cannot_set_state_or_severity() -> None:
+    validator("red-discovery-result").validate(_red())
     for forbidden in ("state", "severity", "confirmed", "priority", "exploitability"):
         document = _red()
-        document["claims"][0][forbidden] = "confirmed"
-        assert not valid("red-result", document)
+        document["proposals"][0][forbidden] = "confirmed"
+        assert not valid("red-discovery-result", document)
+    for field, value in (("security_predicate", "unbounded_copy"), ("weakness", {"namespace": "CWE", "id": "120"})):
+        document = _red()
+        document["proposals"][0][field] = value
+        assert not valid("red-discovery-result", document)
     document = _red()
-    document["claims"][0]["citations"]["not_a_predicate"] = []
-    assert not valid("red-result", document)
+    document["evidence_refs"][0]["predicate"] = "reachability"
+    assert not valid("red-discovery-result", document)
     document = _red()
-    document["claims"][0]["citations"]["affected_construct"] = ["src/a.c"]
-    assert not valid("red-result", document)
+    document["proposals"][0]["affected_entities"] = ["src/a.c"]
+    assert not valid("red-discovery-result", document)
+    document = _red()
+    document["package"]["run_id"] = "run-1"
+    assert not valid("red-discovery-result", document)
 
 
 def test_blue_verifier_and_adjudication_results() -> None:

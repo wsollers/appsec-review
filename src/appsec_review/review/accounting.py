@@ -6,7 +6,7 @@ do; they only drive ``DEGRADED`` outcomes and ``review_incomplete``.
 from __future__ import annotations
 
 from collections import Counter
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any, Mapping
 
@@ -15,6 +15,9 @@ from appsec_review.review.ledger import EvidenceRequestOutcome, Projection
 from appsec_review.review.models import CellStatus, ClaimState, Gap, GapClass, Lane
 
 FINAL_CLAIM_STATES = frozenset(ClaimState) - {ClaimState.PROPOSED}
+# How each package lead fared across its package's succeeded red cells (red-discovery-result/1 lead
+# accounting). ``no_proposal`` is never clean coverage; ``unaccounted`` means no red cell succeeded.
+LEAD_SUMMARY_OUTCOMES = ("proposal", "no_proposal", "blocked", "unaccounted")
 
 
 class PoolOutcome(StrEnum):
@@ -39,6 +42,8 @@ class ViolationCode(StrEnum):
     EVIDENCE_REQUEST_NOT_TERMINAL = "evidence_request_not_terminal"
     EVIDENCE_REQUEST_MULTIPLE_TERMINAL = "evidence_request_multiple_terminal"
     PARTITION_MISMATCH = "partition_mismatch"
+    LEAD_PACKAGE_UNEXPECTED = "lead_package_unexpected"
+    LEAD_OUTCOME_INVALID = "lead_outcome_invalid"
 
 
 def violation(code: ViolationCode, subject_id: str) -> Gap:
@@ -62,10 +67,14 @@ class LaneAccounting:
     review_incomplete: bool
     outcome: PoolOutcome
     duplicate_proposals: int = 0         # proposals this lane made of a claim id another proposal owns
+    leads_expected: int = 0              # (package, lead) pairs of the lane's packages
+    leads_by_outcome: Mapping[str, int] = field(default_factory=lambda: dict.fromkeys(LEAD_SUMMARY_OUTCOMES, 0))
 
     def to_json(self) -> dict[str, Any]:
         return {"lane": self.lane.value, "outcome": self.outcome.value, "claims_total": self.claims_total,
-                "duplicate_proposals": self.duplicate_proposals,
+                "duplicate_proposals": self.duplicate_proposals, "leads_expected": self.leads_expected,
+                "leads_by_outcome": {outcome: self.leads_by_outcome.get(outcome, 0)
+                                     for outcome in LEAD_SUMMARY_OUTCOMES},
                 "claims_by_state": {state.value: self.claims_by_state[state] for state in ClaimState},
                 "cells_expected": self.cells_expected,
                 "cells_by_status": {status.value: self.cells_by_status[status] for status in CellStatus},
@@ -137,13 +146,16 @@ def _combine(outcomes: list[PoolOutcome]) -> PoolOutcome:
 
 
 def exact_accounting(projection: Projection, expected_cells: Mapping[str, Lane],
-                     expected_packages: Mapping[str, Lane], *, incomplete_gap_ratio: float) -> Accounting:
-    """Account for every claim, expected cell, package, and evidence request exactly once.
+                     expected_packages: Mapping[str, Lane], *, incomplete_gap_ratio: float,
+                     lead_accounting: Mapping[str, Mapping[str, Any]] | None = None) -> Accounting:
+    """Account for every claim, expected cell, package, evidence request, and package lead exactly once.
 
     ``expected_cells`` and ``expected_packages`` map each identity to its lane. A cell is gapped
     when its terminal status is not ``succeeded`` or its terminal record is missing; a package is
     gapped when a gap names it as subject. ``review_incomplete`` is set when the overall or any
-    lane's gapped/expected ratio exceeds ``incomplete_gap_ratio``.
+    lane's gapped/expected ratio exceeds ``incomplete_gap_ratio``. ``lead_accounting`` maps each
+    package to its leads' summary outcomes (``LEAD_SUMMARY_OUTCOMES``, from the lane documents);
+    a package outside ``expected_packages`` or an unknown outcome is a violation.
     """
     if not 0.0 <= incomplete_gap_ratio <= 1.0:
         raise ValueError("incomplete_gap_ratio must lie in [0, 1]")
@@ -185,6 +197,18 @@ def exact_accounting(projection: Projection, expected_cells: Mapping[str, Lane],
         else:
             request_outcomes[request.outcomes[0]] += 1
 
+    lead_counts: dict[Lane, Counter[str]] = {lane: Counter() for lane in Lane}
+    for package_id, leads in sorted((lead_accounting or {}).items()):
+        if package_id not in expected_packages:
+            violations.append(violation(ViolationCode.LEAD_PACKAGE_UNEXPECTED, package_id))
+            continue
+        for lead, summary in sorted(leads.items()):
+            outcome = summary.get("outcome") if isinstance(summary, Mapping) else summary
+            if outcome not in LEAD_SUMMARY_OUTCOMES:
+                violations.append(violation(ViolationCode.LEAD_OUTCOME_INVALID, f"{package_id}:{lead}"))
+                continue
+            lead_counts[expected_packages[package_id]][outcome] += 1
+
     gapped_packages = {gap.subject_id for gap in projection.gaps if gap.subject_id in expected_packages}
     duplicates = {lane: sum(view.duplicate_proposals[lane] for view in projection.claims.values()) for lane in Lane}
     lanes: list[LaneAccounting] = []
@@ -212,7 +236,8 @@ def exact_accounting(projection: Projection, expected_cells: Mapping[str, Lane],
             {status: statuses[status] for status in CellStatus}, missing, len(packages), gapped_cells,
             lane_gapped_packages, ratio, ratio > incomplete_gap_ratio,
             _outcome(len(cell_ids), len(packages), statuses, gapped_cells + lane_gapped_packages),
-            duplicates[lane]))
+            duplicates[lane], sum(lead_counts[lane].values()),
+            {outcome: lead_counts[lane][outcome] for outcome in LEAD_SUMMARY_OUTCOMES}))
 
     total_claims = Counter(claim.state for claim in claims.values())
     if sum(lane.claims_total for lane in lanes) != len(claims) or sum(total_claims.values()) != len(claims):

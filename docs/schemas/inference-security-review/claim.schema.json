@@ -45,7 +45,7 @@
       ]
     },
     "security_predicate": {
-      "$ref": "common.schema.json#/$defs/token"
+      "$ref": "common.schema.json#/$defs/security_predicate"
     },
     "preconditions": {
       "$ref": "common.schema.json#/$defs/preconditions"
