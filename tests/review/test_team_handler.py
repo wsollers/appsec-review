@@ -152,10 +152,30 @@ def test_blue_cells_never_see_each_other_and_the_verifier_is_blind(prepared) -> 
     result = run_team(prepared.context(recording, attempt="b"), prepared.work("lead", "sast_critical"), launch=True)
     [record] = [item for values in result.independence.values() for item in values]
     assert record["independent"] is True and record["review_id"].startswith("review-")
-    assert record["provider_distinct"] is False
+    assert record["provider_distinct"] is False and record["verifier_model_distinct"] is False
     [verifier] = [item for item in result.cells if item.role is Role.INDEPENDENT_VERIFIER]
     supporting = [item for item in result.relations if item.producing_cell_id == verifier.cell_id]
     assert supporting and all(item.retrieval_receipt_sha256 == verifier.receipt_sha256 for item in supporting)
+
+
+def test_a_distinct_verifier_profile_is_recorded_without_changing_independence(prepared) -> None:
+    """Decision 2 via configuration: roles.independent_verifier.model_profile names another model."""
+    settings = prepared.settings
+    verifier_profile = replace(settings.models["default"], model="claude-verifier-model")
+    models = MappingProxyType({**settings.models, "verifier": verifier_profile})
+    roles = MappingProxyType({**settings.roles, Role.INDEPENDENT_VERIFIER: replace(
+        settings.roles[Role.INDEPENDENT_VERIFIER], model_profile="verifier")})
+    changed = replace(settings, models=models, roles=roles)
+    assert changed.verifier_distinctness()["distinct"] is True and changed.verifier_distinctness()["warning"] is None
+    assert settings.verifier_distinctness()["warning"]                       # the checked-in default
+    recording = Recording(prepared.infer)
+    result = run_team(prepared.context(recording, models=models, roles=roles), prepared.work("lead", "sast_critical"),
+                      launch=True)
+    [record] = [item for values in result.independence.values() for item in values]
+    assert record["independent"] is True and record["verifier_model_distinct"] is True
+    assert record["provider_distinct"] is False
+    assert {item.model for item in recording.by_role("independent_verifier")} == {"claude-verifier-model"}
+    assert {item.model for item in recording.by_role("red_team_analyst")} == {settings.models["default"].model}
 
 
 # ------------------------------------------------------------------------------------------------ duplicates

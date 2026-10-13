@@ -700,6 +700,43 @@
           "minimum": 0
         }
       }
+    },
+    "ship_block_status": {
+      "enum": [
+        "ship_blocking",
+        "ship_blocking_pending_distinct_verification",
+        "needs_verification",
+        "not_ship_blocking"
+      ],
+      "description": "ship-block-policy/1 status of a finding package."
+    },
+    "ship_block_counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ship_blocking",
+        "ship_blocking_pending_distinct_verification",
+        "needs_verification",
+        "not_ship_blocking"
+      ],
+      "properties": {
+        "ship_blocking": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "ship_blocking_pending_distinct_verification": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "needs_verification": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "not_ship_blocking": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
     }
   }
 }

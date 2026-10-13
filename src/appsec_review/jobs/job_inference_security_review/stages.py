@@ -29,12 +29,15 @@ from appsec_review.review.scoring import (
 )
 from appsec_review.review.scoring.factors import EvidenceSource, FactorSet, factor_input
 from appsec_review.review.scoring.interface import ScoreProviderResult, ScoreRequest
+from appsec_review.review import ship_block
+from appsec_review.review.ship_block import ShipBlockInputs, ShipBlockSettings
 from appsec_review.storage import atomic_bytes, atomic_json, canonical_json, file_sha256
 
+from .datasets import PLANNED_CONSUMERS
 from .schemas import SchemaSet
 
-HANDOFF_SCHEMA = "appsec-review/inference-review-handoff/1"
-FINDING_SCHEMA = "appsec-review/finding-package/1"
+HANDOFF_SCHEMA = "appsec-review/inference-review-handoff/2"
+FINDING_SCHEMA = "appsec-review/finding-package/2"
 COVERAGE_SCHEMA = "appsec-review/inference-review-coverage-matrix/1"
 def scorer_actor(implementation: str) -> str:
     """The deterministic ``independent_scorer`` actor of one provider implementation."""
@@ -253,6 +256,24 @@ def claim_references(merged: Mapping[str, Any], documents: Mapping[str, Mapping[
     return found
 
 
+def claim_lead_families(merged: Mapping[str, Any], documents: Mapping[str, Mapping[str, Any]]
+                        ) -> dict[str, tuple[str, ...]]:
+    """Lead families of the lane A finding-lead packages that proposed each claim.
+
+    As with :func:`claim_references`, only a finding-lead package names the lead a claim was raised
+    from; hunt proposals contribute nothing. ``ship-block-policy/1`` reads these to decide whether a
+    claim is a dependency finding.
+    """
+    found: dict[str, tuple[str, ...]] = {}
+    for claim_id, package_ids in sorted(merged.get("proposal_packages", {}).items()):
+        families = {str(lead["lead_family"]) for package_id in package_ids
+                    for document in [documents.get(package_id) or {}] if document.get("kind") == "finding_lead"
+                    for lead in document.get("lead_menu", ()) if lead.get("lead_family")}
+        if families:
+            found[claim_id] = tuple(sorted(families))
+    return found
+
+
 def score_claims(adjudications: Sequence[Mapping[str, Any]], projection: Projection,
                  cwe_impact_overrides: Mapping[str, Any], out_dir: Path, ledger_path: Path, stream: str,
                  schemas: SchemaSet, references: Mapping[str, Mapping[str, Any]] | None = None, *,
@@ -305,9 +326,11 @@ def score_claims(adjudications: Sequence[Mapping[str, Any]], projection: Project
             schemas.validate("score-package", package)
             path = Path(out_dir) / f"{package['score_id']}.json"
             atomic_bytes(path, canonical_json(package))
+            severity = package["technical_severity"]
             scores.append({"score_id": package["score_id"], "claim_id": claim.claim_id, "sha256": file_sha256(path),
                            "file": path.name, "provider": outcome.implementation_version,
-                           "band": package["native"].get("rating"), "missing_factors": package["missing_factors"]})
+                           "band": package["native"].get("rating"), "missing_factors": package["missing_factors"],
+                           "technical_severity": severity["rating"] if severity else None})
     receipt = writer.seal()
     implementations = sorted(registry.get(item).implementation_version for item in registry.ids())
     catalog = cwe_catalog if cwe_catalog is not None else UNAVAILABLE_CATALOG
@@ -376,13 +399,40 @@ def handoff_status(accounting: Accounting) -> str:
     return "DEGRADED"
 
 
+def _ship_block_inputs(claim_id: str, state: ClaimState, claim_scores: Sequence[Mapping[str, Any]],
+                       references: Mapping[str, Any], lead_families: Sequence[str], model_distinct: bool
+                       ) -> tuple[ShipBlockInputs, dict[str, Any]]:
+    """The policy inputs of one finding and its displayed (never deciding) context."""
+    deciding = sorted((item for item in claim_scores if item["provider"] == ship_block.SEVERITY_PROVIDER),
+                      key=lambda item: item["score_id"])
+    severity = deciding[0] if deciding else None
+    inputs = ShipBlockInputs(
+        claim_state=state, technical_severity=severity.get("technical_severity") if severity else None,
+        severity_score_id=severity["score_id"] if severity else None, lead_families=tuple(lead_families),
+        kev_listed=references.get("kev_listed"), verifier_model_distinct=bool(model_distinct))
+    displayed = {
+        "reference_cvss": [dict(item) for item in references.get("reference_cvss", ())][:8],
+        "non_deciding_scores": sorted(item["score_id"] for item in claim_scores
+                                      if item["provider"] != ship_block.SEVERITY_PROVIDER)[:16],
+    }
+    return inputs, displayed
+
+
 def finding_packages(projection: Projection, adjudications: Sequence[Mapping[str, Any]],
                      merged: Mapping[str, Any], scores: Sequence[Mapping[str, Any]], *, manifest_sha256: str,
-                     out_dir: Path, schemas: SchemaSet) -> list[dict[str, Any]]:
-    """Confirmed and supported claims only; supported is labelled not independently confirmed."""
-    by_claim_scores: dict[str, list[str]] = defaultdict(list)
+                     out_dir: Path, schemas: SchemaSet, references: Mapping[str, Mapping[str, Any]] | None = None,
+                     lead_families: Mapping[str, Sequence[str]] | None = None,
+                     ship_block_settings: ShipBlockSettings = ShipBlockSettings(),
+                     require_distinct_model: bool = True) -> list[dict[str, Any]]:
+    """Confirmed and supported claims only; supported is labelled not independently confirmed.
+
+    Each package carries its ``ship-block-policy/1`` decision with the inputs and citations that
+    decided it. ``references`` and ``lead_families`` are :func:`claim_references` and
+    :func:`claim_lead_families`; without them no finding is a KEV-listed dependency finding.
+    """
+    by_claim_scores: dict[str, list[Mapping[str, Any]]] = defaultdict(list)
     for score in scores:
-        by_claim_scores[score["claim_id"]].append(score["score_id"])
+        by_claim_scores[score["claim_id"]].append(score)
     claim_gaps: dict[str, list[str]] = defaultdict(list)
     for gap in projection.gaps:
         claim_gaps[gap.subject_id].append(gap.gap_id)
@@ -395,17 +445,31 @@ def finding_packages(projection: Projection, adjudications: Sequence[Mapping[str
         verifiers = merged["independence"].get(claim.claim_id, [])
         independent = [item for item in verifiers if item["independent"]]
         reviewed = independent or [item for item in verifiers if item.get("review_id")]
+        # Decision 2 is judged on the verifiers that count: the independent ones when any exist.
+        model_distinct = any(item.get("verifier_model_distinct", False) for item in (independent or verifiers))
         supporting = sorted({relation for item in record["predicates"] for relation in item["supporting"]})
+        missing = sorted(item["predicate"] for item in record["predicates"]
+                         if item["required"] and item["outcome"] != "satisfied")
+        review_id = reviewed[0]["review_id"] if reviewed else None
+        claim_scores = by_claim_scores.get(claim.claim_id, ())
+        inputs, displayed = _ship_block_inputs(claim.claim_id, state, claim_scores,
+                                               (references or {}).get(claim.claim_id) or {},
+                                               (lead_families or {}).get(claim.claim_id, ()), model_distinct)
+        decision = ship_block.decide(inputs, ship_block_settings, require_distinct_model=require_distinct_model)
         body = {
-            "schema": FINDING_SCHEMA, "claim_id": claim.claim_id, "state": state.value,
+            "schema": FINDING_SCHEMA, "claim_id": claim.claim_id, "lane": claim.lane.value, "state": state.value,
             "label": "confirmed" if state is ClaimState.CONFIRMED else "not_independently_confirmed",
             "title": f"{claim.security_predicate} ({claim.weakness_cwe or 'unmapped weakness'})"[:200],
             "adjudication_id": record["adjudication_id"], "direct_evidence": supporting[:256],
-            "verification_review_id": reviewed[0]["review_id"] if reviewed else None,
-            "scores": sorted(by_claim_scores.get(claim.claim_id, ()))[:16], "poc": None, "attack_chains": [],
+            "missing_predicates": missing,
+            "verification_review_id": review_id,
+            "scores": sorted(item["score_id"] for item in claim_scores)[:16], "poc": None, "attack_chains": [],
             "remediation_inputs": {"safe_regression_artifact": None},
             "independence": {"independent": bool(independent),
-                             "provider_distinct": any(item["provider_distinct"] for item in verifiers)},
+                             "provider_distinct": any(item["provider_distinct"] for item in verifiers),
+                             "verifier_model_distinct": model_distinct},
+            "ship_block": decision.record(inputs, adjudication_id=record["adjudication_id"],
+                                          verification_review_id=review_id, displayed_context=displayed),
             "gaps": sorted(set(claim_gaps.get(claim.claim_id, ())) | set(record["gap_ids"]))[:256],
             "provenance": {"run_manifest_sha256": manifest_sha256, "ledger_head_sha256": projection.head},
         }
@@ -414,17 +478,41 @@ def finding_packages(projection: Projection, adjudications: Sequence[Mapping[str
         path = Path(out_dir) / f"{package['finding_package_id']}.json"
         atomic_bytes(path, canonical_json(package))
         written.append({"finding_package_id": package["finding_package_id"], "sha256": file_sha256(path),
-                        "claim_id": claim.claim_id, "state": state.value, "file": path.name})
+                        "claim_id": claim.claim_id, "state": state.value, "lane": claim.lane.value,
+                        "ship_block_status": decision.status.value, "missing_predicates": missing,
+                        "gaps": package["gaps"], "file": path.name})
     return sorted(written, key=lambda item: item["finding_package_id"])
+
+
+def remediation_partition(findings: Sequence[Mapping[str, Any]]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Decision 4: ``(remediation_intake, verification_backlog)``.
+
+    Only ``confirmed`` finding packages enter remediation intake; ``supported`` packages form the
+    separate verification backlog, labelled ``unconfirmed`` with their missing predicates and gaps.
+    """
+    intake, backlog = [], []
+    for item in sorted(findings, key=lambda value: value["finding_package_id"]):
+        entry = {"finding_package_id": item["finding_package_id"], "sha256": item["sha256"],
+                 "claim_id": item["claim_id"], "lane": item["lane"], "ship_block_status": item["ship_block_status"]}
+        if item["state"] == ClaimState.CONFIRMED.value:
+            intake.append(entry)
+        elif item["state"] == ClaimState.SUPPORTED.value:
+            backlog.append({**entry, "label": "unconfirmed", "missing_predicates": list(item["missing_predicates"]),
+                            "gap_ids": list(item["gaps"])})
+        else:
+            raise IntegrityError(f"finding package has an unpublishable state: {item['state']}")
+    return intake, backlog
 
 
 def build_handoff(*, run_id: str, manifest_sha256: str, configuration_sha256: str, projection: Projection,
                   accounting: Accounting, shards: Sequence[Mapping[str, Any]], findings: Sequence[Mapping[str, Any]],
                   scores: Sequence[Mapping[str, Any]], package_manifest_sha256: str,
-                  coverage: Mapping[str, Any], possible: Sequence[Sequence[str]], schemas: SchemaSet) -> dict[str, Any]:
+                  coverage: Mapping[str, Any], possible: Sequence[Sequence[str]], schemas: SchemaSet,
+                  ship_block_policy_sha256: str, verification: Mapping[str, Any]) -> dict[str, Any]:
     if not accounting.exact:
         reasons = ", ".join(sorted({gap.reason for gap in accounting.violations}))
         raise IntegrityError(f"publication_error: claim accounting is not exact ({reasons})")
+    intake, backlog = remediation_partition(findings)
     handoff = {
         "schema": HANDOFF_SCHEMA, "run_id": run_id, "accepted_manifest_sha256": manifest_sha256,
         "configuration_sha256": configuration_sha256, "status": handoff_status(accounting),
@@ -432,6 +520,12 @@ def build_handoff(*, run_id: str, manifest_sha256: str, configuration_sha256: st
         "accounting": accounting.to_json(), "shards": [dict(item) for item in shards],
         "finding_packages": [{"finding_package_id": item["finding_package_id"], "sha256": item["sha256"]}
                              for item in findings],
+        "remediation_intake": intake, "verification_backlog": backlog,
+        "ship_block": {**ship_block.summarize({"lane": item["lane"], "status": item["ship_block_status"]}
+                                              for item in findings),
+                       "policy_sha256": ship_block_policy_sha256},
+        "verification": dict(verification),
+        "planned_consumers": [dict(item) for item in PLANNED_CONSUMERS],
         "score_packages": [{"score_id": item["score_id"], "sha256": item["sha256"]} for item in scores],
         "gap_ids": [gap.gap_id for gap in projection.gaps],
         "package_manifest_sha256": package_manifest_sha256, "coverage_matrix": dict(coverage),
@@ -481,6 +575,6 @@ def verify_receipts(projection: Projection, receipts_root: Path) -> int:
     return checked
 
 
-__all__ = ["apply_policy", "audit", "build_handoff", "coverage_matrix", "completeness_gaps", "finding_packages",
-           "merge_claims", "merge_verified", "score_claims", "scorer_actor", "shard_records", "verify_receipts",
-           "write_ledger"]
+__all__ = ["apply_policy", "audit", "build_handoff", "claim_lead_families", "claim_references", "coverage_matrix",
+           "completeness_gaps", "finding_packages", "merge_claims", "merge_verified", "remediation_partition",
+           "score_claims", "scorer_actor", "shard_records", "verify_receipts", "write_ledger"]

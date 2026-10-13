@@ -880,6 +880,40 @@ def test_input_matrix_resolves_the_planned_graph_producer_once_registered() -> N
     assert states[1] == {"producer": "planned:job_code_graph_index", "status": "planned"}
 
 
+DOWNSTREAM = ("job_remediation_planning", "job_remediation_validation", "job_final_publication_gate",
+              "job_final_report_publication")
+
+
+def test_downstream_review_consumers_are_registered_as_planned_producers_by_name() -> None:
+    """Decision 8: the four downstream job names are fixed before any of them is built."""
+    from appsec_review.jobs.job_inference_security_review.datasets import PLANNED_CONSUMER_JOBS, PLANNED_CONSUMERS
+    from appsec_review.runtime.registry import builtin_registry
+
+    planned = {producer for _source, producers, *_ in input_matrix.INPUT_SOURCES for producer in producers
+               if producer.startswith("planned:")}
+    assert {f"planned:{job}" for job in DOWNSTREAM} <= planned
+    assert PLANNED_CONSUMER_JOBS == DOWNSTREAM
+    assert tuple(consumer.removeprefix("planned:") for consumer, _ in input_matrix.PLANNED_CONSUMERS) == DOWNSTREAM
+    # Every consumed producer is the review itself or an earlier planned downstream job.
+    for index, (_consumer, producers) in enumerate(input_matrix.PLANNED_CONSUMERS):
+        earlier = {f"planned:{job}" for job in DOWNSTREAM[:index]}
+        assert set(producers) <= {"job_inference_security_review"} | earlier
+    assert all(item["status"] == "planned" and item["reads"] for item in PLANNED_CONSUMERS)
+    # Remediation reads only confirmed findings (decision 4); never the verification backlog.
+    reads = {item["job_id"]: set(item["reads"]) for item in PLANNED_CONSUMERS}
+    assert "verification_backlog" not in reads["job_remediation_planning"] | reads["job_remediation_validation"]
+    assert "remediation_intake" in reads["job_remediation_planning"]
+    # Not yet built: they are planned, never registered, and reconcile reports them as planned.
+    assert not set(DOWNSTREAM) & set(builtin_registry().job_ids())
+    rows, discrepancies = input_matrix.reconcile([], [], [], {}, "job_review_data_indexing")
+    states = {item["source"]: item["producer_states"] for item in rows}
+    assert states["remediation_plans"] == [{"producer": "planned:job_remediation_planning", "status": "planned"}]
+    assert not any(job in item for item in discrepancies for job in DOWNSTREAM)
+    # Once registered, a planned name resolves to the job itself without a matrix change.
+    assert input_matrix.resolve_producer("planned:job_final_publication_gate", {"job_final_publication_gate"}) == \
+        "job_final_publication_gate"
+
+
 def test_audit_accepts_graph_export_dataset_only_with_its_named_reason() -> None:
     pattern = ("data/codeql/scopes/*/exports/**",)
     declaration = artifact_only("graph_exports", "export", "codeql", "appsec-review/codeql-graph-export/1",

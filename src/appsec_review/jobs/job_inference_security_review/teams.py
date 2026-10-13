@@ -39,7 +39,7 @@ from appsec_review.review.cells import CellBudgetExceeded, CellOutcome, CellSpec
 from appsec_review.review.claims import normalize_claim
 from appsec_review.review.evidence import resolve_relation, satisfies
 from appsec_review.review.identity import make_id, sha256_hex
-from appsec_review.review.independence import ActorRecord, provider_distinct, verify_independence
+from appsec_review.review.independence import ActorRecord, model_distinct, provider_distinct, verify_independence
 from appsec_review.review.ledger import EvidenceRequestOutcome, LedgerWriter, gap_json
 from appsec_review.review.models import (
     BlueTask, CellRecord, CellStatus, Claim, EvidenceRelation, Gap, GapClass, IntegrityError, Lane, Predicate,
@@ -811,6 +811,8 @@ def _review(ctx: ReviewContext, group: Mapping[str, Any], blues: tuple[_Cell, _C
     markers = list(group["narratives"])
     for cell in (*blues, verifier):
         _record(result, cell)
+    # Decision 2: recorded from the cells' configured model profiles whatever the verifier's outcome.
+    verifier_model_distinct = model_distinct(_actor(verifier), [_actor(cell) for cell in group["cells"]])
     for cell in blues:
         if cell.record.status is CellStatus.SUCCEEDED and cell.outcome.result is not None:
             found, failed = _relations(ctx, cell, claim.claim_id, cell.outcome.result.get("proposed_relations", ()),
@@ -824,7 +826,7 @@ def _review(ctx: ReviewContext, group: Mapping[str, Any], blues: tuple[_Cell, _C
         result.verifier_gaps[claim.claim_id] = [gap_json(gap) for gap in terminal]
         result.independence.setdefault(claim.claim_id, []).append({
             "verifier_cell_id": verifier.cell_id, "independent": False, "provider_distinct": False,
-            "review_id": None, "gap_ids": sorted(gap.gap_id for gap in terminal), "status": verifier.record.status.value})
+            "verifier_model_distinct": verifier_model_distinct, "review_id": None, "gap_ids": sorted(gap.gap_id for gap in terminal), "status": verifier.record.status.value})
         return
     seen = _seen(verifier)
     found, failed = _relations(ctx, verifier, claim.claim_id, verifier.outcome.result.get("proposed_relations", ()),
@@ -842,6 +844,7 @@ def _review(ctx: ReviewContext, group: Mapping[str, Any], blues: tuple[_Cell, _C
     result.independence.setdefault(claim.claim_id, []).append({
         "verifier_cell_id": verifier.cell_id, "independent": independent,
         "provider_distinct": provider_distinct(_actor(verifier), others),
+        "verifier_model_distinct": verifier_model_distinct,
         "review_id": make_id("review", 1, {"cell_id": verifier.cell_id, "claim_id": claim.claim_id}),
         "gap_ids": sorted(gap.gap_id for gap in gaps), "status": verifier.record.status.value})
 

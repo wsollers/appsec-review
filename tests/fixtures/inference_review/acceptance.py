@@ -40,7 +40,9 @@ def job_tables(overrides: Mapping[str, Any] | None = None) -> str:
     return body
 
 
-def write_config(directory: Path, runs_dir: Path, *, overrides: Mapping[str, Any] | None = None) -> Path:
+def write_config(directory: Path, runs_dir: Path, *, overrides: Mapping[str, Any] | None = None,
+                 extra: str = "") -> Path:
+    """``extra`` is appended TOML (for example an additional model profile table)."""
     path = Path(directory) / "appsec-review.toml"
     path.write_text(f"""[runtime]
 runs_dir = "{Path(runs_dir).as_posix()}"
@@ -58,6 +60,7 @@ inference_teams = 2
 inference_score = 1
 
 {job_tables(overrides)}
+{extra}
 {build_capture_toml()}""", encoding="utf-8")
     return path
 

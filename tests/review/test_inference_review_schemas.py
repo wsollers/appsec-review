@@ -14,6 +14,8 @@ from appsec_review.review import models
 from appsec_review.review.accounting import PoolOutcome, exact_accounting
 from appsec_review.review.identity import make_id, sha256_hex
 from appsec_review.review.ledger import EventKind, EvidenceRequestOutcome, merge_shards, project
+from appsec_review.jobs.job_inference_security_review.schemas import SchemaSet
+from appsec_review.review.ship_block import ShipBlockStatus
 from tests.review.test_ledger import cell_id, entity, write_sample
 
 ROOT = Path(__file__).resolve().parents[2] / "docs" / "schemas" / "inference-security-review"
@@ -106,7 +108,7 @@ def test_objects_closed_strings_and_arrays_bounded(name: str) -> None:
     ("cell_status", models.CellStatus), ("gap_class", models.GapClass), ("event_kind", EventKind),
     ("security_predicate", models.SecurityPredicate),
     ("evidence_request_outcome", EvidenceRequestOutcome), ("pool_outcome", PoolOutcome),
-    ("entity_kind", EntityKind)])
+    ("entity_kind", EntityKind), ("ship_block_status", ShipBlockStatus)])
 def test_enums_match_python_contract(definition: str, enum) -> None:
     assert DEFS[definition]["enum"] == [member.value for member in enum]
 
@@ -203,16 +205,39 @@ def test_score_package_2_rejects_version_1_and_malformed_factors() -> None:
     assert not valid("score-package", {**_score(), "missing_factor_reasons": [{"factor": "threat"}]})
 
 
+def _ship_block(status: str = "ship_blocking", state: str = "confirmed") -> dict:
+    return {
+        "policy": "ship-block-policy/1", "policy_sha256": SHA, "status": status,
+        "conditions": {"claim_confirmed": state == "confirmed", "claim_supported": state == "supported",
+                       "technical_severity_qualifies": True, "dependency_finding": False,
+                       "kev_dependency_qualifies": False, "distinct_verification_required": True,
+                       "verifier_model_distinct": True},
+        "reasons": ["technical_severity_high"],
+        "inputs": {"claim_state": state, "lead_families": ["codeql"], "kev_listed": None,
+                   "verifier_model_distinct": True,
+                   "technical_severity": {"provider": "application_risk_matrix/2", "rating": "high",
+                                          "score_id": ident("score", "matrix")}},
+        "citations": {"adjudication_id": ident("adjudication"), "score_ids": [ident("score", "matrix")],
+                      "verification_review_id": ident("review")},
+        "displayed_context": {"decides": False, "non_deciding_scores": [ident("score")],
+                              "reference_cvss": [{"cve_id": "CVE-2026-0001", "version": "3.1",
+                                                  "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
+                                                  "base_score": 9.8}]},
+    }
+
+
 def _finding() -> dict:
     return {
-        "schema": "appsec-review/finding-package/1", "finding_package_id": ident("finding_package"),
-        "claim_id": ident("claim"), "state": "confirmed", "label": "confirmed",
+        "schema": "appsec-review/finding-package/2", "finding_package_id": ident("finding_package"),
+        "claim_id": ident("claim"), "lane": "lead", "state": "confirmed", "label": "confirmed",
         "title": "Unbounded copy on the accepted request path", "adjudication_id": ident("adjudication"),
         "direct_evidence": [ident("evidence_relation", "51"), ident("evidence_relation", "c2")],
+        "missing_predicates": [],
         "verification_review_id": ident("review"), "scores": [ident("score"), ident("score", "matrix")],
         "poc": {"status": "verification_succeeded", "result_id": "pocresult-" + SHA},
         "attack_chains": ["chain-" + SHA], "remediation_inputs": {"safe_regression_artifact": "regression-" + SHA},
-        "independence": {"independent": True, "provider_distinct": False},
+        "independence": {"independent": True, "provider_distinct": False, "verifier_model_distinct": True},
+        "ship_block": _ship_block(),
         "gaps": [ident("gap")], "provenance": {"run_manifest_sha256": SHA, "ledger_head_sha256": SHA},
     }
 
@@ -233,9 +258,43 @@ def test_claim_and_finding_conditionals() -> None:
     assert not valid("claim", {**_claim(), "state": "severe"})
     assert not valid("claim", {**_claim(), "weakness_cwe": "120"})
     assert not valid("finding-package", {**_finding(), "label": "not_independently_confirmed"})
-    assert valid("finding-package", {**_finding(), "state": "supported", "label": "not_independently_confirmed",
-                                     "verification_review_id": None})
+    supported = {**_finding(), "state": "supported", "label": "not_independently_confirmed",
+                 "verification_review_id": None, "missing_predicates": ["source_to_sink_reachability"],
+                 "ship_block": _ship_block("needs_verification", "supported")}
+    assert valid("finding-package", supported)
     assert not valid("finding-package", {**_finding(), "verification_review_id": None})
+
+
+@pytest.mark.parametrize("state,status,ok", [
+    ("confirmed", "ship_blocking", True),
+    ("confirmed", "ship_blocking_pending_distinct_verification", True),
+    ("confirmed", "not_ship_blocking", True),
+    ("confirmed", "needs_verification", False),
+    ("supported", "needs_verification", True),
+    ("supported", "not_ship_blocking", True),
+    ("supported", "ship_blocking", False),
+    ("supported", "ship_blocking_pending_distinct_verification", False),
+])
+def test_finding_ship_block_status_matches_the_claim_state(state: str, status: str, ok: bool) -> None:
+    document = {**_finding(), "state": state, "ship_block": _ship_block(status, state)}
+    if state == "supported":
+        document.update(label="not_independently_confirmed", verification_review_id=None)
+    assert valid("finding-package", document) is ok
+    # The job's closed validator agrees with jsonschema on the ship-block conditionals.
+    assert (not SchemaSet(ROOT).errors("finding-package", document)) is ok
+
+
+def test_finding_ship_block_record_is_closed_and_never_lets_cvss_decide() -> None:
+    assert not valid("finding-package", {**_finding(), "ship_block": {**_ship_block(), "policy": "ship-block-policy/2"}})
+    displayed = {**_ship_block()["displayed_context"], "decides": True}
+    assert not valid("finding-package", {**_finding(), "ship_block": {**_ship_block(), "displayed_context": displayed}})
+    inputs = copy.deepcopy(_ship_block()["inputs"])
+    inputs["technical_severity"]["provider"] = "cvss_v4"
+    assert not valid("finding-package", {**_finding(), "ship_block": {**_ship_block(), "inputs": inputs}})
+    independence = {"independent": True, "provider_distinct": False}
+    assert not valid("finding-package", {**_finding(), "independence": independence})
+    assert not valid("finding-package", {**_finding(), "missing_predicates": ["security_impact"]})   # confirmed
+    assert not valid("finding-package", {**_finding(), "schema": "appsec-review/finding-package/1"})
 
 
 def _citations() -> dict:
@@ -343,6 +402,57 @@ def test_cell_record_and_gap() -> None:
     assert not valid("gap", {**gap, "gap_class": "clean"})
 
 
+def _handoff_review_fields(intake=(), backlog=()) -> dict:
+    from appsec_review.jobs.job_inference_security_review.datasets import PLANNED_CONSUMERS
+    from appsec_review.review.ship_block import summarize
+
+    rows = [*intake, *backlog]
+    return {"remediation_intake": list(intake), "verification_backlog": list(backlog),
+            "ship_block": {**summarize({"lane": row["lane"], "status": row["ship_block_status"]} for row in rows),
+                           "policy_sha256": SHA},
+            "verification": {"require_distinct_model_for_ship_blocking": True,
+                             "verifier": {"provider": "claude-cli", "model": "claude-haiku-5-5"},
+                             "red": {role: {"provider": "claude-cli", "model": "claude-haiku-5-5"}
+                                     for role in ("hypothesis_hunter", "red_team_analyst")},
+                             "distinct": False, "warning": "same model"},
+            "planned_consumers": [dict(item) for item in PLANNED_CONSUMERS]}
+
+
+def test_handoff_partitions_remediation_intake_from_the_verification_backlog(tmp_path: Path) -> None:
+    paths, _ = write_sample(tmp_path)
+    projection = project(merge_shards(paths).events)
+    expected = {cell_id("lead-1"): models.Lane.LEAD, cell_id("lead-2"): models.Lane.LEAD,
+                cell_id("hunt-1"): models.Lane.HUNT}
+    accounting = exact_accounting(projection, expected, {"package-a": models.Lane.LEAD, "package-h": models.Lane.HUNT},
+                                  incomplete_gap_ratio=0.25)
+    confirmed = {"finding_package_id": ident("finding_package", "c"), "sha256": SHA, "claim_id": ident("claim", "c"),
+                 "lane": "lead", "ship_block_status": "ship_blocking_pending_distinct_verification"}
+    supported = {"finding_package_id": ident("finding_package", "s"), "sha256": SHA, "claim_id": ident("claim", "s"),
+                 "lane": "hunt", "ship_block_status": "needs_verification", "label": "unconfirmed",
+                 "missing_predicates": ["source_to_sink_reachability"], "gap_ids": [ident("gap")]}
+    handoff = {
+        "schema": "appsec-review/inference-review-handoff/2", "run_id": "run-1", "accepted_manifest_sha256": SHA,
+        "status": "DEGRADED", "configuration_sha256": SHA, "ledger_head_sha256": projection.head,
+        "projection_sha256": projection.sha256(), "accounting": accounting.to_json(), "shards": [],
+        "finding_packages": [{"finding_package_id": item["finding_package_id"], "sha256": SHA}
+                             for item in (confirmed, supported)],
+        "score_packages": [], "gap_ids": [gap.gap_id for gap in projection.gaps],
+        **_handoff_review_fields([confirmed], [supported])}
+    validator("handoff").validate(handoff)
+    assert SchemaSet(ROOT).errors("handoff", handoff) == []
+    assert handoff["ship_block"]["by_lane"]["hunt"]["needs_verification"] == 1
+    # A supported package can never enter remediation intake, nor a confirmed one the backlog.
+    assert not valid("handoff", {**handoff, "remediation_intake": [{**confirmed, "ship_block_status":
+                                                                    "needs_verification"}]})
+    assert not valid("handoff", {**handoff, "verification_backlog": [{**supported, "label": "confirmed"}]})
+    assert not valid("handoff", {**handoff, "verification_backlog": [{**supported, "ship_block_status":
+                                                                      "ship_blocking"}]})
+    consumers = [{**item, "job_id": "job_remediation"} for item in handoff["planned_consumers"]]
+    assert not valid("handoff", {**handoff, "planned_consumers": consumers})
+    assert not valid("handoff", {key: value for key, value in handoff.items() if key != "remediation_intake"})
+    assert not valid("handoff", {**handoff, "schema": "appsec-review/inference-review-handoff/1"})
+
+
 def test_handoff_accepts_exact_accounting_only(tmp_path: Path) -> None:
     paths, _ = write_sample(tmp_path)
     projection = project(merge_shards(paths).events)
@@ -351,12 +461,13 @@ def test_handoff_accepts_exact_accounting_only(tmp_path: Path) -> None:
     accounting = exact_accounting(projection, expected, {"package-a": models.Lane.LEAD, "package-h": models.Lane.HUNT},
                                   incomplete_gap_ratio=0.25)
     handoff = {
-        "schema": "appsec-review/inference-review-handoff/1", "run_id": "run-1", "accepted_manifest_sha256": SHA,
+        "schema": "appsec-review/inference-review-handoff/2", "run_id": "run-1", "accepted_manifest_sha256": SHA,
         "status": "DEGRADED",
         "configuration_sha256": SHA, "ledger_head_sha256": projection.head, "projection_sha256": projection.sha256(),
         "accounting": accounting.to_json(), "shards": [{"path": "data/ledger/lead.jsonl", "schema":
                                                          "appsec-review/ledger-event/1", "sha256": SHA, "rows": 8}],
-        "finding_packages": [], "score_packages": [], "gap_ids": [gap.gap_id for gap in projection.gaps]}
+        "finding_packages": [], "score_packages": [], "gap_ids": [gap.gap_id for gap in projection.gaps],
+        **_handoff_review_fields()}
     assert accounting.exact and accounting.review_incomplete
     validator("handoff").validate(handoff)
     broken = exact_accounting(projection, {}, {}, incomplete_gap_ratio=0.25)

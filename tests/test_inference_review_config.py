@@ -404,3 +404,76 @@ def test_scoring_and_ranking_tuning_changes_the_semantic_fingerprint(tmp_path: P
 def test_scoring_model_and_rank_weights_are_validated(tmp_path: Path, old: str, new: str, message: str) -> None:
     with pytest.raises(ValueError, match=message):
         _variant(tmp_path, (old, new))
+
+
+# ---------------------------------------------------------------- ship-block policy and verifier distinctness
+
+VERIFIER_PROFILE = f"""
+{SECTION}.models.verifier]
+provider = "claude-cli"
+model = "claude-verifier-model"
+reasoning = "high"
+max_input_tokens = 32000
+max_output_tokens = 8000
+max_queries = 40
+max_turns = 12
+timeout_seconds = 600
+"""
+
+
+def test_ship_block_and_verification_default_to_the_recorded_decisions(tmp_path: Path) -> None:
+    settings = _settings(load_config(ROOT / "appsec-review.toml"))
+    assert settings.ship_block.blocking_technical_severities == ("high", "critical")
+    assert settings.ship_block.kev_dependency_blocks is True
+    assert settings.ship_block.dependency_lead_families == ("dependency_advisory", "artifact_scanner")
+    assert settings.verification.require_distinct_model_for_ship_blocking is True
+    # Every checked-in profile is claude-haiku-5-5, so the verifier is not distinct and a warning is recorded.
+    assert {profile.model for profile in settings.models.values()} == {"claude-haiku-5-5"}
+    record = settings.verifier_distinctness()
+    assert record["distinct"] is False and "ship_blocking_pending_distinct_verification" in record["warning"]
+    # Omitting both tables keeps the same defaults.
+    source = (ROOT / "appsec-review.toml").read_text(encoding="utf-8")
+    start = source.index(f"{SECTION}.verification]")
+    end = source.index(f"{SECTION}.routing]")
+    assert source.index(f"{SECTION}.ship_block]") < end
+    omitted = _settings(_variant(tmp_path / "omitted", (source[start:end], "")))
+    assert omitted.ship_block == settings.ship_block and omitted.verification == settings.verification
+
+
+def test_a_distinct_verifier_profile_clears_the_warning_and_changes_the_fingerprint(tmp_path: Path) -> None:
+    base = _settings(_variant(tmp_path / "base"))
+    distinct = _settings(_variant(tmp_path / "distinct", ('workers = 4\nmodel_profile = "default"',
+                                                         'workers = 4\nmodel_profile = "verifier"'),
+                                  suffix=VERIFIER_PROFILE))
+    record = distinct.verifier_distinctness()
+    assert record["distinct"] is True and record["warning"] is None
+    assert record["verifier"] == {"provider": "claude-cli", "model": "claude-verifier-model"}
+    assert set(record["red"]) == {"hypothesis_hunter", "red_team_analyst"}
+    off = _settings(_variant(tmp_path / "off", ("require_distinct_model_for_ship_blocking = true",
+                                                "require_distinct_model_for_ship_blocking = false")))
+    assert off.verifier_distinctness()["warning"] is None and off.verifier_distinctness()["distinct"] is False
+    critical = _settings(_variant(tmp_path / "critical", ('blocking_technical_severities = ["high", "critical"]',
+                                                          'blocking_technical_severities = ["critical"]')))
+    assert critical.ship_block.blocking_technical_severities == ("critical",)
+    assert len({semantic_settings_sha256(item) for item in (base, distinct, off, critical)}) == 4
+
+
+@pytest.mark.parametrize("old, new, message", [
+    ('blocking_technical_severities = ["high", "critical"]', 'blocking_technical_severities = ["urgent"]',
+     "ship_block.blocking_technical_severities has unknown bands"),
+    ('blocking_technical_severities = ["high", "critical"]', "blocking_technical_severities = []",
+     "at least one band"),
+    ("kev_dependency_blocks = true", 'kev_dependency_blocks = "yes"', "kev_dependency_blocks must be a Boolean"),
+    ('dependency_lead_families = ["dependency_advisory", "artifact_scanner"]', 'dependency_lead_families = ["pip"]',
+     "unknown lead families: pip"),
+    ("kev_dependency_blocks = true", "kev_dependency_blocks = true\ncvss_threshold = 7",
+     "ship_block has unknown settings: cvss_threshold"),
+    ("require_distinct_model_for_ship_blocking = true", "require_distinct_model_for_ship_blocking = 1",
+     "require_distinct_model_for_ship_blocking must be a Boolean"),
+    ("require_distinct_model_for_ship_blocking = true",
+     "require_distinct_model_for_ship_blocking = true\nrequire_distinct_provider = true",
+     "verification has unknown settings: require_distinct_provider"),
+])
+def test_ship_block_and_verification_settings_are_validated(tmp_path: Path, old: str, new: str, message: str) -> None:
+    with pytest.raises(ValueError, match=message):
+        _variant(tmp_path, (old, new))

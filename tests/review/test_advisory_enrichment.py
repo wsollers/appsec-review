@@ -323,3 +323,13 @@ def test_claim_references_come_only_from_proposing_lead_packages(fixture, scope)
     assert set(references) == {"claim-a"}
     assert references["claim-a"]["kev_listed"] is True and references["claim-a"]["epss"]["percentile"] == 0.97
     assert {item["version"] for item in references["claim-a"]["reference_cvss"]} == {"3.1", "4.0"}
+
+
+def test_claim_lead_families_mark_dependency_findings_from_lead_packages_only(fixture, scope) -> None:
+    assembly = assemble_packages(scope)
+    documents = {item.package_id: item.document() for item in assembly.packages}
+    lead = next(item.package_id for item in assembly.packages if item.lead_ids == (fixture.ids["dep_high"],))
+    hunt = next(item.package_id for item in assembly.packages if item.kind == "hunt")
+    merged = {"proposal_packages": {"claim-a": [lead, hunt], "claim-b": [hunt]}}
+    families = stages.claim_lead_families(merged, documents)
+    assert families == {"claim-a": ("dependency_advisory",)}       # a hunt menu names no single lead

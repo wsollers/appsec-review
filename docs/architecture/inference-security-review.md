@@ -5,8 +5,10 @@ Status: design approved; vertical slice 1 is implemented as the registered
 binding decisions in [Implementation readiness decisions](#implementation-readiness-decisions), and
 its definition of done passes with an injected deterministic `Infer` double
 ([slice 1 implementation notes](#slice-1-implementation-notes)). Where an earlier section and that
-section differ for slice 1, the readiness decisions govern. Slices 2-4 (CVSS and policy scoring,
-PoC, chains, rounds and variant hunts) remain design only, and no live-model acceptance has run.
+section differ for slice 1, the readiness decisions govern. `ship-block-policy/1`, verifier model
+distinctness, remediation intake and the planned downstream job names are implemented
+([decisions](#decisions-and-open-questions) 1, 2, 4 and 8). Slices 2-4 (CVSS and SSVC scoring, PoC,
+chains, rounds and variant hunts) remain design only, and no live-model acceptance has run.
 The separate `job_document_issue_analysis` publishes a private, hash-pinned candidate ledger;
 its document hunts are not yet consumed by the inference review job.
 
@@ -70,14 +72,17 @@ Downstream contracts are exact:
 
 | Consumer | Packages consumed | Explicitly not consumed |
 |---|---|---|
-| `job_remediation_planning` | confirmed/supported final finding packages, score packages, evidence requests that remain gaps, safe regression-test specifications derived from successful PoCs | raw worker narratives, rejected claims, raw PoC payloads |
+| `job_remediation_planning` | the handoff's `remediation_intake` (confirmed final finding packages only, decision 4), score packages, evidence requests that remain gaps, safe regression-test specifications derived from successful PoCs | the `verification_backlog` (supported findings), raw worker narratives, rejected claims, raw PoC payloads |
 | `job_remediation_validation` | finding identity and evidence, remediation proposal, safe regression-test artifact, sanitized PoC result/observed signal, score policy identity | the PoC executor, production credentials, offensive tooling |
 | `job_final_publication_gate` | accepted claim-ledger manifest, exact claim accounting, finding-package manifest, score-package manifest, attack-chain manifest, sanitized PoC status manifest, completeness and coverage gaps | unaccepted shards or model transcripts |
 | `job_final_report_publication` | publishable finding packages, separate score dimensions, confirmed/qualified chain packages, PoC outcome summaries, limitations/gaps | reusable exploit code, sensitive queries, secrets, raw prompts, private scratch artifacts |
 | retrieval finding index publisher (inside final publication) | sanitized final finding packages and their resolving citations | proposed/duplicate/out-of-scope claims unless the operator requests an internal audit view |
 
-No remediation or report job may reinterpret a claim state. It projects the accepted state and
-provenance from this job.
+No remediation or report job may reinterpret a claim state or a `ship-block-policy/1` status. It
+projects the accepted state and provenance from this job. The four job names are fixed (decision
+8): each is a `planned:` producer in `indexing/input_matrix.py` (`INPUT_SOURCES` and
+`PLANNED_CONSUMERS`), and the handoff's `planned_consumers` lists them with the handoff fields each
+reads (`jobs/job_inference_security_review/datasets.py::PLANNED_CONSUMERS`). None is implemented.
 
 ## Dagster graph
 
@@ -240,8 +245,10 @@ Blue and verifier pools fan out concurrently after normalization:
 
 Model/provider independence is enforced by actor identities and policy. A verifier cell cannot use
 the hypothesis author's request, response cache entry, conversation, or derived evidence record.
-High/Critical and ship-blocking policies may additionally require a different provider or model
-family; inability to satisfy that requirement yields `insufficient_evidence` or a coverage gap.
+For ship-blocking findings, `ship-block-policy/1` additionally requires the verifier to run on a
+different model profile than the red cells (decision 2). That requirement never changes the claim
+state: a confirmed finding verified on the red cells' model is published as
+`ship_blocking_pending_distinct_verification` (see [R6](#r6-independence)).
 
 ### Evidence-qualified adjudication
 
@@ -1425,13 +1432,23 @@ The following documents are concise shape examples; hashes are shortened only fo
 
 ```json
 {
-  "schema": "appsec-review/finding-package/1",
+  "schema": "appsec-review/finding-package/2",
   "finding_package_id": "finding-6fd1...",
   "claim_id": "claim-9a31...",
+  "lane": "lead",
   "state": "confirmed",
   "title": "Unbounded copy on the accepted request path",
   "direct_evidence": ["evrel-51...", "evrel-c2..."],
+  "missing_predicates": [],
   "verification_review_id": "review-831c...",
+  "independence": {"independent": true, "provider_distinct": false, "verifier_model_distinct": true},
+  "ship_block": {"policy": "ship-block-policy/1", "status": "ship_blocking",
+                 "reasons": ["technical_severity_critical"],
+                 "inputs": {"technical_severity": {"provider": "application_risk_matrix/2", "rating": "critical",
+                                                   "score_id": "score-application-matrix-31..."},
+                            "lead_families": ["source_sast"], "kev_listed": null,
+                            "verifier_model_distinct": true},
+                 "displayed_context": {"decides": false, "reference_cvss": [], "non_deciding_scores": []}},
   "scores": ["score-0fe2...", "score-application-matrix-31..."],
   "poc": {"status": "verification_succeeded", "result_id": "pocresult-77b0..."},
   "attack_chains": ["chain-a37c..."],
@@ -1786,9 +1803,20 @@ A verifier result is independent only when all of these hold:
 - for every required predicate, at least one supporting relation came from its own retrieval
   receipts. It may re-resolve the same entity red cited.
 
-Distinct provider or model family is *default* not required, because only `claude-cli` is
-configured today. Each finding package records `independence.provider_distinct`, so that
-publication can label it. This is the slice 1 answer to open question 2.
+A distinct provider is not required, because only `claude-cli` is configured today; provider
+distinctness becomes required once a second provider is configured. Distinct model profile is not
+part of independence either: R6 and the R5 confirmation row are unchanged by it. Decision 2 adds a
+separate, recorded condition. For every claim the team records
+`independence.verifier_model_distinct`, which is true when the verifier cell's model profile
+(provider and model) differs from every red cell's on the claim (`review/independence.py::
+model_distinct`). Each finding package records it next to `independence.provider_distinct`.
+`ship-block-policy/1` consumes it: with
+`settings.verification.require_distinct_model_for_ship_blocking = true` (the default), a confirmed
+finding that would block but was verified on a red cell's model is published as
+`ship_blocking_pending_distinct_verification` instead of `ship_blocking`. A distinct verifier is
+configured through the existing role mapping (`roles.independent_verifier.model_profile`); the job
+records a warning in the handoff when the requirement is on but the verifier and red profiles
+resolve to the same model.
 
 ### R7 Claim identity normalization
 
@@ -2100,23 +2128,44 @@ host execution of target outputs, production proofs, and text parsing to infer s
 Decisions were recorded by the user on 2026-10-12. "Implementation" names where the decision is or
 will be enforced in code.
 
-1. **Ship-blocking policy — decided.** One versioned policy, `ship-block-policy/1`. A finding is
+1. **Ship-blocking policy — decided and implemented.** One versioned policy, `ship-block-policy/1`. A finding is
    ship-blocking when it is `confirmed` and either `application_risk_matrix/2` rates its technical
    severity `high` or `critical`, or it is a confirmed dependency finding listed in KEV. CVSS and
    SSVC outputs are displayed alongside but never decide. A `supported` finding never blocks; when
    it would otherwise qualify, it is flagged `needs_verification`. When a ship-blocking finding was
    verified by the same model as its red cells (see 2), it is published as
    `ship_blocking_pending_distinct_verification` instead of `ship_blocking`.
-2. **Verifier independence — decided.** A different provider is not required. For ship-blocking
+   Implementation: `review/ship_block.py::decide` is a pure, first-match policy applied to every
+   finding package in `publication.publish_handoff`. A dependency finding is a claim proposed from
+   a lane A lead whose family is in `settings.ship_block.dependency_lead_families` (default
+   `dependency_advisory`, `artifact_scanner`); the KEV flag is the claim's merged reference input.
+   Thresholds live in the typed `settings.ship_block` table. Each finding package records the
+   status, policy version and `policy_sha256`, the evaluated conditions, the inputs (with the
+   deciding score id) and citations, and CVSS/NVD reference context under `displayed_context` with
+   `decides = false`. The handoff counts findings per status and lane (`ship_block`). Schemas:
+   `finding-package/2`, `inference-review-handoff/2`.
+2. **Verifier independence — decided and implemented.** A different provider is not required. For ship-blocking
    candidates the verifier must use a different model profile than the red cells, so their errors
    are less correlated. `provider_distinct` is still recorded, and provider distinctness becomes
    required once a second provider is configured. This refines [R6](#r6-independence).
+   Implementation: `review/independence.py::model_distinct`, recorded per claim as
+   `verifier_model_distinct` in the lane independence data and in `independence` of every finding
+   package. `settings.verification.require_distinct_model_for_ship_blocking` (default `true`) makes
+   `ship-block-policy/1` publish a same-model finding as pending. Confirmation does not depend on
+   it. `InferenceSecurityReviewSettings.verifier_distinctness()` records the configured profiles and
+   a warning in the handoff's `verification` record (and an `INFERENCE_REVIEW_VERIFIER_NOT_DISTINCT`
+   event) when the verifier and a red role resolve to the same model, which is the checked-in
+   default.
 3. **PoC authorization and executor host — to be determined.** It remains open which trusted
    operator workflow issues and revokes target-specific PoC authorization receipts, and which
    environment will host the isolated executor. Until it is decided, the PoC lane is plan-only and
    no execution path is built.
-4. **Remediation intake — decided.** Only `confirmed` findings enter remediation planning.
+4. **Remediation intake — decided and implemented.** Only `confirmed` findings enter remediation planning.
    `supported` findings are published in a separate verification backlog, labelled unconfirmed.
+   Implementation: `stages.remediation_partition` writes the handoff's `remediation_intake`
+   (confirmed packages only) and `verification_backlog` (supported packages, `label =
+   "unconfirmed"`, with `missing_predicates` and gap ids); the handoff schema rejects a supported
+   status in the intake and a confirmed one in the backlog.
 5. **Freshness windows — decided.**
    - Feeds keep `feed_max_age_days = 14`, with overrides `{ kev = 7, epss = 3 }`.
    - A stale MITRE catalog falls back for claim CWE validation and records a gap.
@@ -2131,10 +2180,13 @@ will be enforced in code.
 7. **Chain verification — decided.** Ship-blocking chains get an independent verifier focused on
    the chain's weakest link, in addition to the refuter. Other chains keep the refuter alone. This
    is implemented with the attack-chain slice.
-8. **Downstream job names — decided.** The names are `job_remediation_planning`,
+8. **Downstream job names — decided and implemented.** The names are `job_remediation_planning`,
    `job_remediation_validation`, `job_final_publication_gate` and `job_final_report_publication`,
    as in [Placement and consumers](#placement-and-consumers). They are registered as planned
    producers so later work does not rename them.
+   Implementation: four `planned:` rows in `indexing/input_matrix.py::INPUT_SOURCES` (with matching
+   rows in the [input-source matrix](indexing-and-query-reuse.md)), the consumer graph in
+   `input_matrix.PLANNED_CONSUMERS`, and the review handoff's `planned_consumers`. No job is built.
 9. **`security_predicate` vocabulary — decided and implemented.** `security_predicate` is the
    closed, versioned `security-predicates/1` vocabulary (`review/models.py::SecurityPredicate`),
    rolled up from the taxonomy's weakness classes, with `other` plus an `evidence_gap` for an
