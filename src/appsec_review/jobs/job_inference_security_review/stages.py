@@ -399,7 +399,7 @@ def handoff_status(accounting: Accounting) -> str:
     return "DEGRADED"
 
 
-def _ship_block_inputs(claim_id: str, state: ClaimState, claim_scores: Sequence[Mapping[str, Any]],
+def _ship_block_inputs(state: ClaimState, claim_scores: Sequence[Mapping[str, Any]],
                        references: Mapping[str, Any], lead_families: Sequence[str], model_distinct: bool
                        ) -> tuple[ShipBlockInputs, dict[str, Any]]:
     """The policy inputs of one finding and its displayed (never deciding) context."""
@@ -452,7 +452,7 @@ def finding_packages(projection: Projection, adjudications: Sequence[Mapping[str
                          if item["required"] and item["outcome"] != "satisfied")
         review_id = reviewed[0]["review_id"] if reviewed else None
         claim_scores = by_claim_scores.get(claim.claim_id, ())
-        inputs, displayed = _ship_block_inputs(claim.claim_id, state, claim_scores,
+        inputs, displayed = _ship_block_inputs(state, claim_scores,
                                                (references or {}).get(claim.claim_id) or {},
                                                (lead_families or {}).get(claim.claim_id, ()), model_distinct)
         decision = ship_block.decide(inputs, ship_block_settings, require_distinct_model=require_distinct_model)
