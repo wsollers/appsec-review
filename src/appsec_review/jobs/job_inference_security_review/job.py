@@ -28,7 +28,7 @@ from appsec_review.indexing.store import open_shard
 from appsec_review.jobs.job_security_tagging.crosswalk import load_crosswalk
 from appsec_review.jobs.job_security_tagging.taxonomy import load_vocabulary
 from appsec_review.retrieval.core import RetrievalCore
-from appsec_review.review import obligations
+from appsec_review.review import obligations, ship_block
 from appsec_review.review.budget import JobBudget
 from appsec_review.review.claims import normalize_cwe
 from appsec_review.review.identity import sha256_hex
@@ -406,17 +406,21 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
                 "ledger_shard": _artifact(unit.job.run_root, ledger_path), "states": document["states"],
                 "gaps": [], "terminal_status": "SUCCEEDED"}
 
+    def package_documents(unit: UnitContext) -> dict[str, Mapping[str, Any]]:
+        documents: dict[str, Mapping[str, Any]] = {}
+        for lane in ("lead", "hunt"):
+            packages_doc = _read(unit.job.run_root, unit.output(f"packages.assemble_{lane}_packages")["artifact"])
+            documents.update({work.package_id: work.document for work in package_works(unit.job.run_root,
+                                                                                     packages_doc)})
+        return documents
+
     def score(unit: UnitContext) -> Mapping[str, Any]:
         settings = _settings(unit)
         adjudications = _read(unit.job.run_root, unit.output("adjudicate.apply_policy")["artifact"])
         projection = project(stages.merge_verified(shard_paths(unit, LEDGER_UNITS[:3])).events)
         ledger_path = unit.unit_root / "ledger.jsonl"
         merged = _read(unit.job.run_root, unit.output("merge.claims")["artifact"])
-        documents = {}
-        for lane in ("lead", "hunt"):
-            packages_doc = _read(unit.job.run_root, unit.output(f"packages.assemble_{lane}_packages")["artifact"])
-            documents.update({work.package_id: work.document for work in package_works(unit.job.run_root,
-                                                                                     packages_doc)})
+        documents = package_documents(unit)
         scope = _scope(unit)
         # Factors are derived only from accepted, re-resolved evidence and accepted tags.
         evidence = AcceptedEvidenceSource(
@@ -498,9 +502,18 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
         merged_doc = _read(unit.job.run_root, unit.output("merge.claims")["artifact"])
         scores = _read(unit.job.run_root, unit.output("scoring.score_claims")["artifact"])["scores"]
         accepted = _read(unit.job.run_root, unit.output("scope.accept_manifest")["artifact"])
+        documents = package_documents(unit)
+        require_distinct = settings.verification.require_distinct_model_for_ship_blocking
         findings = stages.finding_packages(projection, adjudications, merged_doc, scores,
                                            manifest_sha256=accepted["manifest_sha256"],
-                                           out_dir=unit.unit_root / "findings", schemas=schemas)
+                                           out_dir=unit.unit_root / "findings", schemas=schemas,
+                                           references=stages.claim_references(merged_doc, documents),
+                                           lead_families=stages.claim_lead_families(merged_doc, documents),
+                                           ship_block_settings=settings.ship_block,
+                                           require_distinct_model=require_distinct)
+        verification = settings.verifier_distinctness()
+        if verification["warning"]:
+            unit.job.events.write("INFERENCE_REVIEW_VERIFIER_NOT_DISTINCT", warning=verification["warning"])
         hunt_packages = _read(unit.job.run_root, unit.output("packages.assemble_hunt_packages")["artifact"])
         matrix_ref = completeness_doc["coverage_matrix"]
         matrix = _read(unit.job.run_root, matrix_ref)
@@ -510,7 +523,9 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
             shards=stages.shard_records(unit.job.run_root, paths), findings=findings, scores=scores,
             package_manifest_sha256=hunt_packages["package_manifest_content_sha256"],
             coverage={"path": matrix_ref["path"], "sha256": matrix_ref["sha256"], "rows": len(matrix["rows"])},
-            possible=merged_doc["possible_duplicates"], schemas=schemas)
+            possible=merged_doc["possible_duplicates"], schemas=schemas,
+            ship_block_policy_sha256=ship_block.policy_sha256(settings.ship_block, require_distinct),
+            verification=verification)
         artifact = _write(unit, "inference-review-handoff.json", handoff)
         gaps = [f"status {handoff['status']}"] if handoff["status"] != "COMPLETE" else []
         if accounting.review_incomplete:

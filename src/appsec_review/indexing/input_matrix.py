@@ -100,6 +100,22 @@ INPUT_SOURCES: tuple[tuple[str, tuple[str, ...], str, tuple[str, ...], tuple[str
     ("dynamic_traces", ("planned:future_dynamic_producer",), "planned", ("review_package",), ()),
     ("protected_runtime_material", ("runtime",), "protected", (), ("query_datasets", "coverage")),
     ("review_decisions", ("job_inference_security_review",), "extend", ("review_package",), ("coverage",)),
+    # Decision 8: the review handoff's downstream consumers, fixed by name before they are built. Each
+    # reads the inference review handoff (``PLANNED_CONSUMERS`` in its datasets module) and will
+    # produce the named source; none is an input to a review today.
+    ("remediation_plans", ("planned:job_remediation_planning",), "planned", (), ()),
+    ("remediation_validations", ("planned:job_remediation_validation",), "planned", (), ()),
+    ("publication_gate_decisions", ("planned:job_final_publication_gate",), "planned", (), ()),
+    ("final_report_publications", ("planned:job_final_report_publication",), "planned", (), ()),
+)
+
+# Decision 8: the planned downstream jobs and the producers whose handoffs each consumes, in graph
+# order. ``planned:`` names resolve through :func:`resolve_producer` once the job is registered.
+PLANNED_CONSUMERS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("planned:job_remediation_planning", ("job_inference_security_review",)),
+    ("planned:job_remediation_validation", ("job_inference_security_review", "planned:job_remediation_planning")),
+    ("planned:job_final_publication_gate", ("job_inference_security_review", "planned:job_remediation_validation")),
+    ("planned:job_final_report_publication", ("planned:job_final_publication_gate",)),
 )
 
 

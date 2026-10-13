@@ -1926,6 +1926,23 @@ workers = 4
 model_profile = "default"
 require_distinct_from_roles = ["hypothesis_hunter", "red_team_analyst", "blue_team_refuter"]
 
+# Decision 2: a ship-blocking candidate is published as ship_blocking only when its verifier's model
+# profile (provider + model) differs from every red cell's on the claim; otherwise it is published as
+# ship_blocking_pending_distinct_verification. Confirmation (R5/R6) never depends on it. With every
+# role on the default profile, the job records a warning and ship-blocking findings stay pending; see
+# docs/operations/inference-security-review.md "Configuring a distinct verifier".
+[jobs.job_inference_security_review.settings.verification]
+require_distinct_model_for_ship_blocking = true
+
+# Decision 1: ship-block-policy/1. A confirmed finding blocks when application_risk_matrix/2 rates its
+# technical severity in blocking_technical_severities, or when it is a dependency finding (proposed
+# from a lane A lead of a dependency_lead_families family) with a KEV-listed reference input. CVSS and
+# SSVC outputs are displayed context only and never decide.
+[jobs.job_inference_security_review.settings.ship_block]
+blocking_technical_severities = ["high", "critical"]
+kev_dependency_blocks = true
+dependency_lead_families = ["dependency_advisory", "artifact_scanner"]
+
 [jobs.job_inference_security_review.settings.routing]
 persona_rule = "persona-routing/1"
 stack_rule = "stack-routing/1"

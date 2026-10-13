@@ -13,6 +13,19 @@ _J = "data/jobs/job_inference_security_review"
 _A = _J + "/attempts/*"
 # The single input is the accepted run/index manifest; its producer handoff is the data-indexing job.
 CONSUMES = ("job_review_data_indexing",)
+# Decision 8: the downstream jobs that consume this job's handoff, fixed by name before they exist.
+# Each is a ``planned:`` producer in ``indexing/input_matrix.py``; ``reads`` names the handoff fields
+# it consumes. Remediation reads only ``remediation_intake`` (confirmed findings, decision 4).
+PLANNED_CONSUMERS: tuple[dict[str, object], ...] = tuple(
+    {"job_id": job_id, "status": "planned", "reads": list(reads)} for job_id, reads in (
+        ("job_remediation_planning", ("remediation_intake", "score_packages", "gap_ids")),
+        ("job_remediation_validation", ("remediation_intake",)),
+        ("job_final_publication_gate", ("accounting", "finding_packages", "score_packages", "ship_block",
+                                        "verification_backlog", "coverage_matrix", "gap_ids")),
+        ("job_final_report_publication", ("finding_packages", "verification_backlog", "ship_block",
+                                          "score_packages")),
+    ))
+PLANNED_CONSUMER_JOBS = tuple(str(item["job_id"]) for item in PLANNED_CONSUMERS)
 DATASETS = (
     artifact_only("review_packages", "packages", "inference_review", "appsec-review/review-package/4",
                   "Lane A finding-lead and lane B hunt packages with their verified package manifest.",
@@ -32,7 +45,7 @@ DATASETS = (
                              _A + "/steps/publication/tasks/publish_claim_ledger/**"),
                   reason="the claim ledger is the review's single authority record; a scoped finding query is "
                          "planned with final publication"),
-    artifact_only("scores_and_findings", "publication", "inference_review", "appsec-review/finding-package/1",
+    artifact_only("scores_and_findings", "publication", "inference_review", "appsec-review/finding-package/2",
                   "Independent score packages, confirmed/supported finding packages and the accepted handoff.",
                   artifacts=(_A + "/steps/scoring/**", _A + "/steps/publication/tasks/publish_handoff/**"),
                   reason="finding packages feed remediation and final publication jobs, which index sanitized "

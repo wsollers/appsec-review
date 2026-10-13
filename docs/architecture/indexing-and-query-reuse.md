@@ -130,6 +130,10 @@ a silent allowlist. `query_precomputed` is abbreviated `QP`; existing generic `f
 | Fuzz, runtime and authorized dynamic traces; future producer | Observed behavior and path validation | Planned run-owned `observations`/trace identities and coverage | `review_package`; observed-path facts would join the `graph` index as their own producer | Planned `query_observations`/typed trace query if acquired; no skill |
 | Runtime logs, raw tool output, exact argv/env, credentials and model transcripts; runtime/all jobs | Audit producer status and failures | Protected artifacts; only safe status, hashes, producer and gap indexed | Coverage and provenance summaries only | `coverage`/dataset catalog; no raw-content MCP or skill |
 | Normalized claims, reviews, adjudication, PoC receipts and final finding packages; `job_inference_security_review` (slice 1), future publication | Review decisions and final evidence | Extend: run-owned typed claim ledger, finding/score packages and handoff (slice 1); PoC receipts planned; publish sanitized final findings only | `review_package` input is separate; final claim/evidence closure | `resolve_evidence` and scoped finding query when built; no worker skill |
+| Remediation plans for confirmed findings; planned `job_remediation_planning` (decision 8) | Fix proposals and safe regression-test specifications | Planned; reads only the review handoff's `remediation_intake` (confirmed findings, decision 4) | None | None until built; no skill |
+| Remediation validation results; planned `job_remediation_validation` (decision 8) | Whether a proposed fix removes the confirmed condition | Planned; reads `remediation_intake` and the remediation plan | None | None until built; no skill |
+| Final publication gate decisions; planned `job_final_publication_gate` (decision 8) | Accept or block publication from exact accounting, ship-block status and gaps | Planned; reads the accepted review handoff (accounting, finding/score packages, `ship_block`, `verification_backlog`, coverage, gaps) | None | None until built; no skill |
+| Final report publications; planned `job_final_report_publication` (decision 8) | Publishable findings, verification backlog and limitations | Planned; reads gate-accepted packages only; publishes sanitized final findings | None | None until built; no skill |
 
 An MCP endpoint is justified only when `core`, an existing domain query, and `QP` cannot give a
 bounded typed answer. `query_observations` (implemented) is the endpoint for scanner severity,
@@ -328,7 +332,7 @@ The machine-readable contract is
 `appsec-review/review-package/3`. It describes the output of `assemble_review_packages` and
 the bounded input planned for the `hypothesis_hunter` and `red_team_analyst` roles in
 [`inference-security-review.md`](inference-security-review.md). It is distinct from the
-post-adjudication `appsec-review/finding-package/1` used for final findings. The assembler reads
+post-adjudication `appsec-review/finding-package/2` used for final findings. The assembler reads
 accepted scanner-correlation facts, fingerprints packages from accepted identities, and emits
 one `finding_lead` package per source-SAST lead and one `hunt` package per accepted menu partition.
 Stable partition keys and bounds prevent silent lead loss.

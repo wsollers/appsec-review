@@ -45,9 +45,49 @@ cells from earlier runs. Package assembly and the other upstream jobs are not af
 resolved-configuration hash also changes.
 
 **Independence.** The blind verifier must be a different actor from the red and blue cells. It does
-not need to be a different provider or model family; that requirement is open question 2 in the
-design. Every finding package records `independence.provider_distinct`, so a run that uses one
-model for every role is labelled as such.
+not need to be a different provider. For ship-blocking findings it should run on a different model
+profile (decision 2); see [Configuring a distinct verifier](#configuring-a-distinct-verifier).
+Every finding package records `independence.provider_distinct` and
+`independence.verifier_model_distinct`, so a run that uses one model for every role is labelled as
+such.
+
+### Configuring a distinct verifier
+
+`[...settings.verification].require_distinct_model_for_ship_blocking` (default `true`) requires the
+verifier's model profile, meaning its provider and model, to differ from every red cell's on a
+claim before that claim can be published as `ship_blocking`. A confirmed finding that would block
+but was verified on the red cells' model is published as
+`ship_blocking_pending_distinct_verification` instead. Confirmation itself does not change: a
+same-model verifier can still confirm a claim.
+
+The checked-in configuration puts every role on the `default` profile (`claude-haiku-5-5`), so a
+run with it publishes every ship-blocking finding as pending. The handoff's `verification` record
+then carries a `warning`, and the job writes an `INFERENCE_REVIEW_VERIFIER_NOT_DISTINCT` event.
+To verify on a second model, add a profile and point the verifier role at it:
+
+```toml
+[jobs.job_inference_security_review.settings.models.verifier]
+provider = "claude-cli"
+model = "<a model other than the red roles' model>"
+reasoning = "high"
+max_input_tokens = 32000
+max_output_tokens = 8000
+max_queries = 40
+max_turns = 12
+timeout_seconds = 600
+
+[jobs.job_inference_security_review.settings.roles.independent_verifier]
+workers = 4
+model_profile = "verifier"
+require_distinct_from_roles = ["hypothesis_hunter", "red_team_analyst", "blue_team_refuter"]
+```
+
+The red roles (`hypothesis_hunter`, `red_team_analyst`) keep using `default` unless they have their
+own entries. The verifier's model must pass `job_review_intake.model_preflight` like any other.
+Changing the verifier's profile changes the verifier cells' fingerprints, so those cells run fresh;
+red and blue cells are reused. Setting `require_distinct_model_for_ship_blocking = false` publishes
+same-model findings as `ship_blocking` and removes the warning. Do that only on purpose: it gives
+up the decision 2 safeguard.
 
 ## Capacity and local runs
 
@@ -245,6 +285,55 @@ When the run has accepted `graph` shards (`job_code_graph_index`; today C/C++ on
 
 `tests/integration/test_code_graph_end_to_end.py` exercises this path offline with an injected
 worker. No live model or live CodeQL export has run it.
+
+## Ship-block status
+
+Every finding package records a `ship_block` decision under `ship-block-policy/1` (decision 1),
+computed in `review/ship_block.py` when the handoff is published. The first matching row wins:
+
+| Status | When |
+|---|---|
+| `ship_blocking` | The claim is `confirmed`, it qualifies, and distinct verification held. |
+| `ship_blocking_pending_distinct_verification` | The claim is `confirmed` and qualifies, but its verifier ran on a red cell's model. |
+| `needs_verification` | The claim is `supported` (not independently confirmed) and would otherwise qualify. |
+| `not_ship_blocking` | Anything else. |
+
+A claim qualifies when `application_risk_matrix/2` rates its technical severity in
+`blocking_technical_severities`, or when it is a dependency finding with a KEV-listed reference
+input. A dependency finding is a claim proposed from a lane A lead of a `dependency_lead_families`
+family. CVSS and SSVC outputs, and the NVD reference CVSS vectors, are recorded under
+`ship_block.displayed_context` with `decides = false` and never change the status. A claim without
+an `application_risk_matrix/2` rating (for example a missing `impact_class`) records the reason
+`technical_severity_unrated`. It is not ship-blocking unless the KEV dependency path applies.
+Treat that reason as a gap to resolve, not as a low-risk verdict.
+
+```toml
+[jobs.job_inference_security_review.settings.ship_block]
+blocking_technical_severities = ["high", "critical"]   # bands of application_risk_matrix/2
+kev_dependency_blocks = true
+dependency_lead_families = ["dependency_advisory", "artifact_scanner"]
+```
+
+Each package's `ship_block` record holds the status, the policy version and `policy_sha256`, every
+condition evaluated, the inputs (claim state, technical severity and its score id, lead families,
+KEV flag and verifier distinctness), and citations to the adjudication, the deciding score package
+and the verification review. The handoff's `ship_block` object counts findings per status, overall
+and per lane.
+
+## Remediation intake and verification backlog
+
+Decision 4 separates the findings the handoff publishes:
+
+- `remediation_intake` lists only `confirmed` finding packages, with their ship-block status.
+  `job_remediation_planning` reads only this list.
+- `verification_backlog` lists `supported` finding packages labelled `unconfirmed`, with the
+  required predicates that still lack direct support (`missing_predicates`) and their gap ids.
+  No remediation job reads it. A backlog item enters remediation only after a later review
+  confirms it.
+
+The handoff's `planned_consumers` names the four downstream jobs fixed by decision 8 and the
+handoff fields each one reads: `job_remediation_planning`, `job_remediation_validation`,
+`job_final_publication_gate` and `job_final_report_publication`. None of them is built yet.
 
 ## Outcomes
 

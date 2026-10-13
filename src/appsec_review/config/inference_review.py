@@ -16,9 +16,11 @@ from typing import Any, Mapping
 
 from appsec_review.review.models import Role
 from appsec_review.review.ranking import RankWeights
-from appsec_review.review.red_discovery import LEAD_ACCOUNTING_CEILING, RedOutputLimits
+from appsec_review.review.lead_families import FAMILIES as LEAD_FAMILIES
+from appsec_review.review.red_discovery import LEAD_ACCOUNTING_CEILING, RED_ROLES, RedOutputLimits
 from appsec_review.review.scoring.cwe_impact import MAX_REASON_CHARS as MAX_OVERRIDE_REASON, ImpactOverride
 from appsec_review.review.scoring.risk_model import DEFAULT_MODEL_DOCUMENT, DimensionModel, RiskModel
+from appsec_review.review.ship_block import ShipBlockSettings
 
 
 JOB_ID = "job_inference_security_review"
@@ -245,6 +247,27 @@ class PocSettings:
 
 
 @dataclass(frozen=True, slots=True)
+class VerificationSettings:
+    """``settings.verification`` (decision 2).
+
+    ``require_distinct_model_for_ship_blocking``: a ship-blocking candidate is published as
+    ``ship_blocking`` only when its verifier's model profile (provider and model) differs from every
+    red cell's on the claim; otherwise ``ship-block-policy/1`` publishes it as
+    ``ship_blocking_pending_distinct_verification``. Confirmation itself (R5/R6) never depends on it.
+    """
+
+    require_distinct_model_for_ship_blocking: bool = True
+
+    @classmethod
+    def from_mapping(cls, value: object, field: str) -> "VerificationSettings":
+        if value is None:
+            return cls()
+        table = _table(value, field, set(), {"require_distinct_model_for_ship_blocking"})
+        return cls(_bool(table.get("require_distinct_model_for_ship_blocking", True),
+                         f"{field}.require_distinct_model_for_ship_blocking"))
+
+
+@dataclass(frozen=True, slots=True)
 class InferenceSecurityReviewSettings:
     rounds: RoundSettings
     teams: TeamSettings
@@ -261,6 +284,33 @@ class InferenceSecurityReviewSettings:
     ranking: RankWeights = RankWeights()
     # Closed red-discovery-result/1 limits (``settings.red_output``); semantic: they decide admission.
     red_output: RedOutputLimits = RedOutputLimits()
+    # ship-block-policy/1 thresholds (``settings.ship_block``, decision 1) and verifier model
+    # distinctness (``settings.verification``, decision 2); both semantic.
+    ship_block: ShipBlockSettings = ShipBlockSettings()
+    verification: VerificationSettings = VerificationSettings()
+
+    def verifier_distinctness(self) -> dict[str, Any]:
+        """How the configured verifier profile relates to the red roles' profiles.
+
+        ``distinct`` is true when the ``independent_verifier`` profile's (provider, model) differs
+        from every red role's. With the requirement on and ``distinct`` false, every ship-blocking
+        candidate is published pending distinct verification; ``warning`` names that state.
+        """
+        verifier = self.profile_for(Role.INDEPENDENT_VERIFIER)
+        reds = {role.value: self.profile_for(role) for role in sorted(RED_ROLES, key=lambda item: item.value)}
+        same = sorted(role for role, profile in reds.items()
+                      if (profile.provider, profile.model) == (verifier.provider, verifier.model))
+        required = self.verification.require_distinct_model_for_ship_blocking
+        warning = None
+        if required and same:
+            warning = (f"verification.require_distinct_model_for_ship_blocking is on but the independent_verifier "
+                       f"profile resolves to the same model ({verifier.provider}/{verifier.model}) as "
+                       f"{', '.join(same)}; ship-blocking candidates will be published as "
+                       "ship_blocking_pending_distinct_verification")
+        return {"require_distinct_model_for_ship_blocking": required,
+                "verifier": {"provider": verifier.provider, "model": verifier.model},
+                "red": {role: {"provider": profile.provider, "model": profile.model} for role, profile in reds.items()},
+                "distinct": not same, "warning": warning}
 
     def profile_for(self, role: Role) -> ModelProfileSettings:
         """The model profile a role uses; an unconfigured role uses ``default``."""
@@ -484,7 +534,8 @@ def _poc(value: object, enabled_providers: tuple[str, ...]) -> PocSettings:
 def parse_inference_review_settings(value: Mapping[str, Any]) -> InferenceSecurityReviewSettings:
     """Validate ``jobs.job_inference_security_review.settings`` into frozen typed settings."""
     settings = _table(value, _PREFIX, {"rounds", "teams", "lanes", "packages", "budgets", "retry", "models",
-                                       "roles", "routing", "scoring", "poc"}, {"ranking", "red_output"})
+                                       "roles", "routing", "scoring", "poc"},
+                      {"ranking", "red_output", "ship_block", "verification"})
 
     field = f"{_PREFIX}.rounds"
     rounds_value = _table(settings["rounds"], field, {"max_rounds", "stable_rounds_required",
@@ -590,4 +641,7 @@ def parse_inference_review_settings(value: Mapping[str, Any]) -> InferenceSecuri
         scoring=scoring, poc=_poc(settings["poc"], scoring.enabled_providers),
         ranking=RankWeights.from_mapping(settings.get("ranking", {}), f"{_PREFIX}.ranking"),
         red_output=RedOutputLimits.from_mapping(settings.get("red_output", {}), f"{_PREFIX}.red_output"),
+        ship_block=ShipBlockSettings.from_mapping(settings.get("ship_block"), f"{_PREFIX}.ship_block",
+                                                  known_families=LEAD_FAMILIES),
+        verification=VerificationSettings.from_mapping(settings.get("verification"), f"{_PREFIX}.verification"),
     )
