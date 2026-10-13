@@ -581,7 +581,8 @@ def build_job(*, infer: Infer | None = None) -> Job:
                         builder.add_relation(RelationRecord(RelationKind.DERIVED_FROM, compile_id.value,
                                                            identity.value, True, 1.0))
                 binary_ids: dict[str, str] = {}
-                binary_names: dict[str, str] = {}
+                binary_paths: dict[str, str] = {}
+                binary_names: dict[str, set[str]] = {}
                 dependency_ids: set[str] = set()
                 for record in inspection_value.get("records", ()):
                     kind = {"object": EntityKind.OBJECT_FILE, "archive": EntityKind.LIBRARY,
@@ -592,7 +593,16 @@ def build_job(*, infer: Infer | None = None) -> Job:
                     identity = LogicalIdentity.derive(kind, unit.job.source_fingerprint,
                         {"case": case_id, "artifact": record["artifact_id"], "sha256": record["sha256"]})
                     binary_ids[record["artifact_id"]] = identity.value
-                    binary_names[PurePosixPath(str(record["run_path"])).name] = identity.value
+                    run_path = PurePosixPath(str(record["run_path"]).replace("\\", "/"))
+                    build_prefix = PurePosixPath("data") / "cpp" / "projects" / case_id / "build"
+                    try:
+                        build_path = run_path.relative_to(build_prefix).as_posix()
+                    except ValueError:
+                        build_path = run_path.as_posix()
+                    previous = binary_paths.setdefault(build_path, identity.value)
+                    if previous != identity.value:
+                        raise ValueError(f"multiple inspected binaries resolve to {build_path}")
+                    binary_names.setdefault(run_path.name, set()).add(identity.value)
                     builder.add_entity(EntityRecord(identity, record["artifact_id"],
                         PurePosixPath(str(record["run_path"])).name, f"{record['format']} {record['kind']}",
                         {**dict(record), "project": case_id,
@@ -625,8 +635,10 @@ def build_job(*, infer: Infer | None = None) -> Job:
                             relation = RelationKind.COMPILES_TO if action.get("classification") == "compiler" else RelationKind.LINKS_INTO
                             builder.add_relation(RelationRecord(relation, source, binary_ids[artifact_id], True, 1.0))
                             output_id = binary_ids[artifact_id]
+                            linked_inputs: set[str] = set()
                             for input_path in action.get("declared_inputs", ()):
-                                input_name = PurePosixPath(str(input_path)).name
+                                normalized_input = PurePosixPath(str(input_path).replace("\\", "/")).as_posix()
+                                input_name = PurePosixPath(normalized_input).name
                                 if action.get("classification") == "compiler" and PurePosixPath(str(input_path)).suffix.lower() in {
                                     ".c", ".cc", ".cpp", ".cxx", ".c++", ".m", ".mm", ".s", ".asm"}:
                                     if str(input_path) not in source_ids:
@@ -639,9 +651,17 @@ def build_job(*, infer: Infer | None = None) -> Job:
                                             "producer": action["producer"], "shard": shard_id}))
                                     builder.add_relation(RelationRecord(RelationKind.COMPILES_TO,
                                         source_ids[str(input_path)], output_id, True, 1.0))
-                                elif input_name in binary_names:
+                                else:
+                                    exact = {binary_id for path, binary_id in binary_paths.items()
+                                             if normalized_input == path or normalized_input.endswith("/" + path)}
+                                    if not exact and len(binary_names.get(input_name, ())) == 1:
+                                        exact = set(binary_names[input_name])
+                                    input_id = next(iter(exact)) if len(exact) == 1 else None
+                                    if input_id is None or input_id in linked_inputs:
+                                        continue
+                                    linked_inputs.add(input_id)
                                     builder.add_relation(RelationRecord(RelationKind.LINKS_INTO,
-                                        binary_names[input_name], output_id, True, 1.0))
+                                        input_id, output_id, True, 1.0))
                 evidence_entities = {**action_ids,
                     **{str(record["sha256"]): binary_ids[record["artifact_id"]]
                        for record in inspection_value.get("records", ()) if record["artifact_id"] in binary_ids}}

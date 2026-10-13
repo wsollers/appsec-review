@@ -240,7 +240,7 @@ def _post_build_config(root: Path, *, model_enabled: bool = False) -> Path:
     return path
 
 
-def _accepted_cpp_fixture(tmp_path: Path) -> tuple[Path, Path]:
+def _accepted_cpp_fixture(tmp_path: Path, *, colliding_object_names: bool = False) -> tuple[Path, Path]:
     runs, run_root = tmp_path / "runs", tmp_path / "runs" / RUN_ID
     target = tmp_path / "target"
     target.mkdir()
@@ -257,8 +257,16 @@ def _accepted_cpp_fixture(tmp_path: Path) -> tuple[Path, Path]:
     _archive(archive)
     link_dir = case_root / "build" / "CMakeFiles" / "app.dir"
     link_dir.mkdir(parents=True)
+    archive_inputs = "app.o"
+    if colliding_object_names:
+        for directory in ("variant_alpha", "variant_beta"):
+            duplicate = case_root / "build" / directory / "profile.cpp.o"
+            duplicate.parent.mkdir(parents=True)
+            _elf64(duplicate, executable=False)
+        archive_inputs += " variant_alpha/profile.cpp.o variant_beta/profile.cpp.o"
     (link_dir / "link.txt").write_text(
-        "llvm-ar rcs libapp.a app.o\nclang++ app.o -Wl,-z,relro,-z,now -pie -o app\n", encoding="utf-8")
+        f"llvm-ar rcs libapp.a {archive_inputs}\nclang++ app.o -Wl,-z,relro,-z,now -pie -o app\n",
+        encoding="utf-8")
     (case_root / "analysis" / "binary").mkdir(parents=True)
     (case_root / "analysis" / "binary" / "records.json").write_text(json.dumps([{
         "path": "build/app", "kind": "executable", "sha256": file_sha256(binary),
@@ -344,6 +352,25 @@ def test_job_consumes_accepted_handoff_logs_gaps_and_reuses_immutable_shards(tmp
     assert linked["results"] and all(item["exact"] for item in linked["results"])
     accepted = json.loads((runs / RUN_ID / "data" / "indices" / "accepted.json").read_text(encoding="utf-8"))
     assert accepted["manifest_path"].endswith("build-security-attempt_0002.json")
+
+
+def test_index_resolves_colliding_object_basenames_by_build_relative_path(tmp_path: Path) -> None:
+    runs, target = _accepted_cpp_fixture(tmp_path, colliding_object_names=True)
+    config = load_config(_post_build_config(tmp_path))
+    result = JobRunner(config).run(
+        build_job(), run_id=RUN_ID, target_root=target, source_fingerprint="snapshot",
+        upstream_handoffs={"job_cpp_compiled_analysis": "a" * 64},
+    )
+    assert result["status"]["status"] == "COMPLETED_WITH_GAPS"
+
+    core = RetrievalCore(runs, RUN_ID)
+    duplicates = core.find(name="profile.cpp.o", indexes=("build_security",))["results"]
+    assert len(duplicates) == 2
+    links = [core.trace(identity=item["identity"], relations=("LINKS_INTO",), depth=1)
+             for item in duplicates]
+    assert all(len(value["results"]) == 1 for value in links)
+    assert {value["results"][0]["target_id"] for value in links} == {
+        core.find(name="libapp.a", indexes=("build_security",))["results"][0]["identity"]}
 
 
 def test_job_rejects_target_drift_after_cpp_acceptance(tmp_path: Path) -> None:
