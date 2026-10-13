@@ -83,14 +83,17 @@ class ImageResolver:
 
 class JvmExecutor:
     def __init__(self, calls: list[tuple[str, ...]], *, fail_roots: set[str] | None = None,
-                 truncate: bool = False):
+                 truncate: bool = False, environments: list[dict[str, str]] | None = None):
         self.calls, self.fail_roots, self.truncate = calls, fail_roots or set(), truncate
+        self.environments = environments
 
     def resolve(self):
         return None
 
     def execute(self, argv, *, workspace, working_directory, environment):
         self.calls.append(tuple(argv))
+        if self.environments is not None:
+            self.environments.append(dict(environment))
         failed = working_directory in self.fail_roots
         if not failed:
             root = workspace / working_directory
@@ -227,14 +230,22 @@ def test_android_gradle_dispatch_survives_project_to_language_execution(tmp_path
     assert dispatch["recipe_provenance"] == "accepted-inference-default-image"
     assert dispatch["descriptor_facts"]["kind"] == "android-gradle-application"
 
-    outcome = GraphRunner(config, [build_language(
-        executor_factory=lambda unit, profile: JvmExecutor(calls))]).run(
+    profiles, environments = [], []
+
+    def executor_factory(unit, profile):
+        profiles.append(profile)
+        return JvmExecutor(calls, environments=environments)
+
+    outcome = GraphRunner(config, [build_language(executor_factory=executor_factory)]).run(
             target_root=target, source_fingerprint=fingerprint, run_id=run_id)
 
     assert outcome["status"] == "SUCCEEDED"
     receipt = load_accepted_language_build(run_root)["receipts"][0]
     assert receipt["terminal_status"] == "SUCCEEDED" and receipt["family"] == "java"
     assert calls.count(("gradle", "--no-daemon", ":app:assembleDebug")) == 2
+    assert [profile.name for profile in profiles] == ["android"]
+    assert environments and "/opt/gradle/gradle-8.9/bin" in environments[0]["PATH"].split(":")
+    assert environments[0]["GRADLE_USER_HOME"] == "/tmp/gradle"
 
 
 @pytest.mark.skipif(
@@ -393,7 +404,8 @@ def test_jvm_checkpoint_fingerprint_invalidates_on_capture_or_upstream_change() 
         "build_dependencies": ["upstream"], "probe_identity": "probe",
         "image": {"image_id": "sha256:" + "d" * 64, "dependency_hashes": {"pom.xml": "a" * 64}}}
     settings = {"trace_bytes": 8, "provenance_count_limit": 10, "diagnostic_tail_bytes": 4,
-        "system_path": "/usr/bin", "tool_paths": {name: f"/usr/bin/{name}" for name in
+        "system_paths": {"java": "/usr/bin", "android": "/opt/gradle/bin:/usr/bin"},
+        "tool_paths": {name: f"/usr/bin/{name}" for name in
         ("javac", "kotlinc", "kapt", "ksp", "java", "jar", "javadoc", "protoc")}}
     first = jvm_fingerprint(dispatch, {"project_build_handoff_sha256": "a" * 64}, settings)
     assert first != jvm_fingerprint(dispatch, {"project_build_handoff_sha256": "b" * 64}, settings)
