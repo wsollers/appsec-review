@@ -266,6 +266,24 @@ def _assert_reference_enrichment(fixture, attempt: Path) -> None:
                for weakness in lead["weaknesses"])
     compact = [lead["advisory_summary"] for lead in hunts if lead["advisory_summary"]]
     assert compact and all(set(item) == {"cve_ids", "kev_listed", "epss_percentile", "max_cvss"} for item in compact)
+    # impact_class is derived from the pinned catalog's consequences and cites its snapshot (decision 11).
+    scoring = _unit(attempt, "scoring.score_claims")
+    scores = _json(scoring / "scores.json")
+    snapshot = fixture.feed_pins["mitre"]["snapshot_id"]
+    assert scores["impact_class"]["rule"] == "cwe-impact-derivation/1"
+    assert scores["impact_class"]["catalog"]["status"] == "current"
+    assert scores["impact_class"]["catalog"]["snapshot_id"] == snapshot
+    derived = []
+    for item in scores["scores"]:
+        package = _json(scoring / "scores" / item["file"])
+        impact = [factor for factor in package["factors"] if factor["factor"] == "impact_class"]
+        cited = [citation for citation in package["factor_citations"] if citation["factor"] == "impact_class"]
+        if impact and impact[0]["detail"]["basis"] == ["derived"]:
+            assert impact[0]["detail"]["catalog_snapshot"] == [snapshot]
+            assert cited[0]["references"] and all(reference.startswith(f"mitre-cwe:{snapshot}:")
+                                                  for reference in cited[0]["references"])
+            derived.append(impact[0]["value"])
+    assert derived
 
 
 def _assert_verifier_blind(logs: Path) -> None:

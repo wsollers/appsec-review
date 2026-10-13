@@ -65,7 +65,12 @@ def test_repository_defaults_load_as_typed_frozen_settings() -> None:
     assert verifier.model_profile == "default" and verifier.workers == 4
     assert Role.BLUE_TEAM_REFUTER in verifier.require_distinct_from_roles
     assert settings.profile_for(Role.HYPOTHESIS_HUNTER) is settings.models["default"]
-    assert settings.scoring.cwe_impact_classes["CWE-89"] == "critical"
+    # Only exceptions to cwe-impact-derivation/1 are configured; CWE-89 is derived from the catalog.
+    overrides = settings.scoring.cwe_impact_overrides
+    assert set(overrides) == {"CWE-79", "CWE-190", "CWE-209", "CWE-476", "CWE-502", "CWE-601"}
+    assert overrides["CWE-79"].impact_class == "medium" and overrides["CWE-79"].reason
+    assert "CWE-89" not in overrides
+    assert settings.as_document()["scoring"]["cwe_impact_overrides"]["CWE-601"]["impact_class"] == "low"
     assert settings.poc.execution_enabled is False and settings.poc.network == "none"
     assert settings.poc.eligibility_rules[0].values == ("HIGH", "CRITICAL")
     with pytest.raises(AttributeError):
@@ -134,8 +139,24 @@ def test_unknown_and_legacy_keys_are_rejected_at_every_level(tmp_path: Path, rep
     ('reasoning = "high"\nmax_input_tokens = 32000\nmax_output_tokens = 8000\nmax_queries',
      'reasoning = "extreme"\nmax_input_tokens = 32000\nmax_output_tokens = 8000\nmax_queries',
      "reasoning must be one of"),
-    ('"CWE-89" = "critical"', '"CWE-89" = "severe"', "CWE-89 must be one of"),
-    ('"CWE-89" = "critical"', '"SQLi" = "critical"', "invalid CWE id: SQLi"),
+    ('"CWE-209" = { impact_class = "low"', '"CWE-209" = { impact_class = "severe"',
+     "cwe_impact_overrides.CWE-209.impact_class must be one of"),
+    ('"CWE-209" = { impact_class = "low"', '"SQLi" = { impact_class = "low"',
+     "cwe_impact_overrides has an invalid CWE id: SQLi"),
+    ('"CWE-209" = { impact_class = "low", reason = "error messages disclose diagnostic detail, not bulk '
+     'application data" }', '"CWE-209" = { impact_class = "low", reason = " " }',
+     "cwe_impact_overrides.CWE-209.reason must be a non-empty string"),
+    ('"CWE-209" = { impact_class = "low", reason = "error messages disclose diagnostic detail, not bulk '
+     'application data" }', '"CWE-209" = { impact_class = "low" }',
+     "cwe_impact_overrides.CWE-209 is missing settings: reason"),
+    ('"CWE-209" = { impact_class = "low"', '"CWE-209" = { weight = 1, impact_class = "low"',
+     "cwe_impact_overrides.CWE-209 has unknown settings: weight"),
+    ('"CWE-209" = { impact_class = "low"', '"CWE-209" = "low"\n"CWE-210" = { impact_class = "low"',
+     "cwe_impact_overrides.CWE-209 must be a table"),
+    ("[jobs.job_inference_security_review.settings.scoring.cwe_impact_overrides]",
+     '[jobs.job_inference_security_review.settings.scoring.cwe_impact_classes]\n"CWE-89" = "critical"\n\n'
+     "[jobs.job_inference_security_review.settings.scoring.cwe_impact_overrides]",
+     "cwe_impact_classes was replaced by .*cwe_impact_overrides"),
     ("allow_docker_socket = false", "allow_docker_socket = true", "allow_docker_socket must be false"),
     ('network = "none"', 'network = "bridge"', "network must be none"),
     ('provider = "cvss_v4"\nfield', 'provider = "ssvc_v9"\nfield', "must name an enabled scoring provider"),

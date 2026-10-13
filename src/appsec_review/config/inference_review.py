@@ -16,6 +16,7 @@ from typing import Any, Mapping
 
 from appsec_review.review.models import Role
 from appsec_review.review.ranking import RankWeights
+from appsec_review.review.scoring.cwe_impact import MAX_REASON_CHARS as MAX_OVERRIDE_REASON, ImpactOverride
 from appsec_review.review.scoring.risk_model import DEFAULT_MODEL_DOCUMENT, DimensionModel, RiskModel
 
 
@@ -208,7 +209,9 @@ class ScoringSettings:
     priority_policy: str
     override_policy: str
     providers: Mapping[str, ScoringProviderSettings]
-    cwe_impact_classes: Mapping[str, str]   # application_risk_matrix impact_class axis
+    # Exceptions to cwe-impact-derivation/1 (decision 11); every other CWE's impact class is derived
+    # from the run's pinned MITRE CWE catalog.
+    cwe_impact_overrides: Mapping[str, ImpactOverride]
 
 
 @dataclass(frozen=True, slots=True)
@@ -335,8 +338,11 @@ def _role(name: str, value: object, profiles: Mapping[str, ModelProfileSettings]
 
 def _scoring(value: object) -> ScoringSettings:
     field = f"{_PREFIX}.scoring"
-    table = _table(value, field, {"enabled_providers", "priority_policy", "override_policy", "providers",
-                                  "cwe_impact_classes"})
+    if isinstance(value, Mapping) and "cwe_impact_classes" in value:
+        raise ValueError(f"{field}.cwe_impact_classes was replaced by {field}.cwe_impact_overrides: impact classes "
+                         "are derived from the pinned MITRE CWE catalog and the table lists only exceptions")
+    table = _table(value, field, {"enabled_providers", "priority_policy", "override_policy", "providers"},
+                   {"cwe_impact_overrides"})
     enabled = _choices(table["enabled_providers"], f"{field}.enabled_providers", SCORING_PROVIDERS)
     providers_value = table["providers"]
     if not isinstance(providers_value, Mapping):
@@ -368,25 +374,33 @@ def _scoring(value: object) -> ScoringSettings:
                 raise ValueError(f"{provider_field}: application_risk_matrix/1 takes no "
                                  f"{'/'.join(RISK_MODEL_KEYS)} tables")
         providers[name] = ScoringProviderSettings(implementation, groups, model)
-    classes_value = table["cwe_impact_classes"]
-    if not isinstance(classes_value, Mapping):
-        raise ValueError(f"{field}.cwe_impact_classes must be a table")
-    classes: dict[str, str] = {}
-    for cwe, impact in classes_value.items():
-        if not isinstance(cwe, str) or not _CWE.fullmatch(cwe):
-            raise ValueError(f"{field}.cwe_impact_classes has an invalid CWE id: {cwe}")
-        if impact not in IMPACT_CLASSES:
-            raise ValueError(f"{field}.cwe_impact_classes.{cwe} must be one of: {', '.join(IMPACT_CLASSES)}")
-        classes[cwe] = impact
-    if "application_risk_matrix" in enabled and not classes:
-        raise ValueError(f"{field}.cwe_impact_classes is required by application_risk_matrix")
     return ScoringSettings(
         enabled_providers=enabled,
         priority_policy=_str(table["priority_policy"], f"{field}.priority_policy", _RULE_ID),
         override_policy=_str(table["override_policy"], f"{field}.override_policy", _RULE_ID),
         providers=MappingProxyType(providers),
-        cwe_impact_classes=MappingProxyType(dict(sorted(classes.items()))),
+        cwe_impact_overrides=_impact_overrides(table.get("cwe_impact_overrides", {}),
+                                               f"{field}.cwe_impact_overrides"),
     )
+
+
+def _impact_overrides(value: object, field: str) -> Mapping[str, ImpactOverride]:
+    """Exceptions to ``cwe-impact-derivation/1``: ``"CWE-n" = { impact_class = "...", reason = "..." }``."""
+    if not isinstance(value, Mapping):
+        raise ValueError(f"{field} must be a table")
+    overrides: dict[str, ImpactOverride] = {}
+    for cwe, entry_value in value.items():
+        if not isinstance(cwe, str) or not _CWE.fullmatch(cwe):
+            raise ValueError(f"{field} has an invalid CWE id: {cwe}")
+        entry = _table(entry_value, f"{field}.{cwe}", {"impact_class", "reason"})
+        if entry["impact_class"] not in IMPACT_CLASSES:
+            raise ValueError(f"{field}.{cwe}.impact_class must be one of: {', '.join(IMPACT_CLASSES)}")
+        reason = entry["reason"]
+        if not isinstance(reason, str) or not reason.strip() or len(reason) > MAX_OVERRIDE_REASON:
+            raise ValueError(f"{field}.{cwe}.reason must be a non-empty string of at most "
+                             f"{MAX_OVERRIDE_REASON} characters")
+        overrides[cwe] = ImpactOverride(entry["impact_class"], reason)
+    return MappingProxyType(dict(sorted(overrides.items())))
 
 
 def _risk_model(provider: Mapping[str, Any], field: str) -> RiskModel:

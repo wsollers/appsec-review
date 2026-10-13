@@ -8,6 +8,10 @@ mismatched or stale is a named gap: claim CWE validation then falls back to the 
 CWE ids named by accepted lead rules and the security-tagging crosswalk, and the gap is recorded
 in the run's ledger. The fallback is never silent.
 
+Each weakness also carries its catalog Common_Consequences (scopes and technical impacts, from the
+``cwe_consequence`` table of a ``mitre-index/2`` index). Scoring derives the ``impact_class`` factor
+from them (``review/scoring/cwe_impact.py``); an index without that table supplies none.
+
 Reference records classify claims and give workers context; they are never finding evidence.
 """
 from __future__ import annotations
@@ -29,10 +33,20 @@ REFERENCE_RULE = "appsec-review/cwe-reference/1"
 
 
 @dataclass(frozen=True, slots=True)
+class CweConsequence:
+    """One catalog Common_Consequences entry: its scopes and technical impacts, in catalog order."""
+
+    ordinal: int
+    scopes: tuple[str, ...]
+    impacts: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class CweEntry:
     cwe_id: str
     name: str | None
     abstraction: str | None
+    consequences: tuple[CweConsequence, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -46,6 +60,10 @@ class CweReference:
     version: str | None = None
     gap: str | None = None
     fallback_ids: frozenset[str] = frozenset()
+    # True when ``entries`` come from a pinned catalog older than its freshness bound.
+    stale: bool = False
+    # Whether the pinned index records Common_Consequences (``mitre-index/2``); a /1 index does not.
+    consequences_indexed: bool = False
 
     @property
     def accepted_ids(self) -> frozenset[str]:
@@ -62,7 +80,7 @@ class CweReference:
     def with_fallback(self, fallback_ids: frozenset[str]) -> "CweReference":
         return CweReference(self.source, self.entries, self.snapshot_id, self.manifest_sha256, self.version,
                             self.gap, frozenset(item for item in (normalize_cwe(value) for value in fallback_ids)
-                                                if item))
+                                                if item), self.stale, self.consequences_indexed)
 
 
 def _unavailable(reason: str, catalog: Mapping[str, CweEntry] | None = None, **identity: Any) -> CweReference:
@@ -113,6 +131,7 @@ def load_cwe_reference(run_root: Path) -> CweReference:
     version = None
     connection = sqlite3.connect(f"file:{path.as_posix()}?mode=ro&immutable=1", uri=True)
     try:
+        consequences = _consequences(connection)
         for external_id, name, raw in connection.execute(
                 "SELECT external_id, name, raw_json FROM entry WHERE object_type = 'weakness' ORDER BY external_id"):
             cwe = normalize_cwe(str(external_id))
@@ -124,7 +143,8 @@ def load_cwe_reference(run_root: Path) -> CweReference:
                 attributes = {}
             abstraction = attributes.get("abstraction") if isinstance(attributes, Mapping) else None
             entries[cwe] = CweEntry(cwe, str(name)[:256] if name else None,
-                                    str(abstraction)[:64] if isinstance(abstraction, str) else None)
+                                    str(abstraction)[:64] if isinstance(abstraction, str) else None,
+                                    (consequences or {}).get(str(external_id), ()))
     except sqlite3.Error as exc:
         return _unavailable(f"mitre_identity_mismatch: pinned catalog is unreadable ({type(exc).__name__})",
                             **identity)
@@ -139,9 +159,32 @@ def load_cwe_reference(run_root: Path) -> CweReference:
     if not entries:
         return _unavailable("mitre_identity_mismatch: the pinned MITRE snapshot holds no CWE weakness", **identity,
                             version=version)
+    indexed = consequences is not None
     if pin.get("stale"):
-        # A stale catalog still names real weaknesses, so it continues to supply names and
-        # abstractions; claim validation nevertheless falls back with the gap recorded.
+        # A stale catalog still names real weaknesses, so it continues to supply names, abstractions
+        # and consequences; claim validation nevertheless falls back with the gap recorded.
         return _unavailable("mitre_stale_feed: the pinned MITRE CWE catalog is older than the configured "
-                            "freshness bound", entries, **identity, version=version)
-    return CweReference("mitre_catalog", entries, version=version, **identity)
+                            "freshness bound", entries, **identity, version=version, stale=True,
+                            consequences_indexed=indexed)
+    return CweReference("mitre_catalog", entries, version=version, consequences_indexed=indexed, **identity)
+
+
+def _consequences(connection: sqlite3.Connection) -> dict[str, tuple[CweConsequence, ...]] | None:
+    """Common_Consequences per weakness id, or ``None`` when the index predates ``mitre-index/2``."""
+    if connection.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'cwe_consequence'"
+                          ).fetchone() is None:
+        return None
+    found: dict[str, list[CweConsequence]] = {}
+    for external_id, ordinal, scopes, impacts in connection.execute(
+            "SELECT external_id, ordinal, scopes_json, impacts_json FROM cwe_consequence "
+            "ORDER BY external_id, ordinal"):
+        try:
+            scope_list, impact_list = json.loads(scopes), json.loads(impacts)
+        except ValueError:
+            continue
+        if not isinstance(scope_list, list) or not isinstance(impact_list, list):
+            continue
+        found.setdefault(str(external_id), []).append(CweConsequence(
+            int(ordinal), tuple(str(item)[:128] for item in scope_list[:16]),
+            tuple(str(item)[:128] for item in impact_list[:16])))
+    return {key: tuple(value[:32]) for key, value in found.items()}

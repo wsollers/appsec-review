@@ -14,6 +14,14 @@ from appsec_review.jobs.job_third_party_data_sync.publication import HttpDownloa
 
 REQUIRED_DEFAULTS = ("enterprise_attack", "capec", "cwe")
 OPTIONAL_ATTACK = ("mobile_attack", "ics_attack")
+NORMALIZE_SCHEMA = "appsec-review/mitre-normalize/2"
+SNAPSHOT_SCHEMA = "appsec-review/mitre-snapshot/2"
+# /2 adds the ``cwe_consequence`` table (each weakness's Common_Consequences); a /1 index has none.
+INDEX_SCHEMA = "appsec-review/mitre-index/2"
+# Bounds on captured Common_Consequences: entries per weakness, terms per entry, characters per term.
+MAX_CONSEQUENCES = 32
+MAX_CONSEQUENCE_TERMS = 16
+MAX_TERM_CHARS = 128
 
 
 @dataclass(frozen=True, slots=True)
@@ -115,6 +123,45 @@ def _xml_bytes(path: Path, bound: int) -> bytes:
     return payload
 
 
+def _local(tag: str) -> str:
+    return tag.rsplit("}", 1)[-1]
+
+
+def _terms(element: ET.Element, name: str) -> tuple[list[str], bool]:
+    """Distinct, whitespace-normalized child texts named ``name`` in document order, bounded."""
+    found: list[str] = []
+    for child in element:
+        if _local(child.tag) != name or not child.text:
+            continue
+        text = " ".join(child.text.split())[:MAX_TERM_CHARS]
+        if text and text not in found:
+            found.append(text)
+    return found[:MAX_CONSEQUENCE_TERMS], len(found) > MAX_CONSEQUENCE_TERMS
+
+
+def weakness_consequences(element: ET.Element) -> tuple[list[tuple[list[str], list[str]]], bool]:
+    """A weakness's Common_Consequences as ``[(scopes, technical impacts)]`` in document order.
+
+    Entries with neither a scope nor an impact are skipped. The list, and the terms of each entry,
+    are bounded; the second value says whether anything was cut. Notes and likelihoods are not
+    captured: the impact derivation (``cwe-impact-derivation/1``) reads only scopes and impacts.
+    """
+    entries: list[tuple[list[str], list[str]]] = []
+    truncated = False
+    for block in element:
+        if _local(block.tag) != "Common_Consequences":
+            continue
+        for consequence in block:
+            if _local(consequence.tag) != "Consequence":
+                continue
+            scopes, cut_scopes = _terms(consequence, "Scope")
+            impacts, cut_impacts = _terms(consequence, "Impact")
+            truncated = truncated or cut_scopes or cut_impacts
+            if scopes or impacts:
+                entries.append((scopes, impacts))
+    return entries[:MAX_CONSEQUENCES], truncated or len(entries) > MAX_CONSEQUENCES
+
+
 def normalize(settings: MitreSettings, fetched: Mapping[str, Any], work: Path) -> dict[str, Any]:
     database = work / "mitre.sqlite"
     database.parent.mkdir(parents=True, exist_ok=True)
@@ -130,7 +177,11 @@ def normalize(settings: MitreSettings, fetched: Mapping[str, Any], work: Path) -
             CREATE INDEX entry_lookup ON entry(external_id, source);
             CREATE INDEX entry_name ON entry(name, source);
             CREATE TABLE metadata(key TEXT PRIMARY KEY, value TEXT NOT NULL);
+            CREATE TABLE cwe_consequence(source TEXT NOT NULL, external_id TEXT NOT NULL, ordinal INTEGER NOT NULL,
+                                         scopes_json TEXT NOT NULL, impacts_json TEXT NOT NULL,
+                                         PRIMARY KEY(source, external_id, ordinal));
         """)
+        truncated_weaknesses = 0
         for name, source in fetched["sources"].items():
             source_count = 0
             if source["kind"] in ("attack", "capec"):
@@ -168,17 +219,33 @@ def normalize(settings: MitreSettings, fetched: Mapping[str, Any], work: Path) -
                                         json.dumps(attributes, sort_keys=True, separators=(",", ":"))
                                         if attributes else None))
                     source_count += 1
+                    if local != "Weakness":
+                        continue
+                    consequences, truncated = weakness_consequences(element)
+                    truncated_weaknesses += int(truncated)
+                    connection.execute("DELETE FROM cwe_consequence WHERE source = ? AND external_id = ?",
+                                       (name, identifier))
+                    connection.executemany(
+                        "INSERT INTO cwe_consequence VALUES (?, ?, ?, ?, ?)",
+                        ((name, identifier, ordinal, json.dumps(scopes, separators=(",", ":")),
+                          json.dumps(impacts, separators=(",", ":")))
+                         for ordinal, (scopes, impacts) in enumerate(consequences)))
             total += source_count
             if total > settings.max_records:
                 raise ValueError("MITRE record count exceeded configured bound")
             counts[name] = connection.execute("SELECT COUNT(*) FROM entry WHERE source = ?", (name,)).fetchone()[0]
         total = connection.execute("SELECT COUNT(*) FROM entry").fetchone()[0]
+        consequence_count = connection.execute("SELECT COUNT(*) FROM cwe_consequence").fetchone()[0]
         connection.executemany("INSERT INTO metadata VALUES (?, ?)",
-                               (("record_count", str(total)), ("max_lookup_results", str(settings.max_lookup_results))))
+                               (("schema", INDEX_SCHEMA), ("record_count", str(total)),
+                                ("max_lookup_results", str(settings.max_lookup_results)),
+                                ("consequence_count", str(consequence_count)),
+                                ("consequence_truncated_weaknesses", str(truncated_weaknesses))))
         if connection.execute("PRAGMA quick_check").fetchone()[0] != "ok":
             raise ValueError("MITRE SQLite quick_check failed")
-    return {"schema": "appsec-review/mitre-normalize/1", "database_path": str(database),
-            "record_count": total, "source_counts": counts, "max_lookup_results": settings.max_lookup_results}
+    return {"schema": NORMALIZE_SCHEMA, "database_path": str(database), "index_schema": INDEX_SCHEMA,
+            "record_count": total, "source_counts": counts, "max_lookup_results": settings.max_lookup_results,
+            "consequence_count": consequence_count, "consequence_truncated_weaknesses": truncated_weaknesses}
 
 
 def publish(settings: MitreSettings, fetched: Mapping[str, Any], normalized: Mapping[str, Any]) -> dict[str, Any]:
@@ -186,9 +253,13 @@ def publish(settings: MitreSettings, fetched: Mapping[str, Any], normalized: Map
     files["index/mitre.sqlite"] = Path(normalized["database_path"])
     sources = {name: {key: value for key, value in entry.items() if key != "path"}
                for name, entry in fetched["sources"].items()}
-    return publish_snapshot(settings.feed_root, feed_id="mitre", schema="appsec-review/mitre-snapshot/1", files=files,
+    return publish_snapshot(settings.feed_root, feed_id="mitre", schema=SNAPSHOT_SCHEMA, files=files,
                             manifest_fields={"source_selections": list(settings.selections), "sources": sources,
+                                             "index_schema": INDEX_SCHEMA,
                                              "record_count": normalized["record_count"],
+                                             "consequence_count": normalized["consequence_count"],
+                                             "consequence_truncated_weaknesses":
+                                                 normalized["consequence_truncated_weaknesses"],
                                              "source_counts": normalized["source_counts"],
                                              "max_lookup_results": settings.max_lookup_results,
                                              "limitations": ["MITRE references classify claims; they are not finding evidence."]})

@@ -7,7 +7,9 @@ declarative :class:`~.risk_model.RiskModel` from TOML:
   the exploitability bands. A KEV-listed lead advisory raises an already scored claim one band
   (``low`` -> ``medium`` -> ``high``), recorded as an assumption; it never makes a claim scoreable.
 - ``technical_severity`` (scale ``application_risk_matrix/2``): impact class x exploitability rating.
-  An unmapped or absent CWE leaves it ``null`` with ``impact_class`` missing.
+  ``impact_class`` is an override or is derived from the run's pinned MITRE CWE catalog under
+  ``cwe-impact-derivation/1`` (:mod:`.cwe_impact`); when it is missing (no CWE, no catalog, no
+  mapped consequence) technical severity is ``null``.
 - ``environmental_business_impact`` (scale ``environmental_exposure/1``): exposure, privilege and
   data-sensitivity points, produced only when at least one of them is present.
 - ``remediation_priority`` is never produced: no priority policy implementation is registered.
@@ -24,6 +26,7 @@ from typing import Any, Mapping
 from appsec_review.review.claims import normalize_cwe
 from appsec_review.review.identity import sha256_hex
 from appsec_review.review.models import ClaimState
+from appsec_review.review.scoring.cwe_impact import ImpactCatalog
 from appsec_review.review.scoring.factors import FACTORS_VERSION, FactorId, ImpactClassExtractor
 from appsec_review.review.scoring.interface import (
     INTERFACE_VERSION, SCOREABLE_STATES, DimensionScore, ScoreProviderResult, ScoreRequest, ValidationResult,
@@ -44,19 +47,26 @@ class ApplicationRiskMatrixV2Provider:
     interface_version = INTERFACE_VERSION
     implementation_version = IMPLEMENTATION_VERSION
 
-    def __init__(self, cwe_impact_classes: Mapping[str, str], model: RiskModel = DEFAULT_RISK_MODEL) -> None:
+    def __init__(self, cwe_impact_overrides: Mapping[str, Any] | None = None,
+                 model: RiskModel = DEFAULT_RISK_MODEL, catalog: ImpactCatalog | None = None) -> None:
         if not isinstance(model, RiskModel):
             raise TypeError("application_risk_matrix/2 needs a RiskModel")
-        self._impact = ImpactClassExtractor(cwe_impact_classes)
+        self._impact = ImpactClassExtractor(cwe_impact_overrides, catalog)
         self.model = model
         self.consumed_factors: frozenset[FactorId] = model.consumed_factors
+        # The derivation rule, the overrides and the pinned catalog's snapshot identity enter the
+        # configuration hash, so a new catalog, rule or override gives new score ids.
         self.provider_config_sha256 = sha256_hex({
-            "factors": FACTORS_VERSION, "cwe_impact_classes": dict(self._impact.table), "model": model.document(),
+            "factors": FACTORS_VERSION, "impact_class": self._impact.identity(), "model": model.document(),
         })
 
     @property
-    def cwe_impact_classes(self) -> Mapping[str, str]:
-        return self._impact.table
+    def cwe_impact_overrides(self) -> Mapping[str, Any]:
+        return self._impact.overrides
+
+    @property
+    def impact_catalog(self) -> ImpactCatalog:
+        return self._impact.catalog
 
     def input_schema(self) -> Mapping[str, object]:
         return {"type": "object", "required": ["claim_state", "weakness_cwe", "factors"],
@@ -91,8 +101,8 @@ class ApplicationRiskMatrixV2Provider:
             if verification is not None and verification.value != state.value:
                 errors.append("verification factor disagrees with the claim state")
             impact = factors.get(FactorId.IMPACT_CLASS)
-            if impact is not None and self._impact.table.get(request.weakness_cwe or "") != impact.value:
-                errors.append("impact_class factor disagrees with the configured CWE table")
+            if impact is not None and self._impact.extract_cwe(request.weakness_cwe) != impact:
+                errors.append("impact_class factor disagrees with this provider's overrides and pinned CWE catalog")
         return ValidationResult(not errors, tuple(errors))
 
     def score(self, request: ScoreRequest) -> ScoreProviderResult:
@@ -113,6 +123,9 @@ class ApplicationRiskMatrixV2Provider:
             assumptions.append("NVD CVSS vectors recorded as reference inputs; they describe the advisory, not "
                                "this target, and do not set any band")
         impact = factors.get(FactorId.IMPACT_CLASS)
+        if impact is not None and "stale" in impact.detail.get("catalog_status", ()):
+            assumptions.append(f"impact_class was read from a stale pinned MITRE CWE catalog "
+                               f"({self._impact.catalog.snapshot_id}); the stale gap is recorded on the factor")
         band = self.model.technical_severity[impact.value][rating] if impact is not None else None
         environmental: dict[str, Any] | None = None
         if self.model.environmental.present(factors):
