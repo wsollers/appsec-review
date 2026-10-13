@@ -46,7 +46,7 @@ def validate_dispatch(dispatch: Mapping[str, Any], settings: RustBuildSettings) 
             errors.append("Rust recipes may execute Cargo commands only")
             continue
         subcommand = str(argv[1]).lower()
-        if subcommand in _FORBIDDEN or subcommand not in {"build", "rustc", "check", "metadata"}:
+        if subcommand in _FORBIDDEN or subcommand not in {"build", "rustc", "check", "metadata", "fetch"}:
             errors.append(f"Cargo subcommand is unsupported: {subcommand}")
         if subcommand in {"build", "rustc"}:
             cargo_builds += 1

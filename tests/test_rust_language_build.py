@@ -32,18 +32,23 @@ REDACTED = "<redacted: secret scan disposition>"
 
 
 class RustRecipeModel:
+    def __init__(self, *, fetch: bool = False):
+        self.fetch = fetch
+
     def complete(self, request, *, timeout_seconds):
         recipes = []
         for unit in request.summary["build_units"]:
             root = unit["root"]
+            commands = ([["cargo", "fetch", "--locked"]] if self.fetch else [])
+            commands.append(["cargo", "build", "--workspace", "--package", "sample",
+                "--features", "serde", "--locked", "--offline", "--target",
+                "x86_64-unknown-linux-gnu", "--profile", "dev"])
             recipes.append({
                 "schema": "appsec-review/build-recipe/1", "build_unit_id": unit["build_unit_id"],
                 "image_profile": "rust", "source_dir": root, "build_dir": f"{root}/target",
                 "system_packages": [], "environment": {"CARGO_TERM_COLOR": "never"},
                 "dependency_files": [f"{root}/Cargo.toml", f"{root}/Cargo.lock"],
-                "configure_commands": [], "build_commands": [["cargo", "build", "--workspace",
-                    "--package", "sample", "--features", "serde", "--locked", "--offline",
-                    "--target", "x86_64-unknown-linux-gnu", "--profile", "dev"]],
+                "configure_commands": [], "build_commands": commands,
                 "expected_outputs": [f"{root}/target"], "network_required": True,
                 "reason": "bounded Rust fixture recipe",
             })
@@ -153,10 +158,11 @@ def _fixture(tmp_path: Path, *, capture: str = "event_count_limit = 250000"):
     return load_config(config_path), target
 
 
-def _accepted_project(config, target, calls):
+def _accepted_project(config, target, calls, *, fetch: bool = False):
     fingerprint = source_fingerprint(target)
     upstream = GraphRunner(config, [build_intake(), build_catalog(),
-        build_plan(infer=RustRecipeModel().complete)]).run(target_root=target, source_fingerprint=fingerprint)
+        build_plan(infer=RustRecipeModel(fetch=fetch).complete)]).run(
+            target_root=target, source_fingerprint=fingerprint)
     GraphRunner(config, [build_projects(
         executor_factory=lambda unit, profile: simulated_executor(profile, rust_container(calls)),
         image_resolver_factory=lambda unit: RustImageResolver(target))]).run(
@@ -206,6 +212,21 @@ def test_rust_option_validation_rejects_target_execution_and_accepts_bounded_cho
     assert rust.validate_dispatch(dispatch, settings) == ()
     bad = {**dispatch, "recipe": {**dispatch["recipe"], "build_commands": [["cargo", "test"]]}}
     assert any("unsupported" in gap for gap in rust.validate_dispatch(bad, settings))
+
+
+def test_rust_fetch_recipe_survives_project_to_language_build_handoff(tmp_path: Path) -> None:
+    config, target = _fixture(tmp_path)
+    calls: list[tuple[str, ...]] = []
+    run_id, fingerprint = _accepted_project(config, target, calls, fetch=True)
+
+    outcome = _language(config, target, fingerprint, run_id, lambda unit, profile:
+        simulated_executor(profile, rust_container(calls)))
+
+    assert outcome["status"] == "SUCCEEDED"
+    receipt = _rust_receipt(config, run_id)
+    assert receipt["terminal_status"] == "SUCCEEDED"
+    assert receipt["recipe"]["build_commands"][0] == ["cargo", "fetch", "--locked"]
+    assert any(command[:2] == ("cargo", "fetch") for command in calls)
 
 
 def test_rust_tool_classification_uses_only_the_kernel_resolved_executable_path() -> None:
