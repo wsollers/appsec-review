@@ -4,6 +4,7 @@ from dataclasses import asdict
 import json
 from pathlib import Path
 from types import SimpleNamespace
+import zipfile
 
 import pytest
 
@@ -11,10 +12,12 @@ from appsec_review.config import JvmBuildSettings, LanguageBuildSettings, load_c
 from appsec_review.container_runtime import BuildCommandResult, ProjectImage
 from appsec_review.container_runtime.project_images import dependency_hashes, project_recipe_identity
 from appsec_review.jobs.cataloging import source_fingerprint
-from appsec_review.jobs.build_discovery import validate_build_recipe
+from appsec_review.jobs.build_discovery import jvm_build_command_errors, validate_build_recipe
 from appsec_review.jobs.job_language_build import build_job as build_language, load_accepted_language_build
-from appsec_review.jobs.job_language_build.jvm import _fingerprint as jvm_fingerprint
-from appsec_review.jobs.job_project_build import build_job as build_projects
+from appsec_review.jobs.job_language_build.jvm import (
+    JvmIntegrityError, _fingerprint as jvm_fingerprint, _jvm_argv,
+)
+from appsec_review.jobs.job_project_build import build_job as build_projects, load_accepted_builds
 from appsec_review.jobs.job_project_build.job import _deterministic_jvm_recipe
 from appsec_review.jobs.job_review_intake import build_job as build_intake
 from appsec_review.jobs.job_target_catalog import build_job as build_catalog
@@ -80,6 +83,12 @@ class JvmExecutor:
         failed = working_directory in self.fail_roots
         if not failed:
             root = workspace / working_directory
+            if any(str(value).lower().endswith(":assembledebug") for value in argv):
+                apk = root / "app" / "build" / "outputs" / "apk" / "debug" / "app-debug.apk"
+                apk.parent.mkdir(parents=True, exist_ok=True)
+                with zipfile.ZipFile(apk, "w") as archive:
+                    archive.writestr("AndroidManifest.xml", b"manifest")
+                    archive.writestr("resources.arsc", b"resources")
             generated = root / "target" / "generated-sources" / "annotations"
             classes = root / "target" / "classes" / "example"
             meta = root / "target" / "classes" / "META-INF"
@@ -127,6 +136,24 @@ def _fixture(tmp_path: Path, *, gradle: bool = False, output_bytes: int | None =
     return load_config(config_path), target
 
 
+def _android_fixture(tmp_path: Path):
+    config_path = tmp_path / "appsec-review.toml"
+    config_path.write_text((ROOT / "appsec-review.toml").read_text(encoding="utf-8"), encoding="utf-8")
+    target = tmp_path / "target"
+    root = target / "android"
+    (root / "app" / "src" / "main" / "java" / "example").mkdir(parents=True)
+    (root / "build.gradle.kts").write_text(
+        'plugins { id("com.android.application") version "8.7.3" apply false }\n', encoding="utf-8")
+    (root / "settings.gradle.kts").write_text(
+        'rootProject.name = "fixture"\ninclude(":app")\n', encoding="utf-8")
+    (root / "app" / "build.gradle.kts").write_text(
+        'plugins { id("com.android.application") }\nandroid { compileSdk = 35 }\n', encoding="utf-8")
+    (root / "gradle.properties").write_text("org.gradle.daemon=false\n", encoding="utf-8")
+    (root / "app" / "src" / "main" / "java" / "example" / "Main.java").write_text(
+        "package example; class Main {}\n", encoding="utf-8")
+    return load_config(config_path), target
+
+
 def _run_to_dispatch(config, target: Path, model: JvmRecipeModel, calls: list[tuple[str, ...]]):
     fingerprint = source_fingerprint(target)
     upstream = GraphRunner(config, [build_intake(), build_catalog(), build_plan(infer=model.complete)]).run(
@@ -164,6 +191,48 @@ def test_jvm_gradle_wrapper_is_resolved_to_system_tool(tmp_path: Path) -> None:
     GraphRunner(config, [build_language(executor_factory=lambda unit, profile: JvmExecutor(calls))]).run(
         target_root=target, source_fingerprint=fingerprint, run_id=run_id)
     assert calls and all(call[0] == "gradle" for call in calls)
+
+
+def test_android_gradle_dispatch_survives_project_to_language_execution(tmp_path: Path) -> None:
+    config, target = _android_fixture(tmp_path)
+    calls: list[tuple[str, ...]] = []
+    run_id, fingerprint = _run_to_dispatch(config, target, JvmRecipeModel(gradle=True), calls)
+    run_root = config.runtime.runs_dir / run_id
+    dispatch = load_accepted_builds(run_root)["build_dispatches"][0]
+    assert dispatch["recipe"]["image_profile"] == "android"
+    assert dispatch["descriptor_facts"]["kind"] == "android-gradle-application"
+
+    outcome = GraphRunner(config, [build_language(
+        executor_factory=lambda unit, profile: JvmExecutor(calls))]).run(
+            target_root=target, source_fingerprint=fingerprint, run_id=run_id)
+
+    assert outcome["status"] == "SUCCEEDED"
+    receipt = load_accepted_language_build(run_root)["receipts"][0]
+    assert receipt["terminal_status"] == "SUCCEEDED" and receipt["family"] == "java"
+    assert calls.count(("gradle", "--no-daemon", ":app:assembleDebug")) == 2
+
+
+@pytest.mark.parametrize("task", [":app:test", ":app:connectedAndroidTest", ":app:installDebug", ":app:run"])
+def test_android_gradle_policy_allows_assembly_but_rejects_execution_tasks(task: str) -> None:
+    recipe = {"image_profile": "android", "source_dir": "android"}
+    accepted = ["gradle", "--no-daemon", ":app:assembleDebug"]
+    assert jvm_build_command_errors("android", accepted) == ()
+    assert _jvm_argv(recipe, accepted)[0] == tuple(accepted)
+    assert jvm_build_command_errors("java", accepted) == ("Gradle task is not build-only",)
+
+    rejected = ["gradle", "--no-daemon", task]
+    assert "Gradle task is not build-only" in jvm_build_command_errors("android", rejected)
+    with pytest.raises(JvmIntegrityError, match="Gradle task is not build-only"):
+        _jvm_argv(recipe, rejected)
+
+
+def test_gradle_build_requires_an_explicit_test_exclusion() -> None:
+    recipe = {"image_profile": "java", "source_dir": "java"}
+    assert jvm_build_command_errors("java", ["gradle", "build", "-x", "test"]) == ()
+    assert _jvm_argv(recipe, ["gradle", "build", "-x", "test"])[0] == (
+        "gradle", "build", "-x", "test")
+    with pytest.raises(JvmIntegrityError, match="must exclude the test task"):
+        _jvm_argv(recipe, ["gradle", "build"])
 
 
 def test_jvm_streams_are_hashed_bounded_and_retain_diagnostic_tails(tmp_path: Path) -> None:

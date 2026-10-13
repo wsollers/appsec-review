@@ -80,9 +80,52 @@ _FORBIDDEN_SUBCOMMANDS = {
     "dotnet": {"run", "test", "tool"}, "npm": {"exec", "install", "test", "start", "publish"},
     "npx": {"--yes", "-y"}, "pnpm": {"add", "dlx", "exec", "install", "test", "start", "publish"},
     "yarn": {"add", "dlx", "exec", "install", "test", "start", "publish"}, "mvn": {"exec:java", "test"},
-    "gradle": {"run", "test"}, "gradlew": {"run", "test"},
     "composer": {"exec", "run-script", "test"}, "php": {"-r", "--interactive"},
 }
+
+
+def jvm_build_command_errors(profile: str, argv: Sequence[str]) -> tuple[str, ...]:
+    """Validate Maven and Gradle build-only goals for planning and execution."""
+    if not argv:
+        return ("JVM command is empty",)
+    executable = PurePosixPath(str(argv[0])).name
+    lowered = [str(value).lower() for value in argv[1:]]
+    errors: list[str] = []
+    if executable in {"mvn", "mvnw"}:
+        goals = [value for value in lowered if not value.startswith("-")]
+        allowed_goals = {"clean", "compile", "package", "process-resources", "generate-sources",
+                         "generate-resources", "jar:jar", "war:war"}
+        if any(value not in allowed_goals for value in goals):
+            errors.append("Maven goal is not build-only")
+        if not any(value == "-dskiptests" or value.startswith("-dmaven.test.skip=true")
+                   for value in lowered):
+            errors.append("Maven build must explicitly disable tests")
+    if executable in {"gradle", "gradlew"}:
+        tasks: list[str] = []
+        excluded: set[str] = set()
+        index = 0
+        while index < len(lowered):
+            value = lowered[index]
+            if value in {"-x", "--exclude-task"}:
+                if index + 1 >= len(lowered):
+                    errors.append("Gradle task exclusion is missing its task")
+                    break
+                excluded.add(lowered[index + 1].rsplit(":", 1)[-1])
+                index += 2
+                continue
+            if value.startswith("--exclude-task="):
+                excluded.add(value.split("=", 1)[1].rsplit(":", 1)[-1])
+            elif not value.startswith("-"):
+                tasks.append(value.rsplit(":", 1)[-1])
+            index += 1
+        allowed_tasks = {"assemble", "classes", "jar", "war", "clean", "build"}
+        if profile == "android":
+            allowed_tasks.add("assembledebug")
+        if any(value not in allowed_tasks for value in tasks):
+            errors.append("Gradle task is not build-only")
+        if "build" in tasks and "test" not in excluded:
+            errors.append("Gradle build must exclude the test task")
+    return tuple(dict.fromkeys(errors))
 
 
 def _marker(path: PurePosixPath) -> tuple[str, str] | None:
@@ -393,26 +436,9 @@ def validate_build_recipe(recipe: Mapping[str, Any], unit: Mapping[str, Any]) ->
             if words & _FORBIDDEN_SUBCOMMANDS.get(executable, set()):
                 errors.append(f"{field}[{index}] requests execution, tests, or tool installation")
             lowered = [str(arg).lower() for arg in argv[1:]]
-            if executable in {"mvn", "mvnw"}:
-                goals = [value for value in lowered if not value.startswith("-")]
-                allowed_goals = {"clean", "compile", "package", "process-resources", "generate-sources",
-                                 "generate-resources", "jar:jar", "war:war"}
-                if any(value not in allowed_goals for value in goals):
-                    errors.append(f"{field}[{index}] Maven goal is not build-only")
-                if not any(value == "-dskiptests" or value.startswith("-dmaven.test.skip=true")
-                           for value in lowered):
-                    errors.append(f"{field}[{index}] Maven build must explicitly disable tests")
-            if executable in {"gradle", "gradlew"}:
-                tasks = [value for value in lowered if not value.startswith("-")]
-                allowed_tasks = {"assemble", "classes", "jar", "war", "clean", "build"}
-                if profile == "android":
-                    allowed_tasks.add("assembledebug")
-                if any(value.rsplit(":", 1)[-1] not in allowed_tasks for value in tasks):
-                    errors.append(f"{field}[{index}] Gradle task is not build-only")
-                if any(value.rsplit(":", 1)[-1] == "build" for value in tasks) and not any(
-                        lowered[offset:offset + 2] == ["-x", "test"]
-                        for offset in range(max(0, len(lowered) - 1))):
-                    errors.append(f"{field}[{index}] Gradle build must exclude tests")
+            if executable in {"mvn", "mvnw", "gradle", "gradlew"}:
+                errors.extend(f"{field}[{index}] {error}"
+                              for error in jvm_build_command_errors(str(profile), argv))
             if profile == "node" and executable == "node" and "--check" not in argv[1:]:
                 errors.append(f"{field}[{index}] may execute a target application")
     if isinstance(recipe.get("build_commands"), list) and not recipe["build_commands"]:

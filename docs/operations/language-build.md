@@ -97,6 +97,9 @@ platform-tools. Gradle and Android mutable homes live only in `.appsec-cache/` i
 workspace; this cache is excluded from snapshots and artifact catalogs. Successful acceptance
 requires a non-empty ZIP-valid APK containing `AndroidManifest.xml` and `resources.arsc`.
 Android intermediate and output metadata are cataloged without executing the application.
+Project-build acceptance and language-build execution use the same Maven/Gradle command-policy
+validator. The Android profile permits only the build-only `assembleDebug` specialization;
+test, connected-test, install, and run tasks remain rejected before execution.
 
 The existing Java/Kotlin CodeQL path layers its pinned payload onto that accepted Android image;
 CodeQL is not installed in the build image. Manual replay receives fresh run-owned Gradle/Android

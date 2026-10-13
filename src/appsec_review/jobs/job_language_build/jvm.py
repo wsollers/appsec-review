@@ -13,6 +13,7 @@ import time
 from typing import Any
 
 from appsec_review.container_runtime import BuildContainerExecutor, BuildProfile
+from appsec_review.jobs.build_discovery import jvm_build_command_errors
 from appsec_review.retrieval import (
     EntityKind, EntityRecord, IndexBuilder, IndexIdentity, LogicalIdentity,
     RelationKind, RelationRecord, index_fingerprint,
@@ -74,24 +75,10 @@ def _jvm_argv(recipe: Mapping[str, Any], raw: list[str]) -> tuple[tuple[str, ...
     elif requested == "gradlew":
         argv[0], wrapper = "gradle", "gradlew"
     tool = Path(argv[0]).name
-    lowered = [value.lower() for value in argv[1:]]
-    if tool == "mvn":
-        goals = [value for value in lowered if not value.startswith("-")]
-        allowed_goals = {"clean", "compile", "package", "process-resources", "generate-sources",
-                         "generate-resources", "jar:jar", "war:war"}
-        if any(value not in allowed_goals for value in goals):
-            raise JvmIntegrityError("accepted Maven command could execute tests or an application")
-        if not any(value == "-dskiptests" or value.startswith("-dmaven.test.skip=true")
-                   for value in lowered):
-            raise JvmIntegrityError("accepted Maven build must explicitly disable tests")
-    if tool == "gradle":
-        tasks = [value for value in lowered if not value.startswith("-")]
-        allowed_tasks = {"assemble", "classes", "jar", "war", "clean"}
-        if any(value.rsplit(":", 1)[-1] not in allowed_tasks | {"build"} for value in tasks):
-            raise JvmIntegrityError("accepted Gradle command could execute tests or an application")
-        if "build" in tasks and not any(lowered[index:index + 2] == ["-x", "test"]
-                                        for index in range(max(0, len(lowered) - 1))):
-            raise JvmIntegrityError("accepted Gradle build must exclude the test task")
+    if tool in {"mvn", "gradle"}:
+        errors = jvm_build_command_errors(str(recipe.get("image_profile", "")), argv)
+        if errors:
+            raise JvmIntegrityError("accepted JVM build command is invalid: " + "; ".join(errors))
     return tuple(argv), wrapper
 
 
