@@ -1096,6 +1096,7 @@ def build_job(*, executor_factory=None, image_resolver_factory=None,
                          "probe_disposition": receipt["probe_disposition"],
                          "markers": list(entry["action"].get("markers", ())),
                          "descriptor_package": dict(entry["action"].get("descriptor_package", {})),
+                         "descriptor_facts": dict(entry["action"].get("descriptor_facts", {})),
                          "processing_facts": dict(entry["action"].get("processing_facts", {})),
                          "build_capture_decision": dict(entry["action"].get("build_capture_decision", {})),
                          "capabilities": list(_BUILD_CAPABILITIES[family])}

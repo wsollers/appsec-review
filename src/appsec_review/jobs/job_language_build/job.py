@@ -123,7 +123,15 @@ def load_accepted_language_build(run_root: Path) -> Mapping[str, Any]:
     return {**document, "language_build_handoff_sha256": pointer["handoff_sha256"]}
 
 
-def _dispatches(unit: UnitContext) -> tuple[list[dict[str, Any]], Mapping[str, Any]]:
+def _dispatches(
+        unit: UnitContext, *, families: frozenset[str] | None = None,
+) -> tuple[list[dict[str, Any]], Mapping[str, Any]]:
+    """Load accepted dispatches and validate only the families consumed by this lane.
+
+    The accepted handoff, target snapshot, workflow envelope, and build-unit identities are shared
+    integrity boundaries. Probe, image, recipe, and dependency validation is family-owned so one
+    producer cannot fail unrelated language lanes.
+    """
     accepted = load_accepted_builds(unit.job.run_root)
     if accepted.get("source_fingerprint") != unit.job.source_fingerprint:
         raise ValueError("target snapshot differs from accepted project-build dispatch")
@@ -141,6 +149,11 @@ def _dispatches(unit: UnitContext) -> tuple[list[dict[str, Any]], Mapping[str, A
         if not re.fullmatch(r"build-unit-[0-9a-f]{20}", build_unit_id) or build_unit_id in seen:
             raise ValueError("project-build handoff contains an unknown or duplicate build unit")
         seen.add(build_unit_id)
+        family = raw.get("family")
+        if not isinstance(family, str) or not family:
+            raise ValueError("project-build handoff contains an invalid build family")
+        if families is not None and family not in families:
+            continue
         probe = probes.get(build_unit_id)
         image, recipe = raw.get("image"), raw.get("recipe")
         if not isinstance(probe, Mapping) or probe.get("terminal_status") != "SUCCEEDED":
@@ -162,9 +175,10 @@ def _dispatches(unit: UnitContext) -> tuple[list[dict[str, Any]], Mapping[str, A
                                                    {str(k): str(v) for k, v in dependencies.items()})
         if expected_recipe != raw.get("recipe_identity"):
             raise ValueError("accepted build dispatch operational recipe identity mismatch")
-        pseudo_unit = {"build_unit_id": build_unit_id, "family": raw["family"], "root": raw["root"],
+        pseudo_unit = {"build_unit_id": build_unit_id, "family": family, "root": raw["root"],
                        "markers": [{"path": path} for path in dependencies],
-                       "descriptor_package": {"documents": [{"path": path} for path in dependencies]}}
+                       "descriptor_package": {"documents": [{"path": path} for path in dependencies]},
+                       "descriptor_facts": raw.get("descriptor_facts", {})}
         errors = validate_build_recipe(recipe, pseudo_unit)
         if errors:
             raise ValueError("accepted build dispatch recipe is invalid: " + "; ".join(errors))
@@ -1328,12 +1342,15 @@ def build_job(*, executor_factory=None) -> Job:
 
     def load_family(family: str):
       def load(unit: UnitContext) -> Mapping[str, Any]:
-        dispatches, accepted = _dispatches(unit)
         typed = unit.job.config.typed_settings
         if not isinstance(typed, LanguageBuildSettings):
             raise ValueError("typed language-build settings are unavailable")
         configuration_sha256 = resolved_configuration_identity(unit.job.run_root)
         wasm_rules = wasm._producer_rules(unit.job.config.settings["wasm"])
+        consumed_families = (frozenset(value for rule in wasm_rules.values()
+                                       for value in rule["families"])
+                             if family == "wasm" else frozenset({family}))
+        dispatches, accepted = _dispatches(unit, families=consumed_families)
         wasm_selected = [(item, wasm._select_producer(item, wasm_rules)) for item in dispatches]
         if family == "wasm":
             selected = [{**item, "wasm_producer": producer} for item, producer in wasm_selected if producer]
@@ -1496,8 +1513,9 @@ def build_job(*, executor_factory=None) -> Job:
                       unit.output("execute.node"), unit.output("execute.python"),
                       unit.output("execute.rust"), unit.output("execute.php"), unit.output("execute.java"),
                       unit.output("execute.wasm")]
-        unsupported = [item for item in _dispatches(unit)[0]
-                       if item["family"] not in {"native", "go", "dotnet", "node", "python", "rust", "php", "java", "wasm"}]
+        supported = {"native", "go", "dotnet", "node", "python", "rust", "php", "java", "wasm"}
+        unsupported = [item for item in loaded["accepted"].get("build_dispatches", ())
+                       if isinstance(item, Mapping) and item.get("family") not in supported]
         unsupported_gaps = [f"{item['build_unit_id']}: accepted {item['family']} execution is not implemented"
                             for item in unsupported]
         document = {"schema": SCHEMA, "source_fingerprint": unit.job.source_fingerprint,

@@ -312,6 +312,7 @@ def test_project_build_executes_accepted_recipes_and_retains_binaries(tmp_path: 
     native = next(item for item in accepted["build_dispatches"] if item["family"] == "native")
     assert native["recipe_provenance"] == "deterministic-cmake-marker"
     assert native["recipe"]["system_packages"] == []
+    assert native["descriptor_facts"] == {}
 
 
 def test_disabled_build_capture_records_policy_skips_without_execution(tmp_path: Path) -> None:

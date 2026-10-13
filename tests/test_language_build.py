@@ -1,16 +1,20 @@
 from __future__ import annotations
 
+from copy import deepcopy
+import hashlib
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 from appsec_review.config import load_config
-from appsec_review.container_runtime import BuildCommandResult, ProjectImage
+from appsec_review.container_runtime import BuildCommandResult, BuildProfile, ProjectImage
 from appsec_review.container_runtime.executor import ExecutionResult
 from appsec_review.container_runtime.project_images import dependency_hashes, project_recipe_identity
 from appsec_review.jobs.cataloging import source_fingerprint
 from appsec_review.jobs.job_language_build import build_job as build_language, load_accepted_language_build, native
+from appsec_review.jobs.job_language_build import job as language_build_job
 from appsec_review.jobs.job_language_build.dotnet import artifact_kind, project_topology, tool_identity, validate_recipe
 from appsec_review.jobs.job_language_build.job import (
     _compile_rows, _dotnet_argv, _fingerprint, _link_rows, _stream_identity,
@@ -19,14 +23,14 @@ from appsec_review.mcp import RetrievalMcpAdapter
 from appsec_review.retrieval import RetrievalCore
 from appsec_review.jobs.job_cpp_compiled_analysis import build_job as build_cpp
 from appsec_review.jobs.job_post_build_security_assessment import build_job as build_post_build
-from appsec_review.jobs.job_project_build import build_job as build_projects
+from appsec_review.jobs.job_project_build import build_job as build_projects, load_accepted_builds
 from appsec_review.jobs.job_review_intake import build_job as build_intake
 from appsec_review.jobs.job_target_catalog import build_job as build_catalog
 from appsec_review.inference import ModelResult
 from appsec_review.jobs.job_target_analysis_plan import build_job as build_plan
 from appsec_review.jobs.job_target_analysis_plan.planning import PROPOSAL_SCHEMA
 from appsec_review.runtime import GraphRunner, plan_jobs
-from appsec_review.storage import file_sha256
+from appsec_review.storage import canonical_json, file_sha256
 from tests.capture_fakes import SYNTHETIC_SECRET, capturing_fake, simulated_executor
 
 
@@ -428,6 +432,43 @@ def test_native_build_failure_is_a_gap_and_topology_is_generic(tmp_path: Path) -
         "job_language_build.load.native",)
     assert graph.node("job_language_build.execute.dotnet").dependencies == (
         "job_language_build.load.dotnet",)
+
+
+def test_dispatch_validation_is_scoped_to_the_consuming_family(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    config, target = _fixture(tmp_path)
+    run_id, fingerprint = _accepted_project(config, target, [])
+    run_root = config.runtime.runs_dir / run_id
+    accepted = dict(load_accepted_builds(run_root))
+    native_dispatch = deepcopy(accepted["build_dispatches"][0])
+    native_probe = deepcopy(accepted["probe_receipts"][0])
+
+    bad_id = "build-unit-" + "f" * 20
+    bad_dispatch = deepcopy(native_dispatch)
+    bad_dispatch.update(build_unit_id=bad_id, family="java")
+    bad_dispatch["recipe"].update(build_unit_id=bad_id, image_profile="node")
+    dependencies = bad_dispatch["image"]["dependency_hashes"]
+    profile = BuildProfile("java", bad_dispatch["image"]["image_tag"],
+                           bad_dispatch["image"]["base_image_id"], bad_dispatch["image"]["user"])
+    bad_identity = project_recipe_identity(
+        {**bad_dispatch["recipe"], "build_system": bad_dispatch["build_system"]},
+        profile, dependencies)
+    bad_dispatch["recipe_identity"] = bad_identity
+    bad_probe = {**native_probe, "build_unit_id": bad_id, "family": "java",
+                 "recipe_identity": bad_identity}
+    bad_dispatch["probe_identity"] = hashlib.sha256(canonical_json(bad_probe)).hexdigest()
+    accepted["build_dispatches"] = [native_dispatch, bad_dispatch]
+    accepted["probe_receipts"] = [native_probe, bad_probe]
+    monkeypatch.setattr(language_build_job, "load_accepted_builds", lambda _run_root: accepted)
+    unit = SimpleNamespace(job=SimpleNamespace(
+        run_root=run_root, target_root=target, source_fingerprint=fingerprint))
+
+    dispatches, _document = language_build_job._dispatches(
+        unit, families=frozenset({"native"}))
+
+    assert [item["build_unit_id"] for item in dispatches] == [native_dispatch["build_unit_id"]]
+    with pytest.raises(ValueError, match="recipe image_profile does not match"):
+        language_build_job._dispatches(unit, families=frozenset({"java"}))
 
 
 def test_multiple_native_units_isolate_sibling_failure_and_reuse_checkpoints(tmp_path: Path) -> None:

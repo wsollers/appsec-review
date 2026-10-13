@@ -5,6 +5,10 @@ current execution implementations include Linux native, Rust/Cargo, JVM/Java/Kot
 Node/JavaScript/TypeScript, Python packaging, PHP/Composer, Linux-capable .NET SDK projects and
 solutions, and WebAssembly output producers. Accepted Windows-only and .NET Framework projects
 publish explicit `NOT_APPLICABLE` receipts.
+Each load lane revalidates only the accepted dispatch families it can consume. Handoff hashes,
+the target snapshot, workflow envelopes, and unique build-unit identities remain shared integrity
+checks; probe, image, recipe, descriptor, and dependency validation is lane-owned. An invalid
+recipe therefore fails its consuming family without aborting unrelated language loads.
 Native, Rust, and .NET commands share one captured-build driver and the generic
 `reconcile_captured_build` successful-exec reconciliation through `CapturedBuildDescriptor`
 instances; the descriptors classify observed tools and map language-specific inputs, outputs,
