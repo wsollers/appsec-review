@@ -15,6 +15,8 @@ from pathlib import Path, PurePosixPath
 import re
 from typing import Any, Mapping
 
+from appsec_review.application_paths import application_root
+
 from .compose import load_registry
 from .fragments import GuidanceError
 
@@ -27,7 +29,7 @@ RUNTIME_AUDIENCE = "runtime-worker"
 DEVELOPMENT_AUDIENCE = "repository-agent"
 _NAME = re.compile(r"^[a-z][a-z0-9-]{0,63}$")
 _FRONT_MATTER = re.compile(r"\A---\n(?P<body>.*?)\n---\n", re.S)
-_PACKAGE_REPOSITORY = Path(__file__).resolve().parents[3]
+_PACKAGE_REPOSITORY = application_root("pipeline/guidance/registry.json")
 
 
 @dataclass(frozen=True, slots=True)

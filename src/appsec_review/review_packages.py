@@ -11,6 +11,7 @@ from typing import Any, Mapping
 
 from jsonschema import Draft202012Validator
 
+from appsec_review.application_paths import application_asset
 from appsec_review.indexing.products_base import AcceptedShards
 from appsec_review.retrieval import RetrievalCore
 from appsec_review.retrieval.model import LogicalIdentity, canonical_json
@@ -23,10 +24,15 @@ MANIFEST_SCHEMA = "appsec-review/review-package-manifest/2"
 _MENU_SEVERITIES = {"high_critical": {"critical", "high"}, "unknown": {"unknown"}}
 
 def _schema_path() -> Path:
-    source = Path(__file__).parents[2] / "docs" / "schemas" / "review-packages.schema.json"
     installed = (Path(sysconfig.get_path("data")) / "share" / "appsec-review" / "schemas" /
                  "review-packages.schema.json")
+    try:
+        source = application_asset("docs/schemas/review-packages.schema.json")
+    except FileNotFoundError:
+        source = None
     for candidate in (source, installed):
+        if candidate is None:
+            continue
         if candidate.is_file():
             return candidate
     raise FileNotFoundError("review package schema is unavailable")

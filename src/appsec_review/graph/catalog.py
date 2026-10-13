@@ -24,6 +24,7 @@ from typing import Any
 from jsonschema import Draft202012Validator
 from jsonschema.exceptions import ValidationError
 
+from appsec_review.application_paths import application_root
 from appsec_review.graph.contract import (
     ATTACKER_REACHABLE_SOURCES,
     CATALOG_SCHEMA,
@@ -31,7 +32,7 @@ from appsec_review.graph.contract import (
     SourceClass,
 )
 
-RULES_ROOT = Path(__file__).resolve().parents[3] / "rules" / "codeql-graph-export"
+RULES_ROOT = application_root("rules/codeql-graph-export/catalog.schema.json") / "rules" / "codeql-graph-export"
 CATALOG_PATH = RULES_ROOT / "catalog.json"
 CATALOG_SCHEMA_PATH = RULES_ROOT / "catalog.schema.json"
 

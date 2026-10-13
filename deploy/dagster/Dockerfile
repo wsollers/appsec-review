@@ -29,6 +29,8 @@ COPY tools/cve-bin-tool ./tools/cve-bin-tool
 RUN python -m pip install --no-cache-dir --no-build-isolation --no-deps . \
     && mkdir -p /opt/dagster/home /var/dagster/compute-logs /var/dagster/artifacts /opt/app/runs /opt/app/data \
     && chmod 1777 /opt/dagster/home /var/dagster \
+    && python -c "from appsec_review.application_paths import verify_runtime_assets; verify_runtime_assets()" \
+    && python -c "from appsec_review.graph.catalog import load_catalog; load_catalog()" \
     && python -c "from appsec_review.orchestration.dagster.definitions import defs; defs.get_job_def('wave1_review')"
 
 COPY deploy/dagster/dagster.yaml deploy/dagster/workspace.yaml /opt/dagster/home/

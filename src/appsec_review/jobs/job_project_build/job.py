@@ -11,6 +11,7 @@ import zipfile
 from typing import Any
 
 import appsec_review.applicability as applicability_contract
+from appsec_review.application_paths import application_root
 from appsec_review.applicability import (
     ApplicabilityAction, ProcessingFeature, decision_from_mapping,
     evaluate_applicability, facts_from_build_unit, finalize_processing,
@@ -475,7 +476,8 @@ def _repair_guidance(unit: UnitContext, family: str, model: Mapping[str, Any]) -
     repository = unit.job.repository_root
     prompt_root = repository / "pipeline" / "prompt-fragments"
     if not prompt_root.is_dir():
-        prompt_root = Path(__file__).parents[4] / "pipeline" / "prompt-fragments"
+        prompt_root = (application_root("pipeline/prompt-fragments/personas/devops-engineer.md") /
+                       "pipeline" / "prompt-fragments")
     persona = (prompt_root / "personas" / "devops-engineer.md").read_text(encoding="utf-8")
     role = (prompt_root / "roles" / f"build-engineer-{family}.md").read_text(encoding="utf-8")
     guidance = load_runtime_skill(repository, "build-image-repair", job_id="job_project_build").text

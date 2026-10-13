@@ -13,6 +13,7 @@ import signal
 import subprocess
 from typing import Any
 
+from appsec_review.application_paths import application_root as _application_root
 from appsec_review.config import BuildCaptureConfig
 from appsec_review.storage import atomic_json, canonical_json
 from .catalog import load_catalog
@@ -20,20 +21,6 @@ from .build_capture import (
     PATH_FIELDS, REQUIRED_EVENT_KINDS, BuildExecutionRecorder, CaptureScope, record_strace_files,
 )
 from .capture_files import CaptureRoots, build_file_inventory, read_events, snapshot_response_files
-
-
-def _application_root(required_path: str) -> Path:
-    """Resolve a required application file in source and installed-image layouts."""
-    candidates: list[Path] = []
-    configured = os.environ.get("APPSEC_REVIEW_CONFIG")
-    if configured:
-        candidates.append(Path(configured).resolve().parent)
-    candidates.append(Path(__file__).resolve().parents[3])
-    for root in candidates:
-        path = root / required_path
-        if path.is_file() and not path.is_symlink():
-            return root
-    raise FileNotFoundError(f"application file is unavailable: {required_path}")
 
 
 def repository_root() -> Path:

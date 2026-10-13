@@ -34,7 +34,9 @@ import re
 import stat
 from typing import Any, Mapping
 
-REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
+from appsec_review.application_paths import application_root
+
+REPOSITORY_ROOT = application_root("rules/sei-cert/pack.lock.json")
 PACK_ROOT = REPOSITORY_ROOT / "rules" / "sei-cert"
 LOCK_NAME = "pack.lock.json"
 LOCK_SCHEMA = "appsec-review/sei-cert-rule-pack-lock/1"

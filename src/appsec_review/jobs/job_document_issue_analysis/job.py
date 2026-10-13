@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 from pathlib import Path
 from typing import Any, Mapping
 
 from jsonschema import Draft202012Validator
 
+from appsec_review.application_paths import application_asset
 from appsec_review.document_issues import SCHEMA, analyze_document_hunts, verify_document_issue_ledger
 from appsec_review.indexing.store import accepted_handoff
 from appsec_review.retrieval import RetrievalCore
@@ -23,11 +23,7 @@ JOB_ID = "job_document_issue_analysis"
 
 
 def _schema_path() -> Path:
-    relative = Path("docs/schemas/document-issue-ledger.schema.json")
-    source = Path(__file__).resolve().parents[4] / relative
-    if source.is_file():
-        return source
-    return Path(os.environ.get("APPSEC_REVIEW_CONFIG", "appsec-review.toml")).resolve().parent / relative
+    return application_asset("docs/schemas/document-issue-ledger.schema.json")
 
 
 def _validate_config(context, _result) -> None:

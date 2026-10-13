@@ -10,6 +10,7 @@ from pathlib import Path
 import time
 from typing import Any
 
+from appsec_review.application_paths import application_root
 from appsec_review.jobs.build_discovery import (
     build_recipe_inference_policy, normalize_build_recipe, required_image_profile,
 )
@@ -260,7 +261,8 @@ def build_job(*, infer: Infer | None = None, fail_task: str | None = None) -> Jo
                                       job_id="job_target_analysis_plan").text
         prompt_root = unit.job.repository_root / "pipeline" / "prompt-fragments"
         if not prompt_root.is_dir():
-            prompt_root = Path(__file__).parents[4] / "pipeline" / "prompt-fragments"
+            prompt_root = (application_root("pipeline/prompt-fragments/personas/devops-engineer.md") /
+                           "pipeline" / "prompt-fragments")
         persona_path = prompt_root / "personas" / "devops-engineer.md"
         persona = persona_path.read_text(encoding="utf-8")
         grouped: dict[tuple[str, str, str], list[Mapping[str, Any]]] = {}
