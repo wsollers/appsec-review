@@ -178,6 +178,27 @@ class ContainerExecutor:
             raise RuntimeError(f"scanner bind source is not backed by a host mount: {path}")
         return max(candidates, key=lambda item: item[0])[1]
 
+    def _normalize_scratch_permissions(self, *, tool: ToolImage, image_id: str,
+                                       runtime_source: Path) -> None:
+        """Return fixed-UID tool output to the run owner without following symlinks."""
+        uid = tool.user.split(":", 1)[0]
+        if not uid.isdecimal():
+            raise ValueError(f"cataloged tool user must begin with a numeric uid: {tool.tool_id}")
+        command = (
+            "docker", "run", "--rm", "--network", "none", "--read-only",
+            "--user", tool.user, "--cap-drop", "ALL", "--security-opt", "no-new-privileges",
+            "--cpus", "0.25", "--memory", "64m", "--pids-limit", "64",
+            "--mount", f"type=bind,src={runtime_source},dst=/scratch",
+            "--entrypoint", "/usr/bin/find", image_id,
+            "/scratch", "-xdev", "-uid", uid, "(", "-type", "d", "-o", "-type", "f", ")",
+            "-exec", "/bin/chmod", "a+rwX", "--", "{}", "+",
+        )
+        outcome = self.runner(command, 60)
+        if outcome.timed_out or outcome.exit_code != 0:
+            detail = outcome.stderr.decode("utf-8", "replace").strip()[:512]
+            suffix = f": {detail}" if detail else ""
+            raise RuntimeError(f"could not return {tool.tool_id} scratch output to the run owner{suffix}")
+
     def execute(self, request: ExecutionRequest) -> ExecutionResult:
         tool = self.catalog.tool(request.tool_id)
         _, mounts = self._validate(request, tool)
@@ -213,6 +234,8 @@ class ContainerExecutor:
         outcome = self.runner(command, tool.timeout_seconds)
         if outcome.timed_out:
             self._run_control(("docker", "kill", name))
+        self._normalize_scratch_permissions(
+            tool=tool, image_id=image_id, runtime_source=effective_sources["/scratch"])
         completed = _stamp()
         stdout = outcome.stdout[:tool.output_bytes]
         stderr = outcome.stderr[:tool.output_bytes]
