@@ -14,10 +14,10 @@ from appsec_review.review.obligations import ALWAYS_REQUIRED
 
 ENTITY = LogicalIdentity.derive(EntityKind.SYMBOL, "snap", {"n": "copy"}).value
 CLAIM = normalize_claim(lane=Lane.LEAD, package_id="p", affected_entities=[ENTITY], weakness_cwe="CWE-120",
-                        security_predicate="unbounded_copy", preconditions=["attacker_controls_request_field"],
+                        security_predicate="memory_corruption", preconditions=["attacker_controls_request_field"],
                         statement="s", accepted_cwe_ids={"CWE-120"}).claim
 CONFIG_CLAIM = normalize_claim(lane=Lane.LEAD, package_id="p", affected_entities=[ENTITY], weakness_cwe=None,
-                               security_predicate="unbounded_copy", preconditions=["debug_mode_enabled"],
+                               security_predicate="memory_corruption", preconditions=["debug_mode_enabled"],
                                statement="s", accepted_cwe_ids=()).claim
 SCOPE = {ENTITY}
 

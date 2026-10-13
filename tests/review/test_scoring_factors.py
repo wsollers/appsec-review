@@ -39,7 +39,7 @@ TABLE = {"CWE-120": "high", "CWE-78": "critical", "CWE-200": "medium", "CWE-209"
 SNAP = "target-sha256:" + "2" * 64
 SYMBOL = LogicalIdentity.derive(EntityKind.SYMBOL, SNAP, {"n": "copy"}).value
 CLAIM = normalize_claim(lane=Lane.LEAD, package_id="p", affected_entities=[SYMBOL], weakness_cwe="CWE-120",
-                        security_predicate="unbounded_copy", preconditions=["attacker_controls_request_field"],
+                        security_predicate="memory_corruption", preconditions=["attacker_controls_request_field"],
                         statement="s", accepted_cwe_ids={"CWE-120"}).claim
 ALL = tuple(item for item in FactorId)
 
