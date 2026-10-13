@@ -38,21 +38,31 @@ ROOT = Path(__file__).parents[1]
 class JvmRecipeModel:
     def __init__(self, *, gradle: bool = False) -> None:
         self.gradle = gradle
+        self.requests = []
 
     def complete(self, request, *, timeout_seconds):
+        self.requests.append(request)
         recipes = []
         for unit in request.summary["build_units"]:
             root = unit["root"]
-            tool = "gradlew" if unit["build_system"] == "gradle" else "mvnw"
-            command = ([tool, "--no-daemon", "assemble"] if tool == "gradlew" else
+            profile = unit["required_image_profile"]
+            android = profile == "android"
+            tool = ("gradle" if android else "gradlew") if unit["build_system"] == "gradle" else "mvnw"
+            command = ([tool, "--no-daemon", ":app:assembleDebug"] if android else
+                       [tool, "--no-daemon", "assemble"] if tool == "gradlew" else
                        [tool, "-B", "-DskipTests", "package"])
+            build_dir = f"{root}/app/build" if android else f"{root}/target"
+            expected = ([f"{root}/app/build/outputs/apk/debug/app-debug.apk"] if android else
+                        [f"{root}/target"])
+            dependencies = ([item["path"] for item in unit["descriptor_package"]["documents"]]
+                            if android else [item["path"] for item in unit["markers"]])
             recipes.append({
                 "schema": "appsec-review/build-recipe/1", "build_unit_id": unit["build_unit_id"],
-                "image_profile": "java", "source_dir": root, "build_dir": f"{root}/target",
+                "image_profile": profile, "source_dir": root, "build_dir": build_dir,
                 "system_packages": [], "environment": {},
-                "dependency_files": [item["path"] for item in unit["markers"]],
+                "dependency_files": dependencies,
                 "configure_commands": [], "build_commands": [command],
-                "expected_outputs": [f"{root}/target"], "network_required": True,
+                "expected_outputs": expected, "network_required": True,
                 "reason": "bounded JVM fixture recipe",
             })
         return ModelResult({"schema": PROPOSAL_SCHEMA, "component_proposals": [],
@@ -197,10 +207,24 @@ def test_jvm_gradle_wrapper_is_resolved_to_system_tool(tmp_path: Path) -> None:
 def test_android_gradle_dispatch_survives_project_to_language_execution(tmp_path: Path) -> None:
     config, target = _android_fixture(tmp_path)
     calls: list[tuple[str, ...]] = []
-    run_id, fingerprint = _run_to_dispatch(config, target, JvmRecipeModel(gradle=True), calls)
+    model = JvmRecipeModel(gradle=True)
+    run_id, fingerprint = _run_to_dispatch(config, target, model, calls)
     run_root = config.runtime.runs_dir / run_id
+    request = model.requests[0]
+    inferred_unit = request.summary["build_units"][0]
+    assert request.allowed_image_profiles == ("android",)
+    assert inferred_unit["required_image_profile"] == "android"
+    assert inferred_unit["command_policy"]["gradle"]["allowed_task_suffixes"][-1] == "assembleDebug"
+    assert {item["path"] for item in inferred_unit["descriptor_package"]["documents"]} == {
+        "android/app/build.gradle.kts", "android/build.gradle.kts",
+        "android/gradle.properties", "android/settings.gradle.kts",
+    }
+    plan = load_accepted_plan(run_root)
+    inferred_recipe = plan["build_topology"]["build_actions"][0]["recipe"]
     dispatch = load_accepted_builds(run_root)["build_dispatches"][0]
     assert dispatch["recipe"]["image_profile"] == "android"
+    assert dispatch["recipe"] == inferred_recipe
+    assert dispatch["recipe_provenance"] == "accepted-inference-default-image"
     assert dispatch["descriptor_facts"]["kind"] == "android-gradle-application"
 
     outcome = GraphRunner(config, [build_language(
@@ -218,7 +242,7 @@ def test_android_gradle_dispatch_survives_project_to_language_execution(tmp_path
     reason="requires the configured authenticated model transport",
 )
 def test_live_configured_model_returns_android_gradle_recipe_proposals(tmp_path: Path) -> None:
-    """Show every model recipe before project-build applies its Android override."""
+    """Show every model recipe before project-build selects the requested Android image."""
     config, target = _android_fixture(tmp_path)
     fingerprint = source_fingerprint(target)
     proposals: list[dict] = []
@@ -232,25 +256,23 @@ def test_live_configured_model_returns_android_gradle_recipe_proposals(tmp_path:
                                    build_plan(infer=capture_infer)]).run(
         target_root=target, source_fingerprint=fingerprint)
 
-    assert outcome["status"] in {"SUCCEEDED", "COMPLETED_WITH_GAPS"}, outcome
+    assert outcome["status"] == "SUCCEEDED", outcome
     assert proposals and all("build_recipes" in proposal for proposal in proposals)
     print(json.dumps(proposals, indent=2, sort_keys=True))
     plan = load_accepted_plan(config.runtime.runs_dir / outcome["run_id"])
     action = next(item for item in plan["build_topology"]["build_actions"]
                   if item["build_system"] == "gradle")
     assert action["descriptor_facts"]["kind"] == "android-gradle-application"
+    assert action["required_image_profile"] == "android"
     recipe = action["recipe"]
-    if recipe is not None:
-        unit = {
-            "build_unit_id": action["build_unit_id"], "family": action["family"],
-            "root": action["root"], "build_system": action["build_system"],
-            "markers": action["markers"], "descriptor_package": action["descriptor_package"],
-            "descriptor_facts": action["descriptor_facts"],
-        }
-        assert validate_build_recipe(recipe, unit) == []
-    else:
-        assert plan["model"]["status"] == "REJECTED"
-        assert any("recipe proposal rejected" in gap for gap in plan["coverage_gaps"])
+    assert recipe is not None and recipe["image_profile"] == "android"
+    unit = {
+        "build_unit_id": action["build_unit_id"], "family": action["family"],
+        "root": action["root"], "build_system": action["build_system"],
+        "markers": action["markers"], "descriptor_package": action["descriptor_package"],
+        "descriptor_facts": action["descriptor_facts"],
+    }
+    assert validate_build_recipe(recipe, unit) == []
 
 
 @pytest.mark.parametrize("task", [":app:test", ":app:connectedAndroidTest", ":app:installDebug", ":app:run"])
@@ -259,12 +281,21 @@ def test_android_gradle_policy_allows_assembly_but_rejects_execution_tasks(task:
     accepted = ["gradle", "--no-daemon", ":app:assembleDebug"]
     assert jvm_build_command_errors("android", accepted) == ()
     assert _jvm_argv(recipe, accepted)[0] == tuple(accepted)
-    assert jvm_build_command_errors("java", accepted) == ("Gradle task is not build-only",)
+    assert "Gradle task is not allowed for java profile" in jvm_build_command_errors(
+        "java", accepted)[0]
 
     rejected = ["gradle", "--no-daemon", task]
-    assert "Gradle task is not build-only" in jvm_build_command_errors("android", rejected)
-    with pytest.raises(JvmIntegrityError, match="Gradle task is not build-only"):
+    assert "Gradle task is not allowed for android profile" in jvm_build_command_errors(
+        "android", rejected)[0]
+    with pytest.raises(JvmIntegrityError, match="Gradle task is not allowed for android profile"):
         _jvm_argv(recipe, rejected)
+
+
+@pytest.mark.parametrize("task", [":app:classes", ":app:jar", ":app:war", "clean", "build"])
+def test_android_gradle_policy_rejects_tasks_that_do_not_produce_an_apk(task: str) -> None:
+    error = jvm_build_command_errors("android", ["gradle", task])[0]
+    assert error == ("Gradle task is not allowed for android profile; "
+                     "allowed task suffixes: assemble, assembleDebug")
 
 
 def test_gradle_build_requires_an_explicit_test_exclusion() -> None:
@@ -379,7 +410,7 @@ def test_jvm_recipe_validation_rejects_test_and_application_tasks_before_probe()
         "system_packages": [], "environment": {}, "dependency_files": ["app/build.gradle"],
         "configure_commands": [], "build_commands": [["gradlew", "run"]],
         "expected_outputs": ["app/build"], "network_required": True, "reason": "unsafe fixture"}
-    assert any("execution, tests" in error or "not build-only" in error
+    assert any("execution, tests" in error or "not allowed for java profile" in error
                for error in validate_build_recipe(recipe, unit))
     recipe["build_commands"] = [["mvnw", "-B", "package"]]
     unit["build_system"] = "maven"

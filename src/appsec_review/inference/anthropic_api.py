@@ -50,7 +50,8 @@ def _plan_prompt(request: ModelRequest) -> dict[str, Any]:
                        "build_systems": request.allowed_build_systems,
                        "components": request.allowed_components,
                        "paths": request.allowed_paths,
-                       "build_units": request.allowed_build_units},
+                       "build_units": request.allowed_build_units,
+                       "image_profiles": request.allowed_image_profiles},
         "limits": {"max_input_tokens": request.max_input_tokens,
                    "max_output_tokens": request.max_output_tokens},
     }

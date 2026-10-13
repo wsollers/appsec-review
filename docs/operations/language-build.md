@@ -90,16 +90,18 @@ rejected. Real builds remain non-root and may resolve declared dependencies over
 
 Android application descriptors using `com.android.application` are a deterministic specialization
 of that JVM path. Nested Gradle modules collapse into the accepted root unit; bounded descriptor
-facts select the dedicated `android` profile and exact
-`gradle --no-daemon :app:assembleDebug` argv. The immutable profile is locked by image ID and
+facts select the dedicated `android` profile before inference. The request carries that required
+profile, the bounded descriptor contents, and the validator-derived Gradle task policy. Project-build
+then preserves the accepted inferred recipe and resolves the dedicated Android image. The immutable
+profile is locked by image ID and
 contains JDK 17, Gradle 8.9, Android command-line tools, Platform 35, Build Tools 35.0.0, and
 platform-tools. Gradle and Android mutable homes live only in `.appsec-cache/` inside the run-owned
 workspace; this cache is excluded from snapshots and artifact catalogs. Successful acceptance
 requires a non-empty ZIP-valid APK containing `AndroidManifest.xml` and `resources.arsc`.
 Android intermediate and output metadata are cataloged without executing the application.
 Project-build acceptance and language-build execution use the same Maven/Gradle command-policy
-validator. The Android profile permits only the build-only `assembleDebug` specialization;
-test, connected-test, install, and run tasks remain rejected before execution.
+validator. The Android profile's only accepted task suffixes are `assemble` and `assembleDebug`.
+Test, connected-test, install, run, and non-APK Gradle tasks remain rejected before execution.
 
 The existing Java/Kotlin CodeQL path layers its pinned payload onto that accepted Android image;
 CodeQL is not installed in the build image. Manual replay receives fresh run-owned Gradle/Android
@@ -221,8 +223,8 @@ the fixed capture test. The configured-model test remains opt-in through
 authenticated model transport.
 
 The JVM suite has a matching opt-in Android inference diagnostic. It prints every model recipe,
-validates an accepted recipe or checks that rejection remains an explicit gap, and runs before
-project-build applies the deterministic Android recipe. This makes recipe-selection drift visible
+requires a valid accepted Android-profile recipe, and runs before
+project-build selects the recipe's Android image. This makes recipe-selection drift visible
 without confusing a model proposal with the command ultimately executed.
 
 The PHP adapter requires `composer.json`; `composer.lock` is used when present. Composer dependency

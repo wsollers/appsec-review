@@ -83,6 +83,32 @@ _FORBIDDEN_SUBCOMMANDS = {
     "composer": {"exec", "run-script", "test"}, "php": {"-r", "--interactive"},
 }
 
+_GRADLE_BUILD_TASKS = ("assemble", "classes", "jar", "war", "clean", "build")
+_ANDROID_GRADLE_BUILD_TASKS = ("assemble", "assembleDebug")
+
+
+def required_image_profile(unit: Mapping[str, Any]) -> str:
+    """Return the execution image selected from accepted deterministic build facts."""
+    facts = unit.get("descriptor_facts", {})
+    if (unit.get("family") == "java" and unit.get("build_system") == "gradle" and
+            isinstance(facts, Mapping) and facts.get("kind") == "android-gradle-application"):
+        return "android"
+    return str(unit.get("family", ""))
+
+
+def build_recipe_inference_policy(unit: Mapping[str, Any]) -> dict[str, Any]:
+    """Expose the validator's bounded command contract to recipe inference."""
+    profile = required_image_profile(unit)
+    policy: dict[str, Any] = {"required_image_profile": profile}
+    if profile == "android":
+        policy["gradle"] = {
+            "allowed_executables": ["gradle", "gradlew"],
+            "allowed_task_suffixes": list(_ANDROID_GRADLE_BUILD_TASKS),
+            "module_qualification": "an allowed task may be qualified by a module from settings.gradle",
+            "forbidden_task_classes": ["test", "connected-test", "install", "run"],
+        }
+    return policy
+
 
 def jvm_build_command_errors(profile: str, argv: Sequence[str]) -> tuple[str, ...]:
     """Validate Maven and Gradle build-only goals for planning and execution."""
@@ -118,11 +144,12 @@ def jvm_build_command_errors(profile: str, argv: Sequence[str]) -> tuple[str, ..
             elif not value.startswith("-"):
                 tasks.append(value.rsplit(":", 1)[-1])
             index += 1
-        allowed_tasks = {"assemble", "classes", "jar", "war", "clean", "build"}
-        if profile == "android":
-            allowed_tasks.add("assembledebug")
+        configured_tasks = _ANDROID_GRADLE_BUILD_TASKS if profile == "android" else _GRADLE_BUILD_TASKS
+        allowed_tasks = {value.lower() for value in configured_tasks}
         if any(value not in allowed_tasks for value in tasks):
-            errors.append("Gradle task is not build-only")
+            errors.append(
+                f"Gradle task is not allowed for {profile} profile; allowed task suffixes: " +
+                ", ".join(configured_tasks))
         if "build" in tasks and "test" not in excluded:
             errors.append("Gradle build must exclude the test task")
     return tuple(dict.fromkeys(errors))
@@ -367,11 +394,9 @@ def validate_build_recipe(recipe: Mapping[str, Any], unit: Mapping[str, Any]) ->
     if recipe.get("build_unit_id") != unit.get("build_unit_id"):
         errors.append("recipe build_unit_id does not match the accepted unit")
     profile = recipe.get("image_profile")
-    android = unit.get("descriptor_facts", {}).get("kind") == "android-gradle-application"
-    if (profile not in _PROFILE_COMMANDS or
-            not (profile == unit.get("family") or
-                 (profile == "android" and unit.get("family") == "java" and android))):
-        errors.append("recipe image_profile does not match the accepted unit family")
+    required_profile = required_image_profile(unit)
+    if profile not in _PROFILE_COMMANDS or profile != required_profile:
+        errors.append(f"recipe image_profile must equal required profile {required_profile}")
     root = str(unit.get("root", ""))
     for field in ("source_dir", "build_dir"):
         if not _relative(recipe.get(field)):

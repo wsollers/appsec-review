@@ -38,6 +38,9 @@ def test_cli_transport_disables_tools_for_inference_and_preflight(monkeypatch) -
         assert "--safe-mode" in argv
         assert argv[argv.index("--allowedTools") + 1] == ""
         assert "bypassPermissions" not in argv
+        if kwargs.get("input", "").startswith("{"):
+            prompt = json.loads(kwargs["input"])
+            assert prompt["allowlists"]["image_profiles"] == ["android"]
         class Result:
             returncode = 0
             stderr = ""
@@ -51,7 +54,7 @@ def test_cli_transport_disables_tools_for_inference_and_preflight(monkeypatch) -
                            allowed_scanners=(), allowed_build_systems=(), allowed_components=(),
                            allowed_paths=(), allowed_build_units=(), provider="claude-cli",
                            model="example", reasoning="low", max_input_tokens=100,
-                           max_output_tokens=100)
+                           max_output_tokens=100, allowed_image_profiles=("android",))
     assert send(request, timeout_seconds=5).proposal == VALUE
     assert models(["example"], timeout_seconds=5)["models"]["example"]["available"]
     assert len(calls) == 2

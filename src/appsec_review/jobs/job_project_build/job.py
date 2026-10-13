@@ -849,32 +849,6 @@ def _deterministic_jvm_recipe(unit: UnitContext, action: Mapping[str, Any]) -> M
         raise ValueError("deterministic JVM recipe is invalid: " + "; ".join(errors))
     return recipe
 
-def _deterministic_android_recipe(action: Mapping[str, Any]) -> Mapping[str, Any] | None:
-    facts = action.get("descriptor_facts", {})
-    if (action.get("family") != "java" or action.get("build_system") != "gradle" or
-            not isinstance(facts, Mapping) or facts.get("kind") != "android-gradle-application"):
-        return None
-    root = str(action["root"])
-    prefix = "" if root == "." else root + "/"
-    documents = action.get("descriptor_package", {}).get("documents", ())
-    dependencies = sorted({str(item["path"]) for item in documents if isinstance(item, Mapping)})
-    recipe = {
-        "schema": "appsec-review/build-recipe/1", "build_unit_id": action["build_unit_id"],
-        "image_profile": "android", "source_dir": root, "build_dir": prefix + "app/build",
-        "system_packages": [], "environment": {}, "dependency_files": dependencies,
-        "configure_commands": [],
-        "build_commands": [["gradle", "--no-daemon", ":app:assembleDebug"]],
-        "expected_outputs": [prefix + "app/build/outputs/apk/debug/app-debug.apk"],
-        "network_required": True,
-        "reason": "Deterministic Android application recipe derived from accepted com.android.application descriptors.",
-    }
-    errors = validate_build_recipe(recipe, action)
-    if errors:
-        raise ValueError("deterministic Android recipe is invalid: " + "; ".join(errors))
-    return recipe
-
-
-
 def build_job(*, executor_factory=None, image_resolver_factory=None,
               infer: Infer | None = None) -> Job:
     def plan(unit: UnitContext) -> Mapping[str, Any]:
@@ -901,7 +875,7 @@ def build_job(*, executor_factory=None, image_resolver_factory=None,
         resolved_actions = []
         for item in actions:
             deterministic = (_deterministic_native_recipe(unit, item) or
-                             _deterministic_android_recipe(item) or _deterministic_jvm_recipe(unit, item))
+                             _deterministic_jvm_recipe(unit, item))
             selected = deterministic if deterministic is not None else item.get("recipe")
             recipe_fields: dict[str, Any] = {}
             if isinstance(selected, Mapping):
@@ -911,8 +885,6 @@ def build_job(*, executor_factory=None, image_resolver_factory=None,
                     "requires_inference": False,
                     "recipe_provenance": (
                         "deterministic-cmake-marker" if deterministic is not None and item.get("family") == "native"
-                        else "deterministic-android-application" if deterministic is not None and
-                        item.get("descriptor_facts", {}).get("kind") == "android-gradle-application"
                         else "deterministic-jvm-source-set" if deterministic is not None
                         else "accepted-inference-default-image"),
                 }
@@ -1097,6 +1069,8 @@ def build_job(*, executor_factory=None, image_resolver_factory=None,
                          "markers": list(entry["action"].get("markers", ())),
                          "descriptor_package": dict(entry["action"].get("descriptor_package", {})),
                          "descriptor_facts": dict(entry["action"].get("descriptor_facts", {})),
+                         "required_image_profile": entry["action"].get(
+                             "required_image_profile", accepted_recipe.get("image_profile")),
                          "processing_facts": dict(entry["action"].get("processing_facts", {})),
                          "build_capture_decision": dict(entry["action"].get("build_capture_decision", {})),
                          "capabilities": list(_BUILD_CAPABILITIES[family])}

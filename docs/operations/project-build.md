@@ -44,8 +44,10 @@ It configures only image repair.
 ## Recipe validation
 
 Every recipe, including a repaired one, passes `validate_build_recipe` in
-`src/appsec_review/jobs/build_discovery.py`. `image_profile` must equal the unit family,
-`source_dir` must equal the build-unit root, and outputs stay beneath it. Commands are argv arrays
+`src/appsec_review/jobs/build_discovery.py`. `image_profile` must equal the deterministic
+`required_image_profile` supplied to inference. This normally equals the language family; an
+accepted `com.android.application` Gradle unit remains in the Java family but requires the Android
+profile. `source_dir` must equal the build-unit root, and outputs stay beneath it. Commands are argv arrays
 (at most 16 per list, 128 arguments each) without shell operators, and `argv[0]` must be a bare
 name in that profile's `_PROFILE_COMMANDS` allowlist (for example `go` only for Go, `dotnet` and
 `msbuild` for .NET). Test, run, and install subcommands, non-build Maven goals or Gradle tasks, and

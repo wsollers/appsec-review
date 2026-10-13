@@ -26,13 +26,20 @@ Each recipe uses schema `appsec-review/build-recipe/1` and contains only: `schem
 `dependency_files`, `configure_commands`, `build_commands`, `expected_outputs`,
 `network_required`, and `reason`. `system_packages`, `dependency_files`, `configure_commands`,
 `build_commands`, and `expected_outputs` are JSON arrays, written `[]` when empty; `environment`
-is a JSON object, written `{}` when empty. Commands are argv arrays, never shell text. Use only the supplied
-build-unit ids and their exact family as `image_profile`; normalized repository-relative paths;
+is a JSON object, written `{}` when empty. Commands are argv arrays, never shell text. Use only the
+supplied build-unit ids and each build unit's exact `required_image_profile` as `image_profile`;
+normalized repository-relative paths;
 ordinary non-secret environment variables; and executables appropriate to that family. Include
 every supplied build marker in `dependency_files`. Do not emit URLs, credentials, secret names,
 absolute paths, shell operators, container image names, package-install commands, or commands that
 run target-produced programs. `system_packages` describes dependencies for the reviewed throwaway
 image; it does not install them.
+
+The request-level `image_profiles` allowlist and each build unit's `command_policy` are authoritative.
+For an Android application the language family remains `java`, but `required_image_profile` is
+`android`. Use only the Gradle executables and task suffixes listed in that unit's policy. A listed
+task may be qualified with a module declared by the supplied `settings.gradle` descriptor. Do not
+substitute compile, test, connected-test, install, or run tasks that the policy does not list.
 
 `source_dir`, `build_dir`, every `dependency_files` value, and every `expected_outputs` value are
 repository-relative paths. `source_dir` must equal the exact build-unit root; the others must

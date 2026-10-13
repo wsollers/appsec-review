@@ -467,7 +467,7 @@ def test_dispatch_validation_is_scoped_to_the_consuming_family(
         unit, families=frozenset({"native"}))
 
     assert [item["build_unit_id"] for item in dispatches] == [native_dispatch["build_unit_id"]]
-    with pytest.raises(ValueError, match="recipe image_profile does not match"):
+    with pytest.raises(ValueError, match="recipe image_profile must equal required profile"):
         language_build_job._dispatches(unit, families=frozenset({"java"}))
 
 

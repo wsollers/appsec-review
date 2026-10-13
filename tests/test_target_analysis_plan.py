@@ -84,6 +84,8 @@ class _Model:
     def complete(self, request, *, timeout_seconds):
         self.calls += 1
         assert request.persona and request.role and request.guidance and timeout_seconds > 0
+        assert set(request.allowed_image_profiles) == {
+            unit["required_image_profile"] for unit in request.summary["build_units"]}
         summarized_paths = {
             item["path"] for prefix in request.summary["prefixes"] for item in prefix["sample"]
         } | {
@@ -125,7 +127,8 @@ def _proposal(request, component_proposals=()):
                                 if Path(item["path"]).name in {"package-lock.json", "pnpm-lock.yaml", "yarn.lock"})
         recipes.append({
             "schema": "appsec-review/build-recipe/1", "build_unit_id": unit["build_unit_id"],
-            "image_profile": unit["family"], "source_dir": source_dir, "build_dir": build_dir,
+            "image_profile": unit["required_image_profile"],
+            "source_dir": source_dir, "build_dir": build_dir,
             "system_packages": [], "environment": {},
             "dependency_files": list(dict.fromkeys(dependencies)),
             "configure_commands": commands[0], "build_commands": commands[1],

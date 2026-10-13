@@ -42,12 +42,15 @@ def test_anthropic_adapter_applies_model_reasoning_and_bounded_json(monkeypatch)
         allowed_scanners=(), allowed_build_systems=(), allowed_components=(), allowed_paths=(),
         allowed_build_units=(), provider="anthropic-api", model="claude-haiku-4-5-20251001",
         reasoning="medium", max_input_tokens=32000, max_output_tokens=8000,
+        allowed_image_profiles=("android",),
     )
     result = infer(request, timeout_seconds=30)
     body = json.loads(captured["request"].data)
     assert body["model"] == request.model
     assert body["system"] == "devops\n\nbuild engineer"
     assert body["thinking"] == {"type": "enabled", "budget_tokens": 2048}
+    prompt = json.loads(body["messages"][0]["content"])
+    assert prompt["allowlists"]["image_profiles"] == ["android"]
     assert captured["request"].headers["X-api-key"] == "fixture-key"
     assert result.proposal["schema"] == PROPOSAL_SCHEMA
     assert result.input_tokens == 12 and result.output_tokens == 8

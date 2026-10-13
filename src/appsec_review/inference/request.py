@@ -21,6 +21,7 @@ class ModelRequest:
     reasoning: str
     max_input_tokens: int
     max_output_tokens: int
+    allowed_image_profiles: tuple[str, ...] = ()
     repair_errors: tuple[str, ...] = ()
     prior_response: str | None = None
 

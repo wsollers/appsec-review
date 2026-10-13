@@ -4,8 +4,8 @@ import hashlib
 from pathlib import Path
 
 from appsec_review.jobs.build_discovery import (
-    BUILD_RECIPE_SCHEMA, android_descriptor_facts, descriptor_package, discover_build_units,
-    normalize_build_recipe,
+    BUILD_RECIPE_SCHEMA, android_descriptor_facts, build_recipe_inference_policy,
+    descriptor_package, discover_build_units, normalize_build_recipe, required_image_profile,
     validate_build_recipe,
 )
 
@@ -235,6 +235,16 @@ android {
     }
     unit["descriptor_package"] = package
     unit["descriptor_facts"] = facts
+    assert required_image_profile(unit) == "android"
+    assert build_recipe_inference_policy(unit) == {
+        "required_image_profile": "android",
+        "gradle": {
+            "allowed_executables": ["gradle", "gradlew"],
+            "allowed_task_suffixes": ["assemble", "assembleDebug"],
+            "module_qualification": "an allowed task may be qualified by a module from settings.gradle",
+            "forbidden_task_classes": ["test", "connected-test", "install", "run"],
+        },
+    }
     recipe = {
         "schema": BUILD_RECIPE_SCHEMA, "build_unit_id": unit["build_unit_id"],
         "image_profile": "android", "source_dir": ".", "build_dir": "app/build",
@@ -246,7 +256,9 @@ android {
         "network_required": True, "reason": "descriptor-backed Android application",
     }
     assert validate_build_recipe(recipe, unit) == []
+    assert "recipe image_profile must equal required profile android" in validate_build_recipe(
+        {**recipe, "image_profile": "java"}, unit)
 
     unit["descriptor_facts"] = {}
-    assert "recipe image_profile does not match the accepted unit family" in validate_build_recipe(
+    assert "recipe image_profile must equal required profile java" in validate_build_recipe(
         recipe, unit)

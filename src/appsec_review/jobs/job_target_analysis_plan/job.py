@@ -10,7 +10,9 @@ from pathlib import Path
 import time
 from typing import Any
 
-from appsec_review.jobs.build_discovery import normalize_build_recipe
+from appsec_review.jobs.build_discovery import (
+    build_recipe_inference_policy, normalize_build_recipe, required_image_profile,
+)
 from appsec_review.jobs.cataloging import write_json
 from appsec_review.observability import PipelineLog, emit_model_event
 from appsec_review.retrieval import (
@@ -261,12 +263,16 @@ def build_job(*, infer: Infer | None = None, fail_task: str | None = None) -> Jo
             prompt_root = Path(__file__).parents[4] / "pipeline" / "prompt-fragments"
         persona_path = prompt_root / "personas" / "devops-engineer.md"
         persona = persona_path.read_text(encoding="utf-8")
-        grouped: dict[tuple[str, str], list[Mapping[str, Any]]] = {}
-        for build_unit in summary.get("build_units", ()):
-            grouped.setdefault((str(build_unit["family"]), str(build_unit["build_system"])), []).append(build_unit)
+        grouped: dict[tuple[str, str, str], list[Mapping[str, Any]]] = {}
+        for raw_unit in summary.get("build_units", ()):
+            image_profile = required_image_profile(raw_unit)
+            build_unit = {**dict(raw_unit), "required_image_profile": image_profile,
+                          "command_policy": build_recipe_inference_policy(raw_unit)}
+            grouped.setdefault((str(build_unit["family"]), str(build_unit["build_system"]),
+                                image_profile), []).append(build_unit)
 
-        def infer_group(item: tuple[tuple[str, str], list[Mapping[str, Any]]]) -> dict[str, Any]:
-            (family, build_system), build_units = item
+        def infer_group(item: tuple[tuple[str, str, str], list[Mapping[str, Any]]]) -> dict[str, Any]:
+            (family, build_system, image_profile), build_units = item
             role_path = prompt_root / "roles" / f"build-engineer-{family}.md"
             role = role_path.read_text(encoding="utf-8")
             guidance_bytes = persona.encode() + b"\0" + role.encode() + b"\0" + guidance.encode()
@@ -287,6 +293,7 @@ def build_job(*, infer: Infer | None = None, fail_task: str | None = None) -> Jo
                 summary=compact_summary, allowed_scanners=(), allowed_build_systems=(build_system,),
                 allowed_components=(), allowed_paths=tuple(paths),
                 allowed_build_units=tuple(str(value["build_unit_id"]) for value in build_units),
+                allowed_image_profiles=(image_profile,),
                 provider=str(model["provider"]), model=str(model["model"]),
                 reasoning=str(model["reasoning"]), max_input_tokens=int(model["max_input_tokens"]),
                 max_output_tokens=int(model["max_output_tokens"]),
@@ -295,6 +302,7 @@ def build_job(*, infer: Infer | None = None, fail_task: str | None = None) -> Jo
                 "schema": request.schema, "summary": request.summary, "persona_sha256": hashlib.sha256(persona.encode()).hexdigest(),
                 "role_sha256": hashlib.sha256(role.encode()).hexdigest(), "allowed_paths": request.allowed_paths,
                 "allowed_build_units": request.allowed_build_units, "provider": request.provider,
+                "allowed_image_profiles": request.allowed_image_profiles,
                 "model": request.model, "reasoning": request.reasoning,
                 "max_input_tokens": request.max_input_tokens, "max_output_tokens": request.max_output_tokens,
                 "guidance_sha256": guidance_sha,
@@ -307,7 +315,7 @@ def build_job(*, infer: Infer | None = None, fail_task: str | None = None) -> Jo
             calls = 0
             errors: list[str] = []
             last_error: Exception | None = None
-            group_slug = hashlib.sha256(f"{family}:{build_system}".encode()).hexdigest()[:12]
+            group_slug = hashlib.sha256(f"{family}:{build_system}:{image_profile}".encode()).hexdigest()[:12]
             for retry in range(int(model["retries"]) + 1):
                 calls += 1
                 invocation = hashlib.sha256(

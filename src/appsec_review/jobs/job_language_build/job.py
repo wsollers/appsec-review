@@ -176,6 +176,8 @@ def _dispatches(
         if expected_recipe != raw.get("recipe_identity"):
             raise ValueError("accepted build dispatch operational recipe identity mismatch")
         pseudo_unit = {"build_unit_id": build_unit_id, "family": family, "root": raw["root"],
+                       "build_system": raw.get("build_system"),
+                       "required_image_profile": raw.get("required_image_profile"),
                        "markers": [{"path": path} for path in dependencies],
                        "descriptor_package": {"documents": [{"path": path} for path in dependencies]},
                        "descriptor_facts": raw.get("descriptor_facts", {})}
