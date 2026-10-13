@@ -337,8 +337,11 @@ def build_job(*, infer: Infer | None = None, fail_task: str | None = None) -> Jo
                     proposal = dict(result.proposal)
                     recipes = proposal.get("build_recipes")
                     if isinstance(recipes, list):
+                        units_by_id = {str(value["build_unit_id"]): value for value in build_units}
                         proposal["build_recipes"] = [
-                            normalize_build_recipe(recipe) if isinstance(recipe, Mapping) else recipe
+                            normalize_build_recipe(
+                                recipe, units_by_id.get(str(recipe.get("build_unit_id", ""))))
+                            if isinstance(recipe, Mapping) else recipe
                             for recipe in recipes]
                     errors = validate_proposal(proposal, catalog=group_catalog,
                                                allowed_components=(), allowed_paths=request.allowed_paths)

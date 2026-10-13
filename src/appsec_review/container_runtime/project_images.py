@@ -14,7 +14,7 @@ from .build_executor import BuildProfile, Runner, _run
 
 
 SCHEMA = "appsec-review/project-build-image/1"
-GENERATOR_IDENTITY = "appsec-review/project-dockerfile/6"
+GENERATOR_IDENTITY = "appsec-review/project-dockerfile/7"
 
 
 class ProjectImageBuildError(RuntimeError):
@@ -72,6 +72,17 @@ def project_recipe_identity(recipe: Mapping[str, Any], profile: BuildProfile,
     })).hexdigest()
 
 
+def node_dependency_root(recipe: Mapping[str, Any]) -> str:
+    source = PurePosixPath(str(recipe.get("source_dir", ".")))
+    locks = sorted(PurePosixPath(str(value)) for value in recipe.get("dependency_files", ())
+                   if PurePosixPath(str(value)).name in {
+                       "package-lock.json", "pnpm-lock.yaml", "yarn.lock"})
+    if not locks:
+        return source.as_posix()
+    parent = locks[0].parent
+    return parent.as_posix()
+
+
 def _restore_command(recipe: Mapping[str, Any]) -> tuple[str, ...] | None:
     system = str(recipe.get("build_system", ""))
     files = {PurePosixPath(str(value)).name for value in recipe.get("dependency_files", ())}
@@ -103,11 +114,17 @@ def _restore_command(recipe: Mapping[str, Any]) -> tuple[str, ...] | None:
             if manager == "yarn":
                 return ("yarn", "install", "--ignore-scripts", "--non-interactive")
             return ("npm", "install", "--ignore-scripts", "--no-audit", "--no-fund")
+        dependency_root = node_dependency_root(recipe)
+        source_dir = str(recipe.get("source_dir", "."))
+        prefix = "/opt/project" if dependency_root == "." else f"/opt/project/{dependency_root}"
         if "package-lock.json" in locks:
-            return ("npm", "ci", "--ignore-scripts", "--no-audit", "--no-fund")
+            leading = ("npm",) if dependency_root == source_dir else ("npm", "--prefix", prefix)
+            return (*leading, "ci", "--ignore-scripts", "--no-audit", "--no-fund")
         if "pnpm-lock.yaml" in locks:
-            return ("pnpm", "install", "--frozen-lockfile", "--ignore-scripts")
-        return ("yarn", "install", "--frozen-lockfile", "--ignore-scripts", "--non-interactive")
+            leading = ("pnpm",) if dependency_root == source_dir else ("pnpm", "--dir", prefix)
+            return (*leading, "install", "--frozen-lockfile", "--ignore-scripts")
+        leading = ("yarn",) if dependency_root == source_dir else ("yarn", "--cwd", prefix)
+        return (*leading, "install", "--frozen-lockfile", "--ignore-scripts", "--non-interactive")
     if system == "composer":
         return ("composer", "install", "--no-interaction", "--no-scripts", "--no-plugins",
                 "--prefer-dist", "--no-progress")
@@ -121,7 +138,8 @@ def _restore_command(recipe: Mapping[str, Any]) -> tuple[str, ...] | None:
 def project_dependency_environment(recipe: Mapping[str, Any]) -> dict[str, str]:
     """Expose dependency caches to later build containers."""
     system = str(recipe.get("build_system", ""))
-    source = f"/opt/project/{recipe['source_dir']}"
+    node_root = node_dependency_root(recipe) if system == "node" else str(recipe["source_dir"])
+    node_source = "/opt/project" if node_root == "." else f"/opt/project/{node_root}"
     environments = {
         "cargo": {"CARGO_HOME": "/opt/project-deps/cargo"},
         "go": {"GOMODCACHE": "/opt/project-deps/go"},
@@ -131,8 +149,8 @@ def project_dependency_environment(recipe: Mapping[str, Any]) -> dict[str, str]:
         "node": {"NPM_CONFIG_CACHE": "/opt/project-deps/npm-cache",
                  "PNPM_STORE_DIR": "/opt/project-deps/pnpm-store",
                  "YARN_CACHE_FOLDER": "/opt/project-deps/yarn-cache",
-                 "NODE_PATH": f"{source}/node_modules",
-                 "PATH": f"{source}/node_modules/.bin:$PATH"},
+                 "NODE_PATH": f"{node_source}/node_modules",
+                 "PATH": f"{node_source}/node_modules/.bin:$PATH"},
         "composer": {"COMPOSER_HOME": "/opt/project-deps/composer-home",
                      "COMPOSER_VENDOR_DIR": "/opt/project-deps/composer-vendor"},
         "python": {"PYTHONPATH": "/opt/project-deps"},

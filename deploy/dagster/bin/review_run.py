@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 import subprocess
 import time
+import tomllib
 from urllib.request import Request, urlopen
 from uuid import uuid4
 
@@ -24,6 +25,20 @@ QUERY = """query ReviewRun($runId: ID!) {
   }
 }"""
 TERMINAL = {"SUCCESS", "FAILURE", "CANCELED"}
+
+
+def verify_build_profile_images(document: dict, *, runner=subprocess.run) -> None:
+    profiles = document["jobs"]["job_project_build"]["settings"]["profiles"]
+    mismatches = []
+    for name, profile in sorted(profiles.items()):
+        inspected = runner(
+            ["docker", "image", "inspect", profile["tag"], "--format", "{{.Id}}"],
+            cwd=ROOT, capture_output=True, text=True, timeout=60, check=False)
+        actual = inspected.stdout.strip() if inspected.returncode == 0 else "unavailable"
+        if actual != profile["image_id"]:
+            mismatches.append(f"{name}: expected {profile['image_id']}, resolved {actual}")
+    if mismatches:
+        raise RuntimeError("project build image preflight failed; " + "; ".join(mismatches))
 
 
 def get_run(url: str, run_id: str) -> dict:
@@ -57,6 +72,8 @@ def show_run(run: dict) -> None:
 
 
 def submit(run_id: str) -> None:
+    document = tomllib.loads((ROOT / "appsec-review.toml").read_text(encoding="utf-8"))
+    verify_build_profile_images(document)
     command = ["docker", "compose", "--env-file", "deploy/dagster/.env",
                "-f", "deploy/dagster/compose.yaml", "exec", "-T", "webserver",
                "dagster", "job", "launch", "-w", "/opt/dagster/home/workspace.yaml",

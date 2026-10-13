@@ -185,9 +185,9 @@ class _NodeExecutor:
     def resolve(self):
         return None
 
-    def prepare_node_dependencies(self, *, workspace, source_dir):
+    def prepare_node_dependencies(self, *, workspace, source_dir, dependency_root=None):
         # The real executor links the image-owned node_modules into the writable source root.
-        self.calls.append(("prepare-node-dependencies", source_dir))
+        self.calls.append(("prepare-node-dependencies", source_dir, dependency_root))
 
     def execute(self, argv, *, workspace, working_directory, environment):
         self.calls.append(tuple(argv))
@@ -233,7 +233,7 @@ def test_node_build_publishes_protected_provenance_and_sanitized_mcp_evidence(tm
             target_root=target, source_fingerprint=fingerprint, run_id=upstream["run_id"])
     assert outcome["status"] == "SUCCEEDED"
     # The probe and the build each exposed the image-owned dependencies before running npm.
-    assert calls.count(("prepare-node-dependencies", "web")) == 2
+    assert calls.count(("prepare-node-dependencies", "web", "web")) == 2
     receipt = load_accepted_language_build(config.runtime.runs_dir / upstream["run_id"])["receipts"][0]
     assert receipt["family"] == "node" and receipt["terminal_status"] == "SUCCEEDED"
     assert receipt["dependency_identity"]["manager"] == "npm"

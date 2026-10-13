@@ -56,6 +56,16 @@ _CONTEXT_NAMES = {
     "packages.lock.json", "Directory.Packages.props", "NuGet.Config", "tsconfig.json",
     "binding.gyp", "config.m4", "go.sum", "go.work.sum",
 }
+_NODE_ANCESTOR_CONTEXT_NAMES = {
+    "package.json", "package-lock.json", "pnpm-lock.yaml", "yarn.lock",
+}
+
+
+def _is_node_ancestor_context(path: PurePosixPath) -> bool:
+    return (path.name in _NODE_ANCESTOR_CONTEXT_NAMES or
+            (path.name.startswith("tsconfig.") and path.name.endswith(".json")))
+
+
 _PROFILE_COMMANDS: dict[str, frozenset[str]] = {
     "native": frozenset({"cmake", "ninja", "make", "gmake", "clang", "clang++", "gcc", "g++",
                          "emcc", "em++", "emar", "wasm-ld", "llvm-ar", "wasm-opt", "wasm-tools",
@@ -233,9 +243,16 @@ def descriptor_package(target_root: Path, unit: Mapping[str, Any], files: Sequen
     for item in files:
         path = PurePosixPath(str(item["path"]))
         under = root == "." or path.as_posix() == root or path.as_posix().startswith(root + "/")
-        if not under:
+        unit_root = PurePosixPath(root)
+        ancestor_context = (
+            unit.get("family") == "node" and _is_node_ancestor_context(path) and
+            path.parent != unit_root and
+            (path.parent == PurePosixPath(".") or path.parent in unit_root.parents)
+        )
+        if not under and not ancestor_context:
             continue
-        if str(item["path"]) in marker_paths or path.name in _CONTEXT_NAMES or path.name.startswith("Dockerfile"):
+        if (str(item["path"]) in marker_paths or path.name in _CONTEXT_NAMES or
+                path.name.startswith("Dockerfile") or ancestor_context):
             candidates.append(item)
     documents = []
     total = 0
@@ -300,9 +317,24 @@ def _within(value: str, root: str) -> bool:
     return root == "." or path == boundary or boundary in path.parents
 
 
-def normalize_build_recipe(recipe: Mapping[str, Any]) -> dict[str, Any]:
+def normalize_build_recipe(recipe: Mapping[str, Any], unit: Mapping[str, Any] | None = None) -> dict[str, Any]:
     """Apply narrow descriptor-backed corrections before accepting inferred build argv."""
     value = dict(recipe)
+    if value.get("image_profile") == "node" and isinstance(unit, Mapping):
+        dependencies = list(value.get("dependency_files", ()))
+        root = PurePosixPath(str(unit.get("root", ".")))
+        has_lock = any(PurePosixPath(str(path)).name in {
+            "package-lock.json", "pnpm-lock.yaml", "yarn.lock"} for path in dependencies)
+        for item in unit.get("descriptor_package", {}).get("documents", ()):
+            path = PurePosixPath(str(item.get("path", "")))
+            is_lock = path.name in {"package-lock.json", "pnpm-lock.yaml", "yarn.lock"}
+            if (path.parent != root and
+                    (path.parent == PurePosixPath(".") or path.parent in root.parents) and
+                    _is_node_ancestor_context(path) and not (is_lock and has_lock) and
+                    path.as_posix() not in dependencies):
+                dependencies.append(path.as_posix())
+                has_lock = has_lock or is_lock
+        value["dependency_files"] = dependencies
     if value.get("image_profile") == "java" and isinstance(value.get("environment"), Mapping):
         # The pinned build image owns the JDK location. Model-inferred JAVA_HOME values are
         # target-host assumptions and can name a JDK that is absent from the image.

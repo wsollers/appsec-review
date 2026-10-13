@@ -11,13 +11,17 @@ from appsec_review.config import ProcessingMode, load_config
 from appsec_review.container_runtime import BuildCommandResult, ProjectImage
 from appsec_review.jobs.cataloging import source_fingerprint
 from appsec_review.jobs.job_project_build import build_job as build_projects, load_accepted_builds
-from appsec_review.jobs.job_project_build.job import _probe_cache, _probe_environment, _validate_expected_outputs
+from appsec_review.jobs.job_project_build.job import (
+    _copy_source, _deterministic_jvm_recipe, _probe_cache, _probe_environment,
+    _validate_expected_outputs,
+)
 from appsec_review.jobs.job_review_intake import build_job as build_intake
 from appsec_review.jobs.job_target_catalog import build_job as build_catalog
 from appsec_review.inference import ModelResult
 from appsec_review.jobs.job_target_analysis_plan import build_job as build_plan
 from appsec_review.jobs.job_target_analysis_plan.planning import PROPOSAL_SCHEMA
 from appsec_review.jobs.job_project_build.repair import REPAIR_SCHEMA, apply_repair, validate_repair_proposal
+from appsec_review.jobs.job_language_build.job import _copy_source as _copy_language_source
 from appsec_review.runtime import GraphRunner, plan_jobs
 
 
@@ -155,6 +159,15 @@ class FakeBuildExecutor:
         return replace(result, capture_record=record)
 
 
+class CaptureGapExecutor(FakeBuildExecutor):
+    def execute_captured(self, *args, **kwargs):
+        result = super().execute_captured(*args, **kwargs)
+        record = json.loads(result.capture_record.read_text(encoding="utf-8"))
+        record["coverage"] = {"complete": False, "gaps": ["temporary response file was not retained"]}
+        result.capture_record.write_text(json.dumps(record, sort_keys=True) + "\n", encoding="utf-8")
+        return result
+
+
 class FakeImageResolver:
     def resolve(self, recipe, profile):
         identity = __import__("hashlib").sha256(
@@ -246,6 +259,44 @@ def test_probe_environment_disables_cargo_incremental_state_the_host_cannot_read
     assert environment["CARGO_INCREMENTAL"] == "0"
     assert "CARGO_INCREMENTAL" not in _probe_environment({
         "build_system": "cmake", "source_dir": "native", "environment": {}})
+
+
+def test_kotlin_direct_recipe_pins_a_compatible_jdk_toolchain(tmp_path: Path) -> None:
+    target = tmp_path / "target"
+    source = target / "kotlin" / "src"
+    source.mkdir(parents=True)
+    kotlin = source / "Main.kt"
+    kotlin.write_text("fun main() = Unit\n", encoding="utf-8")
+    action = {"build_unit_id": "build-unit-kotlin", "family": "java",
+              "build_system": "javac", "root": "kotlin"}
+    unit = SimpleNamespace(job=SimpleNamespace(target_root=target))
+    recipe = _deterministic_jvm_recipe(unit, action)
+    assert recipe is not None
+    assert recipe["system_packages"] == ["kotlin", "openjdk-17-jdk-headless"]
+    assert recipe["environment"]["JAVA_HOME"] == "/usr/lib/jvm/java-17-openjdk-amd64"
+    assert recipe["environment"]["PATH"].startswith(
+        "/usr/lib/jvm/java-17-openjdk-amd64/bin:")
+
+
+def test_project_probe_copies_accepted_parent_dependency_files(tmp_path: Path) -> None:
+    target = tmp_path / "target"
+    member = target / "apps" / "web"
+    member.mkdir(parents=True)
+    (member / "package.json").write_text("{}\n", encoding="utf-8")
+    (target / "tsconfig.base.json").write_text("{}\n", encoding="utf-8")
+    run_root = tmp_path / "runs" / "run-1"
+    workspace = run_root / "data" / "build" / "probes" / "unit" / "attempt-001" / "workspace"
+    unit = SimpleNamespace(job=SimpleNamespace(target_root=target, run_root=run_root))
+    action = {"root": "apps/web", "recipe": {
+        "dependency_files": ["apps/web/package.json", "tsconfig.base.json"]}}
+    _copy_source(unit, action, workspace)
+    assert (workspace / "apps/web/package.json").is_file()
+    assert (workspace / "tsconfig.base.json").is_file()
+
+    language_workspace = tmp_path / "language-workspace"
+    _copy_language_source(unit, action, language_workspace)
+    assert (language_workspace / "apps/web/package.json").is_file()
+    assert (language_workspace / "tsconfig.base.json").is_file()
 
 
 def test_image_repair_accepts_only_bounded_apt_package_sets() -> None:
@@ -400,6 +451,28 @@ def test_build_failure_is_a_gap_and_preserves_other_family_outputs(tmp_path: Pat
     assert {item["family"] for item in accepted["static_dispatches"]
             if item["workflow"] == "lang_jobflow_static"} == {"native", "rust"}
     assert {item["family"] for item in accepted["build_dispatches"]} == {"native"}
+
+
+def test_capture_gap_is_reported_without_triggering_image_repair(tmp_path: Path) -> None:
+    config, target = _fixture(tmp_path)
+    fingerprint = source_fingerprint(target)
+    upstream = GraphRunner(
+        config, [build_intake(), build_catalog(), build_plan(infer=RecipeModel().complete)]
+    ).run(target_root=target, source_fingerprint=fingerprint)
+    model = RepairModel((["should-not-be-installed"],))
+    outcome = GraphRunner(config, [build_projects(
+        executor_factory=lambda unit, profile: CaptureGapExecutor([]),
+        image_resolver_factory=lambda unit: RepairImageResolver(tmp_path / "image-metadata"),
+        infer=model.complete,
+    )]).run(target_root=target, source_fingerprint=fingerprint, run_id=upstream["run_id"])
+    assert outcome["status"] == "COMPLETED_WITH_GAPS"
+    accepted = load_accepted_builds(config.runtime.runs_dir / upstream["run_id"])
+    assert accepted["build_dispatches"] == []
+    assert model.calls == 0
+    assert {item["terminal_status"] for item in accepted["probe_receipts"]} == {
+        "COMPLETED_WITH_GAPS"}
+    assert all(item["repair_attempt_count"] == 0 for item in accepted["probe_receipts"])
+    assert all("capture:" in item["gaps"][0] for item in accepted["probe_receipts"])
 
 
 def test_unchanged_recipe_reuses_probe_across_application_runs(tmp_path: Path) -> None:

@@ -72,6 +72,37 @@ def test_descriptor_package_is_bounded_and_hash_identified(tmp_path: Path) -> No
     assert package["gaps"] == []
 
 
+def test_node_workspace_member_receives_bounded_ancestor_descriptors(tmp_path: Path) -> None:
+    target = tmp_path / "target"
+    values = {
+        "package.json": '{"private":true,"workspaces":["apps/*"]}\n',
+        "package-lock.json": '{"lockfileVersion":3}\n',
+        "tsconfig.base.json": '{"compilerOptions":{"target":"ES2022"}}\n',
+        "apps/web/package.json": '{"scripts":{"build":"tsc"}}\n',
+        "apps/web/tsconfig.json": '{"extends":"../../tsconfig.base.json"}\n',
+        "apps/other/package.json": '{}\n',
+    }
+    files = []
+    for relative, content in values.items():
+        path = target / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+        files.append(_file(relative, content))
+    unit = next(item for item in discover_build_units(files) if item["root"] == "apps/web")
+    package = descriptor_package(target, unit, files)
+    assert {item["path"] for item in package["documents"]} == {
+        "package.json", "package-lock.json", "tsconfig.base.json",
+        "apps/web/package.json", "apps/web/tsconfig.json",
+    }
+    recipe = {
+        "image_profile": "node", "dependency_files": ["apps/web/package.json"],
+        "configure_commands": [], "build_commands": [["npm", "run", "build"]],
+    }
+    normalized = normalize_build_recipe(recipe, {**unit, "descriptor_package": package})
+    assert normalized["dependency_files"] == [
+        "apps/web/package.json", "package-lock.json", "package.json", "tsconfig.base.json"]
+
+
 def test_go_checksum_files_are_accepted_dependency_descriptors(tmp_path: Path) -> None:
     target = tmp_path / "target"
     (target / "svc").mkdir(parents=True)

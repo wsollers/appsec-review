@@ -91,6 +91,27 @@ def test_project_image_is_derived_from_recipe_and_reused(tmp_path: Path) -> None
     assert build_call[-1] == str(next((tmp_path / "metadata" / "project-images").glob("*/context")).resolve())
 
 
+def test_node_workspace_image_restores_and_exposes_root_dependencies(tmp_path: Path) -> None:
+    target = tmp_path / "target"
+    (target / "apps" / "web").mkdir(parents=True)
+    (target / "package.json").write_text('{"private":true}', encoding="utf-8")
+    (target / "package-lock.json").write_text('{"lockfileVersion":3}', encoding="utf-8")
+    (target / "apps" / "web" / "package.json").write_text('{}', encoding="utf-8")
+    recipe = {
+        "source_dir": "apps/web", "build_system": "node",
+        "dependency_files": ["apps/web/package.json", "package.json", "package-lock.json"],
+        "configure_commands": [], "build_commands": [["npm", "run", "build"]],
+        "system_packages": [], "network_required": True,
+    }
+    profile = BuildProfile("node", "node-base:local", "sha256:" + "a" * 64, "10001:10001")
+    resolver = ProjectImageResolver(metadata_root=tmp_path / "metadata", target_root=target)
+    _identity, dockerfile = resolver.definition(recipe, profile)
+    text = dockerfile.decode()
+    assert '["npm","--prefix","/opt/project","ci"' in text
+    assert "ENV NODE_PATH=/opt/project/node_modules" in text
+    assert "ENV PATH=/opt/project/node_modules/.bin:$PATH" in text
+
+
 def test_project_image_failure_retains_bounded_diagnostics(tmp_path: Path) -> None:
     target = tmp_path / "target"
     target.mkdir()

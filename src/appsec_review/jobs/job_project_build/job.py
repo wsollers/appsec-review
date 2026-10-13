@@ -27,6 +27,7 @@ from appsec_review.container_runtime import (
     profiles_from_settings,
     verify_capture_record,
 )
+from appsec_review.container_runtime.project_images import node_dependency_root
 from appsec_review.jobs.build_discovery import validate_build_recipe
 from appsec_review.jobs.cataloging import source_fingerprint, write_json
 from appsec_review.inference import Infer, ModelRequest
@@ -92,6 +93,18 @@ def _copy_source(unit: UnitContext, action: Mapping[str, Any], workspace: Path) 
         if path.is_symlink():
             raise ValueError(f"build source contains an unsupported symlink: {path.relative_to(target)}")
     shutil.copytree(source, destination, dirs_exist_ok=True, ignore=shutil.ignore_patterns(*sorted(_IGNORED)))
+    root = str(action["root"])
+    recipe = action.get("recipe")
+    for relative in recipe.get("dependency_files", ()) if isinstance(recipe, Mapping) else ():
+        logical = PurePosixPath(str(relative))
+        if root == "." or logical.as_posix() == root or root in logical.parents:
+            continue
+        dependency = (target / Path(*logical.parts)).resolve(strict=True)
+        if target not in dependency.parents or not dependency.is_file() or dependency.is_symlink():
+            raise ValueError("build dependency escaped the accepted target")
+        retained = workspace / Path(*logical.parts)
+        retained.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(dependency, retained)
     try:
         workspace.chmod(0o777)
         for directory in (path for path in workspace.rglob("*") if path.is_dir()):
@@ -357,8 +370,10 @@ def _probe_one(unit: UnitContext, entry: Mapping[str, Any], executor_factory=Non
         prepare = getattr(executor, "prepare_node_dependencies", None)
         if not callable(prepare):
             raise RuntimeError("Node dependency-bearing builds require a dependency-view executor")
-        prepare(workspace=workspace, source_dir=str(recipe["source_dir"]))
+        prepare(workspace=workspace, source_dir=str(recipe["source_dir"]),
+                dependency_root=node_dependency_root(recipe))
     command_receipts, gaps = [], []
+    build_failed = False
     for ordinal, argv in enumerate([*recipe["configure_commands"], *recipe["build_commands"]], 1):
         command = _normalized_argv(recipe, argv)
         invocation = hashlib.sha256(
@@ -411,14 +426,16 @@ def _probe_one(unit: UnitContext, entry: Mapping[str, Any], executor_factory=Non
             "protected_argv": {"path": protected.relative_to(unit.job.run_root).as_posix(),
                                "sha256": file_sha256(protected), "size_bytes": protected.stat().st_size},
             "execution_capture": capture_identity})
-        failed = result.timed_out or result.exit_code != 0 or bool(capture_gaps)
+        failed = result.timed_out or result.exit_code != 0
         unit.job.events.write("TOOL_INVOCATION_COMPLETED", unit_id=unit.unit_id, tool_invocation_id=invocation,
             tool_id="build-probe", retry_count=attempt_number - 1,
             tool_identity={"family": action["family"], "image_id": image["image_id"]},
-            disposition="FAILED" if failed else "SUCCEEDED", result_count=0, gap_count=1 if failed else 0,
+            disposition="FAILED" if failed else "SUCCEEDED", result_count=0,
+            gap_count=len(capture_gaps) + (1 if failed else 0),
             truncated=stdout_identity["truncated"] or stderr_identity["truncated"],
             duration_ms=int((time.monotonic() - started) * 1000))
         if failed:
+            build_failed = True
             if result.timed_out or result.exit_code != 0:
                 gaps.append(
                     f"build command {ordinal} {'timed out' if result.timed_out else f'exited {result.exit_code}'}")
@@ -426,12 +443,14 @@ def _probe_one(unit: UnitContext, entry: Mapping[str, Any], executor_factory=Non
     if source_fingerprint(unit.job.target_root or Path()) != unit.job.source_fingerprint:
         raise ValueError("target changed during isolated probe execution")
     artifacts = _outputs(unit.job.run_root, workspace, before, int(unit.job.config.settings["artifact_count_limit"]))
-    gaps.extend(_validate_expected_outputs(workspace, recipe))
-    status = "FAILED" if gaps else "SUCCEEDED"
+    output_gaps = _validate_expected_outputs(workspace, recipe)
+    gaps.extend(output_gaps)
+    status = ("FAILED" if build_failed or output_gaps else
+              "COMPLETED_WITH_GAPS" if gaps else "SUCCEEDED")
     receipt = {**base, "schema": SCHEMA, "executor_identity": EXECUTOR_IDENTITY,
                "recipe_identity": recipe_identity, "image_id": image["image_id"], "commands": command_receipts,
                "artifacts": artifacts, "terminal_status": status,
-               "probe_disposition": "FAILED" if gaps else "PROBED", "gaps": gaps,
+               "probe_disposition": "FAILED" if status == "FAILED" else "PROBED", "gaps": gaps,
                "checkpoint_reused": False, "attempt_number": attempt_number}
     if status == "SUCCEEDED":
         cache.parent.mkdir(parents=True, exist_ok=True)
@@ -580,7 +599,7 @@ def _probe_with_repairs(unit: UnitContext, entry: Mapping[str, Any], *, profile:
         "image_id": first.get("image_id"), "terminal_status": first["terminal_status"],
         "gaps": list(first.get("gaps", ())),
     }]
-    if first["terminal_status"] == "SUCCEEDED":
+    if first["terminal_status"] in {"SUCCEEDED", "COMPLETED_WITH_GAPS"}:
         return {**first, "accepted_recipe": accepted_recipe, "accepted_image": image,
                 "recipe_provenance": action.get("recipe_provenance", "accepted-inference"),
                 "base_recipe_identity": entry.get("base_recipe_identity", first.get("recipe_identity")),
@@ -833,10 +852,15 @@ def _deterministic_jvm_recipe(unit: UnitContext, action: Mapping[str, Any]) -> M
             javac.extend(["-classpath", "build/classes"])
         commands.append([*javac, "-d", "build/classes", *java_sources])
     commands.append(["jar", "--create", "--file", "build/appsec-review.jar", "-C", "build/classes", "."])
+    kotlin_environment = ({
+        "JAVA_HOME": "/usr/lib/jvm/java-17-openjdk-amd64",
+        "PATH": "/usr/lib/jvm/java-17-openjdk-amd64/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+    } if kotlin_sources else {})
     recipe = {
         "schema": "appsec-review/build-recipe/1", "build_unit_id": action["build_unit_id"],
         "image_profile": "java", "source_dir": root, "build_dir": build_dir,
-        "system_packages": [], "environment": {}, "dependency_files": target_paths,
+        "system_packages": (["kotlin", "openjdk-17-jdk-headless"] if kotlin_sources else []),
+        "environment": kotlin_environment, "dependency_files": target_paths,
         "configure_commands": [], "build_commands": commands,
         "expected_outputs": [classes_dir, jar_path], "network_required": False,
         "reason": "Deterministic offline JVM compilation derived from bounded Java/Kotlin source markers.",

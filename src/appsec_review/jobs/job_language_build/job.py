@@ -25,7 +25,7 @@ from appsec_review.container_runtime import (
     verify_capture_record,
 )
 from appsec_review.container_runtime.build_capture import REQUIRED_EVENT_KINDS
-from appsec_review.container_runtime.project_images import project_recipe_identity
+from appsec_review.container_runtime.project_images import node_dependency_root, project_recipe_identity
 from appsec_review.jobs.build_discovery import validate_build_recipe
 from appsec_review.jobs.cataloging import source_fingerprint, write_json
 from appsec_review.jobs.job_project_build import load_accepted_builds
@@ -205,6 +205,18 @@ def _copy_source(unit: UnitContext, dispatch: Mapping[str, Any], workspace: Path
             raise ValueError("build source contains an unsupported symlink")
     shutil.copytree(source, destination, ignore=shutil.ignore_patterns(
         ".git", ".hg", ".svn", "build", "target", "node_modules"))
+    root = str(dispatch["root"])
+    recipe = dispatch.get("recipe")
+    for relative in recipe.get("dependency_files", ()) if isinstance(recipe, Mapping) else ():
+        logical = PurePosixPath(str(relative))
+        if root == "." or logical.as_posix() == root or root in logical.parents:
+            continue
+        dependency = (target / Path(*logical.parts)).resolve(strict=True)
+        if target not in dependency.parents or not dependency.is_file() or dependency.is_symlink():
+            raise ValueError("build dependency escaped the accepted target")
+        retained = workspace / Path(*logical.parts)
+        retained.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(dependency, retained)
     try:
         workspace.chmod(0o777)
         for path in workspace.rglob("*"):
@@ -843,7 +855,8 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
         prepare = getattr(executor, "prepare_node_dependencies", None)
         if not callable(prepare):
             raise RuntimeError("Node dependency-bearing builds require a dependency-view executor")
-        prepare(workspace=workspace, source_dir=str(recipe["source_dir"]))
+        prepare(workspace=workspace, source_dir=str(recipe["source_dir"]),
+                dependency_root=node_dependency_root(recipe))
     protected = root / "protected-commands"
     protected.mkdir(parents=True, exist_ok=True)
     commands, gaps, node_rows = [], [], []

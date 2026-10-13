@@ -619,14 +619,18 @@ class BuildContainerExecutor:
         result["redact_invocation"] = redact_invocation
         return result
 
-    def prepare_node_dependencies(self, *, workspace: Path, source_dir: str) -> None:
+    def prepare_node_dependencies(self, *, workspace: Path, source_dir: str,
+                                  dependency_root: str | None = None) -> None:
         """Expose image-owned node_modules at the writable target source root."""
         logical = PurePosixPath(source_dir)
         if source_dir != "." and (logical.is_absolute() or ".." in logical.parts):
             raise ValueError("Node source directory is not normalized")
-        dependency_root = "/opt/project/node_modules" if source_dir == "." else (
-            f"/opt/project/{logical.as_posix()}/node_modules")
-        result = self.execute(("ln", "-s", dependency_root, "node_modules"),
+        dependency_logical = PurePosixPath(dependency_root or source_dir)
+        if dependency_logical.is_absolute() or ".." in dependency_logical.parts:
+            raise ValueError("Node dependency root is not normalized")
+        image_dependency_root = ("/opt/project/node_modules" if dependency_logical.as_posix() == "." else
+                                 f"/opt/project/{dependency_logical.as_posix()}/node_modules")
+        result = self.execute(("ln", "-s", image_dependency_root, "node_modules"),
                               workspace=workspace, working_directory=source_dir, environment={})
         if result.timed_out or result.exit_code != 0:
             raise RuntimeError("could not expose image-owned Node dependencies to the build workspace")
