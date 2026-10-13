@@ -192,6 +192,28 @@ def test_live_build_container_compiles_fixture_and_emits_cataloged_artifacts(
     _assert_catalog_contract(case, project)
 
 
+def test_live_android_jvm_environment_resolves_gradle_from_cataloged_image(tmp_path: Path) -> None:
+    config = load_config(ROOT / "appsec-review.toml")
+    profile = _profile("android")
+    workspace = tmp_path / "workspace"
+    source = workspace / "android"
+    source.mkdir(parents=True)
+    recipe = {
+        "image_profile": "android", "source_dir": "android", "build_system": "gradle",
+        "environment": {},
+    }
+    environment, _trace = jvm._environment(
+        recipe, workspace, config.job("job_language_build").settings["jvm"])
+    executor = BuildContainerExecutor(profile, timeout_seconds=120, output_bytes=1024 * 1024)
+    executor.resolve()
+    result = executor.execute(("gradle", "--version"), workspace=workspace,
+                              working_directory="android", environment=environment)
+    detail = ((result.stdout_tail or result.stdout) + b"\n" +
+              (result.stderr_tail or result.stderr)).decode("utf-8", "replace")[-12000:]
+    assert not result.timed_out and result.exit_code == 0, detail
+    assert b"Gradle 8.9" in result.stdout
+
+
 def test_live_cpp_build_syscalls_are_captured_in_standard_records(tmp_path: Path) -> None:
     config = load_config(ROOT / "appsec-review.toml")
     capture_config = config.job("job_project_build").build_capture

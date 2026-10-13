@@ -934,7 +934,10 @@ diagnostic_tail_bytes = 32768
 trace_bytes = 8388608
 provenance_count_limit = 20000
 diagnostic_tail_bytes = 32768
-system_path = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+
+[jobs.job_language_build.settings.jvm.system_paths]
+java = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+android = "/opt/gradle/gradle-8.9/bin:/opt/android-sdk/cmdline-tools/15859902/bin:/opt/android-sdk/platform-tools:/opt/android-sdk/build-tools/35.0.0:/opt/java/openjdk/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
 [jobs.job_language_build.settings.jvm.tool_paths]
 javac = "/usr/bin/javac"

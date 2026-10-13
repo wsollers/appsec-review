@@ -49,14 +49,18 @@ def validate_jvm_settings(settings: Mapping[str, Any]) -> None:
     if not isinstance(jvm, Mapping):
         raise ValueError("language-build JVM settings are required")
     required = {"trace_bytes", "provenance_count_limit", "diagnostic_tail_bytes",
-                "system_path", "tool_paths"}
+                "system_paths", "tool_paths"}
     if set(jvm) != required:
         raise ValueError("language-build JVM settings fields are invalid")
     for key in ("trace_bytes", "provenance_count_limit", "diagnostic_tail_bytes"):
         if type(jvm.get(key)) is not int or int(jvm[key]) < 1:
             raise ValueError(f"language-build JVM bound is invalid: {key}")
-    if not isinstance(jvm.get("system_path"), str) or not str(jvm["system_path"]).startswith("/"):
-        raise ValueError("language-build JVM system_path is invalid")
+    paths = jvm.get("system_paths")
+    if (not isinstance(paths, Mapping) or set(paths) != {"java", "android"} or
+            any(not isinstance(value, str) or not value or
+                any(not part.startswith("/") for part in value.split(":"))
+                for value in paths.values())):
+        raise ValueError("language-build JVM system_paths are invalid")
     tools = jvm.get("tool_paths")
     if (not isinstance(tools, Mapping) or set(tools) != set(_TOOLS) or
             any(not isinstance(value, str) or not value.startswith("/") or "\0" in value
@@ -104,10 +108,19 @@ def _environment(recipe: Mapping[str, Any], workspace: Path, settings: Mapping[s
 
     environment = _probe_environment({**recipe, "build_system": recipe.get("build_system")})
     trace, logical = _instrumentation(workspace, str(recipe["source_dir"]), settings)
+    profile = str(recipe.get("image_profile", ""))
+    system_paths = settings["system_paths"]
+    if profile not in system_paths:
+        raise JvmIntegrityError(f"JVM image profile has no configured system path: {profile}")
     environment["APPSEC_JVM_TRACE"] = logical + "/invocations.bin"
-    environment["PATH"] = logical + "/bin:" + str(settings["system_path"])
+    environment["PATH"] = logical + "/bin:" + str(system_paths[profile])
     environment.setdefault("MAVEN_OPTS", "-Dmaven.repo.local=/opt/project-deps/maven")
-    environment.setdefault("GRADLE_USER_HOME", "/opt/project-deps/gradle")
+    if profile == "android":
+        # The derived image is read-only at execution time. Gradle extracts native runtime files
+        # beneath its user home, so the Android execution profile must use its executable tmpfs.
+        environment["GRADLE_USER_HOME"] = "/tmp/gradle"
+    else:
+        environment.setdefault("GRADLE_USER_HOME", "/opt/project-deps/gradle")
     return environment, trace
 
 
@@ -346,8 +359,11 @@ def execute_jvm_one(unit: Any, dispatch: Mapping[str, Any], accepted: Mapping[st
             return receipt
     _copy_source(unit, dispatch, workspace)
     before = _manifest(workspace, int(unit.job.config.settings["artifact_count_limit"]) * 10)
+    image_profile = str(recipe.get("image_profile", ""))
+    if image_profile not in {"java", "android"} or str(image.get("family", "")) != image_profile:
+        raise JvmIntegrityError("JVM recipe and accepted image profiles do not match")
     environment, trace = _environment({**recipe, "build_system": dispatch.get("build_system")}, workspace, settings)
-    profile = BuildProfile("java", str(image["image_tag"]), str(image["image_id"]), str(image["user"]))
+    profile = BuildProfile(image_profile, str(image["image_tag"]), str(image["image_id"]), str(image["user"]))
     executor = executor_factory(unit, profile) if executor_factory else BuildContainerExecutor(
         profile, timeout_seconds=int(unit.job.config.settings["command_timeout_seconds"]),
         output_bytes=int(unit.job.config.settings["output_bytes"]))

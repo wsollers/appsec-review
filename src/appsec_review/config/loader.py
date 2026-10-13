@@ -293,14 +293,17 @@ class JvmBuildSettings:
     trace_bytes: int
     provenance_count_limit: int
     diagnostic_tail_bytes: int
-    system_path: str
+    system_paths: Mapping[str, str]
     tool_paths: Mapping[str, str]
 
     def __post_init__(self) -> None:
         if min(self.trace_bytes, self.provenance_count_limit, self.diagnostic_tail_bytes) < 1:
             raise ValueError("JVM capture limits must be positive")
-        if not self.system_path.startswith("/"):
-            raise ValueError("JVM system path must be absolute")
+        if (set(self.system_paths) != {"java", "android"} or
+                any(not value or "\0" in value or
+                    any(not part.startswith("/") for part in value.split(":"))
+                    for value in self.system_paths.values())):
+            raise ValueError("JVM profile system paths are invalid")
         expected = {"javac", "kotlinc", "kapt", "ksp", "java", "jar", "javadoc", "protoc"}
         if set(self.tool_paths) != expected or any(not value.startswith("/") for value in self.tool_paths.values()):
             raise ValueError("JVM tool path selection is invalid")
@@ -823,7 +826,8 @@ def load_config(path: str | Path = "appsec-review.toml", *, overlay: str | Path 
                     trace_bytes=int(jvm_value.get("trace_bytes", 0)),
                     provenance_count_limit=int(jvm_value.get("provenance_count_limit", 0)),
                     diagnostic_tail_bytes=int(jvm_value.get("diagnostic_tail_bytes", 0)),
-                    system_path=str(jvm_value.get("system_path", "")),
+                    system_paths=MappingProxyType({str(key): str(value)
+                                                   for key, value in jvm_value["system_paths"].items()}),
                     tool_paths=MappingProxyType({str(key): str(value)
                                                   for key, value in jvm_value["tool_paths"].items()}),
                 ),

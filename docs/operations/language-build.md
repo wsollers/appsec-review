@@ -95,8 +95,10 @@ profile, the bounded descriptor contents, and the validator-derived Gradle task 
 then preserves the accepted inferred recipe and resolves the dedicated Android image. The immutable
 profile is locked by image ID and
 contains JDK 17, Gradle 8.9, Android command-line tools, Platform 35, Build Tools 35.0.0, and
-platform-tools. Gradle and Android mutable homes live only in `.appsec-cache/` inside the run-owned
-workspace; this cache is excluded from snapshots and artifact catalogs. Successful acceptance
+platform-tools. JVM instrumentation prepends its wrappers to the configured path for the accepted
+profile, so Android retains the pinned Gradle and SDK directories rather than inheriting the generic
+Java path. Gradle and Android mutable homes live on the Android executor's writable executable
+`/tmp` mount; the image root and dependency cache remain read-only. Successful acceptance
 requires a non-empty ZIP-valid APK containing `AndroidManifest.xml` and `resources.arsc`.
 Android intermediate and output metadata are cataloged without executing the application.
 Project-build acceptance and language-build execution use the same Maven/Gradle command-policy
@@ -277,7 +279,7 @@ it is 0-1 MiB for Go, Python, Rust, PHP, and Node and positive for JVM:
 | `rust` | `toolchain` (`stable`), optional `target`, `profile` (`dev`), `features` ([]), `locked` (false), `offline` (false), `capture_linker` (true) | names match `[A-Za-z0-9_.-]{1,64}` |
 | `php` | `composer_plugins` (`disabled`), `composer_scripts` (`sandboxed`), `require_lockfile` (false) | policies are `disabled` or `sandboxed` |
 | `node` | `package_managers`, `require_lockfile` (false), `network` (`allowed`), `lifecycle_scripts` (`sandboxed`), `capture_source_maps` (true) | validator accepts only the shipped values |
-| `jvm` | `trace_bytes` (8388608), `provenance_count_limit` (20000), `diagnostic_tail_bytes`, `system_path`, `tool_paths` table | limits positive; paths absolute; `tool_paths` names exactly `javac`, `kotlinc`, `kapt`, `ksp`, `java`, `jar`, `javadoc`, `protoc` |
+| `jvm` | `trace_bytes` (8388608), `provenance_count_limit` (20000), `diagnostic_tail_bytes`, `system_paths` table keyed by `java` and `android`, `tool_paths` table | limits positive; every path segment absolute; `tool_paths` names exactly `javac`, `kotlinc`, `kapt`, `ksp`, `java`, `jar`, `javadoc`, `protoc` |
 | `wasm` | `workspace_file_limit` (100000), `producers.<name>` with `families`, `tools`, `indicators` arrays | at least one producer; limit positive |
 
 The WebAssembly adapter reuses the job-level timeout, `output_bytes`, and `artifact_count_limit`.
