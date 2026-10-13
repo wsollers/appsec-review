@@ -144,6 +144,31 @@
         "security_impact"
       ]
     },
+    "security_predicate": {
+      "description": "security-predicates/1: the closed security-consequence vocabulary of a claim (design R7). Part of claim identity.",
+      "enum": [
+        "memory_corruption",
+        "out_of_bounds_read",
+        "use_after_free",
+        "integer_error",
+        "injection",
+        "command_injection",
+        "sql_injection",
+        "code_injection",
+        "path_traversal",
+        "ssrf",
+        "deserialization",
+        "authn_bypass",
+        "authz_bypass",
+        "info_disclosure",
+        "crypto_weakness",
+        "race_condition",
+        "resource_exhaustion",
+        "insecure_configuration",
+        "supply_chain_compromise",
+        "other"
+      ]
+    },
     "relation_kind": {
       "enum": [
         "supports",

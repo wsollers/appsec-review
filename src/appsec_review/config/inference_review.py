@@ -16,6 +16,7 @@ from typing import Any, Mapping
 
 from appsec_review.review.models import Role
 from appsec_review.review.ranking import RankWeights
+from appsec_review.review.red_discovery import LEAD_ACCOUNTING_CEILING, RedOutputLimits
 from appsec_review.review.scoring.cwe_impact import MAX_REASON_CHARS as MAX_OVERRIDE_REASON, ImpactOverride
 from appsec_review.review.scoring.risk_model import DEFAULT_MODEL_DOCUMENT, DimensionModel, RiskModel
 
@@ -258,6 +259,8 @@ class InferenceSecurityReviewSettings:
     poc: PocSettings
     # Lane B review-unit rank weights (``settings.ranking``); semantic, defaults reproduce rank/2.
     ranking: RankWeights = RankWeights()
+    # Closed red-discovery-result/1 limits (``settings.red_output``); semantic: they decide admission.
+    red_output: RedOutputLimits = RedOutputLimits()
 
     def profile_for(self, role: Role) -> ModelProfileSettings:
         """The model profile a role uses; an unconfigured role uses ``default``."""
@@ -481,7 +484,7 @@ def _poc(value: object, enabled_providers: tuple[str, ...]) -> PocSettings:
 def parse_inference_review_settings(value: Mapping[str, Any]) -> InferenceSecurityReviewSettings:
     """Validate ``jobs.job_inference_security_review.settings`` into frozen typed settings."""
     settings = _table(value, _PREFIX, {"rounds", "teams", "lanes", "packages", "budgets", "retry", "models",
-                                       "roles", "routing", "scoring", "poc"}, {"ranking"})
+                                       "roles", "routing", "scoring", "poc"}, {"ranking", "red_output"})
 
     field = f"{_PREFIX}.rounds"
     rounds_value = _table(settings["rounds"], field, {"max_rounds", "stable_rounds_required",
@@ -535,6 +538,9 @@ def parse_inference_review_settings(value: Mapping[str, Any]) -> InferenceSecuri
         max_pages=_int(packages_value["max_pages"], f"{field}.max_pages", 1, 100),
         max_depth=_int(packages_value["max_depth"], f"{field}.max_depth", 1, 8),
     )
+    if packages.hunt_menu_partition_size > LEAD_ACCOUNTING_CEILING:
+        raise ValueError(f"{field}.hunt_menu_partition_size must not exceed {LEAD_ACCOUNTING_CEILING}: every lead "
+                         "of a package needs one red-discovery-result/1 lead accounting entry")
 
     field = f"{_PREFIX}.budgets"
     if isinstance(settings["budgets"], Mapping) and "max_cost_usd" in settings["budgets"]:
@@ -583,4 +589,5 @@ def parse_inference_review_settings(value: Mapping[str, Any]) -> InferenceSecuri
         models=MappingProxyType(models), roles=MappingProxyType(roles), routing=routing,
         scoring=scoring, poc=_poc(settings["poc"], scoring.enabled_providers),
         ranking=RankWeights.from_mapping(settings.get("ranking", {}), f"{_PREFIX}.ranking"),
+        red_output=RedOutputLimits.from_mapping(settings.get("red_output", {}), f"{_PREFIX}.red_output"),
     )

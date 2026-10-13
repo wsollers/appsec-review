@@ -361,6 +361,7 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
                 document = lane_failure(lane, works, f"{type(exc).__name__}", ledger_path, unit.unit_id)
                 unit.job.events.write("INFERENCE_REVIEW_LANE_FAILED", lane=lane.value, error_type=type(exc).__name__)
             document["ledger_shard"]["path"] = _artifact(run_root, ledger_path)["path"]
+            document["chain_seeds"]["path"] = _artifact(run_root, Path(document["chain_seeds"]["path"]))["path"]
             gaps = [f"{lane.value}: {document['counts'].get('gaps', 0)} gaps"] if document["counts"].get("gaps") else []
             unit.job.events.write("INFERENCE_REVIEW_LANE_COMPLETED", lane=lane.value, **{
                 key: value for key, value in document["counts"].items()})

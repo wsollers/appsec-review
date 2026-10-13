@@ -31,6 +31,7 @@ import time
 from typing import Any, Mapping
 
 from appsec_review.inference import ModelResult, ReviewModelRequest
+from tests.fixtures.inference_review.red import Proposal, red_result
 
 TURN = "appsec-review/worker-turn/1"
 PREDICATES = ("affected_construct", "attacker_input_control", "source_to_sink_reachability",
@@ -98,15 +99,14 @@ class ScriptedInfer:
         return {"predicate": predicate, "kind": kind, "entity_id": self.ids[key],
                 "rationale": rationale or f"{kind} {predicate} via {key} for the scripted review"}
 
-    def _claim(self, reference: str, affected: str, cwe: str | None, predicate: str, preconditions: list[str],
-               narrative: str, relations: list[dict[str, Any]]) -> dict[str, Any]:
-        citations: dict[str, list[str]] = {}
-        for relation in relations:
-            citations.setdefault(relation["predicate"], []).append(relation["entity_id"])
-        return {"claim_ref": reference, "affected_entities": [self.ids[affected]], "weakness_cwe": cwe,
-                "security_predicate": predicate, "preconditions": preconditions, "statement": NARRATIVES[narrative],
-                "citations": {key: sorted(set(values)) for key, values in citations.items()},
-                "proposed_relations": relations, "evidence_requests": []}
+    def _proposal(self, local: str, affected: str, cwe: str | None, predicate: str, preconditions: list[str],
+                  narrative: str, support: list[tuple[str, str]], lead: str | None = None) -> Proposal:
+        """One red proposal; ``support`` is (R4 predicate, fixture key) supporting references."""
+        return Proposal(local, [self.ids[affected]], cwe, predicate, preconditions, NARRATIVES[narrative],
+                        [(item, self.ids[key]) for item, key in support], [self.ids[lead]] if lead else [])
+
+    def _red(self, request: ReviewModelRequest, proposals: list[Proposal]) -> ModelResult:
+        return self._final(red_result(request.task_input, proposals))
 
     # -- dispatch ------------------------------------------------------------------------------------
     def __call__(self, request: ReviewModelRequest, *, timeout_seconds: int) -> ModelResult:
@@ -143,58 +143,55 @@ class ScriptedInfer:
 
     def _lead_red(self, request: ReviewModelRequest, task: str, payload: Mapping[str, Any]) -> ModelResult:
         lead = self._lead(payload)
-        empty = {"schema": "appsec-review/red-result/1", "claims": []}
         if lead == "sast_critical" and task == "lead_red_failure_modes":
             if not request.transcript:
                 return self._retrieve([
                     {"tool": "find", "parameters": {"path": "../appsec-multi-vuln-guide/expected-findings.json"}},
                     {"tool": "read_excerpt", "parameters": {"identity": self.ids["history:parse"]}},
                     {"tool": "find", "parameters": {"identity": self.ids["unit:native-main"]}}])
-            return self._final(empty)
+            return self._red(request, [])
         if lead == "sast_critical" and task in ("lead_red_stack", "lead_red_preconditions"):
-            relations = [self._relation(item, "unit:native-main") for item in PREDICATES]
-            relations.append(self._relation("affected_construct", "sast_critical"))
-            return self._final({"schema": "appsec-review/red-result/1", "claims": [self._claim(
+            support = [(item, "unit:native-main") for item in PREDICATES] + [("affected_construct", "sast_critical")]
+            return self._red(request, [self._proposal(
                 "c1", "native/src/parse.c", "CWE-120", "memory_corruption", ["attacker_controls_request_field"],
-                "C1-lead", relations)]})
+                "C1-lead", support, lead="sast_critical")])
         if lead == "sast_high" and task == "lead_red_stack":
-            return self._final({"schema": "appsec-review/red-result/1", "claims": [self._claim(
+            return self._red(request, [self._proposal(
                 "c2", "svc/api/handler.py", "CWE-89", "sql_injection", [], "C2",
-                [self._relation("affected_construct", "sast_high"),
-                 self._relation("attacker_input_control", "unit:py-svc")])]})
+                [("affected_construct", "sast_high"), ("attacker_input_control", "unit:py-svc")], lead="sast_high")])
         if lead == "codeql_high" and task == "lead_red_stack":
-            return self._final({"schema": "appsec-review/red-result/1", "claims": [self._claim(
-                "c3", "native/src/parse.c", "CWE-190", "integer_overflow", [], "C3",
-                [self._relation("affected_construct", "unit:native-main")])]})
+            return self._red(request, [self._proposal(
+                "c3", "native/src/parse.c", "CWE-190", "integer_error", [], "C3",
+                [("affected_construct", "unit:native-main")], lead="codeql_high")])
         if lead == "dep_high" and task == "lead_red_stack":
-            return self._final({"schema": "appsec-review/red-result/1", "claims": [self._claim(
-                "c4", "dep_high", "CWE-400", "denial_of_service", [], "C4", [])]})
-        return self._final(empty)
+            return self._red(request, [self._proposal(
+                "c4", "dep_high", "CWE-400", "resource_exhaustion", [], "C4", [], lead="dep_high")])
+        return self._red(request, [])
 
     def _hunter(self, request: ReviewModelRequest, payload: Mapping[str, Any]) -> ModelResult:
         leads = {self.keys.get(item["observation_id"]) for item in payload["package"]["lead_menu"]}
-        claims: list[dict[str, Any]] = []
+        proposals: list[Proposal] = []
         if "sast_critical" in leads and request.persona == "memory_safety_native":
-            claims = [
-                self._claim("c1", "native/src/parse.c", "CWE-120", "memory_corruption",
-                            ["attacker_controls_request_field"], "C1-hunt",
-                            [self._relation("affected_construct", "unit:native-main")]),
-                self._claim("h1", "native/src/io.c", "CWE-78", "command_injection", [], "H1",
-                            [self._relation("affected_construct", "unit:native-main")]),
+            proposals = [
+                self._proposal("c1", "native/src/parse.c", "CWE-120", "memory_corruption",
+                               ["attacker_controls_request_field"], "C1-hunt",
+                               [("affected_construct", "unit:native-main")], lead="sast_critical"),
+                self._proposal("h1", "native/src/io.c", "CWE-78", "command_injection", [], "H1",
+                               [("affected_construct", "unit:native-main")]),
             ]
         elif "sast_critical" in leads and request.persona == "injection_interpreters":
-            claims = [
-                self._claim("h2", "native/src/io.c", "CWE-416", "use_after_free", [], "H2", []),
-                self._claim("h3", "native/src/io.c", "CWE-78", "command_injection", ["attacker_has_root"], "H3", []),
+            proposals = [
+                self._proposal("h2", "native/src/io.c", "CWE-416", "use_after_free", [], "H2", []),
+                self._proposal("h3", "native/src/io.c", "CWE-78", "command_injection", ["attacker_has_root"], "H3", []),
             ]
-        return self._final({"schema": "appsec-review/red-result/1", "claims": claims})
+        return self._red(request, proposals)
 
     def _blue(self, payload: Mapping[str, Any]) -> ModelResult:
         claim, task = payload["claim"], payload["task"]
         result = {"schema": "appsec-review/blue-result/1", "claim_id": claim["claim_id"], "citations": {},
                   "proposed_relations": [], "evidence_requests": [], "task": task, "disposition": "unresolved",
                   "rationale": NARRATIVES["blue"].format(claim=claim["security_predicate"], task=task)}
-        if claim["security_predicate"] == "integer_overflow" and task == "blue_control":
+        if claim["security_predicate"] == "integer_error" and task == "blue_control":
             relation = self._relation("missing_or_ineffective_guard", "unit:native-main", "contradicts",
                                       NARRATIVES["blue-guard"])
             result.update(disposition="contradicts", rationale=NARRATIVES["blue-guard"],
@@ -205,7 +202,7 @@ class ScriptedInfer:
     def _verifier(self, request: ReviewModelRequest, payload: Mapping[str, Any]) -> ModelResult:
         claim = payload["claim"]
         predicate = claim["security_predicate"]
-        if predicate == "denial_of_service":
+        if predicate == "resource_exhaustion":
             raise RuntimeError("scripted verifier provider failure")
         base = {"schema": "appsec-review/verifier-result/1", "claim_id": claim["claim_id"], "citations": {},
                 "proposed_relations": [], "evidence_requests": [], "rationale": NARRATIVES["verifier"],

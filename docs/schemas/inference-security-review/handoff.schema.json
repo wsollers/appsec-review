@@ -110,6 +110,8 @@
               "outcome",
               "claims_total",
               "duplicate_proposals",
+              "leads_expected",
+              "leads_by_outcome",
               "claims_by_state",
               "cells_expected",
               "cells_by_status",
@@ -134,6 +136,40 @@
               "duplicate_proposals": {
                 "type": "integer",
                 "minimum": 0
+              },
+              "leads_expected": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Package leads of the lane (one per package and lead)."
+              },
+              "leads_by_outcome": {
+                "type": "object",
+                "additionalProperties": false,
+                "description": "red-discovery-result/1 lead accounting across each package's succeeded red cells. no_proposal is never clean coverage; unaccounted means no red cell of the package succeeded.",
+                "required": [
+                  "proposal",
+                  "no_proposal",
+                  "blocked",
+                  "unaccounted"
+                ],
+                "properties": {
+                  "proposal": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "no_proposal": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "blocked": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "unaccounted": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                }
               },
               "claims_by_state": {
                 "$ref": "common.schema.json#/$defs/claims_by_state"

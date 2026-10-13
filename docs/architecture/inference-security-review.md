@@ -211,10 +211,12 @@ Red cells run inside review teams in two lanes (see
 develops the attacker-controlled preconditions and explicit evidence requests
 for normalized leads. Both emit only `proposed` claims and evidence requests. They cannot set
 confirmation, severity, priority, exploitability, PoC eligibility, or chain state.
-Their versioned [red discovery output](red-discovery-output.md) carries lead accounting,
-provisional claims, source-to-sink path segments, chain seeds, citations, open obligations and
-gaps. A chain seed remains a hypothesis; canonical attack-chain composition follows claim
-adjudication.
+Their single versioned output contract, [`red-discovery-result/1`](red-discovery-output.md),
+carries lead accounting, provisional claims, source-to-sink path segments, chain seeds, citations,
+open obligations and gaps; `review/red_discovery.py` enforces its admission rules at cell
+validation. A chain seed remains a hypothesis: lane units persist the admitted seeds as a bounded
+run-owned artifact (`chain-seeds.json`, `appsec-review/red-chain-seeds/1`) for the attack-chain
+slice and never as claims; canonical attack-chain composition follows claim adjudication.
 Package construction does not prove a scanner lead. For C/C++ claims, accepted source-mapped
 post-macro and template-expanded Clang artifacts can help these pools assess the compiled construct;
 blue and blind verification still challenge the relevant predicates before adjudication.
@@ -980,6 +982,19 @@ hunt_max_units = 50
 hunt_max_claims_per_package = 5
 hunt_panel_rule = "hunt-panel/1"
 incomplete_gap_ratio = 0.25      # above this, the handoff is marked review_incomplete
+
+[jobs.job_inference_security_review.settings.red_output]
+max_result_bytes = 65536         # closed red-discovery-result/1 limits (admission rule 1); they
+max_proposals = 8                # tighten the schema's hard ceilings and enter the red cell validator
+max_obligations = 48
+max_taint_paths = 8
+max_path_nodes = 16              # taint path depth
+max_chain_seeds = 4
+max_chain_steps = 8
+max_evidence_refs = 64
+max_evidence_requests = 16
+max_gaps = 32
+max_text_chars = 2000
 
 [jobs.job_inference_security_review.settings.packages]
 hunt_menu_partition_size = 25    # package assembly bounds; admission and cutoff come from lanes
@@ -1784,6 +1799,44 @@ publication can label it. This is the slice 1 answer to open question 2.
   roll-up. An id the catalog does not contain is dropped from identity with an `evidence_gap`.
 - Preconditions and the security predicate are enum members. Statement and mechanism prose are
   excluded from identity.
+- The security predicate is a member of the closed, versioned `security-predicates/1`
+  vocabulary (`review/models.py::SecurityPredicate`, schema `common#/$defs/security_predicate`,
+  used by the claim and `red-discovery-result/1` schemas). It is the claim's security
+  consequence, rolled up from the weakness classes of the
+  [security tag taxonomy](security-tag-taxonomy.md) (sections 3 and 5) and their CERT C rules.
+  `claims.normalize_claim` canonicalizes spelling (case, whitespace, hyphens) and accepts only
+  members. Any other value becomes `other` and records an `evidence_gap` on the claim, as an
+  unaccepted CWE does: the claim survives, but its identity lost precision. It is never silently
+  mapped to another member. Worker results cannot reach that branch, because their schema closes
+  the field; a worker that invents a predicate fails cell validation as a `schema_error`. Claim
+  identity (`claim/2`) hashes the member value together with the vocabulary version, so the change
+  from free tokens altered every claim id once, and a later vocabulary version alters them again.
+  The roll-up below (`SECURITY_PREDICATE_CWE_ROLLUP`, `SECURITY_PREDICATE_CERT_ROLLUP`) documents
+  which member a weakness normally implies. It never rewrites a worker's predicate. CWE-20 is
+  deliberately unmapped, because it names no consequence.
+
+| `security_predicate` | Taxonomy weaknesses rolled up (CWE; CERT C) |
+|---|---|
+| `memory_corruption` | 119, 120, 121, 122, 787, 788, 805, 134 (format string), 457, 908; `arr30-c`, `arr36-c`, `fio30-c`, `exp33-c` |
+| `out_of_bounds_read` | 125, 126, 127 |
+| `use_after_free` | 416, 415 (double free), 825; `mem30-c` |
+| `integer_error` | 190, 191, 681, 682, 369; `int32-c` |
+| `injection` | 74, 79 (XSS), 90, 91, 611 (XXE), 643, 943 |
+| `command_injection` | 77, 78; `env33-c` |
+| `sql_injection` | 89, 564 |
+| `code_injection` | 94, 95, 96, 917 |
+| `path_traversal` | 22, 23, 36, 59 |
+| `ssrf` | 918 |
+| `deserialization` | 502 |
+| `authn_bypass` | 287, 306, 798 (hard-coded credentials), 290, 384 |
+| `authz_bypass` | 284, 285, 269, 352 (CSRF), 639 (IDOR), 862, 863 |
+| `info_disclosure` | 200, 209, 532, 668 |
+| `crypto_weakness` | 311, 319, 326, 327, 328, 330, 338, 347 |
+| `race_condition` | 362, 366, 367; `con43-c` |
+| `resource_exhaustion` | 400, 674, 770, 789, 1333 (ReDoS) |
+| `insecure_configuration` | 16, 250, 276, 732, 778 |
+| `supply_chain_compromise` | 494, 829, 1104, 1357, 1395 |
+| `other` | anything that fits no member; normalization records a gap for an unknown value |
 - Near-duplicates under different CWEs remain separate claims linked by a `possible_duplicate`
   nomination for later review. They are not merged in slice 1.
 
@@ -1797,7 +1850,7 @@ publication can label it. This is the slice 1 answer to open question 2.
   runtime checkpoint mechanism.
 - **Schemas to write first.** Write these under `docs/schemas/inference-security-review/`, before
   handlers: `ledger-event`, `claim`, `evidence-relation`, `cell-record` (terminal status and
-  attempts), `gap`, `worker-turn` (retrieve/final), `red-result`, `blue-result`,
+  attempts), `gap`, `worker-turn` (retrieve/final), `red-discovery-result`, `blue-result`,
   `verifier-result`, `adjudication`, `score-package`, `finding-package`, and the job
   manifest/handoff. Each role's `final.result` schema is the only output that role can produce;
   the allowed transitions follow from it.
@@ -2082,14 +2135,20 @@ will be enforced in code.
    `job_remediation_validation`, `job_final_publication_gate` and `job_final_report_publication`,
    as in [Placement and consumers](#placement-and-consumers). They are registered as planned
    producers so later work does not rename them.
-9. **`security_predicate` vocabulary — decided.** `security_predicate` becomes a closed,
-   versioned `SecurityPredicate` vocabulary, rolled up from the taxonomy's weakness classes, with
-   `other` plus a gap for anything unmapped. Because it is part of claim identity, the change
-   alters claim ids once.
-10. **Red output contract — decided.** `red-discovery-result/1` ([red discovery output
-    contract](red-discovery-output.md)) is the single output contract for `hypothesis_hunter` and
-    `red_team_analyst`. `red-result/1` is retired. Its taint-path hops may cite accepted
-    `query_code_graph` facts.
+9. **`security_predicate` vocabulary — decided and implemented.** `security_predicate` is the
+   closed, versioned `security-predicates/1` vocabulary (`review/models.py::SecurityPredicate`),
+   rolled up from the taxonomy's weakness classes, with `other` plus an `evidence_gap` for an
+   unknown value. The member list and the roll-up are in [R7](#r7-claim-identity-normalization).
+   Because it is part of claim identity, the change altered claim ids once (`claim/2`).
+10. **Red output contract — decided and implemented.** `red-discovery-result/1` ([red discovery
+    output contract](red-discovery-output.md)) is the single output contract for
+    `hypothesis_hunter` and `red_team_analyst`; `red-result/1` and its schema are deleted. The cell
+    validator applies the contract's admission rules (`review/red_discovery.py`), and lane
+    normalization turns proposals into claims and cited references and observed taint hops into
+    relations. Those hops may cite accepted `query_code_graph` facts; a hop whose basis is
+    `analyst_hypothesis` never becomes a relation. Normalization also records evidence requests,
+    named gaps, exact lead accounting (fed to the handoff accounting) and chain seeds, which are
+    stored as a run-owned artifact and never as claims.
 11. **CWE impact class — decided.** The `application_risk_matrix/2` impact class is derived from the
     pinned MITRE CWE catalog's common consequences (confidentiality, integrity and availability
     scopes), with an explicit override table for exceptions. It replaces the hand-maintained table.

@@ -1854,6 +1854,22 @@ hunt_max_claims_per_package = 5
 hunt_panel_rule = "hunt-panel/1"
 incomplete_gap_ratio = 0.25
 
+# Closed limits on a red cell's red-discovery-result/1 (docs/architecture/red-discovery-output.md,
+# admission rule 1). They tighten the schema's hard ceilings; a result over any limit is rejected as
+# a schema_error cell gap. Changing one changes the red cell validator and therefore red cell reuse.
+[jobs.job_inference_security_review.settings.red_output]
+max_result_bytes = 65536
+max_proposals = 8
+max_obligations = 48
+max_taint_paths = 8
+max_path_nodes = 16
+max_chain_seeds = 4
+max_chain_steps = 8
+max_evidence_refs = 64
+max_evidence_requests = 16
+max_gaps = 32
+max_text_chars = 2000
+
 # Lane B review-unit rank weights (review-unit-rank/2), in points of the 0-1000 signal scale. These
 # defaults are the shipped rank; changing one reorders units and the hunt cutoff. See
 # docs/operations/inference-security-review.md "Tuning lane B ranking".

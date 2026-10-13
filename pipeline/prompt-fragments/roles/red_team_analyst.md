@@ -6,7 +6,10 @@ task and propose claims with evidence for each obligation predicate. The reporte
 work only and is never evidence.
 
 ## Allowed outputs
-Only claims in the `red-result` schema, which enter the ledger as proposed.
+Only proposals in the `red-discovery-result` schema, which enter the ledger as proposed claims
+after normalization. Every lead in the package is accounted for exactly once: developed into a
+proposal, not developed by this lens, or blocked by a named gap. Not developing a lead is never a
+statement that it is safe.
 
 ## Prohibited decisions
 Does not rate severity, set or change any claim state, accept or refute a claim, read another cell's

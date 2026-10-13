@@ -91,7 +91,7 @@ def spec(**overrides) -> CellSpec:
         round=0, round_delta_sha256=None, evidence_set=(LEAD,), guidance_bundle_sha256="4" * 64,
         guidance_text=GUIDANCE, provider="claude-cli", model="claude-opus-5-5", reasoning="high",
         max_input_tokens=32000, max_output_tokens=8000, timeout_seconds=60,
-        output_schema="appsec-review/red-result/1", validator_version="red-result-validator/1")
+        output_schema="appsec-review/red-discovery-result/1", validator_version="red-discovery-validator/1")
     values.update(overrides)
     return CellSpec(**values)
 
@@ -284,7 +284,7 @@ def test_fingerprint_tracks_semantic_inputs_but_not_capacity() -> None:
     base = cell_fingerprint(spec(), capability())
     for changed in (spec(evidence_set=(LEAD, SPAN)), spec(guidance_bundle_sha256="5" * 64),
                     spec(model="claude-sonnet-5"), spec(provider="anthropic-api"),
-                    spec(validator_version="red-result-validator/2"), spec(task_input={"lead": SPAN}),
+                    spec(validator_version="red-discovery-validator/2"), spec(task_input={"lead": SPAN}),
                     spec(round_delta_sha256="6" * 64), spec(persona="")):
         assert cell_fingerprint(changed, capability()) != base
     assert cell_fingerprint(spec(), capability(max_queries=5)) != base

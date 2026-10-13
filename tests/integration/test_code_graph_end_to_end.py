@@ -53,6 +53,7 @@ from appsec_review.review.models import IntegrityError
 from appsec_review.review.scope import accept_manifest
 from appsec_review.runtime.runner import JobRunner
 from appsec_review.storage import atomic_json, file_sha256
+from tests.fixtures.inference_review.red import Proposal, evidence_ref, red_result
 
 ROOT = Path(__file__).resolve().parents[2]
 EXPORTS = ROOT / "tests" / "fixtures" / "graph" / "codeql_export"
@@ -334,7 +335,7 @@ class GraphWorker:
         self.calls.append({"role": request.role, "task": task.get("task"), "turn": len(request.transcript) // 2})
         payload = task["input"]
         if request.role == "red_team_analyst":
-            return self._lead_red(task["task"], payload)
+            return self._lead_red(task, payload)
         if request.role == "hypothesis_hunter":
             return self._hunter(request, payload)
         if request.role == "blue_team_refuter":
@@ -347,27 +348,38 @@ class GraphWorker:
             return self._verifier(request, payload)
         raise AssertionError(request.role)
 
-    def _lead_red(self, task: str, payload: Mapping[str, Any]) -> ModelResult:
-        empty = {"schema": "appsec-review/red-result/1", "claims": []}
+    def _lead_red(self, cell_input: Mapping[str, Any], payload: Mapping[str, Any]) -> ModelResult:
         context = {entry["role"]: entry["id"] for entry in payload["package"]["context"]
                    if entry["kind"] in GRAPH_KINDS and entry["role"] in {"path", "sink"}}
-        if task != "lead_red_stack" or {"path", "sink"} - set(context):
-            return self._final(empty)
-        relations = [
-            {"predicate": "affected_construct", "kind": "supports", "entity_id": context["sink"],
-             "rationale": "the memcpy sink site is the affected construct"},
-            {"predicate": "source_to_sink_reachability", "kind": "supports", "entity_id": context["path"],
-             "rationale": "the correlated dataflow path reaches the sink"}]
-        return self._final({"schema": "appsec-review/red-result/1", "claims": [{
-            "claim_ref": "g1", "affected_entities": [context["sink"]], "weakness_cwe": None,
-            "security_predicate": "memory_corruption", "preconditions": ["attacker_controls_environment_variable"],
-            "statement": "the INPUT_LEN environment variable bounds a memcpy into a 64 byte stack buffer",
-            "citations": {item["predicate"]: [item["entity_id"]] for item in relations},
-            "proposed_relations": relations, "evidence_requests": []}]})
+        if cell_input["task"] != "lead_red_stack" or {"path", "sink"} - set(context):
+            return self._final(red_result(cell_input))
+        lead = payload["package"]["lead_menu"][0]["observation_id"]
+        # The sink is cited by the proposal; the correlated dataflow path is cited only by the observed
+        # (accepted_tool_path) hop of the taint path, and the hypothesized hop from the environment
+        # source cites the lead observation, which therefore never becomes a relation.
+        taint = {"local_id": "g1-path", "source_node": "env", "sink_node": "copy", "basis": "partial",
+                 "nodes": [{"local_id": "env", "role": "source", "entity_id": None,
+                            "description": "INPUT_LEN environment variable"},
+                           {"local_id": "len", "role": "transform", "entity_id": context["path"],
+                            "description": "length parsed from the environment"},
+                           {"local_id": "copy", "role": "sink", "entity_id": context["sink"],
+                            "description": "memcpy into a 64 byte stack buffer"}],
+                 "edges": [{"from_node": "env", "to_node": "len", "kind": "data", "basis": "analyst_hypothesis",
+                            "evidence_ids": ["g1-lead"], "open_question": "is getenv the only writer?"},
+                           {"from_node": "len", "to_node": "copy", "kind": "data", "basis": "accepted_tool_path",
+                            "evidence_ids": ["g1-path-ref"], "open_question": None}],
+                 "gap_ids": []}
+        proposal = Proposal(
+            "g1", [context["sink"]], None, "memory_corruption", ["attacker_controls_environment_variable"],
+            "the INPUT_LEN environment variable bounds a memcpy into a 64 byte stack buffer",
+            support=[("affected_construct", context["sink"])], leads=[lead], taint=taint,
+            extra_refs=[evidence_ref("g1-path-ref", context["path"], "source_to_sink_reachability"),
+                        evidence_ref("g1-lead", lead, "attacker_input_control")])
+        return self._final(red_result(cell_input, [proposal]))
 
     def _hunter(self, request, payload: Mapping[str, Any]) -> ModelResult:
         sinks = sorted(entry["id"] for entry in payload["package"]["context"] if entry["role"] == "sink")
-        empty = {"schema": "appsec-review/red-result/1", "claims": []}
+        empty = red_result(request.task_input)
         if payload.get("strategy") != "sink_up" or not sinks:
             return self._final(empty)
         if not request.transcript:
@@ -544,6 +556,25 @@ def test_a_bridged_codeql_lead_is_supported_by_direct_graph_relations(pipeline) 
     states = {row["payload"]["state"] for row in ShardSet(pipeline.run_root, shards).relations(
         shards, kinds=("DERIVED_FROM",)) if row["source_id"] == path["identity"] and row["payload"]}
     assert states == {"bridged"}
+
+
+def test_red_taint_hops_cite_graph_facts_and_hypothesized_hops_stay_unpromoted(pipeline) -> None:
+    lane = _json(_review_unit(pipeline, "lead_review.teams") / "lane.json")
+    reds = {row["cell_id"] for row in lane["capabilities"] if row["role"] == "red_team_analyst"}
+    ledger = [json.loads(line) for line in (_review_unit(pipeline, "publication.publish_claim_ledger")
+                                            / "claim-ledger.jsonl").read_text(encoding="utf-8").splitlines()]
+    red = [event["body"]["relation"] for event in ledger
+           if event["kind"] == "relation_added" and event["body"]["relation"]["producing_cell_id"] in reds]
+    cited = {(item["predicate"], item["entity_kind"], item["admissibility"]) for item in red}
+    # The accepted_tool_path hop's graph fact became a direct relation through resolve_relation...
+    assert ("source_to_sink_reachability", "dataflow_path", "direct_for_mapped_predicate") in cited
+    assert ("affected_construct", "sink_site", "direct_for_mapped_predicate") in cited
+    # ...while the analyst_hypothesis hop's citation (the lead observation) never became one.
+    assert not any(item["entity_kind"] == "tool_observation" for item in red)
+    # Every package lead is accounted; a lens that proposed nothing is never clean coverage.
+    outcomes = {lead["outcome"] for leads in lane["lead_accounting"].values() for lead in leads.values()}
+    assert "proposal" in outcomes and outcomes <= {"proposal", "no_proposal", "blocked", "unaccounted"}
+    assert _json(pipeline.run_root / lane["chain_seeds"]["path"])["seeds"] == []
 
 
 def test_scoring_reads_graph_factors(pipeline) -> None:

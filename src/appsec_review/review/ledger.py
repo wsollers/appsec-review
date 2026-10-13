@@ -18,7 +18,7 @@ from typing import Any, Iterable, Mapping, Sequence
 from appsec_review.review.identity import make_id, sha256_hex
 from appsec_review.review.models import (
     Admissibility, CellRecord, CellStatus, Claim, ClaimState, EvidenceRelation, Gap, GapClass,
-    IntegrityError, Lane, Predicate, RelationKind, Role,
+    IntegrityError, Lane, Predicate, RelationKind, Role, SecurityPredicate,
 )
 from appsec_review.storage.atomic import atomic_bytes, canonical_json
 
@@ -72,7 +72,7 @@ def check_transition(from_state: ClaimState, to_state: ClaimState) -> None:
 def claim_json(claim: Claim) -> dict[str, Any]:
     return {"schema": CLAIM_SCHEMA, "claim_id": claim.claim_id, "lane": claim.lane.value,
             "package_id": claim.package_id, "affected_entities": list(claim.affected_entities),
-            "weakness_cwe": claim.weakness_cwe, "security_predicate": claim.security_predicate,
+            "weakness_cwe": claim.weakness_cwe, "security_predicate": SecurityPredicate(claim.security_predicate).value,
             "preconditions": list(claim.preconditions), "statement": claim.statement,
             "state": claim.state.value, "duplicate_of": claim.duplicate_of,
             "origin_cell_ids": list(claim.origin_cell_ids)}
@@ -81,7 +81,7 @@ def claim_json(claim: Claim) -> dict[str, Any]:
 def claim_from_json(value: Mapping[str, Any]) -> Claim:
     return Claim(claim_id=value["claim_id"], lane=Lane(value["lane"]), package_id=value["package_id"],
                  affected_entities=tuple(value["affected_entities"]), weakness_cwe=value["weakness_cwe"],
-                 security_predicate=value["security_predicate"], preconditions=tuple(value["preconditions"]),
+                 security_predicate=SecurityPredicate(value["security_predicate"]), preconditions=tuple(value["preconditions"]),
                  statement=value["statement"], state=ClaimState(value["state"]),
                  duplicate_of=value["duplicate_of"], origin_cell_ids=tuple(value["origin_cell_ids"]))
 

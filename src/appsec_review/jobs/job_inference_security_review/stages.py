@@ -357,8 +357,10 @@ def audit(lanes: Sequence[Mapping[str, Any]], shard_paths: Sequence[Path], incom
     projection = project(merged.events)
     expected_cells = {cell_id: Lane(lane) for item in lanes for cell_id, lane in item["expected_cells"].items()}
     expected_packages = {package_id: Lane(lane) for item in lanes for package_id, lane in item["packages"].items()}
+    lead_accounting = {package_id: leads for item in lanes
+                       for package_id, leads in (item.get("lead_accounting") or {}).items()}
     accounting = exact_accounting(projection, expected_cells, expected_packages,
-                                  incomplete_gap_ratio=incomplete_gap_ratio)
+                                  incomplete_gap_ratio=incomplete_gap_ratio, lead_accounting=lead_accounting)
     return accounting, projection, merged
 
 

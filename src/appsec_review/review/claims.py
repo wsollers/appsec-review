@@ -1,8 +1,8 @@
 """Claim identity normalization (design R7).
 
-Identity covers the sorted accepted affected entities, the validated CWE, the security predicate,
-and the sorted closed preconditions. Statement prose, lane, package, and origin are excluded, so the
-same condition found in both lanes merges by identity.
+Identity covers the sorted accepted affected entities, the validated CWE, the security predicate
+(a ``security-predicates/1`` member), and the sorted closed preconditions. Statement prose, lane,
+package, and origin are excluded, so the same condition found in both lanes merges by identity.
 """
 from __future__ import annotations
 
@@ -12,12 +12,15 @@ from typing import Callable, Collection, Iterable, Sequence
 
 from appsec_review.retrieval.model import EntityKind, LogicalIdentity
 from appsec_review.review.identity import make_id
-from appsec_review.review.models import Claim, Gap, GapClass, Lane, make_gap
+from appsec_review.review.models import (
+    SECURITY_PREDICATES_VERSION, Claim, Gap, GapClass, Lane, SecurityPredicate, make_gap,
+)
 from appsec_review.review.obligations import parse_precondition
 
-CLAIM_IDENTITY_VERSION = 1
+# Version 2: the security predicate is a closed security-predicates/1 member and the vocabulary
+# version is part of the identity body (claim ids changed once with this vocabulary).
+CLAIM_IDENTITY_VERSION = 2
 _CWE = re.compile(r"^CWE-0*([1-9][0-9]{0,5})$")
-_SECURITY_PREDICATE = re.compile(r"^[a-z][a-z0-9_]{0,95}$")
 
 SymbolLookup = Callable[[str], "str | None"]
 
@@ -37,11 +40,15 @@ def normalize_cwe(value: str) -> str | None:
     return f"CWE-{int(match.group(1))}" if match else None
 
 
-def normalize_security_predicate(value: str) -> str:
+def normalize_security_predicate(value: str | SecurityPredicate) -> tuple[SecurityPredicate, bool]:
+    """Return ``(member, known)``. Spelling is canonicalized (case, whitespace, hyphens) as for
+    preconditions; a value that is still not a ``security-predicates/1`` member is ``OTHER`` with
+    ``known`` false, so the caller records the loss. It is never silently mapped elsewhere."""
     text = re.sub(r"[\s\-]+", "_", str(value).strip().lower())
-    if not _SECURITY_PREDICATE.fullmatch(text):
-        raise ValueError("security predicate must be a bounded snake_case token")
-    return text
+    try:
+        return SecurityPredicate(text), True
+    except ValueError:
+        return SecurityPredicate.OTHER, False
 
 
 def normalize_entities(entities: Iterable[str], enclosing_symbol: SymbolLookup | None = None) -> tuple[str, ...]:
@@ -62,25 +69,31 @@ def normalize_entities(entities: Iterable[str], enclosing_symbol: SymbolLookup |
     return tuple(sorted(normalized))
 
 
-def claim_identity(affected_entities: Sequence[str], weakness_cwe: str | None, security_predicate: str,
-                   preconditions: Sequence[str]) -> str:
+def claim_identity(affected_entities: Sequence[str], weakness_cwe: str | None,
+                   security_predicate: SecurityPredicate | str, preconditions: Sequence[str]) -> str:
+    """The canonical claim id; ``security_predicate`` must be a ``security-predicates/1`` member."""
     return make_id("claim", CLAIM_IDENTITY_VERSION, {
         "affected_entities": list(affected_entities), "weakness_cwe": weakness_cwe,
-        "security_predicate": security_predicate, "preconditions": list(preconditions),
+        "security_predicate": SecurityPredicate(security_predicate).value,
+        "security_predicates": SECURITY_PREDICATES_VERSION, "preconditions": list(preconditions),
     })
 
 
 def normalize_claim(*, lane: Lane, package_id: str, affected_entities: Iterable[str], weakness_cwe: str | None,
-                    security_predicate: str, preconditions: Iterable[str], statement: str,
+                    security_predicate: str | SecurityPredicate, preconditions: Iterable[str], statement: str,
                     accepted_cwe_ids: Collection[str], enclosing_symbol: SymbolLookup | None = None,
                     origin_cell_ids: Iterable[str] = (), round: int = 0) -> ClaimNormalization:
-    """Normalize a worker claim; malformed entities, predicates, or preconditions raise ``ValueError``.
+    """Normalize a worker claim; malformed entities or preconditions raise ``ValueError``.
 
     A CWE that is malformed or absent from ``accepted_cwe_ids`` (the accepted MITRE CWE reference,
-    no parent roll-up) is dropped from identity and reported as an ``evidence_gap``.
+    no parent roll-up) is dropped from identity and reported as an ``evidence_gap``. A security
+    predicate outside ``security-predicates/1`` becomes ``other`` and is likewise reported as an
+    ``evidence_gap`` on the claim: the claim survives, but its identity lost precision. (Worker
+    results cannot reach this branch: their schemas close the field to the vocabulary, so a worker
+    that invents a predicate fails cell validation as a ``schema_error`` instead.)
     """
     entities = normalize_entities(affected_entities, enclosing_symbol)
-    predicate = normalize_security_predicate(security_predicate)
+    predicate, known_predicate = normalize_security_predicate(security_predicate)
     conditions = tuple(sorted({parse_precondition(item).value for item in preconditions}))
     cwe: str | None = None
     rejected_cwe = False
@@ -92,17 +105,21 @@ def normalize_claim(*, lane: Lane, package_id: str, affected_entities: Iterable[
         else:
             rejected_cwe = True
     claim_id = claim_identity(entities, cwe, predicate, conditions)
-    gaps: tuple[Gap, ...] = ()
+    gaps: list[Gap] = []
     if rejected_cwe:
-        gaps = (make_gap(GapClass.EVIDENCE_GAP, claim_id,
-                         "weakness is not an accepted CWE reference identity", round=round),)
+        gaps.append(make_gap(GapClass.EVIDENCE_GAP, claim_id,
+                             "weakness is not an accepted CWE reference identity", round=round))
+    if not known_predicate:
+        gaps.append(make_gap(GapClass.EVIDENCE_GAP, claim_id,
+                             f"security predicate is not a {SECURITY_PREDICATES_VERSION} member; "
+                             f"normalized to other", round=round))
     claim = Claim(
         claim_id=claim_id, lane=Lane(lane), package_id=package_id, affected_entities=entities,
         weakness_cwe=cwe, security_predicate=predicate, preconditions=conditions,
         statement=" ".join(str(statement).split()),
         origin_cell_ids=tuple(sorted(set(origin_cell_ids))),
     )
-    return ClaimNormalization(claim, gaps)
+    return ClaimNormalization(claim, tuple(gaps))
 
 
 def possible_duplicates(claims: Iterable[Claim]) -> tuple[tuple[str, str], ...]:
