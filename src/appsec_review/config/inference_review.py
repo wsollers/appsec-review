@@ -15,6 +15,12 @@ from types import MappingProxyType
 from typing import Any, Mapping
 
 from appsec_review.review.models import Role
+from appsec_review.review.ranking import RankWeights
+from appsec_review.review.lead_families import FAMILIES as LEAD_FAMILIES
+from appsec_review.review.red_discovery import LEAD_ACCOUNTING_CEILING, RED_ROLES, RedOutputLimits
+from appsec_review.review.scoring.cwe_impact import MAX_REASON_CHARS as MAX_OVERRIDE_REASON, ImpactOverride
+from appsec_review.review.scoring.risk_model import DEFAULT_MODEL_DOCUMENT, DimensionModel, RiskModel
+from appsec_review.review.ship_block import ShipBlockSettings
 
 
 JOB_ID = "job_inference_security_review"
@@ -26,6 +32,8 @@ SEMANTIC_VIEW_SCHEMA = "appsec-review/inference-review-semantic-settings/1"
 REPORTED_SEVERITIES = ("critical", "high", "medium", "low", "info", "unknown")
 REASONING_LEVELS = ("low", "medium", "high", "xhigh", "max")
 SCORING_PROVIDERS = ("cvss_v4", "cvss_v31_compat", "application_risk_matrix", "ssvc_decision")
+RISK_MATRIX_IMPLEMENTATIONS = ("application_risk_matrix/1", "application_risk_matrix/2")
+RISK_MODEL_KEYS = ("exploitability", "environmental", "technical_severity")
 CVSS_METRIC_GROUPS = ("base", "threat", "environmental", "supplemental")
 IMPACT_CLASSES = ("critical", "high", "medium", "low")
 ELIGIBILITY_OPERATORS = ("in",)
@@ -194,6 +202,8 @@ class RoutingSettings:
 class ScoringProviderSettings:
     implementation: str
     metric_groups: tuple[str, ...] = ()
+    # application_risk_matrix/2 only: the declarative exploitability/environmental/severity model.
+    model: RiskModel | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -202,7 +212,9 @@ class ScoringSettings:
     priority_policy: str
     override_policy: str
     providers: Mapping[str, ScoringProviderSettings]
-    cwe_impact_classes: Mapping[str, str]   # application_risk_matrix impact_class axis
+    # Exceptions to cwe-impact-derivation/1 (decision 11); every other CWE's impact class is derived
+    # from the run's pinned MITRE CWE catalog.
+    cwe_impact_overrides: Mapping[str, ImpactOverride]
 
 
 @dataclass(frozen=True, slots=True)
@@ -235,6 +247,27 @@ class PocSettings:
 
 
 @dataclass(frozen=True, slots=True)
+class VerificationSettings:
+    """``settings.verification`` (decision 2).
+
+    ``require_distinct_model_for_ship_blocking``: a ship-blocking candidate is published as
+    ``ship_blocking`` only when its verifier's model profile (provider and model) differs from every
+    red cell's on the claim; otherwise ``ship-block-policy/1`` publishes it as
+    ``ship_blocking_pending_distinct_verification``. Confirmation itself (R5/R6) never depends on it.
+    """
+
+    require_distinct_model_for_ship_blocking: bool = True
+
+    @classmethod
+    def from_mapping(cls, value: object, field: str) -> "VerificationSettings":
+        if value is None:
+            return cls()
+        table = _table(value, field, set(), {"require_distinct_model_for_ship_blocking"})
+        return cls(_bool(table.get("require_distinct_model_for_ship_blocking", True),
+                         f"{field}.require_distinct_model_for_ship_blocking"))
+
+
+@dataclass(frozen=True, slots=True)
 class InferenceSecurityReviewSettings:
     rounds: RoundSettings
     teams: TeamSettings
@@ -247,6 +280,37 @@ class InferenceSecurityReviewSettings:
     routing: RoutingSettings
     scoring: ScoringSettings
     poc: PocSettings
+    # Lane B review-unit rank weights (``settings.ranking``); semantic, defaults reproduce rank/2.
+    ranking: RankWeights = RankWeights()
+    # Closed red-discovery-result/1 limits (``settings.red_output``); semantic: they decide admission.
+    red_output: RedOutputLimits = RedOutputLimits()
+    # ship-block-policy/1 thresholds (``settings.ship_block``, decision 1) and verifier model
+    # distinctness (``settings.verification``, decision 2); both semantic.
+    ship_block: ShipBlockSettings = ShipBlockSettings()
+    verification: VerificationSettings = VerificationSettings()
+
+    def verifier_distinctness(self) -> dict[str, Any]:
+        """How the configured verifier profile relates to the red roles' profiles.
+
+        ``distinct`` is true when the ``independent_verifier`` profile's (provider, model) differs
+        from every red role's. With the requirement on and ``distinct`` false, every ship-blocking
+        candidate is published pending distinct verification; ``warning`` names that state.
+        """
+        verifier = self.profile_for(Role.INDEPENDENT_VERIFIER)
+        reds = {role.value: self.profile_for(role) for role in sorted(RED_ROLES, key=lambda item: item.value)}
+        same = sorted(role for role, profile in reds.items()
+                      if (profile.provider, profile.model) == (verifier.provider, verifier.model))
+        required = self.verification.require_distinct_model_for_ship_blocking
+        warning = None
+        if required and same:
+            warning = (f"verification.require_distinct_model_for_ship_blocking is on but the independent_verifier "
+                       f"profile resolves to the same model ({verifier.provider}/{verifier.model}) as "
+                       f"{', '.join(same)}; ship-blocking candidates will be published as "
+                       "ship_blocking_pending_distinct_verification")
+        return {"require_distinct_model_for_ship_blocking": required,
+                "verifier": {"provider": verifier.provider, "model": verifier.model},
+                "red": {role: {"provider": profile.provider, "model": profile.model} for role, profile in reds.items()},
+                "distinct": not same, "warning": warning}
 
     def profile_for(self, role: Role) -> ModelProfileSettings:
         """The model profile a role uses; an unconfigured role uses ``default``."""
@@ -327,8 +391,11 @@ def _role(name: str, value: object, profiles: Mapping[str, ModelProfileSettings]
 
 def _scoring(value: object) -> ScoringSettings:
     field = f"{_PREFIX}.scoring"
-    table = _table(value, field, {"enabled_providers", "priority_policy", "override_policy", "providers",
-                                  "cwe_impact_classes"})
+    if isinstance(value, Mapping) and "cwe_impact_classes" in value:
+        raise ValueError(f"{field}.cwe_impact_classes was replaced by {field}.cwe_impact_overrides: impact classes "
+                         "are derived from the pinned MITRE CWE catalog and the table lists only exceptions")
+    table = _table(value, field, {"enabled_providers", "priority_policy", "override_policy", "providers"},
+                   {"cwe_impact_overrides"})
     enabled = _choices(table["enabled_providers"], f"{field}.enabled_providers", SCORING_PROVIDERS)
     providers_value = table["providers"]
     if not isinstance(providers_value, Mapping):
@@ -341,33 +408,74 @@ def _scoring(value: object) -> ScoringSettings:
         if name not in enabled:
             raise ValueError(f"{provider_field} configures a provider that is not enabled")
         is_cvss = name in {"cvss_v4", "cvss_v31_compat"}
+        is_matrix = name == "application_risk_matrix"
         provider = _table(provider_value, provider_field, {"implementation"},
-                          {"metric_groups"} if is_cvss else set())
+                          {"metric_groups"} if is_cvss else set(RISK_MODEL_KEYS) if is_matrix else set())
         groups = _choices(provider.get("metric_groups", ["base"] if is_cvss else []),
                           f"{provider_field}.metric_groups", CVSS_METRIC_GROUPS, empty=not is_cvss)
         if is_cvss and "base" not in groups:
             raise ValueError(f"{provider_field}.metric_groups must include base")
-        providers[name] = ScoringProviderSettings(
-            _str(provider["implementation"], f"{provider_field}.implementation", _RULE_ID), groups)
-    classes_value = table["cwe_impact_classes"]
-    if not isinstance(classes_value, Mapping):
-        raise ValueError(f"{field}.cwe_impact_classes must be a table")
-    classes: dict[str, str] = {}
-    for cwe, impact in classes_value.items():
-        if not isinstance(cwe, str) or not _CWE.fullmatch(cwe):
-            raise ValueError(f"{field}.cwe_impact_classes has an invalid CWE id: {cwe}")
-        if impact not in IMPACT_CLASSES:
-            raise ValueError(f"{field}.cwe_impact_classes.{cwe} must be one of: {', '.join(IMPACT_CLASSES)}")
-        classes[cwe] = impact
-    if "application_risk_matrix" in enabled and not classes:
-        raise ValueError(f"{field}.cwe_impact_classes is required by application_risk_matrix")
+        implementation = _str(provider["implementation"], f"{provider_field}.implementation", _RULE_ID)
+        model = None
+        if is_matrix:
+            if implementation not in RISK_MATRIX_IMPLEMENTATIONS:
+                raise ValueError(f"{provider_field}.implementation must be one of: "
+                                 f"{', '.join(RISK_MATRIX_IMPLEMENTATIONS)}")
+            if implementation == "application_risk_matrix/2":
+                model = _risk_model(provider, provider_field)
+            elif set(provider) & set(RISK_MODEL_KEYS):
+                raise ValueError(f"{provider_field}: application_risk_matrix/1 takes no "
+                                 f"{'/'.join(RISK_MODEL_KEYS)} tables")
+        providers[name] = ScoringProviderSettings(implementation, groups, model)
     return ScoringSettings(
         enabled_providers=enabled,
         priority_policy=_str(table["priority_policy"], f"{field}.priority_policy", _RULE_ID),
         override_policy=_str(table["override_policy"], f"{field}.override_policy", _RULE_ID),
         providers=MappingProxyType(providers),
-        cwe_impact_classes=MappingProxyType(dict(sorted(classes.items()))),
+        cwe_impact_overrides=_impact_overrides(table.get("cwe_impact_overrides", {}),
+                                               f"{field}.cwe_impact_overrides"),
     )
+
+
+def _impact_overrides(value: object, field: str) -> Mapping[str, ImpactOverride]:
+    """Exceptions to ``cwe-impact-derivation/1``: ``"CWE-n" = { impact_class = "...", reason = "..." }``."""
+    if not isinstance(value, Mapping):
+        raise ValueError(f"{field} must be a table")
+    overrides: dict[str, ImpactOverride] = {}
+    for cwe, entry_value in value.items():
+        if not isinstance(cwe, str) or not _CWE.fullmatch(cwe):
+            raise ValueError(f"{field} has an invalid CWE id: {cwe}")
+        entry = _table(entry_value, f"{field}.{cwe}", {"impact_class", "reason"})
+        if entry["impact_class"] not in IMPACT_CLASSES:
+            raise ValueError(f"{field}.{cwe}.impact_class must be one of: {', '.join(IMPACT_CLASSES)}")
+        reason = entry["reason"]
+        if not isinstance(reason, str) or not reason.strip() or len(reason) > MAX_OVERRIDE_REASON:
+            raise ValueError(f"{field}.{cwe}.reason must be a non-empty string of at most "
+                             f"{MAX_OVERRIDE_REASON} characters")
+        overrides[cwe] = ImpactOverride(entry["impact_class"], reason)
+    return MappingProxyType(dict(sorted(overrides.items())))
+
+
+def _risk_model(provider: Mapping[str, Any], field: str) -> RiskModel:
+    """``application_risk_matrix/2`` model; an absent table keeps its documented default whole."""
+    dimensions: dict[str, DimensionModel] = {}
+    for name in ("exploitability", "environmental"):
+        default = DEFAULT_MODEL_DOCUMENT[name]
+        value = _table(provider.get(name, default), f"{field}.{name}", {"points", "bands"})
+        points = value["points"]
+        if not isinstance(points, Mapping) or any(not isinstance(table, Mapping) for table in points.values()):
+            raise ValueError(f"{field}.{name}.points must be a table of factor tables")
+        try:
+            dimensions[name] = DimensionModel(name, points, value["bands"])
+        except ValueError as exc:
+            raise ValueError(f"{field}.{exc}") from exc
+    matrix = provider.get("technical_severity", DEFAULT_MODEL_DOCUMENT["technical_severity"])
+    if not isinstance(matrix, Mapping):
+        raise ValueError(f"{field}.technical_severity must be a table")
+    try:
+        return RiskModel(dimensions["exploitability"], dimensions["environmental"], matrix)
+    except ValueError as exc:
+        raise ValueError(f"{field}.{exc}") from exc
 
 
 _POC_DENY_ONLY = ("allow_host_execution", "allow_production_services", "allow_real_credentials",
@@ -426,7 +534,8 @@ def _poc(value: object, enabled_providers: tuple[str, ...]) -> PocSettings:
 def parse_inference_review_settings(value: Mapping[str, Any]) -> InferenceSecurityReviewSettings:
     """Validate ``jobs.job_inference_security_review.settings`` into frozen typed settings."""
     settings = _table(value, _PREFIX, {"rounds", "teams", "lanes", "packages", "budgets", "retry", "models",
-                                       "roles", "routing", "scoring", "poc"})
+                                       "roles", "routing", "scoring", "poc"},
+                      {"ranking", "red_output", "ship_block", "verification"})
 
     field = f"{_PREFIX}.rounds"
     rounds_value = _table(settings["rounds"], field, {"max_rounds", "stable_rounds_required",
@@ -480,6 +589,9 @@ def parse_inference_review_settings(value: Mapping[str, Any]) -> InferenceSecuri
         max_pages=_int(packages_value["max_pages"], f"{field}.max_pages", 1, 100),
         max_depth=_int(packages_value["max_depth"], f"{field}.max_depth", 1, 8),
     )
+    if packages.hunt_menu_partition_size > LEAD_ACCOUNTING_CEILING:
+        raise ValueError(f"{field}.hunt_menu_partition_size must not exceed {LEAD_ACCOUNTING_CEILING}: every lead "
+                         "of a package needs one red-discovery-result/1 lead accounting entry")
 
     field = f"{_PREFIX}.budgets"
     if isinstance(settings["budgets"], Mapping) and "max_cost_usd" in settings["budgets"]:
@@ -527,4 +639,9 @@ def parse_inference_review_settings(value: Mapping[str, Any]) -> InferenceSecuri
         rounds=rounds, teams=teams, lanes=lanes, packages=packages, budgets=budgets, retry=retry,
         models=MappingProxyType(models), roles=MappingProxyType(roles), routing=routing,
         scoring=scoring, poc=_poc(settings["poc"], scoring.enabled_providers),
+        ranking=RankWeights.from_mapping(settings.get("ranking", {}), f"{_PREFIX}.ranking"),
+        red_output=RedOutputLimits.from_mapping(settings.get("red_output", {}), f"{_PREFIX}.red_output"),
+        ship_block=ShipBlockSettings.from_mapping(settings.get("ship_block"), f"{_PREFIX}.ship_block",
+                                                  known_families=LEAD_FAMILIES),
+        verification=VerificationSettings.from_mapping(settings.get("verification"), f"{_PREFIX}.verification"),
     )

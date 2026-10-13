@@ -8,29 +8,35 @@
     "schema",
     "finding_package_id",
     "claim_id",
+    "lane",
     "state",
     "label",
     "title",
     "adjudication_id",
     "direct_evidence",
+    "missing_predicates",
     "verification_review_id",
     "scores",
     "poc",
     "attack_chains",
     "remediation_inputs",
     "independence",
+    "ship_block",
     "gaps",
     "provenance"
   ],
   "properties": {
     "schema": {
-      "const": "appsec-review/finding-package/1"
+      "const": "appsec-review/finding-package/2"
     },
     "finding_package_id": {
       "$ref": "common.schema.json#/$defs/finding_package_id"
     },
     "claim_id": {
       "$ref": "common.schema.json#/$defs/claim_id"
+    },
+    "lane": {
+      "$ref": "common.schema.json#/$defs/lane"
     },
     "state": {
       "enum": [
@@ -52,6 +58,15 @@
     },
     "direct_evidence": {
       "$ref": "common.schema.json#/$defs/relation_ids"
+    },
+    "missing_predicates": {
+      "type": "array",
+      "items": {
+        "$ref": "common.schema.json#/$defs/predicate"
+      },
+      "maxItems": 6,
+      "uniqueItems": true,
+      "description": "Required predicates without counted direct support; empty for a confirmed finding."
     },
     "verification_review_id": {
       "oneOf": [
@@ -133,7 +148,8 @@
       "additionalProperties": false,
       "required": [
         "independent",
-        "provider_distinct"
+        "provider_distinct",
+        "verifier_model_distinct"
       ],
       "properties": {
         "independent": {
@@ -141,8 +157,15 @@
         },
         "provider_distinct": {
           "type": "boolean"
+        },
+        "verifier_model_distinct": {
+          "type": "boolean",
+          "description": "Decision 2: the verifier's model profile (provider and model) differs from every red cell's on the claim. Never gates confirmation; ship-block-policy/1 requires it for ship_blocking."
         }
       }
+    },
+    "ship_block": {
+      "$ref": "#/$defs/ship_block"
     },
     "gaps": {
       "$ref": "common.schema.json#/$defs/gap_ids"
@@ -190,6 +213,322 @@
           }
         }
       }
+    },
+    {
+      "if": {
+        "properties": {
+          "state": {
+            "const": "supported"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "ship_block": {
+            "properties": {
+              "status": {
+                "enum": [
+                  "needs_verification",
+                  "not_ship_blocking"
+                ]
+              }
+            }
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "missing_predicates": {
+            "maxItems": 0
+          },
+          "ship_block": {
+            "properties": {
+              "status": {
+                "enum": [
+                  "ship_blocking",
+                  "ship_blocking_pending_distinct_verification",
+                  "not_ship_blocking"
+                ]
+              }
+            }
+          }
+        }
+      }
     }
-  ]
+  ],
+  "$defs": {
+    "ship_block": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "ship-block-policy/1 decision with the inputs and citations that decided it. CVSS and SSVC are displayed context and never decide.",
+      "required": [
+        "policy",
+        "policy_sha256",
+        "status",
+        "conditions",
+        "reasons",
+        "inputs",
+        "citations",
+        "displayed_context"
+      ],
+      "properties": {
+        "policy": {
+          "const": "ship-block-policy/1"
+        },
+        "policy_sha256": {
+          "$ref": "common.schema.json#/$defs/sha256"
+        },
+        "status": {
+          "$ref": "common.schema.json#/$defs/ship_block_status"
+        },
+        "conditions": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "claim_confirmed",
+            "claim_supported",
+            "technical_severity_qualifies",
+            "dependency_finding",
+            "kev_dependency_qualifies",
+            "distinct_verification_required",
+            "verifier_model_distinct"
+          ],
+          "properties": {
+            "claim_confirmed": {
+              "type": "boolean"
+            },
+            "claim_supported": {
+              "type": "boolean"
+            },
+            "technical_severity_qualifies": {
+              "type": "boolean"
+            },
+            "dependency_finding": {
+              "type": "boolean"
+            },
+            "kev_dependency_qualifies": {
+              "type": "boolean"
+            },
+            "distinct_verification_required": {
+              "type": "boolean"
+            },
+            "verifier_model_distinct": {
+              "type": "boolean"
+            }
+          }
+        },
+        "reasons": {
+          "type": "array",
+          "items": {
+            "$ref": "common.schema.json#/$defs/token"
+          },
+          "maxItems": 8,
+          "uniqueItems": true
+        },
+        "inputs": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "claim_state",
+            "technical_severity",
+            "lead_families",
+            "kev_listed",
+            "verifier_model_distinct"
+          ],
+          "properties": {
+            "claim_state": {
+              "enum": [
+                "confirmed",
+                "supported"
+              ]
+            },
+            "technical_severity": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "provider",
+                "rating",
+                "score_id"
+              ],
+              "properties": {
+                "provider": {
+                  "const": "application_risk_matrix/2"
+                },
+                "rating": {
+                  "enum": [
+                    "low",
+                    "medium",
+                    "high",
+                    "critical",
+                    null
+                  ]
+                },
+                "score_id": {
+                  "oneOf": [
+                    {
+                      "$ref": "common.schema.json#/$defs/score_id"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            },
+            "lead_families": {
+              "type": "array",
+              "items": {
+                "$ref": "common.schema.json#/$defs/token"
+              },
+              "maxItems": 16,
+              "uniqueItems": true
+            },
+            "kev_listed": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "verifier_model_distinct": {
+              "type": "boolean"
+            }
+          }
+        },
+        "citations": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "adjudication_id",
+            "score_ids",
+            "verification_review_id"
+          ],
+          "properties": {
+            "adjudication_id": {
+              "$ref": "common.schema.json#/$defs/adjudication_id"
+            },
+            "score_ids": {
+              "type": "array",
+              "items": {
+                "$ref": "common.schema.json#/$defs/score_id"
+              },
+              "maxItems": 1
+            },
+            "verification_review_id": {
+              "oneOf": [
+                {
+                  "$ref": "common.schema.json#/$defs/review_id"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          }
+        },
+        "displayed_context": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "decides",
+            "reference_cvss",
+            "non_deciding_scores"
+          ],
+          "properties": {
+            "decides": {
+              "const": false
+            },
+            "reference_cvss": {
+              "type": "array",
+              "maxItems": 8,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "cve_id",
+                  "version",
+                  "vector",
+                  "base_score"
+                ],
+                "properties": {
+                  "cve_id": {
+                    "type": "string",
+                    "maxLength": 64
+                  },
+                  "version": {
+                    "type": "string",
+                    "maxLength": 16
+                  },
+                  "vector": {
+                    "type": "string",
+                    "maxLength": 256
+                  },
+                  "base_score": {
+                    "type": [
+                      "number",
+                      "null"
+                    ],
+                    "minimum": 0,
+                    "maximum": 10
+                  }
+                }
+              }
+            },
+            "non_deciding_scores": {
+              "type": "array",
+              "items": {
+                "$ref": "common.schema.json#/$defs/score_id"
+              },
+              "maxItems": 16,
+              "uniqueItems": true
+            }
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "enum": [
+                  "ship_blocking",
+                  "ship_blocking_pending_distinct_verification"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "inputs": {
+                "properties": {
+                  "claim_state": {
+                    "const": "confirmed"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "needs_verification"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "inputs": {
+                "properties": {
+                  "claim_state": {
+                    "const": "supported"
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
 }

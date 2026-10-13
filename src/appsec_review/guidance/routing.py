@@ -178,14 +178,28 @@ def route_stack(*, languages: TagCloud = (), components: Iterable[str] = (), bui
 # ---------------------------------------------------------------------------------------------
 # hunt-panel/1
 
+# Data sources that unlock a hunt strategy (code-graph-precomputation.md section 7.5). ``sink_up``
+# needs accepted sink facts and ``entry_down`` an accepted entry-point catalog; symbol links carry no
+# source or sink fact and unlock nothing.
 STRATEGY_SOURCES: Mapping[str, tuple[str, ...]] = {
     HuntStrategy.VARIANT.value: ("confirmed_claims",),
-    HuntStrategy.SINK_UP.value: ("source_sink_facts", "symbol_links"),
+    HuntStrategy.SINK_UP.value: ("source_sink_facts",),
     HuntStrategy.ENTRY_DOWN.value: ("entry_point_catalog",),
     HuntStrategy.CONTROL_GAP.value: ("owasp_workbench",),
     HuntStrategy.PERSONA_SWEEP.value: (),
 }
 DATA_SOURCES = frozenset(source for sources in STRATEGY_SOURCES.values() for source in sources)
+# The accepted code-graph family (any coverage state but ``unavailable``) that provides each source.
+GRAPH_FAMILY_SOURCES: Mapping[str, str] = {
+    "sink_site": "source_sink_facts",
+    "entry_point": "entry_point_catalog",
+}
+
+
+def unit_sources(base: Iterable[str], graph_families: Iterable[str]) -> tuple[str, ...]:
+    """Run-level sources plus the sources a unit's accepted graph families provide, sorted."""
+    return tuple(sorted(set(base) | {GRAPH_FAMILY_SOURCES[family] for family in graph_families
+                                     if family in GRAPH_FAMILY_SOURCES}))
 
 
 def rank_personas(personas: PersonaCovers, unit_tags: TagCloud, *,

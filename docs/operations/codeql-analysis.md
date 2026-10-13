@@ -70,6 +70,69 @@ Ordinary producer failures are accepted as scope-local coverage gaps. A sibling 
 Changed accepted handoffs, source bytes, protected argv, image identities, database manifests,
 checkpoints, or SARIF identities are framework-integrity failures and stop publication.
 
+## Graph export step
+
+The `export` step (unit `export.scopes`) runs the repository-owned, hash-pinned graph export pack
+on each successful database. It depends on `database.scopes` only, so query and export failures
+never invalidate each other. Its design is
+[code-graph precomputation](../architecture/code-graph-precomputation.md) section 7. Only C/C++
+has a pack in this change. Every other language records the export disposition `NOT_APPLICABLE`
+with the reason "no hash-pinned CodeQL graph export pack for `<language>`". This is a named
+disposition, not a failure and not a clean result.
+
+Configuration lives in `appsec-review.toml`:
+
+- `[jobs.job_codeql_analysis.settings.export_queries]` sets `enabled`, `row_limit` (rows decoded
+  per export query), `max_bytes` (total export bytes per scope) and `timeout_seconds` (the runner
+  `export` action). The defaults equal the `GraphSettings` contract: 200000, 268435456 and 1800.
+- `[[jobs.job_codeql_analysis.settings.languages.cpp.export_queries]]` must equal
+  `export_query_packs.cpp` in `containers/tools/codeql/assets.lock.json` field for field. At most
+  one pack is allowed per language, and only `cpp` may declare one. Planning stops with a
+  framework-integrity failure when any language's block differs from its lock entry. The export
+  unit then rechecks the asset-lock hash, the pack tree hash and file count, `qlpack.yml`, the
+  suite, `columns.json` and `catalog.json` in the repository before it runs anything.
+
+For each exportable scope, the job stages scratch under `data/codeql/scopes/<scope-id>/export/`.
+The scratch holds a disposable database copy, the pack, `columns.json` and the asset lock. The
+runner verifies them against the lock again, inside a `--network none` container, and writes
+`exports/<query_id>.json` plus `exports/export-manifest.json`. The scratch is then deleted.
+`load_graph_exports` re-verifies the directory against its manifest and the export contract. The
+manifest's language, pack identity and bounds must equal the configuration.
+
+The export checkpoint is `export-checkpoint.json`
+(`appsec-review/codeql-export-checkpoint/1`). Its identity binds the database identity and tree,
+the export pack entry without the catalog, the manifest schema, the bounds and the runner hash.
+A database, pack, bound or runner change reruns the export only. A query-suite or catalog change
+does not. On reuse the exports are re-verified, and a changed, extra or missing export file is a
+framework-integrity failure. A timeout, a non-zero exit or an invalid fresh export is a scope gap.
+A failed database is the gap "export skipped because database creation failed". A truncated query
+is a named gap. Any of these gaps makes the step's `terminal_status` `COMPLETED_WITH_GAPS`, while
+sibling scopes keep their exports.
+
+Raw exports are the `codeql_graph_export` dataset (`artifact_only`). Their rows hold CodeQL
+internal ids and are never served; `job_code_graph_index` normalizes them. Consumers find them in
+the accepted handoff in three places:
+
+- `outputs["export.scopes"].artifact` points to `artifacts/codeql/graph-exports.json`
+  (`appsec-review/codeql-graph-exports/1`), with one record per scope.
+- The `graph_exports` list in the acceptance summary (`outputs["acceptance.publish_handoff"].artifact`)
+  holds the same records.
+- Every export manifest and file appears with its SHA-256 in the handoff `artifacts`.
+
+A succeeded record carries `export_status`, `export_identity`, `export_reused`, `export_pack`,
+`export_manifest` and `export_files`, each `{path, sha256, size_bytes}`, plus row counts and
+`truncated_queries`. Other records carry `export_status` (`FAILED`, `SKIPPED` or
+`NOT_APPLICABLE`) and the gaps or reason. The plan is `outputs["plan.inventory"].plan` in the
+handoff's `result.json`; `job_code_graph_index` reads the plan and `export.scopes` only through
+those handoff-bound identities, and checks the catalog it normalizes with against this job's
+configured `catalog_sha256` pin.
+
+Verification status: the export step runs offline in `tests/test_codeql_export_step.py` and, inside
+the real job with an injected executor, in `tests/integration/test_code_graph_end_to_end.py`. Both
+play back hand-authored recordings. The export queries have not yet run in the pinned CodeQL image;
+`tests/live/test_codeql_graph_export_live.py` and `tests/live/test_code_graph_live.py` are the
+operator tiers that will refresh and verify the recordings.
+
 ## Evidence and retrieval
 
 SARIF 2.1 results, rule metadata, severities, fingerprints, suppressions, baseline state, locations,
@@ -77,8 +140,12 @@ and code-flow steps are normalized into immutable `observations` shards. Each st
 SARIF `code_flow` index (normalizer `appsec-review/codeql-sarif-normalizer/2`), so alternative paths
 for one result stay separable; `job_review_prioritization` keeps the shortest flow per source and
 sink as a verified semantic path. Exact path matches are
-distinguished from suffix matches; ambiguity and unmapped locations remain gaps. The publisher
-composes its manifest onto the current accepted manifest rather than replacing upstream evidence.
+distinguished from suffix matches; ambiguity and unmapped locations remain gaps. The publisher's
+manifest lists this job's own observation shards and references the current accepted manifest and
+the accepted sibling manifests as verified `upstream_manifests`; it does not copy their shards into
+its own list. Later publishers compose onto it, and shards it dropped from the accepted list are
+restored from their producers' accepted handoffs by `job_code_graph_index` (clangd, IR and AST
+shards) and `job_review_data_indexing` (every producer).
 
 Use the `query_codeql` MCP tool to filter accepted observations by language, original source
 language, scope, build unit, rule, severity, path, or CodeQL shard.
@@ -95,7 +162,10 @@ For a fresh `appsec-multi-vuln` run, verify:
 6. the accepted manifest contains profile-specific `codeql-*` observation shards;
 7. `query_codeql` returns the same accepted observations; and
 8. deployment verification reports per-language and per-profile execution, SARIF, observation,
-   and gap counts.
+   and gap counts; and
+9. every successful C/C++ database has a `SUCCEEDED` graph export whose manifest is bound to the
+   handoff, every other language reports `NOT_APPLICABLE`, and `tests/live/test_code_graph_live.py`
+   passes (not yet run).
 
 ## Live acceptance
 

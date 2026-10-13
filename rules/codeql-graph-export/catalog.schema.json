@@ -1,0 +1,107 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://appsec-review.local/schemas/graph-catalog-1.json",
+  "title": "appsec-review/graph-catalog/1",
+  "description": "Classifies CodeQL graph-export sink and source rows into the closed SinkClass and SourceClass vocabularies of src/appsec_review/graph/contract.py. A row no rule matches is unclassified; the catalog never assigns unclassified itself.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "revision", "attacker_reachable_sources", "languages"],
+  "properties": {
+    "schema": {"const": "appsec-review/graph-catalog/1"},
+    "revision": {"type": "integer", "minimum": 1},
+    "attacker_reachable_sources": {
+      "type": "array", "uniqueItems": true, "minItems": 1,
+      "items": {"$ref": "#/$defs/source_class"}
+    },
+    "languages": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {"cpp": {"$ref": "#/$defs/language"}}
+    }
+  },
+  "$defs": {
+    "sink_class": {
+      "enum": ["memory_write", "memory_read", "allocation_size", "format_string", "command_execution",
+               "path_access", "sql_query", "code_injection", "deserialization", "integer_conversion",
+               "crypto_misuse", "log_output"]
+    },
+    "source_class": {
+      "enum": ["remote", "local_user", "argv", "environment", "file", "ipc", "database", "internal"]
+    },
+    "api": {"type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"},
+    "declared_in": {
+      "description": "Basenames of declaring headers; a row matches when any of its declared_in basenames is listed.",
+      "type": "array", "minItems": 1, "uniqueItems": true,
+      "items": {"type": "string", "pattern": "^[A-Za-z0-9_+.-]+$"}
+    },
+    "sink_model": {
+      "enum": ["FormattingFunction", "AllocationFunction", "ArrayFunction.output", "CommandExecutionFunction",
+               "RemoteFlowSinkFunction", "ArrayExprWrite"]
+    },
+    "source_model": {"enum": ["RemoteFlowSource", "LocalFlowSource", "FlowSource"]},
+    "language": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["model_library", "export_pack", "sinks", "sources", "sanitizers"],
+      "properties": {
+        "model_library": {"type": "string", "pattern": "^codeql/[a-z0-9-]+$"},
+        "export_pack": {"type": "string", "pattern": "^appsec-review/graph-export-[a-z0-9-]+$"},
+        "sinks": {"type": "array", "items": {"$ref": "#/$defs/sink_rule"}},
+        "sources": {"type": "array", "items": {"$ref": "#/$defs/source_rule"}},
+        "sanitizers": {"type": "array", "items": {"$ref": "#/$defs/sanitizer_rule"}}
+      }
+    },
+    "sink_rule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rule_id", "match", "sink_class", "cwe_family"],
+      "properties": {
+        "rule_id": {"type": "string", "pattern": "^[a-z]+\\.sink\\.(api|model)\\.[a-z0-9_.-]+$"},
+        "match": {
+          "oneOf": [
+            {"type": "object", "additionalProperties": false,
+             "required": ["api", "declared_in", "argument_index"],
+             "properties": {"api": {"$ref": "#/$defs/api"}, "declared_in": {"$ref": "#/$defs/declared_in"},
+                            "argument_index": {"type": "integer", "minimum": -1}}},
+            {"type": "object", "additionalProperties": false, "required": ["model"],
+             "properties": {"model": {"$ref": "#/$defs/sink_model"}}}
+          ]
+        },
+        "sink_class": {"$ref": "#/$defs/sink_class"},
+        "cwe_family": {"type": "string", "pattern": "^CWE-[1-9][0-9]*$"}
+      }
+    },
+    "source_rule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rule_id", "match", "source_class"],
+      "properties": {
+        "rule_id": {"type": "string", "pattern": "^[a-z]+\\.source\\.(api|model)\\.[a-z0-9_.-]+$"},
+        "match": {
+          "oneOf": [
+            {"type": "object", "additionalProperties": false, "required": ["api", "declared_in", "index"],
+             "properties": {"api": {"$ref": "#/$defs/api"}, "declared_in": {"$ref": "#/$defs/declared_in"},
+                            "index": {"type": "integer", "minimum": -1}}},
+            {"type": "object", "additionalProperties": false, "required": ["model"],
+             "properties": {"model": {"$ref": "#/$defs/source_model"},
+                            "source_type": {"type": "string", "minLength": 1}}}
+          ]
+        },
+        "source_class": {"$ref": "#/$defs/source_class"}
+      }
+    },
+    "sanitizer_rule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rule_id", "api", "declared_in", "applies_to"],
+      "properties": {
+        "rule_id": {"type": "string", "pattern": "^[a-z]+\\.sanitizer\\.[a-z0-9_.-]+$"},
+        "api": {"$ref": "#/$defs/api"},
+        "declared_in": {"$ref": "#/$defs/declared_in"},
+        "applies_to": {"type": "array", "minItems": 1, "uniqueItems": true,
+                       "items": {"$ref": "#/$defs/sink_class"}}
+      }
+    }
+  }
+}

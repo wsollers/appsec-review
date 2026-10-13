@@ -1,6 +1,6 @@
 ---
 id: lead_red_stack
-version: 1
+version: 2
 roles: ["red_team_analyst"]
 requests_tools: ["find", "query_build_security", "read_excerpt", "trace"]
 max_tokens: 400
@@ -15,6 +15,12 @@ percentile, OSV fixed versions). Treat it as reference context about the advisor
 resolved version and any reachable use of the affected API from target evidence.
 
 ## Expected result
-Zero or more claims in the role's result schema. For every claim, give per-predicate evidence that
-names resolvable identities from the package or this cell's retrieval transcript. When the lead
-does not hold in this stack, return no claim and state which stack fact rules it out.
+Zero or more proposals in the role's result schema. For every proposal, give per-predicate
+evidence that names resolvable identities from the package or this cell's retrieval transcript.
+When the lead does not hold in this stack, propose nothing and state which stack fact rules it out.
+Account for the package lead exactly once: developed into a proposal, not developed by this lens
+(never a statement that it is safe), or blocked by a named gap. Each proposal names its security
+consequence from the closed vocabulary and its preconditions from the closed precondition
+vocabulary. Label every taint hop by its basis: a hop resting on an accepted tool path, an accepted
+graph fact, or source-mapped analysis cites it; an inferred hop stays a hypothesis, paired with an
+evidence request and a gap.

@@ -18,7 +18,9 @@ import math
 import re
 from typing import Any, Mapping
 
+from appsec_review.graph.contract import FAMILY_KINDS, GRAPH_INDEX, QUERY_CODE_GRAPH
 from appsec_review.mcp.schema import TOOLS
+from appsec_review.retrieval.graph import request_error as graph_request_error
 from appsec_review.retrieval.index import INDEX_NAMES
 from appsec_review.review.identity import sha256_hex
 from appsec_review.review.models import IntegrityError, Role
@@ -43,6 +45,7 @@ TOOL_INDEXES: Mapping[str, frozenset[str]] = {
     "query_precomputed": frozenset({"precomputed"}),
     "query_observations": frozenset({"observations", "precomputed"}),
     "query_dataset_inventory": frozenset({"inventory"}),
+    QUERY_CODE_GRAPH: frozenset({GRAPH_INDEX}),
 }
 INDEX_PARAMETER_TOOLS = frozenset({"search", "find", "coverage"})
 IDENTITY_TOOLS = frozenset({"read_excerpt", "trace", "resolve_evidence"})
@@ -52,6 +55,11 @@ IDENTITY_PARAMETERS = frozenset({"identity", "subject", "source", "artifact", "a
 FORBIDDEN_PARAMETERS = frozenset({"path", "paths", "glob", "regex", "pattern", "sql", "query_sql",
                                   "expression", "file", "directory", "url"})
 _LOGICAL_ID = re.compile(r"^asr:[a-z][a-z0-9_]*:[0-9a-f]{64}$")
+# Entity kinds a ``graph`` shard publishes: the seven fact families plus the CodeQL-export function
+# symbols that contain them. Each carries ``payload.scope.scope_id`` (graph-fact/1 and the graph job's
+# symbol payload), which is what a scope-bound graph grant is checked against.
+GRAPH_ROW_KINDS = frozenset({*(kind.value for kind in FAMILY_KINDS.values()), "symbol"})
+_SCOPE_ID = re.compile(r"^[!-~]{1,256}$")   # printable, no whitespace; compared by equality only
 _PATH_LIKE = re.compile(r"(^[/~]|^[A-Za-z]:[\\/]|\.\.|\\|\x00|^file:|://)")
 _REGEX_LIKE = re.compile(r"(\.\*|\.\+|\(\?|\[\^|\[[^\]]*-[^\]]*\]|\{\d+(,\d*)?\}|\||(?<!\w)\^|\$$)")
 # Statement syntax only: searching for SQL *words* in target code stays possible because the core
@@ -92,6 +100,10 @@ class CellCapability:
     indexes: tuple[str, ...]
     entities: tuple[str, ...]            # exact accepted logical identities
     entity_prefixes: tuple[str, ...]     # e.g. "asr:source_span:"; never the empty prefix
+    # CodeQL scope ids whose accepted graph facts belong to this package's scope (its build unit or
+    # paths; ``retrieval.graph_scopes``). A graph row is in scope only when its own
+    # ``payload.scope.scope_id`` is listed; this is never a kind-wide grant across scopes.
+    graph_scopes: tuple[str, ...]
     max_queries: int
     max_turns: int
     page_size: int
@@ -102,7 +114,7 @@ class CellCapability:
     @classmethod
     def issue(cls, *, run_id: str, manifest_sha256: str, package_id: str, package_sha256: str,
               role: Role | str, round: int, tools, indexes, entities=(), entity_prefixes=(),
-              max_queries: int, max_turns: int, page_size: int, max_depth: int,
+              graph_scopes=(), max_queries: int, max_turns: int, page_size: int, max_depth: int,
               max_result_bytes: int) -> "CellCapability":
         """Issue a capability; an unknown tool, index, or cap is an application error."""
         values = {
@@ -112,6 +124,7 @@ class CellCapability:
             "tools": tuple(sorted(set(tools))), "indexes": tuple(sorted(set(indexes))),
             "entities": tuple(sorted(set(entities))),
             "entity_prefixes": tuple(sorted(set(entity_prefixes))),
+            "graph_scopes": tuple(sorted(set(graph_scopes))),
             "max_queries": int(max_queries), "max_turns": int(max_turns),
             "page_size": int(page_size), "max_depth": int(max_depth),
             "max_result_bytes": int(max_result_bytes),
@@ -125,6 +138,10 @@ class CellCapability:
         if any(not re.fullmatch(r"asr:([a-z][a-z0-9_]*:([0-9a-f]{0,64})?)?", item) or item == ""
                for item in values["entity_prefixes"]):
             raise ValueError("capability entity prefix is not a logical-identity prefix")
+        if any(not isinstance(item, str) or not _SCOPE_ID.fullmatch(item) for item in values["graph_scopes"]):
+            raise ValueError("capability graph scope is not a CodeQL scope id")
+        if values["graph_scopes"] and GRAPH_INDEX not in values["indexes"]:
+            raise ValueError("a graph scope grant requires the graph index")
         if values["round"] < 0 or min(values["max_queries"], values["max_turns"], values["page_size"],
                                       values["max_depth"], values["max_result_bytes"]) < 1:
             raise ValueError("capability caps must be positive")
@@ -146,7 +163,7 @@ class CellCapability:
     def semantic_body(self) -> dict[str, Any]:
         """The capability inputs to a cell fingerprint: tools, indexes, scope, and caps."""
         body = self.body()
-        return {key: body[key] for key in ("tools", "indexes", "entities", "entity_prefixes",
+        return {key: body[key] for key in ("tools", "indexes", "entities", "entity_prefixes", "graph_scopes",
                                             "max_queries", "max_turns", "page_size", "max_depth",
                                             "max_result_bytes")}
 
@@ -163,8 +180,30 @@ class CellCapability:
         return isinstance(identity, str) and bool(_LOGICAL_ID.fullmatch(identity)) and (
             identity in self.entities or any(identity.startswith(prefix) for prefix in self.entity_prefixes))
 
-    def authorize(self, request: Any, *, queries_used: int = 0) -> Authorized | AuthorityDenied:
-        """Authorize one `{"tool", "parameters"}` request; never raises for model input."""
+    def graph_row_in_scope(self, row: Mapping[str, Any]) -> bool:
+        """Whether one returned graph entity row belongs to a granted CodeQL scope.
+
+        The row must be a ``graph``-index entity of a graph kind whose own identity is a logical
+        identity of that kind, and its accepted payload must name a ``scope.scope_id`` this capability
+        lists. The payload comes from the retrieval core's accepted shard, never from the model.
+        """
+        if not self.graph_scopes or not isinstance(row, Mapping) or row.get("index") != GRAPH_INDEX:
+            return False
+        identity, kind = row.get("identity"), row.get("kind")
+        if kind not in GRAPH_ROW_KINDS or not isinstance(identity, str) or not _LOGICAL_ID.fullmatch(identity) \
+                or not identity.startswith(f"asr:{kind}:"):
+            return False
+        payload = row.get("payload")
+        scope = payload.get("scope") if isinstance(payload, Mapping) else None
+        return isinstance(scope, Mapping) and scope.get("scope_id") in self.graph_scopes
+
+    def authorize(self, request: Any, *, queries_used: int = 0,
+                  granted: frozenset[str] | set[str] = frozenset()) -> Authorized | AuthorityDenied:
+        """Authorize one `{"tool", "parameters"}` request; never raises for model input.
+
+        ``granted`` holds identities this cell already received in scope-checked graph rows (see
+        :meth:`graph_row_in_scope`); they may be addressed like package entities.
+        """
         self.verify()
         try:
             filter_sha = sha256_hex(request)
@@ -192,6 +231,8 @@ class CellCapability:
         error = _schema_error(parameters, schema)
         if error:
             return deny("schema_violation", error)
+        if tool == QUERY_CODE_GRAPH and (error := graph_request_error(parameters)):
+            return deny("schema_violation", error)
         for key, value in parameters.items():
             for text in _strings(value):
                 if key in _PARAMETER_EXEMPT_FROM_TEXT_CHECK or (key in IDENTITY_PARAMETERS and
@@ -204,7 +245,7 @@ class CellCapability:
                 if _SQL_LIKE.search(text):
                     return deny("sql_like_value", f"{key} looks like a query language")
         for key in sorted(set(parameters) & IDENTITY_PARAMETERS):
-            if not self.entity_in_scope(parameters[key]):
+            if not (self.entity_in_scope(parameters[key]) or parameters[key] in granted):
                 return deny("entity_out_of_scope", f"{key} is outside the package entity scope")
         if tool in IDENTITY_TOOLS and "identity" not in parameters:
             return deny("schema_violation", f"{tool} requires an identity")
@@ -227,6 +268,8 @@ class CellCapability:
             if int(parameters.get("depth", 2)) > self.max_depth:
                 return deny("depth_cap_exceeded", "trace depth exceeds the cell depth cap")
             normalized.setdefault("depth", min(2, self.max_depth))
+        if tool == QUERY_CODE_GRAPH and int(parameters.get("depth", 1)) > self.max_depth:
+            return deny("depth_cap_exceeded", "graph closure depth exceeds the cell depth cap")
         if queries_used >= self.max_queries:
             return deny("query_cap_exceeded", "the cell query budget is exhausted")
         return Authorized(tool, normalized, sha256_hex({"tool": tool, "parameters": normalized}))
@@ -291,5 +334,5 @@ def _value_error(value: Any, schema: Mapping[str, Any]) -> str | None:
     return None
 
 
-__all__ = ["AuthorityDenied", "Authorized", "CAPABILITY_SCHEMA", "CellCapability", "IN_PROCESS_TOOLS",
-           "TOOL_INDEXES", "TOOL_SCHEMAS"]
+__all__ = ["AuthorityDenied", "Authorized", "CAPABILITY_SCHEMA", "CellCapability", "GRAPH_ROW_KINDS",
+           "IN_PROCESS_TOOLS", "TOOL_INDEXES", "TOOL_SCHEMAS"]

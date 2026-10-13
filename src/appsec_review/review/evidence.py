@@ -4,11 +4,24 @@ A model citation reaches the ledger only as an :class:`EvidenceRelation` produce
 cited logical identity has been re-resolved against the accepted manifest. Anything that cannot be
 resolved becomes an ``evidence_gap``; truncated or incomplete resolution is recorded with
 ``complete=False`` and can never satisfy an obligation.
+
+``evidence-admissibility/2`` adds the graph-fact branch (docs/architecture/code-graph-precomputation.md
+section 6): a cited ``call_site``, ``sink_site``, ``entry_point``, ``dataflow_path``, ``guard_fact`` or
+``range_fact`` is ``DIRECT_FOR_MAPPED_PREDICATE`` only for the predicates ``graph-fact-predicates/1``
+maps for its family (after the family's source-class condition), and only when the payload of the
+entity re-resolved from the accepted manifest is a ``graph-fact/1`` record of that family whose
+``admissibility.direct_eligible`` is ``true`` and whose ``graph-fact-admissibility/1`` conditions
+re-check clean. ``flow_summary`` and every ineligible fact are ``INDIRECT``. The payload is read from
+the ``find`` result inside :func:`resolve_relation`; nothing a model writes can set it.
 """
 from __future__ import annotations
 
 from typing import Any, Collection, Iterable, Mapping
 
+from appsec_review.graph.contract import (
+    ADMISSIBILITY_RULE as GRAPH_FACT_ADMISSIBILITY_RULE, FAMILY_KINDS, GRAPH_FACT_SCHEMA, Family,
+    ineligibility_reasons, mapped_predicates,
+)
 from appsec_review.retrieval.core import RetrievalCore
 from appsec_review.retrieval.model import EntityKind, LogicalIdentity
 from appsec_review.review.identity import make_id, sha256_hex
@@ -16,8 +29,7 @@ from appsec_review.review.models import (  # make_gap is re-exported for compati
     MAX_GAP_REASON, Admissibility, EvidenceRelation, Gap, GapClass, IntegrityError, Predicate, RelationKind,
     make_gap,
 )
-
-ADMISSIBILITY_RULES_VERSION = "evidence-admissibility/1"  # reference kinds were already indirect by default deny
+from appsec_review.review.obligations import ADMISSIBILITY_RULES_VERSION
 EVIDENCE_RELATION_KINDS = frozenset({RelationKind.SUPPORTS, RelationKind.CONTRADICTS, RelationKind.QUALIFIES})
 SATISFYING_ADMISSIBILITY = frozenset({Admissibility.DIRECT, Admissibility.DIRECT_FOR_MAPPED_PREDICATE})
 
@@ -49,16 +61,48 @@ REFERENCE_KINDS: frozenset[EntityKind] = frozenset({
     EntityKind.ADVISORY, EntityKind.DEPENDENCY_PACKAGE, EntityKind.PRECOMPUTED_FACT,
 })
 INDIRECT_KINDS = INDIRECT_KINDS | REFERENCE_KINDS
+# R3 (evidence-admissibility/2): code-graph fact kinds. Direct only for the predicates the family's
+# versioned mapping names, and only when the re-resolved payload is direct-eligible; ``flow_summary``
+# has no mapped predicate and is therefore indirect for every predicate.
+GRAPH_KINDS: frozenset[EntityKind] = frozenset(FAMILY_KINDS.values())
 _EVIDENCE_BEARING = frozenset({EntityKind.TOOL_OBSERVATION, EntityKind.EVIDENCE_ARTIFACT,
                                EntityKind.FINDING_PACKAGE})
 
 
+def graph_fact_predicates(entity_kind: EntityKind | str, fact_payload: Mapping[str, Any] | None
+                          ) -> frozenset[Predicate]:
+    """Predicates a re-resolved graph fact may satisfy directly; empty means indirect for all.
+
+    Fail-closed: the payload must be a ``graph-fact/1`` record whose family is the cited kind, whose
+    published ``graph-fact-admissibility/1`` block says ``direct_eligible: true`` with no reasons,
+    and whose conditions re-check clean here. Any other shape, including a missing payload, an
+    unknown family or a kind/family mismatch, yields no predicate (default deny).
+    """
+    kind = EntityKind(entity_kind)
+    if kind not in GRAPH_KINDS or not isinstance(fact_payload, Mapping):
+        return frozenset()
+    if fact_payload.get("schema") != GRAPH_FACT_SCHEMA or fact_payload.get("family") != kind.value:
+        return frozenset()
+    block = fact_payload.get("admissibility")
+    if not isinstance(block, Mapping) or block.get("rule") != GRAPH_FACT_ADMISSIBILITY_RULE:
+        return frozenset()
+    if block.get("direct_eligible") is not True or list(block.get("ineligibility_reasons") or ()) != []:
+        return frozenset()
+    if ineligibility_reasons(fact_payload):
+        return frozenset()
+    result = fact_payload.get("result")
+    return mapped_predicates(Family(kind.value), result if isinstance(result, Mapping) else {})
+
+
 def classify(entity_kind: EntityKind | str, predicate: Predicate,
-             tool_rule_mapping: Collection[Predicate] = ()) -> Admissibility:
-    """Classify a cited entity for ``predicate`` per the R3 table.
+             tool_rule_mapping: Collection[Predicate] = (),
+             fact_payload: Mapping[str, Any] | None = None) -> Admissibility:
+    """Classify a cited entity for ``predicate`` per the R3 table (``evidence-admissibility/2``).
 
     ``tool_rule_mapping`` is the set of predicates the producing rule's versioned mapping names for
-    a ``tool_observation``; it is ignored for every other kind.
+    a ``tool_observation``; it is ignored for every other kind. ``fact_payload`` is the payload of a
+    graph-fact entity as re-resolved from the accepted manifest; it is ignored for every other kind,
+    and a graph kind without it is indirect.
     """
     kind = EntityKind(entity_kind)
     predicate = Predicate(predicate)
@@ -69,6 +113,9 @@ def classify(entity_kind: EntityKind | str, predicate: Predicate,
     if kind in MAPPED_KINDS:
         mapped = {Predicate(item) for item in tool_rule_mapping}
         return Admissibility.DIRECT_FOR_MAPPED_PREDICATE if predicate in mapped else Admissibility.INDIRECT
+    if kind in GRAPH_KINDS:
+        return (Admissibility.DIRECT_FOR_MAPPED_PREDICATE if predicate in graph_fact_predicates(kind, fact_payload)
+                else Admissibility.INDIRECT)
     return Admissibility.INDIRECT
 
 
@@ -132,7 +179,10 @@ def resolve_relation(core: RetrievalCore, *, claim_id: str, predicate: Predicate
     shard_id = f"{entity['index']}/{entity['shard_id']}"
     content_sha256 = sha256_hex(_content_record(entity, excerpt))
     locator = _locator(entity)
-    admissibility = classify(parsed.kind, predicate, tuple(rule_predicates))
+    # The graph payload is the accepted entity's, never the citation's: a model cannot set it.
+    payload = entity.get("payload") if parsed.kind in GRAPH_KINDS else None
+    admissibility = classify(parsed.kind, predicate, tuple(rule_predicates),
+                             payload if isinstance(payload, Mapping) else None)
     body = {
         "claim_id": claim_id, "predicate": predicate.value, "kind": kind.value, "entity_id": parsed.value,
         "entity_kind": parsed.kind.value, "admissibility": admissibility.value, "shard_id": shard_id,

@@ -32,6 +32,11 @@ def _require_pytest_scratch_path(*, option: str, value: str | Path, invocation_d
 def pytest_configure(config: pytest.Config) -> None:
     """Fail before tests can populate disposable directories outside test/tmp."""
 
+    config.addinivalue_line(
+        "markers",
+        "requires_target(name): needs the local checkout targets/<name>; skipped when it is absent",
+    )
+
     invocation_dir = Path(config.invocation_params.dir)
     basetemp = config.getoption("basetemp")
     if basetemp is None:
@@ -46,3 +51,13 @@ def pytest_configure(config: pytest.Config) -> None:
         value=config.getini("cache_dir"),
         invocation_dir=_REPOSITORY_ROOT,
     )
+
+
+def pytest_runtest_setup(item: pytest.Item) -> None:
+    """Skip, with the reason, tests whose local review target checkout is absent."""
+
+    for marker in item.iter_markers("requires_target"):
+        name = marker.args[0]
+        if not (_REPOSITORY_ROOT / "targets" / name).is_dir():
+            pytest.skip(f"local review target checkout is absent: targets/{name}")
+

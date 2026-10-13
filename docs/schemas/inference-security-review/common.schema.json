@@ -144,6 +144,31 @@
         "security_impact"
       ]
     },
+    "security_predicate": {
+      "description": "security-predicates/1: the closed security-consequence vocabulary of a claim (design R7). Part of claim identity.",
+      "enum": [
+        "memory_corruption",
+        "out_of_bounds_read",
+        "use_after_free",
+        "integer_error",
+        "injection",
+        "command_injection",
+        "sql_injection",
+        "code_injection",
+        "path_traversal",
+        "ssrf",
+        "deserialization",
+        "authn_bypass",
+        "authz_bypass",
+        "info_disclosure",
+        "crypto_weakness",
+        "race_condition",
+        "resource_exhaustion",
+        "insecure_configuration",
+        "supply_chain_compromise",
+        "other"
+      ]
+    },
     "relation_kind": {
       "enum": [
         "supports",
@@ -263,12 +288,20 @@
         "review_signal",
         "review_flow_step",
         "review_context_file",
+        "document_record",
         "precomputed_fact",
         "dataset",
         "dataset_audit",
         "coverage_cell",
         "dependency_package",
-        "advisory"
+        "advisory",
+        "call_site",
+        "sink_site",
+        "entry_point",
+        "flow_summary",
+        "dataflow_path",
+        "guard_fact",
+        "range_fact"
       ]
     },
     "poc_status": {
@@ -663,6 +696,43 @@
           "minimum": 0
         },
         "withdrawn": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "ship_block_status": {
+      "enum": [
+        "ship_blocking",
+        "ship_blocking_pending_distinct_verification",
+        "needs_verification",
+        "not_ship_blocking"
+      ],
+      "description": "ship-block-policy/1 status of a finding package."
+    },
+    "ship_block_counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ship_blocking",
+        "ship_blocking_pending_distinct_verification",
+        "needs_verification",
+        "not_ship_blocking"
+      ],
+      "properties": {
+        "ship_blocking": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "ship_blocking_pending_distinct_verification": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "needs_verification": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "not_ship_blocking": {
           "type": "integer",
           "minimum": 0
         }

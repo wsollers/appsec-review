@@ -8,12 +8,14 @@ from pathlib import Path
 
 from jsonschema import Draft202012Validator
 import pytest
+from referencing import Registry, Resource
 
 
-SCHEMA_PATH = (Path(__file__).parents[1] / "docs" / "schemas" /
-               "inference-security-review" / "red-discovery-result.schema.json")
-SCHEMA = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
-VALIDATOR = Draft202012Validator(SCHEMA)
+SCHEMA_DIR = Path(__file__).parents[1] / "docs" / "schemas" / "inference-security-review"
+DOCUMENTS = [json.loads(path.read_text(encoding="utf-8")) for path in sorted(SCHEMA_DIR.glob("*.schema.json"))]
+SCHEMA = json.loads((SCHEMA_DIR / "red-discovery-result.schema.json").read_text(encoding="utf-8"))
+VALIDATOR = Draft202012Validator(SCHEMA, registry=Registry().with_resources(
+    (item["$id"], Resource.from_contents(item)) for item in DOCUMENTS))
 LEAD = "asr:tool_observation:" + "1" * 64
 SOURCE = "asr:source_file:" + "2" * 64
 
@@ -21,8 +23,7 @@ SOURCE = "asr:source_file:" + "2" * 64
 def _result() -> dict:
     return {
         "schema": "appsec-review/red-discovery-result/1",
-        "package": {"run_id": "2026-10-10-0001", "manifest_sha256": "a" * 64,
-                    "package_id": "hunt-example", "package_sha256": "b" * 64},
+        "package": {"basis_sha256": "b" * 64},
         "role": "red_team_analyst", "round_id": "1", "result_status": "partial",
         "lead_accounting": [{"observation_id": LEAD, "outcome": "proposal",
                              "proposal_ids": ["proposal1"], "gap_ids": [],
@@ -31,16 +32,16 @@ def _result() -> dict:
                        "affected_entities": [SOURCE],
                        "statement": "A request value may reach a security-sensitive operation",
                        "mechanism": "unchecked value propagation",
-                       "security_predicate": "untrusted value reaches the operation without an effective guard",
+                       "weakness": None, "security_predicate": "authz_bypass",
                        "attacker_entry": {"entity_id": SOURCE, "control": "request field",
-                                          "preconditions": ["route is enabled"]},
+                                          "preconditions": ["attacker_controls_request_field"]},
                        "trigger": "invoke the accepted request path",
                        "suspected_consequence": "unauthorized state change",
                        "assumptions": ["deployment selects this build unit"],
                        "evidence_ids": ["ev1"], "counterevidence_ids": [],
                        "obligation_ids": ["ob1"], "taint_path_ids": ["path1"]}],
         "proof_obligations": [{"local_id": "ob1", "proposal_id": "proposal1",
-                               "predicate": "guard_state", "question": "Is the guard effective?",
+                               "predicate": "missing_or_ineffective_guard", "question": "Is the guard effective?",
                                "candidate_evidence_ids": ["ev1"]}],
         "taint_paths": [{"local_id": "path1", "proposal_id": "proposal1",
                          "source_node": "source1", "sink_node": "sink1", "basis": "partial",
@@ -64,20 +65,20 @@ def _result() -> dict:
                                     "evidence_ids": ["ev1"],
                                     "open_questions": ["Does the same value reach step 2?"]}],
                          "gap_ids": ["gap1"]}],
-        "evidence_refs": [{"local_id": "ev1", "entity_id": SOURCE, "shard_id": "source-default",
+        "evidence_refs": [{"local_id": "ev1", "entity_id": SOURCE, "shard_id": "source/default",
                            "shard_sha256": "c" * 64, "relation": "nominates",
-                           "predicate": "request value reaches the operation",
+                           "predicate": "source_to_sink_reachability",
                            "locator": {"kind": "source_line", "path": "src/handler.c",
                                        "file_sha256": "d" * 64, "start_line": 10, "end_line": 12}}],
         "evidence_requests": [{"local_id": "request1", "proposal_id": "proposal1",
-                               "predicate": "effective guard state", "requested_kind": "compiled_view",
+                               "predicate": "missing_or_ineffective_guard", "requested_kind": "compiled_view",
                                "scope_entity_ids": [SOURCE], "reason": "Inspect expanded guard"}],
         "gaps": [{"local_id": "gap1", "kind": "unresolved", "scope": "source-to-sink path",
                   "reason": "intermediate call is not mapped"}]
     }
 
 
-def test_red_result_schema_accepts_typed_proposal_and_path() -> None:
+def test_red_discovery_result_schema_accepts_typed_proposal_and_path() -> None:
     Draft202012Validator.check_schema(SCHEMA)
     VALIDATOR.validate(_result())
 
@@ -88,8 +89,11 @@ def test_red_result_schema_accepts_typed_proposal_and_path() -> None:
     lambda value: value["chain_seeds"][0].update({"attack_chain_id": "chain-invented"}),
     lambda value: value["taint_paths"][0]["edges"][0].pop("basis"),
     lambda value: value["evidence_refs"][0]["locator"].update({"raw_source": "secret"}),
+    lambda value: value["proposals"][0].update({"security_predicate": "untrusted value reaches the operation"}),
+    lambda value: value["evidence_refs"][0].update({"predicate": "request value reaches the operation"}),
+    lambda value: value["package"].update({"run_id": "2026-10-10-0001"}),
 ])
-def test_red_result_schema_rejects_premature_conclusions_and_unbounded_content(mutate) -> None:
+def test_red_discovery_result_schema_rejects_premature_conclusions_and_unbounded_content(mutate) -> None:
     result = deepcopy(_result())
     mutate(result)
     assert not VALIDATOR.is_valid(result)

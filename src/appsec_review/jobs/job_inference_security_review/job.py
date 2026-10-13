@@ -15,17 +15,20 @@ import hashlib
 import json
 from pathlib import Path, PurePosixPath
 import re
-from typing import Any, Callable, Mapping, Sequence
+from typing import Any, Callable, Iterable, Mapping, Sequence
 
 from appsec_review.config.inference_review import (
     JOB_ID, InferenceSecurityReviewSettings, semantic_settings_sha256,
 )
+from appsec_review.graph.contract import ADMISSIBILITY_RULE as GRAPH_FACT_ADMISSIBILITY_RULE, FACT_PREDICATES_RULE
 from appsec_review.guidance import load_persona_covers, load_registry
 from appsec_review.guidance.coverage import crosswalk_tags
+from appsec_review.guidance.routing import unit_sources
 from appsec_review.indexing.store import open_shard
 from appsec_review.jobs.job_security_tagging.crosswalk import load_crosswalk
 from appsec_review.jobs.job_security_tagging.taxonomy import load_vocabulary
 from appsec_review.retrieval.core import RetrievalCore
+from appsec_review.review import obligations, ship_block
 from appsec_review.review.budget import JobBudget
 from appsec_review.review.claims import normalize_cwe
 from appsec_review.review.identity import sha256_hex
@@ -35,8 +38,10 @@ from appsec_review.review.packages import (
     ASSEMBLY_RULE, PackageSettings, assemble_packages, publish_packages, verify_package_manifest,
 )
 from appsec_review.review.references import load_cwe_reference
+from appsec_review.review.scoring.cwe_impact import ImpactCatalog
 from appsec_review.review.scope import AcceptedScope, accept_manifest
 from appsec_review.review.teams import ReviewTeamSemaphore
+from appsec_review.review.scoring.evidence_source import AcceptedEvidenceSource
 from appsec_review.runtime import Job, Unit, UnitExecutor
 from appsec_review.runtime.units import UnitContext
 from appsec_review.storage import atomic_json, canonical_json, file_sha256
@@ -163,6 +168,31 @@ def _taxonomy(repository_root: Path):
     return vocabulary, crosswalk
 
 
+def run_sources(query_sets: Iterable[str]) -> tuple[str, ...]:
+    """Hunt-strategy data sources available to every unit of the run.
+
+    Only ``control_evidence`` is run-wide (``owasp_workbench``). Sink facts and the entry-point
+    catalog are per unit: :func:`available_sources` adds them from the package's accepted graph
+    families. Symbol links unlock no strategy.
+    """
+    return ("owasp_workbench",) if "control_evidence" in set(query_sets) else ()
+
+
+def available_sources(query_sets: Iterable[str], graph_families: Iterable[str]) -> tuple[str, ...]:
+    """``source_sink_facts`` when the unit's scope has an accepted ``sink_site`` family and
+    ``entry_point_catalog`` when it has an accepted ``entry_point`` family, plus the run sources."""
+    return unit_sources(run_sources(query_sets), graph_families)
+
+
+# Rule versions that decide which evidence a cell's citations may satisfy; part of every package's
+# reuse basis so a change to graph admissibility invalidates reuse of the cells it affects.
+EVIDENCE_RULES = {"rule_predicates": RULE_PREDICATES_VERSION,
+                  "admissibility": obligations.ADMISSIBILITY_RULES_VERSION,
+                  "graph_fact_predicates": FACT_PREDICATES_RULE,
+                  "graph_fact_admissibility": GRAPH_FACT_ADMISSIBILITY_RULE,
+                  "obligation_policy_sha256": obligations.POLICY_SHA256}
+
+
 def package_works(run_root: Path, packages_doc: Mapping[str, Any]) -> list[PackageWork]:
     """The lane's verified packages as team work items."""
     works = []
@@ -199,8 +229,7 @@ def review_context(*, run_root: Path, run_id: str, attempt_root: Path, repositor
         source_languages=dict(scope_out["source_languages"]),
         build_unit_languages={key: tuple(value) for key, value in scope_out["build_unit_languages"].items()},
         index_names=tuple(sorted({str(shard["name"]) for shard in core.manifest["indexes"]})),
-        available_sources=tuple(sorted(({"symbol_links"} if "symbol_links" in query_sets else set()) |
-                                       ({"owasp_workbench"} if "control_evidence" in query_sets else set()))),
+        available_sources=run_sources(query_sets),
         max_page_size=settings.packages.max_page_size, max_depth=settings.packages.max_depth)
 
 
@@ -274,7 +303,7 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
                 shards = sorted({label for identity in entities[package.package_id]
                                  for label in membership.get(identity, ())})
                 basis = sha256_hex({"package": sanitized, "shards": shards, "assembly": ASSEMBLY_RULE,
-                                    "rule_predicates": RULE_PREDICATES_VERSION})
+                                    **EVIDENCE_RULES})
                 records.append({"package_id": package.package_id, "kind": package.kind, "lane": lane.value,
                                 "sha256": package.sha256, "unit_key": package.unit_key, "rank": list(rank),
                                 "basis": basis, "dependency_shards": shards,
@@ -332,6 +361,7 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
                 document = lane_failure(lane, works, f"{type(exc).__name__}", ledger_path, unit.unit_id)
                 unit.job.events.write("INFERENCE_REVIEW_LANE_FAILED", lane=lane.value, error_type=type(exc).__name__)
             document["ledger_shard"]["path"] = _artifact(run_root, ledger_path)["path"]
+            document["chain_seeds"]["path"] = _artifact(run_root, Path(document["chain_seeds"]["path"]))["path"]
             gaps = [f"{lane.value}: {document['counts'].get('gaps', 0)} gaps"] if document["counts"].get("gaps") else []
             unit.job.events.write("INFERENCE_REVIEW_LANE_COMPLETED", lane=lane.value, **{
                 key: value for key, value in document["counts"].items()})
@@ -376,21 +406,34 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
                 "ledger_shard": _artifact(unit.job.run_root, ledger_path), "states": document["states"],
                 "gaps": [], "terminal_status": "SUCCEEDED"}
 
+    def package_documents(unit: UnitContext) -> dict[str, Mapping[str, Any]]:
+        documents: dict[str, Mapping[str, Any]] = {}
+        for lane in ("lead", "hunt"):
+            packages_doc = _read(unit.job.run_root, unit.output(f"packages.assemble_{lane}_packages")["artifact"])
+            documents.update({work.package_id: work.document for work in package_works(unit.job.run_root,
+                                                                                     packages_doc)})
+        return documents
+
     def score(unit: UnitContext) -> Mapping[str, Any]:
         settings = _settings(unit)
         adjudications = _read(unit.job.run_root, unit.output("adjudicate.apply_policy")["artifact"])
         projection = project(stages.merge_verified(shard_paths(unit, LEDGER_UNITS[:3])).events)
         ledger_path = unit.unit_root / "ledger.jsonl"
         merged = _read(unit.job.run_root, unit.output("merge.claims")["artifact"])
-        documents = {}
-        for lane in ("lead", "hunt"):
-            packages_doc = _read(unit.job.run_root, unit.output(f"packages.assemble_{lane}_packages")["artifact"])
-            documents.update({work.package_id: work.document for work in package_works(unit.job.run_root,
-                                                                                     packages_doc)})
+        documents = package_documents(unit)
+        scope = _scope(unit)
+        # Factors are derived only from accepted, re-resolved evidence and accepted tags.
+        evidence = AcceptedEvidenceSource(
+            RetrievalCore(Path(unit.job.run_root).parent, scope.run_id,
+                          manifest_sha256=scope.manifest_sha256), scope)
+        # impact_class is derived from the run-pinned MITRE CWE catalog (decision 11); an unpinned or
+        # mismatched catalog derives nothing, and a stale one derives with the stale gap recorded.
+        catalog = ImpactCatalog.from_reference(load_cwe_reference(unit.job.run_root))
         document = stages.score_claims(adjudications["adjudications"], projection,
-                                       settings.scoring.cwe_impact_classes, unit.unit_root / "scores", ledger_path,
+                                       settings.scoring.cwe_impact_overrides, unit.unit_root / "scores", ledger_path,
                                        unit.unit_id, SchemaSet(repo(unit) / SCHEMA_DIRECTORY),
-                                       references=stages.claim_references(merged, documents))
+                                       references=stages.claim_references(merged, documents),
+                                       scoring=settings.scoring, evidence=evidence, cwe_catalog=catalog)
         gaps: list[str] = []
         return {"artifact": _write(unit, "scores.json", document),
                 "ledger_shard": _artifact(unit.job.run_root, ledger_path), "score_count": len(document["scores"]),
@@ -459,9 +502,18 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
         merged_doc = _read(unit.job.run_root, unit.output("merge.claims")["artifact"])
         scores = _read(unit.job.run_root, unit.output("scoring.score_claims")["artifact"])["scores"]
         accepted = _read(unit.job.run_root, unit.output("scope.accept_manifest")["artifact"])
+        documents = package_documents(unit)
+        require_distinct = settings.verification.require_distinct_model_for_ship_blocking
         findings = stages.finding_packages(projection, adjudications, merged_doc, scores,
                                            manifest_sha256=accepted["manifest_sha256"],
-                                           out_dir=unit.unit_root / "findings", schemas=schemas)
+                                           out_dir=unit.unit_root / "findings", schemas=schemas,
+                                           references=stages.claim_references(merged_doc, documents),
+                                           lead_families=stages.claim_lead_families(merged_doc, documents),
+                                           ship_block_settings=settings.ship_block,
+                                           require_distinct_model=require_distinct)
+        verification = settings.verifier_distinctness()
+        if verification["warning"]:
+            unit.job.events.write("INFERENCE_REVIEW_VERIFIER_NOT_DISTINCT", warning=verification["warning"])
         hunt_packages = _read(unit.job.run_root, unit.output("packages.assemble_hunt_packages")["artifact"])
         matrix_ref = completeness_doc["coverage_matrix"]
         matrix = _read(unit.job.run_root, matrix_ref)
@@ -471,7 +523,9 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
             shards=stages.shard_records(unit.job.run_root, paths), findings=findings, scores=scores,
             package_manifest_sha256=hunt_packages["package_manifest_content_sha256"],
             coverage={"path": matrix_ref["path"], "sha256": matrix_ref["sha256"], "rows": len(matrix["rows"])},
-            possible=merged_doc["possible_duplicates"], schemas=schemas)
+            possible=merged_doc["possible_duplicates"], schemas=schemas,
+            ship_block_policy_sha256=ship_block.policy_sha256(settings.ship_block, require_distinct),
+            verification=verification)
         artifact = _write(unit, "inference-review-handoff.json", handoff)
         gaps = [f"status {handoff['status']}"] if handoff["status"] != "COMPLETE" else []
         if accounting.review_incomplete:

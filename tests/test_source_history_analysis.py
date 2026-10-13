@@ -683,8 +683,9 @@ def test_history_parsers_read_incrementally_with_bounded_records() -> None:
     assert messages[commits[0]] == body[:1024] and messages[commits[1]] == b"short\n"
     assert messages[commits[2]] == b"last\n"
     assert parse_messages_stream(ChunkReader(messages_data), commits, max_message_bytes=len(body))[0][commits[0]] == body
-    classes = classify([{"change_id": commit} for commit in commits], messages, {}, known_commits=commits,
-                       fix_labels=[], security_labels=[], incomplete_messages=oversized)
+    classes = classify([{"change_id": commit, "files": []} for commit in commits], messages, {}, known_commits=commits,
+                       fix_labels=[], security_labels=[], formatting_tolerance=0.1,
+                       incomplete_messages=oversized)
     assert classes[commits[0]]["message_complete"] is False and classes[commits[0]]["fix"] == "heuristic"
     assert classes[commits[1]]["message_complete"] is True
 

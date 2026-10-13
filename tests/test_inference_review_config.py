@@ -65,7 +65,12 @@ def test_repository_defaults_load_as_typed_frozen_settings() -> None:
     assert verifier.model_profile == "default" and verifier.workers == 4
     assert Role.BLUE_TEAM_REFUTER in verifier.require_distinct_from_roles
     assert settings.profile_for(Role.HYPOTHESIS_HUNTER) is settings.models["default"]
-    assert settings.scoring.cwe_impact_classes["CWE-89"] == "critical"
+    # Only exceptions to cwe-impact-derivation/1 are configured; CWE-89 is derived from the catalog.
+    overrides = settings.scoring.cwe_impact_overrides
+    assert set(overrides) == {"CWE-79", "CWE-190", "CWE-209", "CWE-476", "CWE-502", "CWE-601"}
+    assert overrides["CWE-79"].impact_class == "medium" and overrides["CWE-79"].reason
+    assert "CWE-89" not in overrides
+    assert settings.as_document()["scoring"]["cwe_impact_overrides"]["CWE-601"]["impact_class"] == "low"
     assert settings.poc.execution_enabled is False and settings.poc.network == "none"
     assert settings.poc.eligibility_rules[0].values == ("HIGH", "CRITICAL")
     with pytest.raises(AttributeError):
@@ -134,8 +139,24 @@ def test_unknown_and_legacy_keys_are_rejected_at_every_level(tmp_path: Path, rep
     ('reasoning = "high"\nmax_input_tokens = 32000\nmax_output_tokens = 8000\nmax_queries',
      'reasoning = "extreme"\nmax_input_tokens = 32000\nmax_output_tokens = 8000\nmax_queries',
      "reasoning must be one of"),
-    ('"CWE-89" = "critical"', '"CWE-89" = "severe"', "CWE-89 must be one of"),
-    ('"CWE-89" = "critical"', '"SQLi" = "critical"', "invalid CWE id: SQLi"),
+    ('"CWE-209" = { impact_class = "low"', '"CWE-209" = { impact_class = "severe"',
+     "cwe_impact_overrides.CWE-209.impact_class must be one of"),
+    ('"CWE-209" = { impact_class = "low"', '"SQLi" = { impact_class = "low"',
+     "cwe_impact_overrides has an invalid CWE id: SQLi"),
+    ('"CWE-209" = { impact_class = "low", reason = "error messages disclose diagnostic detail, not bulk '
+     'application data" }', '"CWE-209" = { impact_class = "low", reason = " " }',
+     "cwe_impact_overrides.CWE-209.reason must be a non-empty string"),
+    ('"CWE-209" = { impact_class = "low", reason = "error messages disclose diagnostic detail, not bulk '
+     'application data" }', '"CWE-209" = { impact_class = "low" }',
+     "cwe_impact_overrides.CWE-209 is missing settings: reason"),
+    ('"CWE-209" = { impact_class = "low"', '"CWE-209" = { weight = 1, impact_class = "low"',
+     "cwe_impact_overrides.CWE-209 has unknown settings: weight"),
+    ('"CWE-209" = { impact_class = "low"', '"CWE-209" = "low"\n"CWE-210" = { impact_class = "low"',
+     "cwe_impact_overrides.CWE-209 must be a table"),
+    ("[jobs.job_inference_security_review.settings.scoring.cwe_impact_overrides]",
+     '[jobs.job_inference_security_review.settings.scoring.cwe_impact_classes]\n"CWE-89" = "critical"\n\n'
+     "[jobs.job_inference_security_review.settings.scoring.cwe_impact_overrides]",
+     "cwe_impact_classes was replaced by .*cwe_impact_overrides"),
     ("allow_docker_socket = false", "allow_docker_socket = true", "allow_docker_socket must be false"),
     ('network = "none"', 'network = "bridge"', "network must be none"),
     ('provider = "cvss_v4"\nfield', 'provider = "ssvc_v9"\nfield', "must name an enabled scoring provider"),
@@ -303,3 +324,156 @@ def test_kev_lane_a_admission_is_typed_and_defaults_on(tmp_path: Path) -> None:
     assert _settings(omitted).lanes.lead_admission_kev is True
     with pytest.raises(ValueError, match="lead_admission_kev must be a Boolean"):
         _variant(tmp_path / "bad", ("lead_admission_kev = true", 'lead_admission_kev = "yes"'))
+
+
+# ---------------------------------------------------------------- scoring model and rank weights (B1, B2)
+
+MATRIX = f"{SECTION}.scoring.providers.application_risk_matrix"
+
+
+def test_scoring_model_and_rank_weights_default_to_the_documented_values(tmp_path: Path) -> None:
+    from appsec_review.review.packages import PackageSettings
+    from appsec_review.review.ranking import RankWeights
+    from appsec_review.review.scoring import registry_from_settings
+    from appsec_review.review.scoring.risk_model import DEFAULT_RISK_MODEL
+
+    settings = _settings(load_config(ROOT / "appsec-review.toml"))
+    matrix = settings.scoring.providers["application_risk_matrix"]
+    assert matrix.implementation == "application_risk_matrix/2"
+    assert matrix.model.document() == DEFAULT_RISK_MODEL.document()
+    assert settings.ranking == RankWeights()
+    assert PackageSettings.from_review_settings(settings).rank_weights == RankWeights()
+    registry = registry_from_settings(settings.scoring)
+    assert registry.ids() == ("application_risk_matrix",)       # cvss_v4/ssvc_decision are not implemented
+    assert registry.get("application_risk_matrix").model.document() == DEFAULT_RISK_MODEL.document()
+    document = semantic_settings_view(settings)["settings"]
+    assert document["ranking"]["advisory_kev"] == 250
+    assert document["scoring"]["providers"]["application_risk_matrix"]["model"]["exploitability"]["bands"] == {
+        "medium": 40, "high": 75}
+    # Omitting the tables keeps the same defaults; application_risk_matrix/1 stays selectable without a model.
+    from appsec_review.config.inference_review import parse_inference_review_settings
+
+    raw = json.loads(load_config(ROOT / "appsec-review.toml").resolved_json)["jobs"][JOB]["settings"]
+    raw.pop("ranking")
+    raw["scoring"]["providers"]["application_risk_matrix"] = {"implementation": "application_risk_matrix/2"}
+    parsed = parse_inference_review_settings(raw)
+    assert parsed.ranking == RankWeights()
+    assert parsed.scoring.providers["application_risk_matrix"].model.document() == DEFAULT_RISK_MODEL.document()
+    raw["scoring"]["providers"]["application_risk_matrix"] = {"implementation": "application_risk_matrix/1"}
+    legacy = parse_inference_review_settings(raw)
+    assert legacy.scoring.providers["application_risk_matrix"].model is None
+    assert registry_from_settings(legacy.scoring).get("application_risk_matrix").implementation_version == (
+        "application_risk_matrix/1")
+
+
+def test_scoring_and_ranking_tuning_changes_the_semantic_fingerprint(tmp_path: Path) -> None:
+    base = _settings(_variant(tmp_path / "base"))
+    ranking = _settings(_variant(tmp_path / "ranking", ("advisory_kev = 250", "advisory_kev = 400")))
+    bands = _settings(_variant(tmp_path / "bands", ("medium = 40\nhigh = 75", "medium = 45\nhigh = 75")))
+    assert ranking.ranking.advisory_kev == 400
+    assert bands.scoring.providers["application_risk_matrix"].model.exploitability.bands["medium"] == 45
+    hashes = {semantic_settings_sha256(item) for item in (base, ranking, bands)}
+    assert len(hashes) == 3
+
+
+@pytest.mark.parametrize("old, new, message", [
+    ("advisory_kev = 250", "advisory_kev = 2500", "ranking.advisory_kev must be an integer between 0 and 1000"),
+    ("lps = 1000", "lps = 1000\nbogus = 1", "ranking has unknown settings: bogus"),
+    ("lps = 1000", "lps = 0.5", "ranking.lps must be an integer"),
+    ('implementation = "application_risk_matrix/2"', 'implementation = "application_risk_matrix/7"',
+     "implementation must be one of"),
+    ('implementation = "application_risk_matrix/2"', 'implementation = "application_risk_matrix/1"',
+     "application_risk_matrix/1 takes no"),
+    ('implementation = "application_risk_matrix/2"', 'implementation = "application_risk_matrix/2"\nweights = 1',
+     "providers.application_risk_matrix has unknown settings: weights"),
+    ("verification = { supported = 20, confirmed = 40 }", "verification = { supported = 50, confirmed = 40 }",
+     "exploitability.points.verification must not decrease"),
+    ("verification = { supported = 20, confirmed = 40 }", "verification = { supported = 20 }",
+     "points.verification must give points for exactly: supported, confirmed"),
+    ("verification = { supported = 20, confirmed = 40 }",
+     "verification = { supported = 20, confirmed = 40 }\nepss = { high = 10 }",
+     "exploitability.points has an unknown factor: epss"),
+    ("verification = { supported = 20, confirmed = 40 }",
+     "verification = { supported = 20, confirmed = 40 }\nthreat = { not_listed = 0, kev_listed = 10 }",
+     "may not use factor threat"),
+    ("medium = 40\nhigh = 75", "medium = 80\nhigh = 75", "exploitability.bands.medium must be below bands.high"),
+    ("medium = 40\nhigh = 75", "medium = 40\nhigh = 75\ncritical = 99", "exactly medium and high"),
+    ('high = { low = "low", medium = "medium", high = "high" }',
+     'high = { low = "low", medium = "medium", high = "low" }', "must not decrease as exploitability rises"),
+])
+def test_scoring_model_and_rank_weights_are_validated(tmp_path: Path, old: str, new: str, message: str) -> None:
+    with pytest.raises(ValueError, match=message):
+        _variant(tmp_path, (old, new))
+
+
+# ---------------------------------------------------------------- ship-block policy and verifier distinctness
+
+VERIFIER_PROFILE = f"""
+{SECTION}.models.verifier]
+provider = "claude-cli"
+model = "claude-verifier-model"
+reasoning = "high"
+max_input_tokens = 32000
+max_output_tokens = 8000
+max_queries = 40
+max_turns = 12
+timeout_seconds = 600
+"""
+
+
+def test_ship_block_and_verification_default_to_the_recorded_decisions(tmp_path: Path) -> None:
+    settings = _settings(load_config(ROOT / "appsec-review.toml"))
+    assert settings.ship_block.blocking_technical_severities == ("high", "critical")
+    assert settings.ship_block.kev_dependency_blocks is True
+    assert settings.ship_block.dependency_lead_families == ("dependency_advisory", "artifact_scanner")
+    assert settings.verification.require_distinct_model_for_ship_blocking is True
+    # Every checked-in profile is claude-haiku-5-5, so the verifier is not distinct and a warning is recorded.
+    assert {profile.model for profile in settings.models.values()} == {"claude-haiku-5-5"}
+    record = settings.verifier_distinctness()
+    assert record["distinct"] is False and "ship_blocking_pending_distinct_verification" in record["warning"]
+    # Omitting both tables keeps the same defaults.
+    source = (ROOT / "appsec-review.toml").read_text(encoding="utf-8")
+    start = source.index(f"{SECTION}.verification]")
+    end = source.index(f"{SECTION}.routing]")
+    assert source.index(f"{SECTION}.ship_block]") < end
+    omitted = _settings(_variant(tmp_path / "omitted", (source[start:end], "")))
+    assert omitted.ship_block == settings.ship_block and omitted.verification == settings.verification
+
+
+def test_a_distinct_verifier_profile_clears_the_warning_and_changes_the_fingerprint(tmp_path: Path) -> None:
+    base = _settings(_variant(tmp_path / "base"))
+    distinct = _settings(_variant(tmp_path / "distinct", ('workers = 4\nmodel_profile = "default"',
+                                                         'workers = 4\nmodel_profile = "verifier"'),
+                                  suffix=VERIFIER_PROFILE))
+    record = distinct.verifier_distinctness()
+    assert record["distinct"] is True and record["warning"] is None
+    assert record["verifier"] == {"provider": "claude-cli", "model": "claude-verifier-model"}
+    assert set(record["red"]) == {"hypothesis_hunter", "red_team_analyst"}
+    off = _settings(_variant(tmp_path / "off", ("require_distinct_model_for_ship_blocking = true",
+                                                "require_distinct_model_for_ship_blocking = false")))
+    assert off.verifier_distinctness()["warning"] is None and off.verifier_distinctness()["distinct"] is False
+    critical = _settings(_variant(tmp_path / "critical", ('blocking_technical_severities = ["high", "critical"]',
+                                                          'blocking_technical_severities = ["critical"]')))
+    assert critical.ship_block.blocking_technical_severities == ("critical",)
+    assert len({semantic_settings_sha256(item) for item in (base, distinct, off, critical)}) == 4
+
+
+@pytest.mark.parametrize("old, new, message", [
+    ('blocking_technical_severities = ["high", "critical"]', 'blocking_technical_severities = ["urgent"]',
+     "ship_block.blocking_technical_severities has unknown bands"),
+    ('blocking_technical_severities = ["high", "critical"]', "blocking_technical_severities = []",
+     "at least one band"),
+    ("kev_dependency_blocks = true", 'kev_dependency_blocks = "yes"', "kev_dependency_blocks must be a Boolean"),
+    ('dependency_lead_families = ["dependency_advisory", "artifact_scanner"]', 'dependency_lead_families = ["pip"]',
+     "unknown lead families: pip"),
+    ("kev_dependency_blocks = true", "kev_dependency_blocks = true\ncvss_threshold = 7",
+     "ship_block has unknown settings: cvss_threshold"),
+    ("require_distinct_model_for_ship_blocking = true", "require_distinct_model_for_ship_blocking = 1",
+     "require_distinct_model_for_ship_blocking must be a Boolean"),
+    ("require_distinct_model_for_ship_blocking = true",
+     "require_distinct_model_for_ship_blocking = true\nrequire_distinct_provider = true",
+     "verification has unknown settings: require_distinct_provider"),
+])
+def test_ship_block_and_verification_settings_are_validated(tmp_path: Path, old: str, new: str, message: str) -> None:
+    with pytest.raises(ValueError, match=message):
+        _variant(tmp_path, (old, new))

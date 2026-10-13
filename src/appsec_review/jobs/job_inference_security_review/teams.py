@@ -5,8 +5,11 @@ review team per package under the run-wide :class:`ReviewTeamSemaphore`, the det
 fair-share allocation, and the attempt's :class:`JobBudget`. A team runs:
 
 1. three red cells (lane A: ``red_team_analyst`` with the stack, preconditions and failure-mode
-   lenses; lane B: the ``hunt-panel/1`` (strategy, persona) pairs as ``hypothesis_hunter``);
-2. package-local normalization (``review.claims``), then the lane B triage gate or the lane A cap;
+   lenses; lane B: the ``hunt-panel/1`` (strategy, persona) pairs as ``hypothesis_hunter``), each
+   returning one admitted ``red-discovery-result/1`` (``review.red_discovery``);
+2. package-local normalization of the red proposals (``review.claims``), their evidence references
+   and observed taint hops, evidence requests, named gaps, lead accounting and chain seeds, then the
+   lane B triage gate or the lane A cap;
 3. for every admitted claim, ``blue_control`` and ``blue_reachability`` refuters and one blind
    ``independent_verifier`` whose request carries only the claim's identity fields.
 
@@ -27,6 +30,7 @@ from typing import Any, Callable, Iterable, Mapping, Sequence
 
 from appsec_review.config.inference_review import InferenceSecurityReviewSettings, ModelProfileSettings
 from appsec_review.guidance import compose_bundle, hunt_panel, pin_bundle, render_prompt, route_persona, route_stack
+from appsec_review.guidance.routing import unit_sources
 from appsec_review.inference import ModelResult, ReviewModelRequest
 from appsec_review.retrieval.index import INDEX_NAMES
 from appsec_review.review.budget import JobBudget
@@ -35,23 +39,27 @@ from appsec_review.review.cells import CellBudgetExceeded, CellOutcome, CellSpec
 from appsec_review.review.claims import normalize_claim
 from appsec_review.review.evidence import resolve_relation, satisfies
 from appsec_review.review.identity import make_id, sha256_hex
-from appsec_review.review.independence import ActorRecord, provider_distinct, verify_independence
+from appsec_review.review.independence import ActorRecord, model_distinct, provider_distinct, verify_independence
 from appsec_review.review.ledger import EvidenceRequestOutcome, LedgerWriter, gap_json
 from appsec_review.review.models import (
     BlueTask, CellRecord, CellStatus, Claim, EvidenceRelation, Gap, GapClass, IntegrityError, Lane, Predicate,
     RelationKind, Role, make_gap,
 )
 from appsec_review.review.obligations import required_predicates
+from appsec_review.review import red_discovery
+from appsec_review.review.red_discovery import RED_ROLES, Citation, RedInvocation
 from appsec_review.review.teams import FairShareScheduler, QueuedPackage, ReviewTeamSemaphore, TeamUnavailable
 from appsec_review.storage import atomic_json, file_sha256
 
 from .schemas import SchemaSet
 
 LANE_SCHEMA = "appsec-review/inference-review-lane/1"
-VALIDATOR_VERSION = "inference-review-results/1"
-RESULT_SCHEMAS = {Role.RED_TEAM_ANALYST: "red-result", Role.HYPOTHESIS_HUNTER: "red-result",
+VALIDATOR_VERSION = "inference-review-results/2"
+CHAIN_SEEDS_SCHEMA = "appsec-review/red-chain-seeds/1"
+RESULT_SCHEMAS = {Role.RED_TEAM_ANALYST: red_discovery.SCHEMA_NAME, Role.HYPOTHESIS_HUNTER: red_discovery.SCHEMA_NAME,
                   Role.BLUE_TEAM_REFUTER: "blue-result", Role.INDEPENDENT_VERIFIER: "verifier-result"}
-OUTPUT_SCHEMAS = {name: f"appsec-review/{name}/1" for name in ("red-result", "blue-result", "verifier-result")}
+OUTPUT_SCHEMAS = {name: f"appsec-review/{name}/1" for name in (red_discovery.SCHEMA_NAME, "blue-result",
+                                                               "verifier-result")}
 LEAD_LENSES = ("lead_red_stack", "lead_red_preconditions", "lead_red_failure_modes")
 VERIFIER_TASK = "blind_verifier"
 # Relation kinds each role may author (the registry ``outputs`` of each role; red evidence travels
@@ -118,6 +126,7 @@ class ReviewContext:
     _pinned: set[str] = field(default_factory=set)
     _resolves: dict[str, bool] = field(default_factory=dict)
     _names: dict[str, str | None] = field(default_factory=dict)
+    _locations: dict[str, Mapping[str, Any] | None] = field(default_factory=dict)
     _lock: threading.Lock = field(default_factory=threading.Lock)
 
     def profile(self, role: Role) -> ModelProfileSettings:
@@ -172,6 +181,33 @@ class ReviewContext:
             self._names[identity] = name
         return name
 
+    def location(self, identity: str) -> Mapping[str, Any] | None:
+        """The accepted source location of ``identity`` (``None`` when it has none)."""
+        with self._lock:
+            if identity in self._locations:
+                return self._locations[identity]
+        try:
+            results = self.core.find(identity=identity, limit=1)["results"]
+            location = results[0].get("location") if results else None
+        except (ValueError, LookupError):
+            location = None
+        location = location if isinstance(location, Mapping) else None
+        with self._lock:
+            self._locations[identity] = location
+        return location
+
+    def shard_sha256(self, label: str) -> str | None:
+        """The accepted manifest's hash of shard ``<index>/<shard_id>``."""
+        for item in self.core.manifest["indexes"]:
+            if f"{item['name']}/{item.get('shard_id', 'default')}" == label:
+                return str(item["sha256"])
+        return None
+
+    def red_validator_version(self) -> str:
+        """Red cells' validator version: the admission rules and the resolved closed limits."""
+        return (f"{VALIDATOR_VERSION};{red_discovery.ADMISSION_RULES_VERSION};"
+                f"limits={sha256_hex(self.settings.red_output.record())[:16]}")
+
 
 @dataclass
 class TeamResult:
@@ -190,6 +226,9 @@ class TeamResult:
     capabilities: list[dict[str, Any]] = field(default_factory=list)
     security_events: list[Mapping[str, Any]] = field(default_factory=list)
     triage: list[dict[str, Any]] = field(default_factory=list)
+    leads: tuple[str, ...] = ()                                   # the package's lead menu
+    lead_entries: list[tuple[str, str, str]] = field(default_factory=list)   # (cell, lead, outcome)
+    chain_seeds: list[dict[str, Any]] = field(default_factory=list)
     launched: bool = False
     counts: dict[str, int] = field(default_factory=lambda: {"cells_run": 0, "cells_reused": 0,
                                                             "cells_not_launched": 0})
@@ -201,6 +240,7 @@ class _Cell:
     capability: CellCapability
     kind: str                            # red | blue | verifier
     strategy: str | None = None
+    invocation: RedInvocation | None = None   # red cells: what the result must echo and account for
     outcome: CellOutcome | None = None
     record: CellRecord | None = None
     requests: list[bytes] = field(default_factory=list)
@@ -237,7 +277,7 @@ def lane_allocation(lead_count: int, hunt_count: int, lead_share: float, budget_
 
 def _claim_view(claim: Claim, *, statement: bool) -> dict[str, Any]:
     view = {"claim_id": claim.claim_id, "affected_entities": list(claim.affected_entities),
-            "weakness_cwe": claim.weakness_cwe, "security_predicate": claim.security_predicate,
+            "weakness_cwe": claim.weakness_cwe, "security_predicate": str(claim.security_predicate),
             "preconditions": list(claim.preconditions),
             "required_predicates": sorted(item.value for item in required_predicates(claim.preconditions))}
     if statement:
@@ -248,12 +288,17 @@ def _claim_view(claim: Claim, *, statement: bool) -> dict[str, Any]:
 def _cell(ctx: ReviewContext, work: PackageWork, routing: Mapping[str, Any], *, role: Role, persona: str,
           task: str, kind: str, task_input: Mapping[str, Any], claim: Claim | None = None,
           strategy: str | None = None) -> _Cell:
+    invocation = None
+    if role in RED_ROLES:
+        invocation = RedInvocation(role, 0, work.basis, _lead_ids(work))
+        task_input = {**task_input, "echo": invocation.echo()}
     profile = ctx.profile(role)
     tools = tuple(sorted(set(ctx.role_tools.get(role.value, ())) & IN_PROCESS_TOOLS))
     capability = CellCapability.issue(
         run_id=ctx.run_id, manifest_sha256=ctx.core.manifest_sha256, package_id=work.package_id,
         package_sha256=work.sha256, role=role, round=0, tools=tools,
         indexes=tuple(name for name in ctx.index_names if name in INDEX_NAMES), entities=work.entities,
+        graph_scopes=tuple((work.document.get("retrieval") or {}).get("graph_scopes", ())),
         max_queries=max(1, profile.max_queries), max_turns=profile.max_turns,
         page_size=min(100, ctx.max_page_size), max_depth=min(8, ctx.max_depth), max_result_bytes=MAX_RESULT_BYTES)
     stack = str(routing["stack"])
@@ -268,16 +313,22 @@ def _cell(ctx: ReviewContext, work: PackageWork, routing: Mapping[str, Any], *, 
         provider=profile.provider, model=profile.model, reasoning=profile.reasoning,
         max_input_tokens=profile.max_input_tokens, max_output_tokens=profile.max_output_tokens,
         timeout_seconds=profile.timeout_seconds, output_schema=OUTPUT_SCHEMAS[schema],
-        validator_version=VALIDATOR_VERSION, reuse_basis=work.basis)
-    return _Cell(spec, capability, kind, strategy)
+        validator_version=ctx.red_validator_version() if invocation else VALIDATOR_VERSION, reuse_basis=work.basis)
+    return _Cell(spec, capability, kind, strategy, invocation)
 
 
-def _validator(ctx: ReviewContext, role: Role, *, claim_id: str | None = None,
-               task: str | None = None) -> Callable[[Mapping[str, Any]], list[str]]:
+def _lead_ids(work: PackageWork) -> tuple[str, ...]:
+    return tuple(str(lead["observation_id"]) for lead in work.document.get("lead_menu", ()))
+
+
+def _validator(ctx: ReviewContext, role: Role, *, claim_id: str | None = None, task: str | None = None,
+               invocation: RedInvocation | None = None) -> Callable[[Mapping[str, Any]], list[str]]:
     schema = RESULT_SCHEMAS[role]
 
     def validate(result: Mapping[str, Any]) -> list[str]:
         errors = ctx.schemas.errors(schema, result)
+        if invocation is not None and not errors and isinstance(result, Mapping):
+            errors.extend(red_discovery.admission_errors(result, invocation, ctx.settings.red_output))
         if claim_id is not None and isinstance(result, Mapping) and result.get("claim_id") != claim_id:
             errors.append("result names a different claim")
         if task is not None and isinstance(result, Mapping) and result.get("task") != task:
@@ -385,15 +436,64 @@ def _requests(cell: _Cell, claim_id: str, items: Iterable[Mapping[str, Any]]) ->
     return found
 
 
-def _narratives(result: Mapping[str, Any] | None, claim_ref: Mapping[str, Any] | None = None) -> list[str]:
-    texts: list[str] = []
-    if claim_ref is not None:
-        texts.append(str(claim_ref.get("statement", "")))
-        texts.extend(str(item.get("rationale", "")) for item in claim_ref.get("proposed_relations", ()))
-    elif result is not None:
-        texts.append(str(result.get("rationale", "")))
-        texts.extend(str(item.get("rationale", "")) for item in result.get("proposed_relations", ()))
+def _narratives(result: Mapping[str, Any]) -> list[str]:
+    """Blue prose (rationales) that must never reach the blind verifier (R6 markers)."""
+    texts = [str(result.get("rationale", ""))]
+    texts.extend(str(item.get("rationale", "")) for item in result.get("proposed_relations", ()))
+    return _markers(texts)
+
+
+def _markers(texts: Iterable[str]) -> list[str]:
     return [text for text in texts if len(text.strip()) >= MIN_MARKER_CHARACTERS]
+
+
+def _red_relations(ctx: ReviewContext, cell: _Cell, claim_id: str, red: Mapping[str, Any],
+                   proposal: Mapping[str, Any], seen: set[str]) -> tuple[list[EvidenceRelation], list[Gap]]:
+    """Relations for one red proposal: its cited references and its observed taint hops.
+
+    ``nominates`` references and hops whose basis is ``analyst_hypothesis`` never become relations.
+    Every other citation is re-resolved through ``resolve_relation`` (accepted graph facts included);
+    a cited shard or source locator that disagrees with the re-resolved entity is an ``evidence_gap``.
+    """
+    relations: list[EvidenceRelation] = []
+    gaps: list[Gap] = []
+    for citation in red_discovery.proposal_citations(red, proposal):
+        if citation.kind is None:
+            continue
+        found, failed = _relations(ctx, cell, claim_id, [{"kind": citation.kind.value, "entity_id": citation.entity_id,
+                                                          "predicate": citation.predicate.value}], seen)
+        gaps.extend(failed)
+        for relation in found:
+            mismatch = _citation_mismatch(ctx, relation, citation)
+            if mismatch is None:
+                relations.append(relation)
+            else:
+                gaps.append(make_gap(GapClass.EVIDENCE_GAP, claim_id, mismatch, predicate=relation.predicate))
+    return relations, gaps
+
+
+def _citation_mismatch(ctx: ReviewContext, relation: EvidenceRelation, citation: Citation) -> str | None:
+    if citation.shard_id is not None and citation.shard_id != relation.shard_id:
+        return "cited shard is not the accepted shard the entity re-resolves to"
+    if citation.shard_sha256 is not None and citation.shard_sha256 != ctx.shard_sha256(relation.shard_id):
+        return "cited shard hash does not match the accepted manifest"
+    if citation.locator.get("kind") == "source_line":
+        location = ctx.location(relation.entity_id)
+        if location is None:
+            return "source-line locator cites an entity without an accepted source location"
+        if (citation.locator["path"], citation.locator["file_sha256"]) != (location.get("path"),
+                                                                           location.get("file_sha256")):
+            return "source-line locator names a different file than the re-resolved entity"
+        if (int(citation.locator["end_line"]) < int(location.get("start_line", 0)) or
+                int(citation.locator["start_line"]) > int(location.get("end_line", 0))):
+            return "source-line locator lies outside the re-resolved entity's lines"
+    return None
+
+
+def _worker_gap(cell: _Cell, item: Mapping[str, Any]) -> Gap:
+    """A gap the red worker named: missing or partial coverage, never evidence of a clean target."""
+    gap_class = GapClass.EVIDENCE_GAP if item["kind"] in ("unresolved", "ambiguous") else GapClass.COVERAGE_GAP
+    return make_gap(gap_class, cell.cell_id, f"worker_named_gap:{item['kind']}:{item['local_id']}: {item['scope']}")
 
 
 # ------------------------------------------------------------------------------------------------
@@ -441,7 +541,9 @@ def route(ctx: ReviewContext, work: PackageWork) -> dict[str, Any]:
             gaps.append(make_gap(GapClass.ROUTING_GAP, f"{work.package_id}:routing:persona",
                                  persona.get("reason", "")))
     else:
-        panel = hunt_panel(ctx.covers, unit_tags=tags, available_sources=ctx.available_sources)
+        # Graph-backed strategies unlock per unit, from the families accepted for the package scope.
+        sources = unit_sources(ctx.available_sources, (document.get("retrieval") or {}).get("graph_families", ()))
+        panel = hunt_panel(ctx.covers, unit_tags=tags, available_sources=sources)
         routing.update(persona=panel["cells"][0]["persona"], panel=panel["cells"], panel_rule=panel["rule"])
         for item in panel["gaps"]:
             gaps.append(make_gap(GapClass.COVERAGE_GAP, f"{work.package_id}:strategy:{item['strategy']}",
@@ -493,7 +595,7 @@ def _coverage_row(work: PackageWork, cell: _Cell) -> dict[str, Any]:
 
 def run_team(ctx: ReviewContext, work: PackageWork, *, launch: bool, not_launched_reason: str = "") -> TeamResult:
     """Run one package's team to terminal records. Only an :class:`IntegrityError` escapes."""
-    result = TeamResult(work.package_id, work.lane, work.unit_key)
+    result = TeamResult(work.package_id, work.lane, work.unit_key, leads=_lead_ids(work))
     routing = route(ctx, work)
     result.routing = {key: value for key, value in routing.items() if key != "gaps"}
     result.gaps.extend(routing["gaps"])
@@ -512,7 +614,8 @@ def run_team(ctx: ReviewContext, work: PackageWork, *, launch: bool, not_launche
     except IntegrityError:
         raise
     except Exception as exc:  # a team failure is a package gap; partial team output is discarded
-        failed = TeamResult(work.package_id, work.lane, work.unit_key, routing=result.routing, launched=True)
+        failed = TeamResult(work.package_id, work.lane, work.unit_key, routing=result.routing, launched=True,
+                            leads=result.leads)
         failed.gaps.extend(routing["gaps"])
         failed.gaps.append(make_gap(GapClass.WORKER_GAP, work.package_id, f"team failure: {type(exc).__name__}"))
         for cell in reds:
@@ -543,7 +646,8 @@ def _team_body(ctx: ReviewContext, work: PackageWork, routing: Mapping[str, Any]
                result: TeamResult) -> None:
     teams = ctx.settings.teams
     with ThreadPoolExecutor(max_workers=max(1, teams.red_per_team), thread_name_prefix="red") as pool:
-        futures = [pool.submit(_run, ctx, cell, _validator(ctx, cell.spec.role)) for cell in reds]
+        futures = [pool.submit(_run, ctx, cell, _validator(ctx, cell.spec.role, invocation=cell.invocation))
+                   for cell in reds]
         for future in futures:
             future.result()
     for cell in reds:
@@ -590,19 +694,31 @@ def _team_body(ctx: ReviewContext, work: PackageWork, routing: Mapping[str, Any]
 
 
 def _normalize(ctx: ReviewContext, work: PackageWork, reds: list[_Cell], result: TeamResult) -> list[dict[str, Any]]:
-    """Package-local normalization: one group per claim identity, merging every red proposal."""
+    """Package-local normalization of admitted red results: one group per claim identity.
+
+    Every succeeded red cell contributes its lead accounting, its named gaps and its chain seeds
+    (a run-owned artifact, never claims); every proposal becomes a claim through
+    ``normalize_claim``, merging exact duplicates across the package's red cells.
+    """
     groups: dict[str, dict[str, Any]] = {}
     for cell in reds:
         if cell.record is None or cell.record.status is not CellStatus.SUCCEEDED or cell.outcome.result is None:
             continue
+        red = cell.outcome.result
         seen = _seen(cell)
-        for index, item in enumerate(cell.outcome.result.get("claims", ())):
-            reference = str(item.get("claim_ref", index))
+        result.lead_entries.extend((cell.cell_id, lead, outcome)
+                                   for lead, outcome in sorted(red_discovery.lead_outcomes(red).items()))
+        result.gaps.extend(_worker_gap(cell, item) for item in red_discovery.named_gaps(red))
+        local_claims: dict[str, str] = {}
+        for proposal in red["proposals"]:
+            reference = str(proposal["local_id"])
+            weakness = proposal["weakness"]
             try:
                 normalized = normalize_claim(
-                    lane=work.lane, package_id=work.package_id, affected_entities=item["affected_entities"],
-                    weakness_cwe=item["weakness_cwe"], security_predicate=item["security_predicate"],
-                    preconditions=item["preconditions"], statement=item["statement"],
+                    lane=work.lane, package_id=work.package_id, affected_entities=proposal["affected_entities"],
+                    weakness_cwe=weakness["id"] if weakness else None,
+                    security_predicate=proposal["security_predicate"],
+                    preconditions=proposal["attacker_entry"]["preconditions"], statement=proposal["statement"],
                     accepted_cwe_ids=ctx.accepted_cwe_ids, origin_cell_ids=(cell.cell_id,))
             except (ValueError, KeyError, TypeError) as exc:
                 result.gaps.append(make_gap(GapClass.EVIDENCE_GAP, f"hypothesis:{cell.cell_id}:{reference}",
@@ -611,11 +727,18 @@ def _normalize(ctx: ReviewContext, work: PackageWork, reds: list[_Cell], result:
                                       "decision": "rejected", "reason": "closed_vocabulary"})
                 continue
             claim = normalized.claim
+            local_claims[reference] = claim.claim_id
             group = groups.setdefault(claim.claim_id, {"claim": claim, "cells": [], "items": [],
                                                        "gaps": [], "persona": cell.spec.persona})
             group["cells"].append(cell)
-            group["items"].append((cell, item, seen))
+            group["items"].append((cell, proposal, red, seen))
             group["gaps"].extend(normalized.gaps)
+        for seed in red_discovery.chain_seeds(red):
+            steps = sorted({str(step["proposal_id"]) for step in seed["steps"] if step["proposal_id"]})
+            result.chain_seeds.append({"package_id": work.package_id, "lane": work.lane.value,
+                                       "cell_id": cell.cell_id, "seed_local_id": seed["local_id"],
+                                       "proposal_claims": {local: local_claims.get(local) for local in steps},
+                                       "seed": dict(seed)})
     ordered = []
     for claim_id in sorted(groups):
         group = groups[claim_id]
@@ -624,27 +747,20 @@ def _normalize(ctx: ReviewContext, work: PackageWork, reds: list[_Cell], result:
         relations: dict[str, EvidenceRelation] = {}
         gaps = list({gap.gap_id: gap for gap in group["gaps"]}.values())
         requests: list[dict[str, Any]] = []
-        for cell, item, seen in group["items"]:
-            found, failed = _relations(ctx, cell, claim_id, item.get("proposed_relations", ()), seen)
+        for cell, proposal, red, seen in group["items"]:
+            found, failed = _red_relations(ctx, cell, claim_id, red, proposal, seen)
             relations.update((relation.relation_id, relation) for relation in found)
             gaps.extend(failed)
-            requests.extend(_requests(cell, claim_id, item.get("evidence_requests", ())))
+            requests.extend(_requests(cell, claim_id, red_discovery.proposal_requests(red, proposal["local_id"])))
         group["relations"] = [relations[key] for key in sorted(relations)]
         group["relation_gaps"] = gaps
         group["requests"] = requests
         group["support"] = len({relation.predicate for relation in relations.values()
                                 if relation.kind is RelationKind.SUPPORTS and satisfies(relation)})
-        group["narratives"] = [text for _cell_, item, _seen in group["items"] for text in _narratives(None, item)]
+        group["narratives"] = [text for _cell_, proposal, _red, _seen in group["items"]
+                               for text in _markers(red_discovery.narratives(proposal))]
         ordered.append(group)
     return ordered
-
-
-def _cited(item: Mapping[str, Any]) -> set[str]:
-    cited = set(item.get("affected_entities", ()))
-    for values in (item.get("citations") or {}).values():
-        cited.update(values)
-    cited.update(relation["entity_id"] for relation in item.get("proposed_relations", ()))
-    return cited
 
 
 def _triage(ctx: ReviewContext, work: PackageWork, groups: list[dict[str, Any]],
@@ -658,7 +774,8 @@ def _triage(ctx: ReviewContext, work: PackageWork, groups: list[dict[str, Any]],
         result.claims.append(claim)
         result.gaps.extend(group["relation_gaps"])
         if work.lane is Lane.HUNT:
-            unresolved = sorted(identity for _cell_, item, _seen in group["items"] for identity in _cited(item)
+            unresolved = sorted(identity for _cell_, proposal, red, _seen in group["items"]
+                                for identity in red_discovery.cited_entities(red, proposal)
                                 if not ctx.resolves(identity))
             if unresolved:
                 result.gaps.append(make_gap(GapClass.EVIDENCE_GAP, claim.claim_id,
@@ -694,6 +811,8 @@ def _review(ctx: ReviewContext, group: Mapping[str, Any], blues: tuple[_Cell, _C
     markers = list(group["narratives"])
     for cell in (*blues, verifier):
         _record(result, cell)
+    # Decision 2: recorded from the cells' configured model profiles whatever the verifier's outcome.
+    verifier_model_distinct = model_distinct(_actor(verifier), [_actor(cell) for cell in group["cells"]])
     for cell in blues:
         if cell.record.status is CellStatus.SUCCEEDED and cell.outcome.result is not None:
             found, failed = _relations(ctx, cell, claim.claim_id, cell.outcome.result.get("proposed_relations", ()),
@@ -707,7 +826,7 @@ def _review(ctx: ReviewContext, group: Mapping[str, Any], blues: tuple[_Cell, _C
         result.verifier_gaps[claim.claim_id] = [gap_json(gap) for gap in terminal]
         result.independence.setdefault(claim.claim_id, []).append({
             "verifier_cell_id": verifier.cell_id, "independent": False, "provider_distinct": False,
-            "review_id": None, "gap_ids": sorted(gap.gap_id for gap in terminal), "status": verifier.record.status.value})
+            "verifier_model_distinct": verifier_model_distinct, "review_id": None, "gap_ids": sorted(gap.gap_id for gap in terminal), "status": verifier.record.status.value})
         return
     seen = _seen(verifier)
     found, failed = _relations(ctx, verifier, claim.claim_id, verifier.outcome.result.get("proposed_relations", ()),
@@ -725,6 +844,7 @@ def _review(ctx: ReviewContext, group: Mapping[str, Any], blues: tuple[_Cell, _C
     result.independence.setdefault(claim.claim_id, []).append({
         "verifier_cell_id": verifier.cell_id, "independent": independent,
         "provider_distinct": provider_distinct(_actor(verifier), others),
+        "verifier_model_distinct": verifier_model_distinct,
         "review_id": make_id("review", 1, {"cell_id": verifier.cell_id, "claim_id": claim.claim_id}),
         "gap_ids": sorted(gap.gap_id for gap in gaps), "status": verifier.record.status.value})
 
@@ -787,7 +907,7 @@ def lane_failure(lane: Lane, packages: Sequence[PackageWork], reason: str, ledge
     """A lane that could not start: every package is a gapped package and the shard records it."""
     teams = []
     for work in sorted(packages, key=lambda item: (item.rank, item.package_id)):
-        team = TeamResult(work.package_id, lane, work.unit_key)
+        team = TeamResult(work.package_id, lane, work.unit_key, leads=_lead_ids(work))
         team.gaps.append(make_gap(GapClass.WORKER_GAP, work.package_id, f"lane failure: {reason}"))
         teams.append(team)
     return _seal(None, lane, teams, {Lane.LEAD: 0, Lane.HUNT: 0}, ledger_path, stream)
@@ -832,6 +952,8 @@ def _seal(ctx: ReviewContext | None, lane: Lane, teams: Sequence[TeamResult], al
         for record in team.cells:
             writer.cell_terminal(record)
     receipt = writer.seal()
+    seeds_path = Path(ledger_path).with_name("chain-seeds.json")
+    seeds = _chain_seed_artifact(lane, teams, seeds_path, ctx.settings.red_output.max_chain_seeds if ctx else 0)
     expected_cells = {record.cell_id: lane.value for team in teams for record in team.cells}
     document = {
         "schema": LANE_SCHEMA, "lane": lane.value,
@@ -846,6 +968,8 @@ def _seal(ctx: ReviewContext | None, lane: Lane, teams: Sequence[TeamResult], al
         "verifier_gaps": _merge_lists(team.verifier_gaps for team in teams),
         "routing": {team.package_id: team.routing for team in teams},
         "triage": {team.package_id: team.triage for team in teams},
+        "lead_accounting": {team.package_id: _lead_summary(team) for team in teams},
+        "chain_seeds": seeds,
         "coverage": [row for team in teams for row in team.coverage],
         "capabilities": [row for team in teams for row in team.capabilities],
         "security_events": [dict(event) for team in teams for event in team.security_events],
@@ -857,6 +981,37 @@ def _seal(ctx: ReviewContext | None, lane: Lane, teams: Sequence[TeamResult], al
     document["counts"].update(claims=len({claim.claim_id for team in teams for claim in team.claims}),
                               cells=len(expected_cells), gaps=len(gaps))
     return document
+
+
+def _lead_summary(team: TeamResult) -> dict[str, dict[str, Any]]:
+    """Each package lead across the package's succeeded red cells (``red_discovery.summarize_lead``).
+
+    ``no_proposal`` is never clean coverage; ``unaccounted`` means no red cell of the package
+    succeeded (its cells already carry the terminal gaps).
+    """
+    entries: dict[str, dict[str, str]] = {lead: {} for lead in team.leads}
+    for cell_id, lead, outcome in team.lead_entries:
+        entries.setdefault(lead, {})[cell_id] = outcome
+    return {lead: {"outcome": red_discovery.summarize_lead(list(cells.values())), "cells": dict(sorted(cells.items()))}
+            for lead, cells in sorted(entries.items())}
+
+
+def _chain_seed_artifact(lane: Lane, teams: Sequence[TeamResult], path: Path, per_cell: int) -> dict[str, Any]:
+    """Persist the lane's red chain seeds for the later chain-composition slice; they are not claims.
+
+    The artifact is bounded: each red cell contributes at most ``settings.red_output.max_chain_seeds``
+    admitted seeds, so it holds at most that many per red cell of the lane.
+    """
+    seeds = sorted((seed for team in teams for seed in team.chain_seeds),
+                   key=lambda item: (item["package_id"], item["cell_id"], item["seed_local_id"]))
+    cells = {record.cell_id for team in teams for record in team.cells}
+    if len(seeds) > per_cell * max(1, len(cells)):
+        raise IntegrityError("admitted chain seeds exceed the configured per-cell bound")
+    atomic_json(path, {"schema": CHAIN_SEEDS_SCHEMA, "lane": lane.value,
+                       "statement": "red chain seeds are hypotheses for later chain composition; they are "
+                                    "not claims, findings or confirmed chains",
+                       "seeds": seeds})
+    return {"path": str(path), "schema": CHAIN_SEEDS_SCHEMA, "count": len(seeds), "sha256": file_sha256(path)}
 
 
 def _merge_lists(items: Iterable[Mapping[str, list[Any]]]) -> dict[str, list[Any]]:

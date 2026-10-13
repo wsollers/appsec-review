@@ -5,7 +5,7 @@ Two independent jobs index accepted C/C++ projects after `job_cpp_compiled_analy
 | Job | Tool image | Publishes |
 | --- | --- | --- |
 | `job_cpp_symbol_index` | `tool-clangd-indexer` (clangd 23.1.0) | `analysis` shards: symbols with exact locations, plus call/reference edges |
-| `job_cpg_analysis` | `tool-joern` (Joern 4.0.630, c2cpg) | `observations` shards: a `BLOCKED` disposition and the retained CPG as evidence |
+| `job_cpg_analysis` (deprecated; off by default) | `tool-joern` (Joern 4.0.630, c2cpg) | `observations` shards: an `unavailable` coverage row per scope when disabled; when enabled, a `BLOCKED` disposition and the retained CPG as evidence |
 
 ```text
 job_cpp_compiled_analysis (accepted handoff)
@@ -87,8 +87,14 @@ For each scope:
    reason none was produced: timeout, OOM, non-zero exit, empty output, or over the bound.
    Generating a CPG is not CPG coverage.
 
-Settings in `[jobs.job_cpg_analysis.settings]`: `workers` (1 until a per-tool resource profile is
-reviewed) and `max_cpg_bytes`.
+Settings in `[jobs.job_cpg_analysis.settings]`:
+- `enabled` (default `false`). Joern is deprecated, and no review fact depends on it; see "Why
+  Joern is deprecated" in
+  [`../architecture/code-graph-precomputation.md`](../architecture/code-graph-precomputation.md).
+  When `false`, no Joern container runs, and each accepted C/C++ scope publishes an `unavailable`
+  coverage row naming the setting.
+- `workers` (1 until a per-tool resource profile is reviewed).
+- `max_cpg_bytes`.
 
 The Joern image ships zstd-jni's native library, copied at build time from the hash-pinned JAR, and
 points the JVM at it. Without it, writing a CPG fails, because the runtime `/tmp` is `noexec`.

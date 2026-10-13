@@ -1,4 +1,5 @@
-"""KEV and EPSS sync steps, the NVD CVE index, and per-run feed pinning (offline fixture feeds only)."""
+"""KEV and EPSS sync steps, the NVD CVE index, MITRE CWE consequences, and per-run feed pinning (offline
+fixture feeds only)."""
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
@@ -12,12 +13,14 @@ import pytest
 from appsec_review.jobs.job_third_party_data_sync.publication import verify_current
 from appsec_review.jobs.job_third_party_data_sync.steps.epss_sync import feed as epss_feed
 from appsec_review.jobs.job_third_party_data_sync.steps.kev_sync import feed as kev_feed
+from appsec_review.jobs.job_third_party_data_sync.steps.mitre_sync import feed as mitre_feed
 from appsec_review.jobs.job_third_party_data_sync.steps.nvd_sync import index as nvd_index
 from appsec_review.jobs.job_third_party_data_sync.steps.nvd_sync.feed import NvdPublisher
 from appsec_review.storage import file_sha256
 from tests.fixtures.reference_feeds import (
-    EPSS_URL, FIXED_NOW, KEV_URL, epss_bytes, epss_settings, kev_document, kev_entry, kev_settings, nvd_settings,
-    nvd_vulnerability, pin_feeds, publish_epss, publish_kev, publish_nvd, set_published_at,
+    EPSS_URL, FIXED_NOW, KEV_URL, cwe_xml, epss_bytes, epss_settings, kev_document, kev_entry, kev_settings,
+    nvd_settings, nvd_vulnerability, pin_feeds, publish_epss, publish_kev, publish_mitre, publish_nvd,
+    set_published_at,
 )
 
 V31 = {"cvssMetricV31": [{"version": "3.1", "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H",
@@ -238,6 +241,67 @@ def test_tampered_nvd_index_fails_verification_and_pinning(tmp_path: Path) -> No
     with pytest.raises(ValueError, match="integrity"):
         NvdPublisher(nvd_settings(root)).verify()
     assert pin_feeds(tmp_path, {"nvd": root})["nvd"]["status"] == "unavailable"
+
+
+# --- MITRE CWE Common_Consequences -----------------------------------------------------------------------
+
+CWE_FIXTURE = {
+    "CWE-120": ("Buffer Copy without Checking Size of Input", "Base", [
+        (["Integrity", "Confidentiality", "Availability"], ["Modify Memory", "Execute Unauthorized Code or Commands"]),
+        (["Availability"], ["DoS: Crash, Exit, or Restart", "DoS: Resource Consumption (CPU)"]),
+        (["Access Control"], ["Bypass Protection Mechanism"])]),
+    "CWE-1007": ("Insufficient Visual Distinction of Homoglyphs", "Base"),          # no consequences
+}
+
+
+def test_mitre_index_captures_each_weakness_consequences(tmp_path: Path) -> None:
+    root = publish_mitre(tmp_path / "mitre", CWE_FIXTURE, tmp_path / "work")
+    identity = verify_current(root, "mitre")
+    manifest = json.loads((Path(identity["directory"]) / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["schema"] == mitre_feed.SNAPSHOT_SCHEMA == "appsec-review/mitre-snapshot/2"
+    assert manifest["index_schema"] == mitre_feed.INDEX_SCHEMA == "appsec-review/mitre-index/2"
+    assert manifest["consequence_count"] == 3 and manifest["consequence_truncated_weaknesses"] == 0
+    index = Path(identity["directory"]) / "index" / "mitre.sqlite"
+    rows = _rows(index, "SELECT external_id, ordinal, scopes_json, impacts_json FROM cwe_consequence "
+                        "ORDER BY external_id, ordinal")
+    assert [(row[0], row[1], json.loads(row[2]), json.loads(row[3])) for row in rows] == [
+        ("CWE-120", 0, ["Integrity", "Confidentiality", "Availability"],
+         ["Modify Memory", "Execute Unauthorized Code or Commands"]),
+        ("CWE-120", 1, ["Availability"], ["DoS: Crash, Exit, or Restart", "DoS: Resource Consumption (CPU)"]),
+        ("CWE-120", 2, ["Access Control"], ["Bypass Protection Mechanism"])]
+    # A weakness without Common_Consequences is still catalogued, with no consequence rows.
+    assert _rows(index, "SELECT external_id FROM entry WHERE source = 'cwe'") == [("CWE-1007",), ("CWE-120",)]
+    metadata = dict(_rows(index, "SELECT key, value FROM metadata"))
+    assert metadata["schema"] == "appsec-review/mitre-index/2" and metadata["consequence_count"] == "3"
+
+
+def test_mitre_consequence_index_is_deterministic(tmp_path: Path) -> None:
+    first = publish_mitre(tmp_path / "a", CWE_FIXTURE, tmp_path / "wa")
+    second = publish_mitre(tmp_path / "b", dict(reversed(list(CWE_FIXTURE.items()))), tmp_path / "wb")
+    a, b = verify_current(first, "mitre"), verify_current(second, "mitre")
+    assert a["snapshot_id"] == b["snapshot_id"]
+    assert file_sha256(Path(a["directory"]) / "index" / "mitre.sqlite") == file_sha256(
+        Path(b["directory"]) / "index" / "mitre.sqlite")
+
+
+def test_mitre_consequences_are_bounded_normalized_and_skip_empty_entries() -> None:
+    import xml.etree.ElementTree as ET
+
+    many = [([f"Scope {index}"], ["Read Memory"]) for index in range(mitre_feed.MAX_CONSEQUENCES + 3)]
+    document = ET.fromstring(cwe_xml({"CWE-1": ("Many", "Base", many)}))
+    (weakness,) = [item for item in document.iter() if item.tag.endswith("Weakness")]
+    entries, truncated = mitre_feed.weakness_consequences(weakness)
+    assert len(entries) == mitre_feed.MAX_CONSEQUENCES and truncated is True
+    raw = ('<Weakness ID="2" Name="n"><Common_Consequences>'
+           '<Consequence><Scope>  Integrity </Scope><Scope>Integrity</Scope>'
+           '<Impact>Modify\n   Memory</Impact><Note>ignored</Note></Consequence>'
+           '<Consequence><Note>only a note</Note></Consequence>'
+           f'<Consequence><Scope>Other</Scope>{"".join(f"<Impact>I{n}</Impact>" for n in range(20))}</Consequence>'
+           '</Common_Consequences></Weakness>')
+    entries, truncated = mitre_feed.weakness_consequences(ET.fromstring(raw))
+    assert entries[0] == (["Integrity"], ["Modify Memory"])
+    assert len(entries) == 2 and len(entries[1][1]) == mitre_feed.MAX_CONSEQUENCE_TERMS and truncated is True
+    assert mitre_feed.weakness_consequences(ET.fromstring('<Weakness ID="3" Name="n"/>')) == ([], False)
 
 
 # --- per-run pinning and freshness -----------------------------------------------------------------------

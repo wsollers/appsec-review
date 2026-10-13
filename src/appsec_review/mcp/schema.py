@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from .owasp import QUERY_TOOL_SCHEMA
+from appsec_review.graph.contract import MAX_TOOL_DEPTH, MAX_TOOL_LIMIT, QUERY_CODE_GRAPH, Mode, SinkClass, SourceClass
 from appsec_review.retrieval.index import INDEX_NAMES
 from appsec_review.retrieval.observations import OBSERVATION_CLASSES, REPORTED_SEVERITIES
 from appsec_review.retrieval.precomputed import QUERY_SETS
@@ -140,6 +141,16 @@ TOOLS: tuple[dict[str, Any], ...] = (
          "subject": IDENTITY,
          "path": {"type": "string", "maxLength": 4096},
          "limit": {"type": "integer", "minimum": 1, "maximum": 100},
+         "cursor": {"type": "string", "maxLength": 4096},
+     }}},
+    {"name": QUERY_CODE_GRAPH, "description": "Query accepted, hash-verified code-graph facts (calls, sinks, entry points, paths, guards, ranges, summaries) by mode and exact subject identity; no analysis runs during retrieval and every bound reached is a gap.",
+     "inputSchema": {"type": "object", "additionalProperties": False, "required": ["mode", "subject"], "properties": {
+         "mode": {"type": "string", "enum": [mode.value for mode in Mode]},
+         "subject": IDENTITY,
+         "depth": {"type": "integer", "minimum": 1, "maximum": MAX_TOOL_DEPTH},
+         "sink_class": {"type": "string", "enum": [value.value for value in SinkClass]},
+         "source_class": {"type": "string", "enum": [value.value for value in SourceClass]},
+         "limit": {"type": "integer", "minimum": 1, "maximum": MAX_TOOL_LIMIT},
          "cursor": {"type": "string", "maxLength": 4096},
      }}},
     {"name": "query_observations", "description": "Filter accepted scanner observations by exact scanner, rule, normalized reported severity, suppression/duplicate state, source/artifact and location; returns native severity and the normalization rule. Tool observations are never confirmed findings.",

@@ -50,6 +50,7 @@ def builtin_registry() -> JobRegistry:
     from appsec_review.jobs.job_cpp_symbol_index import build_job as build_cpp_symbol_index
     from appsec_review.jobs.job_cpg_analysis import build_job as build_cpg_analysis
     from appsec_review.jobs.job_codeql_analysis.job import build_job as build_codeql_analysis
+    from appsec_review.jobs.job_code_graph_index import build_job as build_code_graph_index
     from appsec_review.jobs.job_post_build_security_assessment import build_job as build_post_build_security
     from appsec_review.jobs.job_owasp_control_assessment import build_job as build_owasp_control_assessment
     from appsec_review.jobs.job_security_tagging import build_job as build_security_tagging
@@ -79,6 +80,7 @@ def builtin_registry() -> JobRegistry:
     registry.register("job_cpp_symbol_index", build_cpp_symbol_index)
     registry.register("job_cpg_analysis", build_cpg_analysis)
     registry.register("job_codeql_analysis", build_codeql_analysis)
+    registry.register("job_code_graph_index", build_code_graph_index)
     registry.register("job_post_build_security_assessment",
                       lambda: build_post_build_security(infer=infer))
     registry.register("job_owasp_control_assessment", build_owasp_control_assessment)

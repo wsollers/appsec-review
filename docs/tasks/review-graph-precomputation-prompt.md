@@ -1,7 +1,12 @@
 # Implementation prompt: source graphs and reusable review queries
 
-Status: not implemented. Its prerequisite, the review-data indexing batch, is implemented. Only the
-nine stage-1 sets are built (`FIRST_STAGE_SETS` in `indexing/products.py`); `query_precomputed`
+Status: **superseded, not implemented.** The graph batch is now specified by
+[`code-graph-precomputation.md`](../architecture/code-graph-precomputation.md), which replaces
+this prompt's Joern/LLVM export, representation linker and `query_precomputed` graph sets with a
+CodeQL-first export, a `graph` index, the typed `query_code_graph` tool and a chunked
+implementation plan. Implement from that document; this prompt is retained as the record of the
+earlier scope. Its prerequisite, the review-data indexing batch, is implemented. Only the nine
+stage-1 sets are built (`FIRST_STAGE_SETS` in `indexing/products.py`); `query_precomputed`
 returns an unavailable gap for the graph and review-context sets. `job_cpg_analysis` retains a
 Joern CPG binary without graph export.
 

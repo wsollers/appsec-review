@@ -1,7 +1,8 @@
 """``application_risk_matrix/1``: the deterministic slice 1 scoring provider (design R8).
 
-Axes are ``impact_class`` (from a configured CWE table, no parent roll-up) and
-``exploitability_confidence`` (``high`` when confirmed, ``medium`` when supported). A claim that is
+Axes are ``impact_class`` (from a CWE table, no parent roll-up; built from settings it is the frozen
+``LEGACY_CWE_IMPACT_CLASSES``) and ``exploitability_confidence`` (``high`` when confirmed,
+``medium`` when supported). A claim that is
 already ``supported`` or ``confirmed`` and whose lead advisory is CISA KEV-listed has its
 exploitability confidence raised one band (``medium`` -> ``high``; ``high`` stays ``high``), recorded
 as an assumption; KEV never makes an unsupported claim scoreable. NVD CVSS vectors and EPSS are
@@ -28,6 +29,18 @@ IMPACT_CLASSES = ("low", "medium", "high", "critical")
 CONFIDENCE_LEVELS = ("medium", "high")
 BANDS = ("low", "medium", "high", "critical")
 CONFIDENCE_BY_STATE = MappingProxyType({ClaimState.CONFIRMED: "high", ClaimState.SUPPORTED: "medium"})
+# The hand-maintained CWE table shipped as ``scoring.cwe_impact_classes`` before decision 11. It is
+# frozen with this implementation version so that selecting ``application_risk_matrix/1`` for
+# comparison or rollback reproduces earlier ratings and score ids; ``/2`` derives impact classes
+# from the pinned MITRE catalog instead and never reads this table.
+LEGACY_CWE_IMPACT_CLASSES: Mapping[str, str] = MappingProxyType({
+    "CWE-22": "high", "CWE-77": "critical", "CWE-78": "critical", "CWE-79": "medium", "CWE-89": "critical",
+    "CWE-94": "critical", "CWE-120": "high", "CWE-190": "medium", "CWE-200": "medium", "CWE-209": "low",
+    "CWE-287": "critical", "CWE-306": "critical", "CWE-327": "medium", "CWE-352": "medium", "CWE-400": "medium",
+    "CWE-416": "critical", "CWE-434": "high", "CWE-476": "medium", "CWE-502": "critical", "CWE-601": "low",
+    "CWE-611": "high", "CWE-787": "critical", "CWE-798": "high", "CWE-862": "high", "CWE-863": "high",
+    "CWE-918": "high",
+})
 DEFAULT_MATRIX: Mapping[str, Mapping[str, str]] = MappingProxyType({
     "critical": MappingProxyType({"high": "critical", "medium": "high"}),
     "high": MappingProxyType({"high": "high", "medium": "medium"}),

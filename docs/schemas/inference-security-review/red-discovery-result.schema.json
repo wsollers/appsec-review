@@ -2,41 +2,39 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://appsec-review.local/schemas/inference-security-review/red-discovery-result.schema.json",
   "title": "Red discovery proposal result, version 1",
-  "description": "A package-scoped proposal for normalization and independent challenge, never an adjudicated finding or attack chain. Runtime limits are applied from resolved TOML configuration.",
+  "description": "The single final-result contract of hypothesis_hunter and red_team_analyst cells: a package-scoped proposal for normalization and independent challenge, never an adjudicated finding or attack chain. The maxItems/maxLength bounds here are hard ceilings; the tighter limits a run applies come from the resolved settings.red_output table, and the admission rules in docs/architecture/red-discovery-output.md are enforced by appsec_review.review.red_discovery.",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema", "package", "role", "round_id", "result_status", "lead_accounting", "proposals", "proof_obligations", "taint_paths", "chain_seeds", "evidence_refs", "evidence_requests", "gaps"],
   "properties": {
     "schema": {"const": "appsec-review/red-discovery-result/1"},
     "package": {
+      "description": "Echo of the invocation the cell was given. Run, manifest and package identities are bound by the application-held cell capability, never by this echo; the worker sees only the package's reuse basis.",
       "type": "object", "additionalProperties": false,
-      "required": ["run_id", "manifest_sha256", "package_id", "package_sha256"],
+      "required": ["basis_sha256"],
       "properties": {
-        "run_id": {"type": "string", "minLength": 1},
-        "manifest_sha256": {"$ref": "#/$defs/sha256"},
-        "package_id": {"type": "string", "minLength": 1},
-        "package_sha256": {"$ref": "#/$defs/sha256"}
+        "basis_sha256": {"$ref": "common.schema.json#/$defs/sha256"}
       }
     },
     "role": {"enum": ["hypothesis_hunter", "red_team_analyst"]},
-    "round_id": {"type": "string", "minLength": 1},
+    "round_id": {"type": "string", "pattern": "^(0|[1-9][0-9]?)$"},
     "result_status": {"enum": ["completed", "partial"]},
-    "lead_accounting": {"type": "array", "items": {"$ref": "#/$defs/lead_accounting"}},
-    "proposals": {"type": "array", "items": {"$ref": "#/$defs/proposal"}},
-    "proof_obligations": {"type": "array", "items": {"$ref": "#/$defs/obligation"}},
-    "taint_paths": {"type": "array", "items": {"$ref": "#/$defs/taint_path"}},
-    "chain_seeds": {"type": "array", "items": {"$ref": "#/$defs/chain_seed"}},
-    "evidence_refs": {"type": "array", "items": {"$ref": "#/$defs/evidence"}},
-    "evidence_requests": {"type": "array", "items": {"$ref": "#/$defs/evidence_request"}},
-    "gaps": {"type": "array", "items": {"$ref": "#/$defs/gap"}}
+    "lead_accounting": {"type": "array", "maxItems": 1024, "items": {"$ref": "#/$defs/lead_accounting"}},
+    "proposals": {"type": "array", "maxItems": 32, "items": {"$ref": "#/$defs/proposal"}},
+    "proof_obligations": {"type": "array", "maxItems": 256, "items": {"$ref": "#/$defs/obligation"}},
+    "taint_paths": {"type": "array", "maxItems": 32, "items": {"$ref": "#/$defs/taint_path"}},
+    "chain_seeds": {"type": "array", "maxItems": 16, "items": {"$ref": "#/$defs/chain_seed"}},
+    "evidence_refs": {"type": "array", "maxItems": 256, "items": {"$ref": "#/$defs/evidence"}},
+    "evidence_requests": {"type": "array", "maxItems": 64, "items": {"$ref": "#/$defs/evidence_request"}},
+    "gaps": {"type": "array", "maxItems": 128, "items": {"$ref": "#/$defs/gap"}}
   },
   "$defs": {
-    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
-    "entity_id": {"type": "string", "pattern": "^asr:[a-z][a-z0-9_]*:[0-9a-f]{64}$"},
+    "entity_id": {"$ref": "common.schema.json#/$defs/entity_id"},
     "local_id": {"type": "string", "pattern": "^[a-z][a-z0-9_-]{0,63}$"},
-    "entity_ids": {"type": "array", "uniqueItems": true, "items": {"$ref": "#/$defs/entity_id"}},
-    "local_ids": {"type": "array", "uniqueItems": true, "items": {"$ref": "#/$defs/local_id"}},
+    "entity_ids": {"type": "array", "maxItems": 64, "uniqueItems": true, "items": {"$ref": "#/$defs/entity_id"}},
+    "local_ids": {"type": "array", "maxItems": 64, "uniqueItems": true, "items": {"$ref": "#/$defs/local_id"}},
     "text": {"type": "string", "minLength": 1, "maxLength": 4096},
+    "texts": {"type": "array", "maxItems": 16, "items": {"$ref": "#/$defs/text"}},
     "lead_accounting": {
       "type": "object", "additionalProperties": false,
       "required": ["observation_id", "outcome", "proposal_ids", "gap_ids", "reason"],
@@ -50,31 +48,36 @@
     },
     "proposal": {
       "type": "object", "additionalProperties": false,
-      "required": ["local_id", "source_lead_ids", "affected_entities", "statement", "mechanism", "security_predicate", "attacker_entry", "trigger", "suspected_consequence", "assumptions", "evidence_ids", "counterevidence_ids", "obligation_ids", "taint_path_ids"],
+      "required": ["local_id", "source_lead_ids", "affected_entities", "statement", "mechanism", "weakness", "security_predicate", "attacker_entry", "trigger", "suspected_consequence", "assumptions", "evidence_ids", "counterevidence_ids", "obligation_ids", "taint_path_ids"],
       "properties": {
         "local_id": {"$ref": "#/$defs/local_id"},
         "source_lead_ids": {"$ref": "#/$defs/entity_ids"},
-        "affected_entities": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "#/$defs/entity_id"}},
+        "affected_entities": {"type": "array", "minItems": 1, "maxItems": 64, "uniqueItems": true, "items": {"$ref": "#/$defs/entity_id"}},
         "statement": {"$ref": "#/$defs/text"},
         "mechanism": {"$ref": "#/$defs/text"},
         "weakness": {
-          "type": "object", "additionalProperties": false,
-          "required": ["namespace", "id"],
-          "properties": {"namespace": {"type": "string", "minLength": 1}, "id": {"type": "string", "minLength": 1}}
+          "oneOf": [
+            {
+              "type": "object", "additionalProperties": false,
+              "required": ["namespace", "id"],
+              "properties": {"namespace": {"const": "CWE"}, "id": {"$ref": "common.schema.json#/$defs/cwe"}}
+            },
+            {"type": "null"}
+          ]
         },
-        "security_predicate": {"$ref": "#/$defs/text"},
+        "security_predicate": {"$ref": "common.schema.json#/$defs/security_predicate"},
         "attacker_entry": {
           "type": "object", "additionalProperties": false,
           "required": ["entity_id", "control", "preconditions"],
           "properties": {
             "entity_id": {"oneOf": [{"$ref": "#/$defs/entity_id"}, {"type": "null"}]},
             "control": {"$ref": "#/$defs/text"},
-            "preconditions": {"type": "array", "items": {"$ref": "#/$defs/text"}}
+            "preconditions": {"$ref": "common.schema.json#/$defs/preconditions"}
           }
         },
         "trigger": {"$ref": "#/$defs/text"},
         "suspected_consequence": {"$ref": "#/$defs/text"},
-        "assumptions": {"type": "array", "items": {"$ref": "#/$defs/text"}},
+        "assumptions": {"$ref": "#/$defs/texts"},
         "evidence_ids": {"$ref": "#/$defs/local_ids"},
         "counterevidence_ids": {"$ref": "#/$defs/local_ids"},
         "obligation_ids": {"$ref": "#/$defs/local_ids"},
@@ -87,7 +90,7 @@
       "properties": {
         "local_id": {"$ref": "#/$defs/local_id"},
         "proposal_id": {"$ref": "#/$defs/local_id"},
-        "predicate": {"enum": ["affected_construct", "attacker_control", "reachability", "guard_state", "configuration", "impact", "taint_continuity", "chain_continuity", "other"]},
+        "predicate": {"enum": ["affected_construct", "attacker_input_control", "source_to_sink_reachability", "missing_or_ineffective_guard", "configuration_enables", "security_impact", "taint_continuity", "chain_continuity"]},
         "question": {"$ref": "#/$defs/text"},
         "candidate_evidence_ids": {"$ref": "#/$defs/local_ids"}
       }
@@ -112,7 +115,7 @@
         "kind": {"enum": ["data", "call", "alias", "control", "cross_boundary"]},
         "basis": {"enum": ["accepted_tool_path", "source_mapped_analysis", "analyst_hypothesis"]},
         "evidence_ids": {"$ref": "#/$defs/local_ids"},
-        "open_question": {"type": ["string", "null"], "maxLength": 4096}
+        "open_question": {"oneOf": [{"$ref": "#/$defs/text"}, {"type": "null"}]}
       }
     },
     "taint_path": {
@@ -124,8 +127,8 @@
         "source_node": {"$ref": "#/$defs/local_id"},
         "sink_node": {"$ref": "#/$defs/local_id"},
         "basis": {"enum": ["reported", "partial", "hypothesized"]},
-        "nodes": {"type": "array", "minItems": 2, "items": {"$ref": "#/$defs/taint_node"}},
-        "edges": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/taint_edge"}},
+        "nodes": {"type": "array", "minItems": 2, "maxItems": 64, "items": {"$ref": "#/$defs/taint_node"}},
+        "edges": {"type": "array", "minItems": 1, "maxItems": 128, "items": {"$ref": "#/$defs/taint_edge"}},
         "gap_ids": {"$ref": "#/$defs/local_ids"}
       }
     },
@@ -147,9 +150,9 @@
       "properties": {
         "from_step": {"$ref": "#/$defs/local_id"},
         "to_step": {"$ref": "#/$defs/local_id"},
-        "continuity_dimensions": {"type": "array", "uniqueItems": true, "items": {"enum": ["identity", "privilege", "trust_boundary", "deployment_artifact", "temporal"]}},
+        "continuity_dimensions": {"type": "array", "maxItems": 5, "uniqueItems": true, "items": {"enum": ["identity", "privilege", "trust_boundary", "deployment_artifact", "temporal"]}},
         "evidence_ids": {"$ref": "#/$defs/local_ids"},
-        "open_questions": {"type": "array", "items": {"$ref": "#/$defs/text"}}
+        "open_questions": {"$ref": "#/$defs/texts"}
       }
     },
     "chain_seed": {
@@ -158,8 +161,8 @@
       "properties": {
         "local_id": {"$ref": "#/$defs/local_id"},
         "objective": {"$ref": "#/$defs/text"},
-        "steps": {"type": "array", "minItems": 2, "items": {"$ref": "#/$defs/chain_step"}},
-        "links": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/chain_link"}},
+        "steps": {"type": "array", "minItems": 2, "maxItems": 32, "items": {"$ref": "#/$defs/chain_step"}},
+        "links": {"type": "array", "minItems": 1, "maxItems": 64, "items": {"$ref": "#/$defs/chain_link"}},
         "gap_ids": {"$ref": "#/$defs/local_ids"}
       }
     },
@@ -168,8 +171,8 @@
       "required": ["kind", "path", "file_sha256", "start_line", "end_line"],
       "properties": {
         "kind": {"const": "source_line"},
-        "path": {"type": "string", "minLength": 1},
-        "file_sha256": {"$ref": "#/$defs/sha256"},
+        "path": {"type": "string", "minLength": 1, "maxLength": 1024},
+        "file_sha256": {"$ref": "common.schema.json#/$defs/sha256"},
         "start_line": {"type": "integer", "minimum": 1},
         "end_line": {"type": "integer", "minimum": 1}
       }
@@ -179,8 +182,8 @@
       "required": ["kind", "artifact_id", "artifact_sha256"],
       "properties": {
         "kind": {"const": "run_artifact"},
-        "artifact_id": {"type": "string", "minLength": 1},
-        "artifact_sha256": {"$ref": "#/$defs/sha256"}
+        "artifact_id": {"type": "string", "minLength": 1, "maxLength": 512},
+        "artifact_sha256": {"$ref": "common.schema.json#/$defs/sha256"}
       }
     },
     "unresolved_locator": {
@@ -189,15 +192,16 @@
       "properties": {"kind": {"const": "unresolved"}, "reason": {"$ref": "#/$defs/text"}}
     },
     "evidence": {
+      "description": "One cited (entity, predicate, relation) triple. shard_id ('<index>/<shard>') and shard_sha256 are null when the worker did not learn the entity's shard; when given they must match the accepted shard the entity re-resolves to.",
       "type": "object", "additionalProperties": false,
       "required": ["local_id", "entity_id", "shard_id", "shard_sha256", "relation", "predicate", "locator"],
       "properties": {
         "local_id": {"$ref": "#/$defs/local_id"},
         "entity_id": {"$ref": "#/$defs/entity_id"},
-        "shard_id": {"type": "string", "minLength": 1},
-        "shard_sha256": {"$ref": "#/$defs/sha256"},
+        "shard_id": {"oneOf": [{"type": "string", "pattern": "^[a-z][a-z0-9_-]{0,63}/[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"}, {"type": "null"}]},
+        "shard_sha256": {"oneOf": [{"$ref": "common.schema.json#/$defs/sha256"}, {"type": "null"}]},
         "relation": {"enum": ["supports", "contradicts", "qualifies", "nominates"]},
-        "predicate": {"$ref": "#/$defs/text"},
+        "predicate": {"$ref": "common.schema.json#/$defs/predicate"},
         "locator": {"oneOf": [
           {"$ref": "#/$defs/source_locator"},
           {"$ref": "#/$defs/artifact_locator"},
@@ -211,7 +215,7 @@
       "properties": {
         "local_id": {"$ref": "#/$defs/local_id"},
         "proposal_id": {"$ref": "#/$defs/local_id"},
-        "predicate": {"$ref": "#/$defs/text"},
+        "predicate": {"$ref": "common.schema.json#/$defs/predicate"},
         "requested_kind": {"enum": ["source_line", "compiled_view", "dataflow", "configuration", "build_provenance", "deployment", "run_artifact", "other"]},
         "scope_entity_ids": {"$ref": "#/$defs/entity_ids"},
         "reason": {"$ref": "#/$defs/text"}

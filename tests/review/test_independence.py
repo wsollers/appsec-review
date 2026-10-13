@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from appsec_review.review.identity import make_id
-from appsec_review.review.independence import ActorRecord, provider_distinct, verify_independence
+from appsec_review.review.independence import ActorRecord, model_distinct, provider_distinct, verify_independence
 from appsec_review.review.models import Admissibility, EvidenceRelation, GapClass, Predicate, RelationKind
 from appsec_review.review.obligations import ALWAYS_REQUIRED
 
@@ -83,6 +83,18 @@ def test_provider_distinctness_recorded_but_not_required_by_default() -> None:
     assert reasons(check(require_distinct_provider=True)) == {"verifier_provider_not_distinct"}
     other = ActorRecord("actor-v2", "anthropic-api", "opus", "conv-v2")
     assert provider_distinct(other, [RED, BLUE]) and check(verifier=other, require_distinct_provider=True)[0]
+
+
+def test_verifier_model_distinctness_is_recorded_and_never_gates_independence() -> None:
+    """Decision 2: (provider, model) must differ from every red cell's; R6 independence is unchanged."""
+    assert model_distinct(VERIFIER, [RED]) is False and check()[0] is True
+    other_model = ActorRecord("actor-v2", "claude-cli", "sonnet", "conv-v2")
+    other_provider = ActorRecord("actor-v3", "anthropic-api", "opus", "conv-v3")
+    assert model_distinct(other_model, [RED]) and model_distinct(other_provider, [RED])
+    # One red cell on the verifier's model is enough to make it not distinct.
+    assert not model_distinct(other_model, [RED, ActorRecord("actor-red2", "claude-cli", "sonnet", "conv-r2")])
+    assert model_distinct(other_model, [])            # no red cell: nothing to correlate with
+    assert check(verifier=other_model)[0] is True
 
 
 def test_empty_marker_is_rejected() -> None:

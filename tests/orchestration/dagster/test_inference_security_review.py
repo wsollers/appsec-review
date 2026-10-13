@@ -43,14 +43,14 @@ SCHEMAS = ROOT / "docs" / "schemas" / "inference-security-review"
 
 
 def _prepare(base: Path, logs: Path, monkeypatch, *, teams: int, cells: Path | None = None,
-             history_change_count: int = 9, **scenario):
+             history_change_count: int = 9, config_overrides=None, config_extra: str = "", **scenario):
     shutil.rmtree(base, ignore_errors=True)
     base.mkdir(parents=True)
     logs.mkdir(parents=True, exist_ok=True)
     fixture = build_accepted_index_set(base, history_change_count=history_change_count)
     if cells is not None:
         shutil.copytree(cells, fixture.run_root / "data" / "jobs" / JOB / "cells")
-    config = write_config(base, fixture.runs_dir)
+    config = write_config(base, fixture.runs_dir, overrides=config_overrides, extra=config_extra)
     monkeypatch.setenv("APPSEC_REVIEW_CONFIG_OVERLAY", str(write_overlay(base, teams)))
     monkeypatch.setenv("APPSEC_C7_CONFIG", str(config))
     monkeypatch.setenv("APPSEC_C7_SCENARIO", str(write_scenario(
@@ -185,6 +185,7 @@ def test_slice1_acceptance_both_lanes_parallel_and_capacity_invariant(tmp_path: 
     coverage = _json(fixture.run_root / handoff["coverage_matrix"]["path"])
     assert {row["status"] for row in coverage["rows"]} == {"reviewed", "gap", "not_launched"}
     assert any(row["reason"] == "below_hunt_cutoff" for row in coverage["rows"])
+    _assert_ship_block_and_remediation_intake(attempt, handoff)
 
     _assert_verifier_blind(logs)
     _assert_capabilities_isolated(fixture, attempt)
@@ -242,6 +243,90 @@ def test_slice1_acceptance_both_lanes_parallel_and_capacity_invariant(tmp_path: 
     assert latest.read_bytes() == accepted_before
 
 
+STATUSES = ("ship_blocking", "ship_blocking_pending_distinct_verification", "needs_verification",
+            "not_ship_blocking")
+
+
+def _findings(attempt: Path, handoff: dict) -> dict[str, dict]:
+    root = _unit(attempt, "publication.publish_handoff") / "findings"
+    return {item["finding_package_id"]: _json(root / f"{item['finding_package_id']}.json")
+            for item in handoff["finding_packages"]}
+
+
+def _assert_ship_block_and_remediation_intake(attempt: Path, handoff: dict) -> None:
+    """Decisions 1, 2, 4 and 8 under the checked-in default (every role on one model profile)."""
+    findings = _findings(attempt, handoff)
+    summary = handoff["ship_block"]
+    assert summary["policy"] == "ship-block-policy/1"
+    # The scripted run confirms one critical lane A claim; with the verifier on the red cells' model it
+    # is pending distinct verification, never ship_blocking. Supported claims rate medium here.
+    assert summary["by_status"] == {"ship_blocking": 0, "ship_blocking_pending_distinct_verification": 1,
+                                    "needs_verification": 0, "not_ship_blocking": 2}
+    assert summary["by_lane"]["lead"]["ship_blocking_pending_distinct_verification"] == 1
+    assert sum(summary["by_lane"]["hunt"].values()) + sum(summary["by_lane"]["lead"].values()) == len(findings)
+    for package in findings.values():
+        lane = summary["by_lane"][package["lane"]]
+        assert lane[package["ship_block"]["status"]] >= 1
+        assert package["ship_block"]["displayed_context"]["decides"] is False
+        assert package["independence"]["verifier_model_distinct"] is False
+    pending = [item for item in findings.values()
+               if item["ship_block"]["status"] == "ship_blocking_pending_distinct_verification"]
+    assert [item["ship_block"]["inputs"]["technical_severity"]["rating"] for item in pending] == ["critical"]
+    assert pending[0]["ship_block"]["citations"]["score_ids"] == [
+        pending[0]["ship_block"]["inputs"]["technical_severity"]["score_id"]]
+    assert handoff["verification"]["distinct"] is False and handoff["verification"]["warning"]
+    # Decision 4: confirmed packages only in remediation intake; supported ones in the backlog.
+    intake = {item["finding_package_id"] for item in handoff["remediation_intake"]}
+    backlog = {item["finding_package_id"]: item for item in handoff["verification_backlog"]}
+    assert intake == {key for key, item in findings.items() if item["state"] == "confirmed"} and intake
+    assert set(backlog) == {key for key, item in findings.items() if item["state"] == "supported"} and backlog
+    for key, item in backlog.items():
+        assert item["label"] == "unconfirmed" and item["missing_predicates"] == findings[key]["missing_predicates"]
+        assert item["missing_predicates"]
+    # Decision 8: the handoff names its planned consumers.
+    assert [item["job_id"] for item in handoff["planned_consumers"]] == [
+        "job_remediation_planning", "job_remediation_validation", "job_final_publication_gate",
+        "job_final_report_publication"]
+
+
+VERIFIER_PROFILE = f"""
+[jobs.{JOB}.settings.models.verifier]
+provider = "claude-cli"
+model = "verifier-test-model"
+reasoning = "high"
+max_input_tokens = 32000
+max_output_tokens = 8000
+max_queries = 40
+max_turns = 12
+timeout_seconds = 600
+"""
+
+
+def test_a_distinct_verifier_profile_moves_the_pending_finding_to_ship_blocking(tmp_path: Path, monkeypatch) -> None:
+    """Decision 2 by configuration: roles.independent_verifier.model_profile names a second model."""
+    fixture, config = _prepare(tmp_path / "review", tmp_path / "logs", monkeypatch, teams=1,
+                               config_overrides={"model_profile": "verifier"}, config_extra=VERIFIER_PROFILE)
+    settings = load_config(config).job(JOB).typed_settings
+    assert settings.profile_for(Role.INDEPENDENT_VERIFIER).model == "verifier-test-model"
+    _in_process(fixture)
+    attempt = _attempt(fixture)
+    handoff = _handoff(attempt)
+    _validator("handoff").validate(handoff)
+    assert handoff["verification"]["distinct"] is True and handoff["verification"]["warning"] is None
+    assert handoff["ship_block"]["by_status"] == {"ship_blocking": 1, "ship_blocking_pending_distinct_verification": 0,
+                                                  "needs_verification": 0, "not_ship_blocking": 2}
+    findings = _findings(attempt, handoff)
+    [blocking] = [item for item in findings.values() if item["ship_block"]["status"] == "ship_blocking"]
+    assert blocking["state"] == "confirmed" and blocking["independence"]["verifier_model_distinct"] is True
+    assert blocking["ship_block"]["conditions"]["verifier_model_distinct"] is True
+    assert {item["finding_package_id"]: item["ship_block_status"] for item in handoff["remediation_intake"]} == {
+        blocking["finding_package_id"]: "ship_blocking"}
+    for item in findings.values():
+        _validator("finding-package").validate(item)
+    captures = sorted((tmp_path / "logs" / "captures").glob("*.json"))
+    assert captures and {_json(path)["model"] for path in captures} == {"verifier-test-model"}
+
+
 def _assert_reference_enrichment(fixture, attempt: Path) -> None:
     """Pinned MITRE validates claim CWEs; advisory leads carry NVD+KEV+EPSS context and stale-feed gaps."""
     schema = json.loads((ROOT / "docs" / "schemas" / "review-packages.schema.json").read_text())
@@ -266,6 +351,24 @@ def _assert_reference_enrichment(fixture, attempt: Path) -> None:
                for weakness in lead["weaknesses"])
     compact = [lead["advisory_summary"] for lead in hunts if lead["advisory_summary"]]
     assert compact and all(set(item) == {"cve_ids", "kev_listed", "epss_percentile", "max_cvss"} for item in compact)
+    # impact_class is derived from the pinned catalog's consequences and cites its snapshot (decision 11).
+    scoring = _unit(attempt, "scoring.score_claims")
+    scores = _json(scoring / "scores.json")
+    snapshot = fixture.feed_pins["mitre"]["snapshot_id"]
+    assert scores["impact_class"]["rule"] == "cwe-impact-derivation/1"
+    assert scores["impact_class"]["catalog"]["status"] == "current"
+    assert scores["impact_class"]["catalog"]["snapshot_id"] == snapshot
+    derived = []
+    for item in scores["scores"]:
+        package = _json(scoring / "scores" / item["file"])
+        impact = [factor for factor in package["factors"] if factor["factor"] == "impact_class"]
+        cited = [citation for citation in package["factor_citations"] if citation["factor"] == "impact_class"]
+        if impact and impact[0]["detail"]["basis"] == ["derived"]:
+            assert impact[0]["detail"]["catalog_snapshot"] == [snapshot]
+            assert cited[0]["references"] and all(reference.startswith(f"mitre-cwe:{snapshot}:")
+                                                  for reference in cited[0]["references"])
+            derived.append(impact[0]["value"])
+    assert derived
 
 
 def _assert_verifier_blind(logs: Path) -> None:
