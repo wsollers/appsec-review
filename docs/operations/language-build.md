@@ -220,6 +220,11 @@ the fixed capture test. The configured-model test remains opt-in through
 `APPSEC_RUN_LIVE_INFERENCE=1` because it sends bounded target planning metadata to the configured
 authenticated model transport.
 
+The JVM suite has a matching opt-in Android inference diagnostic. It prints every model recipe,
+validates an accepted recipe or checks that rejection remains an explicit gap, and runs before
+project-build applies the deterministic Android recipe. This makes recipe-selection drift visible
+without confusing a model proposal with the command ultimately executed.
+
 The PHP adapter requires `composer.json`; `composer.lock` is used when present. Composer dependency
 installation may occur while deriving the pinned project image or during the network-enabled build,
 with plugins and scripts disabled. Central policy controls Composer plugins and

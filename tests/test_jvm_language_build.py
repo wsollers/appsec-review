@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import asdict
 import json
+import os
 from pathlib import Path
 from types import SimpleNamespace
 import zipfile
@@ -21,8 +22,8 @@ from appsec_review.jobs.job_project_build import build_job as build_projects, lo
 from appsec_review.jobs.job_project_build.job import _deterministic_jvm_recipe
 from appsec_review.jobs.job_review_intake import build_job as build_intake
 from appsec_review.jobs.job_target_catalog import build_job as build_catalog
-from appsec_review.inference import ModelResult
-from appsec_review.jobs.job_target_analysis_plan import build_job as build_plan
+from appsec_review.inference import ModelResult, check_models, infer
+from appsec_review.jobs.job_target_analysis_plan import build_job as build_plan, load_accepted_plan
 from appsec_review.jobs.job_target_analysis_plan.planning import PROPOSAL_SCHEMA
 from appsec_review.mcp import RetrievalMcpAdapter
 from appsec_review.retrieval import IndexIdentity, RetrievalCore, write_manifest
@@ -210,6 +211,46 @@ def test_android_gradle_dispatch_survives_project_to_language_execution(tmp_path
     receipt = load_accepted_language_build(run_root)["receipts"][0]
     assert receipt["terminal_status"] == "SUCCEEDED" and receipt["family"] == "java"
     assert calls.count(("gradle", "--no-daemon", ":app:assembleDebug")) == 2
+
+
+@pytest.mark.skipif(
+    os.environ.get("APPSEC_RUN_LIVE_INFERENCE") != "1",
+    reason="requires the configured authenticated model transport",
+)
+def test_live_configured_model_returns_android_gradle_recipe_proposals(tmp_path: Path) -> None:
+    """Show every model recipe before project-build applies its Android override."""
+    config, target = _android_fixture(tmp_path)
+    fingerprint = source_fingerprint(target)
+    proposals: list[dict] = []
+
+    def capture_infer(request, *, timeout_seconds):
+        result = infer(request, timeout_seconds=timeout_seconds)
+        proposals.append(dict(result.proposal))
+        return result
+
+    outcome = GraphRunner(config, [build_intake(check_models=check_models), build_catalog(),
+                                   build_plan(infer=capture_infer)]).run(
+        target_root=target, source_fingerprint=fingerprint)
+
+    assert outcome["status"] in {"SUCCEEDED", "COMPLETED_WITH_GAPS"}, outcome
+    assert proposals and all("build_recipes" in proposal for proposal in proposals)
+    print(json.dumps(proposals, indent=2, sort_keys=True))
+    plan = load_accepted_plan(config.runtime.runs_dir / outcome["run_id"])
+    action = next(item for item in plan["build_topology"]["build_actions"]
+                  if item["build_system"] == "gradle")
+    assert action["descriptor_facts"]["kind"] == "android-gradle-application"
+    recipe = action["recipe"]
+    if recipe is not None:
+        unit = {
+            "build_unit_id": action["build_unit_id"], "family": action["family"],
+            "root": action["root"], "build_system": action["build_system"],
+            "markers": action["markers"], "descriptor_package": action["descriptor_package"],
+            "descriptor_facts": action["descriptor_facts"],
+        }
+        assert validate_build_recipe(recipe, unit) == []
+    else:
+        assert plan["model"]["status"] == "REJECTED"
+        assert any("recipe proposal rejected" in gap for gap in plan["coverage_gaps"])
 
 
 @pytest.mark.parametrize("task", [":app:test", ":app:connectedAndroidTest", ":app:installDebug", ":app:run"])
