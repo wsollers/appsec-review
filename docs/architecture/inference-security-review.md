@@ -841,7 +841,7 @@ relations never set a factor.
 | `exposure` | `local`, `internal_network`, `public` | accepted `surface:entry:*` tags (`http-public`, `cloud-public`, `mobile-deeplink`, `ci-untrusted` are `public`; `http-internal`, `rpc`, `message-consumer` are `internal_network`; `cli`, `env-config`, `file-input`, `local-ipc` are `local`) | tag assignment ids |
 | `privilege` | `sandboxed`, `elevated` | accepted `surface:priv:*` tags (`elevated`, `host`, `cluster-admin`, `cloud-admin`, `ci-write` are `elevated`) | tag assignment ids |
 | `data_sensitivity` | `sensitive`, `secret` | accepted `data:*` tags (`credential`, `key-material`, `session-token` are `secret`; `pii`, `financial`, `health` are `sensitive`) | tag assignment ids |
-| `impact_class` | `low`, `medium`, `high`, `critical` | the configured CWE table: one factor among many | `cwe_impact_classes.<CWE>` |
+| `impact_class` | `low`, `medium`, `high`, `critical` | a `cwe_impact_overrides` entry, else derived from the run's pinned MITRE CWE catalog consequences (`cwe-impact-derivation/1`, below): one factor among many | `cwe_impact_overrides.<CWE>`, or `mitre-cwe:<snapshot>:<CWE>:consequence/<n>` per producing catalog entry |
 | `threat` | `not_listed`, `kev_listed` | the lead advisory's CISA KEV listing only | `kev_listed` reference input |
 
 A tag applies when its subject is an affected or cited entity (`entity`), or when it belongs to
@@ -869,8 +869,8 @@ It rates the factors with a declarative model held in TOML and validated in
   nothing. KEV keeps its one-band rule: a KEV-listed lead raises an already scored claim one
   band, recorded as an assumption and as `kev_adjusted`.
 - **`technical_severity`** (scale `application_risk_matrix/2`). It looks up `impact_class` against
-  the exploitability rating in the configured matrix. It is `null` when the CWE is absent or
-  unmapped.
+  the exploitability rating in the configured matrix. It is `null` when `impact_class` is missing
+  (no CWE, no usable catalog, or no mapped consequence, and no override).
 - **`environmental_business_impact`** (scale `environmental_exposure/1`). It uses points for
   `exposure`, `privilege` and `data_sensitivity` and is produced only when at least one of them
   is present.
@@ -886,13 +886,58 @@ or guard evidence.
 
 EPSS never affects a score (decision 6). The stage does not pass it, and
 `application_risk_matrix/2` excludes it from its input fingerprint and writes
-`reference_inputs.epss = null`. Varying EPSS leaves every score package byte-identical. The model
-and the CWE table enter `provider_config_sha256`, and the factor set enters the input
-fingerprint. Retuning either changes `score_id`.
+`reference_inputs.epss = null`. Varying EPSS leaves every score package byte-identical. The model,
+the impact derivation rule id, the override table and the pinned catalog's identity (status,
+snapshot id, manifest hash, CWE version, gap) enter `provider_config_sha256`, and the factor set
+enters the input fingerprint. Retuning any of them, or pinning a new catalog snapshot, changes
+`score_id`.
+
+#### CWE impact class (`cwe-impact-derivation/1`)
+
+Decision 11: `impact_class` is derived from the run's pinned MITRE CWE catalog, not from a
+hand-maintained table (`review/scoring/cwe_impact.py`). `mitre_sync` captures each weakness's
+Common_Consequences (scopes and technical impacts, bounded) into the `cwe_consequence` table of
+`index/mitre.sqlite` (`mitre-index/2`). The review reads it through the same pin and hash check as
+claim CWE validation (`review/references.py`). Precedence:
+
+1. an override in `scoring.cwe_impact_overrides` (exceptions only, each with a reason);
+2. derivation from the pinned catalog;
+3. a missing factor with its reason, never a low value.
+
+Each technical impact maps to a class, and the highest class over all of the weakness's
+consequences wins:
+
+| Catalog technical impact | Class |
+|---|---|
+| Execute Unauthorized Code or Commands | `critical` |
+| Modify Memory; Gain Privileges or Assume Identity; Bypass Protection Mechanism; Modify Application Data; Modify Files or Directories | `high` |
+| Read Memory; Read Application Data; Read Files or Directories | `medium`, or `high` when any consequence of the weakness is `Integrity`-scoped |
+| Alter Execution Logic; DoS: Crash, Exit, or Restart; DoS: Instability; DoS: Amplification; DoS: Resource Consumption (CPU/Memory/Other) | `medium` |
+| Hide Activities; Unexpected State; Quality Degradation; Reduce Performance; Reduce Reliability; Reduce Maintainability | `low` |
+| Varies by Context; Other; any other string | nothing (no contribution) |
+
+Matching ignores case and whitespace runs. A weakness absent from the catalog, with no
+consequences, or with no mapped impact leaves `impact_class` missing with that reason. A derived
+factor cites `mitre-cwe:<snapshot>:<CWE>:consequence/<n>` for every consequence that produced the
+winning class (plus the integrity-scoped entry when it raised a read), and its detail records the
+rule, the catalog snapshot and status, the winning technical impacts and their scopes. An override
+cites `cwe_impact_overrides.<CWE>` and records its reason and, when the catalog derives one, the
+derived class, so drift between an exception and the catalog stays visible.
+
+Catalog states follow decision 5's MITRE fallback. An unpinned, mismatched or unreadable catalog,
+or a pinned `mitre-index/1` index without consequences, derives nothing: every non-overridden
+`impact_class` is missing with the catalog gap as its reason, and technical severity is `null`.
+A stale catalog still derives, just as it still supplies CWE names and abstractions, because the
+consequences are reference data about the weakness class. Each such factor records
+`catalog_status = stale` and the stale gap, and the score package gains an assumption naming the
+stale snapshot. The claim-CWE fallback gap is recorded once per run by `completeness.audit`, and
+the scores document records the rule and catalog identity it used (`impact_class`).
 
 `application_risk_matrix/1` stays selectable (`implementation = "application_risk_matrix/1"`, with
 no model tables) so that ratings can be compared across a rollout or rolled back. It rates only
-the CWE table and the claim state, so it does not satisfy B1 and is not the default.
+the hand-maintained CWE table shipped before decision 11, frozen in code with the implementation
+version (`LEGACY_CWE_IMPACT_CLASSES`) so that its ratings and score ids are reproduced, and the
+claim state. It does not satisfy B1 and is not the default.
 
 Score packages are `appsec-review/score-package/2`. They add `factors` (factor, scale, value,
 detail), `missing_factor_reasons`, and populated `factor_citations` (relation ids, entity ids, tag
@@ -1789,8 +1834,10 @@ publication can label it. This is the slice 1 answer to open question 2.
   It rates the `score-factors/1` evidence factors (see
   [Evidence-derived scoring factors](#evidence-derived-scoring-factors-score-factors1)) with a
   configured, monotone model:
-  - `impact_class` comes from a TOML CWE→class table and is one factor among many. An unmapped CWE
-    leaves technical severity `null` and lists `impact_class` in `missing_factors`.
+  - `impact_class` is one factor among many. It is a `cwe_impact_overrides` exception or is derived
+    from the run's pinned MITRE CWE catalog consequences (`cwe-impact-derivation/1`, see
+    [CWE impact class](#cwe-impact-class-cwe-impact-derivation1)). When neither applies, technical
+    severity is `null` and `impact_class` is listed in `missing_factors` with its reason.
   - `exploitability_confidence` sums the points of the verification, taint path, attacker control,
     guard and exposure factors. When the claim's lead advisory is CISA KEV-listed, a claim that is
     already `supported` or `confirmed` is raised one band, recorded as an assumption and as
@@ -1798,8 +1845,8 @@ publication can label it. This is the slice 1 answer to open question 2.
   - `environmental_business_impact` is produced only from accepted exposure, privilege and
     data-sensitivity tags.
 
-  `application_risk_matrix/1` (CWE table x R5 state: `high` when confirmed, `medium` when
-  supported) stays selectable for comparison.
+  `application_risk_matrix/1` (frozen legacy CWE table x R5 state: `high` when confirmed,
+  `medium` when supported) stays selectable for comparison.
 
   Only confirmed and supported claims are scored. Each provider implementation has its own
   deterministic `independent_scorer` actor. `ScoreRequest` also carries labelled reference inputs
@@ -2046,6 +2093,9 @@ will be enforced in code.
 11. **CWE impact class — decided.** The `application_risk_matrix/2` impact class is derived from the
     pinned MITRE CWE catalog's common consequences (confidentiality, integrity and availability
     scopes), with an explicit override table for exceptions. It replaces the hand-maintained table.
+    Implementation: `cwe-impact-derivation/1` in `review/scoring/cwe_impact.py`, consequences in
+    the `mitre-index/2` `cwe_consequence` table, overrides in `scoring.cwe_impact_overrides` (see
+    [CWE impact class](#cwe-impact-class-cwe-impact-derivation1)).
 12. **Live verification gate — decided.** Findings are not relied on until the live tiers pass on
     the deployment host: the CodeQL graph export, the NVD/KEV/EPSS/MITRE feed syncs, and a live
     inference run that includes `job_code_graph_index`. A failure there is treated as a bug, not a

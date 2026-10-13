@@ -26,7 +26,7 @@ from types import MappingProxyType
 from typing import Any, Iterable, Mapping, Protocol, runtime_checkable
 
 from appsec_review.graph.contract import ATTACKER_REACHABLE_SOURCES, Family, SourceClass
-from appsec_review.review.claims import normalize_cwe
+from appsec_review.review.scoring import cwe_impact
 from appsec_review.review.models import ClaimState, EvidenceRelation, Predicate, RelationKind
 
 FACTORS_VERSION = "score-factors/1"
@@ -451,30 +451,79 @@ class TagExtractor:
 
 
 class ImpactClassExtractor:
-    """The configured CWE impact class: one factor among many, never the whole score."""
+    """The CWE impact class (decision 11): one factor among many, never the whole score.
+
+    Precedence is an override from ``scoring.cwe_impact_overrides``, then derivation from the run's
+    pinned MITRE catalog under ``cwe-impact-derivation/1`` (:mod:`.cwe_impact`), then a missing
+    factor with its reason. An override cites its configuration key; a derived class cites the
+    catalog consequence entries that produced it.
+    """
 
     factor = FactorId.IMPACT_CLASS
 
-    def __init__(self, cwe_impact_classes: Mapping[str, str]) -> None:
-        table: dict[str, str] = {}
-        for cwe, impact in cwe_impact_classes.items():
-            normalized = normalize_cwe(cwe)
-            if normalized is None or impact not in SCALES[self.factor]:
-                raise ValueError(f"invalid CWE impact class entry: {cwe}")
-            if table.get(normalized, impact) != impact:
-                raise ValueError(f"conflicting CWE impact class entries: {normalized}")
-            table[normalized] = impact
-        self.table: Mapping[str, str] = MappingProxyType(dict(sorted(table.items())))
+    def __init__(self, cwe_impact_overrides: Mapping[str, Any] | None = None,
+                 catalog: cwe_impact.ImpactCatalog | None = None) -> None:
+        self.overrides = cwe_impact.overrides_table(cwe_impact_overrides or {})
+        self.catalog = catalog if catalog is not None else cwe_impact.UNAVAILABLE_CATALOG
+        if not isinstance(self.catalog, cwe_impact.ImpactCatalog):
+            raise TypeError("impact_class needs an ImpactCatalog")
+
+    def identity(self) -> dict[str, Any]:
+        """Everything the factor's value depends on besides the claim: enters the provider config hash."""
+        return {"rule": cwe_impact.DERIVATION_RULE,
+                "overrides": {cwe: item.document() for cwe, item in self.overrides.items()},
+                "catalog": self.catalog.identity()}
 
     def extract(self, data: FactorInput) -> FactorValue | MissingFactor:
-        if data.weakness_cwe is None:
+        return self.extract_cwe(data.weakness_cwe)
+
+    def extract_cwe(self, cwe: str | None) -> FactorValue | MissingFactor:
+        if cwe is None:
             return MissingFactor(self.factor, "claim has no weakness CWE")
-        impact = self.table.get(data.weakness_cwe)
-        if impact is None:
-            return MissingFactor(self.factor, f"{data.weakness_cwe} is not in cwe_impact_classes")
-        return FactorValue(self.factor, impact,
-                           (Citation(CitationKind.CONFIGURATION, f"cwe_impact_classes.{data.weakness_cwe}"),),
-                           {"cwe": [data.weakness_cwe]})
+        catalog = self.catalog
+        derived, reason = self._derive(cwe)
+        catalog_detail: dict[str, list[str]] = {}
+        if catalog.status != "unavailable":
+            catalog_detail = {"catalog_snapshot": [str(catalog.snapshot_id)], "catalog_status": [catalog.status]}
+            if catalog.gap:
+                catalog_detail["catalog_gap"] = [catalog.gap[:200]]
+        override = self.overrides.get(cwe)
+        if override is not None:
+            detail = {"cwe": [cwe], "basis": ["override"], "rule": [cwe_impact.DERIVATION_RULE], **catalog_detail}
+            if override.reason:
+                detail["override_reason"] = [override.reason]
+            if derived is not None:
+                detail["derived_class"] = [derived.impact_class]
+            return FactorValue(self.factor, override.impact_class,
+                               (Citation(CitationKind.CONFIGURATION, f"{cwe_impact.OVERRIDE_KEY}.{cwe}"),), detail)
+        if derived is None:
+            return MissingFactor(self.factor, reason)
+        detail = {"cwe": [cwe], "basis": ["derived"], "rule": [cwe_impact.DERIVATION_RULE],
+                  "technical_impacts": list(derived.impacts), "scopes": list(derived.scopes), **catalog_detail}
+        if derived.integrity_raised:
+            detail["integrity_raised"] = ["read impact raised to high: the weakness is also integrity-scoped"]
+        return FactorValue(self.factor, derived.impact_class,
+                           tuple(Citation(CitationKind.REFERENCE_INPUT,
+                                          cwe_impact.consequence_reference(catalog, cwe, item))
+                                 for item in derived.consequences), detail)
+
+    def _derive(self, cwe: str) -> tuple[cwe_impact.Derivation | None, str]:
+        catalog = self.catalog
+        if catalog.status == "unavailable":
+            return None, f"impact_class not derived: {catalog.gap}"[:400]
+        consequences = catalog.consequences.get(cwe)
+        if consequences is None:
+            return None, (f"{cwe} is not a weakness in the pinned MITRE CWE catalog {catalog.snapshot_id} and "
+                          f"has no {cwe_impact.OVERRIDE_KEY} entry")
+        if not consequences:
+            return None, (f"{cwe} has no Common_Consequences in the pinned MITRE CWE catalog {catalog.snapshot_id} "
+                          f"and no {cwe_impact.OVERRIDE_KEY} entry")
+        derived = cwe_impact.derive(consequences)
+        if derived is None:
+            impacts = sorted({impact for item in consequences for impact in item.impacts})
+            return None, (f"no technical impact of {cwe} ({', '.join(impacts)[:200] or 'none'}) is mapped by "
+                          f"{cwe_impact.DERIVATION_RULE}, and it has no {cwe_impact.OVERRIDE_KEY} entry")
+        return derived, ""
 
 
 class ThreatExtractor:
@@ -521,13 +570,15 @@ class FactorRegistry:
         return FactorSet(tuple(values), tuple(missing))
 
 
-def default_factor_registry(cwe_impact_classes: Mapping[str, str]) -> FactorRegistry:
+def default_factor_registry(cwe_impact_overrides: Mapping[str, Any] | None = None,
+                            catalog: "cwe_impact.ImpactCatalog | None" = None) -> FactorRegistry:
+    """Every factor extractor; ``impact_class`` uses the overrides and the run's pinned CWE catalog."""
     return FactorRegistry((
         VerificationExtractor(), TaintPathExtractor(), AttackerControlExtractor(), GuardAbsentExtractor(),
         TagExtractor(FactorId.EXPOSURE, EXPOSURE_TAGS, "surface:entry"),
         TagExtractor(FactorId.PRIVILEGE, PRIVILEGE_TAGS, "surface:priv"),
         TagExtractor(FactorId.DATA_SENSITIVITY, DATA_TAGS, "data"),
-        ImpactClassExtractor(cwe_impact_classes), ThreatExtractor(),
+        ImpactClassExtractor(cwe_impact_overrides, catalog), ThreatExtractor(),
     ))
 
 

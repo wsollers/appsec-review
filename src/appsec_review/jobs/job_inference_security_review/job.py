@@ -38,6 +38,7 @@ from appsec_review.review.packages import (
     ASSEMBLY_RULE, PackageSettings, assemble_packages, publish_packages, verify_package_manifest,
 )
 from appsec_review.review.references import load_cwe_reference
+from appsec_review.review.scoring.cwe_impact import ImpactCatalog
 from appsec_review.review.scope import AcceptedScope, accept_manifest
 from appsec_review.review.teams import ReviewTeamSemaphore
 from appsec_review.review.scoring.evidence_source import AcceptedEvidenceSource
@@ -420,11 +421,14 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
         evidence = AcceptedEvidenceSource(
             RetrievalCore(Path(unit.job.run_root).parent, scope.run_id,
                           manifest_sha256=scope.manifest_sha256), scope)
+        # impact_class is derived from the run-pinned MITRE CWE catalog (decision 11); an unpinned or
+        # mismatched catalog derives nothing, and a stale one derives with the stale gap recorded.
+        catalog = ImpactCatalog.from_reference(load_cwe_reference(unit.job.run_root))
         document = stages.score_claims(adjudications["adjudications"], projection,
-                                       settings.scoring.cwe_impact_classes, unit.unit_root / "scores", ledger_path,
+                                       settings.scoring.cwe_impact_overrides, unit.unit_root / "scores", ledger_path,
                                        unit.unit_id, SchemaSet(repo(unit) / SCHEMA_DIRECTORY),
                                        references=stages.claim_references(merged, documents),
-                                       scoring=settings.scoring, evidence=evidence)
+                                       scoring=settings.scoring, evidence=evidence, cwe_catalog=catalog)
         gaps: list[str] = []
         return {"artifact": _write(unit, "scores.json", document),
                 "ledger_shard": _artifact(unit.job.run_root, ledger_path), "score_count": len(document["scores"]),

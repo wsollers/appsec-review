@@ -62,14 +62,34 @@ NVD_RECORDS = (
 )
 KEV_CVES = ("CVE-2026-0001",)
 EPSS_ROWS = (("CVE-2026-0001", 0.42, 0.97), ("CVE-2026-0002", 0.001, 0.05))
+# Names, abstractions and Common_Consequences (scopes, technical impacts) after the MITRE catalog;
+# scoring derives each weakness's impact class from its consequences (cwe-impact-derivation/1).
+_CIA = ["Confidentiality", "Integrity", "Availability"]
 MITRE_WEAKNESSES = {
-    "CWE-78": ("Improper Neutralization of Special Elements used in an OS Command", "Base"),
-    "CWE-89": ("Improper Neutralization of Special Elements used in an SQL Command", "Base"),
-    "CWE-120": ("Buffer Copy without Checking Size of Input", "Base"),
-    "CWE-190": ("Integer Overflow or Wraparound", "Base"),
-    "CWE-400": ("Uncontrolled Resource Consumption", "Class"),
-    "CWE-416": ("Use After Free", "Variant"),
-    "CWE-787": ("Out-of-bounds Write", "Base"),
+    "CWE-78": ("Improper Neutralization of Special Elements used in an OS Command", "Base", [
+        (_CIA + ["Non-Repudiation"], ["Execute Unauthorized Code or Commands", "DoS: Crash, Exit, or Restart",
+                                      "Read Files or Directories", "Modify Files or Directories",
+                                      "Read Application Data", "Modify Application Data", "Hide Activities"])]),
+    "CWE-89": ("Improper Neutralization of Special Elements used in an SQL Command", "Base", [
+        (_CIA, ["Execute Unauthorized Code or Commands"]), (["Confidentiality"], ["Read Application Data"]),
+        (["Authentication"], ["Gain Privileges or Assume Identity", "Bypass Protection Mechanism"]),
+        (["Integrity"], ["Modify Application Data"])]),
+    "CWE-120": ("Buffer Copy without Checking Size of Input", "Base", [
+        (["Integrity", "Confidentiality", "Availability"], ["Modify Memory", "Execute Unauthorized Code or Commands"]),
+        (["Availability"], ["DoS: Crash, Exit, or Restart", "DoS: Resource Consumption (CPU)"])]),
+    "CWE-190": ("Integer Overflow or Wraparound", "Base", [
+        (["Availability"], ["DoS: Crash, Exit, or Restart", "DoS: Resource Consumption (Memory)", "DoS: Instability"]),
+        (["Integrity"], ["Modify Memory"]),
+        (["Confidentiality", "Availability", "Access Control"], ["Execute Unauthorized Code or Commands",
+                                                                 "Bypass Protection Mechanism"])]),
+    "CWE-400": ("Uncontrolled Resource Consumption", "Class", [
+        (["Availability"], ["DoS: Crash, Exit, or Restart", "DoS: Resource Consumption (CPU)",
+                            "DoS: Resource Consumption (Memory)"])]),
+    "CWE-416": ("Use After Free", "Variant", [
+        (["Integrity"], ["Modify Memory"]), (["Availability"], ["DoS: Crash, Exit, or Restart"]),
+        (_CIA, ["Execute Unauthorized Code or Commands"])]),
+    "CWE-787": ("Out-of-bounds Write", "Base", [
+        (["Integrity"], ["Modify Memory", "DoS: Crash, Exit, or Restart", "Execute Unauthorized Code or Commands"])]),
 }
 OSV_RECORDS = (
     {"id": "GHSA-aaaa-bbbb-cccc", "modified": "2026-02-01T00:00:00Z", "published": "2026-01-01T00:00:00Z",
@@ -108,7 +128,7 @@ def _identity(kind: EntityKind, native: Any) -> str:
 
 def publish_feeds(base: Path, *, omit_feeds: Iterable[str] = (), stale_feeds: Iterable[str] = ("osv",),
                   kev_cves: Iterable[str] = KEV_CVES, nvd_records: Iterable[dict] = NVD_RECORDS,
-                  mitre_weaknesses: dict[str, tuple[str, str]] | None = None) -> dict[str, dict[str, Any]]:
+                  mitre_weaknesses: dict[str, tuple] | None = None) -> dict[str, dict[str, Any]]:
     """Publish the fixture reference feeds under ``base/feeds`` and pin them as the indexing job does."""
     omit_feeds, stale_feeds = frozenset(omit_feeds), frozenset(stale_feeds)
     unknown = (omit_feeds | stale_feeds) - set(FEEDS)
@@ -143,7 +163,7 @@ def build_accepted_index_set(base: Path, *, run_id: str = RUN_ID, omit: Iterable
                              seed: int | None = None, history_change_count: int = 9,
                              omit_feeds: Iterable[str] = (), stale_feeds: Iterable[str] = ("osv",),
                              kev_cves: Iterable[str] = KEV_CVES, nvd_records: Iterable[dict] = NVD_RECORDS,
-                             mitre_weaknesses: dict[str, tuple[str, str]] | None = None,
+                             mitre_weaknesses: dict[str, tuple] | None = None,
                              advisory_extra: dict[str, dict[str, Any]] | None = None) -> FixtureRun:
     omit = frozenset(omit)
     unknown = omit - set(SHARDS)

@@ -72,8 +72,9 @@ identical canonical outputs.
 Scoring is deterministic and runs only on `confirmed` and `supported` claims. The default provider
 is `application_risk_matrix/2`. It rates `score-factors/1` factors, each derived from adjudicated,
 re-resolved evidence: `verification`, `taint_path`, `attacker_control`, `guard_absent`,
-`exposure`, `privilege`, `data_sensitivity`, `impact_class` and `threat` (KEV only). The design
-section "Evidence-derived scoring factors" lists every factor's scale and source. A factor with no
+`exposure`, `privilege`, `data_sensitivity`, `impact_class` (from the pinned MITRE catalog; see
+"CWE impact classes" below) and `threat` (KEV only). The design section "Evidence-derived scoring
+factors" lists every factor's scale and source. A factor with no
 evidence is listed in the score package's `missing_factors`, with its reason in
 `missing_factor_reasons`. It adds no points and is never read as a low value.
 
@@ -123,8 +124,10 @@ How to tune it:
   on the summed points, and `medium` must be below `high`.
 - **Change what a band means.** Edit `technical_severity`. Rows are impact classes and columns are
   exploitability ratings; a band may never fall as either axis rises.
-- **Change a CWE's impact.** Edit `[...settings.scoring.cwe_impact_classes]`. The CWE class is one
-  factor among many: it sets the severity row, while exploitability comes from the evidence.
+- **Change a CWE's impact.** Impact classes are derived from the run's pinned MITRE CWE catalog
+  (below). To make an exception, add it to `[...settings.scoring.cwe_impact_overrides]`. The CWE
+  class is one factor among many: it sets the severity row, while exploitability comes from the
+  evidence.
 
 `exploitability` may use `verification`, `taint_path`, `attacker_control`, `guard_absent`,
 `exposure` and `privilege`. `environmental` may use `exposure`, `privilege` and
@@ -134,9 +137,56 @@ never carries points. `threat` (KEV) applies its fixed one-band raise and never 
 Validation rejects a non-monotone model at load time, so stronger evidence can never lower a
 rating.
 
-**What a scoring change invalidates.** The model and the CWE table enter the provider
-configuration hash, so a change gives new `score_id`s and invalidates score-dependent PoC
-eligibility and report projection. It does not rerun claim discovery or verification.
+### CWE impact classes
+
+The `impact_class` factor follows `cwe-impact-derivation/1` (decision 11; the design section "CWE
+impact class" has the full rule). Precedence is override, then derivation from the run's pinned
+MITRE catalog, then a missing factor with its reason. Derivation reads each weakness's catalog
+Common_Consequences, maps every technical impact to a class, and takes the highest:
+
+| Catalog technical impact | Class |
+|---|---|
+| Execute Unauthorized Code or Commands | `critical` |
+| Modify Memory, Gain Privileges or Assume Identity, Bypass Protection Mechanism, Modify Application Data, Modify Files or Directories | `high` |
+| Read Memory, Read Application Data, Read Files or Directories | `medium`; `high` if any of the weakness's consequences is `Integrity`-scoped |
+| Alter Execution Logic, DoS: Crash/Exit/Restart, DoS: Instability, DoS: Amplification, DoS: Resource Consumption (CPU, Memory, Other) | `medium` |
+| Hide Activities, Unexpected State, Quality Degradation, Reduce Performance, Reduce Reliability, Reduce Maintainability | `low` |
+| Varies by Context, Other, anything else | no contribution |
+
+A CWE with no mapped impact, no consequences or no catalog entry, and no override, leaves
+`impact_class` missing and technical severity `null`. It is never rated low.
+
+Overrides list exceptions only. Each entry needs a class and a reason:
+
+```toml
+[jobs.job_inference_security_review.settings.scoring.cwe_impact_overrides]
+"CWE-79" = { impact_class = "medium", reason = "script runs in the victim's browser, not on the reviewed target; ..." }
+```
+
+The shipped overrides are CWE-79, CWE-190 and CWE-476 (`medium`), CWE-209 and CWE-601 (`low`), and
+CWE-502 (`critical`). Each records a judgement the catalog's worst-case consequence does not
+express for the reviewed target. Before adding one, check the score package. An override's factor
+detail records `derived_class` whenever the catalog derives a class, so an override that matches
+derivation is redundant and can be removed. The old `cwe_impact_classes` key is rejected at load.
+
+**Catalog state.** Derivation needs the run's pinned `mitre` feed with a `mitre-index/2` index
+(re-run `mitre_sync` after upgrading; a `/1` index has no consequences).
+
+- **Unpinned, mismatched or unreadable catalog, or a `/1` index.** Nothing is derived. Every
+  non-overridden `impact_class` is missing with the catalog gap as its reason.
+- **Stale catalog** (older than `feed_max_age_days`). Classes are still derived, as CWE names
+  still are. Each factor records `catalog_status = stale` and the stale gap, and the score
+  package gains an assumption naming the stale snapshot. Claim CWE validation still falls back
+  and records its gap, as before.
+
+`scores.json` records the rule and the catalog identity it used under `impact_class`.
+
+**What a scoring change invalidates.** The model, the impact derivation rule, the overrides and
+the pinned MITRE catalog snapshot enter the provider configuration hash. A change to any of them
+gives new `score_id`s and invalidates score-dependent PoC eligibility and report projection. It
+does not rerun claim discovery or verification. `application_risk_matrix/1` ignores the overrides
+and the catalog. It rates its frozen pre-decision-11 CWE table, so a rollback reproduces earlier
+ratings.
 
 ## Tuning lane B ranking
 

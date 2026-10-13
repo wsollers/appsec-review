@@ -24,7 +24,8 @@ from appsec_review.review.models import (
     ClaimState, Gap, GapClass, IntegrityError, Lane, make_gap,
 )
 from appsec_review.review.scoring import (
-    consumed_factors, default_factor_registry, default_registry, registry_from_settings,
+    DERIVATION_RULE, UNAVAILABLE_CATALOG, ImpactCatalog, consumed_factors, default_factor_registry, default_registry,
+    registry_from_settings,
 )
 from appsec_review.review.scoring.factors import EvidenceSource, FactorSet, factor_input
 from appsec_review.review.scoring.interface import ScoreProviderResult, ScoreRequest
@@ -165,7 +166,10 @@ LIMITATIONS: Mapping[str, tuple[str, ...]] = {
     "application_risk_matrix/2": (
         "application_risk_matrix/2 rates configured score-factors/1 evidence factors with a configured model; "
         "it is not a CVSS score", "environmental_business_impact reflects accepted security tags (exposure, "
-        "privilege, data sensitivity), not deployment or business data", _REFERENCE_LIMITATION),
+        "privilege, data sensitivity), not deployment or business data",
+        "impact_class is a cwe_impact_overrides entry or is derived (cwe-impact-derivation/1) from the run's "
+        "pinned MITRE CWE catalog consequences, which describe the weakness class, not this target",
+        _REFERENCE_LIMITATION),
 }
 
 
@@ -250,22 +254,26 @@ def claim_references(merged: Mapping[str, Any], documents: Mapping[str, Mapping[
 
 
 def score_claims(adjudications: Sequence[Mapping[str, Any]], projection: Projection,
-                 cwe_impact_classes: Mapping[str, str], out_dir: Path, ledger_path: Path, stream: str,
+                 cwe_impact_overrides: Mapping[str, Any], out_dir: Path, ledger_path: Path, stream: str,
                  schemas: SchemaSet, references: Mapping[str, Mapping[str, Any]] | None = None, *,
-                 scoring: Any | None = None, evidence: EvidenceSource | None = None) -> dict[str, Any]:
+                 scoring: Any | None = None, evidence: EvidenceSource | None = None,
+                 cwe_catalog: ImpactCatalog | None = None) -> dict[str, Any]:
     """Score every confirmed or supported claim with every registered provider.
 
     ``scoring`` is the job's ``ScoringSettings``; it selects the enabled provider implementations and
     their models (without it, ``application_risk_matrix`` runs at its default implementation and
-    model over ``cwe_impact_classes``). Each provider receives exactly the ``score-factors/1``
-    factors it declares, extracted from the claim's counted supporting relations; ``evidence``
-    re-resolves their cited entities and supplies accepted tags, and without it payload- and
-    tag-derived factors are missing with a reason. FIRST EPSS from ``references`` is dropped here:
-    it is never a scoring input.
+    model with ``cwe_impact_overrides``). ``cwe_catalog`` is the run's pinned MITRE CWE catalog,
+    from which ``impact_class`` is derived (decision 11); without it the factor is missing unless
+    overridden. Each provider receives exactly the ``score-factors/1`` factors it declares,
+    extracted from the claim's counted supporting relations; ``evidence`` re-resolves their cited
+    entities and supplies accepted tags, and without it payload- and tag-derived factors are
+    missing with a reason. FIRST EPSS from ``references`` is dropped here: it is never a scoring
+    input.
     """
-    table = scoring.cwe_impact_classes if scoring is not None else cwe_impact_classes
-    registry = registry_from_settings(scoring) if scoring is not None else default_registry(table)
-    factor_registry = default_factor_registry(table)
+    overrides = scoring.cwe_impact_overrides if scoring is not None else cwe_impact_overrides
+    registry = (registry_from_settings(scoring, cwe_catalog) if scoring is not None
+                else default_registry(overrides, catalog=cwe_catalog))
+    factor_registry = default_factor_registry(overrides, cwe_catalog)
     writer = LedgerWriter(ledger_path, stream)
     scores: list[dict[str, Any]] = []
     for record in adjudications:
@@ -302,7 +310,9 @@ def score_claims(adjudications: Sequence[Mapping[str, Any]], projection: Project
                            "band": package["native"].get("rating"), "missing_factors": package["missing_factors"]})
     receipt = writer.seal()
     implementations = sorted(registry.get(item).implementation_version for item in registry.ids())
+    catalog = cwe_catalog if cwe_catalog is not None else UNAVAILABLE_CATALOG
     return {"schema": "appsec-review/inference-review-scores/2", "providers": implementations,
+            "impact_class": {"rule": DERIVATION_RULE, "catalog": catalog.identity()},
             "scores": sorted(scores, key=lambda item: item["score_id"]),
             "ledger_shard": {"events": receipt.event_count, "sha256": file_sha256(ledger_path)}}
 

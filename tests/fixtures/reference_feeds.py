@@ -14,6 +14,7 @@ import json
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 import zipfile
+from xml.sax.saxutils import escape
 
 from appsec_review.jobs.job_third_party_data_sync.steps.epss_sync import feed as epss_feed
 from appsec_review.jobs.job_third_party_data_sync.steps.kev_sync import feed as kev_feed
@@ -101,8 +102,33 @@ def publish_osv(root: Path, records: list[dict[str, Any]], work: Path) -> Path:
     return root
 
 
-def publish_mitre(root: Path, weaknesses: Mapping[str, tuple[str, str]], work: Path) -> Path:
-    """``weaknesses``: ``{"CWE-120": ("Buffer Copy without ...", "Base")}``."""
+Consequence = tuple[Iterable[str], Iterable[str]]      # (scopes, technical impacts)
+
+
+def cwe_xml(weaknesses: Mapping[str, tuple], *, namespace: str = "http://cwe.mitre.org/cwe-7") -> str:
+    """A CWE catalog document in the published layout (namespaced, Common_Consequences per weakness).
+
+    Each value is ``(name, abstraction)`` or ``(name, abstraction, consequences)`` where
+    ``consequences`` is a sequence of ``(scopes, technical impacts)``.
+    """
+    rows = []
+    for cwe, value in sorted(weaknesses.items()):
+        name, abstraction = escape(value[0], {'"': "&quot;"}), value[1]
+        consequences = value[2] if len(value) > 2 else ()
+        body = "".join(
+            "<Consequence>" + "".join(f"<Scope>{escape(scope)}</Scope>" for scope in scopes)
+            + "".join(f"<Impact>{escape(impact)}</Impact>" for impact in impacts)
+            + "<Note>fixture note</Note></Consequence>" for scopes, impacts in consequences)
+        inner = f"<Description>fixture</Description><Common_Consequences>{body}</Common_Consequences>" if body else ""
+        rows.append(f'<Weakness ID="{cwe.split("-")[1]}" Name="{name}" Abstraction="{abstraction}" '
+                    f'Status="Stable">{inner}</Weakness>')
+    return (f'<Weakness_Catalog xmlns="{namespace}" Version="4.20"><Weaknesses>{"".join(rows)}</Weaknesses>'
+            f'</Weakness_Catalog>')
+
+
+def publish_mitre(root: Path, weaknesses: Mapping[str, tuple], work: Path) -> Path:
+    """``weaknesses``: ``{"CWE-120": ("Buffer Copy without ...", "Base", [(scopes, impacts), ...])}``;
+    the consequence list is optional (see :func:`cwe_xml`)."""
     sources = {"enterprise_attack": {"kind": "attack", "url": "https://raw.githubusercontent.com/a.json",
                                      "version": "19.2"},
                "capec": {"kind": "capec", "url": "https://raw.githubusercontent.com/c.json", "version": "3.9"},
@@ -114,11 +140,8 @@ def publish_mitre(root: Path, weaknesses: Mapping[str, tuple[str, str]], work: P
                                              "name": "Fixture", "external_references": [{"external_id": "T1001"}]}]}
     (work / "enterprise_attack.json").write_text(json.dumps(bundle), encoding="utf-8")
     (work / "capec.json").write_text(json.dumps(bundle), encoding="utf-8")
-    rows = "".join(f'<Weakness ID="{cwe.split("-")[1]}" Name="{name}" Abstraction="{abstraction}" Status="Stable"/>'
-                   for cwe, (name, abstraction) in sorted(weaknesses.items()))
     with zipfile.ZipFile(work / "cwe.zip", "w") as archive:
-        archive.writestr(zipfile.ZipInfo("cwec_v4.20.xml", date_time=(2026, 1, 1, 0, 0, 0)),
-                         f'<Weakness_Catalog Version="4.20"><Weaknesses>{rows}</Weaknesses></Weakness_Catalog>')
+        archive.writestr(zipfile.ZipInfo("cwec_v4.20.xml", date_time=(2026, 1, 1, 0, 0, 0)), cwe_xml(weaknesses))
     fetched = {"schema": "appsec-review/mitre-fetch/1", "sources": {
         name: {**_source(work / (f"{name}.zip" if name == "cwe" else f"{name}.json")), "kind": value["kind"],
                "version": value["version"], "expected_sha256": None} for name, value in sources.items()}}

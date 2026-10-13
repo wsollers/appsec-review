@@ -212,9 +212,11 @@ def test_tag_factors_are_missing_not_low_without_matching_tags() -> None:
 def test_impact_class_threat_and_no_epss_field() -> None:
     impact = extract(data(cwe="CWE-78"), FactorId.IMPACT_CLASS).get(FactorId.IMPACT_CLASS)
     assert impact.value == "critical"
-    assert impact.citations == (Citation(CitationKind.CONFIGURATION, "cwe_impact_classes.CWE-78"),)
+    assert impact.citations == (Citation(CitationKind.CONFIGURATION, "cwe_impact_overrides.CWE-78"),)
+    assert impact.detail["basis"] == ("override",)
     unmapped = extract(data(cwe="CWE-787"), FactorId.IMPACT_CLASS)
-    assert unmapped.missing[0].reason == "CWE-787 is not in cwe_impact_classes"
+    # No override and no pinned catalog: missing with the catalog gap, never a low value.
+    assert unmapped.missing[0].reason.startswith("impact_class not derived: mitre_feed_unavailable")
     assert extract(data(kev=True), FactorId.THREAT).get(FactorId.THREAT).value == "kev_listed"
     assert extract(data(kev=False), FactorId.THREAT).get(FactorId.THREAT).value == "not_listed"
     assert "epss" not in FactorInput.__dataclass_fields__
@@ -611,12 +613,13 @@ def adjudicated(relations, independent=True):
     return record, projection
 
 
-def run_stage(tmp_path: Path, relations, *, name="run", references=None, **kwargs):
+def run_stage(tmp_path: Path, relations, *, name="run", references=None, overrides=None, **kwargs):
     record, projection = adjudicated(relations)
     out = tmp_path / name / "scores"
     out.mkdir(parents=True)
-    document = stages.score_claims([record], projection, TABLE, out, tmp_path / name / "ledger.jsonl", "scoring",
-                                   SCHEMAS, references=references, **kwargs)
+    document = stages.score_claims([record], projection, TABLE if overrides is None else overrides, out,
+                                   tmp_path / name / "ledger.jsonl", "scoring", SCHEMAS, references=references,
+                                   **kwargs)
     packages = {item["file"]: (out / item["file"]).read_bytes() for item in document["scores"]}
     return document, packages
 
@@ -636,7 +639,7 @@ def test_stage_scores_with_factors_and_writes_a_valid_package(tmp_path: Path) ->
     assert factors["attacker_control"] == "direct_unclassified"
     citations = {item["factor"]: item for item in package["factor_citations"]}
     assert set(citations) == set(factors)
-    assert citations["impact_class"]["references"] == ["cwe_impact_classes.CWE-120"]
+    assert citations["impact_class"]["references"] == ["cwe_impact_overrides.CWE-120"]
     assert set(citations["taint_path"]["evidence_relations"]) <= set(package["evidence_relations"])
     reasons = {item["factor"]: item["reason"] for item in package["missing_factor_reasons"]}
     assert reasons["exposure"] == TAGS_NOT_SUPPLIED and "remediation_priority" in reasons
@@ -660,7 +663,7 @@ def test_stage_uses_the_evidence_source_for_payload_and_tag_factors(tmp_path: Pa
 def test_stage_selects_providers_from_settings(tmp_path: Path) -> None:
     from types import SimpleNamespace
 
-    settings = SimpleNamespace(enabled_providers=("cvss_v4", "application_risk_matrix"), cwe_impact_classes=TABLE,
+    settings = SimpleNamespace(enabled_providers=("cvss_v4", "application_risk_matrix"), cwe_impact_overrides=TABLE,
                                providers={"application_risk_matrix": SimpleNamespace(
                                    implementation="application_risk_matrix/1", model=None)})
     assert registry_from_settings(settings).ids() == ("application_risk_matrix",)

@@ -1956,35 +1956,20 @@ high = { low = "low", medium = "medium", high = "high" }
 medium = { low = "low", medium = "low", high = "medium" }
 low = { low = "low", medium = "low", high = "low" }
 
-# The impact_class factor: one factor among many, not the whole score. An unmapped CWE leaves
-# technical severity null with impact_class in missing_factors.
-[jobs.job_inference_security_review.settings.scoring.cwe_impact_classes]
-"CWE-22" = "high"
-"CWE-77" = "critical"
-"CWE-78" = "critical"
-"CWE-79" = "medium"
-"CWE-89" = "critical"
-"CWE-94" = "critical"
-"CWE-120" = "high"
-"CWE-190" = "medium"
-"CWE-200" = "medium"
-"CWE-209" = "low"
-"CWE-287" = "critical"
-"CWE-306" = "critical"
-"CWE-327" = "medium"
-"CWE-352" = "medium"
-"CWE-400" = "medium"
-"CWE-416" = "critical"
-"CWE-434" = "high"
-"CWE-476" = "medium"
-"CWE-502" = "critical"
-"CWE-601" = "low"
-"CWE-611" = "high"
-"CWE-787" = "critical"
-"CWE-798" = "high"
-"CWE-862" = "high"
-"CWE-863" = "high"
-"CWE-918" = "high"
+# The impact_class factor (one factor among many, not the whole score) is derived from the run's
+# pinned MITRE CWE catalog Common_Consequences under cwe-impact-derivation/1 (decision 11; see
+# docs/operations/inference-security-review.md "Tuning scoring"). This table lists only exceptions
+# and wins over derivation. A CWE with neither an override nor a mapped catalog consequence (or a
+# run without a pinned catalog) leaves technical severity null with impact_class in missing_factors.
+# Seeded from the pre-derivation hand table where its class was a deliberate judgement that the
+# catalog's worst-case consequence does not express for the target itself.
+[jobs.job_inference_security_review.settings.scoring.cwe_impact_overrides]
+"CWE-79" = { impact_class = "medium", reason = "script runs in the victim's browser, not on the reviewed target; the catalog's code-execution consequence overstates target impact" }
+"CWE-190" = { impact_class = "medium", reason = "a wraparound is a precursor; code execution arises only when the value reaches a memory write, which is scored as its own weakness (CWE-787, CWE-120)" }
+"CWE-209" = { impact_class = "low", reason = "error messages disclose diagnostic detail, not bulk application data" }
+"CWE-476" = { impact_class = "medium", reason = "the typical consequence is a crash; the catalog's code execution needs rare platform conditions" }
+"CWE-502" = { impact_class = "critical", reason = "gadget-chain code execution is the established consequence; the catalog lists it only as varies by context" }
+"CWE-601" = { impact_class = "low", reason = "an open redirect aids phishing; it executes nothing on the target and grants no privilege by itself" }
 
 [jobs.job_inference_security_review.settings.poc]
 execution_enabled = false
