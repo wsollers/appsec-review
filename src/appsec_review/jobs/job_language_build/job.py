@@ -46,7 +46,7 @@ from appsec_review.jobs.job_language_build.datasets import CONSUMES, DATASETS
 
 SCHEMA = "appsec-review/language-build-handoff/1"
 RECEIPT_SCHEMA = "appsec-review/language-build-receipt/1"
-EXECUTOR_IDENTITY = "appsec-review/generic-language-build-executor/1"
+EXECUTOR_IDENTITY = "appsec-review/generic-language-build-executor/2"
 CAPTURE_DESCRIPTORS: dict[str, CapturedBuildDescriptor] = {
     descriptor.family: descriptor for descriptor in (
         dotnet.CAPTURE_DESCRIPTOR, native.CAPTURE_DESCRIPTOR, rust.CAPTURE_DESCRIPTOR,
@@ -1124,10 +1124,10 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
         if not any(row["tool_kind"] in {"autoload-generator", "package-builder", "code-generator",
                                         "compiler-driver", "linker", "archiver"} for row in compile_rows):
             gaps.append("PHP build exposed no autoload, package, code-generation, or native-tool invocation")
-    # Captured build trees are container-owned; the orchestrator keeps its own records beside
-    # the workspace instead of writing into a tree the build user owns.
-    link_database = (root / "link-commands.json" if family in _CAPTURED_FAMILIES else
-                     workspace / Path(*PurePosixPath(str(recipe["build_dir"])).parts) / ".appsec-review-link-commands.json")
+    # Every build tree is container-owned, including output directories created after the host
+    # prepared the workspace. Keep orchestrator metadata beside the workspace so the host UID
+    # never needs write access to a directory owned by the isolated build UID.
+    link_database = root / "link-commands.json"
     atomic_json(link_database, normalized_links)
     compile_protected = root / "protected-commands" / f"compile-database-{unit.job.attempt_id}.json"
     protected_json(compile_protected, {"schema": "appsec-review/protected-compile-commands/1",

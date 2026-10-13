@@ -87,6 +87,7 @@ class PythonExecutor:
             content = b"[build-system]\nrequires=[]\n"
             info = tarfile.TarInfo("sample-1.0.0/pyproject.toml"); info.size = len(content)
             archive.addfile(info, io.BytesIO(content))
+        dist.chmod(0o555)  # A container-created output tree is not writable by the host UID.
         (generated / "generated.c").write_text("int generated(void) { return 1; }\n", encoding="utf-8")
         (bytecode / "__init__.cpython-313.pyc").write_bytes(b"pyc")
         stdout = b"SENSITIVE-RAW-OUTPUT\n" + b"x" * (128 if self.truncate else 0)
@@ -135,6 +136,10 @@ def test_python_build_catalogs_packages_provenance_streams_and_mcp(tmp_path: Pat
         "package-builder", "build-backend", "compiler-driver"}
     assert all("argv" not in item for item in receipt["tool_invocations"])
     assert receipt["package_relationships"] and receipt["package_members"]
+    link_database = config.runtime.runs_dir / run_id / receipt["link_database"]["path"]
+    workspace = config.runtime.runs_dir / run_id / receipt["workspace"]
+    assert link_database.name == "link-commands.json"
+    assert workspace not in link_database.parents
     command = receipt["commands"][0]
     assert command["stdout"]["truncated"] is True
     assert command["stdout"]["total_bytes"] > command["stdout"]["captured_bytes"]

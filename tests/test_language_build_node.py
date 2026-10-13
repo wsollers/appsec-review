@@ -199,6 +199,7 @@ class _NodeExecutor:
             "version": 3, "file": "bundle.js", "sources": ["../src/index.ts"],
         }), encoding="utf-8")
         (dist / "addon.node").write_bytes(b"native-addon")
+        dist.chmod(0o555)  # A container-created output tree is not writable by the host UID.
         stdout = b"webpack --mode production\n"
         return BuildCommandResult(tuple(argv), 0, stdout, b"warning\n", False,
                                   stdout_bytes=1000, stderr_bytes=8,
@@ -241,6 +242,10 @@ def test_node_build_publishes_protected_provenance_and_sanitized_mcp_evidence(tm
         "generated-code", "source-map", "native-addon"}
     assert {item["tool_kind"] for item in receipt["tool_invocations"]} >= {
         "package-manager", "bundler"}
+    link_database = config.runtime.runs_dir / upstream["run_id"] / receipt["link_database"]["path"]
+    workspace = config.runtime.runs_dir / upstream["run_id"] / receipt["workspace"]
+    assert link_database.name == "link-commands.json"
+    assert workspace not in link_database.parents
     command = receipt["commands"][0]
     assert command["stdout"]["total_bytes"] == 1000 and command["stdout"]["truncated"] is True
     assert command["stdout"]["diagnostic_tail"]["sha256"]
