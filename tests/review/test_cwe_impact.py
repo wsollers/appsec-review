@@ -63,8 +63,13 @@ def impact(cwe: str, overrides=None, source: ImpactCatalog | None = None) -> Fac
     ([(["Integrity"], ["Modify Application Data"])], "high"),
     ([(["Confidentiality"], ["Read Memory"])], "medium"),
     ([(["Confidentiality"], ["Read Application Data", "Read Files or Directories"])], "medium"),
-    # A read is raised to high when the weakness is also integrity-scoped.
-    ([(["Confidentiality"], ["Read Memory"]), (["Integrity"], ["Unexpected State"])], "high"),
+    # A read is raised to high when the weakness also has a non-trivial integrity-scoped consequence,
+    # but not when every integrity impact is rated low (e.g. only Unexpected State).
+    ([(["Confidentiality"], ["Read Memory"]), (["Integrity"], ["Other"])], "high"),
+    ([(["Confidentiality"], ["Read Memory"]), (["Integrity"], ["Varies by Context"])], "high"),
+    ([(["Confidentiality"], ["Read Memory"]), (["Integrity"], ["Unexpected State"])], "medium"),
+    ([(["Confidentiality"], ["Read Memory"]), (["Integrity"], ["Unexpected State", "Quality Degradation"])],
+     "medium"),
     ([(["Confidentiality", "Integrity"], ["Read Application Data"])], "high"),
     ([(["Availability"], ["DoS: Crash, Exit, or Restart"])], "medium"),
     ([(["Availability"], ["DoS: Resource Consumption (Memory)", "DoS: Amplification"])], "medium"),
@@ -105,7 +110,7 @@ def test_derived_factor_cites_the_catalog_snapshot_and_consequence_entries() -> 
 
 def test_an_integrity_raise_cites_the_integrity_scoped_entry() -> None:
     rows = {"CWE-1": consequences((("Confidentiality",), ("Read Memory",)), (("Availability",), ("Reduce Performance",)),
-                                  (("Integrity",), ("Unexpected State",)))}
+                                  (("Integrity",), ("Other",)))}
     value = impact("CWE-1", source=catalog(rows=rows))
     assert value.value == "high" and "integrity_raised" in value.detail
     assert [item.id.rsplit("/", 1)[1] for item in value.citations] == ["0", "2"]

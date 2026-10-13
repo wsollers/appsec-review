@@ -9,8 +9,9 @@ run's pinned ``index/mitre.sqlite`` (:mod:`appsec_review.review.references`). Pr
 3. otherwise a missing factor with its reason, never a low value.
 
 Each technical impact maps to a class (:data:`IMPACT_RULES`). A read impact (memory, application
-data, files) is ``medium``, raised to ``high`` when any of the weakness's consequences is
-``Integrity``-scoped. The highest class over every consequence wins; impacts the rule does not
+data, files) is ``medium``, raised to ``high`` when the weakness also has an ``Integrity``-scoped
+consequence whose impacts are not all rated ``low``. An Integrity scope with only ``Unexpected
+State`` or quality impacts does not raise it; one with ``Other`` or ``Varies by Context`` does. The highest class over every consequence wins; impacts the rule does not
 map (``Varies by Context``, ``Other``, unknown strings) contribute nothing, and a weakness with no
 mapped impact leaves the factor missing.
 
@@ -62,7 +63,8 @@ IMPACT_RULES: Mapping[str, str] = MappingProxyType({
     "reduce reliability": "low",
     "reduce maintainability": "low",
 })
-# Read impacts are raised to ``high`` when the weakness also has an Integrity-scoped consequence.
+# Read impacts are raised to ``high`` when the weakness also has an Integrity-scoped consequence
+# whose impacts are not all rated low.
 READ_IMPACTS = frozenset({"read memory", "read application data", "read files or directories"})
 
 
@@ -142,7 +144,9 @@ class Derivation:
 def derive(consequences: tuple[CweConsequence, ...]) -> Derivation | None:
     """Apply :data:`DERIVATION_RULE`; ``None`` when no consequence has a mapped technical impact."""
     integrity = [item for item in consequences
-                 if any(scope.strip().casefold() == INTEGRITY_SCOPE for scope in item.scopes)]
+                 if any(scope.strip().casefold() == INTEGRITY_SCOPE for scope in item.scopes)
+                 and not all(IMPACT_RULES.get(" ".join(impact.split()).casefold()) == "low"
+                             for impact in item.impacts)]
     scored: list[tuple[int, CweConsequence, str, bool]] = []
     for consequence in consequences:
         for impact in consequence.impacts:

@@ -148,7 +148,7 @@ Common_Consequences, maps every technical impact to a class, and takes the highe
 |---|---|
 | Execute Unauthorized Code or Commands | `critical` |
 | Modify Memory, Gain Privileges or Assume Identity, Bypass Protection Mechanism, Modify Application Data, Modify Files or Directories | `high` |
-| Read Memory, Read Application Data, Read Files or Directories | `medium`; `high` if any of the weakness's consequences is `Integrity`-scoped |
+| Read Memory, Read Application Data, Read Files or Directories | `medium`; `high` if the weakness has an `Integrity`-scoped consequence whose impacts are not all rated `low` |
 | Alter Execution Logic, DoS: Crash/Exit/Restart, DoS: Instability, DoS: Amplification, DoS: Resource Consumption (CPU, Memory, Other) | `medium` |
 | Hide Activities, Unexpected State, Quality Degradation, Reduce Performance, Reduce Reliability, Reduce Maintainability | `low` |
 | Varies by Context, Other, anything else | no contribution |

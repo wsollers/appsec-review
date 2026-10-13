@@ -911,7 +911,7 @@ consequences wins:
 |---|---|
 | Execute Unauthorized Code or Commands | `critical` |
 | Modify Memory; Gain Privileges or Assume Identity; Bypass Protection Mechanism; Modify Application Data; Modify Files or Directories | `high` |
-| Read Memory; Read Application Data; Read Files or Directories | `medium`, or `high` when any consequence of the weakness is `Integrity`-scoped |
+| Read Memory; Read Application Data; Read Files or Directories | `medium`, or `high` when the weakness has an `Integrity`-scoped consequence whose impacts are not all rated `low` (an Integrity scope with only Unexpected State or quality impacts does not raise it) |
 | Alter Execution Logic; DoS: Crash, Exit, or Restart; DoS: Instability; DoS: Amplification; DoS: Resource Consumption (CPU/Memory/Other) | `medium` |
 | Hide Activities; Unexpected State; Quality Degradation; Reduce Performance; Reduce Reliability; Reduce Maintainability | `low` |
 | Varies by Context; Other; any other string | nothing (no contribution) |
