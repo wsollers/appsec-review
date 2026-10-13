@@ -2,7 +2,7 @@
 
 from .codeql import (
     CodeQLAnalysisSettings, CodeQLCustomQuerySettings, CodeQLExecutionMode, CodeQLLanguageSettings,
-    CodeQLPackQuerySettings,
+    CodeQLExportQuerySettings, CodeQLExportSettings, CodeQLPackQuerySettings,
     parse_codeql_settings,
 )
 
@@ -22,7 +22,7 @@ from .loader import (
 )
 
 __all__ = [
-    "AppConfig", "BuildCaptureConfig", "CodeQLAnalysisSettings", "CodeQLCustomQuerySettings", "CodeQLExecutionMode", "CodeQLLanguageSettings", "CodeQLPackQuerySettings", "CppCompiledAnalysisSettings", "DagsterConfig", "DotnetBuildSettings", "GoBuildSettings", "JobConfig", "JvmBuildSettings", "LanguageBuildSettings", "NodeBuildSettings", "RuntimeConfig",
+    "AppConfig", "BuildCaptureConfig", "CodeQLAnalysisSettings", "CodeQLCustomQuerySettings", "CodeQLExecutionMode", "CodeQLExportQuerySettings", "CodeQLExportSettings", "CodeQLLanguageSettings", "CodeQLPackQuerySettings", "CppCompiledAnalysisSettings", "DagsterConfig", "DotnetBuildSettings", "GoBuildSettings", "JobConfig", "JvmBuildSettings", "LanguageBuildSettings", "NodeBuildSettings", "RuntimeConfig",
     "PhpBuildSettings", "ProcessingMode", "PythonBuildSettings", "RustBuildSettings", "ScheduleConfig", "StepConfig", "TargetDocumentSettings", "DocumentIssueSettings", "TaskConfig", "ToolCapabilityConfig",
     "WasmBuildSettings", "WasmProducerSettings", "load_config", "parse_codeql_settings",
     "BudgetSettings", "CAPACITY_KEYS", "InferenceSecurityReviewSettings", "LaneSettings", "ModelProfileSettings",

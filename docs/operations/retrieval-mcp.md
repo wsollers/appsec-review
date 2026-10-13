@@ -28,7 +28,10 @@ are in `docs/schemas/retrieval-mcp-tools.json`. Application code should instanti
 The stdio gateway and plain `RetrievalMcpAdapter` are operator interfaces. Review workers must
 receive only `ScopedRetrievalMcpAdapter` with a package and role capability issued from a verified
 run-owned review package. It checks package identity and permitted entities on every call and
-denies broad search and cross-package retrieval. The package contract and current bounds are in
+denies broad search and cross-package retrieval. A `query_code_graph` row outside the package's
+exact entities is returned only when its accepted `payload.scope.scope_id` is one of the package's
+`retrieval.graph_scopes`; the identities such a row references become addressable for the rest of
+the session. Any other row fails the call. The package contract and current bounds are in
 [review-package-contract.md](../architecture/review-package-contract.md).
 
 The live smoke in `tests/test_retrieval_core.py` starts a fixture server and invokes the core tool
@@ -89,14 +92,29 @@ filters. Each result includes the stored feature vector, evidence identities, an
 location. It reports absent or partial priority coverage as a gap.
 
 `query_precomputed` reads only accepted `precomputed` shards for an allowlisted query set. The
-sets cover code graphs, builds, artifacts, advisories, scanner correlation, CI, history, controls,
-reference intelligence, and review packages; the complete list and product contracts are in
+sets cover builds, artifacts, advisories, scanner correlation, CI, history, controls, reference
+intelligence, documents and review packages; the complete list and product contracts are in
 [`indexing-and-query-reuse.md`](../architecture/indexing-and-query-reuse.md).
-`job_review_data_indexing` publishes the nine stage-1 sets (`build_provenance`,
-`artifact_inventory`, `dependency_advisories`, `scanner_correlation`, `ci_trust`,
-`history_context`, `control_evidence`, `reference_intelligence`, `symbol_links`); graph and
-review-context sets return an unavailable gap until the graph batch publishes them. It never
-executes analyzers or target code during retrieval.
+`job_review_data_indexing` publishes the stage-1 sets (`build_provenance`, `artifact_inventory`,
+`dependency_advisories`, `scanner_correlation`, `ci_trust`, `history_context`, `control_evidence`,
+`reference_intelligence`, `symbol_links`, `document_context`); the stage-3 sets (`hotspot_context`,
+`review_package`) return an unavailable gap until they are built. The former graph sets
+(`call_graph`, `control_flow`, `dataflow`, `sarif_correlation`, `ast_ir_cpg_mapping`,
+`guards_ranges`, `entrypoint_paths`) are retired and rejected as invalid; use `query_code_graph`.
+It never executes analyzers or target code during retrieval.
+
+`query_code_graph` reads only accepted `graph` shards published by `job_code_graph_index`
+([`code-graph-index.md`](code-graph-index.md)). It takes a closed `mode` (`callers`, `callees`,
+`sinks`, `entry_points`, `paths`, `guards`, `ranges`, `summary`, `sarif_path`), an exact
+`subject` identity whose kind the mode accepts, and optional `depth` (`callers`/`callees` only),
+`sink_class`, `source_class`, `limit` and `cursor`. It accepts no path, name, language or free
+text. `depth` is capped by `jobs.job_code_graph_index.settings.graph.max_call_depth` as bound to
+the run (`data/configuration/resolved.json`; a changed resolved configuration fails startup) and by
+the core's depth limit. Every response carries the scope's coverage rows; a bound reached is
+`truncated` with a named gap, and a scope or family without an accepted shard returns `[]` with an
+unavailable gap, never a claim of absence. `sarif_path` returns the `dataflow_path` facts
+correlated with a CodeQL observation and their `bridged`/`partial` state; a `broken` correlation
+returns a gap and no path. The tool never runs CodeQL or any analyzer.
 
 `query_observations` filters accepted observation shards by exact scanner, rule, normalized
 reported severity (`critical`, `high`, `medium`, `low`, `info`, `unknown`), observation class,
@@ -114,7 +132,8 @@ relations carrying their method and confidence.
 `query_dataset_inventory` is the bounded catalog of the accepted dataset inventory: one record per
 dataset (disposition, query route, exception reason, producer attempt and coverage), the
 publication audit, and coverage cells for languages, build units, producer/consumer edges, the
-input-source matrix, query sets, graph-batch follow-ups and offline FTS validation. Operation
+input-source matrix, query sets, the `code_graph` lane, follow-up query sets and offline FTS
+validation. Operation
 details are in [`review-data-indexing.md`](review-data-indexing.md).
 
 `coverage` pages accepted shards and reports each shard's sanitized producer, entity and

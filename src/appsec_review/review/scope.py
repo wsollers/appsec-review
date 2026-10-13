@@ -123,6 +123,9 @@ PRODUCERS: Mapping[str, Callable[[Mapping[str, Any]], bool]] = {
     "dependency_advisories": _precomputed("dependency_advisories"),
     "reference_intelligence": _precomputed("reference_intelligence"),
     "control_evidence": _precomputed("control_evidence"),
+    # Code-graph facts (docs/architecture/code-graph-precomputation.md 7.4): one ``graph`` shard per
+    # (CodeQL scope, family); every non-complete (scope, family) coverage row is a named gap here.
+    "code_graph": _index("graph", "job_code_graph_index"),
 }
 
 

@@ -217,7 +217,7 @@ def build_job(
         Unit("osv_sync.index", osv_index, ("osv_sync.fetch",),
              output_validators=(_schema("appsec-review/osv-index/1"),)),
         Unit("mitre_sync.normalize", mitre_normalize, ("mitre_sync.fetch",),
-             output_validators=(_schema("appsec-review/mitre-normalize/1"),)),
+             output_validators=(_schema("appsec-review/mitre-normalize/2"),)),
         Unit("kev_sync.normalize", kev_normalize, ("kev_sync.fetch",),
              output_validators=(_schema("appsec-review/kev-normalize/1"),)),
         Unit("epss_sync.normalize", epss_normalize, ("epss_sync.fetch",),

@@ -23,16 +23,28 @@ from appsec_review.review.ledger import (
 from appsec_review.review.models import (
     ClaimState, Gap, GapClass, IntegrityError, Lane, make_gap,
 )
-from appsec_review.review.scoring import default_registry
+from appsec_review.review.scoring import (
+    DERIVATION_RULE, UNAVAILABLE_CATALOG, ImpactCatalog, consumed_factors, default_factor_registry, default_registry,
+    registry_from_settings,
+)
+from appsec_review.review.scoring.factors import EvidenceSource, FactorSet, factor_input
 from appsec_review.review.scoring.interface import ScoreProviderResult, ScoreRequest
+from appsec_review.review import ship_block
+from appsec_review.review.ship_block import ShipBlockInputs, ShipBlockSettings
 from appsec_review.storage import atomic_bytes, atomic_json, canonical_json, file_sha256
 
+from .datasets import PLANNED_CONSUMERS
 from .schemas import SchemaSet
 
-HANDOFF_SCHEMA = "appsec-review/inference-review-handoff/1"
-FINDING_SCHEMA = "appsec-review/finding-package/1"
+HANDOFF_SCHEMA = "appsec-review/inference-review-handoff/2"
+FINDING_SCHEMA = "appsec-review/finding-package/2"
 COVERAGE_SCHEMA = "appsec-review/inference-review-coverage-matrix/1"
-SCORER_ACTOR = make_id("actor", 1, {"role": "independent_scorer", "provider": "application_risk_matrix/1"})
+def scorer_actor(implementation: str) -> str:
+    """The deterministic ``independent_scorer`` actor of one provider implementation."""
+    return make_id("actor", 1, {"role": "independent_scorer", "provider": implementation})
+
+
+SCORER_ACTOR = scorer_actor("application_risk_matrix/1")
 # PROPOSED -> final state; confirmation and the R5 row-4 reachability/configuration states pass through
 # ``supported`` because the condition is established before policy or contradiction narrows it.
 TRANSITION_PATHS: Mapping[ClaimState, tuple[ClaimState, ...]] = {
@@ -148,6 +160,22 @@ def apply_policy(merged: Mapping[str, Any], projection: Projection, ledger_path:
 # scoring.score_claims
 
 
+_REFERENCE_LIMITATION = ("reference_inputs are pinned-feed context (NVD CVSS, CISA KEV) about the advisory, not "
+                         "about this target; FIRST EPSS is never a scoring input")
+LIMITATIONS: Mapping[str, tuple[str, ...]] = {
+    "application_risk_matrix/1": (
+        "application_risk_matrix/1 rates impact from a configured CWE table only; it is not a CVSS score and "
+        "does not assess environment or business impact", _REFERENCE_LIMITATION),
+    "application_risk_matrix/2": (
+        "application_risk_matrix/2 rates configured score-factors/1 evidence factors with a configured model; "
+        "it is not a CVSS score", "environmental_business_impact reflects accepted security tags (exposure, "
+        "privilege, data sensitivity), not deployment or business data",
+        "impact_class is a cwe_impact_overrides entry or is derived (cwe-impact-derivation/1) from the run's "
+        "pinned MITRE CWE catalog consequences, which describe the weakness class, not this target",
+        _REFERENCE_LIMITATION),
+}
+
+
 def score_package_json(result: ScoreProviderResult) -> dict[str, Any]:
     native = dict(result.native)
     rendered: dict[str, Any] = {"nomenclature": str(native.get("matrix", result.implementation_version))}
@@ -159,6 +187,17 @@ def score_package_json(result: ScoreProviderResult) -> dict[str, Any]:
     def dimension(value) -> dict[str, Any] | None:
         return None if value is None else {"scale": value.scale, "rating": value.rating, "value": value.value}
 
+    factors = result.factors or FactorSet((), ())
+    citations = []
+    for item in factors.values:
+        by_kind: dict[str, list[str]] = defaultdict(list)
+        for citation in item.citations:
+            by_kind[citation.kind.value].append(citation.id)
+        citations.append({"factor": item.factor.value, "evidence_relations": sorted(by_kind["evidence_relation"]),
+                          "entities": sorted(by_kind["entity"]), "tag_assignments": sorted(by_kind["tag_assignment"]),
+                          "references": sorted(by_kind["adjudication"] + by_kind["reference_input"]
+                                               + by_kind["configuration"])})
+    limitations = LIMITATIONS.get(result.implementation_version, ())
     return {"schema": result.schema, "score_id": result.score_id, "claim_id": result.claim_id,
             "adjudication_id": result.adjudication_id,
             "provider": {"id": result.provider_id, "interface": result.interface_version,
@@ -170,11 +209,12 @@ def score_package_json(result: ScoreProviderResult) -> dict[str, Any]:
             "environmental_business_impact": dimension(result.environmental_business_impact),
             "remediation_priority": dimension(result.remediation_priority),
             "assumptions": list(result.assumptions), "missing_factors": list(result.missing_factors),
-            "evidence_relations": list(result.evidence_relations), "factor_citations": [],
-            "limitations": ["application_risk_matrix/1 rates impact from a configured CWE table only; it is not "
-                            "a CVSS score and does not assess environment or business impact",
-                            "reference_inputs are pinned-feed context (NVD CVSS, CISA KEV, FIRST EPSS) about the "
-                            "advisory, not about this target; they are recorded, not scored"],
+            "evidence_relations": list(result.evidence_relations), "factor_citations": citations,
+            "factors": [{"factor": item.factor.value, "scale": item.scale, "value": item.value,
+                         "detail": item.record()["detail"]} for item in factors.values],
+            "missing_factor_reasons": [{"factor": factor, "reason": reason}
+                                       for factor, reason in result.missing_factor_reasons],
+            "limitations": list(limitations),
             "scorer": result.scorer_actor_id, "input_fingerprint": result.input_fingerprint,
             "overrides": [dict(item) for item in result.overrides],
             **({"reference_inputs": dict(result.reference_inputs)} if result.reference_inputs else {})}
@@ -216,10 +256,45 @@ def claim_references(merged: Mapping[str, Any], documents: Mapping[str, Mapping[
     return found
 
 
+def claim_lead_families(merged: Mapping[str, Any], documents: Mapping[str, Mapping[str, Any]]
+                        ) -> dict[str, tuple[str, ...]]:
+    """Lead families of the lane A finding-lead packages that proposed each claim.
+
+    As with :func:`claim_references`, only a finding-lead package names the lead a claim was raised
+    from; hunt proposals contribute nothing. ``ship-block-policy/1`` reads these to decide whether a
+    claim is a dependency finding.
+    """
+    found: dict[str, tuple[str, ...]] = {}
+    for claim_id, package_ids in sorted(merged.get("proposal_packages", {}).items()):
+        families = {str(lead["lead_family"]) for package_id in package_ids
+                    for document in [documents.get(package_id) or {}] if document.get("kind") == "finding_lead"
+                    for lead in document.get("lead_menu", ()) if lead.get("lead_family")}
+        if families:
+            found[claim_id] = tuple(sorted(families))
+    return found
+
+
 def score_claims(adjudications: Sequence[Mapping[str, Any]], projection: Projection,
-                 cwe_impact_classes: Mapping[str, str], out_dir: Path, ledger_path: Path, stream: str,
-                 schemas: SchemaSet, references: Mapping[str, Mapping[str, Any]] | None = None) -> dict[str, Any]:
-    registry = default_registry(cwe_impact_classes)
+                 cwe_impact_overrides: Mapping[str, Any], out_dir: Path, ledger_path: Path, stream: str,
+                 schemas: SchemaSet, references: Mapping[str, Mapping[str, Any]] | None = None, *,
+                 scoring: Any | None = None, evidence: EvidenceSource | None = None,
+                 cwe_catalog: ImpactCatalog | None = None) -> dict[str, Any]:
+    """Score every confirmed or supported claim with every registered provider.
+
+    ``scoring`` is the job's ``ScoringSettings``; it selects the enabled provider implementations and
+    their models (without it, ``application_risk_matrix`` runs at its default implementation and
+    model with ``cwe_impact_overrides``). ``cwe_catalog`` is the run's pinned MITRE CWE catalog,
+    from which ``impact_class`` is derived (decision 11); without it the factor is missing unless
+    overridden. Each provider receives exactly the ``score-factors/1`` factors it declares,
+    extracted from the claim's counted supporting relations; ``evidence`` re-resolves their cited
+    entities and supplies accepted tags, and without it payload- and tag-derived factors are
+    missing with a reason. FIRST EPSS from ``references`` is dropped here: it is never a scoring
+    input.
+    """
+    overrides = scoring.cwe_impact_overrides if scoring is not None else cwe_impact_overrides
+    registry = (registry_from_settings(scoring, cwe_catalog) if scoring is not None
+                else default_registry(overrides, catalog=cwe_catalog))
+    factor_registry = default_factor_registry(overrides, cwe_catalog)
     writer = LedgerWriter(ledger_path, stream)
     scores: list[dict[str, Any]] = []
     for record in adjudications:
@@ -229,25 +304,38 @@ def score_claims(adjudications: Sequence[Mapping[str, Any]], projection: Project
         claim = projection.claims[record["claim_id"]].claim
         supporting = sorted({relation for item in record["predicates"] for relation in item["supporting"]})
         reference = (references or {}).get(claim.claim_id) or {}
-        request = ScoreRequest(claim_id=claim.claim_id, adjudication_id=record["adjudication_id"], claim_state=state,
-                               weakness_cwe=claim.weakness_cwe, evidence_relation_ids=tuple(supporting),
-                               environment_sha256=None, policy_sha256=record["policy_sha256"],
-                               scorer_actor_id=SCORER_ACTOR,
-                               reference_cvss=tuple(dict(item) for item in reference.get("reference_cvss", ())),
-                               kev_listed=reference.get("kev_listed"), epss=reference.get("epss"))
-        outcome = registry.score("application_risk_matrix", request)
-        if isinstance(outcome, Gap):
-            writer.record_gap(outcome)
-            continue
-        package = score_package_json(outcome)
-        schemas.validate("score-package", package)
-        path = Path(out_dir) / f"{package['score_id']}.json"
-        atomic_bytes(path, canonical_json(package))
-        scores.append({"score_id": package["score_id"], "claim_id": claim.claim_id, "sha256": file_sha256(path),
-                       "file": path.name, "band": package["native"].get("rating"),
-                       "missing_factors": package["missing_factors"]})
+        data = factor_input(claim_id=claim.claim_id, adjudication_id=record["adjudication_id"], claim_state=state,
+                            weakness_cwe=claim.weakness_cwe, affected_entities=claim.affected_entities,
+                            predicates=record["predicates"], relations=projection.relations.get(claim.claim_id, ()),
+                            source=evidence, kev_listed=reference.get("kev_listed"))
+        for provider_id in registry.ids():
+            provider = registry.get(provider_id)
+            wanted = consumed_factors(provider)
+            request = ScoreRequest(
+                claim_id=claim.claim_id, adjudication_id=record["adjudication_id"], claim_state=state,
+                weakness_cwe=claim.weakness_cwe, evidence_relation_ids=tuple(supporting), environment_sha256=None,
+                policy_sha256=record["policy_sha256"], scorer_actor_id=scorer_actor(provider.implementation_version),
+                reference_cvss=tuple(dict(item) for item in reference.get("reference_cvss", ())),
+                kev_listed=reference.get("kev_listed"),
+                factors=factor_registry.extract(data, wanted) if wanted else None)
+            outcome = registry.score(provider_id, request)
+            if isinstance(outcome, Gap):
+                writer.record_gap(outcome)
+                continue
+            package = score_package_json(outcome)
+            schemas.validate("score-package", package)
+            path = Path(out_dir) / f"{package['score_id']}.json"
+            atomic_bytes(path, canonical_json(package))
+            severity = package["technical_severity"]
+            scores.append({"score_id": package["score_id"], "claim_id": claim.claim_id, "sha256": file_sha256(path),
+                           "file": path.name, "provider": outcome.implementation_version,
+                           "band": package["native"].get("rating"), "missing_factors": package["missing_factors"],
+                           "technical_severity": severity["rating"] if severity else None})
     receipt = writer.seal()
-    return {"schema": "appsec-review/inference-review-scores/1", "provider": "application_risk_matrix/1",
+    implementations = sorted(registry.get(item).implementation_version for item in registry.ids())
+    catalog = cwe_catalog if cwe_catalog is not None else UNAVAILABLE_CATALOG
+    return {"schema": "appsec-review/inference-review-scores/2", "providers": implementations,
+            "impact_class": {"rule": DERIVATION_RULE, "catalog": catalog.identity()},
             "scores": sorted(scores, key=lambda item: item["score_id"]),
             "ledger_shard": {"events": receipt.event_count, "sha256": file_sha256(ledger_path)}}
 
@@ -292,8 +380,10 @@ def audit(lanes: Sequence[Mapping[str, Any]], shard_paths: Sequence[Path], incom
     projection = project(merged.events)
     expected_cells = {cell_id: Lane(lane) for item in lanes for cell_id, lane in item["expected_cells"].items()}
     expected_packages = {package_id: Lane(lane) for item in lanes for package_id, lane in item["packages"].items()}
+    lead_accounting = {package_id: leads for item in lanes
+                       for package_id, leads in (item.get("lead_accounting") or {}).items()}
     accounting = exact_accounting(projection, expected_cells, expected_packages,
-                                  incomplete_gap_ratio=incomplete_gap_ratio)
+                                  incomplete_gap_ratio=incomplete_gap_ratio, lead_accounting=lead_accounting)
     return accounting, projection, merged
 
 
@@ -309,13 +399,40 @@ def handoff_status(accounting: Accounting) -> str:
     return "DEGRADED"
 
 
+def _ship_block_inputs(state: ClaimState, claim_scores: Sequence[Mapping[str, Any]],
+                       references: Mapping[str, Any], lead_families: Sequence[str], model_distinct: bool
+                       ) -> tuple[ShipBlockInputs, dict[str, Any]]:
+    """The policy inputs of one finding and its displayed (never deciding) context."""
+    deciding = sorted((item for item in claim_scores if item["provider"] == ship_block.SEVERITY_PROVIDER),
+                      key=lambda item: item["score_id"])
+    severity = deciding[0] if deciding else None
+    inputs = ShipBlockInputs(
+        claim_state=state, technical_severity=severity.get("technical_severity") if severity else None,
+        severity_score_id=severity["score_id"] if severity else None, lead_families=tuple(lead_families),
+        kev_listed=references.get("kev_listed"), verifier_model_distinct=bool(model_distinct))
+    displayed = {
+        "reference_cvss": [dict(item) for item in references.get("reference_cvss", ())][:8],
+        "non_deciding_scores": sorted(item["score_id"] for item in claim_scores
+                                      if item["provider"] != ship_block.SEVERITY_PROVIDER)[:16],
+    }
+    return inputs, displayed
+
+
 def finding_packages(projection: Projection, adjudications: Sequence[Mapping[str, Any]],
                      merged: Mapping[str, Any], scores: Sequence[Mapping[str, Any]], *, manifest_sha256: str,
-                     out_dir: Path, schemas: SchemaSet) -> list[dict[str, Any]]:
-    """Confirmed and supported claims only; supported is labelled not independently confirmed."""
-    by_claim_scores: dict[str, list[str]] = defaultdict(list)
+                     out_dir: Path, schemas: SchemaSet, references: Mapping[str, Mapping[str, Any]] | None = None,
+                     lead_families: Mapping[str, Sequence[str]] | None = None,
+                     ship_block_settings: ShipBlockSettings = ShipBlockSettings(),
+                     require_distinct_model: bool = True) -> list[dict[str, Any]]:
+    """Confirmed and supported claims only; supported is labelled not independently confirmed.
+
+    Each package carries its ``ship-block-policy/1`` decision with the inputs and citations that
+    decided it. ``references`` and ``lead_families`` are :func:`claim_references` and
+    :func:`claim_lead_families`; without them no finding is a KEV-listed dependency finding.
+    """
+    by_claim_scores: dict[str, list[Mapping[str, Any]]] = defaultdict(list)
     for score in scores:
-        by_claim_scores[score["claim_id"]].append(score["score_id"])
+        by_claim_scores[score["claim_id"]].append(score)
     claim_gaps: dict[str, list[str]] = defaultdict(list)
     for gap in projection.gaps:
         claim_gaps[gap.subject_id].append(gap.gap_id)
@@ -328,17 +445,31 @@ def finding_packages(projection: Projection, adjudications: Sequence[Mapping[str
         verifiers = merged["independence"].get(claim.claim_id, [])
         independent = [item for item in verifiers if item["independent"]]
         reviewed = independent or [item for item in verifiers if item.get("review_id")]
+        # Decision 2 is judged on the verifiers that count: the independent ones when any exist.
+        model_distinct = any(item.get("verifier_model_distinct", False) for item in (independent or verifiers))
         supporting = sorted({relation for item in record["predicates"] for relation in item["supporting"]})
+        missing = sorted(item["predicate"] for item in record["predicates"]
+                         if item["required"] and item["outcome"] != "satisfied")
+        review_id = reviewed[0]["review_id"] if reviewed else None
+        claim_scores = by_claim_scores.get(claim.claim_id, ())
+        inputs, displayed = _ship_block_inputs(state, claim_scores,
+                                               (references or {}).get(claim.claim_id) or {},
+                                               (lead_families or {}).get(claim.claim_id, ()), model_distinct)
+        decision = ship_block.decide(inputs, ship_block_settings, require_distinct_model=require_distinct_model)
         body = {
-            "schema": FINDING_SCHEMA, "claim_id": claim.claim_id, "state": state.value,
+            "schema": FINDING_SCHEMA, "claim_id": claim.claim_id, "lane": claim.lane.value, "state": state.value,
             "label": "confirmed" if state is ClaimState.CONFIRMED else "not_independently_confirmed",
             "title": f"{claim.security_predicate} ({claim.weakness_cwe or 'unmapped weakness'})"[:200],
             "adjudication_id": record["adjudication_id"], "direct_evidence": supporting[:256],
-            "verification_review_id": reviewed[0]["review_id"] if reviewed else None,
-            "scores": sorted(by_claim_scores.get(claim.claim_id, ()))[:16], "poc": None, "attack_chains": [],
+            "missing_predicates": missing,
+            "verification_review_id": review_id,
+            "scores": sorted(item["score_id"] for item in claim_scores)[:16], "poc": None, "attack_chains": [],
             "remediation_inputs": {"safe_regression_artifact": None},
             "independence": {"independent": bool(independent),
-                             "provider_distinct": any(item["provider_distinct"] for item in verifiers)},
+                             "provider_distinct": any(item["provider_distinct"] for item in verifiers),
+                             "verifier_model_distinct": model_distinct},
+            "ship_block": decision.record(inputs, adjudication_id=record["adjudication_id"],
+                                          verification_review_id=review_id, displayed_context=displayed),
             "gaps": sorted(set(claim_gaps.get(claim.claim_id, ())) | set(record["gap_ids"]))[:256],
             "provenance": {"run_manifest_sha256": manifest_sha256, "ledger_head_sha256": projection.head},
         }
@@ -347,17 +478,41 @@ def finding_packages(projection: Projection, adjudications: Sequence[Mapping[str
         path = Path(out_dir) / f"{package['finding_package_id']}.json"
         atomic_bytes(path, canonical_json(package))
         written.append({"finding_package_id": package["finding_package_id"], "sha256": file_sha256(path),
-                        "claim_id": claim.claim_id, "state": state.value, "file": path.name})
+                        "claim_id": claim.claim_id, "state": state.value, "lane": claim.lane.value,
+                        "ship_block_status": decision.status.value, "missing_predicates": missing,
+                        "gaps": package["gaps"], "file": path.name})
     return sorted(written, key=lambda item: item["finding_package_id"])
+
+
+def remediation_partition(findings: Sequence[Mapping[str, Any]]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Decision 4: ``(remediation_intake, verification_backlog)``.
+
+    Only ``confirmed`` finding packages enter remediation intake; ``supported`` packages form the
+    separate verification backlog, labelled ``unconfirmed`` with their missing predicates and gaps.
+    """
+    intake, backlog = [], []
+    for item in sorted(findings, key=lambda value: value["finding_package_id"]):
+        entry = {"finding_package_id": item["finding_package_id"], "sha256": item["sha256"],
+                 "claim_id": item["claim_id"], "lane": item["lane"], "ship_block_status": item["ship_block_status"]}
+        if item["state"] == ClaimState.CONFIRMED.value:
+            intake.append(entry)
+        elif item["state"] == ClaimState.SUPPORTED.value:
+            backlog.append({**entry, "label": "unconfirmed", "missing_predicates": list(item["missing_predicates"]),
+                            "gap_ids": list(item["gaps"])})
+        else:
+            raise IntegrityError(f"finding package has an unpublishable state: {item['state']}")
+    return intake, backlog
 
 
 def build_handoff(*, run_id: str, manifest_sha256: str, configuration_sha256: str, projection: Projection,
                   accounting: Accounting, shards: Sequence[Mapping[str, Any]], findings: Sequence[Mapping[str, Any]],
                   scores: Sequence[Mapping[str, Any]], package_manifest_sha256: str,
-                  coverage: Mapping[str, Any], possible: Sequence[Sequence[str]], schemas: SchemaSet) -> dict[str, Any]:
+                  coverage: Mapping[str, Any], possible: Sequence[Sequence[str]], schemas: SchemaSet,
+                  ship_block_policy_sha256: str, verification: Mapping[str, Any]) -> dict[str, Any]:
     if not accounting.exact:
         reasons = ", ".join(sorted({gap.reason for gap in accounting.violations}))
         raise IntegrityError(f"publication_error: claim accounting is not exact ({reasons})")
+    intake, backlog = remediation_partition(findings)
     handoff = {
         "schema": HANDOFF_SCHEMA, "run_id": run_id, "accepted_manifest_sha256": manifest_sha256,
         "configuration_sha256": configuration_sha256, "status": handoff_status(accounting),
@@ -365,6 +520,12 @@ def build_handoff(*, run_id: str, manifest_sha256: str, configuration_sha256: st
         "accounting": accounting.to_json(), "shards": [dict(item) for item in shards],
         "finding_packages": [{"finding_package_id": item["finding_package_id"], "sha256": item["sha256"]}
                              for item in findings],
+        "remediation_intake": intake, "verification_backlog": backlog,
+        "ship_block": {**ship_block.summarize({"lane": item["lane"], "status": item["ship_block_status"]}
+                                              for item in findings),
+                       "policy_sha256": ship_block_policy_sha256},
+        "verification": dict(verification),
+        "planned_consumers": [dict(item) for item in PLANNED_CONSUMERS],
         "score_packages": [{"score_id": item["score_id"], "sha256": item["sha256"]} for item in scores],
         "gap_ids": [gap.gap_id for gap in projection.gaps],
         "package_manifest_sha256": package_manifest_sha256, "coverage_matrix": dict(coverage),
@@ -414,5 +575,6 @@ def verify_receipts(projection: Projection, receipts_root: Path) -> int:
     return checked
 
 
-__all__ = ["apply_policy", "audit", "build_handoff", "coverage_matrix", "completeness_gaps", "finding_packages",
-           "merge_claims", "merge_verified", "score_claims", "shard_records", "verify_receipts", "write_ledger"]
+__all__ = ["apply_policy", "audit", "build_handoff", "claim_lead_families", "claim_references", "coverage_matrix",
+           "completeness_gaps", "finding_packages", "merge_claims", "merge_verified", "remediation_partition",
+           "score_claims", "scorer_actor", "shard_records", "verify_receipts", "write_ledger"]

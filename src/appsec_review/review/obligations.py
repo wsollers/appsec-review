@@ -1,18 +1,28 @@
 """Proof obligations for claims (``obligation-rules/1``, design R4).
 
 The tables in this module are application policy, never prompt text. Any change to them changes
-``POLICY_SHA256`` and therefore every adjudication fingerprint that depends on it.
+``POLICY_SHA256`` and therefore every adjudication fingerprint that depends on it. The policy also
+pins the evidence-admissibility rule version and the graph-fact predicate mapping
+(``graph-fact-predicates/1``, re-exported here from the shared code-graph contract), so a change to
+which graph facts may satisfy which predicate changes the policy hash.
 """
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import Iterable
+from typing import Iterable, Mapping
 
+from appsec_review.graph.contract import (
+    ADMISSIBILITY_RULE as GRAPH_FACT_ADMISSIBILITY_RULE, ATTACKER_REACHABLE_SOURCES, FACT_PREDICATES_RULE,
+    GRAPH_FACT_PREDICATES, Family,
+)
 from appsec_review.review.identity import sha256_hex
 from appsec_review.review.models import Predicate
 
 RULES_VERSION = "obligation-rules/1"
 PRECONDITIONS_VERSION = "preconditions/1"
+# R3 classification rules (review/evidence.py). /2 adds the graph-fact branch: graph kinds are
+# direct only for their mapped predicates and only when the re-resolved fact is direct-eligible.
+ADMISSIBILITY_RULES_VERSION = "evidence-admissibility/2"
 
 
 class Precondition(StrEnum):
@@ -82,9 +92,21 @@ def required_predicates(preconditions: Iterable[str | Precondition]) -> frozense
     return frozenset(required)
 
 
-def _policy_document() -> dict[str, object]:
+def _graph_predicates_record(mapping: Mapping[Family, Iterable[Predicate]]) -> dict[str, object]:
+    return {
+        "rule": FACT_PREDICATES_RULE, "fact_admissibility": GRAPH_FACT_ADMISSIBILITY_RULE,
+        "families": {Family(family).value: sorted(Predicate(item).value for item in predicates)
+                     for family, predicates in sorted(mapping.items(), key=lambda item: Family(item[0]).value)},
+        "attacker_reachable_sources": sorted(item.value for item in ATTACKER_REACHABLE_SOURCES),
+    }
+
+
+def _policy_document(graph_predicates: Mapping[Family, Iterable[Predicate]] = GRAPH_FACT_PREDICATES
+                     ) -> dict[str, object]:
     return {
         "rules": RULES_VERSION,
+        "admissibility": ADMISSIBILITY_RULES_VERSION,
+        "graph_fact_predicates": _graph_predicates_record(graph_predicates),
         "preconditions": PRECONDITIONS_VERSION,
         "predicates": sorted(item.value for item in Predicate),
         "always_required": sorted(item.value for item in ALWAYS_REQUIRED),
@@ -97,3 +119,7 @@ def _policy_document() -> dict[str, object]:
 
 
 POLICY_SHA256 = sha256_hex(_policy_document())
+
+__all__ = ["ADMISSIBILITY_RULES_VERSION", "ALWAYS_REQUIRED", "CONFIGURATION_PREDICATE", "CONFIGURATION_SCOPED",
+           "FACT_PREDICATES_RULE", "GRAPH_FACT_PREDICATES", "POLICY_SHA256", "PRECONDITIONS_VERSION", "Precondition",
+           "RULES_VERSION", "parse_precondition", "required_predicates"]

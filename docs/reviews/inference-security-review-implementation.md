@@ -127,7 +127,7 @@ No live model has been run.
   - The `entry_down` and `control_gap` strategies' data sources.
   - The PoC lane, attack chains, and the CVSS v4, CVSS v3.1 and SSVC scorers.
   - The planned dataflow, call-graph, guard and entry-point queries.
-  - A closed `security_predicate` vocabulary (design open question 10).
+  - A closed `security_predicate` vocabulary (design open question 9).
   - Live-model acceptance.
 
 ## 7. Skill separation (follow-up)
@@ -195,3 +195,41 @@ fixtures through the real normalize, index and publish code.
 - Reference scorer inputs come only from lane A packages.
 - The failing wave-1 Dagster tests write run directories into the repository `runs/` directory.
   This was already the case before this work and should be fixed separately.
+
+## 9. Ship-block policy, verifier distinctness, remediation intake and downstream names (follow-up)
+
+This follow-up implements decisions 1, 2, 4 and 8 of the design. Decision 3 (PoC authorization and
+executor host) is still open, and no PoC execution path was built.
+
+- **Decision 1.** `review/ship_block.py` implements `ship-block-policy/1` as a pure, first-match
+  policy with four statuses: `ship_blocking`, `ship_blocking_pending_distinct_verification`,
+  `needs_verification` and `not_ship_blocking`. `application_risk_matrix/2` technical severity and
+  the KEV dependency path decide. CVSS, SSVC and NVD reference vectors are recorded as displayed
+  context and never decide. Thresholds are in the typed `settings.ship_block` table.
+- **Decision 2.** `review/independence.py::model_distinct` is recorded per claim as
+  `verifier_model_distinct` in the lane independence data and in each finding package. R6 and
+  confirmation are unchanged. `settings.verification.require_distinct_model_for_ship_blocking`
+  (default true) makes the policy publish a same-model finding as pending. The handoff's
+  `verification` record carries a warning when the verifier and red profiles resolve to the same
+  model. Every checked-in profile still uses `claude-haiku-5-5`, so real runs publish ship-blocking
+  findings as pending until an operator configures a distinct verifier profile.
+- **Decision 4.** The handoff publishes `remediation_intake` (confirmed packages only) and
+  `verification_backlog` (supported packages labelled `unconfirmed`, with missing predicates and
+  gap ids).
+- **Decision 8.** The four downstream jobs are `planned:` producers in the input-source matrix,
+  with matching documentation rows, and the handoff names them in `planned_consumers`.
+- **Schemas.** `finding-package/2` and `inference-review-handoff/2` replace version 1. The new
+  fields are required, so earlier handoffs do not validate against the new schemas.
+
+**Verification.** Unit tests cover every status and condition, configuration overrides and
+validation, distinctness recording, the intake and backlog partition, and the schemas under both
+`jsonschema` and the job's closed validator. The Dagster acceptance test now asserts the status
+counts with the default configuration (one pending finding). A new acceptance run configures a
+distinct verifier profile and shows that finding move to `ship_blocking`.
+
+**Open items:**
+- A confirmed claim without an `application_risk_matrix/2` rating records
+  `technical_severity_unrated` and is not ship-blocking unless the KEV dependency path applies.
+  The publication gate should treat that reason as a gap.
+- The acceptance fixture produces no confirmed KEV dependency claim. The KEV path is covered by
+  unit tests only.

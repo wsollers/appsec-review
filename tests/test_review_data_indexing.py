@@ -19,7 +19,12 @@ from typing import Any
 import pytest
 
 from appsec_review.config import load_config
-from appsec_review.indexing import fts_worker, input_matrix, inventory, products
+from appsec_review.graph.contract import GRAPH_INDEX, Family
+from appsec_review.indexing import fts_worker, input_matrix, inventory, matrix, products
+from appsec_review.indexing.store import ShardSet
+from appsec_review.mcp.schema import TOOLS
+from appsec_review.retrieval.precomputed import QUERY_SETS, RETIRED_GRAPH_SETS
+from appsec_review.runtime.datasets import DatasetDeclaration, artifact_only
 from appsec_review.indexing.build_facts import classify_command, classify_environment
 from appsec_review.indexing.store import AcceptedHandoff
 from appsec_review.mcp import RetrievalMcpAdapter
@@ -35,6 +40,8 @@ from appsec_review.storage import atomic_json, file_sha256
 
 
 ROOT = Path(__file__).resolve().parents[1]
+FOLLOW_UP_SETS = ("hotspot_context", "review_package", "redacted_secret_exposure", "contract_enforcement",
+                  "deployment_exposure", "test_intent")
 TOOL = ROOT / "containers" / "tools" / "sqlite-fts" / "sqlite_fts.py"
 SNAPSHOT = "target-sha256:" + "7" * 64
 SECRETS = ("supersecretvalue", "hunter2plaintext", "/tmp/evil.so", "/home/user/secret")
@@ -571,6 +578,20 @@ def test_inventory_audit_matrices_links_and_fts_validation(accepted) -> None:
     language = core.query_dataset_inventory(cell_type="language", limit=100)["results"]
     native = next(item["payload"] for item in language if item["payload"]["language"] == "c/c++")
     assert native["lanes"]["cpg_graph"]["state"] == "unavailable" and native["lanes"]["codeql"]["state"] == "complete"
+    # No accepted graph shard exists (job_code_graph_index is not part of this run): the lane is a named gap.
+    assert all(item["payload"]["lanes"]["code_graph"]["state"] == "unavailable" for item in language)
+    assert native["lanes"]["code_graph"]["basis"] == matrix.GRAPH_UNAVAILABLE
+    assert set(native["lanes"]["code_graph"]["families"]) == {family.value for family in Family}
+    follow_up = core.query_dataset_inventory(cell_type="graph_follow_up", limit=100)["results"]
+    # The payload sanitizer redacts the value "redacted_secret_exposure"; the row is still present.
+    names = sorted(item["payload"]["query_set"] for item in follow_up)
+    assert names == sorted(name if "secret" not in name else "<redacted>" for name in FOLLOW_UP_SETS)
+    assert {item["payload"]["status"] for item in follow_up} == {"pending_follow_up"}
+    hotspot = next(item["payload"] for item in follow_up if item["payload"]["query_set"] == "hotspot_context")
+    assert "no language has accepted graph coverage" in hotspot["missing_prerequisite"]
+    assert "c/c++" in hotspot["graph_coverage"]["unavailable"]
+    matrix_sets = {name for item in sources for name in item["payload"]["query_sets"]}
+    assert not matrix_sets & set(RETIRED_GRAPH_SETS)
     fts = core.query_dataset_inventory(cell_type="fts_validation")["results"][0]["payload"]
     assert fts["status"] == "verified" and fts["image_id"].startswith("sha256:29c26f5f")
     assert executor.calls == ["probe", "build", "verify"]
@@ -750,6 +771,157 @@ def test_input_source_matrix_matches_design_document_and_registry() -> None:
     assert len(rows) == len(input_matrix.INPUT_SOURCES)
     from appsec_review.runtime.registry import builtin_registry
     registered = set(builtin_registry().job_ids())
-    named = {producer for _source, producers, *_ in input_matrix.INPUT_SOURCES for producer in producers}
+    named = {input_matrix.resolve_producer(producer, registered)
+             for _source, producers, *_ in input_matrix.INPUT_SOURCES for producer in producers}
     assert registered - {"job_review_data_indexing", "job_review_package_assembly", "job_document_issue_analysis"} <= named
     assert {producer for producer in named if producer.startswith("job_")} <= registered
+
+
+def _graph_shards(tmp_path: Path, specs) -> ShardSet:
+    """Accepted-style ``graph`` shards: one per (scope, family) with the given coverage statuses."""
+    run_root = tmp_path / "run"
+    shards = []
+    for scope, language, family, statuses in specs:
+        shard_id = f"graph-{scope}-{family}"
+        path = run_root / "data" / "indices" / GRAPH_INDEX / f"{shard_id}.sqlite"
+        builder = IndexBuilder(path, name=GRAPH_INDEX, fingerprint="f" * 64, target_snapshot=SNAPSHOT,
+                               shard_id=shard_id)
+        for number, status in enumerate(statuses):
+            builder.add_coverage(f"{scope}/{family}/{number}", status, None if status == "complete" else "fixture gap")
+        shards.append({"name": GRAPH_INDEX, "shard_id": shard_id, "sha256": builder.build(),
+                       "relative_path": path.relative_to(run_root).as_posix(),
+                       "producer": {"job": matrix.GRAPH_JOB, "family": family, "language": language,
+                                    "scope_id": scope}})
+    return ShardSet(run_root, shards)
+
+
+def test_code_graph_lane_is_complete_only_with_complete_accepted_graph_shards(tmp_path: Path) -> None:
+    complete = [("cpp-main", "cpp", family.value, ("complete",)) for family in Family]
+    partial = [("java-app", "java", family.value, ("complete", "partial") if family is Family.DATAFLOW_PATH
+                else ("complete",)) for family in Family if family is not Family.RANGE_FACT]
+    failed = [("py-app", "python", family.value, ("unavailable",)) for family in Family]
+    shards = _graph_shards(tmp_path, [*complete, *partial, *failed])
+    rows = {row["language"]: row["lanes"] for row in matrix.language_matrix(shards, {})}
+    assert rows["c/c++"]["code_graph"]["state"] == "complete"
+    assert set(rows["c/c++"]["code_graph"]["families"].values()) == {"complete"}
+    java = rows["java/kotlin"]["code_graph"]
+    assert java["state"] == "partial"
+    assert java["families"]["dataflow_path"] == "partial" and java["families"]["range_fact"] == "unavailable"
+    assert "dataflow_path" in java["basis"] and "range_fact" in java["basis"]
+    python = rows["python"]["code_graph"]
+    assert python["state"] == "unavailable" and "every fact family unavailable" in python["basis"]
+    for lanes in rows.values():
+        assert lanes["cpg_graph"]["state"] == "unavailable"
+        assert set(lanes) == set(matrix.LANES)
+    units = {row["build_unit_id"]: row["lanes"] for row in matrix.build_unit_matrix(shards)}
+    assert units["cpp-main"]["code_graph"]["state"] == "complete"
+    assert units["java-app"]["code_graph"]["state"] == "partial"
+    assert units["py-app"]["code_graph"]["state"] == "unavailable"
+
+
+def test_code_graph_lane_without_graph_shards_is_unavailable_with_basis(tmp_path: Path) -> None:
+    # A graph shard with no coverage row is partial, and another job's graph-index shard is ignored.
+    shards = _graph_shards(tmp_path, [("cpp-main", "cpp", family.value, ()) for family in Family])
+    cell = matrix.language_matrix(shards, {})[0]["lanes"]["code_graph"]
+    assert cell["state"] == "partial" and set(cell["families"].values()) == {"partial"}
+    foreign = ShardSet(shards.run_root, [{**item, "producer": {**item["producer"], "job": "job_other"}}
+                                         for item in shards.shards])
+    assert matrix.language_matrix(foreign, {}) == []
+    empty = matrix.graph_cell(foreign, (), matrix.GRAPH_UNAVAILABLE)
+    assert empty["state"] == "unavailable" and empty["basis"] == matrix.GRAPH_UNAVAILABLE
+    assert empty["shards"] == [] and set(empty["families"].values()) == {"unavailable"}
+
+
+def test_graph_follow_up_rows_name_only_stage_three_and_planned_sets() -> None:
+    from appsec_review.jobs.job_review_data_indexing import job as indexing_job
+
+    assert tuple(name for name, _reason in indexing_job.GRAPH_FOLLOW_UP) == FOLLOW_UP_SETS
+    without = indexing_job.graph_follow_up([{"language": "c/c++", "lanes": {"code_graph": {"state": "unavailable"}}}])
+    assert [item["query_set"] for item in without] == list(FOLLOW_UP_SETS)
+    assert all(item["status"] == "pending_follow_up" for item in without)
+    assert "no language has accepted graph coverage" in without[0]["missing_prerequisite"]
+    assert "graph_coverage" not in without[2]
+    with_graph = indexing_job.graph_follow_up([{"language": "c/c++", "lanes": {"code_graph": {"state": "partial"}}}])
+    assert with_graph[0]["graph_coverage"]["partial"] == ["c/c++"]
+    assert "no language has accepted graph coverage" not in with_graph[0]["missing_prerequisite"]
+
+
+def test_retired_graph_sets_are_schema_errors_not_unavailable_gaps() -> None:
+    assert set(QUERY_SETS).isdisjoint(RETIRED_GRAPH_SETS) and set(products.FIRST_STAGE_SETS) <= set(QUERY_SETS)
+    assert {"hotspot_context", "review_package"} <= set(QUERY_SETS)
+    tool = next(item for item in TOOLS if item["name"] == "query_precomputed")
+    assert tool["inputSchema"]["properties"]["query_set"]["enum"] == list(QUERY_SETS)
+    catalog = json.loads((ROOT / "docs" / "schemas" / "retrieval-mcp-tools.json").read_text(encoding="utf-8"))
+    assert "call_graph" not in json.dumps(catalog)
+    core = RetrievalCore.__new__(RetrievalCore)
+    for name in RETIRED_GRAPH_SETS:
+        with pytest.raises(ValueError, match="invalid precomputed query set"):
+            core.query_precomputed(query_set=name)
+
+
+def test_input_matrix_resolves_the_planned_graph_producer_once_registered() -> None:
+    codeql = next(item for item in input_matrix.INPUT_SOURCES if item[0] == "codeql_sarif")
+    assert codeql[1] == ("job_codeql_analysis", "planned:job_code_graph_index")
+    assert "query_code_graph" in codeql[4]
+    joern = next(item for item in input_matrix.INPUT_SOURCES if item[0] == "joern_cpg")
+    assert joern[2] == "artifact_only" and joern[3] == ()
+    assert input_matrix.resolve_producer("planned:job_code_graph_index", set()) == "planned:job_code_graph_index"
+    assert input_matrix.resolve_producer("planned:job_code_graph_index", {"job_code_graph_index"}) == \
+        "job_code_graph_index"
+    registry = ["job_codeql_analysis", "job_code_graph_index"]
+    jobs = [{"job_id": "job_codeql_analysis", "status": "accepted"},
+            {"job_id": "job_code_graph_index", "status": "accepted"}]
+    rows, discrepancies = input_matrix.reconcile(registry, jobs, [], {}, "job_review_data_indexing")
+    assert not any("job_code_graph_index" in item for item in discrepancies)
+    states = next(item for item in rows if item["source"] == "codeql_sarif")["producer_states"]
+    assert [item["status"] for item in states] == ["accepted", "accepted"]
+    rows, _ = input_matrix.reconcile(["job_codeql_analysis"], jobs[:1], [], {}, "job_review_data_indexing")
+    states = next(item for item in rows if item["source"] == "codeql_sarif")["producer_states"]
+    assert states[1] == {"producer": "planned:job_code_graph_index", "status": "planned"}
+
+
+DOWNSTREAM = ("job_remediation_planning", "job_remediation_validation", "job_final_publication_gate",
+              "job_final_report_publication")
+
+
+def test_downstream_review_consumers_are_registered_as_planned_producers_by_name() -> None:
+    """Decision 8: the four downstream job names are fixed before any of them is built."""
+    from appsec_review.jobs.job_inference_security_review.datasets import PLANNED_CONSUMER_JOBS, PLANNED_CONSUMERS
+    from appsec_review.runtime.registry import builtin_registry
+
+    planned = {producer for _source, producers, *_ in input_matrix.INPUT_SOURCES for producer in producers
+               if producer.startswith("planned:")}
+    assert {f"planned:{job}" for job in DOWNSTREAM} <= planned
+    assert PLANNED_CONSUMER_JOBS == DOWNSTREAM
+    assert tuple(consumer.removeprefix("planned:") for consumer, _ in input_matrix.PLANNED_CONSUMERS) == DOWNSTREAM
+    # Every consumed producer is the review itself or an earlier planned downstream job.
+    for index, (_consumer, producers) in enumerate(input_matrix.PLANNED_CONSUMERS):
+        earlier = {f"planned:{job}" for job in DOWNSTREAM[:index]}
+        assert set(producers) <= {"job_inference_security_review"} | earlier
+    assert all(item["status"] == "planned" and item["reads"] for item in PLANNED_CONSUMERS)
+    # Remediation reads only confirmed findings (decision 4); never the verification backlog.
+    reads = {item["job_id"]: set(item["reads"]) for item in PLANNED_CONSUMERS}
+    assert "verification_backlog" not in reads["job_remediation_planning"] | reads["job_remediation_validation"]
+    assert "remediation_intake" in reads["job_remediation_planning"]
+    # Not yet built: they are planned, never registered, and reconcile reports them as planned.
+    assert not set(DOWNSTREAM) & set(builtin_registry().job_ids())
+    rows, discrepancies = input_matrix.reconcile([], [], [], {}, "job_review_data_indexing")
+    states = {item["source"]: item["producer_states"] for item in rows}
+    assert states["remediation_plans"] == [{"producer": "planned:job_remediation_planning", "status": "planned"}]
+    assert not any(job in item for item in discrepancies for job in DOWNSTREAM)
+    # Once registered, a planned name resolves to the job itself without a matrix change.
+    assert input_matrix.resolve_producer("planned:job_final_publication_gate", {"job_final_publication_gate"}) == \
+        "job_final_publication_gate"
+
+
+def test_audit_accepts_graph_export_dataset_only_with_its_named_reason() -> None:
+    pattern = ("data/codeql/scopes/*/exports/**",)
+    declaration = artifact_only("graph_exports", "export", "codeql", "appsec-review/codeql-graph-export/1",
+                                "Bounded raw CodeQL graph exports per scope.", artifacts=pattern,
+                                reason="raw rows hold CodeQL internal ids; normalized facts are the graph index")
+    assert declaration.disposition == "artifact_only" and declaration.reason
+    for reason in (None, "", "  "):
+        with pytest.raises(ValueError, match="named exception reason"):
+            DatasetDeclaration("graph_exports", "export", "codeql", "appsec-review/codeql-graph-export/1",
+                               "internal", "artifact_only", "Bounded raw CodeQL graph exports per scope.",
+                               artifacts=pattern, query_route="query_dataset_inventory", reason=reason)

@@ -2,18 +2,24 @@
 
 Providers emit one normalized four-dimension package. Dimensions a provider does not produce stay
 ``None`` and are named in ``missing_factors``; unlike scales are never combined or coerced.
+
+A provider may declare ``consumed_factors`` (``score-factors/1`` ids); the scoring stage then
+extracts exactly those factors from the adjudicated evidence and passes them in
+``ScoreRequest.factors``. A request without factors canonicalizes exactly as before, so providers
+that consume none keep their fingerprints.
 """
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field, fields
 import json
-from typing import Any, Mapping, Protocol, runtime_checkable
+from typing import Any, Collection, Mapping, Protocol, runtime_checkable
 
 from appsec_review.review.identity import make_id, sha256_hex
 from appsec_review.review.models import ClaimState, Gap, GapClass, make_gap
+from appsec_review.review.scoring.factors import FactorId, FactorSet
 
 INTERFACE_VERSION = "appsec-review/scoring-provider/1"
-SCORE_PACKAGE_SCHEMA = "appsec-review/score-package/1"
+SCORE_PACKAGE_SCHEMA = "appsec-review/score-package/2"
 EVIDENCE_CONFIDENCE_SCALE = "evidence_confidence/1"
 SCOREABLE_STATES = frozenset({ClaimState.CONFIRMED, ClaimState.SUPPORTED})
 
@@ -32,13 +38,18 @@ class ScoreRequest:
     scorer_actor_id: str
     # Labelled reference inputs from pinned feeds (NVD CVSS vectors, CISA KEV, FIRST EPSS). They describe
     # the advisory a lead came from, not the target; providers record them and may use them only as
-    # documented (application_risk_matrix: KEV raises exploitability confidence one band).
+    # documented (application_risk_matrix: KEV raises exploitability confidence one band). EPSS is
+    # never a scoring input: the scoring stage does not pass it, and application_risk_matrix/2
+    # excludes it from its fingerprint and package.
     reference_cvss: tuple[Mapping[str, Any], ...] = ()
     kev_listed: bool | None = None
     epss: Mapping[str, Any] | None = None
+    # score-factors/1 values the provider declared it consumes, derived from adjudicated evidence.
+    factors: FactorSet | None = None
 
-    def canonical(self) -> dict[str, Any]:
-        value = asdict(self)
+    def canonical(self, exclude: Collection[str] = ()) -> dict[str, Any]:
+        value: dict[str, Any] = {item.name: getattr(self, item.name) for item in fields(self)
+                                 if item.name != "factors"}
         value["claim_state"] = ClaimState(self.claim_state).value
         value["evidence_relation_ids"] = sorted(set(self.evidence_relation_ids))
         # Absent reference inputs leave the canonical request (and every fingerprint) unchanged.
@@ -48,12 +59,16 @@ class ScoreRequest:
         for key, empty in (("reference_cvss", []), ("kev_listed", None), ("epss", None)):
             if value[key] == empty:
                 del value[key]
+        if self.factors is not None:
+            value["factors"] = self.factors.canonical()
+        for key in exclude:
+            value.pop(key, None)
         return value
 
-    def reference_inputs(self) -> dict[str, Any]:
+    def reference_inputs(self, exclude: Collection[str] = ()) -> dict[str, Any]:
         canonical = self.canonical()
         return {"label": "reference_context", "reference_cvss": canonical.get("reference_cvss", []),
-                "kev_listed": self.kev_listed, "epss": canonical.get("epss")}
+                "kev_listed": self.kev_listed, "epss": None if "epss" in exclude else canonical.get("epss")}
 
     @property
     def fingerprint(self) -> str:
@@ -97,6 +112,10 @@ class ScoreProviderResult:
     overrides: tuple[Mapping[str, Any], ...] = field(default_factory=tuple)
     reference_inputs: Mapping[str, Any] = field(default_factory=dict)
     schema: str = SCORE_PACKAGE_SCHEMA
+    # The score-factors/1 values the provider used (with their citations) and why each consumed
+    # factor is missing; ``None`` for providers that consume no factors.
+    factors: FactorSet | None = None
+    missing_factor_reasons: tuple[tuple[str, str], ...] = field(default_factory=tuple)
 
 
 @runtime_checkable
@@ -111,10 +130,18 @@ class ScoringProvider(Protocol):
     def score(self, request: ScoreRequest) -> ScoreProviderResult: ...
 
 
-def input_fingerprint(provider: ScoringProvider, provider_config_sha256: str, request: ScoreRequest) -> str:
+def input_fingerprint(provider: ScoringProvider, provider_config_sha256: str, request: ScoreRequest,
+                      exclude: Collection[str] = ()) -> str:
+    """Fingerprint of everything a score depends on; ``exclude`` names request fields the provider
+    provably ignores (``application_risk_matrix/2`` excludes ``epss``)."""
     return sha256_hex({"provider": provider.provider_id, "interface": provider.interface_version,
                        "implementation": provider.implementation_version,
-                       "provider_config_sha256": provider_config_sha256, "request": request.canonical()})
+                       "provider_config_sha256": provider_config_sha256, "request": request.canonical(exclude)})
+
+
+def consumed_factors(provider: ScoringProvider) -> frozenset[FactorId]:
+    """Factor ids a provider declares it consumes; a provider without the attribute consumes none."""
+    return frozenset(FactorId(item) for item in getattr(provider, "consumed_factors", ()))
 
 
 def score_identity(*, provider_id: str, implementation_version: str, provider_config_sha256: str,

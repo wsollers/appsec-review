@@ -1,6 +1,6 @@
 ---
 id: variant
-version: 1
+version: 2
 roles: ["hypothesis_hunter"]
 requests_tools: ["find", "read_excerpt", "search", "trace"]
 max_tokens: 400
@@ -14,3 +14,8 @@ data flow shape?
 Zero or more new hypotheses in the role's result schema, each at a different affected construct
 than the seed claim, with per-predicate evidence that names resolvable identities. Known claims in
 the task input are not re-reported.
+Account for every lead on the package menu exactly once; not developing a lead is never a
+statement that it is safe. Each hypothesis names its security consequence from the closed
+vocabulary. Label every taint hop by its basis: a hop resting on an accepted tool path, an accepted
+graph fact, or source-mapped analysis cites it; an inferred hop stays a hypothesis, paired with an
+evidence request and a gap.

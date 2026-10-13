@@ -3,7 +3,13 @@
 Reconciliation compares this matrix with the resolved registry/configuration and the run's actual
 inventory rows. The matrix is a review check, not an allowlist: the dataset audit still enforces
 every configured step. ``runtime`` names a non-job producer (the runtime itself or a future
-inference/publication lane); ``planned:<job>`` names a producer that is not built.
+inference/publication lane); ``planned:<job>`` names a producer that is not built or not yet
+registered. Once ``<job>`` is registered, reconciliation treats it as that job, so the planned
+code-graph producer ``job_code_graph_index`` needs no matrix change when it lands.
+
+Code-graph facts are not precomputed query sets: the retired graph set names never appear in the
+query-set column. The ``graph`` index is accounted by the ``code_graph`` lane of the language and
+build-unit matrices instead.
 """
 
 from __future__ import annotations
@@ -25,7 +31,7 @@ INPUT_SOURCES: tuple[tuple[str, tuple[str, ...], str, tuple[str, ...], tuple[str
      ("query_change_context", "coverage")),
     ("change_context", ("job_change_context_analysis",), "current", ("history_context", "ci_trust"),
      ("query_change_context", "query_precomputed")),
-    ("tree_sitter_syntax", ("job_tree_sitter_ast",), "current", ("symbol_links", "call_graph", "hotspot_context"),
+    ("tree_sitter_syntax", ("job_tree_sitter_ast",), "current", ("symbol_links", "hotspot_context"),
      ("core", "query_precomputed")),
     ("prioritization_metrics", ("job_review_prioritization",), "current", ("hotspot_context", "review_package"),
      ("query_hotspots", "query_precomputed")),
@@ -39,16 +45,17 @@ INPUT_SOURCES: tuple[tuple[str, tuple[str, ...], str, tuple[str, ...], tuple[str
      ("query_artifacts", "query_precomputed")),
     ("artifact_security_scans", ("job_artifact_security_analysis",), "current",
      ("scanner_correlation", "dependency_advisories"), ("query_artifacts", "query_observations", "query_precomputed")),
-    ("clang_ast", ("job_cpp_compiled_analysis",), "current", ("symbol_links", "ast_ir_cpg_mapping"),
-     ("core", "query_precomputed")),
-    ("llvm_ir_binary_infer", ("job_cpp_compiled_analysis",), "current",
-     ("call_graph", "control_flow", "dataflow", "guards_ranges"), ("core", "query_build_security", "query_precomputed")),
-    ("clangd_symbols", ("job_cpp_symbol_index",), "current", ("symbol_links", "call_graph", "ast_ir_cpg_mapping"),
-     ("core", "query_precomputed")),
-    ("joern_cpg", ("job_cpg_analysis",), "artifact_only",
-     ("call_graph", "control_flow", "dataflow", "ast_ir_cpg_mapping"), ("coverage",)),
-    ("codeql_sarif", ("job_codeql_analysis",), "current", ("sarif_correlation", "dataflow", "scanner_correlation"),
-     ("query_codeql", "query_observations", "query_precomputed")),
+    # Clang AST, LLVM IR and clangd are C/C++ cross-check inputs of the graph index, not graph producers.
+    ("clang_ast", ("job_cpp_compiled_analysis",), "current", ("symbol_links",), ("core", "query_precomputed")),
+    ("llvm_ir_binary_infer", ("job_cpp_compiled_analysis",), "current", ("scanner_correlation",),
+     ("core", "query_build_security", "query_precomputed")),
+    ("clangd_symbols", ("job_cpp_symbol_index",), "current", ("symbol_links",), ("core", "query_precomputed")),
+    # Not a graph producer; see code-graph-precomputation.md.
+    ("joern_cpg", ("job_cpg_analysis",), "artifact_only", (), ("coverage",)),
+    # CodeQL is the primary graph producer: its export is normalized into the graph index by the
+    # planned job_code_graph_index and read through query_code_graph.
+    ("codeql_sarif", ("job_codeql_analysis", "planned:job_code_graph_index"), "current", ("scanner_correlation",),
+     ("query_codeql", "query_code_graph", "query_observations", "query_precomputed")),
     ("post_build_assessment", ("job_post_build_security_assessment",), "current",
      ("build_provenance", "review_package"), ("query_build_security",)),
     ("ci_definitions", ("job_ci_configuration_analysis",), "current", ("ci_trust", "scanner_correlation"),
@@ -81,7 +88,7 @@ INPUT_SOURCES: tuple[tuple[str, tuple[str, ...], str, tuple[str, ...], tuple[str
      ("query_precomputed",)),
     ("cve_bin_tool_database", ("job_third_party_data_sync",), "global_unpinned",
      ("reference_intelligence", "dependency_advisories"), ("query_precomputed",)),
-    ("interface_contracts", ("job_target_catalog",), "extend", ("contract_enforcement", "entrypoint_paths"),
+    ("interface_contracts", ("job_target_catalog",), "extend", ("contract_enforcement",),
      ("search", "find", "read_excerpt")),
     ("deployment_topology", ("planned:job_deployment_topology",), "planned", ("deployment_exposure", "ci_trust"), ()),
     ("tests_and_fixtures", ("job_target_catalog", "job_review_data_indexing"), "extend",
@@ -90,11 +97,32 @@ INPUT_SOURCES: tuple[tuple[str, tuple[str, ...], str, tuple[str, ...], tuple[str
      ("document_context", "review_package"), ("search", "find", "read_excerpt", "query_precomputed")),
     ("target_agent_guidance", ("planned:job_test_and_doc_indexing",), "planned", (), ()),
     ("sanitized_fts_streams", ("job_review_data_indexing",), "current", (), ("search", "find", "read_excerpt")),
-    ("dynamic_traces", ("planned:future_dynamic_producer",), "planned", ("dataflow", "entrypoint_paths", "review_package"),
-     ()),
+    ("dynamic_traces", ("planned:future_dynamic_producer",), "planned", ("review_package",), ()),
     ("protected_runtime_material", ("runtime",), "protected", (), ("query_datasets", "coverage")),
     ("review_decisions", ("job_inference_security_review",), "extend", ("review_package",), ("coverage",)),
+    # Decision 8: the review handoff's downstream consumers, fixed by name before they are built. Each
+    # reads the inference review handoff (``PLANNED_CONSUMERS`` in its datasets module) and will
+    # produce the named source; none is an input to a review today.
+    ("remediation_plans", ("planned:job_remediation_planning",), "planned", (), ()),
+    ("remediation_validations", ("planned:job_remediation_validation",), "planned", (), ()),
+    ("publication_gate_decisions", ("planned:job_final_publication_gate",), "planned", (), ()),
+    ("final_report_publications", ("planned:job_final_report_publication",), "planned", (), ()),
 )
+
+# Decision 8: the planned downstream jobs and the producers whose handoffs each consumes, in graph
+# order. ``planned:`` names resolve through :func:`resolve_producer` once the job is registered.
+PLANNED_CONSUMERS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("planned:job_remediation_planning", ("job_inference_security_review",)),
+    ("planned:job_remediation_validation", ("job_inference_security_review", "planned:job_remediation_planning")),
+    ("planned:job_final_publication_gate", ("job_inference_security_review", "planned:job_remediation_validation")),
+    ("planned:job_final_report_publication", ("planned:job_final_publication_gate",)),
+)
+
+
+def resolve_producer(producer: str, registered: Iterable[str]) -> str:
+    """A ``planned:<job>`` producer whose job is now registered is evaluated as that job."""
+    job = producer.removeprefix("planned:")
+    return job if producer.startswith("planned:job_") and job in set(registered) else producer
 
 
 def reconcile(registry_jobs: Iterable[str], jobs: Iterable[Mapping[str, Any]], rows: Iterable[Mapping[str, Any]],
@@ -106,14 +134,15 @@ def reconcile(registry_jobs: Iterable[str], jobs: Iterable[Mapping[str, Any]], r
     for row in rows:
         by_job.setdefault(str(row["job_id"]), []).append(row)
     discrepancies: list[str] = []
-    named = {producer for _source, producers, *_ in INPUT_SOURCES for producer in producers}
+    named = {resolve_producer(producer, registered) for _source, producers, *_ in INPUT_SOURCES
+             for producer in producers}
     downstream_jobs = {"job_review_package_assembly", "job_document_issue_analysis"}
     for job_id in sorted(registered - named - {self_job} - downstream_jobs):
         discrepancies.append(f"registered job {job_id} is absent from the input-source matrix")
     reconciled = []
     for source, producers, state, query_sets, endpoints in INPUT_SOURCES:
         producer_states = []
-        for producer in producers:
+        for producer in (resolve_producer(item, registered) for item in producers):
             if producer.startswith("planned:") or producer == "runtime":
                 producer_states.append({"producer": producer, "status": "planned" if producer != "runtime" else "runtime"})
                 continue
@@ -133,7 +162,7 @@ def reconcile(registry_jobs: Iterable[str], jobs: Iterable[Mapping[str, Any]], r
         reconciled.append({
             "source": source, "producers": list(producers), "design_state": state,
             "runtime_state": runtime, "producer_states": producer_states, "query_sets": list(query_sets),
-            "query_set_status": {name: products.get(name, {}).get("status", "pending_graph_batch")
+            "query_set_status": {name: products.get(name, {}).get("status", "pending_follow_up")
                                  for name in query_sets},
             "mcp_endpoints": list(endpoints),
         })

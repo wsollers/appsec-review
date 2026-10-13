@@ -1130,7 +1130,7 @@ version = "2.27.0"
 commit = "b47b3e59262c95aff4eeb84ac72d09e25a9c37e9"
 cli_sha256 = "5c905275695b4efcaa02ea380f6e60b01310fa3dff0fa8c442bf0638bb46055a"
 license_sha256 = "d0d6cfdc857c1e0153bbd2b6f0d4ab42dfc38acec9b97b2f7f55c1f51ffe9fbf"
-asset_lock_sha256 = "d19e296947ff33cc0501403d667bb72bd8cdfb6e97cb83df95038cc1005fb9cd"
+asset_lock_sha256 = "7f60a68de90d82d137382b232fa3afe3e76a892e93073ca6bc2ad81741150514"
 runtime_user = "10001:10001"
 retention = "run-owned"
 concurrency = 2
@@ -1145,6 +1145,15 @@ result_limit = 100000
 threads = 2
 ram_mb = 4096
 max_paths = 4
+
+# Graph export step (docs/architecture/code-graph-precomputation.md section 7.1). The bounds equal
+# the GraphSettings contract defaults: rows decoded per export query, total export bytes per scope,
+# and the runner `export` action timeout.
+[jobs.job_codeql_analysis.settings.export_queries]
+enabled = true
+row_limit = 200000
+max_bytes = 268435456
+timeout_seconds = 1800
 
 [jobs.job_codeql_analysis.settings.languages.cpp]
 enabled = true
@@ -1172,6 +1181,22 @@ query_pack_sha256 = "730390d903f2fd6806569cf00e8ae4e86a84dcc5acdd1e4019510b633a2
 query_lock_sha256 = "a4027ef1fb800f5c637f23acec2ac9b67177aaafa7fc7e997c40cbd64076c1b6"
 tree_sha256 = "f6bf41273faaaa58c43ef6825ae77090fb0dfac65eee4cfe423613153b591231"
 file_count = 1971
+
+# Must equal export_query_packs.cpp in containers/tools/codeql/assets.lock.json.
+[[jobs.job_codeql_analysis.settings.languages.cpp.export_queries]]
+query_id = "graph-export-cpp"
+source_path = "rules/codeql-graph-export/cpp"
+query_pack = "appsec-review/graph-export-cpp"
+query_pack_version = "1.0.0"
+query_suite = "graph-export.qls"
+query_suite_sha256 = "4af4c3f7f908796b9d13103e53d7e23b1a57b70fedcbec9dbd440c8dedecf6af"
+query_pack_sha256 = "fa9c3d02433ce3d96aa75d2fdce2a5259f05d208f3a77f4c404a916a68f6cab9"
+tree_sha256 = "14a7890f8b858128f6fac5d181ac89c5062c2bd3e67ca009c454d2491bbea342"
+file_count = 10
+columns_path = "rules/codeql-graph-export/columns.json"
+columns_sha256 = "c45c27ee19b1ccd4d15b4b2308a9ace0a5545d38836f2c905d379f2e3e69dfe0"
+catalog_path = "rules/codeql-graph-export/catalog.json"
+catalog_sha256 = "1a290cf270f5469f02aaf6c10432457101c128ec17a0b340272ccc6b1ef7a0a5"
 
 [jobs.job_codeql_analysis.settings.languages.go]
 enabled = true
@@ -1305,6 +1330,10 @@ workers = 2
 workers = 2
 [jobs.job_codeql_analysis.steps.query.tasks.scopes]
 
+[jobs.job_codeql_analysis.steps.export]
+workers = 2
+[jobs.job_codeql_analysis.steps.export.tasks.scopes]
+
 [jobs.job_codeql_analysis.steps.normalize]
 workers = 2
 [jobs.job_codeql_analysis.steps.normalize.tasks.scopes]
@@ -1313,6 +1342,48 @@ workers = 2
 workers = 1
 [jobs.job_codeql_analysis.steps.acceptance.tasks.publish_handoff]
 
+
+# Code-graph index (docs/architecture/code-graph-precomputation.md D4 and section 7): normalizes the
+# accepted CodeQL graph exports into one `graph` shard per (scope, fact family), cross-checks call
+# sites against the scope's own clangd/IR/AST shards and correlates SARIF code flows. The bounds
+# below are the GraphSettings contract (graph/contract.py) and must stay within its validation.
+[jobs.job_code_graph_index]
+name = "code_graph_index"
+workers = 2
+
+[jobs.job_code_graph_index.settings]
+# Concurrent CodeQL scopes per unit.
+workers = 2
+
+[jobs.job_code_graph_index.settings.graph]
+max_call_depth = 3
+max_neighbors_per_function = 200
+max_paths_per_sink = 8
+max_path_steps = 40
+max_guards_per_sink = 16
+max_facts_per_family_per_scope = 200000
+max_export_bytes = 268435456
+export_timeout_seconds = 1800
+
+[jobs.job_code_graph_index.steps.load]
+workers = 1
+[jobs.job_code_graph_index.steps.load.tasks.accepted_inputs]
+
+[jobs.job_code_graph_index.steps.normalize]
+workers = 1
+[jobs.job_code_graph_index.steps.normalize.tasks.scopes]
+
+[jobs.job_code_graph_index.steps.crosscheck]
+workers = 1
+[jobs.job_code_graph_index.steps.crosscheck.tasks.scopes]
+
+[jobs.job_code_graph_index.steps.correlate]
+workers = 1
+[jobs.job_code_graph_index.steps.correlate.tasks.scopes]
+
+[jobs.job_code_graph_index.steps.acceptance]
+workers = 1
+[jobs.job_code_graph_index.steps.acceptance.tasks.publish_handoff]
 
 [jobs.job_cpp_symbol_index]
 name = "cpp_symbol_index"
@@ -1343,6 +1414,10 @@ name = "cpg_analysis"
 workers = 1
 
 [jobs.job_cpg_analysis.settings]
+# Joern is deprecated and off by default: no review fact depends on it (CodeQL is the code-graph
+# producer, with Clang/LLVM cross-checks). When disabled, every scope publishes an unavailable
+# coverage row and no Joern container runs. See docs/architecture/code-graph-precomputation.md.
+enabled = false
 # Joern is memory-heavy; scopes run one at a time until a per-tool resource profile is reviewed.
 workers = 1
 max_cpg_bytes = 2147483648
@@ -1783,6 +1858,38 @@ hunt_max_claims_per_package = 5
 hunt_panel_rule = "hunt-panel/1"
 incomplete_gap_ratio = 0.25
 
+# Closed limits on a red cell's red-discovery-result/1 (docs/architecture/red-discovery-output.md,
+# admission rule 1). They tighten the schema's hard ceilings; a result over any limit is rejected as
+# a schema_error cell gap. Changing one changes the red cell validator and therefore red cell reuse.
+[jobs.job_inference_security_review.settings.red_output]
+max_result_bytes = 65536
+max_proposals = 8
+max_obligations = 48
+max_taint_paths = 8
+max_path_nodes = 16
+max_chain_seeds = 4
+max_chain_steps = 8
+max_evidence_refs = 64
+max_evidence_requests = 16
+max_gaps = 32
+max_text_chars = 2000
+
+# Lane B review-unit rank weights (review-unit-rank/2), in points of the 0-1000 signal scale. These
+# defaults are the shipped rank; changing one reorders units and the hunt cutoff. See
+# docs/operations/inference-security-review.md "Tuning lane B ranking".
+[jobs.job_inference_security_review.settings.ranking]
+lps = 1000                           # full review-prioritization (LPS) score
+sii = 1000                           # full source-history instability (SII) score
+hotspot = 1000                       # full hotspot score
+tag_density = 1000                   # tag density at tag_density_full_tags_per_file tags per file
+tag_density_full_tags_per_file = 4
+lead_hint_medium = 100               # per medium lead hint
+lead_hint_low = 30                   # per low lead hint
+lead_hint_info = 10                  # per info lead hint
+lead_hints_max = 1000                # cap on the summed lead hints
+advisory_kev = 250                   # any advisory in the unit is CISA KEV-listed
+advisory_epss = 250                  # times the unit's highest EPSS percentile
+
 # Package assembly bounds; admission and the hunt cutoff are lanes.lead_admission and lanes.hunt_max_units.
 [jobs.job_inference_security_review.settings.packages]
 hunt_menu_partition_size = 25
@@ -1823,6 +1930,23 @@ workers = 4
 model_profile = "default"
 require_distinct_from_roles = ["hypothesis_hunter", "red_team_analyst", "blue_team_refuter"]
 
+# Decision 2: a ship-blocking candidate is published as ship_blocking only when its verifier's model
+# profile (provider + model) differs from every red cell's on the claim; otherwise it is published as
+# ship_blocking_pending_distinct_verification. Confirmation (R5/R6) never depends on it. With every
+# role on the default profile, the job records a warning and ship-blocking findings stay pending; see
+# docs/operations/inference-security-review.md "Configuring a distinct verifier".
+[jobs.job_inference_security_review.settings.verification]
+require_distinct_model_for_ship_blocking = true
+
+# Decision 1: ship-block-policy/1. A confirmed finding blocks when application_risk_matrix/2 rates its
+# technical severity in blocking_technical_severities, or when it is a dependency finding (proposed
+# from a lane A lead of a dependency_lead_families family) with a KEV-listed reference input. CVSS and
+# SSVC outputs are displayed context only and never decide.
+[jobs.job_inference_security_review.settings.ship_block]
+blocking_technical_severities = ["high", "critical"]
+kev_dependency_blocks = true
+dependency_lead_families = ["dependency_advisory", "artifact_scanner"]
+
 [jobs.job_inference_security_review.settings.routing]
 persona_rule = "persona-routing/1"
 stack_rule = "stack-routing/1"
@@ -1836,37 +1960,53 @@ override_policy = "review_lead_only/1"
 implementation = "first-reference-compatible/1"
 metric_groups = ["base", "threat", "environmental", "supplemental"]
 
+# application_risk_matrix/2 rates score-factors/1 evidence factors. Points are summed per dimension
+# (a missing factor adds nothing) and must not decrease along a factor's scale. Replacing a table
+# replaces it whole. See docs/operations/inference-security-review.md "Tuning scoring".
 [jobs.job_inference_security_review.settings.scoring.providers.application_risk_matrix]
-implementation = "application_risk_matrix/1"
+implementation = "application_risk_matrix/2"
 
-# application_risk_matrix impact_class axis; an unmapped CWE scores null with missing_factors.
-[jobs.job_inference_security_review.settings.scoring.cwe_impact_classes]
-"CWE-22" = "high"
-"CWE-77" = "critical"
-"CWE-78" = "critical"
-"CWE-79" = "medium"
-"CWE-89" = "critical"
-"CWE-94" = "critical"
-"CWE-120" = "high"
-"CWE-190" = "medium"
-"CWE-200" = "medium"
-"CWE-209" = "low"
-"CWE-287" = "critical"
-"CWE-306" = "critical"
-"CWE-327" = "medium"
-"CWE-352" = "medium"
-"CWE-400" = "medium"
-"CWE-416" = "critical"
-"CWE-434" = "high"
-"CWE-476" = "medium"
-"CWE-502" = "critical"
-"CWE-601" = "low"
-"CWE-611" = "high"
-"CWE-787" = "critical"
-"CWE-798" = "high"
-"CWE-862" = "high"
-"CWE-863" = "high"
-"CWE-918" = "high"
+[jobs.job_inference_security_review.settings.scoring.providers.application_risk_matrix.exploitability.points]
+verification = { supported = 20, confirmed = 40 }
+taint_path = { code_evidence = 10, tool_observation = 15, codeql_path_observation = 20, graph_dataflow_path = 25 }
+attacker_control = { internal = 0, direct_unclassified = 10, local = 15, remote = 25 }
+guard_absent = { code_evidence = 15, tool_observation = 15, graph_fact = 20 }
+exposure = { local = 0, internal_network = 5, public = 10 }
+
+[jobs.job_inference_security_review.settings.scoring.providers.application_risk_matrix.exploitability.bands]
+medium = 40
+high = 75
+
+[jobs.job_inference_security_review.settings.scoring.providers.application_risk_matrix.environmental.points]
+exposure = { local = 5, internal_network = 10, public = 30 }
+privilege = { sandboxed = 0, elevated = 25 }
+data_sensitivity = { sensitive = 20, secret = 30 }
+
+[jobs.job_inference_security_review.settings.scoring.providers.application_risk_matrix.environmental.bands]
+medium = 25
+high = 50
+
+# Technical severity: impact class (row) x exploitability rating (column) -> band.
+[jobs.job_inference_security_review.settings.scoring.providers.application_risk_matrix.technical_severity]
+critical = { low = "medium", medium = "high", high = "critical" }
+high = { low = "low", medium = "medium", high = "high" }
+medium = { low = "low", medium = "low", high = "medium" }
+low = { low = "low", medium = "low", high = "low" }
+
+# The impact_class factor (one factor among many, not the whole score) is derived from the run's
+# pinned MITRE CWE catalog Common_Consequences under cwe-impact-derivation/1 (decision 11; see
+# docs/operations/inference-security-review.md "Tuning scoring"). This table lists only exceptions
+# and wins over derivation. A CWE with neither an override nor a mapped catalog consequence (or a
+# run without a pinned catalog) leaves technical severity null with impact_class in missing_factors.
+# Seeded from the pre-derivation hand table where its class was a deliberate judgement that the
+# catalog's worst-case consequence does not express for the target itself.
+[jobs.job_inference_security_review.settings.scoring.cwe_impact_overrides]
+"CWE-79" = { impact_class = "medium", reason = "script runs in the victim's browser, not on the reviewed target; the catalog's code-execution consequence overstates target impact" }
+"CWE-190" = { impact_class = "medium", reason = "a wraparound is a precursor; code execution arises only when the value reaches a memory write, which is scored as its own weakness (CWE-787, CWE-120)" }
+"CWE-209" = { impact_class = "low", reason = "error messages disclose diagnostic detail, not bulk application data" }
+"CWE-476" = { impact_class = "medium", reason = "the typical consequence is a crash; the catalog's code execution needs rare platform conditions" }
+"CWE-502" = { impact_class = "critical", reason = "gadget-chain code execution is the established consequence; the catalog lists it only as varies by context" }
+"CWE-601" = { impact_class = "low", reason = "an open redirect aids phishing; it executes nothing on the target and grants no privilege by itself" }
 
 [jobs.job_inference_security_review.settings.poc]
 execution_enabled = false

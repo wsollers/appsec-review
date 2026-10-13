@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+import subprocess
 
 import pytest
 
@@ -70,6 +71,10 @@ def test_configured_build_image_captures_hello_world(tmp_path: Path, case: Hello
     job = config.job("job_project_build")
     profiles = profiles_from_settings(job.settings["profiles"])
     assert {case.profile for case in CASES} == set(profiles)
+    inspected = subprocess.run(["docker", "image", "inspect", profiles[case.profile].tag],
+                               capture_output=True, timeout=60, check=False)
+    if inspected.returncode != 0:
+        pytest.skip(f"live build image is unavailable: {profiles[case.profile].tag}")
     assert job.build_capture is not None
 
     run_root = tmp_path / "run"

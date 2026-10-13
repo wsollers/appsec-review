@@ -70,6 +70,15 @@ schedule live in `appsec-review.toml` under the semantic job/step/task hierarchy
 - MITRE requires Enterprise ATT&CK, CAPEC, and CWE in `source_selections`; configuration that omits
   any of them is rejected. Mobile and ICS ATT&CK are optional: they remain fully configured but
   become active only when added to `source_selections`.
+- MITRE snapshots (manifest schema `mitre-snapshot/2`, `index_schema = mitre-index/2`) publish
+  `index/mitre.sqlite` with each CWE weakness's Common_Consequences in the `cwe_consequence` table
+  (one row per consequence, in catalog order: its scopes and technical impacts). Notes and
+  likelihoods are not captured. Capture is bounded to 32 consequences per weakness, 16 scopes or
+  impacts per consequence and 128 characters per term. Terms are whitespace-normalized and
+  deduplicated, and `consequence_truncated_weaknesses` counts weaknesses that were cut. The
+  inference review derives each claim's `impact_class` from these rows
+  (`cwe-impact-derivation/1`). A `mitre-index/1` snapshot has no consequences, so no impact class
+  can be derived until `mitre_sync` runs again.
 - Each MITRE source may carry an optional `sha256` pin; a downloaded file that does not match fails
   the fetch. Without a pin the hash is recorded but not verified. The ATT&CK and CAPEC sources are
   pinned; CWE is currently unpinned, so its download is not hash-verified.
@@ -94,6 +103,8 @@ older than `feed_max_age_days` (default 14), or its entry in `feed_max_age_days_
 record named gaps (`stale_feed`, `<feed>_stale_feed`, `<feed>_feed_unavailable`) and publish
 `stale`/`partial` coverage; they never publish an empty result as complete. The inference review
 validates claim CWEs only against a fresh pinned MITRE catalog and records a gap when it falls back.
+It derives CWE impact classes from a fresh or stale pinned catalog; a stale one records the stale
+gap on each derived factor. An unavailable catalog derives none.
 
 Every record from these feeds is reference context. A KEV listing, an EPSS score, or an NVD CVSS
 vector describes the advisory everywhere, not the target, and never satisfies a proof obligation.

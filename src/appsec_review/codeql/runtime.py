@@ -5,7 +5,7 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 import hashlib
 import json
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import re
 import shutil
 import time
@@ -18,6 +18,9 @@ from appsec_review.storage import atomic_json, bounded_file_lock, canonical_json
 
 IMAGE_SCHEMA = "appsec-review/codeql-derived-image/2"
 EXECUTION_SCHEMA = "appsec-review/codeql-execution/2"
+EXPORT_MANIFEST_SCHEMA = "appsec-review/codeql-graph-export-manifest/1"
+EXPORT_MANIFEST_NAME = "export-manifest.json"
+ACTIONS = frozenset({"inventory", "database", "query", "export"})
 
 
 class RuntimeSettings(Protocol):
@@ -29,6 +32,20 @@ class RuntimeSettings(Protocol):
     output_bytes: int
     threads: int
     ram_mb: int
+
+
+def action_timeout(settings: RuntimeSettings, action: str) -> int:
+    """Per-action timeout; ``export`` uses the typed ``export_timeout_seconds`` setting when the
+    configuration provides it and the contract default (GraphSettings) otherwise."""
+    if action == "export":
+        value = getattr(settings, "export_timeout_seconds", None)
+        if value is None:
+            from appsec_review.graph.contract import GraphSettings
+            value = GraphSettings().export_timeout_seconds
+        return int(value)
+    return {"inventory": settings.inventory_timeout_seconds,
+            "database": settings.database_timeout_seconds,
+            "query": settings.query_timeout_seconds}[action]
 
 
 def _stamp() -> str:
@@ -204,7 +221,7 @@ class CodeQLExecutor:
         self.runner = runner or _run
 
     def execute(self, action: str, argv: Sequence[str], *, scratch_root: Path) -> CodeQLExecution:
-        if action not in {"inventory", "database", "query"} or any(
+        if action not in ACTIONS or any(
                 not isinstance(value, str) or "\0" in value for value in argv):
             raise ValueError("CodeQL execution request is invalid")
         scratch = scratch_root.resolve()
@@ -228,9 +245,9 @@ class CodeQLExecutor:
         if inspected[3] or inspected[0] != 0 or inspected[1].decode().strip() != self.image.image_id:
             raise ValueError("CodeQL derived image identity changed")
         effective = resolve_host_bind_path(scratch, self.runner)
-        timeout = ({"inventory": self.settings.inventory_timeout_seconds,
-                    "database": self.settings.database_timeout_seconds,
-                    "query": self.settings.query_timeout_seconds})[action]
+        timeout = action_timeout(self.settings, action)
+        # Export reads a staged database and pack without network access.
+        network = "none" if action == "export" else "bridge"
         database_name = None
         volume_name = None
         if action in {"database", "query"}:
@@ -250,7 +267,7 @@ class CodeQLExecutor:
             if action == "query":
                 mounts.extend(("--mount", f"type=bind,src={effective},dst=/source,readonly"))
         command = [
-            "docker", "run", "--rm", "--network", "bridge", "--read-only",
+            "docker", "run", "--rm", "--network", network, "--read-only",
             "--user", self.image.runtime_user, "--cap-drop", "ALL",
             "--security-opt", "no-new-privileges", "--cpus", str(self.settings.threads),
             "--memory", f"{self.settings.ram_mb + 1024}m", "--pids-limit", "2048",
@@ -306,7 +323,7 @@ class CodeQLExecutor:
             started, completed, duration_ms, stdout_path.relative_to(self.run_root).as_posix(),
             stderr_path.relative_to(self.run_root).as_posix(), stdout_sha, stderr_sha,
             stdout_total, stderr_total, stdout_truncated, stderr_truncated, stdout_tail, stderr_tail,
-            {"network": "bridge", "root_filesystem": "read-only", "user": self.image.runtime_user,
+            {"network": network, "root_filesystem": "read-only", "user": self.image.runtime_user,
              "cap_drop": ["ALL"], "no_new_privileges": True, "threads": self.settings.threads,
              "ram_mb": self.settings.ram_mb, "timeout_seconds": timeout,
              "output_bytes": self.settings.output_bytes, "capture_mode": "head-tail",
@@ -353,3 +370,76 @@ def load_sarif(path: Path, *, bytes_limit: int, result_limit: int) -> Mapping[st
     if count > result_limit:
         raise ValueError("CodeQL SARIF result count exceeds its configured bound")
     return document
+
+
+class GraphExportIntegrityError(ValueError):
+    """A raw graph export directory differs from its manifest or the export contract."""
+
+
+def graph_export_arguments(*, database: str, pack: str, columns: str, asset_lock: str, language: str,
+                           output_dir: str, row_limit: int, max_bytes: int, threads: int,
+                           ram_mb: int) -> tuple[str, ...]:
+    """Runner argv for the ``export`` action; every path is relative to the execution scratch."""
+    for value in (database, pack, columns, asset_lock, output_dir):
+        logical = PurePosixPath(value)
+        if not logical.parts or logical.is_absolute() or ".." in logical.parts:
+            raise ValueError("CodeQL export path must be scratch-relative")
+    for value in (row_limit, max_bytes, threads, ram_mb):
+        if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+            raise ValueError("CodeQL export bounds must be positive integers")
+    return ("--database", database, "--pack", pack, "--columns", columns, "--asset-lock", asset_lock,
+            "--language", language, "--output-dir", output_dir, "--row-limit", str(row_limit),
+            "--max-bytes", str(max_bytes), "--threads", str(threads), "--ram", str(ram_mb))
+
+
+def load_graph_exports(root: Path, *, bytes_limit: int) -> dict[str, Mapping[str, Any]]:
+    """Verify a raw graph export directory against its manifest; return the exports by query id.
+
+    Every file must be listed with its byte size and SHA-256, no other file may exist, the total
+    must stay within ``bytes_limit``, and every object must satisfy the shared export contract
+    and agree with its manifest row.
+    """
+    from appsec_review.graph.contract import EXPORT_SCHEMA, GraphContractError, validate_export
+
+    manifest_path = root / EXPORT_MANIFEST_NAME
+    if (not root.is_dir() or root.is_symlink() or not manifest_path.is_file() or
+            manifest_path.is_symlink()):
+        raise GraphExportIntegrityError("graph export directory or manifest is missing")
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if not isinstance(manifest, Mapping):
+        raise GraphExportIntegrityError("graph export manifest is unsupported")
+    exports = manifest.get("exports")
+    if (manifest.get("schema") != EXPORT_MANIFEST_SCHEMA or manifest.get("export_schema") != EXPORT_SCHEMA
+            or not isinstance(exports, list) or not exports):
+        raise GraphExportIntegrityError("graph export manifest is unsupported")
+    query_ids = [item.get("query_id") for item in exports if isinstance(item, Mapping)]
+    if (len(query_ids) != len(exports) or not all(isinstance(value, str) and value for value in query_ids)
+            or query_ids != sorted(set(query_ids))):
+        raise GraphExportIntegrityError("graph export manifest rows are invalid")
+    expected = {EXPORT_MANIFEST_NAME, *(f"{query_id}.json" for query_id in query_ids)}
+    if {path.name for path in root.iterdir()} != expected:
+        raise GraphExportIntegrityError("graph export directory holds unlisted or missing files")
+    documents: dict[str, Mapping[str, Any]] = {}
+    total = 0
+    for item in exports:
+        path = root / f"{item['query_id']}.json"
+        if item.get("path") != path.name or not path.is_file() or path.is_symlink():
+            raise GraphExportIntegrityError(f"graph export {item['query_id']} file is invalid")
+        size = path.stat().st_size
+        total += size
+        if size != item.get("bytes") or total > bytes_limit:
+            raise GraphExportIntegrityError(f"graph export {item['query_id']} size differs or exceeds its bound")
+        if file_sha256(path) != item.get("sha256"):
+            raise GraphExportIntegrityError(f"graph export {item['query_id']} hash differs from its manifest")
+        document = json.loads(path.read_text(encoding="utf-8"))
+        try:
+            validate_export(document)
+        except GraphContractError as error:
+            raise GraphExportIntegrityError(f"graph export {item['query_id']}: {error}") from error
+        if (document["query_id"] != item["query_id"] or document["row_count"] != item.get("row_count") or
+                document["truncated"] != item.get("truncated") or
+                len(document["rows"]) != item.get("exported_rows") or
+                document["bqrs_sha256"] != item.get("bqrs_sha256")):
+            raise GraphExportIntegrityError(f"graph export {item['query_id']} differs from its manifest row")
+        documents[item["query_id"]] = document
+    return documents

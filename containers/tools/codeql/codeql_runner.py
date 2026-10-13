@@ -11,6 +11,7 @@ from pathlib import Path, PurePosixPath
 import shutil
 import subprocess
 import sys
+import time
 
 
 CODEQL = "/opt/codeql/codeql"
@@ -273,6 +274,182 @@ def query(args: argparse.Namespace) -> None:
           "--no-sarif-add-snippets"], cwd=scratch, environment=_environment())
 
 
+EXPORT_SCHEMA = "appsec-review/codeql-graph-export/1"
+EXPORT_MANIFEST_SCHEMA = "appsec-review/codeql-graph-export-manifest/1"
+EXPORT_COLUMNS_SCHEMA = "appsec-review/codeql-graph-export-columns/1"
+_COLUMN_TYPES = {"string": str, "int": int}
+
+
+def _capture(argv: list[str], *, cwd: Path, environment: dict[str, str]) -> bytes:
+    completed = subprocess.run(argv, cwd=cwd, env=environment, stdin=subprocess.DEVNULL,
+                               stdout=subprocess.PIPE, check=False)
+    if completed.returncode != 0:
+        raise RuntimeError(f"CodeQL child process exited {completed.returncode}")
+    return completed.stdout
+
+
+def _relative_tree(root: Path) -> tuple[str, int]:
+    """Location-independent tree identity of a repository-owned pack staged into scratch."""
+    rows = []
+    for path in sorted(root.rglob("*"), key=lambda item: item.relative_to(root).as_posix()):
+        if path.is_symlink():
+            raise ValueError("CodeQL export pack contains a symlink")
+        if path.is_file():
+            rows.append(f"{_sha256(path)}  {path.relative_to(root).as_posix()}\n".encode())
+    return hashlib.sha256(b"".join(rows)).hexdigest(), len(rows)
+
+
+def _scratch_path(scratch: Path, value: str, *, strict: bool) -> Path:
+    path = (scratch / _safe_relative(value)).resolve(strict=strict)
+    if scratch not in path.parents:
+        raise ValueError("CodeQL export path escaped scratch")
+    return path
+
+
+def export_queries(columns: dict, language: str) -> list[dict]:
+    """The ordered export queries of ``language`` from the C1 columns contract."""
+    if columns.get("schema") != EXPORT_COLUMNS_SCHEMA or columns.get("export_schema") != EXPORT_SCHEMA:
+        raise ValueError("CodeQL export columns contract is unsupported")
+    queries = columns["languages"][language]["queries"]
+    if not isinstance(queries, list) or not queries:
+        raise ValueError("CodeQL export columns contract has no queries")
+    seen = set()
+    for item in queries:
+        names = [column["name"] for column in item["columns"]]
+        if (item["query_id"] in seen or item["result_set"] != item["query_id"] or not names or
+                len(set(names)) != len(names) or
+                any(column["type"] not in _COLUMN_TYPES for column in item["columns"])):
+            raise ValueError("CodeQL export columns contract is invalid")
+        seen.add(item["query_id"])
+    return queries
+
+
+def decoded_tuples(decoded: dict, result_set: str) -> list:
+    """Rows of one result set from ``codeql bqrs decode --format=json`` output."""
+    value = decoded.get(result_set, decoded)
+    tuples = value.get("tuples") if isinstance(value, dict) else None
+    if not isinstance(tuples, list):
+        raise ValueError(f"CodeQL decoded result set {result_set} is invalid")
+    return tuples
+
+
+def export_document(query: dict, tuples: list, *, total_rows: int, row_limit: int,
+                    bqrs_sha256: str) -> dict:
+    """Build one appsec-review/codeql-graph-export/1 object from decoded BQRS tuples.
+
+    Every cell must be a primitive of its declared column type: an entity cell (a JSON object
+    carrying a CodeQL element id) or a list is rejected, so no internal id leaves the database.
+    Rows are sorted by their string tuple; ``truncated`` is set when CodeQL reported more rows
+    than the bound allowed to be decoded.
+    """
+    columns = query["columns"]
+    if len(tuples) > row_limit or total_rows < len(tuples):
+        raise ValueError(f"CodeQL export {query['query_id']} decoded more rows than its bound")
+    rows = []
+    for row in tuples:
+        if not isinstance(row, list) or len(row) != len(columns):
+            raise ValueError(f"CodeQL export {query['query_id']} row does not match its columns")
+        for cell, column in zip(row, columns):
+            expected = _COLUMN_TYPES[column["type"]]
+            if isinstance(cell, bool) or not isinstance(cell, expected):
+                raise ValueError(f"CodeQL export {query['query_id']} column {column['name']} is not "
+                                 f"a primitive {column['type']}")
+        rows.append(list(row))
+    rows.sort(key=lambda row: tuple(str(value) for value in row))
+    return {"schema": EXPORT_SCHEMA, "query_id": query["query_id"],
+            "columns": [column["name"] for column in columns], "rows": rows,
+            "row_count": total_rows, "truncated": total_rows > len(rows),
+            "bqrs_sha256": bqrs_sha256}
+
+
+def _verify_export_pack(entry: dict, pack: Path, columns_path: Path) -> None:
+    digest, count = _relative_tree(pack)
+    suite = pack / _safe_relative(entry["query_suite"])
+    if (digest != entry["tree_sha256"] or count != entry["file_count"] or
+            _sha256(pack / "qlpack.yml") != entry["query_pack_sha256"] or
+            suite.is_symlink() or _sha256(suite) != entry["query_suite_sha256"] or
+            _sha256(columns_path) != entry["columns_sha256"]):
+        raise ValueError("CodeQL export pack identity differs from the reviewed asset lock")
+
+
+def export(args: argparse.Namespace, scratch: Path | None = None) -> None:
+    """Run the hash-pinned graph export pack and decode each result set with a row bound.
+
+    The pack and its columns contract are staged into scratch by the job and verified here
+    against the asset lock. ``run-queries`` writes BQRS into the (disposable) database copy;
+    each export is ``bqrs info`` for the true row count, then ``bqrs decode --rows <bound>``.
+    """
+    scratch = (scratch or Path("/scratch")).resolve(strict=True)
+    database_path = _scratch_path(scratch, args.database, strict=True)
+    pack = _scratch_path(scratch, args.pack, strict=True)
+    columns_path = _scratch_path(scratch, args.columns, strict=True)
+    lock_path = _scratch_path(scratch, args.asset_lock, strict=True)
+    output = _scratch_path(scratch, args.output_dir, strict=False)
+    if args.row_limit < 1 or args.max_bytes < 1:
+        raise ValueError("CodeQL export bounds must be positive")
+    lock = json.loads(lock_path.read_text(encoding="utf-8"))
+    if lock.get("schema") != "appsec-review/codeql-assets-lock/2":
+        raise ValueError("CodeQL asset lock schema is unsupported")
+    entry = lock.get("export_query_packs", {}).get(args.language)
+    if not isinstance(entry, dict):
+        raise ValueError(f"CodeQL asset lock has no {args.language} export pack")
+    _verify_export_pack(entry, pack, columns_path)
+    queries = export_queries(json.loads(columns_path.read_text(encoding="utf-8")), args.language)
+    if output.exists() and any(output.iterdir()):
+        raise ValueError("CodeQL export output directory is not empty")
+    output.mkdir(parents=True, exist_ok=True)
+    environment = _environment()
+    _run([CODEQL, "database", "run-queries", "--threads", str(args.threads), "--ram", str(args.ram),
+          "--", str(database_path), str(pack / _safe_relative(entry["query_suite"]))],
+         cwd=scratch, environment=environment)
+    results = database_path / "results" / Path(*PurePosixPath(entry["query_pack"]).parts)
+    written, rows_manifest = 0, []
+    for query in queries:
+        bqrs = results / _safe_relative(query["query_file"]).with_suffix(".bqrs")
+        if not bqrs.is_file() or bqrs.is_symlink():
+            raise ValueError(f"CodeQL export result for {query['query_file']} is missing")
+        info = json.loads(_capture([CODEQL, "bqrs", "info", "--format=json", "--", str(bqrs)],
+                                   cwd=scratch, environment=environment))
+        sets = [item for item in info.get("result-sets", ()) if item.get("name") == query["result_set"]]
+        if len(sets) != 1 or len(sets[0].get("columns", ())) != len(query["columns"]):
+            raise ValueError(f"CodeQL export result set {query['result_set']} differs from its contract")
+        total = sets[0].get("rows")
+        if not isinstance(total, int) or isinstance(total, bool) or total < 0:
+            raise ValueError(f"CodeQL export result set {query['result_set']} row count is invalid")
+        decoded_path = output / f".{query['query_id']}.decoded.json"
+        started = time.monotonic()
+        _run([CODEQL, "bqrs", "decode", "--format=json", "--result-set", query["result_set"],
+              "--rows", str(args.row_limit), "--output", str(decoded_path), "--", str(bqrs)],
+             cwd=scratch, environment=environment)
+        if decoded_path.stat().st_size > args.max_bytes - written:
+            raise ValueError("CodeQL export exceeded its configured byte bound")
+        decoded = json.loads(decoded_path.read_text(encoding="utf-8"))
+        decoded_path.unlink()
+        document = export_document(query, decoded_tuples(decoded, query["result_set"]),
+                                   total_rows=total, row_limit=args.row_limit,
+                                   bqrs_sha256=_sha256(bqrs))
+        decode_ms = max(0, int((time.monotonic() - started) * 1000))
+        data = _canonical(document)
+        written += len(data)
+        if written > args.max_bytes:
+            raise ValueError("CodeQL export exceeded its configured byte bound")
+        target = output / f"{query['query_id']}.json"
+        target.write_bytes(data)
+        rows_manifest.append({"query_id": query["query_id"], "query_file": query["query_file"],
+                              "path": target.name, "sha256": hashlib.sha256(data).hexdigest(),
+                              "bytes": len(data), "row_count": total,
+                              "exported_rows": len(document["rows"]),
+                              "truncated": document["truncated"],
+                              "bqrs_sha256": document["bqrs_sha256"], "decode_ms": decode_ms})
+    (output / "export-manifest.json").write_bytes(_canonical({
+        "schema": EXPORT_MANIFEST_SCHEMA, "export_schema": EXPORT_SCHEMA, "language": args.language,
+        "pack": {key: entry[key] for key in ("query_id", "query_pack", "query_pack_version",
+                                              "tree_sha256", "file_count", "columns_sha256")},
+        "row_limit": args.row_limit, "max_bytes": args.max_bytes,
+        "exports": sorted(rows_manifest, key=lambda item: item["query_id"]),
+    }))
+
+
 def parser() -> argparse.ArgumentParser:
     value = argparse.ArgumentParser()
     sub = value.add_subparsers(dest="action", required=True)
@@ -300,6 +477,17 @@ def parser() -> argparse.ArgumentParser:
     query_parser.add_argument("--threads", type=int, required=True)
     query_parser.add_argument("--ram", type=int, required=True)
     query_parser.add_argument("--max-paths", type=int, required=True)
+    export_parser = sub.add_parser("export")
+    export_parser.add_argument("--database", required=True)
+    export_parser.add_argument("--pack", required=True)
+    export_parser.add_argument("--columns", required=True)
+    export_parser.add_argument("--asset-lock", required=True)
+    export_parser.add_argument("--language", choices=("cpp",), required=True)
+    export_parser.add_argument("--output-dir", required=True)
+    export_parser.add_argument("--row-limit", type=int, required=True)
+    export_parser.add_argument("--max-bytes", type=int, required=True)
+    export_parser.add_argument("--threads", type=int, required=True)
+    export_parser.add_argument("--ram", type=int, required=True)
     return value
 
 
@@ -322,7 +510,8 @@ if __name__ == "__main__":
     exit_code = 0
     try:
         parsed = parser().parse_args()
-        {"inventory": inventory, "database": database, "query": query}[parsed.action](parsed)
+        {"inventory": inventory, "database": database, "query": query,
+         "export": export}[parsed.action](parsed)
     except Exception as exc:
         print(f"codeql-runner: {type(exc).__name__}: {exc}", file=sys.stderr)
         exit_code = 2

@@ -1,7 +1,9 @@
 """Blind verifier independence check (design R6).
 
-Provider or model-family distinctness is recorded through :func:`provider_distinct` but is not
-required unless the caller's policy passes ``require_distinct_provider=True``.
+Provider distinctness is recorded through :func:`provider_distinct` but is not required unless the
+caller's policy passes ``require_distinct_provider=True``. Verifier model-profile distinctness from
+the red cells (decision 2) is recorded through :func:`model_distinct`; it never affects
+independence or confirmation and is consumed only by ``ship-block-policy/1``.
 """
 from __future__ import annotations
 
@@ -27,6 +29,16 @@ class ActorRecord:
 def provider_distinct(verifier: ActorRecord, others: Iterable[ActorRecord]) -> bool:
     """``independence.provider_distinct``: the verifier's provider differs from every other actor's."""
     return all(verifier.provider != other.provider for other in others)
+
+
+def model_distinct(verifier: ActorRecord, reds: Iterable[ActorRecord]) -> bool:
+    """``independence.verifier_model_distinct`` (decision 2): the verifier's model profile (provider
+    and model) differs from every red cell's on the claim.
+
+    It is recorded for every claim and never gates confirmation; ``ship-block-policy/1`` requires it
+    for ``ship_blocking`` when ``verification.require_distinct_model_for_ship_blocking`` is on.
+    """
+    return all((verifier.provider, verifier.model) != (red.provider, red.model) for red in reds)
 
 
 def verify_independence(verifier_actor: ActorRecord, other_actors: Iterable[ActorRecord],

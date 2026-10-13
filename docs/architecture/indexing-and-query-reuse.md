@@ -5,7 +5,10 @@ stage-1 precomputed sets, `query_observations` and `query_dataset_inventory` are
 `job_review_data_indexing` (see [First indexing batch](#first-indexing-batch-implemented-coverage)).
 Review packages and a private document candidate ledger now follow the accepted index.
 Finding and scoring retrieval indexes remain dependent work. A missing product is reported as
-unavailable.
+unavailable. The code-graph batch (call graph, sinks, entry points, paths, guards, ranges and
+SARIF correlation) is specified by
+[`code-graph-precomputation.md`](code-graph-precomputation.md), which supersedes the stage-2
+graph query sets this document used to plan; the sections below only summarize that decision.
 This document describes review-worker evidence, not instructions to review workers.
 
 ## Goal and authority
@@ -37,9 +40,9 @@ gap, not silent success.
 | Tree-sitter syntax | `job_tree_sitter_ast`, `analysis` | bounded AST nodes, spans, parent relations across configured grammars | stable symbol/call-site links and parse-gap coverage |
 | C/C++ compiled syntax | `job_cpp_compiled_analysis`, `analysis` AST shard | selected Clang AST records | resolved definitions, references, template and macro origin links |
 | C/C++ symbol graph | `job_cpp_symbol_index`, `analysis` | accepted clangd symbols, `CALLS` and `REFERENCES` | bridge symbols to syntax, IR, CPG, and priority items |
-| LLVM IR | `job_cpp_compiled_analysis`, `analysis` IR shard | function definitions and uniquely resolved direct `CALLS` | basic blocks, CFG, def-use, memory operations, guards, source mapping |
-| Joern CPG | `job_cpg_analysis`, run-owned artifact and unavailable observation shard | retained binary CPG; no retrievable nodes or edges | bounded export of calls, CFG, PDG, data dependencies, and source mappings |
-| CodeQL flows | `job_codeql_analysis` observations; `job_review_prioritization`, `priority` | SARIF paths, ordered source-resolved `review_flow_step` nodes and `FLOWS_TO` edges | correlate path steps to symbols, AST, IR, and CPG nodes |
+| LLVM IR | `job_cpp_compiled_analysis`, `analysis` IR shard | function definitions and uniquely resolved direct `CALLS` with TU-level ambiguous locations | cross-check input for CodeQL call-site facts only ([code graph](code-graph-precomputation.md) D1); CFG/def-use extraction is out of scope |
+| Joern CPG | `job_cpg_analysis`, run-owned artifact and unavailable observation shard | retained binary CPG; no retrievable nodes or edges | none in the code-graph batch: Joern is not a graph producer until an exporter exists |
+| CodeQL flows | `job_codeql_analysis` observations; `job_review_prioritization`, `priority` | SARIF paths, ordered source-resolved `review_flow_step` nodes and `FLOWS_TO` edges | the primary producer of every code-graph fact family through a hash-pinned export pack; SARIF steps correlated to exported paths ([code graph](code-graph-precomputation.md)) |
 | History and ranking | `job_source_history_analysis`, `job_change_context_analysis`, `job_review_prioritization` | metrics, SII, ranked hotspot items, evidence, one-hop import context | bounded graph context package per selected hotspot |
 
 The AST and IR rows describe their present **partial** extraction. A successful producer run must
@@ -90,18 +93,18 @@ a silent allowlist. `query_precomputed` is abbreviated `QP`; existing generic `f
 | Local Git commits, diffs, blame and line/function history; `job_source_history_analysis` | Churn, entropy, fix-on-fix, SII, ownership | Current `history` and hotspot index; extend exact symbol and review-unit links | `history_context`, `hotspot_context` | `query_hotspots`, `query_change_context`, `QP`; no skill |
 | GitHub PR/review metadata; history enrichment | Review cadence and direct-push signals | Conditional current history facts; unavailable when disabled; protect raw API payload | `history_context` | `query_change_context`, `coverage`; no skill |
 | Review/deployment external facts and co-change/test association; `job_change_context_analysis` | Process anomalies and change context | Current `history`/priority facts; extend source/build/deployment identities | `history_context`, `ci_trust` | `query_change_context`, `QP`; no skill |
-| Tree-sitter CST/AST; `job_tree_sitter_ast` | Syntax, symbols, boundaries and complexity basis | Current bounded `analysis` nodes/spans; extend stable symbols/call sites and parse gaps | `symbol_links`, `call_graph`, `hotspot_context` | `core`, `QP`; no skill |
+| Tree-sitter CST/AST; `job_tree_sitter_ast` | Syntax, symbols, boundaries and complexity basis | Current bounded `analysis` nodes/spans; extend stable symbols and parse gaps; no graph facts are derived from syntax | `symbol_links`, `hotspot_context` | `core`, `QP`; no skill |
 | Cyclomatic, cognitive, coupling, taint-proximity and LPS features; `job_review_prioritization` | Rank review attention | Current `priority`; extend metric provenance and package vectors | `hotspot_context`, `review_package` | `query_hotspots`, `QP`; no skill |
 | Project build probes/repairs; `job_project_build` | Establish build feasibility and selected recipe | Current `build`; extend repair decisions, failed scopes and sanitized provenance | `build_provenance` | `query_build_security`, `coverage`; existing `build-image-repair` skill is operator-only |
 | Compile/link/archive commands, file accesses, env and toolchains; `job_language_build` | Reproduce source→artifact provenance and security flags | Current `build`/`build_security`; extend ordered redacted argv facts and allowlisted env classes; exact argv/env protected | `build_provenance`, `ci_trust`, `review_package` | `query_build_security`, `QP`; no worker skill |
 | Language package-manager metadata and SBOM inputs; `job_language_build`/artifact jobs | Dependency identity and lock resolution | Current build/artifact/package facets; audit each ecosystem and version resolution | `artifact_inventory`, `dependency_advisories` | `query_artifacts`, `QP`; no skill |
 | Files produced by builds: native, archives, packages, bytecode, assemblies, WASM; `job_artifact_indexing` | Artifact membership and source/build binding | Current `artifacts`; extend member/symbol/action links | `artifact_inventory`, `build_provenance` | `query_artifacts`, `QP`; no skill |
 | Artifact security scans, format and vulnerability observations; `job_artifact_security_analysis` | Binary/package leads | Current `observations`/`artifacts`; extend dedup and advisory evidence | `scanner_correlation`, `dependency_advisories` | `query_artifacts`, `query_observations`, `QP`; no skill |
-| Clang AST and compile-unit diagnostics; `job_cpp_compiled_analysis` | Resolved C/C++ types, definitions, macro/template context | Current partial `analysis`/`compiled`; extend origin and symbol links | `symbol_links`, `ast_ir_cpg_mapping` | `core`, `QP`; no skill |
-| LLVM IR, binary symbols, Infer output; `job_cpp_compiled_analysis` | Compiled calls, CFG/def-use, hardening and leads | Current partial IR and observations; extend CFG, memory, guards, source maps | `call_graph`, `control_flow`, `dataflow`, `guards_ranges` | `core`, `query_build_security`, `QP`; no skill |
-| clangd symbol graph; `job_cpp_symbol_index` | Definitions, references and direct calls | Current `analysis`; bridge to source/AST/IR/CPG | `symbol_links`, `call_graph`, `ast_ir_cpg_mapping` | `core`, `QP`; no skill |
-| Joern CPG; `job_cpg_analysis` | Call, CFG and data-dependency graph | Binary artifact only; planned bounded graph export with source maps | `call_graph`, `control_flow`, `dataflow`, `ast_ir_cpg_mapping` | `QP` after export; `coverage` reports unavailable now; no skill |
-| CodeQL database and SARIF paths; `job_codeql_analysis` | Analyzer leads and ordered flows | Current `observations`, priority flow steps; DB protected; extend graph correlation | `sarif_correlation`, `dataflow`, `scanner_correlation` | `query_codeql`, `QP`; no skill |
+| Clang AST and compile-unit diagnostics; `job_cpp_compiled_analysis` | Resolved C/C++ types, definitions, macro/template context | Current partial `analysis`/`compiled`; cross-check input (`CallExpr`) for `call_site` facts | `symbol_links`; cross-check of the `graph` index | `core`, `QP`; no skill |
+| LLVM IR, binary symbols, Infer output; `job_cpp_compiled_analysis` | Compiled direct calls, hardening and leads | Current partial IR (TU-level locations) and observations; cross-check input for `call_site` facts | `scanner_correlation`; cross-check of the `graph` index | `core`, `query_build_security`, `QP`; no skill |
+| clangd symbol graph; `job_cpp_symbol_index` | Definitions, references and direct calls | Current `analysis`; cross-check input for `call_site` facts and `SAME_AS` symbol links | `symbol_links`; cross-check of the `graph` index | `core`, `QP`; no skill |
+| Joern CPG; `job_cpg_analysis` | Retained CPG artifact | Binary artifact only; not a graph producer in the code-graph plan | none | `coverage` reports unavailable; no skill |
+| CodeQL database and SARIF paths; `job_codeql_analysis`, planned `job_code_graph_index` | Analyzer leads, ordered flows, and the primary code-graph export (calls, sinks, entry points, summaries, paths, guards, ranges) | Current `observations`, priority flow steps; DB protected; export artifacts `artifact_only`; `graph` index via `job_code_graph_index` | `scanner_correlation`; `graph` index families | `query_codeql`, `query_code_graph`, `QP`; no skill |
 | Post-build flags, hardening and deterministic/model assessments; `job_post_build_security_assessment` | Artifact security posture | Current `build_security`; keep model judgment distinct from measured facts | `build_provenance`, `review_package` | `query_build_security`; existing `post-build-security-assessment` skill is operator-only |
 | CI definitions, permissions, triggers, steps and scanner results; `job_ci_configuration_analysis` | Workflow trust and build/deploy exposure | Current CI observations/evidence; extend typed trust edges | `ci_trust`, `scanner_correlation` | `query_ci_configuration`, `QP`; no skill |
 | Secret leads; Gitleaks and build-capture checks in `job_evidence_collection` | Identify possible credential exposure | Current observations; redacted fingerprint/location only; secret value protected | `redacted_secret_exposure`, `scanner_correlation` | `query_observations`, `QP`; no skill |
@@ -118,15 +121,19 @@ a silent allowlist. `query_precomputed` is abbreviated `QP`; existing generic `f
 | OSV feed; `job_third_party_data_sync.osv_sync` | Package advisory reference | Current global snapshot; pin version per run and join PURLs/versions | `reference_intelligence`, `dependency_advisories` | `QP` or typed reference query; no skill |
 | MITRE ATT&CK, CAPEC and CWE; `job_third_party_data_sync.mitre_sync` | Weakness/technique context | Current global snapshot with `index/mitre.sqlite` (CWE weaknesses carry name, abstraction, status); pinned per run; the inference review validates claim CWEs against the pinned catalog | `reference_intelligence`, `control_evidence` | `QP` or typed reference query; no skill |
 | cve-bin-tool derived database; `job_third_party_data_sync.cve_bin_tool_db_build` | Binary-component advisory matching | Current global artifact; pin source NVD snapshot and database version | `reference_intelligence`, `dependency_advisories` | `QP` or typed reference query; no skill |
-| Materialized OpenAPI 3 JSON; `job_target_catalog` | Declared routes, methods and parameters | Current `documents`; enforcement still needs source/graph proof; other interface formats remain planned | `contract_enforcement`, `entrypoint_paths` | `search`, `find`, `read_excerpt`; no skill |
+| Materialized OpenAPI 3 JSON; `job_target_catalog` | Declared routes, methods and parameters | Current `documents`; enforcement still needs source/graph proof; a future contract join fills `entry_point.exposure.contract_id` | `contract_enforcement` | `search`, `find`, `read_excerpt`; no skill |
 | IaC, rendered Helm/Kustomize, proxy and runtime config; planned `job_deployment_topology` | Exposure, privileges and limits | Planned `deployment`; scanner observations alone are not topology | `deployment_exposure`, `ci_trust` | Planned `query_deployment` if typed exposure filters are needed; no skill |
 | Unit-test source and Postman collections; `job_target_catalog`, `job_review_data_indexing` | Developer intent and request examples | Current bounded `documents` and `document_context`; exact route joins are review context, assertions do not prove enforcement | Current `document_context`; later `review_package` nominations | `search`, `find`, `read_excerpt`, `query_precomputed`; no skill |
 | Markdown under `docs/`, including design, STRIDE and DFD; `job_target_catalog`, `job_review_data_indexing` | Stated architecture and trust boundaries | Current bounded `documents` and `document_context`; target text remains untrusted intent | Current `document_context`; later `review_package` nominations | `search`, `find`, `read_excerpt`, `query_precomputed`; no skill |
 | Target-owned agent guidance; planned doc index | Owner statements only, never instructions | Planned `docs` with `target_guidance` flag and quarantine | None beyond nomination | `search` only if scope permits; no skill |
 | Sanitized text/facet streams from accepted source, observations, contracts, docs, tests and feeds; `tool-sqlite-fts` image | Nominate exact identities for later resolution | Current in-process FTS5; registered image can build/validate bounded FTS5 document shards when a producer is wired | Safe term/facet dictionaries, corpus counts and entity→document links | Existing `search` then `find`/`read_excerpt`; no new MCP endpoint or skill |
-| Fuzz, runtime and authorized dynamic traces; future producer | Observed behavior and path validation | Planned run-owned `observations`/trace identities and coverage | `dataflow`, `entrypoint_paths`, `review_package` | Planned `query_observations`/typed trace query if acquired; no skill |
+| Fuzz, runtime and authorized dynamic traces; future producer | Observed behavior and path validation | Planned run-owned `observations`/trace identities and coverage | `review_package`; observed-path facts would join the `graph` index as their own producer | Planned `query_observations`/typed trace query if acquired; no skill |
 | Runtime logs, raw tool output, exact argv/env, credentials and model transcripts; runtime/all jobs | Audit producer status and failures | Protected artifacts; only safe status, hashes, producer and gap indexed | Coverage and provenance summaries only | `coverage`/dataset catalog; no raw-content MCP or skill |
 | Normalized claims, reviews, adjudication, PoC receipts and final finding packages; `job_inference_security_review` (slice 1), future publication | Review decisions and final evidence | Extend: run-owned typed claim ledger, finding/score packages and handoff (slice 1); PoC receipts planned; publish sanitized final findings only | `review_package` input is separate; final claim/evidence closure | `resolve_evidence` and scoped finding query when built; no worker skill |
+| Remediation plans for confirmed findings; planned `job_remediation_planning` (decision 8) | Fix proposals and safe regression-test specifications | Planned; reads only the review handoff's `remediation_intake` (confirmed findings, decision 4) | None | None until built; no skill |
+| Remediation validation results; planned `job_remediation_validation` (decision 8) | Whether a proposed fix removes the confirmed condition | Planned; reads `remediation_intake` and the remediation plan | None | None until built; no skill |
+| Final publication gate decisions; planned `job_final_publication_gate` (decision 8) | Accept or block publication from exact accounting, ship-block status and gaps | Planned; reads the accepted review handoff (accounting, finding/score packages, `ship_block`, `verification_backlog`, coverage, gaps) | None | None until built; no skill |
+| Final report publications; planned `job_final_report_publication` (decision 8) | Publishable findings, verification backlog and limitations | Planned; reads gate-accepted packages only; publishes sanitized final findings | None | None until built; no skill |
 
 An MCP endpoint is justified only when `core`, an existing domain query, and `QP` cannot give a
 bounded typed answer. `query_observations` (implemented) is the endpoint for scanner severity,
@@ -260,14 +267,17 @@ should reuse the current `IndexBuilder`, `IndexIdentity`, and accepted-manifest 
 | Query set | Reused inputs | Suggested bounded fact | Essential gap |
 |---|---|---|---|
 | `symbol_links` | Tree-sitter, Clang AST, clangd, build maps | declarations, definitions, references, call sites per symbol | unresolved overload, generated source, or parse error |
-| `call_graph` | clangd, LLVM direct calls, CPG calls, CodeQL | callers and callees with dispatch method and provenance | unresolved indirect/virtual calls and tool disagreement |
-| `control_flow` | LLVM CFG, CPG CFG, syntax | basic blocks, branch edges, exits, exception paths | missing TU, inline asm, or non-exact source map |
-| `dataflow` | CPG PDG, LLVM def-use, CodeQL | bounded def-use and source-to-sink subgraphs | unmodeled external call, aliasing, path/step limit |
-| `entrypoint_paths` | ingress catalog, summaries, call/dataflow graph | shortest bounded entrypoint-to-sink paths | path depth/count bound and unresolved dispatch |
-| `guards_ranges` | CFG dominators, AST conditions, LLVM values | dominating guards, branch polarity, operand width/range | unknown range, optimization, non-exact mapping |
-| `sarif_correlation` | CodeQL observations and normalized graphs | each SARIF step mapped to graph nodes/edges | broken or ambiguous hop |
-| `ast_ir_cpg_mapping` | source spans, Clang AST, LLVM IR, Joern CPG | cross-representation node links with method/confidence | missing debug/origin information |
-| `hotspot_context` | priority, history, all accepted graph products | bounded evidence package around a ranked file/function | per-source missing coverage and context truncation |
+| `hotspot_context` | priority, history, accepted `graph` families | bounded evidence package around a ranked file/function | per-source missing coverage and context truncation |
+
+The code-graph families (`call_site`, `sink_site`, `entry_point`, `flow_summary`,
+`dataflow_path`, `guard_fact`, `range_fact`) are **not** `query_precomputed` sets. They are
+first-class entities of the `graph` index, produced CodeQL-first by `job_codeql_analysis`
+(`export.scopes`) and `job_code_graph_index`, cross-checked against clangd/LLVM/Clang AST for
+C/C++, and queried through the single typed `query_code_graph` tool. The former `call_graph`,
+`control_flow`, `dataflow`, `sarif_correlation`, `ast_ir_cpg_mapping`, `guards_ranges` and
+`entrypoint_paths` sets are retired; see
+[`code-graph-precomputation.md`](code-graph-precomputation.md) for the fact semantics,
+admissibility, job topology and implementation plan.
 
 | Query set | Reused inputs | Suggested bounded fact | Essential gap |
 |---|---|---|---|
@@ -288,9 +298,9 @@ should reuse the current `IndexBuilder`, `IndexIdentity`, and accepted-manifest 
 
 The [inventory and first-stage batch](../tasks/review-data-indexing-prompt.md) enforces dataset
 accounting across enabled jobs, adds safe query routes and cross-domain links, and publishes
-products over already accepted inputs. The dependent
-[graph and advanced-query batch](../tasks/review-graph-precomputation-prompt.md) exports Joern
-and LLVM graphs, links representations, and publishes graph and review-context products. Each
+products over already accepted inputs. The dependent code-graph batch is specified by
+[`code-graph-precomputation.md`](code-graph-precomputation.md); the earlier
+[graph task prompt](../tasks/review-graph-precomputation-prompt.md) is superseded by it. Each
 batch verifies every language's available producer path, names unsupported combinations, and
 tests selective reuse when one query rule changes.
 
@@ -307,8 +317,8 @@ invalidate unrelated accepted sets.
 | Stage | Product sets | Prerequisite |
 |---|---|---|
 | 1: broad inventory | `build_provenance`, `artifact_inventory`, `dependency_advisories`, `scanner_correlation`, `ci_trust`, `history_context`, `control_evidence`, `reference_intelligence`, `symbol_links`, `document_context` | Existing accepted domain shards and pinned feed identities |
-| 2: code graphs | `call_graph`, `control_flow`, `dataflow`, `sarif_correlation`, `ast_ir_cpg_mapping`, `guards_ranges`, `entrypoint_paths` | Bounded AST/IR/CPG export, source mappings and available analyzer evidence |
-| 3: review context | `hotspot_context`, `redacted_secret_exposure`, `contract_enforcement`, `deployment_exposure`, `test_intent`, `review_package` | Accepted upstream sets; richer contract/deployment/test semantics remain pending even though `document_context` is indexed |
+| 2: code graph (`graph` index, not `query_precomputed`) | `call_site`, `sink_site`, `entry_point`, `flow_summary`, `dataflow_path`, `guard_fact`, `range_fact` families per [`code-graph-precomputation.md`](code-graph-precomputation.md) | Accepted CodeQL database per scope, hash-pinned export pack and catalog; clangd/LLVM/Clang AST shards only as C/C++ cross-checks |
+| 3: review context | `hotspot_context`, `redacted_secret_exposure`, `contract_enforcement`, `deployment_exposure`, `test_intent`, `review_package` | Accepted upstream sets and `graph` families; richer contract/deployment/test semantics remain pending even though `document_context` is indexed |
 
 Within a stage, implement one complete producer→shard→manifest→MCP vertical slice before
 replicating the pattern. `review_package` is a compact composition of accepted identities,
@@ -322,7 +332,7 @@ The machine-readable contract is
 `appsec-review/review-package/3`. It describes the output of `assemble_review_packages` and
 the bounded input planned for the `hypothesis_hunter` and `red_team_analyst` roles in
 [`inference-security-review.md`](inference-security-review.md). It is distinct from the
-post-adjudication `appsec-review/finding-package/1` used for final findings. The assembler reads
+post-adjudication `appsec-review/finding-package/2` used for final findings. The assembler reads
 accepted scanner-correlation facts, fingerprints packages from accepted identities, and emits
 one `finding_lead` package per source-SAST lead and one `hunt` package per accepted menu partition.
 Stable partition keys and bounds prevent silent lead loss.
@@ -429,6 +439,10 @@ publishes the accepted inventory before `job_review_package_assembly`. Implement
 - **Language and build-unit matrices** are published as coverage cells: source and Tree-sitter per
   catalogued language; compiled/clangd only for C/C++ with accepted shards (partial extraction);
   Joern always `unavailable` (binary artifact only); CodeQL only where an accepted shard exists.
+  The `code_graph` lane reads only accepted `graph` shards of `job_code_graph_index` and their
+  per-family coverage rows: `complete` only when all seven fact families are complete,
+  `unavailable` (with the basis) when no accepted `graph` shard exists or every family is
+  unavailable, `partial` otherwise. Each cell lists its per-family states.
 - **SQLite FTS image.** The in-process FTS5 builder remains the only producer of accepted shards.
   `fts.image_validation` rebuilds this job's link and product shard text with the pinned
   `tool-sqlite-fts:1.0.0` image (image ID verified against the catalog pin, FTS5 probe, record
@@ -436,11 +450,16 @@ publishes the accepted inventory before `job_review_package_assembly`. Implement
 
 Remaining gaps after this batch:
 
-- Graph products (`call_graph`, `control_flow`, `dataflow`, `sarif_correlation`,
-  `ast_ir_cpg_mapping`, `guards_ranges`, `entrypoint_paths`), `hotspot_context`,
-  `redacted_secret_exposure` and `review_package` are not produced; the matrix publishes them as
-  `pending_graph_batch` follow-ups with their missing prerequisite.
-- Joern CPG remains a binary artifact; no CPG graph coverage is claimed.
+- No code-graph fact is produced: the `graph` index, `job_codeql_analysis` export step,
+  `job_code_graph_index` and `query_code_graph` of
+  [`code-graph-precomputation.md`](code-graph-precomputation.md) are not implemented, so every
+  `code_graph` lane is `unavailable`. The seven graph query sets are retired from `QUERY_SETS`;
+  `query_precomputed` rejects their names as invalid. The follow-up list (`GRAPH_FOLLOW_UP` in
+  `job_review_data_indexing/job.py`) names only `hotspot_context`, `review_package`,
+  `redacted_secret_exposure`, `contract_enforcement`, `deployment_exposure` and `test_intent` as
+  `pending_follow_up`; the two graph-dependent rows carry the accepted `code_graph` lane states.
+- Joern CPG remains a binary artifact; no CPG graph coverage is claimed, and the code-graph plan
+  does not use it.
 - Source-to-build-action mapping exists only through captured compile commands (`source_input`
   tokens) and C/C++ compile databases; captured file-access inventories are protected and not
   normalized.
@@ -465,8 +484,9 @@ Remaining gaps after this batch:
   exception, and a query route. New outputs cannot pass acceptance with an unclassified dataset.
 - A source-resolved graph path contains ordered nodes and typed edges, not just endpoint line
   numbers. Every missing or ambiguous hop is visible.
-- In the graph batch, Joern output is decoded by a pinned, bounded exporter into accepted graph
-  shards; a binary-only CPG continues to report unavailable graph coverage.
+- In the code-graph batch, CodeQL exports are normalized by a pinned, bounded producer into
+  accepted `graph` shards with per-scope, per-family coverage; a binary-only Joern CPG continues
+  to report unavailable `cpg_graph` coverage and is not a graph producer.
 - A fact can be traced back through exact upstream identities and hashes; stale or mismatched
   source mappings are rejected.
 - Re-running an unchanged input reuses immutable shards; changes invalidate only dependent

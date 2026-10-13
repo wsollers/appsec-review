@@ -45,11 +45,23 @@ JOERN_GAP = (
     "run-owned evidence, but bounded CPG/PDG export, source mapping, functional fixtures, and "
     "security acceptance are not complete; no CPG coverage is claimed."
 )
+JOERN_DISABLED = (
+    "DISABLED: Joern is not run because jobs.job_cpg_analysis.settings.enabled is false (the default). "
+    "No review fact depends on Joern; code-graph facts come from CodeQL with Clang/LLVM cross-checks "
+    "(docs/architecture/code-graph-precomputation.md). No CPG coverage is claimed."
+)
 
 
 def _settings(unit: UnitContext) -> Mapping[str, int]:
     return {"workers": int(unit.job.config.settings["workers"]),
             "max_cpg_bytes": int(unit.job.config.settings["max_cpg_bytes"])}
+
+
+def _enabled(unit: UnitContext) -> bool:
+    value = unit.job.config.settings.get("enabled", False)
+    if not isinstance(value, bool):
+        raise ValueError("jobs.job_cpg_analysis.settings.enabled must be a boolean")
+    return value
 
 
 def _reuse(unit: UnitContext, root: Path, identity: str, scope: IndexScope) -> dict[str, Any] | None:
@@ -185,24 +197,33 @@ def build_job(*, executor_factory=None) -> Job:
         planned = {item["scope_id"] for item in unit.output("load.accepted_cpp")["scopes"]}
         if {scope.scope_id for scope in scopes} != planned:
             raise ValueError("accepted C++ scopes changed between load and generate")
+        if not _enabled(unit):
+            # Deliberately not run: every scope is an explicit unavailable row, never clean coverage.
+            disabled = {scope.case_id: JOERN_DISABLED for scope in scopes}
+            unit.job.events.write("CPG_ANALYSIS_DISABLED", scope_count=len(scopes))
+            gaps = [f"{case_id}: {reason}" for case_id, reason in {**unavailable, **disabled}.items()]
+            return {"scopes": [], "scope_count": 0, "gaps": gaps, "disabled": sorted(disabled),
+                    "terminal_status": "NOT_APPLICABLE" if not scopes and not unavailable else "COMPLETED_WITH_GAPS"}
         with ThreadPoolExecutor(max_workers=max(1, _settings(unit)["workers"])) as pool:
             results = list(pool.map(lambda scope: _generate(unit, scope, executor_factory), scopes))
         gaps = list(dict.fromkeys(f"{item['case_id']}: {gap}" for item in results for gap in item["gaps"]))
         gaps.extend(f"{case_id}: {reason}" for case_id, reason in unavailable.items())
         status = "NOT_APPLICABLE" if not results and not unavailable else "COMPLETED_WITH_GAPS"
-        return {"scopes": results, "scope_count": len(results), "gaps": gaps, "terminal_status": status}
+        return {"scopes": results, "scope_count": len(results), "gaps": gaps, "disabled": [],
+                "terminal_status": status}
 
     def publish(unit: UnitContext) -> Mapping[str, Any]:
         loaded, generated = unit.output("load.accepted_cpp"), unit.output("generate.scopes")
+        unavailable = {**loaded["unavailable"], **{case_id: JOERN_DISABLED for case_id in generated["disabled"]}}
         manifest = publish_scope_indexes(unit, job_id=JOB_ID, index_name="observations", prefix="joern",
-                                         results=generated["scopes"], unavailable=loaded["unavailable"],
+                                         results=generated["scopes"], unavailable=unavailable,
                                          gaps=generated["gaps"])
-        counts = {"scopes": len(generated["scopes"]),
+        counts = {"scopes": len(generated["scopes"]), "disabled_scopes": len(generated["disabled"]),
                   "cpgs_generated": sum(item["cpg"] is not None for item in generated["scopes"]),
                   "observations": 0}
         summary_path = unit.unit_root / "cpg-analysis-summary.json"
         atomic_json(summary_path, {"schema": SCHEMA, "upstream": loaded["upstream"], "counts": counts,
-                                   "scopes": generated["scopes"], "unavailable": loaded["unavailable"],
+                                   "scopes": generated["scopes"], "unavailable": unavailable,
                                    "gaps": generated["gaps"]})
         unit.job.events.write("CPG_ANALYSIS_COMPLETED", **counts, gap_count=len(generated["gaps"]))
         return {"schema": SCHEMA, "artifact": artifact(unit.job.run_root, summary_path),

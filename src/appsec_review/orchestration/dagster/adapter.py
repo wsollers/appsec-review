@@ -111,7 +111,8 @@ _JOB_STEP_POOLS: Mapping[str, Mapping[str, str]] = {
         "publication": "lifecycle",
     },
 }
-_JOB_DEFAULT_POOLS: Mapping[str, str] = {"job_inference_security_review": "application"}
+_JOB_DEFAULT_POOLS: Mapping[str, str] = {"job_inference_security_review": "application",
+                                         "job_code_graph_index": "index"}
 
 
 def _pool_for(unit_id: str, job_id: str | None = None) -> str:
@@ -181,7 +182,7 @@ def _build_dagster_graph(name: str, jobs: tuple[Job, ...], config: AppConfig,
                     "job_review_intake", "job_target_catalog", "job_target_analysis_plan",
                     "job_project_build", "job_language_build", "job_artifact_indexing",
                     "job_artifact_security_analysis", "job_evidence_collection", "job_cpp_compiled_analysis",
-                    "job_cpp_symbol_index", "job_cpg_analysis", "job_codeql_analysis",
+                    "job_cpp_symbol_index", "job_cpg_analysis", "job_codeql_analysis", "job_code_graph_index",
                     "job_post_build_security_assessment", "job_owasp_control_assessment",
                     "job_ci_configuration_analysis", "job_tree_sitter_ast", "job_source_history_analysis",
                     "job_change_context_analysis", "job_review_prioritization", "job_security_tagging",
@@ -481,6 +482,14 @@ def build_definitions(
             wave_dependencies["job_review_prioritization"] = tuple(job_id for job_id in (
                 "job_codeql_analysis", "job_owasp_control_assessment") if job_id in registered) or tuple(
                 job_id for job_id in ("job_evidence_collection", "job_tree_sitter_ast") if job_id in registered)
+        if "job_code_graph_index" in registered and "job_codeql_analysis" in registered:
+            # The graph index reads the accepted CodeQL exports and observations, the clangd/IR/AST shards
+            # and the prioritization flow steps, and composes the accepted manifest, so it follows every
+            # one of them and precedes the next manifest publisher (tagging, then data indexing).
+            wave_jobs.append(registry.build("job_code_graph_index"))
+            wave_dependencies["job_code_graph_index"] = tuple(job_id for job_id in (
+                "job_codeql_analysis", "job_cpp_compiled_analysis", "job_cpp_symbol_index", "job_tree_sitter_ast",
+                "job_review_prioritization") if job_id in wave_dependencies)
         if "job_security_tagging" in registered:
             wave_jobs.append(registry.build("job_security_tagging"))
             # Tagging reads the accepted retrieval manifest, so it follows its last publisher, and it
@@ -494,15 +503,19 @@ def build_definitions(
                 tagging_dependencies.append("job_owasp_control_assessment")
             if "job_review_prioritization" in wave_dependencies:
                 tagging_dependencies.append("job_review_prioritization")
+            if "job_code_graph_index" in wave_dependencies:
+                tagging_dependencies.append("job_code_graph_index")
             wave_dependencies["job_security_tagging"] = tuple(tagging_dependencies or ("job_target_analysis_plan",))
         if "job_review_data_indexing" in registered:
             # The dataset inventory audits every accepted publisher, so it closes the wave after the last
             # manifest publisher and keeps exactly one terminal job.
-            terminal = next((job_id for job_id in ("job_security_tagging", "job_review_prioritization",
-                                                   "job_codeql_analysis") if job_id in wave_dependencies),
-                            "job_target_analysis_plan")
+            terminal = next((job_id for job_id in ("job_security_tagging", "job_code_graph_index",
+                                                   "job_review_prioritization", "job_codeql_analysis")
+                             if job_id in wave_dependencies), "job_target_analysis_plan")
             wave_jobs.append(registry.build("job_review_data_indexing"))
-            wave_dependencies["job_review_data_indexing"] = (terminal,)
+            # The audit and the code_graph matrix lane account for the graph index explicitly.
+            wave_dependencies["job_review_data_indexing"] = tuple(dict.fromkeys((terminal, *(
+                ("job_code_graph_index",) if "job_code_graph_index" in wave_dependencies else ()))))
         if "job_review_package_assembly" in registered:
             wave_jobs.append(registry.build("job_review_package_assembly"))
             wave_dependencies["job_review_package_assembly"] = ("job_review_data_indexing",)

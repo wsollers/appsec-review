@@ -28,7 +28,7 @@ from typing import Any, Callable, Iterator, Mapping, Sequence
 
 from appsec_review.inference import ModelOutputError, ModelResult, ReviewModelRequest
 from appsec_review.retrieval.core import RetrievalGap, RetrievalIntegrityError
-from appsec_review.review.capability import AuthorityDenied, CellCapability, TOOL_SCHEMAS
+from appsec_review.review.capability import GRAPH_ROW_KINDS, AuthorityDenied, CellCapability, TOOL_SCHEMAS
 from appsec_review.review.identity import make_id, sha256_hex
 from appsec_review.review.models import (
     CellRecord, CellStatus, Gap, GapClass, IntegrityError, Lane, Role,
@@ -126,7 +126,7 @@ def cell_fingerprint(spec: CellSpec, capability: CellCapability) -> str:
         "guidance_bundle": spec.guidance_bundle_sha256,
         "model": {"provider": spec.provider, "model": spec.model, "reasoning": spec.reasoning},
         "tool_capabilities": {key: semantic[key] for key in ("tools", "indexes", "entities",
-                                                              "entity_prefixes")},
+                                                              "entity_prefixes", "graph_scopes")},
         "budgets": {**{key: semantic[key] for key in ("max_queries", "max_turns", "page_size",
                                                        "max_depth", "max_result_bytes")},
                     "max_input_tokens": spec.max_input_tokens,
@@ -323,7 +323,7 @@ def _run_attempt(spec: CellSpec, cell_id: str, number: int, *, infer: Infer, cor
 
 def _retrieve(spec: CellSpec, cell_id: str, attempt: _Attempt, capability: CellCapability, core: Any,
               turn: int, index: int, request: Any, entry: dict[str, Any]) -> dict[str, Any]:
-    decision = capability.authorize(request, queries_used=attempt.queries)
+    decision = capability.authorize(request, queries_used=attempt.queries, granted=attempt.seen)
     tool = request.get("tool") if isinstance(request, Mapping) else None
     tool = tool if isinstance(tool, str) and tool in TOOL_SCHEMAS else "<unknown>"
     call: dict[str, Any] = {"index": index, "tool": tool, "filter_sha256": decision.filter_sha256}
@@ -352,8 +352,10 @@ def _retrieve(spec: CellSpec, cell_id: str, attempt: _Attempt, capability: CellC
                                  GapClass.COVERAGE_GAP, f"tool_error:{decision.tool}:{type(exc).__name__}"))
         return {"index": index, "status": "tool_error", "tool": decision.tool,
                 "error_class": type(exc).__name__}
-    bounded, withheld = _bound(decision.tool, response, capability)
-    seen = {identity for identity in _identities(bounded["results"]) if capability.entity_in_scope(identity)}
+    granted: set[str] = set()
+    bounded, withheld = _bound(decision.tool, response, capability, attempt.seen, granted)
+    seen = {identity for identity in _identities(bounded["results"])
+            if capability.entity_in_scope(identity) or identity in attempt.seen or identity in granted}
     attempt.seen |= seen
     call.update(status="executed", result_count=len(bounded["results"]), withheld_count=withheld,
                 gap_count=len(bounded["coverage_gaps"]), truncated=bounded["truncated"],
@@ -363,12 +365,26 @@ def _retrieve(spec: CellSpec, cell_id: str, attempt: _Attempt, capability: CellC
     return {"index": index, "status": "ok", **bounded}
 
 
-def _bound(tool: str, response: Mapping[str, Any], capability: CellCapability) -> tuple[dict[str, Any], int]:
-    """Withhold out-of-scope rows and trim to the cell byte cap; identities are retained."""
+def _bound(tool: str, response: Mapping[str, Any], capability: CellCapability,
+           seen: set[str] | frozenset[str] = frozenset(), granted: set[str] | None = None
+           ) -> tuple[dict[str, Any], int]:
+    """Withhold out-of-scope rows and trim to the cell byte cap; identities are retained.
+
+    A graph row of a granted CodeQL scope (``CellCapability.graph_row_in_scope``) is in scope, and its
+    identity plus the graph-kind identities its payload references (facts and symbols of the same
+    scope) are added to ``granted`` so the cell may address and cite them.
+    """
+    granted = set() if granted is None else granted
+    rows = [_plain(row) for row in response.get("results", ()) or ()]
+    for row in rows:
+        _grant_graph_row(row, capability, granted)
+        if isinstance(row, dict) and isinstance(row.get("entity"), dict):
+            _grant_graph_row(row["entity"], capability, granted)
+    known = set(seen) | granted
     kept: list[Any] = []
     withheld = 0
-    for row in response.get("results", ()) or ():
-        scoped, dropped = _scope_row(tool, _plain(row), capability)
+    for row in rows:
+        scoped, dropped = _scope_row(tool, row, capability, known)
         withheld += dropped
         if scoped is not None:
             kept.append(scoped)
@@ -386,23 +402,34 @@ def _bound(tool: str, response: Mapping[str, Any], capability: CellCapability) -
     return bounded, withheld
 
 
-def _scope_row(tool: str, row: Any, capability: CellCapability) -> tuple[Any, int]:
+def _grant_graph_row(row: Any, capability: CellCapability, granted: set[str]) -> None:
+    if not isinstance(row, dict) or not capability.graph_row_in_scope(row):
+        return
+    granted.add(row["identity"])
+    granted.update(identity for identity in _identities(row.get("payload"))
+                   if identity.split(":", 2)[1] in GRAPH_ROW_KINDS)
+
+
+def _scope_row(tool: str, row: Any, capability: CellCapability,
+               known: set[str] | frozenset[str] = frozenset()) -> tuple[Any, int]:
     if not isinstance(row, dict):
         return None, 1
     if tool == "resolve_evidence":
         dropped = 0
         entity = row.get("entity")
-        if isinstance(entity, dict) and not _endpoints_in_scope(entity, capability):
+        if isinstance(entity, dict) and not _endpoints_in_scope(entity, capability, known):
             entity, dropped = None, 1
         relationships = [item for item in row.get("relationships", ()) or ()
-                         if isinstance(item, dict) and _endpoints_in_scope(item, capability)]
+                         if isinstance(item, dict) and _endpoints_in_scope(item, capability, known)]
         dropped += len(row.get("relationships", ()) or ()) - len(relationships)
         return {**row, "entity": entity, "relationships": relationships}, dropped
-    return (row, 0) if _endpoints_in_scope(row, capability) else (None, 1)
+    return (row, 0) if _endpoints_in_scope(row, capability, known) else (None, 1)
 
 
-def _endpoints_in_scope(row: Mapping[str, Any], capability: CellCapability) -> bool:
-    return all(capability.entity_in_scope(row[key]) for key in ("identity", "source_id", "target_id")
+def _endpoints_in_scope(row: Mapping[str, Any], capability: CellCapability,
+                        known: set[str] | frozenset[str] = frozenset()) -> bool:
+    return all(capability.entity_in_scope(row[key]) or row[key] in known
+               for key in ("identity", "source_id", "target_id")
                if isinstance(row.get(key), str) and _LOGICAL_ID.fullmatch(row[key]))
 
 

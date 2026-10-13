@@ -68,6 +68,80 @@ class Predicate(StrEnum):
     SECURITY_IMPACT = "security_impact"
 
 
+SECURITY_PREDICATES_VERSION = "security-predicates/1"
+
+
+class SecurityPredicate(StrEnum):
+    """Closed security-consequence vocabulary of a claim (``security-predicates/1``, design R7).
+
+    Rolled up from the weakness classes of the security tag taxonomy; see
+    :data:`SECURITY_PREDICATE_CWE_ROLLUP` and the design's R7 table. It is part of claim identity,
+    so adding, renaming, or remapping a member is a vocabulary version change. Anything that fits
+    no member is ``OTHER``, which normalization records with a gap.
+    """
+
+    MEMORY_CORRUPTION = "memory_corruption"
+    OUT_OF_BOUNDS_READ = "out_of_bounds_read"
+    USE_AFTER_FREE = "use_after_free"
+    INTEGER_ERROR = "integer_error"
+    INJECTION = "injection"
+    COMMAND_INJECTION = "command_injection"
+    SQL_INJECTION = "sql_injection"
+    CODE_INJECTION = "code_injection"
+    PATH_TRAVERSAL = "path_traversal"
+    SSRF = "ssrf"
+    DESERIALIZATION = "deserialization"
+    AUTHN_BYPASS = "authn_bypass"
+    AUTHZ_BYPASS = "authz_bypass"
+    INFO_DISCLOSURE = "info_disclosure"
+    CRYPTO_WEAKNESS = "crypto_weakness"
+    RACE_CONDITION = "race_condition"
+    RESOURCE_EXHAUSTION = "resource_exhaustion"
+    INSECURE_CONFIGURATION = "insecure_configuration"
+    SUPPLY_CHAIN_COMPROMISE = "supply_chain_compromise"
+    OTHER = "other"
+
+
+_SP = SecurityPredicate
+# security-predicates/1 roll-up of the taxonomy's weakness tables (docs/architecture/
+# security-tag-taxonomy.md sections 3 and 5) and the CERT categories they cite. It documents which
+# member a weakness normally implies; it never rewrites a worker's predicate (identity uses the
+# predicate the claim states). CWE-20 (Improper Input Validation) is deliberately absent: it names
+# no consequence, so the claim states the consequence the missing validation enables.
+SECURITY_PREDICATE_CWE_ROLLUP: dict[str, SecurityPredicate] = {
+    **dict.fromkeys(("CWE-119", "CWE-120", "CWE-121", "CWE-122", "CWE-787", "CWE-788", "CWE-805", "CWE-134",
+                     "CWE-457", "CWE-908"), _SP.MEMORY_CORRUPTION),
+    **dict.fromkeys(("CWE-125", "CWE-126", "CWE-127"), _SP.OUT_OF_BOUNDS_READ),
+    **dict.fromkeys(("CWE-416", "CWE-415", "CWE-825"), _SP.USE_AFTER_FREE),
+    **dict.fromkeys(("CWE-190", "CWE-191", "CWE-681", "CWE-682", "CWE-369"), _SP.INTEGER_ERROR),
+    **dict.fromkeys(("CWE-74", "CWE-79", "CWE-90", "CWE-91", "CWE-611", "CWE-643", "CWE-943"), _SP.INJECTION),
+    **dict.fromkeys(("CWE-77", "CWE-78"), _SP.COMMAND_INJECTION),
+    **dict.fromkeys(("CWE-89", "CWE-564"), _SP.SQL_INJECTION),
+    **dict.fromkeys(("CWE-94", "CWE-95", "CWE-96", "CWE-917"), _SP.CODE_INJECTION),
+    **dict.fromkeys(("CWE-22", "CWE-23", "CWE-36", "CWE-59"), _SP.PATH_TRAVERSAL),
+    **dict.fromkeys(("CWE-918",), _SP.SSRF),
+    **dict.fromkeys(("CWE-502",), _SP.DESERIALIZATION),
+    **dict.fromkeys(("CWE-287", "CWE-306", "CWE-798", "CWE-290", "CWE-384"), _SP.AUTHN_BYPASS),
+    **dict.fromkeys(("CWE-284", "CWE-285", "CWE-269", "CWE-352", "CWE-639", "CWE-862", "CWE-863"),
+                    _SP.AUTHZ_BYPASS),
+    **dict.fromkeys(("CWE-200", "CWE-209", "CWE-532", "CWE-668"), _SP.INFO_DISCLOSURE),
+    **dict.fromkeys(("CWE-311", "CWE-319", "CWE-326", "CWE-327", "CWE-328", "CWE-330", "CWE-338", "CWE-347"),
+                    _SP.CRYPTO_WEAKNESS),
+    **dict.fromkeys(("CWE-362", "CWE-366", "CWE-367"), _SP.RACE_CONDITION),
+    **dict.fromkeys(("CWE-400", "CWE-674", "CWE-770", "CWE-789", "CWE-1333"), _SP.RESOURCE_EXHAUSTION),
+    **dict.fromkeys(("CWE-16", "CWE-250", "CWE-276", "CWE-732", "CWE-778"), _SP.INSECURE_CONFIGURATION),
+    **dict.fromkeys(("CWE-494", "CWE-829", "CWE-1104", "CWE-1357", "CWE-1395"), _SP.SUPPLY_CHAIN_COMPROMISE),
+}
+# CERT C categories the taxonomy cites, rolled up the same way (by rule).
+SECURITY_PREDICATE_CERT_ROLLUP: dict[str, SecurityPredicate] = {
+    "cert-c:mem30-c": _SP.USE_AFTER_FREE, "cert-c:int32-c": _SP.INTEGER_ERROR,
+    "cert-c:arr30-c": _SP.MEMORY_CORRUPTION, "cert-c:arr36-c": _SP.MEMORY_CORRUPTION,
+    "cert-c:con43-c": _SP.RACE_CONDITION, "cert-c:fio30-c": _SP.MEMORY_CORRUPTION,
+    "cert-c:env33-c": _SP.COMMAND_INJECTION, "cert-c:exp33-c": _SP.MEMORY_CORRUPTION,
+}
+del _SP
+
+
 class RelationKind(StrEnum):
     SUPPORTS = "supports"
     CONTRADICTS = "contradicts"
@@ -165,7 +239,7 @@ class Claim:
     package_id: str
     affected_entities: tuple[str, ...]   # sorted accepted logical identities (R7)
     weakness_cwe: str | None             # e.g. "CWE-120"
-    security_predicate: str
+    security_predicate: SecurityPredicate  # security-predicates/1 member
     preconditions: tuple[str, ...]       # sorted members of preconditions/1
     statement: str                       # prose; excluded from identity
     state: ClaimState = ClaimState.PROPOSED

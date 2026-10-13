@@ -4,6 +4,8 @@ import json
 from pathlib import Path
 import shutil
 
+import pytest
+
 from appsec_review.config import load_config
 from appsec_review.container_runtime import load_catalog
 from appsec_review.container_runtime.executor import ExecutionResult
@@ -94,6 +96,7 @@ def test_dag_exposes_parallel_provider_branches_and_deterministic_join() -> None
     assert len([item for item in join.dependencies if ".ci_observation_publication." in item]) == len(SPECS)
 
 
+@pytest.mark.requires_target("appsec-multi-vuln")
 def test_live_target_acceptance_is_static_offline_resumable_and_queryable(tmp_path: Path) -> None:
     config = isolated_config(tmp_path)
     target = ROOT / "targets" / "appsec-multi-vuln"
@@ -124,6 +127,7 @@ def test_live_target_acceptance_is_static_offline_resumable_and_queryable(tmp_pa
     assert calls == before
 
 
+@pytest.mark.requires_target("appsec-multi-vuln")
 def test_failed_linter_is_a_gap_and_sibling_results_survive(tmp_path: Path) -> None:
     config = isolated_config(tmp_path)
     target = ROOT / "targets" / "appsec-multi-vuln"
@@ -139,6 +143,7 @@ def test_failed_linter_is_a_gap_and_sibling_results_survive(tmp_path: Path) -> N
     assert any("injected bounded failure" in gap for gap in outputs["ci_coverage.join_coverage"]["gaps"])
 
 
+@pytest.mark.requires_target("appsec-multi-vuln")
 def test_target_and_runtime_cannot_see_evaluator_oracle() -> None:
     target = ROOT / "targets" / "appsec-multi-vuln"
     fixtures = [

@@ -15,7 +15,10 @@ from appsec_review.applicability import (
     resolved_configuration_identity,
 )
 from appsec_review.codeql import CodeQLExecutor, CodeQLImageResolver, load_sarif, tree_manifest
-from appsec_review.codeql.runtime import load_asset_lock
+from appsec_review.codeql.runtime import (
+    EXPORT_MANIFEST_NAME, EXPORT_MANIFEST_SCHEMA, GraphExportIntegrityError, graph_export_arguments, load_asset_lock,
+    load_graph_exports,
+)
 from appsec_review.config import CodeQLAnalysisSettings
 from appsec_review.jobs.cataloging import source_fingerprint
 from appsec_review.jobs.job_evidence_collection.job import load_target_catalog
@@ -29,7 +32,10 @@ from appsec_review.retrieval.index import load_verified_manifest
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from appsec_review.storage import atomic_json, canonical_json, file_sha256
 
-from .planning import CodeQLPlan, CodeQLScope, build_codeql_plan, replay_commands
+from .planning import (
+    CodeQLPlan, CodeQLScope, build_codeql_plan, export_lock_mismatches, plan_graph_exports,
+    replay_commands,
+)
 from .sarif import NORMALIZER_IDENTITY, normalize_sarif
 from appsec_review.jobs.job_codeql_analysis.datasets import CONSUMES, DATASETS
 
@@ -37,6 +43,10 @@ from appsec_review.jobs.job_codeql_analysis.datasets import CONSUMES, DATASETS
 SCHEMA = "appsec-review/codeql-analysis-handoff/1"
 DATABASE_CHECKPOINT_SCHEMA = "appsec-review/codeql-database-checkpoint/3"
 QUERY_CHECKPOINT_SCHEMA = "appsec-review/codeql-query-checkpoint/2"
+EXPORT_CHECKPOINT_SCHEMA = "appsec-review/codeql-export-checkpoint/1"
+GRAPH_EXPORTS_SCHEMA = "appsec-review/codeql-graph-exports/1"
+_RUNNER = ("containers", "tools", "codeql", "codeql_runner.py")
+_ASSET_LOCK = ("containers", "tools", "codeql", "assets.lock.json")
 
 
 class FrameworkIntegrityError(ValueError):
@@ -541,6 +551,251 @@ def _query_one(unit: UnitContext, database: Mapping[str, Any],
     return value
 
 
+def _export_profile(settings: CodeQLAnalysisSettings, language: str) -> Mapping[str, Any] | None:
+    """The configured, lock-equal graph export pack of one language, or ``None``."""
+    configured = settings.languages.get(language)
+    if not settings.export_queries.enabled or configured is None or not configured.export_queries:
+        return None
+    return asdict(configured.export_queries[0])
+
+
+def _pack_tree(root: Path) -> tuple[str, int]:
+    """Location-independent pack identity; the same algorithm the runner checks in scratch."""
+    rows = []
+    for path in sorted(root.rglob("*"), key=lambda item: item.relative_to(root).as_posix()):
+        if path.is_symlink():
+            raise FrameworkIntegrityError("CodeQL graph export pack contains a symlink")
+        if path.is_file():
+            rows.append(f"{file_sha256(path)}  {path.relative_to(root).as_posix()}\n".encode())
+    return hashlib.sha256(b"".join(rows)).hexdigest(), len(rows)
+
+
+def _verify_export_sources(repository_root: Path, profile: Mapping[str, Any],
+                           settings: CodeQLAnalysisSettings) -> None:
+    """The repository pack, contracts and lock must still equal the configured lock entry."""
+    lock = repository_root.joinpath(*_ASSET_LOCK)
+    if not lock.is_file() or lock.is_symlink() or file_sha256(lock) != settings.asset_lock_sha256:
+        raise FrameworkIntegrityError("CodeQL asset lock differs from central configuration")
+    pack = repository_root / str(profile["source_path"])
+    if (not pack.is_dir() or pack.is_symlink() or
+            _pack_tree(pack) != (profile["tree_sha256"], profile["file_count"])):
+        raise FrameworkIntegrityError("CodeQL graph export pack differs from its locked tree")
+    for path, digest in ((pack / "qlpack.yml", profile["query_pack_sha256"]),
+                         (pack / str(profile["query_suite"]), profile["query_suite_sha256"]),
+                         (repository_root / str(profile["columns_path"]), profile["columns_sha256"]),
+                         (repository_root / str(profile["catalog_path"]), profile["catalog_sha256"])):
+        if not path.is_file() or path.is_symlink() or file_sha256(path) != digest:
+            raise FrameworkIntegrityError(f"CodeQL graph export input {path.name} differs from the lock")
+
+
+def _export_identity(database: Mapping[str, Any], profile: Mapping[str, Any],
+                     settings: CodeQLAnalysisSettings, *, runner_sha256: str) -> str:
+    """Export checkpoint identity (plan section 7.2).
+
+    It binds the database identity and tree, the export pack (not the catalog, which only the
+    downstream normalizer reads), the export bounds and the runner. Query suites, SARIF limits and
+    normalizers are deliberately absent, so a SARIF change never invalidates an export.
+    """
+    return hashlib.sha256(canonical_json({
+        "schema": EXPORT_CHECKPOINT_SCHEMA,
+        "database_identity": database["database_identity"],
+        "database_tree_sha256": database["database_tree_sha256"],
+        "export_pack": {key: value for key, value in profile.items()
+                        if key not in {"catalog_path", "catalog_sha256"}},
+        "export_manifest_schema": EXPORT_MANIFEST_SCHEMA,
+        "bounds": {"row_limit": settings.export_queries.row_limit,
+                   "max_bytes": settings.export_queries.max_bytes,
+                   "timeout_seconds": settings.export_queries.timeout_seconds},
+        "runner_sha256": runner_sha256,
+    })).hexdigest()
+
+
+def _default_export_executor(image: Any, run_root: Path, settings: CodeQLAnalysisSettings) -> Any:
+    return CodeQLExecutor(image=image, run_root=run_root, settings=settings)
+
+
+def _stage_export(unit: UnitContext, scope_root: Path, staging: Path, profile: Mapping[str, Any]) -> None:
+    """Disposable database copy plus the repository-owned pack, columns and lock in scratch."""
+    repository = unit.job.repository_root
+    staging.mkdir(parents=True)
+    shutil.copytree(scope_root / "database", staging / "database")
+    _make_workspace_accessible(staging / "database", writable_files=True)
+    shutil.copytree(repository / str(profile["source_path"]), staging / "pack")
+    _make_workspace_accessible(staging / "pack")
+    shutil.copyfile(repository / str(profile["columns_path"]), staging / "columns.json")
+    shutil.copyfile(repository.joinpath(*_ASSET_LOCK), staging / "assets.lock.json")
+    for path in (staging / "columns.json", staging / "assets.lock.json"):
+        path.chmod(0o444)
+    staging.chmod(0o777)
+
+
+def _verify_export_manifest(root: Path, scope: CodeQLScope, profile: Mapping[str, Any],
+                            settings: CodeQLAnalysisSettings) -> Mapping[str, Any]:
+    manifest = json.loads((root / EXPORT_MANIFEST_NAME).read_text(encoding="utf-8"))
+    pack = manifest.get("pack")
+    if (manifest.get("language") != scope.language or not isinstance(pack, Mapping) or
+            pack.get("tree_sha256") != profile["tree_sha256"] or
+            pack.get("query_pack") != profile["query_pack"] or
+            pack.get("query_pack_version") != profile["query_pack_version"] or
+            pack.get("columns_sha256") != profile["columns_sha256"] or
+            manifest.get("row_limit") != settings.export_queries.row_limit or
+            manifest.get("max_bytes") != settings.export_queries.max_bytes):
+        raise GraphExportIntegrityError("graph export manifest differs from the configured pack or bounds")
+    return manifest
+
+
+def _export_base(scope: CodeQLScope, database: Mapping[str, Any]) -> dict[str, Any]:
+    return {"scope_id": scope.scope_id, "language": scope.language, "root": scope.root,
+            "build_unit_id": scope.build_unit_id, "database_identity": database.get("database_identity"),
+            "export_identity": None, "export_reused": False}
+
+
+def _export_success(unit: UnitContext, base: Mapping[str, Any], identity: str, root: Path,
+                    manifest: Mapping[str, Any], documents: Mapping[str, Mapping[str, Any]],
+                    *, reused: bool, execution: Mapping[str, Any] | None) -> dict[str, Any]:
+    truncated = sorted(query_id for query_id, document in documents.items() if document["truncated"])
+    gaps = [f"CodeQL graph export {query_id} truncated at {manifest['row_limit']} rows"
+            for query_id in truncated]
+    value = {**base, "export_status": "SUCCEEDED", "export_identity": identity, "export_reused": reused,
+             "export_pack": dict(manifest["pack"]),
+             "export_manifest": _artifact(unit.job.run_root, root / EXPORT_MANIFEST_NAME),
+             "export_files": [{"query_id": item["query_id"],
+                               **_artifact(unit.job.run_root, root / str(item["path"]))}
+                              for item in manifest["exports"]],
+             "export_count": len(documents),
+             "row_count": sum(int(document["row_count"]) for document in documents.values()),
+             "exported_rows": sum(len(document["rows"]) for document in documents.values()),
+             "truncated_queries": truncated, "gaps": gaps}
+    if execution is not None:
+        value["export_execution"] = execution
+    return value
+
+
+def _export_one(unit: UnitContext, database: Mapping[str, Any], *,
+                executor_factory: Any = None) -> Mapping[str, Any]:
+    """Run (or verify and reuse) the hash-pinned graph export of one scope's database."""
+    settings = _settings(unit)
+    scope = _scope_from(database["scope"])
+    base = _export_base(scope, database)
+    profile = _export_profile(settings, scope.language)
+    if profile is None:
+        reason = ("graph export is disabled in central configuration" if not settings.export_queries.enabled
+                  else f"no hash-pinned CodeQL graph export pack for {scope.language}")
+        return {**base, "export_status": "NOT_APPLICABLE", "reason": reason, "gaps": []}
+    if database.get("terminal_status") != "SUCCEEDED":
+        return {**base, "export_status": "SKIPPED",
+                "gaps": ["CodeQL graph export skipped because database creation failed"]}
+    run_root = unit.job.run_root
+    runner_sha256 = file_sha256(unit.job.repository_root.joinpath(*_RUNNER))
+    identity = _export_identity(database, profile, settings, runner_sha256=runner_sha256)
+    scope_root = run_root / "data" / "codeql" / "scopes" / scope.scope_id
+    exports_root, staging = scope_root / "exports", scope_root / "export"
+    checkpoint_path = scope_root / "export-checkpoint.json"
+    event = {"unit_id": unit.unit_id, "tool_id": "codeql-graph-export", **_metrics_scope(scope),
+             "database_identity": database["database_identity"], "export_identity": identity,
+             "export_pack": profile["query_pack"], "export_pack_version": profile["query_pack_version"]}
+    existing = _checkpoint(checkpoint_path, identity, EXPORT_CHECKPOINT_SCHEMA)
+    if existing is not None:
+        unit.job.events.write("TOOL_INVOCATION_STARTED", **event, checkpoint_reused=True)
+        try:
+            documents = load_graph_exports(exports_root, bytes_limit=settings.export_queries.max_bytes)
+            manifest = _verify_export_manifest(exports_root, scope, profile, settings)
+        except (OSError, ValueError) as exc:
+            raise FrameworkIntegrityError("accepted CodeQL graph export changed after its checkpoint") from exc
+        if file_sha256(exports_root / EXPORT_MANIFEST_NAME) != existing.get("manifest_sha256"):
+            raise FrameworkIntegrityError("accepted CodeQL graph export manifest changed after its checkpoint")
+        value = _export_success(unit, base, identity, exports_root, manifest, documents,
+                                reused=True, execution=None)
+        unit.job.events.write("TOOL_INVOCATION_COMPLETED", **event, disposition="SUCCEEDED",
+                              duration_ms=0, result_count=value["exported_rows"],
+                              gap_count=len(value["gaps"]), checkpoint_reused=True,
+                              truncated=bool(value["truncated_queries"]),
+                              metrics_receipt=_artifact(run_root, checkpoint_path))
+        return value
+    checkpoint_path.unlink(missing_ok=True)
+    for path in (exports_root, staging, scope_root / "executions" / "export"):
+        if path.is_dir():
+            shutil.rmtree(path)
+    _stage_export(unit, scope_root, staging, profile)
+    from appsec_review.codeql import CodeQLImage
+    image = CodeQLImage(**_safe_json(run_root, database["image"]))
+    executor = (executor_factory or _default_export_executor)(image, run_root, settings)
+    argv = graph_export_arguments(
+        database="export/database", pack="export/pack", columns="export/columns.json",
+        asset_lock="export/assets.lock.json", language=scope.language, output_dir="exports",
+        row_limit=settings.export_queries.row_limit, max_bytes=settings.export_queries.max_bytes,
+        threads=settings.threads, ram_mb=settings.ram_mb)
+    unit.job.events.write("TOOL_INVOCATION_STARTED", **event, image_id=image.image_id)
+    result = executor.execute("export", argv, scratch_root=scope_root)
+    shutil.rmtree(staging)
+    status = "FAILED" if result.timed_out or result.exit_code != 0 else "SUCCEEDED"
+    gaps = (["CodeQL graph export timed out"] if result.timed_out else
+            [f"CodeQL graph export exited {result.exit_code}"] if result.exit_code != 0 else [])
+    documents: Mapping[str, Mapping[str, Any]] = {}
+    manifest: Mapping[str, Any] = {}
+    if status == "SUCCEEDED":
+        try:
+            documents = load_graph_exports(exports_root, bytes_limit=settings.export_queries.max_bytes)
+            manifest = _verify_export_manifest(exports_root, scope, profile, settings)
+        except (OSError, ValueError) as exc:
+            status, gaps = "FAILED", [f"CodeQL graph export produced an invalid bounded export ({type(exc).__name__})"]
+    execution = _execution_artifact(unit, scope_root, "export")
+    unit.job.events.write("TOOL_INVOCATION_COMPLETED", **event, image_id=image.image_id,
+                          disposition=status, duration_ms=result.duration_ms,
+                          result_count=sum(len(item["rows"]) for item in documents.values()),
+                          gap_count=len(gaps), gaps=gaps, checkpoint_reused=False,
+                          truncated=result.stdout_truncated or result.stderr_truncated,
+                          metrics_receipt=execution)
+    if status != "SUCCEEDED":
+        return {**base, "export_status": "FAILED", "export_identity": identity,
+                "export_execution": execution, "gaps": gaps}
+    atomic_json(checkpoint_path, {"schema": EXPORT_CHECKPOINT_SCHEMA, "identity": identity,
+                "terminal_status": "SUCCEEDED",
+                "manifest_sha256": file_sha256(exports_root / EXPORT_MANIFEST_NAME)})
+    return _export_success(unit, base, identity, exports_root, manifest, documents,
+                           reused=False, execution=execution)
+
+
+def _export_isolated(unit: UnitContext, database: Mapping[str, Any], *,
+                     executor_factory: Any = None) -> Mapping[str, Any]:
+    try:
+        return _export_one(unit, database, executor_factory=executor_factory)
+    except (RuntimeError, TimeoutError) as exc:
+        scope = _scope_from(database["scope"])
+        return {**_export_base(scope, database), "export_status": "FAILED",
+                "gaps": [f"CodeQL {scope.language} graph export producer failed ({type(exc).__name__})"]}
+
+
+def _export_scopes(unit: UnitContext, *, executor_factory: Any = None) -> Mapping[str, Any]:
+    """The ``export.scopes`` unit: one bounded graph export per successful exportable database."""
+    settings = _settings(unit)
+    values = unit.output("database.scopes")["databases"]
+    verified: set[str] = set()
+    for value in values:
+        language = str(value["scope"]["language"])
+        profile = _export_profile(settings, language)
+        if (profile is not None and language not in verified and
+                value.get("terminal_status") == "SUCCEEDED"):
+            _verify_export_sources(unit.job.repository_root, profile, settings)
+            verified.add(language)
+    with ThreadPoolExecutor(max_workers=settings.concurrency) as pool:
+        results = list(pool.map(lambda value: _export_isolated(
+            unit, value, executor_factory=executor_factory), values))
+    gaps = [gap for item in results for gap in item.get("gaps", ())]
+    document = {"schema": GRAPH_EXPORTS_SCHEMA, "source_fingerprint": unit.job.source_fingerprint,
+                "settings": asdict(settings.export_queries), "exports": results}
+    artifact = _json_artifact(unit.job.run_root,
+                              unit.job.attempt_root / "artifacts" / "codeql" / "graph-exports.json", document)
+    return {"schema": GRAPH_EXPORTS_SCHEMA, "artifact": artifact, "exports": results,
+            "export_count": sum(item["export_status"] == "SUCCEEDED" for item in results),
+            "export_reused": sum(bool(item.get("export_reused")) for item in results),
+            "gaps": gaps,
+            "dispositions": [{"scope_id": item["scope_id"], "language": item["language"],
+                              "action": "export", "terminal_status": item["export_status"]}
+                             for item in results],
+            "terminal_status": "COMPLETED_WITH_GAPS" if gaps else "SUCCEEDED"}
+
+
 def _location(unit: UnitContext, value: Mapping[str, Any]) -> SourceLocation | None:
     path = value.get("path")
     digest = value.get("file_sha256")
@@ -673,7 +928,7 @@ def _normalize_one(unit: UnitContext, query: Mapping[str, Any]) -> Mapping[str, 
 
 def _validate_config(context, _result) -> None:
     expected = {"plan": ("inventory",), "database": ("scopes",), "query": ("scopes",),
-                "normalize": ("scopes",), "acceptance": ("publish_handoff",)}
+                "export": ("scopes",), "normalize": ("scopes",), "acceptance": ("publish_handoff",)}
     if tuple(context.config.steps) != tuple(expected):
         raise ValueError("CodeQL analysis topology does not match central configuration")
     for step, tasks in expected.items():
@@ -760,6 +1015,16 @@ def build_job() -> Job:
                 planned.decisions)
         for scope in planned.scopes:
             _validate_scope_assets(scope, settings, lock)
+        export_mismatches = export_lock_mismatches(
+            {language: [asdict(item) for item in value.export_queries]
+             for language, value in settings.languages.items()}, lock)
+        if export_mismatches:
+            raise FrameworkIntegrityError("CodeQL graph export query assets differ from the lock: " +
+                                          ", ".join(export_mismatches))
+        export_plan = plan_graph_exports(
+            planned.scopes, enabled=settings.export_queries.enabled,
+            export_languages=(language for language, value in settings.languages.items()
+                              if value.export_queries))
         plan_path = unit.job.attempt_root / "artifacts" / "codeql" / "plan.json"
         upstream_handoffs, upstream_manifests = {}, []
         for job_id in ("job_target_catalog", "job_language_build", "job_artifact_indexing",
@@ -785,6 +1050,7 @@ def build_job() -> Job:
                 "scope_count": len(planned.scopes), "gaps": list(planned.gaps),
                 "non_applicable": list(planned.non_applicable),
                 "processing_decisions": list(planned.decisions),
+                "export_plan": [dict(item) for item in export_plan],
                 "upstream_handoffs": upstream_handoffs,
                 "upstream_manifests": list({(item["path"], item["sha256"]): item
                                              for item in upstream_manifests}.values())}
@@ -851,7 +1117,8 @@ def build_job() -> Job:
                 "sarif_results": item.get("sarif_result_count", 0),
                 "normalized_observations": item.get("observation_count", 0),
                 "gaps": item.get("gaps", [])})
-        gaps = list(dict.fromkeys([*plan_value.gaps, *normalized["gaps"]]))
+        gaps = list(dict.fromkeys([*plan_value.gaps, *normalized["gaps"],
+                                   *unit.output("export.scopes")["gaps"]]))
         processing_decisions = []
         for raw in plan_value.decisions:
             decision = decision_from_mapping(raw)
@@ -870,8 +1137,10 @@ def build_job() -> Job:
         gaps.extend(f"{item['project_id']}: {item['reason_code']}"
                     for item in processing_decisions if item.get("disposition") == "GAP")
         gaps = list(dict.fromkeys(gaps))
+        graph_exports = [dict(item) for item in unit.output("export.scopes")["exports"]]
         summary = {"schema": SCHEMA, "source_fingerprint": unit.job.source_fingerprint,
-                   "scopes": scopes, "extractor_inventory": list(plan_value.extractor_inventory),
+                   "scopes": scopes, "graph_exports": graph_exports,
+                   "extractor_inventory": list(plan_value.extractor_inventory),
                    "non_applicable": list(plan_value.non_applicable), "gaps": gaps,
                    "processing_decisions": processing_decisions,
                    "observation_count": normalized["observation_count"], "security_findings": []}
@@ -893,8 +1162,9 @@ def build_job() -> Job:
         Unit("plan.inventory", plan),
         Unit("database.scopes", databases, ("plan.inventory",)),
         Unit("query.scopes", queries, ("database.scopes",)),
+        Unit("export.scopes", _export_scopes, ("database.scopes",)),
         Unit("normalize.scopes", normalize, ("query.scopes",)),
-        Unit("acceptance.publish_handoff", publish, ("normalize.scopes",)),
+        Unit("acceptance.publish_handoff", publish, ("normalize.scopes", "export.scopes")),
     )
     implementation = hashlib.sha256(
         Path(__file__).read_bytes() + Path(applicability_contract.__file__).read_bytes() +

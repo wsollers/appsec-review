@@ -152,10 +152,30 @@ def test_blue_cells_never_see_each_other_and_the_verifier_is_blind(prepared) -> 
     result = run_team(prepared.context(recording, attempt="b"), prepared.work("lead", "sast_critical"), launch=True)
     [record] = [item for values in result.independence.values() for item in values]
     assert record["independent"] is True and record["review_id"].startswith("review-")
-    assert record["provider_distinct"] is False
+    assert record["provider_distinct"] is False and record["verifier_model_distinct"] is False
     [verifier] = [item for item in result.cells if item.role is Role.INDEPENDENT_VERIFIER]
     supporting = [item for item in result.relations if item.producing_cell_id == verifier.cell_id]
     assert supporting and all(item.retrieval_receipt_sha256 == verifier.receipt_sha256 for item in supporting)
+
+
+def test_a_distinct_verifier_profile_is_recorded_without_changing_independence(prepared) -> None:
+    """Decision 2 via configuration: roles.independent_verifier.model_profile names another model."""
+    settings = prepared.settings
+    verifier_profile = replace(settings.models["default"], model="claude-verifier-model")
+    models = MappingProxyType({**settings.models, "verifier": verifier_profile})
+    roles = MappingProxyType({**settings.roles, Role.INDEPENDENT_VERIFIER: replace(
+        settings.roles[Role.INDEPENDENT_VERIFIER], model_profile="verifier")})
+    changed = replace(settings, models=models, roles=roles)
+    assert changed.verifier_distinctness()["distinct"] is True and changed.verifier_distinctness()["warning"] is None
+    assert settings.verifier_distinctness()["warning"]                       # the checked-in default
+    recording = Recording(prepared.infer)
+    result = run_team(prepared.context(recording, models=models, roles=roles), prepared.work("lead", "sast_critical"),
+                      launch=True)
+    [record] = [item for values in result.independence.values() for item in values]
+    assert record["independent"] is True and record["verifier_model_distinct"] is True
+    assert record["provider_distinct"] is False
+    assert {item.model for item in recording.by_role("independent_verifier")} == {"claude-verifier-model"}
+    assert {item.model for item in recording.by_role("red_team_analyst")} == {settings.models["default"].model}
 
 
 # ------------------------------------------------------------------------------------------------ duplicates
@@ -312,9 +332,22 @@ def test_closed_schema_validator_agrees_with_jsonschema() -> None:
     registry = Registry().with_resources((item["$id"], Resource.from_contents(item)) for item in documents)
     closed = SchemaSet(SCHEMAS)
     claim = "claim-" + "a" * 64
+    red = {"schema": "appsec-review/red-discovery-result/1", "package": {"basis_sha256": "b" * 64},
+           "role": "hypothesis_hunter", "round_id": "0", "result_status": "completed", "lead_accounting": [],
+           "proposals": [], "proof_obligations": [], "taint_paths": [], "chain_seeds": [], "evidence_refs": [],
+           "evidence_requests": [], "gaps": []}
     cases = [
-        ("red-result", {"schema": "appsec-review/red-result/1", "claims": []}),
-        ("red-result", {"schema": "appsec-review/red-result/1", "claims": [], "extra": 1}),
+        ("red-discovery-result", red),
+        ("red-discovery-result", {**red, "extra": 1}),
+        ("red-discovery-result", {**red, "round_id": "first"}),
+        ("red-discovery-result", {**red, "evidence_refs": [{
+            "local_id": "e1", "entity_id": "asr:symbol:" + "c" * 64, "shard_id": None, "shard_sha256": None,
+            "relation": "supports", "predicate": "affected_construct",
+            "locator": {"kind": "unresolved", "reason": "not read"}}]}),
+        ("red-discovery-result", {**red, "evidence_refs": [{
+            "local_id": "e1", "entity_id": "asr:symbol:" + "c" * 64, "shard_id": "graph/x", "shard_sha256": None,
+            "relation": "supports", "predicate": "reachability",
+            "locator": {"kind": "unresolved", "reason": "not read"}}]}),
         ("blue-result", {"schema": "appsec-review/blue-result/1", "claim_id": claim, "citations": {},
                          "proposed_relations": [], "evidence_requests": [], "rationale": "x",
                          "task": "blue_control", "disposition": "unresolved"}),
@@ -328,3 +361,91 @@ def test_closed_schema_validator_agrees_with_jsonschema() -> None:
     for name, document in cases:
         reference = Draft202012Validator(json.loads((SCHEMAS / f"{name}.schema.json").read_text()), registry=registry)
         assert (not closed.errors(name, document)) is reference.is_valid(document), (name, document)
+
+
+# ------------------------------------------------------------------------------------------------ red-discovery-result/1
+
+
+def _rewriting(inner, rewrite):
+    """Pass every turn through; let ``rewrite(request, result)`` edit red final results in place."""
+
+    def infer(request, *, timeout_seconds):
+        response = inner(request, timeout_seconds=timeout_seconds)
+        proposal = response.proposal
+        if request.role in {"red_team_analyst", "hypothesis_hunter"} and proposal.get("action") == "final":
+            result = json.loads(json.dumps(proposal["result"]))
+            rewrite(request, result)
+            return replace(response, proposal={**proposal, "result": result})
+        return response
+
+    return infer
+
+
+def test_a_lead_missing_from_lead_accounting_is_a_schema_error_cell_gap(prepared) -> None:
+    def drop(request, result):
+        result["lead_accounting"] = []
+
+    result = run_team(prepared.context(_rewriting(prepared.infer, drop)), prepared.work("lead", "sast_high"),
+                      launch=True)
+    reds = [item for item in result.cells if item.role is Role.RED_TEAM_ANALYST]
+    assert reds and {item.status for item in reds} == {CellStatus.INVALID}
+    assert not result.claims and not result.lead_entries
+    for record in reds:
+        assert any(gap.gap_class is GapClass.SCHEMA_ERROR and gap.subject_id == record.cell_id for gap in result.gaps)
+
+
+def test_red_citations_that_disagree_with_re_resolution_are_evidence_gaps(prepared) -> None:
+    def miscite(request, result):
+        for item in result["evidence_refs"]:
+            if item["predicate"] == "affected_construct":
+                item["shard_id"] = "observations/not-the-accepted-shard"
+            elif item["predicate"] == "attacker_input_control":
+                item["locator"] = {"kind": "source_line", "path": "elsewhere.py", "file_sha256": "e" * 64,
+                                   "start_line": 1, "end_line": 2}
+
+    # Honest citations of the same proposal become relations (test_lead_lane_* and the C2 acceptance state).
+    result = run_team(prepared.context(_rewriting(prepared.infer, miscite), attempt="miscite"),
+                      prepared.work("lead", "sast_high"), launch=True)
+    reds = {item.cell_id for item in result.cells if item.role is Role.RED_TEAM_ANALYST}
+    assert not [item for item in result.relations if item.producing_cell_id in reds]
+    reasons = {gap.reason for gap in result.gaps if gap.gap_class is GapClass.EVIDENCE_GAP}
+    assert "cited shard is not the accepted shard the entity re-resolves to" in reasons
+    assert any(reason.startswith("source-line locator") for reason in reasons)
+
+
+def test_lead_accounting_named_gaps_and_chain_seeds_reach_the_lane(prepared) -> None:
+    def enrich(request, result):
+        if request.task_input["task"] != "lead_red_stack" or not result["proposals"]:
+            return
+        local = result["proposals"][0]["local_id"]
+        result["gaps"] = [{"local_id": "g-cfg", "kind": "unavailable", "scope": "deployment configuration",
+                           "reason": "no deployment snapshot in the package"}]
+        result["result_status"] = "partial"
+        result["chain_seeds"] = [{
+            "local_id": "seed", "objective": "escalate from the parsed request",
+            "steps": [{"local_id": "s1", "description": "reach the weakness", "proposal_id": local,
+                       "prerequisite": "network access", "resulting_state": "corrupted state", "entity_ids": []},
+                      {"local_id": "s2", "description": "use the corrupted state", "proposal_id": None,
+                       "prerequisite": "corrupted state", "resulting_state": "attacker objective", "entity_ids": []}],
+            "links": [{"from_step": "s1", "to_step": "s2", "continuity_dimensions": ["temporal"], "evidence_ids": [],
+                       "open_questions": ["does the state survive the request?"]}],
+            "gap_ids": ["g-cfg"]}]
+
+    ctx = prepared.context(_rewriting(prepared.infer, enrich), lane="lead")
+    shards = prepared.tmp / "seeded"
+    lane = run_lane(ctx, Lane.LEAD, package_works(prepared.fixture.run_root, prepared.documents("lead")),
+                    other_lane_count=2, ledger_path=shards / "ledger.jsonl", stream="lead_review.teams",
+                    signal_dir=prepared.tmp / "lanes-seeded")
+    outcomes = {lead: summary["outcome"] for leads in lane["lead_accounting"].values() for lead, summary in leads.items()}
+    assert outcomes[prepared.fixture.ids["sast_critical"]] == "proposal"
+    assert set(outcomes.values()) <= {"proposal", "no_proposal", "blocked", "unaccounted"}
+    assert "no_proposal" in outcomes.values()                         # looked, proposed nothing: not clean
+    artifact = json.loads((shards / "chain-seeds.json").read_text())
+    assert artifact["schema"] == "appsec-review/red-chain-seeds/1"
+    assert artifact["seeds"] and lane["chain_seeds"]["count"] == len(artifact["seeds"])
+    assert all(seed["seed"]["local_id"] == "seed" for seed in artifact["seeds"])
+    projection = project(merge_shards([shards / "ledger.jsonl"]).events)
+    claimed = {claim_id for seed in artifact["seeds"] for claim_id in seed["proposal_claims"].values()}
+    assert claimed and claimed <= set(projection.claims)               # seeds point at claims; they are not claims
+    assert any(gap.gap_class is GapClass.COVERAGE_GAP and gap.reason.startswith("worker_named_gap:unavailable:g-cfg")
+               for gap in projection.gaps)
