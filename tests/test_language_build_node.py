@@ -56,6 +56,15 @@ def test_node_dependency_identity_binds_npm_pnpm_and_yarn_lockfiles() -> None:
         "recipe": {"configure_commands": [], "build_commands": [["npm", "run", "build"]]},
     })
     assert selected == "npm" and not gaps and _identity["lockfile"] is None
+    selected, identity, gaps = node.dependency_identity({
+        "image": {"dependency_hashes": {
+            "web/package.json": "1" * 64, "web/package-lock.json": "2" * 64,
+            "web/npm-shrinkwrap.json": "3" * 64,
+        }},
+        "recipe": {"configure_commands": [], "build_commands": [["npm", "run", "build"]]},
+    })
+    assert selected == "npm" and not gaps
+    assert identity["lockfile"] == {"path": "web/npm-shrinkwrap.json", "sha256": "3" * 64}
 
 
 def test_node_restore_recipes_are_lockfile_specific_and_disable_install_scripts() -> None:
@@ -148,6 +157,33 @@ def test_node_catalog_and_package_script_provenance_include_maps_packages_and_na
     assert mapping["source_map"]["sources"] == ["../index.ts"]
 
 
+def test_npm_pack_json_retains_bounded_integrity_without_raw_stdout(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    package_root = workspace / "web"
+    package_root.mkdir(parents=True)
+    archive = package_root / "fixture-1.0.0.tgz"
+    archive.write_bytes(b"package")
+    digest = file_sha256(archive)
+    stdout = json.dumps([{
+        "filename": archive.name, "integrity": "sha512-fixture", "shasum": "a" * 40,
+        "size": archive.stat().st_size, "unpackedSize": 12, "totalFiles": 2,
+        "files": [{"path": "index.js", "size": 12}],
+    }]).encode()
+
+    rows, gaps = node.invocation_rows(
+        workspace, "web", ("npm", "pack", "--json"), success=True, before={},
+        after={"web/fixture-1.0.0.tgz": digest}, diagnostic_streams=(stdout,),
+    )
+
+    assert not gaps
+    assert rows[0]["package_integrity"] == [{
+        "workspace_path": "web/fixture-1.0.0.tgz", "sha256": digest,
+        "integrity": "sha512-fixture", "shasum": "a" * 40,
+        "size": 7, "unpackedSize": 12, "totalFiles": 2,
+    }]
+    assert "files" not in json.dumps(rows[0]["package_integrity"])
+
+
 def test_node_catalog_retains_unchanged_coverage_with_origin_and_excludes_other_inputs(
         tmp_path: Path) -> None:
     workspace = tmp_path / "workspace"
@@ -173,6 +209,7 @@ def test_node_catalog_retains_unchanged_coverage_with_origin_and_excludes_other_
             for row in artifacts] == [
         ("coverage-final.json", "test-coverage", "accepted-input"),
         ("dist.js", "generated-code", "build-output"),
+        ("package.json", "package-metadata", "accepted-input"),
         ("reports/coverage.xml", "test-coverage", "build-output"),
     ]
 
@@ -192,7 +229,90 @@ def test_node_catalog_retains_imported_profile_data(tmp_path: Path) -> None:
     assert [(row["workspace_path"], row["kind"], row["artifact_origin"])
             for row in artifacts] == [
         ("cpu.folded", "execution-profile", "accepted-input"),
+        ("package.json", "package-metadata", "accepted-input"),
     ]
+
+
+def test_node_metadata_only_success_has_bounded_review_artifacts(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    manifest = workspace / "package.json"
+    manifest.write_text('{"name":"fixture","dependencies":{"left-pad":"1.3.0"}}', encoding="utf-8")
+    lock = workspace / "package-lock.json"
+    lock.write_text(json.dumps({"lockfileVersion": 3, "packages": {
+        "node_modules/left-pad": {"version": "1.3.0", "integrity": "sha512-fixture"},
+    }}), encoding="utf-8")
+    pnp = workspace / ".pnp.cjs"
+    pnp.write_text("module.exports = {dependencyTreeRoots: []};", encoding="utf-8")
+    before = {path.name: file_sha256(path) for path in (manifest, lock, pnp)}
+
+    artifacts, gaps = node.catalog(tmp_path, workspace, before, 10, "node-unit")
+
+    assert not gaps
+    assert [(row["workspace_path"], row["kind"], row["artifact_origin"])
+            for row in artifacts] == [
+        (".pnp.cjs", "resolved-dependency-metadata", "accepted-input"),
+        ("package-lock.json", "resolved-dependency-metadata", "accepted-input"),
+        ("package.json", "package-metadata", "accepted-input"),
+    ]
+    assert artifacts[1]["dependency_metadata"] == {
+        "format": "package-lock.json", "manager": "npm", "role": "resolved-dependency-graph",
+    }
+
+
+def test_node_catalog_retains_runtime_outputs_and_excludes_dependency_trees_caches_and_intermediates(
+        tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    retained = {
+        "dist/app.cjs": b"module.exports = 1;",
+        "dist/app.cjs.map": json.dumps({"version": 3, "file": "app.cjs", "sources": []}).encode(),
+        "dist/index.d.ts": b"export declare const value: number;",
+        "build/Release/addon.node": b"native-addon",
+        "build/Release/addon.pdb": b"symbols",
+        "pkg/example-1.0.0.tgz": b"package",
+        "pkg/example-1.0.0.tgz.sha512": b"sha512-fixture",
+    }
+    excluded = {
+        "node_modules/dependency/index.js": b"dependency",
+        ".yarn/cache/dependency.zip": b"cache",
+        ".cache/generated.js": b"cache",
+        "build/obj/addon.o": b"object",
+        "build/Release/helper.dll": b"redundant-library",
+        "build/Release/orphan.pdb": b"unbound-symbols",
+        "unrelated.sha512": b"not-package-integrity",
+        "notes.log": b"transient",
+    }
+    for relative, content in {**retained, **excluded}.items():
+        path = workspace / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(content)
+
+    artifacts, gaps = node.catalog(tmp_path, workspace, {}, 100, "node-unit")
+
+    assert not gaps
+    by_path = {row["workspace_path"]: row for row in artifacts}
+    assert set(by_path) == set(retained)
+    assert by_path["build/Release/addon.pdb"]["kind"] == "native-symbols"
+    assert by_path["pkg/example-1.0.0.tgz.sha512"]["package_archive"] == {
+        "workspace_path": "pkg/example-1.0.0.tgz",
+        "sha256": by_path["pkg/example-1.0.0.tgz"]["sha256"],
+    }
+
+
+def test_node_catalog_reports_source_map_size_and_count_bounds(tmp_path: Path, monkeypatch) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    oversized = workspace / "00-oversized.js.map"
+    oversized.write_bytes(b"x" * 17)
+    for index in range(2):
+        (workspace / f"bundle-{index}.js").write_text("export {};", encoding="utf-8")
+    monkeypatch.setattr(node, "_MAX_SOURCE_MAP_BYTES", 16)
+
+    artifacts, gaps = node.catalog(tmp_path, workspace, {}, 1, "node-unit")
+
+    assert len(artifacts) == 1
+    assert any("truncated at configured count bound" in gap for gap in gaps)
+    assert any("source-map exceeds 16 byte retention bound" in gap for gap in gaps)
 
 
 class _NodeRecipeModel:

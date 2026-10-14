@@ -61,7 +61,7 @@ def artifact_family(kind: str) -> EntityKind:
         return EntityKind.LIBRARY
     if value in {"executable", "native-output"}:
         return EntityKind.EXECUTABLE
-    if value in {"wheel", "source-distribution", "jar", "war", "ear", "package-archive"}:
+    if value in {"wheel", "source-distribution", "jar", "war", "ear", "package-archive", "package"}:
         return EntityKind.PACKAGE
     if value in {"bytecode", "python-bytecode", "jvm-class", "dex", "llvm-bitcode"}:
         return EntityKind.BYTECODE_MODULE
@@ -151,6 +151,16 @@ def artifact_index_fingerprint(
     actions = [{key: command.get(key) for key in
                 ("command_id", "argv_sha256", "image_id", "role", "tool_kind")}
                for command in receipt.get("commands", ()) if isinstance(command, Mapping)]
+    invocations = [{
+        "parent_command_id": invocation.get("parent_command_id"),
+        "argv_sha256": invocation.get("argv_sha256"),
+        "tool_kind": invocation.get("tool_kind"),
+        "mapping_confidence": invocation.get("mapping_confidence"),
+        "outputs": [{"workspace_path": output.get("workspace_path"),
+                     "sha256": output.get("sha256")}
+                    for output in invocation.get("outputs", ()) if isinstance(output, Mapping)],
+        "package_integrity": invocation.get("package_integrity"),
+    } for invocation in receipt.get("tool_invocations", ()) if isinstance(invocation, Mapping)]
     dependency_identities = {
         "receipt": receipt.get("fingerprint"),
         "recipe": receipt.get("recipe_identity"),
@@ -165,6 +175,7 @@ def artifact_index_fingerprint(
         "artifacts": sorted(artifact_values, key=lambda item: (item["workspace_path"], item["sha256"])),
         "producing_actions": sorted(actions, key=lambda item: (str(item.get("command_id")),
                                                                 str(item.get("argv_sha256")))),
+        "producing_invocations": invocations,
         "dependency_identities": dependency_identities,
         "image_toolchain": {
             "image": receipt.get("image"),
@@ -283,6 +294,41 @@ def _validate_receipts(run_root: Path, source_fingerprint: str,
             continue
         workspace = normalize_relative_path(str(receipt.get("workspace", "")))
         manifest_files = _load_workspace_manifest(run_root, receipt)
+        package_integrity: dict[str, Mapping[str, Any]] = {}
+        if str(receipt.get("family", receipt.get("source_family", ""))) == "node":
+            for invocation in receipt.get("tool_invocations", ()):
+                if not isinstance(invocation, Mapping):
+                    continue
+                for row in invocation.get("package_integrity", ()):
+                    if not isinstance(row, Mapping):
+                        raise ArtifactIndexIntegrityError("Node package integrity metadata is invalid")
+                    integrity_path = normalize_relative_path(str(row.get("workspace_path", "")))
+                    integrity_digest = str(row.get("sha256", ""))
+                    if (not _SHA256.fullmatch(integrity_digest) or integrity_path in package_integrity
+                            or manifest_files.get(integrity_path) != integrity_digest):
+                        raise ArtifactIndexIntegrityError("Node package integrity identity changed")
+                    normalized_integrity: dict[str, Any] = {
+                        "workspace_path": integrity_path, "sha256": integrity_digest,
+                    }
+                    sri = row.get("integrity")
+                    shasum = row.get("shasum")
+                    if sri is not None:
+                        if (not isinstance(sri, str) or not sri or len(sri) > 1024
+                                or any(character.isspace() for character in sri)):
+                            raise ArtifactIndexIntegrityError("Node package integrity value is invalid")
+                        normalized_integrity["integrity"] = sri
+                    if shasum is not None:
+                        if not isinstance(shasum, str) or not re.fullmatch(r"[0-9a-fA-F]{40}", shasum):
+                            raise ArtifactIndexIntegrityError("Node package shasum is invalid")
+                        normalized_integrity["shasum"] = shasum.lower()
+                    if "integrity" not in normalized_integrity and "shasum" not in normalized_integrity:
+                        raise ArtifactIndexIntegrityError("Node package integrity value is unavailable")
+                    for key in ("size", "unpackedSize", "totalFiles"):
+                        if key in row:
+                            if type(row[key]) is not int or not 0 <= row[key] <= 2**63 - 1:
+                                raise ArtifactIndexIntegrityError("Node package integrity size is invalid")
+                            normalized_integrity[key] = row[key]
+                    package_integrity[integrity_path] = normalized_integrity
         verified: list[dict[str, Any]] = []
         if not artifacts:
             gaps.append(f"{unit_id}: accepted successful build produced no artifact entries")
@@ -291,10 +337,20 @@ def _validate_receipts(run_root: Path, source_fingerprint: str,
                 raise ArtifactIndexIntegrityError("produced artifact identity is invalid")
             artifact = dict(raw_artifact)
             workspace_path, digest, _ = _artifact_fields(artifact)
+            if str(receipt.get("family", receipt.get("source_family", ""))) == "node":
+                if artifact.get("build_unit_id") != unit_id:
+                    raise ArtifactIndexIntegrityError("Node artifact build-unit identity changed")
+                if (artifact.get("mapping") != "exact-workspace-path" or
+                        artifact.get("mapping_confidence") != 1.0):
+                    raise ArtifactIndexIntegrityError("Node artifact workspace mapping is not exact")
+                if artifact.get("artifact_origin") not in {"accepted-input", "build-output"}:
+                    raise ArtifactIndexIntegrityError("Node artifact origin is invalid")
             path = _safe_file(run_root, artifact, "produced artifact")
             expected = (run_root / workspace / Path(*PurePosixPath(workspace_path).parts)).resolve()
             if path != expected or manifest_files.get(workspace_path) != digest:
                 raise ArtifactIndexIntegrityError("produced artifact is not bound to its workspace manifest")
+            if artifact.get("kind") == "package" and workspace_path in package_integrity:
+                artifact["package_integrity"] = dict(package_integrity[workspace_path])
             identity = canonical_artifact_identity(source_fingerprint, unit_id, artifact)
             if identity.value in seen_artifacts:
                 raise ArtifactIndexIntegrityError("duplicate canonical produced-artifact identity")
@@ -385,7 +441,9 @@ def _catalogs(unit: UnitContext) -> Mapping[str, Any]:
                 payload = {key: artifact.get(key) for key in
                            ("workspace_path", "sha256", "size_bytes", "kind", "build_unit_id",
                             "mapping", "mapping_confidence", "loader_dependencies",
-                            "loader_dependency_status", "build_id_sha256")}
+                            "loader_dependency_status", "build_id_sha256", "artifact_origin",
+                            "source_map", "package_metadata", "dependency_metadata",
+                            "package_archive", "native_addon", "package_integrity")}
                 payload.update({"artifact_family": family.value,
                                 "producer_family": receipt.get("family", receipt.get("source_family"))})
                 builder.add_entity(EntityRecord(logical, str(artifact["sha256"]),
@@ -466,6 +524,10 @@ def _relationships(unit: UnitContext) -> Mapping[str, Any]:
         artifacts_by_hash = {str(item["sha256"]): item for item in receipt["validated_artifacts"]}
         actions = {str(item.get("command_id")): item for item in receipt.get("commands", ())
                    if isinstance(item, Mapping) and item.get("command_id")}
+        actions_by_argv: dict[str, list[str]] = defaultdict(list)
+        for command_id, action_row in actions.items():
+            if action_row.get("argv_sha256"):
+                actions_by_argv[str(action_row["argv_sha256"])].append(command_id)
         for artifact in receipt["validated_artifacts"]:
             artifact_gaps: list[str] = []
             fingerprint = artifact_index_fingerprint(
@@ -504,6 +566,9 @@ def _relationships(unit: UnitContext) -> Mapping[str, Any]:
                         item.get("sha256") == artifact["sha256"] for item in outputs):
                     continue
                 parent = str(invocation.get("parent_command_id", ""))
+                if parent not in actions:
+                    matches = actions_by_argv.get(str(invocation.get("argv_sha256", "")), ())
+                    parent = matches[0] if len(matches) == 1 else ""
                 if parent in actions:
                     action = LogicalIdentity.derive(EntityKind.BUILD_ACTION, unit.job.source_fingerprint,
                         {"build_unit_id": receipt["build_unit_id"], "command_id": parent})
