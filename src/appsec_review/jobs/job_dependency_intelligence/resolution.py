@@ -67,6 +67,41 @@ def repository_identity(value: object, *, supported_hosts: Sequence[str]) -> dic
             "url": f"https://{host}/{owner}/{name}"}
 
 
+def deduplicate_repositories(dependencies: Sequence[Mapping[str, Any]], *, max_repositories: int
+                             ) -> tuple[list[dict[str, Any]], list[dict[str, str]]]:
+    """Group dependencies by canonical forge identity before any remote request is made."""
+    if type(max_repositories) is not int or max_repositories < 1:
+        raise ValueError("repository bound must be a positive integer")
+    grouped: dict[str, dict[str, Any]] = {}
+    for dependency in dependencies:
+        repository = dependency.get("repository")
+        if not isinstance(repository, Mapping):
+            continue
+        parts = tuple(str(repository.get(field, "")).strip() for field in ("host", "owner", "name"))
+        if not all(parts):
+            continue
+        key = "/".join(part.casefold() for part in parts)
+        canonical_repository = {field: value for field, value in zip(("host", "owner", "name"), parts)}
+        canonical_repository["url"] = str(repository.get("url") or f"https://{'/'.join(parts)}")
+        entry = grouped.setdefault(key, {
+            "repository_id": "repository-" + hashlib.sha256(key.encode()).hexdigest()[:24],
+            "repository": canonical_repository,
+            "dependency_ids": [],
+        })
+        entry["dependency_ids"].append(str(dependency["dependency_id"]))
+    repositories, gaps = [], []
+    for index, key in enumerate(sorted(grouped)):
+        entry = grouped[key]
+        entry["dependency_ids"] = sorted(set(entry["dependency_ids"]))
+        if index < max_repositories:
+            repositories.append(entry)
+        else:
+            gaps.extend({"dependency_id": dependency_id, "kind": "repository_bound",
+                         "detail": f"repository deduplication bound exceeded ({max_repositories})"}
+                        for dependency_id in entry["dependency_ids"])
+    return repositories, gaps
+
+
 def _observation_id(record: Mapping[str, Any], source: str) -> str:
     supplied = record.get("observation_id") or record.get("candidate_id")
     return str(supplied) if supplied else source + ":" + hashlib.sha256(canonical_json(record)).hexdigest()[:24]
@@ -264,5 +299,5 @@ def apply_model_resolution(dependency: Mapping[str, Any], proposal: Mapping[str,
             "resolution_rationale": str(proposal.get("rationale", ""))[:4096]}
 
 
-__all__ = ["apply_model_resolution", "infer_maximal_exposure", "normalize_dependencies",
-           "repository_identity"]
+__all__ = ["apply_model_resolution", "deduplicate_repositories", "infer_maximal_exposure",
+           "normalize_dependencies", "repository_identity"]

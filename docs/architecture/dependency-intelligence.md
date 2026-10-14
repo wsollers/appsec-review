@@ -19,6 +19,12 @@ retrieval shard named `dependency-intelligence`. The shard contains:
 - exact response artifact hashes and `DERIVED_FROM` relations from Scorecard context to a dependency;
 - dependency-scoped coverage rows and gaps.
 
+After repository inference, a distinct deterministic unit canonicalizes repository identities and
+groups every referring `dependency_id`. Scorecard retrieval consumes only that repository inventory,
+so each unique repository causes at most one cache lookup and one remote request per run. The result
+is then associated back to every dependency in the group; repository deduplication never discards
+the package, SBOM, native provenance, exposure, CVE, or advisory identities.
+
 Scorecard is review context and a red-team seed. It is never a vulnerability finding, never changes
 finding severity, and cannot establish that reviewed bytes are identical to repository source.
 
@@ -73,20 +79,29 @@ corroborates it.
 ## Network and gaps
 
 The Scorecard client uses a configured HTTPS base URL and host allowlist, rejects redirects, and
-enforces request, response-byte, timeout, and retry bounds. Exact HTTP response bytes, including
-bounded non-success and malformed responses, are retained run-owned and hash referenced. It never
-follows a repository-provided endpoint.
+enforces request, response-byte, timeout, and retry bounds. Before HTTP, the retrieval unit checks a
+repository-owned content-addressed cache. Each cache entry has an atomic repository pointer, UTC
+fetch time, exact response SHA-256 and byte length. A hit is accepted only when the pointer and blob
+verify and its age is no greater than the centrally configured TTL. Stale entries are refreshed;
+missing entries are fetched; corrupt entries produce `scorecard_cache_invalid` and are refreshed.
+Successful refresh bytes are written under their content hash and the pointer is atomically updated.
+Cache writes are bounded by a per-repository filesystem lock.
+
+Whether cached or fetched, exact successful response bytes are copied into the run and hash
+referenced. Bounded non-success and malformed HTTP responses are also retained run-owned. The cache
+is optimization and reference history, not run evidence by itself, and the client never follows a
+repository-provided endpoint.
 
 Every dependency without usable Scorecard context remains present and receives a scoped gap. The
 closed operational kinds are `unresolved_repository`, `unsupported_host`, `scorecard_not_found`,
 `scorecard_rate_limit`, `scorecard_request_failure`, `scorecard_malformed_response`,
-`model_unavailable`, `model_failure`, and `bounds`. A gap is missing coverage, not evidence that the
-dependency is safe.
+`scorecard_cache_invalid`, `scorecard_cache_write_failure`, `repository_bound`, `model_unavailable`,
+`model_failure`, and `bounds`. A gap is missing coverage, not evidence that the dependency is safe.
 
 ## Public API
 
 `appsec_review.jobs.job_dependency_intelligence` exports `build_job`,
 `load_accepted_dependency_intelligence`, `parse_native_candidates`, `normalize_dependencies`,
-`infer_maximal_exposure`, `repository_identity`, `apply_model_resolution`, and the bounded
-`ScorecardClient`. Inference and HTTP transport are injectable for deterministic tests and
-alternate orchestration environments.
+`deduplicate_repositories`, `infer_maximal_exposure`, `repository_identity`,
+`apply_model_resolution`, `ScorecardCache`, and the bounded `ScorecardClient`. Inference and HTTP
+transport are injectable for deterministic tests and alternate orchestration environments.

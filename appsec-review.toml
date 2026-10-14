@@ -1785,6 +1785,7 @@ workers = 4
 
 [jobs.job_dependency_intelligence.settings]
 dependency_limit = 100000
+repository_limit = 100000
 native_candidate_limit = 10000
 command_token_limit = 4096
 metadata_file_limit = 10000
@@ -1809,6 +1810,9 @@ max_requests = 10000
 max_response_bytes = 1048576
 timeout_seconds = 30
 retries = 2
+cache_root = "data/feeds/openssf-scorecard"
+cache_max_age_seconds = 604800
+cache_lock_timeout_seconds = 5
 
 [jobs.job_dependency_intelligence.steps.inputs]
 workers = 1
@@ -1818,6 +1822,10 @@ workers = 1
 workers = 2
 [jobs.job_dependency_intelligence.steps.resolution.tasks.detect_dependencies]
 [jobs.job_dependency_intelligence.steps.resolution.tasks.infer_repositories]
+
+[jobs.job_dependency_intelligence.steps.repositories]
+workers = 1
+[jobs.job_dependency_intelligence.steps.repositories.tasks.deduplicate]
 
 [jobs.job_dependency_intelligence.steps.scorecards]
 workers = 4

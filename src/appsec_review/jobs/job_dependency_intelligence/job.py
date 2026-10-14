@@ -24,14 +24,16 @@ from appsec_review.storage import atomic_bytes, atomic_json, canonical_json, fil
 from .datasets import CONSUMES, DATASETS
 from .inference import resolve_with_inference
 from .native import parse_native_candidates
-from .resolution import normalize_dependencies, repository_identity
-from .scorecard import ScorecardClient, ScorecardError, Transport, https_get
+from .resolution import deduplicate_repositories, normalize_dependencies, repository_identity
+from .scorecard import (ScorecardCache, ScorecardCacheError, ScorecardClient, ScorecardError,
+                        Transport, https_get)
 
 
 JOB_ID = "job_dependency_intelligence"
 TOPOLOGY = {
     "inputs": ("load_accepted",),
     "resolution": ("detect_dependencies", "infer_repositories"),
+    "repositories": ("deduplicate",),
     "scorecards": ("fetch",),
     "publication": ("publish_context",),
     "acceptance": ("publish_handoff",),
@@ -189,8 +191,8 @@ def _validate_config(context, _result) -> None:
         if tuple(context.config.step(step).tasks) != tasks:
             raise ValueError(f"dependency-intelligence task order mismatch: {step}")
     settings = context.config.settings
-    integers = ("dependency_limit", "native_candidate_limit", "command_token_limit", "metadata_file_limit",
-                "metadata_bytes_per_file", "inference_candidate_bytes")
+    integers = ("dependency_limit", "repository_limit", "native_candidate_limit", "command_token_limit",
+                "metadata_file_limit", "metadata_bytes_per_file", "inference_candidate_bytes")
     if any(type(settings.get(key)) is not int or int(settings[key]) < 1 for key in integers):
         raise ValueError("dependency-intelligence deterministic bounds are invalid")
     hosts = settings.get("repository_hosts")
@@ -202,7 +204,8 @@ def _validate_config(context, _result) -> None:
     required_model = {"enabled", "provider", "model", "reasoning", "max_input_tokens", "max_output_tokens",
                       "timeout_seconds", "retries"}
     required_scorecard = {"base_url", "allowed_hosts", "max_requests", "max_response_bytes",
-                          "timeout_seconds", "retries"}
+                          "timeout_seconds", "retries", "cache_root", "cache_max_age_seconds",
+                          "cache_lock_timeout_seconds"}
     if not required_model <= set(model) or not required_scorecard <= set(scorecard):
         raise ValueError("dependency-intelligence model or Scorecard settings are incomplete")
     if type(model["enabled"]) is not bool:
@@ -211,12 +214,17 @@ def _validate_config(context, _result) -> None:
         if not isinstance(model[key], str) or not model[key]:
             raise ValueError(f"dependency-intelligence model {key} is invalid")
     for table, keys in ((model, ("max_input_tokens", "max_output_tokens", "timeout_seconds")),
-                        (scorecard, ("max_requests", "max_response_bytes", "timeout_seconds"))):
+                        (scorecard, ("max_requests", "max_response_bytes", "timeout_seconds",
+                                     "cache_max_age_seconds", "cache_lock_timeout_seconds"))):
         if any(type(table[key]) is not int or table[key] < 1 for key in keys):
             raise ValueError("dependency-intelligence configured bounds are invalid")
     if type(model["retries"]) is not int or not 0 <= model["retries"] <= 5 or \
        type(scorecard["retries"]) is not int or not 0 <= scorecard["retries"] <= 5:
         raise ValueError("dependency-intelligence retry bounds are invalid")
+    cache_root = scorecard["cache_root"]
+    if (not isinstance(cache_root, str) or not cache_root or Path(cache_root).is_absolute() or
+            ".." in Path(cache_root).parts):
+        raise ValueError("dependency-intelligence Scorecard cache root must be repository-relative")
 
 
 def build_job(*, infer: Infer | None = None, scorecard_transport: Transport = https_get) -> Job:
@@ -267,47 +275,86 @@ def build_job(*, infer: Infer | None = None, scorecard_transport: Transport = ht
         return {"dependencies": dependencies, "gaps": gaps,
                 "terminal_status": "COMPLETED_WITH_GAPS" if gaps else "SUCCEEDED"}
 
-    def scorecards(unit: UnitContext) -> Mapping[str, Any]:
+    def repositories(unit: UnitContext) -> Mapping[str, Any]:
         resolved = unit.output("resolution.infer_repositories")
+        values, gaps = deduplicate_repositories(
+            resolved["dependencies"], max_repositories=int(unit.job.config.settings["repository_limit"]))
+        return {"repositories": values, "dependency_count": len(resolved["dependencies"]),
+                "repository_count": len(values), "gaps": gaps,
+                "terminal_status": "COMPLETED_WITH_GAPS" if gaps else "SUCCEEDED"}
+
+    def scorecards(unit: UnitContext) -> Mapping[str, Any]:
+        deduplicated = unit.output("repositories.deduplicate")
         settings = unit.job.config.settings["scorecard"]
         client = ScorecardClient(base_url=str(settings["base_url"]), allowed_hosts=settings["allowed_hosts"],
                                  max_requests=int(settings["max_requests"]),
                                  max_response_bytes=int(settings["max_response_bytes"]),
                                  timeout_seconds=int(settings["timeout_seconds"]), retries=int(settings["retries"]),
                                  transport=scorecard_transport)
+        cache = ScorecardCache(unit.job.repository_root / str(settings["cache_root"]),
+                               max_age_seconds=int(settings["cache_max_age_seconds"]),
+                               max_response_bytes=int(settings["max_response_bytes"]),
+                               lock_timeout_seconds=int(settings["cache_lock_timeout_seconds"]))
         records, gaps = [], []
         root = unit.unit_root / "artifacts" / "scorecards"
-        for dependency in resolved["dependencies"]:
-            repository = dependency.get("repository")
-            if not isinstance(repository, Mapping):
-                continue
+        cache_hits = 0
+        for group in deduplicated["repositories"]:
+            repository = group["repository"]
+            raw = None
+            cache_metadata: dict[str, Any] = {"status": "miss"}
             try:
-                record, raw = client.fetch(repository)
-                path = root / f"{dependency['dependency_id']}.json"
+                raw, cache_metadata = cache.load(repository)
+                if raw is not None:
+                    record, raw = client.normalize(repository, raw)
+                    cache_hits += 1
+            except (ScorecardCacheError, ScorecardError) as exc:
+                raw = None
+                cache_metadata = {"status": "invalid"}
+                gaps.extend(_gap(dependency_id, "scorecard_cache_invalid", str(exc))
+                            for dependency_id in group["dependency_ids"])
+            try:
+                if raw is None:
+                    record, raw = client.fetch(repository)
+                    try:
+                        cache_metadata = cache.store(repository, raw)
+                    except (OSError, ScorecardCacheError) as exc:
+                        cache_metadata = {"status": "write_failed"}
+                        gaps.extend(_gap(dependency_id, "scorecard_cache_write_failure", str(exc))
+                                    for dependency_id in group["dependency_ids"])
+                path = root / f"{group['repository_id']}.json"
                 atomic_bytes(path, raw)
-                records.append({**record, "dependency_id": dependency["dependency_id"],
-                                "response_artifact": _artifact(unit.job.run_root, path)})
+                artifact = _artifact(unit.job.run_root, path)
+                records.extend({**record, "dependency_id": dependency_id,
+                                "repository_id": group["repository_id"], "cache": cache_metadata,
+                                "response_artifact": artifact}
+                               for dependency_id in group["dependency_ids"])
             except ScorecardError as exc:
                 mapping = {"not_found": "scorecard_not_found", "rate_limit": "scorecard_rate_limit",
                            "request_failure": "scorecard_request_failure",
                            "malformed_response": "scorecard_malformed_response", "bounds": "bounds",
                            "unsupported_host": "unsupported_host"}
-                gap = _gap(dependency["dependency_id"], mapping.get(exc.kind, exc.kind), str(exc))
+                scoped_gaps = [_gap(dependency_id, mapping.get(exc.kind, exc.kind), str(exc))
+                               for dependency_id in group["dependency_ids"]]
                 if exc.response is not None:
-                    path = root / f"{dependency['dependency_id']}.error.json"
+                    path = root / f"{group['repository_id']}.error.json"
                     atomic_bytes(path, exc.response.body)
-                    gap["response_artifact"] = _artifact(unit.job.run_root, path)
-                    gap["http_status"] = exc.response.status
-                    gap["request_url"] = exc.url
-                gaps.append(gap)
+                    artifact = _artifact(unit.job.run_root, path)
+                    for gap in scoped_gaps:
+                        gap["response_artifact"] = artifact
+                        gap["http_status"] = exc.response.status
+                        gap["request_url"] = exc.url
+                gaps.extend(scoped_gaps)
         return {"records": records, "gaps": gaps, "request_count": client.requests,
+                "repository_count": len(deduplicated["repositories"]), "cache_hit_count": cache_hits,
                 "terminal_status": "COMPLETED_WITH_GAPS" if gaps else "SUCCEEDED"}
 
     def publish_context(unit: UnitContext) -> Mapping[str, Any]:
         loaded = unit.output("inputs.load_accepted")
         resolved = unit.output("resolution.infer_repositories")
+        repositories = unit.output("repositories.deduplicate")
         scorecard = unit.output("scorecards.fetch")
-        gaps = [*unit.output("resolution.detect_dependencies")["gaps"], *resolved["gaps"], *scorecard["gaps"]]
+        gaps = [*unit.output("resolution.detect_dependencies")["gaps"], *resolved["gaps"],
+                *repositories["gaps"], *scorecard["gaps"]]
         producer_artifacts = [{"job": key, "sha256": value} for key, value in sorted(loaded["upstream_handoffs"].items())]
         fingerprint = index_fingerprint(name="inventory", target_snapshot=unit.job.source_fingerprint,
             producer_artifacts=producer_artifacts,
@@ -359,11 +406,16 @@ def build_job(*, infer: Infer | None = None, scorecard_transport: Transport = ht
 
     def publish_handoff(unit: UnitContext) -> Mapping[str, Any]:
         loaded, resolved = unit.output("inputs.load_accepted"), unit.output("resolution.infer_repositories")
+        repositories = unit.output("repositories.deduplicate")
         scorecard, context = unit.output("scorecards.fetch"), unit.output("publication.publish_context")
         document = {"schema": DEPENDENCY_INTELLIGENCE_HANDOFF_SCHEMA,
                     "source_fingerprint": unit.job.source_fingerprint,
                     "upstream_handoffs": loaded["upstream_handoffs"],
-                    "dependencies": resolved["dependencies"], "scorecards": scorecard["records"],
+                    "dependencies": resolved["dependencies"], "repositories": repositories["repositories"],
+                    "scorecards": scorecard["records"], "scorecard_metrics": {
+                        "request_count": scorecard["request_count"],
+                        "repository_count": scorecard["repository_count"],
+                        "cache_hit_count": scorecard["cache_hit_count"]},
                     "gaps": context["gaps"], "index_identity": context["index_identity"],
                     "index_manifest": context["index_manifest"],
                     "security_findings": [], "scorecard_semantics": "review-context-and-red-team-seed-only"}
@@ -378,12 +430,13 @@ def build_job(*, infer: Infer | None = None, scorecard_transport: Transport = ht
         Unit("inputs.load_accepted", load),
         Unit("resolution.detect_dependencies", detect, ("inputs.load_accepted",)),
         Unit("resolution.infer_repositories", infer_repositories, ("resolution.detect_dependencies",)),
-        Unit("scorecards.fetch", scorecards, ("resolution.infer_repositories",)),
+        Unit("repositories.deduplicate", repositories, ("resolution.infer_repositories",)),
+        Unit("scorecards.fetch", scorecards, ("repositories.deduplicate",)),
         Unit("publication.publish_context", publish_context,
              ("inputs.load_accepted", "resolution.detect_dependencies", "resolution.infer_repositories",
-              "scorecards.fetch")),
+              "repositories.deduplicate", "scorecards.fetch")),
         Unit("acceptance.publish_handoff", publish_handoff,
-             ("inputs.load_accepted", "resolution.infer_repositories", "scorecards.fetch",
+             ("inputs.load_accepted", "resolution.infer_repositories", "repositories.deduplicate", "scorecards.fetch",
               "publication.publish_context")),
     )
     implementation = hashlib.sha256(b"".join(Path(__file__).with_name(name).read_bytes() for name in

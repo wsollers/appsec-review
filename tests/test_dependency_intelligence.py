@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict
+from datetime import datetime, timedelta, timezone
 import json
 from pathlib import Path
 import sqlite3
@@ -11,9 +12,9 @@ from appsec_review.guidance.compose import load_registry
 from appsec_review.guidance.skills import load_runtime_skill
 from appsec_review.jobs.engineering_contracts import DEPENDENCY_INTELLIGENCE_HANDOFF_SCHEMA
 from appsec_review.jobs.job_dependency_intelligence import (
-    HttpResponse, ScorecardClient, ScorecardError, apply_model_resolution, build_job,
-    infer_maximal_exposure, load_accepted_dependency_intelligence, normalize_dependencies,
-    parse_native_candidates,
+    HttpResponse, ScorecardCache, ScorecardCacheError, ScorecardClient, ScorecardError,
+    apply_model_resolution, build_job, deduplicate_repositories, infer_maximal_exposure,
+    load_accepted_dependency_intelligence, normalize_dependencies, parse_native_candidates,
 )
 from appsec_review.jobs.job_dependency_intelligence.inference import resolve_with_inference
 from appsec_review.inference import ModelResult
@@ -71,6 +72,33 @@ def test_normalization_prefers_package_repository_metadata_and_deduplicates() ->
     assert zlib["resolution_basis"] == "package_metadata"
     assert zlib["exact_repository_identity"] is True
     assert len(dependencies) == 2
+
+
+def test_repository_deduplication_groups_dependency_fanout_before_requests() -> None:
+    repositories, gaps = deduplicate_repositories([
+        {"dependency_id": "dependency-a", "repository": {
+            "host": "github.com", "owner": "OpenSSF", "name": "Scorecard",
+            "url": "https://github.com/OpenSSF/Scorecard"}},
+        {"dependency_id": "dependency-b", "repository": {
+            "host": "GITHUB.COM", "owner": "openssf", "name": "scorecard",
+            "url": "https://github.com/openssf/scorecard"}},
+        {"dependency_id": "dependency-c", "repository": None},
+    ], max_repositories=10)
+    assert gaps == []
+    assert len(repositories) == 1
+    assert repositories[0]["dependency_ids"] == ["dependency-a", "dependency-b"]
+
+
+def test_repository_deduplication_records_bound_per_affected_dependency() -> None:
+    repositories, gaps = deduplicate_repositories([
+        {"dependency_id": f"dependency-{name}", "repository": {
+            "host": "github.com", "owner": "example", "name": name,
+            "url": f"https://github.com/example/{name}"}}
+        for name in ("a", "b")
+    ], max_repositories=1)
+    assert len(repositories) == 1
+    assert gaps == [{"dependency_id": "dependency-b", "kind": "repository_bound",
+                     "detail": "repository deduplication bound exceeded (1)"}]
 
 
 @pytest.mark.parametrize(("field", "value", "expected"), [
@@ -211,6 +239,39 @@ def test_scorecard_success_retains_exact_bytes_and_context_semantics() -> None:
     assert calls[0][0].endswith("/projects/github.com/ossf/scorecard")
 
 
+def test_scorecard_cache_reuses_fresh_exact_bytes_and_expires_by_tunable_age(tmp_path: Path) -> None:
+    instant = datetime(2026, 10, 14, 12, tzinfo=timezone.utc)
+    now = [instant]
+    cache = ScorecardCache(tmp_path / "cache", max_age_seconds=3600, max_response_bytes=4096,
+                           clock=lambda: now[0])
+    repository = {"host": "github.com", "owner": "ossf", "name": "scorecard"}
+    raw = json.dumps({"score": 8, "checks": []}).encode()
+    stored = cache.store(repository, raw)
+    assert stored["status"] == "refresh"
+    payload, hit = cache.load(repository)
+    assert payload == raw and hit["status"] == "hit" and hit["age_seconds"] == 0
+    client = ScorecardClient(base_url="https://api.securityscorecards.dev",
+        allowed_hosts=("api.securityscorecards.dev",), max_requests=1, max_response_bytes=4096,
+        timeout_seconds=3, retries=0,
+        transport=lambda *_args, **_kwargs: pytest.fail("fresh cache must avoid HTTP"))
+    record, normalized_raw = client.normalize(repository, payload)
+    assert record["score"] == 8 and normalized_raw == raw and client.requests == 0
+    now[0] += timedelta(seconds=3601)
+    payload, stale = cache.load(repository)
+    assert payload is None and stale["status"] == "stale" and stale["age_seconds"] == 3601
+
+
+def test_scorecard_cache_rejects_tampered_content_addressed_blob(tmp_path: Path) -> None:
+    cache = ScorecardCache(tmp_path / "cache", max_age_seconds=3600, max_response_bytes=4096)
+    repository = {"host": "github.com", "owner": "ossf", "name": "scorecard"}
+    stored = cache.store(repository, b'{"score":8,"checks":[]}')
+    blob = next((tmp_path / "cache" / "blobs").iterdir())
+    blob.write_bytes(b"changed")
+    with pytest.raises(ScorecardCacheError, match="invalid Scorecard cache entry"):
+        cache.load(repository)
+    assert stored["response_sha256"] != file_sha256(blob)
+
+
 @pytest.mark.parametrize("status,kind", [(404, "not_found"), (429, "rate_limit"), (503, "request_failure")])
 def test_scorecard_missing_rate_limit_and_failure_are_typed(status: int, kind: str) -> None:
     client = ScorecardClient(base_url="https://api.securityscorecards.dev",
@@ -242,6 +303,8 @@ def test_guidance_and_job_public_api_are_registered() -> None:
     skill = load_runtime_skill(root, "native-dependency-resolution", job_id="job_dependency_intelligence")
     assert skill.name == "native-dependency-resolution"
     job = build_job()
+    assert [unit.unit_id for unit in job.units][2:5] == [
+        "resolution.infer_repositories", "repositories.deduplicate", "scorecards.fetch"]
     assert job.consumes == ("job_target_catalog", "job_language_build", "job_artifact_indexing",
                             "job_evidence_collection")
     assert {item.output_kind for item in job.datasets} == {
