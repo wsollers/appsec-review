@@ -3,7 +3,7 @@ stage-1 products, cross-domain links, MCP routes and offline FTS image validatio
 
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timezone
 import hashlib
 import json
@@ -11,6 +11,7 @@ import os
 from pathlib import Path
 import re
 import shutil
+import sqlite3
 import subprocess
 import sys
 import tomllib
@@ -52,6 +53,105 @@ def test_scanner_menu_partition_fits_review_package_page() -> None:
     partition = jobs["job_review_data_indexing"]["settings"]["menu_partition_size"]
     page = jobs["job_review_package_assembly"]["settings"]["max_page_size"]
     assert 1 <= partition <= page <= 100
+
+
+def test_dependency_inventory_candidates_enter_bounded_osv_advisory_lookup() -> None:
+    database = sqlite3.connect(":memory:")
+    database.execute("CREATE TABLE package(advisory_id TEXT, ecosystem TEXT, name TEXT)")
+    database.executemany("INSERT INTO package VALUES (?, ?, ?)", [
+        ("GHSA-npm", "npm", "@scope/widget"),
+        ("PYSEC-native", "PyPI", "native-lib"),
+        ("GHSA-native", "Go", "native-lib"),
+    ])
+    dependencies = [
+        {"identity": "asr:dependency_package:" + "1" * 64,
+         "payload": {"name": "@scope/widget", "version": "2.0.0",
+                     "purl": "pkg:npm/%40scope/widget@2.0.0", "maximal_exposure": "PROD",
+                     "resolution_basis": "package_metadata"}},
+        {"identity": "asr:dependency_package:" + "2" * 64,
+         "payload": {"name": "native-lib", "version": None, "purl": None,
+                     "maximal_exposure": "PROD", "resolution_basis": "linker_evidence"}},
+        {"identity": "asr:dependency_package:" + "3" * 64, "payload": {}},
+    ]
+
+    pairs, coverage, gaps = products._inventory_advisory_pairs(database, dependencies, max_pairs=10)
+
+    assert {(row["advisory"], row["identity_basis"]) for row in pairs} == {
+        ("GHSA-npm", "purl-ecosystem-and-name"),
+        ("PYSEC-native", "name-only"),
+        ("GHSA-native", "name-only"),
+    }
+    assert all(row["applicability_verified"] is False for row in pairs)
+    assert {row["dependency_identity"] for row in pairs} == {
+        dependencies[0]["identity"], dependencies[1]["identity"]}
+    assert any(state == "partial" and "version applicability" in str(reason)
+               for _area, state, reason in coverage)
+    assert any("unresolved_dependency_identity" in gap for gap in gaps)
+
+
+def test_dependency_advisory_selection_includes_heuristic_inventory() -> None:
+    class Shards:
+        def select(self, *, index, job=None):
+            return ({"name": index, "producer": {"job": job}},)
+
+    selected = products._select_dependency_advisories(Shards())
+
+    assert any(row["name"] == "inventory" and
+               row["producer"]["job"] == "job_dependency_intelligence" for row in selected)
+
+
+def test_dependency_inventory_osv_match_publishes_unverified_cve_lead(tmp_path: Path) -> None:
+    shard_path = tmp_path / "data/indices/inventory/dependencies.sqlite"
+    builder = IndexBuilder(shard_path, name="inventory", fingerprint="f" * 64,
+                           target_snapshot=SNAPSHOT, shard_id="dependency-intelligence")
+    dependency = LogicalIdentity.derive(EntityKind.DEPENDENCY_PACKAGE, SNAPSHOT, {"name": "widget"})
+    builder.add_entity(EntityRecord(
+        dependency, "dependency-widget", "widget", "dependency widget",
+        {"name": "widget", "version": "2.0.0", "purl": "pkg:npm/widget@2.0.0",
+         "maximal_exposure": "PROD", "resolution_basis": "model_inference"}))
+    builder.add_coverage("dependency-widget", "complete")
+    shard_sha = builder.build()
+    identity = IndexIdentity(
+        "inventory", "appsec-review/retrieval-index/2", shard_sha, "f" * 64,
+        shard_path.relative_to(tmp_path).as_posix(), {"job": "job_dependency_intelligence"}, (),
+        "dependency-intelligence")
+
+    feed_dir = tmp_path / "feeds/osv"
+    feed_db = feed_dir / "index/osv.sqlite"
+    feed_db.parent.mkdir(parents=True)
+    with sqlite3.connect(feed_db) as database:
+        database.executescript("""
+            CREATE TABLE advisory(id TEXT PRIMARY KEY, modified TEXT, published TEXT, withdrawn TEXT,
+                                  summary TEXT, raw_json TEXT);
+            CREATE TABLE package(advisory_id TEXT, ecosystem TEXT, name TEXT);
+            CREATE TABLE alias(advisory_id TEXT, alias TEXT);
+        """)
+        database.execute("INSERT INTO advisory VALUES (?, ?, ?, ?, ?, ?)", (
+            "GHSA-widget", "2026-01-02", "2026-01-01", None, "candidate advisory",
+            json.dumps({"affected": [{"package": {"name": "widget"}, "ranges": []}]})))
+        database.execute("INSERT INTO package VALUES (?, ?, ?)", ("GHSA-widget", "npm", "widget"))
+        database.execute("INSERT INTO alias VALUES (?, ?)", ("GHSA-widget", "CVE-2026-1234"))
+
+    shards = ShardSet(tmp_path, (asdict(identity),))
+    feeds = {
+        "osv": {"status": "pinned", "directory": str(feed_dir),
+                "files": {"index/osv.sqlite": file_sha256(feed_db)}, "snapshot_id": "osv-fixture"},
+        **{name: {"status": "unavailable", "reason": "fixture omits feed"}
+           for name in ("nvd", "kev", "epss")},
+    }
+    context = products.ProductContext(tmp_path, SNAPSHOT, shards, {}, feeds, {}, 100,
+                                      "dependency-advisories/test")
+
+    derived = products._build_dependency_advisories(context, (asdict(identity),))
+
+    assert len(derived.entities) == 1
+    payload = derived.entities[0].payload
+    assert payload["result"]["lookup_bases"] == ["dependency-inventory-osv-lookup"]
+    assert payload["result"]["applicability_verified"] is False
+    assert payload["result"]["match_exact"] is False
+    assert payload["result"]["reference_summary"]["cve_ids"] == ["CVE-2026-1234"]
+    assert any("applicability_unverified" in gap for gap in payload["gaps"])
+    assert any(relation.target_id == dependency.value for relation in derived.relations)
 
 
 def _configured(tmp_path: Path, extra: str = ""):

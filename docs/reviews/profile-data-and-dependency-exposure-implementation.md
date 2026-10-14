@@ -55,6 +55,9 @@ profile reports, build output, model output, and logs are untrusted data.
 
 - Dependency exposure is computed during normalization and survives model resolution, immutable
   inventory publication, and the accepted handoff unchanged.
+- Every normalized dependency inventory row is routed to Scorecard retrieval where repository
+  identity permits and to bounded OSV/CVE advisory lookup; inferred-only advisory matches remain
+  explicit applicability-unverified leads.
 - Generic and Node build catalogs retain recognized imported profile data and classify emitted
   profile reports as build output.
 - The profile producer is registered in direct and Dagster graphs after artifact indexing, is

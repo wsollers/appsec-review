@@ -175,9 +175,13 @@ context describes the resolved source repository's practices; it does not prove 
 artifact bytes came from that repository and is not a vulnerability finding.
 
 The inventory therefore enriches the review's SBOM/package context without rewriting the original
-SBOM or changing its evidence identity. Direct package evidence remains the accepted SBOM,
-lockfile, manifest, or artifact observation; inferred repositories and Scorecards remain bounded
-reference context.
+SBOM or changing its evidence identity. Every normalized dependency, including linker/loader and
+model-assisted identities, is offered to the bounded `dependency_advisories` OSV/CVE lookup and to
+Scorecard retrieval when it has a supported repository identity. Inventory-to-OSV package matches
+remain applicability-unverified until a scanner or version-range evaluator corroborates the
+observed version. Direct package evidence remains the accepted SBOM, lockfile, manifest, or artifact
+observation; inferred repositories, advisory candidates, and Scorecards remain bounded reference
+context.
 
 ## Execution-profile ingestion
 
@@ -237,8 +241,10 @@ Downstream behavior is deliberately narrower than the available context:
 - Dependency and Scorecard entities are balanced under the normal context cap so a large package
   inventory cannot evict all Scorecard seeds. They seed supply-chain/security-review and red-team
   hunting context; truncation is an explicit package gap.
-- The `dependency_advisories` precomputed route can combine accepted package identities with
-  reference intelligence. Repository inference and Scorecard data do not establish product
+- The `dependency_advisories` precomputed route combines accepted scanner matches and normalized
+  dependency identities with pinned OSV, NVD, KEV, and EPSS reference intelligence. A heuristic
+  package-name or purl lookup is an applicability-unverified lead. Repository inference and
+  Scorecard data do not establish product
   applicability, change finding severity, or bypass the normal evidence and verification gates.
 - `job_review_data_indexing` inventories all engineering-signal producers, exposes their coverage, and retains
   their declared retrieval routes for later prioritization and review. The current numeric review

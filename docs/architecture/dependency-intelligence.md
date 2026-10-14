@@ -22,6 +22,14 @@ retrieval shard named `dependency-intelligence`. The shard contains:
 Scorecard is review context and a red-team seed. It is never a vulnerability finding, never changes
 finding severity, and cannot establish that reviewed bytes are identical to repository source.
 
+Every normalized dependency is also consumed by review-data indexing's bounded
+`dependency_advisories` lookup. PURLs map to configured OSV ecosystem/package identities; records
+without a supported purl receive a bounded name-only lookup across the pinned ecosystems. These
+matches retain the dependency identity, resolution basis, maximal exposure, and lookup ambiguity.
+They are CVE/SBOM review leads only: the OSV package-name index does not evaluate affected version
+ranges, so inventory-only matches always publish `applicability_verified: false` until corroborated
+by a scanner or future version-range evaluator.
+
 ## Maximal exposure
 
 Each normalized dependency receives one value from the ordered vocabulary

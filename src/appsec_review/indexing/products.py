@@ -16,6 +16,7 @@ from pathlib import Path
 import re
 import sqlite3
 from typing import Any
+from urllib.parse import unquote
 
 from appsec_review.indexing.derive import Derived, fact
 from appsec_review.indexing.links import (
@@ -296,7 +297,97 @@ def _feed_reference(context: ProductContext, feed: str) -> dict[str, Any]:
 
 def _select_dependency_advisories(shards: ShardSet) -> tuple[Mapping[str, Any], ...]:
     return (*shards.select(index="observations", job="job_evidence_collection"),
-            *shards.select(index="observations", job="job_artifact_security_analysis"))
+            *shards.select(index="observations", job="job_artifact_security_analysis"),
+            *shards.select(index="inventory", job="job_dependency_intelligence"))
+
+
+_PURL_OSV_ECOSYSTEM = {
+    "cargo": "crates.io", "composer": "Packagist", "gem": "RubyGems", "golang": "Go",
+    "maven": "Maven", "npm": "npm", "nuget": "NuGet", "pypi": "PyPI",
+}
+
+
+def _purl_osv_identity(purl: object, fallback_name: object) -> tuple[str | None, str | None, str]:
+    """Map a bounded Package URL to OSV ecosystem/name, retaining name-only fallback uncertainty."""
+    fallback = str(fallback_name).strip()[:512] if fallback_name is not None else ""
+    if not isinstance(purl, str) or not purl.startswith("pkg:") or len(purl) > 4096:
+        return None, fallback or None, "name-only"
+    body = purl[4:].split("?", 1)[0].split("#", 1)[0]
+    package_type, separator, path = body.partition("/")
+    if not separator or package_type.casefold() not in _PURL_OSV_ECOSYSTEM:
+        return None, fallback or None, "unsupported-purl-type"
+    # The version delimiter is the final literal @. Encoded npm scopes therefore remain intact.
+    path = path.rsplit("@", 1)[0]
+    parts = [unquote(item) for item in path.split("/") if item]
+    if not parts:
+        return None, fallback or None, "malformed-purl"
+    kind = package_type.casefold()
+    if kind == "maven" and len(parts) >= 2:
+        name = f"{parts[-2]}:{parts[-1]}"
+    elif kind == "golang":
+        name = "/".join(parts)
+    elif kind == "npm" and len(parts) >= 2 and parts[-2].startswith("@"):
+        name = f"{parts[-2]}/{parts[-1]}"
+    else:
+        name = parts[-1]
+    return _PURL_OSV_ECOSYSTEM[kind], name[:512], "purl-ecosystem-and-name"
+
+
+def _inventory_advisory_pairs(database: sqlite3.Connection, dependencies: Sequence[Mapping[str, Any]], *,
+                              max_pairs: int) -> tuple[list[dict[str, Any]], list[tuple[str, str, str | None]],
+                                                       list[str]]:
+    """Attempt bounded OSV package lookup for every heuristic/normalized dependency entity."""
+    pairs: list[dict[str, Any]] = []
+    coverage: list[tuple[str, str, str | None]] = []
+    gaps: list[str] = []
+    for row in dependencies:
+        identity = str(row.get("identity", ""))
+        payload = row.get("payload") if isinstance(row.get("payload"), Mapping) else {}
+        ecosystem, lookup_name, identity_basis = _purl_osv_identity(payload.get("purl"), payload.get("name"))
+        area = f"dependency-advisory-lookup:{identity}"
+        if not lookup_name:
+            reason = "dependency identity has no package name usable for OSV lookup"
+            coverage.append((area, "unavailable", reason))
+            gaps.append(f"unresolved_dependency_identity: {identity}: {reason}")
+            continue
+        remaining = max_pairs - len(pairs)
+        if remaining <= 0:
+            gaps.append(f"truncated: dependency inventory advisory pairs exceeded {max_pairs}")
+            coverage.append((area, "unavailable", "dependency advisory pair bound exhausted"))
+            continue
+        if ecosystem:
+            records = database.execute(
+                "SELECT DISTINCT p.advisory_id, p.ecosystem, p.name FROM package p "
+                "WHERE p.ecosystem=? AND p.name=? COLLATE NOCASE ORDER BY p.advisory_id LIMIT ?",
+                (ecosystem, lookup_name, remaining + 1),
+            ).fetchall()
+        else:
+            records = database.execute(
+                "SELECT DISTINCT p.advisory_id, p.ecosystem, p.name FROM package p "
+                "WHERE p.name=? COLLATE NOCASE ORDER BY p.ecosystem, p.advisory_id LIMIT ?",
+                (lookup_name, remaining + 1),
+            ).fetchall()
+        truncated = len(records) > remaining
+        records = records[:remaining]
+        uncertainty = ("version applicability is not evaluated by the feed index" if ecosystem else
+                       "ecosystem and version applicability are unresolved for name-only lookup")
+        coverage.append((area, "partial" if records or not ecosystem else "complete",
+                         uncertainty if records or not ecosystem else None))
+        if truncated:
+            gaps.append(f"truncated: {identity}: OSV package matches exceeded remaining pair bound {remaining}")
+        for advisory, matched_ecosystem, matched_name in records:
+            pairs.append({
+                "package": str(payload.get("name") or matched_name),
+                "version": _text(payload.get("version")), "purl": _text(payload.get("purl")),
+                "advisory": str(advisory), "severity": None,
+                "scanner": "dependency-intelligence-osv-lookup", "observation": identity,
+                "dependency_identity": identity, "lookup_basis": "dependency-inventory-osv-lookup",
+                "osv_ecosystem": str(matched_ecosystem), "osv_package_name": str(matched_name),
+                "identity_basis": identity_basis, "applicability_verified": False,
+                "maximal_exposure": payload.get("maximal_exposure"),
+                "resolution_basis": payload.get("resolution_basis"),
+            })
+    return pairs, coverage, gaps
 
 
 def _fixed_versions(raw: str, package: str) -> list[str]:
@@ -406,9 +497,11 @@ def _build_dependency_advisories(context: ProductContext, selected: tuple[Mappin
     derived, shards, name = Derived(), context.shards, "dependency_advisories"
     scanners = [shard for shard in selected if shard.get("shard_id") in {"osv_scanner", "grype", "syft",
                                                                            "artifact-security"}]
-    if not scanners:
+    dependencies = [shard for shard in selected
+                    if shard.get("producer", {}).get("job") == "job_dependency_intelligence"]
+    if not scanners and not dependencies:
         return _finish(derived, name, unavailable="dependency advisories are unavailable: no accepted dependency "
-                                                  "scanner observation shards")
+                                                  "scanner or intelligence shards")
     databases: dict[str, sqlite3.Connection | None] = {}
     feed_gaps: dict[str, str | None] = {}
     for feed_name in REFERENCE_FEEDS:
@@ -417,19 +510,48 @@ def _build_dependency_advisories(context: ProductContext, selected: tuple[Mappin
     feed = _feed_reference(context, "osv")
     references = {feed_name: _feed_reference(context, feed_name) for feed_name in REFERENCE_FEEDS}
     grouped: dict[tuple[str, str | None, str | None, str], dict[str, Any]] = {}
-    for row in shards.entities(selected, kinds=("tool_observation",)):
+    for row in shards.entities(scanners, kinds=("tool_observation",)):
         for pair in advisory_pairs(row):
             key = (pair["package"], pair["version"], pair["purl"], pair["advisory"])
-            entry = grouped.setdefault(key, {**pair, "observations": [], "scanners": set(), "location": None})
+            entry = grouped.setdefault(key, {**pair, "observations": [], "scanners": set(), "location": None,
+                                             "lookup_bases": set(), "dependency_identities": set(),
+                                             "inventory_context": []})
             entry["observations"].append(row["identity"])
             entry["scanners"].add(pair["scanner"] or row["shard_id"])
+            entry["lookup_bases"].add("scanner-reported-match")
             entry["location"] = entry["location"] or row["location"]
+    dependency_rows = list(shards.entities(dependencies, kinds=("dependency_package",)))
+    if database is not None:
+        inventory_pairs, lookup_coverage, lookup_gaps = _inventory_advisory_pairs(
+            database, dependency_rows, max_pairs=context.max_facts)
+        derived.coverage.extend(lookup_coverage)
+        derived.gaps.extend(lookup_gaps)
+        for pair in inventory_pairs:
+            key = (pair["package"], pair["version"], pair["purl"], pair["advisory"])
+            entry = grouped.setdefault(key, {**pair, "observations": [], "scanners": set(), "location": None,
+                                             "lookup_bases": set(), "dependency_identities": set(),
+                                             "inventory_context": []})
+            entry["observations"].append(pair["observation"])
+            entry["scanners"].add(pair["scanner"])
+            entry["lookup_bases"].add(pair["lookup_basis"])
+            entry["dependency_identities"].add(pair["dependency_identity"])
+            entry["inventory_context"].append({key_name: pair.get(key_name) for key_name in (
+                "dependency_identity", "identity_basis", "osv_ecosystem", "osv_package_name",
+                "applicability_verified", "maximal_exposure", "resolution_basis")})
+    elif dependency_rows:
+        derived.gap(f"feed_unavailable: {feed_gap}; {len(dependency_rows)} dependency inventory row(s) "
+                    "could not be checked against OSV")
     try:
         for key in sorted(grouped, key=lambda item: tuple(str(part) for part in item))[:context.max_facts]:
             entry = grouped[key]
             package, version, purl, advisory = key
-            versioned = bool(version or purl)
-            gaps = [] if versioned else ["missing_version: the scanner reported a package name only"]
+            scanner_reported = "scanner-reported-match" in entry["lookup_bases"]
+            versioned = bool(version or purl) and scanner_reported
+            gaps = [] if versioned else (["missing_version: the scanner reported a package name only"]
+                                         if scanner_reported else [])
+            if "dependency-inventory-osv-lookup" in entry["lookup_bases"] and not scanner_reported:
+                gaps.append("applicability_unverified: dependency identity matched an OSV package, but this "
+                            "index does not evaluate whether the observed version is in an affected range")
             intelligence: dict[str, Any] = {"feed": feed, "advisory_known": None, "aliases": []}
             if database is None:
                 gaps.append(f"feed_unavailable: {feed_gap}")
@@ -464,20 +586,26 @@ def _build_dependency_advisories(context: ProductContext, selected: tuple[Mappin
             reference = {"cve_ids": cve_ids, "nvd": joins["nvd"], "kev": joins["kev"], "epss": joins["epss"],
                          "join_status": joins["join_status"], "reference_summary": joins["summary"],
                          "feeds": references}
-            subject = package_identity(context.snapshot, package, version, purl).value
+            subject = (sorted(entry["dependency_identities"])[0] if entry["dependency_identities"] else
+                       package_identity(context.snapshot, package, version, purl).value)
+            lookup_bases = sorted(entry["lookup_bases"])
             record_fact = fact(
                 context.snapshot, name, context.rule_version,
                 {"package": package, "version": version, "purl": purl, "advisory": advisory},
                 name=f"{package} {advisory}", text=f"dependency advisory {package} {version or ''} {advisory}",
                 subject_identity=subject, location=entry["location"], status="partial" if gaps else "complete",
-                gaps=gaps, basis="scanner-reported package/advisory match joined to the pinned OSV snapshot and, by "
-                                 "CVE id from the advisory id or its OSV aliases, to the pinned NVD, KEV and EPSS "
-                                 "snapshots; every joined record is reference context, never target evidence",
-                upstream=_upstream((*scanners, *_link_shard(context, "package_advisory"))),
+                gaps=gaps, basis="accepted scanner match and/or dependency-inventory package identity joined to "
+                                 "the pinned OSV snapshot and, by CVE id from the advisory id or its OSV aliases, "
+                                 "to pinned NVD, KEV and EPSS snapshots; inventory lookup does not evaluate version "
+                                 "applicability and every joined record is reference context, never target evidence",
+                upstream=_upstream((*scanners, *dependencies, *_link_shard(context, "package_advisory"))),
                 result={"package": package, "version": version, "purl": purl, "advisory": advisory,
                         "advisory_identity": advisory_identity(context.snapshot, advisory).value,
                         "severity": entry["severity"], "scanners": sorted(str(item) for item in entry["scanners"]),
-                        "match_exact": versioned, "observations": sorted(set(entry["observations"]))[:8],
+                        "match_exact": versioned, "lookup_bases": lookup_bases,
+                        "applicability_verified": scanner_reported,
+                        "dependency_inventory": entry["inventory_context"][:8],
+                        "observations": sorted(set(entry["observations"]))[:8],
                         "observation_count": len(set(entry["observations"])), "intelligence": intelligence,
                         **reference})
             derived.entities.append(record_fact)
@@ -497,7 +625,7 @@ def _build_dependency_advisories(context: ProductContext, selected: tuple[Mappin
         elif (context.feeds.get(feed_name) or {}).get("stale"):
             derived.gap(f"{prefix}stale_feed: the pinned {feed_name.upper()} snapshot is older than the configured "
                         "freshness bound")
-    for gap in _coverage_gaps(shards, scanners):
+    for gap in _coverage_gaps(shards, (*scanners, *dependencies)):
         derived.gap(gap)
     return _finish(derived, name)
 
@@ -1071,7 +1199,7 @@ PRODUCT_RULES: tuple[ProductRule, ...] = (
     ProductRule("build_provenance", "build-provenance/1", _select_build_provenance, _build_build_provenance,
                 links=("representation",)),
     ProductRule("artifact_inventory", "artifact-inventory/1", _select_artifact_inventory, _build_artifact_inventory),
-    ProductRule("dependency_advisories", "dependency-advisories/2", _select_dependency_advisories,
+    ProductRule("dependency_advisories", "dependency-advisories/3", _select_dependency_advisories,
                 _build_dependency_advisories, links=("package_advisory",), feeds=REFERENCE_FEEDS),
     ProductRule("scanner_correlation", "scanner-correlation/1", _select_scanner_correlation,
                 _build_scanner_correlation),
