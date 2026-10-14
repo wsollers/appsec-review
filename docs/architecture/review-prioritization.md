@@ -77,6 +77,7 @@ they are bound to, or `<callback:CALLEE>` when passed as a call argument (for ex
 | JavaScript, TypeScript, TSX | function declarations and expressions, generator functions, `arrow_function`, `method_definition` |
 | Rust | `function_item`, `closure_expression` |
 | PHP | `function_definition`, `method_declaration`, `anonymous_function`, `arrow_function` |
+| Ruby | `method`, `singleton_method`, `lambda`, and call-attached `block`/`do_block` |
 
 Qualified names join enclosing namespaces, classes, structs, `impl` types, Go method receivers, and
 enclosing functions. Python is parsed by Tree-sitter but is outside this batch's scored languages;
@@ -88,13 +89,13 @@ McCabe's decision count: `1 + decisions` inside the unit.
 
 | Decision | Counted as | Grammar nodes |
 |---|---|---|
-| conditional branch | +1 per `if` and per `else if` | `if_statement`, `if_expression` (Rust), PHP `else_if_clause` |
+| conditional branch | +1 per `if` and per `else if` | `if_statement`, `if_expression` (Rust), PHP `else_if_clause`, Ruby `if`/`elsif` and conditional modifiers |
 | loop | +1 | `for`, range/each/`foreach`/`for…of`, `while`, `do`, Rust `loop` |
 | statement `switch` case | +1 per non-default case clause | C/C++ `case_statement` with a value, Java `switch_label` with `case`, C# each `case` in a `switch_section`, JS `switch_case`, Go `expression_case`/`type_case`/`communication_case`, PHP `case_statement` |
 | exhaustive multiway expression | arms − 1 | Rust `match`, C# `switch` expression, PHP `match` |
 | guard | +1 | Rust match-arm guard, C# `when` (case guard and catch filter) |
-| catch | +1 per clause | C++, Java, C#, JS/TS, PHP |
-| conditional expression | +1 | `?:` ternaries |
+| catch | +1 per clause | C++, Java, C#, JS/TS, PHP, Ruby `rescue` |
+| conditional expression | +1 | `?:` ternaries and Ruby `conditional` |
 | short-circuit operator | +1 per operator | `&&`, `\|\|`, PHP `and`/`or` |
 | null coalescing | +1 per operator | `??`, `??=`, `&&=`, `\|\|=` |
 | refutable binding with diverging else | +1 | Rust `let … else` |

@@ -143,6 +143,17 @@ SPECS: dict[str, LanguageSpec] = {
         calls={"function_call_expression": "function", "member_call_expression": "name",
                "nullsafe_member_call_expression": "name", "scoped_call_expression": "name",
                "object_creation_expression": "type"}),
+    "ruby": LanguageSpec(
+        "ruby", "Ruby",
+        frozenset({"method", "singleton_method", "lambda", "block", "do_block"}),
+        frozenset({"lambda", "block", "do_block"}),
+        {"class": "name", "module": "name"},
+        frozenset({"if", "unless", "if_modifier", "unless_modifier"}),
+        else_wrappers=frozenset(), else_if_types=frozenset({"elsif"}),
+        loops=frozenset({"for", "while", "until", "while_modifier", "until_modifier"}),
+        switches=frozenset({"case"}), cases=frozenset({"when"}),
+        catches=frozenset({"rescue"}), ternaries=frozenset({"conditional"}),
+        calls={"call": "method"}),
 }
 for _grammar, _language in (("typescript", "TypeScript"), ("tsx", "TSX")):
     _base = SPECS["javascript"]

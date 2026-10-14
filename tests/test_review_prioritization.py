@@ -87,7 +87,7 @@ def fn(value: str | None) -> str | None:
 def test_ast_golden_matches_fixture_bytes_and_locked_parser_versions() -> None:
     sources = {path.relative_to(TARGET).as_posix() for path in TARGET.rglob("*")
                if path.is_file() and path.suffix in {".c", ".h", ".cpp", ".java", ".cs", ".go", ".js", ".ts", ".rs",
-                                                     ".php"}}
+                                                     ".php", ".rb"}}
     assert set(GOLDEN["files"]) == sources
     for path, record in GOLDEN["files"].items():
         assert hashlib.sha256((TARGET / path).read_bytes()).hexdigest() == record["sha256"], (
@@ -176,6 +176,21 @@ def test_csharp_php_and_typescript_multiway_and_null_coalescing() -> None:
     assert ts["handle"]["cyclomatic"] == 3 and ts["handle.pick"]["cyclomatic"] == 4
     js = units_of("web/src/server.js")
     assert js["<callback:app.post>.<callback:exec>"]["cyclomatic"] == 3
+
+
+def test_ruby_methods_singletons_lambdas_blocks_and_control_flow() -> None:
+    units = units_of("ruby/lib/processor.rb")
+    assert set(units) == {"Audit.Processor.build", "Audit.Processor.transform",
+                          "Audit.Processor.transform.normalize",
+                          "Audit.Processor.transform.<callback:items.each>",
+                          "Audit.Processor.classify"}
+    assert units["Audit.Processor.build"]["cyclomatic"] == 2
+    assert units["Audit.Processor.transform.normalize"]["anonymous"]
+    block = units["Audit.Processor.transform.<callback:items.each>"]
+    assert block["anonymous"] and block["decisions"] == {"boolean": 1, "if": 3}
+    assert (block["cyclomatic"], block["cognitive"]) == (5, 5)
+    assert units["Audit.Processor.classify"]["decisions"] == {"case": 2, "catch": 1}
+    assert units_of("ruby/lib/support.rb")["Audit.Support.record"]["cyclomatic"] == 1
 
 
 def test_parse_errors_mark_units_and_files() -> None:
@@ -289,6 +304,7 @@ def test_imports_resolve_conservatively_and_keep_unresolved_and_dynamic_gaps() -
     assert ("rust/src/lib.rs", "rust/src/wire.rs", "rust-module-path") in edges
     assert ("php/src/Controller.php", "php/src/Support/Helpers.php", "php-namespace-declaration") in edges
     assert ("php/src/Controller.php", "php/src/Support/Helpers.php", "php-dir-relative") in edges
+    assert ("ruby/lib/processor.rb", "ruby/lib/support.rb", "ruby-require-relative") in edges
 
     def statuses(path: str) -> set[tuple[str | None, str]]:
         return {(item["specifier"], item["status"]) for item in graph["files"][path]["imports"]}
@@ -298,6 +314,7 @@ def test_imports_resolve_conservatively_and_keep_unresolved_and_dynamic_gaps() -
     assert ("./missing", "unresolved") in statuses("web/src/api.ts")
     assert (None, "dynamic") in statuses("web/src/server.js") and (None, "dynamic") in statuses("php/src/Controller.php")
     assert ("zod", "external") in statuses("web/src/api.ts") and ("std::io::Read", "external") in statuses("rust/src/lib.rs")
+    assert ("json", "external") in statuses("ruby/lib/processor.rb")
     assert graph["files"]["web/src/server.js"]["coupling_lower_bound"]
     store = graph["files"]["go/store/store.go"]
     server = graph["files"]["go/server/handler.go"]
@@ -385,7 +402,8 @@ def configured(tmp_path: Path, *, max_nodes: int | None = None, extra: str = "")
         text = text.replace("max_nodes_per_file = 20000", f"max_nodes_per_file = {max_nodes}")
     text += extra
     (tmp_path / "appsec-review.toml").write_text(text, encoding="utf-8")
-    shutil.copytree(ROOT / "containers", tmp_path / "containers")
+    shutil.copytree(ROOT / "containers", tmp_path / "containers",
+                    ignore=shutil.ignore_patterns("downloads"))
     shutil.copytree(ROOT / "rules" / "semgrep", tmp_path / "rules" / "semgrep")
     base = load_config(tmp_path / "appsec-review.toml")
     return replace(base, runtime=replace(base.runtime, runs_dir=tmp_path / "runs", data_dir=tmp_path / "data",
@@ -428,6 +446,7 @@ def test_job_ranks_indexes_and_names_every_missing_producer(tmp_path: Path) -> N
                      "web/src/server.js: unresolved_or_dynamic_imports: None (non_literal_specifier)"):
         assert expected in gaps
     assert document["summary"]["by_language"]["Go"]["function_count"] == 5
+    assert document["summary"]["by_language"]["Ruby"]["function_count"] == 6
     ranking = json.loads((run_root / document["artifacts"]["ranking"]["path"]).read_text())
     first = ranking["functions"][0]
     assert set(first["features"]) >= {"cyclomatic", "cognitive", "semantic_path", "history_hotspot", "sink"}
@@ -440,6 +459,7 @@ def test_job_ranks_indexes_and_names_every_missing_producer(tmp_path: Path) -> N
     found = core.find(kind="priority_item", path="java/src/main/java/com/example/web/UserController.java",
                       indexes=("priority",))["results"]
     assert found and found[0]["payload"]["authority"].startswith("review-first")
+    assert core.find(kind="priority_item", path="ruby/lib/processor.rb", indexes=("priority",))["results"]
     assert not core.find(kind="priority_item", path="php/src/Support/Helpers.php", indexes=("priority",))["results"]
     function_hit = next(item for item in core.search(query="priority function", indexes=("priority",),
                                                      kinds=("priority_item",), limit=50)["results"]

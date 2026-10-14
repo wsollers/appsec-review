@@ -46,6 +46,7 @@ _ANONYMOUS_BINDINGS = {
     "assignment_expression": ("left",), "pair": ("key",), "keyed_element": ("key",),
     "public_field_definition": ("name",), "field_definition": ("property", "name"),
     "short_var_declaration": ("left",), "property_declaration": ("name",),
+    "assignment": ("left",),
 }
 
 
@@ -54,7 +55,7 @@ def own_nodes(unit: Node, spec: LanguageSpec) -> Iterator[Node]:
     stack = list(reversed(unit.children))
     while stack:
         node = stack.pop()
-        if node.named and node.type in spec.units:
+        if is_unit(node, spec):
             continue
         yield node
         stack.extend(reversed(node.children))
@@ -62,6 +63,8 @@ def own_nodes(unit: Node, spec: LanguageSpec) -> Iterator[Node]:
 
 def is_unit(node: Node, spec: LanguageSpec) -> bool:
     if not node.named or node.type not in spec.units:
+        return False
+    if spec.grammar == "ruby" and node.type == "block" and node.parent is not None and node.parent.type == "lambda":
         return False
     if node.type in spec.anonymous:
         return True
@@ -109,6 +112,11 @@ def unit_name(source: SourceFile, node: Node, spec: LanguageSpec) -> tuple[str, 
         if callee is not None:
             text = " ".join(source.text(callee, 96).split())[:64]
             return f"<callback:{text}>", True
+    if (parent is not None and node.field == "block" and parent.type in spec.calls and
+            (callee := parent.child(spec.calls[parent.type])) is not None):
+        receiver = parent.child("receiver")
+        prefix = source.text(receiver, 64).strip() + "." if receiver is not None else ""
+        return f"<callback:{prefix}{source.text(callee, 64).strip()}>", True
     return "<anonymous>", True
 
 
@@ -220,11 +228,11 @@ def _cognitive(source: SourceFile, unit: Node, spec: LanguageSpec, simple_name: 
 
     while stack:
         node, nesting, else_if = stack.pop()
-        if node.named and node.type in spec.units:
+        if is_unit(node, spec):
             continue
         max_nesting = max(max_nesting, nesting)
         kind = node.type
-        if kind in spec.if_types or kind in spec.else_if_types:
+        if node.named and (kind in spec.if_types or kind in spec.else_if_types):
             amount = 1 if else_if else 1 + nesting
             total += amount
             increments["else_if" if else_if else "if"] += amount
@@ -246,7 +254,8 @@ def _cognitive(source: SourceFile, unit: Node, spec: LanguageSpec, simple_name: 
                 else:
                     stack.append((item, nesting + 1, False))
             continue
-        if kind in spec.loops or kind in spec.switches or kind in spec.catches or kind in spec.ternaries:
+        if node.named and (kind in spec.loops or kind in spec.switches or
+                           kind in spec.catches or kind in spec.ternaries):
             total += 1 + nesting
             label = ("loop" if kind in spec.loops else "switch" if kind in spec.switches else
                      "catch" if kind in spec.catches else "ternary")
@@ -258,7 +267,7 @@ def _cognitive(source: SourceFile, unit: Node, spec: LanguageSpec, simple_name: 
             increments["let_else"] += 1 + nesting
             push_children(node, nesting, nested_except=frozenset({"pattern", "value", "type"}))
             continue
-        if kind in spec.gotos:
+        if node.named and kind in spec.gotos:
             total += 1
             increments["jump"] += 1
         elif kind in spec.labeled_jumps and any(item.type in _LABEL_TYPES for item in node.children):
@@ -286,21 +295,22 @@ def _cyclomatic(source: SourceFile, unit: Node, spec: LanguageSpec, count_error_
     for node in own_nodes(unit, spec):
         kind = node.type
         parse_error = parse_error or node.error
-        if kind in spec.if_types or kind in spec.else_if_types:
+        if node.named and (kind in spec.if_types or kind in spec.else_if_types):
             decisions["if"] += 1
             if spec.grammar == "go" and _go_error_check(source, node, spec):
                 go_checks += 1
-        elif kind in spec.loops:
+        elif node.named and kind in spec.loops:
             decisions["loop"] += 1
-        elif kind in spec.cases:
+        elif node.named and kind in spec.cases:
             decisions["case"] += _case_count(node, spec)
-        elif kind in spec.multiway:
+        elif node.named and kind in spec.multiway:
             decisions["multiway_arm"] += max(0, _arm_count(node, spec.multiway[kind]) - 1)
-        elif kind in spec.guards or (kind == "match_pattern" and node.child("condition") is not None):
+        elif node.named and (kind in spec.guards or
+                             (kind == "match_pattern" and node.child("condition") is not None)):
             decisions["guard"] += 1
-        elif kind in spec.catches:
+        elif node.named and kind in spec.catches:
             decisions["catch"] += 1
-        elif kind in spec.ternaries:
+        elif node.named and kind in spec.ternaries:
             decisions["ternary"] += 1
         elif kind == "let_declaration" and node.child("alternative") is not None:
             decisions["let_else"] += 1

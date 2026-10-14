@@ -414,8 +414,11 @@ selects the measure that enters the SII (default `cyclomatic`). Both are always 
 
 Gaps:
 
-- Unsupported languages (Kotlin, Ruby, Swift, shell, configuration files, and so on) get
+- Unsupported languages (Kotlin, Swift, shell, configuration files, and so on) get
   `symbol_language_unsupported`, and their complexity is `null`.
+- Ruby methods, singleton methods, lambdas, and call blocks are source-resolved symbols; Ruby
+  conditionals, modifiers, loops, `case`/`when`, rescue clauses, ternaries, and short-circuit
+  operators contribute to the same bounded complexity measures as the other supported languages.
 - Inside a span, syntax errors give `parse_errors_in_span`, C/C++ and C# preprocessor conditionals
   give `preprocessor_branches_not_counted`, and node-limit truncation gives `node_limit_reached`.
 

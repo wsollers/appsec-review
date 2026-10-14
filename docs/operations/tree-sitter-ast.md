@@ -7,8 +7,8 @@ documented in `containers/tools/tree-sitter/README.md`. The build must use the t
 the job.
 
 A rebuilt offline image from this context supports C, C++, C#, Go, Java, JavaScript, Kotlin, PHP,
-PowerShell, Python, Rust, Shell, TSX, and TypeScript. Shell files use the hash-locked upstream Bash grammar.
-Ruby, Swift, and any other cataloged language without a lock remain explicit `UNAVAILABLE`
+PowerShell, Python, Ruby, Rust, Shell, TSX, and TypeScript. Shell files use the hash-locked upstream Bash grammar.
+Swift and any other cataloged language without a lock remain explicit `UNAVAILABLE`
 dispositions; operators must not interpret those gaps as clean coverage.
 
 The standalone `tree_sitter_ast` Dagster job is the manual dispatch path. In the review graph it

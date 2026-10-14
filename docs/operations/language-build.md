@@ -5,6 +5,10 @@ current execution implementations include Linux native, Rust/Cargo, JVM/Java/Kot
 Node/JavaScript/TypeScript, Python packaging, PHP/Composer, Linux-capable .NET SDK projects and
 solutions, and WebAssembly output producers. Accepted Windows-only and .NET Framework projects
 publish explicit `NOT_APPLICABLE` receipts.
+Bundler is intentionally not an execution lane: an accepted `Gemfile` produces a named gap stating
+that no pinned Ruby build profile or executor exists and that gem installation, lifecycle hooks,
+packaging, and native extensions were not run. Ruby source-mode Tree-sitter and CodeQL coverage do
+not imply Bundler or target-code execution.
 Each load lane revalidates only the accepted dispatch families it can consume. Handoff hashes,
 the target snapshot, workflow envelopes, and unique build-unit identities remain shared integrity
 checks; probe, image, recipe, descriptor, and dependency validation is lane-owned. An invalid

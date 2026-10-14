@@ -16,7 +16,7 @@ import time
 
 CODEQL = "/opt/codeql/codeql"
 MANUAL_LANGUAGES = {"cpp", "go", "java", "csharp"}
-NONE_LANGUAGES = {"javascript", "python", "rust", "actions"}
+NONE_LANGUAGES = {"javascript", "python", "ruby", "rust", "actions"}
 
 
 def _canonical(value: object) -> bytes:

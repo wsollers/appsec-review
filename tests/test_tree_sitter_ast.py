@@ -125,9 +125,9 @@ def test_normalization_preserves_spans_fields_malformed_flags_and_truncation(tmp
 
 
 def test_unavailable_grammar_is_an_explicit_gap() -> None:
-    runnable, gaps = partition_scopes((_scope("Ruby"),), {"Python": _lock()})
+    runnable, gaps = partition_scopes((_scope("Swift"),), {"Python": _lock()})
     assert runnable == ()
-    assert gaps == ({"scope_id": "scope-python", "language": "Ruby",
+    assert gaps == ({"scope_id": "scope-python", "language": "Swift",
                      "terminal_status": "UNAVAILABLE", "reason": "grammar unavailable",
                      "gaps": []},)
 
@@ -148,6 +148,8 @@ def test_supported_languages_have_locked_offline_grammars_and_parser_routes() ->
                        "610c910b6fb4b265894cf8af035d597d87abef2838206bccaa204629034c09c8"),
         "Shell": ("bash", "a06c2e4415e9bc0346c6b86d401879ffb44058f7",
                   "0a3c99ddb5ba49f35fb890d893af8483049bf9d8d7b1261730acc2488e3d3379"),
+        "Ruby": ("ruby", "ad907a69da0c8a4f7a943a7fe012712208da6dee",
+                 "c1c22f6a62595422e154fabedae9218ee92bf1a307c42965b7272b2531503bf8"),
     }
     identities = {item["language"]: item for item in lock["grammars"]}
     for language, (grammar, revision, digest) in expected.items():
@@ -158,14 +160,14 @@ def test_supported_languages_have_locked_offline_grammars_and_parser_routes() ->
 
 
 def test_supported_run_grammars_are_runnable_but_unknown_languages_remain_gaps() -> None:
-    languages = ("Kotlin", "PowerShell", "Shell")
+    languages = ("Kotlin", "PowerShell", "Ruby", "Shell")
     scopes = tuple(replace(_scope(language), scope_id=f"scope-{language.lower()}")
                    for language in languages)
     locks = {language: _lock(language, {"Kotlin": "kotlin", "PowerShell": "powershell",
-                                       "Shell": "bash"}[language]) for language in languages}
-    runnable, gaps = partition_scopes((*scopes, _scope("Ruby")), locks)
+                                       "Ruby": "ruby", "Shell": "bash"}[language]) for language in languages}
+    runnable, gaps = partition_scopes((*scopes, _scope("Swift")), locks)
     assert [scope.language for scope in runnable] == list(languages)
-    assert gaps == ({"scope_id": "scope-python", "language": "Ruby",
+    assert gaps == ({"scope_id": "scope-python", "language": "Swift",
                      "terminal_status": "UNAVAILABLE", "reason": "grammar unavailable",
                      "gaps": []},)
 
@@ -248,7 +250,7 @@ def test_live_container_parses_mult_project_multilanguage_fixture_and_proves_ide
              ("C#", "dotnet/Program.cs"),
              ("Python", "python/app.py"), ("PHP", "php/index.php"),
              ("Kotlin", "kotlin/Main.kt"), ("PowerShell", "powershell/main.ps1"),
-             ("Shell", "shell/main.sh")]
+             ("Ruby", "ruby/main.rb"), ("Shell", "shell/main.sh")]
     for language, relative in cases:
         payload = (FIXTURE / relative).read_bytes()
         request = {"schema": "appsec-review/tree-sitter-request/1", "scope_id": language.lower(),
@@ -297,7 +299,7 @@ def test_live_container_parses_mult_project_multilanguage_fixture_and_proves_ide
 
 @pytest.mark.skipif(not _cataloged_docker_available(),
                     reason="cataloged Tree-sitter image is not locally available")
-def test_real_graph_is_parallel_queryable_gapped_and_resumable(tmp_path: Path) -> None:
+def test_real_graph_is_parallel_queryable_complete_and_resumable(tmp_path: Path) -> None:
     base = load_config(ROOT / "appsec-review.toml")
     runtime = replace(base.runtime, runs_dir=tmp_path / "runs", data_dir=tmp_path / "data",
                       metadata_dir=tmp_path / "metadata")
@@ -307,8 +309,10 @@ def test_real_graph_is_parallel_queryable_gapped_and_resumable(tmp_path: Path) -
     outcome = GraphRunner(config, jobs).run(target_root=FIXTURE, source_fingerprint=fingerprint)
     published = outcome["jobs"]["job_tree_sitter_ast"]["result"]["outputs"][
         "acceptance.publish_handoff"]
+    # Catalog gaps (including the explicit Bundler execution gap) keep the aggregate partial,
+    # while Ruby's grammar scope itself must be successful.
     assert published["terminal_status"] == "PARTIAL"
-    assert any(value.get("language") == "Ruby" and value.get("terminal_status") == "UNAVAILABLE"
+    assert any(value.get("language") == "Ruby" and value.get("terminal_status") == "SUCCEEDED"
                for value in published["dispositions"])
     successful = [value for value in published["dispositions"] if "execution" in value]
     intervals = [(value["execution"]["started_at"], value["execution"]["completed_at"])
@@ -318,8 +322,8 @@ def test_real_graph_is_parallel_queryable_gapped_and_resumable(tmp_path: Path) -
                for start_b, end_b in intervals[index + 1:])
     core = RetrievalCore(config.runtime.runs_dir, outcome["run_id"])
     assert core.search(query="identifier", indexes=("analysis",), kinds=("ast_node",))["results"]
-    assert any("grammar unavailable" in gap
-               for gap in core.coverage(indexes=("analysis",))["coverage_gaps"])
+    assert not any("grammar unavailable" in gap
+                   for gap in core.coverage(indexes=("analysis",))["coverage_gaps"])
     resumed = GraphRunner(config, jobs).run(target_root=FIXTURE, source_fingerprint=fingerprint,
                                             run_id=outcome["run_id"])
     assert [item["action"] for item in resumed["decisions"]] == ["REUSE", "REUSE", "REUSE"]

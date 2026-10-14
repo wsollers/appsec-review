@@ -239,6 +239,7 @@ def test_routes_every_supported_mode_and_keeps_kotlin_and_typescript_visible() -
     files = [
         source("cpp/a.cpp"), source("go/main.go"), source("jvm/A.java"), source("jvm/B.kt"),
         source("dotnet/A.cs"), source("node/a.js"), source("node/b.ts"), source("py/a.py"),
+        source("ruby/a.rb"),
         source("rust/a.rs"), source("rust/Cargo.toml"), source("rust/Cargo.lock"),
         source(".github/workflows/ci.yml"), source("web/a.php"),
     ]
@@ -253,19 +254,19 @@ def test_routes_every_supported_mode_and_keeps_kotlin_and_typescript_visible() -
     ]
     plan = build_codeql_plan(
         source_fingerprint="f" * 64, files=files, receipts=receipts,
-        supported_extractors={"cpp", "go", "java", "csharp", "javascript", "python", "rust", "actions"},
+        supported_extractors={"cpp", "go", "java", "csharp", "javascript", "python", "ruby", "rust", "actions"},
         source_image_id=IMAGE,
     )
     by_language = {item.language: item for item in plan.scopes}
-    assert set(by_language) == {"cpp", "go", "java", "csharp", "javascript", "python", "rust", "actions"}
+    assert set(by_language) == {"cpp", "go", "java", "csharp", "javascript", "python", "ruby", "rust", "actions"}
     assert {name: by_language[name].mode for name in by_language} == {
         "cpp": "manual", "go": "manual", "java": "manual", "csharp": "manual",
-        "javascript": "none", "python": "none", "rust": "none", "actions": "none",
+        "javascript": "none", "python": "none", "ruby": "none", "rust": "none", "actions": "none",
     }
     assert by_language["java"].source_languages == ("Java", "Kotlin")
     assert by_language["javascript"].source_languages == ("JavaScript", "TypeScript")
     assert all(not by_language[name].commands_permitted
-               for name in ("javascript", "python", "rust", "actions"))
+               for name in ("javascript", "python", "ruby", "rust", "actions"))
     assert [item["status"] for item in plan.non_applicable] == ["SKIPPED_NA"]
     assert plan.non_applicable[0]["language"] == "php"
 
@@ -404,14 +405,22 @@ def test_rust_cannot_be_represented_as_manual() -> None:
         replace(plan.scopes[0], mode="manual", commands_permitted=True)
 
 
-def test_ruby_and_swift_require_an_accepted_executor_and_platform() -> None:
+def test_ruby_uses_source_mode_while_swift_remains_a_platform_gap() -> None:
     plan = build_codeql_plan(
         source_fingerprint="f" * 64, files=[source("lib/a.rb"), source("ios/a.swift")], receipts=[],
         supported_extractors={"ruby", "swift"}, source_image_id=IMAGE,
     )
-    assert not plan.scopes
-    assert any(gap.startswith("Ruby:") for gap in plan.gaps)
+    assert [(scope.language, scope.mode, scope.source_languages) for scope in plan.scopes] == [
+        ("ruby", "none", ("Ruby",))]
+    assert not any(gap.startswith("Ruby:") for gap in plan.gaps)
     assert any(gap.startswith("Swift:") for gap in plan.gaps)
+
+
+def test_missing_ruby_extractor_is_a_gap_not_false_coverage() -> None:
+    plan = build_codeql_plan(source_fingerprint="f" * 64, files=[source("lib/a.rb")], receipts=[],
+                             supported_extractors={"python"}, source_image_id=IMAGE)
+    assert not plan.scopes
+    assert plan.gaps == ("ruby: accepted source exists but the runtime reported no extractor",)
 
 
 def test_actions_are_planned_only_for_accepted_workflow_files() -> None:
@@ -503,10 +512,11 @@ def test_sarif_contract_rejects_malformed_top_level() -> None:
 def _settings_value() -> dict[str, object]:
     lock = json.loads((ROOT / "containers/tools/codeql/assets.lock.json").read_text(encoding="utf-8"))
     modes = {"cpp": "manual", "go": "manual", "java": "manual", "csharp": "manual",
-             "javascript": "none", "python": "none", "rust": "none", "actions": "none"}
+             "javascript": "none", "python": "none", "ruby": "none", "rust": "none", "actions": "none"}
     source_languages = {"cpp": ["C", "C++"], "go": ["Go"], "java": ["Java", "Kotlin"],
                         "csharp": ["C#"], "javascript": ["JavaScript", "TypeScript"],
-                        "python": ["Python"], "rust": ["Rust"], "actions": ["GitHub Actions"]}
+                        "python": ["Python"], "ruby": ["Ruby"], "rust": ["Rust"],
+                        "actions": ["GitHub Actions"]}
     prerequisites = {name: [] for name in modes}
     prerequisites["javascript"] = ["bundled-typescript"]
     prerequisites["rust"] = ["Cargo.toml", "Cargo.lock", "bundled-rust-indexer"]
@@ -539,6 +549,7 @@ def test_typed_codeql_configuration_enforces_language_contracts() -> None:
     settings = parse_codeql_settings(value)
     assert settings.languages["java"].source_languages == ("Java", "Kotlin")
     assert settings.languages["rust"].mode == "source"
+    assert settings.languages["ruby"].mode == "source"
     assert settings.languages["cpp"].query_suite == "codeql-suites/cpp-code-scanning.qls"
     assert [(item.query_id, item.query_suite) for item in settings.languages["cpp"].custom_queries] == [
         ("cert-cpp", "codeql-suites/cert-cpp-default.qls")]

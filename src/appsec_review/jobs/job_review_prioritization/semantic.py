@@ -24,7 +24,8 @@ SEMGREP_CATEGORIES = frozenset({"ingress", "sink", "privilege_shift", "sensitive
                                 "custom_parsing", "public_api", "validator", "parser", "middleware"})
 # Catalog language -> CodeQL extractor language covering it.
 CODEQL_LANGUAGES = {"C": "cpp", "C++": "cpp", "C/C++": "cpp", "Java": "java", "C#": "csharp", "Go": "go",
-                    "JavaScript": "javascript", "TypeScript": "javascript", "TSX": "javascript", "Rust": "rust"}
+                    "JavaScript": "javascript", "TypeScript": "javascript", "TSX": "javascript", "Rust": "rust",
+                    "Ruby": "ruby"}
 
 
 def _semgrep_pack(repository_root: Path) -> Mapping[str, Any]:

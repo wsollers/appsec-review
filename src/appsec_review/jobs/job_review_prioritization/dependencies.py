@@ -141,6 +141,15 @@ def extract(source: SourceFile, spec: LanguageSpec) -> tuple[list[dict[str, Any]
                 name = node.child("name")
                 if name is not None:
                     declarations["types"].append(text(name, 128))
+        elif grammar == "ruby" and kind == "call":
+            method = node.child("method")
+            name = text(method, 32).strip() if method is not None else ""
+            if name in {"require", "require_relative"}:
+                arguments = node.child("arguments")
+                named = arguments.named_children() if arguments is not None else []
+                value = _literal(source, named[0] if named else None)
+                records.append(_record(node, "ruby_require_relative" if name == "require_relative" else
+                                       "ruby_require", value, dynamic=value is None))
     return records, declarations
 
 
@@ -318,6 +327,14 @@ class GraphBuilder:
             if any(item == root or item.startswith(root + "\\") for item in self.php_namespaces if item):
                 return {**outcome, "method": "php-local-namespace-type-not-found"}
             return {**outcome, "status": "external", "method": "php-external"}
+        if kind in {"ruby_require", "ruby_require_relative"}:
+            if kind == "ruby_require" and not specifier.startswith("."):
+                return {**outcome, "status": "external", "method": "ruby-gem-or-load-path"}
+            joined = posixpath.normpath(posixpath.join(directory, specifier))
+            for candidate in (joined, joined + ".rb", posixpath.join(joined, "init.rb")):
+                if candidate in self.inventory:
+                    return found([candidate], "ruby-require-relative", 1.0)
+            return {**outcome, "method": "ruby-require-relative-not-found"}
         if kind == "rust_mod":
             name = posixpath.basename(path)
             base = directory if name in {"lib.rs", "main.rs", "mod.rs"} else posixpath.join(directory, name[:-3])

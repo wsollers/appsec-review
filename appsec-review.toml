@@ -1241,7 +1241,7 @@ version = "2.27.0"
 commit = "b47b3e59262c95aff4eeb84ac72d09e25a9c37e9"
 cli_sha256 = "5c905275695b4efcaa02ea380f6e60b01310fa3dff0fa8c442bf0638bb46055a"
 license_sha256 = "d0d6cfdc857c1e0153bbd2b6f0d4ab42dfc38acec9b97b2f7f55c1f51ffe9fbf"
-asset_lock_sha256 = "7f60a68de90d82d137382b232fa3afe3e76a892e93073ca6bc2ad81741150514"
+asset_lock_sha256 = "66abfdea3531f64994e2311a870272a6cc8ad581728470b20a506ae518f9315a"
 runtime_user = "10001:10001"
 retention = "run-owned"
 concurrency = 2
@@ -1392,6 +1392,21 @@ query_suite_sha256 = "bdd029fbd4c9b7e47b0aaca0cffd46726ceaa3a39d390f45a49b145d75
 query_pack_sha256 = "bc14923f3e1e3d862a5439953411c79022bbc3545e3ab539ec47dd224ac92946"
 query_lock_sha256 = "0c6ce22fd453bb6214dd7badf393096b17af3aae76fa7bfd1a14b93effc112a3"
 source_languages = ["Python"]
+prerequisites = []
+
+[jobs.job_codeql_analysis.settings.languages.ruby]
+enabled = true
+mode = "source"
+platform = "linux-x86_64"
+extractor_tree_sha256 = "e4ff0297fe75052e2dca1ae08e23c34dc2460a864c89b1022e9a571136cfadf4"
+extractor_file_count = 184
+query_pack = "codeql/ruby-queries"
+query_pack_version = "1.6.10"
+query_suite = "codeql-suites/ruby-security-and-quality.qls"
+query_suite_sha256 = "5d59961ed7382ccf2083aafce7bc7488ba509eb1f98b1981da07e5e3077d56d0"
+query_pack_sha256 = "fc74f5fd9a81de48fe6ce9c4b446c9ead6f6a95cb033f7ff6c6bb116374c9793"
+query_lock_sha256 = "186b8e67a334bcf5e3ab09a250a8d895e179df6bc3f8f0f4badfbdabcfcf9baf"
+source_languages = ["Ruby"]
 prerequisites = []
 
 [jobs.job_codeql_analysis.settings.languages.rust]

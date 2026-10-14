@@ -61,7 +61,8 @@ INDEX_SETTINGS = {"file_top_fraction": float, "file_top_count": int, "function_t
                   "max_graph_neighbors": int}
 # Catalog language -> grammar for languages this batch scores (".tsx" files route to the TSX grammar).
 SCORED_LANGUAGES = {"C": "c", "C++": "cpp", "C/C++": "cpp", "Java": "java", "C#": "csharp", "Go": "go",
-                    "JavaScript": "javascript", "TypeScript": "typescript", "Rust": "rust", "PHP": "php"}
+                    "JavaScript": "javascript", "TypeScript": "typescript", "Rust": "rust", "PHP": "php",
+                    "Ruby": "ruby"}
 CATEGORY_ORDER = ("privilege_shift", "semantic_path", "sink", "ingress", "sensitive_wrapper", "state_mutation",
                   "custom_parsing", "parser", "middleware", "validator", "suppression", "public_api")
 SKIPPED = {"SKIPPED_NA", "SKIPPED_POLICY"}

@@ -125,6 +125,15 @@ RULES: Mapping[str, LanguageRules] = {
         ("for_statement", "foreach_statement", "while_statement", "do_statement", "switch_statement", "catch_clause",
          "conditional_expression", "match_expression"),
         ("else_if_clause", "else_clause"), ("&&", "||", "??", "and", "or")),
+    "Ruby": _rules(
+        ("method", "singleton_method", "lambda", "block", "do_block"),
+        ("class", "module"),
+        ("if", "unless", "if_modifier", "unless_modifier"),
+        ("elsif", "for", "while", "until", "while_modifier", "until_modifier", "when", "rescue",
+         "conditional"),
+        ("when",),
+        ("for", "while", "until", "while_modifier", "until_modifier", "case", "rescue", "conditional"),
+        ("elsif", "else"), ("&&", "||", "and", "or")),
 }
 _NAME_TYPES = frozenset({"identifier", "field_identifier", "qualified_identifier", "destructor_name", "operator_name",
                          "scoped_identifier", "property_identifier", "name", "type_identifier"})
@@ -183,7 +192,7 @@ def _name(tree: _Tree, source: bytes, ordinal: tuple[int, ...]) -> str | None:
         current = declarator
     parent = tree.parent(ordinal)
     if parent is not None:
-        for field in ("name", "key", "left"):
+        for field in ("name", "key", "left", "method"):
             child = tree.field_child(parent, field)
             if child is not None and child != ordinal and tree.type(child) in _NAME_TYPES:
                 return _text(source, tree.nodes[child]) or None
@@ -192,7 +201,7 @@ def _name(tree: _Tree, source: bytes, ordinal: tuple[int, ...]) -> str | None:
 
 def _is_else_if(tree: _Tree, ordinal: tuple[int, ...], rules: LanguageRules) -> bool:
     parent = tree.parent(ordinal)
-    if tree.type(ordinal) not in rules.ifs or parent is None:
+    if not tree.nodes[ordinal].get("named") or tree.type(ordinal) not in rules.ifs or parent is None:
         return False
     return tree.type(parent) in _ELSE or (tree.nodes[ordinal].get("field") == "alternative" and
                                           tree.type(parent) in rules.ifs)
@@ -200,6 +209,12 @@ def _is_else_if(tree: _Tree, ordinal: tuple[int, ...], rules: LanguageRules) -> 
 
 def _operator(tree: _Tree, ordinal: tuple[int, ...] | None, rules: LanguageRules) -> str | None:
     return None if ordinal is None else tree.anonymous(ordinal, rules.boolean_tokens)
+
+
+def _is_function(tree: _Tree, ordinal: tuple[int, ...], rules: LanguageRules) -> bool:
+    """Ruby's ``block`` is a closure except when it is the body wrapper of a ``lambda``."""
+    return (tree.type(ordinal) in rules.functions and
+            not (tree.type(ordinal) == "block" and tree.type(tree.parent(ordinal)) == "lambda"))
 
 
 def _measure(tree: _Tree, root: tuple[int, ...], rules: LanguageRules) -> dict[str, Any]:
@@ -212,7 +227,7 @@ def _measure(tree: _Tree, root: tuple[int, ...], rules: LanguageRules) -> dict[s
         ordinal, nesting = stack.pop()
         node = tree.nodes[ordinal]
         kind = str(node["type"])
-        if kind in rules.functions:
+        if _is_function(tree, ordinal, rules):
             nested.append(ordinal)
             continue
         if node.get("error") or node.get("missing"):
@@ -228,17 +243,18 @@ def _measure(tree: _Tree, root: tuple[int, ...], rules: LanguageRules) -> dict[s
                 outer = tree.parent(outer)
             if _operator(tree, outer, rules) != kind:
                 cognitive += 1
-        elif kind in rules.decisions and not (kind in rules.cases and tree.anonymous(ordinal, frozenset({"default"}))):
+        elif node.get("named") and kind in rules.decisions and not (
+                kind in rules.cases and tree.anonymous(ordinal, frozenset({"default"}))):
             decisions += 1
         if _is_else_if(tree, ordinal, rules):
             # ``else if`` scores +1 once: on the else node when the grammar has one, otherwise here.
             cognitive += 0 if tree.type(tree.parent(ordinal)) in _ELSE else 1
-        elif kind in rules.nesting:
+        elif node.get("named") and kind in rules.nesting:
             cognitive += 1 + nesting
             child_nesting = nesting + 1
-        elif kind in rules.flat:
+        elif node.get("named") and kind in rules.flat:
             cognitive += 1
-        if kind in rules.ifs:
+        if node.get("named") and kind in rules.ifs:
             alternative = tree.field_child(ordinal, "alternative")
             if alternative is not None and tree.type(alternative) not in _ELSE | rules.ifs | rules.flat:
                 cognitive += 1

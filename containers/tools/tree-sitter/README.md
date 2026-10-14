@@ -10,7 +10,7 @@ Acquire on Linux using the digest-pinned base image, download the exact binary w
 grammar's upstream repository, release, license, generated library hash, and byte size.
 
 The locked grammar set is C, C++, C#, Go, Java, JavaScript, Kotlin, PHP, PowerShell, Python,
-Rust, Shell (the upstream `bash` grammar), TSX, and TypeScript. `assets.lock.json` records the
+Ruby, Rust, Shell (the upstream `bash` grammar), TSX, and TypeScript. `assets.lock.json` records the
 upstream repository revision and license for each generated library; `verify_assets.py` rejects a
 missing, additional, or hash-mismatched library. The acquisition helper fetches Kotlin,
 PowerShell, and Bash explicitly along with the original grammar set, so the production build does

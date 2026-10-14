@@ -84,7 +84,7 @@ def _source_labels(language: str, files: Sequence[Mapping[str, Any]]) -> set[str
         return ({"C"} if ".c" in suffixes else set()) | (
             {"C++"} if suffixes & {".cc", ".cpp", ".cxx", ".c++"} else set()) | (
             {"C/C++"} if suffixes & {".h", ".hh", ".hpp", ".hxx"} else set())
-    return {{"csharp": "C#", "go": "Go", "python": "Python", "rust": "Rust"}.get(
+    return {{"csharp": "C#", "go": "Go", "python": "Python", "ruby": "Ruby", "rust": "Rust"}.get(
         language, language)}
 
 
@@ -254,7 +254,7 @@ def build_codeql_plan(*, source_fingerprint: str, files: Sequence[Mapping[str, A
     non_applicable: list[Mapping[str, str]] = []
     modes = dict(language_modes or {
         "cpp": "build", "go": "build", "java": "build", "csharp": "build",
-        "javascript": "source", "python": "source", "rust": "source", "actions": "source",
+        "javascript": "source", "python": "source", "ruby": "source", "rust": "source", "actions": "source",
     })
 
     seen_build_units: set[str] = set()
@@ -348,7 +348,7 @@ def build_codeql_plan(*, source_fingerprint: str, files: Sequence[Mapping[str, A
     # scope so every accepted byte is covered exactly once.
     accepted_roots = tuple(sorted({_path(project.get("root")) for project in projects}))
     source_image_identity = source_image_id.removeprefix("sha256:")
-    for language in ("javascript", "python", "rust"):
+    for language in ("javascript", "python", "ruby", "rust"):
         remaining = tuple(item for item in _files_for(normalized_files, ".", _LANGUAGE_SUFFIXES[language])
                           if item["path"] not in covered_paths)
         if not remaining:
@@ -425,7 +425,7 @@ def build_codeql_plan(*, source_fingerprint: str, files: Sequence[Mapping[str, A
         if count:
             gaps.append(f"{name}: {count} accepted source file(s) are outside CodeQL C# coverage")
 
-    for language, display in (("ruby", "Ruby"), ("swift", "Swift")):
+    for language, display in (("swift", "Swift"),):
         found = _files_for(normalized_files, ".", _LANGUAGE_SUFFIXES[language])
         if found:
             if language == "swift" and not enable_swift:

@@ -11,7 +11,7 @@ before use.
 The pinned Linux x86-64 runtime is inventoried live before planning. C/C++, Go, Java/Kotlin, and
 C# are centrally configured as `build` and use `manual` executor databases that replay the exact
 protected configure/build argv captured by `job_language_build`. JavaScript/TypeScript and Python
-are configured as `source` and use `none` executor databases. Rust uses the pinned
+and Ruby are configured as `source` and use `none` executor databases. Rust uses the pinned
 source/no-build extractor layered onto the accepted Rust build image so the semantic analyzer can
 load Cargo metadata without replaying or executing the target build; missing Cargo manifests,
 lockfiles, accepted Rust images, or semantic-analyzer coverage are explicit gaps.
@@ -37,7 +37,9 @@ working directory, and environment that the accepted build actually executed, no
 recipe text.
 
 Visual Basic and F# are not implied by C# coverage. PHP and raw WebAssembly are recorded as
-`SKIPPED_NA`. Ruby and Swift remain explicit gaps until an accepted executor/platform exists.
+`SKIPPED_NA`. Swift remains an explicit platform gap. Ruby source analysis is accepted only when
+the live pinned runtime reports the Ruby extractor and the locked official Ruby query pack; a
+missing extractor or pack is a coverage gap, never clean Ruby coverage.
 
 ## Runtime and checkpoints
 

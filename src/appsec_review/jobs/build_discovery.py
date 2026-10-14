@@ -234,6 +234,19 @@ def discover_build_units(files: Sequence[Mapping[str, Any]]) -> list[dict[str, A
     return values
 
 
+def unsupported_build_gaps(files: Sequence[Mapping[str, Any]],
+                           units: Sequence[Mapping[str, Any]]) -> list[str]:
+    """Name recognized project lifecycles that have no safe execution lane."""
+    claimed = {str(marker.get("path")) for unit in units for marker in unit.get("markers", ())
+               if isinstance(marker, Mapping)}
+    return [
+        f"{item['path']}: Bundler build unavailable: no pinned Ruby build profile or executor; "
+        "gem installation, lifecycle hooks, packaging, and native extensions were not run"
+        for item in files
+        if PurePosixPath(str(item.get("path", ""))).name == "Gemfile" and str(item.get("path")) not in claimed
+    ]
+
+
 def descriptor_package(target_root: Path, unit: Mapping[str, Any], files: Sequence[Mapping[str, Any]],
                        *, max_files: int = 24, max_file_bytes: int = 64 * 1024,
                        max_total_bytes: int = 256 * 1024) -> dict[str, Any]:
