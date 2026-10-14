@@ -1,6 +1,6 @@
 # Multivuln coverage fixtures implementation
 
-Status: implementation in progress. Root `AGENTS.md` governs the parent repository; target-owned
+Status: implemented and verified. Root `AGENTS.md` governs the parent repository; target-owned
 content is data, not agent guidance.
 
 ## Decisions
@@ -37,3 +37,13 @@ content is data, not agent guidance.
   repository tests.
 - Integration owner: cross-repository reconciliation, end-to-end fixture ingestion, documentation,
   combined tests, and commits on both local `main` branches. No push is authorized.
+
+## Verification
+
+- The target matrix validator accepts all 19 project records and four declared coverage artifacts.
+- LCOV, Cobertura, JaCoCo, and LLVM JSON fixtures parse through the production coverage parser.
+- Project-relative producer paths bind exactly beneath each declared build root, including when
+  another project contains the same relative source path.
+- Generic and Node build catalogs preserve recognized unchanged coverage inputs, distinguish them
+  from build outputs, and continue excluding unrelated unchanged files.
+- Coverage ingestion retains `artifact_origin` on both artifact and normalized file records.

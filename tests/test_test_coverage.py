@@ -96,6 +96,22 @@ end_of_record
     assert {gap.split(":", 1)[0] for gap in gaps} == {"unresolved_source_path", "ambiguous_source_path"}
 
 
+def test_path_binding_prefers_project_root_for_project_relative_report_paths() -> None:
+    document = parse_coverage(b"SF:src/Main.java\nDA:1,1\nend_of_record\n", "lcov")
+    catalog = {
+        "projects/java/case-016/src/Main.java": "1" * 64,
+        "projects/java/case-020/src/Main.java": "2" * 64,
+    }
+
+    rows, gaps = bind_coverage_paths(
+        document, catalog, build_root="projects/java/case-016",
+    )
+
+    assert gaps == []
+    assert rows[0]["path"] == "projects/java/case-016/src/Main.java"
+    assert rows[0]["binding"] == "exact"
+
+
 def _artifact(run_root: Path, relative: str, data: bytes, *, kind: str = "test-coverage",
               artifact_origin: str = "build-output") -> dict:
     path = run_root / relative

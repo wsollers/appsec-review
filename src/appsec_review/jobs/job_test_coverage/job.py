@@ -162,8 +162,11 @@ def bind_coverage_paths(
     for item in document.files:
         normalized = _normalize_report_path(item.source_path)
         direct = [normalized]
-        if normalized_root and normalized.startswith(normalized_root + "/"):
-            direct.append(normalized[len(normalized_root) + 1:])
+        if normalized_root:
+            if normalized.startswith(normalized_root + "/"):
+                direct.append(normalized[len(normalized_root) + 1:])
+            else:
+                direct.append(f"{normalized_root}/{normalized}")
         exact = [path for path in direct if path in catalog_hashes]
         matches = sorted(set(exact or [path for path in catalog if (
             normalized == path or normalized.endswith("/" + path) or path.endswith("/" + normalized))]))
