@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 import hashlib
 import json
+import os
 from pathlib import Path, PurePosixPath
 import re
 import shlex
@@ -12,7 +13,10 @@ from appsec_review.storage import canonical_json, file_sha256
 
 
 CAPTURE_IDENTITY = "appsec-review/node-build-capture/2"
-LOCKFILES = {"package-lock.json": "npm", "pnpm-lock.yaml": "pnpm", "yarn.lock": "yarn"}
+LOCKFILES = {
+    "package-lock.json": "npm", "npm-shrinkwrap.json": "npm",
+    "pnpm-lock.yaml": "pnpm", "yarn.lock": "yarn",
+}
 TOOL_KINDS = {
     "tsc": "typescript-compiler", "babel": "transpiler", "babeljs": "transpiler",
     "swc": "transpiler", "esbuild": "bundler", "webpack": "bundler",
@@ -54,6 +58,18 @@ def is_profile_exchange_path(path: str | Path) -> bool:
 
 _SOURCE_SUFFIXES = {".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx", ".mts", ".cts"}
 _GENERATED_SUFFIXES = _SOURCE_SUFFIXES | {".d.ts", ".d.mts", ".d.cts"}
+_PACKAGE_METADATA = {"package.json"}
+_RESOLVED_DEPENDENCY_METADATA = {*LOCKFILES, ".pnp.cjs", ".pnp.loader.mjs"}
+_NATIVE_SYMBOL_SUFFIXES = {".pdb", ".debug", ".dwo", ".dwp", ".sym"}
+_PACKAGE_SUFFIXES = {".tgz", ".zip"}
+_INTEGRITY_SUFFIXES = (".integrity", ".sha1", ".sha256", ".sha512", ".shasum")
+_EXCLUDED_DIRECTORIES = {
+    "node_modules", ".cache", ".npm", ".pnpm-store", ".parcel-cache", ".turbo",
+    ".eslintcache", ".nyc_output", ".tmp", ".temp", "tmp", "temp",
+}
+_MAX_ARTIFACT_BYTES = 512 * 1024 * 1024
+_MAX_METADATA_BYTES = 64 * 1024 * 1024
+_MAX_SOURCE_MAP_BYTES = 16 * 1024 * 1024
 _CONFIG_NAMES = {
     "package.json", "tsconfig.json", "babel.config.js", "babel.config.cjs", "babel.config.mjs",
     ".babelrc", ".swcrc", "webpack.config.js", "webpack.config.cjs", "webpack.config.mjs",
@@ -74,7 +90,8 @@ def dependency_identity(dispatch: Mapping[str, Any]) -> tuple[str | None, dict[s
     package = by_name.get("package.json")
     if package is None:
         return None, {}, ["Node build package.json identity is unavailable"]
-    if len(locks) > 1:
+    lock_managers = {LOCKFILES[name] for name, *_ in locks}
+    if len(lock_managers) > 1:
         return None, {}, ["Node build declares multiple package-manager lockfiles"]
     commands = [*dispatch.get("recipe", {}).get("configure_commands", ()),
                 *dispatch.get("recipe", {}).get("build_commands", ())]
@@ -82,7 +99,8 @@ def dependency_identity(dispatch: Mapping[str, Any]) -> tuple[str | None, dict[s
     managers = invoked & set(LOCKFILES.values())
     if len(managers) > 1:
         return None, {}, ["accepted Node commands use multiple package managers"]
-    lock_name, lock_path, lock_sha = locks[0] if locks else (None, None, None)
+    preferred = next((row for row in locks if row[0] == "npm-shrinkwrap.json"), None)
+    lock_name, lock_path, lock_sha = preferred or (locks[0] if locks else (None, None, None))
     manager = LOCKFILES[str(lock_name)] if lock_name else next(iter(managers), "npm")
     identity = {
         "manager": manager,
@@ -111,20 +129,79 @@ def artifact_kind(path: Path) -> str | None:
         return "execution-profile"
     if name.endswith((".d.ts", ".d.mts", ".d.cts")):
         return "generated-declaration"
+    if name.endswith(".node.map") or suffix in _NATIVE_SYMBOL_SUFFIXES:
+        return "native-symbols"
     if suffix == ".map":
         return "source-map"
     if suffix == ".node":
         return "native-addon"
-    if suffix in {".tgz", ".zip"}:
+    if suffix in _PACKAGE_SUFFIXES:
         return "package"
+    if name.endswith(_INTEGRITY_SUFFIXES):
+        return "package-integrity"
+    if name in _PACKAGE_METADATA:
+        return "package-metadata"
+    if name in _RESOLVED_DEPENDENCY_METADATA:
+        return "resolved-dependency-metadata"
     if suffix in _GENERATED_SUFFIXES:
         return "generated-code"
     if suffix in {".wasm", ".css", ".html"}:
         return "bundle-asset"
-    if suffix in {".o", ".obj", ".a", ".lib", ".so", ".dll", ".dylib"}:
-        return "native-intermediate" if suffix in {".o", ".obj"} else "native-library"
-    if name in {"package.json", "package-lock.json", "pnpm-lock.yaml", "yarn.lock"}:
-        return "package-metadata"
+    return None
+
+
+def _excluded_directory(parent: PurePosixPath, name: str) -> bool:
+    lowered = name.lower()
+    if lowered in _EXCLUDED_DIRECTORIES:
+        return True
+    return lowered == "cache" and bool(parent.parts) and parent.parts[-1].lower() == ".yarn"
+
+
+def _catalog_files(workspace: Path) -> list[Path]:
+    """Walk without entering dependency trees, caches, or transient directories."""
+    files: list[Path] = []
+    for raw_root, directories, names in os.walk(workspace, followlinks=False):
+        root = Path(raw_root)
+        parent = PurePosixPath(root.relative_to(workspace).as_posix())
+        directories[:] = sorted(name for name in directories
+                                if not (root / name).is_symlink()
+                                and not _excluded_directory(parent, name))
+        files.extend(root / name for name in names)
+    return sorted(files, key=lambda path: path.relative_to(workspace).as_posix())
+
+
+def _size_limit(kind: str) -> int:
+    if kind == "source-map":
+        return _MAX_SOURCE_MAP_BYTES
+    if kind in {"package-metadata", "resolved-dependency-metadata", "package-integrity"}:
+        return _MAX_METADATA_BYTES
+    return _MAX_ARTIFACT_BYTES
+
+
+def _integrity_archive(relative: str, archives: Mapping[str, str]) -> tuple[str, str] | None:
+    lowered = relative.lower()
+    for suffix in _INTEGRITY_SUFFIXES:
+        if lowered.endswith(suffix):
+            archive = relative[:-len(suffix)]
+            digest = archives.get(archive)
+            return (archive, digest) if digest is not None else None
+    return None
+
+
+def _symbol_addon(relative: str, addons: Mapping[str, str]) -> tuple[str, str] | None:
+    lowered = relative.lower()
+    candidates = []
+    if lowered.endswith(".node.map"):
+        candidates.append(relative[:-4])
+    if lowered.endswith(".node.debug"):
+        candidates.append(relative[:-6])
+    suffix = PurePosixPath(relative).suffix
+    if suffix.lower() in _NATIVE_SYMBOL_SUFFIXES:
+        candidates.append(relative[:-len(suffix)] + ".node")
+    for candidate in candidates:
+        digest = addons.get(candidate)
+        if digest is not None:
+            return candidate, digest
     return None
 
 
@@ -132,29 +209,74 @@ def catalog(run_root: Path, workspace: Path, before: Mapping[str, str], limit: i
             build_unit_id: str) -> tuple[list[dict[str, Any]], list[str]]:
     artifacts: list[dict[str, Any]] = []
     gaps: list[str] = []
-    for path in sorted(workspace.rglob("*")):
+    candidates = _catalog_files(workspace)
+    archives: dict[str, str] = {}
+    addons: dict[str, str] = {}
+    for candidate in candidates:
+        try:
+            relative = candidate.relative_to(workspace).as_posix()
+            if (not candidate.is_file() or candidate.is_symlink()
+                    or candidate.stat().st_size > _MAX_ARTIFACT_BYTES):
+                continue
+            if candidate.suffix.lower() in _PACKAGE_SUFFIXES:
+                digest = file_sha256(candidate)
+                if before.get(relative) != digest:
+                    archives[relative] = digest
+            elif candidate.suffix.lower() == ".node":
+                digest = file_sha256(candidate)
+                if before.get(relative) != digest:
+                    addons[relative] = digest
+        except OSError:
+            continue
+    for path in candidates:
         try:
             if path.is_symlink() or not path.is_file():
                 continue
         except OSError:
             continue
         relative = path.relative_to(workspace).as_posix()
-        digest = file_sha256(path)
         kind = artifact_kind(path)
+        if kind is None:
+            continue
+        integrity_archive = _integrity_archive(relative, archives) if kind == "package-integrity" else None
+        if kind == "package-integrity" and integrity_archive is None:
+            continue
+        symbol_addon = _symbol_addon(relative, addons) if kind == "native-symbols" else None
+        if kind == "native-symbols" and symbol_addon is None:
+            continue
+        size = path.stat().st_size
+        size_limit = _size_limit(kind)
+        if size > size_limit:
+            gaps.append(f"{relative}: {kind} exceeds {size_limit} byte retention bound")
+            continue
+        digest = file_sha256(path)
         unchanged = before.get(relative) == digest
-        if kind is None or (unchanged and kind not in {"test-coverage", "execution-profile"}):
+        if unchanged and kind not in {
+            "test-coverage", "execution-profile", "package-metadata",
+            "resolved-dependency-metadata",
+        }:
             continue
         value: dict[str, Any] = {
             "path": path.relative_to(run_root).as_posix(), "workspace_path": relative,
-            "sha256": digest, "size_bytes": path.stat().st_size, "kind": kind,
+            "sha256": digest, "size_bytes": size, "kind": kind,
             "build_unit_id": build_unit_id, "mapping": "exact-workspace-path",
             "mapping_confidence": 1.0,
             "artifact_origin": "accepted-input" if unchanged else "build-output",
         }
+        if kind == "package-metadata":
+            value["package_metadata"] = {"format": "package.json", "role": "package-manifest"}
+        elif kind == "resolved-dependency-metadata":
+            manager = LOCKFILES.get(path.name.lower(), "yarn" if path.name.lower().startswith(".pnp") else None)
+            value["dependency_metadata"] = {"format": path.name, "manager": manager,
+                                              "role": "resolved-dependency-graph"}
+        elif integrity_archive is not None:
+            value["package_archive"] = {"workspace_path": integrity_archive[0],
+                                        "sha256": integrity_archive[1]}
+        elif symbol_addon is not None:
+            value["native_addon"] = {"workspace_path": symbol_addon[0],
+                                     "sha256": symbol_addon[1]}
         if kind == "source-map":
             try:
-                if path.stat().st_size > 16 * 1024 * 1024:
-                    raise ValueError("source map exceeds 16 MiB bound")
                 document = json.loads(path.read_text(encoding="utf-8"))
                 sources = document.get("sources", ()) if isinstance(document, Mapping) else ()
                 if not isinstance(sources, list) or len(sources) > 4096:
@@ -259,6 +381,46 @@ def validate_lifecycle_scripts(workspace: Path, source_dir: str,
     return list(dict.fromkeys(gaps))
 
 
+def _npm_pack_integrity(source_dir: str, argv: Sequence[str], after: Mapping[str, str],
+                        stdout: bytes) -> tuple[list[dict[str, Any]], list[str]]:
+    if Path(str(argv[0])).name != "npm" or "pack" not in argv or "--json" not in argv:
+        return [], []
+    try:
+        document = json.loads(stdout.decode("utf-8"))
+    except (UnicodeError, json.JSONDecodeError):
+        return [], ["npm pack --json integrity metadata was unavailable or not parseable"]
+    rows = document if isinstance(document, list) else [document]
+    if len(rows) > 256:
+        return [], ["npm pack --json integrity metadata exceeds 256 row bound"]
+    values: list[dict[str, Any]] = []
+    for row in rows:
+        if not isinstance(row, Mapping):
+            continue
+        filename = row.get("filename")
+        integrity, shasum = row.get("integrity"), row.get("shasum")
+        if (not isinstance(filename, str) or not filename or
+                (not isinstance(integrity, str) and not isinstance(shasum, str))):
+            continue
+        logical = PurePosixPath(filename.replace("\\", "/"))
+        if logical.is_absolute() or any(part in {"", ".", ".."} for part in logical.parts):
+            continue
+        workspace_path = (PurePosixPath(source_dir) / logical).as_posix()
+        digest = after.get(workspace_path)
+        if digest is None:
+            continue
+        value: dict[str, Any] = {"workspace_path": workspace_path, "sha256": digest}
+        if isinstance(integrity, str) and len(integrity) <= 1024:
+            value["integrity"] = integrity
+        if isinstance(shasum, str) and re.fullmatch(r"[0-9a-fA-F]{40}", shasum):
+            value["shasum"] = shasum.lower()
+        for key in ("size", "unpackedSize", "totalFiles"):
+            if type(row.get(key)) is int and 0 <= row[key] <= 2**63 - 1:
+                value[key] = row[key]
+        if "integrity" in value or "shasum" in value:
+            values.append(value)
+    return values, ([] if values else ["npm pack --json exposed no bound integrity metadata"])
+
+
 def invocation_rows(workspace: Path, source_dir: str, argv: Sequence[str], *, success: bool,
                     before: Mapping[str, str], after: Mapping[str, str],
                     diagnostic_streams: Sequence[bytes] = ()) -> tuple[list[dict[str, Any]], list[str]]:
@@ -279,6 +441,11 @@ def invocation_rows(workspace: Path, source_dir: str, argv: Sequence[str], *, su
                            "mapping": "configuration-input", "mapping_confidence": 0.75}
                           for path in sorted(root.rglob("*")) if path.is_file() and not path.is_symlink()
                           and (path.name in _CONFIG_NAMES or path.suffix.lower() in _SOURCE_SUFFIXES)][:4096]
+    if success and diagnostic_streams:
+        integrity, integrity_gaps = _npm_pack_integrity(source_dir, argv, after, diagnostic_streams[0])
+        if integrity:
+            rows[0]["package_integrity"] = integrity
+        gaps.extend(integrity_gaps)
     for stream in diagnostic_streams:
         for line in stream.decode("utf-8", "replace").splitlines()[:20000]:
             try:
@@ -302,6 +469,8 @@ def invocation_rows(workspace: Path, source_dir: str, argv: Sequence[str], *, su
                          "origin": "retained-build-diagnostics", "mapping": "diagnostic-trace",
                          "mapping_confidence": 0.9})
     if not success or tool not in {"npm", "pnpm", "yarn"}:
+        return rows, gaps
+    if tool == "npm" and "pack" in argv:
         return rows, gaps
     package = _package_document(workspace, source_dir)
     script_name = _script_name(argv, tool)

@@ -16,7 +16,7 @@ from appsec_review.jobs.job_artifact_indexing import (
     canonical_artifact_identity,
     load_accepted_artifact_index,
 )
-from appsec_review.jobs.job_artifact_indexing.job import _finish_shard
+from appsec_review.jobs.job_artifact_indexing.job import _finish_shard, _validate_receipts
 from appsec_review.retrieval import (
     INDEX_SCHEMA,
     EntityKind,
@@ -276,6 +276,81 @@ def test_repeated_link_observations_produce_one_relation_with_provenance(
     gaps = load_accepted_artifact_index(run_root)["gaps"]
     assert any("link provenance exceeds 500 observations" in gap for gap in gaps) == (
         observation_count > 500)
+
+
+def test_node_catalog_payload_preserves_source_identity_and_exact_producing_action(tmp_path: Path) -> None:
+    config, target, snapshot, run_root, receipts, accepted_path, handoff_path, latest = _seed(tmp_path)
+    receipt = receipts[0]
+    receipt["family"] = "node"
+    artifact = receipt["artifacts"][1]
+    artifact.update({
+        "kind": "generated-code", "artifact_origin": "build-output",
+        "source_map": {"sources": ["../src/index.ts"], "source_identities": [{
+            "declared_path": "../src/index.ts", "workspace_path": "src/index.ts",
+            "sha256": "f" * 64, "size_bytes": 12, "mapping": "source-map",
+            "mapping_confidence": 1.0,
+        }], "source_root": "", "file": "app.js"},
+    })
+    receipt["artifacts"] = [artifact]
+    command = receipt["commands"][0]
+    receipt["tool_invocations"] = [{
+        "tool": "webpack", "tool_kind": "bundler", "argv_sha256": command["argv_sha256"],
+        "mapping_confidence": 1.0,
+        "outputs": [{"workspace_path": artifact["workspace_path"], "sha256": artifact["sha256"]}],
+        "inputs": [], "origin": "accepted-recipe",
+    }]
+    _publish_changed_language_receipts(run_root, receipts, accepted_path, handoff_path, latest)
+
+    GraphRunner(config, [build_job()]).run(target_root=target, source_fingerprint=snapshot,
+                                            run_id=RUN_ID)
+
+    identity = canonical_artifact_identity(snapshot, receipt["build_unit_id"], artifact).value
+    result = RetrievalCore(config.runtime.runs_dir, RUN_ID).query_artifacts(artifact_identity=identity)
+    assert result["results"][0]["payload"]["artifact_origin"] == "build-output"
+    assert result["results"][0]["payload"]["source_map"]["source_identities"][0][
+        "workspace_path"] == "src/index.ts"
+    relation_shard = next(item for item in RetrievalCore(config.runtime.runs_dir, RUN_ID).manifest["indexes"]
+                          if item["shard_id"].startswith("relations-")
+                          and item["shard_id"].endswith(identity.rsplit(":", 1)[-1][:24]))
+    with sqlite3.connect(run_root / relation_shard["relative_path"]) as database:
+        relation = database.execute(
+            "SELECT exact, confidence, ambiguity FROM relations WHERE kind='GENERATED_FROM'"
+        ).fetchone()
+    assert relation == (1, 1.0, None)
+
+
+def test_node_artifact_validation_rejects_weakened_origin_or_workspace_identity(tmp_path: Path) -> None:
+    _config, _target, snapshot, run_root, receipts, *_ = _seed(tmp_path)
+    receipt = receipts[0]
+    receipt["family"] = "node"
+    receipt["artifacts"][0]["artifact_origin"] = "untrusted-discovery"
+
+    with pytest.raises(ValueError, match="origin is invalid"):
+        _validate_receipts(run_root, snapshot, [receipt])
+
+    receipt["artifacts"][0]["artifact_origin"] = "build-output"
+    receipt["artifacts"][0]["build_unit_id"] = "other-unit"
+    with pytest.raises(ValueError, match="build-unit identity changed"):
+        _validate_receipts(run_root, snapshot, [receipt])
+
+
+def test_node_package_integrity_is_bound_to_the_workspace_artifact(tmp_path: Path) -> None:
+    _config, _target, snapshot, run_root, receipts, *_ = _seed(tmp_path)
+    receipt = receipts[0]
+    receipt["family"] = "node"
+    artifact = receipt["artifacts"][1]
+    artifact.update(kind="package", artifact_origin="build-output")
+    receipt["artifacts"] = [artifact]
+    receipt["tool_invocations"] = [{"package_integrity": [{
+        "workspace_path": artifact["workspace_path"], "sha256": artifact["sha256"],
+        "integrity": "sha512-fixture", "shasum": "a" * 40,
+    }]}]
+
+    validated, gaps = _validate_receipts(run_root, snapshot, [receipt])
+
+    assert not gaps
+    assert validated[0]["validated_artifacts"][0]["package_integrity"]["integrity"] == (
+        "sha512-fixture")
 
 
 def test_mixed_language_partition_resume_selective_invalidation_and_retrieval(tmp_path: Path) -> None:
