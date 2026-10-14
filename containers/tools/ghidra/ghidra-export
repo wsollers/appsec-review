@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+# Bounded headless Ghidra export of exactly one binary. The binary is data: it is imported,
+# analyzed, and exported, never executed. Every option value is validated before use, and all
+# Ghidra state (project, user settings, temporary files) is confined to the scratch mount.
+set -euo pipefail
+
+input=""
+output=""
+work="/scratch/ghidra-work"
+max_heap="768m"
+max_cpu="2"
+analysis_timeout="300"
+decompile_timeout="60"
+max_functions="50000"
+max_function_bytes="262144"
+max_pcode_ops="20000"
+max_strings="100000"
+min_string_length="4"
+processor=""
+cspec=""
+loader=""
+
+fail() {
+    echo "ghidra-export: $1" >&2
+    exit 64
+}
+
+while [ "$#" -gt 0 ]; do
+    [ "$#" -ge 2 ] || fail "option $1 needs a value"
+    case "$1" in
+        --input) input="$2" ;;
+        --output) output="$2" ;;
+        --work) work="$2" ;;
+        --max-heap) max_heap="$2" ;;
+        --max-cpu) max_cpu="$2" ;;
+        --analysis-timeout) analysis_timeout="$2" ;;
+        --decompile-timeout) decompile_timeout="$2" ;;
+        --max-functions) max_functions="$2" ;;
+        --max-function-bytes) max_function_bytes="$2" ;;
+        --max-pcode-ops) max_pcode_ops="$2" ;;
+        --max-strings) max_strings="$2" ;;
+        --min-string-length) min_string_length="$2" ;;
+        --processor) processor="$2" ;;
+        --cspec) cspec="$2" ;;
+        --loader) loader="$2" ;;
+        *) fail "unknown option $1" ;;
+    esac
+    shift 2
+done
+
+[[ "$input" =~ ^/target/[A-Za-z0-9._-]+$ ]] || fail "--input must name one file directly under /target"
+[[ "$output" =~ ^/scratch/[A-Za-z0-9._/-]+$ && "$output" != *..* ]] || fail "--output must stay under /scratch"
+[[ "$work" =~ ^/scratch/[A-Za-z0-9._/-]+$ && "$work" != *..* ]] || fail "--work must stay under /scratch"
+[[ "$max_heap" =~ ^[1-9][0-9]*[gGmM]$ ]] || fail "--max-heap must look like 768m or 6g"
+for value in "$max_cpu" "$analysis_timeout" "$decompile_timeout" "$max_functions" \
+             "$max_function_bytes" "$max_pcode_ops" "$max_strings" "$min_string_length"; do
+    [[ "$value" =~ ^[1-9][0-9]{0,9}$ ]] || fail "numeric options must be positive integers"
+done
+[[ -z "$processor" || "$processor" =~ ^[A-Za-z0-9._:-]+$ ]] || fail "--processor is not a language id"
+[[ -z "$cspec" || "$cspec" =~ ^[A-Za-z0-9._-]+$ ]] || fail "--cspec is not a compiler spec id"
+[[ -z "$loader" || "$loader" =~ ^[A-Za-z0-9]+$ ]] || fail "--loader is not a loader class name"
+[ -f "$input" ] && [ ! -L "$input" ] || fail "input is not a regular file"
+
+mkdir -p "$work/home" "$work/tmp" "$work/project" "$output"
+export HOME="$work/home"
+export XDG_CONFIG_HOME="$work/home/.config"
+export XDG_CACHE_HOME="$work/home/.cache"
+export GHIDRA_HEADLESS_MAXMEM="$max_heap"
+export GHIDRA_HEADLESS_JAVA_OPTIONS="-Djava.io.tmpdir=$work/tmp -Duser.home=$work/home"
+
+arguments=("$work/project" appsec -import "$input")
+[ -z "$processor" ] || arguments+=(-processor "$processor")
+[ -z "$cspec" ] || arguments+=(-cspec "$cspec")
+[ -z "$loader" ] || arguments+=(-loader "$loader")
+arguments+=(
+    -scriptPath /opt/appsec/ghidra-scripts
+    -postScript AppsecExportProgram.java
+        "output=$output"
+        "decompile_timeout=$decompile_timeout"
+        "max_functions=$max_functions"
+        "max_function_bytes=$max_function_bytes"
+        "max_pcode_ops=$max_pcode_ops"
+        "max_strings=$max_strings"
+        "min_string_length=$min_string_length"
+    -analysisTimeoutPerFile "$analysis_timeout"
+    -max-cpu "$max_cpu"
+    -deleteProject
+)
+exec /opt/ghidra/support/analyzeHeadless "${arguments[@]}"

@@ -1,0 +1,55 @@
+{
+  "schema": "appsec-review/binary-decompilation-expectations/1",
+  "fixture": "case083",
+  "weakness": "CWE-120: unbounded strcpy into a 32-byte stack buffer in print_label, reached from main with argv[1]",
+  "source": {
+    "repository": "https://github.com/wsollers/appsec-multi-vuln",
+    "commit": "7c10536389c3cfb20a27d7a6a78943267ea43b3f",
+    "path": "projects/native/case-083/src/main.c",
+    "fixture_path": "containers/fixtures/ghidra/case-083/main.c",
+    "sha256": "6d4a19d1bcd41dec9ec9d763c324f53f1523090f44b7bd938a79e917be58e5cc"
+  },
+  "build": {
+    "tool_id": "tool-native-cpp",
+    "compiler": "/usr/bin/clang-18",
+    "common_flags": ["-std=c17", "-ffile-prefix-map=/target=."]
+  },
+  "variants": {
+    "symbols": {
+      "description": "Unoptimized, not stripped, with DWARF. The best case: names, types, and the buffer size survive.",
+      "flags": ["-O0", "-g", "-fno-inline"],
+      "minimum_score": 1.0,
+      "checks": [
+        {"id": "function-main", "kind": "function", "name": "main"},
+        {"id": "function-print-label", "kind": "function", "name": "print_label"},
+        {"id": "import-strcpy", "kind": "import", "name": "strcpy"},
+        {"id": "import-printf", "kind": "import", "name": "printf"},
+        {"id": "call-print-label-to-strcpy", "kind": "call", "caller": {"name": "print_label"}, "callee": "strcpy"},
+        {"id": "call-main-to-print-label", "kind": "call", "caller": {"name": "main"}, "callee": "print_label"},
+        {"id": "string-format-in-print-label", "kind": "string", "value": "label=%s\n", "referenced_by": {"name": "print_label"}},
+        {"id": "string-default-in-main", "kind": "string", "value": "demo", "referenced_by": {"name": "main"}},
+        {"id": "pseudo-c-sink-and-buffer", "kind": "pseudo_c", "function": {"name": "print_label"}, "contains": ["strcpy(", "[32]"]},
+        {"id": "pseudo-c-argv-source", "kind": "pseudo_c", "function": {"name": "main"}, "contains": ["argv[1]", "print_label("]},
+        {"id": "pcode-call-strcpy", "kind": "pcode_call", "function": {"name": "print_label"}, "callee": "strcpy"},
+        {"id": "decompile-coverage", "kind": "decompile_coverage", "minimum": 1.0}
+      ]
+    },
+    "stripped": {
+      "description": "Optimized and stripped. The realistic third-party case: local names are gone and the helper may be inlined, so the sink must be located by import and call edge. Optional checks record what was lost: both function names, and the four-character default string, which Ghidra leaves as untyped data below its string-length threshold.",
+      "flags": ["-O2", "-s"],
+      "minimum_score": 1.0,
+      "checks": [
+        {"id": "import-strcpy", "kind": "import", "name": "strcpy"},
+        {"id": "import-printf", "kind": "import", "name": "printf"},
+        {"id": "call-any-to-strcpy", "kind": "call", "callee": "strcpy"},
+        {"id": "string-format-referenced", "kind": "string", "value": "label=%s\n", "referenced_by": {"calls": "strcpy"}},
+        {"id": "pseudo-c-sink-and-buffer", "kind": "pseudo_c", "function": {"calls": "strcpy"}, "contains": ["strcpy(", "[32]"]},
+        {"id": "pcode-call-strcpy", "kind": "pcode_call", "function": {"calls": "strcpy"}, "callee": "strcpy"},
+        {"id": "decompile-coverage", "kind": "decompile_coverage", "minimum": 1.0},
+        {"id": "lost-function-main", "kind": "function", "name": "main", "required": false},
+        {"id": "lost-function-print-label", "kind": "function", "name": "print_label", "required": false},
+        {"id": "lost-short-string", "kind": "string", "value": "demo", "required": false}
+      ]
+    }
+  }
+}

@@ -45,6 +45,9 @@ Operations, one page per job or service:
   [`operations/dependency-intelligence.md`](operations/dependency-intelligence.md) — engineering
   security-signal production and recovery.
 - [`operations/cpp-index-jobs.md`](operations/cpp-index-jobs.md) — clangd symbol index and Joern CPG jobs.
+- [`operations/binary-decompilation.md`](operations/binary-decompilation.md) — pre-run Ghidra decompilation of
+  third-party binaries, publications, and the known-binary efficacy check; design in
+  [`architecture/binary-decompilation.md`](architecture/binary-decompilation.md).
 - [`operations/post-build-security-assessment.md`](operations/post-build-security-assessment.md) — build-hardening assessment.
 - [`operations/static-analysis.md`](operations/static-analysis.md) — deterministic static evidence collection.
 - [`operations/codeql-analysis.md`](operations/codeql-analysis.md) — cross-language CodeQL.

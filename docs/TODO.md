@@ -479,3 +479,24 @@ See [`architecture/review-prioritization.md`](architecture/review-prioritization
 - Score preprocessor-conditional and macro control flow instead of reporting it as unsupported.
 - Add a Python mapping and any further languages the Tree-sitter producer gains.
 - Add Semgrep or CodeQL path queries for PHP, which has no CodeQL extractor today.
+
+## Wire binary decompilation publications into a review
+
+Done: the pinned `tool-ghidra` image, the `[binary_decompilation]` configuration, the pre-run
+`appsec-review binary-decompile` command, the verified publication store with its `current.json`
+pointer and `resolve_current` lookup, and the case-083 known-binary efficacy comparison. See
+[`architecture/binary-decompilation.md`](architecture/binary-decompilation.md).
+
+Outstanding, in order:
+
+1. Add the `binary_evidence.resolve_publications` task to `job_review_intake`. It records each
+   configured binary's identity and manifest hash in `review-intake.json`, or a
+   `binary_decompilation_unavailable` gap, and honors a per-binary `required` key.
+2. Add `job_binary_evidence_indexing` with bounded function, import-caller, call-neighbourhood, and
+   string indices, plus retrieval tools over them.
+3. Register a runtime skill that tells review workers how binary-derived evidence differs from
+   source, and require findings to cite binary hash, function address, and pseudo-C line.
+4. Add a PE fixture (with and without a PDB), optional debug-symbol inputs, and managed-code
+   routing.
+5. Design a target kind for a review whose only input is a binary.
+6. Measure memory, time, and file counts on a large real binary and tune the defaults.

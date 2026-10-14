@@ -66,6 +66,15 @@ def parser() -> argparse.ArgumentParser:
     metrics = commands.add_parser("metrics", help="derive bounded operational metrics from telemetry")
     metrics.add_argument("--run-id", required=True)
 
+    binary = commands.add_parser(
+        "binary-decompile", help="decompile configured third-party binaries before a review is submitted")
+    binary.add_argument("--binary", action="append", dest="binaries", metavar="ID",
+                        help="configured binary id; repeatable; default is every configured binary")
+    binary.add_argument("--force", action="store_true",
+                        help="decompile again even when a verified publication exists")
+    binary.add_argument("--verify-only", action="store_true",
+                        help="verify existing publications without running Ghidra")
+
     commands.add_parser("schedules", help="print configured schedules")
     return root
 
@@ -85,6 +94,29 @@ def main(argv: Sequence[str] | None = None) -> int:
         }
         print(json.dumps(schedules, sort_keys=True))
         return 0
+
+    if args.command == "binary-decompile":
+        from appsec_review.binary_decompilation import (
+            DecompilationError, PublicationError, decompile_binary, verify_binary)
+        settings = config.binary_decompilation
+        requests = [settings.binary(binary_id) for binary_id in args.binaries] if args.binaries             else list(settings.binaries)
+        if not requests:
+            parser().error("no binaries are configured under [[binary_decompilation.binaries]]")
+        results, failed = [], False
+        for request in requests:
+            common = {"repository_root": config.runtime.repository_root,
+                      "data_dir": config.runtime.data_dir, "settings": settings, "request": request}
+            try:
+                results.append({"status": "PUBLISHED", **(
+                    verify_binary(**common) if args.verify_only
+                    else decompile_binary(**common, force=args.force))})
+            except (DecompilationError, PublicationError, ValueError, RuntimeError, OSError) as exc:
+                failed = True
+                results.append({"status": getattr(exc, "status", "REFUSED"), "binary_id": request.binary_id,
+                                "binary_sha256": request.sha256, "error": str(exc),
+                                "evidence": str(getattr(exc, "evidence", None) or "") or None})
+        print(json.dumps(results, sort_keys=True, indent=2))
+        return 1 if failed else 0
 
     if args.command == "logs":
         from appsec_review.observability import PipelineLog

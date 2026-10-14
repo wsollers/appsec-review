@@ -16,6 +16,8 @@
 /data/feeds/cve-bin-tool/
 # Preseeded embedding models (semantic_recall_index.py fetch-model; pins under data/embedding-models/).
 /data/feeds/embedding-models/
+# Pre-run Ghidra decompilation publications of third-party binaries (appsec-review binary-decompile).
+/data/binary-decompilation/
 # Tool-output cache and per-item memo (brief N): pointers into run trees, never committed.
 /data/caches/
 *.jsonl

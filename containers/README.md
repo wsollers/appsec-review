@@ -7,9 +7,9 @@ entry is always `enabled`, `deferred`, `replaced`, or `retired`; absence is not 
 
 The catalog also enables tools that were not derived from the legacy archive: `tool-actionlint`,
 `tool-cppcheck`, `tool-native-cpp`, `tool-tree-sitter`, `tool-sqlite-fts`, `tool-git`, `tool-pmd`,
-`tool-opengrep`, `tool-infer`, `tool-clangd-indexer`, `tool-clang-static-analysis`, and `tool-joern`.
-The authoritative catalog currently enables 29 tool images; the other enabled entries are the four
-bases and `audit-buildenv-android`.
+`tool-opengrep`, `tool-infer`, `tool-clangd-indexer`, `tool-clang-static-analysis`, `tool-joern`, and
+`tool-ghidra`. The authoritative catalog currently enables 30 tool images; the other enabled
+entries are the four bases and `audit-buildenv-android`.
 
 CodeQL is the exception: its licensed source image is operator-provided and its derived
 `appsec-review-codeql:*` analysis images are built by the CodeQL job
@@ -67,7 +67,11 @@ Application jobs own arguments and translate tool output into findings.
 A catalog entry may pin `image_id`; the application executor then refuses to run a local image
 whose id differs (`src/appsec_review/container_runtime/executor.py`). Every enabled tool is
 expected to have a static evidence-collection adapter unless its `tool.toml` sets
-`static_adapter = false`; tools with that opt-out are run by their own jobs instead.
+`static_adapter = false`; tools with that opt-out are run by their own jobs instead. `tool-ghidra`
+is the one tool run by a pre-run command, `appsec-review binary-decompile`, which raises memory,
+CPU, PID, and time limits from the typed `[binary_decompilation]` configuration and leaves every
+isolation setting at this boundary (see
+[`tools/ghidra/README.md`](tools/ghidra/README.md)).
 
 ## Updating a pin
 

@@ -34,6 +34,37 @@ disable_grype = true
 # Enabling removes only this policy gate; unsupported tool/platform requirements remain gaps.
 enable_swift = false
 
+[binary_decompilation]
+# Pre-run Ghidra decompilation of third-party binaries (`appsec-review binary-decompile`). It runs
+# before a review is submitted, one binary at a time, so its container limits exceed the central
+# scanner policy. Network, user, mounts, and capabilities stay at the scanner baseline.
+tool_id = "tool-ghidra"
+memory = "8g"
+cpus = 4
+pids_limit = 1024
+max_heap = "6g"                     # JVM heap; must leave 1g of `memory` for the native decompiler
+timeout_seconds = 7200              # whole container
+analysis_timeout_seconds = 3600     # Ghidra auto-analysis; a timeout is a named gap, not a failure
+decompile_timeout_seconds = 60      # per function; a timeout is a named gap for that function
+max_binary_bytes = 536870912
+max_functions = 50000
+max_function_bytes = 262144         # pseudo-C per function
+max_pcode_ops = 20000               # high P-code operations per function
+max_strings = 100000
+min_string_length = 4
+output_file_bytes = 2147483648      # RLIMIT_FSIZE for every file the container writes
+
+# One table per binary. `sha256` is the expected hash of the file at `path`; a mismatch refuses
+# the run. `authorization` states why this binary may be reverse-engineered (license term,
+# contract, or ownership) and is recorded in the publication. Optional `processor`,
+# `compiler_spec`, and `loader` override Ghidra's detection.
+#
+# [[binary_decompilation.binaries]]
+# id = "vendor-codec"
+# path = "inputs/vendor/libcodec.so"
+# sha256 = "<64 lowercase hex characters>"
+# authorization = "Vendor agreement 2026-014 section 7 permits security analysis"
+
 [orchestration.dagster]
 executor = "multiprocess"
 max_concurrent = 8

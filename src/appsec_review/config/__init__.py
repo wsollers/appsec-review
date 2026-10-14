@@ -1,5 +1,7 @@
 """Typed application configuration."""
 
+from .binary_decompilation import BinaryDecompilationSettings, BinaryRequest, parse_binary_decompilation
+
 from .codeql import (
     CodeQLAnalysisSettings, CodeQLCustomQuerySettings, CodeQLExecutionMode, CodeQLLanguageSettings,
     CodeQLExportQuerySettings, CodeQLExportSettings, CodeQLPackQuerySettings,
@@ -22,6 +24,7 @@ from .loader import (
 )
 
 __all__ = [
+    "BinaryDecompilationSettings", "BinaryRequest", "parse_binary_decompilation",
     "AppConfig", "BuildCaptureConfig", "CodeQLAnalysisSettings", "CodeQLCustomQuerySettings", "CodeQLExecutionMode", "CodeQLExportQuerySettings", "CodeQLExportSettings", "CodeQLLanguageSettings", "CodeQLPackQuerySettings", "CppCompiledAnalysisSettings", "DagsterConfig", "DotnetBuildSettings", "GoBuildSettings", "JobConfig", "JvmBuildSettings", "LanguageBuildSettings", "NodeBuildSettings", "RuntimeConfig",
     "PhpBuildSettings", "ProcessingMode", "PythonBuildSettings", "RustBuildSettings", "ScheduleConfig", "StepConfig", "TargetDocumentSettings", "DocumentIssueSettings", "TaskConfig", "ToolCapabilityConfig",
     "WasmBuildSettings", "WasmProducerSettings", "load_config", "parse_codeql_settings",

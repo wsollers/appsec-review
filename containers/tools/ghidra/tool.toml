@@ -1,0 +1,61 @@
+schema = "appsec-review/tool/1"
+id = "tool-ghidra"
+name = "ghidra"
+version = "12.1.4"
+license = "Apache-2.0"
+project = "https://github.com/NationalSecurityAgency/ghidra"
+purpose = "Offline headless disassembly and decompilation of one binary into bounded structured exports; the binary is never executed."
+static_adapter = false
+architecture = "linux/amd64"
+network = "none"
+user = "10001:10001"
+root_filesystem = "read-only"
+target_mount = "read-only"
+scratch_mount = "read-write"
+capabilities = "drop-all"
+security_opt = "no-new-privileges"
+# These are the central packaging-acceptance limits used by smoke and security probes. The
+# pre-run decompilation command raises memory, CPUs, PIDs, and time from the typed
+# [binary_decompilation] configuration; it never relaxes network, user, mounts, or capabilities.
+memory = "1g"
+cpus = "2"
+pids_limit = 256
+timeout_seconds = 600
+output_bytes = 16777216
+executable = "/opt/appsec/bin/ghidra-export"
+version_argv = ["/opt/appsec/bin/ghidra-version"]
+version_expect = "ghidra {version}"
+dependency = "appsec-review/base-jre:21-noble"
+jdk = "eclipse-temurin:21-jdk-noble@sha256:b468c3fc688b14450571494f588bd939378e7fd542ed5a73f8efc13f17872a87"
+inventory = "containers/tools/ghidra/inventory.json"
+review = "containers/tools/ghidra/LICENSE.md"
+export_script = "containers/tools/ghidra/scripts/AppsecExportProgram.java"
+coverage = "binary-derived evidence only: function table, pseudo-C, high P-code, call edges, imports, exports, and strings for native ELF/PE/Mach-O; managed code is a named gap"
+update = "Select an immutable upstream release tag, record the archive by exact size, SHA-256, and SHA-512, regenerate inventory.json from the archive with containers/tools/shared/safe_extract.py, re-review licenses and advisories in LICENSE.md, re-pin the JDK stage digest, then validate, build offline, smoke, security-test, and rerun the fixture efficacy comparison."
+
+# The reviewed installation closure. The archive is verified whole; only these members are
+# installed. The debugger, extensions, server, documentation, DMG and icon GPL modules, and the
+# GUI launchers are excluded.
+[closure]
+root = "/opt/ghidra"
+include = [
+  "ghidra_12.1.4_PUBLIC/GPL/DemanglerGnu",
+  "ghidra_12.1.4_PUBLIC/GPL/licenses",
+  "ghidra_12.1.4_PUBLIC/Ghidra/Configurations",
+  "ghidra_12.1.4_PUBLIC/Ghidra/Features",
+  "ghidra_12.1.4_PUBLIC/Ghidra/Framework",
+  "ghidra_12.1.4_PUBLIC/Ghidra/Processors",
+  "ghidra_12.1.4_PUBLIC/Ghidra/application.properties",
+  "ghidra_12.1.4_PUBLIC/Ghidra/patch",
+  "ghidra_12.1.4_PUBLIC/LICENSE",
+  "ghidra_12.1.4_PUBLIC/bom.json",
+  "ghidra_12.1.4_PUBLIC/licenses",
+  "ghidra_12.1.4_PUBLIC/support/LaunchSupport.jar",
+  "ghidra_12.1.4_PUBLIC/support/analyzeHeadless",
+  "ghidra_12.1.4_PUBLIC/support/launch.properties",
+  "ghidra_12.1.4_PUBLIC/support/launch.sh",
+]
+max_members = 8192
+max_expanded_bytes = 1073741824
+max_member_compression_ratio = 50.0
+max_archive_expansion_ratio = 4.0
