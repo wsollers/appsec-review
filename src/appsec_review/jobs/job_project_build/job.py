@@ -78,7 +78,7 @@ def _safe_root(target: Path, relative: str) -> Path:
     return path
 
 
-def _copy_source(unit: UnitContext, action: Mapping[str, Any], workspace: Path) -> None:
+def _copy_source(unit: UnitContext, action: Mapping[str, Any], workspace: Path) -> list[str]:
     target = (unit.job.target_root or Path()).resolve(strict=True)
     source = _safe_root(target, str(action["root"]))
     destination = workspace if str(action["root"]) == "." else workspace / Path(*PurePosixPath(str(action["root"])).parts)
@@ -111,6 +111,33 @@ def _copy_source(unit: UnitContext, action: Mapping[str, Any], workspace: Path) 
             directory.chmod(0o777)
     except OSError:
         pass
+    return _materialize_build_layout(action, workspace)
+
+
+def _materialize_build_layout(action: Mapping[str, Any], workspace: Path) -> list[str]:
+    """Apply bounded, run-owned layout adaptations without changing target source."""
+    if action.get("family") != "java" or action.get("build_system") != "maven":
+        return []
+    recipe = action.get("recipe")
+    if not isinstance(recipe, Mapping):
+        return []
+    source_root = workspace / Path(*PurePosixPath(str(recipe["source_dir"])).parts)
+    legacy_root = source_root / "src"
+    conventional_root = legacy_root / "main" / "java"
+    if conventional_root.exists() or not legacy_root.is_dir():
+        return []
+    sources = sorted(path for path in legacy_root.rglob("*.java")
+                     if path.is_file() and not path.is_symlink()
+                     and not ({"main", "test"} & set(path.relative_to(legacy_root).parts[:-1])))
+    if not sources or len(sources) > 60:
+        return []
+    for source in sources:
+        destination = conventional_root / source.relative_to(legacy_root)
+        if destination.exists():
+            raise ValueError("legacy Maven source adaptation would overwrite a workspace file")
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(source, destination)
+    return ["materialized legacy Maven src/*.java under src/main/java in the run-owned workspace"]
 
 
 def _snapshot(root: Path, limit: int) -> dict[str, str]:
@@ -226,12 +253,29 @@ def _probe_environment(recipe: Mapping[str, Any]) -> dict[str, str]:
             environment[key] = protected.replace("$PATH", environment[key])
         else:
             environment[key] = protected
+    if str(recipe.get("build_system", "")) == "node" and recipe.get("network_required"):
+        # Dependency-bearing images are immutable during the probe. A package-manager restore
+        # therefore needs scratch caches rather than the image-owned cache paths.
+        environment.update({
+            "NPM_CONFIG_CACHE": "/tmp/appsec-npm-cache",
+            "PNPM_STORE_DIR": "/tmp/appsec-pnpm-store",
+            "YARN_CACHE_FOLDER": "/tmp/appsec-yarn-cache",
+        })
     if str(recipe.get("build_system", "")) == "go" and not recipe.get("network_required"):
         # Only a dependency-bearing project image carries a populated module cache. Otherwise
         # the cache would be the read-only image root, so declared modules resolve into the
         # build container's writable scratch instead.
         environment["GOMODCACHE"] = "/tmp/appsec-go-mod"
     return environment
+
+
+def _node_recipe_restores_dependencies(recipe: Mapping[str, Any]) -> bool:
+    installers = {"npm": {"ci", "install"}, "pnpm": {"install"}, "yarn": {"install"}}
+    for argv in recipe.get("configure_commands", ()):
+        if (isinstance(argv, list) and len(argv) >= 2
+                and str(argv[1]) in installers.get(str(argv[0]), set())):
+            return True
+    return False
 
 
 def _probe_stream(run_root: Path, path: Path, result: Any, name: str, limit: int) -> dict[str, Any]:
@@ -354,7 +398,8 @@ def _probe_one(unit: UnitContext, entry: Mapping[str, Any], executor_factory=Non
     root = (unit.job.run_root / "data" / "build" / "probes" / build_unit_id / "attempts" /
             unit.job.attempt_id / f"probe-{attempt_number:03d}")
     workspace = root / "workspace"
-    _copy_source(unit, action, workspace)
+    workspace_adaptations = _copy_source(unit, action, workspace)
+    base["workspace_adaptations"] = workspace_adaptations
     before = _snapshot(workspace, int(unit.job.config.settings["artifact_count_limit"]) * 10)
     # The pre-build hashes double as the capture's snapshot: unchanged files are never rehashed.
     snapshot_files = {}
@@ -366,7 +411,8 @@ def _probe_one(unit: UnitContext, entry: Mapping[str, Any], executor_factory=Non
         profile, timeout_seconds=int(unit.job.config.settings["command_timeout_seconds"]),
         output_bytes=int(unit.job.config.settings["output_bytes"]))
     executor.resolve()
-    if action["family"] == "node" and recipe.get("network_required"):
+    if (action["family"] == "node" and recipe.get("network_required")
+            and not _node_recipe_restores_dependencies(recipe)):
         prepare = getattr(executor, "prepare_node_dependencies", None)
         if not callable(prepare):
             raise RuntimeError("Node dependency-bearing builds require a dependency-view executor")
@@ -555,6 +601,8 @@ def _infer_repair(unit: UnitContext, *, action: Mapping[str, Any], recipe: Mappi
         reasoning_level=request.reasoning, guidance_bundle_sha256=guidance_sha,
         request_sha256=request_sha, retry_count=repair_number - 1, job_id="job_project_build",
         attempt_id=unit.job.attempt_id, build_unit_id=str(action["build_unit_id"]),
+        family=str(action["family"]), root=str(action["root"]),
+        build_system=str(action["build_system"]), repair_number=repair_number,
         inference_task="build_image_repair")
     started = time.monotonic()
     try:
@@ -573,7 +621,9 @@ def _infer_repair(unit: UnitContext, *, action: Mapping[str, Any], recipe: Mappi
             duration_ms=int((time.monotonic() - started) * 1000), retry_count=repair_number - 1,
             input_tokens=result.input_tokens, output_tokens=result.output_tokens,
             cache_tokens=result.cache_tokens, job_id="job_project_build", attempt_id=unit.job.attempt_id,
-            build_unit_id=str(action["build_unit_id"]), inference_task="build_image_repair")
+            build_unit_id=str(action["build_unit_id"]), family=str(action["family"]),
+            root=str(action["root"]), build_system=str(action["build_system"]),
+            repair_number=repair_number, inference_task="build_image_repair")
         return result.proposal
     except Exception as exc:
         emit_model_event(log, event_type="MODEL_CALL_COMPLETED", run_id=unit.job.run_id,
@@ -582,7 +632,9 @@ def _infer_repair(unit: UnitContext, *, action: Mapping[str, Any], recipe: Mappi
             request_sha256=request_sha, terminal_status="FAILED",
             duration_ms=int((time.monotonic() - started) * 1000), retry_count=repair_number - 1,
             error_class=type(exc).__name__, job_id="job_project_build", attempt_id=unit.job.attempt_id,
-            build_unit_id=str(action["build_unit_id"]), inference_task="build_image_repair")
+            build_unit_id=str(action["build_unit_id"]), family=str(action["family"]),
+            root=str(action["root"]), build_system=str(action["build_system"]),
+            repair_number=repair_number, inference_task="build_image_repair")
         raise
 
 

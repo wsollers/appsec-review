@@ -12,7 +12,8 @@ from appsec_review.container_runtime import BuildCommandResult, ProjectImage
 from appsec_review.jobs.cataloging import source_fingerprint
 from appsec_review.jobs.job_project_build import build_job as build_projects, load_accepted_builds
 from appsec_review.jobs.job_project_build.job import (
-    _copy_source, _deterministic_jvm_recipe, _probe_cache, _probe_environment,
+    _copy_source, _deterministic_jvm_recipe, _node_recipe_restores_dependencies,
+    _probe_cache, _probe_environment,
     _validate_expected_outputs,
 )
 from appsec_review.jobs.job_review_intake import build_job as build_intake
@@ -79,6 +80,29 @@ class RecipeModel:
                 "configure_commands": configure, "build_commands": build,
                 "expected_outputs": [f"{root}/{'build' if system == 'cmake' else 'target'}"],
                 "network_required": system == "cargo", "reason": "fixture recipe",
+            })
+        return ModelResult({"schema": PROPOSAL_SCHEMA, "component_proposals": [],
+                            "build_recipes": recipes})
+
+
+class NodeRestoreRecipeModel:
+    def complete(self, request, *, timeout_seconds):
+        recipes = []
+        for unit in request.summary["build_units"]:
+            root = unit["root"]
+            addon = root.endswith("case-087")
+            output = (f"{root}/build/Release/case087.node" if addon
+                      else f"{root}/dist/bundle.js")
+            recipes.append({
+                "schema": "appsec-review/build-recipe/1", "build_unit_id": unit["build_unit_id"],
+                "image_profile": "node", "source_dir": root,
+                "build_dir": f"{root}/{'build' if addon else 'dist'}",
+                "system_packages": [], "environment": {},
+                "dependency_files": [f"{root}/package.json", f"{root}/package-lock.json"],
+                "configure_commands": [["npm", "ci"]],
+                "build_commands": [["npm", "run", "build"]],
+                "expected_outputs": [output], "network_required": True,
+                "reason": "locked fixture restore and build",
             })
         return ModelResult({"schema": PROPOSAL_SCHEMA, "component_proposals": [],
                             "build_recipes": recipes})
@@ -157,6 +181,26 @@ class FakeBuildExecutor:
             },
         }, sort_keys=True) + "\n", encoding="utf-8")
         return replace(result, capture_record=record)
+
+
+class NodeRestoreExecutor(FakeBuildExecutor):
+    def prepare_node_dependencies(self, **_kwargs):
+        raise AssertionError("npm ci must not receive the immutable image dependency view")
+
+    def execute(self, argv, *, workspace, working_directory, environment):
+        self.calls.append(tuple(argv))
+        assert environment["NPM_CONFIG_CACHE"] == "/tmp/appsec-npm-cache"
+        if tuple(argv) == ("npm", "run", "build"):
+            root = workspace / working_directory
+            if working_directory.endswith("case-087"):
+                output = root / "build" / "Release" / "case087.node"
+                data = b"native-addon"
+            else:
+                output = root / "dist" / "bundle.js"
+                data = b"const bundled = true;\n"
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_bytes(data)
+        return BuildCommandResult(tuple(argv), 0, b"ok", b"", False)
 
 
 class CaptureGapExecutor(FakeBuildExecutor):
@@ -253,6 +297,25 @@ def test_probe_environment_supplies_writable_maven_repository_without_user_optio
         "-Dmaven.repo.local=/tmp/appsec-review-maven")
 
 
+def test_networked_node_restore_uses_writable_scratch_caches() -> None:
+    environment = _probe_environment({
+        "build_system": "node", "source_dir": "projects/javascript-bundler/case-086",
+        "network_required": True, "environment": {}, "dependency_files": [
+            "projects/javascript-bundler/case-086/package-lock.json"],
+    })
+    assert environment["NPM_CONFIG_CACHE"] == "/tmp/appsec-npm-cache"
+    assert environment["PNPM_STORE_DIR"] == "/tmp/appsec-pnpm-store"
+    assert environment["YARN_CACHE_FOLDER"] == "/tmp/appsec-yarn-cache"
+
+
+def test_node_configure_restore_does_not_mount_immutable_image_dependencies() -> None:
+    for root in ("projects/javascript-bundler/case-086", "projects/node-addon/case-087"):
+        assert _node_recipe_restores_dependencies({
+            "source_dir": root, "configure_commands": [["npm", "ci"]]})
+    assert not _node_recipe_restores_dependencies({
+        "source_dir": "projects/node/no-restore", "configure_commands": []})
+
+
 def test_probe_environment_disables_cargo_incremental_state_the_host_cannot_read() -> None:
     environment = _probe_environment({"build_system": "cargo", "source_dir": "rust",
                                       "environment": {"CARGO_INCREMENTAL": "1"}})
@@ -297,6 +360,61 @@ def test_project_probe_copies_accepted_parent_dependency_files(tmp_path: Path) -
     _copy_language_source(unit, action, language_workspace)
     assert (language_workspace / "apps/web/package.json").is_file()
     assert (language_workspace / "tsconfig.base.json").is_file()
+
+
+def test_project_probe_materializes_bounded_legacy_maven_source_layout(tmp_path: Path) -> None:
+    target = tmp_path / "target"
+    source = target / "projects" / "java" / "case-034"
+    (source / "src").mkdir(parents=True)
+    (source / "pom.xml").write_text("<project/>\n", encoding="utf-8")
+    (source / "src" / "Main.java").write_text("class Main {}\n", encoding="utf-8")
+    run_root = tmp_path / "runs" / "run-1"
+    workspace = run_root / "data" / "build" / "probes" / "unit" / "workspace"
+    unit = SimpleNamespace(job=SimpleNamespace(target_root=target, run_root=run_root))
+    root = "projects/java/case-034"
+    action = {"root": root, "family": "java", "build_system": "maven", "recipe": {
+        "source_dir": root, "dependency_files": [f"{root}/pom.xml"]}}
+    adaptations = _copy_source(unit, action, workspace)
+    materialized = workspace / root / "src" / "main" / "java" / "Main.java"
+    assert materialized.read_text(encoding="utf-8") == "class Main {}\n"
+    assert adaptations == [
+        "materialized legacy Maven src/*.java under src/main/java in the run-owned workspace"]
+
+
+def test_node_086_087_restore_outputs(tmp_path: Path) -> None:
+    config_path = tmp_path / "appsec-review.toml"
+    config_path.write_text((ROOT / "appsec-review.toml").read_text(encoding="utf-8"),
+                           encoding="utf-8")
+    target = tmp_path / "target"
+    for relative in ("case-086", "case-087"):
+        root = target / relative
+        root.mkdir(parents=True)
+        (root / "package.json").write_text(json.dumps({
+            "name": root.name, "version": "1.0.0", "scripts": {"build": "fixture-build"},
+        }), encoding="utf-8")
+        (root / "package-lock.json").write_text(json.dumps({
+            "name": root.name, "version": "1.0.0", "lockfileVersion": 3,
+            "requires": True, "packages": {},
+        }), encoding="utf-8")
+    config = load_config(config_path)
+    fingerprint = source_fingerprint(target)
+    upstream = GraphRunner(config, [build_intake(), build_catalog(),
+        build_plan(infer=NodeRestoreRecipeModel().complete)]).run(
+            target_root=target, source_fingerprint=fingerprint)
+    calls: list[tuple[str, ...]] = []
+    outcome = GraphRunner(config, [build_projects(
+        executor_factory=lambda unit, profile: NodeRestoreExecutor(calls),
+        image_resolver_factory=lambda unit: FakeImageResolver())]).run(
+            target_root=target, source_fingerprint=fingerprint, run_id=upstream["run_id"])
+    assert outcome["status"] == "SUCCEEDED"
+    accepted = load_accepted_builds(config.runtime.runs_dir / upstream["run_id"])
+    receipts = {item["root"]: item for item in accepted["probe_receipts"]}
+    assert {root: receipt["terminal_status"] for root, receipt in receipts.items()} == {
+        "case-086": "SUCCEEDED",
+        "case-087": "SUCCEEDED",
+    }
+    assert calls.count(("npm", "ci")) == 2
+    assert calls.count(("npm", "run", "build")) == 2
 
 
 def test_image_repair_accepts_only_bounded_apt_package_sets() -> None:
@@ -584,6 +702,18 @@ def test_failed_default_build_repairs_image_and_reuses_winning_definition(tmp_pa
     definition = resolver.root / native_dispatch["image"]["dockerfile_path"]
     assert definition.is_file() and "libtwo-dev" in definition.read_text(encoding="utf-8")
     assert model.calls == 2
+
+    events = [json.loads(line) for line in (
+        config.runtime.runs_dir / run_ids[0] / "data" / "logs" / "pipeline.jsonl"
+    ).read_text(encoding="utf-8").splitlines()]
+    repair_events = [item for item in events if item["event_type"] == "MODEL_CALL_STARTED"
+                     and item["details"].get("inference_task") == "build_image_repair"]
+    assert [(item["details"]["family"], item["details"]["root"],
+             item["details"]["build_system"], item["details"]["repair_number"])
+            for item in repair_events] == [
+                ("native", "native", "cmake", 1),
+                ("native", "native", "cmake", 2),
+            ]
 
     second = load_accepted_builds(config.runtime.runs_dir / run_ids[1])
     reused = next(value for value in second["build_dispatches"] if value["family"] == "native")
