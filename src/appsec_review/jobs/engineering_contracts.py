@@ -1,0 +1,35 @@
+"""Shared contracts for engineering-signal producer jobs.
+
+The producer implementations deliberately remain independent.  These constants are the small
+cross-job contract used by orchestration, review-data indexing, and tests; changing one is a schema
+change rather than an implementation detail.
+"""
+from __future__ import annotations
+
+from enum import StrEnum
+
+
+CLANG_STATIC_HANDOFF_SCHEMA = "appsec-review/clang-static-analysis-handoff/1"
+TEST_COVERAGE_HANDOFF_SCHEMA = "appsec-review/test-coverage-handoff/1"
+DEPENDENCY_INTELLIGENCE_HANDOFF_SCHEMA = "appsec-review/dependency-intelligence-handoff/1"
+SCORECARD_RECORD_SCHEMA = "appsec-review/openssf-scorecard-record/1"
+NATIVE_DEPENDENCY_CANDIDATE_SCHEMA = "appsec-review/native-dependency-candidate/1"
+
+
+class CoverageState(StrEnum):
+    """Closed producer-coverage vocabulary shared by the new jobs."""
+
+    COMPLETE = "complete"
+    PARTIAL = "partial"
+    UNAVAILABLE = "unavailable"
+
+
+class ResolutionBasis(StrEnum):
+    """How a dependency-to-repository identity was established."""
+
+    DECLARED = "declared"
+    PACKAGE_METADATA = "package_metadata"
+    LINKER_EVIDENCE = "linker_evidence"
+    MODEL_INFERENCE = "model_inference"
+    UNRESOLVED = "unresolved"
+
