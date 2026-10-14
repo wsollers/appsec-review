@@ -19,6 +19,16 @@ ExecutorFactory = Callable[[UnitContext], ContainerExecutor]
 SCHEMA = "appsec-review/tree-sitter-ast/1"
 
 
+def _write_container_request(scratch: Path, request: Mapping[str, Any]) -> Path:
+    """Create a request that the unprivileged container can read."""
+    scratch.mkdir(parents=True, exist_ok=True)
+    scratch.chmod(0o733)
+    request_path = scratch / "request.json"
+    atomic_json(request_path, request)
+    request_path.chmod(0o644)
+    return request_path
+
+
 def _validate_container_output(output: Mapping[str, Any], *, scope: Scope, grammar: GrammarLock,
                                asset_lock: Mapping[str, Any], image_id: str,
                                execution_image_id: str) -> None:
@@ -63,14 +73,12 @@ def parse_scope(unit: UnitContext, raw_scope: Mapping[str, Any],
         return {**metadata, "index_reused": True}
     scratch = (unit.job.run_root / "data" / "treesitter" / "work" / unit.job.attempt_id /
                hashlib.sha256(scope.scope_id.encode()).hexdigest()[:20])
-    scratch.mkdir(parents=True, exist_ok=True)
     request = {"schema": "appsec-review/tree-sitter-request/1", "scope_id": scope.scope_id,
                "language": scope.language, "max_nodes": limits["max_nodes"],
                "max_scope_nodes": limits["max_scope_nodes"],
                "max_file_bytes": limits["max_file_bytes"],
                "files": [{"path": item["path"], "sha256": item["sha256"]} for item in scope.files]}
-    request_path = scratch / "request.json"
-    atomic_json(request_path, request)
+    _write_container_request(scratch, request)
     # The scanner runs as the application uid/gid and writes only to this run-owned boundary. The
     # target mount remains read-only.
     executor = executor_factory(unit) if executor_factory else ContainerExecutor(

@@ -11,7 +11,7 @@ from appsec_review.retrieval.model import canonical_json
 
 SUPPORTED_LANGUAGES = frozenset({
     "C", "C++", "C/C++", "Rust", "Go", "Java", "JavaScript", "TypeScript",
-    "C#", "Python", "PHP", "TSX",
+    "C#", "Python", "PHP", "TSX", "Kotlin", "PowerShell", "Shell",
 })
 
 

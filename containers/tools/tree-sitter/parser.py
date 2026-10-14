@@ -21,6 +21,7 @@ LANGUAGES = {
     "C": "c", "C++": "cpp", "C/C++": "cpp", "Rust": "rust", "Go": "go",
     "Java": "java", "JavaScript": "javascript", "TypeScript": "typescript",
     "TSX": "tsx", "C#": "csharp", "Python": "python", "PHP": "php",
+    "Kotlin": "kotlin", "PowerShell": "powershell", "Shell": "bash",
 }
 
 
