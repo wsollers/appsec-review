@@ -203,7 +203,9 @@ this work.
   rows reveal.
 - **More languages** (A6): Java/Kotlin, JavaScript/TypeScript and Python export packs and catalog
   sections, each with recorded fixtures.
-- **Clang second producer** (design section 12, planned, not started): K1 IR debug locations, K2
-  macro-precise locations, K3 LLVM dominator cross-check for guard facts, K4 Clang Static Analyzer
-  and clang-tidy as a lane A producer, optional K5 bounded CFG export, and K6 integration with its
-  own documentation truth-up (including the D1 producer table's Status column).
+- **Clang second producer** (design section 12, partially implemented): K4 is complete as the
+  standalone `job_clang_static_analysis`/`tool-clang-static-analysis` producer with bounded
+  source-mapped observations and gaps. K1 IR debug locations, K2 macro-precise locations, K3 LLVM
+  dominator cross-checking, and optional K5 bounded CFG export remain planned. K6 still requires
+  integration of those graph-producing chunks and their live acceptance; K4 itself is already wired
+  into source-SAST review and documented under `docs/architecture/clang-static-analysis.md`.

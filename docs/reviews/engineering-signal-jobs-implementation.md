@@ -21,11 +21,14 @@ Status: implemented and locally verified. Root `AGENTS.md` governs.
    record, a registered runtime skill, one supply-chain investigator persona, and one dependency
    resolver role. Its result is validated, records confidence and evidence references, and is never
    promoted to an exact identity without corroborating metadata.
-6. OpenSSF Scorecard is requested for every unique dependency whose source repository resolves to
-   a supported public repository identity. HTTPS hosts, request count, response bytes, timeout, and
-   retries are centrally configured. Exact response bytes are stored run-owned and hash referenced.
-   A missing repository identity, unsupported host, 404/no Scorecard, rate limit, request failure,
-   malformed response, or bound exhaustion is a dependency-scoped coverage gap.
+6. A deterministic repository stage groups all dependencies by canonical public forge identity
+   before OpenSSF Scorecard retrieval. Each unique repository receives one cache lookup and at most
+   one HTTP request per run; the result fans back out to every referring dependency. HTTPS hosts,
+   request count, response bytes, timeout, retries, cache root, cache age, and lock timeout are
+   centrally configured. Fresh verified cache entries avoid HTTP. Exact response bytes are stored
+   run-owned and hash referenced. Missing or unsupported identities, repository bounds, 404/no
+   Scorecard, rate limits, request failures, malformed responses, invalid cache entries, cache-write
+   failures, and bound exhaustion are dependency-scoped coverage gaps.
 7. Scorecard records and gaps are indexed as dependency context. They seed lane-B ranking/context
    and red-team packages but are not vulnerability findings and cannot raise finding severity.
 8. The four jobs are generic producers: their parsers, resolver, client, and index builders have no
@@ -40,7 +43,7 @@ Status: implemented and locally verified. Root `AGENTS.md` governs.
 - Clang producer: `job_clang_static_analysis`, its tool image/rules, focused tests and docs.
 - Coverage producer: `job_test_coverage`, format parsers, focused tests and docs.
 - Dependency producer: `job_dependency_intelligence`, native inference, Scorecard client/index,
-  registered runtime guidance, focused tests and docs.
+  repository deduplication/cache, registered runtime guidance, focused tests and docs.
 - Integration owner: central TOML, registries, graphs, cross-domain indexing, inference review
   consumption, combined tests, and reconciliation.
 
@@ -89,4 +92,12 @@ Status: implemented and locally verified. Root `AGENTS.md` governs.
   the host gap `fts_validation.status = unavailable` where that fixture expects the pinned SQLite
   FTS image to verify. No live model-provider, Scorecard-network, or tool-container acceptance was
   inferred from these local results.
+
+## 2026-10-14 Scorecard cache follow-up
+
+- Added `repositories.deduplicate` between repository inference and Scorecard retrieval.
+- Added a content-addressed cache with atomic per-repository pointers, exact response hashes,
+  bounded locks, and a centrally tunable maximum age (seven days by default).
+- Accepted handoffs now expose unique-repository, cache-hit, and HTTP-request counts. Tests cover
+  repository fan-out, repository bounds, fresh hits with zero HTTP, expiry, and tamper rejection.
 

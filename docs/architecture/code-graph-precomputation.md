@@ -6,8 +6,10 @@ admissibility, package v4 graph context, the `code_graph` lane and the scoring f
 end in `tests/integration/test_code_graph_end_to_end.py` against recorded exports. Live-unverified:
 the export queries have never run in the pinned CodeQL image, so the recordings are hand-authored
 (section 10, "C9 Integration and acceptance"); Java/Kotlin, JavaScript/TypeScript and Python packs
-are not written; section 12 (Clang second producer) is planned, not started. The implementation
-record is [`../reviews/code-graph-precomputation-implementation.md`](../reviews/code-graph-precomputation-implementation.md).
+are not written. Section 12 is partially implemented: K4 now runs as the independent
+`job_clang_static_analysis` producer, while K1, K2, K3, and optional K5 remain planned. The
+implementation record is
+[`../reviews/code-graph-precomputation-implementation.md`](../reviews/code-graph-precomputation-implementation.md).
 
 This document is the single authority for "item 2": precomputing code-graph facts so that the inference
 review can obtain **direct** evidence for `source_to_sink_reachability`,
@@ -127,7 +129,7 @@ the only producer with interprocedural taint tracking and maintained source and 
 | Interprocedural dataflow and taint | Yes, global taint tracking with path graphs | No (would need PhASAR, SVF or a new analyzer) | CodeQL `dataflow_path` |
 | Modeled sources and sinks | Yes, maintained libraries | No | CodeQL plus the graph catalog |
 | Value ranges | `SimpleRangeAnalysis` (deliberately simple) | `LazyValueInfo`/`ScalarEvolution`, weak at `-O0` | CodeQL `range_fact`; unknown bounds are gaps |
-| Path-sensitive bug finding | No | Yes (Clang Static Analyzer) | Planned as a lane A producer (K4) |
+| Path-sensitive bug finding | No | Yes (Clang Static Analyzer) | Implemented by standalone `job_clang_static_analysis` as source-SAST context (K4); normal severity/admissibility rules apply |
 | What the optimizer does (UB exploitation, inlining) | No | Yes, at real optimization levels | Not planned |
 | Sanitizer and runtime instrumentation | No | Yes (ASan/UBSan) | Reserved for the PoC lane |
 
@@ -1085,8 +1087,10 @@ The six questions this plan raised were answered by accepting the plan's recomme
 
 ## 12. Phase 2: Clang second producer (after C9)
 
-Status: planned (user, 2026-10-12). It starts only after C9's offline and live acceptance pass; C9's
-offline acceptance passes, and the live tier has not yet run (see the implementation record).
+Status: partially implemented. K4 shipped on 2026-10-14 as a standalone, compile-context-bound
+Clang-Tidy and Clang Static Analyzer producer. K1 IR debug locations, K2 macro mapping, K3 LLVM
+dominator cross-checking, and optional K5 CFG export remain planned. C9's offline acceptance passes,
+and its CodeQL live tier has not yet run (see the implementation record).
 CodeQL stays the primary producer of every fact family. Clang and LLVM are the compiler of record
 for C/C++, so this phase uses them for what they do better:
 - exact locations through macro expansions;
@@ -1187,29 +1191,39 @@ parallel; K3 needs K1; K5 is optional; K6 integrates.
 - A synthetic conflict produces `disagree` and ineligibility.
 - A missing IR shard gives `not_covered`, and eligibility is unchanged.
 
-#### K4 Clang Static Analyzer and clang-tidy as a lane A producer
+#### K4 Clang Static Analyzer and clang-tidy as a source-SAST producer
+
+**Status: implemented with bounded deviations.** The implementation uses the separate
+`tool-clang-static-analysis` image and `job_clang_static_analysis`, consuming accepted
+`job_cpp_compiled_analysis` scopes. It publishes source-mapped `tool_observation` entities and
+coverage gaps directly into an `observations` shard instead of running as an
+`job_evidence_collection` adapter or emitting SARIF. Analyzer traces remain bounded data on each
+observation. Findings enter the existing source-SAST review lane according to normal severity and
+admissibility rules; `alpha.security.*` remains normalized to medium and therefore does not receive
+special lane-A admission.
 
 **Owned files:**
-- A `tool-native-cpp` action, or a small `tool-clang-analyzer` image, running `clang --analyze`
-  (core, unix, security and alpha.security checkers chosen in TOML) and `clang-tidy` (bugprone,
-  cert, security checks) over the accepted compile commands, with SARIF output.
-- `src/appsec_review/jobs/job_evidence_collection/` adapter.
-- A new lead family `clang_analyzer` in `review/lead_families.py`, with its normalization rule.
-- TOML checker selection.
-- Tests.
+- `containers/tools/clang-static-analysis/`: the offline image and bounded JSON adapter over the
+  accepted compilation database;
+- `src/appsec_review/jobs/job_clang_static_analysis/`: scope execution, source mapping, retrieval
+  publication, checkpoints, and accepted handoff;
+- `appsec-review.toml`: typed checker selection, bounds, workers, and topology; and
+- `tests/test_clang_static_analysis.py` plus `tests/test_clang_static_tool.py`.
 
 **Behavior:**
-- Analyzer path diagnostics become `tool_observation`s with flows. The existing SARIF correlation
-  and the `tool-rule-predicates` mapping treat them like CodeQL path observations, so a CSA path
-  that agrees with a CodeQL `dataflow_path` is independent support.
-- Lane A admits them by reported severity like every other family.
+- Clang-Tidy and Static Analyzer actions run independently per accepted scope; one failure does not
+  erase the other action's observations.
+- Diagnostics become source-hash-bound `tool_observation`s. Static Analyzer path pieces remain a
+  bounded trace on the observation rather than a graph fact or confirmed vulnerability.
+- Existing source-SAST review rules consume the observations. No special lead family or severity
+  promotion is introduced.
 
 **Unit tests:**
-- A recorded CSA SARIF for the native fixture normalizes to observations with flows.
-- Correlation bridges a CSA flow onto the CodeQL path.
+- Bounded adapter JSON normalizes to exact source locations and Static Analyzer traces.
+- Both actions receive the accepted compile context and centrally configured checker sets.
 - Checker selection is typed and pinned.
 - An analyzer failure is a scope gap.
-- The membership audit covers the new family.
+- Review-data and source-SAST membership audits cover the standalone producer.
 
 #### K5 Bounded per-function CFG export (optional)
 
@@ -1220,11 +1234,12 @@ unless K3 or a later rule needs CodeQL-side CFG detail beyond guards.
 
 #### K6 Integration, acceptance and documentation truth-up
 
-- **Offline end to end:** the native fixture through K1–K4, then `job_code_graph_index`, then
+- **Offline end to end:** the native fixture through K1–K3, then `job_code_graph_index`, then
   review. Assert:
   - a macro guard is now direct-eligible (K2);
   - guard facts carry `agree` from `llvm-ir` (K3);
-  - a CSA observation bridges to a CodeQL path and counts as independent support (K4).
+- K4 remains independently verified through its accepted observations and source-SAST route; it
+  does not publish graph facts.
 - **Live tier:** on the pinned images and the `appsec-multi-vuln` C/C++ workspace. It reports how
   many facts each change turned eligible and the cross-check agreement rates.
 - **Documentation truth-up (required to finish the phase):**
@@ -1240,13 +1255,12 @@ unless K3 or a later rule needs CodeQL-side CFG detail beyond guards.
   - write an implementation record under `docs/reviews/`, in the style of
     `inference-security-review-implementation.md`.
 
-### 12.3 Contract and rule changes
+### 12.3 Remaining contract and rule changes
 
 - `PRODUCERS` already includes `clang-ast` and `llvm-ir`; no contract enum changes are needed.
-- New rule versions:
+- Planned K1-K3 rule versions:
   - `graph-cross-check/2`, for IR span matching and the guard branch;
-  - the location mapping methods `llvm-dilocation` and `clang-spelling-range`;
-  - the lead family rule for `clang_analyzer`.
+  - the location mapping methods `llvm-dilocation` and `clang-spelling-range`.
 
   Each one changes the corresponding fingerprints, so only affected graph shards and review cells
   rerun.
@@ -1254,12 +1268,12 @@ unless K3 or a later rule needs CodeQL-side CFG detail beyond guards.
   publishes cross-checks and refined locations, not primary facts. CSA observations follow the
   existing tool-observation rules.
 
-### 12.4 Decisions for this phase (user, 2026-10-12)
+### 12.4 Decisions for this phase (user, 2026-10-12; K4 implementation reconciled 2026-10-14)
 
 1. **Static Analyzer `alpha.security.*` checkers:** enabled. Their findings are normalized to
    `medium` reported severity, so they appear on lane B hunt menus instead of being admitted to
    lane A.
-2. **Where K4 runs:** in a separate `tool-clang-analyzer` image. Changing analyzer checkers then
+2. **Where K4 runs:** in the separate `tool-clang-static-analysis` image. Changing analyzer checkers then
    never changes the identity of `tool-native-cpp`, the compile-replay image every C/C++ fact
    depends on.
 3. **K3 guard disagreement:** makes the guard fact ineligible, the same rule as call-site

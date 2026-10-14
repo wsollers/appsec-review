@@ -169,20 +169,34 @@ evidence-reference allowlist plus the registered runtime skill, persona, role, a
 configured hosts, limited to confidence `0.95`, and remains
 `exact_repository_identity: false` until corroborated by accepted metadata.
 
-For every deduplicated dependency with a resolved supported repository, the Scorecard client makes
-one bounded retrieval attempt unless the central request budget is exhausted. It uses only the
-configured HTTPS API and host allowlist, follows no redirects or repository-provided endpoint, and
-enforces response-byte, timeout, and retry limits. Successful normalized records use
-`appsec-review/openssf-scorecard-record/1`. Exact successful response bytes are retained in the
-Scorecard task directory; bounded error or malformed response bytes are also retained when
-available. Both are referenced by SHA-256.
+After dependency resolution, `repositories.deduplicate` groups dependencies by canonical public
+forge identity. Scorecard retrieval consumes that repository inventory, so dependencies that map
+to the same repository share one cache lookup and at most one bounded HTTP retrieval per run. The
+result is associated back to every referring dependency without collapsing package, version,
+provenance, exposure, SBOM, or advisory identities.
+
+The client first checks the content-addressed cache rooted at the centrally configured
+repository-relative path. A fresh entry must be within `cache_max_age_seconds` and pass pointer,
+path, size, and SHA-256 verification. Fresh hits avoid HTTP; stale and missing entries are refreshed.
+Corrupt entries and failed cache writes become dependency-scoped gaps while a bounded remote
+attempt may still proceed. Cache blobs use exact successful response bytes, atomic pointers, and a
+bounded per-repository writer lock.
+
+Remote retrieval uses only the configured HTTPS API and host allowlist, follows no redirects or
+repository-provided endpoint, and enforces request-count, response-byte, timeout, and retry limits.
+Successful normalized records use `appsec-review/openssf-scorecard-record/1`. Whether cached or
+fetched, exact successful response bytes are copied into the run-owned Scorecard task directory and
+referenced by SHA-256. Bounded HTTP error or malformed response bytes are also retained when
+available.
 
 Every dependency remains in the output even when repository identity or Scorecard context is
 missing. The dependency-scoped gap kinds are `unresolved_repository`, `unsupported_host`,
 `scorecard_not_found`, `scorecard_rate_limit`, `scorecard_request_failure`,
-`scorecard_malformed_response`, `model_unavailable`, `model_failure`, and `bounds`. Scorecard
-context describes the resolved source repository's practices; it does not prove that accepted
-artifact bytes came from that repository and is not a vulnerability finding.
+`scorecard_malformed_response`, `scorecard_cache_invalid`, `scorecard_cache_write_failure`,
+`repository_bound`, `model_unavailable`, `model_failure`, and `bounds`. The accepted handoff also
+records unique-repository, cache-hit, and HTTP-request counts. Scorecard context describes the
+resolved source repository's practices; it does not prove that accepted artifact bytes came from
+that repository and is not a vulnerability finding.
 
 The inventory therefore enriches the review's SBOM/package context without rewriting the original
 SBOM or changing its evidence identity. Every normalized dependency, including linker/loader and

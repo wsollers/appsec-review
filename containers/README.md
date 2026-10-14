@@ -1,13 +1,15 @@
 # Container packaging
 
 `catalog.toml` is the inventory for every image built by `build.py`. For the legacy audit it
-accounts for all 42 audited legacy image variants and four narrow shared runtime bases. An entry is
-always `enabled`, `deferred`, `replaced`, or `retired`; absence is not a decision.
+accounts for all 42 audited legacy image variants. The current enabled inventory contains 34
+images: 29 tool images, four narrow shared runtime bases, and the Android build environment. An
+entry is always `enabled`, `deferred`, `replaced`, or `retired`; absence is not a decision.
 
 The catalog also enables tools that were not derived from the legacy archive: `tool-actionlint`,
 `tool-cppcheck`, `tool-native-cpp`, `tool-tree-sitter`, `tool-sqlite-fts`, `tool-git`, `tool-pmd`,
-`tool-opengrep`, `tool-infer`, `tool-clangd-indexer`, and `tool-joern`. In total it enables 28 tool
-images plus the four bases.
+`tool-opengrep`, `tool-infer`, `tool-clangd-indexer`, `tool-clang-static-analysis`, and `tool-joern`.
+The authoritative catalog currently enables 29 tool images; the other enabled entries are the four
+bases and `audit-buildenv-android`.
 
 CodeQL is the exception: its licensed source image is operator-provided and its derived
 `appsec-review-codeql:*` analysis images are built by the CodeQL job

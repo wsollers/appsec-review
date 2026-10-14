@@ -398,10 +398,12 @@ calls, unmodeled externals, and path/depth limits must be published as gaps.
 
 ## Acquire dynamic execution evidence
 
-Coverage profiles, sanitizer logs, fuzz corpora, and IAST traces are not yet available. Define
-either a hash-verified import of externally produced artifacts or a separately authorized,
-isolated execution job. Positive traces may support reachability; zero coverage is a gap and never
-refutes a claim.
+Hash-verified import is now implemented for LCOV, Cobertura, JaCoCo, and LLVM coverage JSON, and
+for textual folded-stack, perf-script, Callgrind, and LLVM sample profiles. Those producers ingest
+artifacts already retained by accepted builds; they do not execute tests or profilers. Live
+coverage/profile generation, sanitizer logs, fuzz corpora, and IAST traces are not yet available.
+Define a separately authorized, isolated execution job before producing them. Positive traces may
+support reachability; zero coverage is a gap and never refutes a claim.
 
 ## Add Perforce history to source history analysis
 

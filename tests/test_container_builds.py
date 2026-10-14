@@ -37,6 +37,19 @@ def test_catalog_accounts_for_every_audited_image() -> None:
     assert {item["state"] for item in audited} <= {"enabled", "deferred", "replaced", "retired"}
 
 
+def test_container_docs_track_current_enabled_inventory() -> None:
+    catalog = container_build.load_catalog()
+    enabled = [item for item in catalog["images"] if item["state"] == "enabled"]
+    counts = {kind: sum(item.get("kind") == kind for item in enabled)
+              for kind in ("tool", "base", "buildenv")}
+    readme = " ".join((ROOT / "containers" / "README.md").read_text(encoding="utf-8").split())
+    migration = " ".join((ROOT / "docs" / "reviews" / "container-migration.md")
+                         .read_text(encoding="utf-8").split())
+    assert f"contains {len(enabled)} images: {counts['tool']} tool images" in readme
+    assert f"{counts['tool']} enabled tool images plus {counts['base']} bases" in migration
+    assert counts == {"tool": 29, "base": 4, "buildenv": 1}
+
+
 def test_dependency_order_puts_base_before_tool() -> None:
     catalog = container_build.load_catalog()
     order = container_build.dependency_order(["tool-gitleaks"], catalog)

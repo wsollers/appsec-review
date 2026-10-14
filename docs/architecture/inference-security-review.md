@@ -196,9 +196,9 @@ Packages are independently fingerprinted and size-limited. Oversized scopes spli
 by component, trust boundary, and stable entity range. Truncation creates a coverage gap.
 The pre-adjudication input format is
 [`review-packages.schema.json`](../schemas/review-packages.schema.json) as specialized by the
-[review package contract](review-package-contract.md); the broader
-[`review-input-package.schema.json`](../schemas/review-input-package.schema.json) is not an
-assembler contract. Inference `finding_lead` and `hunt` variants and the separate
+[review package contract](review-package-contract.md); the earlier broad
+`review-input-package.schema.json` draft was removed when this implemented schema became
+authoritative. Inference `finding_lead` and `hunt` variants and the separate
 `document_hunt` variant carry accepted-manifest identity and applicable lead membership,
 history/complexity metrics, safe build-command and environment facts, graph/evidence references,
 retrieval scope and gaps. The package assembler audits that every lead admitted to lane A, from

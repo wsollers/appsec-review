@@ -13,9 +13,9 @@ Version 4 adds accepted code-graph context (see [Code-graph context](#code-graph
 
 This contract specializes [inference security review](inference-security-review.md). Its
 machine-checkable shape is [review-packages.schema.json](../schemas/review-packages.schema.json).
-The broad [review-input-package.schema.json](../schemas/review-input-package.schema.json) exists
-but is not yet an assembler contract. Both package kinds here are pre-adjudication inputs: scanner
-severity is *reported* severity for ordering, never an adjudicated finding severity.
+The earlier broad `review-input-package.schema.json` draft was removed when this implemented schema
+became authoritative. Both package kinds here are pre-adjudication inputs: scanner severity is
+*reported* severity for ordering, never an adjudicated finding severity.
 
 The same versioned schema also accepts the separate catalog-derived package producer
 `job_review_package_assembly`. Its `document_hunt` variant contains one accepted

@@ -105,6 +105,9 @@ def test_architecture_docs_pin_current_counts_and_nonfinding_semantics() -> None
         "not a vulnerability finding",
         "context_only",
         "artifact_origin: \"accepted-input\"",
+        "repositories.deduplicate",
+        "Fresh hits avoid HTTP",
+        "cache-hit, and HTTP-request counts",
     ):
         assert phrase in canonical_words
 
