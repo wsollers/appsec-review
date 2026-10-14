@@ -41,9 +41,10 @@ corroborates it.
 
 ## Network and gaps
 
-The Scorecard client uses a configured HTTPS base URL and host allowlist, and enforces request,
-response-byte, timeout, and retry bounds. Exact successful response bytes are retained run-owned
-and hash referenced. It never follows a repository-provided endpoint.
+The Scorecard client uses a configured HTTPS base URL and host allowlist, rejects redirects, and
+enforces request, response-byte, timeout, and retry bounds. Exact HTTP response bytes, including
+bounded non-success and malformed responses, are retained run-owned and hash referenced. It never
+follows a repository-provided endpoint.
 
 Every dependency without usable Scorecard context remains present and receives a scoped gap. The
 closed operational kinds are `unresolved_repository`, `unsupported_host`, `scorecard_not_found`,

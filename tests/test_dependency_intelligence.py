@@ -139,6 +139,7 @@ def test_scorecard_malformed_and_request_bounds_are_typed() -> None:
     with pytest.raises(ScorecardError) as caught:
         malformed.fetch({"host": "github.com", "owner": "o", "name": "r"})
     assert caught.value.kind == "malformed_response"
+    assert caught.value.response is not None and caught.value.response.body == b"[]"
     with pytest.raises(ScorecardError) as caught:
         malformed.fetch({"host": "github.com", "owner": "o", "name": "r"})
     assert caught.value.kind == "bounds"

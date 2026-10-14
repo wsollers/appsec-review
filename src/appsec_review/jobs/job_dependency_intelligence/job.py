@@ -178,7 +178,7 @@ def _artifact(run_root: Path, path: Path) -> dict[str, Any]:
             "size_bytes": path.stat().st_size}
 
 
-def _gap(dependency_id: str, kind: str, detail: str) -> dict[str, str]:
+def _gap(dependency_id: str, kind: str, detail: str) -> dict[str, Any]:
     return {"dependency_id": dependency_id, "kind": kind, "detail": detail[:4096]}
 
 
@@ -292,7 +292,14 @@ def build_job(*, infer: Infer | None = None, scorecard_transport: Transport = ht
                            "request_failure": "scorecard_request_failure",
                            "malformed_response": "scorecard_malformed_response", "bounds": "bounds",
                            "unsupported_host": "unsupported_host"}
-                gaps.append(_gap(dependency["dependency_id"], mapping.get(exc.kind, exc.kind), str(exc)))
+                gap = _gap(dependency["dependency_id"], mapping.get(exc.kind, exc.kind), str(exc))
+                if exc.response is not None:
+                    path = root / f"{dependency['dependency_id']}.error.json"
+                    atomic_bytes(path, exc.response.body)
+                    gap["response_artifact"] = _artifact(unit.job.run_root, path)
+                    gap["http_status"] = exc.response.status
+                    gap["request_url"] = exc.url
+                gaps.append(gap)
         return {"records": records, "gaps": gaps, "request_count": client.requests,
                 "terminal_status": "COMPLETED_WITH_GAPS" if gaps else "SUCCEEDED"}
 

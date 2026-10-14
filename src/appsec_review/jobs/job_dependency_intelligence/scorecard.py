@@ -48,9 +48,11 @@ def https_get(url: str, *, timeout_seconds: int, max_bytes: int) -> HttpResponse
 
 
 class ScorecardError(RuntimeError):
-    def __init__(self, kind: str, detail: str):
+    def __init__(self, kind: str, detail: str, *, response: HttpResponse | None = None, url: str | None = None):
         super().__init__(detail)
         self.kind = kind
+        self.response = response
+        self.url = url
 
 
 class ScorecardClient:
@@ -101,14 +103,17 @@ class ScorecardClient:
                 if attempt < self.retries:
                     self.sleeper(min(1.0, 0.1 * (2 ** attempt)))
                     continue
-                raise ScorecardError("rate_limit", "Scorecard API rate limited the request")
+                raise ScorecardError("rate_limit", "Scorecard API rate limited the request",
+                                     response=response, url=url)
             if response.status == 404:
-                raise ScorecardError("not_found", "no Scorecard exists for the repository")
+                raise ScorecardError("not_found", "no Scorecard exists for the repository",
+                                     response=response, url=url)
             if response.status < 200 or response.status >= 300:
                 if response.status >= 500 and attempt < self.retries:
                     self.sleeper(min(1.0, 0.1 * (2 ** attempt)))
                     continue
-                raise ScorecardError("request_failure", f"Scorecard API returned HTTP {response.status}")
+                raise ScorecardError("request_failure", f"Scorecard API returned HTTP {response.status}",
+                                     response=response, url=url)
             break
         if response is None:  # pragma: no cover - loop guarantees response or exception
             raise ScorecardError("request_failure", str(last_error or "Scorecard request failed"))
@@ -117,14 +122,17 @@ class ScorecardClient:
         try:
             document = json.loads(response.body.decode("utf-8"))
         except (UnicodeError, json.JSONDecodeError) as exc:
-            raise ScorecardError("malformed_response", "Scorecard response is not UTF-8 JSON") from exc
+            raise ScorecardError("malformed_response", "Scorecard response is not UTF-8 JSON",
+                                 response=response, url=url) from exc
         if not isinstance(document, Mapping):
-            raise ScorecardError("malformed_response", "Scorecard response is not an object")
+            raise ScorecardError("malformed_response", "Scorecard response is not an object",
+                                 response=response, url=url)
         score = document.get("score")
         checks = document.get("checks")
         if (not isinstance(score, (int, float)) or isinstance(score, bool) or not 0 <= score <= 10 or
                 not isinstance(checks, list)):
-            raise ScorecardError("malformed_response", "Scorecard response lacks a bounded score/check list")
+            raise ScorecardError("malformed_response", "Scorecard response lacks a bounded score/check list",
+                                 response=response, url=url)
         normalized = {
             "schema": SCORECARD_RECORD_SCHEMA, "repository": dict(repository), "request_url": url,
             "score": float(score), "date": document.get("date"), "commit": document.get("commit"),
@@ -135,7 +143,7 @@ class ScorecardClient:
             "context_only": True, "security_finding": False,
         }
         if len(checks) > 1000:
-            raise ScorecardError("bounds", "Scorecard check count bound exceeded")
+            raise ScorecardError("bounds", "Scorecard check count bound exceeded", response=response, url=url)
         return normalized, response.body
 
 
