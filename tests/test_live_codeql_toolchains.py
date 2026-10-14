@@ -119,6 +119,7 @@ LIVE_SCOPES = (
     )),
     ("javascript", "source", "none", "typescript", ()),
     ("python", "source", "none", "python", ()),
+    ("ruby", "source", "none", "ruby", ()),
     ("rust", "rust", "none", "rust", ()),
     ("actions", "source", "none", ".", ()),
 )
@@ -175,7 +176,7 @@ def test_live_codeql_database_default_and_applicable_extended_queries(
     source_files = [{"path": path.relative_to(workspace).as_posix(),
                      "sha256": file_sha256(path), "size_bytes": path.stat().st_size}
                     for path in workspace.rglob("*") if path.is_file() and
-                    path.suffix.lower() in {".c", ".cc", ".cpp", ".cxx", ".h", ".hpp", ".rs"}]
+                    path.suffix.lower() in {".c", ".cc", ".cpp", ".cxx", ".h", ".hpp", ".rb", ".rs"}]
 
     def assert_observation_identity(sarif_value, relative: str, query_id: str) -> None:
         sarif_path = scratch / relative

@@ -12,6 +12,7 @@ from typing import Any
 from appsec_review.jobs.cataloging import BUILD_FILES, PROJECT_FILES, inventory, write_json
 from appsec_review.jobs.build_discovery import (
     android_descriptor_facts, descriptor_package, discover_build_units, required_image_profile,
+    unsupported_build_gaps,
 )
 from appsec_review.indexing.target_documents import (
     KINDS, InventoryIntegrityError, collect_target_documents, select_document_inventory,
@@ -120,9 +121,11 @@ def build_job(*, fail_task: str | None = None) -> Job:
             name = Path(item["path"]).name
             if name in BUILD_FILES or name in PROJECT_FILES or Path(item["path"]).suffix in {".csproj", ".sln", ".vcxproj"}:
                 systems.append({"path": item["path"], "kind": name, "sha256": item["sha256"]})
-        units = discover_build_units(unit.output("repository_discovery.partition_repository")["files"])
+        files = unit.output("repository_discovery.partition_repository")["files"]
+        units = discover_build_units(files)
+        gaps = unsupported_build_gaps(files, units)
         doc = {"schema": "appsec-review/build-systems/2", "systems": systems, "build_units": units,
-               "gaps": [] if units else ["no recognized build system"]}
+               "gaps": gaps or ([] if units else ["no recognized build system"])}
         return {"artifact": _artifact(unit, "build-systems.json", doc), **doc}
 
     def compile_commands(unit: UnitContext) -> Mapping[str, Any]:

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from fractions import Fraction
+import gzip
 import json
 from pathlib import Path
 import tomllib
@@ -265,7 +266,28 @@ def test_tree_sitter_symbols_carry_spans_and_distinct_complexities() -> None:
     assert SOURCE[outer["start_byte"]:outer["end_byte"]].startswith(b"def outer")
     truncated = extract({**_record(SOURCE), "truncated": True}, SOURCE, "Python", "m.py")
     assert truncated["status"] == "partial" and "node_limit_reached" in truncated["gaps"]
-    assert tree_sitter_language("Ruby", "app.rb") is None and tree_sitter_language("TypeScript", "ui/App.tsx") == "TSX"
+    assert tree_sitter_language("Ruby", "app.rb") == "Ruby"
+    assert tree_sitter_language("TypeScript", "ui/App.tsx") == "TSX"
+
+
+def test_ruby_symbols_use_real_locked_grammar_nodes() -> None:
+    fixture = ROOT / "tests" / "fixtures" / "review_prioritization"
+    golden = json.loads(gzip.decompress((fixture / "ast-golden.json.gz").read_bytes()))
+    relative = "ruby/lib/processor.rb"
+    record = golden["files"][relative]
+    source = (fixture / "target" / relative).read_bytes()
+    result = extract({"path": relative, "status": "SUCCEEDED", "nodes": record["nodes"],
+                      "truncated": False, "root_has_error": False}, source, "Ruby", relative)
+    symbols = {item["symbol_id"]: item for item in result["symbols"]}
+    assert set(symbols) == {
+        f"{relative}::Audit.Processor.build", f"{relative}::Audit.Processor.transform",
+        f"{relative}::Audit.Processor.transform.normalize",
+        f"{relative}::Audit.Processor.transform.each",
+        f"{relative}::Audit.Processor.classify",
+    }
+    callback = symbols[f"{relative}::Audit.Processor.transform.each"]
+    assert (callback["cyclomatic_complexity"], callback["cognitive_complexity"]) == (5, 5)
+    assert result["status"] == "complete" and result["file_complexity"]["function_count"] == 5
 
 
 def test_symbol_attribution_follows_regions_to_innermost_functions() -> None:

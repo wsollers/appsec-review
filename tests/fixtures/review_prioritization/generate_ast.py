@@ -29,7 +29,8 @@ PARSER = HERE.parents[2] / "containers" / "tools" / "tree-sitter" / "parser.py"
 SCHEMA = "appsec-review/test-tree-sitter-golden/1"
 # Catalog language -> grammar, mirroring the container's LANGUAGES table and scope routing.
 GRAMMARS = {".c": "c", ".h": "cpp", ".cpp": "cpp", ".java": "java", ".cs": "csharp", ".go": "go",
-            ".js": "javascript", ".ts": "typescript", ".tsx": "tsx", ".rs": "rust", ".php": "php"}
+            ".js": "javascript", ".ts": "typescript", ".tsx": "tsx", ".rs": "rust", ".php": "php",
+            ".rb": "ruby"}
 
 
 def _container_module() -> Any:

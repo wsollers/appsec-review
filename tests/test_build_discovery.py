@@ -6,7 +6,7 @@ from pathlib import Path
 from appsec_review.jobs.build_discovery import (
     BUILD_RECIPE_SCHEMA, android_descriptor_facts, build_recipe_inference_policy,
     descriptor_package, discover_build_units, normalize_build_recipe, required_image_profile,
-    validate_build_recipe,
+    unsupported_build_gaps, validate_build_recipe,
 )
 
 
@@ -55,6 +55,16 @@ def test_dotnet_project_suffixes_cover_csharp_visual_basic_and_fsharp() -> None:
         ("csharp", "dotnet", "dotnet"), ("fsharp", "dotnet", "dotnet"),
         ("visual-basic", "dotnet", "dotnet"),
     ]
+
+
+def test_bundler_is_a_precise_execution_gap_not_a_false_build_unit() -> None:
+    files = [_file("ruby/Gemfile", "source 'https://rubygems.org'\n"),
+             _file("ruby/Gemfile.lock", "GEM\n")]
+    units = discover_build_units(files)
+    assert units == []
+    assert unsupported_build_gaps(files, units) == [
+        "ruby/Gemfile: Bundler build unavailable: no pinned Ruby build profile or executor; "
+        "gem installation, lifecycle hooks, packaging, and native extensions were not run"]
 
 
 def test_descriptor_package_is_bounded_and_hash_identified(tmp_path: Path) -> None:

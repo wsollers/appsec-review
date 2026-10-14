@@ -90,7 +90,7 @@ def test_codeql_analysis_has_typed_cross_language_policy() -> None:
     settings = config.job("job_codeql_analysis").typed_settings
     assert isinstance(settings, CodeQLAnalysisSettings)
     assert set(settings.languages) == {
-        "actions", "cpp", "csharp", "go", "java", "javascript", "python", "rust"}
+        "actions", "cpp", "csharp", "go", "java", "javascript", "python", "ruby", "rust"}
     assert settings.languages["java"].source_languages == ("Java", "Kotlin")
     assert settings.execution_mode is CodeQLExecutionMode.AUTO
     assert settings.languages["rust"].mode is CodeQLExecutionMode.SOURCE
@@ -238,7 +238,7 @@ def test_mode_override_targets_and_duplicate_definitions_are_rejected(tmp_path: 
             "\n[jobs.job_review_intake.settings.build_capture]\nmode = \"auto\"\n"))
     with pytest.raises(ValueError, match="unknown CodeQL language override target"):
         _variant(tmp_path, suffix=(
-            "\n[jobs.job_codeql_analysis.settings.languages.ruby]\nmode = \"source\"\n"))
+            "\n[jobs.job_codeql_analysis.settings.languages.swift]\nmode = \"source\"\n"))
     with pytest.raises(tomllib.TOMLDecodeError):
         _variant(tmp_path, ('mode = "required"', 'mode = "required"\nmode = "auto"'))
 

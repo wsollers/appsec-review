@@ -27,7 +27,8 @@ _RECEIVER_FIELDS = {
     "qualified_name": ("prefix", "name"), "generic_function": ("function", None),
 }
 _CALL_RECEIVERS = {"method_invocation": "object", "member_call_expression": "object",
-                   "nullsafe_member_call_expression": "object", "scoped_call_expression": "scope"}
+                   "nullsafe_member_call_expression": "object", "scoped_call_expression": "scope",
+                   "call": "receiver"}
 _CREATION = frozenset({"object_creation_expression", "new_expression"})
 _STRINGS = frozenset({"string", "string_literal", "interpreted_string_literal", "raw_string_literal",
                       "encapsed_string", "template_string", "verbatim_string_literal"})

@@ -11,7 +11,7 @@ from typing import Any
 
 _SHA = re.compile(r"^[0-9a-f]{64}$")
 _IMAGE = re.compile(r"^sha256:[0-9a-f]{64}$")
-_LANGUAGES = {"cpp", "go", "java", "csharp", "javascript", "python", "rust", "actions"}
+_LANGUAGES = {"cpp", "go", "java", "csharp", "javascript", "python", "ruby", "rust", "actions"}
 _LEGACY_MODES = {"manual": "build", "none": "source"}
 
 
