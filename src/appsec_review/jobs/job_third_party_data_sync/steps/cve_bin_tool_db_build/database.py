@@ -9,6 +9,7 @@ import sqlite3
 import subprocess
 from typing import Any, Callable, Mapping
 
+from appsec_review.container_runtime.identity import application_runtime_user
 from appsec_review.jobs.job_third_party_data_sync.publication import publish_snapshot, require_beneath, verify_current
 from appsec_review.storage import file_sha256
 
@@ -97,7 +98,8 @@ def _docker_builder(settings: CveBinToolSettings, input_dir: Path, output_dir: P
     bind_output = _docker_bind_source(output_dir.resolve())
     command = [
         "docker", "run", "--rm", "--network", "none", "--read-only", "--cap-drop", "ALL",
-        "--security-opt", "no-new-privileges", "--pids-limit", "128", "--user", "65532:65532",
+        "--security-opt", "no-new-privileges", "--pids-limit", "128", "--user",
+        application_runtime_user("65532:65532"),
         "--tmpfs", "/tmp:rw,nosuid,nodev,size=256m", "-v", f"{bind_input}:/input:ro",
         "-v", f"{bind_output}:/output:rw", "--entrypoint", "python", settings.image,
         "/opt/builder/build_db.py", "/input", "/output",

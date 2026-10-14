@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import json
 import hashlib
+import json
 import os
 from pathlib import Path
 import subprocess
@@ -101,6 +101,9 @@ def test_build_executor_pins_image_and_runs_argv_without_shell(tmp_path: Path) -
                               working_directory="project",
                               environment={"RUSTFLAGS": "-C debuginfo=2"})
     command = calls[-1][0]
+    expected_user = (f"{os.geteuid()}:{os.getegid()}" if hasattr(os, "geteuid") and
+                     os.geteuid() > 0 and os.getegid() > 0 else profile.user)
+    assert command[command.index("--user") + 1] == expected_user
     assert ("--network", "bridge") == command[command.index("--network"):command.index("--network") + 2]
     assert command[command.index("--entrypoint") + 1:] == (
         "cargo", image_id, "build", "--locked")

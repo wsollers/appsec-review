@@ -1,15 +1,33 @@
 from __future__ import annotations
 
 from pathlib import Path
+import os
 from types import MappingProxyType
 
 import pytest
 
 from appsec_review.container_runtime.catalog import ContainerCatalog, ToolImage
 from appsec_review.container_runtime.executor import CommandOutcome, ContainerExecutor, ExecutionRequest, Mount
+from appsec_review.container_runtime.identity import application_runtime_user
 
 
 DIGEST = "sha256:" + "a" * 64
+
+
+def test_application_runtime_user_uses_non_root_process_identity(monkeypatch) -> None:
+    monkeypatch.setattr("appsec_review.container_runtime.identity.os.geteuid", lambda: 1234,
+                        raising=False)
+    monkeypatch.setattr("appsec_review.container_runtime.identity.os.getegid", lambda: 5678,
+                        raising=False)
+    assert application_runtime_user("10001:10001") == "1234:5678"
+
+
+def test_application_runtime_user_keeps_non_root_fallback_for_root_process(monkeypatch) -> None:
+    monkeypatch.setattr("appsec_review.container_runtime.identity.os.geteuid", lambda: 0,
+                        raising=False)
+    monkeypatch.setattr("appsec_review.container_runtime.identity.os.getegid", lambda: 0,
+                        raising=False)
+    assert application_runtime_user("10001:10001") == "10001:10001"
 
 
 def catalog(tmp_path: Path, *, expected: str | None = DIGEST) -> ContainerCatalog:
@@ -43,13 +61,10 @@ def test_executor_uses_argv_and_enforces_mounts_policy_digest_and_bounds(tmp_pat
     assert result.image_id == DIGEST
     assert result.stdout_truncated and result.stderr_truncated
     assert (tmp_path / "run" / result.stdout_path).read_bytes() == b"01234567"
-    cleanup = calls[-1]
-    assert cleanup[cleanup.index("--user") + 1] == "10001:10001"
-    assert cleanup[cleanup.index("--entrypoint") + 1] == "/usr/bin/find"
-    assert ["-uid", "10001"] == cleanup[cleanup.index("-uid"):cleanup.index("-uid") + 2]
-    assert ["-type", "d", "-o", "-type", "f"] == cleanup[
-        cleanup.index("-type"):cleanup.index("-type") + 5]
-    assert ["-exec", "/bin/chmod", "a+rwX", "--", "{}", "+"] == cleanup[-6:]
+    expected_user = (f"{os.geteuid()}:{os.getegid()}" if hasattr(os, "geteuid") and
+                     os.geteuid() > 0 and os.getegid() > 0 else "10001:10001")
+    assert docker[docker.index("--user") + 1] == expected_user
+    assert len([call for call in calls if call[:2] == ["docker", "run"]]) == 1
 
 
 def test_executor_rejects_digest_mismatch_and_docker_socket_mount(tmp_path: Path) -> None:
@@ -80,21 +95,3 @@ def test_executor_records_timeout_and_failure_state(tmp_path: Path) -> None:
     result = ContainerExecutor(catalog(tmp_path), tmp_path / "run", runner=runner).execute(
         ExecutionRequest("tool-fixture", ("/bin/fixture",), target, tmp_path / "run" / "scratch"))
     assert result.timed_out and result.terminal_status == "TIMEOUT" and result.exit_code is None
-
-
-def test_executor_fails_closed_when_tool_output_permissions_cannot_be_normalized(tmp_path: Path) -> None:
-    target = tmp_path / "target"
-    target.mkdir()
-
-    def runner(argv, timeout):
-        if tuple(argv[:3]) == ("docker", "image", "inspect"):
-            return CommandOutcome(0, (DIGEST + "\n").encode(), b"")
-        if "/usr/bin/find" in argv:
-            return CommandOutcome(1, b"", b"find: /scratch/private: Permission denied")
-        return CommandOutcome(0, b"", b"")
-
-    executor = ContainerExecutor(catalog(tmp_path), tmp_path / "run", runner=runner)
-    with pytest.raises(RuntimeError, match="could not return tool-fixture scratch output to the run owner"):
-        executor.execute(ExecutionRequest(
-            "tool-fixture", ("/bin/fixture",), target, tmp_path / "run" / "scratch"))
-    assert not (tmp_path / "run" / "scratch" / "execution.json").exists()

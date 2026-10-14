@@ -5,6 +5,7 @@ import argparse
 import copy
 import importlib.util
 import json
+import os
 from pathlib import Path
 import random
 import re
@@ -257,6 +258,10 @@ def test_executor_export_action_runs_without_network_and_with_export_timeout(tmp
     result = CodeQLExecutor(image=image, run_root=tmp_path, settings=settings, runner=runner).execute(
         "export", ("--language", "cpp"), scratch_root=tmp_path / "scratch")
     command, timeout = next(call for call in calls if call[0][:2] == ("docker", "run"))
+    expected_user = (f"{os.geteuid()}:{os.getegid()}" if hasattr(os, "geteuid") and
+                     os.geteuid() > 0 and os.getegid() > 0 else image.runtime_user)
+    assert command[command.index("--user") + 1] == expected_user
+    assert result.limits["user"] == expected_user
     assert command[command.index("--network") + 1] == "none" and result.limits["network"] == "none"
     assert command[-3:] == ("export", "--language", "cpp")
     assert timeout == contract.GraphSettings().export_timeout_seconds

@@ -37,11 +37,7 @@ def atomic_json(path: Path, value: Any) -> None:
 
 
 def tool_input_json(path: Path, value: Any) -> None:
-    """Atomically write JSON that a tool container reads as its non-root runtime user.
-
-    ``atomic_json`` inherits ``mkstemp``'s owner-only ``0600`` mode, which the container user
-    (uid 10001) cannot read when the run directory belongs to another host user.
-    """
+    """Atomically write JSON consumed by a non-root tool container."""
     atomic_json(path, value)
     Path(path).chmod(0o644)
 

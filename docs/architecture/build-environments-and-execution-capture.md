@@ -76,7 +76,8 @@ derived from declared image dependencies, and each run writes logs plus an
 `appsec-review/container-build-summary/1` record under `runs/container-builds/<run-id>/`.
 
 Startup, functional, and security acceptance use `containers/runtime-policy.toml`: non-root
-`10001:10001`, read-only root filesystem, all capabilities dropped, `no-new-privileges`, bounded
+the application/Dagster process uid and gid, read-only root filesystem, all capabilities dropped,
+`no-new-privileges`, bounded
 CPU, memory, PIDs, time and output, a read-only target, one writable scratch mount, and no network
 for static tool execution. `containers/tools/gitleaks/tool.toml` applies this policy to gitleaks and
 fixes its executable and version.

@@ -211,11 +211,6 @@ class LocalDocker:
                     file_size = int(soft)
                 index += 2
         assert argv[argv.index("--network") + 1] == "none"
-        if entrypoint == "/usr/bin/find":
-            assert mounts == {"/scratch": mounts["/scratch"]}
-            assert arguments[0:4] == ["/scratch", "-xdev", "-uid", "10001"]
-            assert arguments[-6:] == ["-exec", "/bin/chmod", "a+rwX", "--", "{}", "+"]
-            return CommandOutcome(0, b"", b"")
         assert "type=bind,src=" in " ".join(argv) and ",dst=/target,readonly" in " ".join(argv)
 
         def host(value: str) -> str:

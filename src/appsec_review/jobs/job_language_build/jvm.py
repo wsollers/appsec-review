@@ -21,7 +21,7 @@ from appsec_review.retrieval import (
 from appsec_review.storage import FileLock, atomic_json, canonical_json, file_sha256, protected_json
 
 
-JVM_EXECUTOR_IDENTITY = "appsec-review/jvm-language-build-executor/1"
+JVM_EXECUTOR_IDENTITY = "appsec-review/jvm-language-build-executor/2"
 JVM_CAPTURE_IDENTITY = "appsec-review/jvm-build-capture/2"
 JVM_RECEIPT_SCHEMA = "appsec-review/language-build-receipt/1"
 _SECRET = re.compile(r"(SECRET|TOKEN|PASSWORD|PASSWD|API_KEY|PRIVATE_KEY|CREDENTIAL)", re.I)

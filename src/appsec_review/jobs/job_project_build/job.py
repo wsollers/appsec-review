@@ -42,7 +42,7 @@ from appsec_review.guidance.skills import load_runtime_skill
 
 
 SCHEMA = "appsec-review/project-build-dispatch/2"
-EXECUTOR_IDENTITY = "appsec-review/build-container-executor/2"
+EXECUTOR_IDENTITY = "appsec-review/build-container-executor/3"
 REPAIR_CACHE_SCHEMA = "appsec-review/build-image-repair-cache/1"
 BUILD_FAMILIES = ("native", "rust", "go", "java", "node", "dotnet", "python", "php", "wasm")
 STATIC_LANES = ("global", *BUILD_FAMILIES)

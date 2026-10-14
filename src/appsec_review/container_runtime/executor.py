@@ -14,6 +14,7 @@ from typing import Any
 import uuid
 
 from appsec_review.container_runtime.catalog import ContainerCatalog, ToolImage
+from appsec_review.container_runtime.identity import application_runtime_user
 from appsec_review.storage import atomic_json, file_sha256
 
 
@@ -130,8 +131,8 @@ class ContainerExecutor:
         if scratch != self.run_root and self.run_root not in scratch.parents:
             raise ValueError("scanner scratch must be run-owned")
         scratch.mkdir(parents=True, exist_ok=True)
-        # The application/Dagster uid and fixed scanner uid intentionally differ. Grant write only
-        # on this run-owned scratch boundary; target, rules, and database mounts remain read-only.
+        # The scanner inherits the application uid/gid. Keep the writable boundary limited to its
+        # run-owned scratch; target, rules, and database mounts remain read-only.
         scratch.chmod(0o777)
         if not request.argv or request.argv[0] != tool.executable:
             raise ValueError(f"argv must begin with the cataloged executable for {tool.tool_id}")
@@ -178,29 +179,9 @@ class ContainerExecutor:
             raise RuntimeError(f"scanner bind source is not backed by a host mount: {path}")
         return max(candidates, key=lambda item: item[0])[1]
 
-    def _normalize_scratch_permissions(self, *, tool: ToolImage, image_id: str,
-                                       runtime_source: Path) -> None:
-        """Return fixed-UID tool output to the run owner without following symlinks."""
-        uid = tool.user.split(":", 1)[0]
-        if not uid.isdecimal():
-            raise ValueError(f"cataloged tool user must begin with a numeric uid: {tool.tool_id}")
-        command = (
-            "docker", "run", "--rm", "--network", "none", "--read-only",
-            "--user", tool.user, "--cap-drop", "ALL", "--security-opt", "no-new-privileges",
-            "--cpus", "0.25", "--memory", "64m", "--pids-limit", "64",
-            "--mount", f"type=bind,src={runtime_source},dst=/scratch",
-            "--entrypoint", "/usr/bin/find", image_id,
-            "/scratch", "-xdev", "-uid", uid, "(", "-type", "d", "-o", "-type", "f", ")",
-            "-exec", "/bin/chmod", "a+rwX", "--", "{}", "+",
-        )
-        outcome = self.runner(command, 60)
-        if outcome.timed_out or outcome.exit_code != 0:
-            detail = outcome.stderr.decode("utf-8", "replace").strip()[:512]
-            suffix = f": {detail}" if detail else ""
-            raise RuntimeError(f"could not return {tool.tool_id} scratch output to the run owner{suffix}")
-
     def execute(self, request: ExecutionRequest) -> ExecutionResult:
         tool = self.catalog.tool(request.tool_id)
+        runtime_user = application_runtime_user(tool.user)
         _, mounts = self._validate(request, tool)
         image_id = self.resolve_image(tool)
         raw = request.scratch_root / "raw"
@@ -210,7 +191,7 @@ class ContainerExecutor:
         name = "appsec-" + uuid.uuid4().hex[:20]
         command = [
             "docker", "run", "--rm", "--name", name,
-            "--network", "none", "--read-only", "--user", tool.user,
+            "--network", "none", "--read-only", "--user", runtime_user,
             "--cap-drop", "ALL", "--security-opt", "no-new-privileges",
             "--cpus", tool.cpus, "--memory", tool.memory,
             "--pids-limit", str(tool.pids_limit),
@@ -234,8 +215,6 @@ class ContainerExecutor:
         outcome = self.runner(command, tool.timeout_seconds)
         if outcome.timed_out:
             self._run_control(("docker", "kill", name))
-        self._normalize_scratch_permissions(
-            tool=tool, image_id=image_id, runtime_source=effective_sources["/scratch"])
         completed = _stamp()
         stdout = outcome.stdout[:tool.output_bytes]
         stderr = outcome.stderr[:tool.output_bytes]
@@ -246,7 +225,7 @@ class ContainerExecutor:
             "runtime_source": str(effective_sources[mount.target]), "read_only": mount.read_only,
         } for mount in mounts)
         limits = {
-            "network": "none", "user": tool.user, "root_filesystem": "read-only",
+            "network": "none", "user": runtime_user, "root_filesystem": "read-only",
             "cap_drop": ["ALL"], "no_new_privileges": True, "cpus": tool.cpus,
             "memory": tool.memory, "pids": tool.pids_limit,
             "tmpfs": list(self.catalog.policy["tmpfs"]),

@@ -17,6 +17,7 @@ from appsec_review.application_paths import application_root as _application_roo
 from appsec_review.config import BuildCaptureConfig
 from appsec_review.storage import atomic_json, canonical_json
 from .catalog import load_catalog
+from .identity import application_runtime_user
 from .build_capture import (
     PATH_FIELDS, REQUIRED_EVENT_KINDS, BuildExecutionRecorder, CaptureScope, record_strace_files,
 )
@@ -177,8 +178,8 @@ class BuildContainerExecutor:
         return resolve_host_bind_path(path, self.runner)
 
     def _make_workspace_writable(self, root: Path) -> None:
-        """Grant the fixed non-root container identity access to the run-owned source copy."""
-        container_uid = int(self.profile.user.split(":", 1)[0])
+        """Ensure the application identity can update its run-owned source copy."""
+        container_uid = int(application_runtime_user(self.profile.user).split(":", 1)[0])
         for path in (root, *root.rglob("*")):
             if path.is_symlink():
                 continue
@@ -201,9 +202,10 @@ class BuildContainerExecutor:
             raise ValueError("build working directory escaped the run-owned workspace")
         self._make_workspace_writable(root)
         bind_source = self._bind_source(root)
+        runtime_user = application_runtime_user(self.profile.user)
         command = [
             "docker", "run", "--rm", "--network", "bridge", "--read-only",
-            "--user", self.profile.user, "--cap-drop", "ALL",
+            "--user", runtime_user, "--cap-drop", "ALL",
             "--security-opt", "no-new-privileges", "--cpus", "2", "--memory", "4g",
             "--pids-limit", "1024", "--tmpfs",
             "/tmp:rw,exec,nosuid,size=2g" if self.profile.name == "android"
@@ -278,7 +280,7 @@ class BuildContainerExecutor:
              "trace_options": ["--seccomp-bpf", "-y"]},
         )
         driver = capture_root / "build-driver.sh"
-        # Host and non-root container IDs differ; only this new run-owned leaf is shared.
+        # The build container shares the application identity and writes only to this run-owned leaf.
         capture_root.chmod(0o733)
 
         source_driver = _capture_asset("build-driver.sh")
@@ -512,9 +514,10 @@ class BuildContainerExecutor:
                     (tool.expected_image_id is not None and image_id != tool.expected_image_id)):
                 raise RuntimeError("pinned gitleaks image is unavailable or changed")
             scan_root.chmod(0o777)
+            runtime_user = application_runtime_user(tool.user)
             command = [
                 "docker", "run", "--rm", "--network", "none", "--read-only",
-                "--user", tool.user, "--cap-drop", "ALL", "--security-opt",
+                "--user", runtime_user, "--cap-drop", "ALL", "--security-opt",
                 "no-new-privileges", "--cpus", tool.cpus, "--memory", tool.memory,
                 "--pids-limit", str(tool.pids_limit), "--tmpfs", "/tmp:rw,noexec,nosuid,size=1g",
                 "--workdir", "/target", "--mount",

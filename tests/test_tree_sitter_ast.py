@@ -14,6 +14,7 @@ from appsec_review.jobs.job_tree_sitter_ast import (
     GrammarLock, Scope, partition_scopes, plan_scopes, scope_fingerprint,
 )
 from appsec_review.config import load_config
+from appsec_review.container_runtime.identity import application_runtime_user
 from appsec_review.jobs.cataloging import source_fingerprint
 from appsec_review.jobs.job_review_intake import build_job as build_intake
 from appsec_review.jobs.job_target_catalog import build_job as build_catalog
@@ -188,7 +189,8 @@ def test_live_container_parses_mult_project_multilanguage_fixture_and_proves_ide
         request_path.chmod(0o444)
         scratch.chmod(0o733)
         subprocess.run(["docker", "run", "--rm", "--network", "none", "--read-only",
-            "--user", "10001:10001", "--cap-drop", "ALL", "--security-opt", "no-new-privileges",
+            "--user", application_runtime_user("10001:10001"), "--cap-drop", "ALL",
+            "--security-opt", "no-new-privileges",
             "--cpus", "2", "--memory", "1g", "--pids-limit", "256",
             "--tmpfs", "/tmp:rw,nosuid,nodev,noexec,size=128m",
             "--mount", f"type=bind,src={FIXTURE},dst=/target,readonly",
@@ -215,7 +217,8 @@ def test_live_container_parses_mult_project_multilanguage_fixture_and_proves_ide
     bounded_request.chmod(0o444)
     bounded.chmod(0o733)
     subprocess.run(["docker", "run", "--rm", "--network", "none", "--read-only",
-        "--user", "10001:10001", "--cap-drop", "ALL", "--security-opt", "no-new-privileges",
+        "--user", application_runtime_user("10001:10001"), "--cap-drop", "ALL",
+        "--security-opt", "no-new-privileges",
         "--cpus", "2", "--memory", "1g", "--pids-limit", "256",
         "--tmpfs", "/tmp:rw,nosuid,nodev,noexec,size=128m",
         "--mount", f"type=bind,src={FIXTURE},dst=/target,readonly",

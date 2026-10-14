@@ -41,8 +41,8 @@ them:
 Tools see only the run-owned case root, mounted read-only at `/target`, plus a read-write
 `/scratch`. The compile commands are rewritten to `/target/source/...` paths (driver normalized to
 `clang`/`clang++`, MSVC-style flags preserved) and written to `/scratch/compile_commands.json`.
-That file is made world-readable, because the tool runs as uid 10001. Execution follows the central
-container policy: no network, read-only root, all capabilities dropped, `no-new-privileges`, and
+The tool runs as the application/Dagster uid and gid. Execution follows the central container
+policy: no network, read-only root, all capabilities dropped, `no-new-privileges`, and
 bounded memory, CPU, PIDs, time, and output.
 
 ## `job_cpp_symbol_index`

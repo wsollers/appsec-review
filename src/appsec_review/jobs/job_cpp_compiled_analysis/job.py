@@ -891,7 +891,7 @@ def build_job(*, executor_factory=None) -> Job:
             root = _case_root(unit, case_id)
             try:
                 commands = normalize_compile_db(root, mapping)
-                # tool-native-cpp reads this as uid 10001 for the AST and IR replays.
+                # tool-native-cpp reads this as the application uid for the AST and IR replays.
                 normalized = root / "normalized-compile-commands.json"
                 tool_input_json(normalized, commands)
                 compile_artifact = _artifact(unit.job.run_root, normalized)

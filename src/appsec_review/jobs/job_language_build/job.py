@@ -46,7 +46,7 @@ from appsec_review.jobs.job_language_build.datasets import CONSUMES, DATASETS
 
 SCHEMA = "appsec-review/language-build-handoff/1"
 RECEIPT_SCHEMA = "appsec-review/language-build-receipt/1"
-EXECUTOR_IDENTITY = "appsec-review/generic-language-build-executor/2"
+EXECUTOR_IDENTITY = "appsec-review/generic-language-build-executor/3"
 CAPTURE_DESCRIPTORS: dict[str, CapturedBuildDescriptor] = {
     descriptor.family: descriptor for descriptor in (
         dotnet.CAPTURE_DESCRIPTOR, native.CAPTURE_DESCRIPTOR, rust.CAPTURE_DESCRIPTOR,

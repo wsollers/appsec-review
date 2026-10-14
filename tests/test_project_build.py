@@ -340,7 +340,7 @@ def test_project_build_executes_accepted_recipes_and_retains_binaries(tmp_path: 
     assert {item["family"] for item in accepted["static_dispatches"]
             if item["workflow"] == "lang_jobflow_static"} == {"native", "rust"}
     assert {item["workflow"] for item in accepted["build_dispatches"]} == {"lang_jobflow_build"}
-    assert all(item["executor_identity"] == "appsec-review/build-container-executor/2"
+    assert all(item["executor_identity"] == "appsec-review/build-container-executor/3"
                for item in accepted["probe_receipts"])
     assert all((config.runtime.runs_dir / upstream["run_id"] / artifact["path"]).is_file()
                for build in accepted["probe_receipts"] for artifact in build["artifacts"])

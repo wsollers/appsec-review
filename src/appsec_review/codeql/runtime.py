@@ -13,6 +13,7 @@ from typing import Any, Protocol
 from uuid import uuid4
 
 from appsec_review.container_runtime.build_executor import Runner, _run, resolve_host_bind_path
+from appsec_review.container_runtime.identity import application_runtime_user
 from appsec_review.storage import atomic_json, bounded_file_lock, canonical_json, file_sha256
 
 
@@ -228,7 +229,8 @@ class CodeQLExecutor:
         if scratch != self.run_root and self.run_root not in scratch.parents:
             raise ValueError("CodeQL scratch must be run-owned")
         scratch.mkdir(parents=True, exist_ok=True)
-        container_uid = int(self.image.runtime_user.split(":", 1)[0])
+        runtime_user = application_runtime_user(self.image.runtime_user)
+        container_uid = int(runtime_user.split(":", 1)[0])
         for path in (scratch, *scratch.rglob("*")):
             if path.is_symlink():
                 continue
@@ -236,8 +238,8 @@ class CodeQLExecutor:
             try:
                 path.chmod(mode | (0o007 if path.is_dir() else 0o006))
             except PermissionError:
-                # Outputs from an earlier CodeQL action are owned by the fixed container UID and
-                # remain accessible to the next action; unrelated ownership is an integrity error.
+                # Outputs from an earlier CodeQL action share the application UID and remain
+                # accessible to the next action; unrelated ownership is an integrity error.
                 if path.stat().st_uid != container_uid:
                     raise
         inspected = self.runner(("docker", "image", "inspect", self.image.image_tag,
@@ -268,7 +270,7 @@ class CodeQLExecutor:
                 mounts.extend(("--mount", f"type=bind,src={effective},dst=/source,readonly"))
         command = [
             "docker", "run", "--rm", "--network", network, "--read-only",
-            "--user", self.image.runtime_user, "--cap-drop", "ALL",
+            "--user", runtime_user, "--cap-drop", "ALL",
             "--security-opt", "no-new-privileges", "--cpus", str(self.settings.threads),
             "--memory", f"{self.settings.ram_mb + 1024}m", "--pids-limit", "2048",
             "--tmpfs", "/tmp:rw,noexec,nosuid,size=2g", *mounts, "--workdir", "/scratch",
@@ -289,7 +291,7 @@ class CodeQLExecutor:
                 initialized = self.runner(("docker", "run", "--rm", "--network", "none",
                     "--read-only", "--user", "0:0", "--security-opt", "no-new-privileges",
                     "--mount", f"type=volume,src={volume_name},dst=/scratch/{database_name}",
-                    "--entrypoint", "chown", self.image.image_id, self.image.runtime_user,
+                    "--entrypoint", "chown", self.image.image_id, runtime_user,
                     f"/scratch/{database_name}"), 60)
                 if initialized[3] or initialized[0] != 0:
                     raise RuntimeError("CodeQL temporary database volume could not be initialized")
@@ -323,7 +325,7 @@ class CodeQLExecutor:
             started, completed, duration_ms, stdout_path.relative_to(self.run_root).as_posix(),
             stderr_path.relative_to(self.run_root).as_posix(), stdout_sha, stderr_sha,
             stdout_total, stderr_total, stdout_truncated, stderr_truncated, stdout_tail, stderr_tail,
-            {"network": network, "root_filesystem": "read-only", "user": self.image.runtime_user,
+            {"network": network, "root_filesystem": "read-only", "user": runtime_user,
              "cap_drop": ["ALL"], "no_new_privileges": True, "threads": self.settings.threads,
              "ram_mb": self.settings.ram_mb, "timeout_seconds": timeout,
              "output_bytes": self.settings.output_bytes, "capture_mode": "head-tail",
