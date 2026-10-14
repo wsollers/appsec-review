@@ -16,7 +16,7 @@ from appsec_review.jobs.cataloging import source_fingerprint
 # The deterministic review graph in execution order; ``start``, ``resume`` and ``--force-from`` all
 # use it. ``job_code_graph_index`` consumes CodeQL and prioritization output and must precede the
 # indexing job that accounts for it.
-GRAPH_JOB_IDS = ("job_review_intake", "job_target_catalog", "job_source_history_analysis",
+GRAPH_JOB_IDS = ("job_model_connectivity", "job_review_intake", "job_target_catalog", "job_source_history_analysis",
                  "job_target_analysis_plan", "job_tree_sitter_ast",
                  "job_project_build", "job_language_build", "job_artifact_indexing",
                  "job_artifact_security_analysis",

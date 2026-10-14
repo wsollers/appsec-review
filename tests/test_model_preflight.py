@@ -12,6 +12,7 @@ from appsec_review import inference
 from appsec_review.config import load_config
 from appsec_review.inference import anthropic_api, check_models, claude_cli, openai_api
 from appsec_review.jobs.cataloging import source_fingerprint
+from appsec_review.jobs.job_model_connectivity import build_job as build_connectivity
 from appsec_review.jobs.job_review_intake import build_job as build_intake
 from appsec_review.jobs.job_review_intake.job import PREFLIGHT_SCHEMA, configured_models
 from appsec_review.runtime import GraphRunner
@@ -163,9 +164,35 @@ def test_registry_wires_the_real_check_into_the_first_job_of_a_review(monkeypatc
     monkeypatch.setitem(inference.MODEL_CHECKS, "claude-cli", lambda names, *, timeout_seconds: (
         seen.extend(names) or {"method": "probe", "listed": None, "models": {
             name: {"available": True, "detail": "answered"} for name in names}}))
-    outcome = GraphRunner(config, [builtin_registry().build("job_review_intake")]).run(
+    gate = builtin_registry().build("job_model_connectivity")
+    assert gate.always_execute is True and gate.propagate_handoff is False
+    outcome = GraphRunner(config, [gate]).run(
         target_root=target, source_fingerprint=source_fingerprint(target))
     assert outcome["status"] == "SUCCEEDED" and seen == ["claude-haiku-5-5"]
+
+
+def test_connectivity_gate_runs_again_without_invalidating_reusable_downstream_work(tmp_path: Path) -> None:
+    config, target = _fixture(tmp_path)
+    check, calls = _serving("claude-haiku-5-5")
+    jobs = [build_connectivity(check_models=check), build_intake()]
+    first = GraphRunner(config, jobs).run(
+        target_root=target, source_fingerprint=source_fingerprint(target))
+    second = GraphRunner(config, jobs).run(
+        run_id=first["run_id"], target_root=target, source_fingerprint=source_fingerprint(target))
+    assert [item["action"] for item in second["decisions"]] == ["RUN", "REUSE"]
+    assert len(calls) == 2
+    attempts = config.runtime.runs_dir / first["run_id"] / "data/jobs/job_model_connectivity/attempts"
+    assert sorted(path.name for path in attempts.iterdir()) == ["attempt_0001", "attempt_0002"]
+
+
+def test_connectivity_failure_stops_before_review_intake(tmp_path: Path) -> None:
+    config, target = _fixture(tmp_path)
+    check, _calls = _serving()
+    with pytest.raises(RuntimeError, match="connectivity.verify_models"):
+        GraphRunner(config, [build_connectivity(check_models=check), build_intake()]).run(
+            target_root=target, source_fingerprint=source_fingerprint(target))
+    run_id = next(path.name for path in config.runtime.runs_dir.iterdir() if path.name != "metadata")
+    assert not (config.runtime.runs_dir / run_id / "data/jobs/job_review_intake").exists()
 
 
 # ---------------------------------------------------------------- provider checks
@@ -243,6 +270,9 @@ def test_claude_cli_probe_accepts_only_a_model_that_actually_answered(tmp_path: 
         "    print(json.dumps({'is_error': False, 'result': 'ok', 'modelUsage': {'claude-other': {}}}))\n"
         "elif model == 'claude-garbled':\n"
         "    print('not json'); sys.stderr.write('boom'); sys.exit(3)\n"
+        "elif model == 'claude-expired':\n"
+        "    print(json.dumps({'is_error': True, 'terminal_reason': 'api_error', "
+        "'result': 'OAuth access token has expired. Re-authenticate to continue.', 'modelUsage': {}})); sys.exit(1)\n"
         "else:\n"
         "    print(json.dumps({'is_error': True, 'terminal_reason': 'api_error', 'modelUsage': {}})); sys.exit(1)\n",
         encoding="utf-8")
@@ -250,10 +280,16 @@ def test_claude_cli_probe_accepts_only_a_model_that_actually_answered(tmp_path: 
     monkeypatch.setenv("PATH", f"{tmp_path}:{__import__('os').environ['PATH']}")
     monkeypatch.setenv("ANTHROPIC_API_KEY", "must-not-reach-the-subscription-cli")
     result = claude_cli.models(
-        ["claude-haiku-5-5", "claude-missing", "claude-substituted", "claude-garbled"], timeout_seconds=20)
+        ["claude-haiku-5-5", "claude-missing", "claude-substituted", "claude-garbled",
+         "claude-expired"], timeout_seconds=20)
     assert result["method"] == "probe" and result["listed"] is None
     assert result["models"]["claude-haiku-5-5"] == {"available": True, "detail": "answered an availability probe"}
     assert result["models"]["claude-missing"] == {
         "available": False, "detail": "probe was not answered by this model: api_error"}
     assert result["models"]["claude-substituted"]["available"] is False
     assert result["models"]["claude-garbled"] == {"available": False, "detail": "Claude CLI exited 3: boom"}
+    assert result["models"]["claude-expired"] == {
+        "available": False,
+        "detail": "probe was not answered by this model: OAuth access token has expired. "
+                  "Re-authenticate to continue.",
+    }

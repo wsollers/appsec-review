@@ -6,7 +6,7 @@ accepted handoffs, but they do not currently expose the same review topology.
 The direct `start`, `plan-resume`, and `resume` commands run this linear graph:
 
 ```text
-review_intake -> target_catalog -> source_history_analysis -> target_analysis_plan
+model_connectivity -> review_intake -> target_catalog -> source_history_analysis -> target_analysis_plan
   -> tree_sitter_ast -> project_build -> language_build
   -> artifact_indexing -> artifact_security_analysis -> cpp_compiled_analysis
   -> cpp_symbol_index -> cpg_analysis -> evidence_collection

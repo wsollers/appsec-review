@@ -64,6 +64,11 @@ class Job:
     # whose handoffs it reads. The dataset audit compares both with what a run actually produced.
     datasets: tuple[DatasetDeclaration, ...] = ()
     consumes: tuple[str, ...] = ()
+    # Live readiness gates must execute for every graph dispatch, even when the application run
+    # can otherwise reuse accepted work.  A non-propagating gate orders downstream jobs without
+    # becoming part of their immutable input identity.
+    always_execute: bool = False
+    propagate_handoff: bool = True
 
     def __post_init__(self) -> None:
         validate_declarations(self.job_id, self.datasets)

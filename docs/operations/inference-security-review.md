@@ -35,7 +35,7 @@ To upgrade for a real review:
    missing profile is rejected.
 2. Revisit `max_input_tokens`, `max_output_tokens` and the job budgets
    (`[...settings.budgets]`), because larger models cost more per turn.
-3. Start the run. `job_review_intake.model_preflight` confirms that the provider serves every
+3. Start the run. `job_model_connectivity` confirms that the provider serves every
    configured model, including this job's profiles, before any review work. An unavailable model
    blocks the run.
 
@@ -83,7 +83,7 @@ require_distinct_from_roles = ["hypothesis_hunter", "red_team_analyst", "blue_te
 ```
 
 The red roles (`hypothesis_hunter`, `red_team_analyst`) keep using `default` unless they have their
-own entries. The verifier's model must pass `job_review_intake.model_preflight` like any other.
+own entries. The verifier's model must pass `job_model_connectivity` like any other.
 Changing the verifier's profile changes the verifier cells' fingerprints, so those cells run fresh;
 red and blue cells are reused. Setting `require_distinct_model_for_ship_blocking = false` publishes
 same-model findings as `ship_blocking` and removes the warning. Do that only on purpose: it gives

@@ -189,6 +189,6 @@ def models(names: Sequence[str], *, timeout_seconds: int, binary: str = "claude"
                     any(key == name or key.startswith(name) for key in served))
         result[name] = ({"available": True, "detail": "answered an availability probe"} if answered else
                         {"available": False, "detail": "probe was not answered by this model: " + str(
-                            envelope.get("terminal_reason") or envelope.get("subtype") or
-                            envelope.get("result") or "unknown")[:256]})
+                            envelope.get("result") or envelope.get("terminal_reason") or
+                            envelope.get("subtype") or "unknown")[:256]})
     return {"method": "probe", "listed": None, "models": result}

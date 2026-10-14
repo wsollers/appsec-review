@@ -166,6 +166,9 @@ def _build_dagster_graph(name: str, jobs: tuple[Job, ...], config: AppConfig,
                     "run_id": next(iter(run_ids), None),
                     "handoffs": {key: digest for value in upstream_values
                                  for key, digest in dict(value.get("handoffs", {})).items()},
+                    "completed_handoffs": {key: digest for value in upstream_values
+                                           for key, digest in dict(value.get(
+                                               "completed_handoffs", value.get("handoffs", {}))).items()},
                     "completion_status": ("COMPLETED_WITH_GAPS" if any(
                         value.get("completion_status") == "COMPLETED_WITH_GAPS" for value in upstream_values)
                         else "SUCCEEDED"),
@@ -212,6 +215,7 @@ def _build_dagster_graph(name: str, jobs: tuple[Job, ...], config: AppConfig,
                 claim = {**dict(claim),
                          "graph_started_at": upstream.get("graph_started_at") or claim["started_at"],
                          "prior_graph_completion_status": upstream.get("completion_status", "SUCCEEDED"),
+                         "completed_handoffs": dict(upstream.get("completed_handoffs", {})),
                          "resume_decisions": [*upstream.get("resume_decisions", []), {
                              "job_id": selected.job_id,
                              "action": "reuse" if claim.get("reused") else "execute",
@@ -294,14 +298,18 @@ def _build_dagster_graph(name: str, jobs: tuple[Job, ...], config: AppConfig,
                         "orchestrator": {"system": "dagster", "run_id": context.run_id},
                         "decisions": list(claim.get("resume_decisions", [])),
                         "handoff_sha256": {
-                            **dict(claim.get("upstream_handoffs", {})),
+                            **dict(claim.get("completed_handoffs", {})),
                             selected.job_id: outcome["handoff_sha256"],
                         },
                     })
                     write_run_metrics(config.runtime.runs_dir / str(outcome["status"]["run_id"]))
+                propagated = dict(claim.get("upstream_handoffs", {}))
+                if selected.propagate_handoff:
+                    propagated[selected.job_id] = outcome["handoff_sha256"]
                 return {"run_id": outcome["status"]["run_id"],
-                        "handoffs": {**dict(claim.get("upstream_handoffs", {})),
-                                     selected.job_id: outcome["handoff_sha256"]},
+                        "handoffs": propagated,
+                        "completed_handoffs": {**dict(claim.get("completed_handoffs", {})),
+                                               selected.job_id: outcome["handoff_sha256"]},
                         "completion_status": ("COMPLETED_WITH_GAPS" if "COMPLETED_WITH_GAPS" in {
                             str(claim.get("prior_graph_completion_status", "SUCCEEDED")),
                             str(outcome["status"]["status"]),
@@ -393,10 +401,14 @@ def build_definitions(
                     ),
                 )
             )
-    if {"job_review_intake", "job_target_catalog", "job_target_analysis_plan"} <= registered:
-        wave_jobs = [registry.build("job_review_intake"), registry.build("job_target_catalog")]
+    if {"job_model_connectivity", "job_review_intake", "job_target_catalog",
+        "job_target_analysis_plan"} <= registered:
+        wave_jobs = [registry.build("job_model_connectivity"), registry.build("job_review_intake"),
+                     registry.build("job_target_catalog")]
         wave_dependencies: dict[str, tuple[str, ...]] = {
-            "job_review_intake": (), "job_target_catalog": ("job_review_intake",),
+            "job_model_connectivity": (),
+            "job_review_intake": ("job_model_connectivity",),
+            "job_target_catalog": ("job_review_intake",),
         }
         if "job_ci_configuration_analysis" in registered:
             wave_jobs.append(registry.build("job_ci_configuration_analysis"))
@@ -528,22 +540,27 @@ def build_definitions(
         error_job, error_sensors = build_error_state_definitions(wave_job, config.runtime.runs_dir)
         jobs.append(error_job)
         sensors.extend(error_sensors)
-    if {"job_review_intake", "job_target_catalog", "job_ci_configuration_analysis"} <= registered:
+    if {"job_model_connectivity", "job_review_intake", "job_target_catalog",
+        "job_ci_configuration_analysis"} <= registered:
         jobs.append(_build_dagster_graph(
             "ci_configuration_review",
-            (registry.build("job_review_intake"), registry.build("job_target_catalog"),
+            (registry.build("job_model_connectivity"), registry.build("job_review_intake"),
+             registry.build("job_target_catalog"),
              registry.build("job_ci_configuration_analysis")),
             config, runner_factory, node_namespace="ci_review",
         ))
-    if {"job_review_intake", "job_target_catalog", "job_target_analysis_plan",
+    if {"job_model_connectivity", "job_review_intake", "job_target_catalog", "job_target_analysis_plan",
         "job_project_build", "job_language_build"} <= registered:
         project_dependencies = {
-            "job_review_intake": (), "job_target_catalog": ("job_review_intake",),
+            "job_model_connectivity": (),
+            "job_review_intake": ("job_model_connectivity",),
+            "job_target_catalog": ("job_review_intake",),
             "job_target_analysis_plan": ("job_target_catalog",),
             "job_project_build": ("job_target_analysis_plan",),
             "job_language_build": ("job_project_build",),
         }
-        project_jobs = [registry.build("job_review_intake"), registry.build("job_target_catalog"),
+        project_jobs = [registry.build("job_model_connectivity"), registry.build("job_review_intake"),
+                        registry.build("job_target_catalog"),
                         registry.build("job_target_analysis_plan"), registry.build("job_project_build"),
                         registry.build("job_language_build")]
         if "job_artifact_indexing" in registered:

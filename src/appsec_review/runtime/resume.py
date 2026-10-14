@@ -60,6 +60,8 @@ class ResumePlanner:
         self.source_fingerprint = source_fingerprint
 
     def _accepted(self, job: Job, upstream: Mapping[str, str]) -> tuple[list[str], str | None]:
+        if job.always_execute:
+            return ["job requires a fresh execution for every graph dispatch"], None
         latest = self.run_root / "data" / "jobs" / job.job_id / "latest.json"
         if not latest.is_file():
             return ["no accepted handoff"], None
@@ -131,11 +133,13 @@ class ResumePlanner:
             else:
                 reasons, handoff_hash = self._accepted(job, upstream)
                 if reasons:
-                    invalidated = True
+                    if job.propagate_handoff:
+                        invalidated = True
                     decision = ResumeDecision(job.job_id, "RUN", tuple(reasons))
                 else:
                     decision = ResumeDecision(job.job_id, "REUSE", ("all declared identities and artifacts match",), handoff_hash)
-                    upstream[job.job_id] = str(handoff_hash)
+                    if job.propagate_handoff:
+                        upstream[job.job_id] = str(handoff_hash)
             decisions.append(decision)
         if emit_event:
             PipelineLog(self.run_root).write("RESUME_PLANNED", run_id=self.run_root.name,

@@ -19,7 +19,8 @@ from typing import Any, Iterable, Mapping
 
 # (source, producers, design state, precomputed query sets, MCP endpoints)
 INPUT_SOURCES: tuple[tuple[str, tuple[str, ...], str, tuple[str, ...], tuple[str, ...]], ...] = (
-    ("resolved_configuration", ("job_review_intake",), "extend", ("review_package",), ("query_datasets", "coverage")),
+    ("resolved_configuration", ("job_model_connectivity", "job_review_intake"), "extend",
+     ("review_package",), ("query_datasets", "coverage")),
     ("source_snapshot", ("job_target_catalog",), "current", ("symbol_links", "hotspot_context"), ("core",)),
     ("repository_partitions", ("job_target_catalog",), "current", ("artifact_inventory", "review_package"), ("core",)),
     ("build_recipes", ("job_target_catalog", "job_target_analysis_plan"), "extend",

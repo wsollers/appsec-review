@@ -14,7 +14,7 @@ The graph holds a kernel-backed per-run claim lock across planning and execution
 processes cannot claim the same run concurrently.
 
 The direct CLI currently exercises this mechanism with a linear review graph from
-`job_review_intake` through `job_document_issue_analysis`. Dagster builds the broader, branched
+`job_model_connectivity` through `job_document_issue_analysis`. Dagster builds the broader, branched
 `wave1_review` topology from every registered and configured job except
 `job_third_party_data_sync` and `job_inference_security_review`, adding the CI configuration,
 post-build, OWASP, and security-tagging jobs that are not in the direct graph. The inference
@@ -24,13 +24,14 @@ accepted-handoff format. The exact operator-visible distinction is documented in
 
 ## Registered jobs
 
-`runtime/registry.py` registers 25 jobs. Each has a `[jobs.<job_id>]` table in
+`runtime/registry.py` registers 27 jobs. Each has a `[jobs.<job_id>]` table in
 `appsec-review.toml`, and its Dagster job is named from that table's `name`.
 
 | Job | Purpose | Operations |
 | --- | --- | --- |
 | `job_third_party_data_sync` | NVD (with `index/nvd.sqlite`), OSV, MITRE, CISA KEV, FIRST EPSS and cve-bin-tool feed snapshots (scheduled, outside reviews) | [third-party-data-sync](../operations/third-party-data-sync.md) |
-| `job_review_intake` | Model preflight and review intake | [below](#inference-entry-point-and-model-preflight) |
+| `job_model_connectivity` | Mandatory fresh provider/model connectivity gate | [below](#inference-entry-point-and-model-preflight) |
+| `job_review_intake` | Configuration and target intake | [below](#inference-entry-point-and-model-preflight) |
 | `job_target_catalog` | Bounded target catalog and source index | [target-analysis-planning](../operations/target-analysis-planning.md) |
 | `job_source_history_analysis` | Git/GitHub history instability signals | [source-history-analysis](../operations/source-history-analysis.md) |
 | `job_ci_configuration_analysis` | CI/CD configuration analysis | [ci-configuration-analysis](../operations/ci-configuration-analysis.md) |
@@ -234,7 +235,10 @@ The two transports grant the model no tools:
   2048 (`medium`, also the fallback), 4096 (`high`), or 6144 (`xhigh`) tokens, capped at
   `max_output_tokens - 1024` and never below 1024.
 
-Every review graph starts with `job_review_intake`, whose first step is `model_preflight`:
+Every review graph starts with `job_model_connectivity`. Unlike semantic review jobs, the gate is
+always executed for each graph dispatch: an accepted handoff from an earlier attempt cannot satisfy
+it. Its handoff enforces ordering but does not enter downstream semantic identities, so a successful
+fresh probe does not invalidate otherwise reusable review work.
 
 - `resolve_models` reads the run's frozen configuration and collects every provider/model pair any
   job's settings name, including jobs whose model is disabled and nested model tables.
@@ -243,12 +247,13 @@ Every review graph starts with `job_review_intake`, whose first step is `model_p
   has no listing, so each model is confirmed by one minimal call that the model itself must answer.
 
 The provider listings, per-model results, and provider errors are written to
-`model-preflight.json` before any decision. If one configured model is unavailable, its provider
+`model-connectivity.json` before any decision. If one configured model is unavailable, its provider
 cannot be reached or authenticated, or its provider has no inference transport, `verify_models`
-fails, the intake handoff is not published, and no later job in the review can start. A job
-instance built outside the registry has no check wired and reports `NOT_APPLICABLE` rather than
-claiming the models were confirmed. `jobs.job_review_intake.settings.model_preflight.timeout_seconds`
-bounds each provider request or probe.
+fails, the gate handoff is not published, and no later job in the review can start. A job instance
+built outside the registry has no check wired and reports `NOT_APPLICABLE` rather than claiming the
+models were confirmed. `jobs.job_model_connectivity.settings.timeout_seconds` bounds each provider
+request or probe. Review intake retains its bound preflight receipt when intake itself executes, but
+the dedicated first job is the authoritative fresh check when a run is resumed.
 
 ## Target analysis planning
 

@@ -62,12 +62,14 @@ class GraphRunner:
             decisions = ResumePlanner(self.config, run_root, self.jobs, source_fingerprint,
                                       target_root=target_root).plan(force_from=force_from)
             upstream: dict[str, str] = {}
+            completed_handoffs: dict[str, str] = {}
             outcomes: dict[str, Any] = {}
-            execute = False
             try:
                 for job, decision in zip(self.jobs, decisions, strict=True):
-                    if decision.action == "REUSE" and not execute:
-                        upstream[job.job_id] = str(decision.handoff_sha256)
+                    if decision.action == "REUSE":
+                        completed_handoffs[job.job_id] = str(decision.handoff_sha256)
+                        if job.propagate_handoff:
+                            upstream[job.job_id] = str(decision.handoff_sha256)
                         pointer = json.loads((run_root / "data/jobs" / job.job_id / "latest.json").read_text())
                         handoff = json.loads((run_root / pointer["handoff_path"]).read_text())
                         outcomes[job.job_id] = {"decision": decision.as_dict(),
@@ -75,11 +77,12 @@ class GraphRunner:
                                                 "handoff_sha256": decision.handoff_sha256,
                                                 "attempt_root": str((run_root / pointer["handoff_path"]).parent)}
                         continue
-                    execute = True
                     outcome = runner.run(job, run_id=run_id, trigger=trigger, orchestration=orchestration,
                         target_root=target_root, source_fingerprint=source_fingerprint,
                         upstream_handoffs=upstream)
-                    upstream[job.job_id] = str(outcome["handoff_sha256"])
+                    completed_handoffs[job.job_id] = str(outcome["handoff_sha256"])
+                    if job.propagate_handoff:
+                        upstream[job.job_id] = str(outcome["handoff_sha256"])
                     outcomes[job.job_id] = {"decision": decision.as_dict(), **outcome}
             except BaseException as exc:
                 PipelineLog(run_root).write("GRAPH_FAILED", run_id=run_id, level="ERROR", trigger=trigger,
@@ -94,11 +97,11 @@ class GraphRunner:
                 "GRAPH_COMPLETED_WITH_GAPS" if graph_status == "COMPLETED_WITH_GAPS" else "GRAPH_SUCCEEDED",
                 run_id=run_id, trigger=trigger,
                 orchestrator=dict(orchestration or {}).get("system", "application"),
-                details={"handoffs": upstream, "completion_status": graph_status,
+                details={"handoffs": completed_handoffs, "completion_status": graph_status,
                          "duration_ms": max(0, int((datetime.now(timezone.utc) - graph_started).total_seconds() * 1000))})
             PipelineLog(run_root).write("RUN_COMPLETED", run_id=run_id, trigger=trigger,
                 orchestrator=dict(orchestration or {}).get("system", "application"),
-                details={"completion_status": graph_status, "handoffs": upstream})
+                details={"completion_status": graph_status, "handoffs": completed_handoffs})
             orchestration_receipt = None
             if correlation.get("system") and correlation.get("run_id"):
                 receipt_path = (run_root / "data" / "orchestration" / correlation["system"] /
@@ -109,7 +112,7 @@ class GraphRunner:
                     "application_run_id": run_id,
                     "orchestrator": correlation,
                     "decisions": [decision.as_dict() for decision in decisions],
-                    "handoff_sha256": upstream,
+                    "handoff_sha256": completed_handoffs,
                 })
                 orchestration_receipt = str(receipt_path)
             return {"run_id": run_id, "status": graph_status,

@@ -265,6 +265,7 @@ def test_production_schedule_is_midnight_utc_and_enabled() -> None:
     assert schedule.execution_timezone == "UTC"
     assert schedule.default_status is dagster.DefaultScheduleStatus.RUNNING
     assert definitions.get_job_def("third_party_data_sync").name == "third_party_data_sync"
+    assert definitions.get_job_def("model_connectivity").name == "model_connectivity"
     assert definitions.get_job_def("review_intake").name == "review_intake"
     assert definitions.get_job_def("target_catalog").name == "target_catalog"
     assert definitions.get_job_def("target_analysis_plan").name == "target_analysis_plan"
@@ -286,6 +287,7 @@ def test_wave1_exposes_real_producer_shard_topology() -> None:
     names = {node.name for node in graph.node_defs}
     assert "dispatch_wave1_review" not in names
     expected = {
+        "model_connectivity__begin", "model_connectivity__connectivity__verify_models",
         "review_intake__begin", "target_catalog__begin", "target_analysis_plan__begin",
         "target_catalog__retrieval_indexes__build_target_documents",
         "ci_configuration_analysis__ci_discovery__discover_definitions",
@@ -342,6 +344,8 @@ def test_wave1_exposes_real_producer_shard_topology() -> None:
     def upstream(node: str) -> set[str]:
         mapping = graph.dependency_structure.input_to_upstream_outputs_for_node(node)
         return {output.node_name for outputs in mapping.values() for output in outputs}
+
+    assert "model_connectivity__finalize" in upstream("review_intake__begin")
 
     assert "evidence_collection__secrets__gitleaks_scan" in upstream(
         "evidence_collection__secrets__gitleaks_normalize")

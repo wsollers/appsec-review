@@ -261,7 +261,7 @@ def _run(url: str, run_id: str, repository: Path, document: dict,
     tags = {item["key"]: item["value"] for item in run.get("tags", [])}
     application_run_id = tags.get("appsec/application_run_id")
     if run.get("pipelineName") in {
-        "wave1_review", "ci_configuration_review", "project_build_review", "artifact_indexing",
+        "wave1_review", "ci_configuration_review", "project_build_review", "model_connectivity", "artifact_indexing",
         "artifact_security_analysis", "codeql_analysis",
     }:
         if not application_run_id:
@@ -280,9 +280,11 @@ def _run(url: str, run_id: str, repository: Path, document: dict,
                 }):
             raise SystemExit("application orchestration receipt does not link to the Dagster run")
         jobs = {}
-        job_ids = (("job_artifact_indexing",) if run.get("pipelineName") == "artifact_indexing" else
+        job_ids = (("job_model_connectivity",) if run.get("pipelineName") == "model_connectivity" else
+        ("job_artifact_indexing",) if run.get("pipelineName") == "artifact_indexing" else
         ("job_artifact_security_analysis",) if run.get("pipelineName") == "artifact_security_analysis" else
         ("job_codeql_analysis",) if run.get("pipelineName") == "codeql_analysis" else (
+            "job_model_connectivity",
             "job_review_intake",
             "job_target_catalog",
             "job_target_analysis_plan",
@@ -295,9 +297,9 @@ def _run(url: str, run_id: str, repository: Path, document: dict,
             "job_evidence_collection",
             "job_codeql_analysis",
         ) if run.get("pipelineName") == "wave1_review" else ((
-            "job_review_intake", "job_target_catalog", "job_ci_configuration_analysis",
+            "job_model_connectivity", "job_review_intake", "job_target_catalog", "job_ci_configuration_analysis",
         ) if run.get("pipelineName") == "ci_configuration_review" else (
-            "job_review_intake", "job_target_catalog", "job_target_analysis_plan", "job_project_build",
+            "job_model_connectivity", "job_review_intake", "job_target_catalog", "job_target_analysis_plan", "job_project_build",
             "job_language_build", "job_artifact_indexing", "job_artifact_security_analysis",
         )))
         if run.get("pipelineName") == "wave1_review":
@@ -327,6 +329,7 @@ def _run(url: str, run_id: str, repository: Path, document: dict,
             if status.get("orchestration", {}).get("system") != "dagster":
                 raise SystemExit(f"{job_id} accepted attempt lacks its originating Dagster link")
             publication_units = {
+                "job_model_connectivity": "publication.publish_handoff",
                 "job_review_intake": "publish_intake.publish_handoff",
                 "job_target_catalog": "publish_catalog.publish_handoff",
                 "job_target_analysis_plan": "plan_acceptance.publish_handoff",

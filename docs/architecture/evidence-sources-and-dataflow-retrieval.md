@@ -237,7 +237,7 @@ Existing jobs are solid boxes; planned jobs are dashed. Edges are simplified; ex
 
 ```mermaid
 flowchart TD
-  I[job_review_intake] --> C[job_target_catalog]
+  M[job_model_connectivity] --> I[job_review_intake] --> C[job_target_catalog]
   C --> DOC[documents shard] --> RD
   C --> CI[job_ci_configuration_analysis]
   C --> SH[job_source_history_analysis]

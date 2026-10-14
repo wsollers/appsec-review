@@ -214,6 +214,23 @@ workers = 1
 [jobs.job_third_party_data_sync.steps.epss_sync.tasks.publish]
 workers = 1
 
+[jobs.job_model_connectivity]
+name = "model_connectivity"
+workers = 1
+
+[jobs.job_model_connectivity.settings]
+# Every graph dispatch makes a live, tool-disabled request to every configured model.
+timeout_seconds = 120
+
+[jobs.job_model_connectivity.steps.connectivity]
+workers = 1
+[jobs.job_model_connectivity.steps.connectivity.tasks.resolve_models]
+[jobs.job_model_connectivity.steps.connectivity.tasks.verify_models]
+
+[jobs.job_model_connectivity.steps.publication]
+workers = 1
+[jobs.job_model_connectivity.steps.publication.tasks.publish_handoff]
+
 [jobs.job_review_intake]
 name = "review_intake"
 workers = 1

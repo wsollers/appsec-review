@@ -56,7 +56,7 @@ GitHub only adds review-process facts on top of it.
 ## Placement in the graph
 
 ```text
-job_review_intake -> job_target_catalog -> job_source_history_analysis -> job_target_analysis_plan -> ...
+job_model_connectivity -> job_review_intake -> job_target_catalog -> job_source_history_analysis -> job_target_analysis_plan -> ...
                                        \-> job_ci_configuration_analysis ---/   (Dagster wave1_review)
 ```
 
