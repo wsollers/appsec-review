@@ -64,6 +64,19 @@ reason. Commands, paths, environment, dependency files, outputs, base image, and
 cannot change. Each attempt rebuilds the image, re-probes it, and is recorded with its outcome;
 invalid output, failed installation, timeout, and compiler failure each consume one attempt.
 
+Probe preparation is family-local and remains inside the run-owned workspace. For Maven units with
+a bounded legacy `src/*.java` source set and no conventional `src/main/java` tree, project-build
+materializes a duplicate conventional tree in that workspace before running the accepted Maven
+recipe; the target is not changed and the adaptation is recorded on the probe receipt. For a
+networked Node recipe whose configure phase already runs `npm ci`/`npm install`, `pnpm install`, or
+`yarn install`, the probe does not expose the immutable image-owned `node_modules` tree. The
+package manager restores into the writable workspace and uses bounded `/tmp` caches. Node recipes
+without an explicit restore continue to receive the image-owned dependency view.
+
+Concurrent image-repair telemetry identifies `family`, `root`, `build_system`, `build_unit_id`, and
+`repair_number`. Operators must use those correlation fields rather than adjacent log order when
+multiple family lanes repair simultaneously.
+
 A repaired image that passes is accepted in
 `runs/metadata/project-build-repairs/<base-recipe-identity>/accepted.json`
 (`appsec-review/build-image-repair-cache/1`). A later run with the same base recipe identity
