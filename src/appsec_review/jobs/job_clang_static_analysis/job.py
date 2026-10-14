@@ -32,7 +32,7 @@ from .datasets import CONSUMES, DATASETS
 JOB_ID = "job_clang_static_analysis"
 TOOL_ID = "tool-clang-static-analysis"
 OUTPUT_SCHEMA = "appsec-review/clang-static-output/1"
-ADAPTER = "clang-static-adapter/1"
+ADAPTER = "clang-static-adapter/2"
 ENGINES = ("clang-tidy", "clang-static-analyzer")
 
 

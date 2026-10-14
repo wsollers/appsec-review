@@ -125,6 +125,25 @@ def test_positive_scope_runs_both_engines_and_publishes_observations(tmp_path: P
     assert all(source in entities and target in entities for source, target in relations)
 
 
+def test_adapter_version_invalidates_a_pre_fix_scope_checkpoint(
+        monkeypatch, tmp_path: Path) -> None:
+    import appsec_review.jobs.job_clang_static_analysis.job as module
+
+    current_adapter = module.ADAPTER
+    scope, unit = _scope(tmp_path), _unit(tmp_path)
+    executor = FakeExecutor(unit.job.run_root)
+
+    monkeypatch.setattr(module, "ADAPTER", "clang-static-adapter/1")
+    first = module._analyze_scope(unit, scope, lambda _unit: executor)
+    assert first.get("checkpoint_reused", False) is False
+
+    monkeypatch.setattr(module, "ADAPTER", current_adapter)
+    second = module._analyze_scope(unit, scope, lambda _unit: executor)
+
+    assert second.get("checkpoint_reused", False) is False
+    assert executor.calls == list(ENGINES) * 2
+
+
 def test_no_applicable_target_is_not_clean_coverage(monkeypatch, tmp_path: Path) -> None:
     import appsec_review.jobs.job_clang_static_analysis.job as module
     monkeypatch.setattr(module, "accepted_cpp_scopes", lambda _root: ({}, [], {}))
