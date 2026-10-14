@@ -8,10 +8,12 @@ The direct `start`, `plan-resume`, and `resume` commands run this linear graph:
 ```text
 model_connectivity -> review_intake -> target_catalog -> source_history_analysis -> target_analysis_plan
   -> tree_sitter_ast -> project_build -> language_build
-  -> artifact_indexing -> artifact_security_analysis -> cpp_compiled_analysis
-  -> cpp_symbol_index -> [cpg_analysis only when enabled] -> evidence_collection
+  -> artifact_indexing -> test_coverage -> profile_data -> artifact_security_analysis
+  -> cpp_compiled_analysis -> clang_static_analysis -> cpp_symbol_index
+  -> [cpg_analysis only when enabled] -> evidence_collection -> dependency_intelligence
   -> change_context_analysis -> codeql_analysis -> review_prioritization
-  -> review_data_indexing -> review_package_assembly -> document_issue_analysis
+  -> code_graph_index -> review_data_indexing -> review_package_assembly
+  -> document_issue_analysis
 ```
 
 The direct graph does not include CI configuration analysis, post-build security assessment, OWASP
@@ -24,6 +26,15 @@ except the standalone
 `third_party_data_sync` and `inference_security_review` jobs, when its
 additional branches are required. Dagster's current dependency graph is assembled from the registered,
 configured jobs and is summarized in [`../../deploy/dagster/README.md`](../../deploy/dagster/README.md).
+
+The direct sequence includes the engineering-signal producers and the code-graph normalizer. It is
+linear for deterministic resume semantics: adjacency does not widen a job's declared inputs. In
+particular, coverage and profile ingestion consume accepted catalog/build/artifact handoffs;
+Clang consumes accepted C/C++ scopes; dependency intelligence consumes accepted catalog, build,
+artifact, and evidence handoffs (including compiler/linker/loader facts resolved from their
+hash-bound artifacts); and code-graph indexing consumes accepted CodeQL exports plus its declared
+cross-check inputs. Dagster additionally orders dependency intelligence after compiled C/C++
+analysis when that branch is enabled, but that barrier does not add a fifth accepted handoff.
 
 On both surfaces, `target_catalog.retrieval_indexes.build_target_documents` starts after
 `target_catalog.repository_discovery.partition_repository`. It selects Markdown design and threat

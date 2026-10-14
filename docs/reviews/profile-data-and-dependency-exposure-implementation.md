@@ -64,3 +64,6 @@ profile reports, build output, model output, and logs are untrusted data.
   centrally configured, and is audited by review-data indexing.
 - Profile hotspot entities enter review-package context by exact source path where available and by
   build unit otherwise; they remain context-only and never become finding or scoring evidence.
+- The 2026-10-14 reconciliation verified that the current direct CLI and Dagster graphs retain the
+  profile producer, dependency producer, and their review-data-indexing leaves; the accepted dataset
+  declarations remain the source of truth for inputs, outputs, routes, and protected artifacts.

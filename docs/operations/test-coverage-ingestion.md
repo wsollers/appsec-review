@@ -69,3 +69,12 @@ pytest -q tests/test_test_coverage.py --basetemp=test/tmp/test-coverage
 
 The suite covers all four formats, catalog SHA binding, aggregate metrics, malformed and bounded
 inputs, absent applicable coverage, and accepted handoff/manifest verification.
+
+When the ignored `targets/appsec-multi-vuln` checkout is available, also run:
+
+```text
+pytest -q tests/test_multivuln_coverage_fixtures.py --basetemp=test/tmp/multivuln-coverage
+```
+
+That suite verifies the target's 19 project records and four fixture reports against the production
+parser and source binder. It proves fixture ingestion, not live test execution or security coverage.

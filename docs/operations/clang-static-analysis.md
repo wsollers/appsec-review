@@ -26,3 +26,12 @@ contain only bounded, source-mapped observations and resolving hashes.
 Retries reuse a scope checkpoint only when its identity (accepted scope, tool identity, checker
 selection, bounds, and adapter) matches and every referenced run artifact still verifies. A changed
 checker set or compile database produces a new immutable shard.
+
+For development verification, run the producer and adapter suites together:
+
+```text
+python -m pytest -q tests/test_clang_static_analysis.py tests/test_clang_static_tool.py --basetemp=test/tmp/clang-static
+```
+
+These tests validate bounded normalization and injected execution. The tool-image acceptance is a
+separate container check; a mocked run never proves that the pinned image is locally available.

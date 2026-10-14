@@ -68,8 +68,10 @@ shard; `planned` = inputs are available but no producer exists yet.
 | Produced artifacts (packages, archives, bytecode, wasm) | `job_artifact_indexing`, `job_artifact_security_analysis` | `artifacts`, `observations` | observed / tool_finding | artifact identity, membership, package CVE matches | reachability of the vulnerable code | indexed |
 | CodeQL database | `job_codeql_analysis` | run-owned artifact (not exposed) | computed | input to dataflow summary export | — | indexed (database) |
 | CodeQL SARIF incl. `threadFlows` | `job_codeql_analysis` | `observations` | tool_finding | candidate source→sink paths with resolving steps | exploitability; completeness of paths not reported | indexed |
+| CodeQL graph export | `job_codeql_analysis`, `job_code_graph_index` | `graph` | computed | bounded calls, sinks, entry points, summaries, paths, guards, ranges and SARIF correlation for supported packs | completeness outside per-family coverage; exploitability | indexed for C/C++; unsupported languages publish unavailable coverage |
 | Joern CPG | `job_cpg_analysis` (consumes the accepted `job_cpp_compiled_analysis` handoff) | `observations` (Joern, zero observations plus a gap) | computed | slices, PDG edges once a bounded export is accepted | — | CPG binary retained; graph export blocked (see `TODO.md`) |
 | Infer | `job_cpp_compiled_analysis` | `observations` | tool_finding | null/resource/memory-safety leads | absence of those bugs | indexed |
+| Clang-Tidy and Clang Static Analyzer | `job_clang_static_analysis` | `observations` | tool_finding | independent, compile-context-bound C/C++ leads with exact source hashes and bounded traces | confirmed vulnerability; absence of defects | indexed |
 | Other SAST (Semgrep, cppcheck, gosec, SpotBugs, PMD, PHPStan, Psalm, phpcs, mobsfscan, ShellCheck, blint) | `job_evidence_collection` | `observations` | tool_finding | candidate leads, sink locations | reachability, exploitability | indexed |
 
 ### Interfaces, deployment, intent, and history
@@ -84,6 +86,9 @@ shard; `planned` = inputs are available but no producer exists yet.
 | CI/CD definitions | `job_ci_configuration_analysis` | `ci_*`, `ci_findings` | observed / tool_finding | pipeline trust, secrets exposure, build provenance risk | — | indexed |
 | Secrets (source, build envp, artifacts) | `job_evidence_collection` (Gitleaks), build capture scan | `observations`, `build_security` | tool_finding | secret presence with redacted fingerprint | validity of the secret | indexed |
 | SBOM and dependency vulnerabilities (Syft, Grype, OSV-Scanner, Trivy, cve-bin-tool) | `job_evidence_collection`, `job_artifact_security_analysis` | `components`, `observations` | observed / tool_finding | package identity, matched advisories | that the vulnerable function is reachable | indexed (Grype disabled by config) |
+| Normalized dependency inventory, native identities, maximal exposure and OpenSSF Scorecard | `job_dependency_intelligence` | `inventory` | observed / inferred / external context | evidence-backed dependency candidates, conservative exposure priority, and repository-practice context | production deployment, vulnerable-version applicability, artifact/source equivalence, or a vulnerability finding | indexed; every normalized identity is offered to bounded advisory lookup |
+| Imported test-coverage reports | `job_test_coverage` | `analysis` | observed context | bounded line/branch/function counts bound to accepted source hashes | security of covered code, vulnerability of uncovered code, or live execution when origin is `accepted-input` | indexed for LCOV, Cobertura, JaCoCo and LLVM JSON; missing or ambiguous data is a gap |
+| Imported execution profiles | `job_profile_data` | `analysis` | observed context | bounded within-build function/symbol hotness ranks | defect probability, attacker reachability, security of cold code, or a vulnerability finding | indexed for supported textual formats; opaque formats are gaps |
 | Unit tests (static) and Postman collections | `job_target_catalog.retrieval_indexes.build_target_documents`, `job_review_data_indexing.precompute.document_context` | `documents`, `precomputed` | intent / computed | named test cases, request methods/routes, and exact route-context links | enforcement on all paths; tests and requests are never executed | bounded index and analysis; missing and unparsed inputs are gaps |
 | Markdown under `docs/`, including design, STRIDE and DFD | `job_target_catalog.retrieval_indexes.build_target_documents`, `job_review_data_indexing.precompute.document_context` | `documents`, `precomputed` | intent / computed | headings, threats, trust boundaries, flows and boundary-context links | implementation behavior | bounded index and analysis; unsupported or missing inputs are gaps |
 | Target agent guidance (`AGENTS.md`, `CLAUDE.md`, etc. in the target) | `job_test_and_doc_indexing` | `docs` (flagged `target_guidance`) | intent | what the target owners claim | anything; never instructions | planned |
@@ -92,7 +97,7 @@ shard; `planned` = inputs are available but no producer exists yet.
 | NVD, OSV, MITRE ATT&CK/CAPEC/CWE | `job_third_party_data_sync` | pinned feed indexes (`index/nvd.sqlite`, `index/osv.sqlite`, `index/mitre.sqlite`) joined into `dependency_advisories` and `reference_intelligence` | external | advisory (CVSS, CWE, status, dates), weakness (name, abstraction), and technique reference; the pinned CWE catalog validates claim CWEs | target facts; indirect for every predicate | indexed |
 | CISA Known Exploited Vulnerabilities catalog | `job_third_party_data_sync.kev_sync` | pinned `index/kev.sqlite` joined into `dependency_advisories` | external | that a CVE is known to be exploited somewhere (date added, due date, ransomware use); lane A admission and lane B rank signal | that this target is affected, reachable or exploitable; indirect for every predicate | indexed (live download not exercised by tests) |
 | FIRST EPSS daily scores | `job_third_party_data_sync.epss_sync` | pinned `index/epss.sqlite` joined into `dependency_advisories` | external | population-level exploitation probability and percentile for a CVE; lane B rank signal | anything about this target; indirect for every predicate | indexed (live download not exercised by tests) |
-| Dynamic traces: coverage, sanitizer logs, fuzz corpora, IAST | future authorized execution job or hash-verified import | `dynamic` | observed | positive reachability and observed memory errors | **absence**: zero coverage never refutes a claim | not available; acquisition TODO |
+| Sanitizer logs, fuzz corpora, IAST and other dynamic traces | future authorized execution job or hash-verified import | `dynamic` | observed | positive reachability and observed memory errors | **absence**: zero observations never refutes a claim | not available; acquisition TODO |
 | Evaluator ground truth | none | none | — | — | — | **never** mounted, indexed, or exposed |
 
 ## Derived products to precompute
@@ -136,7 +141,7 @@ regular expressions, globs, filesystem paths, or shell.
 | `query_precomputed` | exists | precomputed code facts | named query set, subject identity, path | hash-verified; no analysis runs during retrieval; unbuilt sets return gaps |
 | `query_observations` | exists | scanner observations | scanner, rule, reported severity, class, suppression/duplicate, source/artifact, location, shard | observations are never confirmed findings; candidate bound returns a gap |
 | `query_dataset_inventory` | exists | dataset inventory | record type, job, family, disposition, coverage, sensitivity, cell type | publication audit and coverage cells |
-| `query_code_graph` | planned (replaces the earlier `query_dataflow` sketch) | code-graph facts over the `graph` index | modes `callers`, `callees`, `sinks`, `entry_points`, `paths`, `guards`, `ranges`, `summary`, `sarif_path`; exact `subject` identity; closed `sink_class`/`source_class`; bounded `depth` | specified in [`code-graph-precomputation.md`](code-graph-precomputation.md) section 5; no `aliases` mode |
+| `query_code_graph` | exists (replaces the earlier `query_dataflow` sketch) | code-graph facts over the `graph` index | modes `callers`, `callees`, `sinks`, `entry_points`, `paths`, `guards`, `ranges`, `summary`, `sarif_path`; exact `subject` identity; closed `sink_class`/`source_class`; bounded `depth` | reads only accepted `job_code_graph_index` shards; no `aliases` mode |
 | `query_contracts` | planned | API/IDL contracts | entrypoint, route, RPC, message/field, handler symbol | returns `declared` vs `enforced` with linking evidence |
 | `query_deployment` | planned | deployment and exposure | service, image, artifact, exposure class | privileges, FS, network, size limits, auth placement |
 | `query_tests` | planned | tests as intent | function, test, assertion kind, negative-only | never executes tests |
@@ -246,39 +251,57 @@ flowchart TD
   P --> TS[job_tree_sitter_ast] --> CC[job_change_context_analysis]
   P --> PB[job_project_build] --> LB[job_language_build]
   P --> EC[job_evidence_collection]
-  LB --> AI[job_artifact_indexing] --> AS[job_artifact_security_analysis]
-  LB --> CPP[job_cpp_compiled_analysis] --> PBS[job_post_build_security_assessment]
+  LB --> AI[job_artifact_indexing]
+  AI --> TC[job_test_coverage]
+  AI --> PD[job_profile_data]
+  AI --> AS[job_artifact_security_analysis]
+  LB --> CPP[job_cpp_compiled_analysis]
+  CPP --> CLANG[job_clang_static_analysis]
+  CPP --> PBS[job_post_build_security_assessment]
+  CPP --> CSI[job_cpp_symbol_index]
   CPP --> CPG[job_cpg_analysis]
   LB --> CQ[job_codeql_analysis]
   CPG --> CQ
+  CLANG --> CQ
   CC --> CQ
+  C --> DI[job_dependency_intelligence]
+  LB --> DI
+  AI --> DI
+  EC --> DI
+  CPP --> DI
   EC --> OW[job_owasp_control_assessment]
   CQ --> OW
   OW --> RP0[job_review_prioritization] --> ST[job_security_tagging]
-  ST --> RD[job_review_data_indexing] --> RPA[job_review_package_assembly]
+  CQ --> CGI[job_code_graph_index]
+  CPP --> CGI
+  CLANG --> CGI
+  CSI --> CGI
+  TS --> CGI
+  RP0 --> CGI
+  CGI --> ST
+  TC --> RD[job_review_data_indexing]
+  PD --> RD
+  DI --> RD
+  ST --> RD
+  RD --> RPA[job_review_package_assembly]
 
   C -.-> IC[job_interface_contracts]
   C -.-> TD[job_test_and_doc_indexing]
   EC -.-> DT[job_deployment_topology]
   AI -.-> DT
 
-  CQ -.-> DF[job_dataflow_summary]
-  CPP -.-> DF
-  TS -.-> DF
-  IC -.-> DF
-
-  DF -.-> RX[job_reachability_linking]
+  CGI -.-> RX[job_reachability_linking]
   IC -.-> RX
   DT -.-> RX
   TD -.-> RX
   PBS -.-> RX
 
-  RX -.-> M[accepted composite manifest]
-  AS --> M
-  OW --> M
-  CI --> M
-  RD --> M
-  M -.-> R[job_inference_security_review]
+  RX -.-> AM[accepted composite manifest]
+  AS --> AM
+  OW --> AM
+  CI --> AM
+  RD --> AM
+  AM -.-> R[job_inference_security_review]
   R -.-> RP[job_remediation_planning] -.-> RV[job_remediation_validation] -.-> G[job_final_publication_gate] -.-> FR[job_final_report_publication]
 ```
 
@@ -293,7 +316,7 @@ that subset to other contract formats, generated validators, richer test links a
 | `job_interface_contracts` | catalog (OpenAPI, protobuf/IDL files), generated-code identities from build capture | `contracts` | constraints start `declared` |
 | `job_deployment_topology` | IaC/proxy/config files, IaC scanner observations, artifact catalog | `deployment` | renders Helm/Kustomize with pinned tools; unrendered templates are gaps |
 | `job_test_and_doc_indexing` | catalog, symbol table | `tests`, `docs` | static only; target guidance flagged and quarantined |
-| `job_codeql_analysis` `export.scopes` and `job_code_graph_index` (replace the `job_dataflow_summary` box in the diagram) | accepted CodeQL databases and observations, clangd, Clang AST, LLVM IR, Tree-sitter, prioritization flow steps | `graph` | CodeQL-first export; C/C++ cross-checks; disagreement is `CONTRADICTS`, never merged; see [`code-graph-precomputation.md`](code-graph-precomputation.md) |
+| `job_codeql_analysis` `export.scopes` and `job_code_graph_index` | accepted CodeQL databases and observations, clangd, Clang AST, LLVM IR, Tree-sitter, prioritization flow steps | `graph` | Implemented CodeQL-first export; C/C++ cross-checks; disagreement is `CONTRADICTS`, never merged; see [`code-graph-precomputation.md`](code-graph-precomputation.md) |
 | `job_reachability_linking` (replaces the `RX` box; still planned) | `graph`, `contracts`, `deployment`, `tests`, `build_security` | `enforced` links, `entry_point.exposure.contract_id` | the only job that promotes `declared` → `enforced`; it joins onto `graph` facts rather than publishing its own path index |
 
 Invalidation follows existing fingerprint rules: a contract change rebuilds `contracts` and the
@@ -302,9 +325,8 @@ CodeQL database or Clang outputs; a doc change rebuilds only `docs`.
 
 ## Implementation order
 
-1. The code-graph batch of [`code-graph-precomputation.md`](code-graph-precomputation.md)
-   (C/C++ first, then Java/Kotlin, JavaScript/TypeScript, Python), which supersedes the former
-   `query_dataflow` item.
+1. Extend the implemented C/C++ code-graph batch to Java/Kotlin, JavaScript/TypeScript, and Python
+   export packs while preserving per-family unavailable coverage until each lands.
 2. `job_interface_contracts` and `job_deployment_topology` with `declared` records, plus
    `query_contracts` and `query_deployment`.
 3. `job_reachability_linking` with `enforced` promotion joined onto `graph` entry points.

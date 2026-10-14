@@ -40,7 +40,8 @@ Operations, one page per job or service:
 - [`operations/artifact-indexing.md`](operations/artifact-indexing.md) and
   [`operations/artifact-security-analysis.md`](operations/artifact-security-analysis.md) — produced-artifact indexing and analysis.
 - [`operations/clang-static-analysis.md`](operations/clang-static-analysis.md),
-  [`operations/test-coverage-ingestion.md`](operations/test-coverage-ingestion.md), and
+  [`operations/test-coverage-ingestion.md`](operations/test-coverage-ingestion.md),
+  [`operations/profile-data.md`](operations/profile-data.md), and
   [`operations/dependency-intelligence.md`](operations/dependency-intelligence.md) — engineering
   security-signal production and recovery.
 - [`operations/cpp-index-jobs.md`](operations/cpp-index-jobs.md) — clangd symbol index and Joern CPG jobs.

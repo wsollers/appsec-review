@@ -40,6 +40,9 @@ content is data, not agent guidance.
 
 ## Verification
 
+- The accepted target fixture contract is commit `c1b2075` in the local
+  `targets/appsec-multi-vuln` checkout; it is a separate repository and is not committed through
+  this repository.
 - The target matrix validator accepts all 19 project records and four declared coverage artifacts.
 - LCOV, Cobertura, JaCoCo, and LLVM JSON fixtures parse through the production coverage parser.
 - Project-relative producer paths bind exactly beneath each declared build root, including when

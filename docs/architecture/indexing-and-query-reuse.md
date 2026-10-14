@@ -107,7 +107,7 @@ a silent allowlist. `query_precomputed` is abbreviated `QP`; existing generic `f
 | Clang-Tidy and Clang Static Analyzer diagnostics; `job_clang_static_analysis` | Independent C/C++ source-analysis leads | Current bounded observations with accepted compile-scope and exact source/hash binding; producer gaps remain explicit | `scanner_correlation`, `review_package`, `hotspot_context` | `query_observations`, `QP`, `coverage`; no skill |
 | clangd symbol graph; `job_cpp_symbol_index` | Definitions, references and direct calls | Current `analysis`; cross-check input for `call_site` facts and `SAME_AS` symbol links | `symbol_links`; cross-check of the `graph` index | `core`, `QP`; no skill |
 | Joern CPG; `job_cpg_analysis` | Retained CPG artifact | Binary artifact only; not a graph producer in the code-graph plan | none | `coverage` reports unavailable; no skill |
-| CodeQL database and SARIF paths; `job_codeql_analysis`, planned `job_code_graph_index` | Analyzer leads, ordered flows, and the primary code-graph export (calls, sinks, entry points, summaries, paths, guards, ranges) | Current `observations`, priority flow steps; DB protected; export artifacts `artifact_only`; `graph` index via `job_code_graph_index` | `scanner_correlation`; `graph` index families | `query_codeql`, `query_code_graph`, `QP`; no skill |
+| CodeQL database and SARIF paths; `job_codeql_analysis`, `job_code_graph_index` | Analyzer leads, ordered flows, and the primary code-graph export (calls, sinks, entry points, summaries, paths, guards, ranges) | Current `observations`, priority flow steps; DB protected; export artifacts `artifact_only`; accepted per-scope/per-family `graph` shards via `job_code_graph_index` | `scanner_correlation`; `graph` index families | `query_codeql`, `query_code_graph`, `QP`; no skill |
 | Post-build flags, hardening and deterministic/model assessments; `job_post_build_security_assessment` | Artifact security posture | Current `build_security`; keep model judgment distinct from measured facts | `build_provenance`, `review_package` | `query_build_security`; existing `post-build-security-assessment` skill is operator-only |
 | CI definitions, permissions, triggers, steps and scanner results; `job_ci_configuration_analysis` | Workflow trust and build/deploy exposure | Current CI observations/evidence; extend typed trust edges | `ci_trust`, `scanner_correlation` | `query_ci_configuration`, `QP`; no skill |
 | Secret leads; Gitleaks and build-capture checks in `job_evidence_collection` | Identify possible credential exposure | Current observations; redacted fingerprint/location only; secret value protected | `redacted_secret_exposure`, `scanner_correlation` | `query_observations`, `QP`; no skill |
@@ -419,7 +419,9 @@ names or inspects raw run directories.
 `job_review_data_indexing` (operations: [`review-data-indexing.md`](../operations/review-data-indexing.md))
 publishes the accepted inventory before `job_review_package_assembly`. Implemented:
 
-- **Inventory and audit.** All 23 registered jobs declare datasets in their own `datasets.py`.
+- **Inventory and audit.** All 31 currently registered jobs declare datasets in their own
+  `datasets.py`. The registry/configuration equality check, rather than this prose count, is the
+  acceptance authority.
   The audit compares declarations with the resolved configuration, accepted handoffs, every
   accepted shard (recomputed counts) and the run-owned `data/` tree, plus runtime receipts,
   configuration, telemetry, guidance and manifests. Violations block acceptance. Shards a producer
@@ -433,7 +435,7 @@ publishes the accepted inventory before `job_review_package_assembly`. Implement
 - **Links.** `links-representation`, `links-finding-source`, `links-package-advisory`,
   `links-symbol-syntax` and `links-history-code` shards. Exact links require equal identity, hash or
   byte span; other joins are separate ambiguous relations.
-- **Stage-1 products.** All nine stage-1 sets publish independent shards keyed by rule version,
+- **Stage-1 products.** All 10 stage-1 sets publish independent shards keyed by rule version,
   upstream shard identities, pinned feed/OWASP identities and dependent settings.
   `scanner_correlation` is the complete High/Critical and unknown-severity lead menu with a
   membership audit. `history_context` adds schema-conformant metric vectors (churn, revisions,
@@ -454,14 +456,14 @@ publishes the accepted inventory before `job_review_package_assembly`. Implement
 
 Remaining gaps after this batch:
 
-- No code-graph fact is produced: the `graph` index, `job_codeql_analysis` export step,
-  `job_code_graph_index` and `query_code_graph` of
-  [`code-graph-precomputation.md`](code-graph-precomputation.md) are not implemented, so every
-  `code_graph` lane is `unavailable`. The seven graph query sets are retired from `QUERY_SETS`;
-  `query_precomputed` rejects their names as invalid. The follow-up list (`GRAPH_FOLLOW_UP` in
-  `job_review_data_indexing/job.py`) names only `hotspot_context`, `review_package`,
-  `redacted_secret_exposure`, `contract_enforcement`, `deployment_exposure` and `test_intent` as
-  `pending_follow_up`; the two graph-dependent rows carry the accepted `code_graph` lane states.
+- Code-graph production is implemented for the configured C/C++ export pack. Other configured
+  languages publish explicit unavailable family coverage until their export packs exist. The
+  seven former graph query sets remain retired from `QUERY_SETS`; `query_precomputed` rejects their
+  names, and `query_code_graph` is the only graph query surface. The follow-up list
+  (`GRAPH_FOLLOW_UP` in `job_review_data_indexing/job.py`) names only `hotspot_context`,
+  `review_package`, `redacted_secret_exposure`, `contract_enforcement`, `deployment_exposure` and
+  `test_intent` as `pending_follow_up`; the two graph-dependent rows carry accepted per-language
+  `code_graph` lane states.
 - Joern CPG remains a binary artifact; no CPG graph coverage is claimed, and the code-graph plan
   does not use it.
 - Source-to-build-action mapping exists only through captured compile commands (`source_input`

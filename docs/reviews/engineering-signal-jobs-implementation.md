@@ -4,9 +4,9 @@ Status: implemented and locally verified. Root `AGENTS.md` governs.
 
 ## Decisions
 
-1. The change adds three explicit jobs: `job_clang_static_analysis`, `job_test_coverage`, and
-   `job_dependency_intelligence`. They publish immutable handoffs and retrieval shards; downstream
-   review consumes only accepted outputs.
+1. The original slice added `job_clang_static_analysis`, `job_test_coverage`, and
+   `job_dependency_intelligence`; the follow-on slice added `job_profile_data`. All four publish
+   immutable handoffs and retrieval shards, and downstream review consumes only accepted outputs.
 2. Clang-Tidy and Clang Static Analyzer share one C/C++ job and one hash-pinned tool image. Each
    accepted native compile scope is analyzed from its run-owned compilation database. Missing
    compile context, unsupported commands, tool failure, timeout, and truncation are named gaps.
@@ -28,7 +28,7 @@ Status: implemented and locally verified. Root `AGENTS.md` governs.
    malformed response, or bound exhaustion is a dependency-scoped coverage gap.
 7. Scorecard records and gaps are indexed as dependency context. They seed lane-B ranking/context
    and red-team packages but are not vulnerability findings and cannot raise finding severity.
-8. The new jobs are generic producers: their parsers, resolver, client, and index builders have no
+8. The four jobs are generic producers: their parsers, resolver, client, and index builders have no
    Dagster dependency and are independently testable. Dagster and the direct graph only order them.
 9. Central configuration owns versions, limits, model choice, role/persona selection, networking,
    and worker counts. Target files, tool output, model output, and Scorecard responses are data.
@@ -46,15 +46,18 @@ Status: implemented and locally verified. Root `AGENTS.md` governs.
 
 ## Implemented integration
 
-- The direct graph and Dagster wave register and order all three jobs before review-data indexing.
+- The direct graph and Dagster wave register and order all four jobs before review-data indexing.
 - Language-build preserves well-known coverage exchange files for every supported build family.
 - Clang observations are classified as source-SAST and enter scanner correlation and review lanes.
 - Coverage cells are attached to the exact source/build unit in lane-B review packages.
 - Dependency and Scorecard entities seed lane-B red-team context. Package context bounds still apply;
   truncation is a named gap, and Scorecards remain context rather than vulnerability findings.
+- Every normalized dependency, including a native identity completed by bounded model inference,
+  enters `dependency_advisories`. Inventory-only OSV package matches are explicitly
+  applicability-unverified until corroborated by accepted version-aware evidence.
 - Review scope accounts for missing, partial, and failed coverage from each new producer.
 
-## Verification record
+## Original verification record
 
 - Focused producer/orchestration integration: 70 passed, 1 skipped; review package/cap tests:
   40 passed; guidance/persona/dependency tests: 165 passed.
@@ -65,4 +68,25 @@ Status: implemented and locally verified. Root `AGENTS.md` governs.
   and CodeQL fixture export.
 - Clang tool acceptance built its offline image and exercised both analyzers against a native null
   dereference fixture. No live model-provider or OpenSSF network acceptance was performed.
+
+## 2026-10-14 documentation reconciliation
+
+- Re-audited the current central TOML, producer dataset declarations, direct CLI order, generated
+  Dagster dependencies, review-data product rules, schemas, focused tests, and the accepted
+  multivuln fixture contract rather than carrying forward the original implementation summary.
+- The current registry and configuration each contain 31 jobs; the input-source matrix contains 53
+  rows; review-data indexing publishes ten precomputed products. These counts are descriptive and
+  are guarded by executable consistency tests rather than treated as runtime authority.
+- Operator topology, data-flow tables, navigation, graph implementation status, profile context,
+  maximal-exposure semantics, Scorecard gaps, and advisory applicability language were reconciled
+  with the current implementation. Live provider, Scorecard, and container availability remain
+  environment acceptance gaps unless separately exercised.
+- Focused producer verification passed 58 tests across Clang, coverage, the multivuln fixtures,
+  profile ingestion, dependency intelligence, and advisory indexing inputs. Documentation and
+  configuration consistency passed 58 tests with the Dagster-dependent test skipped and the
+  Windows symlink-privilege test deliberately deselected after reproducing `WinError 1314`.
+  Review-data indexing passed its other 24 tests; its image-validation acceptance test reproduced
+  the host gap `fts_validation.status = unavailable` where that fixture expects the pinned SQLite
+  FTS image to verify. No live model-provider, Scorecard-network, or tool-container acceptance was
+  inferred from these local results.
 

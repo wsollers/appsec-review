@@ -147,19 +147,30 @@ With the current registry, the cross-job dependencies are:
 model_connectivity -> review_intake -> target_catalog -> ci_configuration_analysis -> target_analysis_plan
 target_catalog -> source_history_analysis -> target_analysis_plan
 target_analysis_plan -> tree_sitter_ast -> change_context_analysis
-target_analysis_plan -> project_build -> language_build -> artifact_indexing -> artifact_security_analysis
-language_build -> cpp_compiled_analysis -> post_build_security_assessment
+target_analysis_plan -> project_build -> language_build -> artifact_indexing
+artifact_indexing -> test_coverage
+artifact_indexing -> profile_data
+artifact_indexing -> artifact_security_analysis
+language_build -> cpp_compiled_analysis -> clang_static_analysis
+cpp_compiled_analysis -> post_build_security_assessment
 cpp_compiled_analysis -> cpp_symbol_index
 cpp_compiled_analysis -> cpg_analysis  # only when jobs.job_cpg_analysis.settings.enabled = true
 target_analysis_plan -> evidence_collection
+target_catalog + language_build + artifact_indexing + evidence_collection + cpp_compiled_analysis
+  -> dependency_intelligence
 language_build + artifact_indexing + artifact_security_analysis + cpp_compiled_analysis
-  + cpp_symbol_index + cpg_analysis + post_build_security_assessment + evidence_collection
+  + clang_static_analysis + cpp_symbol_index + cpg_analysis
+  + post_build_security_assessment + evidence_collection
   + tree_sitter_ast + change_context_analysis -> codeql_analysis
 post_build_security_assessment + evidence_collection + artifact_security_analysis
   + tree_sitter_ast + codeql_analysis -> owasp_control_assessment
 codeql_analysis + owasp_control_assessment -> review_prioritization
-codeql_analysis + owasp_control_assessment + review_prioritization -> security_tagging
-security_tagging -> review_data_indexing -> review_package_assembly -> document_issue_analysis
+codeql_analysis + cpp_compiled_analysis + clang_static_analysis + cpp_symbol_index
+  + tree_sitter_ast + review_prioritization -> code_graph_index
+codeql_analysis + owasp_control_assessment + review_prioritization + code_graph_index
+  -> security_tagging
+test_coverage + profile_data + dependency_intelligence + security_tagging
+  -> review_data_indexing -> review_package_assembly -> document_issue_analysis
 ```
 
 `wave1_review` contains every registered job except the standalone
@@ -195,15 +206,18 @@ gaps, and receipt paths. The application `status.json` contains the reverse
 `orchestration.system=dagster` and `orchestration.run_id=<Dagster UUID>` link. The verification
 command validates both directions rather than inferring success from one system alone.
 
-`wave1_review` shows intake and catalog units followed by the planned analysis jobs. Static evidence
+`wave1_review` shows intake and catalog units followed by the configured analysis jobs. Static evidence
 collection and project-build processing both start from the accepted target-analysis plan. Generic
 language-build execution waits for accepted project-build probes while its source and WebAssembly
-lanes remain independent; C++ analysis waits for its native receipts; and post-build security waits
-for the accepted C++ analysis handoff. Cross-language CodeQL then consumes the accepted catalog,
-language-build, artifact, C++ (including the clangd and Joern indexes), post-build,
-static-evidence, tree-sitter, and change-context publications. Its manifest is the composed
-retrieval view consumed by OWASP; review prioritization and security tagging publish further
-shards after it, and `review_data_indexing` audits the final accepted view. Each evidence
+lanes remain independent. Coverage and profile ingestion branch from accepted artifact indexing;
+C++ analysis waits for native receipts, Clang static analysis waits for accepted compiled scopes,
+and dependency intelligence joins accepted catalog, build, artifact, and evidence handoffs while
+also waiting for the compiled C/C++ branch when present. Cross-language CodeQL consumes its
+declared catalog, language-build, artifact, C++,
+post-build, static-evidence, tree-sitter, and change-context publications. The code-graph job then
+normalizes accepted CodeQL exports and cross-check inputs. OWASP, review prioritization, and
+security tagging publish their own branches; `review_data_indexing` waits for every enabled leaf
+and audits the composed accepted view. Each evidence
 branch has scan, normalize, and producer-owned index nodes. Its cheap manifest barrier waits for a
 truthful terminal disposition from every static branch, verifies every immutable shard, and then
 publication moves the accepted pointer. OWASP assessment waits for both the static-evidence and

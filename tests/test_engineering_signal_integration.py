@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
-from appsec_review.cli import GRAPH_JOB_IDS
+from appsec_review.cli import GRAPH_JOB_IDS, POST_INDEX_JOB_IDS
 from appsec_review.config import load_config
 from appsec_review.indexing.input_matrix import INPUT_SOURCES
+from appsec_review.indexing.products import PRODUCT_RULES
 from appsec_review.jobs.job_review_data_indexing.datasets import CONSUMES
 from appsec_review.runtime.registry import builtin_registry
 from appsec_review.retrieval import EntityKind, LogicalIdentity
@@ -44,9 +46,8 @@ def test_engineering_signal_jobs_precede_review_data_indexing() -> None:
     assert all(order[job_id] < order["job_review_data_indexing"] for job_id in NEW_JOBS)
 
 
-def test_profile_data_dagster_wave_follows_artifact_indexing() -> None:
+def test_engineering_signal_dagster_dependencies_match_current_orchestration() -> None:
     pytest.importorskip("dagster")
-    from pathlib import Path
     from appsec_review.orchestration.dagster import build_definitions
 
     graph = build_definitions(Path(__file__).parents[1] / "appsec-review.toml").get_job_def(
@@ -56,8 +57,56 @@ def test_profile_data_dagster_wave_follows_artifact_indexing() -> None:
         mapping = graph.dependency_structure.input_to_upstream_outputs_for_node(node)
         return {output.node_name for outputs in mapping.values() for output in outputs}
 
-    assert "artifact_indexing__finalize" in upstream("profile_data__begin")
-    assert "profile_data__finalize" in upstream("review_data_indexing__begin")
+    assert upstream("test_coverage__begin") == {"artifact_indexing__finalize"}
+    assert upstream("profile_data__begin") == {"artifact_indexing__finalize"}
+    assert upstream("clang_static_analysis__begin") == {"cpp_compiled_analysis__finalize"}
+    assert {"target_catalog__finalize", "language_build__finalize", "artifact_indexing__finalize",
+            "evidence_collection__finalize", "cpp_compiled_analysis__finalize"} == \
+        upstream("dependency_intelligence__begin")
+    assert "code_graph_index__finalize" in upstream("security_tagging__begin")
+    review_upstream = upstream("review_data_indexing__begin")
+    assert {"test_coverage__finalize", "profile_data__finalize",
+            "dependency_intelligence__finalize", "security_tagging__finalize"} <= review_upstream
+
+
+def _direct_graph_block(path: str, marker: str) -> str:
+    text = Path(path).read_text(encoding="utf-8")
+    remainder = text.split(marker, 1)[1]
+    return remainder.split("```text", 1)[1].split("```", 1)[0]
+
+
+def test_operator_docs_track_the_executable_direct_graph() -> None:
+    expected = tuple(job.removeprefix("job_") for job in (*GRAPH_JOB_IDS, *POST_INDEX_JOB_IDS))
+    for path, marker in (
+        ("README.md", "The direct CLI runs this linear graph:"),
+        ("docs/operations/wave1-review.md", "commands run this linear graph:"),
+    ):
+        block = _direct_graph_block(path, marker)
+        positions = [block.index(job) for job in expected]
+        assert positions == sorted(positions), (path, expected)
+
+
+def test_architecture_docs_pin_current_counts_and_nonfinding_semantics() -> None:
+    config = load_config("appsec-review.toml")
+    indexing = Path("docs/architecture/indexing-and-query-reuse.md").read_text(encoding="utf-8")
+    record = Path("docs/reviews/engineering-signal-jobs-implementation.md").read_text(encoding="utf-8")
+    canonical = Path("docs/architecture/engineering-security-signals.md").read_text(encoding="utf-8")
+    canonical_words = " ".join(canonical.split())
+    evidence = Path("docs/architecture/evidence-sources-and-dataflow-retrieval.md").read_text(encoding="utf-8")
+
+    assert f"All {len(config.jobs)} currently registered jobs" in indexing
+    assert f"All {len(PRODUCT_RULES)} stage-1 sets" in indexing
+    assert f"input-source matrix contains {len(INPUT_SOURCES)}" in record
+    assert "`query_code_graph` | exists" in evidence
+    for phrase in (
+        "including linker/loader and model-assisted identities",
+        "applicability-unverified",
+        "conservative-default",
+        "not a vulnerability finding",
+        "context_only",
+        "artifact_origin: \"accepted-input\"",
+    ):
+        assert phrase in canonical_words
 
 
 def test_clang_observations_enter_the_source_sast_review_lane() -> None:

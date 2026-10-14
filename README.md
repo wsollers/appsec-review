@@ -360,10 +360,12 @@ The direct CLI runs this linear graph:
 ```text
 model_connectivity -> review_intake -> target_catalog -> source_history_analysis -> target_analysis_plan
   -> tree_sitter_ast -> project_build -> language_build
-  -> artifact_indexing -> artifact_security_analysis -> cpp_compiled_analysis
-  -> cpp_symbol_index -> cpg_analysis -> evidence_collection
+  -> artifact_indexing -> test_coverage -> profile_data -> artifact_security_analysis
+  -> cpp_compiled_analysis -> clang_static_analysis -> cpp_symbol_index
+  -> cpg_analysis -> evidence_collection -> dependency_intelligence
   -> change_context_analysis -> codeql_analysis -> review_prioritization
-  -> review_data_indexing -> review_package_assembly -> document_issue_analysis
+  -> code_graph_index -> review_data_indexing -> review_package_assembly
+  -> document_issue_analysis
 ```
 
 Start a review from the repository root with the virtual environment active:
@@ -410,7 +412,9 @@ python -m appsec_review start --target targets/appsec-multi-vuln
 
 The direct graph leaves out CI configuration analysis, post-build security assessment, OWASP
 control assessment, and security tagging. Use Dagster's `wave1_review` job, which runs every
-registered review job except the standalone `inference_security_review`, when you need those.
+enabled registered review job except the standalone `third_party_data_sync` and
+`inference_security_review` jobs, when you need those branches. The direct graph is linear, so its
+order is an execution order rather than a claim that every adjacent job consumes its predecessor.
 `third_party_data_sync` remains a separate scheduled metadata job.
 See [`docs/operations/wave1-review.md`](docs/operations/wave1-review.md).
 

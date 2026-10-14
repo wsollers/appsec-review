@@ -69,6 +69,16 @@ The principal payload schemas and locations are:
 Consumers use the producer-specific accepted loaders where one exists, rather than opening an
 attempt or SQLite file by guessed path.
 
+Interpretation is deliberately narrower than successful ingestion:
+
+| Signal | May support | Never establishes by itself |
+| --- | --- | --- |
+| Clang diagnostic | a source-resolved analyzer lead and bounded trace to review | a confirmed vulnerability, exploitability, or clean coverage when no diagnostic appears |
+| Coverage cell | counts from one hash-bound report and review-completeness context | that tests ran for the current checkout when the origin is `accepted-input`, that covered code is safe, or that uncovered code is vulnerable |
+| Dependency record | a normalized identity candidate, evidence-backed or conservative exposure priority, and bounded advisory nomination | production deployment, affected-version applicability, repository/artifact equivalence, or a vulnerability finding |
+| Scorecard record | practices reported for one resolved public source repository | a vulnerability finding, package applicability, or provenance of the accepted artifact bytes |
+| Profile hotspot | relative event/sample hotness within one accepted build unit | defect probability, attacker-controlled reachability, severity, or safety of cold code |
+
 ## C/C++ Clang analysis
 
 Each accepted compiled scope runs two independent actions from the pinned
