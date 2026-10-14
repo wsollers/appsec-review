@@ -11,7 +11,7 @@ from tree_sitter_language_pack import PackConfig, configure, prefetch
 
 LANGUAGES = [
     "c", "cpp", "rust", "go", "java", "javascript", "typescript", "tsx",
-    "csharp", "python", "php",
+    "csharp", "python", "php", "kotlin", "powershell", "bash",
 ]
 
 

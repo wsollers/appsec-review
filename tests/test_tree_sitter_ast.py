@@ -3,8 +3,11 @@ from __future__ import annotations
 from dataclasses import replace
 import hashlib
 import json
+import os
 from pathlib import Path
+import runpy
 import shutil
+import stat
 import subprocess
 import tomllib
 
@@ -13,6 +16,7 @@ import pytest
 from appsec_review.jobs.job_tree_sitter_ast import (
     GrammarLock, Scope, partition_scopes, plan_scopes, scope_fingerprint,
 )
+from appsec_review.jobs.job_tree_sitter_ast.model import SUPPORTED_LANGUAGES
 from appsec_review.config import load_config
 from appsec_review.container_runtime.identity import application_runtime_user
 from appsec_review.jobs.cataloging import source_fingerprint
@@ -22,7 +26,9 @@ from appsec_review.jobs.job_tree_sitter_ast import build_job
 from appsec_review.jobs.job_tree_sitter_ast.normalize import (
     NORMALIZER_SCHEMA, node_identity, normalize_scope, reusable_shard,
 )
-from appsec_review.jobs.job_tree_sitter_ast.scope_execution import _validate_container_output
+from appsec_review.jobs.job_tree_sitter_ast.scope_execution import (
+    _validate_container_output, _write_container_request,
+)
 from appsec_review.storage import atomic_json, file_sha256
 from appsec_review.retrieval import RetrievalCore
 from appsec_review.runtime import GraphRunner
@@ -30,7 +36,8 @@ from appsec_review.runtime import GraphRunner
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE = ROOT / "tests" / "fixtures" / "tree_sitter_target"
-IMAGE = "appsec-review/tool-tree-sitter:1.0.0"
+DEFAULT_IMAGE = "appsec-review/tool-tree-sitter:1.0.0"
+IMAGE = os.environ.get("APPSEC_TREE_SITTER_TEST_IMAGE", DEFAULT_IMAGE)
 
 
 def _lock(language: str = "Python", grammar: str = "python") -> GrammarLock:
@@ -125,6 +132,55 @@ def test_unavailable_grammar_is_an_explicit_gap() -> None:
                      "gaps": []},)
 
 
+def test_supported_languages_have_locked_offline_grammars_and_parser_routes() -> None:
+    lock = json.loads((ROOT / "containers" / "tools" / "tree-sitter" /
+                       "assets.lock.json").read_text(encoding="utf-8"))
+    locked = {item["language"] for item in lock["grammars"]} | {"C/C++"}
+    parser = runpy.run_path(str(ROOT / "containers" / "tools" / "tree-sitter" / "parser.py"))
+    acquisition = runpy.run_path(str(ROOT / "containers" / "tools" / "tree-sitter" /
+                                       "acquire_assets.py"))
+    assert locked == SUPPORTED_LANGUAGES == set(parser["LANGUAGES"])
+    assert set(parser["LANGUAGES"].values()) == set(acquisition["LANGUAGES"])
+    expected = {
+        "Kotlin": ("kotlin", "c8ac3d2627240160b999a2c100de3babbdb8f419",
+                   "4ba2c2f1b00fb74350a335aadc287e4bcd82f8cbec2848f644cc95279ad44a1c"),
+        "PowerShell": ("powershell", "d398441825243b00e317e87e1829b9d6a3e54ce0",
+                       "610c910b6fb4b265894cf8af035d597d87abef2838206bccaa204629034c09c8"),
+        "Shell": ("bash", "a06c2e4415e9bc0346c6b86d401879ffb44058f7",
+                  "0a3c99ddb5ba49f35fb890d893af8483049bf9d8d7b1261730acc2488e3d3379"),
+    }
+    identities = {item["language"]: item for item in lock["grammars"]}
+    for language, (grammar, revision, digest) in expected.items():
+        assert parser["LANGUAGES"][language] == grammar
+        assert (identities[language]["grammar"], identities[language]["revision"],
+                identities[language]["sha256"]) == (grammar, revision, digest)
+        assert identities[language]["license"] == "MIT"
+
+
+def test_supported_run_grammars_are_runnable_but_unknown_languages_remain_gaps() -> None:
+    languages = ("Kotlin", "PowerShell", "Shell")
+    scopes = tuple(replace(_scope(language), scope_id=f"scope-{language.lower()}")
+                   for language in languages)
+    locks = {language: _lock(language, {"Kotlin": "kotlin", "PowerShell": "powershell",
+                                       "Shell": "bash"}[language]) for language in languages}
+    runnable, gaps = partition_scopes((*scopes, _scope("Ruby")), locks)
+    assert [scope.language for scope in runnable] == list(languages)
+    assert gaps == ({"scope_id": "scope-python", "language": "Ruby",
+                     "terminal_status": "UNAVAILABLE", "reason": "grammar unavailable",
+                     "gaps": []},)
+
+
+def test_container_request_is_readable_and_scratch_is_writable_by_runtime_user(tmp_path: Path) -> None:
+    request_path = _write_container_request(tmp_path / "scope", {"schema": "fixture"})
+    request_mode = request_path.stat().st_mode
+    scratch_mode = request_path.parent.stat().st_mode
+    assert request_mode & stat.S_IROTH
+    if os.name != "nt":
+        assert not request_mode & stat.S_IWOTH
+    assert scratch_mode & stat.S_IWOTH
+    assert scratch_mode & stat.S_IXOTH
+
+
 def test_resume_requires_matching_fingerprint_and_both_immutable_hashes(tmp_path: Path) -> None:
     artifact, index, metadata = tmp_path / "a.jsonl", tmp_path / "a.sqlite", tmp_path / "a.json"
     artifact.write_bytes(b"ast\n")
@@ -158,9 +214,23 @@ def _docker_available() -> bool:
     if not shutil.which("docker"):
         return False
     try:
-        return subprocess.run(["docker", "image", "inspect", IMAGE], capture_output=True, timeout=15).returncode == 0
+        if subprocess.run(["docker", "image", "inspect", IMAGE], capture_output=True,
+                          timeout=15).returncode != 0:
+            return False
+        lock = json.loads((ROOT / "containers" / "tools" / "tree-sitter" /
+                           "assets.lock.json").read_text(encoding="utf-8"))
+        expected = sorted(item["artifact"] for item in lock["grammars"])
+        probe = subprocess.run(["docker", "run", "--rm", "--entrypoint", "python", IMAGE,
+            "-c", "from pathlib import Path; print('\\n'.join(sorted(p.name for p in "
+                  "Path('/opt/grammars').glob('*.so'))))"], capture_output=True, text=True,
+            timeout=15)
+        return probe.returncode == 0 and probe.stdout.splitlines() == expected
     except (OSError, subprocess.TimeoutExpired):
         return False
+
+
+def _cataloged_docker_available() -> bool:
+    return IMAGE == DEFAULT_IMAGE and _docker_available()
 
 
 @pytest.mark.skipif(not _docker_available(), reason="locked Tree-sitter image is not locally available")
@@ -169,13 +239,16 @@ def test_live_container_parses_mult_project_multilanguage_fixture_and_proves_ide
     cataloged = next(item for item in catalog["images"] if item["id"] == "tool-tree-sitter")
     inspected = subprocess.run(["docker", "image", "inspect", IMAGE, "--format", "{{.Id}}"],
                                capture_output=True, text=True, check=True).stdout.strip()
-    assert inspected == cataloged["image_id"]
+    if IMAGE == DEFAULT_IMAGE:
+        assert inspected == cataloged["image_id"]
     cases = [("C", "native/main.c"), ("C++", "native/main.cpp"),
              ("Rust", "rust/src/main.rs"), ("Go", "go/main.go"),
              ("Java", "java/Main.java"), ("JavaScript", "web/src/index.js"),
              ("TypeScript", "web/src/index.ts"), ("TSX", "web/src/view.tsx"),
              ("C#", "dotnet/Program.cs"),
-             ("Python", "python/app.py"), ("PHP", "php/index.php")]
+             ("Python", "python/app.py"), ("PHP", "php/index.php"),
+             ("Kotlin", "kotlin/Main.kt"), ("PowerShell", "powershell/main.ps1"),
+             ("Shell", "shell/main.sh")]
     for language, relative in cases:
         payload = (FIXTURE / relative).read_bytes()
         request = {"schema": "appsec-review/tree-sitter-request/1", "scope_id": language.lower(),
@@ -183,11 +256,7 @@ def test_live_container_parses_mult_project_multilanguage_fixture_and_proves_ide
                    "max_file_bytes": 1024 * 1024,
                    "files": [{"path": relative, "sha256": hashlib.sha256(payload).hexdigest()}]}
         scratch = tmp_path / language.lower()
-        scratch.mkdir()
-        request_path = scratch / "request.json"
-        atomic_json(request_path, request)
-        request_path.chmod(0o444)
-        scratch.chmod(0o733)
+        _write_container_request(scratch, request)
         subprocess.run(["docker", "run", "--rm", "--network", "none", "--read-only",
             "--user", application_runtime_user("10001:10001"), "--cap-drop", "ALL",
             "--security-opt", "no-new-privileges",
@@ -206,16 +275,12 @@ def test_live_container_parses_mult_project_multilanguage_fixture_and_proves_ide
 
     payload = (FIXTURE / "python/app.py").read_bytes()
     bounded = tmp_path / "bounded"
-    bounded.mkdir()
-    bounded_request = bounded / "request.json"
-    atomic_json(bounded_request, {
+    _write_container_request(bounded, {
         "schema": "appsec-review/tree-sitter-request/1", "scope_id": "bounded",
         "language": "Python", "max_nodes": 1000, "max_scope_nodes": 1,
         "max_file_bytes": 1024 * 1024,
         "files": [{"path": "python/app.py", "sha256": hashlib.sha256(payload).hexdigest()}],
     })
-    bounded_request.chmod(0o444)
-    bounded.chmod(0o733)
     subprocess.run(["docker", "run", "--rm", "--network", "none", "--read-only",
         "--user", application_runtime_user("10001:10001"), "--cap-drop", "ALL",
         "--security-opt", "no-new-privileges",
@@ -230,7 +295,8 @@ def test_live_container_parses_mult_project_multilanguage_fixture_and_proves_ide
     assert bounded_output["records"][0]["node_count"] == 1
 
 
-@pytest.mark.skipif(not _docker_available(), reason="locked Tree-sitter image is not locally available")
+@pytest.mark.skipif(not _cataloged_docker_available(),
+                    reason="cataloged Tree-sitter image is not locally available")
 def test_real_graph_is_parallel_queryable_gapped_and_resumable(tmp_path: Path) -> None:
     base = load_config(ROOT / "appsec-review.toml")
     runtime = replace(base.runtime, runs_dir=tmp_path / "runs", data_dir=tmp_path / "data",

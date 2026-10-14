@@ -6,6 +6,11 @@ documented in `containers/tools/tree-sitter/README.md`. The build must use the t
 `--provenance=false`. Record the final local image ID in `containers/catalog.toml` before running
 the job.
 
+A rebuilt offline image from this context supports C, C++, C#, Go, Java, JavaScript, Kotlin, PHP,
+PowerShell, Python, Rust, Shell, TSX, and TypeScript. Shell files use the hash-locked upstream Bash grammar.
+Ruby, Swift, and any other cataloged language without a lock remain explicit `UNAVAILABLE`
+dispositions; operators must not interpret those gaps as clean coverage.
+
 The standalone `tree_sitter_ast` Dagster job is the manual dispatch path. In the review graph it
 runs after accepted intake/catalog planning and independently from build, compiled AST/IR, SAST,
 and inference branches. CodeQL waits for its accepted handoff before composing the later retrieval
@@ -21,3 +26,10 @@ Live acceptance must verify the cataloged image ID, run with network disabled an
 read-only, parse the multi-project/multi-language fixture, publish at least one searchable AST shard,
 and demonstrate that an injected sibling grammar failure produces `COMPLETED_WITH_GAPS` while the
 successful shard remains accepted.
+
+If every runnable scope reports container exit 1, inspect a scope's protected raw stderr. A
+`PermissionError` for `/scratch/request.json` indicates a stale producer that did not make the
+atomic request readable by uid 10001. Current producers set the scope directory to `0733` and the
+completed request to `0644` before starting the network-disabled container. Keeping the owner-write
+bit avoids Docker Desktop input/output errors caused by Windows read-only file attributes while the
+container user still has read-only access.

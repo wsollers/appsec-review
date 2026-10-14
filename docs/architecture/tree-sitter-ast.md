@@ -20,6 +20,13 @@ Python base, hash-locked wheels, and pre-generated Linux grammar libraries. Imag
 every cached byte. Review execution is non-root, read-only, network-disabled, capability-free, and
 bounded by the central container policy; it cannot download or compile grammars.
 
+The supported grammar contract is closed and identical across planner, parser routing, acquisition,
+and the asset lock: C, C++, C#, Go, Java, JavaScript, Kotlin, PHP, PowerShell, Python, Rust, Shell,
+TSX, and TypeScript (plus the C/C++ catalog alias). Shell routes to the upstream Bash grammar.
+Each library is pinned by upstream revision, SHA-256, size, and license. Catalog languages outside
+that set, currently including Ruby and Swift, continue through publication as explicit unavailable
+coverage rather than a fallback parse.
+
 Each successful scope emits:
 
 - an immutable normalized AST JSONL shard;
