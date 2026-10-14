@@ -396,10 +396,13 @@ class GoldenTreeSitter:
                                "", "", "")
 
 
-def configured(tmp_path: Path, *, max_nodes: int | None = None, extra: str = ""):
+def configured(tmp_path: Path, *, max_nodes: int | None = None, file_top_count: int | None = None,
+               extra: str = ""):
     text = (ROOT / "appsec-review.toml").read_text(encoding="utf-8")
     if max_nodes is not None:
         text = text.replace("max_nodes_per_file = 20000", f"max_nodes_per_file = {max_nodes}")
+    if file_top_count is not None:
+        text = text.replace("file_top_count = 0", f"file_top_count = {file_top_count}")
     text += extra
     (tmp_path / "appsec-review.toml").write_text(text, encoding="utf-8")
     shutil.copytree(ROOT / "containers", tmp_path / "containers",
@@ -430,7 +433,7 @@ def published(outcome) -> dict[str, Any]:
 
 
 def test_job_ranks_indexes_and_names_every_missing_producer(tmp_path: Path) -> None:
-    config = configured(tmp_path)
+    config = configured(tmp_path, file_top_count=12)
     target = target_copy(tmp_path)
     outcome = run_graph(config, target)
     output = published(outcome)
