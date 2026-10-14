@@ -48,9 +48,13 @@ class Row:
 class AcceptedIndexes:
     """The accepted manifest for one run, excluding any earlier tag shards."""
 
-    def __init__(self, run_root: Path):
+    def __init__(self, run_root: Path, *, manifest_path: Path | None = None,
+                 manifest_sha256: str | None = None):
         self.run_root = Path(run_root)
-        manifest_path, manifest_sha = resolve_accepted_manifest(self.run_root)
+        if manifest_path is None or manifest_sha256 is None:
+            manifest_path, manifest_sha = resolve_accepted_manifest(self.run_root)
+        else:
+            manifest_sha = manifest_sha256
         self.manifest, self.manifest_sha256 = load_verified_manifest(self.run_root, manifest_path, manifest_sha)
         self.manifest_path = manifest_path
         self.target_snapshot = str(self.manifest["target_snapshot"])

@@ -27,7 +27,7 @@ from appsec_review.guidance.routing import unit_sources
 from appsec_review.indexing.store import open_shard
 from appsec_review.jobs.job_security_tagging.crosswalk import load_crosswalk
 from appsec_review.jobs.job_security_tagging.taxonomy import load_vocabulary
-from appsec_review.retrieval.core import RetrievalCore
+from appsec_review.retrieval.core import RetrievalCore, resolve_context_manifest
 from appsec_review.review import obligations, ship_block
 from appsec_review.review.budget import JobBudget
 from appsec_review.review.claims import normalize_cwe
@@ -128,7 +128,9 @@ def _check_isolation(scope: AcceptedScope) -> None:
 
 
 def _scope(unit: UnitContext) -> AcceptedScope:
-    scope = accept_manifest(unit.job.run_root)
+    manifest_path, manifest_sha = resolve_context_manifest(unit.job)
+    scope = accept_manifest(unit.job.run_root, manifest_path=manifest_path,
+                            manifest_sha256=manifest_sha)
     pinned = unit.output("scope.accept_manifest")["manifest_sha256"] if unit.unit_id != "scope.accept_manifest" else None
     if pinned is not None and scope.manifest_sha256 != pinned:
         raise IntegrityError("accepted manifest changed during the review attempt")
@@ -208,12 +210,14 @@ def package_works(run_root: Path, packages_doc: Mapping[str, Any]) -> list[Packa
 
 def review_context(*, run_root: Path, run_id: str, attempt_root: Path, repository_root: Path,
                    settings: InferenceSecurityReviewSettings, infer: Callable[..., Any], manifest_sha256: str,
-                   packages_doc: Mapping[str, Any], scope_out: Mapping[str, Any]) -> ReviewContext:
+                   packages_doc: Mapping[str, Any], scope_out: Mapping[str, Any],
+                   manifest_path: Path | None = None) -> ReviewContext:
     """Everything a lane needs: pinned retrieval core, guidance inputs, budget, semaphore, policy."""
     root = Path(repository_root)
     vocabulary, crosswalk = _taxonomy(root)
     registry = load_registry(root)
-    core = RetrievalCore(Path(run_root).parent, run_id, manifest_sha256=manifest_sha256)
+    core = RetrievalCore(Path(run_root).parent, run_id, manifest_sha256=manifest_sha256,
+                         manifest_path=manifest_path)
     query_sets = set(_read(Path(run_root), scope_out["artifact"])["query_sets"])
     return ReviewContext(
         run_root=Path(run_root), run_id=run_id, repository_root=root, settings=settings, core=core, infer=infer,
@@ -252,7 +256,8 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
                                 "sha256": str(shard["sha256"])} for shard in scope.shards]}
         unit.job.events.write("INFERENCE_REVIEW_SCOPE_ACCEPTED", manifest_sha256=scope.manifest_sha256,
                               shard_count=len(scope.shards))
-        return {"artifact": _write(unit, "accepted-scope.json", document), "manifest_sha256": scope.manifest_sha256,
+        return {"artifact": _write(unit, "accepted-scope.json", document),
+                "manifest_path": document["manifest_path"], "manifest_sha256": scope.manifest_sha256,
                 "shard_count": len(scope.shards), "gaps": [], "terminal_status": "SUCCEEDED"}
 
     def assemble_scope(unit: UnitContext) -> Mapping[str, Any]:
@@ -349,6 +354,7 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
                     run_root=run_root, run_id=unit.job.run_id, attempt_root=unit.job.attempt_root,
                     repository_root=repo(unit), settings=settings, infer=infer or _default_infer(),
                     manifest_sha256=unit.output("scope.accept_manifest")["manifest_sha256"],
+                    manifest_path=(run_root / unit.output("scope.accept_manifest")["manifest_path"]),
                     packages_doc=packages_doc, scope_out=scope_out)
                 document = run_lane(ctx, lane, works, other_lane_count=int(packages_doc["lane_counts"][other.value]),
                                     ledger_path=ledger_path, stream=unit.unit_id,
@@ -425,7 +431,8 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
         # Factors are derived only from accepted, re-resolved evidence and accepted tags.
         evidence = AcceptedEvidenceSource(
             RetrievalCore(Path(unit.job.run_root).parent, scope.run_id,
-                          manifest_sha256=scope.manifest_sha256), scope)
+                          manifest_sha256=scope.manifest_sha256,
+                          manifest_path=scope.manifest_path), scope)
         # impact_class is derived from the run-pinned MITRE CWE catalog (decision 11); an unpinned or
         # mismatched catalog derives nothing, and a stale one derives with the stale gap recorded.
         catalog = ImpactCatalog.from_reference(load_cwe_reference(unit.job.run_root))

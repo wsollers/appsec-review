@@ -17,7 +17,7 @@ from appsec_review.retrieval import (
     EntityKind, EntityRecord, IndexBuilder, IndexIdentity, LogicalIdentity, RelationKind,
     RelationRecord, SourceLocation, index_fingerprint, write_manifest,
 )
-from appsec_review.retrieval.core import resolve_accepted_manifest
+from appsec_review.retrieval.core import resolve_context_manifest
 from appsec_review.retrieval.index import load_verified_manifest
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from appsec_review.storage import atomic_json, canonical_json, file_sha256
@@ -491,9 +491,11 @@ def build_job(*, executor_factory: ExecutorFactory | None = None, fail_tool: str
                       ("ci_correlation.correlate_findings", *tuple(index_ids))))
 
     def publish(unit: UnitContext) -> Mapping[str, Any]:
-        manifest_path, manifest_sha = resolve_accepted_manifest(unit.job.run_root)
+        manifest_path, manifest_sha = resolve_context_manifest(unit.job)
         upstream, _ = load_verified_manifest(unit.job.run_root, manifest_path, manifest_sha)
-        identities = [IndexIdentity(**{**item, "gaps": tuple(item.get("gaps", ()))}) for item in upstream["indexes"]]
+        identities = [IndexIdentity(**{**item, "gaps": tuple(item.get("gaps", ()))})
+                      for item in upstream["indexes"]
+                      if item.get("producer", {}).get("job") != "job_ci_configuration_analysis"]
         identities.extend(IndexIdentity(**{**unit.output(unit_id)["index_identity"],
                                             "gaps": tuple(unit.output(unit_id)["index_identity"].get("gaps", ()))})
                           for unit_id in index_ids)

@@ -30,7 +30,7 @@ from appsec_review.indexing.products_base import AcceptedShards, merge_product, 
 from appsec_review.indexing.sast import build_scanner_correlation
 from appsec_review.indexing.store import AcceptedHandoff, ShardSet, accepted_handoff, as_identity, digest, \
     handoff_manifests, shard_key
-from appsec_review.retrieval.core import resolve_accepted_manifest
+from appsec_review.retrieval.core import resolve_context_manifest
 from appsec_review.retrieval.index import load_verified_manifest, write_manifest
 from appsec_review.retrieval.model import EntityKind, EntityRecord, LogicalIdentity
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
@@ -230,7 +230,7 @@ def build_job(*, providers: Providers = registry_providers,
 
     def load(unit: UnitContext) -> Mapping[str, Any]:
         run_root = unit.job.run_root
-        manifest_path, manifest_sha = resolve_accepted_manifest(run_root)
+        manifest_path, manifest_sha = resolve_context_manifest(unit.job)
         manifest, _ = load_verified_manifest(run_root, manifest_path, manifest_sha)
         if manifest.get("target_snapshot") != unit.job.source_fingerprint:
             raise ValueError("accepted index snapshot differs from the graph target snapshot")

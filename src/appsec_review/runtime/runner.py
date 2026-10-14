@@ -12,6 +12,7 @@ from typing import Any, Mapping
 from appsec_review.config import AppConfig
 from appsec_review.observability import EventLog, PipelineLog, write_run_metrics
 from appsec_review.retrieval.index import MANIFEST_SCHEMA as RETRIEVAL_MANIFEST_SCHEMA
+from appsec_review.retrieval.core import materialize_attempt_input_manifest
 from appsec_review.runtime.resume import ResumePlanner, job_config_sha256
 from appsec_review.runtime.job import Job, JobContext
 from appsec_review.runtime.units import UnitContext, UnitExecutor
@@ -82,6 +83,10 @@ class JobRunner:
             tools=self.config.tools,
             target_root=Path(str(target)).resolve() if target else None,
             source_fingerprint=str(claim.get("source_fingerprint", "none")),
+            input_manifest_path=(run_root / str(claim["input_manifest_path"])).resolve()
+                                if claim.get("input_manifest_path") else None,
+            input_manifest_sha256=(str(claim["input_manifest_sha256"])
+                                   if claim.get("input_manifest_sha256") else None),
         )
 
     def begin_attempt(
@@ -127,6 +132,14 @@ class JobRunner:
             "input_identity": job.probe_input_identity(target_root),
             "started_at": instant.isoformat(),
         }
+        input_manifest_path, input_manifest_sha = materialize_attempt_input_manifest(
+            run_root=run_root, attempt_root=attempt_root, run_id=str(run_id),
+            target_snapshot=source_fingerprint, target_root=target_root,
+            upstream_handoffs=dict(upstream_handoffs or {}),
+        )
+        if input_manifest_path is not None:
+            claim["input_manifest_path"] = input_manifest_path.relative_to(run_root).as_posix()
+            claim["input_manifest_sha256"] = input_manifest_sha
         atomic_json(attempt_root / "claim.json", claim)
         context = self._context_from_claim(job, claim)
         records, _ = PipelineLog(run_root).read()
@@ -547,7 +560,24 @@ class JobRunner:
             tools=self.config.tools,
             target_root=target_root.resolve() if target_root else None,
             source_fingerprint=source_fingerprint,
+            input_manifest_path=None,
+            input_manifest_sha256=None,
         )
+        input_manifest_path, input_manifest_sha = materialize_attempt_input_manifest(
+            run_root=run_root, attempt_root=attempt_root, run_id=str(run_id),
+            target_snapshot=source_fingerprint, target_root=target_root,
+            upstream_handoffs=dict(upstream_handoffs or {}),
+        )
+        if input_manifest_path is not None:
+            context = JobContext(
+                run_id=context.run_id, attempt_id=context.attempt_id, trigger=context.trigger,
+                repository_root=context.repository_root, run_root=context.run_root,
+                attempt_root=context.attempt_root, metadata_root=context.metadata_root,
+                orchestration=context.orchestration, config=context.config, events=context.events,
+                tools=context.tools, target_root=context.target_root,
+                source_fingerprint=context.source_fingerprint,
+                input_manifest_path=input_manifest_path, input_manifest_sha256=input_manifest_sha,
+            )
         started = instant.isoformat()
         atomic_json(attempt_root / "status.json", {
             "job_id": job.job_id,

@@ -29,6 +29,8 @@ class JobContext:
     tools: ToolCapabilityConfig = ToolCapabilityConfig()
     target_root: Path | None = None
     source_fingerprint: str = "none"
+    input_manifest_path: Path | None = None
+    input_manifest_sha256: str | None = None
 
 
 class JobHandler(Protocol):

@@ -22,7 +22,7 @@ from appsec_review.jobs.job_target_analysis_plan import build_job as build_plan
 from appsec_review.jobs.job_target_analysis_plan.planning import PROPOSAL_SCHEMA
 from appsec_review.jobs.job_project_build.repair import REPAIR_SCHEMA, apply_repair, validate_repair_proposal
 from appsec_review.jobs.job_language_build.job import _copy_source as _copy_language_source
-from appsec_review.runtime import GraphRunner, plan_jobs
+from appsec_review.runtime import GraphRunner, JobRunner, plan_jobs
 
 
 ROOT = Path(__file__).parents[1]
@@ -518,6 +518,35 @@ def test_force_probe_override_executes_unchanged_recipe(tmp_path: Path) -> None:
                  "-DCMAKE_BUILD_TYPE=RelWithDebInfo")
     build = ("cmake", "--build", "build", "--parallel", "2")
     assert calls == [configure, build, configure, build]
+
+
+def test_forced_project_build_rerun_in_same_application_run_is_attempt_isolated(tmp_path: Path) -> None:
+    config, target = _fixture(tmp_path)
+    config.source_path.write_text(
+        config.source_path.read_text(encoding="utf-8").replace(
+            "force_buildability_probe = false", "force_buildability_probe = true"),
+        encoding="utf-8")
+    config = load_config(config.source_path)
+    fingerprint = source_fingerprint(target)
+    upstream = GraphRunner(
+        config, [build_intake(), build_catalog(), build_plan(infer=RecipeModel().complete)]
+    ).run(target_root=target, source_fingerprint=fingerprint)
+    calls: list[tuple[str, ...]] = []
+    job = build_projects(executor_factory=lambda unit, profile: FakeBuildExecutor(calls),
+                         image_resolver_factory=lambda unit: FakeImageResolver())
+    runner = JobRunner(config)
+    first = runner.run(job, run_id=upstream["run_id"], target_root=target,
+                       source_fingerprint=fingerprint)
+    second = runner.run(job, run_id=upstream["run_id"], target_root=target,
+                        source_fingerprint=fingerprint)
+    assert first["status"]["attempt_id"] == "attempt_0001"
+    assert second["status"]["attempt_id"] == "attempt_0002"
+    run_root = config.runtime.runs_dir / upstream["run_id"]
+    captures = sorted(path.relative_to(run_root).as_posix()
+                      for path in (run_root / "data" / "build" / "probes").glob(
+                          "*/attempts/attempt_*/probe-001/execution-capture/command-001/record.json"))
+    assert any("/attempts/attempt_0001/" in path for path in captures)
+    assert any("/attempts/attempt_0002/" in path for path in captures)
 
 
 def test_failed_default_build_repairs_image_and_reuses_winning_definition(tmp_path: Path) -> None:

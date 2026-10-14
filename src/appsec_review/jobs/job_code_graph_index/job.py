@@ -40,7 +40,7 @@ from appsec_review.graph.normalize import COLUMNS_PATH, EXPORT_UPSTREAM_INDEX, n
 from appsec_review.graph.settings import RunConfigurationError, catalog_pins, run_configuration
 from appsec_review.indexing.store import ShardSet
 from appsec_review.retrieval import IndexIdentity, write_manifest
-from appsec_review.retrieval.core import resolve_accepted_manifest
+from appsec_review.retrieval.core import resolve_context_manifest
 from appsec_review.retrieval.index import load_verified_manifest
 from appsec_review.review.models import IntegrityError
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
@@ -138,7 +138,7 @@ def build_job(*, catalog_path: Path | None = None) -> Job:
         run_root = unit.job.run_root
         settings = graph_settings(unit)
         codeql = s.load_codeql_inputs(run_root, unit.job.source_fingerprint)
-        manifest_path, manifest_sha = resolve_accepted_manifest(run_root)
+        manifest_path, manifest_sha = resolve_context_manifest(unit.job)
         manifest, _ = load_verified_manifest(run_root, manifest_path, manifest_sha)
         shard_set = ShardSet(run_root, manifest["indexes"])
         current = catalog()
@@ -316,7 +316,7 @@ def build_job(*, catalog_path: Path | None = None) -> Job:
     def publish(unit: UnitContext) -> Mapping[str, Any]:
         loaded, published = unit.output("load.accepted_inputs"), unit.output("correlate.scopes")
         run_root = unit.job.run_root
-        upstream_path, upstream_sha = resolve_accepted_manifest(run_root)
+        upstream_path, upstream_sha = resolve_context_manifest(unit.job)
         upstream, _ = load_verified_manifest(run_root, upstream_path, upstream_sha)
         # Secondary shards the accepted manifest had dropped were consumed from their producers' own
         # verified handoffs; this manifest composes them back so every consumed shard stays resolvable.

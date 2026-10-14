@@ -315,7 +315,7 @@ def publish_scope_indexes(unit: Any, *, job_id: str, index_name: str, prefix: st
     independent jobs that run in parallel never drop each other's evidence.
     """
     from appsec_review.retrieval import IndexBuilder, IndexIdentity, write_manifest
-    from appsec_review.retrieval.core import resolve_accepted_manifest
+    from appsec_review.retrieval.core import resolve_context_manifest
 
     run_root = unit.job.run_root
     indexes = [IndexIdentity(**{**item["index_identity"], "gaps": tuple(item["index_identity"]["gaps"])})
@@ -335,7 +335,7 @@ def publish_scope_indexes(unit: Any, *, job_id: str, index_name: str, prefix: st
     indexes.append(IndexIdentity(index_name, "appsec-review/retrieval-index/2", coverage_sha, fingerprint,
                                  coverage_path.relative_to(run_root).as_posix(),
                                  {"job": job_id, "unit": unit.unit_id}, tuple(gaps), shard))
-    upstream_path, upstream_sha = resolve_accepted_manifest(run_root)
+    upstream_path, upstream_sha = resolve_context_manifest(unit.job)
     upstream, _ = load_verified_manifest(run_root, upstream_path, upstream_sha)
     base = [IndexIdentity(**{**item, "gaps": tuple(item.get("gaps", ()))}) for item in upstream["indexes"]
             if item.get("producer", {}).get("job") != job_id]

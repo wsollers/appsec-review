@@ -8,7 +8,7 @@ from typing import Any
 
 from appsec_review.jobs.job_target_analysis_plan import load_accepted_plan
 from appsec_review.observability import PipelineLog
-from appsec_review.retrieval.core import resolve_accepted_manifest
+from appsec_review.retrieval.core import resolve_context_manifest
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from appsec_review.storage import atomic_json, file_sha256
 from appsec_review.owasp_workbench import (
@@ -112,7 +112,7 @@ def _fixture_or_accepted_inputs(unit: UnitContext) -> dict[str, Any]:
             "frameworks": [], "tags": tags, "evidence": [{"source_identity":
             f"accepted-plan:{raw['component_id']}", "artifact_sha256": root_hash,
             "lines": [1, 1]}]})
-    manifest_path, manifest_sha = resolve_accepted_manifest(unit.job.run_root)
+    manifest_path, manifest_sha = resolve_context_manifest(unit.job)
     return {"components": components, "evidence": [],
             "retrieval_manifest": {"path": manifest_path.relative_to(unit.job.run_root).as_posix(),
                                    "sha256": manifest_sha}, "input_mode": "accepted_indexes"}

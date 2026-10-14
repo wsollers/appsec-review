@@ -12,7 +12,7 @@ from appsec_review.retrieval import (
     EntityKind, EntityRecord, IndexBuilder, IndexIdentity, LogicalIdentity, RelationKind,
     RelationRecord, SourceLocation, index_fingerprint, write_manifest,
 )
-from appsec_review.retrieval.core import resolve_accepted_manifest
+from appsec_review.retrieval.core import resolve_context_manifest
 from appsec_review.retrieval.index import INDEX_SCHEMA, load_verified_manifest
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from appsec_review.storage import atomic_json, canonical_json, file_sha256
@@ -105,7 +105,9 @@ def _read(unit: UnitContext, artifact: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def _indexes(unit: UnitContext) -> AcceptedIndexes:
-    indexes = AcceptedIndexes(unit.job.run_root)
+    manifest_path, manifest_sha = resolve_context_manifest(unit.job)
+    indexes = AcceptedIndexes(unit.job.run_root, manifest_path=manifest_path,
+                              manifest_sha256=manifest_sha)
     resolved = unit.output("scope.resolve_inputs")
     if indexes.manifest_sha256 != resolved["accepted_manifest"]["sha256"]:
         raise ValueError("accepted index manifest changed during the security tagging attempt")
@@ -143,7 +145,7 @@ def _validate_config(context, _result) -> None:
         if tuple(context.config.step(step).tasks) != tasks:
             raise ValueError(f"security tagging task order mismatch: {step}")
     _taxonomy(context.repository_root, context.config.settings)
-    resolve_accepted_manifest(context.run_root)
+    resolve_context_manifest(context)
 
 
 def _subject_location(record: Mapping[str, Any]) -> SourceLocation | None:
@@ -232,7 +234,9 @@ def build_job() -> Job:
 
     def resolve_inputs(unit: UnitContext) -> Mapping[str, Any]:
         _, limit, _ = _settings(unit.job.config.settings)
-        indexes = AcceptedIndexes(unit.job.run_root)
+        manifest_path, manifest_sha = resolve_context_manifest(unit.job)
+        indexes = AcceptedIndexes(unit.job.run_root, manifest_path=manifest_path,
+                                  manifest_sha256=manifest_sha)
         if unit.job.source_fingerprint not in {"none", indexes.target_snapshot}:
             raise ValueError("security tagging target fingerprint does not match the accepted index manifest")
         scope, gaps = resolve_scope(indexes, limit)

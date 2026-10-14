@@ -13,6 +13,7 @@ from appsec_review.application_paths import application_asset
 from appsec_review.document_issues import SCHEMA, analyze_document_hunts, verify_document_issue_ledger
 from appsec_review.indexing.store import accepted_handoff
 from appsec_review.retrieval import RetrievalCore
+from appsec_review.retrieval.core import resolve_context_manifest
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from appsec_review.storage import atomic_json, file_sha256
 
@@ -42,7 +43,9 @@ def _validate_output(unit: UnitContext, result: Mapping[str, Any] | None) -> Non
     path = (unit.job.run_root / result["artifact"]["path"]).resolve()
     if unit.job.run_root.resolve() not in path.parents or file_sha256(path) != result["artifact"]["sha256"]:
         raise ValueError("document issue ledger receipt failed verification")
-    core = RetrievalCore(unit.job.run_root.parent, unit.job.run_id)
+    manifest_path, manifest_sha = resolve_context_manifest(unit.job)
+    core = RetrievalCore(unit.job.run_root.parent, unit.job.run_id,
+                         manifest_sha256=manifest_sha, manifest_path=manifest_path)
     ledger = verify_document_issue_ledger(core, path)
     if ledger["counts"] != result["counts"]:
         raise ValueError("document issue ledger counts differ from receipt")
@@ -51,7 +54,9 @@ def _validate_output(unit: UnitContext, result: Mapping[str, Any] | None) -> Non
 def build_job() -> Job:
     def analyze(unit: UnitContext) -> Mapping[str, Any]:
         run_root = unit.job.run_root
-        core = RetrievalCore(run_root.parent, unit.job.run_id)
+        manifest_path, manifest_sha = resolve_context_manifest(unit.job)
+        core = RetrievalCore(run_root.parent, unit.job.run_id,
+                             manifest_sha256=manifest_sha, manifest_path=manifest_path)
         if core.manifest["target_snapshot"] != unit.job.source_fingerprint:
             raise ValueError("document issue analysis target snapshot changed")
         handoff = accepted_handoff(run_root, "job_review_package_assembly")

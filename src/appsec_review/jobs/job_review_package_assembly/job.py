@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from pathlib import Path
 from typing import Any, Mapping
 
-from appsec_review.retrieval.core import RetrievalCore, resolve_accepted_manifest
+from appsec_review.retrieval.core import RetrievalCore, resolve_context_manifest
 from appsec_review.indexing.store import accepted_handoff
 from appsec_review.review_packages import publish_review_packages, verify_review_packages
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
@@ -33,8 +34,11 @@ def _validate_config(context, _result) -> None:
 def _validate_output(unit: UnitContext, result: Mapping[str, Any] | None) -> None:
     if result is None:
         raise ValueError("review package publication result is unavailable")
+    manifest_path, manifest_sha = resolve_context_manifest(unit.job)
     core = RetrievalCore(unit.job.run_root.parent, unit.job.run_id,
-                         manifest_sha256=str(result["accepted_manifest_sha256"]))
+                         manifest_sha256=manifest_sha, manifest_path=manifest_path)
+    if manifest_sha != str(result["accepted_manifest_sha256"]):
+        raise ValueError("review package publication used a different input manifest")
     directory = (unit.job.run_root / str(result["package_directory"])).resolve()
     manifest = verify_review_packages(core, directory)
     manifest_path = directory / "manifest.json"
@@ -48,14 +52,19 @@ def _validate_output(unit: UnitContext, result: Mapping[str, Any] | None) -> Non
 def build_job() -> Job:
     def publish(unit: UnitContext) -> Mapping[str, Any]:
         run_root = unit.job.run_root
-        accepted_path, accepted_sha = resolve_accepted_manifest(run_root)
-        core = RetrievalCore(run_root.parent, unit.job.run_id, manifest_sha256=accepted_sha)
+        accepted_path, accepted_sha = resolve_context_manifest(unit.job)
+        core = RetrievalCore(run_root.parent, unit.job.run_id, manifest_sha256=accepted_sha,
+                             manifest_path=accepted_path)
         if core.manifest["target_snapshot"] != unit.job.source_fingerprint:
             raise ValueError("review package target snapshot differs from the graph target")
         handoff = accepted_handoff(run_root, "job_review_data_indexing")
-        if handoff is None or not any(item.get("path") == accepted_path.relative_to(run_root).as_posix()
-                                      and item.get("sha256") == accepted_sha
-                                      for item in handoff.handoff.get("artifacts", ())):
+        input_manifest = json.loads(accepted_path.read_text(encoding="utf-8"))
+        bound = {(item.get("path"), item.get("sha256"))
+                 for item in handoff.handoff.get("artifacts", ())} if handoff is not None else set()
+        lineage = {(item.get("path"), item.get("sha256"))
+                   for item in input_manifest.get("upstream_manifests", ())}
+        if handoff is None or not (bound & (lineage | {
+                (accepted_path.relative_to(run_root).as_posix(), accepted_sha)})):
             raise ValueError("review packages require the accepted review-data-indexing manifest")
         directory = publish_review_packages(core, max_page_size=unit.job.config.settings["max_page_size"])
         manifest = verify_review_packages(core, directory)

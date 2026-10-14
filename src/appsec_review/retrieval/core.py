@@ -17,7 +17,7 @@ import uuid
 from typing import TYPE_CHECKING, Any, Callable, Iterable, Mapping
 
 from appsec_review.observability import PipelineLog
-from appsec_review.retrieval.index import INDEX_NAMES, load_verified_manifest
+from appsec_review.retrieval.index import INDEX_NAMES, IndexIdentity, load_verified_manifest, write_manifest
 from appsec_review.retrieval.interfaces import ArtifactQueryRequest
 from appsec_review.retrieval.model import (
     EntityKind, LogicalIdentity, RelationKind, canonical_json, normalize_relative_path,
@@ -96,16 +96,155 @@ def resolve_accepted_manifest(run_root: Path) -> tuple[Path, str]:
     return manifest_path, manifest_sha
 
 
+def resolve_context_manifest(context: Any) -> tuple[Path, str]:
+    """Resolve the immutable retrieval input pinned when this job attempt was claimed."""
+
+    path = getattr(context, "input_manifest_path", None)
+    sha256 = getattr(context, "input_manifest_sha256", None)
+    if path is None or sha256 is None:
+        return resolve_accepted_manifest(Path(context.run_root))
+    run_root = Path(context.run_root).resolve()
+    resolved = Path(path).resolve()
+    if run_root not in resolved.parents or not resolved.is_file():
+        raise RetrievalIntegrityError("job input manifest escapes the application run or is unavailable")
+    if file_sha256(resolved) != sha256:
+        raise RetrievalIntegrityError("job input manifest changed after the attempt was claimed")
+    return resolved, str(sha256)
+
+
+def _accepted_handoff(run_root: Path, job_id: str, expected_sha256: str) -> tuple[Mapping[str, Any], Path]:
+    attempts = run_root / "data" / "jobs" / job_id / "attempts"
+    matches = []
+    for path in sorted(attempts.glob("attempt_*/handoff.json")):
+        if file_sha256(path) == expected_sha256:
+            matches.append(path)
+    if len(matches) != 1:
+        raise RetrievalIntegrityError(f"expected exactly one accepted handoff for {job_id}")
+    path = matches[0]
+    handoff = json.loads(path.read_text(encoding="utf-8"))
+    if (handoff.get("schema") != "appsec-review/job-handoff/1" or
+            handoff.get("status") != "ACCEPTED" or handoff.get("job_id") != job_id):
+        raise RetrievalIntegrityError(f"invalid accepted handoff for {job_id}")
+    return handoff, path
+
+
+def _handoff_manifest_roots(
+    run_root: Path, handoffs: Mapping[str, str], seen: frozenset[tuple[str, str]] = frozenset(),
+) -> dict[tuple[str, str], Path]:
+    roots: dict[tuple[str, str], Path] = {}
+    for job_id, handoff_sha in sorted(handoffs.items()):
+        key = (job_id, handoff_sha)
+        if key in seen:
+            raise RetrievalIntegrityError("accepted handoff dependency cycle")
+        handoff, _ = _accepted_handoff(run_root, job_id, handoff_sha)
+        manifests: dict[tuple[str, str], Path] = {}
+        for output in handoff.get("outputs", {}).values():
+            raw = output.get("index_manifest") if isinstance(output, Mapping) else None
+            if not isinstance(raw, Mapping):
+                continue
+            relative, sha256 = raw.get("path"), raw.get("sha256")
+            if not isinstance(relative, str) or not isinstance(sha256, str):
+                raise RetrievalIntegrityError(f"invalid index manifest identity in {job_id} handoff")
+            path = (run_root / relative).resolve()
+            if run_root not in path.parents or not _artifact_in_handoff(handoff, relative, sha256):
+                raise RetrievalIntegrityError(f"index manifest is not bound to {job_id} handoff")
+            manifests[(relative, sha256)] = path
+        if manifests:
+            roots.update(manifests)
+        else:
+            upstream = handoff.get("upstream_handoff_sha256", {})
+            if not isinstance(upstream, Mapping):
+                raise RetrievalIntegrityError(f"invalid upstream handoff set for {job_id}")
+            roots.update(_handoff_manifest_roots(
+                run_root, {str(name): str(value) for name, value in upstream.items()}, seen | {key}))
+    return roots
+
+
+def _flatten_manifest(
+    run_root: Path, path: Path, sha256: str,
+    seen: frozenset[tuple[str, str]] = frozenset(),
+) -> tuple[dict[tuple[str, str], Mapping[str, Any]], frozenset[tuple[str, str]]]:
+    relative = path.relative_to(run_root).as_posix()
+    identity = (relative, sha256)
+    if identity in seen:
+        raise RetrievalIntegrityError("index manifest dependency cycle")
+    document, _ = load_verified_manifest(run_root, path, sha256)
+    values: dict[tuple[str, str], Mapping[str, Any]] = {}
+    lineage: set[tuple[str, str]] = {identity}
+    for upstream in document.get("upstream_manifests", ()):
+        upstream_path = (run_root / str(upstream.get("path", ""))).resolve()
+        upstream_sha = str(upstream.get("sha256", ""))
+        inherited, ancestors = _flatten_manifest(run_root, upstream_path, upstream_sha, seen | {identity})
+        values.update(inherited)
+        lineage.update(ancestors)
+    for raw in document.get("indexes", ()):
+        key = (str(raw.get("name")), str(raw.get("shard_id", "default")))
+        values[key] = dict(raw)
+    return values, frozenset(lineage)
+
+
+def materialize_attempt_input_manifest(
+    *, run_root: Path, attempt_root: Path, run_id: str, target_snapshot: str,
+    target_root: Path | None, upstream_handoffs: Mapping[str, str],
+) -> tuple[Path | None, str | None]:
+    """Pin and merge the exact retrieval manifests reachable from this attempt's handoffs."""
+
+    run_root = Path(run_root).resolve()
+    roots = _handoff_manifest_roots(run_root, upstream_handoffs)
+    if not roots:
+        return None, None
+    if len(roots) == 1:
+        (relative, sha256), path = next(iter(roots.items()))
+        load_verified_manifest(run_root, path, sha256)
+        return path, sha256
+    expanded = []
+    for identity, path in roots.items():
+        values, lineage = _flatten_manifest(run_root, path, identity[1])
+        expanded.append((identity, values, lineage))
+    merged: dict[tuple[str, str], tuple[Mapping[str, Any], tuple[str, str]]] = {}
+    for root_identity, values, lineage in sorted(expanded, key=lambda item: (len(item[2]), item[0])):
+        for key, value in values.items():
+            prior = merged.get(key)
+            if prior is None or prior[0] == value:
+                merged[key] = (value, root_identity)
+                continue
+            prior_root = prior[1]
+            prior_lineage = next(item[2] for item in expanded if item[0] == prior_root)
+            if prior_root in lineage:
+                merged[key] = (value, root_identity)
+            elif root_identity not in prior_lineage:
+                raise RetrievalIntegrityError(
+                    f"parallel upstream manifests conflict for index shard {key[0]}/{key[1]}")
+    destination = attempt_root / "inputs" / "retrieval-manifest.json"
+    identities = [IndexIdentity(**{**value, "gaps": tuple(value.get("gaps", ()))})
+                  for value, _root in merged.values()]
+    write_manifest(
+        destination, run_id=run_id, target_snapshot=target_snapshot,
+        target_root=target_root or run_root, indexes=identities,
+        upstream_manifests=tuple({"path": identity[0], "sha256": identity[1]} for identity in sorted(roots)),
+    )
+    sha256 = file_sha256(destination)
+    load_verified_manifest(run_root, destination, sha256)
+    return destination, sha256
+
+
 class RetrievalCore:
     """Read immutable shards for exactly one accepted run and manifest set."""
 
     def __init__(self, runs_dir: Path, run_id: str, *, manifest_sha256: str | None = None,
+                 manifest_path: Path | None = None,
                  limits: RetrievalLimits | None = None, clock: Callable[[], float] = time.monotonic,
                  graph_settings: GraphSettings | None = None):
         if not _RUN_ID.fullmatch(run_id):
             raise ValueError("invalid run id")
         self.run_root = RunStore(Path(runs_dir)).resolve(run_id)
-        manifest_path, accepted_sha = resolve_accepted_manifest(self.run_root)
+        if manifest_path is None:
+            manifest_path, accepted_sha = resolve_accepted_manifest(self.run_root)
+        else:
+            manifest_path = Path(manifest_path).resolve()
+            if self.run_root not in manifest_path.parents or not manifest_path.is_file():
+                raise RetrievalIntegrityError("explicit retrieval manifest is unavailable or escapes the run")
+            accepted_sha = file_sha256(manifest_path)
         if manifest_sha256 is not None and not hmac.compare_digest(accepted_sha, manifest_sha256):
             raise RetrievalIntegrityError("MCP session manifest pin does not match accepted index set")
         self.manifest, self.manifest_sha256 = load_verified_manifest(self.run_root, manifest_path, accepted_sha)

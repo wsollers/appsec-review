@@ -17,7 +17,7 @@ from appsec_review.retrieval import (
     EntityKind, EntityRecord, IndexBuilder, IndexIdentity, LogicalIdentity, RelationKind,
     RelationRecord, SourceLocation, index_fingerprint, write_manifest,
 )
-from appsec_review.retrieval.core import resolve_accepted_manifest
+from appsec_review.retrieval.core import resolve_context_manifest
 from appsec_review.retrieval.index import load_verified_manifest
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from appsec_review.storage import atomic_json, canonical_json, file_sha256, tool_input_json
@@ -995,10 +995,11 @@ def build_job(*, executor_factory=None) -> Job:
         return handler
 
     def publish(unit: UnitContext) -> Mapping[str, Any]:
-        manifest_path, manifest_sha = resolve_accepted_manifest(unit.job.run_root)
+        manifest_path, manifest_sha = resolve_context_manifest(unit.job)
         upstream, _ = load_verified_manifest(unit.job.run_root, manifest_path, manifest_sha)
         prior_identities = [IndexIdentity(**{**value, "gaps": tuple(value.get("gaps", ()))})
-                            for value in upstream["indexes"]]
+                            for value in upstream["indexes"]
+                            if value.get("producer", {}).get("job") != "job_cpp_compiled_analysis"]
         current_identities: list[IndexIdentity] = []
         gaps, dispositions = [], {}
         for name in BRANCHES:

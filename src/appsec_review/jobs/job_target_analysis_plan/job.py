@@ -20,7 +20,7 @@ from appsec_review.retrieval import (
     EntityKind, EntityRecord, IndexBuilder, IndexIdentity, LogicalIdentity, RelationKind,
     RelationRecord, index_fingerprint, write_manifest,
 )
-from appsec_review.retrieval.core import resolve_accepted_manifest
+from appsec_review.retrieval.core import resolve_context_manifest
 from appsec_review.retrieval.index import load_verified_manifest
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from appsec_review.storage import atomic_bytes, atomic_json, canonical_json, file_sha256
@@ -177,8 +177,9 @@ def _validate_config(context, result) -> None:
         raise ValueError("target analysis plan model workers must be between one and sixteen")
 
 
-def _base_indexes(run_root: Path) -> tuple[list[IndexIdentity], Path, str]:
-    manifest_path, manifest_sha = resolve_accepted_manifest(run_root)
+def _base_indexes(context) -> tuple[list[IndexIdentity], Path, str]:
+    run_root = context.run_root
+    manifest_path, manifest_sha = resolve_context_manifest(context)
     manifest, _ = load_verified_manifest(run_root, manifest_path, manifest_sha)
     while any(item["name"] == "observations" for item in manifest["indexes"]):
         upstream = manifest.get("upstream_manifests", [])
@@ -476,7 +477,7 @@ def build_job(*, infer: Infer | None = None, fail_task: str | None = None) -> Jo
             path.relative_to(unit.job.run_root).as_posix(),
             {"job": "job_target_analysis_plan", "unit": unit.unit_id}, tuple(plan["coverage_gaps"]),
             "target-analysis-plan")
-        existing, upstream_path, upstream_sha = _base_indexes(unit.job.run_root)
+        existing, upstream_path, upstream_sha = _base_indexes(unit.job)
         manifest_path = unit.job.run_root / "data" / "indices" / "manifests" / f"analysis-plan-{unit.job.attempt_id}.json"
         write_manifest(manifest_path, run_id=unit.job.run_id, target_snapshot=unit.job.source_fingerprint,
             target_root=unit.job.target_root or Path(), indexes=[*existing, identity],

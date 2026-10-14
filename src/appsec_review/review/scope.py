@@ -270,9 +270,14 @@ class AcceptedScope:
         }
 
 
-def _verified(run_root: Path) -> tuple[Path, str, Mapping[str, Any]]:
+def _verified(run_root: Path, manifest_path: Path | None = None,
+              manifest_sha256: str | None = None) -> tuple[Path, str, Mapping[str, Any]]:
     try:
-        manifest_path, accepted_sha = resolve_accepted_manifest(run_root)
+        if manifest_path is None or manifest_sha256 is None:
+            manifest_path, accepted_sha = resolve_accepted_manifest(run_root)
+        else:
+            manifest_path = Path(manifest_path).resolve()
+            accepted_sha = manifest_sha256
         manifest, actual = load_verified_manifest(run_root, manifest_path, accepted_sha)
     except (RetrievalGap, ValueError, OSError, json.JSONDecodeError, TypeError) as exc:
         raise IntegrityError(f"accepted index set failed verification: {exc}") from exc
@@ -321,10 +326,11 @@ def _coverage(store: ShardSet, name: str, shards: tuple[Mapping[str, Any], ...])
     return ProducerCoverage(name, "stale" if stale else "partial" if ordered else "available", shards, ordered)
 
 
-def accept_manifest(run_root: Path) -> AcceptedScope:
+def accept_manifest(run_root: Path, *, manifest_path: Path | None = None,
+                    manifest_sha256: str | None = None) -> AcceptedScope:
     """Verify the run's accepted index set and build its evidence map (gates 1 and 2)."""
     run_root = Path(run_root).resolve()
-    manifest_path, manifest_sha, manifest = _verified(run_root)
+    manifest_path, manifest_sha, manifest = _verified(run_root, manifest_path, manifest_sha256)
     snapshot = str(manifest.get("target_snapshot", ""))
     shards = tuple(sorted((dict(item) for item in manifest.get("indexes", ())), key=shard_key))
     _check_embedded(run_root, shards, snapshot)

@@ -27,7 +27,7 @@ from appsec_review.retrieval import (
     EntityKind, EntityRecord, IndexBuilder, IndexIdentity, LogicalIdentity, RelationKind,
     RelationRecord, SourceLocation, index_fingerprint, write_manifest,
 )
-from appsec_review.retrieval.core import resolve_accepted_manifest
+from appsec_review.retrieval.core import resolve_context_manifest
 from appsec_review.retrieval.index import load_verified_manifest
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from appsec_review.storage import atomic_json, canonical_json, file_sha256
@@ -1141,7 +1141,7 @@ def build_job() -> Job:
         indexes = [IndexIdentity(**{**item["index_identity"],
                                     "gaps": tuple(item["index_identity"].get("gaps", ()))})
                    for item in normalized["scopes"]]
-        upstream_path, upstream_sha = resolve_accepted_manifest(unit.job.run_root)
+        upstream_path, upstream_sha = resolve_context_manifest(unit.job)
         load_verified_manifest(unit.job.run_root, upstream_path, upstream_sha)
         destination = unit.job.run_root / "data" / "indices" / "manifests" / f"codeql-{unit.job.attempt_id}.json"
         current = {"path": upstream_path.relative_to(unit.job.run_root).as_posix(),

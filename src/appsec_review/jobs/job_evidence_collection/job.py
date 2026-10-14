@@ -25,7 +25,7 @@ from appsec_review.retrieval import (
     EntityKind, EntityRecord, IndexBuilder, IndexIdentity, LogicalIdentity, RelationKind,
     RelationRecord, SourceLocation, index_fingerprint, write_manifest,
 )
-from appsec_review.retrieval.core import resolve_accepted_manifest
+from appsec_review.retrieval.core import resolve_context_manifest
 from appsec_review.retrieval.index import load_verified_manifest
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from appsec_review.storage import FileLock, atomic_json, canonical_json, file_sha256, tool_input_json
@@ -680,16 +680,8 @@ def _build_producer_shard(unit: UnitContext, normalize_unit: str) -> Mapping[str
 
 
 def _assemble_manifest(unit: UnitContext, index_units: tuple[str, ...]) -> Mapping[str, Any]:
-    manifest_path, manifest_sha = resolve_accepted_manifest(unit.job.run_root)
+    manifest_path, manifest_sha = resolve_context_manifest(unit.job)
     upstream, _ = load_verified_manifest(unit.job.run_root, manifest_path, manifest_sha)
-    if any(item["name"] == "observations" for item in upstream["indexes"]):
-        base_candidates = upstream.get("upstream_manifests", [])
-        if not base_candidates:
-            raise ValueError("observation manifest has no stable upstream index set")
-        base = base_candidates[0]
-        manifest_path = (unit.job.run_root / base["path"]).resolve()
-        manifest_sha = base["sha256"]
-        upstream, _ = load_verified_manifest(unit.job.run_root, manifest_path, manifest_sha)
     gaps: list[str] = []
     dispositions: list[dict[str, Any]] = []
     shards: list[IndexIdentity] = []
@@ -703,7 +695,9 @@ def _assemble_manifest(unit: UnitContext, index_units: tuple[str, ...]) -> Mappi
         gaps.extend(str(item) for item in output.get("gaps", []))
         shards.append(IndexIdentity(**{**output["index_identity"],
                                        "gaps": tuple(output["index_identity"].get("gaps", ())) }))
-    existing = [IndexIdentity(**{**item, "gaps": tuple(item.get("gaps", ()))}) for item in upstream["indexes"]]
+    existing = [IndexIdentity(**{**item, "gaps": tuple(item.get("gaps", ()))})
+                for item in upstream["indexes"]
+                if item.get("producer", {}).get("job") != "job_evidence_collection"]
     combined = existing + shards
     combined_manifest = unit.job.run_root / "data" / "indices" / "manifests" / f"evidence-{unit.job.attempt_id}.json"
     write_manifest(combined_manifest, run_id=unit.job.run_id, target_snapshot=unit.job.source_fingerprint,

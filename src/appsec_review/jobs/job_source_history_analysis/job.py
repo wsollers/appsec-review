@@ -15,7 +15,7 @@ from appsec_review.retrieval import (
     EntityKind, EntityRecord, IndexBuilder, IndexIdentity, LogicalIdentity, RelationKind,
     RelationRecord, SourceLocation, index_fingerprint, write_manifest,
 )
-from appsec_review.retrieval.core import resolve_accepted_manifest
+from appsec_review.retrieval.core import resolve_context_manifest
 from appsec_review.retrieval.index import load_verified_manifest
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from appsec_review.storage import atomic_json, canonical_json, file_sha256
@@ -1128,7 +1128,7 @@ def build_job(*, executor_factory: ExecutorFactory | None = None,
         identity = IndexIdentity("history", "appsec-review/retrieval-index/2", file_sha256(path), fingerprint,
                                  _rel(unit.job.run_root, path), {"job": "job_source_history_analysis", "vcs": "git"},
                                  tuple(gaps), shard_id)
-        upstream_path, upstream_sha = resolve_accepted_manifest(unit.job.run_root)
+        upstream_path, upstream_sha = resolve_context_manifest(unit.job)
         upstream, _ = load_verified_manifest(unit.job.run_root, upstream_path, upstream_sha)
         base = [IndexIdentity(**{**item, "gaps": tuple(item.get("gaps", ()))}) for item in upstream["indexes"]
                 if item.get("producer", {}).get("job") != "job_source_history_analysis"]

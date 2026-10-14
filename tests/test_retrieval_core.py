@@ -17,6 +17,7 @@ from appsec_review.retrieval import (
 )
 from appsec_review.storage import atomic_json, file_sha256
 from appsec_review.retrieval.precomputed import FACT_SCHEMA
+from appsec_review.retrieval.core import materialize_attempt_input_manifest
 
 
 RUN_ID = "2026-10-08-0001"
@@ -222,6 +223,49 @@ def test_manifest_rejects_duplicate_composite_shard_identity(tmp_path: Path) -> 
         write_manifest(core.run_root / "data" / "indices" / "manifests" / "duplicate.json",
                        run_id=RUN_ID, target_snapshot=core.manifest["target_snapshot"],
                        target_root=core.target_root, indexes=(identity, identity))
+
+
+def test_attempt_input_manifest_is_pinned_to_exact_parallel_handoffs(tmp_path: Path) -> None:
+    runs, _ = _fixture(tmp_path)
+    core = RetrievalCore(runs, RUN_ID)
+    run_root = core.run_root
+    base_path = run_root / "data" / "indices" / "manifests" / "fixture.json"
+    base_sha = file_sha256(base_path)
+    identities = [IndexIdentity(**{**item, "gaps": tuple(item.get("gaps", ()))})
+                  for item in core.manifest["indexes"]]
+
+    handoffs = {}
+    for job_id, selected in (("branch_a", identities[:1]), ("branch_b", identities[1:2])):
+        manifest = run_root / "data" / "indices" / "manifests" / f"{job_id}.json"
+        write_manifest(manifest, run_id=RUN_ID, target_snapshot=core.manifest["target_snapshot"],
+                       target_root=core.target_root, indexes=selected,
+                       upstream_manifests=({"path": base_path.relative_to(run_root).as_posix(),
+                                            "sha256": base_sha},))
+        artifact = {"path": manifest.relative_to(run_root).as_posix(),
+                    "sha256": file_sha256(manifest), "size_bytes": manifest.stat().st_size}
+        handoff = run_root / "data" / "jobs" / job_id / "attempts" / "attempt_0001" / "handoff.json"
+        atomic_json(handoff, {"schema": "appsec-review/job-handoff/1", "status": "ACCEPTED",
+                              "job_id": job_id, "attempt_id": "attempt_0001", "artifacts": [artifact],
+                              "outputs": {"publication.publish": {"index_manifest": artifact}},
+                              "upstream_handoff_sha256": {}})
+        handoffs[job_id] = file_sha256(handoff)
+
+    # A later run-wide publication is intentionally irrelevant to the next attempt's exact inputs.
+    accepted = run_root / "data" / "indices" / "accepted.json"
+    accepted.write_text("{}\n", encoding="utf-8")
+    attempt = run_root / "data" / "jobs" / "consumer" / "attempts" / "attempt_0001"
+    attempt.mkdir(parents=True)
+    path, sha256 = materialize_attempt_input_manifest(
+        run_root=run_root, attempt_root=attempt, run_id=RUN_ID,
+        target_snapshot=core.manifest["target_snapshot"], target_root=core.target_root,
+        upstream_handoffs=handoffs,
+    )
+    assert path is not None and sha256 == file_sha256(path)
+    merged = json.loads(path.read_text(encoding="utf-8"))
+    keys = [(item["name"], item["shard_id"]) for item in merged["indexes"]]
+    assert len(keys) == len(set(keys)) == len(core.manifest["indexes"])
+    assert {item["path"] for item in merged["upstream_manifests"]} == {
+        "data/indices/manifests/branch_a.json", "data/indices/manifests/branch_b.json"}
 
 
 def test_relationships_excerpt_integrity_and_evidence_resolution(tmp_path: Path) -> None:

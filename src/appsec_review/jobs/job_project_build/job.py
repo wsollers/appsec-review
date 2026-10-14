@@ -351,8 +351,8 @@ def _probe_one(unit: UnitContext, entry: Mapping[str, Any], executor_factory=Non
                         "attempt_number": 0}
     if source_fingerprint(unit.job.target_root or Path()) != unit.job.source_fingerprint:
         raise ValueError("target changed after the accepted review snapshot")
-    root = (unit.job.run_root / "data" / "build" / "probes" / build_unit_id /
-            f"attempt-{attempt_number:03d}")
+    root = (unit.job.run_root / "data" / "build" / "probes" / build_unit_id / "attempts" /
+            unit.job.attempt_id / f"probe-{attempt_number:03d}")
     workspace = root / "workspace"
     _copy_source(unit, action, workspace)
     before = _snapshot(workspace, int(unit.job.config.settings["artifact_count_limit"]) * 10)

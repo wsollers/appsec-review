@@ -11,7 +11,7 @@ from typing import Any
 
 from appsec_review.container_runtime import ContainerExecutor, load_catalog
 from appsec_review.retrieval import IndexBuilder, IndexIdentity, write_manifest
-from appsec_review.retrieval.core import resolve_accepted_manifest
+from appsec_review.retrieval.core import resolve_context_manifest
 from appsec_review.retrieval.index import load_verified_manifest
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from appsec_review.storage import atomic_json, file_sha256
@@ -201,7 +201,7 @@ def build_job(*, executor_factory: ExecutorFactory | None = None) -> Job:
             coverage_fingerprint, coverage_path.relative_to(unit.job.run_root).as_posix(),
             {"job": "job_tree_sitter_ast", "unit": unit.unit_id}, tuple(parsed["gaps"]),
             f"tree-sitter-coverage-{unit.job.attempt_id}"))
-        upstream_path, upstream_sha = resolve_accepted_manifest(unit.job.run_root)
+        upstream_path, upstream_sha = resolve_context_manifest(unit.job)
         upstream, _ = load_verified_manifest(unit.job.run_root, upstream_path, upstream_sha)
         base = [IndexIdentity(**{**item, "gaps": tuple(item.get("gaps", ()))})
                 for item in upstream["indexes"]

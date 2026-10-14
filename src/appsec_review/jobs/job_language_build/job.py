@@ -34,7 +34,7 @@ from appsec_review.retrieval import (
     EntityKind, EntityRecord, IndexBuilder, IndexIdentity, LogicalIdentity, RelationKind, RelationRecord,
     index_fingerprint, write_manifest,
 )
-from appsec_review.retrieval.core import resolve_accepted_manifest
+from appsec_review.retrieval.core import resolve_context_manifest
 from appsec_review.retrieval.index import load_verified_manifest
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from appsec_review.storage import FileLock, atomic_json, canonical_json, file_sha256, protected_json
@@ -1272,7 +1272,7 @@ def _validate_config(context, _result) -> None:
 
 
 def _publish_build_index(unit: UnitContext, receipts: list[Mapping[str, Any]]) -> dict[str, Any]:
-    prior_path, prior_sha = resolve_accepted_manifest(unit.job.run_root)
+    prior_path, prior_sha = resolve_context_manifest(unit.job)
     prior, _ = load_verified_manifest(unit.job.run_root, prior_path, prior_sha)
     producer = [{"build_unit_id": receipt.get("build_unit_id"), "fingerprint": receipt.get("fingerprint"),
                  "status": receipt.get("terminal_status")} for receipt in receipts]
