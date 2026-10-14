@@ -9,11 +9,37 @@ import re
 from typing import Any
 from urllib.parse import unquote, urlparse
 
-from appsec_review.jobs.engineering_contracts import ResolutionBasis
+from appsec_review.jobs.engineering_contracts import MaximalExposure, ResolutionBasis
 from appsec_review.storage import canonical_json
 
 
 _PUBLIC_REPOSITORY = re.compile(r"^[A-Za-z0-9_.-]{1,200}$")
+_EXPOSURE_ORDER = tuple(item.value for item in MaximalExposure)
+_EXPOSURE_RANK = {value: rank for rank, value in enumerate(_EXPOSURE_ORDER)}
+_EXPOSURE_FIELDS = frozenset({
+    "category", "configuration", "dependency_group", "dependency_scope", "dependency_type",
+    "environment", "location", "path", "profile", "scope", "target", "usage",
+})
+_EXPOSURE_TERMS = {
+    MaximalExposure.DEV.value: frozenset({
+        "dev", "development", "developmentonly", "devdependencies", "devdependency",
+    }),
+    MaximalExposure.DEBUG.value: frozenset({
+        "debug", "debugonly", "debugimplementation", "debugcompile", "debugruntime",
+    }),
+    MaximalExposure.QA.value: frozenset({
+        "test", "tests", "testing", "testonly", "testdependencies", "testdependency",
+        "testimplementation", "testruntime", "qa", "qualityassurance", "integrationtest",
+    }),
+    MaximalExposure.PREPROD.value: frozenset({
+        "stage", "staging", "preprod", "preproduction", "uat",
+    }),
+    MaximalExposure.PROD.value: frozenset({
+        "dependencies", "dependency", "implementation", "runtime", "runtimeonly", "required",
+        "prod", "production", "release",
+    }),
+}
+_RUNTIME_OBSERVATION_KINDS = frozenset({"loader_needed", "soname"})
 
 
 def repository_identity(value: object, *, supported_hosts: Sequence[str]) -> dict[str, str] | None:
@@ -44,6 +70,95 @@ def repository_identity(value: object, *, supported_hosts: Sequence[str]) -> dic
 def _observation_id(record: Mapping[str, Any], source: str) -> str:
     supplied = record.get("observation_id") or record.get("candidate_id")
     return str(supplied) if supplied else source + ":" + hashlib.sha256(canonical_json(record)).hexdigest()[:24]
+
+
+def _terms(value: object) -> set[str]:
+    """Return bounded normalized terms from a scalar accepted observation field."""
+    if not isinstance(value, (str, int, float)) or isinstance(value, bool):
+        return set()
+    text = str(value)[:4096]
+    # Split camelCase before punctuation so manifest keys such as devDependencies remain useful.
+    text = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", " ", text)
+    parts = {part.casefold() for part in re.split(r"[^A-Za-z0-9]+", text) if part}
+    collapsed = re.sub(r"[^A-Za-z0-9]+", "", str(value)[:4096]).casefold()
+    if collapsed:
+        parts.add(collapsed)
+    return parts
+
+
+def _classify_field(source: str, evidence_id: str, field: str, value: object,
+                    *, basis: str = "structured-scope") -> list[dict[str, str]]:
+    if not isinstance(value, (str, int, float)) or isinstance(value, bool):
+        return []
+    terms = _terms(value)
+    collapsed = re.sub(r"[^A-Za-z0-9]+", "", str(value)[:4096]).casefold()
+    if any(collapsed in vocabulary for vocabulary in _EXPOSURE_TERMS.values()):
+        terms = {collapsed}
+    evidence: list[dict[str, str]] = []
+    for exposure in _EXPOSURE_ORDER:
+        matched = sorted(terms & _EXPOSURE_TERMS[exposure])
+        if matched:
+            evidence.append({
+                "exposure": exposure,
+                "basis": basis,
+                "source": source,
+                "evidence_id": evidence_id,
+                "field": field,
+                "value": str(value)[:4096],
+                "matched_term": matched[0],
+            })
+    return evidence
+
+
+def infer_maximal_exposure(record: Mapping[str, Any], source: str, *,
+                           evidence_id: str | None = None) -> list[dict[str, str]]:
+    """Classify bounded, structured exposure evidence from one accepted observation.
+
+    Only named observation fields and native loader kinds are considered. Dependency names,
+    versions, repository text, and arbitrary target prose cannot affect the classification.
+    """
+    identity = evidence_id or _observation_id(record, source)
+    evidence: list[dict[str, str]] = []
+    for field in sorted(_EXPOSURE_FIELDS):
+        if record.get(field) is not None:
+            evidence.extend(_classify_field(source, identity, field, record[field]))
+    if source == "native":
+        for observation in record.get("observations", ()) or ():
+            if not isinstance(observation, Mapping):
+                continue
+            kind = str(observation.get("kind", ""))
+            nested_id = str(observation.get("command_id") or observation.get("artifact_sha256") or identity)
+            if kind in _RUNTIME_OBSERVATION_KINDS:
+                evidence.append({
+                    "exposure": MaximalExposure.PROD.value,
+                    "basis": "runtime-loader",
+                    "source": source,
+                    "evidence_id": nested_id,
+                    "field": "observations.kind",
+                    "value": kind,
+                    "matched_term": kind,
+                })
+            for field in sorted(_EXPOSURE_FIELDS):
+                if observation.get(field) is not None:
+                    evidence.extend(_classify_field(
+                        source, nested_id, f"observations.{field}", observation[field],
+                        basis="native-build-configuration"))
+    unique = {canonical_json(item): item for item in evidence}
+    return [unique[key] for key in sorted(unique)]
+
+
+def _finalize_exposure(item: dict[str, Any]) -> None:
+    evidence = item.pop("_exposure_evidence", [])
+    if evidence:
+        evidence.sort(key=lambda value: canonical_json(value))
+        item["maximal_exposure"] = max(
+            (entry["exposure"] for entry in evidence), key=_EXPOSURE_RANK.__getitem__)
+        item["exposure_inference_basis"] = "maximum-observed-evidence"
+        item["exposure_evidence"] = evidence
+    else:
+        item["maximal_exposure"] = MaximalExposure.PROD.value
+        item["exposure_inference_basis"] = "conservative-default"
+        item["exposure_evidence"] = []
 
 
 def normalize_dependencies(
@@ -80,6 +195,7 @@ def normalize_dependencies(
                                  ResolutionBasis.UNRESOLVED.value),
             "exact_repository_identity": bool(repo), "observations": [], "aliases": [],
             "repository_url_observed": str(repo_value)[:4096] if repo_value else None,
+            "_exposure_evidence": [],
         })
         entry["aliases"] = sorted(set([*entry["aliases"], name]))
         if entry["version"] is None and version:
@@ -92,6 +208,8 @@ def normalize_dependencies(
         if entry.get("repository_url_observed") is None and repo_value:
             entry["repository_url_observed"] = str(repo_value)[:4096]
         observation = {"source": source, "evidence_id": _observation_id(raw, source)}
+        entry["_exposure_evidence"].extend(
+            infer_maximal_exposure(raw, source, evidence_id=observation["evidence_id"]))
         for key_name in ("source", "location", "path", "component_id", "candidate_id"):
             if raw.get(key_name) is not None:
                 observation[key_name] = raw[key_name]
@@ -101,6 +219,9 @@ def normalize_dependencies(
             entry["native_candidate"] = dict(raw)
     values = []
     for key, item in sorted(grouped.items()):
+        unique_exposure = {canonical_json(value): value for value in item["_exposure_evidence"]}
+        item["_exposure_evidence"] = [unique_exposure[value] for value in sorted(unique_exposure)]
+        _finalize_exposure(item)
         item["dependency_id"] = "dependency-" + hashlib.sha256(key.encode()).hexdigest()[:24]
         item["observations"] = sorted(item["observations"], key=lambda value: canonical_json(value))
         values.append(item)
@@ -143,4 +264,5 @@ def apply_model_resolution(dependency: Mapping[str, Any], proposal: Mapping[str,
             "resolution_rationale": str(proposal.get("rationale", ""))[:4096]}
 
 
-__all__ = ["apply_model_resolution", "normalize_dependencies", "repository_identity"]
+__all__ = ["apply_model_resolution", "infer_maximal_exposure", "normalize_dependencies",
+           "repository_identity"]
