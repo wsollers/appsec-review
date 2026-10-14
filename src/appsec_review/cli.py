@@ -9,7 +9,7 @@ from typing import Sequence
 from appsec_review.config import load_config
 from appsec_review.runtime.registry import builtin_registry
 from appsec_review.runtime.runner import JobRunner
-from appsec_review.runtime import GraphRunner
+from appsec_review.runtime import GraphRunner, active_job_ids, job_is_enabled
 from appsec_review.jobs.cataloging import source_fingerprint
 
 
@@ -120,7 +120,10 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if args.command in {"start", "plan-resume", "resume"}:
         registry = builtin_registry()
-        jobs = [registry.build(job_id) for job_id in (*GRAPH_JOB_IDS, *POST_INDEX_JOB_IDS)]
+        selected = active_job_ids(config, (*GRAPH_JOB_IDS, *POST_INDEX_JOB_IDS))
+        if getattr(args, "force_from", None) and args.force_from not in selected:
+            raise ValueError(f"cannot force from disabled job: {args.force_from}")
+        jobs = [registry.build(job_id) for job_id in selected]
         fingerprint = source_fingerprint(args.target)
         graph = GraphRunner(config, jobs)
         if args.command == "plan-resume":
@@ -140,6 +143,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(json.dumps(summary, sort_keys=True))
         return 0
 
+    if not job_is_enabled(config, args.job_id):
+        raise ValueError(f"job is disabled by configuration: {args.job_id}")
     job = builtin_registry().build(args.job_id)
     outcome = JobRunner(config).run(job, run_id=args.run_id, trigger=args.trigger)
     print(json.dumps(outcome, sort_keys=True))

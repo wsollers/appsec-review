@@ -9,7 +9,7 @@ The direct `start`, `plan-resume`, and `resume` commands run this linear graph:
 model_connectivity -> review_intake -> target_catalog -> source_history_analysis -> target_analysis_plan
   -> tree_sitter_ast -> project_build -> language_build
   -> artifact_indexing -> artifact_security_analysis -> cpp_compiled_analysis
-  -> cpp_symbol_index -> cpg_analysis -> evidence_collection
+  -> cpp_symbol_index -> [cpg_analysis only when enabled] -> evidence_collection
   -> change_context_analysis -> codeql_analysis -> review_prioritization
   -> review_data_indexing -> review_package_assembly -> document_issue_analysis
 ```
@@ -19,7 +19,8 @@ control assessment, or security tagging, and `third_party_data_sync` runs separa
 run job_third_party_data_sync`). Both surfaces run change-context analysis after Tree-sitter AST
 production, review prioritization after CodeQL, review-package assembly after data indexing, and
 document issue analysis after package assembly. Use Dagster's
-`wave1_review`, which includes every registered job except the standalone
+`wave1_review`, which includes every registered job whose job-level `settings.enabled` is not false,
+except the standalone
 `third_party_data_sync` and `inference_security_review` jobs, when its
 additional branches are required. Dagster's current dependency graph is assembled from the registered,
 configured jobs and is summarized in [`../../deploy/dagster/README.md`](../../deploy/dagster/README.md).

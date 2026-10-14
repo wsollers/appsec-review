@@ -33,7 +33,7 @@ from appsec_review.indexing.store import AcceptedHandoff, ShardSet, accepted_han
 from appsec_review.retrieval.core import resolve_context_manifest
 from appsec_review.retrieval.index import load_verified_manifest, write_manifest
 from appsec_review.retrieval.model import EntityKind, EntityRecord, LogicalIdentity
-from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
+from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor, resolved_job_is_enabled
 from appsec_review.storage import atomic_json, file_sha256
 
 from .datasets import CONSUMES, DATASETS
@@ -96,7 +96,9 @@ def _resolved_steps(run_root: Path) -> dict[str, list[str]]:
     if file_sha256(configuration / "resolved.json") != manifest.get("resolved_sha256"):
         raise ValueError("run-owned resolved configuration hash mismatch")
     document = json.loads((configuration / "resolved.json").read_text(encoding="utf-8"))
-    return {job_id: list((value.get("steps") or {}).keys()) for job_id, value in sorted((document.get("jobs") or {}).items())}
+    return {job_id: list((value.get("steps") or {}).keys())
+            for job_id, value in sorted((document.get("jobs") or {}).items())
+            if resolved_job_is_enabled(job_id, value)}
 
 
 FEED_STEPS = {"nvd": "nvd_sync", "osv": "osv_sync", "mitre": "mitre_sync", "cve-bin-tool": "cve_bin_tool_db_build",
@@ -235,6 +237,14 @@ def build_job(*, providers: Providers = registry_providers,
         if manifest.get("target_snapshot") != unit.job.source_fingerprint:
             raise ValueError("accepted index snapshot differs from the graph target snapshot")
         job_ids, declarations, consumes = providers()
+        resolved_jobs = (_resolved_document(run_root).get("jobs") or {})
+        disabled = {job_id for job_id, value in resolved_jobs.items()
+                    if not resolved_job_is_enabled(job_id, value)}
+        active = set(_resolved_steps(run_root))
+        job_ids = tuple(job_id for job_id in job_ids if job_id in active)
+        declarations = {job_id: values for job_id, values in declarations.items() if job_id in active}
+        consumes = {job_id: tuple(upstream for upstream in values if upstream in active)
+                    for job_id, values in consumes.items() if job_id in active}
         handoffs = {job_id: accepted_handoff(run_root, job_id) for job_id in job_ids if job_id != JOB_ID}
         accepted, restored, conflicts = reconcile_shards(run_root, manifest["indexes"], handoffs)
         for shard in restored:
@@ -254,6 +264,7 @@ def build_job(*, providers: Providers = registry_providers,
             "accepted_manifest": {"path": manifest_path.relative_to(run_root).as_posix(), "sha256": manifest_sha},
             "shards": accepted, "restored_shards": restored, "shard_conflicts": conflicts,
             "registry_jobs": list(job_ids), "registry_configuration_mismatch": mismatch, "job_steps": job_steps,
+            "disabled_jobs": sorted(disabled),
             "declarations": {job_id: [item.output_kind for item in values] for job_id, values in declarations.items()},
             "consumes": {job_id: list(values) for job_id, values in consumes.items()},
             "handoffs": {job_id: None if value is None else {
@@ -402,6 +413,10 @@ def build_job(*, providers: Providers = registry_providers,
         settings = settings_of(unit)
         run_root = unit.job.run_root
         _job_ids, declarations, consumes = providers()
+        active = set(document["registry_jobs"])
+        declarations = {job_id: values for job_id, values in declarations.items() if job_id in active}
+        consumes = {job_id: tuple(upstream for upstream in values if upstream in active)
+                    for job_id, values in consumes.items() if job_id in active}
         handoffs = {job_id: accepted_handoff(run_root, job_id) for job_id in document["registry_jobs"] if job_id != JOB_ID}
         inventory = build_inventory(InventoryInputs(
             run_root=run_root, run_id=unit.job.run_id, target_snapshot=document["target_snapshot"],
@@ -446,8 +461,9 @@ def build_job(*, providers: Providers = registry_providers,
         jobs = [{"job_id": job_id, "status": "self" if job_id == JOB_ID else
                  "accepted" if document["handoffs"].get(job_id) else "not_executed"}
                 for job_id in document["registry_jobs"]]
-        reconciled, discrepancies = input_matrix.reconcile(document["registry_jobs"], jobs, inventory["rows"],
-                                                           product_status, JOB_ID)
+        reconciled, discrepancies = input_matrix.reconcile(
+            document["registry_jobs"], jobs, inventory["rows"], product_status, JOB_ID,
+            disabled_jobs=document.get("disabled_jobs", ()))
         matrices = {"schema": "appsec-review/coverage-matrices/1", "target_snapshot": document["target_snapshot"],
                     "languages": matrix.language_matrix(view.store, leads),
                     "build_units": matrix.build_unit_matrix(view.store),

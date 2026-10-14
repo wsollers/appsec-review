@@ -33,7 +33,7 @@ in the last column establishes each fact.
 |---|---|---|---|
 | `job_codeql_analysis` | One immutable database per accepted scope and language, one SARIF per query profile, normalized `observations` shards with ordered `code_flow`/`thread_flow` steps. Executor actions are `inventory`, `database`, `query` and, since C1/C2, `export`: the `export.scopes` unit runs the hash-pinned `rules/codeql-graph-export/cpp` pack per successful C/C++ database and retains bounded JSON exports plus `export-manifest.json` under `data/codeql/scopes/<scope-id>/exports` (dataset `codeql_graph_export`, `artifact_only`). Languages without a pinned export pack record `NOT_APPLICABLE`. Its publication writes a manifest of its own shards only and references sibling manifests as verified upstream manifests (it does not compose their shards). Live acceptance before this plan: C/C++ 2/2, Java/Kotlin 7/7, JavaScript/TypeScript 12/12, Python 8/8, Actions 1/1; Go 0/7; C# and Rust planning gaps; PHP `NOT_APPLICABLE`. | Export packs exist for C/C++ only. The export queries have not run in the pinned image (recordings are hand-authored). | `jobs/job_codeql_analysis/job.py` (`_export_one`, `_verify_export_sources`), `codeql/runtime.py`, `containers/tools/codeql/codeql_runner.py`, `docs/operations/codeql-analysis.md` |
 | `job_code_graph_index` (new, C5) | One `graph` shard per `(CodeQL scope, family)` with a coverage row each; normalized (C3), cross-checked against clangd/IR/AST (C4) and SARIF-correlated (C4) facts; `unavailable` coverage-only shards for scopes without a usable export. Restores clangd/IR/AST shards the CodeQL manifest rewrite dropped from their producers' accepted handoffs (C9). | Facts for languages without an export pack; anything CodeQL's models do not cover. | `jobs/job_code_graph_index/`, `docs/operations/code-graph-index.md` |
-| `job_cpg_analysis` (Joern) | Deprecated and disabled by default (`jobs.job_cpg_analysis.settings.enabled = false`): no container runs and every accepted C/C++ scope publishes an `unavailable` coverage row naming the setting. When enabled it retains `cpg.bin` and publishes a `BLOCKED` shard with zero observations, as before. | Nothing retrievable. | `jobs/job_cpg_analysis/job.py` (`JOERN_DISABLED`, `JOERN_GAP`), `indexing/matrix.py` (`cpg_graph` lane always `unavailable`) |
+| `job_cpg_analysis` (Joern) | Deprecated and disabled by default (`jobs.job_cpg_analysis.settings.enabled = false`): it is omitted from execution plans and produces no run artifacts. When enabled it retains `cpg.bin` and publishes a `BLOCKED` shard with zero observations, as before. | Nothing retrievable. | `jobs/job_cpg_analysis/job.py` (`JOERN_GAP`), `runtime/selection.py`, `indexing/matrix.py` (`cpg_graph` lane always `unavailable`) |
 | `job_cpp_compiled_analysis` LLVM IR branch | Unchanged: `define` lines as `ir_entity`, uniquely resolvable direct `call @name` as exact `CALLS`; TU-level ambiguous locations. Used as a C4 cross-check input (`ir-name-same-tu`). | CFG, def-use, dominators, guards, ranges, source-exact locations (section 12, K1/K3). | `jobs/job_cpp_compiled_analysis/job.py::_ir_index` |
 | `job_cpp_compiled_analysis` Clang AST branch | Unchanged: bounded JSON AST walk; `CallExpr` nodes are a C4 cross-check input. | Resolved callee identity, CFG, dataflow, macro spelling ranges (section 12, K2). | `jobs/job_cpp_compiled_analysis/job.py::_ast_index` |
 | `job_cpp_symbol_index` (clangd) | Unchanged: `symbol` entities and aggregated `CALLS`/`REFERENCES` edges; the primary C4 cross-check input for `call_site`. | Dispatch method, dataflow, guards. | `jobs/job_cpp_symbol_index/`, `docs/operations/cpp-index-jobs.md` |
@@ -105,9 +105,9 @@ Disagreement representation (never silently merged, never dropped):
   Missing coverage on the CodeQL side is reported as the fact's gap, never as "CodeQL says no call".
 
 Joern is **not** a producer in this plan, and it is deprecated (see "Why Joern is deprecated"
-below). `job_cpg_analysis` stays registered but does not run Joern unless
-`jobs.job_cpg_analysis.settings.enabled = true`; the default is `false`. The `cpg_graph` matrix lane
-stays `unavailable`. LLVM IR extension (CFG, def-use, guards) is out of scope for this batch and is
+below). `job_cpg_analysis` stays available for configuration validation but is omitted from run
+plans unless `jobs.job_cpg_analysis.settings.enabled = true`; the default is `false`. The
+`cpg_graph` matrix lane stays `unavailable`. LLVM IR extension (CFG, def-use, guards) is out of scope for this batch and is
 planned as the Clang second producer phase (section 12).
 
 #### Producer comparison: CodeQL and Clang/LLVM for C/C++
@@ -152,11 +152,9 @@ because nothing in the review depends on it, and finishing it would duplicate Co
 4. **Running it costs resources for no evidence.** Joern needs far more than 1 GiB per scope at
    scale, and the image carries license-attribution work for bundled JARs.
 
-So `jobs.job_cpg_analysis.settings.enabled` defaults to `false`. When disabled:
-- no Joern container runs;
-- every accepted C/C++ scope publishes an `unavailable` coverage row whose reason names the
-  setting;
-- the job still produces an accepted handoff, so the graph topology and accounting are unchanged.
+So `jobs.job_cpg_analysis.settings.enabled` defaults to `false`. When disabled, the job is absent
+from direct and Dagster execution plans, cannot be dispatched explicitly, and produces no attempt,
+handoff, manifest, index or coverage artifact. Run inventory excludes it as a producer.
 
 Setting it to `true` restores the previous behaviour: the CPG is retained as evidence and the shard
 is still `BLOCKED`. Removing the job and image entirely is a later clean-up once no run depends on

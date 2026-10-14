@@ -281,11 +281,31 @@ def test_production_schedule_is_midnight_utc_and_enabled() -> None:
         assert definitions.get_sensor_def(name).default_status is dagster.DefaultSensorStatus.RUNNING
 
 
+def test_job_level_disabled_setting_is_transparent_to_dagster(tmp_path: Path) -> None:
+    source = (Path(__file__).resolve().parents[3] / "appsec-review.toml").read_text(encoding="utf-8")
+    source = source.replace(
+        '[jobs.job_codeql_analysis.settings]\nenabled = true\nexecution_mode = "auto"',
+        '[jobs.job_codeql_analysis.settings]\nenabled = false\nexecution_mode = "disabled"',
+        1,
+    )
+    config = tmp_path / "appsec-review.toml"
+    config.write_text(source, encoding="utf-8")
+
+    definitions = build_definitions(config)
+    job_names = {job.name for job in definitions.get_repository_def().get_all_jobs()}
+    wave_nodes = {node.name for node in definitions.get_job_def("wave1_review").graph.node_defs}
+
+    assert "codeql_analysis" not in job_names
+    assert not any(name.startswith("codeql_analysis__") for name in wave_nodes)
+    assert "review_prioritization__begin" in wave_nodes
+
+
 def test_wave1_exposes_real_producer_shard_topology() -> None:
     config = Path(__file__).resolve().parents[3] / "appsec-review.toml"
     graph = build_definitions(config).get_job_def("wave1_review").graph
     names = {node.name for node in graph.node_defs}
     assert "dispatch_wave1_review" not in names
+    assert not any(name.startswith("cpg_analysis__") for name in names)
     expected = {
         "model_connectivity__begin", "model_connectivity__connectivity__verify_models",
         "review_intake__begin", "target_catalog__begin", "target_analysis_plan__begin",

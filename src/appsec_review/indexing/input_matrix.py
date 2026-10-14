@@ -127,21 +127,27 @@ def resolve_producer(producer: str, registered: Iterable[str]) -> str:
 
 
 def reconcile(registry_jobs: Iterable[str], jobs: Iterable[Mapping[str, Any]], rows: Iterable[Mapping[str, Any]],
-              products: Mapping[str, Mapping[str, Any]], self_job: str) -> tuple[list[dict[str, Any]], list[str]]:
+              products: Mapping[str, Mapping[str, Any]], self_job: str, *,
+              disabled_jobs: Iterable[str] = ()) -> tuple[list[dict[str, Any]], list[str]]:
     """Return one reconciled row per input source plus discrepancies between matrix and registry."""
     registered = set(registry_jobs)
+    disabled = set(disabled_jobs)
     status = {item["job_id"]: item["status"] for item in jobs}
     by_job: dict[str, list[Mapping[str, Any]]] = {}
     for row in rows:
         by_job.setdefault(str(row["job_id"]), []).append(row)
     discrepancies: list[str] = []
     named = {resolve_producer(producer, registered) for _source, producers, *_ in INPUT_SOURCES
-             for producer in producers}
+             for producer in producers if producer.removeprefix("planned:") not in disabled}
     downstream_jobs = {"job_review_package_assembly", "job_document_issue_analysis"}
     for job_id in sorted(registered - named - {self_job} - downstream_jobs):
         discrepancies.append(f"registered job {job_id} is absent from the input-source matrix")
     reconciled = []
     for source, producers, state, query_sets, endpoints in INPUT_SOURCES:
+        producers = tuple(producer for producer in producers
+                          if producer.removeprefix("planned:") not in disabled)
+        if not producers:
+            continue
         producer_states = []
         for producer in (resolve_producer(item, registered) for item in producers):
             if producer.startswith("planned:") or producer == "runtime":

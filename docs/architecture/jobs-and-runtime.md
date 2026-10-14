@@ -15,12 +15,19 @@ processes cannot claim the same run concurrently.
 
 The direct CLI currently exercises this mechanism with a linear review graph from
 `job_model_connectivity` through `job_document_issue_analysis`. Dagster builds the broader, branched
-`wave1_review` topology from every registered and configured job except
+`wave1_review` topology from every registered, configured, enabled job except
 `job_third_party_data_sync` and `job_inference_security_review`, adding the CI configuration,
 post-build, OWASP, and security-tagging jobs that are not in the direct graph. The inference
 security review runs as its own standalone Dagster job over the run's accepted index set. Both surfaces use the same semantic registry and
 accepted-handoff format. The exact operator-visible distinction is documented in
 [`../operations/wave1-review.md`](../operations/wave1-review.md).
+
+A boolean at `[jobs.<job_id>.settings].enabled` is the generic job dispatch gate. Missing means
+enabled. `false` makes the job transparent: it is absent from direct and Dagster graphs, takes no
+inputs, publishes no handoff or artifacts, and is excluded from the run inventory. Nested feature
+flags such as `settings.model.enabled` or `settings.github.enabled` control only that feature and do
+not suppress the containing job. An enabled job is dispatched normally and must satisfy its full
+input, output, tool, and acceptance contracts.
 
 ## Registered jobs
 

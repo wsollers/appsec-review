@@ -150,7 +150,7 @@ target_analysis_plan -> tree_sitter_ast -> change_context_analysis
 target_analysis_plan -> project_build -> language_build -> artifact_indexing -> artifact_security_analysis
 language_build -> cpp_compiled_analysis -> post_build_security_assessment
 cpp_compiled_analysis -> cpp_symbol_index
-cpp_compiled_analysis -> cpg_analysis
+cpp_compiled_analysis -> cpg_analysis  # only when jobs.job_cpg_analysis.settings.enabled = true
 target_analysis_plan -> evidence_collection
 language_build + artifact_indexing + artifact_security_analysis + cpp_compiled_analysis
   + cpp_symbol_index + cpg_analysis + post_build_security_assessment + evidence_collection

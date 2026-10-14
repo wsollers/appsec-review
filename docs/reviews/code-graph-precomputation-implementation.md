@@ -147,8 +147,8 @@ given or retrieved. It asserts:
   pack;
 - flipping one byte in any of the 21 `graph` shards makes `scope.accept_manifest` raise
   `IntegrityError`;
-- `job_cpg_analysis` with the default configuration runs no container and publishes only
-  `unavailable` coverage rows naming the disabled setting.
+- `job_cpg_analysis` with the default configuration is absent from execution plans and publishes
+  no run artifacts.
 
 **Focused tests** for every C9 fix (section 5) and the chunk suites (`tests/graph`,
 `tests/test_code_graph_index_job.py`, `tests/test_retrieval_code_graph.py`,

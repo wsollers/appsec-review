@@ -574,7 +574,8 @@ def test_inventory_audit_matrices_links_and_fts_validation(accepted) -> None:
         cursor = page["pagination"]["next_cursor"]
         if cursor is None:
             break
-    assert len(sources) == len(input_matrix.INPUT_SOURCES)
+    assert len(sources) == len(input_matrix.INPUT_SOURCES) - 1
+    assert all(item["payload"]["source"] != "joern_cpg" for item in sources)
     language = core.query_dataset_inventory(cell_type="language", limit=100)["results"]
     native = next(item["payload"] for item in language if item["payload"]["language"] == "c/c++")
     assert native["lanes"]["cpg_graph"]["state"] == "unavailable" and native["lanes"]["codeql"]["state"] == "complete"
@@ -878,6 +879,11 @@ def test_input_matrix_resolves_the_planned_graph_producer_once_registered() -> N
     rows, _ = input_matrix.reconcile(["job_codeql_analysis"], jobs[:1], [], {}, "job_review_data_indexing")
     states = next(item for item in rows if item["source"] == "codeql_sarif")["producer_states"]
     assert states[1] == {"producer": "planned:job_code_graph_index", "status": "planned"}
+    rows, discrepancies = input_matrix.reconcile(
+        ["job_codeql_analysis"], jobs[:1], [], {}, "job_review_data_indexing",
+        disabled_jobs=["job_cpg_analysis"])
+    assert all(item["source"] != "joern_cpg" for item in rows)
+    assert not any("job_cpg_analysis" in item for item in discrepancies)
 
 
 DOWNSTREAM = ("job_remediation_planning", "job_remediation_validation", "job_final_publication_gate",

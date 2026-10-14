@@ -2073,7 +2073,7 @@ both lanes, and one score dimension. It does not execute PoCs, run variant hunts
 - C++ compiled analysis must supply accepted build/AST/IR/binary shards. The separate pinned,
   licensed cross-language CodeQL job supplies database, SARIF, and observation shards when its
   operator-provided image is present. Joern/CPG is deprecated and disabled by default
-  (`jobs.job_cpg_analysis.settings.enabled = false`, `unavailable` rows); it is not a producer.
+  (`jobs.job_cpg_analysis.settings.enabled = false`, absent from the run); it is not a producer.
   Unavailable language scopes lower evidence confidence truthfully.
 - Direct evidence for `source_to_sink_reachability`, `attacker_input_control` and
   `missing_or_ineffective_guard` comes from CodeQL `tool_observation`s (the first two, by

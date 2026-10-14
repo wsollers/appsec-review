@@ -23,7 +23,7 @@ from dagster import (
 from appsec_review.config import AppConfig, load_config
 from appsec_review.runtime.registry import JobRegistry, builtin_registry
 from appsec_review.runtime.runner import JobRunner
-from appsec_review.runtime import Job, plan_jobs
+from appsec_review.runtime import Job, job_is_enabled, plan_jobs
 from appsec_review.jobs.cataloging import source_fingerprint
 from appsec_review.observability import PipelineLog, write_run_metrics
 from appsec_review.storage import atomic_json
@@ -372,10 +372,14 @@ def build_definitions(
             f"missing_config={missing_config}, missing_registration={missing_registration}"
         )
 
+    # A job-level enabled flag controls dispatch. Keep disabled jobs registered so configuration
+    # validation and a future enablement still work, but make them transparent to every graph.
+    registered = {job_id for job_id in registered if job_is_enabled(config, job_id)}
+
     jobs = []
     schedules = []
     sensors = []
-    for job_id in registry.job_ids():
+    for job_id in sorted(registered):
         job_config = config.job(job_id)
         if job_id == "job_tree_sitter_ast":
             from appsec_review.jobs.job_tree_sitter_ast.dagster import build_dagster_job
@@ -468,7 +472,7 @@ def build_definitions(
                 "job_cpp_compiled_analysis", "job_cpp_symbol_index", "job_cpg_analysis",
                 "job_post_build_security_assessment", "job_evidence_collection", "job_tree_sitter_ast",
                 "job_change_context_analysis")
-                if job_id in registered]
+                if job_id in wave_dependencies]
             wave_dependencies["job_codeql_analysis"] = tuple(codeql_dependencies or (
                 "job_target_analysis_plan",))
         if "job_owasp_control_assessment" in registered:
@@ -520,14 +524,13 @@ def build_definitions(
             wave_dependencies["job_security_tagging"] = tuple(tagging_dependencies or ("job_target_analysis_plan",))
         if "job_review_data_indexing" in registered:
             # The dataset inventory audits every accepted publisher, so it closes the wave after the last
-            # manifest publisher and keeps exactly one terminal job.
-            terminal = next((job_id for job_id in ("job_security_tagging", "job_code_graph_index",
-                                                   "job_review_prioritization", "job_codeql_analysis")
-                             if job_id in wave_dependencies), "job_target_analysis_plan")
+            # enabled producer on every branch and keeps exactly one terminal job. Derive the leaves
+            # instead of naming them: disabling any job must make that job transparent to topology.
+            depended_on = {dependency for dependencies in wave_dependencies.values()
+                           for dependency in dependencies}
+            terminals = tuple(sorted(set(wave_dependencies) - depended_on))
             wave_jobs.append(registry.build("job_review_data_indexing"))
-            # The audit and the code_graph matrix lane account for the graph index explicitly.
-            wave_dependencies["job_review_data_indexing"] = tuple(dict.fromkeys((terminal, *(
-                ("job_code_graph_index",) if "job_code_graph_index" in wave_dependencies else ()))))
+            wave_dependencies["job_review_data_indexing"] = terminals or ("job_target_analysis_plan",)
         if "job_review_package_assembly" in registered:
             wave_jobs.append(registry.build("job_review_package_assembly"))
             wave_dependencies["job_review_package_assembly"] = ("job_review_data_indexing",)
