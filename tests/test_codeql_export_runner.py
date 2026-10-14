@@ -242,7 +242,8 @@ def test_export_document_rejects_entity_and_non_primitive_cells(cell) -> None:
         RUNNER.export_document(query, [row[:-1]], total_rows=1, row_limit=10, bqrs_sha256="b" * 64)
 
 
-def test_executor_export_action_runs_without_network_and_with_export_timeout(tmp_path: Path) -> None:
+def test_executor_export_action_runs_without_network_and_with_export_timeout(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[tuple[tuple[str, ...], int]] = []
 
     def runner(argv, timeout):
@@ -255,8 +256,20 @@ def test_executor_export_action_runs_without_network_and_with_export_timeout(tmp
                         "codeql:local", "10001:10001", "b" * 64, "c" * 64, False, "manifest.json")
     settings = SimpleNamespace(inventory_timeout_seconds=30, database_timeout_seconds=30,
                                query_timeout_seconds=30, output_bytes=1024, threads=2, ram_mb=1024)
+    scratch = tmp_path / "scratch"
+    (scratch / "export").mkdir(parents=True)
+    query_sibling = scratch / "queries" / "busy" / "query-database" / "transient"
+    query_sibling.mkdir(parents=True)
+    original_is_symlink = Path.is_symlink
+
+    def guarded_is_symlink(path: Path) -> bool:
+        if query_sibling == path or query_sibling in path.parents:
+            raise AssertionError("export must not traverse a concurrent query scratch tree")
+        return original_is_symlink(path)
+
+    monkeypatch.setattr(Path, "is_symlink", guarded_is_symlink)
     result = CodeQLExecutor(image=image, run_root=tmp_path, settings=settings, runner=runner).execute(
-        "export", ("--language", "cpp"), scratch_root=tmp_path / "scratch")
+        "export", ("--language", "cpp"), scratch_root=scratch)
     command, timeout = next(call for call in calls if call[0][:2] == ("docker", "run"))
     expected_user = (f"{os.geteuid()}:{os.getegid()}" if hasattr(os, "geteuid") and
                      os.geteuid() > 0 and os.getegid() > 0 else image.runtime_user)

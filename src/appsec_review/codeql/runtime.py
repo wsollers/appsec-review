@@ -231,7 +231,13 @@ class CodeQLExecutor:
         scratch.mkdir(parents=True, exist_ok=True)
         runtime_user = application_runtime_user(self.image.runtime_user)
         container_uid = int(runtime_user.split(":", 1)[0])
-        for path in (scratch, *scratch.rglob("*")):
+        # Query and graph export may run concurrently for one scope. Export owns only its staged
+        # ``export`` tree plus the scope root used to create ``exports``; traversing sibling query
+        # scratch here races query cleanup and can turn a valid producer run into a host EIO.
+        access_root = scratch / "export" if action == "export" else scratch
+        access_paths = ((scratch, access_root, *access_root.rglob("*"))
+                        if access_root != scratch else (scratch, *scratch.rglob("*")))
+        for path in access_paths:
             if path.is_symlink():
                 continue
             mode = path.stat().st_mode
