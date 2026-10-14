@@ -309,7 +309,7 @@ class DotnetExecutor:
 
 
 def dotnet_language_executor(profile, calls: list[tuple[str, ...]], *, fail: bool = False,
-                             phantom_compiler: bool = False):
+                             phantom_compiler: bool = False, response_file: bool = False):
     def behavior(command, workspace, working_directory, environment, simulation):
         calls.append(command)
         simulation.exec("/capture/wrappers/dotnet", command)
@@ -334,10 +334,22 @@ def dotnet_language_executor(profile, calls: list[tuple[str, ...]], *, fail: boo
             compiler = ("/usr/bin/dotnet", "exec", "/sdk/Roslyn/bincore/csc.dll",
                         f"/out:/workspace/{working_directory}/bin/Debug/net8.0/Sample.dll",
                         f"/workspace/{working_directory}/Program.cs")
+            if response_file:
+                scratch = root / ".appsec-review-build-scratch.ABC123"
+                scratch.mkdir()
+                response = scratch / "csc.rsp"
+                response.write_bytes(
+                    f"/workspace/{working_directory}/Program.cs\n".encode())
+                logical = f"/workspace/{working_directory}/.appsec-review-build-scratch.ABC123/csc.rsp"
+                compiler = (*compiler, f"@{logical}")
             if phantom_compiler:
                 simulation.tool_call("dotnet", compiler[1:], executable="/usr/bin/dotnet")
             else:
                 simulation.exec("/usr/bin/dotnet", compiler)
+                if response_file:
+                    simulation.syscall(
+                        f'openat(AT_FDCWD</workspace/{working_directory}>, "{logical}", O_RDONLY)',
+                        f"3<{logical}>")
             # A hostile diagnostic line must never create provenance on its own.
             return 0, b"dotnet /unobserved/csc.dll /out:/workspace/phantom.dll phantom.cs\n", b""
         return 0, b"", b""
@@ -659,6 +671,31 @@ def test_dotnet_linux_build_catalogs_outputs_and_sanitized_mcp_evidence(tmp_path
     rendered = json.dumps(response)
     assert "Sample.dll" in rendered
     assert "protected-commands" not in rendered and "csc.dll /out:" not in rendered
+
+
+def test_dotnet_rsp_containment(tmp_path: Path) -> None:
+    config, target = _dotnet_fixture(tmp_path)
+    calls: list[tuple[str, ...]] = []
+    run_id, fingerprint = _accepted_dotnet(config, target, calls)
+    outcome = GraphRunner(config, [build_language(executor_factory=lambda unit, profile:
+        dotnet_language_executor(profile, calls, response_file=True))]).run(
+            target_root=target, source_fingerprint=fingerprint, run_id=run_id)
+    assert outcome["status"] == "SUCCEEDED"
+    run_root = config.runtime.runs_dir / run_id
+    receipt = load_accepted_language_build(run_root)["receipts"][0]
+    provenance = receipt["capture_provenance"]
+    assert provenance["complete"] is True
+    assert provenance["response_file_records"] == 1
+    assert provenance["response_file_references"] == 1
+    assert provenance["response_file_bytes"] > 0
+    records = [json.loads(path.read_text(encoding="utf-8"))
+               for path in run_root.glob("data/build/dotnet/units/*/attempts/*/execution-capture/*/record.json")]
+    (response,) = [item for record in records for item in record["response_files"]["records"]]
+    retained = next(run_root.glob(
+        "data/build/dotnet/units/*/attempts/*/execution-capture/*/response-files/*.rsp"))
+    assert response["path"].endswith("/.appsec-review-build-scratch.ABC123/csc.rsp")
+    assert response["sha256"] == hashlib.sha256(retained.read_bytes()).hexdigest()
+    assert response["size_bytes"] == retained.stat().st_size
 
 
 def test_dotnet_windows_only_project_is_explicitly_not_applicable(tmp_path: Path) -> None:

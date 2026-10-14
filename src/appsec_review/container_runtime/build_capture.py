@@ -11,6 +11,7 @@ from typing import Any, Iterable, Iterator, Mapping, Sequence
 
 from appsec_review.config import BuildCaptureConfig
 from appsec_review.storage import atomic_json, canonical_json
+from .capture_files import RESPONSE_FILE_SCHEMA
 
 
 SCHEMA = "appsec-review/build-execution-record/1"
@@ -243,6 +244,8 @@ class BuildExecutionRecorder:
                 "envp_bytes_limit": self.limits.envp_bytes_limit,
                 "envp_redact_names": list(self.limits.envp_redact_names),
                 "path_bytes_limit": self.limits.path_bytes_limit,
+                "response_file_count_limit": self.limits.response_file_count_limit,
+                "response_file_bytes_limit": self.limits.response_file_bytes_limit,
                 "tool_call_count_limit": self.limits.tool_call_count_limit,
                 "secret_finding_count_limit": self.limits.secret_finding_count_limit,
             },
@@ -440,12 +443,19 @@ def _directory_argument(argument: str) -> str | None:
 
 def _file_event(call: str, body: str, result: str) -> dict[str, Any]:
     """Normalize one path-bearing syscall printed by ``strace -y``."""
-    outcome = _SYSCALL_RESULT.match(result.strip())
-    if not outcome:
+    rendered_result = result.strip()
+    unknown_outcome = rendered_result == "?"
+    outcome = None if unknown_outcome else _SYSCALL_RESULT.match(rendered_result)
+    if outcome is None and not unknown_outcome:
         raise ValueError("unparsed syscall result")
     args = _split_arguments(body)
-    event: dict[str, Any] = {"result": int(outcome.group("value"))}
-    if outcome.group("errno"):
+    # strace prints ``= ?`` when a tracee disappears before it can observe the return value.
+    # Preserve the requested path as an unfinished failed event: it is useful containment
+    # evidence but can never establish that a response file was read successfully.
+    event: dict[str, Any] = {"result": -1 if unknown_outcome else int(outcome.group("value"))}
+    if unknown_outcome:
+        event["unfinished"] = True
+    if outcome is not None and outcome.group("errno"):
         event["errno"] = outcome.group("errno")
     truncated = False
     if call in {"open", "openat", "openat2", "creat"}:
@@ -461,7 +471,7 @@ def _file_event(call: str, body: str, result: str) -> dict[str, Any]:
             event["flags"] = flags.group(1) if flags else ""
         else:
             event["flags"] = args[2 if at else 1]
-        if outcome.group("path") and event["result"] >= 0:
+        if outcome is not None and outcome.group("path") and event["result"] >= 0:
             event["resolved"] = outcome.group("path")
     elif call in {"chdir", "fchdir"}:
         event["kind"] = "directory_change"
@@ -709,11 +719,45 @@ def _verify_capture_record(record_path: Path, *, run_root: Path, scope: CaptureS
         verified_calls.append({"uri": member["uri"], "sha256": member["sha256"], "record": tool})
     if "file_inventory" in document:
         _capture_member(capture_root, document["file_inventory"])
-    response_files = document.get("response_files", {"records": []})
+    response_files = document.get("response_files", {"retained": 0, "records": []})
     if not isinstance(response_files, Mapping) or not isinstance(response_files.get("records"), list):
         raise CaptureIntegrityError("build execution response files are invalid")
+    limits = document.get("limits", {})
+    response_count_limit = limits.get("response_file_count_limit") if isinstance(limits, Mapping) else None
+    if (("retained" in response_files and
+         response_files["retained"] != len(response_files["records"])) or
+            (type(response_count_limit) is int and
+             len(response_files["records"]) > response_count_limit)):
+        raise CaptureIntegrityError("build execution response-file count is inconsistent")
+    response_paths: set[str] = set()
+    response_references: set[tuple[int, int, int]] = set()
+    response_byte_limit = limits.get("response_file_bytes_limit") if isinstance(limits, Mapping) else None
+    path_byte_limit = limits.get("path_bytes_limit") if isinstance(limits, Mapping) else None
     for member in response_files["records"]:
-        _capture_member(capture_root, member)
+        response_path = _capture_member(capture_root, member)
+        logical_path = member.get("path") if isinstance(member, Mapping) else None
+        logical = PurePosixPath(logical_path) if isinstance(logical_path, str) else PurePosixPath()
+        references = member.get("references") if isinstance(member, Mapping) else None
+        if (member.get("schema") != RESPONSE_FILE_SCHEMA or not logical_path or
+                logical.is_absolute() or logical.as_posix() != logical_path or
+                any(part in {"", ".", ".."} for part in logical.parts) or
+                (type(path_byte_limit) is int and
+                 len(logical_path.encode("utf-8")) > path_byte_limit) or
+                logical_path in response_paths or not isinstance(references, list) or not references or
+                (type(response_byte_limit) is int and
+                 response_path.stat().st_size > response_byte_limit) or
+                member.get("size_bytes") != response_path.stat().st_size):
+            raise CaptureIntegrityError("build execution response-file identity is invalid")
+        response_paths.add(logical_path)
+        for reference in references:
+            if (not isinstance(reference, Mapping) or
+                    any(type(reference.get(name)) is not int or reference[name] < 0
+                        for name in ("pid", "exec_ordinal", "argv_index"))):
+                raise CaptureIntegrityError("build execution response-file reference is invalid")
+            identity = (reference["pid"], reference["exec_ordinal"], reference["argv_index"])
+            if identity in response_references:
+                raise CaptureIntegrityError("build execution response-file reference is ambiguous")
+            response_references.add(identity)
     secret_scan = document.get("secret_scan")
     if not isinstance(secret_scan, Mapping) or secret_scan.get("scanner") != "tool-gitleaks":
         raise CaptureIntegrityError("build execution secret scan is invalid")

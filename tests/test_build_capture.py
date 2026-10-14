@@ -14,6 +14,9 @@ from appsec_review.container_runtime.build_capture import REQUIRED_EVENT_KINDS, 
 from tests.capture_fakes import simulated_executor
 
 
+ROOT = Path(__file__).parents[1]
+
+
 def _recorder(tmp_path: Path, *, event_limit: int = 20) -> BuildExecutionRecorder:
     return BuildExecutionRecorder(
         tmp_path / "capture", CaptureScope(
@@ -171,8 +174,24 @@ def test_strace_normalizer_records_open_outcomes_directory_changes_renames_and_u
 def test_strace_normalizer_reports_unparseable_file_rows(tmp_path: Path) -> None:
     recorder = _recorder(tmp_path)
     trace = tmp_path / "trace.51"
-    trace.write_text('1700000000.000001 openat(AT_FDCWD, 0x1234, O_RDONLY) = 3\n', encoding="utf-8")
-    assert record_strace_files((trace,), recorder) == ("unparsed openat row: trace.51:1",)
+    trace.write_text(
+        '1700000000.000001 openat(AT_FDCWD</workspace/dotnet>, '
+        '"/workspace/dotnet/.appsec-review-build-scratch.ABC123/clr-debug-pipe-in", O_RDONLY) = ?\n'
+        '1700000000.000002 openat(AT_FDCWD, 0x1234, O_RDONLY) = 3\n', encoding="utf-8")
+    assert record_strace_files((trace,), recorder) == ("unparsed openat row: trace.51:2",)
+    recorder.flush()
+    (event,) = [json.loads(line) for line in (recorder.root / "events.jsonl").read_text().splitlines()]
+    assert event["path"].startswith("/workspace/dotne") and event["path_truncated"] is True
+    assert event["result"] == -1 and event["unfinished"] is True
+
+
+def test_capture_driver_confines_temporary_files_to_fresh_workspace_scratch() -> None:
+    driver = (ROOT / "containers" / "build-capture" / "build-driver.sh").read_text(encoding="utf-8")
+    assert 'mktemp -d "$PWD/.appsec-review-build-scratch.XXXXXX"' in driver
+    assert 'export TMPDIR="$scratch_root"' in driver
+    assert 'export TMP="$scratch_root"' in driver
+    assert 'export TEMP="$scratch_root"' in driver
+    assert "export MSBUILDPRESERVETOOLTEMPFILES=1" in driver
 
 
 def test_strace_normalizer_accepts_exact_detach_metadata_but_rejects_malformed_rows(
@@ -275,8 +294,15 @@ def _capture(tmp_path: Path) -> tuple[Path, Path, CaptureScope]:
     scope = CaptureScope("2026-10-09-0001", "job_language_build", "attempt_0001", "build-unit-rust", "rust")
 
     def behavior(argv, _workspace, _directory, _environment, container):
-        container.exec("/usr/bin/rustc", ["rustc", "main.rs"])
-        container.tool_call("rustc", ["main.rs"], executable="/usr/bin/rustc", stdout=b"compiled")
+        scratch = _workspace / "unit" / ".appsec-review-build-scratch.ABC123"
+        scratch.mkdir()
+        response = scratch / "rustc.rsp"
+        response.write_bytes(b"main.rs\n")
+        logical = "/workspace/unit/.appsec-review-build-scratch.ABC123/rustc.rsp"
+        container.exec("/usr/bin/rustc", ["rustc", f"@{logical}"])
+        container.syscall(
+            f'openat(AT_FDCWD</workspace/unit>, "{logical}", O_RDONLY)', f"3<{logical}>")
+        container.tool_call("rustc", [f"@{logical}"], executable="/usr/bin/rustc", stdout=b"compiled")
         return 0, b"out", b"err"
 
     executor = simulated_executor(
@@ -308,6 +334,9 @@ def test_capture_verification_returns_hash_bound_identity_and_parsed_members(tmp
     assert verified.identity["secret_findings"] == {
         "path": "capture/command-001/secret-scan/findings.json", "sha256": _digest(findings), "count": 0}
     assert verified.gaps == ()
+    (response,) = verified.document["response_files"]["records"]
+    assert response["path"] == "unit/.appsec-review-build-scratch.ABC123/rustc.rsp"
+    assert response["size_bytes"] == len(b"main.rs\n") and len(response["sha256"]) == 64
     assert [event["executable"] for event in verified.events() if event["kind"] == "process_exec"] == [
         "/usr/bin/rustc"]
     assert [call["record"]["tool"] for call in verified.tool_calls] == ["rustc"]
@@ -349,6 +378,16 @@ def _tamper_scanner_receipt(record: Path) -> None:
     _rewrite(record, lambda document: document["secret_scan"]["execution"].update(sha256=_digest(execution)))
 
 
+def _tamper_response_path(record: Path) -> None:
+    _rewrite(record, lambda document: document["response_files"]["records"][0].update(
+        path="../escaped.rsp"))
+
+
+def _tamper_response_reference(record: Path) -> None:
+    _rewrite(record, lambda document: document["response_files"]["records"][0].update(
+        references=[{"pid": 101, "exec_ordinal": 1, "argv_index": "1"}]))
+
+
 @pytest.mark.parametrize(("tamper", "message"), [
     (lambda record: (record.parent / "events.jsonl").write_text("", encoding="utf-8"),
      "member identity changed"),
@@ -366,6 +405,8 @@ def _tamper_scanner_receipt(record: Path) -> None:
      "member identity changed"),
     (_tamper_findings_schema, "secret findings are invalid"),
     (_tamper_scanner_receipt, "secret scan receipt is invalid"),
+    (_tamper_response_path, "response-file identity is invalid"),
+    (_tamper_response_reference, "response-file reference is invalid"),
     (lambda record: (record.parent / "secret-scan" / "gitleaks.json").write_text("[{}]", encoding="utf-8"),
      "member identity changed"),
     (lambda record: _rewrite(record, lambda document: document.update(schema="appsec-review/other/1")),
@@ -377,7 +418,8 @@ def _tamper_scanner_receipt(record: Path) -> None:
     (lambda record: record.write_text("not json", encoding="utf-8"), "capture is unreadable"),
 ], ids=["event-hash", "event-schema", "event-count", "member-path", "member-symlink", "stream-hash",
         "tool-stream-hash", "tool-schema", "findings-hash", "findings-schema", "scanner-receipt-schema",
-        "gitleaks-report-hash", "record-schema", "record-scope", "coverage", "record-unreadable"])
+        "response-path", "response-reference", "gitleaks-report-hash", "record-schema", "record-scope",
+        "coverage", "record-unreadable"])
 def test_capture_verification_rejects_hash_schema_path_and_scope_tampering(
         tmp_path: Path, tamper, message: str) -> None:
     run_root, record, scope = _capture(tmp_path)
