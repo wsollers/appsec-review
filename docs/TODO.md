@@ -158,6 +158,10 @@ Windows executor rather than extending Linux recipes with platform-specific exce
 The follow-on work should:
 
 - bootstrap an ephemeral Windows image or VM from centrally configured, hash-identified tooling;
+- make the Clang/C++ test collector host-portable by isolating the Unix-only `resource` dependency,
+  preserving the existing Linux file-size-limit assertions, and adding a Windows regression test
+  that proves `tests/test_cpp_index_jobs.py` and the related Clang suites collect and run rather
+  than failing during import;
 - support MSVC, clang-cl, MSBuild, CMake/Ninja, and UBT/UAT-style modular build orchestration;
 - capture `cl`, `clang-cl`, `link`, `lib`, `rc`, `cvtres`, `midl`, shader compilers, code generators,
   signing tools, and other build-time compiler/transpiler actions through the same protected
