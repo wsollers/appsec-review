@@ -67,6 +67,14 @@ def request_json(url: str, body: dict | None = None) -> dict:
         return json.load(response)
 
 
+def _job_enabled(job_id: str, job: Mapping) -> bool:
+    settings = job.get("settings") or {}
+    enabled = settings.get("enabled", True)
+    if not isinstance(enabled, bool):
+        raise SystemExit(f"jobs.{job_id}.settings.enabled must be a boolean")
+    return enabled
+
+
 def _workspace(url: str, document: dict) -> dict:
     request_json(f"{url}/server_info")
     payload = request_json(f"{url}/graphql", {"query": WORKSPACE_QUERY})
@@ -83,19 +91,23 @@ def _workspace(url: str, document: dict) -> dict:
     jobs = sorted(item["name"] for item in location["pipelines"])
     schedules = sorted(location["schedules"], key=lambda item: item["name"])
     sensors = sorted(location["sensors"], key=lambda item: item["name"])
+    active_jobs = {
+        job_id: value for job_id, value in document["jobs"].items()
+        if _job_enabled(job_id, value)
+    }
     composed = ["wave1_review", "wave1_error_state"]
-    if "job_ci_configuration_analysis" in document["jobs"]:
+    if "job_ci_configuration_analysis" in active_jobs:
         composed.append("ci_configuration_review")
-    if "job_project_build" in document["jobs"]:
+    if "job_project_build" in active_jobs:
         composed.append("project_build_review")
-    expected_jobs = sorted([*(value["name"] for value in document["jobs"].values()), *composed])
+    expected_jobs = sorted([*(value["name"] for value in active_jobs.values()), *composed])
     expected_schedules = sorted(
         ({
             "name": f"{value['name']}_schedule",
             "cronSchedule": value["schedule"]["cron"],
             "executionTimezone": value["schedule"]["timezone"],
             "scheduleState": {"status": "RUNNING" if value["schedule"]["enabled"] else "STOPPED"},
-        } for value in document["jobs"].values() if "schedule" in value),
+        } for value in active_jobs.values() if "schedule" in value),
         key=lambda item: item["name"],
     )
     expected_sensors = [{"name": name, "sensorState": {"status": "RUNNING"}}
