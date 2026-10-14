@@ -38,6 +38,7 @@ from appsec_review.retrieval.core import resolve_context_manifest
 from appsec_review.retrieval.index import load_verified_manifest
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from appsec_review.storage import FileLock, atomic_json, canonical_json, file_sha256, protected_json
+from appsec_review.swift_policy import reject_swift_derived, swift_enabled_from_run
 
 from . import capture as captured_build, dotnet, elf, go, jvm, native, node, php, python, rust
 from .capture import CapturedBuildDescriptor, link_rows as captured_link_rows, reconcile_captured_build
@@ -120,6 +121,9 @@ def load_accepted_language_build(run_root: Path) -> Mapping[str, Any]:
     document = _safe_artifact(run_root, identity)
     if document.get("schema") != SCHEMA:
         raise ValueError("language-build handoff schema is unsupported")
+    reject_swift_derived(
+        document, enabled=swift_enabled_from_run(run_root),
+        context="accepted language-build handoff")
     return {**document, "language_build_handoff_sha256": pointer["handoff_sha256"]}
 
 
@@ -133,6 +137,9 @@ def _dispatches(
     producer cannot fail unrelated language lanes.
     """
     accepted = load_accepted_builds(unit.job.run_root)
+    reject_swift_derived(
+        accepted, enabled=swift_enabled_from_run(unit.job.run_root),
+        context="accepted project-build dispatch")
     if accepted.get("source_fingerprint") != unit.job.source_fingerprint:
         raise ValueError("target snapshot differs from accepted project-build dispatch")
     if source_fingerprint(unit.job.target_root or Path()) != unit.job.source_fingerprint:

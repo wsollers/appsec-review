@@ -12,6 +12,9 @@ from typing import Any, Iterable, Mapping
 
 from appsec_review.retrieval.model import EntityRecord, RelationRecord, canonical_json, sanitize_producer_data
 from appsec_review.storage import atomic_json, file_sha256
+from appsec_review.swift_policy import (
+    is_swift_path, reject_swift_derived, swift_coverage_cell_is_gap, swift_enabled_from_run,
+)
 
 
 INDEX_SCHEMA = "appsec-review/retrieval-index/2"
@@ -220,6 +223,7 @@ def load_verified_manifest(run_root: Path, path: Path, expected_sha256: str | No
     if content_hash != hashlib.sha256(canonical_json(document)).hexdigest():
         raise ValueError("index manifest content hash mismatch")
     document["content_sha256"] = content_hash
+    swift_enabled = swift_enabled_from_run(run_root)
     for upstream in document.get("upstream_manifests", []):
         upstream_path = (run_root / str(upstream.get("path", ""))).resolve()
         if upstream_path == resolved:
@@ -249,6 +253,24 @@ def load_verified_manifest(run_root: Path, path: Path, expected_sha256: str | No
                 raise ValueError(f"index metadata mismatch: {identity.name}/{identity.shard_id}")
             if metadata.get("target_snapshot") != document.get("target_snapshot"):
                 raise ValueError(f"index target snapshot mismatch: {identity.name}/{identity.shard_id}")
+            # The catalog is the sole durable inventory exception. Every derived shard is checked
+            # independently so a stale or externally presented Swift artifact fails closed.
+            if not swift_enabled and identity.producer.get("job") != "job_target_catalog":
+                if any(is_swift_path(str(row[0])) for row in database.execute("SELECT path FROM locations")):
+                    raise ValueError(
+                        f"index contains Swift-derived locations while tools.enable_swift=false: "
+                        f"{identity.name}/{identity.shard_id}")
+                for kind, payload_json in database.execute("SELECT kind, payload_json FROM entities"):
+                    payload = json.loads(str(payload_json))
+                    if kind == "coverage_cell" and swift_coverage_cell_is_gap(payload):
+                        continue
+                    reject_swift_derived(
+                        payload, enabled=False,
+                        context=f"index {identity.name}/{identity.shard_id}")
+                for (payload_json,) in database.execute("SELECT payload_json FROM relations"):
+                    reject_swift_derived(
+                        json.loads(str(payload_json)), enabled=False,
+                        context=f"index {identity.name}/{identity.shard_id}")
             entity_ids.update(str(row[0]) for row in database.execute("SELECT identity FROM entities"))
             relations.extend((str(row[0]), str(row[1]), str(row[2]), identity.shard_id)
                              for row in database.execute(

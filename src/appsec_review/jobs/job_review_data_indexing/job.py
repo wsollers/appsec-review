@@ -465,7 +465,8 @@ def build_job(*, providers: Providers = registry_providers,
             document["registry_jobs"], jobs, inventory["rows"], product_status, JOB_ID,
             disabled_jobs=document.get("disabled_jobs", ()))
         matrices = {"schema": "appsec-review/coverage-matrices/1", "target_snapshot": document["target_snapshot"],
-                    "languages": matrix.language_matrix(view.store, leads),
+                    "languages": matrix.language_matrix(
+                        view.store, leads, enable_swift=unit.job.tools.enable_swift),
                     "build_units": matrix.build_unit_matrix(view.store),
                     "producer_consumer": matrix.producer_consumer_matrix(jobs, document["consumes"]),
                     "input_sources": reconciled, "input_source_discrepancies": discrepancies,

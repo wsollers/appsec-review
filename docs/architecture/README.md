@@ -77,6 +77,7 @@ Operations pages not listed above:
 - [`../operations/post-build-security-assessment.md`](../operations/post-build-security-assessment.md) — build-hardening assessment.
 - [`../operations/static-analysis.md`](../operations/static-analysis.md) — deterministic static evidence collection.
 - [`../operations/codeql-analysis.md`](../operations/codeql-analysis.md) — cross-language CodeQL.
+- [`../operations/swift-execution-policy.md`](../operations/swift-execution-policy.md) — disabled-by-default Swift execution and durable coverage gap.
 - [`../operations/owasp-control-assessment.md`](../operations/owasp-control-assessment.md) — OWASP control assessment.
 - [`../operations/security-tagging.md`](../operations/security-tagging.md) — security tagging.
 - [`../operations/review-data-indexing.md`](../operations/review-data-indexing.md) — dataset inventory and publication audit.

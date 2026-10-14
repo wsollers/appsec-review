@@ -41,6 +41,8 @@ def test_default_config_declares_midnight_nvd_schedule() -> None:
     assert job.schedule.timezone == "UTC"
     assert config.runtime.metadata_dir == config.runtime.runs_dir / "metadata"
     assert config.tools.disable_grype is True
+    assert config.tools.enable_swift is False
+    assert json.loads(config.resolved_json)["tools"]["enable_swift"] is False
     assert config.build_capture == BuildCaptureConfig(
         "ptrace", 100000, 256, 16384, True, 1024, 131072,
         ("AWS_SECRET_ACCESS_KEY", "GITHUB_TOKEN", "NODE_AUTH_TOKEN", "NUGET_AUTH_TOKEN",
@@ -69,6 +71,23 @@ def test_global_grype_policy_is_strictly_typed(tmp_path: Path) -> None:
     path.write_text(source.replace("disable_grype = true", 'disable_grype = "true"'), encoding="utf-8")
     with pytest.raises(ValueError, match="must be a Boolean"):
         load_config(path)
+
+
+def test_global_swift_execution_policy_is_typed_and_changes_resolved_identity(tmp_path: Path) -> None:
+    source = (ROOT / "appsec-review.toml").read_text(encoding="utf-8")
+    enabled_path = tmp_path / "enabled.toml"
+    enabled_path.write_text(source.replace("enable_swift = false", "enable_swift = true", 1), encoding="utf-8")
+    enabled = load_config(enabled_path)
+    disabled = load_config(ROOT / "appsec-review.toml")
+    assert enabled.tools.enable_swift is True
+    assert json.loads(enabled.resolved_json)["tools"]["enable_swift"] is True
+    assert enabled.resolved_sha256 != disabled.resolved_sha256
+
+    invalid_path = tmp_path / "invalid.toml"
+    invalid_path.write_text(source.replace("enable_swift = false", 'enable_swift = "false"', 1),
+                            encoding="utf-8")
+    with pytest.raises(ValueError, match="tools.enable_swift must be a Boolean"):
+        load_config(invalid_path)
 
 
 def test_language_build_has_typed_rust_limits_and_policy() -> None:

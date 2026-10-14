@@ -24,6 +24,10 @@ from appsec_review.retrieval.core import resolve_context_manifest
 from appsec_review.retrieval.index import load_verified_manifest
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from appsec_review.storage import atomic_bytes, atomic_json, canonical_json, file_sha256
+from appsec_review.swift_policy import (
+    SWIFT_KNOWN_GAP, contains_swift_derived, filter_swift_files, reject_swift_derived,
+    swift_enabled_from_run, swift_inventory_count,
+)
 
 from appsec_review.inference import Infer, ModelRequest
 from appsec_review.jobs.job_source_history_analysis import load_accepted_history
@@ -141,6 +145,9 @@ def load_accepted_plan(run_root: Path) -> Mapping[str, Any]:
     plan = _read_artifact(Path(run_root), identity or {})
     if plan.get("schema") != PLAN_SCHEMA:
         raise ValueError("accepted analysis plan schema is unsupported")
+    reject_swift_derived(
+        plan, enabled=swift_enabled_from_run(Path(run_root)),
+        context="accepted target analysis plan")
     return plan
 
 
@@ -194,6 +201,23 @@ def _base_indexes(context) -> tuple[list[IndexIdentity], Path, str]:
     return indexes, manifest_path, manifest_sha
 
 
+def apply_swift_catalog_policy(catalog: Mapping[str, Any], *, enabled: bool) -> dict[str, Any]:
+    """Keep Swift inventory upstream while removing it from every executable planning input."""
+    if enabled:
+        return dict(catalog)
+    files = tuple(catalog.get("files", ()))
+    return {
+        **dict(catalog),
+        "files": filter_swift_files(files, enabled=False),
+        "accepted_artifacts": tuple(item for item in catalog.get("accepted_artifacts", ())
+                                    if not contains_swift_derived(item)),
+        "build_units": tuple(item for item in catalog.get("build_units", ())
+                             if not contains_swift_derived(item)),
+        "gaps": (*catalog.get("gaps", ()), *([SWIFT_KNOWN_GAP]
+                 if swift_inventory_count(files) else [])),
+    }
+
+
 def build_job(*, infer: Infer | None = None, fail_task: str | None = None) -> Job:
     def maybe_fail(unit: UnitContext) -> None:
         if unit.unit_id == fail_task:
@@ -213,7 +237,9 @@ def build_job(*, infer: Infer | None = None, fail_task: str | None = None) -> Jo
 
     def summarize(unit: UnitContext) -> Mapping[str, Any]:
         maybe_fail(unit)
-        catalog = unit.output("catalog_summary.load_accepted_catalog")["catalog"]
+        catalog = apply_swift_catalog_policy(
+            unit.output("catalog_summary.load_accepted_catalog")["catalog"],
+            enabled=unit.job.tools.enable_swift)
         settings = unit.job.config.settings
         value = summarize_catalog(catalog, max_items=int(settings["summary_max_items"]),
                                   max_bytes=int(settings["summary_max_bytes"]),
@@ -224,7 +250,9 @@ def build_job(*, infer: Infer | None = None, fail_task: str | None = None) -> Jo
 
     def deterministic(unit: UnitContext) -> Mapping[str, Any]:
         maybe_fail(unit)
-        catalog = unit.output("catalog_summary.load_accepted_catalog")["catalog"]
+        catalog = apply_swift_catalog_policy(
+            unit.output("catalog_summary.load_accepted_catalog")["catalog"],
+            enabled=unit.job.tools.enable_swift)
         summary = unit.output("catalog_summary.summarize_components")["summary"]
         value = deterministic_plan(catalog, summary,
                                    unit.output("catalog_summary.load_accepted_catalog").get("history"))
@@ -256,7 +284,9 @@ def build_job(*, infer: Infer | None = None, fail_task: str | None = None) -> Jo
             plan["model"] = {"status": "UNAVAILABLE", "proposal_sha256": None}
             return {"plan": plan, "gaps": [gap], "model_calls": 0, "validation_rejections": 0,
                     "terminal_status": "COMPLETED_WITH_GAPS"}
-        catalog = unit.output("catalog_summary.load_accepted_catalog")["catalog"]
+        catalog = apply_swift_catalog_policy(
+            unit.output("catalog_summary.load_accepted_catalog")["catalog"],
+            enabled=unit.job.tools.enable_swift)
         summary = unit.output("catalog_summary.summarize_components")["summary"]
         guidance = load_runtime_skill(unit.job.repository_root, "target-analysis-planning",
                                       job_id="job_target_analysis_plan").text
@@ -414,7 +444,9 @@ def build_job(*, infer: Infer | None = None, fail_task: str | None = None) -> Jo
     def validate(unit: UnitContext) -> Mapping[str, Any]:
         maybe_fail(unit)
         plan = unit.output("analysis_decisions.resolve_ambiguity")["plan"]
-        catalog = unit.output("catalog_summary.load_accepted_catalog")["catalog"]
+        catalog = apply_swift_catalog_policy(
+            unit.output("catalog_summary.load_accepted_catalog")["catalog"],
+            enabled=unit.job.tools.enable_swift)
         validate_plan(plan, catalog)
         artifact = _artifact(unit, "accepted-analysis-plan.json", plan)
         return {"status": "VALID", "artifact": artifact, "plan": plan,

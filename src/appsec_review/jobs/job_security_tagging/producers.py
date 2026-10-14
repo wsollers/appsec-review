@@ -23,6 +23,7 @@ from appsec_review.retrieval import EntityKind, LogicalIdentity
 from appsec_review.retrieval.core import resolve_accepted_manifest
 from appsec_review.retrieval.index import load_verified_manifest
 from appsec_review.storage import canonical_json, file_sha256
+from appsec_review.swift_policy import SWIFT_KNOWN_GAP, is_swift_language, is_swift_path
 
 from .taxonomy import (
     CapabilityRules, TaxonomyError, Vocabulary, assignment, normalize_cert, normalize_cwe, segment,
@@ -208,7 +209,8 @@ def _path_tags(rules: CapabilityRules, path: str) -> list[tuple[str, str]]:
 
 
 def collect_source_facts(indexes: AcceptedIndexes, scope: Scope, vocabulary: Vocabulary,
-                         rules: CapabilityRules, limit: int) -> tuple[list[dict[str, Any]], list[str]]:
+                         rules: CapabilityRules, limit: int, *,
+                         enable_swift: bool = False) -> tuple[list[dict[str, Any]], list[str]]:
     """Declared language and configuration-file facts from the cataloged source inventory."""
     records: list[dict[str, Any]] = []
     gaps: list[str] = []
@@ -220,6 +222,9 @@ def collect_source_facts(indexes: AcceptedIndexes, scope: Scope, vocabulary: Voc
             if row.location is None:
                 continue
             path = row.location["path"]
+            if not enable_swift and (is_swift_path(path) or is_swift_language(row.payload.get("language"))):
+                gaps.append(SWIFT_KNOWN_GAP)
+                continue
             subjects = scope.subjects("source_file", row.identity, path)
             evidence = [_evidence(row, identity)]
             emitted: list[tuple[str, str]] = []

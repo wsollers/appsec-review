@@ -11,6 +11,7 @@ from appsec_review.applicability import (
     ProjectProcessingFacts, SourceArtifactIdentity, evaluate_applicability,
 )
 from appsec_review.storage import canonical_json
+from appsec_review.swift_policy import SWIFT_ENABLED_GAP, SWIFT_KNOWN_GAP
 
 
 PLAN_SCHEMA = "appsec-review/codeql-plan/1"
@@ -237,7 +238,8 @@ def build_codeql_plan(*, source_fingerprint: str, files: Sequence[Mapping[str, A
                       source_image_id: str,
                       projects: Sequence[Mapping[str, Any]] = (),
                       language_modes: Mapping[str, str] | None = None,
-                      configuration_sha256: str = "0" * 64) -> CodeQLPlan:
+                      configuration_sha256: str = "0" * 64,
+                      enable_swift: bool = False) -> CodeQLPlan:
     """Map accepted scopes using the extractor inventory reported by the pinned CLI."""
     inventory = tuple(sorted(set(str(value) for value in supported_extractors)))
     if not source_fingerprint:
@@ -426,9 +428,14 @@ def build_codeql_plan(*, source_fingerprint: str, files: Sequence[Mapping[str, A
     for language, display in (("ruby", "Ruby"), ("swift", "Swift")):
         found = _files_for(normalized_files, ".", _LANGUAGE_SUFFIXES[language])
         if found:
+            if language == "swift" and not enable_swift:
+                gaps.append(f"{display}: {len(found)} accepted source file(s); {SWIFT_KNOWN_GAP}")
+                continue
             qualifier = ("extractor is present but no accepted source/build executor and platform capability exists"
                          if language in inventory else "pinned runtime reported no extractor")
             gaps.append(f"{display}: {len(found)} accepted source file(s); {qualifier}")
+            if language == "swift":
+                gaps.append(SWIFT_ENABLED_GAP)
 
     for language, suffixes in (("php", {".php"}), ("wasm", {".wasm", ".wat"})):
         found = _files_for(normalized_files, ".", suffixes)

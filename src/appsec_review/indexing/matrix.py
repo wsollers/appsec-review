@@ -16,6 +16,7 @@ from typing import Any
 
 from appsec_review.graph.contract import GRAPH_INDEX, Coverage, Family
 from appsec_review.indexing.store import ShardSet
+from appsec_review.swift_policy import SWIFT_KNOWN_GAP
 
 
 LANES = ("source", "syntax", "compiled", "symbols", "cpg_graph", "codeql", "code_graph", "source_sast")
@@ -93,7 +94,8 @@ def graph_cell(shards: ShardSet, selected: Sequence[Mapping[str, Any]], unavaila
                  unrecognised_shards=unknown[:20])
 
 
-def language_matrix(shards: ShardSet, lead_languages: Mapping[str, int]) -> list[dict[str, Any]]:
+def language_matrix(shards: ShardSet, lead_languages: Mapping[str, int], *,
+                    enable_swift: bool = False) -> list[dict[str, Any]]:
     """One row per catalogued language with a cell per lane."""
     source_counts: dict[str, int] = defaultdict(int)
     for row in shards.entities(shards.select(index="source", job="job_target_catalog"), kinds=("source_file",)):
@@ -120,7 +122,7 @@ def language_matrix(shards: ShardSet, lead_languages: Mapping[str, int]) -> list
     for language in sorted(set(source_counts) | set(syntax) | set(codeql) | set(graph)):
         native = language == "c/c++"
         scope_states = [state for scope, state in syntax_states.items() if canonical_language(scope.split("-")[0]) == language]
-        rows.append({
+        row = {
             "cell_type": "language", "language": language, "source_files": source_counts.get(language, 0),
             "lanes": {
                 "source": _cell("complete" if source_counts.get(language) else "unavailable",
@@ -155,7 +157,19 @@ def language_matrix(shards: ShardSet, lead_languages: Mapping[str, int]) -> list
                                      "no accepted source-SAST lead names this language (scanner absent, skipped or "
                                      "reported nothing); not evidence of a clean target",
                                      leads=lead_languages.get(language, 0)),
-            }})
+            }}
+        if language == "swift" and not enable_swift:
+            row["known_gap"] = SWIFT_KNOWN_GAP
+            row["lanes"]["source"]["basis"] = (
+                "accepted catalog source_file inventory only; no Swift-derived consumer input")
+            for lane, cell in row["lanes"].items():
+                if lane != "source":
+                    cell.update({"state": "unavailable", "basis": SWIFT_KNOWN_GAP})
+                    cell.pop("leads", None)
+                    cell.pop("shards", None)
+                    cell.pop("artifact_shards", None)
+                    cell.pop("families", None)
+        rows.append(row)
     return rows
 
 
