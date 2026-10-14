@@ -19,6 +19,10 @@ from appsec_review.retrieval.core import resolve_context_manifest
 from appsec_review.retrieval.index import load_verified_manifest
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from appsec_review.storage import atomic_json, canonical_json, file_sha256
+from appsec_review.swift_policy import (
+    SWIFT_KNOWN_GAP, filter_swift_files, reject_swift_derived, swift_enabled_from_run,
+    swift_inventory_count,
+)
 
 from . import signals as history_signals
 from .filters import FILTER_IDENTITY, FORMATTING_IDENTITY
@@ -186,6 +190,9 @@ def load_accepted_history(run_root: Path) -> Mapping[str, Any] | None:
     document = _read(Path(run_root), handoff["outputs"]["publish.publish_handoff"]["artifact"])
     if document.get("schema") != SCHEMA:
         raise ValueError("accepted source history schema is unsupported")
+    reject_swift_derived(
+        document, enabled=swift_enabled_from_run(Path(run_root)),
+        context="accepted source history handoff")
     return {**document, "handoff_sha256": handoff_sha}
 
 
@@ -271,10 +278,15 @@ def build_job(*, executor_factory: ExecutorFactory | None = None,
     def resolve(unit: UnitContext) -> Mapping[str, Any]:
         settings = _settings(unit.job)
         inputs = _load_inputs(unit.job.run_root)
+        swift_count = swift_inventory_count(inputs["files"])
+        if not unit.job.tools.enable_swift:
+            inputs["files"] = list(filter_swift_files(inputs["files"], enabled=False))
         if inputs["source_fingerprint"] != unit.job.source_fingerprint:
             raise ValueError("graph target fingerprint does not match the accepted catalog")
         target = unit.job.target_root
-        if not settings.git_enabled:
+        if swift_count and not inputs["files"] and not unit.job.tools.enable_swift:
+            git = GitSource("SKIPPED_POLICY", "swift_execution_disabled")
+        elif not settings.git_enabled:
             git = GitSource("SKIPPED_POLICY", "git_history_disabled")
         elif target is None:
             git = GitSource("SKIPPED_NA", "no_target")
@@ -288,6 +300,8 @@ def build_job(*, executor_factory: ExecutorFactory | None = None,
         unit.job.events.write("SOURCE_HISTORY_RESOLVED", git_decision=git.decision, git_reason=git.reason,
                               github_decision=github[0])
         gaps = [git.reason] if git.decision == "GAP" else []
+        if swift_count and not unit.job.tools.enable_swift:
+            gaps.append(SWIFT_KNOWN_GAP)
         return {"identity": history_identity(target), "git": git.as_dict(),
                 "github": {"decision": github[0], "reason": github[1]}, "inputs": inputs,
                 "gaps": gaps, "terminal_status": git.decision if git.decision in SKIPPED else _status(gaps)}

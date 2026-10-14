@@ -1073,7 +1073,8 @@ def build_job() -> Job:
             supported_extractors=inventory["languages"], source_image_id=settings.source_image_id,
             projects=catalog.projects,
             language_modes={language: value.mode.value for language, value in settings.languages.items()},
-            configuration_sha256=resolved_configuration_identity(unit.job.run_root))
+            configuration_sha256=resolved_configuration_identity(unit.job.run_root),
+            enable_swift=unit.job.tools.enable_swift)
         if runtime_gaps:
             planned = CodeQLPlan(planned.schema, planned.source_fingerprint,
                 planned.extractor_inventory, planned.scopes,

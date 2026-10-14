@@ -30,6 +30,9 @@ secret_finding_count_limit = 1000
 [tools]
 # Global selection policy; disabled coverage is a named gap, never a clean result.
 disable_grype = true
+# Catalog Swift, but keep it out of execution and downstream evidence unless explicitly enabled.
+# Enabling removes only this policy gate; unsupported tool/platform requirements remain gaps.
+enable_swift = false
 
 [orchestration.dagster]
 executor = "multiprocess"

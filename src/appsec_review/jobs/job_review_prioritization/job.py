@@ -25,6 +25,7 @@ from appsec_review.retrieval.core import resolve_context_manifest
 from appsec_review.retrieval.index import load_verified_manifest
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from appsec_review.storage import atomic_json, canonical_json, file_sha256
+from appsec_review.swift_policy import SWIFT_KNOWN_GAP, is_swift_language, is_swift_path
 from appsec_review.jobs.component_ownership import resolve_root_ownership
 
 from . import scoring
@@ -210,6 +211,13 @@ def build_job() -> Job:
     def load(unit: UnitContext) -> Mapping[str, Any]:
         settings = _settings(unit.job)
         inputs = _load_inputs(unit.job.run_root)
+        policy_gaps: list[str] = []
+        if not unit.job.tools.enable_swift:
+            filtered = {path: value for path, value in inputs["files"].items()
+                        if not (is_swift_path(path) or is_swift_language(value.get("language")))}
+            if len(filtered) != len(inputs["files"]):
+                policy_gaps.append(SWIFT_KNOWN_GAP)
+            inputs["files"] = filtered
         if inputs["source_fingerprint"] != unit.job.source_fingerprint:
             raise ValueError("graph target fingerprint does not match accepted inputs")
         optional = {name: has_handoff(unit.job.run_root, job_id) for name, job_id in (
@@ -219,7 +227,8 @@ def build_job() -> Job:
                               optional_inputs=optional, sources=dict(settings["sources"]))
         return {"inputs": {key: value for key, value in inputs.items() if key != "files"},
                 "files_artifact": _write(unit, "catalog-files.json", inputs["files"]), "optional": optional,
-                "gaps": [], "terminal_status": "SUCCEEDED"}
+                "gaps": policy_gaps,
+                "terminal_status": "COMPLETED_WITH_GAPS" if policy_gaps else "SUCCEEDED"}
 
     def catalog_files(unit: UnitContext) -> Mapping[str, Mapping[str, Any]]:
         return read_json(unit.job.run_root, unit.output("load.accepted_inputs")["files_artifact"])

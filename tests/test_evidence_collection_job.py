@@ -16,9 +16,10 @@ from appsec_review.jobs.cataloging import source_fingerprint
 from appsec_review.jobs.job_evidence_collection import build_job, plan_applicability
 from appsec_review.jobs.job_review_intake import build_job as build_intake
 from appsec_review.jobs.job_target_catalog import build_job as build_catalog
-from appsec_review.jobs.job_target_analysis_plan import build_job as build_analysis_plan
+from appsec_review.jobs.job_target_analysis_plan import build_job as build_analysis_plan, load_accepted_plan
 from appsec_review.rulepacks.sei_cert.pack import PackVerificationError, verify_pack, write_lock
 from appsec_review.runtime import GraphRunner, JobRunner
+from appsec_review.swift_policy import SWIFT_KNOWN_GAP
 
 
 ROOT = Path(__file__).parents[1]
@@ -134,6 +135,31 @@ def test_job_has_explicit_dispositions_and_reuses_only_successful_tool_checkpoin
         executor_factory=factory)]).run(target_root=target, source_fingerprint=fingerprint, run_id=run_id)
     assert calls == calls_after
     assert [item["action"] for item in reused["decisions"]] == ["REUSE", "REUSE", "REUSE", "REUSE"]
+
+
+def test_disabled_swift_target_dispatches_no_evidence_producer(tmp_path: Path) -> None:
+    config, target = fixture(tmp_path)
+    shutil.rmtree(target)
+    target.mkdir()
+    (target / "Only.swift").write_text("print(\"swift\")\n", encoding="utf-8")
+    fingerprint = source_fingerprint(target)
+    base = GraphRunner(config, [build_intake(), build_catalog(), build_analysis_plan()]).run(
+        target_root=target, source_fingerprint=fingerprint)
+    run_id = base["run_id"]
+    plan = load_accepted_plan(config.runtime.runs_dir / run_id)
+    assert any("KNOWN_GAP" in gap and "Swift execution is disabled" in gap
+               for gap in plan["coverage_gaps"])
+
+    calls: list[str] = []
+    factory = lambda unit: FakeExecutor(unit.job.repository_root, unit.job.run_root, calls)
+    outcome = GraphRunner(config, [build_intake(), build_catalog(), build_analysis_plan(),
+                                   build_job(executor_factory=factory)]).run(
+        target_root=target, source_fingerprint=fingerprint, run_id=run_id)
+    assert calls == []
+    dispositions = outcome["jobs"]["job_evidence_collection"]["result"]["outputs"][
+        "evidence_publication.publish_handoff"]["dispositions"]
+    assert all(item["terminal_status"] == "NOT_APPLICABLE" for item in dispositions)
+    assert all(SWIFT_KNOWN_GAP in item["gaps"] for item in dispositions)
 
 
 def test_job_refuses_dispatch_without_graph_target(tmp_path: Path) -> None:

@@ -255,7 +255,9 @@ def build_job() -> Job:
     def source_facts(unit: UnitContext) -> Mapping[str, Any]:
         vocabulary, rules, _ = _unit_taxonomy(unit)
         _, limit, _ = _settings(unit.job.config.settings)
-        records, gaps = collect_source_facts(_indexes(unit), _scope(unit), vocabulary, rules, limit)
+        records, gaps = collect_source_facts(
+            _indexes(unit), _scope(unit), vocabulary, rules, limit,
+            enable_swift=unit.job.tools.enable_swift)
         return _assignment_set(unit, "source-facts", records, gaps)
 
     def observation_facts(unit: UnitContext) -> Mapping[str, Any]:

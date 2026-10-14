@@ -32,6 +32,10 @@ from appsec_review.storage import FileLock, atomic_json, canonical_json, file_sh
 from appsec_review.jobs.job_third_party_data_sync.publication import verify_current
 from appsec_review.rulepacks.sei_cert.pack import PackError, PackIdentity, verify_pack
 from appsec_review.jobs.job_evidence_collection.datasets import CONSUMES, DATASETS
+from appsec_review.swift_policy import (
+    SWIFT_KNOWN_GAP, filter_swift_files, is_swift_path, reject_swift_derived,
+    swift_inventory_count,
+)
 
 
 CAPABILITIES: Mapping[str, tuple[str, ...]] = {
@@ -44,6 +48,18 @@ CAPABILITIES: Mapping[str, tuple[str, ...]] = {
     "configuration": ("tool-hadolint", "tool-checkov", "tool-trivy", "tool-zizmor"),
     "binary_hardening": ("tool-blint",),
 }
+
+
+def _apply_swift_policy(selection: Applicability, *, enabled: bool) -> Applicability:
+    if enabled:
+        return selection
+    files = tuple(path for path in selection.files if not is_swift_path(path))
+    if files == selection.files:
+        return selection
+    gaps = tuple(dict.fromkeys((*selection.gaps, SWIFT_KNOWN_GAP)))
+    reason = (f"{selection.reason}; Swift inputs excluded by tools.enable_swift=false" if files else
+              "only Swift inputs matched and Swift execution is disabled by tools.enable_swift=false")
+    return Applicability(bool(files), reason, files, selection.coverage_kind, gaps, selection.families)
 TOPOLOGY: Mapping[str, tuple[str, ...]] = {
     capability: tuple(
         f"{tool.removeprefix('tool-').replace('-', '_')}_{phase}"
@@ -354,9 +370,15 @@ def _write_evidence(unit: UnitContext, adapter: ToolAdapter, catalog: ScanCatalo
 
 def _execute_tool(unit: UnitContext, adapter: ToolAdapter, catalog: ScanCatalog,
                   executor_factory: ExecutorFactory, fail_tool: str | None,
-                  planned: Applicability | None = None) -> Mapping[str, Any]:
+                  planned: Applicability | None = None, *, swift_present: bool = False) -> Mapping[str, Any]:
+    selection = _apply_swift_policy(
+        planned if planned is not None else adapter.applicability(catalog),
+        enabled=unit.job.tools.enable_swift)
+    if swift_present and not unit.job.tools.enable_swift and SWIFT_KNOWN_GAP not in selection.gaps:
+        selection = Applicability(
+            selection.applicable, selection.reason, selection.files, selection.coverage_kind,
+            (*selection.gaps, SWIFT_KNOWN_GAP), selection.families)
     if adapter.tool_id == "tool-grype" and unit.job.tools.disable_grype:
-        selection = planned if planned is not None else adapter.applicability(catalog)
         gap = "Grype coverage was configured disabled by tools.disable_grype"
         envelope, path = _write_evidence(
             unit, adapter, catalog, selection,
@@ -371,8 +393,7 @@ def _execute_tool(unit: UnitContext, adapter: ToolAdapter, catalog: ScanCatalog,
                 "checkpoint_reused": False, "artifact": _artifact(unit.job.run_root, path),
                 "scanner_output": None, "execution": None, "record_count": 0,
                 "gaps": envelope["exclusions_and_gaps"], "retry_count": 0}
-    selection, mounts, environment, blocked = _prerequisites(
-        unit, adapter, planned if planned is not None else adapter.applicability(catalog))
+    selection, mounts, environment, blocked = _prerequisites(unit, adapter, selection)
     if not selection.applicable:
         envelope, path = _write_evidence(
             unit, adapter, catalog, selection,
@@ -468,12 +489,37 @@ def _execute_tool(unit: UnitContext, adapter: ToolAdapter, catalog: ScanCatalog,
                     destination = staged / relative
                     destination.parent.mkdir(parents=True, exist_ok=True)
                     shutil.copyfile(source, destination)
+            execution_target = unit.job.target_root or Path()
+            if swift_present and not unit.job.tools.enable_swift and adapter.tool_id not in {
+                    "tool-spotbugs", "tool-blint", "tool-grype"}:
+                stage_id = hashlib.sha256(canonical_json({
+                    "tool": adapter.tool_id, "files": list(selection.files),
+                    "catalog": catalog.handoff_sha256,
+                })).hexdigest()[:16]
+                staged_target = unit.job.run_root / ".scratch" / "swift-policy-targets" / stage_id
+                staged_target.mkdir(parents=True, exist_ok=True)
+                hashes = {str(item["path"]): str(item.get("sha256", "")) for item in catalog.files}
+                for relative in selection.files:
+                    if relative not in hashes:
+                        continue
+                    source = (execution_target / relative).resolve()
+                    if (execution_target.resolve() not in source.parents or source.is_symlink()
+                            or not source.is_file() or file_sha256(source) != hashes[relative]):
+                        raise ValueError(f"accepted scanner input changed or escapes the target: {relative}")
+                    destination = staged_target / relative
+                    destination.parent.mkdir(parents=True, exist_ok=True)
+                    if destination.exists():
+                        if destination.is_symlink() or file_sha256(destination) != hashes[relative]:
+                            raise ValueError(f"staged scanner input identity changed: {relative}")
+                    else:
+                        shutil.copyfile(source, destination)
+                execution_target = staged_target
             try:
                 if fail_tool == adapter.tool_id:
                     raise RuntimeError(f"injected bounded failure: {adapter.tool_id}")
                 result = executor.execute(ExecutionRequest(
                     tool_id=adapter.tool_id, argv=adapter.argv(tool.executable, selection),
-                    target_root=unit.job.target_root or Path(), scratch_root=scratch,
+                    target_root=execution_target, scratch_root=scratch,
                     extra_mounts=mounts, environment=environment,
                 ))
                 attempt_paths = (unit.job.run_root / result.stdout_path,
@@ -500,6 +546,9 @@ def _execute_tool(unit: UnitContext, adapter: ToolAdapter, catalog: ScanCatalog,
                 try:
                     parsed = adapter.parse(output.read_bytes())
                     observations, parser_gaps = _separate_parser_diagnostics(parsed)
+                    reject_swift_derived(
+                        observations, enabled=unit.job.tools.enable_swift,
+                        context=f"{adapter.tool_id} observations")
                     gaps.extend(parser_gaps)
                 except (ValueError, KeyError, TypeError, UnicodeError, json.JSONDecodeError) as exc:
                     raise RuntimeError(f"{adapter.tool_id} parser incompatibility ({type(exc).__name__})") from exc
@@ -755,6 +804,12 @@ def build_job(*, executor_factory: ExecutorFactory | None = None, fail_tool: str
             dependencies = ("software_inventory.syft_scan",) if tool_id == "tool-grype" else ()
             def handler(unit: UnitContext, selected: ToolAdapter = adapter) -> Mapping[str, Any]:
                 catalog = load_target_catalog(unit.job.run_root)
+                swift_present = bool(swift_inventory_count(catalog.files))
+                if not unit.job.tools.enable_swift:
+                    catalog = ScanCatalog(
+                        catalog.source_fingerprint, catalog.handoff_sha256,
+                        filter_swift_files(catalog.files, enabled=False), catalog.projects,
+                        catalog.artifacts, catalog.target_root, catalog.compile_commands)
                 plan = load_accepted_plan(unit.job.run_root)
                 by_tool = {item["scanner_id"]: item for item in plan["scanner_selections"]}
                 natural = selected.applicability(catalog)
@@ -764,7 +819,9 @@ def build_job(*, executor_factory: ExecutorFactory | None = None, fail_tool: str
                            Applicability(True, str(decision["reason"]),
                                          tuple(item["path"] for item in decision["scope"]),
                                          natural.coverage_kind, natural.gaps, natural.families))
-                return _execute_tool(unit, selected, catalog, factory, fail_tool, planned)
+                return _execute_tool(
+                    unit, selected, catalog, factory, fail_tool, planned,
+                    swift_present=swift_present)
             units.append(Unit(scan_id, handler, dependencies))
             units.append(Unit(normalize_id,
                               lambda unit, scan=scan_id: _normalize_tool(unit, scan), (scan_id,)))

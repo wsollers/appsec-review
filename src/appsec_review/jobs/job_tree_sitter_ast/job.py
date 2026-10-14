@@ -15,6 +15,7 @@ from appsec_review.retrieval.core import resolve_context_manifest
 from appsec_review.retrieval.index import load_verified_manifest
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from appsec_review.storage import atomic_json, file_sha256
+from appsec_review.swift_policy import SWIFT_KNOWN_GAP, is_swift_language
 
 from .model import GrammarLock, partition_scopes, plan_scopes
 from .normalize import NORMALIZER_SCHEMA
@@ -124,8 +125,18 @@ def build_job(*, executor_factory: ExecutorFactory | None = None) -> Job:
         settings = unit.job.config.settings
         scopes = plan_scopes(loaded["accepted"], max_files_per_scope=int(settings["max_files_per_scope"]),
                              max_source_bytes_per_scope=int(settings["max_source_bytes_per_scope"]))
+        policy_gaps = ()
+        if not unit.job.tools.enable_swift:
+            swift_scopes = tuple(scope for scope in scopes if is_swift_language(scope.language))
+            scopes = tuple(scope for scope in scopes if not is_swift_language(scope.language))
+            policy_gaps = tuple({
+                "scope_id": scope.scope_id, "language": scope.language,
+                "terminal_status": "UNAVAILABLE", "reason": SWIFT_KNOWN_GAP,
+                "gaps": [SWIFT_KNOWN_GAP],
+            } for scope in swift_scopes)
         locks = loaded["grammar_locks"]
         runnable, gaps = partition_scopes(scopes, {key: GrammarLock(**value) for key, value in locks.items()})
+        gaps = (*policy_gaps, *gaps)
         retained = {str(item.get("path")) for scope in scopes for item in scope.exclusions}
         orphaned = [item for item in loaded["accepted"]["gaps"]
                     if item.get("reason") in {"excluded_directory", "generated_file_excluded", "file_too_large"}

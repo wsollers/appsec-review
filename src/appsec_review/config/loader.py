@@ -179,6 +179,7 @@ class ToolCapabilityConfig:
     """Global tool selection policy shared by every producer."""
 
     disable_grype: bool = False
+    enable_swift: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -613,7 +614,11 @@ def load_config(path: str | Path = "appsec-review.toml", *, overlay: str | Path 
     disable_grype = tools_value.get("disable_grype", False)
     if not isinstance(disable_grype, bool):
         raise ValueError("tools.disable_grype must be a Boolean")
-    tool_capabilities = ToolCapabilityConfig(disable_grype=disable_grype)
+    enable_swift = tools_value.get("enable_swift", False)
+    if not isinstance(enable_swift, bool):
+        raise ValueError("tools.enable_swift must be a Boolean")
+    tool_capabilities = ToolCapabilityConfig(
+        disable_grype=disable_grype, enable_swift=enable_swift)
 
     build_capture = _build_capture(document.get("build_capture"), field="build_capture")
     resolved_document["build_capture"]["mode"] = build_capture.mode.value
@@ -889,6 +894,7 @@ def load_config(path: str | Path = "appsec-review.toml", *, overlay: str | Path 
     resolved_document["runtime"]["metadata_dir"] = str(
         document["runtime"].get("metadata_dir", "runs/metadata"))
     resolved_document.setdefault("tools", {})["disable_grype"] = tool_capabilities.disable_grype
+    resolved_document["tools"]["enable_swift"] = tool_capabilities.enable_swift
     for job_id, job in jobs.items():
         resolved_document["jobs"][job_id]["settings"] = copy.deepcopy(dict(job.settings))
     pending = {job_id: jobs.pop(job_id) for job_id in sorted(PENDING_JOBS & set(jobs))}
