@@ -37,6 +37,23 @@ def test_catalog_accounts_for_every_audited_image() -> None:
     assert {item["state"] for item in audited} <= {"enabled", "deferred", "replaced", "retired"}
 
 
+def test_catalog_validation_rejects_tool_runtime_policy_drift(monkeypatch, tmp_path: Path) -> None:
+    catalog = container_build.load_catalog()
+    relative = Path("containers/tools/clang-static-analysis/tool.toml")
+    source = ROOT / relative
+    drifted = tmp_path / "tool.toml"
+    drifted.write_text(source.read_text(encoding="utf-8").replace(
+        'memory = "1g"', 'memory = "2g"'), encoding="utf-8")
+    original_safe_path = container_build.safe_path
+
+    def safe_path(value):
+        return drifted if Path(value) == relative else original_safe_path(value)
+
+    monkeypatch.setattr(container_build, "safe_path", safe_path)
+    assert "tool-clang-static-analysis: memory does not match central runtime policy" in (
+        container_build.validate(catalog))
+
+
 def test_container_docs_track_current_enabled_inventory() -> None:
     catalog = container_build.load_catalog()
     enabled = [item for item in catalog["images"] if item["state"] == "enabled"]

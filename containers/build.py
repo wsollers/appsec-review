@@ -70,6 +70,12 @@ def dependency_order(ids: list[str], catalog: dict[str, Any]) -> list[str]:
 
 def validate(catalog: dict[str, Any]) -> list[str]:
     errors: list[str] = []
+    policy: dict[str, Any] = {}
+    try:
+        with safe_path(catalog["runtime_policy"]).open("rb") as stream:
+            policy = tomllib.load(stream)
+    except (KeyError, OSError, ValueError, tomllib.TOMLDecodeError) as exc:
+        errors.append(f"runtime policy is unavailable: {exc}")
     images = catalog.get("images", [])
     ids = [item.get("id") for item in images]
     if len(ids) != len(set(ids)):
@@ -130,6 +136,17 @@ def validate(catalog: dict[str, Any]) -> list[str]:
                 not isinstance(item.get("probe_argv"), list) or
                 not isinstance(item.get("probe_expect"), list)):
             errors.append(f"{image_id}: buildenv probe contract is required")
+        if item.get("kind") == "tool":
+            try:
+                manifest_path = safe_path(item["tool_manifest"])
+                with manifest_path.open("rb") as stream:
+                    manifest = tomllib.load(stream)
+                for field in ("network", "user", "memory", "cpus", "pids_limit",
+                              "timeout_seconds", "output_bytes"):
+                    if manifest.get(field) != policy.get(field):
+                        errors.append(f"{image_id}: {field} does not match central runtime policy")
+            except (KeyError, OSError, ValueError, tomllib.TOMLDecodeError) as exc:
+                errors.append(f"{image_id}: tool manifest is unavailable: {exc}")
         lock_name = item.get("assets_lock")
         if lock_name:
             lock_path = safe_path(lock_name)
