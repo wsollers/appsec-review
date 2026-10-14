@@ -30,6 +30,7 @@ from appsec_review.jobs.job_codeql_analysis.job import (
     _database_identity,
     _query_identity,
     _query_profiles,
+    _stage_manifest_workspace,
     _validate_scope_assets,
 )
 from appsec_review.storage import canonical_json
@@ -37,6 +38,84 @@ from appsec_review.storage import canonical_json
 
 IMAGE = "sha256:" + "1" * 64
 ROOT = Path(__file__).parents[1]
+
+
+def _workspace_manifest(workspace: Path) -> dict[str, object]:
+    return {
+        "schema": "appsec-review/build-workspace-manifest/1",
+        "files": {
+            path.relative_to(workspace).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
+            for path in sorted(workspace.rglob("*"))
+            if path.is_file() and not path.is_symlink()
+        },
+    }
+
+
+def _symlink_or_skip(link: Path, target: str | Path, *, target_is_directory: bool = False) -> None:
+    try:
+        link.symlink_to(target, target_is_directory=target_is_directory)
+    except OSError as exc:
+        pytest.skip(f"symlink creation is unavailable: {exc}")
+
+
+def test_materialized_workspace_staging_omits_manifest_backed_npm_symlink(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    executable = source / "node_modules" / "esbuild" / "bin" / "esbuild"
+    executable.parent.mkdir(parents=True)
+    executable.write_text("binary", encoding="utf-8")
+    npm_bin = source / "node_modules" / ".bin"
+    npm_bin.mkdir()
+    _symlink_or_skip(npm_bin / "esbuild", "../esbuild/bin/esbuild")
+    manifest = _workspace_manifest(source)
+
+    staged = tmp_path / "staged"
+    _stage_manifest_workspace(source, staged, manifest, file_limit=10)
+
+    assert (staged / "node_modules" / "esbuild" / "bin" / "esbuild").read_text() == "binary"
+    assert not (staged / "node_modules" / ".bin" / "esbuild").exists()
+
+
+def test_materialized_workspace_staging_rejects_escaping_symlink(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    retained = source / "package.json"
+    retained.write_text("{}", encoding="utf-8")
+    outside = tmp_path / "outside"
+    outside.write_text("untrusted", encoding="utf-8")
+    _symlink_or_skip(source / "escape", outside)
+
+    with pytest.raises(FrameworkIntegrityError, match="unsafe symlink"):
+        _stage_manifest_workspace(source, tmp_path / "staged", _workspace_manifest(source),
+                                  file_limit=10)
+
+
+def test_materialized_workspace_staging_rejects_manifest_path_through_symlink(
+        tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    real = source / "real"
+    real.mkdir()
+    payload = real / "payload.js"
+    payload.write_text("payload", encoding="utf-8")
+    _symlink_or_skip(source / "linked", "real", target_is_directory=True)
+    manifest = _workspace_manifest(source)
+    manifest_files = manifest["files"]
+    assert isinstance(manifest_files, dict)
+    manifest_files["linked/payload.js"] = hashlib.sha256(payload.read_bytes()).hexdigest()
+
+    with pytest.raises(FrameworkIntegrityError, match="unsafe symlink"):
+        _stage_manifest_workspace(source, tmp_path / "staged", manifest, file_limit=10)
+
+
+def test_materialized_workspace_staging_rejects_hash_change(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "package.json").write_text("{}", encoding="utf-8")
+    manifest = _workspace_manifest(source)
+    (source / "package.json").write_text('{"changed":true}', encoding="utf-8")
+
+    with pytest.raises(FrameworkIntegrityError, match="identity changed"):
+        _stage_manifest_workspace(source, tmp_path / "staged", manifest, file_limit=10)
 
 
 def test_central_codeql_asset_lock_matches_tracked_lock() -> None:

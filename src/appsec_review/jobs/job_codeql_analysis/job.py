@@ -232,22 +232,76 @@ def _verify_workspace_scope(workspace: Path, scope: CodeQLScope) -> None:
             raise FrameworkIntegrityError("CodeQL materialized scope source identity changed")
 
 
-def _verify_workspace_manifest(workspace: Path, manifest: Mapping[str, Any], *, file_limit: int) -> None:
+def _workspace_manifest_files(workspace: Path, manifest: Mapping[str, Any], *, file_limit: int,
+                              allow_manifest_backed_symlinks: bool = False) -> dict[str, str]:
     expected = manifest.get("files")
     if (manifest.get("schema") != "appsec-review/build-workspace-manifest/1" or
             not isinstance(expected, Mapping) or len(expected) > file_limit):
         raise FrameworkIntegrityError("CodeQL materialized environment manifest is invalid")
+    expected_files = {str(path): str(digest) for path, digest in expected.items()}
+    workspace_root = workspace.resolve(strict=True)
     actual: dict[str, str] = {}
     for path in sorted(workspace.rglob("*")):
         if path.is_symlink():
-            raise FrameworkIntegrityError("CodeQL materialized environment contains a symlink")
+            if not allow_manifest_backed_symlinks:
+                raise FrameworkIntegrityError("CodeQL materialized environment contains a symlink")
+            try:
+                link_target = path.readlink()
+                resolved = path.resolve(strict=True)
+            except (OSError, RuntimeError) as exc:
+                raise FrameworkIntegrityError(
+                    "CodeQL materialized environment contains an invalid symlink") from exc
+            if (link_target.is_absolute() or workspace_root not in resolved.parents or
+                    not resolved.is_file() or resolved.is_symlink()):
+                raise FrameworkIntegrityError(
+                    "CodeQL materialized environment contains an unsafe symlink")
+            resolved_relative = resolved.relative_to(workspace_root).as_posix()
+            if expected_files.get(resolved_relative) != file_sha256(resolved):
+                raise FrameworkIntegrityError(
+                    "CodeQL materialized environment contains an unpinned symlink")
+            continue
         if not path.is_file():
             continue
         if len(actual) >= file_limit:
             raise FrameworkIntegrityError("CodeQL materialized environment exceeds its file bound")
         actual[path.relative_to(workspace).as_posix()] = file_sha256(path)
-    if actual != {str(path): str(digest) for path, digest in expected.items()}:
+    if actual != expected_files:
         raise FrameworkIntegrityError("CodeQL materialized environment identity changed")
+    return expected_files
+
+
+def _verify_workspace_manifest(workspace: Path, manifest: Mapping[str, Any], *, file_limit: int) -> None:
+    _workspace_manifest_files(workspace, manifest, file_limit=file_limit)
+
+
+def _stage_manifest_workspace(source: Path, workspace: Path, manifest: Mapping[str, Any],
+                              *, file_limit: int) -> None:
+    expected = _workspace_manifest_files(
+        source, manifest, file_limit=file_limit, allow_manifest_backed_symlinks=True)
+    if workspace.exists():
+        shutil.rmtree(workspace)
+    workspace.mkdir(parents=True)
+    source_root = source.resolve(strict=True)
+    for relative, digest in sorted(expected.items()):
+        logical = PurePosixPath(relative)
+        if (logical.is_absolute() or logical.as_posix() != relative or ".." in logical.parts or
+                any("\\" in part for part in logical.parts)):
+            raise FrameworkIntegrityError("CodeQL materialized environment manifest is invalid")
+        source_path = source / Path(*logical.parts)
+        current = source
+        for part in logical.parts:
+            current /= part
+            if current.is_symlink():
+                raise FrameworkIntegrityError(
+                    "CodeQL materialized environment manifest traverses a symlink")
+        resolved = source_path.resolve(strict=True)
+        if (source_root not in resolved.parents or not source_path.is_file() or
+                file_sha256(source_path) != digest):
+            raise FrameworkIntegrityError("CodeQL materialized environment identity changed")
+        destination = workspace / Path(*logical.parts)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source_path, destination)
+    _verify_workspace_manifest(workspace, manifest, file_limit=file_limit)
 
 
 def _stage_workspace(unit: UnitContext, scope: CodeQLScope,
@@ -266,11 +320,8 @@ def _stage_workspace(unit: UnitContext, scope: CodeQLScope,
         source = (unit.job.run_root / workspace_value).resolve(strict=True)
         if unit.job.run_root.resolve() not in source.parents or not source.is_dir() or source.is_symlink():
             raise FrameworkIntegrityError("CodeQL materialized environment escaped the run")
-        _verify_workspace_manifest(source, manifest, file_limit=_settings(unit).database_file_limit)
-        if workspace.exists():
-            shutil.rmtree(workspace)
-        shutil.copytree(source, workspace)
-        _verify_workspace_manifest(workspace, manifest, file_limit=_settings(unit).database_file_limit)
+        _stage_manifest_workspace(
+            source, workspace, manifest, file_limit=_settings(unit).database_file_limit)
     _verify_workspace_scope(workspace, scope)
     _make_workspace_accessible(workspace)
 
