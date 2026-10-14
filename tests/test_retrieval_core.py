@@ -268,6 +268,58 @@ def test_attempt_input_manifest_is_pinned_to_exact_parallel_handoffs(tmp_path: P
         "data/indices/manifests/branch_a.json", "data/indices/manifests/branch_b.json"}
 
 
+def test_specialized_index_manifest_preserves_upstream_retrieval_lineage(tmp_path: Path) -> None:
+    runs, _ = _fixture(tmp_path)
+    core = RetrievalCore(runs, RUN_ID)
+    run_root = core.run_root
+    retrieval_manifest = run_root / "data" / "indices" / "manifests" / "fixture.json"
+    retrieval_artifact = {
+        "path": retrieval_manifest.relative_to(run_root).as_posix(),
+        "sha256": file_sha256(retrieval_manifest),
+        "size_bytes": retrieval_manifest.stat().st_size,
+    }
+    producer_handoff = (
+        run_root / "data" / "jobs" / "retrieval_producer" / "attempts" / "attempt_0001" / "handoff.json"
+    )
+    atomic_json(producer_handoff, {
+        "schema": "appsec-review/job-handoff/1", "status": "ACCEPTED",
+        "job_id": "retrieval_producer", "attempt_id": "attempt_0001",
+        "artifacts": [retrieval_artifact],
+        "outputs": {"publication.publish": {"index_manifest": retrieval_artifact}},
+        "upstream_handoff_sha256": {},
+    })
+
+    specialized = run_root / "data" / "indexes" / "owasp" / "manifest.json"
+    specialized.parent.mkdir(parents=True)
+    atomic_json(specialized, {"schema": "appsec-review/owasp-index-manifest/1", "shards": []})
+    specialized_artifact = {
+        "path": specialized.relative_to(run_root).as_posix(),
+        "sha256": file_sha256(specialized),
+        "size_bytes": specialized.stat().st_size,
+    }
+    specialized_handoff = (
+        run_root / "data" / "jobs" / "specialized_producer" / "attempts" / "attempt_0001" / "handoff.json"
+    )
+    atomic_json(specialized_handoff, {
+        "schema": "appsec-review/job-handoff/1", "status": "ACCEPTED",
+        "job_id": "specialized_producer", "attempt_id": "attempt_0001",
+        "artifacts": [specialized_artifact],
+        "outputs": {"publication.publish": {"index_manifest": specialized_artifact}},
+        "upstream_handoff_sha256": {"retrieval_producer": file_sha256(producer_handoff)},
+    })
+
+    attempt = run_root / "data" / "jobs" / "consumer" / "attempts" / "attempt_0001"
+    attempt.mkdir(parents=True)
+    path, sha256 = materialize_attempt_input_manifest(
+        run_root=run_root, attempt_root=attempt, run_id=RUN_ID,
+        target_snapshot=core.manifest["target_snapshot"], target_root=core.target_root,
+        upstream_handoffs={"specialized_producer": file_sha256(specialized_handoff)},
+    )
+
+    assert path == retrieval_manifest
+    assert sha256 == retrieval_artifact["sha256"]
+
+
 def test_relationships_excerpt_integrity_and_evidence_resolution(tmp_path: Path) -> None:
     runs, ids = _fixture(tmp_path)
     core = RetrievalCore(runs, RUN_ID)

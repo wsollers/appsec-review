@@ -17,7 +17,9 @@ import uuid
 from typing import TYPE_CHECKING, Any, Callable, Iterable, Mapping
 
 from appsec_review.observability import PipelineLog
-from appsec_review.retrieval.index import INDEX_NAMES, IndexIdentity, load_verified_manifest, write_manifest
+from appsec_review.retrieval.index import (
+    INDEX_NAMES, MANIFEST_SCHEMA, IndexIdentity, load_verified_manifest, write_manifest,
+)
 from appsec_review.retrieval.interfaces import ArtifactQueryRequest
 from appsec_review.retrieval.model import (
     EntityKind, LogicalIdentity, RelationKind, canonical_json, normalize_relative_path,
@@ -148,6 +150,9 @@ def _handoff_manifest_roots(
             path = (run_root / relative).resolve()
             if run_root not in path.parents or not _artifact_in_handoff(handoff, relative, sha256):
                 raise RetrievalIntegrityError(f"index manifest is not bound to {job_id} handoff")
+            document = json.loads(path.read_text(encoding="utf-8"))
+            if document.get("schema") != MANIFEST_SCHEMA:
+                continue
             manifests[(relative, sha256)] = path
         if manifests:
             roots.update(manifests)
