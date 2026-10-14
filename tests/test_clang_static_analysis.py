@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 from pathlib import Path
+import sqlite3
 from types import MappingProxyType, SimpleNamespace
 
 from appsec_review.container_runtime.executor import ExecutionResult
@@ -117,6 +118,11 @@ def test_positive_scope_runs_both_engines_and_publishes_observations(tmp_path: P
     assert result["gaps"] == []
     shard = unit.job.run_root / result["index_identity"]["relative_path"]
     assert shard.is_file() and file_sha256(shard) == result["index_identity"]["sha256"]
+    with sqlite3.connect(shard) as database:
+        entities = {row[0] for row in database.execute("SELECT identity FROM entities")}
+        relations = database.execute("SELECT source_id, target_id FROM relations").fetchall()
+    assert relations
+    assert all(source in entities and target in entities for source, target in relations)
 
 
 def test_no_applicable_target_is_not_clean_coverage(monkeypatch, tmp_path: Path) -> None:

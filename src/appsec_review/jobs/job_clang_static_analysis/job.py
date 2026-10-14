@@ -194,6 +194,7 @@ def _analyze_scope(unit: UnitContext, scope: IndexScope, executor_factory: Any) 
     builder = IndexBuilder(path, name="observations", fingerprint=fingerprint,
                            target_snapshot=unit.job.source_fingerprint, shard_id=shard)
     accepted_count = 0
+    source_entities: set[str] = set()
     for record in records:
         location, accepted = _location(scope, record)
         if location is None or accepted is None:
@@ -204,6 +205,13 @@ def _analyze_scope(unit: UnitContext, scope: IndexScope, executor_factory: Any) 
                                              {"producer": record["engine"], "evidence_id": evidence_id})
         source_id = LogicalIdentity.derive(EntityKind.SOURCE_FILE, scope.case_snapshot,
                                            {"path": accepted["target_path"], "sha256": accepted["sha256"]})
+        if source_id.value not in source_entities:
+            builder.add_entity(EntityRecord(
+                source_id, str(accepted["target_path"]), Path(str(accepted["target_path"])).name,
+                str(accepted["target_path"]),
+                {"sha256": accepted["sha256"], "scope_id": scope.scope_id}, location,
+            ))
+            source_entities.add(source_id.value)
         builder.add_entity(EntityRecord(
             observation, evidence_id, str(record["rule_id"]),
             f"{record['rule_id']} {record['message']}",
