@@ -75,6 +75,43 @@ def test_materialized_workspace_staging_omits_manifest_backed_npm_symlink(tmp_pa
     assert not (staged / "node_modules" / ".bin" / "esbuild").exists()
 
 
+def test_materialized_workspace_staging_omits_container_owned_node_modules_symlink(
+        tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    project = source / "projects" / "typescript" / "case-032"
+    project.mkdir(parents=True)
+    (project / "package.json").write_text("{}", encoding="utf-8")
+    _symlink_or_skip(
+        project / "node_modules",
+        "/opt/project/projects/typescript/case-032/node_modules",
+        target_is_directory=True,
+    )
+    manifest = _workspace_manifest(source)
+
+    staged = tmp_path / "staged"
+    _stage_manifest_workspace(source, staged, manifest, file_limit=10)
+
+    assert (staged / "projects" / "typescript" / "case-032" / "package.json").is_file()
+    assert not (staged / "projects" / "typescript" / "case-032" / "node_modules").is_symlink()
+
+
+def test_materialized_workspace_staging_rejects_mismatched_container_node_modules_symlink(
+        tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    project = source / "projects" / "typescript" / "case-032"
+    project.mkdir(parents=True)
+    (project / "package.json").write_text("{}", encoding="utf-8")
+    _symlink_or_skip(
+        project / "node_modules",
+        "/opt/project/projects/typescript/other/node_modules",
+        target_is_directory=True,
+    )
+
+    with pytest.raises(FrameworkIntegrityError, match="unsafe symlink"):
+        _stage_manifest_workspace(source, tmp_path / "staged", _workspace_manifest(source),
+                                  file_limit=10)
+
+
 def test_materialized_workspace_staging_rejects_escaping_symlink(tmp_path: Path) -> None:
     source = tmp_path / "source"
     source.mkdir()

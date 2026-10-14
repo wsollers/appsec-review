@@ -247,11 +247,26 @@ def _workspace_manifest_files(workspace: Path, manifest: Mapping[str, Any], *, f
                 raise FrameworkIntegrityError("CodeQL materialized environment contains a symlink")
             try:
                 link_target = path.readlink()
+            except (OSError, RuntimeError) as exc:
+                raise FrameworkIntegrityError(
+                    "CodeQL materialized environment contains an invalid symlink") from exc
+            relative = path.relative_to(workspace).as_posix()
+            container_dependency = (
+                path.name == "node_modules" and
+                relative not in expected_files and
+                PurePosixPath(link_target.as_posix()) == PurePosixPath("/opt/project") / relative
+            )
+            if container_dependency:
+                continue
+            if link_target.is_absolute():
+                raise FrameworkIntegrityError(
+                    "CodeQL materialized environment contains an unsafe symlink")
+            try:
                 resolved = path.resolve(strict=True)
             except (OSError, RuntimeError) as exc:
                 raise FrameworkIntegrityError(
                     "CodeQL materialized environment contains an invalid symlink") from exc
-            if (link_target.is_absolute() or workspace_root not in resolved.parents or
+            if (workspace_root not in resolved.parents or
                     not resolved.is_file() or resolved.is_symlink()):
                 raise FrameworkIntegrityError(
                     "CodeQL materialized environment contains an unsafe symlink")
