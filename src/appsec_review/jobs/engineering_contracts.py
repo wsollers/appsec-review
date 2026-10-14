@@ -12,6 +12,7 @@ from enum import StrEnum
 CLANG_STATIC_HANDOFF_SCHEMA = "appsec-review/clang-static-analysis-handoff/1"
 TEST_COVERAGE_HANDOFF_SCHEMA = "appsec-review/test-coverage-handoff/1"
 DEPENDENCY_INTELLIGENCE_HANDOFF_SCHEMA = "appsec-review/dependency-intelligence-handoff/1"
+PROFILE_DATA_HANDOFF_SCHEMA = "appsec-review/profile-data-handoff/1"
 SCORECARD_RECORD_SCHEMA = "appsec-review/openssf-scorecard-record/1"
 NATIVE_DEPENDENCY_CANDIDATE_SCHEMA = "appsec-review/native-dependency-candidate/1"
 
@@ -32,4 +33,14 @@ class ResolutionBasis(StrEnum):
     LINKER_EVIDENCE = "linker_evidence"
     MODEL_INFERENCE = "model_inference"
     UNRESOLVED = "unresolved"
+
+
+class MaximalExposure(StrEnum):
+    """Ordered deployment exposure inferred for a dependency or runtime observation."""
+
+    DEV = "DEV"
+    DEBUG = "DEBUG"
+    QA = "QA"
+    PREPROD = "PREPROD"
+    PROD = "PROD"
 
