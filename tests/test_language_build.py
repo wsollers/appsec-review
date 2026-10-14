@@ -43,6 +43,12 @@ def test_coverage_exchange_artifacts_are_preserved_for_every_build_family(family
     assert _kind(Path("coverage.json"), family, relative="out/coverage.json") == "test-coverage"
 
 
+@pytest.mark.parametrize("family", ["native", "dotnet", "rust", "node", "python", "go", "java"])
+def test_profile_exchange_artifacts_are_preserved_for_every_build_family(family: str) -> None:
+    assert _kind(Path("hot.folded"), family, relative="profiles/hot.folded") == "execution-profile"
+    assert _kind(Path("default.profraw"), family, relative="out/default.profraw") == "execution-profile"
+
+
 def test_generic_catalog_retains_unchanged_coverage_with_origin_and_excludes_other_inputs(
         tmp_path: Path) -> None:
     workspace = tmp_path / "workspace"
@@ -68,6 +74,29 @@ def test_generic_catalog_retains_unchanged_coverage_with_origin_and_excludes_oth
         ("reports/lcov.info", "accepted-input"),
     ]
     assert {row["kind"] for row in artifacts} == {"test-coverage"}
+
+
+def test_generic_catalog_retains_imported_and_emitted_profiles(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    imported = workspace / "profiles" / "hot.folded"
+    imported.parent.mkdir()
+    imported.write_text("root;hot 9\n", encoding="utf-8")
+    emitted = workspace / "callgrind.out"
+    emitted.write_text("events: Ir\nfn=hot\n1 9\n", encoding="utf-8")
+    unchanged_object = workspace / "input.o"
+    unchanged_object.write_bytes(b"unchanged")
+    before = {"profiles/hot.folded": file_sha256(imported),
+              "input.o": file_sha256(unchanged_object)}
+
+    artifacts, gaps = _catalog(tmp_path, workspace, before, 10, "native-unit", "native")
+
+    assert not gaps
+    assert [(row["workspace_path"], row["kind"], row["artifact_origin"])
+            for row in artifacts] == [
+        ("callgrind.out", "execution-profile", "build-output"),
+        ("profiles/hot.folded", "execution-profile", "accepted-input"),
+    ]
 
 
 def test_processing_modes_change_language_build_checkpoint_identity() -> None:

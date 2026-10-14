@@ -20,7 +20,7 @@ Relevant bounded procedures and design references:
 - [`reviews/inference-security-review-implementation.md`](reviews/inference-security-review-implementation.md) — slice 1 implementation record: readiness decisions, partition, merges, reconciliations, verification, and outstanding work.
 - [`architecture/jobs-and-runtime.md`](architecture/jobs-and-runtime.md) — semantic jobs and orchestration.
 - [`architecture/build-environments-and-execution-capture.md`](architecture/build-environments-and-execution-capture.md) — shared capture architecture, conditional-control design status, and the pinned fixture matrix.
-- [`architecture/engineering-security-signals.md`](architecture/engineering-security-signals.md) — canonical end-to-end design for Clang static analysis, coverage ingestion, dependency identity, OpenSSF Scorecard context, and their review handoffs.
+- [`architecture/engineering-security-signals.md`](architecture/engineering-security-signals.md) — canonical end-to-end design for Clang static analysis, coverage and profile ingestion, dependency identity, OpenSSF Scorecard context, and their review handoffs.
 - [`operations/language-build.md`](operations/language-build.md) — operator behavior for generic language builds and conditional applicability.
 - [`architecture/python-and-retrieval.md`](architecture/python-and-retrieval.md) — accepted immutable retrieval indexes.
 - [`operations/target-analysis-planning.md`](operations/target-analysis-planning.md) — operator behavior and recovery.

@@ -122,6 +122,7 @@ PRODUCERS: Mapping[str, Callable[[Mapping[str, Any]], bool]] = {
     "source_history": _index("history"),
     "security_tagging": _index("tags"),
     "test_coverage": _index("analysis", "job_test_coverage"),
+    "profile_data": _index("analysis", "job_profile_data"),
     "dependency_intelligence": _index("inventory", "job_dependency_intelligence"),
     "scanner_correlation": _precomputed("scanner_correlation"),
     "dependency_advisories": _precomputed("dependency_advisories"),

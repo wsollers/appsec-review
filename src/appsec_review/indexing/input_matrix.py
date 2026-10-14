@@ -46,6 +46,8 @@ INPUT_SOURCES: tuple[tuple[str, tuple[str, ...], str, tuple[str, ...], tuple[str
      ("query_artifacts", "query_precomputed")),
     ("test_coverage", ("job_test_coverage",), "current", ("hotspot_context", "review_package"),
      ("query_precomputed", "coverage")),
+    ("execution_profiles", ("job_profile_data",), "current", ("hotspot_context", "review_package"),
+     ("query_precomputed", "coverage")),
     ("artifact_security_scans", ("job_artifact_security_analysis",), "current",
      ("scanner_correlation", "dependency_advisories"), ("query_artifacts", "query_observations", "query_precomputed")),
     # Clang AST, LLVM IR and clangd are C/C++ cross-check inputs of the graph index, not graph producers.

@@ -9,10 +9,11 @@ Repository authority remains in [`../../AGENTS.md`](../../AGENTS.md). This page 
 - [`../operations/language-build.md`](../operations/language-build.md) — generic real-build execution, protected provenance, and checkpoints.
 - [`../operations/artifact-security-analysis.md`](../operations/artifact-security-analysis.md) — generic bounded security analysis of accepted produced artifacts.
 - [`engineering-security-signals.md`](engineering-security-signals.md) — end-to-end Clang,
-  coverage, dependency identity, OpenSSF Scorecard, provenance, handoff, and downstream-consumer
-  architecture.
+  coverage, profile hotness, dependency identity and exposure, OpenSSF Scorecard, provenance,
+  handoff, and downstream-consumer architecture.
 - [`clang-static-analysis.md`](clang-static-analysis.md) — Clang-Tidy and Clang Static Analyzer over accepted C/C++ compile scopes.
 - [`test-coverage-ingestion.md`](test-coverage-ingestion.md) — bounded LCOV, Cobertura, JaCoCo, and LLVM coverage normalization and source binding.
+- [`profile-data.md`](profile-data.md) — bounded folded-stack, perf-script, Callgrind, and LLVM sample-profile ingestion with context-only hotness ranks.
 - [`dependency-intelligence.md`](dependency-intelligence.md) — declared, SBOM, linker, loader, and metadata dependency resolution with OpenSSF Scorecard context.
 - [`../operations/wasm-build.md`](../operations/wasm-build.md) — WebAssembly output-family execution across accepted source-language recipes.
 - [`../operations/metrics.md`](../operations/metrics.md) — receipt-resolved review scope, build, artifact, and CodeQL timing metrics.

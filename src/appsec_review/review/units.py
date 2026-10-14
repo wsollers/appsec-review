@@ -66,6 +66,16 @@ def _engineering_context(scope: AcceptedScope
                 by_path[path].append(entry)
             if aggregate and isinstance(payload.get("build_unit_id"), str):
                 by_build[payload["build_unit_id"]].append(entry)
+    profiles = scope.producer("profile_data")
+    for shard in profiles.shards:
+        sha = scope.shard_sha256(shard)
+        for row in scope.store.entities((shard,), kinds=("hotspot",)):
+            payload = row["payload"]
+            entry = context_entry(row["identity"], "profile_hotspot", sha)
+            if isinstance(payload.get("source"), str) and payload["source"]:
+                by_path[payload["source"]].append(entry)
+            if isinstance(payload.get("build_unit_id"), str):
+                by_build[payload["build_unit_id"]].append(entry)
     dependencies_context: list[ContextEntry] = []
     dependencies = scope.producer("dependency_intelligence")
     for shard in dependencies.shards:

@@ -245,6 +245,8 @@ def _kind(path: Path, family: str = "native", *, relative: str = "",
     # well-known filenames so the bounded coverage ingestion job can inspect the bytes.
     if node.is_coverage_exchange_path(relative or path):
         return "test-coverage"
+    if node.is_profile_exchange_path(relative or path):
+        return "execution-profile"
     if family == "dotnet":
         return dotnet.artifact_kind(path)
     if family == "rust":
@@ -284,7 +286,7 @@ def _catalog(run_root: Path, workspace: Path, before: Mapping[str, str], limit: 
         relative, digest = path.relative_to(workspace).as_posix(), file_sha256(path)
         kind = _kind(path, family, relative=relative, before=before)
         unchanged = before.get(relative) == digest
-        if kind is None or (unchanged and kind != "test-coverage"):
+        if kind is None or (unchanged and kind not in {"test-coverage", "execution-profile"}):
             continue
         artifact = {"path": path.relative_to(run_root).as_posix(), "workspace_path": relative,
                           "sha256": digest, "size_bytes": path.stat().st_size, "kind": kind,

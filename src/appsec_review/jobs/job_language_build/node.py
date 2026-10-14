@@ -34,11 +34,22 @@ _COVERAGE_EXCHANGE_FILE = re.compile(
     r"jacoco(?:test)?report\.xml|jacoco\.xml|coverage(?:-final)?\.json|.*\.coverage\.json)$",
     re.I,
 )
+_PROFILE_EXCHANGE_FILE = re.compile(
+    r"(^|/)(gmon\.out|callgrind(?:\.out(?:\.\d+)?)?|.*\.(?:callgrind|folded|stacks|"
+    r"perf-script|perf\.txt|llvm-sample|sample\.prof|prof|profraw|profdata|pprof)|"
+    r"(?:profile|pprof)\.pb(?:\.gz)?)$",
+    re.I,
+)
 
 
 def is_coverage_exchange_path(path: str | Path) -> bool:
     """Return whether a path has a bounded, well-known coverage exchange filename."""
     return bool(_COVERAGE_EXCHANGE_FILE.search(str(path).replace("\\", "/")))
+
+
+def is_profile_exchange_path(path: str | Path) -> bool:
+    """Return whether a path has a bounded, well-known execution-profile filename."""
+    return bool(_PROFILE_EXCHANGE_FILE.search(str(path).replace("\\", "/")))
 
 
 _SOURCE_SUFFIXES = {".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx", ".mts", ".cts"}
@@ -96,6 +107,8 @@ def artifact_kind(path: Path) -> str | None:
     name, suffix = path.name.lower(), path.suffix.lower()
     if is_coverage_exchange_path(path):
         return "test-coverage"
+    if is_profile_exchange_path(path):
+        return "execution-profile"
     if name.endswith((".d.ts", ".d.mts", ".d.cts")):
         return "generated-declaration"
     if suffix == ".map":
@@ -129,7 +142,7 @@ def catalog(run_root: Path, workspace: Path, before: Mapping[str, str], limit: i
         digest = file_sha256(path)
         kind = artifact_kind(path)
         unchanged = before.get(relative) == digest
-        if kind is None or (unchanged and kind != "test-coverage"):
+        if kind is None or (unchanged and kind not in {"test-coverage", "execution-profile"}):
             continue
         value: dict[str, Any] = {
             "path": path.relative_to(run_root).as_posix(), "workspace_path": relative,

@@ -184,6 +184,7 @@ def _build_dagster_graph(name: str, jobs: tuple[Job, ...], config: AppConfig,
                 target_jobs = {
                     "job_review_intake", "job_target_catalog", "job_target_analysis_plan",
                     "job_project_build", "job_language_build", "job_artifact_indexing", "job_test_coverage",
+                    "job_profile_data",
                     "job_artifact_security_analysis", "job_evidence_collection", "job_dependency_intelligence",
                     "job_cpp_compiled_analysis",
                     "job_clang_static_analysis",
@@ -448,6 +449,9 @@ def build_definitions(
         if "job_test_coverage" in registered and "job_artifact_indexing" in registered:
             wave_jobs.append(registry.build("job_test_coverage"))
             wave_dependencies["job_test_coverage"] = ("job_artifact_indexing",)
+        if "job_profile_data" in registered and "job_artifact_indexing" in registered:
+            wave_jobs.append(registry.build("job_profile_data"))
+            wave_dependencies["job_profile_data"] = ("job_artifact_indexing",)
         if "job_artifact_security_analysis" in registered:
             wave_jobs.append(registry.build("job_artifact_security_analysis"))
             wave_dependencies["job_artifact_security_analysis"] = (("job_artifact_indexing",)

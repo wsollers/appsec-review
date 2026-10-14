@@ -1,9 +1,10 @@
 # Engineering security signals
 
-This page is the canonical cross-workflow design for the three engineering-signal producers added
+This page is the canonical cross-workflow design for the engineering-signal producers added
 to the review graph. The component contracts remain in
 [`clang-static-analysis.md`](clang-static-analysis.md),
-[`test-coverage-ingestion.md`](test-coverage-ingestion.md), and
+[`test-coverage-ingestion.md`](test-coverage-ingestion.md),
+[`profile-data.md`](profile-data.md), and
 [`dependency-intelligence.md`](dependency-intelligence.md); operator procedures are linked below.
 
 The workflows turn already accepted build and evidence material into bounded, immutable review
@@ -15,9 +16,9 @@ binaries, or treat missing data as a clean result.
 ```text
 accepted target catalog
         |
-        +--> accepted language builds --> artifact index --> test coverage
-        |          |                           |                 |
-        |          |                           +-----------------+
+        +--> accepted language builds --> artifact index --> test coverage --+
+        |          |                           |              profile data --+|
+        |          |                           +-----------------------------+|
         |          +--> C/C++ compiled scopes --> Clang static --+--> accepted index set
         |          |                                             |    and review-data audit
         |          +--> native receipts/artifacts ---------------+             |
@@ -31,10 +32,11 @@ accepted target catalog
 The direct graph in `appsec_review.cli.GRAPH_JOB_IDS` and the Dagster wave encode the same ordering:
 
 - `job_test_coverage` follows `job_artifact_indexing`;
+- `job_profile_data` follows `job_artifact_indexing`;
 - `job_clang_static_analysis` follows `job_cpp_compiled_analysis`;
 - `job_dependency_intelligence` follows the accepted catalog, language-build, artifact-index, and
   evidence-collection producers (Dagster also waits for C/C++ compiled analysis when present); and
-- all three precede `job_review_data_indexing`, which audits their declared datasets and composes
+- all four precede `job_review_data_indexing`, which audits their declared datasets and composes
   the accepted run view.
 
 Their job handlers, parsers, resolver, clients, and index builders have no Dagster dependency.
@@ -47,6 +49,7 @@ attempts, checkpoints, receipts, validation, immutable handoffs, manifests, and 
 | --- | --- | --- | --- |
 | `job_clang_static_analysis` | `job_cpp_compiled_analysis` handoff; accepted source map and normalized `compile_commands.json` per C/C++ scope | `appsec-review/clang-static-analysis-handoff/1` | `observations` shards `clang-static-<scope-id>` plus unavailable-scope coverage shards |
 | `job_test_coverage` | `job_target_catalog`, `job_language_build`, and `job_artifact_indexing` handoffs; hash-listed coverage artifacts | `appsec-review/test-coverage-handoff/1` | `analysis` shard `test-coverage-<build-unit-id>` for every applicable receipt |
+| `job_profile_data` | `job_target_catalog`, `job_language_build`, and `job_artifact_indexing` handoffs; hash-listed execution-profile artifacts | `appsec-review/profile-data-handoff/1` | `analysis` shard `profile-data-<build-unit-id>` for every accepted receipt |
 | `job_dependency_intelligence` | `job_target_catalog`, `job_language_build`, `job_artifact_indexing`, and `job_evidence_collection` handoffs | `appsec-review/dependency-intelligence-handoff/1` | one `inventory` shard `dependency-intelligence` |
 
 Every input is resolved through `data/jobs/<job-id>/latest.json` to an accepted
@@ -144,6 +147,11 @@ candidate retains the supporting command id/hash, artifact hash, or metadata pat
 fields are bounded and interpreted only as identity hints; they never authorize execution.
 
 Records deduplicate by purl when available, otherwise normalized name plus version/constraint.
+Every normalized record also carries a bounded, evidence-backed `maximal_exposure` from the ordered
+vocabulary `DEV < DEBUG < QA < PREPROD < PROD`. Development, debug, test/QA, staging/preproduction,
+and runtime/production observations are retained even when they conflict, and the maximum wins.
+When no accepted observation establishes scope, the job conservatively emits `PROD` with basis
+`conservative-default`; this prioritizes investigation and is not proof of production deployment.
 Canonical HTTPS repository metadata on the configured public-forge allowlist wins. Only unresolved
 native candidates may use model inference. The model receives one bounded candidate and an
 evidence-reference allowlist plus the registered runtime skill, persona, role, and task. Its
@@ -170,6 +178,21 @@ The inventory therefore enriches the review's SBOM/package context without rewri
 SBOM or changing its evidence identity. Direct package evidence remains the accepted SBOM,
 lockfile, manifest, or artifact observation; inferred repositories and Scorecards remain bounded
 reference context.
+
+## Execution-profile ingestion
+
+`job_profile_data` imports profile reports already retained by accepted language-build receipts. It
+never launches a profiler, runs a target binary, or deserializes executable/pickle data. Textual
+folded stacks, perf-script output, Callgrind, and LLVM sample profiles are normalized into bounded
+function or symbol event counts. Recognized opaque gmon, pprof protobuf, LLVM raw, and LLVM indexed
+profiles remain explicit unsupported-format gaps until a pinned converter is introduced.
+
+Each row retains its report hash, format, artifact origin, build unit, symbol, event, count, and any
+available module/source/line. Deterministic ranks describe relative hotness only within a build
+unit. They are `context_only`, are not findings, and do not estimate defect probability. Review
+packages may use them to direct attention to highly exercised or operationally important code, but
+must combine them with reachability, unsafe behavior, complexity, change history, coverage, static
+analysis, and deployment exposure before making a security claim.
 
 ## Trust, provenance, and integrity
 
@@ -209,13 +232,15 @@ Downstream behavior is deliberately narrower than the available context:
 - Coverage cells attach by exact source path and build unit to lane-B review packages. Coverage is
   review-completeness and hunt context; it does not currently change the numeric LPS and neither
   covered nor uncovered status is a security conclusion.
+- Profile hotspots attach by source path when available and by build unit otherwise. They seed
+  hotspot context but do not change numeric prioritization, finding severity, or verification rules.
 - Dependency and Scorecard entities are balanced under the normal context cap so a large package
   inventory cannot evict all Scorecard seeds. They seed supply-chain/security-review and red-team
   hunting context; truncation is an explicit package gap.
 - The `dependency_advisories` precomputed route can combine accepted package identities with
   reference intelligence. Repository inference and Scorecard data do not establish product
   applicability, change finding severity, or bypass the normal evidence and verification gates.
-- `job_review_data_indexing` inventories all three producers, exposes their coverage, and retains
+- `job_review_data_indexing` inventories all engineering-signal producers, exposes their coverage, and retains
   their declared retrieval routes for later prioritization and review. The current numeric review
   prioritization job consumes its own syntax, dependency-graph, Semgrep, CodeQL, and history
   features; these engineering signals complement that ranking rather than silently modifying it.
@@ -223,7 +248,7 @@ Downstream behavior is deliberately narrower than the available context:
 ## Configuration, operation, and development
 
 All model, network, worker, parser identity, checker, and bound settings live in
-[`../../appsec-review.toml`](../../appsec-review.toml) under the three job tables. Changing an
+[`../../appsec-review.toml`](../../appsec-review.toml) under the producer job tables. Changing an
 identity-bearing setting invalidates reuse through the resolved configuration and producer
 fingerprints. Do not move operational values into prompts.
 
@@ -231,14 +256,15 @@ Operator pages:
 
 - [`../operations/clang-static-analysis.md`](../operations/clang-static-analysis.md)
 - [`../operations/test-coverage-ingestion.md`](../operations/test-coverage-ingestion.md)
+- [`../operations/profile-data.md`](../operations/profile-data.md)
 - [`../operations/dependency-intelligence.md`](../operations/dependency-intelligence.md)
 - [`../operations/review-data-indexing.md`](../operations/review-data-indexing.md)
 - [`../../deploy/dagster/README.md`](../../deploy/dagster/README.md)
 
 Implementation entry points are under `src/appsec_review/jobs/job_clang_static_analysis/`,
-`job_test_coverage/`, and `job_dependency_intelligence/`; the shared schema vocabulary is in
+`job_test_coverage/`, `job_profile_data/`, and `job_dependency_intelligence/`; the shared schema vocabulary is in
 `jobs/engineering_contracts.py`. Cross-workflow wiring is covered by
 `tests/test_engineering_signal_integration.py`; focused behavior lives in
-`tests/test_clang_static_analysis.py`, `tests/test_test_coverage.py`,
+`tests/test_clang_static_analysis.py`, `tests/test_test_coverage.py`, `tests/test_profile_data.py`,
 `tests/test_dependency_intelligence.py`, and `tests/test_multivuln_coverage_fixtures.py`.
 

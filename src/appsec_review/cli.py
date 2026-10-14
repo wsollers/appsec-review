@@ -19,6 +19,7 @@ from appsec_review.jobs.cataloging import source_fingerprint
 GRAPH_JOB_IDS = ("job_model_connectivity", "job_review_intake", "job_target_catalog", "job_source_history_analysis",
                  "job_target_analysis_plan", "job_tree_sitter_ast",
                  "job_project_build", "job_language_build", "job_artifact_indexing", "job_test_coverage",
+                 "job_profile_data",
                  "job_artifact_security_analysis",
                  "job_cpp_compiled_analysis", "job_clang_static_analysis", "job_cpp_symbol_index", "job_cpg_analysis",
                  "job_evidence_collection", "job_dependency_intelligence", "job_change_context_analysis",

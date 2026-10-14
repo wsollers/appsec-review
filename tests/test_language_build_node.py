@@ -177,6 +177,24 @@ def test_node_catalog_retains_unchanged_coverage_with_origin_and_excludes_other_
     ]
 
 
+def test_node_catalog_retains_imported_profile_data(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    profile = workspace / "cpu.folded"
+    profile.write_text("root;handler 12\n", encoding="utf-8")
+    package = workspace / "package.json"
+    package.write_text('{"name":"fixture"}', encoding="utf-8")
+    before = {"cpu.folded": file_sha256(profile), "package.json": file_sha256(package)}
+
+    artifacts, gaps = node.catalog(tmp_path, workspace, before, 10, "node-unit")
+
+    assert not gaps
+    assert [(row["workspace_path"], row["kind"], row["artifact_origin"])
+            for row in artifacts] == [
+        ("cpu.folded", "execution-profile", "accepted-input"),
+    ]
+
+
 class _NodeRecipeModel:
     def complete(self, request, *, timeout_seconds):
         recipes = []

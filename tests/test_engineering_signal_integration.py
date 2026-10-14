@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+import pytest
+
 from appsec_review.cli import GRAPH_JOB_IDS
 from appsec_review.config import load_config
 from appsec_review.indexing.input_matrix import INPUT_SOURCES
@@ -17,6 +19,7 @@ from appsec_review.review.units import ContextEntry, _engineering_context
 NEW_JOBS = {
     "job_clang_static_analysis",
     "job_test_coverage",
+    "job_profile_data",
     "job_dependency_intelligence",
 }
 
@@ -36,8 +39,25 @@ def test_engineering_signal_jobs_precede_review_data_indexing() -> None:
     order = {job_id: position for position, job_id in enumerate(GRAPH_JOB_IDS)}
     assert order["job_cpp_compiled_analysis"] < order["job_clang_static_analysis"]
     assert order["job_artifact_indexing"] < order["job_test_coverage"]
+    assert order["job_artifact_indexing"] < order["job_profile_data"]
     assert order["job_evidence_collection"] < order["job_dependency_intelligence"]
     assert all(order[job_id] < order["job_review_data_indexing"] for job_id in NEW_JOBS)
+
+
+def test_profile_data_dagster_wave_follows_artifact_indexing() -> None:
+    pytest.importorskip("dagster")
+    from pathlib import Path
+    from appsec_review.orchestration.dagster import build_definitions
+
+    graph = build_definitions(Path(__file__).parents[1] / "appsec-review.toml").get_job_def(
+        "wave1_review").graph
+
+    def upstream(node: str) -> set[str]:
+        mapping = graph.dependency_structure.input_to_upstream_outputs_for_node(node)
+        return {output.node_name for outputs in mapping.values() for output in outputs}
+
+    assert "artifact_indexing__finalize" in upstream("profile_data__begin")
+    assert "profile_data__finalize" in upstream("review_data_indexing__begin")
 
 
 def test_clang_observations_enter_the_source_sast_review_lane() -> None:
@@ -47,21 +67,28 @@ def test_clang_observations_enter_the_source_sast_review_lane() -> None:
     assert classify({"tool_id": "tool-clang-static-analysis", "category": "source_sast"}) == "source_sast"
 
 
-def test_coverage_and_scorecards_seed_hunt_context() -> None:
+def test_coverage_profiles_and_scorecards_seed_hunt_context() -> None:
     coverage_shard = {"name": "analysis", "shard_id": "test-coverage-native",
                       "producer": {"job": "job_test_coverage"}}
     dependency_shard = {"name": "inventory", "shard_id": "dependency-intelligence",
                         "producer": {"job": "job_dependency_intelligence"}}
+    profile_shard = {"name": "analysis", "shard_id": "profile-data-native",
+                     "producer": {"job": "job_profile_data"}}
     snapshot = "target-sha256:" + "a" * 64
     coverage_id = LogicalIdentity.derive(EntityKind.COVERAGE_CELL, snapshot, {"path": "src/main.c"}).value
     dependency_id = LogicalIdentity.derive(EntityKind.DEPENDENCY_PACKAGE, snapshot, {"name": "libssl"}).value
     scorecard_id = LogicalIdentity.derive(EntityKind.REVIEW_SIGNAL, snapshot, {"dependency": dependency_id}).value
+    profile_id = LogicalIdentity.derive(EntityKind.HOTSPOT, snapshot, {"symbol": "main"}).value
 
     class Store:
         def entities(self, shards, *, kinds=()):
             if shards[0] is coverage_shard:
                 yield {"identity": coverage_id, "kind": "coverage_cell",
                        "payload": {"path": "src/main.c", "build_unit_id": "native"}}
+            elif shards[0] is profile_shard:
+                yield {"identity": profile_id, "kind": "hotspot",
+                       "payload": {"source": "src/main.c", "build_unit_id": "native",
+                                   "semantics": "context_only", "is_finding": False}}
             else:
                 yield {"identity": dependency_id, "kind": "dependency_package", "payload": {}}
                 yield {"identity": scorecard_id, "kind": "review_signal", "payload": {}}
@@ -69,11 +96,14 @@ def test_coverage_and_scorecards_seed_hunt_context() -> None:
     scope = SimpleNamespace(
         store=Store(),
         producer=lambda name: SimpleNamespace(shards=(coverage_shard,) if name == "test_coverage"
+                                              else (profile_shard,) if name == "profile_data"
                                               else (dependency_shard,)),
-        shard_sha256=lambda shard: "c" * 64 if shard is coverage_shard else "d" * 64,
+        shard_sha256=lambda shard: "c" * 64 if shard is coverage_shard else
+                                   "e" * 64 if shard is profile_shard else "d" * 64,
     )
     by_path, _by_build, dependencies = _engineering_context(scope)
-    assert [(entry.id, entry.role) for entry in by_path["src/main.c"]] == [(coverage_id, "test_coverage")]
+    assert {(entry.id, entry.role) for entry in by_path["src/main.c"]} == {
+        (coverage_id, "test_coverage"), (profile_id, "profile_hotspot")}
     assert {(entry.id, entry.role) for entry in dependencies} == {
         (dependency_id, "dependency"), (scorecard_id, "openssf_scorecard")}
 

@@ -44,6 +44,7 @@ def builtin_registry() -> JobRegistry:
     from appsec_review.jobs.job_language_build import build_job as build_language_build
     from appsec_review.jobs.job_artifact_indexing import build_job as build_artifact_indexing
     from appsec_review.jobs.job_test_coverage import build_job as build_test_coverage
+    from appsec_review.jobs.job_profile_data import build_job as build_profile_data
     from appsec_review.jobs.job_artifact_security_analysis import build_job as build_artifact_security_analysis
     from appsec_review.jobs.job_third_party_data_sync import build_job as build_sync
     from appsec_review.jobs.job_evidence_collection import build_job as build_evidence
@@ -78,6 +79,7 @@ def builtin_registry() -> JobRegistry:
     registry.register("job_language_build", build_language_build)
     registry.register("job_artifact_indexing", build_artifact_indexing)
     registry.register("job_test_coverage", build_test_coverage)
+    registry.register("job_profile_data", build_profile_data)
     registry.register("job_artifact_security_analysis", build_artifact_security_analysis)
     registry.register("job_third_party_data_sync", build_sync)
     registry.register("job_evidence_collection", build_evidence)

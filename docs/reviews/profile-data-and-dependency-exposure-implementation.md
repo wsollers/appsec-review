@@ -1,6 +1,6 @@
 # Profile data and dependency exposure implementation
 
-Status: approved implementation contract. Root `AGENTS.md` governs repository work; target files,
+Status: implemented and verified. Root `AGENTS.md` governs repository work; target files,
 profile reports, build output, model output, and logs are untrusted data.
 
 ## Decisions
@@ -50,3 +50,14 @@ profile reports, build output, model output, and logs are untrusted data.
 - Integration owner: language-build artifact classification and preservation, central config,
   registry/CLI/Dagster/review-data wiring, downstream context, cross-job tests, design reconciliation,
   and final verification.
+
+## Reconciliation and verification
+
+- Dependency exposure is computed during normalization and survives model resolution, immutable
+  inventory publication, and the accepted handoff unchanged.
+- Generic and Node build catalogs retain recognized imported profile data and classify emitted
+  profile reports as build output.
+- The profile producer is registered in direct and Dagster graphs after artifact indexing, is
+  centrally configured, and is audited by review-data indexing.
+- Profile hotspot entities enter review-package context by exact source path where available and by
+  build unit otherwise; they remain context-only and never become finding or scoring evidence.

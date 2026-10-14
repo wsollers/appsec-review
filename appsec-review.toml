@@ -1081,6 +1081,38 @@ workers = 2
 workers = 1
 [jobs.job_test_coverage.steps.acceptance.tasks.publish_handoff]
 
+[jobs.job_profile_data]
+name = "profile_data"
+workers = 4
+
+[jobs.job_profile_data.settings]
+parser_identity = "appsec-review/profile-data-parsers/1"
+normalizer_identity = "appsec-review/profile-data-normalizer/1"
+mapping_identity = "appsec-review/profile-data-report-binding/1"
+
+[jobs.job_profile_data.settings.bounds]
+max_artifacts = 256
+max_artifact_bytes = 33554432
+max_rows_per_artifact = 250000
+max_line_bytes = 65536
+max_frames_per_sample = 256
+
+[jobs.job_profile_data.steps.load]
+workers = 1
+[jobs.job_profile_data.steps.load.tasks.accepted_inputs]
+
+[jobs.job_profile_data.steps.normalize]
+workers = 4
+[jobs.job_profile_data.steps.normalize.tasks.profile_data]
+
+[jobs.job_profile_data.steps.index]
+workers = 2
+[jobs.job_profile_data.steps.index.tasks.profile_data]
+
+[jobs.job_profile_data.steps.acceptance]
+workers = 1
+[jobs.job_profile_data.steps.acceptance.tasks.publish_handoff]
+
 [jobs.job_artifact_security_analysis]
 name = "artifact_security_analysis"
 workers = 8
