@@ -148,6 +148,35 @@ def test_node_catalog_and_package_script_provenance_include_maps_packages_and_na
     assert mapping["source_map"]["sources"] == ["../index.ts"]
 
 
+def test_node_catalog_retains_unchanged_coverage_with_origin_and_excludes_other_inputs(
+        tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    coverage = workspace / "coverage-final.json"
+    coverage.write_text('{"type":"llvm.coverage.json.export","data":[]}', encoding="utf-8")
+    package = workspace / "package.json"
+    package.write_text('{"name":"fixture"}', encoding="utf-8")
+    generated = workspace / "dist.js"
+    generated.write_text("export {};", encoding="utf-8")
+    emitted_coverage = workspace / "reports" / "coverage.xml"
+    emitted_coverage.parent.mkdir()
+    emitted_coverage.write_text("<coverage/>", encoding="utf-8")
+    before = {
+        "coverage-final.json": file_sha256(coverage),
+        "package.json": file_sha256(package),
+    }
+
+    artifacts, gaps = node.catalog(tmp_path, workspace, before, 10, "node-unit")
+
+    assert not gaps
+    assert [(row["workspace_path"], row["kind"], row["artifact_origin"])
+            for row in artifacts] == [
+        ("coverage-final.json", "test-coverage", "accepted-input"),
+        ("dist.js", "generated-code", "build-output"),
+        ("reports/coverage.xml", "test-coverage", "build-output"),
+    ]
+
+
 class _NodeRecipeModel:
     def complete(self, request, *, timeout_seconds):
         recipes = []

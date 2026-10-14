@@ -239,16 +239,11 @@ def _snapshot(root: Path, limit: int) -> dict[str, str]:
     return values
 
 
-_COVERAGE_ARTIFACT = re.compile(
-    r"(^|/)(lcov(?:\.info)?|coverage\.lcov|cobertura(?:-coverage)?\.xml|coverage\.xml|"
-    r"jacoco(?:test)?report\.xml|jacoco\.xml|coverage(?:-final)?\.json|.*\.coverage\.json)$", re.I)
-
-
 def _kind(path: Path, family: str = "native", *, relative: str = "",
           before: Mapping[str, str] | None = None) -> str | None:
-    # Coverage is a generic build output, not a language-family-specific artifact. Preserve only
-    # well-known exchange filenames so the bounded coverage ingestion job can inspect the bytes.
-    if _COVERAGE_ARTIFACT.search((relative or path.as_posix()).replace("\\", "/")):
+    # Coverage is a generic exchange artifact, not language-family-specific. Preserve only
+    # well-known filenames so the bounded coverage ingestion job can inspect the bytes.
+    if node.is_coverage_exchange_path(relative or path):
         return "test-coverage"
     if family == "dotnet":
         return dotnet.artifact_kind(path)
@@ -288,12 +283,14 @@ def _catalog(run_root: Path, workspace: Path, before: Mapping[str, str], limit: 
             continue
         relative, digest = path.relative_to(workspace).as_posix(), file_sha256(path)
         kind = _kind(path, family, relative=relative, before=before)
-        if kind is None or before.get(relative) == digest:
+        unchanged = before.get(relative) == digest
+        if kind is None or (unchanged and kind != "test-coverage"):
             continue
         artifact = {"path": path.relative_to(run_root).as_posix(), "workspace_path": relative,
                           "sha256": digest, "size_bytes": path.stat().st_size, "kind": kind,
                           "build_unit_id": build_unit_id, "mapping": "exact-workspace-path",
-                          "mapping_confidence": 1.0}
+                          "mapping_confidence": 1.0,
+                          "artifact_origin": "accepted-input" if unchanged else "build-output"}
         if kind in {"executable", "shared-library", "native-output"}:
             try:
                 facts = elf.loader_facts(path)

@@ -96,16 +96,19 @@ end_of_record
     assert {gap.split(":", 1)[0] for gap in gaps} == {"unresolved_source_path", "ambiguous_source_path"}
 
 
-def _artifact(run_root: Path, relative: str, data: bytes, *, kind: str = "test-coverage") -> dict:
+def _artifact(run_root: Path, relative: str, data: bytes, *, kind: str = "test-coverage",
+              artifact_origin: str = "build-output") -> dict:
     path = run_root / relative
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(data)
     return {"path": relative, "workspace_path": Path(relative).name, "sha256": file_sha256(path),
-            "size_bytes": len(data), "kind": kind}
+            "size_bytes": len(data), "kind": kind, "artifact_origin": artifact_origin}
 
 
 def test_ingestion_aggregates_and_records_malformed_bounds_and_absence(tmp_path: Path) -> None:
-    good = _artifact(tmp_path, "data/build/u/coverage/lcov.info", b"SF:src/a.c\nDA:1,1\nDA:2,0\nend_of_record\n")
+    good = _artifact(tmp_path, "data/build/u/coverage/lcov.info",
+                     b"SF:src/a.c\nDA:1,1\nDA:2,0\nend_of_record\n",
+                     artifact_origin="accepted-input")
     malformed = _artifact(tmp_path, "data/build/u/coverage/cobertura.xml", b"<coverage>")
     too_large = _artifact(tmp_path, "data/build/u/coverage/large.lcov", b"SF:a\n" * 30)
     unsupported = _artifact(tmp_path, "data/build/u/coverage/coverage.dat", b"binary-ish")
@@ -121,10 +124,23 @@ def test_ingestion_aggregates_and_records_malformed_bounds_and_absence(tmp_path:
     unit = next(item for item in output["units"] if item["build_unit_id"] == "u")
     assert unit["totals"]["lines_rate"] == .5
     assert unit["files"][0]["file_sha256"] == "a" * 64
+    assert unit["files"][0]["artifact_origin"] == "accepted-input"
+    assert unit["artifacts"][0]["artifact_origin"] == "accepted-input"
     assert any("malformed_coverage" in gap for gap in output["gaps"])
     assert any("artifact_byte_bound" in gap for gap in output["gaps"])
     assert any("unsupported_coverage_format" in gap for gap in output["gaps"])
     assert any("missing_applicable_coverage" in gap for gap in output["gaps"])
+
+
+def test_ingestion_rejects_unknown_artifact_origin(tmp_path: Path) -> None:
+    artifact = _artifact(tmp_path, "data/build/u/coverage/lcov.info",
+                         b"SF:src/a.c\nDA:1,1\nend_of_record\n")
+    artifact["artifact_origin"] = "untrusted"
+    with pytest.raises(ValueError, match="invalid artifact origin"):
+        ingest_coverage_artifacts(tmp_path, [{
+            "build_unit_id": "u", "family": "native", "root": ".",
+            "terminal_status": "SUCCEEDED", "artifacts": [artifact],
+        }], {"src/a.c": "a" * 64})
 
 
 def test_job_contract_is_generic_and_declares_the_bounded_workflow() -> None:

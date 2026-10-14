@@ -19,6 +19,7 @@ from typing import Any
 from appsec_review.jobs.engineering_contracts import TEST_COVERAGE_HANDOFF_SCHEMA
 from appsec_review.jobs.job_artifact_indexing import load_accepted_artifact_index
 from appsec_review.jobs.job_language_build import load_accepted_language_build
+from appsec_review.jobs.job_language_build.node import is_coverage_exchange_path
 from appsec_review.retrieval import (
     EntityKind, EntityRecord, IndexBuilder, IndexIdentity, LogicalIdentity, index_fingerprint,
     write_manifest,
@@ -40,11 +41,6 @@ TOPOLOGY = {
 PARSER_IDENTITY = "appsec-review/test-coverage-parsers/1"
 NORMALIZER_IDENTITY = "appsec-review/test-coverage-normalizer/1"
 MAPPING_IDENTITY = "appsec-review/test-coverage-source-binding/1"
-_COVERAGE_NAMES = re.compile(
-    r"(^|/)(lcov(?:\.info)?|coverage\.lcov|cobertura(?:-coverage)?\.xml|coverage\.xml|"
-    r"jacoco(?:test)?report\.xml|jacoco\.xml|coverage(?:-final)?\.json|.*\.coverage\.json)$", re.I)
-
-
 class CoverageIntegrityError(ValueError):
     """An accepted identity changed or escaped the run boundary."""
 
@@ -143,7 +139,7 @@ def _format(path: str, data: bytes) -> str | None:
 def _is_candidate(artifact: Mapping[str, Any]) -> bool:
     path = str(artifact.get("workspace_path") or artifact.get("path") or "").replace("\\", "/")
     kind = str(artifact.get("kind", "")).lower()
-    return bool(_COVERAGE_NAMES.search(path)) or "coverage" in kind
+    return is_coverage_exchange_path(path) or "coverage" in kind
 
 
 def _normalize_report_path(value: str) -> str:
@@ -216,6 +212,10 @@ def ingest_coverage_artifacts(
         seen_paths: set[str] = set()
         for candidate in candidates:
             label = str(candidate.get("workspace_path") or candidate.get("path") or "coverage artifact")
+            artifact_origin = candidate.get("artifact_origin", "build-output")
+            if artifact_origin not in {"accepted-input", "build-output"}:
+                raise CoverageIntegrityError(
+                    f"coverage artifact {label} has invalid artifact origin")
             try:
                 path = _safe_file(run_root, candidate, f"coverage artifact {label}")
             except CoverageIntegrityError:
@@ -247,11 +247,13 @@ def ingest_coverage_artifacts(
                 if row.get("path"):
                     seen_paths.add(str(row["path"]))
                 rows.append({**row, "artifact_path": candidate.get("path"),
-                             "artifact_sha256": candidate.get("sha256")})
+                             "artifact_sha256": candidate.get("sha256"),
+                             "artifact_origin": artifact_origin})
             unit_gaps.extend(binding_gaps)
             artifacts.append({"path": candidate.get("path"), "workspace_path": candidate.get("workspace_path"),
                               "sha256": candidate.get("sha256"), "format": format_name,
-                              "source_row_count": len(document.files)})
+                              "source_row_count": len(document.files),
+                              "artifact_origin": artifact_origin})
         applicable = receipt.get("terminal_status") in {"SUCCEEDED", "COMPLETED_WITH_GAPS"}
         if applicable and not candidates:
             unit_gaps.append("missing_applicable_coverage: accepted build receipt has no coverage artifact")

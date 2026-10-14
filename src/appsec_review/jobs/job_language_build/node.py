@@ -28,6 +28,19 @@ TOOL_KINDS = {
     "llvm-ar": "archiver", "ranlib": "post-link", "strip": "post-link",
     "objcopy": "post-link",
 }
+
+_COVERAGE_EXCHANGE_FILE = re.compile(
+    r"(^|/)(lcov(?:\.info)?|coverage\.lcov|cobertura(?:-coverage)?\.xml|coverage\.xml|"
+    r"jacoco(?:test)?report\.xml|jacoco\.xml|coverage(?:-final)?\.json|.*\.coverage\.json)$",
+    re.I,
+)
+
+
+def is_coverage_exchange_path(path: str | Path) -> bool:
+    """Return whether a path has a bounded, well-known coverage exchange filename."""
+    return bool(_COVERAGE_EXCHANGE_FILE.search(str(path).replace("\\", "/")))
+
+
 _SOURCE_SUFFIXES = {".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx", ".mts", ".cts"}
 _GENERATED_SUFFIXES = _SOURCE_SUFFIXES | {".d.ts", ".d.mts", ".d.cts"}
 _CONFIG_NAMES = {
@@ -81,6 +94,8 @@ def environment_facts(environment: Mapping[str, str]) -> dict[str, str]:
 
 def artifact_kind(path: Path) -> str | None:
     name, suffix = path.name.lower(), path.suffix.lower()
+    if is_coverage_exchange_path(path):
+        return "test-coverage"
     if name.endswith((".d.ts", ".d.mts", ".d.cts")):
         return "generated-declaration"
     if suffix == ".map":
@@ -112,16 +127,16 @@ def catalog(run_root: Path, workspace: Path, before: Mapping[str, str], limit: i
             continue
         relative = path.relative_to(workspace).as_posix()
         digest = file_sha256(path)
-        if before.get(relative) == digest:
-            continue
         kind = artifact_kind(path)
-        if kind is None:
+        unchanged = before.get(relative) == digest
+        if kind is None or (unchanged and kind != "test-coverage"):
             continue
         value: dict[str, Any] = {
             "path": path.relative_to(run_root).as_posix(), "workspace_path": relative,
             "sha256": digest, "size_bytes": path.stat().st_size, "kind": kind,
             "build_unit_id": build_unit_id, "mapping": "exact-workspace-path",
             "mapping_confidence": 1.0,
+            "artifact_origin": "accepted-input" if unchanged else "build-output",
         }
         if kind == "source-map":
             try:

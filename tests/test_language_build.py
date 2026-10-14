@@ -17,7 +17,7 @@ from appsec_review.jobs.job_language_build import build_job as build_language, l
 from appsec_review.jobs.job_language_build import job as language_build_job
 from appsec_review.jobs.job_language_build.dotnet import artifact_kind, project_topology, tool_identity, validate_recipe
 from appsec_review.jobs.job_language_build.job import (
-    _compile_rows, _dotnet_argv, _fingerprint, _kind, _link_rows, _stream_identity,
+    _catalog, _compile_rows, _dotnet_argv, _fingerprint, _kind, _link_rows, _stream_identity,
 )
 from appsec_review.mcp import RetrievalMcpAdapter
 from appsec_review.retrieval import RetrievalCore
@@ -41,6 +41,33 @@ ROOT = Path(__file__).parents[1]
 def test_coverage_exchange_artifacts_are_preserved_for_every_build_family(family: str) -> None:
     assert _kind(Path("coverage.xml"), family, relative="reports/coverage.xml") == "test-coverage"
     assert _kind(Path("coverage.json"), family, relative="out/coverage.json") == "test-coverage"
+
+
+def test_generic_catalog_retains_unchanged_coverage_with_origin_and_excludes_other_inputs(
+        tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    coverage = workspace / "reports" / "lcov.info"
+    coverage.parent.mkdir()
+    coverage.write_text("SF:src/main.c\nDA:1,1\nend_of_record\n", encoding="utf-8")
+    unchanged_object = workspace / "input.o"
+    unchanged_object.write_bytes(b"unchanged")
+    changed_coverage = workspace / "coverage.xml"
+    changed_coverage.write_text("<coverage/>", encoding="utf-8")
+    before = {
+        "reports/lcov.info": file_sha256(coverage),
+        "input.o": file_sha256(unchanged_object),
+        "coverage.xml": "0" * 64,
+    }
+
+    artifacts, gaps = _catalog(tmp_path, workspace, before, 10, "native-unit", "native")
+
+    assert not gaps
+    assert [(row["workspace_path"], row["artifact_origin"]) for row in artifacts] == [
+        ("coverage.xml", "build-output"),
+        ("reports/lcov.info", "accepted-input"),
+    ]
+    assert {row["kind"] for row in artifacts} == {"test-coverage"}
 
 
 def test_processing_modes_change_language_build_checkpoint_identity() -> None:
