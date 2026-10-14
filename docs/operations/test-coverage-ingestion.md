@@ -15,11 +15,11 @@ mapping_identity = "appsec-review/test-coverage-source-binding/1"
 applicable_families = ["native", "go", "dotnet", "node", "python", "rust", "php", "java", "wasm"]
 
 [jobs.job_test_coverage.settings.bounds]
-max_artifacts = 256
-max_artifact_bytes = 33554432
-max_rows_per_artifact = 250000
-max_files_per_artifact = 50000
-max_path_candidates = 20
+max_artifacts = 10000
+max_artifact_bytes = 268435456
+max_rows_per_artifact = 1000000
+max_files_per_artifact = 100000
+max_path_candidates = 32
 ```
 
 The configured topology is `load.accepted_inputs`, `normalize.coverage`, `index.coverage`, then
@@ -36,6 +36,11 @@ do not identify a supported format, the job records `unsupported_coverage_format
 The accepted output is under the job attempt's `artifacts/test-coverage/` directory. Retrieval
 shards use the `analysis` index and `test-coverage-` prefix. Downstream code should call
 `load_accepted_test_coverage(run_root)` rather than selecting a latest file directly.
+
+The checked-in `appsec-multi-vuln` reports are deterministic parser/source-binding fixtures marked
+`provenance: "fixture"` and retained as `artifact_origin: "accepted-input"`. They are not live test
+measurements. Reports emitted by an accepted build/test workflow use
+`artifact_origin: "build-output"`; only those can describe that execution.
 
 ## Gap triage
 

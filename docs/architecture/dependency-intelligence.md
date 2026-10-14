@@ -1,5 +1,8 @@
 # Dependency intelligence
 
+See [`engineering-security-signals.md`](engineering-security-signals.md) for this producer's place
+in the combined engineering-signal data flow and downstream review boundary.
+
 `job_dependency_intelligence` is the generic dependency identity and OpenSSF Scorecard producer.
 It consumes only accepted target-catalog, language-build, artifact-index, and evidence-collection
 handoffs. Target content, protected compiler commands, SBOM observations, model output, and remote

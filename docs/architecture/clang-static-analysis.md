@@ -1,5 +1,8 @@
 # Clang static analysis
 
+See [`engineering-security-signals.md`](engineering-security-signals.md) for this producer's place
+in the combined engineering-signal data flow and downstream review boundary.
+
 `job_clang_static_analysis` is an independent C/C++ evidence producer. It consumes only immutable,
 accepted project scopes from `job_cpp_compiled_analysis`; each scope binds a materialized source
 snapshot and its run-owned normalized `compile_commands.json`. It does not scan an arbitrary live

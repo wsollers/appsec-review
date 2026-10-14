@@ -20,6 +20,7 @@ Relevant bounded procedures and design references:
 - [`reviews/inference-security-review-implementation.md`](reviews/inference-security-review-implementation.md) — slice 1 implementation record: readiness decisions, partition, merges, reconciliations, verification, and outstanding work.
 - [`architecture/jobs-and-runtime.md`](architecture/jobs-and-runtime.md) — semantic jobs and orchestration.
 - [`architecture/build-environments-and-execution-capture.md`](architecture/build-environments-and-execution-capture.md) — shared capture architecture, conditional-control design status, and the pinned fixture matrix.
+- [`architecture/engineering-security-signals.md`](architecture/engineering-security-signals.md) — canonical end-to-end design for Clang static analysis, coverage ingestion, dependency identity, OpenSSF Scorecard context, and their review handoffs.
 - [`operations/language-build.md`](operations/language-build.md) — operator behavior for generic language builds and conditional applicability.
 - [`architecture/python-and-retrieval.md`](architecture/python-and-retrieval.md) — accepted immutable retrieval indexes.
 - [`operations/target-analysis-planning.md`](operations/target-analysis-planning.md) — operator behavior and recovery.
@@ -38,6 +39,10 @@ Operations, one page per job or service:
 - [`operations/wasm-build.md`](operations/wasm-build.md) — WebAssembly output-family builds.
 - [`operations/artifact-indexing.md`](operations/artifact-indexing.md) and
   [`operations/artifact-security-analysis.md`](operations/artifact-security-analysis.md) — produced-artifact indexing and analysis.
+- [`operations/clang-static-analysis.md`](operations/clang-static-analysis.md),
+  [`operations/test-coverage-ingestion.md`](operations/test-coverage-ingestion.md), and
+  [`operations/dependency-intelligence.md`](operations/dependency-intelligence.md) — engineering
+  security-signal production and recovery.
 - [`operations/cpp-index-jobs.md`](operations/cpp-index-jobs.md) — clangd symbol index and Joern CPG jobs.
 - [`operations/post-build-security-assessment.md`](operations/post-build-security-assessment.md) — build-hardening assessment.
 - [`operations/static-analysis.md`](operations/static-analysis.md) — deterministic static evidence collection.

@@ -1,5 +1,8 @@
 # Test-coverage ingestion
 
+See [`engineering-security-signals.md`](engineering-security-signals.md) for this producer's place
+in the combined engineering-signal data flow and downstream review boundary.
+
 `job_test_coverage` turns test coverage already emitted by accepted builds into bounded review
 signals. It does not run tests, discover commands, or scan the target or build trees. Coverage is a
 prioritization and review-completeness signal; it is not evidence that covered code is secure or
