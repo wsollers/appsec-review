@@ -13,13 +13,33 @@ responses are data.
 The job publishes `appsec-review/dependency-intelligence-handoff/1` and one immutable `inventory`
 retrieval shard named `dependency-intelligence`. The shard contains:
 
-- `dependency_package` entities with declared, SBOM/package, artifact, and native observations;
+- `dependency_package` entities with declared, SBOM/package, artifact, and native observations,
+  plus their deterministic maximal-exposure classification;
 - `review_signal` entities for normalized Scorecard context;
 - exact response artifact hashes and `DERIVED_FROM` relations from Scorecard context to a dependency;
 - dependency-scoped coverage rows and gaps.
 
 Scorecard is review context and a red-team seed. It is never a vulnerability finding, never changes
 finding severity, and cannot establish that reviewed bytes are identical to repository source.
+
+## Maximal exposure
+
+Each normalized dependency receives one value from the ordered vocabulary
+`DEV < DEBUG < QA < PREPROD < PROD`. The normalizer considers only bounded structured fields on
+accepted observations: manifest/package scopes, build configuration/profile/environment fields,
+and native loader kinds. It does not classify dependency names, versions, repository text, or
+arbitrary target prose.
+
+Development-only manifest scope maps to `DEV`, debug configuration to `DEBUG`, test and quality
+assurance scope to `QA`, staging/preproduction scope to `PREPROD`, and explicit runtime,
+production, release, loader-needed, or SONAME evidence to `PROD`. Every recognized observation is
+retained in `exposure_evidence`, including contradictions. `maximal_exposure` is the greatest
+observed class, and `exposure_inference_basis` is `maximum-observed-evidence`.
+
+When no recognized scope evidence exists, the record is assigned `PROD` with
+`exposure_inference_basis = conservative-default` and an empty evidence list. This deliberately
+avoids understating review priority. It is not proof that the dependency is deployed in production.
+The fields remain unchanged in both the dependency retrieval entity and accepted handoff.
 
 ## Identity resolution
 
@@ -59,5 +79,6 @@ dependency is safe.
 
 `appsec_review.jobs.job_dependency_intelligence` exports `build_job`,
 `load_accepted_dependency_intelligence`, `parse_native_candidates`, `normalize_dependencies`,
-`repository_identity`, `apply_model_resolution`, and the bounded `ScorecardClient`. Inference and
-HTTP transport are injectable for deterministic tests and alternate orchestration environments.
+`infer_maximal_exposure`, `repository_identity`, `apply_model_resolution`, and the bounded
+`ScorecardClient`. Inference and HTTP transport are injectable for deterministic tests and
+alternate orchestration environments.

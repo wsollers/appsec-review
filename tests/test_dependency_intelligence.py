@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import asdict
 import json
 from pathlib import Path
+import sqlite3
 
 import pytest
 
@@ -11,7 +12,8 @@ from appsec_review.guidance.skills import load_runtime_skill
 from appsec_review.jobs.engineering_contracts import DEPENDENCY_INTELLIGENCE_HANDOFF_SCHEMA
 from appsec_review.jobs.job_dependency_intelligence import (
     HttpResponse, ScorecardClient, ScorecardError, apply_model_resolution, build_job,
-    load_accepted_dependency_intelligence, normalize_dependencies, parse_native_candidates,
+    infer_maximal_exposure, load_accepted_dependency_intelligence, normalize_dependencies,
+    parse_native_candidates,
 )
 from appsec_review.jobs.job_dependency_intelligence.inference import resolve_with_inference
 from appsec_review.inference import ModelResult
@@ -45,6 +47,17 @@ def test_native_detection_records_command_bounds() -> None:
     assert gaps == ["native invocation 0 exceeds command token bound (2)"]
 
 
+def test_native_detection_retains_structured_and_explicit_debug_build_context() -> None:
+    candidates, gaps = parse_native_candidates([
+        {"command_id": "cmd-1", "argv": ["clang", "-g", "main.o", "-lexample"]},
+        {"command_id": "cmd-2", "argv": ["link", "x.obj", "example.lib"],
+         "configuration": "preproduction"},
+    ])
+    assert gaps == []
+    assert {item["configuration"] for item in candidates[0]["observations"]} == {
+        "debug", "preproduction"}
+
+
 def test_normalization_prefers_package_repository_metadata_and_deduplicates() -> None:
     dependencies, gaps = normalize_dependencies(
         [{"name": "zlib", "constraint": "1.3", "source": "package.json"}],
@@ -58,6 +71,82 @@ def test_normalization_prefers_package_repository_metadata_and_deduplicates() ->
     assert zlib["resolution_basis"] == "package_metadata"
     assert zlib["exact_repository_identity"] is True
     assert len(dependencies) == 2
+
+
+@pytest.mark.parametrize(("field", "value", "expected"), [
+    ("location", "devDependencies", "DEV"),
+    ("configuration", "Debug", "DEBUG"),
+    ("scope", "integration-test", "QA"),
+    ("environment", "staging", "PREPROD"),
+    ("usage", "runtime", "PROD"),
+])
+def test_exposure_classifier_covers_the_closed_ordered_vocabulary(
+        field: str, value: str, expected: str) -> None:
+    evidence = infer_maximal_exposure({field: value, "observation_id": "obs-1"}, "declared")
+    assert {item["exposure"] for item in evidence} == {expected}
+    assert all(item["evidence_id"] == "obs-1" for item in evidence)
+
+
+def test_normalization_retains_conflicting_exposure_and_chooses_maximum() -> None:
+    dependencies, gaps = normalize_dependencies(
+        [
+            {"name": "example", "constraint": "1", "location": "devDependencies",
+             "observation_id": "manifest-dev"},
+            {"name": "example", "constraint": "1", "scope": "qa",
+             "observation_id": "manifest-qa"},
+            {"name": "example", "constraint": "1", "environment": "preproduction",
+             "observation_id": "manifest-preprod"},
+        ], [], [], supported_hosts=("github.com",), max_dependencies=10)
+    assert gaps == []
+    dependency = dependencies[0]
+    assert dependency["maximal_exposure"] == "PREPROD"
+    assert dependency["exposure_inference_basis"] == "maximum-observed-evidence"
+    assert {item["exposure"] for item in dependency["exposure_evidence"]} == {
+        "DEV", "QA", "PREPROD"}
+    assert {item["evidence_id"] for item in dependency["exposure_evidence"]} == {
+        "manifest-dev", "manifest-qa", "manifest-preprod"}
+
+
+def test_unknown_exposure_conservatively_defaults_to_prod() -> None:
+    dependencies, gaps = normalize_dependencies(
+        [{"name": "example", "constraint": "1", "source": "package.json"}], [], [],
+        supported_hosts=("github.com",), max_dependencies=10)
+    assert gaps == []
+    assert dependencies[0]["maximal_exposure"] == "PROD"
+    assert dependencies[0]["exposure_inference_basis"] == "conservative-default"
+    assert dependencies[0]["exposure_evidence"] == []
+
+
+def test_exposure_evidence_is_deduplicated_with_dependency_observations() -> None:
+    record = {"name": "example", "constraint": "1", "scope": "test",
+              "observation_id": "same-observation"}
+    dependencies, gaps = normalize_dependencies(
+        [record, dict(record)], [], [], supported_hosts=("github.com",), max_dependencies=10)
+    assert gaps == []
+    assert len(dependencies[0]["observations"]) == 1
+    assert len(dependencies[0]["exposure_evidence"]) == 1
+    assert dependencies[0]["maximal_exposure"] == "QA"
+
+
+def test_native_loader_and_configuration_evidence_conflict_and_propagate() -> None:
+    native = {"candidate_id": "native-dependency-a", "native_name": "example",
+              "observations": [
+                  {"command_id": "cmd-1", "kind": "link_flag", "configuration": "debug"},
+                  {"artifact_sha256": "a" * 64, "kind": "loader_needed", "value": "libexample.so"},
+              ]}
+    (dependency,), gaps = normalize_dependencies(
+        [], [], [native], supported_hosts=("github.com",), max_dependencies=10)
+    assert gaps == [] and dependency["maximal_exposure"] == "PROD"
+    assert {item["basis"] for item in dependency["exposure_evidence"]} == {
+        "native-build-configuration", "runtime-loader"}
+    proposal = {"schema": "appsec-review/native-dependency-resolution-proposal/1",
+                "candidate_id": "native-dependency-a",
+                "repository": {"host": "github.com", "owner": "example", "name": "example",
+                               "url": "https://github.com/example/example"},
+                "confidence": .7, "evidence_refs": ["cmd-1"], "rationale": "bounded evidence"}
+    resolved = apply_model_resolution(dependency, proposal, supported_hosts=("github.com",))
+    assert resolved["maximal_exposure"] == dependency["maximal_exposure"]
+    assert resolved["exposure_evidence"] == dependency["exposure_evidence"]
 
 
 def test_model_resolution_is_validated_and_never_exact() -> None:
@@ -167,7 +256,12 @@ def test_accepted_publication_verifies_handoff_index_and_hashes(tmp_path: Path) 
     builder = IndexBuilder(index_path, name="inventory", fingerprint=fingerprint,
                            target_snapshot=snapshot, shard_id="dependency-intelligence")
     identity = LogicalIdentity.derive(EntityKind.DEPENDENCY_PACKAGE, snapshot, {"name": "zlib"})
-    builder.add_entity(EntityRecord(identity, "dependency-zlib", "zlib", "dependency zlib", {}))
+    exposure = {"dependency_id": "dependency-zlib", "name": "zlib", "maximal_exposure": "QA",
+                "exposure_inference_basis": "maximum-observed-evidence",
+                "exposure_evidence": [{"exposure": "QA", "basis": "structured-scope",
+                                       "source": "declared", "evidence_id": "manifest-1",
+                                       "field": "scope", "value": "test", "matched_term": "test"}]}
+    builder.add_entity(EntityRecord(identity, "dependency-zlib", "zlib", "dependency zlib", exposure))
     builder.add_coverage("dependency-zlib", "complete")
     index_sha = builder.build()
     index = IndexIdentity("inventory", "appsec-review/retrieval-index/2", index_sha, fingerprint,
@@ -179,7 +273,7 @@ def test_accepted_publication_verifies_handoff_index_and_hashes(tmp_path: Path) 
     manifest_identity = {"path": manifest_path.relative_to(run_root).as_posix(),
                          "sha256": file_sha256(manifest_path), "size_bytes": manifest_path.stat().st_size}
     document = {"schema": DEPENDENCY_INTELLIGENCE_HANDOFF_SCHEMA, "source_fingerprint": snapshot,
-                "upstream_handoffs": {}, "dependencies": [], "scorecards": [], "gaps": [],
+                "upstream_handoffs": {}, "dependencies": [exposure], "scorecards": [], "gaps": [],
                 "index_identity": asdict(index), "index_manifest": manifest_identity,
                 "security_findings": [], "scorecard_semantics": "review-context-and-red-team-seed-only"}
     published = run_root / "published.json"
@@ -196,6 +290,12 @@ def test_accepted_publication_verifies_handoff_index_and_hashes(tmp_path: Path) 
                          "handoff_sha256": file_sha256(framework)})
     loaded = load_accepted_dependency_intelligence(run_root)
     assert loaded["schema"] == DEPENDENCY_INTELLIGENCE_HANDOFF_SCHEMA
+    assert loaded["dependencies"][0]["maximal_exposure"] == "QA"
+    with sqlite3.connect(index_path) as database:
+        payload = json.loads(database.execute(
+            "SELECT payload_json FROM entities WHERE native_id = 'dependency-zlib'").fetchone()[0])
+    assert payload["maximal_exposure"] == "QA"
+    assert payload["exposure_evidence"] == exposure["exposure_evidence"]
     index_path.write_bytes(b"changed")
     with pytest.raises(ValueError, match="index integrity mismatch"):
         load_accepted_dependency_intelligence(run_root)

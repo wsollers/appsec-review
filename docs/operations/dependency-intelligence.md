@@ -31,6 +31,13 @@ Operational triage should group gaps by `dependency_id`:
   is incomplete;
 - bounds: increase the specific central limit only after reviewing target scale and retained data.
 
+Exposure triage should start with `maximal_exposure`, then inspect `exposure_evidence` before using
+it to prioritize review. `PROD` with `exposure_inference_basis = conservative-default` means the
+accepted observations had no recognized scope; it does not claim verified production deployment.
+Conflicting evidence is expected and retained, with the maximum class chosen in the fixed order
+`DEV < DEBUG < QA < PREPROD < PROD`. Improve upstream manifest, SBOM, build-configuration, or loader
+observations when a conservative default is too broad; do not manually weaken the accepted output.
+
 Focused verification:
 
 ```text
