@@ -216,9 +216,10 @@ class ImageResolver:
 
 class NativeExecutor:
     def __init__(self, calls: list[tuple[str, ...]], *, fail: bool = False,
-                 fail_workdirs: set[str] | None = None):
+                 fail_workdirs: set[str] | None = None, partial_output: bool = False):
         self.calls, self.fail = calls, fail
         self.fail_workdirs = fail_workdirs or set()
+        self.partial_output = partial_output
 
     def resolve(self):
         return None
@@ -226,6 +227,10 @@ class NativeExecutor:
     def execute(self, argv, *, workspace, working_directory, environment):
         self.calls.append(tuple(argv))
         if (self.fail or working_directory in self.fail_workdirs) and "--build" in argv:
+            if self.partial_output:
+                output = workspace / working_directory / "build" / "sample"
+                output.parent.mkdir(parents=True, exist_ok=True)
+                output.write_bytes(b"partial")
             return BuildCommandResult(tuple(argv), 2, b"", b"bounded failure", False)
         if "--build" in argv:
             root = workspace / working_directory
@@ -251,8 +256,9 @@ class NativeExecutor:
 
 def native_language_executor(profile, calls: list[tuple[str, ...]], *, fail: bool = False,
                              fail_workdirs: set[str] | None = None,
-                             phantom_compiler: bool = False):
-    fake = NativeExecutor(calls, fail=fail, fail_workdirs=fail_workdirs)
+                             phantom_compiler: bool = False, partial_output: bool = False):
+    fake = NativeExecutor(calls, fail=fail, fail_workdirs=fail_workdirs,
+                          partial_output=partial_output)
 
     def behavior(command, workspace, working_directory, environment, simulation):
         simulation.exec("/capture/wrappers/cmake", command)
@@ -496,11 +502,13 @@ def test_native_build_failure_is_a_gap_and_topology_is_generic(tmp_path: Path) -
     config, target = _fixture(tmp_path)
     run_id, fingerprint = _accepted_project(config, target, [])
     outcome = GraphRunner(config, [build_language(
-        executor_factory=lambda unit, profile: native_language_executor(profile, [], fail=True))]).run(
+        executor_factory=lambda unit, profile: native_language_executor(
+            profile, [], fail=True, partial_output=True))]).run(
             target_root=target, source_fingerprint=fingerprint, run_id=run_id)
     assert outcome["status"] == "COMPLETED_WITH_GAPS"
     receipt = load_accepted_language_build(config.runtime.runs_dir / run_id)["receipts"][0]
     assert receipt["terminal_status"] == "FAILED" and receipt["gaps"]
+    assert receipt["artifacts"] == []
     graph = plan_jobs((build_language(executor_factory=lambda unit, profile: NativeExecutor([])),), config)
     assert graph.node("job_language_build.execute.native").dependencies == (
         "job_language_build.load.native",)

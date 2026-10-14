@@ -1151,6 +1151,13 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
     atomic_json(workspace_manifest_path, {"schema": "appsec-review/build-workspace-manifest/1",
                 "build_unit_id": build_unit_id, "files": workspace_files})
     status = "FAILED" if any("build command" in gap for gap in gaps) else "SUCCEEDED"
+    if status == "FAILED":
+        # A failed command may leave plausible-looking partial outputs behind. Preserve the
+        # command, capture, and workspace evidence for diagnosis, but do not publish those files
+        # as accepted build artifacts for downstream analysis.
+        artifacts = []
+        build_metadata = []
+        package_members = []
     capture_complete = not any(gap.startswith(_CAPTURE_GAP) for gap in gaps) and not (
         family in _CAPTURED_FAMILIES and provenance_gaps)
     receipt = {"schema": RECEIPT_SCHEMA, "fingerprint": fingerprint, "source_fingerprint": unit.job.source_fingerprint,
