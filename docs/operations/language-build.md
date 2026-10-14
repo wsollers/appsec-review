@@ -65,6 +65,14 @@ executes the accepted configure/build argv without a shell. The pinned container
 bridge network so declared package-manager dependencies can be downloaded,
 runs non-root with dropped capabilities and `no-new-privileges`, has a read-only root, and receives
 central CPU, memory, PID, timeout, tmpfs, and output limits. Target binaries and tests are never run.
+The capture driver creates a fresh owner-only scratch directory inside the run-owned workspace for
+each command and binds `TMPDIR`, `TMP`, and `TEMP` to it. Compiler and build-system temporaries,
+including MSBuild response files, therefore remain inside the workspace boundary until capture can
+retain their bounded content. MSBuild's tool-temporary preservation switch prevents it from deleting
+response files before that snapshot. A target collision cannot select this directory because creation is
+atomic; a response path outside the workspace, an over-limit or removed response file, or malformed
+response identity is an explicit coverage gap or integrity failure rather than silently omitted
+provenance.
 
 Receipts catalog generated sources, compile databases, objects, static/shared libraries,
 executables, LLVM bitcode/IR, debug data, and link maps. Loader dependencies of ELF executables and

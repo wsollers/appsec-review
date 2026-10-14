@@ -152,6 +152,9 @@ def reconcile_captured_build(
         "tool_call_records_observed": 0,
         "tool_call_records_retained": 0,
         "tool_call_records_lost": 0,
+        "response_file_records": 0,
+        "response_file_bytes": 0,
+        "response_file_references": 0,
     }
     redacted_names: set[str] = set()
     truncated = False
@@ -176,6 +179,17 @@ def reconcile_captured_build(
                 facts["tool_call_records_observed"] += observed
                 facts["tool_call_records_retained"] += retained
                 facts["tool_call_records_lost"] += max(0, observed - retained)
+        response_summary = capture.document.get("response_files")
+        if isinstance(response_summary, Mapping) and isinstance(response_summary.get("records"), list):
+            facts["response_file_records"] += len(response_summary["records"])
+            for response in response_summary["records"]:
+                if isinstance(response, Mapping):
+                    size = response.get("size_bytes")
+                    references = response.get("references")
+                    if type(size) is int:
+                        facts["response_file_bytes"] += size
+                    if isinstance(references, list):
+                        facts["response_file_references"] += len(references)
 
         for event in capture.events():
             if not isinstance(event, Mapping):
