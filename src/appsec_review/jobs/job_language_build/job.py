@@ -239,8 +239,17 @@ def _snapshot(root: Path, limit: int) -> dict[str, str]:
     return values
 
 
+_COVERAGE_ARTIFACT = re.compile(
+    r"(^|/)(lcov(?:\.info)?|coverage\.lcov|cobertura(?:-coverage)?\.xml|coverage\.xml|"
+    r"jacoco(?:test)?report\.xml|jacoco\.xml|coverage(?:-final)?\.json|.*\.coverage\.json)$", re.I)
+
+
 def _kind(path: Path, family: str = "native", *, relative: str = "",
           before: Mapping[str, str] | None = None) -> str | None:
+    # Coverage is a generic build output, not a language-family-specific artifact. Preserve only
+    # well-known exchange filenames so the bounded coverage ingestion job can inspect the bytes.
+    if _COVERAGE_ARTIFACT.search((relative or path.as_posix()).replace("\\", "/")):
+        return "test-coverage"
     if family == "dotnet":
         return dotnet.artifact_kind(path)
     if family == "rust":

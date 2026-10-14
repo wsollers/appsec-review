@@ -17,7 +17,7 @@ from appsec_review.jobs.job_language_build import build_job as build_language, l
 from appsec_review.jobs.job_language_build import job as language_build_job
 from appsec_review.jobs.job_language_build.dotnet import artifact_kind, project_topology, tool_identity, validate_recipe
 from appsec_review.jobs.job_language_build.job import (
-    _compile_rows, _dotnet_argv, _fingerprint, _link_rows, _stream_identity,
+    _compile_rows, _dotnet_argv, _fingerprint, _kind, _link_rows, _stream_identity,
 )
 from appsec_review.mcp import RetrievalMcpAdapter
 from appsec_review.retrieval import RetrievalCore
@@ -35,6 +35,12 @@ from tests.capture_fakes import SYNTHETIC_SECRET, capturing_fake, simulated_exec
 
 
 ROOT = Path(__file__).parents[1]
+
+
+@pytest.mark.parametrize("family", ["native", "dotnet", "rust", "node", "python", "go", "java"])
+def test_coverage_exchange_artifacts_are_preserved_for_every_build_family(family: str) -> None:
+    assert _kind(Path("coverage.xml"), family, relative="reports/coverage.xml") == "test-coverage"
+    assert _kind(Path("coverage.json"), family, relative="out/coverage.json") == "test-coverage"
 
 
 def test_processing_modes_change_language_build_checkpoint_identity() -> None:

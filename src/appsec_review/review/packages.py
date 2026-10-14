@@ -467,8 +467,20 @@ class _Assembler:
         bound = self.settings.max_context_entries
         if len(ordered) <= bound:
             return ordered, 0, []
+        # Preserve representation from every context role under pressure. In particular, a large
+        # dependency inventory must not consume the whole budget before its Scorecard seeds are
+        # admitted. This remains deterministic because both roles and identities are sorted.
+        buckets = {role: [unique[key] for key in sorted(unique) if key[0] == role]
+                   for role in sorted({key[0] for key in unique})}
+        balanced: list[ContextEntry] = []
+        depth = 0
+        while len(balanced) < bound and any(depth < len(bucket) for bucket in buckets.values()):
+            for bucket in buckets.values():
+                if depth < len(bucket) and len(balanced) < bound:
+                    balanced.append(bucket[depth])
+            depth += 1
         omitted = len(ordered) - bound
-        return ordered[:bound], omitted, [ScopeGap(producer, subject, "truncated",
+        return balanced, omitted, [ScopeGap(producer, subject, "truncated",
                                                    f"{omitted} context entr{'y' if omitted == 1 else 'ies'} "
                                                    f"exceeded max_context_entries={bound}")]
 

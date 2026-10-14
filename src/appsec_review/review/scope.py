@@ -93,8 +93,10 @@ def _is_dependency(shard: Mapping[str, Any]) -> bool:
 
 
 def _is_source_sast(shard: Mapping[str, Any]) -> bool:
-    return (shard["name"] == "observations" and _job(shard) == "job_evidence_collection"
-            and not (_is_dependency(shard) or _is_codeql(shard) or _is_ci(shard) or _is_artifact(shard)))
+    return (shard["name"] == "observations" and
+            (_job(shard) == "job_clang_static_analysis" or
+             (_job(shard) == "job_evidence_collection" and
+              not (_is_dependency(shard) or _is_codeql(shard) or _is_ci(shard) or _is_artifact(shard)))))
 
 
 def _precomputed(query_set: str) -> Callable[[Mapping[str, Any]], bool]:
@@ -119,6 +121,8 @@ PRODUCERS: Mapping[str, Callable[[Mapping[str, Any]], bool]] = {
     "review_prioritization": _index("priority"),
     "source_history": _index("history"),
     "security_tagging": _index("tags"),
+    "test_coverage": _index("analysis", "job_test_coverage"),
+    "dependency_intelligence": _index("inventory", "job_dependency_intelligence"),
     "scanner_correlation": _precomputed("scanner_correlation"),
     "dependency_advisories": _precomputed("dependency_advisories"),
     "reference_intelligence": _precomputed("reference_intelligence"),

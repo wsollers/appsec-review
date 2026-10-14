@@ -43,11 +43,14 @@ def builtin_registry() -> JobRegistry:
     from appsec_review.jobs.job_project_build import build_job as build_project_build
     from appsec_review.jobs.job_language_build import build_job as build_language_build
     from appsec_review.jobs.job_artifact_indexing import build_job as build_artifact_indexing
+    from appsec_review.jobs.job_test_coverage import build_job as build_test_coverage
     from appsec_review.jobs.job_artifact_security_analysis import build_job as build_artifact_security_analysis
     from appsec_review.jobs.job_third_party_data_sync import build_job as build_sync
     from appsec_review.jobs.job_evidence_collection import build_job as build_evidence
+    from appsec_review.jobs.job_dependency_intelligence import build_job as build_dependency_intelligence
     from appsec_review.jobs.job_ci_configuration_analysis import build_job as build_ci_configuration_analysis
     from appsec_review.jobs.job_cpp_compiled_analysis import build_job as build_cpp_compiled
+    from appsec_review.jobs.job_clang_static_analysis import build_job as build_clang_static_analysis
     from appsec_review.jobs.job_cpp_symbol_index import build_job as build_cpp_symbol_index
     from appsec_review.jobs.job_cpg_analysis import build_job as build_cpg_analysis
     from appsec_review.jobs.job_codeql_analysis.job import build_job as build_codeql_analysis
@@ -74,11 +77,14 @@ def builtin_registry() -> JobRegistry:
                       lambda: build_project_build(infer=infer))
     registry.register("job_language_build", build_language_build)
     registry.register("job_artifact_indexing", build_artifact_indexing)
+    registry.register("job_test_coverage", build_test_coverage)
     registry.register("job_artifact_security_analysis", build_artifact_security_analysis)
     registry.register("job_third_party_data_sync", build_sync)
     registry.register("job_evidence_collection", build_evidence)
+    registry.register("job_dependency_intelligence", lambda: build_dependency_intelligence(infer=infer))
     registry.register("job_ci_configuration_analysis", build_ci_configuration_analysis)
     registry.register("job_cpp_compiled_analysis", build_cpp_compiled)
+    registry.register("job_clang_static_analysis", build_clang_static_analysis)
     registry.register("job_cpp_symbol_index", build_cpp_symbol_index)
     registry.register("job_cpg_analysis", build_cpg_analysis)
     registry.register("job_codeql_analysis", build_codeql_analysis)

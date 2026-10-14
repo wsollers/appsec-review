@@ -1048,6 +1048,39 @@ workers = 8
 workers = 1
 [jobs.job_artifact_indexing.steps.acceptance.tasks.publish_handoff]
 
+[jobs.job_test_coverage]
+name = "test_coverage"
+workers = 4
+
+[jobs.job_test_coverage.settings]
+parser_identity = "appsec-review/test-coverage-parsers/1"
+normalizer_identity = "appsec-review/test-coverage-normalizer/1"
+mapping_identity = "appsec-review/test-coverage-source-binding/1"
+applicable_families = ["native", "go", "dotnet", "node", "python", "rust", "php", "java", "wasm"]
+
+[jobs.job_test_coverage.settings.bounds]
+max_artifacts = 10000
+max_artifact_bytes = 268435456
+max_rows_per_artifact = 1000000
+max_files_per_artifact = 100000
+max_path_candidates = 32
+
+[jobs.job_test_coverage.steps.load]
+workers = 1
+[jobs.job_test_coverage.steps.load.tasks.accepted_inputs]
+
+[jobs.job_test_coverage.steps.normalize]
+workers = 4
+[jobs.job_test_coverage.steps.normalize.tasks.coverage]
+
+[jobs.job_test_coverage.steps.index]
+workers = 2
+[jobs.job_test_coverage.steps.index.tasks.coverage]
+
+[jobs.job_test_coverage.steps.acceptance]
+workers = 1
+[jobs.job_test_coverage.steps.acceptance.tasks.publish_handoff]
+
 [jobs.job_artifact_security_analysis]
 name = "artifact_security_analysis"
 workers = 8
@@ -1136,6 +1169,29 @@ workers = 1
 [jobs.job_cpp_compiled_analysis.steps.acceptance]
 workers = 1
 [jobs.job_cpp_compiled_analysis.steps.acceptance.tasks.publish_handoff]
+
+[jobs.job_clang_static_analysis]
+name = "clang_static_analysis"
+workers = 4
+
+[jobs.job_clang_static_analysis.settings]
+workers = 4
+max_output_bytes = 16777216
+max_diagnostics_per_scope = 10000
+clang_tidy_checks = ["clang-analyzer-*", "bugprone-*", "cert-*", "concurrency-*", "performance-*", "portability-*"]
+clang_analyzer_checkers = ["core", "cplusplus", "deadcode", "security", "unix", "alpha.security.*"]
+
+[jobs.job_clang_static_analysis.steps.load]
+workers = 1
+[jobs.job_clang_static_analysis.steps.load.tasks.accepted_cpp]
+
+[jobs.job_clang_static_analysis.steps.analyze]
+workers = 4
+[jobs.job_clang_static_analysis.steps.analyze.tasks.scopes]
+
+[jobs.job_clang_static_analysis.steps.acceptance]
+workers = 1
+[jobs.job_clang_static_analysis.steps.acceptance.tasks.publish_handoff]
 
 [jobs.job_codeql_analysis]
 name = "codeql_analysis"
@@ -1690,6 +1746,58 @@ workers = 1
 workers = 1
 [jobs.job_evidence_collection.steps.evidence_publication.tasks.assemble_manifest]
 [jobs.job_evidence_collection.steps.evidence_publication.tasks.publish_handoff]
+
+[jobs.job_dependency_intelligence]
+name = "dependency_intelligence"
+workers = 4
+
+[jobs.job_dependency_intelligence.settings]
+dependency_limit = 100000
+native_candidate_limit = 10000
+command_token_limit = 4096
+metadata_file_limit = 10000
+metadata_bytes_per_file = 1048576
+inference_candidate_bytes = 32768
+repository_hosts = ["github.com", "gitlab.com"]
+
+[jobs.job_dependency_intelligence.settings.model]
+enabled = true
+provider = "claude-cli"
+model = "claude-haiku-5-5"
+reasoning = "medium"
+max_input_tokens = 32000
+max_output_tokens = 4000
+timeout_seconds = 120
+retries = 1
+
+[jobs.job_dependency_intelligence.settings.scorecard]
+base_url = "https://api.securityscorecards.dev"
+allowed_hosts = ["api.securityscorecards.dev"]
+max_requests = 10000
+max_response_bytes = 1048576
+timeout_seconds = 30
+retries = 2
+
+[jobs.job_dependency_intelligence.steps.inputs]
+workers = 1
+[jobs.job_dependency_intelligence.steps.inputs.tasks.load_accepted]
+
+[jobs.job_dependency_intelligence.steps.resolution]
+workers = 2
+[jobs.job_dependency_intelligence.steps.resolution.tasks.detect_dependencies]
+[jobs.job_dependency_intelligence.steps.resolution.tasks.infer_repositories]
+
+[jobs.job_dependency_intelligence.steps.scorecards]
+workers = 4
+[jobs.job_dependency_intelligence.steps.scorecards.tasks.fetch]
+
+[jobs.job_dependency_intelligence.steps.publication]
+workers = 1
+[jobs.job_dependency_intelligence.steps.publication.tasks.publish_context]
+
+[jobs.job_dependency_intelligence.steps.acceptance]
+workers = 1
+[jobs.job_dependency_intelligence.steps.acceptance.tasks.publish_handoff]
 
 [jobs.job_owasp_control_assessment]
 name = "owasp_control_assessment"

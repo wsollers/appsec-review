@@ -8,6 +8,9 @@ Repository authority remains in [`../../AGENTS.md`](../../AGENTS.md). This page 
   `appsec-multi-vuln` project-type matrix, envp redaction, and per-command gitleaks evidence.
 - [`../operations/language-build.md`](../operations/language-build.md) — generic real-build execution, protected provenance, and checkpoints.
 - [`../operations/artifact-security-analysis.md`](../operations/artifact-security-analysis.md) — generic bounded security analysis of accepted produced artifacts.
+- [`clang-static-analysis.md`](clang-static-analysis.md) — Clang-Tidy and Clang Static Analyzer over accepted C/C++ compile scopes.
+- [`test-coverage-ingestion.md`](test-coverage-ingestion.md) — bounded LCOV, Cobertura, JaCoCo, and LLVM coverage normalization and source binding.
+- [`dependency-intelligence.md`](dependency-intelligence.md) — declared, SBOM, linker, loader, and metadata dependency resolution with OpenSSF Scorecard context.
 - [`../operations/wasm-build.md`](../operations/wasm-build.md) — WebAssembly output-family execution across accepted source-language recipes.
 - [`../operations/metrics.md`](../operations/metrics.md) — receipt-resolved review scope, build, artifact, and CodeQL timing metrics.
 - [`python-and-retrieval.md`](python-and-retrieval.md) — immutable accepted retrieval indexes and bounded MCP access.

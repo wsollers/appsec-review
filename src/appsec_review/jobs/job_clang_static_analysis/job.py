@@ -207,7 +207,8 @@ def _analyze_scope(unit: UnitContext, scope: IndexScope, executor_factory: Any) 
         builder.add_entity(EntityRecord(
             observation, evidence_id, str(record["rule_id"]),
             f"{record['rule_id']} {record['message']}",
-            {"tool_id": TOOL_ID, "scanner": record["engine"], "native_rule_id": record["rule_id"],
+            {"tool_id": TOOL_ID, "scanner": record["engine"], "category": "source_sast",
+             "native_rule_id": record["rule_id"],
              "message": record["message"], "reported_severity": record["severity"],
              "project_id": scope.project_id, "trace": record["notes"], "evidence_id": evidence_id},
             location,

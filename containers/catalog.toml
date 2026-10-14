@@ -689,6 +689,21 @@ build_args = { TOOL_VERSION = "23.1.0", CLANGD_SHA512 = "1c901aca0bdbc8b1367b940
 purpose = "Offline C/C++ semantic symbol and reference index from a compilation database, including clang-cl commands; runtime availability is not index coverage."
 
 [[images]]
+id = "tool-clang-static-analysis"
+state = "enabled"
+kind = "tool"
+version = "1.0.0"
+tag = "appsec-review/tool-clang-static-analysis:1.0.0"
+context = "containers/tools/clang-static-analysis"
+dockerfile = "Dockerfile"
+dependencies = ["tool-native-cpp"]
+architectures = ["linux/amd64"]
+tool_manifest = "containers/tools/clang-static-analysis/tool.toml"
+assets_lock = "containers/tools/clang-static-analysis/assets.lock.json"
+build_args = { TOOL_VERSION = "1.0.0" }
+purpose = "Offline Clang-Tidy and Clang Static Analyzer over accepted C/C++ compilation databases."
+
+[[images]]
 id = "tool-joern"
 state = "enabled"
 kind = "tool"

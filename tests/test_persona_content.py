@@ -26,6 +26,9 @@ PERSONAS = (
     "network_api_surface", "filesystem_resources", "business_logic_abuse", "build_supply_chain",
     "ci_cd_pipeline", "cloud_container_deployment", "mobile_platform", "generalist",
 )
+# Job-scoped personas share the fragment directory but are not members of the inference-review
+# routing taxonomy validated below.
+JOB_SCOPED_PERSONAS = {"devops-engineer", "dependency_repository_investigator"}
 STACKS = (
     "cpp_rpc_service", "cpp_native_service", "c_systems_embedded", "jvm_service", "dotnet_service",
     "go_service", "rust_service", "python_service", "node_web", "php_web", "android", "ios", "wasm",
@@ -149,7 +152,7 @@ ALL_FILES = {**{("personas", key): value for key, value in PERSONA_FILES.items()
 
 
 def test_fragment_directories_hold_exactly_the_expected_files() -> None:
-    personas = {path.stem for path in (FRAGMENTS / "personas").glob("*.md")} - {"devops-engineer"}
+    personas = {path.stem for path in (FRAGMENTS / "personas").glob("*.md")} - JOB_SCOPED_PERSONAS
     stacks = {path.stem for path in (FRAGMENTS / "stacks").glob("*.md")}
     assert personas == set(PERSONAS)
     assert stacks == set(STACKS)

@@ -1,6 +1,6 @@
 # Engineering-signal jobs implementation
 
-Status: implementation in progress. Root `AGENTS.md` governs.
+Status: implemented and locally verified. Root `AGENTS.md` governs.
 
 ## Decisions
 
@@ -43,4 +43,26 @@ Status: implementation in progress. Root `AGENTS.md` governs.
   registered runtime guidance, focused tests and docs.
 - Integration owner: central TOML, registries, graphs, cross-domain indexing, inference review
   consumption, combined tests, and reconciliation.
+
+## Implemented integration
+
+- The direct graph and Dagster wave register and order all three jobs before review-data indexing.
+- Language-build preserves well-known coverage exchange files for every supported build family.
+- Clang observations are classified as source-SAST and enter scanner correlation and review lanes.
+- Coverage cells are attached to the exact source/build unit in lane-B review packages.
+- Dependency and Scorecard entities seed lane-B red-team context. Package context bounds still apply;
+  truncation is a named gap, and Scorecards remain context rather than vulnerability findings.
+- Review scope accounts for missing, partial, and failed coverage from each new producer.
+
+## Verification record
+
+- Focused producer/orchestration integration: 70 passed, 1 skipped; review package/cap tests:
+  40 passed; guidance/persona/dependency tests: 165 passed.
+- A later combined run reached 241 passed and 1 skipped; two unrelated feed-publication fixtures
+  failed with Windows `os.replace` access-denied errors. The full suite cannot collect on this host
+  because `hypothesis` and the Unix-only `resource` module are unavailable. Separate broad runs also
+  reproduced existing Windows path/permission failures in project probes, SQLite shard creation,
+  and CodeQL fixture export.
+- Clang tool acceptance built its offline image and exercised both analyzers against a native null
+  dereference fixture. No live model-provider or OpenSSF network acceptance was performed.
 

@@ -27,7 +27,8 @@ MENU_KINDS = ("high_critical", "unknown")
 _SUPPRESSION_TOOLS = {
     "semgrep": {"tool-semgrep", "tool-opengrep"}, "gosec": {"tool-gosec"}, "codeql": {"codeql"},
     "flawfinder": {"tool-flawfinder"}, "cppcheck": {"tool-cppcheck"}, "phpcs": {"tool-phpcs"},
-    "psalm": {"tool-psalm"}, "phpstan": {"tool-phpstan"}, "sonar": set(), "clang-tidy": {"tool-clang-tidy"},
+    "psalm": {"tool-psalm"}, "phpstan": {"tool-phpstan"}, "sonar": set(),
+    "clang-tidy": {"tool-clang-tidy", "tool-clang-static-analysis"},
 }
 
 

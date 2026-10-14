@@ -43,6 +43,39 @@ _SIGNAL_PRODUCERS = {"lps": "review_prioritization", "sii": "source_history", "h
 _EXHAUSTIVE = frozenset({"tag_density", "lead_hints"})
 
 
+def _engineering_context(scope: AcceptedScope
+                         ) -> tuple[dict[str, list[ContextEntry]], dict[str, list[ContextEntry]],
+                                    list[ContextEntry]]:
+    """Index boundable coverage and supply-chain context once for review-unit assembly.
+
+    Coverage cells are selected by exact accepted path (plus the unit aggregate). Dependency and
+    Scorecard entities are run-wide review context: package assembly applies its normal context cap
+    and emits an explicit truncation gap when the dependency inventory is larger than that cap.
+    """
+    by_path: dict[str, list[ContextEntry]] = defaultdict(list)
+    by_build: dict[str, list[ContextEntry]] = defaultdict(list)
+    coverage = scope.producer("test_coverage")
+    for shard in coverage.shards:
+        sha = scope.shard_sha256(shard)
+        for row in scope.store.entities((shard,), kinds=("coverage_cell",)):
+            payload = row["payload"]
+            path = payload.get("path")
+            aggregate = payload.get("totals") is not None
+            entry = context_entry(row["identity"], "test_coverage", sha)
+            if isinstance(path, str) and path:
+                by_path[path].append(entry)
+            if aggregate and isinstance(payload.get("build_unit_id"), str):
+                by_build[payload["build_unit_id"]].append(entry)
+    dependencies_context: list[ContextEntry] = []
+    dependencies = scope.producer("dependency_intelligence")
+    for shard in dependencies.shards:
+        sha = scope.shard_sha256(shard)
+        for row in scope.store.entities((shard,), kinds=("dependency_package", "review_signal")):
+            role = "dependency" if row["kind"] == "dependency_package" else "openssf_scorecard"
+            dependencies_context.append(context_entry(row["identity"], role, sha))
+    return by_path, by_build, dependencies_context
+
+
 @dataclass(frozen=True, slots=True)
 class ContextEntry:
     id: str
@@ -176,6 +209,7 @@ def build_units(scope: AcceptedScope, collection: LeadCollection, *, unit_max_fi
     lead_families_available = any(collection.available.values())
     components = {item.component_id: item for item in scope.components}
     build_units = {item.build_unit_id: item for item in scope.build_units}
+    coverage_by_path, coverage_by_build, dependency_context = _engineering_context(scope)
 
     units: list[ReviewUnit] = []
     keys = sorted(set(groups) | set(unlocated), key=lambda item: (item[0], item[1] or ""))
@@ -194,6 +228,10 @@ def build_units(scope: AcceptedScope, collection: LeadCollection, *, unit_max_fi
                 context.append(context_entry(components[component_id].identity, "component"))
             if build_unit_id in build_units:
                 context.append(context_entry(build_units[build_unit_id].identity, "build_unit"))
+            context.extend(entry for path in members for entry in coverage_by_path.get(path, ()))
+            if build_unit_id is not None:
+                context.extend(coverage_by_build.get(build_unit_id, ()))
+            context.extend(dependency_context)
             sources = sorted({source.identity for path in members if (source := scope.source_for(path))})
             signals: list[Signal] = []
             member_set = set(members)

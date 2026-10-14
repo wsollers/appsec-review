@@ -183,8 +183,10 @@ def _build_dagster_graph(name: str, jobs: tuple[Job, ...], config: AppConfig,
                 )).resolve()
                 target_jobs = {
                     "job_review_intake", "job_target_catalog", "job_target_analysis_plan",
-                    "job_project_build", "job_language_build", "job_artifact_indexing",
-                    "job_artifact_security_analysis", "job_evidence_collection", "job_cpp_compiled_analysis",
+                    "job_project_build", "job_language_build", "job_artifact_indexing", "job_test_coverage",
+                    "job_artifact_security_analysis", "job_evidence_collection", "job_dependency_intelligence",
+                    "job_cpp_compiled_analysis",
+                    "job_clang_static_analysis",
                     "job_cpp_symbol_index", "job_cpg_analysis", "job_codeql_analysis", "job_code_graph_index",
                     "job_post_build_security_assessment", "job_owasp_control_assessment",
                     "job_ci_configuration_analysis", "job_tree_sitter_ast", "job_source_history_analysis",
@@ -443,6 +445,9 @@ def build_definitions(
             wave_jobs.append(registry.build("job_artifact_indexing"))
             wave_dependencies["job_artifact_indexing"] = (("job_language_build",)
                 if "job_language_build" in registered else ("job_project_build",))
+        if "job_test_coverage" in registered and "job_artifact_indexing" in registered:
+            wave_jobs.append(registry.build("job_test_coverage"))
+            wave_dependencies["job_test_coverage"] = ("job_artifact_indexing",)
         if "job_artifact_security_analysis" in registered:
             wave_jobs.append(registry.build("job_artifact_security_analysis"))
             wave_dependencies["job_artifact_security_analysis"] = (("job_artifact_indexing",)
@@ -452,6 +457,9 @@ def build_definitions(
             wave_dependencies["job_cpp_compiled_analysis"] = (("job_language_build",)
                 if "job_language_build" in registered else
                 ("job_project_build",) if "job_project_build" in registered else ("job_target_analysis_plan",))
+        if "job_clang_static_analysis" in registered and "job_cpp_compiled_analysis" in registered:
+            wave_jobs.append(registry.build("job_clang_static_analysis"))
+            wave_dependencies["job_clang_static_analysis"] = ("job_cpp_compiled_analysis",)
         # Both indexers consume only the accepted C++ handoff and never wait for each other.
         for job_id in ("job_cpp_symbol_index", "job_cpg_analysis"):
             if job_id in registered and "job_cpp_compiled_analysis" in registered:
@@ -465,11 +473,16 @@ def build_definitions(
         if "job_evidence_collection" in registered:
             wave_jobs.append(registry.build("job_evidence_collection"))
             wave_dependencies["job_evidence_collection"] = ("job_target_analysis_plan",)
+        if "job_dependency_intelligence" in registered:
+            wave_jobs.append(registry.build("job_dependency_intelligence"))
+            wave_dependencies["job_dependency_intelligence"] = tuple(job_id for job_id in (
+                "job_target_catalog", "job_language_build", "job_artifact_indexing",
+                "job_evidence_collection", "job_cpp_compiled_analysis") if job_id in wave_dependencies)
         if "job_codeql_analysis" in registered:
             wave_jobs.append(registry.build("job_codeql_analysis"))
             codeql_dependencies = [job_id for job_id in (
                 "job_language_build", "job_artifact_indexing", "job_artifact_security_analysis",
-                "job_cpp_compiled_analysis", "job_cpp_symbol_index", "job_cpg_analysis",
+                "job_cpp_compiled_analysis", "job_clang_static_analysis", "job_cpp_symbol_index", "job_cpg_analysis",
                 "job_post_build_security_assessment", "job_evidence_collection", "job_tree_sitter_ast",
                 "job_change_context_analysis")
                 if job_id in wave_dependencies]
@@ -504,7 +517,8 @@ def build_definitions(
             # one of them and precedes the next manifest publisher (tagging, then data indexing).
             wave_jobs.append(registry.build("job_code_graph_index"))
             wave_dependencies["job_code_graph_index"] = tuple(job_id for job_id in (
-                "job_codeql_analysis", "job_cpp_compiled_analysis", "job_cpp_symbol_index", "job_tree_sitter_ast",
+                "job_codeql_analysis", "job_cpp_compiled_analysis", "job_clang_static_analysis",
+                "job_cpp_symbol_index", "job_tree_sitter_ast",
                 "job_review_prioritization") if job_id in wave_dependencies)
         if "job_security_tagging" in registered:
             wave_jobs.append(registry.build("job_security_tagging"))
@@ -513,6 +527,7 @@ def build_definitions(
             tagging_dependencies = ["job_codeql_analysis"] if "job_codeql_analysis" in registered else [
                 job_id for job_id in ("job_language_build", "job_artifact_indexing",
                                       "job_artifact_security_analysis", "job_cpp_compiled_analysis",
+                                      "job_clang_static_analysis",
                                       "job_post_build_security_assessment", "job_evidence_collection",
                                       "job_tree_sitter_ast", "job_change_context_analysis") if job_id in registered]
             if "job_owasp_control_assessment" in registered:
