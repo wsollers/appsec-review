@@ -65,6 +65,8 @@ agents that inspect or change the repository. It is not a prompt for review work
 - Other agent sessions work on this repository at the same time. Follow
   `.claude/skills/multi-session-coordination/SKILL.md` before starting a change, before building or
   testing on a shared host, and when handing work to another session.
+- Keep the docs true to the code: after a batch of merged PRs, follow
+  `.claude/skills/docs-sync/SKILL.md` to reconcile them with the delta since `docs/docs-sync.json`.
 - Do not merge, auto-merge, rebase, or otherwise land a Dependabot pull request unless the user
   specifically instructs you to merge that pull request.
 
