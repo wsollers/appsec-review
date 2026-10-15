@@ -128,7 +128,11 @@ the probe sequence. Accepted probes are cached under `runs/metadata/project-prob
 ## Outputs and recovery
 
 Probe workspaces and captures live under `runs/<run-id>/data/build/probes/<build-unit-id>/`; the
-dispatch document is under the attempt's `artifacts/project-build/`. A failed probe, a disabled or
+dispatch document is under the attempt's `artifacts/project-build/`. A probe receipt lists each
+changed output with a role `kind` from the typed `ArtifactKind` vocabulary and its container
+`format` (`elf`, `ar`, `pe`, `macho`, `wasm`, `zip`, ...) separately, and counts CMake and Cargo
+build bookkeeping under `excluded_bookkeeping` instead of listing it (see
+[`language-build.md`](language-build.md)). A failed probe, a disabled or
 unavailable repair model, or exhausted repairs is a named gap and publishes no build dispatch for
 that unit; static dispatch and sibling units continue. Resume the same run: accepted probes are
 reused only when the recipe identity and resolved image ID still match. An invalid repair cache

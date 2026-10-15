@@ -62,14 +62,18 @@ directory and verified against the declared byte size and SHA-256 in `assets.loc
 steps run with networking disabled. Logs and the machine-readable summary are written under
 `runs/container-builds/<run-id>/`; each result records status, duration, image id, tag, digest, and
 log paths. Any failed, blocked, or skipped image makes the command fail, including with
-`--continue-on-error`.
+`--continue-on-error`. Images that install Python wheels offline with `--require-hashes` take them
+from their asset lock, so a requirements bump must update the lock too;
+`tests/test_container_requirements_lock.py` checks that every `requirements.txt` pin with a locked
+wheel names that wheel's version and SHA-256.
 `--timeout-seconds` bounds each `docker build` (default 1800, 60..14400). A review run rebuilds the
 catalog through this builder in `job_tool_image_rebuild` before intake and fails when any image does
 not build; see [`../docs/operations/tool-image-rebuild.md`](../docs/operations/tool-image-rebuild.md).
 
-Some locked assets cannot be downloaded by the launcher and must be placed in `downloads/` by hand
-before a build: the `tool-native-cpp` `.deb` closure (its lock URL is the archive root; see
-[`tools/native-cpp/README.md`](tools/native-cpp/README.md)) and the `tool-tree-sitter` wheels and
+Some locked assets cannot be downloaded by the launcher and must be placed in `downloads/` before a
+build: the `tool-native-cpp` `.deb` closure produced with its `acquire_assets.sh` (its lock URL is
+the archive root; see [`tools/native-cpp/README.md`](tools/native-cpp/README.md)) and the
+`tool-tree-sitter` wheels and
 parsers produced with `acquire_assets.py` (its lock lists no fetchable artifacts; see
 [`tools/tree-sitter/README.md`](tools/tree-sitter/README.md)). `tool-sqlite-fts` has no asset lock.
 

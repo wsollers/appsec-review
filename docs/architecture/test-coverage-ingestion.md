@@ -30,7 +30,10 @@ The generic parser API accepts:
 - JaCoCo XML source-file counters plus class method counters; and
 - LLVM `llvm-cov export` JSON file summaries.
 
-Every source record normalizes to line, branch, and function totals and covered counts. Rates are
+Every source record normalizes to line, branch, and function totals and covered counts. Cobertura
+lists each line under a class's `<lines>` and again under its `<method>`, so lines and their
+`condition-coverage` branch counts are keyed by line number and a repeated line is counted once.
+Rates are
 derived from those integers and are `null` when the corresponding denominator is zero. Counts are
 published for each report source row and as build-unit aggregates. If multiple accepted reports
 cover the same source path, their additive aggregate is retained with an

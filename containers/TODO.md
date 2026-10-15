@@ -34,5 +34,7 @@
   into the run's resolved configuration (a changed image then invalidates reuse and forces a
   rerun), drop the cross-host equality assertions in the live and integration tests
   (`tests/integration/test_node_project_builds.py`, `tests/test_live_android_build.py`, the
-  `APPSEC_REVIEW_BUILDENV_PINS=local` opt-in in `tests/integration/test_family_project_builds.py`),
-  and keep asset locks (SHA-256 of downloaded inputs) exact, since those are reproducible.
+  `APPSEC_REVIEW_BUILDENV_PINS=local` opt-in in `tests/integration/test_family_project_builds.py`).
+  Asset locks stay enforced at build time, but they record what a working build downloaded, not a
+  reproducible target: when upstream moves, re-acquire and record the new hash (see
+  [Moving forward, not reproducing](README.md#moving-forward-not-reproducing)).
