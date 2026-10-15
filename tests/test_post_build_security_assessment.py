@@ -313,12 +313,18 @@ def _accepted_cpp_fixture(tmp_path: Path, *, colliding_object_names: bool = Fals
     return runs, target
 
 
+def _cpp_handoffs(runs: Path) -> dict[str, str]:
+    """The exact accepted C++ handoff identity the fixture published, as the graph would bind it."""
+    latest = runs / RUN_ID / "data" / "jobs" / "job_cpp_compiled_analysis" / "latest.json"
+    return {"job_cpp_compiled_analysis": json.loads(latest.read_text(encoding="utf-8"))["handoff_sha256"]}
+
+
 def test_job_consumes_accepted_handoff_logs_gaps_and_reuses_immutable_shards(tmp_path: Path) -> None:
     runs, target = _accepted_cpp_fixture(tmp_path)
     config = load_config(_post_build_config(tmp_path))
     runner, job = JobRunner(config), build_job()
     first = runner.run(job, run_id=RUN_ID, target_root=target, source_fingerprint="snapshot",
-                       upstream_handoffs={"job_cpp_compiled_analysis": "a" * 64})
+                       upstream_handoffs=_cpp_handoffs(runs))
     assert first["status"]["status"] == "COMPLETED_WITH_GAPS"
     protected = list((runs / RUN_ID / "data" / "cpp" / "projects" / "unit-a" /
                       "build-security" / "protected-commands").glob("*.json"))
@@ -338,7 +344,7 @@ def test_job_consumes_accepted_handoff_logs_gaps_and_reuses_immutable_shards(tmp
     assert metrics["domain_counts"]["inspected_count"] == 3
     assert metrics["domain_counts"]["check_count"] > 0
     second = runner.run(job, run_id=RUN_ID, target_root=target, source_fingerprint="snapshot",
-                        upstream_handoffs={"job_cpp_compiled_analysis": "a" * 64})
+                        upstream_handoffs=_cpp_handoffs(runs))
     reused = second["result"]["outputs"]["index.native_units"]["projects"]
     assert len(reused) == 1 and all(item["index_reused"] for item in reused.values())
     metrics = aggregate_run_metrics(runs / RUN_ID)
@@ -359,7 +365,7 @@ def test_index_resolves_colliding_object_basenames_by_build_relative_path(tmp_pa
     config = load_config(_post_build_config(tmp_path))
     result = JobRunner(config).run(
         build_job(), run_id=RUN_ID, target_root=target, source_fingerprint="snapshot",
-        upstream_handoffs={"job_cpp_compiled_analysis": "a" * 64},
+        upstream_handoffs=_cpp_handoffs(runs),
     )
     assert result["status"]["status"] == "COMPLETED_WITH_GAPS"
 
@@ -380,7 +386,7 @@ def test_job_rejects_target_drift_after_cpp_acceptance(tmp_path: Path) -> None:
         JobRunner(config).run(
             build_job(), run_id=RUN_ID, target_root=target,
             source_fingerprint="changed-after-cpp-acceptance",
-            upstream_handoffs={"job_cpp_compiled_analysis": "a" * 64},
+            upstream_handoffs=_cpp_handoffs(runs),
         )
     result = json.loads((runs / RUN_ID / "data" / "jobs" /
                          "job_post_build_security_assessment" / "attempts" /
@@ -410,7 +416,7 @@ def test_bounded_inference_records_tokens_and_validates_observations(tmp_path: P
     config = load_config(_post_build_config(tmp_path, model_enabled=True))
     outcome = JobRunner(config).run(build_job(infer=_context_inference),
         run_id=RUN_ID, target_root=target, source_fingerprint="snapshot",
-        upstream_handoffs={"job_cpp_compiled_analysis": "a" * 64})
+        upstream_handoffs=_cpp_handoffs(runs))
     inference = outcome["result"]["outputs"]["inference.native_units"]["projects"]["unit-a"]
     assert inference["model_calls"] == 1
     assert inference["confirmed_count"] == 1 and inference["refuted_count"] == 1
