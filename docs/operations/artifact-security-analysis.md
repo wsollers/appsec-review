@@ -15,13 +15,31 @@ metadata without extracting or executing members. Traversal, absolute paths, lin
 member count or size, expansion ratios, corrupt containers, and unsupported formats become precise
 coverage gaps.
 
-Pinned scanners run only on the formats `appsec_review.tool_inputs` declares for them: BLint on
-ELF, PE/.NET, COFF, Mach-O, and Android packages; SpotBugs on JVM classes and archives; Syft,
-Grype, and osv-scanner on any produced artifact. An artifact outside a scanner's formats is never
-launched and is counted per capability in `not_applicable_inputs` as `SKIPPED_NA`, not as a gap.
-osv-scanner's extractor set decides which artifacts it can read, so its documented exit-128
-"No package sources found" report is the one post-run result accepted as `SKIPPED_NA`; any other
-non-zero exit, timeout, or truncation remains a gap.
+Pinned scanners run only on the inputs `appsec_review.tool_inputs` declares for them: BLint on
+ELF, PE/.NET, COFF, Mach-O, and Android packages; SpotBugs on JVM classes and on archives that
+contain `.class` members; osv-scanner on lockfiles and manifests it extracts offline (by file name,
+`OSV_LOCKFILE_ECOSYSTEMS`); Syft and Grype on any produced artifact. An artifact outside a
+scanner's support is never launched and is counted per capability in `not_applicable_inputs` as
+`SKIPPED_NA`, not as a gap. Classification reads bounded member names: a jar holding only
+`classes.dex` is `dex-archive` and a jar with no `.class` member is `jvm-resource-archive`, so
+neither reaches SpotBugs (which would exit 1 with "No files to analyze could be opened"). Unix `ar`
+archives (`.a` static libraries, Rust `.rlib`) are `ar-archive`: their members are listed from GNU,
+BSD, and thin headers without extraction instead of being reported as corrupt.
+
+BLint 3.4.0 has no JSON stdout: with `--reports /scratch` it writes `findings.json` (only when there
+are findings), `reviews.json`, and one `<name>-metadata.json` per binary it analyzed.
+`appsec_review.blint_report` assembles those into `blint-report.json`; a supported binary with no
+metadata report is a gap ("blint produced no per-binary analysis report"), never a clean result.
+
+osv-scanner 1.9.2 is invoked as `scan --experimental-offline --lockfile /target/<name>`: it selects
+an extractor by file name and has no extractor for jars, wheels, Go/Rust binaries, objects, or
+package metadata such as `PKG-INFO` or `composer.json` when handed the file. Every ecosystem in the
+verified OSV snapshot is bind-mounted read-only at `/database/osv-scanner/<ecosystem>/all.zip`. A
+lockfile whose ecosystem the snapshot lacks is not launched and records the gap "offline OSV
+snapshot lacks ecosystem <X>"; the same text replaces osv-scanner's exit-127 "could not find local
+databases" report. Its exit-128 "No package sources found" report (an empty lockfile) is accepted as
+`SKIPPED_NA`; any other non-zero exit is a gap carrying the last bounded stderr line, as are
+timeouts and truncation.
 
 ## Units, recovery, and invalidation
 

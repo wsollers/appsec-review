@@ -18,6 +18,8 @@ from appsec_review.jobs.job_evidence_collection.adapters import (
     SEI_CERT_MOUNT,
     ToolAdapter,
     adapter_registry,
+    semgrep_rule_languages,
+    semgrep_unscanned_inputs,
 )
 from appsec_review.jobs.job_evidence_collection.evidence import NORMALIZER_IDENTITY, build_envelope
 from appsec_review.jobs.job_target_analysis_plan import load_accepted_plan
@@ -33,8 +35,13 @@ from appsec_review.jobs.job_third_party_data_sync.publication import verify_curr
 from appsec_review.rulepacks.sei_cert.pack import PackError, PackIdentity, verify_pack
 from appsec_review.jobs.job_evidence_collection.datasets import CONSUMES, DATASETS
 from appsec_review.applicability import ReasonCode
+from appsec_review.osv_offline import (
+    DATABASE_ROOT as OSV_DATABASE_ROOT, ENVIRONMENT as OSV_DB_ENVIRONMENT, offline_database_mounts,
+    snapshot_ecosystems,
+)
 from appsec_review.tool_inputs import (
-    TOOL_INPUT_SUPPORT, InputDecision, not_applicable_summary, partition_paths,
+    TOOL_INPUT_SUPPORT, InputDecision, bounded_diagnostic, not_applicable_summary,
+    osv_ecosystem, osv_missing_ecosystem_gap, osv_missing_ecosystems, partition_paths,
 )
 from appsec_review.swift_policy import (
     SWIFT_KNOWN_GAP, filter_swift_files, is_swift_path, reject_swift_derived,
@@ -224,6 +231,17 @@ def _sei_cert_pack(repository: Path) -> PackIdentity | None:
         return None
 
 
+def _semgrep_rule_files(*, repository_root: Path, tool_id: str) -> list[Path]:
+    """The rule files mounted for a Semgrep-family tool (mirrors _prerequisites and the argv)."""
+    files: list[Path] = []
+    if tool_id == "tool-semgrep":
+        files += [repository_root / "rules" / "semgrep" / name for name in ("security.yml", "review-signals.yml")]
+    pack = _sei_cert_pack(repository_root)
+    if pack is not None:
+        files += sorted(path for path in pack.rules_root.rglob("*") if path.suffix in {".yml", ".yaml"})
+    return files
+
+
 def _rule_pack_identity(unit: UnitContext, adapter: ToolAdapter) -> dict[str, Any]:
     """Rule-pack identities recorded with a tool's evidence, so results bind to exact rules."""
     packs: dict[str, Any] = {}
@@ -314,14 +332,14 @@ def _prerequisites(unit: UnitContext, adapter: ToolAdapter, selection: Applicabi
     if adapter.tool_id == "tool-osv-scanner":
         try:
             identity = verify_current(unit.job.repository_root / "data" / "feeds" / "osv", "osv")
-            source = Path(identity["directory"]) / "sources" / "PyPI.zip"
-            database = unit.unit_root / "inputs" / "osv-db" / "osv-scanner" / "PyPI"
-            database.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(source, database / "all.zip")
-            mounts.append(Mount(unit.unit_root / "inputs" / "osv-db", "/database", True))
-            environment["OSV_SCANNER_LOCAL_DB_CACHE_DIRECTORY"] = "/database"
+            ecosystems = snapshot_ecosystems(Path(identity["directory"]))
         except (OSError, ValueError, KeyError, json.JSONDecodeError) as exc:
             return selection, (), {}, f"verified immutable OSV database snapshot is unavailable ({type(exc).__name__})"
+        selection, missing_gap = _osv_split_by_snapshot(selection, ecosystems)
+        if not selection.files:
+            return selection, (), {}, missing_gap
+        mounts.extend(offline_database_mounts(ecosystems))
+        environment[OSV_DB_ENVIRONMENT] = OSV_DATABASE_ROOT
     if adapter.tool_id == "tool-grype":
         try:
             identity = verify_current(unit.job.repository_root / "data" / "feeds" / "grype", "grype")
@@ -334,6 +352,35 @@ def _prerequisites(unit: UnitContext, adapter: ToolAdapter, selection: Applicabi
             return selection, (), {}, "a successful Syft SBOM is required"
         mounts.append(Mount(unit.job.run_root / syft["scanner_output"], "/inputs/syft.json", True))
     return selection, tuple(mounts), environment, None
+
+
+def _osv_split_by_snapshot(selection: Applicability,
+                           ecosystems: Mapping[str, Any]) -> tuple[Applicability, str | None]:
+    """Keep lockfiles whose OSV ecosystem the snapshot holds; name the rest as a coverage gap.
+
+    osv-scanner 1.9.2 aborts the whole offline run (exit 127) when any scanned lockfile needs an
+    ecosystem with no local database, so uncovered inputs are withheld and recorded, never hidden.
+    """
+    missing: dict[str, list[str]] = {}
+    kept: list[str] = []
+    for path in selection.files:
+        ecosystem = osv_ecosystem(path)
+        if ecosystem is not None and ecosystem not in ecosystems:
+            missing.setdefault(ecosystem, []).append(path)
+        else:
+            kept.append(path)
+    if not missing:
+        return selection, None
+    count = sum(len(paths) for paths in missing.values())
+    sample = ", ".join(sorted(path for paths in missing.values() for path in paths)[:10])
+    gap = osv_missing_ecosystem_gap(missing, f"{count} lockfile(s): {sample}")
+    if not kept:
+        # Supported inputs exist but none can be matched: the caller records this as BLOCKED.
+        return (Applicability(True, gap, (), selection.coverage_kind, selection.gaps,
+                              selection.families), gap)
+    reason = f"{selection.reason}; {count} lockfile(s) need an ecosystem absent from the OSV snapshot"
+    return (Applicability(True, reason, tuple(kept), selection.coverage_kind,
+                          (*selection.gaps, gap), selection.families), gap)
 
 
 def _scope_identity(catalog: ScanCatalog, selection: Applicability) -> str:
@@ -616,7 +663,22 @@ def _execute_tool(unit: UnitContext, adapter: ToolAdapter, catalog: ScanCatalog,
                 if result.oom_killed:
                     raise RuntimeError(f"{adapter.tool_id} was OOM-killed")
                 if result.exit_code not in adapter.accepted_exit_codes:
-                    raise RuntimeError(f"{adapter.tool_id} exited with {result.exit_code}")
+                    stderr = attempt_paths[1].read_bytes() if attempt_paths[1].is_file() else b""
+                    missing = (osv_missing_ecosystems(stderr)
+                               if adapter.tool_id == "tool-osv-scanner" else ())
+                    if missing:
+                        raise RuntimeError(osv_missing_ecosystem_gap(missing, "the selected lockfiles"))
+                    detail = bounded_diagnostic(stderr)
+                    raise RuntimeError(f"{adapter.tool_id} exited with {result.exit_code}" +
+                                       (f": {detail}" if detail else ""))
+                if adapter.collector is not None:
+                    try:
+                        adapter.collector(scratch)
+                    except (OSError, ValueError, UnicodeError) as exc:
+                        raise RuntimeError(f"{adapter.tool_id} report could not be assembled "
+                                           f"({type(exc).__name__}: {exc})") from exc
+                if adapter.stderr_gaps is not None and attempt_paths[1].is_file():
+                    gaps.extend(adapter.stderr_gaps(attempt_paths[1].read_bytes()))
                 output = scratch / adapter.output_file.removeprefix("/scratch/") if adapter.output_file else attempt_paths[0]
                 if not output.is_file():
                     raise RuntimeError(f"{adapter.tool_id} did not produce its expected output")
@@ -632,6 +694,17 @@ def _execute_tool(unit: UnitContext, adapter: ToolAdapter, catalog: ScanCatalog,
                         observations, enabled=unit.job.tools.enable_swift,
                         context=f"{adapter.tool_id} observations")
                     gaps.extend(parser_gaps)
+                    if adapter.tool_id in SEI_CERT_TOOLS:
+                        dropped_gaps, dropped_na = semgrep_unscanned_inputs(
+                            output.read_bytes(), selection.files,
+                            semgrep_rule_languages(_semgrep_rule_files(repository_root=unit.job.repository_root,
+                                                                       tool_id=adapter.tool_id)),
+                            _container_relative)
+                        gaps.extend(dropped_gaps)
+                        known = {item.path for item in reported_not_applicable}
+                        reported_not_applicable.extend(
+                            InputDecision(path, adapter.tool_id, ReasonCode.TOOL_REPORTED_UNSUPPORTED_INPUT, reason)
+                            for path, reason in dropped_na if path not in known)
                 except (ValueError, KeyError, TypeError, UnicodeError, json.JSONDecodeError) as exc:
                     raise RuntimeError(f"{adapter.tool_id} parser incompatibility ({type(exc).__name__})") from exc
                 error_class = None

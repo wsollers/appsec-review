@@ -118,7 +118,13 @@ workers = 1
 
 [jobs.job_third_party_data_sync.steps.osv_sync.settings]
 feed_root = "data/feeds/osv"
-ecosystems = ["PyPI"]
+# Every ecosystem whose lockfiles osv-scanner 1.9.2 extracts offline and the build families produce.
+# A lockfile whose ecosystem is absent here is a named coverage gap, never a clean result.
+# Measured 2026-10-15 (zip / uncompressed / records): npm 218 MB / 387 MB / 230,351; PyPI 36 MB /
+# 78 MB / 26,229; Go 12 MB / 27 MB / 9,618; Packagist 11 MB / 27 MB / 7,300; Maven 10 MB / 26 MB /
+# 7,190; RubyGems 5 MB / 10 MB / 5,464; crates.io 4 MB / 7 MB / 2,932; NuGet 3 MB / 12 MB / 1,964.
+# Totals 573 MB uncompressed and 291,048 records fit the bounds below (largest archive 218 MB).
+ecosystems = ["PyPI", "crates.io", "npm", "Go", "Maven", "Packagist", "NuGet", "RubyGems"]
 max_archive_bytes = 536870912
 max_uncompressed_bytes = 2147483648
 max_records = 500000

@@ -55,6 +55,9 @@ def classify(path: Path, producer: Mapping[str, Any], *, probe_bytes: int = 1024
         try:
             with zipfile.ZipFile(path) as archive:
                 names = {item.filename for item in archive.infolist()[:20_000]}
+            result["zip_member_kinds"] = {
+                "class": sum(1 for name in names if name.endswith(".class")),
+                "dex": sum(1 for name in names if name.endswith(".dex"))}
             if "META-INF/MANIFEST.MF" in names:
                 result.update(format="jvm-archive", family="jvm")
             elif any(name.endswith(".dist-info/WHEEL") for name in names):
@@ -69,7 +72,11 @@ def classify(path: Path, producer: Mapping[str, Any], *, probe_bytes: int = 1024
         result.update(format="compressed-archive", family="archive", container=True)
     elif len(head) > 265 and head[257:263] in {b"ustar\0", b"ustar "}:
         result.update(format="tar", family="archive", container=True)
-    elif head.startswith((b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1", b"!<arch>\n", b"\xed\xab\xee\xdb")):
+    elif head.startswith((b"!<arch>\n", b"!<thin>\n")):
+        # Unix ar: static libraries (.a) and Rust crate libraries (.rlib) are members lists, not
+        # tar or zip, and are inspected by the bounded ar reader below.
+        result.update(format="ar-archive", family="archive", container=True)
+    elif head.startswith((b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1", b"\xed\xab\xee\xdb")):
         result.update(format="installer", family="archive", container=True)
     elif b"__HALT_COMPILER" in head and b"GBMB" in head:
         result.update(format="php-phar", family="php", container=True)
@@ -92,8 +99,89 @@ def classify(path: Path, producer: Mapping[str, Any], *, probe_bytes: int = 1024
             result.update(format="php-package", family="php")
         elif declared in {"node-package", "package-archive"} and producer_family == "node":
             result.update(format="node-package", family="node")
+    kinds = result.pop("zip_member_kinds", None)
+    if result["format"] == "jvm-archive" and isinstance(kinds, Mapping) and not kinds["class"]:
+        # A jar-named zip without JVM class files is not bytecode: Android dexBuilder outputs carry
+        # classes.dex, and resource-only jars (e.g. a Maven package of a non-standard source layout)
+        # carry nothing a bytecode analyzer can open.
+        if kinds["dex"]:
+            result.update(format="dex-archive", family="android",
+                          classification_basis=[*result["classification_basis"], "bounded-member-names"])
+        else:
+            result.update(format="jvm-resource-archive", family="jvm",
+                          classification_basis=[*result["classification_basis"], "bounded-member-names"])
     result["declared_kind"] = declared
     return result
+
+
+_AR_HEADER = 60
+_AR_SPECIAL = {"/", "//", "/SYM64/", "__.SYMDEF", "__.SYMDEF SORTED", "__.SYMDEF_64"}
+
+
+def _ar_members(path: Path, limits: ArchiveLimits, *, thin: bool) -> tuple[list[dict[str, Any]], int, list[str]]:
+    """List Unix ar members (GNU, BSD, and thin) from headers only; member data is never read
+    beyond the GNU long-name table, and nothing is extracted."""
+    members: list[dict[str, Any]] = []
+    gaps: list[str] = []
+    total = 0
+    long_names = b""
+    size_bytes = path.stat().st_size
+    with path.open("rb") as stream:
+        offset = 8
+        while offset + _AR_HEADER <= size_bytes:
+            stream.seek(offset)
+            header = stream.read(_AR_HEADER)
+            if header[58:60] != b"`\n":
+                gaps.append("ar archive member header is malformed")
+                break
+            raw_name = header[:16].decode("ascii", "replace").rstrip()
+            try:
+                size = int(header[48:58].decode("ascii").strip() or "0")
+            except ValueError:
+                gaps.append("ar archive member size is malformed")
+                break
+            data_offset = offset + _AR_HEADER
+            name = raw_name
+            if raw_name == "//":
+                if size > limits.member_bytes:
+                    gaps.append("ar long-name table exceeds the member byte limit")
+                    break
+                long_names = stream.read(size)
+            elif raw_name.startswith("#1/"):
+                # BSD: the name occupies the first N bytes of the member data.
+                try:
+                    length = int(raw_name[3:])
+                except ValueError:
+                    gaps.append("ar archive BSD member name is malformed")
+                    break
+                name = stream.read(min(length, 4096)).split(b"\0", 1)[0].decode("utf-8", "replace")
+            elif raw_name.startswith("/") and raw_name[1:].isdigit():
+                start = int(raw_name[1:])
+                end = long_names.find(b"/\n", start)
+                name = long_names[start:end if end >= 0 else None].decode("utf-8", "replace")
+            else:
+                name = raw_name[:-1] if raw_name.endswith("/") and raw_name not in _AR_SPECIAL else raw_name
+            if raw_name not in _AR_SPECIAL and raw_name != "//":
+                if len(members) >= limits.members:
+                    gaps.append("archive member count exceeded")
+                    break
+                if not _safe_member(name):
+                    gaps.append(f"archive member rejected: {name[:256]}")
+                else:
+                    total += size
+                    if size > limits.member_bytes:
+                        gaps.append(f"archive member byte limit exceeded: {name[:256]}")
+                    members.append({"path": name, "size_bytes": size, "type": "file"})
+            # Thin archives store only headers (and the name table); member data lives elsewhere.
+            stored = size if (not thin or raw_name in _AR_SPECIAL or raw_name == "//") else 0
+            if data_offset + stored > size_bytes:
+                gaps.append("ar archive member data is truncated")
+                break
+            offset = data_offset + stored + (stored % 2)
+        else:
+            if offset < size_bytes:
+                gaps.append("ar archive ends inside a member header")
+    return members, total, gaps
 
 
 def inspect_archive(path: Path, limits: ArchiveLimits = ArchiveLimits(), *, depth: int = 0) -> dict[str, Any]:
@@ -104,7 +192,12 @@ def inspect_archive(path: Path, limits: ArchiveLimits = ArchiveLimits(), *, dept
     gaps: list[str] = []
     total = 0
     try:
-        if zipfile.is_zipfile(path):
+        with path.open("rb") as stream:
+            magic = stream.read(8)
+        if magic in {b"!<arch>\n", b"!<thin>\n"}:
+            members, total, ar_gaps = _ar_members(path, limits, thin=magic == b"!<thin>\n")
+            gaps.extend(ar_gaps)
+        elif zipfile.is_zipfile(path):
             with zipfile.ZipFile(path) as archive:
                 infos = archive.infolist()
                 if len(infos) > limits.members:
@@ -264,6 +357,9 @@ def builtin_observation(path: Path, classification: Mapping[str, Any], capabilit
                 "JVM bytecode security rules require a pinned scanner"]
     if capability == "jvm" and fmt == "jvm-archive":
         return {"archive": inspect_archive(path, limits)}, ["JVM bytecode security rules require a pinned scanner"]
+    if capability == "jvm" and fmt == "jvm-resource-archive":
+        archive = inspect_archive(path, limits)
+        return {"archive": archive, "class_count": 0}, list(archive["gaps"])
     if capability == "wasm" and fmt == "wasm":
         try: return parse_wasm(data), ["WebAssembly feature and capability policy requires a pinned validator"]
         except ValueError as exc: return {}, [f"WebAssembly parse failure: {exc}"]

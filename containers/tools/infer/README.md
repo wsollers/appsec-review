@@ -1,7 +1,7 @@
 # infer tool image
 
 `appsec-review/tool-infer:1.3.0` is the tool image declared by `tool-infer` in
-[`containers/catalog.toml`](../../catalog.toml). It builds `FROM` `appsec-review/base-ubuntu:24.04`,
+[`containers/catalog.toml`](../../catalog.toml). It builds `FROM` `appsec-review/tool-native-cpp:1.0.0` (for the system C/C++ headers Infer's clang needs),
 which must exist locally first. Its external artifacts are pinned by exact byte size and SHA-256 in
 `assets.lock.json` and are fetched into the ignored `downloads/` directory.
 

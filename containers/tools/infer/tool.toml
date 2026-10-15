@@ -22,5 +22,5 @@ output_bytes = 16777216
 executable = "/opt/infer/bin/infer"
 version_argv = ["/opt/infer/bin/infer", "--version"]
 version_expect = "Infer version v{version}"
-dependency = "appsec-review/base-ubuntu:24.04"
+dependency = "appsec-review/tool-native-cpp:1.0.0"
 update = "Select an immutable upstream release, refresh its published SHA-256 and exact byte size, review bundled licenses, then validate, build, smoke, and security-test offline."

@@ -8,6 +8,7 @@ from pathlib import Path
 import re
 import shutil
 import sqlite3
+import urllib.parse
 import zipfile
 
 from appsec_review.config import load_config
@@ -55,9 +56,18 @@ class FeedDownloader:
             destination.write_bytes(gzip.compress(b"#model_version:v2025.03.14,score_date:2026-10-07T00:00:00Z\n"
                                                   b"cve,epss,percentile\nCVE-2026-1000,0.5,0.99\n", mtime=0))
         elif "osv-vulnerabilities" in url:
+            ecosystem = urllib.parse.unquote(url.split("/osv-vulnerabilities/", 1)[1].split("/", 1)[0])
             with zipfile.ZipFile(destination, "w", compression=zipfile.ZIP_DEFLATED) as archive:
-                archive.writestr("PYSEC-2026-1.json", json.dumps({"id": "PYSEC-2026-1", "modified": "2026-01-01T00:00:00Z",
-                    "aliases": ["CVE-2026-1000"], "affected": [{"package": {"ecosystem": "PyPI", "name": "fixture"}}]}))
+                if ecosystem == "PyPI":
+                    archive.writestr("PYSEC-2026-1.json", json.dumps({"id": "PYSEC-2026-1", "modified": "2026-01-01T00:00:00Z",
+                        "aliases": ["CVE-2026-1000"], "affected": [{"package": {"ecosystem": "PyPI", "name": "fixture"}}]}))
+                else:
+                    archive.writestr(f"OSV-{ecosystem}.json", json.dumps({"id": f"OSV-2026-{ecosystem}",
+                        "modified": "2026-01-01T00:00:00Z",
+                        "affected": [{"package": {"ecosystem": ecosystem, "name": "fixture"}}]}))
+                # A multi-ecosystem advisory appears in every ecosystem's archive.
+                archive.writestr("GHSA-shared.json", json.dumps({"id": "GHSA-2026-shared", "modified": "2026-01-01T00:00:00Z",
+                    "affected": [{"package": {"ecosystem": ecosystem, "name": "shared"}}]}))
         elif "cwec_" in url:
             with zipfile.ZipFile(destination, "w", compression=zipfile.ZIP_DEFLATED) as archive:
                 archive.writestr("cwec.xml", '<Weakness_Catalog Version="4.20"><Weaknesses><Weakness ID="79" Name="XSS"/></Weaknesses></Weakness_Catalog>')
@@ -114,3 +124,10 @@ def test_complete_job_runs_all_units_and_places_global_and_run_metadata(tmp_path
     lookup = lookup_package(settings, "PyPI", "fixture", limit=1)
     assert lookup["items"][0]["advisory_id"] == "PYSEC-2026-1"
     assert lookup["snapshot_id"] == outcome["result"]["outputs"]["osv_sync.publish"]["identity"]["snapshot_id"]
+    # Every configured ecosystem is fetched, indexed, and published as its own offline archive.
+    assert lookup_package(settings, "crates.io", "fixture", limit=1)["items"][0]["advisory_id"] == "OSV-2026-crates.io"
+    snapshot = Path(outcome["result"]["outputs"]["osv_sync.publish"]["identity"]["directory"])
+    assert {path.name for path in (snapshot / "sources").glob("*.zip")} == {
+        f"{name}.zip" for name in settings.ecosystems}
+    # A multi-ecosystem advisory published in every archive is indexed once.
+    assert lookup_package(settings, "npm", "shared", limit=5)["items"][0]["advisory_id"] == "GHSA-2026-shared"

@@ -66,7 +66,15 @@ schedule live in `appsec-review.toml` under the semantic job/step/task hierarchy
   `index/epss.sqlite` (CVE id, EPSS, percentile, score date, model version). The daily file changes
   every day, so leave `sha256` unset unless a specific file must be reproduced.
 - OSV downloads only the explicitly configured ecosystem archives and builds a SQLite lookup index
-  with configured result limits. Inference queries that index; it does not scan ZIP archives.
+  with configured result limits. Inference queries that index; it does not scan ZIP archives. The
+  default `ecosystems` are PyPI, crates.io, npm, Go, Maven, Packagist, NuGet, and RubyGems: every
+  ecosystem whose lockfiles osv-scanner extracts offline and the build families produce. Each
+  published `sources/<ecosystem>.zip` is mounted for osv-scanner's offline database, so a lockfile
+  of an ecosystem left out here is a named coverage gap. Measured 2026-10-15 the eight archives are
+  291,048 records and 573 MB uncompressed (npm alone 218 MB compressed, 230,351 records), inside the
+  configured `max_archive_bytes`, `max_uncompressed_bytes`, and `max_records` bounds. An advisory
+  published in several ecosystem archives (for example a GHSA record) is stored and counted once
+  with the affected packages of every copy.
 - MITRE requires Enterprise ATT&CK, CAPEC, and CWE in `source_selections`; configuration that omits
   any of them is rejected. Mobile and ICS ATT&CK are optional: they remain fully configured but
   become active only when added to `source_selections`.

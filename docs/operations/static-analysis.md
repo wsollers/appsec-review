@@ -77,9 +77,22 @@ SHA-256 and provenance. Semgrep runs both `security.yml` and the review-prioriti
 after verifying its rule files against `pack.lock.json`; a mismatch blocks both tools with an explicit
 gap. Their records carry the CERT mapping and source hash, and engine errors or skipped files become
 gaps, except skip reasons that mean no rule or language applies to the target (for example
-`wrong_language`, `irrelevant_rule`, `excluded_by_config`), which are `SKIPPED_NA` for that file. See [`sei-cert-rule-pack.md`](sei-cert-rule-pack.md). The adapters do not install PHP dependencies or invent project security
+`wrong_language`, `irrelevant_rule`, `excluded_by_config`), which are `SKIPPED_NA` for that file.
+Semgrep CE omits `paths.skipped` from non-verbose JSON, so every given input missing from
+`paths.scanned` is recorded explicitly: `SKIPPED_NA` with "no rules for language <x>" when no
+configured rule file declares that language, otherwise a gap naming the dropped files. See [`sei-cert-rule-pack.md`](sei-cert-rule-pack.md). The adapters do not install PHP dependencies or invent project security
 configuration. OSV and Grype execute only with verified immutable local snapshots and never update at
-scan time. The data-sync pipeline publishes OSV. `tools/publish_grype_snapshot.py` separately imports
+scan time. OSV Scanner receives every cataloged lockfile or manifest it extracts offline, in any
+project root (`Cargo.lock`, npm/yarn/pnpm locks, `go.mod`, `pom.xml` and Gradle lockfiles,
+`composer.lock`, `packages.lock.json`, `Gemfile.lock`, Python requirements/Poetry/Pipfile/PDM locks,
+and others in `OSV_LOCKFILE_ECOSYSTEMS`), each passed with `--lockfile`; inputs whose ecosystem the
+snapshot lacks are withheld with the gap "offline OSV snapshot lacks ecosystem <X>" because
+osv-scanner aborts the whole offline run for one missing ecosystem database. Gosec receives each
+selected file's package directory, never a `.go` file. Trivy runs with `--skip-check-update` and
+uses the checks embedded in the pinned binary; a checks-bundle download fallback on stderr is a
+named gap. BLint is invoked with `--reports /scratch` and its report files are assembled as in
+[`artifact-security-analysis.md`](artifact-security-analysis.md). A tool that exits outside its
+accepted codes reports the last bounded stderr line in its gap. The data-sync pipeline publishes OSV. `tools/publish_grype_snapshot.py` separately imports
 an already-downloaded Grype v6 database only after verifying the upstream archive checksum, then
 publishes it through the same immutable feed manifest/current-pointer contract. Neither path permits
 a scanner to update its database at scan time.

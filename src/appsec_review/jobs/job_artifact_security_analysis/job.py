@@ -18,7 +18,8 @@ from appsec_review.retrieval.index import INDEX_SCHEMA, load_verified_manifest
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from appsec_review.storage import atomic_bytes, atomic_json, canonical_json, file_sha256
 from appsec_review.tool_inputs import (
-    InputDecision, not_applicable_summary, osv_reported_no_package_sources, partition_formats,
+    InputDecision, bounded_diagnostic, not_applicable_summary, osv_missing_ecosystem_gap,
+    osv_missing_ecosystems, osv_reported_no_package_sources, partition_artifacts,
 )
 from appsec_review.applicability import ReasonCode
 
@@ -114,12 +115,17 @@ def _support_key(capability: str) -> str | None:
     return f"artifact:{ADAPTERS[capability].tool_id}" if capability in ADAPTERS else None
 
 
-def _applicable(capability: str, classification: Mapping[str, Any]) -> bool:
-    """Built-in inspectors by family; pinned scanners by their declared supported formats."""
+def _artifact_name(artifact: Mapping[str, Any]) -> str:
+    """The run-owned file name the scanner is handed (path-declared tools decide by it)."""
+    return PurePosixPath(str(artifact.get("path") or "")).name
+
+
+def _applicable(capability: str, classification: Mapping[str, Any], name: str = "") -> bool:
+    """Built-in inspectors by family; pinned scanners by their declared supported inputs."""
     family, fmt = classification.get("family"), classification.get("format")
     key = _support_key(capability)
     if key is not None:
-        return not partition_formats(key, (("artifact", fmt),)).not_applicable
+        return not partition_artifacts(key, (("artifact", name, fmt),)).not_applicable
     if capability == "inventory": return True
     if capability == "native": return family in {"native", "dotnet"}
     if capability == "jvm": return family == "jvm"
@@ -235,9 +241,22 @@ def _scan_one(unit: UnitContext, artifact: Mapping[str, Any], capability: str,
                     str(artifact["artifact_id"]), "artifact:tool-osv-scanner",
                     ReasonCode.TOOL_REPORTED_UNSUPPORTED_INPUT,
                     "osv-scanner reported no package sources in this artifact").as_dict()
+            elif raw.get("precondition_gap"):
+                # The scanner was not launched for a named, data-coverage reason (for example the
+                # offline OSV snapshot lacks this lockfile's ecosystem): a gap, never "clean".
+                gaps.append(str(raw["precondition_gap"]))
             elif timed_out: gaps.append(f"{capability} scanner timed out")
             elif exit_code not in ADAPTERS[capability].accepted_exit_codes:
-                gaps.append(f"{capability} scanner exited {exit_code}")
+                missing = osv_missing_ecosystems(stderr) if capability == "osv" else ()
+                if missing:
+                    gaps.append(osv_missing_ecosystem_gap(missing, "this produced lockfile"))
+                else:
+                    detail = bounded_diagnostic(stderr)
+                    gaps.append(f"{capability} scanner exited {exit_code}" + (f": {detail}" if detail else ""))
+            elif capability == "blint" and observation and not observation.get("analyzed"):
+                # blint writes a per-binary metadata report for every binary it analyzes; none
+                # means this supported artifact was not analyzed, which is not a clean result.
+                gaps.append("blint produced no per-binary analysis report for this artifact")
             if raw.get("truncated"): gaps.append(f"{capability} scanner output was truncated")
     except FrameworkIntegrityError:
         raise
@@ -334,8 +353,8 @@ def build_job(*, scanner_runner: ScannerRunner | None = None) -> Job:
                 classification = classify(path, artifact)
                 if key is not None:
                     # Declared format support decides before launch; unsupported is SKIPPED_NA.
-                    decision = partition_formats(key, ((str(artifact["artifact_id"]),
-                                                        classification.get("format")),))
+                    decision = partition_artifacts(key, ((str(artifact["artifact_id"]), _artifact_name(artifact),
+                                                          classification.get("format")),))
                     if decision.not_applicable:
                         skipped.extend(item.as_dict() for item in decision.not_applicable)
                         continue

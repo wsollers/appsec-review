@@ -10,6 +10,7 @@ from types import MappingProxyType
 from typing import Any, Callable, Iterable, Mapping
 import xml.etree.ElementTree as ET
 
+from appsec_review import blint_report
 from appsec_review.storage import canonical_json
 from appsec_review.tool_inputs import (
     C_CPP_SOURCE, IAC_SUFFIXES, NATIVE_BINARIES, SEI_CERT_SOURCE, SOURCE_SUFFIXES,
@@ -89,6 +90,11 @@ class ToolAdapter:
     argv_builder: ArgvBuilder
     parser: Parser
     limitations: tuple[str, ...] = ()
+    # Assembles ``output_file`` inside the host scratch directory after a successful exit, for tools
+    # that write several report files instead of one (blint).
+    collector: Callable[[Path], None] | None = None
+    # Named degradations a tool reports only on stderr while still exiting successfully.
+    stderr_gaps: Callable[[bytes], list[str]] | None = None
 
     @property
     def parser_identity(self) -> str:
@@ -98,7 +104,8 @@ class ToolAdapter:
     def adapter_identity(self) -> str:
         value = (self.tool_id, self.capability, sorted(self.accepted_exit_codes), self.output_file,
                  self.limitations, inspect.getsource(self.selector), inspect.getsource(self.argv_builder),
-                 self.parser_identity)
+                 self.parser_identity,
+                 *(inspect.getsource(item) for item in (self.collector, self.stderr_gaps) if item))
         return hashlib.sha256(repr(value).encode()).hexdigest()
 
     def applicability(self, catalog: ScanCatalog) -> Applicability:
@@ -317,6 +324,23 @@ def _args(*prefix: str, output: str | None = None) -> ArgvBuilder:
     return build
 
 
+def _gosec_args(executable: str, selection: Applicability) -> tuple[str, ...]:
+    """gosec loads Go *packages*: hand it each selected file's package directory, never a file.
+
+    A file argument makes go/packages fail with 'importing dir ".../main.go": cannot find package'.
+    Directories are derived from the catalog selection, so every Go package root of any target is
+    covered without assuming a layout.
+    """
+    directories = sorted({PurePosixPath(_target(path)).parent.as_posix() for path in selection.files})
+    return (executable, "-fmt=json", "-out=/scratch/output.json", "-no-fail", *directories)
+
+
+def _blint_args(executable: str, selection: Applicability) -> tuple[str, ...]:
+    """blint 3.4.0 has no --format/--output; it writes JSON reports into --reports (blint_report)."""
+    return (executable, "--no-banner", "--no-error", "--quiet", "--reports", "/scratch",
+            "--src", *(_target(path) for path in selection.files))
+
+
 def _json(payload: bytes) -> Any:
     if not payload.strip():
         return []
@@ -409,6 +433,75 @@ def _semgrep_parser(payload: bytes) -> list[dict[str, Any]]:
     return records
 
 
+# Semgrep/OpenGrep language names (and aliases) a rule's ``languages`` may use for a file suffix.
+SEMGREP_SUFFIX_LANGUAGES: Mapping[str, frozenset[str]] = MappingProxyType({
+    ".py": frozenset({"python", "py", "python3"}), ".js": frozenset({"javascript", "js"}),
+    ".jsx": frozenset({"javascript", "js"}), ".ts": frozenset({"typescript", "ts"}),
+    ".tsx": frozenset({"typescript", "ts"}), ".java": frozenset({"java"}),
+    ".kt": frozenset({"kotlin", "kt"}), ".go": frozenset({"go", "golang"}),
+    ".rs": frozenset({"rust"}), ".c": frozenset({"c"}), ".h": frozenset({"c", "cpp", "c++"}),
+    **{suffix: frozenset({"cpp", "c++"}) for suffix in (".cc", ".cpp", ".cxx", ".hh", ".hpp", ".hxx")},
+    ".cs": frozenset({"csharp", "c#"}), ".rb": frozenset({"ruby"}), ".php": frozenset({"php"}),
+    ".swift": frozenset({"swift"}), ".sh": frozenset({"bash", "sh"}),
+})
+_ALL_FILE_LANGUAGES = frozenset({"generic", "regex", "none"})
+_INLINE_LANGUAGES = re.compile(r"(?m)^\s*-?\s*languages:\s*\[([^\]]*)\]")
+_BLOCK_LANGUAGES = re.compile(r"(?m)^(\s*)-?\s*languages:\s*\n((?:\1\s+-\s*[^\n]+\n?)+)")
+
+
+def semgrep_rule_languages(rule_files: Iterable[Path]) -> frozenset[str] | None:
+    """Languages declared by the configured rule files, or ``None`` when any file is unreadable or
+    declares none (then no dropped input can be attributed to a missing rule language)."""
+    languages: set[str] = set()
+    for path in rule_files:
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeError):
+            return None
+        found = [item for match in _INLINE_LANGUAGES.finditer(text) for item in match.group(1).split(",")]
+        found += [line.strip().lstrip("-").strip() for match in _BLOCK_LANGUAGES.finditer(text)
+                  for line in match.group(2).splitlines()]
+        found = [item.strip().strip("'\"").lower() for item in found if item.strip()]
+        if not found:
+            return None
+        languages.update(found)
+    return frozenset(languages)
+
+
+def semgrep_unscanned_inputs(payload: bytes, given: Iterable[str], rule_languages: frozenset[str] | None,
+                             relative: Callable[[str], str]) -> tuple[list[str], list[tuple[str, str]]]:
+    """Inputs handed to Semgrep/OpenGrep that it neither scanned nor reported as skipped.
+
+    Semgrep CE omits ``paths.skipped`` unless verbose, so a dropped file would otherwise vanish. A
+    dropped file whose language no configured rule declares is SKIPPED_NA (``no rules for
+    language``); any other dropped file is a coverage gap.
+    """
+    document = _json(payload)
+    paths = document.get("paths") if isinstance(document, Mapping) else None
+    if not isinstance(paths, Mapping) or not isinstance(paths.get("scanned"), list):
+        return (["engine did not report scanned paths; per-file Semgrep coverage is unverified"], [])
+    accounted = {relative(str(item)) for item in paths["scanned"]}
+    accounted |= {relative(str(item.get("path"))) for item in paths.get("skipped") or []
+                  if isinstance(item, Mapping)}
+    gaps: list[str] = []
+    skipped: list[tuple[str, str]] = []
+    dropped = sorted(set(given) - accounted)
+    for path in dropped:
+        names = SEMGREP_SUFFIX_LANGUAGES.get(PurePosixPath(path).suffix.lower(), frozenset())
+        if (rule_languages is not None and names and not names & rule_languages
+                and not rule_languages & _ALL_FILE_LANGUAGES):
+            language = sorted(names)[0]
+            skipped.append((path, f"engine did not scan the input: no rules for language {language} "
+                                  "in the configured rule packs"))
+        else:
+            gaps.append(path)
+    if gaps:
+        sample = ", ".join(gaps[:20]) + (f" (+{len(gaps) - 20} more)" if len(gaps) > 20 else "")
+        return ([f"engine did not scan {len(gaps)} given input(s) whose language has configured rules: {sample}"],
+                skipped)
+    return [], skipped
+
+
 def _shellcheck_parser(payload: bytes) -> list[dict[str, Any]]:
     """ShellCheck json1; SC1071 (unsupported shell dialect) is SKIPPED_NA for that file, not a finding."""
     value = _json(payload)
@@ -499,6 +592,36 @@ def _spotbugs_parser(payload: bytes) -> list[dict[str, Any]]:
     return records
 
 
+BLINT_REPORT = "/scratch/blint-report.json"
+TRIVY_EMBEDDED_CHECKS = ("Trivy misconfiguration checks are the set embedded in the pinned Trivy binary; "
+                         "the online checks bundle is never fetched (--skip-check-update)")
+
+
+def _collect_blint(scratch: Path) -> None:
+    blint_report.write(scratch, scratch / PurePosixPath(BLINT_REPORT).name)
+
+
+def _blint_parser(payload: bytes) -> list[dict[str, Any]]:
+    """Assembled blint reports; no per-binary metadata at all means nothing was analyzed (a gap)."""
+    document = _json(payload)
+    records: list[dict[str, Any]] = [
+        {"rule_id": item.get("id"), "message": item.get("title") or item.get("id"),
+         "severity": item.get("severity"), "category": "binary_hardening",
+         "path": item.get("filename") or item.get("exe_name"), "start_line": 1, "end_line": 1}
+        for item in document.get("findings", [])]
+    if not document.get("analyzed"):
+        records.append({"gap_only": True,
+                        "coverage_gap": "blint produced no per-binary analysis report for the selected binaries"})
+    return records
+
+
+def _trivy_stderr_gaps(stderr: bytes) -> list[str]:
+    text = stderr[-65_536:].decode("utf-8", "replace")
+    if "failed to download checks bundle" in text:
+        return ["Trivy attempted a checks-bundle download and fell back to its embedded checks"]
+    return []
+
+
 def _cppcheck_parser(payload: bytes) -> list[dict[str, Any]]:
     root = ET.fromstring(payload.decode("utf-8"))
     records = []
@@ -576,9 +699,10 @@ def _registry() -> dict[str, ToolAdapter]:
                         missing="target catalog contains no supported IaC files")
     workflows = _select_files("workflows", lambda p, i: supports_path("tool-zizmor", p),
                               missing="target catalog contains no GitHub Actions workflows")
-    manifests = _select_files("python_dependency_manifests", lambda p, i: supports_path("tool-osv-scanner", p),
-                              missing="target catalog contains no Python dependency lockfile covered by the synchronized OSV snapshot",
-                              gaps=("the synchronized OSV snapshot currently covers PyPI only",))
+    # Every lockfile/manifest osv-scanner extracts offline, in any project root; each input's
+    # ecosystem is checked against the synchronized snapshot before launch (job._osv_split_by_snapshot).
+    manifests = _select_files("dependency_lockfiles", lambda p, i: supports_path("tool-osv-scanner", p),
+                              missing="target catalog contains no lockfile or manifest osv-scanner extracts offline")
     adapters = [
         ToolAdapter("tool-gitleaks", "secrets", frozenset({0, 1}), "/scratch/output.json", _gitleaks,
                     lambda exe, sel: (exe, "dir", "/target", "--no-banner", "--redact", "--report-format", "json",
@@ -595,7 +719,7 @@ def _registry() -> dict[str, ToolAdapter]:
                     ("runs the SEI CERT rule pack only; the Semgrep security baseline is Semgrep-specific",
                      *SEI_CERT_LIMITATIONS)),
         ToolAdapter("tool-gosec", "source_sast", frozenset({0, 1}), "/scratch/output.json", lang("tool-gosec", "Go"),
-                    _args("-fmt=json", "-out=/scratch/output.json", "-no-fail"), _gosec_parser,
+                    _gosec_args, _gosec_parser,
                     ("dependency/build context may be incomplete in offline mode",)),
         ToolAdapter("tool-mobsfscan", "source_sast", frozenset({0, 1}), "/scratch/output.json",
                     lang("tool-mobsfscan", "Java, Kotlin, or Swift"), _args("--json", "-o", "/scratch/output.json"), _mobsfscan_parser),
@@ -637,12 +761,14 @@ def _registry() -> dict[str, ToolAdapter]:
                         bool((files := tuple(sorted(set(dockerfiles(catalog).files + iac(catalog).files))))),
                         f"catalog contains {len(files)} configuration input(s)" if files else "target catalog contains no Dockerfile or IaC inputs",
                         files, "configuration_files"),
-                    lambda exe, sel: (exe, "config", "--skip-version-check", "--format", "json", "--output",
-                                      "/scratch/output.json", "--exit-code", "0", "/scratch/inputs"), _trivy_parser),
+                    lambda exe, sel: (exe, "config", "--skip-version-check", "--skip-check-update",
+                                      "--format", "json", "--output", "/scratch/output.json",
+                                      "--exit-code", "0", "/scratch/inputs"), _trivy_parser,
+                    (TRIVY_EMBEDDED_CHECKS,), stderr_gaps=_trivy_stderr_gaps),
         ToolAdapter("tool-zizmor", "configuration", frozenset({0, 1}), None, workflows,
                     _args("--offline", "--no-exit-codes", "--format", "json"), _list_parser),
-        ToolAdapter("tool-blint", "binary_hardening", frozenset({0, 1}), "/scratch/output.json", _blint,
-                    _args("--no-banner", "--format", "json", "--output", "/scratch/output.json"), _list_parser),
+        ToolAdapter("tool-blint", "binary_hardening", frozenset({0}), BLINT_REPORT, _blint,
+                    _blint_args, _blint_parser, collector=_collect_blint),
     ]
     return {adapter.tool_id: adapter for adapter in adapters}
 

@@ -87,24 +87,31 @@ def index(settings: OsvSettings, fetched: Mapping[str, Any], work: Path) -> dict
                     identifier = document.get("id")
                     if not isinstance(identifier, str) or not identifier:
                         raise ValueError(f"OSV record has no id: {member.filename}")
-                    count += 1
-                    if count > settings.max_records:
-                        raise ValueError("OSV record count exceeded configured bound")
-                    connection.execute(
-                        "INSERT INTO advisory VALUES (?, ?, ?, ?, ?, ?)",
+                    # An advisory affecting several ecosystems (e.g. a GHSA record) is published in
+                    # each ecosystem's archive: it is stored and counted once, and its affected
+                    # packages from every copy are indexed without duplicates.
+                    inserted = connection.execute(
+                        "INSERT OR IGNORE INTO advisory VALUES (?, ?, ?, ?, ?, ?)",
                         (identifier, document.get("modified"), document.get("published"), document.get("withdrawn"),
                          document.get("summary"), json.dumps(document, sort_keys=True, separators=(",", ":"))),
-                    )
-                    for alias in document.get("aliases", []):
-                        if isinstance(alias, str):
-                            connection.execute("INSERT INTO alias VALUES (?, ?)", (identifier, alias))
+                    ).rowcount
+                    if inserted:
+                        count += 1
+                        if count > settings.max_records:
+                            raise ValueError("OSV record count exceeded configured bound")
+                        for alias in document.get("aliases", []):
+                            if isinstance(alias, str):
+                                connection.execute("INSERT INTO alias VALUES (?, ?)", (identifier, alias))
                     packages: set[tuple[str, str]] = set()
                     for affected in document.get("affected", []):
                         package = affected.get("package") if isinstance(affected, dict) else None
                         if isinstance(package, dict) and isinstance(package.get("ecosystem"), str) and isinstance(package.get("name"), str):
                             packages.add((package["ecosystem"], package["name"]))
                     for package_ecosystem, name in sorted(packages):
-                        connection.execute("INSERT INTO package VALUES (?, ?, ?)", (identifier, package_ecosystem, name))
+                        connection.execute(
+                            "INSERT INTO package SELECT ?, ?, ? WHERE NOT EXISTS (SELECT 1 FROM package "
+                            "WHERE advisory_id = ? AND ecosystem = ? AND name = ?)",
+                            (identifier, package_ecosystem, name, identifier, package_ecosystem, name))
         connection.execute("CREATE TABLE metadata(key TEXT PRIMARY KEY, value TEXT NOT NULL)")
         connection.executemany("INSERT INTO metadata VALUES (?, ?)", (("record_count", str(count)), ("max_lookup_results", str(settings.max_lookup_results))))
         if connection.execute("PRAGMA quick_check").fetchone()[0] != "ok":
