@@ -571,8 +571,14 @@ def validate_build_recipe(recipe: Mapping[str, Any], unit: Mapping[str, Any]) ->
     required = {"schema", "build_unit_id", "image_profile", "source_dir", "build_dir",
                 "system_packages", "environment", "dependency_files", "configure_commands",
                 "build_commands", "expected_outputs", "network_required", "reason"}
-    if set(recipe) != required or recipe.get("schema") != BUILD_RECIPE_SCHEMA:
+    # image_repairs is present only on a recipe an accepted image repair produced.
+    if (set(recipe) - {"image_repairs"} != required or
+            recipe.get("schema") != BUILD_RECIPE_SCHEMA):
         return ["recipe fields or schema are unsupported"]
+    if "image_repairs" in recipe:
+        from appsec_review.jobs.job_project_build.repair import image_repair_errors
+
+        errors.extend(image_repair_errors(recipe, str(unit.get("build_system", ""))))
     if recipe.get("build_unit_id") != unit.get("build_unit_id"):
         errors.append("recipe build_unit_id does not match the accepted unit")
     profile = recipe.get("image_profile")

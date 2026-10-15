@@ -4,8 +4,10 @@ import hashlib
 import importlib.util
 import json
 from pathlib import Path, PurePosixPath
+import re
 import shutil
 import sqlite3
+import sys
 import pytest
 
 from appsec_review.config import load_config
@@ -18,6 +20,7 @@ from appsec_review.jobs.job_cpp_compiled_analysis.job import (
     _project_key,
     normalize_compile_db,
     normalize_link_commands,
+    replay_failures,
 )
 from appsec_review.jobs.job_review_intake import build_job as build_intake
 from appsec_review.jobs.job_target_catalog import build_job as build_catalog
@@ -308,3 +311,213 @@ def test_project_failure_is_scoped_and_retry_reuses_other_checkpoints(tmp_path: 
     job = build_job(executor_factory=lambda unit: None)
     assert {unit.unit_id for unit in job.units}.isdisjoint({"configure.projects", "compile.projects"})
     assert config.job("job_cpp_compiled_analysis").steps.keys().isdisjoint({"configure", "compile"})
+
+
+# PHP (phpize) and Python (setuptools) extension compiles are captured in buildenv-php and
+# buildenv-python and replayed in tool-native-cpp. Their absolute system include directories must
+# reach the replay unchanged and must exist in the replay image.
+PHP_INCLUDES = ["/usr/include/php/20230831", "/usr/include/php/20230831/main",
+                "/usr/include/php/20230831/TSRM", "/usr/include/php/20230831/Zend",
+                "/usr/include/php/20230831/ext", "/usr/include/php/20230831/ext/date/lib"]
+PYTHON_INCLUDES = ["/usr/include/python3.12"]
+# A stand-in compiler: it resolves each quoted or angled include against the replayed -I/-isystem
+# directories inside a fake image root, and fails the way clang does when one is missing.
+FAKE_CLANG = r'''
+import json, re, sys
+from pathlib import Path
+SCRATCH, IMAGE = Path(sys.argv[1]), Path(sys.argv[2])
+argv = sys.argv[3:]
+def host(value):
+    if value.startswith("/scratch/"):
+        return SCRATCH / value[len("/scratch/"):]
+    return IMAGE / value.lstrip("/") if value.startswith("/") else SCRATCH / "source" / value
+dirs, output, index = [], None, 0
+while index < len(argv):
+    value = argv[index]
+    if value in {"-I", "-isystem"}:
+        dirs.append(host(argv[index + 1])); index += 2; continue
+    for flag in ("-isystem", "-I"):
+        if value.startswith(flag) and len(value) > len(flag):
+            dirs.append(host(value[len(flag):])); break
+    if value == "-o":
+        output = argv[index + 1]; index += 2; continue
+    index += 1
+source = [value for value in argv if value.endswith(".c")][-1]
+for name in re.findall(r'#include\s*[<"]([^>"]+)[>"]', host(source).read_text()):
+    if not any((directory / name).is_file() for directory in [host(source).parent, *dirs]):
+        sys.stderr.write(f"{source}:1:10: fatal error: '{name}' file not found\n")
+        sys.exit(1)
+if output:
+    Path(output).write_text("define i32 @ext_entry() {\nentry:\n  ret i32 0\n}\n")
+else:
+    print(json.dumps({"kind": "TranslationUnitDecl", "inner": [
+        {"id": "0x1", "kind": "FunctionDecl", "name": "ext_entry", "loc": {"line": 2, "col": 1}}]}))
+'''
+
+
+def _extension_rows(scratch: Path) -> list[dict]:
+    """Normalize one captured phpize compile and one captured setuptools compile."""
+    source = scratch / "source"
+    (source / "src").mkdir(parents=True)
+    (source / "php_sample.c").write_text('#include "php.h"\n#include "ext/standard/info.h"\n'
+                                         "int ext_entry(void) { return 0; }\n", encoding="utf-8")
+    (source / "src" / "fast.c").write_text("#include <Python.h>\nint ext_entry(void) { return 0; }\n",
+                                           encoding="utf-8")
+    (scratch / "build").mkdir()
+    root = "ext/sample"
+    php_argv = ["cc", "-I.", "-I/workspace/ext/sample", "-DPHP_ATOM_INC",
+                "-I/workspace/ext/sample/include", "-I/workspace/ext/sample/main",
+                *[f"-I{path}" for path in PHP_INCLUDES[:-1]], "-isystem", PHP_INCLUDES[-1],
+                "-DHAVE_CONFIG_H", "-g", "-O2", "-c", "/workspace/ext/sample/php_sample.c",
+                "-fPIC", "-DPIC", "-o", ".libs/php_sample.o"]
+    python_argv = ["x86_64-linux-gnu-gcc", "-fno-strict-overflow", "-DNDEBUG", "-g", "-O2", "-fPIC",
+                   f"-I{PYTHON_INCLUDES[0]}", "-c", "/workspace/ext/sample/src/fast.c",
+                   "-o", "build/temp.linux-x86_64-cpython-312/src/fast.o"]
+    (scratch / "build" / "compile_commands.json").write_text(json.dumps([
+        {"directory": "/workspace/ext/sample", "file": "/workspace/ext/sample/php_sample.c",
+         "arguments": php_argv},
+        {"directory": "/workspace/ext/sample", "file": "/workspace/ext/sample/src/fast.c",
+         "arguments": python_argv},
+    ]), encoding="utf-8")
+    files = [{"target_path": f"{root}/{name}", "scratch_path": f"source/{name}",
+              "sha256": hashlib.sha256((source / name).read_bytes()).hexdigest()}
+             for name in ("php_sample.c", "src/fast.c")]
+    return normalize_compile_db(scratch, {"project_key": "unit-ext", "project_id": f"cpp:{root}",
+                                          "case_snapshot": "c" * 64, "root": root, "files": files})
+
+
+def _image(root: Path, *, php: bool, python: bool) -> Path:
+    """A stand-in for the replay image's filesystem with the dev headers it carries."""
+    root.mkdir(parents=True, exist_ok=True)
+    if php:
+        for directory in PHP_INCLUDES:
+            (root / directory.lstrip("/")).mkdir(parents=True, exist_ok=True)
+        (root / PHP_INCLUDES[1].lstrip("/") / "php.h").write_text("", encoding="utf-8")
+        (root / PHP_INCLUDES[0].lstrip("/") / "ext" / "standard").mkdir(parents=True, exist_ok=True)
+        (root / PHP_INCLUDES[0].lstrip("/") / "ext" / "standard" / "info.h").write_text("")
+    if python:
+        (root / PYTHON_INCLUDES[0].lstrip("/")).mkdir(parents=True, exist_ok=True)
+        (root / PYTHON_INCLUDES[0].lstrip("/") / "Python.h").write_text("", encoding="utf-8")
+    return root
+
+
+def _replay(tmp_path: Path, scratch: Path, rows: list[dict], image: Path, mode: str) -> int:
+    source = ROOT / "containers" / "tools" / "native-cpp" / "native.py"
+    spec = importlib.util.spec_from_file_location("native_cpp_replay", source)
+    assert spec and spec.loader
+    driver = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(driver)
+    driver.ROOT, driver.SOURCE, driver.OUT = scratch, scratch / "source", scratch / "analysis"
+    clang = tmp_path / "fake-clang.py"
+    clang.write_text(FAKE_CLANG, encoding="utf-8")
+    wrapper = tmp_path / "fake-clang"
+    wrapper.write_text(f'#!/bin/sh\nexec "{sys.executable}" "{clang}" "{scratch}" "{image}" "$@"\n',
+                       encoding="utf-8")
+    wrapper.chmod(0o755)
+    replayed = [{**row, "arguments": [str(wrapper), *row["arguments"][1:]]} for row in rows]
+    (scratch / "normalized-compile-commands.json").write_text(json.dumps(replayed), encoding="utf-8")
+    return driver.replay(mode)
+
+
+def test_php_and_python_extension_include_paths_reach_the_replay_unchanged(tmp_path: Path) -> None:
+    rows = _extension_rows(tmp_path / "scratch")
+    php, python = rows
+    assert php["target_path"] == "ext/sample/php_sample.c"
+    assert python["target_path"] == "ext/sample/src/fast.c"
+    assert php["arguments"][0] == "clang-18" and python["arguments"][0] == "clang-18"
+    # Absolute system include directories are identical in build and replay; workspace ones map.
+    assert [value for value in php["arguments"] if value.startswith("-I/usr/include/")] == [
+        f"-I{path}" for path in PHP_INCLUDES[:-1]]
+    assert php["arguments"][php["arguments"].index("-isystem") + 1] == PHP_INCLUDES[-1]
+    assert "-I/scratch/source/include" in php["arguments"] and "-I." in php["arguments"]
+    assert not any("/workspace/" in value for row in rows for value in row["arguments"])
+    assert f"-I{PYTHON_INCLUDES[0]}" in python["arguments"]
+    assert python["arguments"][-1] == "/scratch/source/src/fast.c"
+
+
+def test_joined_system_include_forms_are_retained_for_replay(tmp_path: Path) -> None:
+    root = tmp_path / "scratch"
+    (root / "source").mkdir(parents=True)
+    (root / "build").mkdir()
+    (root / "source" / "a.c").write_text("int a;\n", encoding="utf-8")
+    (root / "build" / "compile_commands.json").write_text(json.dumps([{
+        "directory": "/workspace/lib", "file": "/workspace/lib/a.c",
+        "arguments": ["cc", "-isystem/usr/include/python3.12", "-iquote/workspace/lib/inc",
+                      "-idirafter/usr/local/include", "-c", "/workspace/lib/a.c"]}]), encoding="utf-8")
+    rows = normalize_compile_db(root, {"project_key": "k", "project_id": "cpp:lib",
+        "case_snapshot": "d" * 64, "root": "lib", "files": [{
+            "target_path": "lib/a.c", "scratch_path": "source/a.c",
+            "sha256": hashlib.sha256(b"int a;\n").hexdigest()}]})
+    assert rows[0]["arguments"] == ["clang-18", "-isystem/usr/include/python3.12",
+                                    "-iquote/scratch/source/inc", "-idirafter/usr/local/include",
+                                    "/scratch/source/a.c"]
+
+
+@pytest.mark.parametrize("mode", ["ast", "ir"])
+def test_extension_replay_resolves_php_and_python_headers_in_the_replay_image(
+        tmp_path: Path, mode: str) -> None:
+    scratch = tmp_path / "scratch"
+    rows = _extension_rows(scratch)
+    image = _image(tmp_path / "image", php=True, python=True)
+    assert _replay(tmp_path, scratch, rows, image, mode) == 0
+    assert replay_failures(scratch, mode, rows) == {}
+
+
+@pytest.mark.parametrize("mode", ["ast", "ir"])
+def test_missing_extension_header_is_a_named_replay_gap(tmp_path: Path, mode: str) -> None:
+    scratch = tmp_path / "scratch"
+    rows = _extension_rows(scratch)
+    image = _image(tmp_path / "image", php=False, python=True)
+    assert _replay(tmp_path, scratch, rows, image, mode) == 2
+    assert replay_failures(scratch, mode, rows) == {0: (
+        f"ext/sample/php_sample.c: {mode} replay header not found in tool-native-cpp: php.h "
+        "(an include path the build image had is absent from the replay image)")}
+
+
+def test_replay_receipt_that_does_not_match_the_compile_database_is_unusable(tmp_path: Path) -> None:
+    rows = [{"target_path": "a.c"}, {"target_path": "b.c"}]
+    destination = tmp_path / "analysis" / "ast"
+    destination.mkdir(parents=True)
+    assert replay_failures(tmp_path, "ast", rows) is None
+    (destination / "receipt.json").write_text(json.dumps([{"index": 0, "exit_code": 0}]))
+    assert replay_failures(tmp_path, "ast", rows) is None
+    (destination / "receipt.json").write_text(json.dumps([
+        {"index": 0, "exit_code": 0},
+        {"index": 1, "exit_code": None, "timeout": True},
+    ]))
+    assert replay_failures(tmp_path, "ast", rows) == {1: "b.c: ast replay timed out"}
+    (destination / "receipt.json").write_text(json.dumps([
+        {"index": 0, "exit_code": 1,
+         "stderr": "a.c:1:10: fatal error: config.h: No such file or directory"},
+        {"index": 1, "exit_code": 1, "stderr": "warning: x\nb.c:3:1: error: unknown type name 'zval'"},
+    ]))
+    failures = replay_failures(tmp_path, "ast", rows)
+    assert "a.c: ast replay header not found in tool-native-cpp: config.h" in failures[0]
+    assert failures[1] == "b.c: ast replay failed with exit 1: b.c:3:1: error: unknown type name 'zval'"
+
+
+def _shell_value(text: str, name: str) -> str:
+    match = re.search(rf'^{name}="([^"]+)"$', text, re.MULTILINE)
+    assert match, name
+    return match.group(1)
+
+
+def test_replay_closure_pins_the_build_environment_dev_header_versions() -> None:
+    native = ROOT / "containers" / "tools" / "native-cpp"
+    script = (native / "acquire_assets.sh").read_text(encoding="utf-8")
+    buildenv = ROOT / "containers" / "buildenv"
+    php_dockerfile = (buildenv / "php" / "Dockerfile").read_text(encoding="utf-8")
+    python_dockerfile = (buildenv / "python" / "Dockerfile").read_text(encoding="utf-8")
+    php_version = _shell_value(script, "php_version")
+    python_version = _shell_value(script, "python_version")
+    for package in ("php8.3-cli", "php8.3-dev"):
+        assert f"{package}={php_version}" in php_dockerfile
+        assert f"{package}=$php_version" in script
+    assert f"python3-dev={python_version}" in python_dockerfile
+    assert "python3-dev=$python_version" in script
+    assert re.search(r'^packages="clang-18 cmake bear"$', script, re.MULTILINE)
+    dockerfile = (native / "Dockerfile").read_text(encoding="utf-8")
+    for header in (f"{PHP_INCLUDES[1]}/php.h", f"{PYTHON_INCLUDES[0]}/Python.h"):
+        assert f"test -f {header}" in dockerfile
+    assert f"-I{PHP_INCLUDES[0]} -I{PHP_INCLUDES[1]}" in dockerfile
+    assert f"python3.12-config --includes | grep -F -- '-I{PYTHON_INCLUDES[0]}'" in dockerfile

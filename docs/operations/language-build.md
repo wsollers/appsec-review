@@ -59,8 +59,10 @@ The reason codes operators will see are `POLICY_REQUIRED`, `POLICY_DISABLED`,
 are framework-integrity failures; ordinary unavailable tools and failed processing remain `GAP`.
 
 Native CMake dispatches use the validated deterministic marker command recipe. A failed default
-project-build probe may add only validated apt packages through the bounded image-repair workflow;
-model output cannot change the accepted command, path, dependency, environment, or output contract.
+project-build probe may add only typed repairs through the bounded image-repair workflow: apt
+packages, allowlisted environment variables, a pinned package manager, and restores of accepted
+manifests (see [`project-build.md`](project-build.md)); model output cannot change the accepted
+command, path, dependency-file, or output contract.
 
 For every native unit the job revalidates the target snapshot, successful probe identity, recipe,
 dependency hashes, build-unit root, derived image identity, and dependency edges. It then copies

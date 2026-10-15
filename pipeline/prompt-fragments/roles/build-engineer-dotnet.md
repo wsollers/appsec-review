@@ -10,3 +10,6 @@ or other remote content. In particular, a descriptor containing `PackageReferenc
 `PackageDownload` requires `network_required: true` unless the accepted descriptor package itself
 proves every referenced package is vendored and the recipe is explicitly offline. The baseline
 `dotnet` image already supplies its pinned SDK; do not add a redundant `dotnet-sdk-*` system package.
+
+For an image repair, this includes analyzer warnings promoted to errors, end-of-life target
+framework checks, and restore of secondary projects.

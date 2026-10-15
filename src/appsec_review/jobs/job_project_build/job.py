@@ -36,7 +36,7 @@ from appsec_review.observability import PipelineLog, emit_model_event
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from appsec_review.storage import FileLock, atomic_bytes, atomic_json, canonical_json, file_sha256, protected_json
 
-from .repair import REPAIR_SCHEMA, apply_repair, validate_repair_proposal
+from .repair import REPAIR_SCHEMA, apply_repair, repair_options, validate_repair_proposal
 from appsec_review.jobs.job_project_build.datasets import CONSUMES, DATASETS
 from appsec_review.guidance.skills import load_runtime_skill
 
@@ -596,7 +596,9 @@ def _infer_repair(unit: UnitContext, *, action: Mapping[str, Any], recipe: Mappi
         "planning_package_hints": list(action.get("package_hints", ())),
         "accepted_recipe": {key: recipe.get(key) for key in
                             ("source_dir", "build_dir", "dependency_files", "configure_commands",
-                             "build_commands", "expected_outputs", "network_required", "system_packages")},
+                             "build_commands", "expected_outputs", "network_required", "system_packages",
+                             "environment", "image_repairs")},
+        "repair_options": repair_options(recipe, str(action["build_system"])),
         "dockerfile": dockerfile.decode("utf-8", "replace"),
         "failure": diagnostics,
         "prior_attempts": attempts[-10:],
@@ -635,7 +637,8 @@ def _infer_repair(unit: UnitContext, *, action: Mapping[str, Any], recipe: Mappi
             atomic_bytes(unit.unit_root / str(action["build_unit_id"]) /
                          f"repair-{repair_number:03d}" / "model-response.txt",
                          result.raw_response.encode("utf-8")[:2 * 1024 * 1024])
-        errors = validate_repair_proposal(result.proposal)
+        errors = validate_repair_proposal(result.proposal, recipe=recipe,
+                                          build_system=str(action["build_system"]))
         if errors:
             raise ValueError("; ".join(errors))
         emit_model_event(log, event_type="MODEL_CALL_COMPLETED", run_id=unit.job.run_id,
@@ -701,7 +704,7 @@ def _probe_with_repairs(unit: UnitContext, entry: Mapping[str, Any], *, profile:
             proposal = _infer_repair(unit, action=action, recipe=current_recipe, dockerfile=dockerfile,
                                      diagnostics=diagnostics, attempts=attempts,
                                      repair_number=repair_number, infer=infer)
-            candidate = apply_repair(current_recipe, proposal)
+            candidate = apply_repair(current_recipe, proposal, build_system=str(action["build_system"]))
             errors = validate_build_recipe(candidate, _repair_validation_unit(action, candidate))
             if errors:
                 raise ValueError("repaired build recipe is invalid: " + "; ".join(errors))
@@ -728,6 +731,7 @@ def _probe_with_repairs(unit: UnitContext, entry: Mapping[str, Any], *, profile:
                              "dockerfile_sha256": repaired_image.dockerfile_sha256,
                              "dockerfile_path": repaired_image.dockerfile_path,
                              "system_packages": list(candidate["system_packages"]),
+                             "image_repairs": dict(candidate.get("image_repairs", {})),
                              "attempt_identity": f"{unit.job.attempt_id}:{action['build_unit_id']}:repair:{repair_number}",
                              "command_identity": hashlib.sha256(canonical_json({"kind": "project-image-build",
                                  "recipe_identity": repaired_image.recipe_identity})).hexdigest(),
@@ -774,7 +778,8 @@ def _probe_with_repairs(unit: UnitContext, entry: Mapping[str, Any], *, profile:
                                  "repair_number": repair_number, "family": action["family"]})).hexdigest(),
                              "duration_ms": int((time.monotonic() - attempt_started) * 1000),
                              "streams": image_streams,
-                             "system_packages": list(current_recipe.get("system_packages", ()))})
+                             "system_packages": list(current_recipe.get("system_packages", ())),
+                             "image_repairs": dict(current_recipe.get("image_repairs", {}))})
             unit.job.events.write("PROJECT_IMAGE_REPAIR_FAILED", unit_id=unit.unit_id,
                 build_unit_id=action["build_unit_id"], family=action["family"],
                 repair_attempt=repair_number, error_class=type(exc).__name__)
