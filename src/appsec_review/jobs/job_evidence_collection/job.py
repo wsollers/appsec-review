@@ -924,12 +924,12 @@ def _assemble_manifest(unit: UnitContext, index_units: tuple[str, ...]) -> Mappi
                              "not_applicable_input_count": int(skipped.get("count", 0))})
         not_applicable.extend(skipped.get("items", ()))
         gaps.extend(str(item) for item in output.get("gaps", []))
+        shards.append(IndexIdentity(**{**output["index_identity"],
+                                       "gaps": tuple(output["index_identity"].get("gaps", ()))}))
     unsupported = unsupported_source_coverage(load_target_catalog(unit.job.run_root))
     if unsupported["count"]:
         # No declared source analyzer supports these files: a named coverage gap, never clean.
         gaps.append(unsupported["gap"])
-        shards.append(IndexIdentity(**{**output["index_identity"],
-                                       "gaps": tuple(output["index_identity"].get("gaps", ())) }))
     existing = [IndexIdentity(**{**item, "gaps": tuple(item.get("gaps", ()))})
                 for item in upstream["indexes"]
                 if item.get("producer", {}).get("job") != "job_evidence_collection"]
