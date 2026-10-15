@@ -84,8 +84,12 @@ Every retained entry carries its run-owned path, workspace path, SHA-256, byte s
 identity, exact-path mapping, and accepted-input/build-output origin. Source maps retain bounded
 source identities; package integrity sidecars retain the corresponding archive path and hash.
 Catalog publication revalidates those identities against the immutable workspace manifest. The
-relationship index maps a tool invocation to a producing command only when its protected argument
-hash uniquely matches; otherwise it publishes explicit ambiguous relations and a coverage gap.
+relationship index maps an artifact to its producing command through a tool invocation that names
+it as an output (same workspace path and SHA-256): the invocation's own `parent_command_id`, which
+captured rows carry, or else a unique match of its protected argument hash. An artifact that no
+invocation or producer-supplied relationship attributes gets explicit ambiguous relations
+(confidence 0.25) to every command of its unit and a `producing action mapping is ambiguous`
+coverage gap.
 
 Bounds are fail-visible: source maps are limited to 16 MiB and 4,096 declared sources; package and
 dependency metadata to 64 MiB per file; other retained artifacts to 512 MiB per file; the central
