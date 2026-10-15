@@ -6,10 +6,13 @@ import hashlib
 import json
 from pathlib import Path, PurePosixPath
 import shlex
+import shutil
 import time
 from typing import Any
+import zipfile
 
 from appsec_review.jobs.cpp_index_scopes import load_accepted_cpp
+from appsec_review.jobs.job_language_build import load_accepted_language_build
 from appsec_review.inference import Infer, ModelRequest
 from appsec_review.observability import PipelineLog, emit_model_event
 from appsec_review.retrieval import (
@@ -104,6 +107,105 @@ def _argv(row: Mapping[str, Any]) -> list[str]:
     return shlex.split(str(row.get("command", "")), posix=True)
 
 
+_BINARY_MAGICS = (b"\x7fELF", b"MZ", b"\xfe\xed\xfa\xce", b"\xce\xfa\xed\xfe",
+                  b"\xfe\xed\xfa\xcf", b"\xcf\xfa\xed\xfe")
+_ARCHIVE_MEMBER_SUFFIXES = (".so", ".pyd", ".dylib", ".dll", ".node")
+_ARCHIVE_MEMBER_LIMIT = 256
+
+
+def _is_binary(path: Path) -> bool:
+    try:
+        with path.open("rb") as stream:
+            return stream.read(4).startswith(_BINARY_MAGICS)
+    except OSError:
+        return False
+
+
+def family_build_cases(language: Mapping[str, Any], run_root: Path) -> dict[str, dict[str, Any]]:
+    """Accepted non-native builds whose produced binaries need ELF/PE/Mach-O inspection.
+
+    Native units and mixed units whose own build compiled ``native_components`` reach this job
+    through the C/C++ lane, with their captured compile flags. Every other successful build
+    (Go and Rust executables, .NET native AOT output, prebuilt extension modules inside wheels)
+    is a family case judged by its family's documented hardening expectations.
+    """
+    cases: dict[str, dict[str, Any]] = {}
+    for receipt in language.get("receipts", ()):
+        family = str(receipt.get("family") or receipt.get("source_family") or "")
+        database = receipt.get("native_compile_database")
+        if (receipt.get("terminal_status") != "SUCCEEDED" or family in {"", "native"} or
+                (isinstance(database, Mapping) and int(database.get("entry_count", 0)) > 0)):
+            continue
+        artifacts = []
+        for item in receipt.get("artifacts", ()):
+            path = (run_root / str(item.get("path", ""))).resolve()
+            if run_root.resolve() not in path.parents or not path.is_file() or path.is_symlink():
+                continue
+            if _is_binary(path) or str(item.get("kind")) == "wheel":
+                artifacts.append({key: item[key] for key in ("path", "sha256", "size_bytes", "kind")
+                                  if key in item})
+        if artifacts:
+            case_id = f"family-{receipt['build_unit_id']}"
+            cases[case_id] = {"terminal_status": "SUCCEEDED", "source": "language-build",
+                              "family": family, "build_unit_id": receipt["build_unit_id"],
+                              "root": receipt.get("root"), "artifacts": artifacts,
+                              "image_id": str(receipt.get("image", {}).get("image_id", "unknown"))}
+    return cases
+
+
+def _family_provenance(unit: UnitContext, case_id: str, catalog: Mapping[str, Any]) -> dict[str, Any]:
+    """Artifacts of a family build: verified receipt binaries plus binary members of wheels."""
+    artifacts, gaps = [], []
+    for item in catalog.get("artifacts", ()):
+        path = (unit.job.run_root / str(item["path"])).resolve()
+        if (unit.job.run_root.resolve() not in path.parents or not path.is_file() or path.is_symlink() or
+                file_sha256(path) != item.get("sha256")):
+            gaps.append(f"accepted build artifact identity changed: {PurePosixPath(str(item['path'])).name}")
+            continue
+        if item.get("kind") != "wheel":
+            artifacts.append({"path": PurePosixPath(str(item["path"])).name, "kind": item.get("kind"),
+                              "sha256": item["sha256"], "size_bytes": path.stat().st_size,
+                              "artifact_id": hashlib.sha256(canonical_json({
+                                  "case": case_id, "path": item["path"], "sha256": item["sha256"]})).hexdigest(),
+                              "run_path": path.relative_to(unit.job.run_root).as_posix()})
+            continue
+        try:
+            with zipfile.ZipFile(path) as archive:
+                members = [info for info in archive.infolist()
+                           if not info.is_dir() and info.filename.lower().endswith(_ARCHIVE_MEMBER_SUFFIXES)]
+                if len(members) > _ARCHIVE_MEMBER_LIMIT:
+                    gaps.append(f"{path.name}: binary member bound reached; later members were not inspected")
+                for ordinal, info in enumerate(members[:_ARCHIVE_MEMBER_LIMIT]):
+                    if info.file_size > 512 * 1024 * 1024:
+                        gaps.append(f"{path.name}: member exceeds the inspection byte bound")
+                        continue
+                    target = unit.unit_root / "archive-members" / item["sha256"][:16] / f"{ordinal:04d}.bin"
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    with archive.open(info) as source, target.open("wb") as sink:
+                        shutil.copyfileobj(source, sink)
+                    digest = file_sha256(target)
+                    artifacts.append({"path": PurePosixPath(info.filename).name, "kind": "archive-member",
+                                      "sha256": digest, "size_bytes": target.stat().st_size,
+                                      "archive": {"path": item["path"], "sha256": item["sha256"],
+                                                  "member": info.filename[:4096]},
+                                      "artifact_id": hashlib.sha256(canonical_json({
+                                          "case": case_id, "archive": item["sha256"],
+                                          "member": info.filename, "sha256": digest})).hexdigest(),
+                                      "run_path": target.relative_to(unit.job.run_root).as_posix()})
+        except (OSError, zipfile.BadZipFile) as exc:
+            gaps.append(f"{path.name}: package archive could not be inspected ({type(exc).__name__})")
+    document = {"schema": PROVENANCE_SCHEMA, "case_id": _display(case_id), "family": catalog["family"],
+                "actions": [], "artifacts": artifacts, "relationships_exact": False,
+                "relationship_count": 0,
+                "action_source": "no captured C/C++ compiles; family hardening expectations apply",
+                "gaps": list(dict.fromkeys(gaps))}
+    artifact = _artifact(unit.job.run_root, unit.unit_root / "build-command-provenance.json", document)
+    unit.job.events.write("BUILD_COMMAND_PROVENANCE_CAPTURED", case_id=_display(case_id),
+                          action_count=0, artifact_count=len(artifacts), gap_count=len(document["gaps"]))
+    return {**document, "artifact": artifact,
+            "terminal_status": "COMPLETED_WITH_GAPS" if document["gaps"] else "SUCCEEDED"}
+
+
 def _case_catalog(unit: UnitContext, case_id: str) -> Mapping[str, Any]:
     cases = unit.output("load.accepted_cpp_build")["cases"]
     value = cases.get(case_id)
@@ -146,10 +248,21 @@ def build_job(*, infer: Infer | None = None) -> Job:
             else:
                 cases[case_id] = {"terminal_status": catalog.get("terminal_status", "UNAVAILABLE"),
                                   "gaps": list(catalog.get("gaps", ())) or ["accepted build catalog is unavailable"]}
+        # Every other family's accepted binaries (Go, Rust, .NET AOT, wheel extension members).
+        # The C/C++ lane is downstream of job_language_build, so its accepted handoff exists in a
+        # real run; read it through its own integrity-checked pointer.
+        load_gaps: list[str] = []
+        if (unit.job.run_root / "data" / "jobs" / "job_language_build" / "latest.json").is_file():
+            cases.update(family_build_cases(load_accepted_language_build(unit.job.run_root),
+                                            unit.job.run_root))
+        else:
+            load_gaps.append("accepted language-build handoff is unavailable; non-native family binaries "
+                             "were not inspected")
         unit.job.events.write("BUILD_SECURITY_ACCEPTED_BUILD_LOADED",
                               upstream_handoff_sha256=accepted["handoff_sha256"], case_count=len(cases))
         return {"schema": SCHEMA, "cases": cases, "upstream_handoff_sha256": accepted["handoff_sha256"],
-                "upstream_manifest": accepted["manifest"], "terminal_status": "SUCCEEDED"}
+                "upstream_manifest": accepted["manifest"], "gaps": load_gaps,
+                "terminal_status": "COMPLETED_WITH_GAPS" if load_gaps else "SUCCEEDED"}
 
     def aggregate(factory):
         def handler(unit: UnitContext) -> Mapping[str, Any]:
@@ -169,6 +282,8 @@ def build_job(*, infer: Infer | None = None) -> Job:
     def provenance(case_id: str):
         def handler(unit: UnitContext) -> Mapping[str, Any]:
             catalog = _case_catalog(unit, case_id)
+            if catalog.get("source") == "language-build":
+                return _family_provenance(unit, case_id, catalog)
             if catalog.get("terminal_status") == "NOT_APPLICABLE":
                 document = {"schema": PROVENANCE_SCHEMA, "case_id": _display(case_id),
                             "actions": [], "artifacts": [], "relationships_exact": False, "gaps": []}
@@ -395,7 +510,10 @@ def build_job(*, infer: Infer | None = None) -> Job:
                 return {**document, "artifact": _artifact(unit.job.run_root,
                         unit.unit_root / "deterministic-results.json", document),
                         "terminal_status": "NOT_APPLICABLE"}
-            checks = deterministic_checks(provenance_value.get("actions", ()), inspection_value.get("records", ()))
+            catalog = _case_catalog(unit, case_id)
+            family = str(catalog.get("family") or catalog.get("mapping", {}).get("family") or "native")
+            checks = deterministic_checks(provenance_value.get("actions", ()), inspection_value.get("records", ()),
+                                          family=family)
             unknown = sum(item["status"] == "UNKNOWN" for item in checks)
             failed = sum(item["status"] == "FAIL" for item in checks)
             gaps = list(dict.fromkeys([*provenance_value.get("gaps", ()), *inspection_value.get("gaps", ()),

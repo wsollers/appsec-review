@@ -456,6 +456,70 @@ reconciler when syscall-authoritative capture is required, and adds a parameteri
 such as those above. Applicability classification, artifact expectations, and CodeQL capability
 are descriptor policy; capture collection remains shared.
 
+## Mixed C/C++ units and native components
+
+A package whose own build tool compiles C or C++ is one build unit of that package's family, run
+in one container under one execution capture. Examples:
+
+- node-gyp from npm;
+- phpize, then `configure`, then `make`;
+- a setuptools extension built by `pip wheel`;
+- a build script that runs `clang --target=wasm32`.
+
+The build is never split across a language container and a native container. Routing comes only
+from descriptors, build files and catalog data (`build_discovery.discover_build_units`):
+
+- `config.m4` is a `php`/`phpize` marker.
+- A bounded `build.sh` whose text targets `wasm32` (or runs `emcc`) creates a `wasm`/`clang` unit
+  with the script as its marker. The catalog supplies a 64 KiB, target-confined reader.
+- A C/C++ source under a `node`, `python`, `php` or `wasm` unit root becomes that unit's typed
+  `native_components` (`path`, `sha256`, `size_bytes`). The nearest owning root wins. No
+  direct-native unit is emitted for it.
+- Rust, Go and JVM roots do not own C sources. A C tree beside them stays a direct-native unit.
+- The direct-native path is unchanged for standalone C/C++ trees.
+- The unit's descriptor package carries its markers, `requirements*.txt` files and the native
+  component sources, so recipe inference sees the files the build uses. Its
+  `command_policy.allowed_executables` lists the profile's allowlist, and phpize units add
+  `./configure`.
+- `job_project_build` derives a deterministic phpize recipe from `config.m4`:
+  `phpize`, then `./configure --enable-<name>`, then `make -j1`, producing
+  `modules/<extension>.so`.
+
+Python, PHP and the wasm lane for units with native components run under the same execution
+capture as the native family. `job_language_build/native_components.py` turns every successful,
+image-owned compiler exec that names a C/C++ source into one compile-database entry. Each entry
+holds the kernel-observed argv and the working directory reconstructed from the capture's
+fork/chdir events. Wrapper launchers in writable roots and clang `-cc1` re-execs are excluded.
+
+The receipt publishes:
+
+- `native_components`;
+- `native_compile_database`: path, SHA-256, entry count and family. The file is
+  `data/build/<family>/units/<id>/native-compile-commands.json`.
+
+A component source that no captured compile touched is a named gap.
+
+`job_cpp_compiled_analysis.native_analysis_actions` selects native units and every successful
+receipt whose database has entries. For a mixed unit, prepare writes that database as the
+project's `compile_commands.json`. The C/C++ analyses, clang/CodeQL replay and the code graph then
+consume it like a CMake database, tagged with the unit's real family and its `native_components`.
+
+Analysis images carry no PHP or Python headers. A replay that needs those headers records the
+failure as its own gap.
+
+Documented exception, not implemented because no current fixture needs it: a C library that builds
+independently with its own CMake or Makefile, and that a language package only links against, is a
+separate native unit. The package declares a dependency on it and receives a hashed artifact
+handoff.
+
+Interpreted trees that no unit owns (`.py` and `.php` sources) are published as
+`build_topology.source_only_scopes`. `job_project_build` records them as `SKIPPED_NA`:
+`MATERIAL_BUILD_ABSENT` for build capture and `ARTIFACT_CAPABILITY_ABSENT` for compiler artifacts.
+Their absence from the build lanes is therefore explicit.
+
+The C/C++ toolchain all family images compile with is defined once in
+`containers/buildenv/native-toolchain/` (see its README).
+
 ## Generic captured-build extension contract
 
 The compiled-language path has one driver and one collector boundary. `job_language_build` passes each accepted argv to the shared container executor. The

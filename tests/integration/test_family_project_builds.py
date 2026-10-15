@@ -39,6 +39,8 @@ from appsec_review.jobs.job_cpp_compiled_analysis.job import native_analysis_act
 from appsec_review.jobs.job_language_build import build_job as build_language, load_accepted_language_build
 from appsec_review.jobs.job_project_build import build_job as build_projects
 from appsec_review.jobs.job_project_build.job import load_accepted_builds
+from appsec_review.jobs.job_post_build_security_assessment.assessment import deterministic_checks, inspect_binary
+from appsec_review.jobs.job_post_build_security_assessment.job import family_build_cases
 from appsec_review.jobs.job_review_intake import build_job as build_intake
 from appsec_review.jobs.job_target_analysis_plan import build_job as build_plan
 from appsec_review.jobs.job_target_analysis_plan.planning import PROPOSAL_SCHEMA
@@ -257,6 +259,24 @@ def test_family_project_builds_in_its_pinned_image(tmp_path: Path, project: str)
         assert "native-extension" in kinds, detail
     else:
         assert expected[family] <= kinds, (kinds, detail)
+    # Post-build binary inspection: every ELF/PE/Mach-O output is inspected by the shared parser.
+    cases = family_build_cases(language, run_root)
+    if family in {"go", "rust"}:
+        case = cases[f"family-{receipt['build_unit_id']}"]
+        records = [inspect_binary(run_root / item["path"]) for item in case["artifacts"]]
+        assert records and {item["format"] for item in records} == {"ELF"}
+        checks = deterministic_checks([], records, family=family)
+        assert all(item.get("expectation", {}).get("family") == family for item in checks
+                   if item["status"] != "NOT_APPLICABLE" or "expectation" in item)
+        assert not any(item["status"] == "UNKNOWN" for item in checks if item.get("expectation"))
+    elif family == "wasm":
+        assert f"family-{receipt['build_unit_id']}" not in cases  # wasm modules are not ELF/PE/Mach-O
+    elif project in {"python-package/case-085", "php-extension/case-090"}:
+        # Mixed units reach inspection through the C/C++ lane with their captured compile flags.
+        assert f"family-{receipt['build_unit_id']}" not in cases
+        extensions = [item for item in receipt["artifacts"] if item["kind"] == "native-extension"]
+        assert extensions and all(inspect_binary(run_root / item["path"])["format"] == "ELF"
+                                  for item in extensions)
     if project in {"python-package/case-085", "php-extension/case-090", "wasm/case-091"}:
         # The family build's single capture recorded the C compile; it reaches native analysis.
         database = receipt["native_compile_database"]

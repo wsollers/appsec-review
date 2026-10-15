@@ -17,6 +17,8 @@ from typing import Any, Iterable, Mapping
 
 from appsec_review.storage import canonical_json, file_sha256
 
+from .hardening import Expectation, FamilyExpectations, expectations_for, unknown_family
+
 
 SCHEMA = "appsec-review/post-build-security-assessment/1"
 PROVENANCE_SCHEMA = "appsec-review/build-command-provenance/1"
@@ -649,10 +651,43 @@ def _check(check_id: str, status: str, scope: str, evidence: Iterable[str], rati
             "evidence": sorted(set(evidence)), "rationale": rationale, "applicable": applicable}
 
 
-def deterministic_checks(actions: Iterable[Mapping[str, Any]], artifacts: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:
+_FLAG_DRIVEN_FAMILIES = frozenset({"native", "node", "python", "php", "wasm"})
+
+
+def family_expectations(family: str, has_compile_actions: bool) -> FamilyExpectations | None:
+    """``None`` when captured C/C++ flags decide; otherwise the family's documented defaults.
+
+    Native units, and mixed units whose own build captured C/C++ compiles, are flag-driven. Every
+    other family uses its typed table; a family without one assumes nothing.
+    """
+    if family == "native" or (family in _FLAG_DRIVEN_FAMILIES and has_compile_actions):
+        return None
+    return expectations_for(family) or unknown_family(family)
+
+
+def _expected(table: FamilyExpectations | None, check_id: str, scope: str, evidence: Iterable[str],
+              observed: Any, rationale: str) -> dict[str, Any]:
+    if table is None:
+        return _check(check_id, "PASS" if observed is True else "FAIL" if observed is False else "UNKNOWN",
+                      scope, evidence, rationale)
+    expectation = table.for_check(check_id)
+    if expectation.expectation is Expectation.REQUIRED:
+        value = _check(check_id, "PASS" if observed is True else "FAIL" if observed is False else "UNKNOWN",
+                       scope, evidence, f"{rationale}; {expectation.reason}")
+    else:
+        value = _check(check_id, "NOT_APPLICABLE", scope, evidence,
+                       f"{table.toolchain}: {expectation.reason}", applicable=False)
+    value["expectation"] = {"family": table.family, "value": expectation.expectation.value,
+                            "source": expectation.source}
+    return value
+
+
+def deterministic_checks(actions: Iterable[Mapping[str, Any]], artifacts: Iterable[Mapping[str, Any]],
+                         *, family: str = "native") -> list[dict[str, Any]]:
     actions, artifacts = list(actions), list(artifacts)
     checks: list[dict[str, Any]] = []
     compile_actions = [item for item in actions if item.get("classification") in {"compiler", "linker_driver"}]
+    table = family_expectations(family, bool(compile_actions))
     for action in compile_actions:
         flags = _flag_values(action.get("argv", ()))
         scope = str(action.get("compile_unit_id") or action.get("build_action_id"))
@@ -698,18 +733,19 @@ def deterministic_checks(actions: Iterable[Mapping[str, Any]], artifacts: Iterab
                         (check_id == "elf.pie" and kind == "shared_library")):
                     checks.append(_check(check_id, "NOT_APPLICABLE", scope, evidence, "not a linked executable/shared object", applicable=False))
                 else:
-                    value = hardening.get(key)
-                    checks.append(_check(check_id, "PASS" if value is True else "FAIL" if value is False else "UNKNOWN",
-                                         scope, evidence, f"observed ELF {key}"))
+                    checks.append(_expected(table, check_id, scope, evidence, hardening.get(key),
+                                            f"observed ELF {key}"))
         elif fmt == "PE/COFF":
             for check_id, key in (("pe.dynamic_base", "dynamic_base"), ("pe.nx_compat", "nx_compat"),
                                   ("pe.high_entropy_va", "high_entropy_va"), ("pe.guard_cf", "guard_cf"),
                                   ("pe.safe_seh", "safe_seh"), ("pe.gs", "gs")):
                 value = hardening.get(key)
                 applicable = not (key == "safe_seh" and artifact.get("bits") == 64)
-                checks.append(_check(check_id, "NOT_APPLICABLE" if not applicable else
-                                     "PASS" if value is True else "FAIL" if value is False else "UNKNOWN",
-                                     scope, evidence, f"observed PE {key}", applicable=applicable))
+                if not applicable:
+                    checks.append(_check(check_id, "NOT_APPLICABLE", scope, evidence, f"observed PE {key}",
+                                         applicable=False))
+                else:
+                    checks.append(_expected(table, check_id, scope, evidence, value, f"observed PE {key}"))
     all_flags = set().union(*(_flag_values(item.get("argv", ())) for item in actions)) if actions else set()
     for artifact in artifacts:
         hardening = artifact.get("hardening", {})
