@@ -31,7 +31,7 @@ input, output, tool, and acceptance contracts.
 
 ## Registered jobs
 
-`runtime/registry.py` registers 32 jobs. Each has a `[jobs.<job_id>]` table in
+`runtime/registry.py` registers 35 jobs. Each has a `[jobs.<job_id>]` table in
 `appsec-review.toml`, and its Dagster job is named from that table's `name`.
 
 | Job | Purpose | Operations |
@@ -49,13 +49,18 @@ input, output, tool, and acceptance contracts.
 | `job_project_build` | Project images, probes, and image repair | [project-build](../operations/project-build.md) |
 | `job_language_build` | Generic language and WebAssembly builds | [language-build](../operations/language-build.md), [wasm-build](../operations/wasm-build.md) |
 | `job_artifact_indexing` | Produced-artifact index | [artifact-indexing](../operations/artifact-indexing.md) |
+| `job_test_coverage` | Hash-verified import of retained LCOV, Cobertura, JaCoCo and LLVM coverage | [test-coverage-ingestion](../operations/test-coverage-ingestion.md) |
+| `job_profile_data` | Hash-verified import of retained folded-stack, perf-script, Callgrind and LLVM sample profiles | [profile-data](../operations/profile-data.md) |
 | `job_artifact_security_analysis` | Produced-artifact security analysis | [artifact-security-analysis](../operations/artifact-security-analysis.md) |
 | `job_cpp_compiled_analysis` | C/C++ compiled analysis | [cpp-compiled-analysis](../operations/cpp-compiled-analysis.md) |
+| `job_clang_static_analysis` | Clang-Tidy and Clang Static Analyzer over accepted compile scopes | [clang-static-analysis](../operations/clang-static-analysis.md) |
 | `job_cpp_symbol_index` | clangd symbol index | [cpp-index-jobs](../operations/cpp-index-jobs.md) |
-| `job_cpg_analysis` | Joern code property graph | [cpp-index-jobs](../operations/cpp-index-jobs.md) |
+| `job_cpg_analysis` | Joern code property graph (deprecated; shipped `settings.enabled = false`) | [cpp-index-jobs](../operations/cpp-index-jobs.md) |
 | `job_post_build_security_assessment` | Build-hardening assessment | [post-build-security-assessment](../operations/post-build-security-assessment.md) |
 | `job_evidence_collection` | Deterministic static evidence | [static-analysis](../operations/static-analysis.md) |
+| `job_dependency_intelligence` | Declared, SBOM, linker and loader dependency identity with OpenSSF Scorecard context | [dependency-intelligence](../operations/dependency-intelligence.md) |
 | `job_codeql_analysis` | Cross-language CodeQL | [codeql-analysis](../operations/codeql-analysis.md) |
+| `job_code_graph_index` | Normalized, cross-checked `graph` index from CodeQL and C/C++ producers | [code-graph-index](../operations/code-graph-index.md) |
 | `job_owasp_control_assessment` | OWASP control assessment | [owasp-control-assessment](../operations/owasp-control-assessment.md) |
 | `job_review_prioritization` | Function-level review prioritization | [review-prioritization](../operations/review-prioritization.md) |
 | `job_security_tagging` | Basis-qualified security tags | [security-tagging](../operations/security-tagging.md) |
