@@ -99,8 +99,10 @@ remain protected under `data/clang-static/<scope-id>/`. Retrieval-visible record
 facts and resolving hashes, not raw protected commands. One engine may complete while the other
 records a gap; valid observations are not discarded.
 
-The job is applicable only to accepted C/C++ scopes. No applicable scope produces
-`NOT_APPLICABLE`; a known scope without usable compilation context remains unavailable. Missing
+The job is applicable only to accepted C/C++ scopes. A scope with no compile commands remains
+`unavailable`; a scope whose compile units are all outside Clang support (assembly, CUDA) is
+`SKIPPED_NA` in `not_applicable_scopes` and never launched (`job_clang_static_analysis/job.py`).
+Missing
 image/tooling, timeout, OOM, nonzero exit, output truncation, malformed or over-limit results, and a
 diagnostic that cannot resolve through the accepted source map are per-scope gaps.
 

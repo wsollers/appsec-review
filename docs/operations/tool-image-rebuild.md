@@ -104,12 +104,12 @@ unknown keys and out-of-range or wrongly typed values fail configuration loading
 | Setting | Meaning |
 | --- | --- |
 | `enabled` | `false` makes the job transparent: intake then depends directly on `model_connectivity`. |
-| `images` | Catalog image ids to rebuild. Empty (default) selects every `enabled` catalog image. Dependencies are always built first. |
+| `images` | Catalog image ids to rebuild. Empty (the shipped value) selects every `enabled` catalog image, including the deprecated `tool-joern`. Dependencies are always built first. |
 | `parallelism` | Concurrent docker builds, passed as `--jobs` (1..8). |
 | `image_timeout_seconds` | Per-image docker build bound, passed as `--timeout-seconds` (60..14400). |
 | `total_timeout_seconds` | Bound on the whole builder run; must be at least `image_timeout_seconds`. |
 | `continue_on_error` | Keep building independent images after a failure so one run names every failing image. The job still fails. |
-| `pin_mismatch` | `report` (default) or `fail`; see [Image-ID pins](#image-id-pins). |
+| `pin_mismatch` | `report` (the shipped value) or `fail` (emits `TOOL_IMAGE_PIN_CHECK_FAILED`); see [Image-ID pins](#image-id-pins). All eight keys are required; the loader supplies no defaults. |
 | `log_tail_bytes` | Bytes of builder output and of each failed build log kept in the failure report (256..65536). |
 
 The job needs a working Docker host, like the builder. Unit tests inject a fake builder runner and

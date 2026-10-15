@@ -29,9 +29,13 @@ The configured topology is `load.accepted_inputs`, `normalize.coverage`, `index.
 
 Build producers must place coverage files in their run-owned workspace and enumerate them in the
 accepted language-build receipt with path, workspace path, size, kind, and SHA-256. Recognized
-names include LCOV `.info`/`.lcov`, Cobertura or generic `coverage.xml`, `jacoco.xml`, and LLVM
-coverage JSON names. A producer may also use an artifact kind containing `coverage`; if the bytes
-do not identify a supported format, the job records `unsupported_coverage_format`.
+names (`job_language_build/node.py`) are `lcov`, `lcov.info`, `coverage.lcov`, `cobertura.xml`,
+`cobertura-coverage.xml`, `coverage.xml`, `jacoco.xml`, `jacocoreport.xml`,
+`jacocotestreport.xml`, `coverage.json`, `coverage-final.json` and `*.coverage.json`; any other
+file is picked up only when its artifact kind contains `coverage`. If the bytes do not identify a
+supported format, the job records `unsupported_coverage_format`. Receipts whose family is not in
+`applicable_families` are skipped and get no shard. The parser, normalizer and mapping identities
+in the settings must equal the code constants; any other value fails configuration loading.
 
 The accepted output is under the job attempt's `artifacts/test-coverage/` directory. Retrieval
 shards use the `analysis` index and `test-coverage-` prefix. Downstream code should call
