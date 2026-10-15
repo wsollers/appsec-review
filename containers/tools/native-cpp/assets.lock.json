@@ -5,17 +5,17 @@
   "project": "repository-local",
   "license": "Apache-2.0 AND NCSA AND GPL-3.0-or-later",
   "architecture": "linux/amd64",
-  "generated_from": "ubuntu-24.04-exact-156-deb-closure-2026-10-15",
+  "generated_from": "ubuntu-24.04-exact-263-deb-closure-2026-10-15",
   "artifacts": [{
     "name": "native-cpp-debs.tar",
     "url": "https://archive.ubuntu.com/ubuntu/",
     "path": "downloads/native-cpp-debs.tar",
-    "sha256": "493a70e7d69c48cafe2c946be8ecd10e00db6b51987ca1893f0c3d176a719c37",
-    "bytes": 262922240,
+    "sha256": "f8a88d621d7ea69b9bdd54bef2232b30df0c1f8e03120a52feaea18d771a2259",
+    "bytes": 316026880,
     "version": "ubuntu-24.04-2026-10-15",
     "license": "various; package copyright files are retained in the image",
     "license_source": "https://packages.ubuntu.com/noble/",
-    "provenance": "deterministic tar of 156 exact-version .deb files produced by containers/tools/native-cpp/acquire_assets.sh, which resolves the clang-18/cmake/bear closure inside the Dockerfile's pinned ubuntu base from noble, noble-updates, and noble-security; every package version and SHA-256 is recorded in packages.manifest; cache is host-local and ignored",
+    "provenance": "deterministic tar of 263 exact-version .deb files produced by containers/tools/native-cpp/acquire_assets.sh, which resolves the clang-18/cmake/bear closure plus the pinned PHP 8.3 and Python 3.12 development headers inside the Dockerfile's pinned ubuntu base from noble, noble-updates, and noble-security; every package version and SHA-256 is recorded in packages.manifest; cache is host-local and ignored",
     "signature_verification": {"status": "verified", "reason": "APT Release metadata signatures were verified during bounded acquisition; bundle SHA-256 and byte size are enforced"}
   }]
 }
