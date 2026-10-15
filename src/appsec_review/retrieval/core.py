@@ -168,24 +168,35 @@ def _handoff_manifest_roots(
 def _flatten_manifest(
     run_root: Path, path: Path, sha256: str,
     seen: frozenset[tuple[str, str]] = frozenset(),
+    verified: dict[tuple[Path, str], Mapping[str, Any]] | None = None,
+    flattened: dict[tuple[str, str], tuple[dict[tuple[str, str], Mapping[str, Any]],
+                                           frozenset[tuple[str, str]]]] | None = None,
 ) -> tuple[dict[tuple[str, str], Mapping[str, Any]], frozenset[tuple[str, str]]]:
+    """Flatten one manifest lineage; ``verified`` and ``flattened`` memoize shared ancestors."""
+    verified = {} if verified is None else verified
+    flattened = {} if flattened is None else flattened
     relative = path.relative_to(run_root).as_posix()
     identity = (relative, sha256)
     if identity in seen:
         raise RetrievalIntegrityError("index manifest dependency cycle")
-    document, _ = load_verified_manifest(run_root, path, sha256)
+    if identity in flattened:
+        values, lineage = flattened[identity]
+        return dict(values), lineage
+    document, _ = load_verified_manifest(run_root, path, sha256, verified=verified)
     values: dict[tuple[str, str], Mapping[str, Any]] = {}
     lineage: set[tuple[str, str]] = {identity}
     for upstream in document.get("upstream_manifests", ()):
         upstream_path = (run_root / str(upstream.get("path", ""))).resolve()
         upstream_sha = str(upstream.get("sha256", ""))
-        inherited, ancestors = _flatten_manifest(run_root, upstream_path, upstream_sha, seen | {identity})
+        inherited, ancestors = _flatten_manifest(run_root, upstream_path, upstream_sha, seen | {identity},
+                                                 verified, flattened)
         values.update(inherited)
         lineage.update(ancestors)
     for raw in document.get("indexes", ()):
         key = (str(raw.get("name")), str(raw.get("shard_id", "default")))
         values[key] = dict(raw)
-    return values, frozenset(lineage)
+    flattened[identity] = (values, frozenset(lineage))
+    return dict(values), frozenset(lineage)
 
 
 def materialize_attempt_input_manifest(
@@ -202,9 +213,13 @@ def materialize_attempt_input_manifest(
         (relative, sha256), path = next(iter(roots.items()))
         load_verified_manifest(run_root, path, sha256)
         return path, sha256
+    # Upstream lineages share ancestors (every job inherits the catalog manifest, for example), so
+    # one verification and flattening per manifest serves every root of this attempt.
+    verified: dict[tuple[Path, str], Mapping[str, Any]] = {}
+    flattened: dict[tuple[str, str], Any] = {}
     expanded = []
     for identity, path in roots.items():
-        values, lineage = _flatten_manifest(run_root, path, identity[1])
+        values, lineage = _flatten_manifest(run_root, path, identity[1], verified=verified, flattened=flattened)
         expanded.append((identity, values, lineage))
     merged: dict[tuple[str, str], tuple[Mapping[str, Any], tuple[str, str]]] = {}
     for root_identity, values, lineage in sorted(expanded, key=lambda item: (len(item[2]), item[0])):
@@ -229,7 +244,7 @@ def materialize_attempt_input_manifest(
         upstream_manifests=tuple({"path": identity[0], "sha256": identity[1]} for identity in sorted(roots)),
     )
     sha256 = file_sha256(destination)
-    load_verified_manifest(run_root, destination, sha256)
+    load_verified_manifest(run_root, destination, sha256, verified=verified)
     return destination, sha256
 
 

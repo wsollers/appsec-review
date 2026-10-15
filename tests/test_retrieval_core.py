@@ -268,6 +268,65 @@ def test_attempt_input_manifest_is_pinned_to_exact_parallel_handoffs(tmp_path: P
         "data/indices/manifests/branch_a.json", "data/indices/manifests/branch_b.json"}
 
 
+def test_attempt_input_manifest_verifies_each_shared_ancestor_once(tmp_path: Path, monkeypatch) -> None:
+    # Every job inherits the catalog lineage, so upstream manifests share ancestors. Verification
+    # must be linear in distinct manifests, not in paths through the lineage graph (2**depth here).
+    runs, _ = _fixture(tmp_path)
+    core = RetrievalCore(runs, RUN_ID)
+    run_root = core.run_root
+    manifests = run_root / "data" / "indices" / "manifests"
+    base = manifests / "fixture.json"
+    identities = [IndexIdentity(**{**item, "gaps": tuple(item.get("gaps", ()))})
+                  for item in core.manifest["indexes"]]
+
+    def reference(path: Path) -> dict[str, str]:
+        return {"path": path.relative_to(run_root).as_posix(), "sha256": file_sha256(path)}
+
+    depth = 8
+    layer = [base]
+    for level in range(1, depth + 1):
+        upstream = tuple(reference(path) for path in layer)
+        layer = []
+        for side, selected in (("a", identities[:1]), ("b", identities[1:2])):
+            path = manifests / f"level-{level}-{side}.json"
+            write_manifest(path, run_id=RUN_ID, target_snapshot=core.manifest["target_snapshot"],
+                           target_root=core.target_root, indexes=selected if level == depth else (),
+                           upstream_manifests=upstream)
+            layer.append(path)
+    handoffs = {}
+    for job_id, path in zip(("branch_a", "branch_b"), layer):
+        artifact = {**reference(path), "size_bytes": path.stat().st_size}
+        handoff = run_root / "data" / "jobs" / job_id / "attempts" / "attempt_0001" / "handoff.json"
+        atomic_json(handoff, {"schema": "appsec-review/job-handoff/1", "status": "ACCEPTED",
+                              "job_id": job_id, "attempt_id": "attempt_0001", "artifacts": [artifact],
+                              "outputs": {"publication.publish": {"index_manifest": artifact}},
+                              "upstream_handoff_sha256": {}})
+        handoffs[job_id] = file_sha256(handoff)
+
+    from appsec_review.retrieval import index as index_module
+    verifications = []
+    original = index_module.swift_enabled_from_run  # read once per full manifest verification
+
+    def counting(run_root_arg):
+        verifications.append(run_root_arg)
+        return original(run_root_arg)
+
+    monkeypatch.setattr(index_module, "swift_enabled_from_run", counting)
+    attempt = run_root / "data" / "jobs" / "consumer" / "attempts" / "attempt_0001"
+    attempt.mkdir(parents=True)
+    path, sha256 = materialize_attempt_input_manifest(
+        run_root=run_root, attempt_root=attempt, run_id=RUN_ID,
+        target_snapshot=core.manifest["target_snapshot"], target_root=core.target_root,
+        upstream_handoffs=handoffs,
+    )
+    assert path == attempt / "inputs" / "retrieval-manifest.json" and sha256 == file_sha256(path)
+    distinct = 1 + 2 * depth + 1  # the base, two per level, and the merged input manifest
+    assert len(verifications) == distinct
+    merged = json.loads(path.read_text(encoding="utf-8"))
+    assert {(item["name"], item["shard_id"]) for item in merged["indexes"]} >= {
+        (item.name, item.shard_id) for item in identities[:2]}
+
+
 def test_specialized_index_manifest_preserves_upstream_retrieval_lineage(tmp_path: Path) -> None:
     runs, _ = _fixture(tmp_path)
     core = RetrievalCore(runs, RUN_ID)
