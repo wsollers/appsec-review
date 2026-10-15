@@ -132,15 +132,11 @@ def test_unavailable_grammar_is_an_explicit_gap() -> None:
                      "gaps": []},)
 
 
-def test_supported_languages_have_locked_offline_grammars_and_parser_routes() -> None:
+def test_supported_languages_have_locked_offline_grammars() -> None:
     lock = json.loads((ROOT / "containers" / "tools" / "tree-sitter" /
                        "assets.lock.json").read_text(encoding="utf-8"))
     locked = {item["language"] for item in lock["grammars"]} | {"C/C++"}
-    parser = runpy.run_path(str(ROOT / "containers" / "tools" / "tree-sitter" / "parser.py"))
-    acquisition = runpy.run_path(str(ROOT / "containers" / "tools" / "tree-sitter" /
-                                       "acquire_assets.py"))
-    assert locked == SUPPORTED_LANGUAGES == set(parser["LANGUAGES"])
-    assert set(parser["LANGUAGES"].values()) == set(acquisition["LANGUAGES"])
+    assert locked == SUPPORTED_LANGUAGES
     expected = {
         "Kotlin": ("kotlin", "c8ac3d2627240160b999a2c100de3babbdb8f419",
                    "4ba2c2f1b00fb74350a335aadc287e4bcd82f8cbec2848f644cc95279ad44a1c"),
@@ -153,10 +149,25 @@ def test_supported_languages_have_locked_offline_grammars_and_parser_routes() ->
     }
     identities = {item["language"]: item for item in lock["grammars"]}
     for language, (grammar, revision, digest) in expected.items():
-        assert parser["LANGUAGES"][language] == grammar
         assert (identities[language]["grammar"], identities[language]["revision"],
                 identities[language]["sha256"]) == (grammar, revision, digest)
         assert identities[language]["license"] == "MIT"
+
+
+def test_container_parser_and_acquisition_route_every_supported_language() -> None:
+    # parser.py and acquire_assets.py run inside tool-tree-sitter, which installs the pinned
+    # tree-sitter packages; reviews never import them on the host. Run this where they exist.
+    pytest.importorskip("tree_sitter_language_pack",
+                        reason="tree-sitter packages are installed only in the tool-tree-sitter image")
+    parser = runpy.run_path(str(ROOT / "containers" / "tools" / "tree-sitter" / "parser.py"))
+    acquisition = runpy.run_path(str(ROOT / "containers" / "tools" / "tree-sitter" /
+                                       "acquire_assets.py"))
+    assert set(parser["LANGUAGES"]) == SUPPORTED_LANGUAGES
+    assert set(parser["LANGUAGES"].values()) == set(acquisition["LANGUAGES"])
+    lock = json.loads((ROOT / "containers" / "tools" / "tree-sitter" /
+                       "assets.lock.json").read_text(encoding="utf-8"))
+    for item in lock["grammars"]:
+        assert parser["LANGUAGES"][item["language"]] == item["grammar"]
 
 
 def test_supported_run_grammars_are_runnable_but_unknown_languages_remain_gaps() -> None:
