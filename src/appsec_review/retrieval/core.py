@@ -252,7 +252,14 @@ class RetrievalCore:
             accepted_sha = file_sha256(manifest_path)
         if manifest_sha256 is not None and not hmac.compare_digest(accepted_sha, manifest_sha256):
             raise RetrievalIntegrityError("MCP session manifest pin does not match accepted index set")
-        self.manifest, self.manifest_sha256 = load_verified_manifest(self.run_root, manifest_path, accepted_sha)
+        try:
+            self.manifest, self.manifest_sha256 = load_verified_manifest(self.run_root, manifest_path, accepted_sha)
+        except RetrievalIntegrityError:
+            raise
+        except ValueError as exc:
+            # Manifest, shard and run-bound configuration checks (including the Swift policy's
+            # resolved-configuration hash) are framework-integrity failures, never tool gaps.
+            raise RetrievalIntegrityError(str(exc)) from exc
         if self.manifest.get("run_id") != run_id:
             raise RetrievalIntegrityError("manifest run isolation mismatch")
         self.run_id = run_id
