@@ -706,7 +706,11 @@ def test_go_recipe_that_substitutes_the_toolchain_is_rejected_at_plan_time_and_n
     _language(config, target, fingerprint, upstream["run_id"], lambda unit, profile: simulated_executor(
         profile, go_container(calls)))
     assert calls == []
-    assert not [item for item in load_accepted_language_build(run_root)["receipts"] if item["family"] == "go"]
+    # The planned Go unit was never built, so it is a named BLOCKED gap rather than an absent lane.
+    receipt, = [item for item in load_accepted_language_build(run_root)["receipts"] if item["family"] == "go"]
+    assert receipt["terminal_status"] == "BLOCKED" and receipt["commands"] == [] and receipt["artifacts"] == []
+    assert receipt["upstream_failure"]["job_id"] == "job_project_build"
+    assert receipt["gaps"] and "job_project_build" in receipt["gaps"][0]
 
 
 def test_go_adapter_rechecks_the_command_policy_of_an_accepted_dispatch() -> None:
