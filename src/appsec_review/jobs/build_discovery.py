@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 import hashlib
+import json
 from pathlib import Path, PurePosixPath
 import re
 from typing import Any, Mapping, Sequence
@@ -330,6 +331,26 @@ def _within(value: str, root: str) -> bool:
     return root == "." or path == boundary or boundary in path.parents
 
 
+_NODE_DEPENDENCY_FIELDS = ("dependencies", "devDependencies", "optionalDependencies")
+
+
+def node_manifest_declares_dependencies(unit: Mapping[str, Any]) -> bool:
+    """Return whether the build unit's own accepted package.json declares packages."""
+    root = PurePosixPath(str(unit.get("root", ".")))
+    manifest = (root / "package.json").as_posix()
+    for item in unit.get("descriptor_package", {}).get("documents", ()):
+        if not isinstance(item, Mapping) or str(item.get("path", "")) != manifest:
+            continue
+        try:
+            document = json.loads(str(item.get("content", "")))
+        except json.JSONDecodeError:
+            return False
+        return isinstance(document, Mapping) and any(
+            isinstance(document.get(field), Mapping) and bool(document[field])
+            for field in _NODE_DEPENDENCY_FIELDS)
+    return False
+
+
 def normalize_build_recipe(recipe: Mapping[str, Any], unit: Mapping[str, Any] | None = None) -> dict[str, Any]:
     """Apply narrow descriptor-backed corrections before accepting inferred build argv."""
     value = dict(recipe)
@@ -348,6 +369,11 @@ def normalize_build_recipe(recipe: Mapping[str, Any], unit: Mapping[str, Any] | 
                 dependencies.append(path.as_posix())
                 has_lock = has_lock or is_lock
         value["dependency_files"] = dependencies
+        if value.get("network_required") is False and node_manifest_declares_dependencies(unit):
+            # Declared packages (including devDependencies such as typescript and @types/*) are
+            # build inputs. Without a restore the build resolves whatever the image happens to
+            # carry, so a lockless manifest still needs the networked, script-disabled restore.
+            value["network_required"] = True
     if value.get("image_profile") == "java" and isinstance(value.get("environment"), Mapping):
         # The pinned build image owns the JDK location. Model-inferred JAVA_HOME values are
         # target-host assumptions and can name a JDK that is absent from the image.

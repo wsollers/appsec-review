@@ -5,6 +5,7 @@ toolchain with separate, typed profiles for networked dependency resolution and 
 It must not inherit the archived native-analysis omnibus or duplicate MCP/LSP payloads.
 
 Tracked catalog entries cover C/C++ (including the former resolute variant), .NET, Go, Java, PHP,
-Python, Rust, and TypeScript. Enable a language only after its base and package closure are immutable,
+Python, and Rust. Two build environments are enabled: `android/` and `typescript/` (Node.js,
+npm, pnpm, Yarn, and the node-gyp toolchain from `native-toolchain/`). Enable a language only after its base and package closure are immutable,
 all release assets are authenticated, its supported compiler/runtime range is documented, and tests
 prove both profiles, non-root startup, and the standard runtime boundary.

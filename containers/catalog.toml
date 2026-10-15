@@ -190,13 +190,28 @@ recommended_destination = "containers/buildenv/rust/"
 
 [[images]]
 id = "audit-buildenv-typescript"
-state = "deferred"
-kind = "redesign"
+state = "enabled"
+kind = "buildenv"
 legacy_class = 2
+version = "node22.23.3-pnpm9.15.9-yarn1.22.22"
+tag = "audit-buildenv-typescript:local"
+context = "containers/buildenv/typescript"
+dockerfile = "Dockerfile"
+dependencies = []
 architectures = ["linux/amd64"]
-purpose = "Node/TypeScript build and language-server environment."
-reason = "Refresh Node support decision; retain npm lock integrity; separate target dependency installation from language server; share common LSP layers"
-recommended_destination = "containers/buildenv/typescript/"
+assets_lock = "containers/buildenv/typescript/assets.lock.json"
+build_contexts = { native-toolchain = "containers/buildenv/native-toolchain" }
+build_network = "default"
+upstream = "ubuntu:24.04@sha256:008173c23f95b170204355c12626cb5a965d779a7e1283b09e9cffbb1bf33ca3"
+upstream_manifest_bytes = 6688
+upstream_manifest_sha256 = "008173c23f95b170204355c12626cb5a965d779a7e1283b09e9cffbb1bf33ca3"
+license = "MIT (Node.js, pnpm), BSD-2-Clause (Yarn), and mixed Ubuntu packages"
+license_source = "Node.js, pnpm, Yarn, and Ubuntu package metadata"
+provenance = "Digest-pinned Ubuntu base plus hash-locked official Node.js archive and npm-registry pnpm/Yarn tarballs"
+signature_verification = "base manifest and downloaded archive SHA-256 values verified"
+probe_argv = ["/bin/sh", "-c", "node --version && npm --version && pnpm --version && yarn --version && strace -V && python3 --version && g++ --version && make --version && pkg-config --version && test -f /opt/node/include/node/node_api.h && id -u"]
+probe_expect = ["v22.23.3", "9.15.9", "1.22.22", "strace -- version 6.8", "10001"]
+purpose = "Pinned non-root Node/TypeScript (npm, pnpm, Yarn, node-gyp) build and capture environment; language servers are out of scope."
 
 [[images]]
 id = "audit-codeql"

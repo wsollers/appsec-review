@@ -29,7 +29,9 @@ from appsec_review.container_runtime.project_images import node_dependency_root,
 from appsec_review.jobs.build_discovery import validate_build_recipe
 from appsec_review.jobs.cataloging import source_fingerprint, write_json
 from appsec_review.jobs.job_project_build import load_accepted_builds
-from appsec_review.jobs.job_project_build.job import _normalized_argv, _probe_environment, _safe_root
+from appsec_review.jobs.job_project_build.job import (
+    _node_recipe_restores_dependencies, _normalized_argv, _probe_environment, _safe_root,
+)
 from appsec_review.retrieval import (
     EntityKind, EntityRecord, IndexBuilder, IndexIdentity, LogicalIdentity, RelationKind, RelationRecord,
     index_fingerprint, write_manifest,
@@ -766,6 +768,12 @@ def _validate_checkpoint_artifacts(run_root: Path, receipt: Mapping[str, Any]) -
                 raise FrameworkIntegrityError("language-build checkpoint workspace identity changed")
 
 
+def _has_build_output(receipt: Mapping[str, Any]) -> bool:
+    """Compiler-artifact validation needs produced output, not retained accepted inputs."""
+    return any(isinstance(item, Mapping) and item.get("artifact_origin") != "accepted-input"
+               for item in receipt.get("artifacts", ()))
+
+
 def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mapping[str, Any], executor_factory=None) -> dict[str, Any]:
     build_unit_id, recipe, image = str(dispatch["build_unit_id"]), dispatch["recipe"], dispatch["image"]
     family = str(dispatch["family"])
@@ -866,7 +874,10 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
         profile, timeout_seconds=int(unit.job.config.settings["command_timeout_seconds"]),
         output_bytes=int(unit.job.config.settings["output_bytes"]))
     executor.resolve()
-    if family == "node" and recipe.get("network_required"):
+    if (family == "node" and recipe.get("network_required")
+            and not _node_recipe_restores_dependencies(recipe)):
+        # A recipe that runs its own installer owns the workspace node_modules; linking the
+        # read-only image tree there would make that installer fail with EROFS.
         prepare = getattr(executor, "prepare_node_dependencies", None)
         if not callable(prepare):
             raise RuntimeError("Node dependency-bearing builds require a dependency-view executor")
@@ -1528,7 +1539,7 @@ def build_job(*, executor_factory=None) -> Job:
                         terminal_decisions.append(finalize_processing(
                             decision, succeeded=receipt.get("terminal_status") == "SUCCEEDED",
                             evidence_complete=not bool(receipt.get("gaps")),
-                            artifacts_valid=(bool(receipt.get("artifacts")) if artifacts_required else True),
+                            artifacts_valid=(_has_build_output(receipt) if artifacts_required else True),
                             toolchain_available=receipt.get("terminal_status") not in {"BLOCKED"},
                         ).as_dict())
                     processing_gaps = [f"{value['feature']}: {value['reason_code']}"

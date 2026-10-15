@@ -71,7 +71,14 @@ recipe; the target is not changed and the adaptation is recorded on the probe re
 networked Node recipe whose configure phase already runs `npm ci`/`npm install`, `pnpm install`, or
 `yarn install`, the probe does not expose the immutable image-owned `node_modules` tree. The
 package manager restores into the writable workspace and uses bounded `/tmp` caches. Node recipes
-without an explicit restore continue to receive the image-owned dependency view.
+without an explicit restore continue to receive the image-owned dependency view. The language
+build applies the same rule, so a recipe's own installer never meets the read-only image tree.
+
+Recipe normalization marks a Node recipe `network_required` whenever the unit's own `package.json`
+declares `dependencies`, `devDependencies`, or `optionalDependencies`, even without a lockfile. The
+derived image then runs the script-disabled lockless restore (`npm install --ignore-scripts`), so a
+TypeScript build resolves the declared `typescript` and `@types/*` packages instead of failing with
+TS2688. The Node build image is defined in `containers/buildenv/typescript/`.
 
 Concurrent image-repair telemetry identifies `family`, `root`, `build_system`, `build_unit_id`, and
 `repair_number`. Operators must use those correlation fields rather than adjacent log order when
