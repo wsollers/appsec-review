@@ -250,6 +250,8 @@ def simulated_executor(profile: BuildProfile, behavior: Behavior, *, scanner: Sc
             return 0, resolved.encode(), b"", False
         if argv[:2] == ("docker", "inspect"):
             return 0, json.dumps([{"Destination": "/", "Source": "/"}]).encode(), b"", False
+        if argv[:3] == ("docker", "rm", "--force"):
+            return 0, b"", b"", False
         bound = mounts(argv)
         if "--report-path" in argv:
             return scan(bound["/target"], bound["/scratch"])

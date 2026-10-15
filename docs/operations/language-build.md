@@ -429,7 +429,7 @@ loading. Values below are the shipped `appsec-review.toml` defaults. Global capt
 
 | Key | Default | Meaning |
 | --- | --- | --- |
-| `command_timeout_seconds` | 600 | per-command timeout; positive |
+| `command_timeout_seconds` | 1800 | per-command timeout; positive |
 | `output_bytes` | 8388608 | in-memory stream preview only; complete files are retained |
 | `artifact_count_limit` | 10000 | cataloged artifacts per unit; positive |
 | `compiler_artifact_collection_mode` | `required` | `required`, `auto`, or `disabled` |

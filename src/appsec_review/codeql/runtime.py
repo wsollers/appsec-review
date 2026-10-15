@@ -274,8 +274,9 @@ class CodeQLExecutor:
             mounts.extend(("--mount", f"type=volume,src={volume_name},dst=/scratch/{database_name}"))
             if action == "query":
                 mounts.extend(("--mount", f"type=bind,src={effective},dst=/source,readonly"))
+        container_name = f"appsec-review-codeql-{uuid4().hex}"
         command = [
-            "docker", "run", "--rm", "--network", network, "--read-only",
+            "docker", "run", "--rm", "--name", container_name, "--network", network, "--read-only",
             "--user", runtime_user, "--cap-drop", "ALL",
             "--security-opt", "no-new-privileges", "--cpus", str(self.settings.threads),
             "--memory", f"{self.settings.ram_mb + 1024}m", "--pids-limit", "2048",
@@ -302,6 +303,9 @@ class CodeQLExecutor:
                 if initialized[3] or initialized[0] != 0:
                     raise RuntimeError("CodeQL temporary database volume could not be initialized")
             code, stdout, stderr, timed_out = self.runner(command, timeout)
+            if timed_out:
+                # Killing the docker client leaves the container running and holding the volume.
+                self.runner(("docker", "rm", "--force", container_name), 60)
         finally:
             if volume_created:
                 removed = self.runner(("docker", "volume", "rm", volume_name), 60)

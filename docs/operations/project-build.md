@@ -29,7 +29,7 @@ needs a `settings.profiles.<family>` entry with a pinned `tag`, `image_id`, and 
 
 | Key | Default | Meaning |
 | --- | --- | --- |
-| `command_timeout_seconds` | 600 | per probe command |
+| `command_timeout_seconds` | 1800 | per probe command |
 | `image_build_timeout_seconds` | 1800 | per project-image build |
 | `output_bytes` | 8388608 | in-memory stream preview; complete streams are retained |
 | `artifact_count_limit` | 10000 | cataloged probe artifacts |

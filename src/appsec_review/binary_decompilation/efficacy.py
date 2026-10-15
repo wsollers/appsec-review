@@ -18,6 +18,7 @@ from pathlib import Path
 import re
 import sys
 import time
+import uuid
 from typing import Any
 
 from appsec_review.config import load_config
@@ -69,7 +70,8 @@ def fixture_argv(repository_root: Path, expectations: Mapping[str, Any], variant
     source = (repository_root / expectations["source"]["fixture_path"]).resolve(strict=True)
     name = f"{expectations['fixture']}-{variant}"
     argv = [
-        "docker", "run", "--rm", "--network", "none", "--read-only", "--user", tool.user,
+        "docker", "run", "--rm", "--name", f"appsec-review-efficacy-{uuid.uuid4().hex}",
+        "--network", "none", "--read-only", "--user", tool.user,
         "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--cpus", tool.cpus,
         "--memory", tool.memory, "--pids-limit", str(tool.pids_limit),
         "--tmpfs", str(catalog.policy["tmpfs"][0]), "--workdir", "/scratch",
@@ -100,6 +102,9 @@ def build_fixture(repository_root: Path, expectations: Mapping[str, Any], varian
     binary = output_root / name
     binary.unlink(missing_ok=True)
     outcome = run(argv, tool.timeout_seconds)
+    if outcome.timed_out:
+        # Killing the docker client leaves the container running; remove it by name.
+        run(("docker", "rm", "--force", argv[argv.index("--name") + 1]), 60)
     if outcome.exit_code != 0 or not binary.is_file():
         raise RuntimeError(f"fixture variant {variant} did not compile: "
                            + outcome.stderr.decode("utf-8", "replace")[-2000:])

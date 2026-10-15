@@ -849,7 +849,7 @@ name = "project_build"
 workers = 8
 
 [jobs.job_project_build.settings]
-command_timeout_seconds = 600
+command_timeout_seconds = 1800      # a cold workspace `npm ci` under capture exceeds 600 s
 image_build_timeout_seconds = 1800
 # In-memory diagnostic preview only; captured build streams are retained as complete files.
 output_bytes = 8388608
@@ -977,7 +977,7 @@ name = "language_build"
 workers = 8
 
 [jobs.job_language_build.settings]
-command_timeout_seconds = 600
+command_timeout_seconds = 1800
 # In-memory diagnostic preview only; captured build streams are retained as complete files.
 output_bytes = 8388608
 artifact_count_limit = 10000

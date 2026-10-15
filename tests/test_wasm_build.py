@@ -83,10 +83,10 @@ def _fixture(tmp_path: Path):
     config_path = tmp_path / "appsec-review.toml"
     text = (ROOT / "appsec-review.toml").read_text(encoding="utf-8")
     text = text.replace(
-        "[jobs.job_language_build.settings]\ncommand_timeout_seconds = 600\n"
+        "[jobs.job_language_build.settings]\ncommand_timeout_seconds = 1800\n"
         "# In-memory diagnostic preview only; captured build streams are retained as complete files.\n"
         "output_bytes = 8388608",
-        "[jobs.job_language_build.settings]\ncommand_timeout_seconds = 600\n"
+        "[jobs.job_language_build.settings]\ncommand_timeout_seconds = 1800\n"
         "# In-memory diagnostic preview only; captured build streams are retained as complete files.\n"
         "output_bytes = 4",
     )

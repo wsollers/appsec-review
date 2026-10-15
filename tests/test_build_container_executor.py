@@ -350,3 +350,53 @@ def test_capture_assets_resolve_from_the_deployment_root_when_the_package_is_ins
     assert ignored.index("containers/**") < ignored.index("!containers/build-capture/**")
     for name in ("build-driver.sh", "tool-wrapper.py"):
         assert (build_executor.repository_root() / "containers" / "build-capture" / name).is_file()
+
+
+def test_timed_out_capture_removes_its_container_and_reports_unfinished_calls(tmp_path: Path) -> None:
+    image_id = "sha256:" + "e" * 64
+    gitleaks_image_id = load_catalog(Path(__file__).parents[1]).tool("tool-gitleaks").expected_image_id
+    workspace = tmp_path / "workspace"
+    (workspace / "app").mkdir(parents=True)
+    capture = workspace / ".capture" / "command-1"
+    calls = []
+
+    def runner(argv, timeout):
+        calls.append(tuple(argv))
+        if argv[:3] == ("docker", "image", "inspect"):
+            resolved = (gitleaks_image_id or "sha256:" + "d" * 64) if "gitleaks" in argv[3] else image_id
+            return 0, str(resolved).encode(), b"", False
+        if argv[:2] == ("docker", "inspect"):
+            return 0, json.dumps([{"Destination": "/", "Source": "/"}]).encode(), b"", False
+        if "--report-path" in argv:
+            scratch_spec = argv[argv.index("--mount", argv.index("--mount") + 1) + 1]
+            scratch = Path(scratch_spec.split("src=", 1)[1].split(",dst=", 1)[0])
+            (scratch / "gitleaks.json").write_text("[]\n", encoding="utf-8")
+            return 0, b"", b"", False
+        if argv[:2] == ("docker", "rm"):
+            return 0, b"", b"", False
+        # Two wrapped npm calls started; the timeout killed both before either wrote its record.
+        (capture / "tool-call-counter").write_text("2", encoding="utf-8")
+        (capture / "trace.7").write_text(
+            '1700000000.0 execve("/usr/bin/npm", ["npm", "ci"], []) = 0\n', encoding="utf-8")
+        return None, b"", b"", True
+
+    executor = BuildContainerExecutor(
+        BuildProfile("node", "build-node:local", image_id, "10001:10001"),
+        timeout_seconds=90, output_bytes=1024, runner=runner)
+    result = executor.execute_captured(
+        ("npm", "ci"), workspace=workspace, working_directory="app", environment={},
+        capture_directory=capture,
+        capture_config=BuildCaptureConfig(
+            "ptrace", 100, 32, 4096, True, 128, 16384, (), 1024, 10000, 100),
+        scope=CaptureScope("2026-10-15-0001", "job_project_build", "attempt_0001",
+                           "build-unit-node", "node"))
+    build = next(call for call in calls if "/bin/sh" in call)
+    name = build[build.index("--name") + 1]
+    assert name.startswith("appsec-review-build-")
+    assert ("docker", "rm", "--force", name) in calls
+    assert result.timed_out is True
+    record = json.loads(result.capture_record.read_text())
+    assert record["tool_calls"] == {**record["tool_calls"], "observed": 2, "retained": 0,
+                                    "capped": False, "unfinished": 2}
+    assert "2 tool call(s) did not finish before the command ended" in record["coverage"]["gaps"]
+    assert "tool call retention limit reached" not in record["coverage"]["gaps"]
