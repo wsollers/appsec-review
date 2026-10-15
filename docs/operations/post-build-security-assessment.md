@@ -39,6 +39,49 @@ unknown evidence unvalidated. Provider failures and budget overflow complete wit
 The model must answer with an `appsec-review/build-security-inference-proposal/1` object; the
 validated outcome is written to `inference-results.json` (`appsec-review/build-security-inference/1`).
 
+## Binaries of every build family
+
+`load.accepted_cpp_build` loads two kinds of case:
+
+- C/C++ cases from `job_cpp_compiled_analysis`. These are native units, plus mixed units
+  (node-gyp, phpize, setuptools, clang `--target=wasm32`) whose own family build captured compiles
+  of their `native_components`.
+- Family cases (`family-<build-unit-id>`) from the accepted `job_language_build` receipts. These
+  cover every other successful build that produced an ELF, PE/COFF or Mach-O file: Go and Rust
+  executables, .NET native AOT output, and the binary members (`.so`, `.pyd`, `.dylib`, `.dll`,
+  `.node`) of wheels.
+  - Wheel members are extracted with a bounded archive reader into the task directory. They are
+    inspected with the same `inspect_binary` parser, and each records its archive and member name.
+  - WebAssembly modules are not ELF/PE/Mach-O and are not inspected here.
+  - A missing language-build handoff is a named load gap.
+
+Family cases have no captured C flags. Their checks follow the typed table in
+`job_post_build_security_assessment/hardening.py` (`build-security-family-expectations/1`). Each
+entry is one of three values:
+
+- `required`: the observed value decides PASS or FAIL.
+- `not_offered`: the toolchain does not provide the protection by default.
+- `unknown`: no documented default is known.
+
+Both `not_offered` and `unknown` make the check `NOT_APPLICABLE` with the documented reason and
+source, never a PASS and never a finding. Each such check carries an `expectation` object with the
+family, the value and the source.
+
+Summary of the table:
+
+| Family | Required | Not offered by default |
+| --- | --- | --- |
+| Go (linux/amd64) | non-executable stack | PIE (needs `-buildmode=pie`), RELRO, immediate binding, CET, stack canary, FORTIFY |
+| Rust (x86_64-unknown-linux-gnu) | PIE, full RELRO, immediate binding, non-executable stack | stack protector, CET, FORTIFY |
+| .NET native AOT | PE `/DYNAMICBASE`, `/NXCOMPAT`, `/HIGHENTROPYVA` | `/GS`, SafeSEH (64-bit) |
+
+For .NET native AOT, ELF defaults and Control Flow Guard are `unknown`.
+
+Native and mixed units keep the requested-versus-actual checks driven by their captured compile and
+link flags. The pinned `nm`/`readelf` cross-check comes from the C/C++ lane's binary branch. Family
+cases do not have it, so an ELF family artifact keeps the named gap that the pinned observation was
+unavailable.
+
 ## Retrieval and resume
 
 Each dynamically discovered build unit publishes an immutable `build_security` shard. Query through
