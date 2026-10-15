@@ -463,7 +463,7 @@ def test_a_matching_pin_is_recorded_on_the_receipt(tmp_path: Path) -> None:
 
 
 def test_a_rebuild_that_invalidates_a_pin_fails_the_run_naming_the_stale_pin(tmp_path: Path) -> None:
-    config, target = _fixture(tmp_path)
+    config, target = _fixture(tmp_path, pin_mismatch='"fail"')
     _pin_catalog(tmp_path, "sha256:" + "0" * 64)
     with pytest.raises(RuntimeError):
         _run(config, target, FakeBuilder(tmp_path), build_intake())

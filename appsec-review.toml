@@ -288,9 +288,10 @@ continue_on_error = true
 log_tail_bytes = 8192
 # Rebuilt image IDs are compared with every pin naming a rebuilt tag: catalog `image_id` values and
 # enabled jobs' `tag`/`image_id` (for example project-build profiles) and `source_image_tag`/
-# `source_image_id` settings. "fail" stops the run naming each stale pin; "report" records the
-# mismatch and leaves enforcement to the consuming job's own pin check.
-pin_mismatch = "fail"
+# `source_image_id` settings. "report" (default) records each mismatch and leaves enforcement to the
+# consuming job's own pin check; `appsec-review update-image-pins --run-id <id>` then rewrites the
+# stale pins from the run's rebuild record for review. "fail" stops the run naming each stale pin.
+pin_mismatch = "report"
 
 [jobs.job_tool_image_rebuild.steps.selection]
 workers = 1

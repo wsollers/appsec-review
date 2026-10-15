@@ -77,6 +77,14 @@ def parser() -> argparse.ArgumentParser:
     binary.add_argument("--verify-only", action="store_true",
                         help="verify existing publications without running Ghidra")
 
+    pins = commands.add_parser(
+        "update-image-pins", help="rewrite stale image-ID pins from a run's tool-image rebuild record")
+    pins.add_argument("--run-id", required=True)
+    pins.add_argument("--write", action="store_true",
+                      help="apply the edits; without it the planned edits are only printed")
+    pins.add_argument("--no-image-check", action="store_true",
+                      help="do not require the local image for each tag to be the rebuilt image")
+
     commands.add_parser("schedules", help="print configured schedules")
     return root
 
@@ -96,6 +104,21 @@ def main(argv: Sequence[str] | None = None) -> int:
         }
         print(json.dumps(schedules, sort_keys=True))
         return 0
+
+    if args.command == "update-image-pins":
+        from appsec_review.jobs.job_tool_image_rebuild.pins import PinUpdateError, docker_inspector, update_pins
+        config_path = Path(args.config)
+        if not config_path.is_file():
+            config_path = config.runtime.repository_root / "appsec-review.toml"
+        try:
+            report = update_pins(runs_dir=config.runtime.runs_dir, run_id=args.run_id, config_path=config_path,
+                                 catalog_path=config.runtime.repository_root / "containers" / "catalog.toml",
+                                 write=args.write, inspect=None if args.no_image_check else docker_inspector)
+        except PinUpdateError as exc:
+            print(json.dumps({"run_id": args.run_id, "error": str(exc)}, sort_keys=True))
+            return 1
+        print(json.dumps(report, sort_keys=True, indent=2))
+        return 0 if all(edit["status"] in {"planned", "applied"} for edit in report["edits"]) else 1
 
     if args.command == "binary-decompile":
         from appsec_review.binary_decompilation import (

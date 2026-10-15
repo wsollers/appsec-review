@@ -51,7 +51,7 @@ the review can start when any of these holds:
 - the builder exits non-zero, exceeds `total_timeout_seconds`, or cannot be started;
 - the builder reports no summary, or its results do not match the catalog dependency order;
 - a configured image id is unknown or not `enabled` in the catalog.
-- with `pin_mismatch = "fail"`, a rebuilt image ID differs from a configured pin (see below).
+- with `pin_mismatch = "fail"` (not the default), a rebuilt image ID differs from a configured pin (see below).
 
 The error message, the run log event `TOOL_IMAGE_REBUILD_FAILED` (level `ERROR`), and
 `tool-image-rebuild-failure.json` in the unit root name the failed image ids, the builder command,
@@ -68,12 +68,29 @@ reproducible yields a new image ID, which those consumers' own pin checks would 
 
 `selection.resolve_images` collects every pin, from the catalog and from enabled jobs' settings in the
 run's frozen configuration, whose tag this run rebuilds. After a successful build, each pin is
-recorded on its image receipt as `matched` or `mismatched`. With `pin_mismatch = "fail"` (default) a
-mismatch fails the run before intake, naming each stale pin, its pinned ID, and the rebuilt ID;
-update the pin (or make the image build reproducible) and resume. With `"report"` the mismatch is
-recorded in the receipts and handoff and logged as `TOOL_IMAGE_PIN_MISMATCH`, and the consuming
-job's own pin check decides. Pins whose tag is not rebuilt (for example a profile naming a deferred
-catalog image) are not checked here.
+recorded on its image receipt as `matched` or `mismatched`. With `pin_mismatch = "report"` (default)
+the mismatch is recorded in the receipts and handoff and logged as `TOOL_IMAGE_PIN_MISMATCH`, and the
+consuming job's own pin check decides. With `"fail"` a mismatch fails the run before intake, naming
+each stale pin, its pinned ID, and the rebuilt ID. Pins whose tag is not rebuilt (for example a
+profile naming a deferred catalog image) are not checked here.
+
+### Updating pins
+
+`update-image-pins` turns one run's mismatched pins into exact edits of `containers/catalog.toml`
+and `appsec-review.toml`:
+
+```bash
+appsec-review update-image-pins --run-id <run-id>          # print the planned edits only
+appsec-review update-image-pins --run-id <run-id> --write  # apply them
+```
+
+It reads the rebuild record of the run's latest attempt, and for each mismatched pin replaces the one
+quoted image ID on the line that owns that pin. Formatting and comments are untouched, and the edited
+file is re-parsed to prove that only the planned values changed. By default each tag's local image
+must already be the rebuilt image (`docker image inspect`); a pin whose local image differs is
+`refused`. `--no-image-check` skips that check. A pin whose line cannot be located unambiguously is
+reported as `manual`. The command exits non-zero when any pin is refused or manual. Review the diff
+and commit it; the next run then records the pins as `matched`.
 
 To recover, fix the image (or the Docker host) and rebuild it directly with
 `python3 containers/build.py build <image-id>`, then resume the run. Resume reruns the rebuild gate
@@ -92,7 +109,7 @@ unknown keys and out-of-range or wrongly typed values fail configuration loading
 | `image_timeout_seconds` | Per-image docker build bound, passed as `--timeout-seconds` (60..14400). |
 | `total_timeout_seconds` | Bound on the whole builder run; must be at least `image_timeout_seconds`. |
 | `continue_on_error` | Keep building independent images after a failure so one run names every failing image. The job still fails. |
-| `pin_mismatch` | `fail` (default) or `report`; see [Image-ID pins](#image-id-pins). |
+| `pin_mismatch` | `report` (default) or `fail`; see [Image-ID pins](#image-id-pins). |
 | `log_tail_bytes` | Bytes of builder output and of each failed build log kept in the failure report (256..65536). |
 
 The job needs a working Docker host, like the builder. Unit tests inject a fake builder runner and
