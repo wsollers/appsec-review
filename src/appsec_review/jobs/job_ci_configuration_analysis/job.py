@@ -5,7 +5,6 @@ from collections.abc import Callable, Mapping
 from dataclasses import asdict, dataclass
 import hashlib
 import json
-import os
 from pathlib import Path
 import re
 import subprocess
@@ -556,8 +555,8 @@ def build_job(*, executor_factory: ExecutorFactory | None = None, fail_tool: str
     implementation = hashlib.sha256(b"".join(path.read_bytes() for path in source_files) +
                                     str(fail_tool).encode()).hexdigest()
 
-    def runtime_identity() -> str:
-        root = Path(os.environ.get("APPSEC_REVIEW_CONFIG", "appsec-review.toml")).resolve().parent
+    def runtime_identity(repository_root: Path) -> str:
+        root = Path(repository_root).resolve()
         digest = hashlib.sha256(RULESET_IDENTITY.encode())
         for tool_id in ("tool-actionlint", "tool-checkov", "tool-zizmor"):
             try:
