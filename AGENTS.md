@@ -62,6 +62,9 @@ agents that inspect or change the repository. It is not a prompt for review work
 - Add tests for behavior that survives the refactor. Do not restore archived tests merely to retain
   old coverage counts.
 - Preserve unrelated new work. Commit coherent changes to `main`; do not push unless the user asks.
+- Other agent sessions work on this repository at the same time. Follow
+  `.claude/skills/multi-session-coordination/SKILL.md` before starting a change, before building or
+  testing on a shared host, and when handing work to another session.
 - Do not merge, auto-merge, rebase, or otherwise land a Dependabot pull request unless the user
   specifically instructs you to merge that pull request.
 
