@@ -59,8 +59,10 @@ The reason codes operators will see are `POLICY_REQUIRED`, `POLICY_DISABLED`,
 are framework-integrity failures; ordinary unavailable tools and failed processing remain `GAP`.
 
 Native CMake dispatches use the validated deterministic marker command recipe. A failed default
-project-build probe may add only validated apt packages through the bounded image-repair workflow;
-model output cannot change the accepted command, path, dependency, environment, or output contract.
+project-build probe may add only typed repairs through the bounded image-repair workflow: apt
+packages, allowlisted environment variables, a pinned package manager, and restores of accepted
+manifests (see [`project-build.md`](project-build.md)); model output cannot change the accepted
+command, path, dependency-file, or output contract.
 
 For every native unit the job revalidates the target snapshot, successful probe identity, recipe,
 dependency hashes, build-unit root, derived image identity, and dependency edges. It then copies
@@ -141,11 +143,17 @@ caches, then the configured default and security-extended suites operate on the 
 The adapter instruments available `javac`, `kotlinc`, annotation/code-generator, archiver, and
 related JVM tools and retains exact nested argv only in a protected trace. Each wrapper exec writes
 its own record file under `.appsec-review-jvm/invocations.d/`, so parallel compilations never
-interleave, and retains the content of every readable `@argfile` at exec time, because Maven and
-Gradle delete their argument files once the compiler exits. Compiler inputs and outputs are
-resolved from the expanded arguments. Maven compilation is forked through the PATH `javac` wrapper.
+interleave. For every readable, non-symlink `@argfile` the record also keeps the file's path, the
+directory the tool ran in, and its first 1 MiB of contents with NUL bytes stripped, because Maven
+and Gradle delete their argument files once the compiler exits. One javac-compatible tokenizer
+expands them. Relative arguments resolve against that recorded `/workspace` directory, or else
+against the recipe source directory. `javac` rows add hash-resolved class outputs
+(`javac-derived-class`, including nested and anonymous classes) derived from `-d` and each source's
+package and types. A missing argfile or an unreadable source is a named gap. Argfile contents stay in
+the protected record, and receipts carry `argfile_sha256` and `expanded_argv_sha256`.
+Maven compilation is forked through the PATH `javac` wrapper.
 It catalogs class files, generated Java/Kotlin sources, resources and dependency metadata, Kotlin
-module/source-map data, DEX files, APK/AAB packages, and JAR/WAR/EAR packages. When a build tool
+module/source-map data, DEX files, APK packages, and JAR/WAR/EAR packages. When a build tool
 performs compiler or packaging work in-process and no nested invocation is observable, the receipt
 reports a provenance gap instead of inventing a command.
 
@@ -256,6 +264,24 @@ network-enabled build sandbox with lifecycle scripts disabled. Build lifecycle s
 the same non-root, read-only-root, capability, PID, CPU, memory, timeout, and stream limits as every
 other build. Install, test, start, publish, `npx` download, and direct Node application commands do
 not enter this path.
+
+Before any Node command runs, the lifecycle policy resolves the whole package-script graph the
+recipe's commands reach and classifies every script body with the same rules at every depth. The
+graph follows npm, pnpm, and Yarn script runs (`run <script>`, the bare pnpm/Yarn script form,
+and `test`/`start` aliases), directory changes (`--prefix`, `--dir`, `-C`, `--cwd`), workspace
+members (npm `-w`/`--workspace`/`--workspaces`, `pnpm -r` and `--filter` name, path, and `...`
+dependency selectors over `pnpm-workspace.yaml`, `yarn workspace <name>`,
+`yarn workspaces foreach`/`run`), `run-s`/`run-p`/`npm-run-all` groups, and the `pre`/`post` hooks
+of every script it reaches (for every package manager, which is stricter than pnpm and Yarn
+defaults). A simple command that runs `node`, `tsx`, or `ts-node` without `--check` blocks the
+unit with `package lifecycle script <script> may execute a target application`, and a test runner
+blocks it with `... requests a test runner`. Each gap names the full chain from the requested
+script to the command, for example
+`package.json#scripts.build → backend/package.json#scripts.build → node scripts/copy-assets.mjs`,
+so a workspace root is blocked for the same repository code as the member that contains it. A
+cycle, a chain deeper than eight scripts, more than 256 script visits, an unknown workspace or
+filter, a directory that escapes the workspace, or an unparseable script is its own named gap,
+never a pass. Commands outside these forms are classified as leaves; they are not followed.
 
 Successful direct commands and simple package-script invocations retain exact argv only in
 protected command artifacts. Diagnostic traces additionally capture compiler, transpiler,

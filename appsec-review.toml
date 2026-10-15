@@ -873,23 +873,23 @@ timeout_seconds = 180
 
 [jobs.job_project_build.settings.profiles.native]
 tag = "audit-buildenv-cpp:local"
-image_id = "sha256:33ecfc897153d56383c125c02817327a77f30a741fe7c88c546dbc62a74fcea3"
+image_id = "sha256:d390389961bceac669172d50269a23d316150cbdef6cc81d803f9c572d2a71d2"
 user = "10001:10001"
 [jobs.job_project_build.settings.profiles.rust]
 tag = "audit-buildenv-rust-wasm:local"
-image_id = "sha256:fe5d9ff906a6413f9bf203f3958293c0da6b6f159d26936003e6f1f90f869438"
+image_id = "sha256:e5aba3527276580ac7cca215415a9ebeb834b85d49aea6fa3cf8116677bd73d5"
 user = "10001:10001"
 [jobs.job_project_build.settings.profiles.go]
 tag = "audit-buildenv-go:local"
-image_id = "sha256:476cb4dd1622175a5dd8782856fa549ba32dc3834a89c4a8caf5ce6a1cabca66"
+image_id = "sha256:852d6116c91114275417a10d5b0b9c17623567935a152337f13d7ba21cde35db"
 user = "10001:10001"
 [jobs.job_project_build.settings.profiles.java]
 tag = "audit-buildenv-java:local"
-image_id = "sha256:ef678af17b8ba67ed1f5ee0815ce6c47fce9f61f75a2dd4646dbe28c9c57e36b"
+image_id = "sha256:ed8cc2fd47b441915d2226c9612f41f65a9ee2d1224a94ee17e89dab62028513"
 user = "10001:10001"
 [jobs.job_project_build.settings.profiles.android]
 tag = "audit-buildenv-android:local"
-image_id = "sha256:a6a4105f8021f64ad5b4c9451b4b8f00cb0521322a4384163b71649145f89f45"
+image_id = "sha256:3067d12b3ca7caea9a9f7bf12bebc966210bbdb253faa15da6d317153054a7cc"
 user = "10001:10001"
 # Built from containers/buildenv/typescript/ (see its README). Image IDs are host-specific; after
 # rebuilding with `python3 containers/build.py build audit-buildenv-typescript`, replace image_id
@@ -900,19 +900,19 @@ image_id = "sha256:67d1625340c935c54f966af7a08a689448c3cdacc111b0dc0ac317a6a89e5
 user = "10001:10001"
 [jobs.job_project_build.settings.profiles.dotnet]
 tag = "audit-buildenv-dotnet:local"
-image_id = "sha256:e54e18aaf202e36446e511ce4727fe8549b9177aafca44bf6577904addd9c423"
+image_id = "sha256:0e28b2d60ecc82533658f37f6b8e961e9284c042caa3411ceaf9a9b5db35a753"
 user = "10001:10001"
 [jobs.job_project_build.settings.profiles.python]
 tag = "audit-buildenv-python:local"
-image_id = "sha256:fd8bb9d2e86224bb9aa80aa1e42c907acfa3d5143f5df47639ce1e582bfcbf66"
+image_id = "sha256:170a16dcf074f000883a5531bfb228e6e3a7b449eabcacc26d21374f2e4f8a91"
 user = "10001:10001"
 [jobs.job_project_build.settings.profiles.php]
 tag = "audit-buildenv-php:local"
-image_id = "sha256:e1e66dac01ef50a03f036a7983e432fca6c2957064f09926b20fff56c7041e30"
+image_id = "sha256:462c94028f8a553350cebddaaaaf894e17b876a904d34bab70569359428d93f3"
 user = "10001:10001"
 [jobs.job_project_build.settings.profiles.wasm]
 tag = "audit-buildenv-rust-wasm:local"
-image_id = "sha256:fe5d9ff906a6413f9bf203f3958293c0da6b6f159d26936003e6f1f90f869438"
+image_id = "sha256:e5aba3527276580ac7cca215415a9ebeb834b85d49aea6fa3cf8116677bd73d5"
 user = "10001:10001"
 
 [jobs.job_project_build.steps.plan]
@@ -1329,12 +1329,12 @@ workers = 2
 enabled = true
 execution_mode = "auto"
 source_image_tag = "audit-codeql:custom-2.27.0"
-source_image_id = "sha256:3239953db3f14aaa9339f60adfa778ae8beb15c5db2aa393d3f21e7254413afa"
+source_image_id = "sha256:d6c9d6f58b646cf56d446960394cc3a41e1ca612ba655c64a4a06036f8b11af4"
 version = "2.27.0"
 commit = "b47b3e59262c95aff4eeb84ac72d09e25a9c37e9"
 cli_sha256 = "5c905275695b4efcaa02ea380f6e60b01310fa3dff0fa8c442bf0638bb46055a"
 license_sha256 = "d0d6cfdc857c1e0153bbd2b6f0d4ab42dfc38acec9b97b2f7f55c1f51ffe9fbf"
-asset_lock_sha256 = "66abfdea3531f64994e2311a870272a6cc8ad581728470b20a506ae518f9315a"
+asset_lock_sha256 = "d14fcecb0ac3dd4fa6866a7630f7432d4e467d557d8873a903f74c42106d1b96"
 runtime_user = "10001:10001"
 retention = "run-owned"
 concurrency = 2

@@ -9,6 +9,7 @@ import re
 import shlex
 from typing import Any
 
+from appsec_review.jobs.job_language_build import node_scripts
 from appsec_review.jobs.job_project_build.job import node_installer_command
 from appsec_review.storage import canonical_json, file_sha256
 
@@ -77,7 +78,6 @@ _CONFIG_NAMES = {
     "rollup.config.js", "rollup.config.mjs", "vite.config.js", "vite.config.ts",
 }
 _CONTROL = {"&&", "||", ";", "|", "&"}
-_TEST_TOOLS = {"jest", "mocha", "vitest", "ava", "tap", "cypress", "playwright", "karma"}
 _SECRET = re.compile(r"(SECRET|TOKEN|PASSWORD|PASSWD|API_KEY|PRIVATE_KEY|CREDENTIAL)", re.I)
 
 
@@ -347,39 +347,16 @@ def _script_name(argv: Sequence[str], manager: str) -> str | None:
 
 def validate_lifecycle_scripts(workspace: Path, source_dir: str,
                                commands: Sequence[Sequence[str]]) -> list[str]:
+    """Classify every package script the recipe's commands reach, at every depth.
+
+    Gaps name the full chain from the recipe-requested script to the offending command.
+    """
     package = _package_document(workspace, source_dir)
     if package is None:
         return ["package.json is unavailable for lifecycle-script validation"]
-    scripts = package[1].get("scripts", {})
-    if not isinstance(scripts, Mapping):
+    if not isinstance(package[1].get("scripts", {}), Mapping):
         return ["package.json scripts must be an object"]
-    gaps: list[str] = []
-    for argv in commands:
-        if not argv:
-            continue
-        manager = Path(str(argv[0])).name
-        if manager not in {"npm", "pnpm", "yarn"}:
-            continue
-        requested = _script_name(argv, manager)
-        if requested is None:
-            continue
-        for name in (f"pre{requested}", requested, f"post{requested}"):
-            script = scripts.get(name)
-            if not isinstance(script, str):
-                continue
-            try:
-                tokens = shlex.split(script)
-            except ValueError:
-                gaps.append(f"package lifecycle script {name} is not safely parseable")
-                continue
-            lowered = {Path(value).name.lower() for value in tokens if value not in _CONTROL}
-            if lowered & _TEST_TOOLS:
-                gaps.append(f"package lifecycle script {name} requests a test runner")
-            for index, value in enumerate(tokens):
-                if Path(value).name in {"node", "tsx", "ts-node"} and "--check" not in tokens[index + 1:]:
-                    gaps.append(f"package lifecycle script {name} may execute a target application")
-                    break
-    return list(dict.fromkeys(gaps))
+    return node_scripts.classify(workspace, source_dir, commands)
 
 
 def _npm_pack_integrity(source_dir: str, argv: Sequence[str], after: Mapping[str, str],

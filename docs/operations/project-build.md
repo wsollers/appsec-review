@@ -61,10 +61,43 @@ Each unseen recipe is probed against the default family image first. If it fails
 enabled, the job copies the exact generated Dockerfile and bounded diagnostics into
 `repair-NNN/` under the probe task, sends an `appsec-review/build-image-repair-request/1` summary
 with the runtime skill `pipeline/skills/build-image-repair/SKILL.md` guidance, and accepts only an
-`appsec-review/build-image-repair/1` proposal: a new, unique apt package set (1-64 packages) and a
-reason. Commands, paths, environment, dependency files, outputs, base image, and container policy
-cannot change. Each attempt rebuilds the image, re-probes it, and is recorded with its outcome;
-invalid output, failed installation, timeout, and compiler failure each consume one attempt.
+`appsec-review/build-image-repair/2` proposal
+([schema](../schemas/build-image-repair.schema.json)). The request carries `repair_options`, the
+closed vocabulary for that unit. A proposal is typed data in four parts, each the complete set for
+the next attempt, and must differ from the current repair set:
+
+| Part | Bound | Applied as |
+| --- | --- | --- |
+| `system_packages` | 0-64 apt package specifiers | exec-form `apt-get install` in the derived image |
+| `environment` | 0-16 names from the family allowlist, each value matching that name's pattern | `ENV` before every restore, and merged into the recipe environment the probe and language build pass |
+| `package_manager` | `null`, or a manager the family image pins (Node: npm, pnpm 9.15.9, Yarn 1.22.22) | the lockless Node restore; refused when a lockfile fixes the manager or the recipe runs another manager |
+| `dependency_restores` | 0-8 accepted dependency files | a restore by the family's own manager, built by code, run in the manifest's directory while the image builds |
+
+The environment allowlist (`REPAIR_ENVIRONMENT` in `src/appsec_review/jobs/job_project_build/repair.py`)
+comes from the failures real builds hit: `PIP_BREAK_SYSTEM_PACKAGES`, `PIP_NO_BUILD_ISOLATION`,
+`PIP_PREFER_BINARY`, and `SETUPTOOLS_SCM_PRETEND_VERSION` for Python; npm peer/engine/fund settings,
+`YARN_IGNORE_ENGINES`, and a bounded `NODE_OPTIONS=--max-old-space-size=N` for Node; Cargo git
+fetch, retry, multiplexing, and job settings; `MAVEN_ARGS` limited to plugin `*.skip=true`, test
+skips, compiler source/target/release levels, and wagon retries; MSBuild warning, analyzer,
+end-of-life, and locked-restore properties for .NET; `GOFLAGS` limited to `-mod=` and
+`-buildvcs=false`, and `CGO_ENABLED` for Go; Composer platform-requirement, no-dev, and timeout
+settings for PHP. Names that pick URLs, registries, credentials, toolchain downloads, or checksum
+databases are absent, and a repair cannot overwrite a variable the accepted recipe already sets.
+
+Restorable manifests are those whose dependencies land where the later build reads them: any
+accepted `requirements*.txt` (pip into `/opt/project-deps`), `Cargo.toml`, `go.mod`/`go.work`,
+`pom.xml`, Gradle build or settings file, and .NET project or solution; for Node only the
+manifest or lockfile at the dependency root; for Composer only the unit's own `composer.json`. Node
+restores keep `--ignore-scripts`, Composer keeps `--no-scripts --no-plugins`, and Maven keeps
+`-DskipTests`. There is no free-form command, path, URL, or Dockerfile text in a proposal.
+
+The applied repair is recorded on the recipe as `image_repairs` (environment, package manager, and
+normalized restores with their manager), so it is part of the recipe identity, the Dockerfile,
+every attempt record, the build dispatch, and the repair cache. `validate_build_recipe` re-checks
+it whenever the recipe is reused. Commands, paths, dependency files, outputs, base image, and
+container policy cannot change. Each attempt rebuilds the image, re-probes it, and is recorded with
+its outcome; invalid output, failed installation, timeout, and compiler failure each consume one
+attempt.
 
 Probe preparation is family-local and remains inside the run-owned workspace. For Maven units with
 a bounded legacy `src/*.java` source set and no conventional `src/main/java` tree, project-build

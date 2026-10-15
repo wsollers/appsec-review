@@ -348,51 +348,6 @@ def instrument_argv(argv: Sequence[str], logical_root: str) -> tuple[tuple[str, 
                                  "added_arguments": added, "removed_arguments": removed}
 
 
-def parse_argfile(text: str) -> list[str]:
-    """Tokenize a javac/kotlinc `@argfile`: whitespace separated, quoted, `#` line comments."""
-    tokens: list[str] = []
-    index, size = 0, len(text)
-    escapes = {"n": "\n", "r": "\r", "t": "\t", "f": "\f"}
-    while index < size:
-        char = text[index]
-        if char.isspace():
-            index += 1
-            continue
-        if char == "#":
-            while index < size and text[index] not in "\r\n":
-                index += 1
-            continue
-        token: list[str] = []
-        while index < size and not text[index].isspace():
-            char = text[index]
-            if char in "\"'":
-                quote, index = char, index + 1
-                while index < size and text[index] != quote:
-                    if text[index] == "\\" and index + 1 < size:
-                        index += 1
-                        token.append(escapes.get(text[index], text[index]))
-                    else:
-                        token.append(text[index])
-                    index += 1
-                index += 1
-            else:
-                token.append(char)
-                index += 1
-        tokens.append("".join(token))
-    return tokens
-
-
-def expanded_argv(argv: Sequence[str], argfiles: Mapping[str, str]) -> list[str]:
-    """Replace each `@file` argument whose content was captured at exec time by its tokens."""
-    result: list[str] = []
-    for value in argv:
-        if value.startswith("@") and value[1:] in argfiles:
-            result.extend(parse_argfile(argfiles[value[1:]]))
-        else:
-            result.append(value)
-    return result
-
-
 def read_task_records(path: Path, byte_limit: int, count_limit: int) -> tuple[list[dict[str, Any]], list[str]]:
     if not path.is_file() or path.is_symlink():
         return [], []

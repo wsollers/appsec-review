@@ -28,6 +28,10 @@ from appsec_review.container_runtime import (
     verify_capture_record,
 )
 from appsec_review.container_runtime.project_images import node_dependency_root
+from appsec_review.jobs.artifact_kinds import binary_role, require_artifact_kind
+from appsec_review.jobs.build_bookkeeping import (
+    BookkeepingExclusions, bookkeeping_reason, cargo_profile_directories,
+)
 from appsec_review.jobs.build_discovery import validate_build_recipe
 from appsec_review.jobs.cataloging import source_fingerprint, write_json
 from appsec_review.inference import Infer, ModelRequest
@@ -36,7 +40,7 @@ from appsec_review.observability import PipelineLog, emit_model_event
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from appsec_review.storage import FileLock, atomic_bytes, atomic_json, canonical_json, file_sha256, protected_json
 
-from .repair import REPAIR_SCHEMA, apply_repair, validate_repair_proposal
+from .repair import REPAIR_SCHEMA, apply_repair, repair_options, validate_repair_proposal
 from appsec_review.jobs.job_project_build.datasets import CONSUMES, DATASETS
 from appsec_review.guidance.skills import load_runtime_skill
 
@@ -47,8 +51,6 @@ REPAIR_CACHE_SCHEMA = "appsec-review/build-image-repair-cache/1"
 BUILD_FAMILIES = ("native", "rust", "go", "java", "node", "dotnet", "python", "php", "wasm")
 STATIC_LANES = ("global", *BUILD_FAMILIES)
 _IGNORED = {".git", ".hg", ".svn", "build", "target", "node_modules", "bin", "obj", ".gradle"}
-_ARTIFACT_SUFFIXES = {".o", ".obj", ".a", ".lib", ".so", ".dll", ".dylib", ".exe", ".wasm",
-                      ".class", ".jar", ".war", ".ear", ".rlib", ".rmeta", ".pdb", ".apk", ".dex"}
 _SECRET_KEY = re.compile(r"(SECRET|TOKEN|PASSWORD|PASSWD|API_KEY|PRIVATE_KEY|CREDENTIAL)", re.I)
 _BUILD_CAPABILITIES = {
     "native": ("build", "ast", "ir", "infer", "codeql", "joern", "binary"),
@@ -156,24 +158,41 @@ def _snapshot(root: Path, limit: int) -> dict[str, str]:
     return result
 
 
-def _kind(path: Path) -> str | None:
-    if path.suffix.lower() == ".apk":
-        return "android-apk"
-    if "build" in path.parts and "intermediates" in path.parts and path.suffix.lower() in {
+_SUFFIX_KINDS = {
+    ".o": "object", ".obj": "object", ".a": "static-library", ".lib": "static-library",
+    ".so": "shared-library", ".dll": "shared-library", ".dylib": "shared-library",
+    ".exe": "executable", ".wasm": "wasm-module", ".class": "jvm-class", ".jar": "jar",
+    ".war": "war", ".ear": "ear", ".rlib": "rust-library", ".rmeta": "rust-metadata",
+    ".pdb": "debug-information", ".apk": "android-apk", ".dex": "dex",
+}
+_NATIVE_ROLES = frozenset({"object", "executable", "shared-library", "static-library"})
+
+
+def _kind(path: Path) -> tuple[str, str] | None:
+    """Return ``(kind, format)``: a role from the typed vocabulary and the container format."""
+    suffix = path.suffix.lower()
+    if suffix == ".apk":
+        return "android-apk", "zip"
+    if "build" in path.parts and "intermediates" in path.parts and suffix in {
             ".xml", ".flat", ".pb", ".prof", ".map", ".json"}:
-        return "android-intermediate"
+        return "android-intermediate", suffix.removeprefix(".")
     if "outputs" in path.parts and path.name == "output-metadata.json":
-        return "android-metadata"
-    if path.suffix.lower() in _ARTIFACT_SUFFIXES:
-        return path.suffix.lower().removeprefix(".") or "binary"
-    try:
-        magic = path.read_bytes()[:4]
-    except OSError:
-        return None
-    return "elf" if magic == b"\x7fELF" else "pe" if magic[:2] == b"MZ" else "wasm" if magic == b"\x00asm" else None
+        return "android-metadata", "json"
+    role, container = binary_role(path)
+    if suffix == ".rlib":
+        return "rust-library", container or "ar"
+    if role in _NATIVE_ROLES or role == "wasm-module":
+        return str(role), str(container)
+    if suffix in _SUFFIX_KINDS:
+        return _SUFFIX_KINDS[suffix], container or suffix.removeprefix(".")
+    return None
 
 
-def _outputs(run_root: Path, workspace: Path, before: Mapping[str, str], limit: int) -> list[dict[str, Any]]:
+def _outputs(run_root: Path, workspace: Path, before: Mapping[str, str], limit: int,
+             exclusions: BookkeepingExclusions | None = None) -> list[dict[str, Any]]:
+    """Changed probe outputs with a role ``kind``; build bookkeeping is counted, not listed."""
+    exclusions = exclusions if exclusions is not None else BookkeepingExclusions()
+    profiles = cargo_profile_directories(workspace)
     values = []
     for path in sorted(workspace.rglob("*")):
         if not path.is_file() or path.is_symlink():
@@ -181,11 +200,17 @@ def _outputs(run_root: Path, workspace: Path, before: Mapping[str, str], limit: 
         relative, digest = path.relative_to(workspace).as_posix(), file_sha256(path)
         if ".appsec-cache" in path.parts:
             continue
-        kind = _kind(path)
-        if kind is None or before.get(relative) == digest:
+        classified = _kind(path)
+        if classified is None or before.get(relative) == digest:
             continue
+        reason = bookkeeping_reason(relative, cargo=bool(profiles), cargo_profile_directories=profiles)
+        if reason is not None:
+            exclusions.record(reason, relative)
+            continue
+        kind, container = classified
         values.append({"path": path.relative_to(run_root).as_posix(), "workspace_path": relative,
-                       "sha256": digest, "size_bytes": path.stat().st_size, "kind": kind})
+                       "sha256": digest, "size_bytes": path.stat().st_size,
+                       "kind": require_artifact_kind(kind), "format": container})
         if len(values) >= limit:
             break
     return values
@@ -512,14 +537,17 @@ def _probe_one(unit: UnitContext, entry: Mapping[str, Any], executor_factory=Non
             break
     if source_fingerprint(unit.job.target_root or Path()) != unit.job.source_fingerprint:
         raise ValueError("target changed during isolated probe execution")
-    artifacts = _outputs(unit.job.run_root, workspace, before, int(unit.job.config.settings["artifact_count_limit"]))
+    bookkeeping = BookkeepingExclusions()
+    artifacts = _outputs(unit.job.run_root, workspace, before, int(unit.job.config.settings["artifact_count_limit"]),
+                         bookkeeping)
     output_gaps = _validate_expected_outputs(workspace, recipe)
     gaps.extend(output_gaps)
     status = ("FAILED" if build_failed or output_gaps else
               "COMPLETED_WITH_GAPS" if gaps else "SUCCEEDED")
     receipt = {**base, "schema": SCHEMA, "executor_identity": EXECUTOR_IDENTITY,
                "recipe_identity": recipe_identity, "image_id": image["image_id"], "commands": command_receipts,
-               "artifacts": artifacts, "terminal_status": status,
+               "artifacts": artifacts, "excluded_bookkeeping": bookkeeping.document(),
+               "terminal_status": status,
                "probe_disposition": "FAILED" if status == "FAILED" else "PROBED", "gaps": gaps,
                "checkpoint_reused": False, "attempt_number": attempt_number}
     if status == "SUCCEEDED":
@@ -596,7 +624,9 @@ def _infer_repair(unit: UnitContext, *, action: Mapping[str, Any], recipe: Mappi
         "planning_package_hints": list(action.get("package_hints", ())),
         "accepted_recipe": {key: recipe.get(key) for key in
                             ("source_dir", "build_dir", "dependency_files", "configure_commands",
-                             "build_commands", "expected_outputs", "network_required", "system_packages")},
+                             "build_commands", "expected_outputs", "network_required", "system_packages",
+                             "environment", "image_repairs")},
+        "repair_options": repair_options(recipe, str(action["build_system"])),
         "dockerfile": dockerfile.decode("utf-8", "replace"),
         "failure": diagnostics,
         "prior_attempts": attempts[-10:],
@@ -635,7 +665,8 @@ def _infer_repair(unit: UnitContext, *, action: Mapping[str, Any], recipe: Mappi
             atomic_bytes(unit.unit_root / str(action["build_unit_id"]) /
                          f"repair-{repair_number:03d}" / "model-response.txt",
                          result.raw_response.encode("utf-8")[:2 * 1024 * 1024])
-        errors = validate_repair_proposal(result.proposal)
+        errors = validate_repair_proposal(result.proposal, recipe=recipe,
+                                          build_system=str(action["build_system"]))
         if errors:
             raise ValueError("; ".join(errors))
         emit_model_event(log, event_type="MODEL_CALL_COMPLETED", run_id=unit.job.run_id,
@@ -701,7 +732,7 @@ def _probe_with_repairs(unit: UnitContext, entry: Mapping[str, Any], *, profile:
             proposal = _infer_repair(unit, action=action, recipe=current_recipe, dockerfile=dockerfile,
                                      diagnostics=diagnostics, attempts=attempts,
                                      repair_number=repair_number, infer=infer)
-            candidate = apply_repair(current_recipe, proposal)
+            candidate = apply_repair(current_recipe, proposal, build_system=str(action["build_system"]))
             errors = validate_build_recipe(candidate, _repair_validation_unit(action, candidate))
             if errors:
                 raise ValueError("repaired build recipe is invalid: " + "; ".join(errors))
@@ -728,6 +759,7 @@ def _probe_with_repairs(unit: UnitContext, entry: Mapping[str, Any], *, profile:
                              "dockerfile_sha256": repaired_image.dockerfile_sha256,
                              "dockerfile_path": repaired_image.dockerfile_path,
                              "system_packages": list(candidate["system_packages"]),
+                             "image_repairs": dict(candidate.get("image_repairs", {})),
                              "attempt_identity": f"{unit.job.attempt_id}:{action['build_unit_id']}:repair:{repair_number}",
                              "command_identity": hashlib.sha256(canonical_json({"kind": "project-image-build",
                                  "recipe_identity": repaired_image.recipe_identity})).hexdigest(),
@@ -774,7 +806,8 @@ def _probe_with_repairs(unit: UnitContext, entry: Mapping[str, Any], *, profile:
                                  "repair_number": repair_number, "family": action["family"]})).hexdigest(),
                              "duration_ms": int((time.monotonic() - attempt_started) * 1000),
                              "streams": image_streams,
-                             "system_packages": list(current_recipe.get("system_packages", ()))})
+                             "system_packages": list(current_recipe.get("system_packages", ())),
+                             "image_repairs": dict(current_recipe.get("image_repairs", {}))})
             unit.job.events.write("PROJECT_IMAGE_REPAIR_FAILED", unit_id=unit.unit_id,
                 build_unit_id=action["build_unit_id"], family=action["family"],
                 repair_attempt=repair_number, error_class=type(exc).__name__)

@@ -6,12 +6,14 @@ from datetime import datetime, timezone
 import hashlib
 import json
 from pathlib import Path, PurePosixPath
+import posixpath
 import re
 import shlex
 import shutil
 import time
 from typing import Any
 
+from appsec_review.jobs.artifact_kinds import require_artifact_kind
 from appsec_review.container_runtime import BuildContainerExecutor, BuildProfile
 from appsec_review.jobs.build_discovery import jvm_build_command_errors
 from appsec_review.retrieval import (
@@ -38,9 +40,29 @@ _KIND_BY_SUFFIX = {
     ".kts": "generated-kotlin-source", ".kotlin_module": "kotlin-module-metadata",
     ".smap": "source-debug-map", ".map": "source-map", ".properties": "metadata",
     ".xml": "metadata", ".json": "metadata", ".proto": "generated-source",
-    ".dex": "dex", ".apk": "android-apk", ".aab": "android-app-bundle",
+    ".dex": "dex", ".apk": "android-apk",
 }
 _RESOURCE_NAMES = {"MANIFEST.MF", "pom.properties", "pom.xml", "module-info.class"}
+# The wrapper's pseudo-tool record that carries an @argfile's bounded contents.
+_ARGFILE_RECORD = "@argfile"
+_ARGFILE_BYTES = 1024 * 1024
+_SOURCE_READ_BYTES = 64 * 1024
+_JAVAC_SOURCE_LIMIT = 20000
+# javac options whose next argument is a value, never a source file.
+_JAVAC_VALUE_OPTIONS = frozenset({
+    "-d", "-s", "-h", "-cp", "-classpath", "--class-path", "-sourcepath", "--source-path",
+    "-processorpath", "--processor-path", "--processor-module-path", "-processor",
+    "--module-path", "-p", "--module-source-path", "--upgrade-module-path", "--system",
+    "--release", "-source", "--source", "-target", "--target", "-encoding", "-bootclasspath",
+    "--boot-class-path", "-extdirs", "-endorseddirs", "--add-modules", "--limit-modules",
+    "--add-exports", "--add-reads", "--patch-module", "--module", "-m", "--module-version",
+    "-Xmaxerrs", "-Xmaxwarns", "-Xstdout", "--default-module-for-created-files",
+})
+_JAVA_COMMENT_OR_LITERAL = re.compile(
+    r'//[^\n]*|/\*.*?\*/|"""(?:\\.|[^\\])*?"""|"(?:\\.|[^"\\\n])*"|' + r"'(?:\\.|[^'\\\n])*'", re.S)
+_JAVA_PACKAGE = re.compile(
+    r"\s*(?:@[\w.]+(?:\([^)]*\))?\s*)*package\s+([A-Za-z_$][\w$]*(?:\s*\.\s*[A-Za-z_$][\w$]*)*)\s*;")
+_JAVA_TOKEN = re.compile(r"[{}]|\b(?:class|interface|enum|record)\s+([A-Za-z_$][\w$]*)")
 
 
 class JvmIntegrityError(ValueError):
@@ -90,9 +112,10 @@ def _jvm_argv(recipe: Mapping[str, Any], raw: list[str]) -> tuple[tuple[str, ...
 
 
 def _wrapper_script(tool: str, real: str) -> str:
-    """Return a wrapper that records argv, and the content of every readable `@argfile`, then
-    execs `real` (already shell-quoted). Build tools delete their argument files after the
-    compiler exits, so the content is retained at exec time. Each invocation writes its own
+    """Return a wrapper that records argv and, for every readable `@argfile`, its path, the
+    directory the tool ran in, and its bounded NUL-stripped contents, then execs `real` (already
+    shell-quoted). Build tools delete their argument files after the compiler exits, so the
+    content is retained at exec time. Each invocation writes its own
     record file, so concurrent compilations (Gradle --parallel, Maven -T) never interleave."""
     return (
         "#!/bin/sh\n"
@@ -104,9 +127,9 @@ def _wrapper_script(tool: str, real: str) -> str:
         "for arg in \"$@\"; do\n"
         "  case $arg in\n"
         "    @*) file=${arg#@}\n"
-        "        if [ -f \"$file\" ] && [ -r \"$file\" ]; then\n"
-        "          printf '%s\\0%s\\0%s\\0%s\\0' '@argfile' \"$parent\" 2 \"$file\" >> \"$record\"\n"
-        "          tr -d '\\000' < \"$file\" >> \"$record\"\n"
+        "        if [ -f \"$file\" ] && [ -r \"$file\" ] && [ ! -L \"$file\" ]; then\n"
+        f"          printf '%s\\0%s\\0%s\\0%s\\0%s\\0' '{_ARGFILE_RECORD}' \"$parent\" 3 \"$file\" \"$PWD\" >> \"$record\"\n"
+        f"          head -c {_ARGFILE_BYTES} \"$file\" | tr -d '\\000' >> \"$record\"\n"
         "          printf '\\0' >> \"$record\"\n"
         "        fi ;;\n"
         "  esac\n"
@@ -206,7 +229,157 @@ def _trace_chunks(trace: Path) -> list[bytes]:
     return chunks
 
 
-def _trace_rows(trace: Path, workspace: Path, limit: int, byte_limit: int) -> tuple[list[dict[str, Any]], list[str]]:
+def _argfile_arguments(text: str) -> list[str]:
+    """Split an @argfile the way javac does: whitespace separates, quotes group, # comments."""
+    arguments: list[str] = []
+    current: list[str] = []
+    quote: str | None = None
+    started = False
+    index = 0
+    while index < len(text):
+        char = text[index]
+        if quote:
+            if char == quote:
+                quote = None
+            elif char == "\\" and index + 1 < len(text):
+                index += 1
+                current.append({"n": "\n", "t": "\t", "r": "\r", "f": "\f"}.get(text[index], text[index]))
+            else:
+                current.append(char)
+        elif char in "\"'":
+            quote, started = char, True
+        elif char == "#" and not started:
+            while index < len(text) and text[index] not in "\r\n":
+                index += 1
+            continue
+        elif char.isspace():
+            if started:
+                arguments.append("".join(current))
+                current, started = [], False
+        else:
+            current.append(char)
+            started = True
+        index += 1
+    if started:
+        arguments.append("".join(current))
+    return arguments
+
+
+def _bounded_text(path: Path, limit: int) -> str | None:
+    try:
+        if path.is_symlink() or not path.is_file():
+            return None
+        with path.open("rb") as stream:
+            return stream.read(limit).decode("utf-8", "replace")
+    except OSError:
+        return None
+
+
+def _blank(match: re.Match[str]) -> str:
+    # Comments become spaces and literals become empty strings, so neither can hide or fake
+    # a brace, a package declaration, or a type declaration.
+    text = match.group(0)
+    return '""' if text.startswith(('"', "'")) else re.sub(r"[^\n]", " ", text)
+
+
+def java_declarations(text: str) -> tuple[str, list[str]]:
+    """The package and top-level type names a Java source declares, from bounded text."""
+    stripped = _JAVA_COMMENT_OR_LITERAL.sub(_blank, text)
+    package_match = _JAVA_PACKAGE.match(stripped)
+    package = re.sub(r"\s+", "", package_match.group(1)) if package_match else ""
+    names: list[str] = []
+    depth = 0
+    for match in _JAVA_TOKEN.finditer(stripped):
+        token = match.group(0)
+        if token == "{":
+            depth += 1
+        elif token == "}":
+            depth = max(0, depth - 1)
+        elif depth == 0 and match.group(1) and match.group(1) not in names:
+            names.append(match.group(1))
+    return package, names
+
+
+def _logical(directory: str, value: str) -> str | None:
+    """A path as the build container saw it, made workspace-relative; None outside it."""
+    normalized = value.replace("\\", "/")
+    if not normalized.startswith("/"):
+        base = directory if directory.startswith("/") else posixpath.join("/workspace", directory)
+        normalized = posixpath.join(base, normalized)
+    normalized = posixpath.normpath(normalized)
+    if normalized == "/workspace":
+        return "."
+    if not normalized.startswith("/workspace/"):
+        return None
+    return normalized[len("/workspace/"):]
+
+
+def javac_outputs(workspace: Path, directory: str, arguments: list[str]) -> tuple[list[str], list[str]]:
+    """Class files a javac invocation wrote, from ``-d`` and each source's package and types.
+
+    ``arguments`` are javac's arguments with @argfiles already expanded. javac writes
+    ``<d>/<package path>/<Type>.class`` for every top-level type a source declares, and
+    ``<Type>$<n>.class`` or ``<Type>$<Inner>.class`` for its nested, local, and anonymous
+    classes. Only class files that exist are named. A source that cannot be read is returned
+    as a gap, never guessed, and its classes stay unattributed.
+    """
+    destination: str | None = None
+    sources: list[str] = []
+    gaps: list[str] = []
+    index = 0
+    while index < len(arguments):
+        value = arguments[index]
+        if value in _JAVAC_VALUE_OPTIONS:
+            if value == "-d" and index + 1 < len(arguments):
+                destination = arguments[index + 1]
+            index += 2
+            continue
+        if not value.startswith("-") and value.lower().endswith(".java"):
+            sources.append(value)
+        index += 1
+    if len(sources) > _JAVAC_SOURCE_LIMIT:
+        return [], [f"javac source list exceeded {_JAVAC_SOURCE_LIMIT}; class outputs were not mapped"]
+    root = workspace.resolve()
+    base = _logical(directory, destination) if destination is not None else None
+    if destination is not None and base is None:
+        return [], gaps  # Classes written outside the workspace are not catalogued artifacts.
+    listings: dict[str, list[str]] = {}
+    outputs: list[str] = []
+    for source in sources:
+        logical = _logical(directory, source)
+        if logical is None:
+            continue
+        text = _bounded_text(root / Path(*PurePosixPath(logical).parts), _SOURCE_READ_BYTES)
+        if text is None:
+            gaps.append(f"javac source was unreadable; its class outputs were not mapped: {logical}")
+            continue
+        package, types = java_declarations(text)
+        stem = PurePosixPath(logical).stem
+        if base is None:
+            output_directory = PurePosixPath(logical).parent.as_posix()
+        else:
+            output_directory = posixpath.normpath(posixpath.join(base, *package.split("."))) if package else base
+        if stem in {"package-info", "module-info"}:
+            types = [stem]
+        elif stem not in types:
+            types.insert(0, stem)
+        if output_directory not in listings:
+            folder = root / Path(*PurePosixPath(output_directory).parts)
+            try:
+                listings[output_directory] = sorted(
+                    item.name for item in folder.iterdir() if item.name.endswith(".class")
+                ) if folder.is_dir() and not folder.is_symlink() else []
+            except OSError:
+                listings[output_directory] = []
+        for type_name in types:
+            for name in listings[output_directory]:
+                if name == f"{type_name}.class" or name.startswith(f"{type_name}$"):
+                    outputs.append(posixpath.join(output_directory, name))
+    return list(dict.fromkeys(outputs)), gaps
+
+
+def _trace_rows(trace: Path, workspace: Path, limit: int, byte_limit: int,
+                source_dir: str = ".") -> tuple[list[dict[str, Any]], list[str]]:
     chunks = _trace_chunks(trace)
     if not chunks:
         return [], ["nested JVM tool provenance was not emitted by the build"]
@@ -224,7 +397,7 @@ def _trace_rows(trace: Path, workspace: Path, limit: int, byte_limit: int) -> tu
         remaining -= len(chunk)
         gaps.extend(_trace_chunk_rows(chunk, rows, limit))
     for row in rows:
-        _finish_row(row, workspace)
+        gaps.extend(_finish_row(row, workspace, source_dir))
     return rows, list(dict.fromkeys(gaps))
 
 
@@ -246,39 +419,65 @@ def _trace_chunk_rows(data: bytes, rows: list[dict[str, Any]], limit: int) -> li
             break
         values = [value.decode("utf-8", "replace") for value in fields[offset:offset + count]]
         offset += count
-        if tool == "@argfile":
-            # The wrapper retains each @argfile right after the exec record that named it.
-            if owner is not None and count == 2 and "@" + values[0] in owner["argv"][1:]:
-                owner["argfiles"][values[0]] = values[1]
-            else:
-                gaps.append("JVM invocation trace has an argument file without its invocation")
+        if tool == _ARGFILE_RECORD:
+            # The wrapper retains each @argfile (path, the PWD javac ran in, bounded contents)
+            # right after the exec record that named it, in the same per-exec record file.
+            if owner is None or owner["parent_command_id"] != parent or count != 3 or \
+                    f"@{values[0]}" not in owner["argv"][1:]:
+                gaps.append("JVM argfile record did not follow the invocation that named it")
+                continue
+            owner.setdefault("argfiles", []).append({
+                "reference": values[0], "working_directory": values[1],
+                "sha256": hashlib.sha256(values[2].encode("utf-8")).hexdigest(),
+                "arguments": _argfile_arguments(values[2])})
             continue
         if len(rows) >= limit:
             gaps.append("JVM invocation trace exceeded its configured record bound")
             break
         owner = {"ordinal": len(rows) + 1, "tool": tool, "argv": [tool, *values],
-                 "parent_command_id": parent, "argfiles": {}}
+                 "parent_command_id": parent}
         rows.append(owner)
     return gaps
 
 
-def _finish_row(row: dict[str, Any], workspace: Path) -> None:
-    argfiles = row.pop("argfiles")
-    expanded = gradle_provenance.expanded_argv(row["argv"], argfiles)
-    tool, arguments = row["tool"], expanded[1:]
-    launcher = None
+def _finish_row(row: dict[str, Any], workspace: Path, source_dir: str) -> list[str]:
+    """Expand argfiles, classify the exec, and resolve its inputs and outputs."""
+    gaps: list[str] = []
+    argfiles = {f"@{item['reference']}": item for item in row.get("argfiles", ())}
+    arguments: list[str] = []
+    for value in row["argv"][1:]:
+        if value in argfiles:
+            arguments.extend(argfiles[value]["arguments"])
+            continue
+        if value.startswith("@") and row["tool"] in {"javac", "java"}:
+            gaps.append(f"{row['tool']} argfile contents were not recorded: {value[1:]}")
+        arguments.append(value)
+    tool, launcher = row["tool"], None
     if tool == "java" and gradle_provenance.KOTLIN_COMPILER_MAIN in arguments:
         # Out-of-process Kotlin compilation execs the JDK launcher with the compiler main class.
         launcher, tool = "java", "kotlinc"
         arguments = arguments[arguments.index(gradle_provenance.KOTLIN_COMPILER_MAIN) + 1:]
+    # Build tools name argfiles with absolute paths; the wrapper records the directory the tool
+    # ran in, so relative arguments inside it resolve exactly. Otherwise the recipe source_dir.
+    directory = next((str(item["working_directory"]) for item in row.get("argfiles", ())
+                      if str(item["working_directory"]).startswith("/workspace")), source_dir)
     inputs, outputs = _paths(arguments)
-    row.update({"tool": tool, "tool_kind": _TOOLS.get(tool, "jvm-tool"),
-        "launcher": launcher, "expanded_argv": [tool, *arguments],
-        "argfiles": [{"path": path, "sha256": hashlib.sha256(text.encode("utf-8")).hexdigest(),
-                      "byte_count": len(text.encode("utf-8"))} for path, text in sorted(argfiles.items())],
-        "working_directory": ".", "inputs": _mapped(workspace, inputs),
-        "outputs": _mapped(workspace, outputs), "evidence_kind": "observed-exec",
-        "mapping": "instrumented-tool-wrapper", "mapping_confidence": 1.0})
+    if tool == "javac":
+        classes, class_gaps = javac_outputs(workspace, directory, arguments)
+        if class_gaps:
+            # The classes stay unattributed, and artifact indexing names each one as a gap.
+            row["class_mapping_gaps"] = class_gaps[:16]
+        mapped_classes = [{**item, "mapping": "javac-derived-class"}
+                          for item in _mapped(workspace, ".", classes) if item.get("sha256")]
+        mapped_outputs = [*_mapped(workspace, directory, outputs), *mapped_classes]
+    else:
+        mapped_outputs = _mapped(workspace, directory, outputs)
+    row.update({"tool": tool, "tool_kind": _TOOLS.get(tool, "jvm-tool"), "launcher": launcher,
+        "expanded_argv": [tool, *arguments], "working_directory": directory,
+        "inputs": _mapped(workspace, directory, inputs), "outputs": mapped_outputs,
+        "evidence_kind": "observed-exec", "mapping": "instrumented-tool-wrapper",
+        "mapping_confidence": 1.0})
+    return gaps
 
 
 def _paths(args: list[str]) -> tuple[list[str], list[str]]:
@@ -294,9 +493,10 @@ def _paths(args: list[str]) -> tuple[list[str], list[str]]:
     return inputs, outputs
 
 
-def _mapped(workspace: Path, values: list[str]) -> list[dict[str, Any]]:
+def _mapped(workspace: Path, directory: str, values: list[str]) -> list[dict[str, Any]]:
     from .job import _mapped_files
-    return _mapped_files(workspace, "/workspace", values)
+    base = directory if directory.startswith("/") else posixpath.join("/workspace", directory)
+    return _mapped_files(workspace, posixpath.normpath(base), values)
 
 
 def _remove_jdk_mirrors(root: Path, gaps: list[str]) -> None:
@@ -335,7 +535,7 @@ def _catalog(run_root: Path, workspace: Path, before: Mapping[str, str], limit: 
         if kind is None or before.get(relative) == digest:
             continue
         artifacts.append({"path": path.relative_to(run_root).as_posix(), "workspace_path": relative,
-            "sha256": digest, "size_bytes": path.stat().st_size, "kind": kind,
+            "sha256": digest, "size_bytes": path.stat().st_size, "kind": require_artifact_kind(kind),
             "build_unit_id": build_unit_id, "mapping": "exact-workspace-path",
             "mapping_confidence": 1.0})
         if len(artifacts) >= limit:
@@ -556,7 +756,7 @@ def execute_jvm_one(unit: Any, dispatch: Mapping[str, Any], accepted: Mapping[st
         int(unit.job.config.settings["artifact_count_limit"]), build_unit_id)
     gaps.extend(artifact_gaps)
     rows, trace_gaps = _trace_rows(trace, workspace, int(settings["provenance_count_limit"]),
-                                   int(settings["trace_bytes"]))
+                                   int(settings["trace_bytes"]), str(recipe["source_dir"]))
     if trace.is_file():
         try:
             trace.chmod(0o600)
@@ -569,7 +769,7 @@ def execute_jvm_one(unit: Any, dispatch: Mapping[str, Any], accepted: Mapping[st
         int(settings["provenance_count_limit"]))
     gaps.extend(record_gaps)
     declared, declared_gaps = gradle_provenance.declared_compilations(
-        records, rows, lambda values: _mapped(workspace, values))
+        records, rows, lambda values: _mapped(workspace, str(recipe["source_dir"]), values))
     gaps.extend(declared_gaps)
     if (any(item.get("instrumentation") for item in commands) and
             not any(item.get("record_kind") == "session" for item in records)):
@@ -592,9 +792,11 @@ def execute_jvm_one(unit: Any, dispatch: Mapping[str, Any], accepted: Mapping[st
         trace_protected.chmod(0o600)
     except OSError:
         pass
-    sanitized = [{key: value for key, value in row.items() if key not in {"argv", "expanded_argv"}} |
+    # Argfile contents are arguments too; only their digests leave the protected record.
+    sanitized = [{key: value for key, value in row.items() if key not in {"argv", "expanded_argv", "argfiles"}} |
                  {"argv_sha256": hashlib.sha256(canonical_json(row["argv"])).hexdigest(),
-                  "expanded_argv_sha256": hashlib.sha256(canonical_json(row["expanded_argv"])).hexdigest()}
+                  "expanded_argv_sha256": hashlib.sha256(canonical_json(row["expanded_argv"])).hexdigest()} |
+                 ({"argfile_sha256": [item["sha256"] for item in row["argfiles"]]} if row.get("argfiles") else {})
                  for row in rows]
     sanitized_declared = [{key: value for key, value in row.items() if key != "declared_arguments"} |
                           {"declared_arguments_sha256": hashlib.sha256(

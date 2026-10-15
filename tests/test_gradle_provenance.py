@@ -21,7 +21,7 @@ from appsec_review.config import load_config
 from appsec_review.jobs.build_discovery import jvm_build_command_errors
 from appsec_review.jobs.job_language_build import gradle_provenance
 from appsec_review.jobs.job_language_build.jvm import (
-    _artifact_kind, _environment, _instrumentation, _mapped, _remove_jdk_mirrors, _trace_rows,
+    _argfile_arguments, _artifact_kind, _environment, _instrumentation, _mapped, _remove_jdk_mirrors, _trace_rows,
 )
 
 
@@ -52,7 +52,8 @@ def _synthetic_project(root: Path, *, kotlin: bool = True, toolchain: str | None
     application = root / "app" / "src" / "main" / "java" / "app"
     application.mkdir(parents=True)
     (application / "Main.java").write_text(
-        "package app; public class Main { public static void main(String[] a) {"
+        "package app; public class Main { static class Inner {}\n"
+        " public static void main(String[] a) { Runnable r = new Runnable() { public void run() {} };\n"
         " System.out.println(lib.Greeter.hi()); } }\n", encoding="utf-8")
     (root / "app" / "build.gradle").write_text(
         "plugins { id 'application' }\ndependencies { implementation project(':lib') }\n"
@@ -69,7 +70,7 @@ def _record(trace_dir: Path, name: str, tool: str, argv: list[str], argfiles: di
     """Write one per-invocation record exactly as the instrumented wrapper does."""
     fields = [tool, PARENT, str(len(argv)), *argv]
     for path, text in (argfiles or {}).items():
-        fields.extend(("@argfile", PARENT, "2", path, text))
+        fields.extend(("@argfile", PARENT, "3", path, "/workspace/multi", text))
     (trace_dir / name).write_bytes(b"\0".join(item.encode() for item in fields) + b"\0")
 
 
@@ -132,7 +133,7 @@ def test_gradle_argv_is_instrumented_without_changing_the_accepted_tasks() -> No
     ("'single quoted' plain", ["single quoted", "plain"]),
 ])
 def test_argfiles_are_tokenized_like_javac(text: str, expected: list[str]) -> None:
-    assert gradle_provenance.parse_argfile(text) == expected
+    assert _argfile_arguments(text) == expected
 
 
 def test_instrumented_wrapper_retains_deleted_argfiles_and_parses_into_provenance(tmp_path: Path) -> None:
@@ -160,7 +161,7 @@ def test_instrumented_wrapper_retains_deleted_argfiles_and_parses_into_provenanc
     environment = {**os.environ, "APPSEC_JVM_TRACE_DIR": str(root / "invocations.d"),
                    "APPSEC_JVM_PARENT_COMMAND": PARENT}
     completed = subprocess.run([str(wrapper), f"@{argfile}"], env=environment, capture_output=True,
-                               check=True)
+                               check=True, cwd=tmp_path)
     assert completed.stdout.decode().strip() == f"compiled @{argfile}"
     argfile.unlink()
     rows, gaps = _trace_rows(trace, workspace, 100, 1 << 20)
@@ -169,7 +170,8 @@ def test_instrumented_wrapper_retains_deleted_argfiles_and_parses_into_provenanc
     assert row["tool"] == "javac" and row["evidence_kind"] == "observed-exec"
     assert row["argv"] == ["javac", f"@{argfile}"]
     assert row["expanded_argv"][1:3] == ["-d", f"{project}/lib/build/classes/java/main"]
-    assert row["argfiles"][0]["path"] == str(argfile)
+    assert row["argfiles"][0]["reference"] == str(argfile)
+    assert row["argfiles"][0]["working_directory"] == str(tmp_path)
     assert [item["workspace_path"] for item in row["inputs"]] == ["multi/lib/src/main/java/lib/Greeter.java"]
     assert row["inputs"][0]["mapping"] == "exact-workspace-path"
     assert [item["workspace_path"] for item in row["outputs"]] == ["multi/lib/build/classes/java/main"]
@@ -232,7 +234,7 @@ def test_multi_module_records_separate_observed_execs_from_declared_tasks(tmp_pa
     records, record_gaps = gradle_provenance.read_task_records(root / "gradle-tasks.jsonl", 1 << 20, 100)
     assert record_gaps == []
     declared, gaps = gradle_provenance.declared_compilations(
-        records, rows, lambda values: _mapped(workspace, values))
+        records, rows, lambda values: _mapped(workspace, "multi", values))
     by_task = {row["task_path"]: row for row in declared}
     assert all(row["evidence_kind"] == "build-tool-declared" and
                row["mapping_confidence"] < 1.0 for row in declared)
@@ -261,7 +263,7 @@ def test_android_dex_tasks_are_declared_gaps_and_dex_outputs_are_cataloged(tmp_p
         {"record_kind": "completed", "task_path": ":app:mergeDexDebug", "compiler": "d8", "did_work": True},
     ])
     records, _gaps = gradle_provenance.read_task_records(trace.parent / "gradle-tasks.jsonl", 1 << 20, 100)
-    declared, gaps = gradle_provenance.declared_compilations(records, [], lambda values: _mapped(workspace, values))
+    declared, gaps = gradle_provenance.declared_compilations(records, [], lambda values: _mapped(workspace, "multi", values))
     (row,) = declared
     assert row["tool"] == "d8" and row["tool_kind"] == "dexer"
     assert row["evidence_kind"] == "build-tool-declared"
@@ -314,7 +316,11 @@ def test_live_gradle_forks_every_java_compilation_through_the_instrumented_mirro
     assert (project / "lib" / "build" / "classes" / "java" / "main" / "lib" / "Greeter.class").is_file()
     assert (project / "app" / "build" / "classes" / "java" / "main" / "app" / "Main.class").is_file()
 
-    rows, trace_gaps = _trace_rows(trace, workspace, 1000, 1 << 24)
+    # The build container sees the run-owned workspace at /workspace; this host run sees it at
+    # tmp_path. Translate the recorded paths to the container view the parser resolves.
+    for record in [*(root / "invocations.d").iterdir(), root / "gradle-tasks.jsonl"]:
+        record.write_bytes(record.read_bytes().replace(str(workspace).encode(), b"/workspace"))
+    rows, trace_gaps = _trace_rows(trace, workspace, 1000, 1 << 24, "multi")
     assert trace_gaps == []
     compilations = [row for row in rows if row["tool"] == "javac"]
     assert len(compilations) == 2
@@ -323,11 +329,19 @@ def test_live_gradle_forks_every_java_compilation_through_the_instrumented_mirro
     outputs = {item["workspace_path"] for row in compilations for item in row["outputs"]}
     assert {"multi/lib/build/classes/java/main", "multi/app/build/classes/java/main"} <= outputs
     assert all(row["argfiles"] and row["parent_command_id"] == PARENT for row in compilations)
+    # javac rows carry hash-resolved class outputs, nested and anonymous classes included.
+    classes = {item["workspace_path"] for row in compilations for item in row["outputs"]
+               if item.get("mapping") == "javac-derived-class" and item.get("sha256")}
+    assert classes == {"multi/lib/build/classes/java/main/lib/Greeter.class",
+                       "multi/app/build/classes/java/main/app/Main.class",
+                       "multi/app/build/classes/java/main/app/Main$Inner.class",
+                       "multi/app/build/classes/java/main/app/Main$1.class"}
+    assert not any(row.get("class_mapping_gaps") for row in compilations)
 
     records, record_gaps = gradle_provenance.read_task_records(root / "gradle-tasks.jsonl", 1 << 24, 1000)
     assert record_gaps == []
     declared, gaps = gradle_provenance.declared_compilations(
-        records, rows, lambda values: _mapped(workspace, values))
+        records, rows, lambda values: _mapped(workspace, "multi", values))
     assert gaps == []
     by_task = {row["task_path"]: row for row in declared}
     assert set(by_task) == {":lib:compileJava", ":app:compileJava"}

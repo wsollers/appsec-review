@@ -17,6 +17,7 @@ from typing import Any
 
 from appsec_review.container_runtime import VerifiedCapture
 from appsec_review.container_runtime.capture_files import process_directories
+from appsec_review.jobs.build_bookkeeping import BookkeepingExclusions, BookkeepingReason, bookkeeping_reason
 from appsec_review.storage import atomic_json, canonical_json, file_sha256
 
 from . import native
@@ -47,9 +48,28 @@ def _output_argument(argv: Sequence[str]) -> str | None:
     return None
 
 
-def compile_entries(captures: Sequence[tuple[int, VerifiedCapture]], *,
-                    initial_directory: str) -> tuple[list[dict[str, Any]], list[str]]:
-    """Return compile-database rows for every captured C/C++ translation unit."""
+def _bookkeeping_compile(directory: str, file: str, output: str | None) -> BookkeepingReason | None:
+    """CMake configure-time probe compiles (compiler identification, try_compile) are not code."""
+    def relative(value: str) -> str:
+        return value[len("/workspace/"):] if value.startswith("/workspace/") else value.lstrip("/")
+
+    produced = (posixpath.normpath(output if output.startswith("/") else posixpath.join(directory, output))
+                if output else posixpath.join(directory, "output"))
+    for candidate in (file, produced):
+        reason = bookkeeping_reason(relative(candidate))
+        if reason is not None:
+            return reason
+    return None
+
+
+def compile_entries(captures: Sequence[tuple[int, VerifiedCapture]], *, initial_directory: str,
+                    exclusions: BookkeepingExclusions | None = None,
+                    ) -> tuple[list[dict[str, Any]], list[str]]:
+    """Return compile-database rows for every captured C/C++ translation unit.
+
+    CMake probe compiles are left out and counted in ``exclusions`` by typed reason.
+    """
+    exclusions = exclusions if exclusions is not None else BookkeepingExclusions()
     entries: list[dict[str, Any]] = []
     gaps: list[str] = []
     seen: set[str] = set()
@@ -77,6 +97,10 @@ def compile_entries(captures: Sequence[tuple[int, VerifiedCapture]], *,
             directory = directories.get((int(event.get("pid", 0)), int(event.get("ordinal", 0))),
                                         initial_directory)
             file = posixpath.normpath(source if source.startswith("/") else posixpath.join(directory, source))
+            reason = _bookkeeping_compile(directory, file, _output_argument(argv))
+            if reason is not None:
+                exclusions.record(reason, file)
+                continue
             entry = {"directory": directory, "arguments": argv, "file": file,
                      "output": _output_argument(argv), "capture_command": ordinal,
                      "capture_record_sha256": str(capture.identity.get("sha256", "")),
@@ -101,6 +125,7 @@ def invocation_rows(captures: Sequence[tuple[int, VerifiedCapture]], *, family: 
              "tool_kind": "compiler-driver", "directory": entry["directory"],
              "argv": list(entry["arguments"]), "inputs": [], "outputs": [],
              "native_component": True, "family": family,
+             "origin": f"execution-capture:command-{int(entry['capture_command']):03d}",
              "mapping": "syscall-process-exec", "mapping_confidence": 1.0}
             for index, entry in enumerate(entries, 1)]
 
@@ -114,7 +139,8 @@ def publish(root: Path, run_root: Path, *, dispatch: Mapping[str, Any], workspac
         return None, []
     source_dir = str(dispatch.get("recipe", {}).get("source_dir", dispatch.get("root", ".")))
     initial = posixpath.normpath(f"/workspace/{source_dir}")
-    entries, gaps = compile_entries(captures, initial_directory=initial)
+    exclusions = BookkeepingExclusions()
+    entries, gaps = compile_entries(captures, initial_directory=initial, exclusions=exclusions)
     workspace_root = workspace.resolve()
     compiled = set()
     for entry in entries:
@@ -137,7 +163,8 @@ def publish(root: Path, run_root: Path, *, dispatch: Mapping[str, Any], workspac
     path = root / "native-compile-commands.json"
     document = {"schema": SCHEMA, "build_unit_id": dispatch["build_unit_id"],
                 "family": dispatch["family"], "root": dispatch["root"],
-                "native_components": components, "entries": entries}
+                "native_components": components, "entries": entries,
+                "excluded_bookkeeping": exclusions.document()}
     atomic_json(path, document)
     return ({"path": path.relative_to(run_root).as_posix(), "sha256": file_sha256(path),
              "entry_count": len(entries), "family": dispatch["family"],

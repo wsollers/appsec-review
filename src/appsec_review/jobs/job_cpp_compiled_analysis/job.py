@@ -224,7 +224,8 @@ def _sanitize_arguments(row: Mapping[str, Any], case_root: Path, source_path: st
         if mapped == source_path:
             source_seen = True
             continue
-        if mapped.startswith(("-D", "-U", "-I", "-std=", "-f", "-m", "-W", "--sysroot=", "--target=")):
+        if mapped.startswith(("-D", "-U", "-I", "-isystem", "-iquote", "-idirafter", "-std=", "-f", "-m",
+                              "-W", "--sysroot=", "--target=")):
             result.append(mapped)
     result.append(source_path)
     return result
@@ -317,6 +318,49 @@ def normalize_compile_db(root: Path, mapping: Mapping[str, Any]) -> list[dict[st
                        "command_sha256": hashlib.sha256(canonical_json(arguments)).hexdigest()})
         result[-1]["compile_unit_id"] = _tu_identity(mapping, result[-1])
     return sorted(result, key=lambda item: (item["target_path"], item["command_sha256"]))
+
+
+_MISSING_HEADER = (
+    re.compile(r"fatal error: '([^'\n]{1,512})' file not found"),
+    re.compile(r"fatal error: ([^:\n]{1,512}): No such file or directory"),
+)
+
+
+def replay_failures(root: Path, mode: str, commands: list[Mapping[str, Any]]) -> dict[int, str] | None:
+    """Name each translation unit the AST or IR replay could not compile, from its bounded receipt.
+
+    A header the replay image does not carry is named as such, so a missing include path is a
+    visible gap rather than an empty index. Returns ``None`` when the receipt is unusable.
+    """
+    path = root / "analysis" / mode / "receipt.json"
+    if not path.is_file() or path.is_symlink() or path.stat().st_size > 64 * 1024 * 1024:
+        return None
+    try:
+        records = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, UnicodeDecodeError):
+        return None
+    if not isinstance(records, list) or len(records) != len(commands):
+        return None
+    failures: dict[int, str] = {}
+    for index, (record, command) in enumerate(zip(records, commands)):
+        if not isinstance(record, Mapping) or record.get("index") != index:
+            return None
+        if record.get("exit_code") == 0:
+            continue
+        stderr = str(record.get("stderr", ""))[:8192]
+        prefix = f"{command['target_path']}: {mode} replay"
+        missing = next((match.group(1) for pattern in _MISSING_HEADER
+                        for match in [pattern.search(stderr)] if match), None)
+        if record.get("timeout"):
+            failures[index] = f"{prefix} timed out"
+        elif missing is not None:
+            failures[index] = (f"{prefix} header not found in tool-native-cpp: {missing} "
+                               "(an include path the build image had is absent from the replay image)")
+        else:
+            first = next((line.strip() for line in stderr.splitlines() if "error" in line), "")
+            failures[index] = f"{prefix} failed with exit {record.get('exit_code')}" + (
+                f": {first[:512]}" if first else "")
+    return failures
 
 
 def _location(snapshot: str, target: Path, path: str, line: int = 1, column: int = 1,
@@ -475,15 +519,20 @@ def _load_ast_document(path: Path) -> Mapping[str, Any]:
     return {"kind": "TranslationUnitDecl", "inner": documents}
 
 
-def _ast_index(unit: UnitContext, case_id: str, catalog: Mapping[str, Any], execution: Mapping[str, Any]) -> Mapping[str, Any]:
+def _ast_index(unit: UnitContext, case_id: str, catalog: Mapping[str, Any], execution: Mapping[str, Any],
+               failures: Mapping[int, str] | None = None) -> Mapping[str, Any]:
     root = _case_root(unit, case_id)
     gaps: list[str] = []
+    failures = failures or {}
     builder, path, fingerprint, shard = _new_builder(unit, "analysis", case_id, "ast",
         [execution["execution"], catalog["compile_database"]], gaps,
         {"tool": "clang-18", "image": execution["image_id"]}, catalog["mapping"]["case_snapshot"])
     count = 0
     seen_entities: set[str] = set()
     for index, command in enumerate(catalog["compile_commands"]):
+        if index in failures:
+            gaps.append(failures[index])
+            continue
         ast_path = root / "analysis" / "ast" / f"tu-{index:04d}.json"
         try:
             document = _load_ast_document(ast_path)
@@ -526,9 +575,11 @@ _IR_ENTITY = re.compile(r"^define\s+.*?@(?P<name>[^\s(]+)\(")
 _IR_CALL = re.compile(r"\bcall\b.*?@(?P<name>[^\s(]+)\(")
 
 
-def _ir_index(unit: UnitContext, case_id: str, catalog: Mapping[str, Any], execution: Mapping[str, Any]) -> Mapping[str, Any]:
+def _ir_index(unit: UnitContext, case_id: str, catalog: Mapping[str, Any], execution: Mapping[str, Any],
+              failures: Mapping[int, str] | None = None) -> Mapping[str, Any]:
     root = _case_root(unit, case_id)
     gaps: list[str] = []
+    failures = failures or {}
     builder, path, fingerprint, shard = _new_builder(unit, "analysis", case_id, "ir",
         [execution["execution"], catalog["compile_database"]], gaps,
         {"tool": "clang-18-llvm-ir", "image": execution["image_id"]},
@@ -537,6 +588,9 @@ def _ir_index(unit: UnitContext, case_id: str, catalog: Mapping[str, Any], execu
     pending_calls: list[tuple[str, str, str]] = []
     count = blocks = instructions = 0
     for index, command in enumerate(catalog["compile_commands"]):
+        if index in failures:
+            gaps.append(failures[index])
+            continue
         ir_path = root / "analysis" / "ir" / f"tu-{index:04d}.ll"
         if not ir_path.is_file() or ir_path.stat().st_size > 64 * 1024 * 1024:
             gaps.append(f"{command['target_path']}: LLVM IR output unavailable or over bound")
@@ -1010,6 +1064,16 @@ def build_job(*, executor_factory=None) -> Job:
                     execution = _run_tool(unit, case_id, (tool_mode,), executor_factory)
                     tool_gap = (None if execution["exit_code"] == 0 else
                                 f"{case_id} {name} failed with exit {execution['exit_code']}")
+                    failures: dict[int, str] | None = None
+                    if name in {"ast", "ir"} and not execution["timed_out"] and not execution["oom_killed"]:
+                        failures = replay_failures(_case_root(unit, case_id), name,
+                                                   cataloged["compile_commands"])
+                        # The driver exits 2 when some units failed: index the others and name
+                        # each failed unit, instead of discarding the whole branch.
+                        if execution["exit_code"] == 2 and failures:
+                            tool_gap = None
+                        elif tool_gap and failures:
+                            tool_gap += "; " + "; ".join(list(failures.values())[:5])
                     if tool_gap:
                         builder, path, fingerprint, shard = _new_builder(
                             unit, "compiled" if name == "binary" else "analysis", case_id, name,
@@ -1020,9 +1084,9 @@ def build_job(*, executor_factory=None) -> Job:
                         result = _finish_index(unit, builder, path, fingerprint, shard,
                                                builder.name, name, [tool_gap])
                     elif name == "ast":
-                        result = _ast_index(unit, case_id, cataloged, execution)
+                        result = _ast_index(unit, case_id, cataloged, execution, failures)
                     elif name == "ir":
-                        result = _ir_index(unit, case_id, cataloged, execution)
+                        result = _ir_index(unit, case_id, cataloged, execution, failures)
                     else:
                         result = _binary_index(unit, case_id, cataloged, execution)
                 _save_checkpoint(unit, case_id, f"branch-{name}", identity, result)

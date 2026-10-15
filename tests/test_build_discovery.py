@@ -304,3 +304,12 @@ android {
     unit["descriptor_facts"] = {}
     assert "recipe image_profile must equal required profile java" in validate_build_recipe(
         recipe, unit)
+
+
+def test_planning_registers_every_build_system_discovery_emits() -> None:
+    # A unit discovery assigns (phpize for config.m4, clang for a wasm32 build.sh) must never be
+    # rejected by the plan validator as an unregistered build system.
+    from appsec_review.jobs.build_discovery import DISCOVERED_BUILD_SYSTEMS
+    from appsec_review.jobs.job_target_analysis_plan.planning import BUILD_SYSTEMS
+
+    assert {"phpize", "clang"} <= DISCOVERED_BUILD_SYSTEMS <= BUILD_SYSTEMS

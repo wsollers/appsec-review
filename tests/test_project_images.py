@@ -171,6 +171,72 @@ def test_networked_cargo_image_supplies_a_descriptor_only_fetch_target(tmp_path:
     assert '["cargo","fetch"]' in dockerfile
 
 
+def test_image_repairs_render_typed_environment_and_restores_into_the_dockerfile(tmp_path: Path) -> None:
+    target = tmp_path / "target"
+    (target / "crates" / "tool").mkdir(parents=True)
+    (target / "Cargo.toml").write_text("[workspace]\nmembers=['crates/tool']\n", encoding="utf-8")
+    (target / "crates" / "tool" / "Cargo.toml").write_text("[package]\nname='tool'\n", encoding="utf-8")
+    (target / "crates" / "tool" / "Cargo.lock").write_text("version = 3\n", encoding="utf-8")
+    base_id, derived_id = "sha256:" + "a" * 64, "sha256:" + "b" * 64
+
+    def runner(argv, _timeout):
+        if argv[:3] == ("docker", "image", "inspect"):
+            return (0, (base_id if argv[3] == "rust-base:local" else derived_id).encode(), b"", False)
+        if argv[:3] == ("docker", "buildx", "build"):
+            return 0, b"built", b"", False
+        raise AssertionError(argv)
+
+    recipe = {
+        "schema": "appsec-review/build-recipe/1", "build_unit_id": "build-unit-" + "1" * 20,
+        "image_profile": "rust", "source_dir": ".", "build_dir": "target",
+        "system_packages": [], "environment": {"CARGO_NET_GIT_FETCH_WITH_CLI": "true"},
+        "dependency_files": ["Cargo.toml", "crates/tool/Cargo.toml", "crates/tool/Cargo.lock"],
+        "configure_commands": [], "build_commands": [["cargo", "build"]],
+        "expected_outputs": ["target/debug/tool"], "network_required": False,
+        "reason": "fixture", "build_system": "cargo",
+        "image_repairs": {"environment": {"CARGO_NET_GIT_FETCH_WITH_CLI": "true"},
+                          "package_manager": None,
+                          "dependency_restores": [{"manager": "cargo",
+                                                   "manifest": "crates/tool/Cargo.toml"}]},
+    }
+    resolver = ProjectImageResolver(metadata_root=tmp_path / "metadata", target_root=target, runner=runner)
+    image, _, _ = resolver.resolve(recipe, BuildProfile("rust", "rust-base:local", base_id, "10001:10001"))
+    # A repair without apt packages or network_required still derives an image.
+    assert image.customized and image.image_id == derived_id
+    context = next((tmp_path / "metadata" / "project-images").glob("*/context"))
+    lines = (context / "Dockerfile").read_text(encoding="utf-8").splitlines()
+    assert 'ENV CARGO_NET_GIT_FETCH_WITH_CLI="true"' in lines
+    assert lines[-3:] == ["WORKDIR /opt/project/crates/tool", 'RUN ["cargo","fetch","--locked"]',
+                          "WORKDIR /opt/project/."]
+    assert lines.index('ENV CARGO_NET_GIT_FETCH_WITH_CLI="true"') < lines.index(
+        "WORKDIR /opt/project/crates/tool")
+    assert 'COPY --chown=10001:10001 ["cargo-placeholder.rs","/opt/project/crates/tool/src/main.rs"]' in lines
+    assert (context / "cargo-placeholder.rs").is_file()
+    without = {key: value for key, value in recipe.items() if key != "image_repairs"}
+    profile = BuildProfile("rust", "rust-base:local", base_id, "10001:10001")
+    assert resolver.definition(recipe, profile)[0] != resolver.definition(without, profile)[0]
+
+
+@pytest.mark.parametrize("image_repairs", (
+    {"environment": {"BAD": "a\nRUN id"}, "package_manager": None, "dependency_restores": []},
+    {"environment": {"lower": "1"}, "package_manager": None, "dependency_restores": []},
+    {"environment": {}, "package_manager": None,
+     "dependency_restores": [{"manager": "cargo", "manifest": "../escape/Cargo.toml"}]},
+    {"environment": {}, "package_manager": None,
+     "dependency_restores": [{"manager": "pip", "manifest": "Cargo.toml"}]},
+))
+def test_image_repairs_never_render_unvalidated_text(tmp_path: Path, image_repairs) -> None:
+    target = tmp_path / "target"
+    target.mkdir()
+    (target / "Cargo.toml").write_text("[package]\nname='fixture'\n", encoding="utf-8")
+    recipe = {"source_dir": ".", "build_system": "cargo", "dependency_files": ["Cargo.toml"],
+              "system_packages": [], "network_required": False, "image_repairs": image_repairs}
+    resolver = ProjectImageResolver(metadata_root=tmp_path / "metadata", target_root=target)
+    with pytest.raises(ValueError, match="image repair"):
+        resolver.definition(recipe, BuildProfile("rust", "rust-base:local", "sha256:" + "a" * 64,
+                                                 "10001:10001"))
+
+
 def test_maven_image_primes_clean_plugin_dependencies() -> None:
     assert _restore_command({"build_system": "maven", "dependency_files": ["pom.xml"]}) == (
         "mvn", "-B", "-DskipTests", "clean", "dependency:go-offline")
