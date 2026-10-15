@@ -52,15 +52,10 @@ def test_target_paths_and_prose_do_not_expose_evaluator_answers() -> None:
 
 def test_guide_lock_contains_identity_only() -> None:
     lock = json.loads(LOCK.read_text(encoding="utf-8"))
-    assert lock["schema"] == "appsec-review/evaluator-guide-lock/1"
+    assert lock["schema"] == "appsec-review/evaluator-guide-lock/2"
     assert re.fullmatch(r"[0-9a-f]{40}", lock["guide"]["commit"])
-    assert re.fullmatch(r"[0-9a-f]{64}", lock["guide"]["oracle_sha256"])
-    assert re.fullmatch(r"[0-9a-f]{64}", lock["guide"]["provenance_sha256"])
-    assert re.fullmatch(r"[0-9a-f]{64}", lock["guide"]["observed_run_sha256"])
     assert re.fullmatch(r"[0-9a-f]{40}", lock["target"]["commit"])
-    assert set(lock["guide"]) == {
-        "repository", "commit", "oracle_sha256", "provenance_sha256", "observed_run_sha256",
-    }
+    assert set(lock["guide"]) == {"repository", "commit"}
     assert set(lock["target"]) == {"repository", "commit"}
 
 
