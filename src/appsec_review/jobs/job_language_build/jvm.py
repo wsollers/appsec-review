@@ -137,6 +137,17 @@ def _wrapper_script(tool: str, real: str) -> str:
         f"exec {real} \"$@\"\n")
 
 
+def _resolved_tool(tool: str, configured: str) -> str:
+    """Shell expression for the real tool: the configured path when it exists in the image, else
+    the image's own JDK (``$JAVA_HOME/bin``). Build images differ: the Java image installs the JDK
+    under /usr/bin, while the Android image ships it only under JAVA_HOME."""
+    configured = shlex.quote(configured)
+    fallback = shlex.quote(tool)
+    return (f'"$(if [ -x {configured} ]; then printf %s {configured}; '
+            f'elif [ -n "${{JAVA_HOME:-}}" ] && [ -x "$JAVA_HOME/bin/"{fallback} ]; '
+            f'then printf %s "$JAVA_HOME/bin/"{fallback}; else printf %s {configured}; fi)"')
+
+
 def _logical_root(source_dir: str) -> str:
     return f"/workspace/{source_dir}/.appsec-review-jvm"
 
@@ -147,7 +158,8 @@ def _instrumentation(workspace: Path, source_dir: str, settings: Mapping[str, An
     binary.mkdir(parents=True, exist_ok=True)
     for tool, real in sorted(settings["tool_paths"].items()):
         script = binary / tool
-        script.write_text(_wrapper_script(tool, shlex.quote(str(real))), encoding="utf-8", newline="\n")
+        script.write_text(_wrapper_script(tool, _resolved_tool(tool, str(real))), encoding="utf-8",
+                          newline="\n")
         # The build container may run as a different numeric identity than the orchestrator
         # that wrote this run-owned wrapper (the configured profile user when the orchestrator
         # is root). The wrapper holds no secrets, so it must be executable by that identity.

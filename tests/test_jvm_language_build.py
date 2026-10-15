@@ -539,3 +539,32 @@ def test_build_system_environment_generalizes_to_multi_module_layouts(tmp_path: 
     assert environment["GRADLE_USER_HOME"] == "/tmp/appsec-review-gradle"
     assert environment["GRADLE_RO_DEP_CACHE"] == "/opt/project-deps/gradle/caches"
     assert "maven.compiler.fork" not in environment["MAVEN_OPTS"]
+
+
+def test_wrapper_execs_the_image_jdk_when_the_configured_path_is_absent(tmp_path: Path) -> None:
+    # The Android image has no /usr/bin/javac; its JDK is only under JAVA_HOME.
+    import os
+    import subprocess
+    from appsec_review.jobs.job_language_build import jvm
+
+    java_home = tmp_path / "jdk"
+    (java_home / "bin").mkdir(parents=True)
+    real = java_home / "bin" / "javac"
+    real.write_text("#!/bin/sh\necho jdk-javac \"$@\"\n", encoding="utf-8")
+    real.chmod(0o755)
+    trace = tmp_path / "trace"
+    trace.mkdir()
+    wrapper = tmp_path / "javac"
+    wrapper.write_text(jvm._wrapper_script("javac", jvm._resolved_tool("javac", str(tmp_path / "missing"))),
+                       encoding="utf-8")
+    wrapper.chmod(0o755)
+    env = {**os.environ, "APPSEC_JVM_TRACE_DIR": str(trace), "JAVA_HOME": str(java_home)}
+    result = subprocess.run([str(wrapper), "-version"], capture_output=True, text=True, env=env, check=False)
+    assert result.returncode == 0 and result.stdout.strip() == "jdk-javac -version"
+    assert len(list(trace.iterdir())) == 1
+    present = tmp_path / "present"
+    present.write_text("#!/bin/sh\necho configured\n", encoding="utf-8")
+    present.chmod(0o755)
+    wrapper.write_text(jvm._wrapper_script("javac", jvm._resolved_tool("javac", str(present))), encoding="utf-8")
+    assert subprocess.run([str(wrapper)], capture_output=True, text=True, env=env,
+                          check=False).stdout.strip() == "configured"
