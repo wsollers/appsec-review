@@ -22,9 +22,11 @@ from appsec_review.retrieval import (
 )
 from appsec_review.storage import FileLock, atomic_json, canonical_json, file_sha256, protected_json
 
+from . import gradle_provenance
 
-JVM_EXECUTOR_IDENTITY = "appsec-review/jvm-language-build-executor/2"
-JVM_CAPTURE_IDENTITY = "appsec-review/jvm-build-capture/2"
+
+JVM_EXECUTOR_IDENTITY = "appsec-review/jvm-language-build-executor/3"
+JVM_CAPTURE_IDENTITY = "appsec-review/jvm-build-capture/3"
 JVM_RECEIPT_SCHEMA = "appsec-review/language-build-receipt/1"
 _SECRET = re.compile(r"(SECRET|TOKEN|PASSWORD|PASSWD|API_KEY|PRIVATE_KEY|CREDENTIAL)", re.I)
 _TOOLS = {
@@ -38,6 +40,7 @@ _KIND_BY_SUFFIX = {
     ".kts": "generated-kotlin-source", ".kotlin_module": "kotlin-module-metadata",
     ".smap": "source-debug-map", ".map": "source-map", ".properties": "metadata",
     ".xml": "metadata", ".json": "metadata", ".proto": "generated-source",
+    ".dex": "dex", ".apk": "android-apk",
 }
 _RESOURCE_NAMES = {"MANIFEST.MF", "pom.properties", "pom.xml", "module-info.class"}
 # The wrapper's pseudo-tool record that carries an @argfile's bounded contents.
@@ -108,31 +111,54 @@ def _jvm_argv(recipe: Mapping[str, Any], raw: list[str]) -> tuple[tuple[str, ...
     return tuple(argv), wrapper
 
 
+def _wrapper_script(tool: str, real: str) -> str:
+    """Return a wrapper that records argv and, for every readable `@argfile`, its path, the
+    directory the tool ran in, and its bounded NUL-stripped contents, then execs `real` (already
+    shell-quoted). Build tools delete their argument files after the compiler exits, so the
+    content is retained at exec time. Each invocation writes its own
+    record file, so concurrent compilations (Gradle --parallel, Maven -T) never interleave."""
+    return (
+        "#!/bin/sh\n"
+        "trace_dir=${APPSEC_JVM_TRACE_DIR:?}\n"
+        "parent=${APPSEC_JVM_PARENT_COMMAND:-unknown}\n"
+        "record=\"$trace_dir/$(date +%s%N)-$$\"\n"
+        f"printf '%s\\0%s\\0%s\\0' '{tool}' \"$parent\" \"$#\" >> \"$record\"\n"
+        "for arg in \"$@\"; do printf '%s\\0' \"$arg\" >> \"$record\"; done\n"
+        "for arg in \"$@\"; do\n"
+        "  case $arg in\n"
+        "    @*) file=${arg#@}\n"
+        "        if [ -f \"$file\" ] && [ -r \"$file\" ] && [ ! -L \"$file\" ]; then\n"
+        f"          printf '%s\\0%s\\0%s\\0%s\\0%s\\0' '{_ARGFILE_RECORD}' \"$parent\" 3 \"$file\" \"$PWD\" >> \"$record\"\n"
+        f"          head -c {_ARGFILE_BYTES} \"$file\" | tr -d '\\000' >> \"$record\"\n"
+        "          printf '\\0' >> \"$record\"\n"
+        "        fi ;;\n"
+        "  esac\n"
+        "done\n"
+        f"exec {real} \"$@\"\n")
+
+
+def _logical_root(source_dir: str) -> str:
+    return f"/workspace/{source_dir}/.appsec-review-jvm"
+
+
 def _instrumentation(workspace: Path, source_dir: str, settings: Mapping[str, Any]) -> tuple[Path, str]:
     root = workspace / Path(*PurePosixPath(source_dir).parts) / ".appsec-review-jvm"
     binary, trace = root / "bin", root / "invocations.bin"
     binary.mkdir(parents=True, exist_ok=True)
     for tool, real in sorted(settings["tool_paths"].items()):
         script = binary / tool
-        script.write_text(
-            "#!/bin/sh\n"
-            "trace=${APPSEC_JVM_TRACE:?}\n"
-            f"printf '%s\\0%s\\0%s\\0' '{tool}' \"${{APPSEC_JVM_PARENT_COMMAND:-unknown}}\" \"$#\" >> \"$trace\"\n"
-            "for arg in \"$@\"; do printf '%s\\0' \"$arg\" >> \"$trace\"; done\n"
-            # javac reads @argfiles itself and Maven deletes its argfile when the build JVM
-            # exits, so the wrapper keeps a bounded copy beside the invocation it belongs to.
-            "for arg in \"$@\"; do case \"$arg\" in @*) file=${arg#@}\n"
-            "  if [ -f \"$file\" ] && [ ! -L \"$file\" ]; then\n"
-            f"    printf '%s\\0%s\\0%s\\0%s\\0%s\\0' '{_ARGFILE_RECORD}' \"${{APPSEC_JVM_PARENT_COMMAND:-unknown}}\" 3 \"$file\" \"$PWD\" >> \"$trace\"\n"
-            f"    head -c {_ARGFILE_BYTES} \"$file\" | tr -d '\\000' >> \"$trace\"; printf '\\0' >> \"$trace\"\n"
-            "  fi;; esac; done\n"
-            f"exec {shlex.quote(str(real))} \"$@\"\n", encoding="utf-8", newline="\n")
+        script.write_text(_wrapper_script(tool, shlex.quote(str(real))), encoding="utf-8", newline="\n")
         # The build container may run as a different numeric identity than the orchestrator
         # that wrote this run-owned wrapper (the configured profile user when the orchestrator
         # is root). The wrapper holds no secrets, so it must be executable by that identity.
         script.chmod(0o755)
-    logical = f"/workspace/{source_dir}/.appsec-review-jvm"
-    return trace, logical
+    # Per-invocation records (and the Gradle task records) are written by that same identity;
+    # the executor makes the run-owned workspace writable for it.
+    trace.with_name("invocations.d").mkdir(exist_ok=True)
+    gradle_provenance.write_init_script(root, {
+        tool: _wrapper_script(tool, gradle_provenance.TEMPLATE_PLACEHOLDER)
+        for tool in gradle_provenance.MIRRORED_TOOLS})
+    return trace, _logical_root(source_dir)
 
 
 def _environment(recipe: Mapping[str, Any], workspace: Path, settings: Mapping[str, Any]) -> tuple[dict[str, str], Path]:
@@ -145,6 +171,8 @@ def _environment(recipe: Mapping[str, Any], workspace: Path, settings: Mapping[s
     if profile not in system_paths:
         raise JvmIntegrityError(f"JVM image profile has no configured system path: {profile}")
     environment["APPSEC_JVM_TRACE"] = logical + "/invocations.bin"
+    environment["APPSEC_JVM_TRACE_DIR"] = logical + "/invocations.d"
+    environment["APPSEC_JVM_INSTRUMENTATION"] = logical
     environment["PATH"] = logical + "/bin:" + str(system_paths[profile])
     environment.setdefault("MAVEN_OPTS", "-Dmaven.repo.local=/opt/project-deps/maven")
     if str(recipe.get("build_system", "")) == "maven":
@@ -189,6 +217,16 @@ def _stream(run_root: Path, path: Path, result: Any, name: str, limit: int,
         value["diagnostic_tail"] = {"path": tail_path.relative_to(run_root).as_posix(),
             "sha256": file_sha256(tail_path), "byte_count": len(tail)}
     return value
+
+
+def _trace_chunks(trace: Path) -> list[bytes]:
+    """Read the legacy serial trace and the per-invocation record files in exec order."""
+    chunks = [trace.read_bytes()] if trace.is_file() and not trace.is_symlink() else []
+    directory = trace.with_name("invocations.d")
+    if directory.is_dir() and not directory.is_symlink():
+        chunks.extend(path.read_bytes() for path in sorted(directory.iterdir())
+                      if path.is_file() and not path.is_symlink())
+    return chunks
 
 
 def _argfile_arguments(text: str) -> list[str]:
@@ -342,17 +380,32 @@ def javac_outputs(workspace: Path, directory: str, arguments: list[str]) -> tupl
 
 def _trace_rows(trace: Path, workspace: Path, limit: int, byte_limit: int,
                 source_dir: str = ".") -> tuple[list[dict[str, Any]], list[str]]:
-    if not trace.is_file():
+    chunks = _trace_chunks(trace)
+    if not chunks:
         return [], ["nested JVM tool provenance was not emitted by the build"]
-    data = trace.read_bytes()
     gaps: list[str] = []
-    if len(data) > byte_limit:
-        data = data[:byte_limit]
-        gaps.append("JVM invocation trace exceeded its configured byte bound")
-    fields = data.split(b"\0")
     rows: list[dict[str, Any]] = []
-    offset = 0
-    while offset + 3 <= len(fields) and len(rows) < limit:
+    remaining = byte_limit
+    for chunk in chunks:
+        if remaining <= 0 or len(rows) >= limit:
+            gaps.append("JVM invocation trace exceeded its configured " +
+                        ("byte" if remaining <= 0 else "record") + " bound")
+            break
+        if len(chunk) > remaining:
+            chunk = chunk[:remaining]
+            gaps.append("JVM invocation trace exceeded its configured byte bound")
+        remaining -= len(chunk)
+        gaps.extend(_trace_chunk_rows(chunk, rows, limit))
+    for row in rows:
+        gaps.extend(_finish_row(row, workspace, source_dir))
+    return rows, list(dict.fromkeys(gaps))
+
+
+def _trace_chunk_rows(data: bytes, rows: list[dict[str, Any]], limit: int) -> list[str]:
+    fields = data.split(b"\0")
+    gaps: list[str] = []
+    offset, owner = 0, None
+    while offset + 3 <= len(fields):
         try:
             tool = fields[offset].decode("utf-8", "replace")
             parent = fields[offset + 1].decode("ascii", "replace")
@@ -364,53 +417,67 @@ def _trace_rows(trace: Path, workspace: Path, limit: int, byte_limit: int,
         if count < 0 or count > 4096 or offset + count > len(fields):
             gaps.append("JVM invocation trace ended with an incomplete record")
             break
-        argv = [tool, *(value.decode("utf-8", "replace") for value in fields[offset:offset + count])]
+        values = [value.decode("utf-8", "replace") for value in fields[offset:offset + count]]
         offset += count
         if tool == _ARGFILE_RECORD:
-            # The wrapper writes an invocation's argfiles right after the invocation itself.
-            owner = rows[-1] if rows and rows[-1]["parent_command_id"] == parent else None
-            if owner is None or len(argv) != 4 or f"@{argv[1]}" not in owner["argv"]:
+            # The wrapper retains each @argfile (path, the PWD javac ran in, bounded contents)
+            # right after the exec record that named it, in the same per-exec record file.
+            if owner is None or owner["parent_command_id"] != parent or count != 3 or \
+                    f"@{values[0]}" not in owner["argv"][1:]:
                 gaps.append("JVM argfile record did not follow the invocation that named it")
                 continue
             owner.setdefault("argfiles", []).append({
-                "reference": argv[1], "working_directory": argv[2],
-                "sha256": hashlib.sha256(argv[3].encode("utf-8")).hexdigest(),
-                "arguments": _argfile_arguments(argv[3])})
+                "reference": values[0], "working_directory": values[1],
+                "sha256": hashlib.sha256(values[2].encode("utf-8")).hexdigest(),
+                "arguments": _argfile_arguments(values[2])})
             continue
-        rows.append({"ordinal": len(rows) + 1, "tool": tool,
-            "tool_kind": _TOOLS.get(tool, "jvm-tool"), "argv": argv,
-            "parent_command_id": parent,
-            "working_directory": ".", "mapping": "instrumented-tool-wrapper",
-            "mapping_confidence": 1.0})
-    if len(rows) >= limit and offset + 3 <= len(fields):
-        gaps.append("JVM invocation trace exceeded its configured record bound")
-    for row in rows:
-        argfiles = {f"@{item['reference']}": item for item in row.get("argfiles", ())}
-        arguments: list[str] = []
-        for value in row["argv"][1:]:
-            if value in argfiles:
-                arguments.extend(argfiles[value]["arguments"])
-                continue
-            if value.startswith("@") and row["tool"] == "javac":
-                gaps.append(f"javac argfile contents were not recorded: {value[1:]}")
-            arguments.append(value)
-        # Maven's forked javac names its argfile with an absolute path; the wrapper records
-        # the directory javac ran in so relative arguments inside it resolve exactly.
-        directory = next((str(item["working_directory"]) for item in row.get("argfiles", ())
-                          if str(item["working_directory"]).startswith("/workspace")), source_dir)
-        inputs, outputs = _paths(arguments)
-        if row["tool"] == "javac":
-            classes, class_gaps = javac_outputs(workspace, directory, arguments)
-            if class_gaps:
-                # The classes stay unattributed, and artifact indexing names each one as a gap.
-                row["class_mapping_gaps"] = class_gaps[:16]
-            mapped_classes = [{**item, "mapping": "javac-derived-class"}
-                              for item in _mapped(workspace, ".", classes) if item.get("sha256")]
-            row["outputs"] = [*_mapped(workspace, directory, outputs), *mapped_classes]
-        else:
-            row["outputs"] = _mapped(workspace, directory, outputs)
-        row["inputs"] = _mapped(workspace, directory, inputs)
-    return rows, list(dict.fromkeys(gaps))
+        if len(rows) >= limit:
+            gaps.append("JVM invocation trace exceeded its configured record bound")
+            break
+        owner = {"ordinal": len(rows) + 1, "tool": tool, "argv": [tool, *values],
+                 "parent_command_id": parent}
+        rows.append(owner)
+    return gaps
+
+
+def _finish_row(row: dict[str, Any], workspace: Path, source_dir: str) -> list[str]:
+    """Expand argfiles, classify the exec, and resolve its inputs and outputs."""
+    gaps: list[str] = []
+    argfiles = {f"@{item['reference']}": item for item in row.get("argfiles", ())}
+    arguments: list[str] = []
+    for value in row["argv"][1:]:
+        if value in argfiles:
+            arguments.extend(argfiles[value]["arguments"])
+            continue
+        if value.startswith("@") and row["tool"] in {"javac", "java"}:
+            gaps.append(f"{row['tool']} argfile contents were not recorded: {value[1:]}")
+        arguments.append(value)
+    tool, launcher = row["tool"], None
+    if tool == "java" and gradle_provenance.KOTLIN_COMPILER_MAIN in arguments:
+        # Out-of-process Kotlin compilation execs the JDK launcher with the compiler main class.
+        launcher, tool = "java", "kotlinc"
+        arguments = arguments[arguments.index(gradle_provenance.KOTLIN_COMPILER_MAIN) + 1:]
+    # Build tools name argfiles with absolute paths; the wrapper records the directory the tool
+    # ran in, so relative arguments inside it resolve exactly. Otherwise the recipe source_dir.
+    directory = next((str(item["working_directory"]) for item in row.get("argfiles", ())
+                      if str(item["working_directory"]).startswith("/workspace")), source_dir)
+    inputs, outputs = _paths(arguments)
+    if tool == "javac":
+        classes, class_gaps = javac_outputs(workspace, directory, arguments)
+        if class_gaps:
+            # The classes stay unattributed, and artifact indexing names each one as a gap.
+            row["class_mapping_gaps"] = class_gaps[:16]
+        mapped_classes = [{**item, "mapping": "javac-derived-class"}
+                          for item in _mapped(workspace, ".", classes) if item.get("sha256")]
+        mapped_outputs = [*_mapped(workspace, directory, outputs), *mapped_classes]
+    else:
+        mapped_outputs = _mapped(workspace, directory, outputs)
+    row.update({"tool": tool, "tool_kind": _TOOLS.get(tool, "jvm-tool"), "launcher": launcher,
+        "expanded_argv": [tool, *arguments], "working_directory": directory,
+        "inputs": _mapped(workspace, directory, inputs), "outputs": mapped_outputs,
+        "evidence_kind": "observed-exec", "mapping": "instrumented-tool-wrapper",
+        "mapping_confidence": 1.0})
+    return gaps
 
 
 def _paths(args: list[str]) -> tuple[list[str], list[str]]:
@@ -430,6 +497,17 @@ def _mapped(workspace: Path, directory: str, values: list[str]) -> list[dict[str
     from .job import _mapped_files
     base = directory if directory.startswith("/") else posixpath.join("/workspace", directory)
     return _mapped_files(workspace, posixpath.normpath(base), values)
+
+
+def _remove_jdk_mirrors(root: Path, gaps: list[str]) -> None:
+    """Remove the run-owned JDK mirrors; their links name container paths and are not evidence."""
+    mirrors = root / "jdk"
+    if not mirrors.exists() or mirrors.is_symlink():
+        return
+    try:
+        shutil.rmtree(mirrors)  # Never follows the mirror's links into the real JDK.
+    except OSError as exc:
+        gaps.append(f"run-owned Gradle JDK mirror could not be removed ({type(exc).__name__})")
 
 
 def _artifact_kind(path: Path) -> str | None:
@@ -478,6 +556,7 @@ def _fingerprint(dispatch: Mapping[str, Any], accepted: Mapping[str, Any], setti
         "dependencies": image["dependency_hashes"], "build_dependencies": dispatch.get("build_dependencies", ()),
         "image": image["image_id"], "executor": JVM_EXECUTOR_IDENTITY, "capture": JVM_CAPTURE_IDENTITY,
         "toolchain": {"family": "java", "image_id": image["image_id"], "settings": settings},
+        "gradle_init_script": gradle_provenance.INIT_SCRIPT_SHA256,
         "probe": dispatch["probe_identity"], "upstream_handoff": accepted["project_build_handoff_sha256"]
     })).hexdigest()
 
@@ -486,7 +565,7 @@ def _index(unit: Any, receipt: Mapping[str, Any]) -> dict[str, Any]:
     producer = [{"sha256": item["sha256"]} for item in receipt["artifacts"]]
     fingerprint = index_fingerprint(name="build", target_snapshot=unit.job.source_fingerprint,
         producer_artifacts=producer, tool_identity={"executor": JVM_EXECUTOR_IDENTITY,
-        "image": receipt["image"]["image_id"]}, parser_identity="jvm-provenance/1",
+        "image": receipt["image"]["image_id"]}, parser_identity="jvm-provenance/2",
         normalizer_identity="jvm-build-normalizer/1", mapping_identity="jvm-workspace-path/1")
     shard = "jvm-" + str(receipt["build_unit_id"])
     path = unit.job.run_root / "data" / "indices" / "build" / f"{fingerprint}-{shard}.sqlite"
@@ -512,7 +591,8 @@ def _index(unit: Any, receipt: Mapping[str, Any]) -> dict[str, Any]:
                  "ordinal": invocation["ordinal"], "tool": invocation["tool"],
                  "argv_sha256": invocation["argv_sha256"]})
             payload = {key: invocation.get(key) for key in ("ordinal", "tool", "tool_kind",
-                "argv_sha256", "parent_command_id", "working_directory", "inputs", "outputs",
+                "argv_sha256", "expanded_argv_sha256", "launcher", "evidence_kind",
+                "parent_command_id", "working_directory", "inputs", "outputs",
                 "mapping", "mapping_confidence")}
             builder.add_entity(EntityRecord(identity, invocation["argv_sha256"], invocation["tool"],
                 f"observed {invocation['tool_kind']} invocation", payload))
@@ -520,6 +600,20 @@ def _index(unit: Any, receipt: Mapping[str, Any]) -> dict[str, Any]:
             if parent:
                 builder.add_relation(RelationRecord(RelationKind.DEPENDS_ON, identity.value,
                                                      parent, True, 1.0))
+        for declared in receipt.get("declared_compilations", ()):
+            identity = LogicalIdentity.derive(EntityKind.BUILD_ACTION, unit.job.source_fingerprint,
+                {"unit": receipt["build_unit_id"], "parent": declared["parent_command_id"],
+                 "declared_task": declared["task_path"], "tool": declared["tool"]})
+            payload = {key: declared.get(key) for key in ("ordinal", "tool", "tool_kind",
+                "evidence_kind", "task_path", "task_type", "parent_command_id", "did_work",
+                "declared_arguments_sha256", "declared_settings", "inputs", "outputs",
+                "observed_invocation_ordinals", "mapping", "mapping_confidence")}
+            builder.add_entity(EntityRecord(identity, declared["task_path"], declared["tool"],
+                f"build-tool-declared {declared['tool_kind']} task (not an observed exec)", payload))
+            parent = action_by_command.get(str(declared["parent_command_id"]))
+            if parent:
+                builder.add_relation(RelationRecord(RelationKind.DEPENDS_ON, identity.value, parent,
+                                                     True, gradle_provenance.DECLARED_CONFIDENCE))
         for artifact in receipt["artifacts"]:
             kind = EntityKind.LIBRARY if artifact["kind"] in {"jar", "war", "ear"} else EntityKind.EVIDENCE_ARTIFACT
             identity = LogicalIdentity.derive(kind, unit.job.source_fingerprint,
@@ -608,6 +702,10 @@ def execute_jvm_one(unit: Any, dispatch: Mapping[str, Any], accepted: Mapping[st
     protected.mkdir(parents=True, exist_ok=True)
     for ordinal, raw in enumerate([*recipe["configure_commands"], *recipe["build_commands"]], 1):
         argv, wrapper = _jvm_argv(recipe, raw)
+        instrumentation = None
+        if Path(argv[0]).name == "gradle":
+            argv, instrumentation = gradle_provenance.instrument_argv(
+                argv, _logical_root(str(recipe["source_dir"])))
         attempt_identity = hashlib.sha256(canonical_json({"run": unit.job.run_id,
             "attempt": unit.job.attempt_id, "unit": build_unit_id, "ordinal": ordinal})).hexdigest()
         command_id = hashlib.sha256(canonical_json({"attempt": attempt_identity, "argv": list(argv)})).hexdigest()
@@ -639,6 +737,7 @@ def execute_jvm_one(unit: Any, dispatch: Mapping[str, Any], accepted: Mapping[st
             "environment_facts": {key: "set" for key in sorted(command_environment) if not _SECRET.search(key)},
             "wrapper_resolution": ({"requested": wrapper, "executed": argv[0],
                 "policy": "pinned-system-tool"} if wrapper else None),
+            "instrumentation": instrumentation,
             "started_at": datetime.now(timezone.utc).isoformat(),
             "duration_ms": int((time.monotonic() - command_started) * 1000),
             "exit_code": result.exit_code, "timed_out": result.timed_out,
@@ -649,6 +748,7 @@ def execute_jvm_one(unit: Any, dispatch: Mapping[str, Any], accepted: Mapping[st
         if failed:
             gaps.append(f"JVM build command {ordinal} {'timed out' if result.timed_out else f'exited {result.exit_code}'}")
             break
+    _remove_jdk_mirrors(trace.parent, gaps)
     from appsec_review.jobs.cataloging import source_fingerprint
     if source_fingerprint(unit.job.target_root or Path()) != unit.job.source_fingerprint:
         raise JvmIntegrityError("target changed during JVM language-build execution")
@@ -663,21 +763,45 @@ def execute_jvm_one(unit: Any, dispatch: Mapping[str, Any], accepted: Mapping[st
         except OSError:
             pass
     gaps.extend(trace_gaps)
+    instrumentation_root = trace.parent
+    records, record_gaps = gradle_provenance.read_task_records(
+        instrumentation_root / "gradle-tasks.jsonl", int(settings["trace_bytes"]),
+        int(settings["provenance_count_limit"]))
+    gaps.extend(record_gaps)
+    declared, declared_gaps = gradle_provenance.declared_compilations(
+        records, rows, lambda values: _mapped(workspace, str(recipe["source_dir"]), values))
+    gaps.extend(declared_gaps)
+    if (any(item.get("instrumentation") for item in commands) and
+            not any(item.get("record_kind") == "session" for item in records)):
+        gaps.append("Gradle provenance init script did not report; Gradle compiler provenance is unavailable")
+    for path in [trace.with_name("invocations.d"), *trace.with_name("invocations.d").glob("*"),
+                 instrumentation_root / "gradle-tasks.jsonl"]:
+        try:
+            if path.exists() and not path.is_symlink():
+                path.chmod(0o700 if path.is_dir() else 0o600)
+        except OSError:
+            pass
     command_streams = {item["command_id"]: {"stdout": item["stdout"], "stderr": item["stderr"]}
                        for item in commands}
     for row in rows:
         row["parent_streams"] = command_streams.get(row["parent_command_id"], {})
     trace_protected = protected / f"jvm-invocations-{unit.job.attempt_id}.json"
-    protected_json(trace_protected, {"schema": "appsec-review/protected-jvm-invocations/1", "rows": rows})
+    protected_json(trace_protected, {"schema": "appsec-review/protected-jvm-invocations/2", "rows": rows,
+                                     "declared_compilations": declared})
     try:
         trace_protected.chmod(0o600)
     except OSError:
         pass
     # Argfile contents are arguments too; only their digests leave the protected record.
-    sanitized = [{key: value for key, value in row.items() if key not in {"argv", "argfiles"}} |
-                 {"argv_sha256": hashlib.sha256(canonical_json(row["argv"])).hexdigest()} |
+    sanitized = [{key: value for key, value in row.items() if key not in {"argv", "expanded_argv", "argfiles"}} |
+                 {"argv_sha256": hashlib.sha256(canonical_json(row["argv"])).hexdigest(),
+                  "expanded_argv_sha256": hashlib.sha256(canonical_json(row["expanded_argv"])).hexdigest()} |
                  ({"argfile_sha256": [item["sha256"] for item in row["argfiles"]]} if row.get("argfiles") else {})
                  for row in rows]
+    sanitized_declared = [{key: value for key, value in row.items() if key != "declared_arguments"} |
+                          {"declared_arguments_sha256": hashlib.sha256(
+                              canonical_json(row["declared_arguments"])).hexdigest()}
+                          for row in declared]
     workspace_files = _manifest(workspace, int(unit.job.config.settings["artifact_count_limit"]) * 10)
     workspace_manifest = root / "workspace-manifest.json"
     atomic_json(workspace_manifest, {"schema": "appsec-review/build-workspace-manifest/1",
@@ -691,6 +815,7 @@ def execute_jvm_one(unit: Any, dispatch: Mapping[str, Any], accepted: Mapping[st
         "recipe_identity": dispatch["recipe_identity"], "probe_identity": dispatch["probe_identity"],
         "image": image, "workspace": workspace.relative_to(unit.job.run_root).as_posix(),
         "commands": commands, "tool_invocations": sanitized,
+        "declared_compilations": sanitized_declared,
         "protected_tool_invocations": {"path": trace_protected.relative_to(unit.job.run_root).as_posix(),
             "sha256": file_sha256(trace_protected), "byte_count": trace_protected.stat().st_size},
         "workspace_manifest": {"path": workspace_manifest.relative_to(unit.job.run_root).as_posix(),

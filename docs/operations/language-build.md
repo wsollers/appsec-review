@@ -141,11 +141,72 @@ CodeQL is not installed in the build image. Manual replay receives fresh run-own
 caches, then the configured default and security-extended suites operate on the Java database.
 
 The adapter instruments available `javac`, `kotlinc`, annotation/code-generator, archiver, and
-related JVM tools and retains exact nested argv only in a protected trace. It catalogs class files,
-generated Java/Kotlin sources, resources and dependency metadata, Kotlin module/source-map data,
-and JAR/WAR/EAR packages. When a build tool performs compiler or packaging work in-process and no
-nested invocation is observable, the receipt reports a provenance gap instead of inventing a
-command. Maven/Gradle build-driver commands and their separate stdout/stderr artifacts always retain
+related JVM tools and retains exact nested argv only in a protected trace. Each wrapper exec writes
+its own record file under `.appsec-review-jvm/invocations.d/`, so parallel compilations never
+interleave. For every readable, non-symlink `@argfile` the record also keeps the file's path, the
+directory the tool ran in, and its first 1 MiB of contents with NUL bytes stripped, because Maven
+and Gradle delete their argument files once the compiler exits. One javac-compatible tokenizer
+expands them. Relative arguments resolve against that recorded `/workspace` directory, or else
+against the recipe source directory. `javac` rows add hash-resolved class outputs
+(`javac-derived-class`, including nested and anonymous classes) derived from `-d` and each source's
+package and types. A missing argfile or an unreadable source is a named gap. Argfile contents stay in
+the protected record, and receipts carry `argfile_sha256` and `expanded_argv_sha256`.
+Maven compilation is forked through the PATH `javac` wrapper.
+It catalogs class files, generated Java/Kotlin sources, resources and dependency metadata, Kotlin
+module/source-map data, DEX files, APK packages, and JAR/WAR/EAR packages. When a build tool
+performs compiler or packaging work in-process and no nested invocation is observable, the receipt
+reports a provenance gap instead of inventing a command.
+
+Gradle compiles Java and Kotlin inside its own JVM, so every language-build Gradle command (plain
+and Android) runs with a run-owned init script,
+`.appsec-review-jvm/gradle/appsec-provenance.init.gradle`, generated from
+`job_language_build/gradle_provenance.py`. The accepted tasks are validated first. Execution then
+appends only options: `--no-daemon`, `--no-build-cache`, `--no-configuration-cache`,
+`-Pkotlin.compiler.execution.strategy=out-of-process`, and `--init-script <path>`. It removes recipe
+`--daemon`, `--build-cache`, and `--configuration-cache` flags, because a reused daemon, a cache hit,
+or a configuration-cache replay would hide compilation. The command receipt's `instrumentation`
+field records the script hash and every added or removed argument.
+
+- **Java (`JavaCompile`, including AGP's `compile*JavaWithJavac`).** After all projects are
+  evaluated, and before the task graph reads any toolchain, each task's `javaCompiler` is replaced
+  lazily by a mirror of the JDK the task would have used: an explicit task toolchain, the `java`
+  extension toolchain, or the Gradle JVM. The mirror, under `.appsec-review-jvm/jdk/<hash>/`, links
+  every entry of that JDK except `bin/javac` and `bin/java`, which are the recording wrappers. Gradle
+  therefore probes a complete JDK of the same version, and its fork-executable validation (which
+  compares canonical toolchain homes) passes. Just before compilation, the task is set to
+  `fork = true` with `forkOptions.executable` set to the mirror `javac`. Gradle then runs the
+  command-line compiler with its exact `@argfile`, and that compilation is an observed exec. The
+  mirror is removed after the build. The replacement uses Gradle's own internal
+  `SpecificInstallationToolchainSpec`. The pinned Gradle 8.9 and Gradle 8.14 were verified offline.
+  On another version the fallback below applies.
+- **Kotlin (KGP `KotlinCompile`, including kapt stub tasks).** The init script sets
+  `compilerExecutionStrategy` to `OUT_OF_PROCESS`. When the Kotlin toolchain is the Gradle JVM,
+  which means the `java` extension toolchain is unset or has the same major version, the init script
+  points `kotlinJavaToolchain` at the mirror. The `java ... K2JVMCompiler @argfile` exec is then
+  recorded and typed as an observed `kotlinc` invocation with `launcher: java`. A different
+  toolchain version is left untouched and reported.
+- **Declared task records.** Every compile task and every Android D8/R8 dex task
+  (`com.android.build.*` `Dex*`/`D8*`/`L8Dex*`/`R8*` tasks) also writes a JSON record to
+  `.appsec-review-jvm/gradle-tasks.jsonl`. A record holds the task path and type, configured compiler
+  arguments, sources, destination, classpath count, release/target settings, toolchain home,
+  instrumentation outcome, and `did_work`. Records are bounded by the JVM `trace_bytes` and
+  `provenance_count_limit` settings. They become receipt `declared_compilations` rows with
+  `evidence_kind: build-tool-declared`, `mapping: gradle-init-script-task-record`, and confidence
+  0.5. Observed rows in `tool_invocations` carry `evidence_kind: observed-exec` and confidence 1.0.
+  A declared row is linked to an observed exec only through the same parent command, compiler, and
+  resolved `-d` destination (`observed_invocation_ordinals`). Exact declared arguments stay in the
+  protected invocation file, and the receipt keeps only their hash.
+
+The following are named gaps: a compile task that did work without a matching observed exec (for
+example, when forking or the toolchain replacement was unavailable); a Gradle command whose init
+script never reported; and every Android dex task. D8 and R8 run in-process in Gradle workers, so
+the receipt records their declared outputs and input count, never an invocation. Artifact-transform
+dexing of external libraries is not recorded at all. An Android build that dexes therefore completes
+with gaps. NO-SOURCE and up-to-date tasks (`did_work: false`) compiled nothing and are not gaps.
+`tests/test_gradle_provenance.py` covers this with fakes. It also runs a real offline build of a
+synthetic java-library and application project, with and without `--parallel`, when
+`APPSEC_GRADLE_HOME` names a Gradle distribution.
+Maven/Gradle build-driver commands and their separate stdout/stderr artifacts always retain
 hashes, original and retained sizes, configured bounds, truncation and diagnostic-tail state,
 exit/timeout state, duration, image, command, and attempt identities.
 

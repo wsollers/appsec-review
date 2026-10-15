@@ -431,10 +431,13 @@ def test_jvm_wrapper_records_argfile_contents_beside_the_invocation(tmp_path: Pa
     trace, _logical = jvm._instrumentation(workspace, "module", settings)
     argfile = workspace / "module" / "target" / "javac.args"
     argfile.write_text('-d "target/classes"\nsrc/main/java/com/example/app/Main.java\n', encoding="utf-8")
-    environment = {**os.environ, "APPSEC_JVM_TRACE": str(trace), "APPSEC_JVM_PARENT_COMMAND": "cmd-1"}
+    records = trace.with_name("invocations.d")
+    environment = {**os.environ, "APPSEC_JVM_TRACE_DIR": str(records), "APPSEC_JVM_PARENT_COMMAND": "cmd-1"}
     wrapper = trace.parent / "bin" / "javac"
     subprocess.run([str(wrapper), f"@{argfile}"], cwd=workspace / "module", env=environment, check=True)
-    fields = trace.read_bytes().split(b"\0")
+    # Each exec writes its own record file, so parallel compilations never interleave.
+    (record,) = records.iterdir()
+    fields = record.read_bytes().split(b"\0")
     assert fields[:4] == [b"javac", b"cmd-1", b"1", f"@{argfile}".encode()]
     assert fields[4:8] == [b"@argfile", b"cmd-1", b"3", str(argfile).encode()]
     assert fields[8] == str(workspace / "module").encode()
