@@ -81,8 +81,9 @@ For .NET native AOT, ELF defaults and Control Flow Guard are `unknown`. A family
 binary without captured compiles) makes every check `NOT_APPLICABLE` with the reason that no
 documented default exists; Node, Python, PHP and WebAssembly units that did capture compile
 actions are assessed flag-driven like native units (`_FLAG_DRIVEN_FAMILIES` in `assessment.py`).
-Open question: `family_build_cases` admits any artifact with ELF, PE or Mach-O magic, so ordinary
-managed .NET assemblies (PE) are also judged by the .NET native AOT table.
+`family_build_cases` admits artifacts with ELF, PE or Mach-O magic, except managed .NET
+assemblies: a PE image with a CLR runtime header (data directory 14) carries IL, not native code,
+so only native AOT output is judged by the .NET native AOT table (`_is_managed_pe`).
 
 Native and mixed units keep the requested-versus-actual checks driven by their captured compile and
 link flags. The pinned `nm`/`readelf` cross-check comes from the C/C++ lane's binary branch. Family

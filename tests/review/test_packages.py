@@ -250,3 +250,16 @@ def test_settings_are_typed_and_reject_unknown_keys() -> None:
         PackageSettings(admit_severities=("severe",))
     with pytest.raises(ValueError):
         PackageSettings(max_depth=9)
+
+
+def test_schema_role_enum_covers_every_context_role_the_assembler_emits() -> None:
+    from appsec_review.review.packages import GRAPH_ROLES
+    from appsec_review.review.units import SIGNAL_CONTEXT_ROLES
+
+    allowed = set(SCHEMA["$defs"]["inference_context"]["properties"]["role"]["enum"])
+    assert SIGNAL_CONTEXT_ROLES | set(GRAPH_ROLES.values()) <= allowed
+    identity = "asr:coverage_cell:" + "a" * 64
+    validator = jsonschema.Draft202012Validator({**SCHEMA["$defs"]["inference_context"],
+                                                 "$defs": SCHEMA["$defs"]})
+    for role in sorted(SIGNAL_CONTEXT_ROLES):
+        assert not list(validator.iter_errors({"id": identity, "kind": "coverage_cell", "role": role}))

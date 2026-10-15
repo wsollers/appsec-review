@@ -956,7 +956,11 @@
             "sink",
             "path",
             "guard",
-            "range"
+            "range",
+            "test_coverage",
+            "profile_hotspot",
+            "dependency",
+            "openssf_scorecard"
           ]
         }
       }

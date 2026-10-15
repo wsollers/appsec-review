@@ -469,12 +469,13 @@ integration tests `tests/integration/test_family_project_builds.py` (native, Go,
 Composer and phpize, Rust, WebAssembly families), `test_jvm_dotnet_project_builds.py` (direct
 `javac`, Kotlin `case-084`, Android `case-092`, .NET) and `test_node_project_builds.py` exercise
 those rows through `job_project_build` and `job_language_build`; they run only where the pinned
-images exist, and a pass on one host is not a Dagster acceptance. Open question: several matrix
-rows quote the corpus's own command (`javac src/Main.java`, `./build.sh`, `npm ci && npm run
+images exist, and a pass on one host is not a Dagster acceptance. The matrix deliberately keeps
+the corpus view: several rows quote the corpus's own command (`javac src/Main.java`, `./build.sh`, `npm ci && npm run
 build` for `case-088`) and output path, while the pipeline derives its own deterministic recipe
 (`build/classes/Main.class` plus `build/appsec-review.jar` for `case-016` and `case-084`,
 `phpize`/`configure`/`make` for `case-090`, a single `clang --target=wasm32` command for
-`case-091`, and `SKIPPED_NA` compiler artifacts for `case-088`); the matrix keeps the corpus view.
+`case-091`, and `SKIPPED_NA` compiler artifacts for `case-088`). The derived recipe is what runs
+and is recorded in each build receipt; the corpus command is the fixture's own contract.
 
 Adding a language or project type does not add another syscall parser or capture loop. It
 supplies a small descriptor/classifier/artifact policy, registers that descriptor with the shared
