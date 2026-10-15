@@ -44,6 +44,10 @@ from appsec_review.swift_policy import reject_swift_derived, swift_enabled_from_
 
 from . import capture as captured_build, dotnet, elf, go, jvm, native, native_components, node, php, python, rust
 from .capture import CapturedBuildDescriptor, link_rows as captured_link_rows, reconcile_captured_build
+from appsec_review.jobs.artifact_kinds import binary_role, require_artifact_kind
+from appsec_review.jobs.build_bookkeeping import (
+    BookkeepingExclusions, bookkeeping_reason, cargo_profile_directories,
+)
 from appsec_review.jobs.job_language_build.datasets import CONSUMES, DATASETS
 
 
@@ -268,24 +272,29 @@ def _kind(path: Path, family: str = "native", *, relative: str = "",
     suffix = path.suffix.lower()
     if path.name == "compile_commands.json": return "compile-database"
     if suffix in _SOURCE_SUFFIXES: return "generated-source"
-    if suffix in _OBJECT_SUFFIXES: return "object"
-    if suffix in _STATIC_SUFFIXES: return "static-library"
-    if suffix in _SHARED_SUFFIXES: return "shared-library"
     if suffix in _BITCODE_SUFFIXES: return "llvm-bitcode"
     if suffix == ".ast": return "clang-ast"
     if suffix in _DEBUG_SUFFIXES: return "debug-information"
     if suffix in _MAP_SUFFIXES: return "link-map"
-    try:
-        magic = path.read_bytes()[:4]
-    except OSError:
-        return None
-    return "executable" if magic == b"\x7fELF" else None
+    # The role of a machine-code file comes from its header: `libx.so.1` and a PIE executable
+    # are both ET_DYN, and an LTO `.o` holds bitcode rather than an ELF relocatable.
+    role, _format = binary_role(path)
+    if role in {"object", "executable", "shared-library", "static-library"}:
+        return role
+    if suffix in _OBJECT_SUFFIXES: return "object"
+    if suffix in _STATIC_SUFFIXES: return "static-library"
+    if suffix in _SHARED_SUFFIXES: return "shared-library"
+    return None
 
 
 def _catalog(run_root: Path, workspace: Path, before: Mapping[str, str], limit: int,
-             build_unit_id: str, family: str = "native") -> tuple[list[dict[str, Any]], list[str]]:
+             build_unit_id: str, family: str = "native",
+             exclusions: BookkeepingExclusions | None = None) -> tuple[list[dict[str, Any]], list[str]]:
+    """Catalog changed build outputs; build bookkeeping is counted in ``exclusions``, not listed."""
     if family == "node":
         return node.catalog(run_root, workspace, before, limit, build_unit_id)
+    exclusions = exclusions if exclusions is not None else BookkeepingExclusions()
+    profiles = cargo_profile_directories(workspace) if family == "rust" else frozenset()
     artifacts, gaps = [], []
     for path in sorted(workspace.rglob("*")):
         try:
@@ -298,8 +307,13 @@ def _catalog(run_root: Path, workspace: Path, before: Mapping[str, str], limit: 
         unchanged = before.get(relative) == digest
         if kind is None or (unchanged and kind not in {"test-coverage", "execution-profile"}):
             continue
+        reason = bookkeeping_reason(relative, cargo=family == "rust", cargo_profile_directories=profiles)
+        if reason is not None:
+            exclusions.record(reason, relative)
+            continue
         artifact = {"path": path.relative_to(run_root).as_posix(), "workspace_path": relative,
-                          "sha256": digest, "size_bytes": path.stat().st_size, "kind": kind,
+                          "sha256": digest, "size_bytes": path.stat().st_size,
+                          "kind": require_artifact_kind(kind),
                           "build_unit_id": build_unit_id, "mapping": "exact-workspace-path",
                           "mapping_confidence": 1.0,
                           "artifact_origin": "accepted-input" if unchanged else "build-output"}
@@ -319,6 +333,25 @@ def _catalog(run_root: Path, workspace: Path, before: Mapping[str, str], limit: 
             gaps.append("artifact catalog truncated at configured count bound")
             break
     return artifacts, gaps
+
+
+_CAPTURE_ORIGIN = re.compile(r"execution-capture:command-(\d+)(?::|$)")
+
+
+def _attribute_captured_rows(rows: Sequence[dict[str, Any]], commands: Sequence[Mapping[str, Any]]) -> None:
+    """Name the protected command whose execution capture observed each tool invocation.
+
+    A captured row's origin names the capture of command ``N``; that command is the producing
+    action of every output the row names. A row whose capture matches no command keeps no
+    parent, and its outputs stay unattributed.
+    """
+    by_ordinal = {int(command["ordinal"]): str(command["command_id"]) for command in commands
+                  if isinstance(command, Mapping) and command.get("command_id") and
+                  type(command.get("ordinal")) is int}
+    for row in rows:
+        match = _CAPTURE_ORIGIN.match(str(row.get("origin", "")))
+        if match and not row.get("parent_command_id") and int(match.group(1)) in by_ordinal:
+            row["parent_command_id"] = by_ordinal[int(match.group(1))]
 
 
 def _compile_rows(workspace: Path, source_dir: str, build_dir: str) -> tuple[list[dict[str, Any]], list[str]]:
@@ -1031,13 +1064,15 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
             break
     if source_fingerprint(unit.job.target_root or Path()) != unit.job.source_fingerprint:
         raise FrameworkIntegrityError("target changed during generic language-build execution")
+    bookkeeping = BookkeepingExclusions()
     if family == "php":
         artifacts, catalog_gaps = php.catalog(unit.job.run_root, workspace, before,
             int(unit.job.config.settings["artifact_count_limit"]), build_unit_id,
             str(dispatch.get("build_system", "composer")))
     else:
         artifacts, catalog_gaps = _catalog(unit.job.run_root, workspace, before,
-                                           int(unit.job.config.settings["artifact_count_limit"]), build_unit_id, family)
+                                           int(unit.job.config.settings["artifact_count_limit"]), build_unit_id, family,
+                                           bookkeeping)
     gaps.extend([*python_metadata_gaps, *php_metadata_gaps, *catalog_gaps])
     # The unit's own build compiled its native_components under this same capture.
     native_database, native_gaps = native_components.publish(
@@ -1171,6 +1206,7 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
         if not any(row["tool_kind"] in {"autoload-generator", "package-builder", "code-generator",
                                         "compiler-driver", "linker", "archiver"} for row in compile_rows):
             gaps.append("PHP build exposed no autoload, package, code-generation, or native-tool invocation")
+    _attribute_captured_rows(compile_rows, commands)
     # Every build tree is container-owned, including output directories created after the host
     # prepared the workspace. Keep orchestrator metadata beside the workspace so the host UID
     # never needs write access to a directory owned by the isolated build UID.
@@ -1197,6 +1233,8 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
         artifacts = []
         build_metadata = []
         package_members = []
+    for item in artifacts:
+        require_artifact_kind(str(item.get("kind")))
     capture_complete = not any(gap.startswith(_CAPTURE_GAP) for gap in gaps) and not (
         family in _CAPTURED_FAMILIES and provenance_gaps)
     receipt = {"schema": RECEIPT_SCHEMA, "fingerprint": fingerprint, "source_fingerprint": unit.job.source_fingerprint,
@@ -1213,7 +1251,9 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
                           "sha256": file_sha256(link_database), "relationship_count": len(normalized_links)},
         "workspace_manifest": {"path": workspace_manifest_path.relative_to(unit.job.run_root).as_posix(),
                                "sha256": file_sha256(workspace_manifest_path)},
-        "artifacts": artifacts, "gaps": list(dict.fromkeys(gaps)), "terminal_status": status,
+        "artifacts": artifacts,
+        "excluded_bookkeeping": bookkeeping.document(),
+        "gaps": list(dict.fromkeys(gaps)), "terminal_status": status,
         "checkpoint_reused": False, "started_at": started_at,
         "completed_at": datetime.now(timezone.utc).isoformat(), "duration_ms": int((time.monotonic()-started)*1000),
         "executor_identity": EXECUTOR_IDENTITY, "capture_identity": CAPTURE_IDENTITIES[family]}

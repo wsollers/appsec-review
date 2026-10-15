@@ -4,9 +4,11 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 import hashlib
 from pathlib import Path, PurePosixPath
+import posixpath
 from typing import Any
 
 from appsec_review.container_runtime import VerifiedCapture
+from appsec_review.container_runtime.capture_files import process_directories
 from appsec_review.storage import canonical_json
 
 
@@ -93,6 +95,36 @@ def _argv(value: object) -> list[str] | None:
     if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
         return None
     return [str(item) for item in value]
+
+
+def _orderable(event: Mapping[str, Any]) -> bool:
+    try:
+        int(event.get("timestamp_ns", 0)), int(event.get("ordinal", 0)), int(event.get("pid", 0))
+    except (TypeError, ValueError):
+        return False
+    return True
+
+
+def _workspace_directory(directories: Mapping[tuple[int, int], str], event: Mapping[str, Any],
+                         default: str) -> str:
+    """The workspace-relative directory the kernel ran this exec in.
+
+    Build drivers change directory before starting tools (``make -C``, CMake's build tree, Cargo
+    in a member package), so relative output paths resolve against the process's own working
+    directory. A directory outside ``/workspace`` is returned absolute, which maps no path.
+    """
+    try:
+        key = (int(event.get("pid", 0)), int(event.get("ordinal", 0)))
+    except (TypeError, ValueError):
+        return default
+    current = directories.get(key)
+    if current is None:
+        return default
+    if current == "/workspace":
+        return "."
+    if current.startswith("/workspace/"):
+        return current[len("/workspace/"):]
+    return current
 
 
 def _identity_key(identity: ToolIdentity, argv: Sequence[str]) -> str:
@@ -191,7 +223,11 @@ def reconcile_captured_build(
                     if isinstance(references, list):
                         facts["response_file_references"] += len(references)
 
-        for event in capture.events():
+        events = list(capture.events())
+        initial = posixpath.normpath(posixpath.join("/workspace", directory))
+        directories = process_directories(
+            [event for event in events if isinstance(event, Mapping) and _orderable(event)], initial)
+        for event in events:
             if not isinstance(event, Mapping):
                 facts["malformed_records"] += 1
                 continue
@@ -237,7 +273,8 @@ def reconcile_captured_build(
                     truncated = True
                     continue
                 row = descriptor.build_invocation(
-                    identity.name, identity.kind, argv, workspace, directory,
+                    identity.name, identity.kind, argv, workspace,
+                    _workspace_directory(directories, event, directory),
                     f"{label}:event-{event.get('ordinal')}",
                 )
                 row["evidence"] = {
