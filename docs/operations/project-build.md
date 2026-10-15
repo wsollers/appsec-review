@@ -100,9 +100,11 @@ its outcome; invalid output, failed installation, timeout, and compiler failure 
 attempt.
 
 Probe preparation is family-local and remains inside the run-owned workspace. For Maven units with
-a bounded legacy `src/*.java` source set and no conventional `src/main/java` tree, project-build
-materializes a duplicate conventional tree in that workspace before running the accepted Maven
-recipe; the target is not changed and the adaptation is recorded on the probe receipt. For a
+a bounded legacy `src/*.java` source set, no conventional `src/main/java` tree, and no
+`<build><sourceDirectory>` in the pom, project-build materializes a duplicate conventional tree in that workspace before running the accepted Maven
+recipe; the target is not changed and the adaptation is recorded on the probe receipt. A pom that
+names its source directory already finds its sources, and a second copy would compile each class
+twice, so it is left as is. For a
 networked Node recipe whose configure phase already runs `npm ci`/`npm install`, `pnpm install`, or
 `yarn install`, the probe does not expose the immutable image-owned `node_modules` tree. The
 package manager restores into the writable workspace and uses bounded `/tmp` caches. Node recipes
