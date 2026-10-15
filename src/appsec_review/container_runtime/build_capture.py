@@ -273,15 +273,23 @@ class BuildExecutionRecorder:
         observed_path = self.root / "tool-call-counter"
         observed_calls = int(observed_path.read_text(encoding="utf-8").strip() or "0") \
             if observed_path.is_file() else 0
-        call_capped = observed_calls > len(call_records)
+        # The wrapper writes a call's record when that call exits, so a call cut off by a timeout
+        # or kill is observed without a record. Only calls past the configured limit are capped.
+        call_capped = observed_calls > self.limits.tool_call_count_limit
+        unfinished_calls = min(observed_calls, self.limits.tool_call_count_limit) - len(call_records)
         record["tool_calls"] = {
             "observed": observed_calls, "retained": len(call_records), "capped": call_capped,
+            "unfinished": max(0, unfinished_calls),
             "records": [{"uri": item.relative_to(self.root).as_posix(), "sha256": _sha256(item)}
                         for item in call_records],
         }
         if call_capped:
             record["coverage"]["complete"] = False
             record["coverage"]["gaps"].append("tool call retention limit reached")
+        if unfinished_calls > 0:
+            record["coverage"]["complete"] = False
+            record["coverage"]["gaps"].append(
+                f"{unfinished_calls} tool call(s) did not finish before the command ended")
         if file_inventory is not None:
             inventory_path = self.root / "files.jsonl"
             record["file_inventory"] = {"uri": inventory_path.name, "sha256": _sha256(inventory_path),

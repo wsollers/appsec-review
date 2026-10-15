@@ -252,6 +252,14 @@ probes dropped, 429 image files identified without hashing) and hashed 27 worksp
 The Python PATH wrapper costs about 40 ms per wrapped tool call. `docs/TODO.md` tracks replacing it
 with a static Go binary.
 
+A wrapped call writes its tool-call record when it exits. When a command times out, its container
+is removed by name (killing the `docker` client alone would leave it running), and calls that had
+started but not finished are reported as `N tool call(s) did not finish before the command ended`,
+separately from `tool call retention limit reached`, which means calls beyond
+`tool_call_count_limit` were not recorded. Open- and write-heavy commands cost more under capture
+than compiles do: a cold 576-package workspace `npm ci` took about 640 s, which is why build
+commands default to a 1,800 s timeout.
+
 `strace` closes a still-open row with ` <detached ...>` when it drops a tracee that vanished
 because its thread group exited or exec'd underneath it. Multi-threaded toolchains such as Go
 produce several on every build. Such a row holds what strace decoded at syscall entry, sometimes

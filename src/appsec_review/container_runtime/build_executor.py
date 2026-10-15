@@ -11,6 +11,7 @@ import re
 import shutil
 import signal
 import subprocess
+import uuid
 from typing import Any
 
 from appsec_review.application_paths import application_root as _application_root
@@ -103,6 +104,10 @@ def _run(argv: Sequence[str], timeout: int) -> tuple[int | None, bytes, bytes, b
         return None, stdout or exc.stdout or b"", stderr or exc.stderr or b"", True
 
 
+def _container_name() -> str:
+    return f"appsec-review-build-{uuid.uuid4().hex}"
+
+
 def _run_to_files(argv: Sequence[str], timeout: int, stdout_path: Path,
                   stderr_path: Path) -> tuple[int | None, bool]:
     """Run without pipe buffering and retain both diagnostic streams in full."""
@@ -178,6 +183,12 @@ class BuildContainerExecutor:
     def _bind_source(self, path: Path) -> Path:
         return resolve_host_bind_path(path, self.runner)
 
+    def _stop_on_timeout(self, command: Sequence[str], timed_out: bool) -> None:
+        """Remove a timed-out container; killing the docker client leaves the container running."""
+
+        if timed_out and "--name" in command:
+            self.runner(("docker", "rm", "--force", command[command.index("--name") + 1]), 60)
+
     def _make_workspace_writable(self, root: Path) -> None:
         """Ensure the application identity can update its run-owned source copy."""
         container_uid = int(application_runtime_user(self.profile.user).split(":", 1)[0])
@@ -205,7 +216,7 @@ class BuildContainerExecutor:
         bind_source = self._bind_source(root)
         runtime_user = application_runtime_user(self.profile.user)
         command = [
-            "docker", "run", "--rm", "--network", "bridge", "--read-only",
+            "docker", "run", "--rm", "--name", _container_name(), "--network", "bridge", "--read-only",
             "--user", runtime_user, "--cap-drop", "ALL",
             "--security-opt", "no-new-privileges", "--cpus", "2", "--memory", "4g",
             "--pids-limit", "1024", "--tmpfs",
@@ -233,6 +244,7 @@ class BuildContainerExecutor:
             workspace=workspace, working_directory=working_directory, environment=environment)
         command.extend(("--entrypoint", argv[0], self.profile.image_id, *argv[1:]))
         code, stdout, stderr, timed_out = self.runner(command, self.timeout_seconds)
+        self._stop_on_timeout(command, timed_out)
         stdout_truncated, stderr_truncated = len(stdout) > self.output_bytes, len(stderr) > self.output_bytes
         tail_bytes = min(32768, self.output_bytes)
         return BuildCommandResult(
@@ -318,8 +330,10 @@ class BuildContainerExecutor:
         if self.runner is _run:
             code, timed_out = _run_to_files(
                 command, self.timeout_seconds, stdout_path, stderr_path)
+            self._stop_on_timeout(command, timed_out)
         else:
             code, stdout, stderr, timed_out = self.runner(command, self.timeout_seconds)
+            self._stop_on_timeout(command, timed_out)
             stdout_path.write_bytes(stdout)
             stderr_path.write_bytes(stderr)
         self._take_tool_call_ownership(capture_root)
@@ -529,7 +543,7 @@ class BuildContainerExecutor:
             scan_root.chmod(0o777)
             runtime_user = application_runtime_user(tool.user)
             command = [
-                "docker", "run", "--rm", "--network", "none", "--read-only",
+                "docker", "run", "--rm", "--name", _container_name(), "--network", "none", "--read-only",
                 "--user", runtime_user, "--cap-drop", "ALL", "--security-opt",
                 "no-new-privileges", "--cpus", tool.cpus, "--memory", tool.memory,
                 "--pids-limit", str(tool.pids_limit), "--tmpfs", "/tmp:rw,noexec,nosuid,size=1g",
@@ -541,6 +555,7 @@ class BuildContainerExecutor:
                 "/scratch/gitleaks.json", "--exit-code", "1",
             ]
             code, stdout, stderr, timed_out = self.runner(command, tool.timeout_seconds)
+            self._stop_on_timeout(command, timed_out)
             scan_code, scan_timed_out = code, timed_out
             stdout_path.write_bytes(stdout[:tool.output_bytes])
             stderr_path.write_bytes(stderr[:tool.output_bytes])
