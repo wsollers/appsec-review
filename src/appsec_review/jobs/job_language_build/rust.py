@@ -8,6 +8,7 @@ import re
 from typing import Any
 
 from appsec_review.config import RustBuildSettings
+from appsec_review.jobs.artifact_kinds import binary_role
 from appsec_review.storage import canonical_json, file_sha256
 
 from .capture import CapturedBuildDescriptor, ToolIdentity, image_owned, normalized_path
@@ -205,13 +206,142 @@ def tool_kind(name: str, argv: Sequence[str]) -> str | None:
     return None
 
 
+_RUSTC_EMIT_SUFFIXES = {"dep-info": ".d", "metadata": ".rmeta", "obj": ".o", "llvm-ir": ".ll",
+                        "llvm-bc": ".bc", "asm": ".s", "mir": ".mir"}
+
+
+def _rustc_options(values: Sequence[str]) -> dict[str, list[str]]:
+    """The rustc options that decide output names, in both spaced and attached spellings."""
+    options: dict[str, list[str]] = {"--crate-name": [], "--crate-type": [], "--emit": [],
+                                     "--out-dir": [], "-o": [], "--target": [], "-C": []}
+    index = 1
+    while index < len(values):
+        value = values[index]
+        if value in {"-C", "--codegen"} and index + 1 < len(values):
+            options["-C"].append(values[index + 1])
+            index += 2
+            continue
+        if value.startswith("-C") and len(value) > 2:
+            options["-C"].append(value[2:])
+        elif value.startswith("--codegen="):
+            options["-C"].append(value.split("=", 1)[1])
+        elif value in options and index + 1 < len(values):
+            options[value].append(values[index + 1])
+            index += 2
+            continue
+        elif value.startswith("--") and "=" in value and value.split("=", 1)[0] in options:
+            key, selected = value.split("=", 1)
+            options[key].append(selected)
+        index += 1
+    return options
+
+
+def rustc_outputs(argv: Sequence[str]) -> list[str]:
+    """Files a rustc compilation writes, derived from its argv the way rustc names them.
+
+    ``--crate-name``, ``--crate-type``, ``--emit`` and ``-C extra-filename`` decide the file
+    names and ``--out-dir`` (or ``-o``) the location, so a captured compile names its rlib,
+    rmeta, shared or static library, executable and dependency-info outputs. Nothing is read
+    from the workspace here; an invocation without a crate name names no outputs.
+    """
+    values = [str(value) for value in argv]
+    options = _rustc_options(values)
+    if not options["--crate-name"]:
+        return []
+    name = options["--crate-name"][-1].replace("-", "_")
+    extra = ""
+    for codegen in options["-C"]:
+        if codegen.startswith("extra-filename="):
+            extra = codegen.split("=", 1)[1]
+    crate_types = [item.strip() for value in options["--crate-type"] for item in value.split(",")
+                   if item.strip()] or (["bin"] if "--test" not in values else ["bin"])
+    emits: dict[str, str | None] = {}
+    for value in options["--emit"] or ["link"]:
+        for item in value.split(","):
+            kind, _, explicit = item.strip().partition("=")
+            if kind:
+                emits[kind] = explicit or None
+    target = (options["--target"][-1] if options["--target"] else "").lower()
+    windows, apple, wasm = "windows" in target, "apple" in target or "darwin" in target, \
+        target.startswith("wasm")
+    explicit_output = options["-o"][-1] if options["-o"] else None
+    out_dir = options["--out-dir"][-1] if options["--out-dir"] else None
+    if explicit_output is None and out_dir is None:
+        return []
+
+    def placed(file_name: str) -> str:
+        return f"{out_dir.rstrip('/')}/{file_name}" if out_dir is not None else file_name
+
+    outputs: list[str] = []
+    if "link" in emits:
+        if emits["link"]:
+            outputs.append(str(emits["link"]))
+        elif explicit_output is not None:
+            outputs.append(explicit_output)
+        else:
+            stem = f"{name}{extra}"
+            for crate_type in crate_types:
+                if crate_type in {"lib", "rlib"}:
+                    outputs.append(placed(f"lib{stem}.rlib"))
+                elif crate_type == "staticlib":
+                    outputs.append(placed(f"{stem}.lib" if windows and "msvc" in target else f"lib{stem}.a"))
+                elif crate_type in {"dylib", "cdylib", "proc-macro"}:
+                    if windows:
+                        outputs.append(placed(f"{stem}.dll"))
+                    elif wasm and crate_type == "cdylib":
+                        outputs.append(placed(f"{stem}.wasm"))
+                    else:
+                        outputs.append(placed(f"lib{stem}.{'dylib' if apple else 'so'}"))
+                elif crate_type == "bin":
+                    outputs.append(placed(f"{stem}.exe" if windows else f"{stem}.wasm" if wasm else stem))
+    for kind, suffix in _RUSTC_EMIT_SUFFIXES.items():
+        if kind not in emits:
+            continue
+        if emits[kind]:
+            outputs.append(str(emits[kind]))
+        elif kind == "metadata":
+            outputs.append(placed(f"lib{name}{extra}{suffix}"))
+        elif explicit_output is not None and out_dir is None:
+            outputs.append(str(PurePosixPath(explicit_output).with_suffix(suffix)))
+        else:
+            outputs.append(placed(f"{name}{extra}{suffix}"))
+    return list(dict.fromkeys(outputs))
+
+
+def _cargo_uplifts(workspace: Path, directory: str, argv: Sequence[str],
+                   outputs: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """Cargo's hard-linked copies of a rustc output, outside ``deps/`` and without the hash.
+
+    Cargo links ``<profile>/deps/<file><extra>`` to ``<profile>/<file>``. The copy is the same
+    bytes rustc wrote, so it is named as this invocation's output only when it exists with the
+    identical digest; anything else stays unattributed.
+    """
+    options = _rustc_options([str(value) for value in argv])
+    extra = next((value.split("=", 1)[1] for value in reversed(options["-C"])
+                  if value.startswith("extra-filename=")), "")
+    if not extra:
+        return []
+    uplifts = []
+    for output in outputs:
+        relative, digest = PurePosixPath(str(output.get("workspace_path", ""))), output.get("sha256")
+        if not digest or relative.parent.name != "deps" or extra not in relative.name:
+            continue
+        candidate = _mapped(workspace, directory,
+                            "/workspace/" + (relative.parent.parent / relative.name.replace(extra, "", 1)).as_posix())
+        if candidate is not None and candidate.get("sha256") == digest:
+            uplifts.append({**candidate, "mapping": "cargo-uplift-identical-digest"})
+    return uplifts
+
+
 def _row(name: str, kind: str, argv: Sequence[str], workspace: Path, directory: str,
          origin: str) -> dict[str, Any]:
     values = [str(value) for value in argv]
     outputs: list[str] = []
     inputs: list[str] = []
+    if name == "rustc":
+        outputs.extend(rustc_outputs(values))
     for index, value in enumerate(values[:-1]):
-        if value in {"-o", "--out-dir"}:
+        if value in {"-o", "--out-dir"} and not (name == "rustc" and outputs):
             outputs.append(values[index + 1])
     if kind == "archiver":
         outputs.extend(value for value in values[1:] if Path(value).suffix.lower() in {".a", ".rlib"})
@@ -219,10 +349,13 @@ def _row(name: str, kind: str, argv: Sequence[str], workspace: Path, directory: 
     for value in values[1:]:
         if Path(value).suffix.lower() in {".rs", ".rlib", ".rmeta", ".o", ".a", ".so"} and value not in outputs:
             inputs.append(value)
+    mapped_outputs = [item for item in (_mapped(workspace, directory, value) for value in outputs) if item]
+    if name == "rustc":
+        mapped_outputs.extend(_cargo_uplifts(workspace, directory, values, mapped_outputs))
     return {"tool": name, "tool_kind": kind, "argv": values,
             "argv_sha256": hashlib.sha256(canonical_json(values)).hexdigest(),
             "inputs": [item for item in (_mapped(workspace, directory, value) for value in inputs) if item],
-            "outputs": [item for item in (_mapped(workspace, directory, value) for value in outputs) if item],
+            "outputs": mapped_outputs,
             "origin": origin, "mapping_confidence": 1.0}
 
 
@@ -288,8 +421,5 @@ def artifact_kind(path: Path, relative: str, before: Mapping[str, str]) -> str |
         return "dependency-metadata"
     if path.name in {"Cargo.toml", "Cargo.lock", ".rustc_info.json"} and before.get(relative) != file_sha256(path):
         return "cargo-metadata"
-    try:
-        magic = path.read_bytes()[:4]
-    except OSError:
-        return None
-    return "executable" if magic == b"\x7fELF" else None
+    role, _format = binary_role(path)
+    return role if role in {"executable", "shared-library", "object", "static-library"} else None
