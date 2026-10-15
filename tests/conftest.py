@@ -46,11 +46,17 @@ def pytest_configure(config: pytest.Config) -> None:
         value=basetemp,
         invocation_dir=invocation_dir,
     )
-    _require_pytest_scratch_path(
-        option="cache_dir",
-        value=config.getini("cache_dir"),
-        invocation_dir=_REPOSITORY_ROOT,
-    )
+    # test/tmp is ignored, so a fresh checkout or worktree does not have it, and pytest
+    # creates only the final --basetemp component. Create the validated parent here.
+    _resolved_from_invocation(basetemp, invocation_dir).parent.mkdir(parents=True, exist_ok=True)
+    # With ``-p no:cacheprovider`` the cache plugin never registers ``cache_dir`` and
+    # writes no cache, so there is no location to police.
+    if config.pluginmanager.has_plugin("cacheprovider"):
+        _require_pytest_scratch_path(
+            option="cache_dir",
+            value=config.getini("cache_dir"),
+            invocation_dir=_REPOSITORY_ROOT,
+        )
 
 
 def pytest_runtest_setup(item: pytest.Item) -> None:
