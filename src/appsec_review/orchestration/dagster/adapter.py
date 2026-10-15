@@ -408,13 +408,22 @@ def build_definitions(
                     ),
                 )
             )
+    # Pre-intake gates run in this order in every composite review graph: the live model check, then
+    # the tool-image rebuild. A disabled gate is transparent, so intake follows the last enabled one.
+    gate_ids = tuple(job_id for job_id in ("job_model_connectivity", "job_tool_image_rebuild")
+                     if job_id in registered)
+    gate_dependencies: dict[str, tuple[str, ...]] = {
+        job_id: ((gate_ids[position - 1],) if position else ()) for position, job_id in enumerate(gate_ids)}
+
+    def gate_jobs() -> list[Job]:
+        return [registry.build(job_id) for job_id in gate_ids]
+
     if {"job_model_connectivity", "job_review_intake", "job_target_catalog",
         "job_target_analysis_plan"} <= registered:
-        wave_jobs = [registry.build("job_model_connectivity"), registry.build("job_review_intake"),
-                     registry.build("job_target_catalog")]
+        wave_jobs = [*gate_jobs(), registry.build("job_review_intake"), registry.build("job_target_catalog")]
         wave_dependencies: dict[str, tuple[str, ...]] = {
-            "job_model_connectivity": (),
-            "job_review_intake": ("job_model_connectivity",),
+            **gate_dependencies,
+            "job_review_intake": (gate_ids[-1],),
             "job_target_catalog": ("job_review_intake",),
         }
         if "job_ci_configuration_analysis" in registered:
@@ -566,7 +575,7 @@ def build_definitions(
         "job_ci_configuration_analysis"} <= registered:
         jobs.append(_build_dagster_graph(
             "ci_configuration_review",
-            (registry.build("job_model_connectivity"), registry.build("job_review_intake"),
+            (*gate_jobs(), registry.build("job_review_intake"),
              registry.build("job_target_catalog"),
              registry.build("job_ci_configuration_analysis")),
             config, runner_factory, node_namespace="ci_review",
@@ -574,14 +583,14 @@ def build_definitions(
     if {"job_model_connectivity", "job_review_intake", "job_target_catalog", "job_target_analysis_plan",
         "job_project_build", "job_language_build"} <= registered:
         project_dependencies = {
-            "job_model_connectivity": (),
-            "job_review_intake": ("job_model_connectivity",),
+            **gate_dependencies,
+            "job_review_intake": (gate_ids[-1],),
             "job_target_catalog": ("job_review_intake",),
             "job_target_analysis_plan": ("job_target_catalog",),
             "job_project_build": ("job_target_analysis_plan",),
             "job_language_build": ("job_project_build",),
         }
-        project_jobs = [registry.build("job_model_connectivity"), registry.build("job_review_intake"),
+        project_jobs = [*gate_jobs(), registry.build("job_review_intake"),
                         registry.build("job_target_catalog"),
                         registry.build("job_target_analysis_plan"), registry.build("job_project_build"),
                         registry.build("job_language_build")]

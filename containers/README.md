@@ -50,6 +50,9 @@ steps run with networking disabled. Logs and the machine-readable summary are wr
 `runs/container-builds/<run-id>/`; each result records status, duration, image id, tag, digest, and
 log paths. Any failed, blocked, or skipped image makes the command fail, including with
 `--continue-on-error`.
+`--timeout-seconds` bounds each `docker build` (default 1800, 60..14400). A review run rebuilds the
+catalog through this builder in `job_tool_image_rebuild` before intake and fails when any image does
+not build; see [`../docs/operations/tool-image-rebuild.md`](../docs/operations/tool-image-rebuild.md).
 
 Some locked assets cannot be downloaded by the launcher and must be placed in `downloads/` by hand
 before a build: the `tool-native-cpp` `.deb` closure (its lock URL is the archive root; see
