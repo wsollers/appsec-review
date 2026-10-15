@@ -646,10 +646,20 @@ class BuildContainerExecutor:
             raise ValueError("Node dependency root is not normalized")
         image_dependency_root = ("/opt/project/node_modules" if dependency_logical.as_posix() == "." else
                                  f"/opt/project/{dependency_logical.as_posix()}/node_modules")
-        result = self.execute(("ln", "-s", image_dependency_root, "node_modules"),
-                              workspace=workspace, working_directory=source_dir, environment={})
-        if result.timed_out or result.exit_code != 0:
-            raise RuntimeError("could not expose image-owned Node dependencies to the build workspace")
+        links = [(source_dir, image_dependency_root)]
+        if dependency_logical.as_posix() != logical.as_posix():
+            # A workspace (or ancestor-locked) unit: the restore installed one tree at the
+            # dependency root. Mirror its layout so Node resolution walks the unit's own
+            # node_modules (pnpm and non-hoisted members keep dependencies there; the image
+            # layout step creates it) and then the root's hoisted node_modules.
+            links = [(dependency_logical.as_posix(), image_dependency_root),
+                     (source_dir, "/opt/project/node_modules" if logical.as_posix() == "." else
+                      f"/opt/project/{logical.as_posix()}/node_modules")]
+        for directory, image_path in links:
+            result = self.execute(("ln", "-s", image_path, "node_modules"),
+                                  workspace=workspace, working_directory=directory, environment={})
+            if result.timed_out or result.exit_code != 0:
+                raise RuntimeError("could not expose image-owned Node dependencies to the build workspace")
 
 
 def profiles_from_settings(value: Any) -> dict[str, BuildProfile]:

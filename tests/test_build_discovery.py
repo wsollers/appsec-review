@@ -109,8 +109,10 @@ def test_node_workspace_member_receives_bounded_ancestor_descriptors(tmp_path: P
         "configure_commands": [], "build_commands": [["npm", "run", "build"]],
     }
     normalized = normalize_build_recipe(recipe, {**unit, "descriptor_package": package})
+    # The workspace installs as one tree: every member manifest travels with the root lockfile.
     assert normalized["dependency_files"] == [
-        "apps/web/package.json", "package-lock.json", "package.json", "tsconfig.base.json"]
+        "apps/web/package.json", "apps/other/package.json", "package-lock.json", "package.json",
+        "tsconfig.base.json"]
 
 
 def test_go_checksum_files_are_accepted_dependency_descriptors(tmp_path: Path) -> None:
