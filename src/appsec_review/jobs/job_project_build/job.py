@@ -7,6 +7,7 @@ from pathlib import Path, PurePosixPath
 import re
 import shutil
 import time
+import xml.etree.ElementTree as ET
 import zipfile
 from typing import Any
 
@@ -126,7 +127,7 @@ def _materialize_build_layout(action: Mapping[str, Any], workspace: Path) -> lis
     source_root = workspace / Path(*PurePosixPath(str(recipe["source_dir"])).parts)
     legacy_root = source_root / "src"
     conventional_root = legacy_root / "main" / "java"
-    if conventional_root.exists() or not legacy_root.is_dir():
+    if conventional_root.exists() or not legacy_root.is_dir() or _declares_source_directory(source_root):
         return []
     sources = sorted(path for path in legacy_root.rglob("*.java")
                      if path.is_file() and not path.is_symlink()
@@ -140,6 +141,23 @@ def _materialize_build_layout(action: Mapping[str, Any], workspace: Path) -> lis
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(source, destination)
     return ["materialized legacy Maven src/*.java under src/main/java in the run-owned workspace"]
+
+
+def _declares_source_directory(source_root: Path) -> bool:
+    """True when the project's pom sets build/sourceDirectory, so Maven already finds its sources.
+
+    Copying them under src/main/java as well would make Maven compile each class twice.
+    """
+    pom = source_root / "pom.xml"
+    if not pom.is_file() or pom.is_symlink() or pom.stat().st_size > 1024 * 1024:
+        return False
+    try:
+        project = ET.fromstring(pom.read_bytes())
+    except ET.ParseError:
+        return False
+    build = next((child for child in project if child.tag.rsplit("}", 1)[-1] == "build"), None)
+    return build is not None and any(
+        child.tag.rsplit("}", 1)[-1] == "sourceDirectory" and (child.text or "").strip() for child in build)
 
 
 def _snapshot(root: Path, limit: int) -> dict[str, str]:

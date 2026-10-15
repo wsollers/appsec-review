@@ -400,6 +400,25 @@ def test_project_probe_materializes_bounded_legacy_maven_source_layout(tmp_path:
         "materialized legacy Maven src/*.java under src/main/java in the run-owned workspace"]
 
 
+def test_project_probe_keeps_maven_layout_when_pom_declares_source_directory(tmp_path: Path) -> None:
+    target = tmp_path / "target"
+    source = target / "projects" / "java" / "case-034"
+    (source / "src").mkdir(parents=True)
+    (source / "pom.xml").write_text(
+        '<project xmlns="http://maven.apache.org/POM/4.0.0"><build>'
+        "<sourceDirectory>src</sourceDirectory></build></project>\n", encoding="utf-8")
+    (source / "src" / "Main.java").write_text("class Main {}\n", encoding="utf-8")
+    run_root = tmp_path / "runs" / "run-1"
+    workspace = run_root / "data" / "build" / "probes" / "unit" / "workspace"
+    unit = SimpleNamespace(job=SimpleNamespace(target_root=target, run_root=run_root))
+    root = "projects/java/case-034"
+    action = {"root": root, "family": "java", "build_system": "maven", "recipe": {
+        "source_dir": root, "dependency_files": [f"{root}/pom.xml"]}}
+    assert _copy_source(unit, action, workspace) == []
+    assert not (workspace / root / "src" / "main").exists()
+    assert (workspace / root / "src" / "Main.java").is_file()
+
+
 def test_node_086_087_restore_outputs(tmp_path: Path) -> None:
     config_path = tmp_path / "appsec-review.toml"
     config_path.write_text((ROOT / "appsec-review.toml").read_text(encoding="utf-8"),
