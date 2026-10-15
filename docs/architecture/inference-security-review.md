@@ -6,9 +6,14 @@ binding decisions in [Implementation readiness decisions](#implementation-readin
 its definition of done passes with an injected deterministic `Infer` double
 ([slice 1 implementation notes](#slice-1-implementation-notes)). Where an earlier section and that
 section differ for slice 1, the readiness decisions govern. `ship-block-policy/1`, verifier model
-distinctness, remediation intake and the planned downstream job names are implemented
-([decisions](#decisions-and-open-questions) 1, 2, 4 and 8). Slices 2-4 (CVSS and SSVC scoring, PoC,
-chains, rounds and variant hunts) remain design only, and no live-model acceptance has run.
+distinctness, remediation intake, the planned downstream job names, the closed
+`security-predicates/1` vocabulary, the `red-discovery-result/1` contract and the catalog-derived
+CWE impact class are implemented ([decisions](#decisions-and-open-questions) 1, 2, 4, 6, 8, 9, 10
+and 11), as are evidence-driven scoring (`score-factors/1`, `application_risk_matrix/2`) and
+code-graph evidence (`evidence-admissibility/2`, `query_code_graph`, package graph context). The
+remaining parts of slices 2-4 (CVSS v4 and SSVC providers, which the scoring registry skips while
+unimplemented, PoC, chains, rounds and variant hunts) remain design only, and no live-model
+acceptance has run.
 The separate `job_document_issue_analysis` publishes a private, hash-pinned candidate ledger;
 its document hunts are not yet consumed by the inference review job.
 
@@ -123,8 +128,12 @@ application-owned bounded cell executor, and the round loop is an in-application
 [R1](#r1-execution-model)); the current `ExecutionPlan` has no dynamic mapping or cycles. Application
 code owns immutable configuration, cell fingerprints, typed validation, deterministic merge,
 ledger transitions, evidence resolution, safety policy, receipts, and accepted publication.
-Suggested Dagster pools are `inference_review`, `inference_verify`, `inference_score`,
-`poc_plan`, `poc_isolated`, and the existing single-slot `lifecycle` pool for manifest publication.
+The design suggested pools `inference_review`, `inference_verify`, `inference_score`, `poc_plan`
+and `poc_isolated`. The implemented routing (`orchestration/dagster/adapter.py::_JOB_STEP_POOLS`,
+limits in `[orchestration.dagster.pools]`) is narrower: `lead_review` and `hunt_review` use
+`inference_teams` (2), `scoring` uses `inference_score` (4), `publication` uses the single-slot
+`lifecycle` pool, and every other step uses the default `application` pool. The PoC pools do not
+exist because no PoC execution path is built.
 
 Pool outcomes are `COMPLETE`, `DEGRADED`, `FAILED`, `CANCELED`, or `EMPTY`. Every expected cell has
 one terminal record such as `succeeded`, `failed`, `blocked`, `timed_out`, `canceled`, `invalid`, or
@@ -182,7 +191,10 @@ embedded shard identity. It emits a deterministic evidence map of available cove
 coverage, components, trust boundaries, build/deployment identities, external-intelligence
 freshness, and exact retrieval scopes. It never infers that an unavailable shard is clean.
 
-`assemble_review_packages` creates three bounded package kinds:
+Package assembly creates three bounded package kinds. The inference job's own assembler
+(`review/packages.py`, tasks `packages.assemble_lead_packages` and `packages.assemble_hunt_packages`)
+builds the first two; the document hunt package comes only from the separate
+`job_review_package_assembly` and is not yet consumed by this job:
 
 - A **finding package** groups one normalized upstream lead with its source/artifact identities,
   original evidence, known supporting and contradicting relations, proof obligations, coverage,
@@ -955,7 +967,13 @@ assignment ids and reference/configuration ids per factor).
 ## Central TOML
 
 Predictable keys follow the repository's `jobs.<job>.steps.<step>.tasks.<task>` convention. Values
-below are illustrative defaults, not runtime configuration added by this design task.
+below are the design's illustrative defaults, not the shipped configuration. The authoritative
+runtime table is `[jobs.job_inference_security_review]` in `appsec-review.toml`, validated by
+`config/inference_review.py`; it differs from this sketch in the model name (`claude-haiku-5-5`),
+the absence of the `poc_plan`/`poc_isolated` pools, the added `verification`, `ship_block` and
+`scoring.cwe_impact_overrides` tables, and the `scope`, `packages`, `merge`, `adjudicate`,
+`scoring` and `completeness` steps. The operator view is
+[`../operations/inference-security-review.md`](../operations/inference-security-review.md).
 
 ```toml
 [orchestration.dagster.pools]
@@ -1335,7 +1353,10 @@ that content is safe to publish.
 ## Schema sketches and examples
 
 Normative schemas live under `docs/schemas/inference-security-review/` as each stage is defined.
-The red discovery result has a closed versioned schema; later stage schemas remain to be defined.
+Closed versioned schemas exist for the red discovery result, blue and verifier results, worker
+turns, cell records, claims, evidence relations, adjudication, gaps, ledger events, score packages
+(`score-package/2`), finding packages (`finding-package/2`) and the handoff
+(`inference-review-handoff/2`); the PoC, attack-chain and completeness schemas remain to be defined.
 They use closed objects, bounded strings/arrays, enums for state, and reusable definitions for
 artifact/evidence references.
 The following documents are concise shape examples; hashes are shortened only for readability.
@@ -1498,6 +1519,15 @@ Free-text error details are bounded and redacted. Machine decisions use only the
 fields, never phrase matching.
 
 ## Proposed source, package, and schema locations
+
+This tree is the original proposal. The implemented layout differs: the job package holds
+`job.py`, `stages.py`, `teams.py`, `datasets.py` and `schemas.py`; `review/` holds `accounting`,
+`advisories`, `budget`, `capability`, `cells`, `claims`, `evidence`, `identity`, `independence`,
+`lead_families`, `ledger`, `models`, `obligations`, `packages`, `ranking`, `red_discovery`,
+`references`, `scope`, `ship_block`, `teams`, `units` and the `scoring/` package
+(`application_matrix_v2`, `cwe_impact`, `evidence_source`, `factors`, `interface`, `risk_model`);
+`review/rounds.py`, `review/poc/`, `review/attack_chains.py` and the CVSS/SSVC providers do not
+exist. Guidance composition lives in `src/appsec_review/guidance/`.
 
 ```text
 src/appsec_review/
@@ -1883,12 +1913,15 @@ resolve to the same model.
   manifest/handoff. Each role's `final.result` schema is the only output that role can produce;
   the allowed transitions follow from it.
 - **Input.** The input is the accepted index set at `runs/<run-id>/data/indices/accepted.json`
-  (`appsec-review/accepted-index-set/1`, resolved by `retrieval/core.py::resolve_accepted_manifest`).
+  (`appsec-review/accepted-index-set/1`). The job resolves the attempt-pinned input manifest
+  through `retrieval/core.py::resolve_context_manifest` and falls back to
+  `resolve_accepted_manifest` only when none is pinned.
   Slice 1 implements review-package-contract assembly steps 1–6 inside `scope.*` and
-  `packages.*`; no separate assembler job exists. Hunt-package launch order is `package_id`
+  `packages.*`; the inference job does not use the separate `job_review_package_assembly`. Hunt-package launch order is `package_id`
   order. Review-prioritization signals may reorder launches later, but they never change
   membership.
-- **Configuration.** Add a typed `InferenceSecurityReviewSettings` to `config/loader.py` that
+- **Configuration.** Add a typed `InferenceSecurityReviewSettings` (implemented in
+  `config/inference_review.py`, loaded by `config/loader.py`) that
   rejects unknown keys. Model profiles use the existing `settings.model` field shape (`provider`,
   `model`, `reasoning`, token caps, `timeout_seconds`, `retries`) under
   `settings.models.<profile>`. Roles select a profile by name. Remove `max_cost_usd` until a
@@ -2059,8 +2092,10 @@ both lanes, and one score dimension. It does not execute PoCs, run variant hunts
 
 13. Add delta-driven completeness audit, bounded resynthesis rounds, unsatisfiable evidence-request
     detection, stable-round termination, and advanced selective invalidation.
-14. Add round-1 `variant` hunts seeded by round-0 confirmed claims, and the `entry_down` and
-    `control_gap` strategies once their accepted sources exist. Add any persona beyond the
+14. Add round-1 `variant` hunts seeded by round-0 confirmed claims. (`entry_down` and
+    `control_gap` are already slots of `hunt-panel/1` in `guidance/routing.py`; `entry_down`
+    unlocks from a unit's accepted `entry_point` graph family and `control_gap` from the run's
+    `control_evidence` query set, per `job.py::run_sources`.) Add any persona beyond the
     partition set (for example `ai_llm_integration`) only when fixtures show measurable coverage
     value. Never add a persona-role cross-product.
 15. Add more PoC strategy plugins, organization scoring plugins, and sophisticated chain search only
@@ -2076,8 +2111,10 @@ both lanes, and one score dimension. It does not execute PoCs, run variant hunts
   (`jobs.job_cpg_analysis.settings.enabled = false`, absent from the run); it is not a producer.
   Unavailable language scopes lower evidence confidence truthfully.
 - Direct evidence for `source_to_sink_reachability`, `attacker_input_control` and
-  `missing_or_ineffective_guard` comes from CodeQL `tool_observation`s (the first two, by
-  `tool-rule-predicates/1`), from source constructs the model cites, and, for C/C++ scopes with an
+  `missing_or_ineffective_guard` comes from CodeQL `tool_observation`s (only
+  `source_to_sink_reachability`, besides `affected_construct`, per `TOOL_RULE_PREDICATES` in the
+  job module; `owasp_control` observations are direct for `missing_or_ineffective_guard`, and
+  `ci_rule`/`post_build_hardening` for `configuration_enables`), from source constructs the model cites, and, for C/C++ scopes with an
   accepted graph export, from direct-eligible graph facts (`evidence-admissibility/2`,
   [`code-graph-precomputation.md`](code-graph-precomputation.md)): `dataflow_path`, `entry_point`,
   `sink_site`, `call_site`, `guard_fact` and `range_fact`. `sink_up` and `entry_down` launch per
@@ -2164,8 +2201,8 @@ will be enforced in code.
    `supported` findings are published in a separate verification backlog, labelled unconfirmed.
    Implementation: `stages.remediation_partition` writes the handoff's `remediation_intake`
    (confirmed packages only) and `verification_backlog` (supported packages, `label =
-   "unconfirmed"`, with `missing_predicates` and gap ids); the handoff schema rejects a supported
-   status in the intake and a confirmed one in the backlog.
+   "unconfirmed"`, with `missing_predicates` and gap ids). The partition itself enforces the
+   split; the handoff schema constrains only each list's allowed `ship_block_status` values.
 5. **Freshness windows — decided.**
    - Feeds keep `feed_max_age_days = 14`, with overrides `{ kev = 7, epss = 3 }`.
    - A stale MITRE catalog falls back for claim CWE validation and records a gap.
@@ -2201,7 +2238,7 @@ will be enforced in code.
     `analyst_hypothesis` never becomes a relation. Normalization also records evidence requests,
     named gaps, exact lead accounting (fed to the handoff accounting) and chain seeds, which are
     stored as a run-owned artifact and never as claims.
-11. **CWE impact class — decided.** The `application_risk_matrix/2` impact class is derived from the
+11. **CWE impact class — decided and implemented.** The `application_risk_matrix/2` impact class is derived from the
     pinned MITRE CWE catalog's common consequences (confidentiality, integrity and availability
     scopes), with an explicit override table for exceptions. It replaces the hand-maintained table.
     Implementation: `cwe-impact-derivation/1` in `review/scoring/cwe_impact.py`, consequences in
