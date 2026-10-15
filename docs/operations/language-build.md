@@ -113,6 +113,26 @@ the unit's `protected-commands/` directory; searchable records retain argv hashe
 environment facts, resolved inputs/outputs, artifact hashes, and mapping confidence. A complete
 workspace manifest protects the handoff consumed by later language-specific analysis.
 
+Every catalogued artifact's `kind` comes from one typed vocabulary,
+`ArtifactKind` in `src/appsec_review/jobs/artifact_kinds.py`; a kind outside it fails the receipt.
+A kind names the artifact's role (`object`, `executable`, `shared-library`, `static-library`,
+`jvm-class`, `dex`, and so on), never a raw format tag. Machine-code roles come from bounded header
+bytes rather than the file name: the ELF `e_type` and `PT_INTERP` program header (so a PIE
+executable and `libx.so.1` are told apart), the `ar` magic, PE characteristics, and the Mach-O file
+type. Build bookkeeping is left out of the catalog and counted instead: CMake compiler
+identification, ABI detection, `try_compile` and Find-module probe trees (in every family), and,
+for Rust, Cargo fingerprints, incremental caches, dependency-info files and build-script records.
+The receipt's `excluded_bookkeeping` (`appsec-review/build-bookkeeping-exclusions/1`) gives the
+count per typed reason with up to five example paths, and native compile databases omit CMake probe
+compiles the same way (`src/appsec_review/jobs/build_bookkeeping.py`).
+
+Captured tool rows name the command whose execution capture observed them (`parent_command_id`,
+from the row's `execution-capture:command-NNN` origin), and their relative output paths resolve
+against the working directory the kernel recorded for that exec (`make -C`, the CMake build tree, a
+Cargo member package), not the recipe directory. An output a row names therefore resolves to its
+producing action in [`artifact-indexing.md`](artifact-indexing.md); an artifact no row names stays an
+ambiguous producer mapping and a gap.
+
 The JVM adapter accepts Maven, Gradle, and direct `javac` recipes, including mixed Java/Kotlin
 sources assigned to one accepted build topology. `mvnw` and `gradlew` recipe names are resolved to
 the pinned system Maven or Gradle in the verified image; repository wrapper payloads are never
@@ -273,7 +293,11 @@ evidence for rustc, linker-driver, linker, archiver, and build-script/code-gener
 Cargo output is retained as a diagnostic stream and is not parsed for provenance. Cargo metadata
 identifies proc-macro targets, workspace packages, and exact resolve relationships. Generated Rust
 sources, rlib/rmeta files, static/shared libraries, binaries, and debug/dependency metadata are
-cataloged without executing target programs. A tool-call record without a matching successful
+cataloged without executing target programs. A captured `rustc` row names its outputs the way rustc
+names them, from `--crate-name`, `--crate-type`, `--emit`, `-C extra-filename`, `--target`, and
+`--out-dir` or `-o` (rlib, rmeta, static or shared library, executable, dependency info). Cargo's
+uplifted copy outside `deps/` is named as the same row's output only when its digest equals rustc's
+output (`cargo-uplift-identical-digest`). A tool-call record without a matching successful
 process-exec event is never tool provenance. Capture caps, scanner failure, redacted exec events,
 unreconciled tool-call records, and an unobserved compiler are named gaps; a unit with an
 incomplete capture or incomplete tool provenance is not checkpointed.
