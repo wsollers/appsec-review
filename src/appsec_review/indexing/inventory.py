@@ -77,9 +77,13 @@ def runtime_claims(job_steps: Mapping[str, Sequence[str]]) -> list[Claim]:
         base = f"data/jobs/{job_id}"
         claims.append(Claim(job_id, "lifecycle", "attempt_receipts", _runtime_declaration(
             "attempt_receipts", "lifecycle", "execution_receipts", "appsec-review/job-handoff/1",
-            "Attempt claims, status, results, handoffs and event logs.",
+            "Attempt claims, status, results, handoffs, event logs and the attempt's pinned retrieval "
+            "input manifest.",
             (f"{base}/latest.json", f"{base}/attempts/*/claim.json", f"{base}/attempts/*/status.json",
-             f"{base}/attempts/*/result.json", f"{base}/attempts/*/handoff.json", f"{base}/attempts/*/logs/**"),
+             f"{base}/attempts/*/result.json", f"{base}/attempts/*/handoff.json", f"{base}/attempts/*/logs/**",
+             # Written by the runner (materialize_attempt_input_manifest) when an attempt inherits
+             # more than one upstream index lineage; it merges manifests and adds no shards.
+             f"{base}/attempts/*/inputs/retrieval-manifest.json"),
             "unit results may embed exact recipes, host paths and unredacted records; only status, counts "
             "and hashes are published", sensitivity="sensitive", disposition="protected")))
         for step in steps:

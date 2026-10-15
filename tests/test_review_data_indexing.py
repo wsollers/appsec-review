@@ -781,6 +781,22 @@ def test_inventory_rehashes_accepted_handoff_artifacts(tmp_path: Path) -> None:
     assert "artifact_hash_mismatch" in {item["code"] for item in result["audit"]["violations"]}
 
 
+def test_inventory_claims_the_runner_written_attempt_input_manifest(tmp_path: Path) -> None:
+    # JobRunner pins a merged retrieval input manifest into an attempt that inherits more than one
+    # upstream index lineage; the audit must account for it as a runtime receipt, not a stray file.
+    run_root = tmp_path / "run"
+    attempt = run_root / "data" / "jobs" / "job_test" / "attempts" / "attempt_0001"
+    pinned = attempt / "inputs" / "retrieval-manifest.json"
+    pinned.parent.mkdir(parents=True)
+    pinned.write_text("{}", encoding="utf-8")
+    stray = attempt / "inputs" / "other.json"
+    stray.write_text("{}", encoding="utf-8")
+    result = inventory.build_inventory(inventory.InventoryInputs(
+        run_root, "2026-10-10-0001", SNAPSHOT, {"job_test": []}, {"job_test": []}, {}, {}, {}, []))
+    unaccounted = {item["subject"] for item in result["audit"]["violations"] if item["code"] == "unaccounted_file"}
+    assert unaccounted == {stray.relative_to(run_root).as_posix()}
+
+
 def test_fts_image_validation_gaps_and_required_mode(tmp_path: Path) -> None:
     run_root = tmp_path / "run"
     path = run_root / "data" / "indices" / "precomputed" / "x.sqlite"
