@@ -98,6 +98,45 @@ probe_argv = ["/bin/sh", "-c", "java -version && GRADLE_USER_HOME=/tmp/gradle GR
 probe_expect = ["openjdk version \"17.", "Gradle 8.9", "10001"]
 purpose = "Pinned non-root Android Gradle application build and capture environment."
 [[images]]
+id = "buildenv-native-toolchain"
+state = "enabled"
+kind = "buildenv"
+version = "noble-gcc13.3-clang18.1"
+tag = "appsec-review/buildenv-native-toolchain:noble-gcc13.3-clang18.1"
+context = "containers/buildenv/native-toolchain"
+dockerfile = "Dockerfile"
+dependencies = ["base-ubuntu"]
+architectures = ["linux/amd64"]
+build_network = "default"
+license = "mixed Ubuntu distribution packages plus each toolchain's upstream license"
+license_source = "Ubuntu package metadata and pinned upstream release metadata"
+provenance = "Built FROM the digest-pinned base-ubuntu boundary with exact apt version pins"
+signature_verification = "Ubuntu archive signatures verified by apt; locked assets SHA-256 verified"
+purpose = "Shared pinned C/C++ toolchain (gcc/g++ 13.3, clang/wasm-ld 18.1, make, pkg-config, python3, strace) that every language build environment builds FROM."
+probe_argv = ["/bin/sh", "-c", "sh /opt/native-toolchain/check-toolchain.sh && id -u"]
+probe_expect = ["13.3.0", "18.1.3", "10001"]
+
+[[images]]
+id = "audit-buildenv-rust-wasm"
+state = "enabled"
+kind = "buildenv"
+version = "rust1.90.0-wasm32-clang18.1"
+tag = "audit-buildenv-rust-wasm:local"
+context = "containers/buildenv/rust-wasm"
+dockerfile = "Dockerfile"
+dependencies = ["buildenv-native-toolchain"]
+architectures = ["linux/amd64"]
+assets_lock = "containers/buildenv/rust-wasm/assets.lock.json"
+build_network = "default"
+license = "mixed Ubuntu distribution packages plus each toolchain's upstream license"
+license_source = "Ubuntu package metadata and pinned upstream release metadata"
+provenance = "Built FROM the digest-pinned base-ubuntu boundary with exact apt version pins"
+signature_verification = "Ubuntu archive signatures verified by apt; locked assets SHA-256 verified"
+purpose = "Non-root Rust and WebAssembly (Rust wasm32 targets and C-to-wasm32 clang) build and capture environment on the shared native toolchain."
+probe_argv = ["/bin/sh", "-c", "sh /opt/native-toolchain/check-toolchain.sh && rustc --version && cargo --version && rustc --print target-list && id -u"]
+probe_expect = ["13.3.0", "rustc 1.90.0", "cargo 1.90.0", "wasm32-wasip1", "10001"]
+
+[[images]]
 id = "audit-binary-analysis"
 state = "replaced"
 kind = "replacement"
@@ -110,14 +149,23 @@ replaced_by = ["tool-blint", "tool-syft", "tool-grype", "tool-trivy"]
 
 [[images]]
 id = "audit-buildenv-cpp"
-state = "deferred"
-kind = "redesign"
+state = "enabled"
+kind = "buildenv"
 legacy_class = 2
+version = "noble-gcc13.3-clang18.1-cmake3.28"
+tag = "audit-buildenv-cpp:local"
+context = "containers/buildenv/cpp"
+dockerfile = "Dockerfile"
+dependencies = ["buildenv-native-toolchain"]
 architectures = ["linux/amd64"]
-purpose = "C/C++ build, trace, debugging, tree-sitter, and language-server environment."
-reason = "Decouple build environment from 12.6 GiB analysis base; replace NodeSource curl-to-shell; re-resolve apt pins; remove duplicated MCP/LSP payloads; retain explicit networked-build versus offline-analysis profiles"
-recommended_destination = "containers/buildenv/cpp/"
-
+build_network = "default"
+license = "mixed Ubuntu distribution packages plus each toolchain's upstream license"
+license_source = "Ubuntu package metadata and pinned upstream release metadata"
+provenance = "Built FROM the digest-pinned base-ubuntu boundary with exact apt version pins"
+signature_verification = "Ubuntu archive signatures verified by apt; locked assets SHA-256 verified"
+purpose = "Non-root C/C++ build and capture environment (CMake, Make, Ninja, Autotools) on the shared native toolchain; analysis tooling lives in separate images."
+probe_argv = ["/bin/sh", "-c", "sh /opt/native-toolchain/check-toolchain.sh && cmake --version && id -u"]
+probe_expect = ["13.3.0", "cmake version 3.28.3", "10001"]
 [[images]]
 id = "audit-buildenv-cpp-resolute"
 state = "deferred"
@@ -140,14 +188,23 @@ recommended_destination = "containers/buildenv/dotnet/"
 
 [[images]]
 id = "audit-buildenv-go"
-state = "deferred"
-kind = "redesign"
+state = "enabled"
+kind = "buildenv"
 legacy_class = 2
+version = "noble-go1.23.1"
+tag = "audit-buildenv-go:local"
+context = "containers/buildenv/go"
+dockerfile = "Dockerfile"
+dependencies = ["buildenv-native-toolchain"]
 architectures = ["linux/amd64"]
-purpose = "Go build/debug and language-server environment."
-reason = "Replace NodeSource curl-to-shell; refresh Go/gopls/delve support decision; preserve module-checksum verification; share common LSP layers"
-recommended_destination = "containers/buildenv/go/"
-
+build_network = "default"
+license = "mixed Ubuntu distribution packages plus each toolchain's upstream license"
+license_source = "Ubuntu package metadata and pinned upstream release metadata"
+provenance = "Built FROM the digest-pinned base-ubuntu boundary with exact apt version pins"
+signature_verification = "Ubuntu archive signatures verified by apt; locked assets SHA-256 verified"
+purpose = "Non-root Go module build and capture environment on the shared native toolchain (cgo uses the same gcc); GOTOOLCHAIN=local."
+probe_argv = ["/bin/sh", "-c", "sh /opt/native-toolchain/check-toolchain.sh && go version && id -u"]
+probe_expect = ["13.3.0", "go1.23.1 linux/amd64", "10001"]
 [[images]]
 id = "audit-buildenv-java"
 state = "deferred"
@@ -160,33 +217,51 @@ recommended_destination = "containers/buildenv/java/"
 
 [[images]]
 id = "audit-buildenv-php"
-state = "deferred"
-kind = "redesign"
+state = "enabled"
+kind = "buildenv"
 legacy_class = 2
+version = "noble-php8.3.6-composer2.7.1"
+tag = "audit-buildenv-php:local"
+context = "containers/buildenv/php"
+dockerfile = "Dockerfile"
+dependencies = ["buildenv-native-toolchain"]
 architectures = ["linux/amd64"]
-purpose = "PHP/Composer build and language-server environment."
-reason = "Replace NodeSource curl-to-shell; authenticate PHPactor acquisition; refresh PHP/Composer support decision; share common LSP layers"
-recommended_destination = "containers/buildenv/php/"
-
+build_network = "default"
+license = "mixed Ubuntu distribution packages plus each toolchain's upstream license"
+license_source = "Ubuntu package metadata and pinned upstream release metadata"
+provenance = "Built FROM the digest-pinned base-ubuntu boundary with exact apt version pins"
+signature_verification = "Ubuntu archive signatures verified by apt; locked assets SHA-256 verified"
+purpose = "Non-root PHP/Composer and phpize extension build and capture environment on the shared native toolchain."
+probe_argv = ["/bin/sh", "-c", "sh /opt/native-toolchain/check-toolchain.sh && php --version && composer --version && id -u"]
+probe_expect = ["13.3.0", "PHP 8.3.6", "Composer version 2.7.1", "10001"]
 [[images]]
 id = "audit-buildenv-python"
-state = "deferred"
-kind = "redesign"
+state = "enabled"
+kind = "buildenv"
 legacy_class = 2
+version = "noble-python3.12.3-pip24.0"
+tag = "audit-buildenv-python:local"
+context = "containers/buildenv/python"
+dockerfile = "Dockerfile"
+dependencies = ["buildenv-native-toolchain"]
 architectures = ["linux/amd64"]
-purpose = "Python build/debug and language-server environment."
-reason = "Replace NodeSource curl-to-shell; refresh Python support decision; retain hash-locked LSP requirements; share common LSP layers"
-recommended_destination = "containers/buildenv/python/"
-
+build_network = "default"
+license = "mixed Ubuntu distribution packages plus each toolchain's upstream license"
+license_source = "Ubuntu package metadata and pinned upstream release metadata"
+provenance = "Built FROM the digest-pinned base-ubuntu boundary with exact apt version pins"
+signature_verification = "Ubuntu archive signatures verified by apt; locked assets SHA-256 verified"
+purpose = "Non-root Python package (wheel, sdist, C extension) build and capture environment on the shared native toolchain."
+probe_argv = ["/bin/sh", "-c", "sh /opt/native-toolchain/check-toolchain.sh && python --version && python -m pip --version && id -u"]
+probe_expect = ["13.3.0", "Python 3.12.3", "pip 24.0", "10001"]
 [[images]]
 id = "audit-buildenv-rust"
-state = "deferred"
-kind = "redesign"
+state = "replaced"
+kind = "replacement"
 legacy_class = 2
 architectures = ["linux/amd64"]
 purpose = "Rust build/debug and rust-analyzer environment."
-reason = "Replace NodeSource curl-to-shell; make rustup component artifacts reproducible; refresh Rust support decision; share common LSP layers"
-recommended_destination = "containers/buildenv/rust/"
+reason = "Folded into the hash-locked audit-buildenv-rust-wasm image, which both the rust and wasm build profiles use; rust-analyzer belongs to an analysis image"
+replaced_by = ["audit-buildenv-rust-wasm"]
 
 [[images]]
 id = "audit-buildenv-typescript"
