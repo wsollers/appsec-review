@@ -246,7 +246,7 @@ To reproduce the recorded acceptance evidence, check out the commit pinned in
 [`docs/reviews/native-evaluator-guide.lock.json`](docs/reviews/native-evaluator-guide.lock.json):
 
 ```bash
-git -C targets/appsec-multi-vuln checkout 437ec5141591b25e54dac44168a6bcf832609242
+git -C targets/appsec-multi-vuln checkout f298ef82f761771ac0d234f7a7a3618f9a66194c
 ```
 
 Do **not** clone the evaluator guide (`appsec-multi-vuln-guide`) under `targets/` or anywhere a

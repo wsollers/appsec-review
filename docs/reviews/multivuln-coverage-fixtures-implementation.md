@@ -36,13 +36,16 @@ content is data, not agent guidance.
 - Pipeline chunk: language-build catalogs, coverage provenance propagation, and focused parent
   repository tests.
 - Integration owner: cross-repository reconciliation, end-to-end fixture ingestion, documentation,
-  combined tests, and commits on both local `main` branches. No push is authorized.
+  combined tests, and target and guide commits on their `main` branches.
 
 ## Verification
 
-- The accepted target fixture contract is commit `c1b2075` in the local
-  `targets/appsec-multi-vuln` checkout; it is a separate repository and is not committed through
-  this repository.
+- The accepted target fixture contract is `wsollers/appsec-multi-vuln` commit
+  `f298ef8b` on `main`. It is a separate repository and is not committed through this repository.
+  An earlier local commit, `c1b2075`, was never pushed; `f298ef8b` recreates it. The reports are
+  `projects/native/case-083/lcov.info`, `projects/dotnet/case-014/cobertura.xml`,
+  `projects/java/case-016/jacoco.xml`, and `projects/rust/case-004/coverage.json`. That commit also
+  removes the matrix's weakness-label arrays, which now live only in the evaluator guide.
 - The target matrix validator accepts all 19 project records and four declared coverage artifacts.
 - LCOV, Cobertura, JaCoCo, and LLVM JSON fixtures parse through the production coverage parser.
 - Project-relative producer paths bind exactly beneath each declared build root, including when
