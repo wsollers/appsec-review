@@ -79,13 +79,19 @@ CASES = (
         ".", ("build/Release/case087.node",), ("native-addon",), native_compile="src/addon.cc"),)),
     _syntax_only("node-lifecycle/case-088"),
     NodeCase("northwinds-v1", (
-        UnitExpectation(".", ("backend/dist/index.js", "frontend/dist/index.html"),
-                        ("generated-code",)),
-        # backend's build script ends with `node scripts/copy-assets.mjs`. The language build's
-        # lifecycle policy cannot distinguish a build helper from running the application, so it
-        # must record that truthfully instead of executing it.
+        # backend's build script ends with `node scripts/copy-assets.mjs`. The lifecycle policy
+        # cannot distinguish a build helper from running the application, so it records that
+        # truthfully instead of executing it, wherever the script graph reaches it: the root's
+        # `npm run build` reaches it through `npm run build --workspace backend`.
+        UnitExpectation(".", language_status="BLOCKED", compiler_artifacts="GAP",
+                        language_gap="package lifecycle script build may execute a target "
+                                     "application: package.json#scripts.build → "
+                                     "backend/package.json#scripts.build → "
+                                     "node scripts/copy-assets.mjs"),
         UnitExpectation("backend", language_status="BLOCKED", compiler_artifacts="GAP",
-                        language_gap="package lifecycle script build may execute a target application"),
+                        language_gap="package lifecycle script build may execute a target "
+                                     "application: backend/package.json#scripts.build → "
+                                     "node scripts/copy-assets.mjs"),
         UnitExpectation("frontend", ("frontend/dist/index.html",), ("generated-code",)),
     )),
 )

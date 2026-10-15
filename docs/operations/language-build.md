@@ -202,6 +202,24 @@ the same non-root, read-only-root, capability, PID, CPU, memory, timeout, and st
 other build. Install, test, start, publish, `npx` download, and direct Node application commands do
 not enter this path.
 
+Before any Node command runs, the lifecycle policy resolves the whole package-script graph the
+recipe's commands reach and classifies every script body with the same rules at every depth. The
+graph follows npm, pnpm, and Yarn script runs (`run <script>`, the bare pnpm/Yarn script form,
+and `test`/`start` aliases), directory changes (`--prefix`, `--dir`, `-C`, `--cwd`), workspace
+members (npm `-w`/`--workspace`/`--workspaces`, `pnpm -r` and `--filter` name, path, and `...`
+dependency selectors over `pnpm-workspace.yaml`, `yarn workspace <name>`,
+`yarn workspaces foreach`/`run`), `run-s`/`run-p`/`npm-run-all` groups, and the `pre`/`post` hooks
+of every script it reaches (for every package manager, which is stricter than pnpm and Yarn
+defaults). A simple command that runs `node`, `tsx`, or `ts-node` without `--check` blocks the
+unit with `package lifecycle script <script> may execute a target application`, and a test runner
+blocks it with `... requests a test runner`. Each gap names the full chain from the requested
+script to the command, for example
+`package.json#scripts.build → backend/package.json#scripts.build → node scripts/copy-assets.mjs`,
+so a workspace root is blocked for the same repository code as the member that contains it. A
+cycle, a chain deeper than eight scripts, more than 256 script visits, an unknown workspace or
+filter, a directory that escapes the workspace, or an unparseable script is its own named gap,
+never a pass. Commands outside these forms are classified as leaves; they are not followed.
+
 Successful direct commands and simple package-script invocations retain exact argv only in
 protected command artifacts. Diagnostic traces additionally capture compiler, transpiler,
 code-generator, bundler, native-addon, assembler, linker, archiver, package-builder, and post-link
