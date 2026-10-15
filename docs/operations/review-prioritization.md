@@ -87,7 +87,8 @@ Through the MCP gateway the same calls are `search`, `find`, `trace`, and `cover
 
 ## Coverage limits
 
-- Scored languages: C, C++, Java, C#, Go, JavaScript, TypeScript/TSX, Rust, PHP. Other inventory
+- Scored languages: C, C++, Java, C#, Go, JavaScript, TypeScript/TSX, Rust, PHP, Ruby
+  (`SCORED_LANGUAGES` in `job_review_prioritization/job.py`). Other inventory
   languages, including Python, are `language_not_scored` gaps.
 - A truncated or unparsed syntax tree removes the file from scoring (`ast_truncated`,
   `ast_unavailable`). Raise the Tree-sitter node bounds in `[jobs.job_tree_sitter_ast.settings]` and
