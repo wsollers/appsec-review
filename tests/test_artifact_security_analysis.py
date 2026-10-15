@@ -86,7 +86,10 @@ def test_scanner_adapters_mount_artifacts_as_data() -> None:
     blint = ADAPTERS["blint"].argv("/opt/blint", "sample.bin")
     assert blint == ("/opt/blint", "--no-banner", "--no-error", "--quiet", "--src",
                      "/target/sample.bin", "--reports", "/scratch")
-    assert ADAPTERS["blint"].output_file == "/scratch/blint-output.json"
+    # blint 3.4.0 writes findings.json/<name>-metadata.json; the runner assembles this document.
+    assert ADAPTERS["blint"].output_file == "/scratch/blint-report.json"
+    assert "--lockfile" in ADAPTERS["osv"].argv("/opt/osv", "Cargo.lock")
+    assert "--recursive" not in ADAPTERS["osv"].argv("/opt/osv", "Cargo.lock")
 
 
 def test_scanner_execution_tokens_distinguish_equal_content_artifacts() -> None:
@@ -125,7 +128,8 @@ def test_spotbugs_failed_or_malformed_output_is_a_retained_gap(tmp_path: Path) -
 
 
 def _fixture(tmp_path: Path, payload: bytes = b"\0asm\x01\0\0\0", *, disable_grype: bool = False,
-             duplicate_artifact: bool = False, no_artifacts: bool = False):
+             duplicate_artifact: bool = False, no_artifacts: bool = False,
+             name: str = "module.wasm", kind: str = "wasm-module"):
     config_path = tmp_path / "appsec-review.toml"
     text = (ROOT / "appsec-review.toml").read_text(encoding="utf-8")
     if not disable_grype:
@@ -135,11 +139,11 @@ def _fixture(tmp_path: Path, payload: bytes = b"\0asm\x01\0\0\0", *, disable_gry
     run_id, run_root = RunStore(config.runtime.runs_dir).create(datetime.now(timezone.utc))
     target = tmp_path / "target"
     target.mkdir()
-    produced = run_root / "data" / "build" / "wasm" / "module.wasm"
+    produced = run_root / "data" / "build" / "wasm" / name
     produced.parent.mkdir(parents=True)
     produced.write_bytes(payload)
-    artifact = {"path": produced.relative_to(run_root).as_posix(), "workspace_path": "build/module.wasm",
-        "sha256": file_sha256(produced), "size_bytes": produced.stat().st_size, "kind": "wasm-module",
+    artifact = {"path": produced.relative_to(run_root).as_posix(), "workspace_path": f"build/{name}",
+        "sha256": file_sha256(produced), "size_bytes": produced.stat().st_size, "kind": kind,
         "build_unit_id": "build-unit-fixture", "mapping": "exact-workspace-path", "mapping_confidence": 1.0}
     artifacts = [] if no_artifacts else [artifact]
     if duplicate_artifact:
@@ -222,11 +226,13 @@ def test_job_isolates_scanner_failure_retains_raw_output_and_indexes_siblings(tm
     assert outcome["status"] == "COMPLETED_WITH_GAPS"
     accepted = load_accepted_artifact_security_analysis(run_root)
     assert accepted["artifact_count"] == 1
-    assert accepted["observation_count"] >= 5
+    assert accepted["observation_count"] >= 4
     assert accepted["capabilities"]["grype"]["terminal_status"] == "COMPLETED_WITH_GAPS"
     assert accepted["capabilities"]["syft"]["observation_count"] == 1
-    # blint parses ELF/PE/Mach-O/APK only: the WebAssembly fixture is SKIPPED_NA, never launched.
-    assert set(calls) == {"syft", "grype", "osv"}
+    # blint parses ELF/PE/Mach-O/APK only and osv-scanner lockfiles only: the WebAssembly fixture
+    # is SKIPPED_NA for both, never launched.
+    assert set(calls) == {"syft", "grype"}
+    assert accepted["capabilities"]["osv"]["not_applicable_inputs"]["count"] == 1
     blint = accepted["capabilities"]["blint"]
     assert blint["terminal_status"] == "NOT_APPLICABLE" and not blint["gaps"]
     assert blint["not_applicable_inputs"]["count"] == 1

@@ -11,12 +11,17 @@ import hashlib
 import inspect
 import json
 from pathlib import Path, PurePosixPath
-import shutil
 from typing import Any, Mapping
 import xml.etree.ElementTree as ET
 
 from appsec_review.container_runtime import ContainerExecutor, ExecutionRequest, Mount, load_catalog
+from appsec_review import blint_report
 from appsec_review.jobs.job_third_party_data_sync.publication import verify_current
+from appsec_review.osv_offline import (
+    DATABASE_ROOT as OSV_DATABASE_ROOT, ENVIRONMENT as OSV_DB_ENVIRONMENT, offline_database_mounts,
+    snapshot_ecosystems,
+)
+from appsec_review.tool_inputs import osv_ecosystem, osv_missing_ecosystem_gap
 from appsec_review.storage import file_sha256
 
 
@@ -75,6 +80,7 @@ class ScannerAdapter:
         name = PurePosixPath(artifact_name).name
         target = f"/target/{name}"
         if self.capability == "blint":
+            # blint writes findings.json and <name>-metadata.json into --reports; see blint_report.
             return (executable, "--no-banner", "--no-error", "--quiet", "--src", target,
                     "--reports", "/scratch")
         if self.capability == "syft":
@@ -83,8 +89,10 @@ class ScannerAdapter:
             return (executable, f"file:{target}", "--output", "json", "--file", self.output_file,
                     "--only-fixed=false")
         if self.capability == "osv":
+            # --lockfile selects the extractor by file name; a single-file --recursive scan instead
+            # trips osv-scanner's gitignore resolution and finds no package sources.
             return (executable, "scan", "--experimental-offline", "--format", "json", "--output",
-                    self.output_file, "--recursive", target)
+                    self.output_file, "--lockfile", target)
         if self.capability == "spotbugs":
             return (executable, "-textui", "-xml:withMessages", "-output", self.output_file, target)
         raise ValueError(f"unknown scanner capability: {self.capability}")
@@ -94,7 +102,7 @@ class ScannerAdapter:
 
 
 ADAPTERS = {item.capability: item for item in (
-    ScannerAdapter("blint", "tool-blint", frozenset({0}), "/scratch/blint-output.json"),
+    ScannerAdapter("blint", "tool-blint", frozenset({0}), "/scratch/blint-report.json"),
     ScannerAdapter("syft", "tool-syft", frozenset({0}), "/scratch/output.json"),
     ScannerAdapter("grype", "tool-grype", frozenset({0}), "/scratch/output.json"),
     ScannerAdapter("osv", "tool-osv-scanner", frozenset({0, 1}), "/scratch/output.json"),
@@ -122,6 +130,7 @@ class ContainerScannerRunner:
         self.executor = ContainerExecutor(self.catalog, run_root)
         self._identities: dict[str, Mapping[str, Any]] = {}
         self._feeds: dict[str, Mapping[str, Any]] = {}
+        self._osv_ecosystems: Mapping[str, Path] = {}
 
     def identity(self, capability: str, artifact: Mapping[str, Any]) -> Mapping[str, Any]:
         if capability in self._identities:
@@ -143,6 +152,8 @@ class ContainerScannerRunner:
             try:
                 current = verify_current(self.repository_root / "data" / "feeds" / feed, feed)
                 self._feeds[capability] = current
+                if capability == "osv":
+                    self._osv_ecosystems = snapshot_ecosystems(Path(str(current["directory"])))
                 value["rules"] = {"feed": feed, "snapshot_id": current["snapshot_id"],
                                   "manifest_sha256": current["manifest_sha256"]}
             except (OSError, ValueError, KeyError, json.JSONDecodeError) as exc:
@@ -166,13 +177,15 @@ class ContainerScannerRunner:
             mounts.append(Mount(Path(str(snapshot["directory"])), "/database", True))
             environment["GRYPE_DB_CACHE_DIR"] = "/database"
         elif capability == "osv":
-            snapshot = self._feeds[capability]
-            source = Path(str(snapshot["directory"])) / "sources" / "PyPI.zip"
-            database = scratch / "inputs" / "osv-db" / "osv-scanner" / "PyPI"
-            database.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(source, database / "all.zip")
-            mounts.append(Mount(scratch / "inputs" / "osv-db", "/database", True))
-            environment["OSV_SCANNER_LOCAL_DB_CACHE_DIRECTORY"] = "/database"
+            ecosystem = osv_ecosystem(path.name)
+            if ecosystem is not None and ecosystem not in self._osv_ecosystems:
+                # osv-scanner would abort with exit 127; record the data-coverage gap instead.
+                gap = osv_missing_ecosystem_gap((ecosystem,), f"produced lockfile {path.name}")
+                return {"stdout": b"", "stderr": gap.encode(), "exit_code": None, "timed_out": False,
+                        "truncated": False, "precondition_gap": gap, "tool_identity": identity,
+                        "execution_receipt": None}
+            mounts.extend(offline_database_mounts(self._osv_ecosystems))
+            environment[OSV_DB_ENVIRONMENT] = OSV_DATABASE_ROOT
         tool = self.catalog.tool(adapter.tool_id)
         result = self.executor.execute(ExecutionRequest(adapter.tool_id,
             adapter.argv(tool.executable, path.name), path.parent, scratch,
@@ -180,6 +193,9 @@ class ContainerScannerRunner:
         stdout = (self.run_root / result.stdout_path).read_bytes()
         stderr = (self.run_root / result.stderr_path).read_bytes()
         output = scratch / PurePosixPath(adapter.output_file).name
+        if (capability == "blint" and not result.timed_out
+                and result.exit_code in adapter.accepted_exit_codes):
+            blint_report.write(scratch, output)
         payload = output.read_bytes() if output.is_file() else stdout
         return {"stdout": stdout, "stderr": stderr, "exit_code": result.exit_code,
             "timed_out": result.timed_out, "truncated": result.stdout_truncated or result.stderr_truncated,

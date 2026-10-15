@@ -281,21 +281,35 @@ def _asa_scanner(calls: list[str], *, osv_exit: int, osv_stderr: bytes, blint_ex
     return scanner
 
 
-def test_artifact_scanner_unsupported_formats_and_osv_report_are_skipped_na(tmp_path: Path) -> None:
+def test_artifact_scanner_unsupported_formats_are_never_launched(tmp_path: Path) -> None:
     config, run_id, run_root, target, fingerprint, _ = asa_tests._fixture(tmp_path)
     calls: list[str] = []
     outcome = GraphRunner(config, [build_artifact_security(scanner_runner=_asa_scanner(
-        calls, osv_exit=128, osv_stderr=b"No package sources found, --help for usage information."))]).run(
+        calls, osv_exit=0, osv_stderr=b""))]).run(
             target_root=target, source_fingerprint=fingerprint, run_id=run_id)
     accepted = load_accepted_artifact_security_analysis(run_root)
-    assert "blint" not in calls and "spotbugs" not in calls  # WebAssembly is neither
+    # WebAssembly is neither a native binary, JVM bytecode, nor an osv-scanner lockfile.
+    assert not {"blint", "spotbugs", "osv"} & set(calls)
     osv = accepted["capabilities"]["osv"]
     assert osv["terminal_status"] == "NOT_APPLICABLE" and osv["gaps"] == []
-    assert osv["not_applicable_inputs"]["items"][0]["reason_code"] == "TOOL_REPORTED_UNSUPPORTED_INPUT"
+    assert osv["not_applicable_inputs"]["items"][0]["reason_code"] == "INPUT_FORMAT_UNSUPPORTED"
     assert not any("osv" in gap or "blint" in gap for gap in accepted["gaps"])
     # The only remaining gap is the built-in WebAssembly validator gap, unrelated to scanner input support.
     assert all("WebAssembly feature" in gap for gap in accepted["gaps"]), accepted["gaps"]
     assert outcome["status"] == "COMPLETED_WITH_GAPS"
+
+
+def test_artifact_osv_empty_lockfile_report_is_skipped_na(tmp_path: Path) -> None:
+    config, run_id, run_root, target, fingerprint, _ = asa_tests._fixture(
+        tmp_path, payload=b"", name="requirements.txt", kind="generated-output")
+    calls: list[str] = []
+    GraphRunner(config, [build_artifact_security(scanner_runner=_asa_scanner(
+        calls, osv_exit=128, osv_stderr=b"No package sources found, --help for usage information."))]).run(
+            target_root=target, source_fingerprint=fingerprint, run_id=run_id)
+    osv = load_accepted_artifact_security_analysis(run_root)["capabilities"]["osv"]
+    assert "osv" in calls
+    assert osv["gaps"] == []
+    assert osv["not_applicable_inputs"]["items"][0]["reason_code"] == "TOOL_REPORTED_UNSUPPORTED_INPUT"
 
 
 def test_artifact_supported_scanner_failures_remain_gaps(tmp_path: Path) -> None:
@@ -306,9 +320,20 @@ def test_artifact_supported_scanner_failures_remain_gaps(tmp_path: Path) -> None
             target_root=target, source_fingerprint=fingerprint, run_id=run_id)
     accepted = load_accepted_artifact_security_analysis(run_root)
     assert "blint" in calls  # ELF is supported
+    assert "osv" not in calls  # an ELF binary is not an osv-scanner lockfile
     assert any("blint scanner exited 2" in gap for gap in accepted["capabilities"]["blint"]["gaps"])
-    assert any("osv scanner exited 128" in gap for gap in accepted["capabilities"]["osv"]["gaps"])
     assert outcome["status"] == "COMPLETED_WITH_GAPS"
+
+
+def test_artifact_osv_failure_on_a_lockfile_is_a_gap_with_its_reason(tmp_path: Path) -> None:
+    config, run_id, run_root, target, fingerprint, _ = asa_tests._fixture(
+        tmp_path, payload=b"requests==2.19.0\n", name="requirements.txt", kind="generated-output")
+    GraphRunner(config, [build_artifact_security(scanner_runner=_asa_scanner(
+        [], osv_exit=128, osv_stderr=b"Scanning...\nfailed to load local database: zip: not a valid zip file\n"))]).run(
+            target_root=target, source_fingerprint=fingerprint, run_id=run_id)
+    gaps = load_accepted_artifact_security_analysis(run_root)["capabilities"]["osv"]["gaps"]
+    assert any("osv scanner exited 128: failed to load local database: zip: not a valid zip file" in gap
+               for gap in gaps), gaps
 
 
 # --- Clang-family C/C++ scopes ----------------------------------------------------------------

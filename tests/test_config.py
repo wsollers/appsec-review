@@ -61,7 +61,8 @@ def test_default_config_declares_midnight_nvd_schedule() -> None:
     assert tuple(job.step("osv_sync").tasks) == ("fetch", "index", "publish")
     assert tuple(job.step("mitre_sync").tasks) == ("fetch", "normalize", "publish")
     assert tuple(job.step("cve_bin_tool_db_build").tasks) == ("resolve_nvd_snapshot", "build", "publish")
-    assert job.step("osv_sync").settings["ecosystems"] == ["PyPI"]
+    assert job.step("osv_sync").settings["ecosystems"] == [
+        "PyPI", "crates.io", "npm", "Go", "Maven", "Packagist", "NuGet", "RubyGems"]
     assert job.step("mitre_sync").settings["source_selections"] == ["enterprise_attack", "capec", "cwe"]
 
 

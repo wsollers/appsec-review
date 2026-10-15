@@ -42,7 +42,10 @@ Infer 1.3.0 is an enabled compiled-analysis branch. Its immutable MIT-licensed L
 hash-pinned in `containers/tools/infer/assets.lock.json`, packaged without build-time network
 access, and executed under the central scanner boundary. The adapter rewrites the normalized
 compilation database to stable read-only container paths and uses Infer's bundled LLVM/Clang 21
-frontend. It does not rerun the target build or execute target binaries.
+frontend. It does not rerun the target build or execute target binaries. That frontend parses each
+unit against the system C/C++ headers, so the Infer image is built `FROM`
+`appsec-review/tool-native-cpp:1.0.0` (the offline Ubuntu toolchain headers) rather than the bare
+Ubuntu base, where every unit failed with `'stdio.h' file not found`.
 
 The producer retains Infer's JSON report, execution receipt, compilation database, and log as
 run-owned artifacts. Each observation resolves through the accepted source mapping and is indexed

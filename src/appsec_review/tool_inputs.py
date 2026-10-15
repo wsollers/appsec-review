@@ -8,7 +8,7 @@ unavailable remains a GAP exactly as before.
 
 ``recognized_unsupported`` is the narrow fallback for tools whose support cannot be decided exactly
 from bounded facts before launch (for example a ShellCheck dialect declared only by a shebang the
-job could not read, or osv-scanner extractor coverage of one produced artifact). Only the specific,
+job could not read, or an empty lockfile osv-scanner finds no packages in). Only the specific,
 documented "unsupported input" report of that tool qualifies; every other error stays a GAP.
 
 Declarations are data, not policy: operators tune *whether* a tool runs in ``appsec-review.toml``;
@@ -62,6 +62,38 @@ def _is_dockerfile(path: PurePosixPath) -> bool:
     candidate = (name.startswith(("Dockerfile.", "Containerfile.")) or
                  lowered.endswith(".dockerfile") or lowered.endswith(".containerfile"))
     return candidate and path.suffix.lower() not in _DOCKERFILE_EXCLUDED_SUFFIXES
+
+
+# Lockfiles and manifests osv-scanner 1.9.2 extracts offline when handed the file itself (``-L``),
+# each mapped to the OSV ecosystem whose offline database it needs. Verified against the pinned
+# binary: it has no extractor for archives (.jar, .whl), compiled binaries (Go, Rust), package
+# metadata (PKG-INFO, composer.json, package.json, Cargo.toml), or go.sum/uv.lock/bun.lock.
+OSV_LOCKFILE_ECOSYSTEMS: Mapping[str, str] = MappingProxyType({
+    "Cargo.lock": "crates.io",
+    "package-lock.json": "npm", "yarn.lock": "npm", "pnpm-lock.yaml": "npm",
+    "go.mod": "Go",
+    "pom.xml": "Maven", "gradle.lockfile": "Maven", "buildscript-gradle.lockfile": "Maven",
+    "composer.lock": "Packagist",
+    "packages.lock.json": "NuGet",
+    "Gemfile.lock": "RubyGems",
+    "requirements.txt": "PyPI", "poetry.lock": "PyPI", "Pipfile.lock": "PyPI", "pdm.lock": "PyPI",
+    "pubspec.lock": "Pub", "mix.lock": "Hex", "renv.lock": "CRAN", "conan.lock": "ConanCenter",
+})
+
+
+def osv_ecosystem(path: str | PurePosixPath) -> str | None:
+    """The OSV ecosystem an osv-scanner-extractable lockfile needs, or ``None`` when unsupported."""
+    name = PurePosixPath(str(path)).name
+    if name in OSV_LOCKFILE_ECOSYSTEMS:
+        return OSV_LOCKFILE_ECOSYSTEMS[name]
+    # osv-scanner's requirements extractor matches any ``*requirements*.txt`` (dev-requirements.txt).
+    if name.endswith(".txt") and "requirements" in name:
+        return "PyPI"
+    return None
+
+
+def _is_osv_lockfile(path: PurePosixPath) -> bool:
+    return osv_ecosystem(path) is not None
 
 
 def _is_github_workflow(path: PurePosixPath) -> bool:
@@ -184,8 +216,8 @@ _declare(
     InputSupport("tool-psalm", "PHP source", suffixes=frozenset({".php"})),
     InputSupport("tool-spotbugs", "accepted JVM bytecode artifacts", suffixes=JVM_BYTECODE),
     InputSupport("tool-blint", "accepted native binary artifacts", suffixes=NATIVE_BINARIES),
-    InputSupport("tool-osv-scanner", "Python lockfiles covered by the synchronized OSV snapshot",
-                 names=frozenset({"requirements.txt", "poetry.lock", "Pipfile.lock"})),
+    InputSupport("tool-osv-scanner", "lockfiles and manifests osv-scanner extracts offline",
+                 predicate=_is_osv_lockfile),
     InputSupport("tool-hadolint", "Dockerfiles and Containerfiles", predicate=_is_dockerfile),
     InputSupport("tool-checkov", "Terraform/HCL files and Dockerfiles",
                  predicate=lambda path: path.suffix.lower() in IAC_SUFFIXES or _is_dockerfile(path)),
@@ -214,10 +246,10 @@ _declare(
                  formats=frozenset({"jvm-class", "jvm-archive"})),
     InputSupport("artifact:tool-syft", "any produced artifact file", any_input=True),
     InputSupport("artifact:tool-grype", "any produced artifact file", any_input=True),
-    # osv-scanner extractor coverage of one produced artifact depends on its pinned extractor set;
-    # it is launched and its documented "no package sources" report is recognized instead.
-    InputSupport("artifact:tool-osv-scanner", "any produced artifact file (extractor-decided)",
-                 any_input=True),
+    # osv-scanner selects an extractor by file name only; it has no extractor for produced binaries,
+    # archives, objects, or package metadata, so those are never launched.
+    InputSupport("artifact:tool-osv-scanner", "lockfiles and manifests osv-scanner extracts offline",
+                 predicate=_is_osv_lockfile),
     # Clang-family tools over accepted compile databases (clang-tidy, Clang Static Analyzer,
     # clangd-indexer, and the compile database handed to Joern).
     InputSupport("clang:compile-unit", "C, C++, Objective-C, and preprocessed translation units",
@@ -266,6 +298,28 @@ def partition_paths(key: str, paths: Iterable[str], *,
     return InputPartition(tuple(supported), tuple(skipped))
 
 
+def partition_artifacts(key: str, items: Iterable[tuple[str, str, str | None]]) -> InputPartition:
+    """Split ``(identity, file_path, classified_format)`` produced artifacts by declared support.
+
+    Format-declared tools decide by bounded-magic format; path-declared tools (osv-scanner) decide
+    by the artifact's file name. Decisions are recorded against the artifact identity.
+    """
+    declared = support(key)
+    if declared.formats or declared.any_input:
+        return partition_formats(key, ((identity, value) for identity, _path, value in items))
+    supported: list[str] = []
+    skipped: list[InputDecision] = []
+    for identity, path, value in items:
+        if declared.supports_path(path):
+            supported.append(identity)
+        else:
+            skipped.append(InputDecision(
+                identity, key, ReasonCode.INPUT_FORMAT_UNSUPPORTED,
+                f"{key} supports only {declared.description}; artifact "
+                f"{PurePosixPath(path).name or 'unknown'} is {value or 'unknown'}"))
+    return InputPartition(tuple(supported), tuple(skipped))
+
+
 def partition_formats(key: str, items: Iterable[tuple[str, str | None]]) -> InputPartition:
     """Split ``(identity, classified_format)`` pairs by a tool's declared artifact formats."""
     declared = support(key)
@@ -307,6 +361,34 @@ def osv_reported_no_package_sources(exit_code: int | None, output: bytes) -> boo
     """osv-scanner's exit-128 'No package sources found' report for an input it has no extractor for."""
     return exit_code == _OSV_NO_SOURCES_EXIT and bool(
         _OSV_NO_SOURCES.search(output[-65_536:].decode("utf-8", "replace")))
+
+
+_OSV_MISSING_DATABASES = re.compile(r"could not find local databases? for ecosystems?:\s*([^\n]+)")
+_DIAGNOSTIC_LINE_LIMIT = 300
+
+
+def osv_missing_ecosystems(output: bytes) -> tuple[str, ...]:
+    """Ecosystems osv-scanner reported it has no offline database for (exit 127 in 1.9.2)."""
+    text = output[-65_536:].decode("utf-8", "replace")
+    names: list[str] = []
+    for match in _OSV_MISSING_DATABASES.finditer(text):
+        names.extend(item.strip() for item in match.group(1).split(",") if item.strip())
+    return tuple(dict.fromkeys(names))
+
+
+def osv_missing_ecosystem_gap(ecosystems: Iterable[str], subject: str) -> str:
+    """The named data-coverage gap for inputs whose OSV ecosystem is absent from the snapshot."""
+    names = ", ".join(sorted(set(ecosystems), key=str.lower))
+    return (f"offline OSV snapshot lacks ecosystem {names}; vulnerability matching for {subject} "
+            "was not performed (configure jobs.job_third_party_data_sync.steps.osv_sync.settings."
+            "ecosystems and re-sync)")
+
+
+def bounded_diagnostic(output: bytes) -> str:
+    """The last meaningful diagnostic line of a tool's stderr, bounded for gap text."""
+    lines = [" ".join(line.split()) for line in output[-16_384:].decode("utf-8", "replace").splitlines()]
+    lines = [line for line in lines if line]
+    return lines[-1][:_DIAGNOSTIC_LINE_LIMIT] if lines else ""
 
 
 def semgrep_skip_not_applicable(reason: object) -> bool:
