@@ -489,6 +489,29 @@ def test_nothing_review_without_container_images(no_images: Review) -> None:
             assert job_id not in review.gated, review.gated
     plan = _unit_outputs(review.run_root, "job_target_analysis_plan")
     assert plan["plan_acceptance.publish_handoff"].get("terminal_status") in {"SUCCEEDED", "COMPLETED_WITH_GAPS"}
+    assert_failed_native_build_is_a_gap_downstream(review)
+
+
+# Jobs that analyze a native build; a planned native unit whose build failed is a gap in each.
+NATIVE_LANE_JOBS = ("job_language_build", "job_cpp_compiled_analysis", "job_clang_static_analysis",
+                    "job_cpp_symbol_index")
+
+
+def assert_failed_native_build_is_a_gap_downstream(review: Review) -> None:
+    """Without images the CMake unit cannot be built; no native-lane job may then read as clean."""
+    outputs = _unit_outputs(review.run_root, "job_project_build")
+    document = _json(review.run_root / outputs["acceptance.publish_handoff"]["artifact"]["path"])
+    failed = [item["build_unit_id"] for item in document["probe_receipts"]
+              if item.get("family") == "native" and item.get("terminal_status") != "SUCCEEDED"]
+    assert failed, "the CMake unit was expected to be planned and blocked without images"
+    for job_id in NATIVE_LANE_JOBS:
+        if job_id not in review.job_ids or job_id in review.gated:
+            continue
+        handoff, _ = _accepted_handoff(review.run_root, job_id)
+        assert handoff["completion_status"] == "COMPLETED_WITH_GAPS", (job_id, handoff["completion_status"])
+        gaps = [gap for output in handoff["outputs"].values() for gap in _named_gaps(output)]
+        for build_unit_id in failed:
+            assert any(build_unit_id in gap and "job_project_build" in gap for gap in gaps), (job_id, gaps)
 
 
 def _missing_images(config: AppConfig) -> list[str]:

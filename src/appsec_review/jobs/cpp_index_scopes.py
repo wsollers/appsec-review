@@ -85,6 +85,18 @@ def load_accepted_cpp(run_root: Path) -> Mapping[str, Any]:
             "manifest": {"path": manifest_path.relative_to(run_root).as_posix(), "sha256": manifest_sha}}
 
 
+def project_prefix(root: str) -> str:
+    """The target-relative path prefix of a C/C++ project; empty for a project at the target root."""
+    value = str(root).strip("/")
+    return "" if value in {"", "."} else value + "/"
+
+
+def workspace_root(root: str) -> str:
+    """The project's directory in the build container, where the target is copied to /workspace."""
+    prefix = project_prefix(root)
+    return "/workspace/" + prefix.rstrip("/") if prefix else "/workspace"
+
+
 def container_compile_database(root: str, compile_commands: Any,
                                source_mount: str = SOURCE_MOUNT) -> list[dict[str, Any]]:
     """Rewrite accepted compile commands to read-only container paths under ``source_mount``.
@@ -92,12 +104,12 @@ def container_compile_database(root: str, compile_commands: Any,
     The driver is normalized to ``clang``/``clang++`` by source suffix; every other argument is
     preserved, with build-time ``/scratch`` paths rebased onto the mounted case root.
     """
-    prefix = str(root).rstrip("/") + "/"
+    prefix = project_prefix(root)
     mount_root = source_mount.rsplit("/", 1)[0]
     rows = []
     for command in compile_commands:
         target_path = str(command["target_path"])
-        if not target_path.startswith(prefix):
+        if not target_path.startswith(prefix) or target_path.startswith("/"):
             raise ValueError("compile unit is outside the accepted project root")
         relative = target_path[len(prefix):]
         arguments = []

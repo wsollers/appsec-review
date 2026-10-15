@@ -818,3 +818,67 @@ def test_dotnet_recipe_and_capture_helpers_allow_restore_but_forbid_run(tmp_path
     assert tool_identity("dotnet", ["dotnet", "build", "Sample.csproj"]) == (
         "dotnet", "build-driver")
     assert tool_identity("python3", ["python3", "tool-wrapper.py", "dotnet"]) is None
+
+
+class UnavailableImageResolver:
+    """The base build image cannot be resolved, as on a host without the pinned images."""
+
+    def resolve(self, recipe, profile):
+        raise ValueError(f"base build image identity changed: {profile.name}")
+
+
+def _blocked_project(config, target):
+    fingerprint = source_fingerprint(target)
+    upstream = GraphRunner(config, [build_intake(), build_catalog(),
+        build_plan(infer=NativeRecipeModel().complete)]).run(target_root=target, source_fingerprint=fingerprint)
+    project = build_projects(executor_factory=lambda unit, profile: capturing_fake(profile, NativeExecutor([])),
+                             image_resolver_factory=lambda unit: UnavailableImageResolver())
+    GraphRunner(config, [project]).run(target_root=target, source_fingerprint=fingerprint,
+                                       run_id=upstream["run_id"])
+    return upstream["run_id"], fingerprint
+
+
+def test_failed_native_project_build_is_a_named_gap_in_every_native_lane_job(tmp_path: Path) -> None:
+    # A planned native unit that job_project_build could not build must not read as "no native
+    # code": language build, compiled analysis, Clang and the symbol index each name the unit, the
+    # upstream failure and the failing job, and none of them is SUCCEEDED or NOT_APPLICABLE.
+    from appsec_review.jobs.job_clang_static_analysis import build_job as build_clang
+    from appsec_review.jobs.job_cpp_symbol_index import build_job as build_symbols
+
+    config, target = _fixture(tmp_path)
+    run_id, fingerprint = _blocked_project(config, target)
+    run_root = config.runtime.runs_dir / run_id
+    probe = load_accepted_builds(run_root)["probe_receipts"][0]
+    assert probe["family"] == "native" and probe["terminal_status"] == "BLOCKED"
+    unit_id = probe["build_unit_id"]
+    outcome = GraphRunner(config, [build_language(), build_cpp(), build_clang(), build_symbols()]).run(
+        target_root=target, source_fingerprint=fingerprint, run_id=run_id)
+    receipt = load_accepted_language_build(run_root)["receipts"][0]
+    assert receipt["build_unit_id"] == unit_id and receipt["terminal_status"] == "BLOCKED"
+    assert receipt["upstream_failure"]["job_id"] == "job_project_build"
+    assert "base build image identity changed: native" in receipt["upstream_failure"]["reason"]
+    for job_id in ("job_language_build", "job_cpp_compiled_analysis", "job_clang_static_analysis",
+                   "job_cpp_symbol_index"):
+        status = outcome["jobs"][job_id]["status"]["status"]
+        assert status == "COMPLETED_WITH_GAPS", (job_id, status)
+        handoff = outcome["jobs"][job_id]["handoff"]
+        gaps = [gap for output in handoff["outputs"].values() for gap in output.get("gaps", ())]
+        assert any(unit_id in gap and "job_project_build" in gap and "base build image identity changed" in gap
+                   for gap in gaps), (job_id, gaps)
+
+
+def test_target_without_native_units_keeps_the_native_lane_not_applicable(tmp_path: Path) -> None:
+    config, target = _fixture(tmp_path)
+    for path in sorted((target / "native").iterdir()):
+        path.unlink()
+    (target / "native").rmdir()
+    (target / "notes.md").write_text("# Notes\n\nPlain text only.\n", encoding="utf-8")
+    run_id, fingerprint = _accepted_project(config, target, [])
+    outcome = GraphRunner(config, [build_language(), build_cpp()]).run(
+        target_root=target, source_fingerprint=fingerprint, run_id=run_id)
+    language = outcome["jobs"]["job_language_build"]["handoff"]["outputs"]
+    assert language["execute.native"]["terminal_status"] == "NOT_APPLICABLE"
+    assert language["execute.native"].get("gaps", []) == []
+    compiled = outcome["jobs"]["job_cpp_compiled_analysis"]["handoff"]["outputs"]
+    assert compiled["plan.accepted_cpp_plan"]["terminal_status"] == "NOT_APPLICABLE"
+    assert outcome["jobs"]["job_cpp_compiled_analysis"]["status"]["status"] == "SUCCEEDED"

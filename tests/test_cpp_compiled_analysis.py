@@ -521,3 +521,24 @@ def test_replay_closure_pins_the_build_environment_dev_header_versions() -> None
         assert f"test -f {header}" in dockerfile
     assert f"-I{PHP_INCLUDES[0]} -I{PHP_INCLUDES[1]}" in dockerfile
     assert f"python3.12-config --includes | grep -F -- '-I{PYTHON_INCLUDES[0]}'" in dockerfile
+
+
+def test_compile_database_normalization_maps_a_project_at_the_target_root(tmp_path: Path) -> None:
+    root = tmp_path / "project"
+    (root / "build").mkdir(parents=True)
+    (root / "source" / "src").mkdir(parents=True)
+    (root / "source" / "src" / "add.c").write_text("int add(int a, int b) { return a + b; }\n", encoding="utf-8")
+    # The language build ran in /workspace, which is the project itself for a root-level project.
+    (root / "build" / "compile_commands.json").write_text(json.dumps([{
+        "directory": "/workspace/build", "file": str(root / "source" / "src" / "add.c"),
+        "arguments": ["cc", "-I/workspace/include", "-c", str(root / "source" / "src" / "add.c"),
+                      "-o", "/workspace/build/add.o"],
+    }]), encoding="utf-8")
+    source_sha = hashlib.sha256((root / "source" / "src" / "add.c").read_bytes()).hexdigest()
+    rows = normalize_compile_db(root, {"project_key": "root", "project_id": "cpp:.",
+        "case_snapshot": "a" * 64, "root": ".", "files": [{
+            "target_path": "src/add.c", "scratch_path": "source/src/add.c", "sha256": source_sha}]})
+    assert [row["target_path"] for row in rows] == ["src/add.c"]
+    assert rows[0]["file"] == "/scratch/source/src/add.c"
+    assert "-I/scratch/source/include" in rows[0]["arguments"]
+    assert rows[0]["output_path"] == "build/add.o"

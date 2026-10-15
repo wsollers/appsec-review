@@ -543,3 +543,14 @@ def test_cpg_checkpoint_identity_binds_the_configured_limit(tmp_path: Path) -> N
         checkpoint = run_root / "data" / "code-index" / "joern" / scope["scope_id"] / "checkpoint.json"
         identities.append((scope["scope_id"], json.loads(checkpoint.read_text())["identity"]))
     assert identities[0][0] == identities[1][0] and identities[0][1] != identities[1][1]
+
+
+def test_container_compile_database_accepts_a_project_at_the_target_root() -> None:
+    # A CMakeLists.txt at the repository root is the project root ".", not an invalid root.
+    rows = container_compile_database(".", [
+        {"target_path": "src/add.c", "arguments": ["gcc", "-I/scratch/source/include"]},
+    ])
+    assert rows == [{"directory": "/target/source", "file": "/target/source/src/add.c",
+                     "arguments": ["clang", "-I/target/source/include"]}]
+    with pytest.raises(ValueError, match="outside the accepted project root"):
+        container_compile_database(".", [{"target_path": "/etc/x.c", "arguments": ["cc"]}])

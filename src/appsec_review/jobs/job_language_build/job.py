@@ -660,6 +660,34 @@ def _unavailable_dotnet_receipt(unit: UnitContext, probe: Mapping[str, Any],
             "executor_identity": EXECUTOR_IDENTITY, "capture_identity": dotnet.CAPTURE_IDENTITY}
 
 
+# Probe dispositions that mean the unit positively needs no build, as opposed to a build that failed.
+_PROBE_NOT_NEEDED = frozenset({"SUCCEEDED", "NOT_APPLICABLE", "SKIPPED_NA", "SKIPPED_POLICY"})
+
+
+def upstream_build_failure_receipt(probe: Mapping[str, Any], accepted: Mapping[str, Any]) -> dict[str, Any]:
+    """A receipt for a planned build unit that job_project_build could not build.
+
+    The unit was planned but never dispatched, so nothing downstream can analyze it; the receipt
+    keeps it visible as a named gap (unit, upstream failure and failing job) instead of letting
+    the lane read as not applicable.
+    """
+    build_unit_id = str(probe.get("build_unit_id"))
+    status = str(probe.get("terminal_status") or "UNKNOWN")
+    reasons = [str(value) for value in probe.get("gaps", ()) if value]
+    reason = reasons[0] if reasons else "no reason recorded"
+    prefix = f"{build_unit_id}: "
+    while reason.startswith(prefix):
+        reason = reason[len(prefix):]
+    return {"schema": RECEIPT_SCHEMA, "build_unit_id": build_unit_id, "family": probe.get("family"),
+            "root": probe.get("root", "."), "build_system": probe.get("build_system"),
+            "upstream_handoff_sha256": accepted.get("project_build_handoff_sha256"),
+            "workspace": None, "artifacts": [], "commands": [], "processing_decisions": [],
+            "upstream_failure": {"job_id": "job_project_build", "terminal_status": status, "reason": reason},
+            "terminal_status": "BLOCKED",
+            "gaps": [f"{probe.get('family')} build unit at {probe.get('root', '.')} was not built: "
+                     f"job_project_build reported {status}: {reason}"]}
+
+
 def _node_gap_receipt(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mapping[str, Any],
                       dependency: Mapping[str, Any], gaps: list[str]) -> dict[str, Any]:
     return {"schema": RECEIPT_SCHEMA,
@@ -1475,6 +1503,15 @@ def build_job(*, executor_factory=None) -> Job:
                         if item.get("family") == "dotnet"
                         and str(item.get("build_unit_id")) not in selected_ids]
                        if family == "dotnet" else [])
+        # A planned unit of this family that project build could not build is a named gap here,
+        # never an absent lane. (.NET keeps its topology-aware receipt above; the WebAssembly lane
+        # consumes other families' units, which their own lanes already report.)
+        upstream_failed = ([] if family in {"dotnet", "wasm"} else
+                           [upstream_build_failure_receipt(item, accepted)
+                            for item in accepted.get("probe_receipts", ())
+                            if item.get("family") == family
+                            and str(item.get("build_unit_id")) not in selected_ids
+                            and item.get("terminal_status") not in _PROBE_NOT_NEEDED])
         if family == "rust":
             for dispatch in selected:
                 errors = rust.validate_dispatch(dispatch, typed.rust)
@@ -1522,8 +1559,10 @@ def build_job(*, executor_factory=None) -> Job:
                          for value in item["recipe"].get("expected_outputs", ()))))
         gaps.extend(f"{item['build_unit_id']}: {gap}" for item in non_run_receipts
                     for gap in item.get("gaps", ()))
+        gaps.extend(f"{item['build_unit_id']}: {gap}" for item in upstream_failed for gap in item["gaps"])
         return {"dispatches": selected, "unavailable": unavailable, "accepted": accepted,
-                "non_run_receipts": non_run_receipts, "processing_decisions": decisions, "gaps": gaps,
+                "non_run_receipts": [*non_run_receipts, *upstream_failed],
+                "processing_decisions": decisions, "gaps": gaps,
                 "terminal_status": "COMPLETED_WITH_GAPS" if gaps else
                                    "SUCCEEDED"}
       return load

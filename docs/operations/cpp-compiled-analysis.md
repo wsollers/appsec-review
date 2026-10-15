@@ -110,8 +110,12 @@ The acceptance task writes `cpp-compiled-summary.json` (schema
 [`../schemas/cpp-compiled-analysis.schema.json`](../schemas/cpp-compiled-analysis.schema.json)).
 It records `branch_count` 5 and one `<case-id>:<branch>` disposition per project and branch, either
 `SUCCEEDED` or `COMPLETED_WITH_GAPS`; a project blocked upstream is recorded as
-`COMPLETED_WITH_GAPS` with its named gap. With no accepted native project the plan step is
-`NOT_APPLICABLE` and the disposition map is empty.
+`COMPLETED_WITH_GAPS` with its named gap. A planned native unit that was never built (a `BLOCKED`
+or failed language-build receipt without a workspace) becomes a blocked project whose gap names the
+unit, the upstream failure and the job that failed; `job_clang_static_analysis` and
+`job_cpp_symbol_index` carry that gap as an unavailable scope, so all three are
+`COMPLETED_WITH_GAPS`. Only a target with no native unit leaves the plan step `NOT_APPLICABLE` with an
+empty disposition map. A project whose `CMakeLists.txt` is at the target root has root `.`.
 
 Resume the same application run. Completed unit receipts and immutable fingerprinted shards are
 reused. Generic build reuse is decided upstream from source, recipe, dependency, image, probe,
