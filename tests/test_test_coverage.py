@@ -50,6 +50,17 @@ condition-coverage="50% (1/2)"/></lines></class></classes></package></packages><
     assert _totals(document)["functions_covered"] == 1
 
 
+def test_cobertura_branch_line_listed_under_method_and_class_counts_once() -> None:
+    # coverlet and Cobertura list every line under its <method> and again under the class <lines>.
+    line = b'<line number="5" hits="1" branch="true" condition-coverage="50% (2/4)"/>'
+    document = parse_coverage(b"""<?xml version="1.0"?>
+<coverage><packages><package><classes><class filename="Program.cs"><methods>
+<method name="Main"><lines>""" + line + b"""</lines></method></methods><lines>""" + line + b"""
+</lines></class></classes></package></packages></coverage>""", "cobertura")
+    totals = _totals(document)
+    assert (totals["lines_total"], totals["branches_total"], totals["branches_covered"]) == (1, 4, 2)
+
+
 def test_parses_jacoco_counts() -> None:
     document = parse_coverage(b"""<report name="fixture"><package name="org/acme">
 <class name="org/acme/A" sourcefilename="A.java"><counter type="METHOD" missed="1" covered="2"/></class>

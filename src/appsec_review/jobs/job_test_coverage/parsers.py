@@ -168,19 +168,22 @@ def _cobertura(data: bytes, max_rows: int) -> CoverageDocument:
         if cls.tag.rsplit("}", 1)[-1] != "class" or not cls.get("filename"):
             continue
         line_hits: dict[int, int] = {}
-        branches_total = branches_covered = 0
+        # A class lists each line once under <lines> and again under its <method>; branch counts
+        # are kept per line, like hits, so a line reported twice is counted once.
+        line_branches: dict[int, tuple[int, int]] = {}
         methods_total = methods_covered = 0
         for child in cls.iter():
             name = child.tag.rsplit("}", 1)[-1]
             if name == "line" and child.get("number") is not None:
-                line_hits[_checked_int(child.get("number"), "Cobertura line")] = max(
-                    line_hits.get(_checked_int(child.get("number"), "Cobertura line"), 0),
-                    _checked_int(child.get("hits", "0"), "Cobertura hits"))
+                number = _checked_int(child.get("number"), "Cobertura line")
+                line_hits[number] = max(line_hits.get(number, 0),
+                                        _checked_int(child.get("hits", "0"), "Cobertura hits"))
                 if child.get("branch") == "true":
                     match = _CONDITION.search(child.get("condition-coverage", ""))
                     if match:
-                        branches_covered += _checked_int(match.group(1), "Cobertura covered branches")
-                        branches_total += _checked_int(match.group(2), "Cobertura branches")
+                        covered = _checked_int(match.group(1), "Cobertura covered branches")
+                        total = _checked_int(match.group(2), "Cobertura branches")
+                        line_branches[number] = max(line_branches.get(number, (0, 0)), (total, covered))
             elif name == "method":
                 methods_total += 1
                 method_hits = [_checked_int(line.get("hits", "0"), "Cobertura method hits")
@@ -188,7 +191,8 @@ def _cobertura(data: bytes, max_rows: int) -> CoverageDocument:
                 methods_covered += bool(method_hits and any(method_hits))
         files.append(CoverageFile(str(cls.get("filename")), CoverageTotals(
             len(line_hits), sum(value > 0 for value in line_hits.values()),
-            branches_total, branches_covered, methods_total, methods_covered)))
+            sum(total for total, _ in line_branches.values()),
+            sum(covered for _, covered in line_branches.values()), methods_total, methods_covered)))
     if not files:
         raise ValueError("Cobertura contains no class source records")
     return CoverageDocument("cobertura", _merge(files))

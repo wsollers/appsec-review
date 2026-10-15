@@ -74,12 +74,15 @@ services:
       - ../../targets:/opt/app/targets:ro
       - ../../rules:/opt/app/rules:ro
       - /var/run/docker.sock:/var/run/docker.sock
+    # Each check starts a Python process that imports dagster (~10-13s of CPU on a loaded host), so
+    # the timeout must exceed that import and the interval must leave the CPU idle between checks.
     healthcheck:
       test: ["CMD", "dagster", "api", "grpc-health-check", "-h", "127.0.0.1", "-p", "4000"]
-      interval: 5s
-      timeout: 10s
-      retries: 20
-      start_period: 10s
+      interval: 30s
+      timeout: 60s
+      retries: 10
+      start_period: 60s
+      start_interval: 5s
 
   webserver:
     <<: *dagster-service
@@ -106,12 +109,14 @@ services:
         condition: service_healthy
       code-location:
         condition: service_healthy
+    # liveness-check imports dagster too; same budget as the code location.
     healthcheck:
       test: ["CMD", "dagster-daemon", "liveness-check"]
-      interval: 10s
-      timeout: 10s
-      retries: 12
-      start_period: 20s
+      interval: 30s
+      timeout: 60s
+      retries: 10
+      start_period: 60s
+      start_interval: 5s
 
 volumes:
   postgres-data:
