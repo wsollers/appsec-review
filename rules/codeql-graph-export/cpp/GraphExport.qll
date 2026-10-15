@@ -18,7 +18,7 @@
  */
 
 import cpp
-import semmle.code.cpp.dataflow.new.DataFlow
+import semmle.code.cpp.ir.dataflow.DataFlow
 import semmle.code.cpp.controlflow.Dominance
 import semmle.code.cpp.security.FlowSources
 import semmle.code.cpp.models.interfaces.FormattingFunction

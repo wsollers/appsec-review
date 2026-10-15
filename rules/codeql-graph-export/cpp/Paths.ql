@@ -16,8 +16,8 @@
 // only bound applied here and is reported as `truncated`. No barrier is configured, so a path
 // through a sanitizer is exported and the sanitizer is listed instead of silently cutting it.
 import cpp
-import semmle.code.cpp.dataflow.new.DataFlow
-import semmle.code.cpp.dataflow.new.TaintTracking
+import semmle.code.cpp.ir.dataflow.DataFlow
+import semmle.code.cpp.ir.dataflow.TaintTracking
 import GraphExport
 
 module GraphTaintConfig implements DataFlow::ConfigSig {
@@ -61,9 +61,11 @@ string edgeKind(GraphTaint::PathNode a, GraphTaint::PathNode b) {
 }
 
 string functionName(GraphTaint::PathNode n) {
-  result = n.getNode().getEnclosingCallable().(Function).getQualifiedName()
+  // The IR dataflow library's getEnclosingCallable() returns a DataFlowCallable, not a Function.
+  // getUnderlyingCallable() yields the Cpp::Declaration, which Function extends.
+  result = n.getNode().getEnclosingCallable().getUnderlyingCallable().(Function).getQualifiedName()
   or
-  not n.getNode().getEnclosingCallable() instanceof Function and result = ""
+  not n.getNode().getEnclosingCallable().getUnderlyingCallable() instanceof Function and result = ""
 }
 
 query predicate path_flows(

@@ -17,7 +17,7 @@
 import cpp
 import semmle.code.cpp.controlflow.Guards
 import semmle.code.cpp.controlflow.Dominance
-import semmle.code.cpp.dataflow.new.DataFlow
+import semmle.code.cpp.ir.dataflow.DataFlow
 import GraphExport
 
 /** A variable read anywhere inside `e`. */

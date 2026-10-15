@@ -382,6 +382,140 @@ def execute_build(args: argparse.Namespace, catalog: dict[str, Any]) -> int:
     return 1 if any(item["status"] != "passed" for item in summary["results"]) else 0
 
 
+REGISTRY = Path("rules") / "registry.toml"
+PACK_VERIFY_TIMEOUT_SECONDS = 1800
+
+
+def load_registry() -> dict[str, Any]:
+    """The central rule-pack registry (rules/registry.toml)."""
+    with safe_path(REGISTRY.as_posix()).open("rb") as stream:
+        document = tomllib.load(stream)
+    if document.get("schema") != "appsec-review/rule-pack-registry/1":
+        raise SystemExit("rule pack registry schema is not appsec-review/rule-pack-registry/1")
+    packs = document.get("packs")
+    if not isinstance(packs, list) or not packs:
+        raise SystemExit("rule pack registry declares no packs")
+    seen: set[str] = set()
+    for pack in packs:
+        if not (isinstance(pack.get("path"), str) or isinstance(pack.get("image_path"), str)):
+            raise SystemExit(f"{pack.get('id')}: declare either path or image_path")
+        for field in ("id", "engine", "library", "verify", "state"):
+            if not isinstance(pack.get(field), str) or not pack[field]:
+                raise SystemExit(f"rule pack entry is missing {field}")
+        if pack["id"] in seen:
+            raise SystemExit(f"rule pack id is declared twice: {pack['id']}")
+        seen.add(pack["id"])
+        if pack["engine"] not in ("codeql", "semgrep", "pmd"):
+            raise SystemExit(f"{pack['id']}: unknown engine {pack['engine']}")
+        if pack["verify"] not in ("check-only", "validate"):
+            raise SystemExit(f"{pack['id']}: unknown verify mode {pack['verify']}")
+        if isinstance(pack.get("path"), str):
+            safe_path(pack["path"])
+    return document
+
+
+def _codeql_check_only(pack: dict[str, Any], log_path: Path) -> tuple[bool, str]:
+    """Type-check every query in a CodeQL pack inside its pinned image, offline.
+
+    ``codeql query compile --check-only`` resolves imports and types without building a query
+    plan. That is the whole bug class we care about (ambiguous or moved library modules, casts
+    that no longer typecheck) and it needs no database, so it can gate a run cheaply.
+    """
+    library, _, version = pack["library"].partition("@")
+    in_image = pack.get("image_path")
+    mount: list[str] = []
+    if in_image:
+        stage = f"cp -r {in_image} /tmp/pack\n"
+    else:
+        root = safe_path(pack["path"])
+        mount = ["--volume", f"{root.resolve().as_posix()}:/pack:ro"]
+        stage = "cp -r /pack /tmp/pack\n"
+    script = (
+        "set -eu\n"
+        f"test -d /opt/codeql/qlpacks/{library}/{version} || "
+        f"{{ echo \"PACK_LIBRARY_ABSENT {library}@{version}\" >&2; exit 3; }}\n"
+        + stage +
+        "cd /tmp/pack\n"
+        "exec /opt/codeql/codeql query compile --check-only --threads=4 -- "
+        "$(find . -name '*.ql' -print | sort)\n"
+    )
+    argv = [docker_binary(), "run", "--rm", "--network", "none", *mount,
+            "--entrypoint", "sh", pack["image"], "-c", script]
+    result = run_logged(argv, log_path, PACK_VERIFY_TIMEOUT_SECONDS)
+    # run_logged sends both streams to log_path, so the CompletedProcess carries no text. The
+    # first line is the argv echo, which quotes the probe script; scanning it would match the
+    # marker in the command text rather than in the container's output.
+    lines = log_path.read_text(encoding="utf-8", errors="replace").splitlines()
+    text = "\n".join(line for line in lines if not line.startswith("argv="))
+    if "PACK_LIBRARY_ABSENT" in text:
+        return False, f"pinned library {pack['library']} is not installed in {pack['image']}"
+    if result.returncode != 0:
+        errors = [line for line in text.splitlines() if line.startswith("ERROR:")]
+        failed = sorted({line.split()[-1].rstrip(".") for line in text.splitlines()
+                         if line.startswith("Failed [")})
+        detail = f"exit {result.returncode}"
+        if errors:
+            detail = f"{len(errors)} compile error(s) in {len(failed) or 1} query file(s); " \
+                     f"first: {errors[0][len('ERROR: '):][:120]}"
+        return False, detail
+    return True, "check-only compile clean"
+
+
+def _engine_validate(pack: dict[str, Any], log_path: Path) -> tuple[bool, str]:
+    """Engine-native validation for non-CodeQL packs."""
+    root = safe_path(pack["path"])
+    if pack["engine"] == "semgrep":
+        # `semgrep --validate` fetches p/semgrep-rule-lints from semgrep.dev, so it cannot run
+        # under the no-network packaging boundary. Mirror the real adapter instead: a scan with
+        # each config against an empty tree loads and parses every rule offline, and a malformed
+        # rule still fails the command.
+        inner = ("mkdir -p /tmp/empty && exec semgrep scan --disable-version-check "
+                 "--metrics off --config /pack --json --output /dev/null /tmp/empty")
+    else:
+        suite = pack.get("suite")
+        if not isinstance(suite, str) or not suite:
+            return False, "pmd pack declares no suite to validate"
+        inner = f"exec pmd check --rulesets /pack/{suite} --dir /pack --format text --no-progress"
+    argv = [docker_binary(), "run", "--rm", "--network", "none",
+            "--volume", f"{root.resolve().as_posix()}:/pack:ro",
+            "--entrypoint", "sh", pack["image"], "-c", f"set -eu\n{inner}\n"]
+    result = run_logged(argv, log_path, PACK_VERIFY_TIMEOUT_SECONDS)
+    if result.returncode != 0:
+        lines = [line for line in log_path.read_text(encoding="utf-8", errors="replace").splitlines()
+                 if line.strip() and not line.startswith("argv=")]
+        return False, f"exit {result.returncode}: {lines[-1][:140] if lines else 'no output'}"
+    return True, "engine validation clean"
+
+
+def query_packs(args: argparse.Namespace, _catalog: dict[str, Any]) -> int:
+    """Verify every registered rule pack. Any failure fails the command; nothing is a gap."""
+    document = load_registry()
+    requested = set(args.ids)
+    packs = [pack for pack in document["packs"]
+             if (not requested or pack["id"] in requested)]
+    unknown = requested - {pack["id"] for pack in document["packs"]}
+    if unknown:
+        raise SystemExit("unknown rule pack id(s): " + ", ".join(sorted(unknown)))
+    run_dir = RUN_ROOT / (datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ") + f"-packs-{os.getpid()}")
+    (run_dir / "logs").mkdir(parents=True, exist_ok=True)
+    failures = 0
+    for pack in packs:
+        if pack["state"] != "enabled":
+            print(f"SKIPPED {pack['id']:<30} state={pack['state']}")
+            continue
+        log_path = run_dir / "logs" / f"{pack['id']}.verify.log"
+        if pack["engine"] == "codeql":
+            ok, detail = _codeql_check_only(pack, log_path)
+        else:
+            ok, detail = _engine_validate(pack, log_path)
+        print(f"{'PASSED ' if ok else 'FAILED '}{pack['id']:<30} {detail}")
+        if not ok:
+            failures += 1
+            print(f"        log: {log_path.as_posix()}")
+    print(f"summary=packs={len(packs)} failed={failures}")
+    return 1 if failures else 0
+
+
 def runtime_args(policy: dict[str, Any]) -> list[str]:
     argv = [docker_binary(), "run", "--rm", "--network", policy["network"], "--read-only",
             "--user", policy["user"], "--pids-limit", str(policy["pids_limit"]),
@@ -601,6 +735,8 @@ def parser() -> argparse.ArgumentParser:
     listing.add_argument("ids", nargs="*")
     listing.add_argument("--json", action="store_true")
     sub.add_parser("validate")
+    packs = sub.add_parser("query-packs")
+    packs.add_argument("ids", nargs="*")
     for name in ("build", "smoke", "security"):
         command = sub.add_parser(name)
         command.add_argument("ids", nargs="*")
@@ -625,6 +761,8 @@ def main(argv: list[str] | None = None) -> int:
         argv[0] = "validate"
     args = parser().parse_args(argv)
     catalog = load_catalog()
+    if args.command == "query-packs":
+        return query_packs(args, catalog)
     if args.command == "list":
         items = catalog["images"]
         if args.ids:

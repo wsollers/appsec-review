@@ -8,7 +8,7 @@
 
 // LIVE-UNVERIFIED (see GraphExport.qll). Column contract: ../columns.json `source_sites`.
 import cpp
-import semmle.code.cpp.dataflow.new.DataFlow
+import semmle.code.cpp.ir.dataflow.DataFlow
 import GraphExport
 
 query predicate source_sites(
@@ -19,7 +19,8 @@ query predicate source_sites(
 ) {
   exists(DataFlow::Node n, Function function |
     GraphExport::source(n, model, source_type, node_kind, api, index) and
-    function = n.getEnclosingCallable()
+    // IR dataflow: getEnclosingCallable() is a DataFlowCallable; unwrap to the Cpp::Declaration.
+    function = n.getEnclosingCallable().getUnderlyingCallable()
   |
     GraphExport::locationColumns(n.getLocation(), source_path, source_start_line,
       source_start_column, source_end_line, source_end_column) and

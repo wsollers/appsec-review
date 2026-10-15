@@ -1,0 +1,105 @@
+# Central registry of analysis rule and query packs.
+#
+# Every pack the review graph may load is registered here exactly once. The registry is the
+# authoritative inventory: `containers/build.py query-packs` verifies each entry, and
+# `job_tool_image_rebuild` runs that verification at the start of a review, so a pack that does
+# not compile fails the run before any target work begins. A pack that is absent from this file
+# is not verified and must not be loaded.
+#
+# Fields
+#   path            repository-relative pack root (holds qlpack.yml for CodeQL packs)
+#   engine          codeql | semgrep | pmd
+#   language        source language the pack analyses
+#   suite           pack-relative suite file, when the pack declares one
+#   image           catalog image id, or the operator-provided CodeQL source tag, used to verify
+#   library         the analysis library version the pack is written against; asserted present
+#   verify          check-only (type-check, no query plan) | validate (engine-native validation)
+#   state           enabled | deferred
+#
+# `library` is pinned deliberately. A CodeQL pack that declares `codeql/cpp-all: "*"` binds to
+# whatever library the image ships, and the old and new dataflow generations both export
+# `DataFlow::DataFlow`; that is how the graph-export pack silently stopped compiling. Pin it, and
+# the preflight fails loudly when the image moves instead of the queries resolving against a
+# library they were not written for.
+
+schema = "appsec-review/rule-pack-registry/1"
+
+[[packs]]
+id = "graph-export-cpp"
+path = "rules/codeql-graph-export/cpp"
+engine = "codeql"
+language = "cpp"
+suite = "graph-export.qls"
+image = "audit-codeql:custom-2.27.0"
+library = "codeql/cpp-all@12.1.0"
+verify = "check-only"
+state = "enabled"
+description = "Repository-authored code-graph export tables (call sites, sources, sinks, guards, paths, ranges, flow summaries)."
+
+[[packs]]
+id = "cert-cpp-coding-standards"
+# KNOWN BROKEN - the gate is expected to fail this entry until the image is fixed.
+#
+# The pack declares codeql/common-cpp-coding-standards@2.62.0 and advanced-security/qtil@0.0.3
+# (codeql-pack.lock.yml), and neither is present anywhere in the image: containers/tools/codeql/
+# Dockerfile.custom-source extracts only `cert-cpp-coding-standards.tgz` from
+# coding-standards-codeql-packs.zip and never extracts the sibling member packs. The pack
+# therefore cannot resolve its imports, which is why every run records
+# "CodeQL cert-cpp query suite completed with zero observations; this is not a clean
+# classification" - the suite has never produced a finding.
+#
+# The repository copy under rules/cpp-cert/codeql/cert is a partial vendored snapshot with the
+# same missing dependencies, so it cannot be verified either. Verify the in-image pack, because
+# that is the one the review loads.
+#
+# Fix: extract every member pack from the licensed zip in Dockerfile.custom-source, rebuild
+# audit-codeql:custom-2.27.0, re-pin source_image_id, then re-run this gate.
+image_path = "/opt/codeql/custom-queries/cert-cpp"
+engine = "codeql"
+language = "cpp"
+suite = "codeql-suites/cert-cpp-default.qls"
+image = "audit-codeql:custom-2.27.0"
+library = "codeql/cpp-all@12.1.0"
+verify = "check-only"
+state = "enabled"
+description = "Licensed CERT C++ 2016 coding-standards pack, release-pinned at 2.62.0 and layered into the CodeQL source image."
+
+[[packs]]
+id = "semgrep-security"
+path = "rules/semgrep"
+engine = "semgrep"
+language = "multi"
+image = "appsec-review/tool-semgrep:1.178.0"
+library = "semgrep@1.178.0"
+verify = "validate"
+state = "enabled"
+description = "Repository-authored Semgrep rules (security.yml, review-signals.yml), locked by rules.lock.json."
+
+[[packs]]
+id = "pmd-java-security"
+path = "rules/pmd"
+engine = "pmd"
+language = "java"
+suite = "java-security.xml"
+image = "appsec-review/tool-pmd:7.28.0"
+library = "pmd@7.28.0"
+verify = "validate"
+state = "enabled"
+description = "Repository-authored PMD Java security ruleset, locked by rules.lock.json."
+
+[[packs]]
+id = "cert-cpp-vendored-snapshot"
+# Not loaded by any job and not verifiable: a partial vendored copy of the licensed CERT pack that
+# ships the `cert` pack without the `codeql/common-cpp-coding-standards` and
+# `advanced-security/qtil` packs its own lock file requires, and pins codeql/cpp-all 5.0.0 while
+# the image ships 12.1.0. It is registered so that the pack is accounted for rather than sitting
+# on disk unverified; `cert-cpp-coding-standards` above is the copy the review loads.
+path = "rules/cpp-cert/codeql/cert"
+engine = "codeql"
+language = "cpp"
+suite = "codeql-suites/cert-cpp-default.qls"
+image = "audit-codeql:custom-2.27.0"
+library = "codeql/cpp-all@5.0.0"
+verify = "check-only"
+state = "deferred"
+description = "Partial vendored snapshot of CERT C++ 2016, superseded by the in-image licensed pack; retained for diff and provenance only."

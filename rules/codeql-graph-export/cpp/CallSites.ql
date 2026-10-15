@@ -8,7 +8,7 @@
 
 // LIVE-UNVERIFIED (see GraphExport.qll). Column contract: ../columns.json `call_sites`.
 import cpp
-import semmle.code.cpp.dataflow.new.DataFlow
+import semmle.code.cpp.ir.dataflow.DataFlow
 import GraphExport
 
 /** Function addresses flowing to the callee expression of a call through a function pointer. */

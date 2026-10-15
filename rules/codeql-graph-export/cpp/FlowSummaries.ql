@@ -11,8 +11,8 @@
 // them is followed. Writes through a parameter are direct stores (`*p`, `p[i]`, `p->f`) and
 // call arguments that CodeQL marks as defined by the call.
 import cpp
-import semmle.code.cpp.dataflow.new.DataFlow
-import semmle.code.cpp.dataflow.new.TaintTracking
+import semmle.code.cpp.ir.dataflow.DataFlow
+import semmle.code.cpp.ir.dataflow.TaintTracking
 import GraphExport
 
 predicate inputNode(

@@ -77,6 +77,28 @@ the archive root; see [`tools/native-cpp/README.md`](tools/native-cpp/README.md)
 parsers produced with `acquire_assets.py` (its lock lists no fetchable artifacts; see
 [`tools/tree-sitter/README.md`](tools/tree-sitter/README.md)). `tool-sqlite-fts` has no asset lock.
 
+## Rule and query packs
+
+Every analysis rule and query pack is registered in [`../rules/registry.toml`](../rules/registry.toml)
+and verified by the builder:
+
+```text
+containers/build.py query-packs            # every enabled pack
+containers/build.py query-packs <pack-id>
+```
+
+CodeQL packs are type-checked with `codeql query compile --check-only` inside their pinned image
+with networking disabled; Semgrep and PMD packs are validated the way the review invokes them. Any
+pack that does not verify fails the command, and the failure names the pack, the error count and
+the first error with its file and line. Logs are written under
+`runs/container-builds/<run-id>/logs/<pack-id>.verify.log`.
+
+The registry pins the analysis library each pack is written against (`library`), and verification
+asserts that version is installed before compiling. Image smoke tests prove a tool starts; they do
+not prove our queries still compile against the library the image ships. See
+[`../rules/README.md`](../rules/README.md) for the field reference and for the pack that is
+currently known broken.
+
 ## Runtime boundary
 
 `runtime-policy.toml` is the packaging acceptance boundary: no network, non-root UID/GID 10001,
