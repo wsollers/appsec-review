@@ -39,6 +39,8 @@ def classify(path: Path, producer: Mapping[str, Any], *, probe_bytes: int = 1024
                               "classification_basis": ["bounded-magic"]}
     if head.startswith(b"\x7fELF"):
         result.update(format="elf", family="native")
+    elif head[:4] in {b"\xfe\xed\xfa\xce", b"\xce\xfa\xed\xfe", b"\xfe\xed\xfa\xcf", b"\xcf\xfa\xed\xfe"}:
+        result.update(format="macho", family="native")
     elif head.startswith(b"\0asm"):
         result.update(format="wasm", family="wasm")
     elif head.startswith(b"\xca\xfe\xba\xbe"):

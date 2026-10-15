@@ -45,7 +45,13 @@ timestamps, exit/timeout/OOM state, truncation, and resolving raw-output/log pat
 preserved within bounds and normalized separately. Unexpected exit, timeout, OOM, parse failure, or
 missing output produces a durable producer `FAILED` disposition and gap without claiming clean
 coverage. An inapplicable scope produces `NOT_APPLICABLE`; an applicable tool with an unavailable
-prerequisite produces `BLOCKED`. Artifact, receipt, handoff, manifest, index, and path integrity
+prerequisite produces `BLOCKED`. Planned inputs outside a tool's declared support
+(`appsec_review.tool_inputs`, shared with target-analysis planning) are dropped before launch and
+counted as `SKIPPED_NA` in `not_applicable_inputs` rather than as gaps; for example a `.sh` file
+whose shebang names `zsh` or `fish` is never handed to ShellCheck, and `Dockerfile.md` or
+`dockerfile_utils.py` is never handed to Hadolint, Checkov, or Trivy. Cataloged source files that
+no source analyzer supports are published as `unsupported_coverage` and one named
+`unsupported-language coverage` gap. Artifact, receipt, handoff, manifest, index, and path integrity
 violations remain framework failures.
 
 ## Evidence and retrieval
@@ -70,7 +76,8 @@ SHA-256 and provenance. Semgrep runs both `security.yml` and the review-prioriti
 (see [`review-prioritization.md`](review-prioritization.md)). Semgrep and OpenGrep also run the SEI CERT rule pack from `rules/sei-cert/`
 after verifying its rule files against `pack.lock.json`; a mismatch blocks both tools with an explicit
 gap. Their records carry the CERT mapping and source hash, and engine errors or skipped files become
-gaps. See [`sei-cert-rule-pack.md`](sei-cert-rule-pack.md). The adapters do not install PHP dependencies or invent project security
+gaps, except skip reasons that mean no rule or language applies to the target (for example
+`wrong_language`, `irrelevant_rule`, `excluded_by_config`), which are `SKIPPED_NA` for that file. See [`sei-cert-rule-pack.md`](sei-cert-rule-pack.md). The adapters do not install PHP dependencies or invent project security
 configuration. OSV and Grype execute only with verified immutable local snapshots and never update at
 scan time. The data-sync pipeline publishes OSV. `tools/publish_grype_snapshot.py` separately imports
 an already-downloaded Grype v6 database only after verifying the upstream archive checksum, then

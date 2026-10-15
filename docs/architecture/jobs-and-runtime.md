@@ -179,6 +179,31 @@ language-build, and CodeQL artifacts and handoffs. They are checkpoint inputs, p
 resume invalidation, and feed completeness accounting; `GAP` is retriable and blocks clean claims,
 while either skip remains explicit without becoming a gap or evidence of security.
 
+### Per-input tool support
+
+The same dispositions apply to each input a job hands to an external tool. The inputs every
+tool consumer can process are declared once, typed, in `src/appsec_review/tool_inputs.py`
+(`TOOL_INPUT_SUPPORT`): file suffixes, names, or path shapes for source/configuration scanners,
+bounded-magic artifact formats for produced-artifact scanners, and translation-unit suffixes for
+Clang-family compile databases. Target-analysis planning, evidence collection, CI configuration
+analysis, artifact security analysis, and the C/C++ scope jobs partition their candidates through
+that table **before launch**:
+
+- an input outside a tool's declared support is never launched; it is recorded as `SKIPPED_NA`
+  with reason code `INPUT_FORMAT_UNSUPPORTED` and a reason, in a separately counted
+  `not_applicable_inputs` summary that is neither a gap nor a failure;
+- a tool whose every planned input is unsupported publishes `NOT_APPLICABLE` with
+  `coverage_disposition: SKIPPED_NA` and no gap;
+- only where support cannot be decided exactly before launch is a tool's own documented
+  "unsupported input" report accepted after the run (`TOOL_REPORTED_UNSUPPORTED_INPUT`): ShellCheck
+  SC1071, Semgrep/OpenGrep skip reasons that mean no rule or language applies, and osv-scanner's
+  exit-128 "No package sources found" for one produced artifact. Every other error stays a gap;
+- a supported input on which the tool fails, times out, is OOM-killed, truncates, or whose image
+  or database is unavailable remains a `GAP`/`FAILED` exactly as before;
+- a cataloged source file that no declared source analyzer supports is never treated as clean:
+  evidence collection publishes it as `unsupported_coverage` (kind `unsupported-language`) and a
+  named `unsupported-language coverage` gap.
+
 ## NVD synchronization
 
 `job_third_party_data_sync.nvd_sync` is a standalone, network-enabled reference publisher. It bootstraps from the official

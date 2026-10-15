@@ -201,6 +201,13 @@ def normalize_scope(unit: UnitContext, scope: IndexScope, execution: Mapping[str
             "coverage": status}
 
 
+def _not_applicable_scope(scope: IndexScope) -> dict[str, Any]:
+    """A scope whose compile units are all outside Clang support: SKIPPED_NA, never launched."""
+    return {"scope_id": scope.scope_id, "case_id": scope.case_id, "project_id": scope.project_id,
+            "terminal_status": "SKIPPED_NA", "gaps": [],
+            "not_applicable_inputs": scope.not_applicable_inputs()}
+
+
 def _index_scope(unit: UnitContext, scope: IndexScope, executor_factory: Any) -> dict[str, Any]:
     limits = _settings(unit)
     root = unit.job.run_root / "data" / "code-index" / "clangd" / scope.scope_id
@@ -240,6 +247,7 @@ def _index_scope(unit: UnitContext, scope: IndexScope, executor_factory: Any) ->
                                                               "timed_out", "oom_killed", "image_id")},
               "accepted_compile_database": dict(scope.compile_database),
               "index_identity": asdict(index), "counts": counts, "gaps": counts["gaps"],
+              "not_applicable_inputs": scope.not_applicable_inputs(),
               "terminal_status": "COMPLETED_WITH_GAPS" if counts["gaps"] else "SUCCEEDED"}
     save_scope_checkpoint(root / "checkpoint.json", identity, result)
     return result
@@ -269,13 +277,16 @@ def build_job(*, executor_factory=None) -> Job:
         planned = {item["scope_id"] for item in unit.output("load.accepted_cpp")["scopes"]}
         if {scope.scope_id for scope in scopes} != planned:
             raise ValueError("accepted C++ scopes changed between load and index")
+        runnable = [scope for scope in scopes if scope.container_compile_database()]
+        skipped = [_not_applicable_scope(scope) for scope in scopes if not scope.container_compile_database()]
         with ThreadPoolExecutor(max_workers=max(1, _settings(unit)["workers"])) as pool:
-            results = list(pool.map(lambda scope: _index_scope(unit, scope, executor_factory), scopes))
+            results = list(pool.map(lambda scope: _index_scope(unit, scope, executor_factory), runnable))
         gaps = [f"{item['case_id']}: {gap}" for item in results for gap in item["gaps"]]
         gaps.extend(f"{case_id}: {reason}" for case_id, reason in unavailable.items())
         status = ("NOT_APPLICABLE" if not results and not unavailable else
                   "COMPLETED_WITH_GAPS" if gaps else "SUCCEEDED")
-        return {"scopes": results, "scope_count": len(results), "gaps": gaps, "terminal_status": status}
+        return {"scopes": results, "scope_count": len(results), "gaps": gaps,
+                "not_applicable_scopes": skipped, "terminal_status": status}
 
     def publish(unit: UnitContext) -> Mapping[str, Any]:
         loaded, indexed = unit.output("load.accepted_cpp"), unit.output("index.scopes")

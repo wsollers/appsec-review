@@ -4,7 +4,7 @@ from collections.abc import Callable, Mapping
 import hashlib
 import json
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import re
 import shutil
 import subprocess
@@ -32,6 +32,10 @@ from appsec_review.storage import FileLock, atomic_json, canonical_json, file_sh
 from appsec_review.jobs.job_third_party_data_sync.publication import verify_current
 from appsec_review.rulepacks.sei_cert.pack import PackError, PackIdentity, verify_pack
 from appsec_review.jobs.job_evidence_collection.datasets import CONSUMES, DATASETS
+from appsec_review.applicability import ReasonCode
+from appsec_review.tool_inputs import (
+    TOOL_INPUT_SUPPORT, InputDecision, not_applicable_summary, partition_paths,
+)
 from appsec_review.swift_policy import (
     SWIFT_KNOWN_GAP, filter_swift_files, is_swift_path, reject_swift_derived,
     swift_inventory_count,
@@ -60,6 +64,58 @@ def _apply_swift_policy(selection: Applicability, *, enabled: bool) -> Applicabi
     reason = (f"{selection.reason}; Swift inputs excluded by tools.enable_swift=false" if files else
               "only Swift inputs matched and Swift execution is disabled by tools.enable_swift=false")
     return Applicability(bool(files), reason, files, selection.coverage_kind, gaps, selection.families)
+
+
+_HEAD_BYTES = 256
+
+
+def _bounded_head(target_root: Path | None) -> Callable[[str], bytes | None]:
+    """Read a bounded prefix of one cataloged file for declared-dialect checks (e.g. shebangs)."""
+    def read(relative: str) -> bytes | None:
+        pure = PurePosixPath(relative)
+        if target_root is None or pure.is_absolute() or ".." in pure.parts:
+            return None
+        candidate = target_root / pure
+        try:
+            if candidate.is_symlink() or not candidate.is_file():
+                return None
+            with candidate.open("rb") as stream:
+                return stream.read(_HEAD_BYTES)
+        except OSError:
+            return None
+    return read
+
+
+def _filter_supported_inputs(selection: Applicability, adapter: ToolAdapter,
+                             target_root: Path | None) -> tuple[Applicability, tuple[InputDecision, ...]]:
+    """Drop planned inputs outside the tool's declared support before launch (SKIPPED_NA)."""
+    if not selection.files or adapter.tool_id not in TOOL_INPUT_SUPPORT:
+        return selection, ()
+    partition = partition_paths(adapter.tool_id, selection.files, read_head=_bounded_head(target_root))
+    if not partition.not_applicable:
+        return selection, ()
+    files = partition.supported
+    count = len(partition.not_applicable)
+    if files:
+        reason = f"{selection.reason}; {count} planned input(s) outside declared tool support were not launched"
+        return (Applicability(True, reason, files, selection.coverage_kind, selection.gaps, selection.families),
+                partition.not_applicable)
+    reason = f"all {count} planned input(s) are outside {adapter.tool_id} declared input support"
+    # Policy gaps (the Swift execution policy) stay named; scope limitations of a tool that does
+    # not run are not gaps.
+    policy_gaps = tuple(gap for gap in selection.gaps if gap == SWIFT_KNOWN_GAP)
+    return (Applicability(False, reason, (), selection.coverage_kind, policy_gaps, selection.families),
+            partition.not_applicable)
+
+
+def _container_relative(path: str) -> str:
+    value = str(path)
+    for prefix in ("/target/", "/scratch/inputs/"):
+        if value.startswith(prefix):
+            return value[len(prefix):]
+    return value
+
+
 TOPOLOGY: Mapping[str, tuple[str, ...]] = {
     capability: tuple(
         f"{tool.removeprefix('tool-').replace('-', '_')}_{phase}"
@@ -334,24 +390,37 @@ def _valid_checkpoint(run_root: Path, path: Path) -> dict[str, Any] | None:
 
 
 def _separate_parser_diagnostics(
-    records: list[dict[str, Any]],
-) -> tuple[list[dict[str, Any]], list[str]]:
-    """Keep scanner diagnostics out of observations while preserving them as coverage gaps."""
+    records: list[dict[str, Any]], tool_id: str = "",
+) -> tuple[list[dict[str, Any]], list[str], list[InputDecision]]:
+    """Keep scanner diagnostics out of observations while preserving them as coverage gaps.
+
+    A tool's own recognized "unsupported input" report (``not_applicable_input``) is SKIPPED_NA for
+    that input, counted separately, and never a gap or an observation.
+    """
     observations: list[dict[str, Any]] = []
     gaps: list[str] = []
+    skipped: dict[str, InputDecision] = {}
     for record in records:
+        if record.get("not_applicable_input"):
+            path = _container_relative(str(record["not_applicable_input"]))
+            skipped.setdefault(path, InputDecision(
+                path, tool_id, ReasonCode.TOOL_REPORTED_UNSUPPORTED_INPUT,
+                str(record.get("not_applicable_reason") or "tool reported an unsupported input")))
+            continue
         gap = record.get("coverage_gap")
         if gap:
             gaps.append(str(gap))
         if not record.get("gap_only"):
             observations.append(record)
-    return observations, list(dict.fromkeys(gaps))
+    return observations, list(dict.fromkeys(gaps)), list(skipped.values())
 
 
 def _write_evidence(unit: UnitContext, adapter: ToolAdapter, catalog: ScanCatalog,
                     selection: Applicability, *, tool_identity: Mapping[str, Any],
                     raw_artifacts: tuple[Path, ...], observations: list[dict[str, Any]],
-                    terminal_status: str, gaps: tuple[str, ...]) -> tuple[dict[str, Any], Path]:
+                    terminal_status: str, gaps: tuple[str, ...],
+                    not_applicable: tuple[InputDecision, ...] = (),
+                    include_limitations: bool = True) -> tuple[dict[str, Any], Path]:
     destination = unit.unit_root / "evidence.json"
     destination.parent.mkdir(parents=True, exist_ok=True)
     envelope = build_envelope(
@@ -359,11 +428,13 @@ def _write_evidence(unit: UnitContext, adapter: ToolAdapter, catalog: ScanCatalo
         applicability=selection.as_dict(), coverage_scope={
             "kind": selection.coverage_kind, "paths": list(selection.files),
             "path_count": len(selection.files),
-        }, gaps=(*selection.gaps, *adapter.limitations, *gaps), raw_artifacts=raw_artifacts,
+        }, gaps=(*selection.gaps, *(adapter.limitations if include_limitations else ()), *gaps),
+        raw_artifacts=raw_artifacts,
         parser_identity=adapter.parser_identity, observations=observations,
         cataloged_paths=catalog.paths, terminal_status=terminal_status, run_root=unit.job.run_root,
         source_hashes={str(item["path"]): str(item["sha256"]) for item in catalog.files if item.get("sha256")},
     )
+    envelope["not_applicable_inputs"] = not_applicable_summary(not_applicable)
     atomic_json(destination, envelope)
     return envelope, destination
 
@@ -378,6 +449,7 @@ def _execute_tool(unit: UnitContext, adapter: ToolAdapter, catalog: ScanCatalog,
         selection = Applicability(
             selection.applicable, selection.reason, selection.files, selection.coverage_kind,
             (*selection.gaps, SWIFT_KNOWN_GAP), selection.families)
+    selection, not_applicable = _filter_supported_inputs(selection, adapter, unit.job.target_root)
     if adapter.tool_id == "tool-grype" and unit.job.tools.disable_grype:
         gap = "Grype coverage was configured disabled by tools.disable_grype"
         envelope, path = _write_evidence(
@@ -395,15 +467,23 @@ def _execute_tool(unit: UnitContext, adapter: ToolAdapter, catalog: ScanCatalog,
                 "gaps": envelope["exclusions_and_gaps"], "retry_count": 0}
     selection, mounts, environment, blocked = _prerequisites(unit, adapter, selection)
     if not selection.applicable:
+        # Every planned input was outside the tool's declared support: SKIPPED_NA, not a gap.
+        unsupported_only = bool(not_applicable)
         envelope, path = _write_evidence(
             unit, adapter, catalog, selection,
             tool_identity={"id": adapter.tool_id, "disposition": "not_executed"},
-            raw_artifacts=(), observations=[], terminal_status="NOT_APPLICABLE", gaps=(selection.reason,),
+            raw_artifacts=(), observations=[], terminal_status="NOT_APPLICABLE",
+            gaps=() if unsupported_only else (selection.reason,), not_applicable=not_applicable,
+            include_limitations=not unsupported_only,
         )
         return {"tool_id": adapter.tool_id, "capability": adapter.capability,
-                "terminal_status": "NOT_APPLICABLE", "checkpoint_reused": False,
+                "terminal_status": "NOT_APPLICABLE",
+                **({"coverage_disposition": "SKIPPED_NA", "reason": selection.reason}
+                   if unsupported_only else {}),
+                "checkpoint_reused": False,
                 "artifact": _artifact(unit.job.run_root, path), "record_count": 0,
-                "gaps": envelope["exclusions_and_gaps"]}
+                "gaps": envelope["exclusions_and_gaps"],
+                "not_applicable_inputs": envelope["not_applicable_inputs"]}
     if blocked is not None:
         envelope, path = _write_evidence(
             unit, adapter, catalog, selection,
@@ -471,6 +551,7 @@ def _execute_tool(unit: UnitContext, adapter: ToolAdapter, catalog: ScanCatalog,
         output = None
         observations: list[dict[str, Any]] = []
         gaps: list[str] = []
+        reported_not_applicable: list[InputDecision] = []
         error_class = None
         for attempt in range(configured_retries + 1):
             scratch = unit.unit_root / "scratch" / f"attempt_{attempt + 1:02d}"
@@ -545,7 +626,8 @@ def _execute_tool(unit: UnitContext, adapter: ToolAdapter, catalog: ScanCatalog,
                     raw_paths = (*raw_paths, output)
                 try:
                     parsed = adapter.parse(output.read_bytes())
-                    observations, parser_gaps = _separate_parser_diagnostics(parsed)
+                    observations, parser_gaps, reported_not_applicable = _separate_parser_diagnostics(
+                        parsed, adapter.tool_id)
                     reject_swift_derived(
                         observations, enabled=unit.job.tools.enable_swift,
                         context=f"{adapter.tool_id} observations")
@@ -585,6 +667,7 @@ def _execute_tool(unit: UnitContext, adapter: ToolAdapter, catalog: ScanCatalog,
                            "attempt_count": configured_retries + 1 if error_class else attempt + 1,
                            "error_class": error_class},
             raw_artifacts=raw_paths, observations=observations, terminal_status=terminal, gaps=tuple(gaps),
+            not_applicable=(*not_applicable, *reported_not_applicable),
         )
         output_value = {
             "tool_id": adapter.tool_id, "capability": adapter.capability,
@@ -594,6 +677,7 @@ def _execute_tool(unit: UnitContext, adapter: ToolAdapter, catalog: ScanCatalog,
             "execution": (_artifact(unit.job.run_root, unit.job.run_root / result.receipt_path)
                           if result is not None else None),
             "record_count": envelope["record_count"], "gaps": envelope["exclusions_and_gaps"],
+            "not_applicable_inputs": envelope["not_applicable_inputs"],
             "checkpoint_identity": identity, "retry_count": attempt if error_class is None else configured_retries,
         }
         if terminal in {"SUCCEEDED", "PARTIAL"}:
@@ -653,7 +737,8 @@ def _build_producer_shard(unit: UnitContext, normalize_unit: str) -> Mapping[str
         candidate = unit.job.run_root / identity.relative_path
         if candidate.is_file() and file_sha256(candidate) == identity.sha256:
             reused = {**value, "checkpoint_reused": output.get("checkpoint_reused", False),
-                      "index_reused": True}
+                      "index_reused": True,
+                      "not_applicable_inputs": output.get("not_applicable_inputs") or not_applicable_summary(())}
             unit.job.events.write(
                 "PRODUCER_SHARD_COMPLETED", unit_id=unit.unit_id, producer=producer,
                 shard_identity=reused["index_identity"], disposition=reused["terminal_status"],
@@ -715,7 +800,8 @@ def _build_producer_shard(unit: UnitContext, normalize_unit: str) -> Mapping[str
              "index_identity": __import__("dataclasses").asdict(identity), "index_reused": False,
              "tool_id": producer, "terminal_status": output["terminal_status"],
              "checkpoint_reused": output.get("checkpoint_reused", False),
-             "record_count": output.get("record_count", 0), "gaps": output.get("gaps", [])}
+             "record_count": output.get("record_count", 0), "gaps": output.get("gaps", []),
+             "not_applicable_inputs": output.get("not_applicable_inputs") or not_applicable_summary(())}
     checkpoint.parent.mkdir(parents=True, exist_ok=True)
     atomic_json(checkpoint, value)
     unit.job.events.write(
@@ -728,20 +814,48 @@ def _build_producer_shard(unit: UnitContext, normalize_unit: str) -> Mapping[str
     return value
 
 
+SOURCE_ANALYZERS = CAPABILITIES["source_sast"]
+
+
+def unsupported_source_coverage(catalog: ScanCatalog) -> dict[str, Any]:
+    """Cataloged source files that no declared source analyzer supports (unsupported-language coverage)."""
+    paths = sorted(str(item["path"]) for item in catalog.files
+                   if item.get("language") is not None and not any(
+                       TOOL_INPUT_SUPPORT[tool].supports_path(str(item["path"])) for tool in SOURCE_ANALYZERS))
+    languages: dict[str, int] = {}
+    selected = set(paths)
+    for item in catalog.files:
+        if str(item["path"]) in selected:
+            key = str(item.get("language"))
+            languages[key] = languages.get(key, 0) + 1
+    gap = (f"unsupported-language coverage: {len(paths)} cataloged source file(s) have no declared source "
+           f"analyzer ({', '.join(f'{key}={value}' for key, value in sorted(languages.items()))})") if paths else None
+    return {"kind": "unsupported-language", "count": len(paths), "languages": dict(sorted(languages.items())),
+            "paths": paths[:200], "truncated": len(paths) > 200, "gap": gap}
+
+
 def _assemble_manifest(unit: UnitContext, index_units: tuple[str, ...]) -> Mapping[str, Any]:
     manifest_path, manifest_sha = resolve_context_manifest(unit.job)
     upstream, _ = load_verified_manifest(unit.job.run_root, manifest_path, manifest_sha)
     gaps: list[str] = []
     dispositions: list[dict[str, Any]] = []
     shards: list[IndexIdentity] = []
+    not_applicable: list[Mapping[str, Any]] = []
     for unit_id in index_units:
         output = unit.output(unit_id)
+        skipped = output.get("not_applicable_inputs") or not_applicable_summary(())
         dispositions.append({"tool_id": output["tool_id"], "terminal_status": output["terminal_status"],
                              "checkpoint_reused": output["checkpoint_reused"], "record_count": output["record_count"],
                              "index_reused": output.get("index_reused", False),
                              "shard_id": output["index_identity"]["shard_id"],
-                             "gaps": output.get("gaps", [])})
+                             "gaps": output.get("gaps", []),
+                             "not_applicable_input_count": int(skipped.get("count", 0))})
+        not_applicable.extend(skipped.get("items", ()))
         gaps.extend(str(item) for item in output.get("gaps", []))
+    unsupported = unsupported_source_coverage(load_target_catalog(unit.job.run_root))
+    if unsupported["count"]:
+        # No declared source analyzer supports these files: a named coverage gap, never clean.
+        gaps.append(unsupported["gap"])
         shards.append(IndexIdentity(**{**output["index_identity"],
                                        "gaps": tuple(output["index_identity"].get("gaps", ())) }))
     existing = [IndexIdentity(**{**item, "gaps": tuple(item.get("gaps", ()))})
@@ -757,7 +871,9 @@ def _assemble_manifest(unit: UnitContext, index_units: tuple[str, ...]) -> Mappi
     return {"index_manifest": _artifact(unit.job.run_root, combined_manifest),
             "shards": [__import__("dataclasses").asdict(item) for item in shards],
             "item_count": sum(item["record_count"] for item in dispositions),
-            "dispositions": dispositions, "gaps": list(dict.fromkeys(gaps))}
+            "dispositions": dispositions, "gaps": list(dict.fromkeys(gaps)),
+            "not_applicable_inputs": not_applicable_summary(not_applicable),
+            "unsupported_coverage": unsupported}
 
 
 def build_job(*, executor_factory: ExecutorFactory | None = None, fail_tool: str | None = None) -> Job:
@@ -841,6 +957,8 @@ def build_job(*, executor_factory: ExecutorFactory | None = None, fail_tool: str
             "target_fingerprint": unit.job.source_fingerprint,
             "shards": index["shards"], "dispositions": index["dispositions"],
             "gaps": index["gaps"], "security_findings": [],
+            "not_applicable_inputs": index.get("not_applicable_inputs"),
+            "unsupported_coverage": index.get("unsupported_coverage"),
         }
         path = unit.unit_root / "handoff.json"
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -848,7 +966,9 @@ def build_job(*, executor_factory: ExecutorFactory | None = None, fail_tool: str
         return {"schema": document["schema"], "artifact": _artifact(unit.job.run_root, path),
                 "index_manifest": index["index_manifest"],
                 "item_count": index["item_count"], "gaps": document["gaps"],
-                "dispositions": document["dispositions"]}
+                "dispositions": document["dispositions"],
+                "not_applicable_inputs": document["not_applicable_inputs"],
+                "unsupported_coverage": document["unsupported_coverage"]}
 
     units.append(Unit("evidence_publication.publish_handoff", publish,
                       ("evidence_publication.assemble_manifest",)))

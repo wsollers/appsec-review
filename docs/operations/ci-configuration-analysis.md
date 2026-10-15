@@ -12,7 +12,15 @@ Accepted outputs include:
 - immutable `observations/ci_*` shards;
 - an immutable `evidence/ci_findings` shard;
 - exact-only canonical findings;
-- a coverage join naming every missing or partial provider/tool branch.
+- a coverage join naming every missing or partial provider/tool branch, plus a separately
+  counted `not_applicable_inputs` summary.
+
+External linters receive only definitions their declared input support accepts
+(`appsec_review.tool_inputs`): actionlint and Checkov's `github_actions` framework read workflow
+files under `.github/workflows/`, while Zizmor also reads `.github/actions/**/action.yml`
+definitions. A definition outside a linter's support is `SKIPPED_NA` for that linter and never
+launched; when none remain the branch is `NOT_APPLICABLE` without a gap. A supported definition on
+which a linter fails stays a gap.
 
 Use the MCP `query_ci_configuration` tool to filter accepted shards by provider, pipeline, workflow, stage, job, step, tool, rule, category, canonical finding, or shard. Source excerpts remain hash-verified through the ordinary retrieval API.
 

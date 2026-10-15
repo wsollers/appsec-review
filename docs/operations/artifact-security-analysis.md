@@ -15,6 +15,14 @@ metadata without extracting or executing members. Traversal, absolute paths, lin
 member count or size, expansion ratios, corrupt containers, and unsupported formats become precise
 coverage gaps.
 
+Pinned scanners run only on the formats `appsec_review.tool_inputs` declares for them: BLint on
+ELF, PE/.NET, COFF, Mach-O, and Android packages; SpotBugs on JVM classes and archives; Syft,
+Grype, and osv-scanner on any produced artifact. An artifact outside a scanner's formats is never
+launched and is counted per capability in `not_applicable_inputs` as `SKIPPED_NA`, not as a gap.
+osv-scanner's extractor set decides which artifacts it can read, so its documented exit-128
+"No package sources found" report is the one post-run result accepted as `SKIPPED_NA`; any other
+non-zero exit, timeout, or truncation remains a gap.
+
 ## Units, recovery, and invalidation
 
 Dagster exposes independent inventory, native, JVM, package, WebAssembly, SpotBugs, BLint, Syft,
