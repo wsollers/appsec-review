@@ -31,7 +31,7 @@ input, output, tool, and acceptance contracts.
 
 ## Registered jobs
 
-`runtime/registry.py` registers 35 jobs. Each has a `[jobs.<job_id>]` table in
+`runtime/registry.py` registers 32 jobs. Each has a `[jobs.<job_id>]` table in
 `appsec-review.toml`, and its Dagster job is named from that table's `name`.
 
 | Job | Purpose | Operations |
