@@ -13,20 +13,28 @@ carries MCP/LSP payloads; analysis tooling lives in its own images.
 | `audit-buildenv-php` | `php/` | + PHP 8.3.6 CLI/dev (phpize, php-config), Composer 2.7.1, Autotools | `php` |
 | `audit-buildenv-rust-wasm` | `rust-wasm/` | + hash-locked Rust 1.90.0 with wasm32-unknown-unknown and wasm32-wasip1 | `rust`, `wasm` |
 | `audit-buildenv-typescript` | `typescript/` | + hash-locked Node 22.23.3 (npm 10.9.9), pnpm 9.15.9, Yarn 1.22.22; node-gyp uses the shared compiler | `node` |
-| `audit-buildenv-android` | `android/` | JDK 17, Gradle 8.9, Android SDK 35 | `android` |
+| `audit-buildenv-java` | `java/` | OpenJDK 21, hash-locked Maven 3.9.9, Gradle 8.9, Kotlin 2.0.21; strace, python3 | `java` |
+| `audit-buildenv-android` | `android/` | JDK 17, Gradle 8.9, Android SDK 35 (Build Tools 35.0.0, platform-tools) | `android` |
+| `audit-buildenv-dotnet` | `dotnet/` | .NET SDK 8.0.131 and 10.0.112, hash-locked linux-x64 8.0.31 apphost pack; strace, python3 | `dotnet` |
 
-All family images except Android build `FROM` the shared native toolchain (see
-`native-toolchain/README.md`), so every family compiles C/C++ with the same compiler identity.
-Apt packages are pinned to exact Ubuntu 24.04 versions; downloaded release assets are listed with
-their size and SHA-256 in an `assets.lock.json` and verified before use.
+The C/C++, Go, Python, PHP, Rust/WebAssembly and Node/TypeScript images build `FROM` the shared
+native toolchain (see `native-toolchain/README.md`), so those families compile C/C++ with the same
+compiler identity. The Java, Android and .NET images do not: Java and .NET start from the
+digest-pinned `ubuntu:24.04` image and Android from a digest-pinned `eclipse-temurin:17-jdk-noble`
+image, each installing exact-version apt packages (including the same `strace` 6.8 and `python3`
+3.12.3 the build capture uses) plus hash-locked release archives. Apt packages are pinned to exact
+Ubuntu 24.04 versions; downloaded release assets are listed with their size and SHA-256 in an
+`assets.lock.json` and verified before use.
 
 Build them in dependency order (the builder resolves `dependencies`):
 
 ```sh
 python3 containers/build.py build buildenv-native-toolchain audit-buildenv-cpp audit-buildenv-go \
-  audit-buildenv-python audit-buildenv-php audit-buildenv-rust-wasm audit-buildenv-typescript
+  audit-buildenv-python audit-buildenv-php audit-buildenv-rust-wasm audit-buildenv-typescript \
+  audit-buildenv-java audit-buildenv-android audit-buildenv-dotnet
 python3 containers/build.py smoke buildenv-native-toolchain audit-buildenv-cpp audit-buildenv-go \
-  audit-buildenv-python audit-buildenv-php audit-buildenv-rust-wasm audit-buildenv-typescript
+  audit-buildenv-python audit-buildenv-php audit-buildenv-rust-wasm audit-buildenv-typescript \
+  audit-buildenv-java audit-buildenv-android audit-buildenv-dotnet
 ```
 
 ## Profile image pins
@@ -38,15 +46,21 @@ when the local id differs from the pin, so a pin names exactly the bytes the run
 The id is produced by building the image on the host that runs reviews and reading
 `docker image inspect <tag> --format '{{.Id}}'` (`build.py build` also records it as `digest` in its
 summary). It is not reproducible across hosts: apt archive state, layer timestamps and builder
-metadata all change the id even when the Dockerfile and pins are identical. That is expected: pins
-record the working images on the review host and are not compared between machines (see
-[Moving forward, not reproducing](../README.md#moving-forward-not-reproducing)). After rebuilding and
-smoking an image, set its pin to the new id, by hand or with `update-image-pins`. When a Dockerfile
-here changes, rebuild the image and update the pin in the same change.
+metadata all change the id even when the Dockerfile and pins are identical. Pins are therefore
+host-local (owner decision, 2026-10-15): images move forward, results are never compared across
+hosts, slight container drift between hosts is acceptable, and a changed pin means rerunning, not a
+defect (see [Moving forward, not reproducing](../README.md#moving-forward-not-reproducing)). Asset
+locks record the SHA-256 of the downloaded inputs a working build used; when upstream moves,
+re-acquire and record the new hash. After rebuilding and smoking an image, update its pin by hand or
+with `appsec-review update-image-pins --run-id <run-id> --write` after a review run's
+`job_tool_image_rebuild` reported it as mismatched (see
+[`../../docs/operations/tool-image-rebuild.md`](../../docs/operations/tool-image-rebuild.md)); the
+pipeline never rewrites pins on its own. When a Dockerfile here changes, rebuild the image and update
+the pin in the same change. The committed pins name whichever host last re-pinned (see the last
+bullet of [`../TODO.md`](../TODO.md)).
 
 The Rust/WebAssembly image backs both the `rust` and `wasm` profiles; update both pins together.
 
 ## Still deferred
 
-`.NET` and Java build environments are owned by their own work streams; the former
-`audit-buildenv-cpp-resolute` variant remains deferred in the catalog.
+The former `audit-buildenv-cpp-resolute` variant remains deferred in the catalog.

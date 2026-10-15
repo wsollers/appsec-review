@@ -1,6 +1,12 @@
 # C/C++ index jobs: clangd symbol index and Joern CPG
 
-Two independent jobs index accepted C/C++ projects after `job_cpp_compiled_analysis` completes:
+Two independent jobs index accepted C/C++ projects after `job_cpp_compiled_analysis` completes.
+Joern (`job_cpg_analysis`) is deprecated and shipped disabled
+(`jobs.job_cpg_analysis.settings.enabled = false`): the direct CLI and Dagster planners leave a
+disabled job out of the graph entirely, so by default only clangd runs, `job_codeql_analysis`
+waits only for clangd, and no Joern rows or artifacts are written. The third consumer of the same
+index scopes, `job_clang_static_analysis`, is documented in
+[`clang-static-analysis.md`](clang-static-analysis.md).
 
 | Job | Tool image | Publishes |
 | --- | --- | --- |
@@ -96,8 +102,9 @@ Settings in `[jobs.job_cpg_analysis.settings]`:
 - `enabled` (default `false`). Joern is deprecated, and no review fact depends on it; see "Why
   Joern is deprecated" in
   [`../architecture/code-graph-precomputation.md`](../architecture/code-graph-precomputation.md).
-  When `false`, no Joern container runs, and each accepted C/C++ scope publishes an `unavailable`
-  coverage row naming the setting.
+  When `false`, the job is not planned at all, so no Joern container runs and no rows are
+  published (the in-job `DISABLED` path that writes `unavailable` rows is unreachable from the
+  planners). The `cpg_graph` coverage lane is always `unavailable` in the coverage matrix.
 - `workers` (1 until a per-tool resource profile is reviewed).
 - `max_cpg_bytes`.
 
@@ -137,7 +144,7 @@ matches and its shard still hash-verifies. The identity covers:
   - checkpoint reuse;
   - rejection of tampered sources;
   - the strict YAML parser.
-- **Live run** (2026-10-10, real `tool-clangd-indexer` and `tool-joern` images through the real
+- **Live run** (2026-10-10, before the Joern deprecation; real `tool-clangd-indexer` and `tool-joern` images through the real
   `ContainerExecutor`, on the native fixture):
   - clangd indexed `main` at `native/main.cpp:1:5`, processed 1 of 1 translation units, and
     reported `complete` coverage;

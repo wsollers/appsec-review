@@ -57,10 +57,10 @@ read-only root filesystem, dropped capabilities, bounded memory/CPU/PIDs, and bo
 logs.
 
 Database and query checkpoints are separate. Each applicable scope runs a `default` query profile;
-C# and Rust also run independently hash-pinned `security-extended` profiles, and C/C++ runs the
-discovered `cert-cpp` custom profile. `appsec-review.toml` also configures a Go `security-extended`
-additional query that the asset lock does not contain, so Go scopes fail the additional-suite
-equality check until the lock and configuration agree. The C/C++ default profile uses
+Go, C# and Rust also run independently hash-pinned `security-extended` profiles (each configured
+under `languages.<language>.additional_queries` and present with the same suite hash in
+`containers/tools/codeql/assets.lock.json`), and C/C++ runs the discovered `cert-cpp` custom
+profile. The C/C++ default profile uses
 `cpp-code-scanning.qls`, while the custom profile uses `cert-cpp-default.qls`. Database identities
 exclude all query inputs, so a query-suite change reuses a verified database while a build recipe,
 dependency, environment,
@@ -159,7 +159,7 @@ For a fresh `appsec-multi-vuln` run, verify:
 1. the live extractor inventory matches `containers/tools/codeql/assets.lock.json`;
 2. every applicable scope reports separate database and per-profile query identities;
 3. every successful C/C++ database reports both `default` and `cert-cpp` query profiles;
-4. every successful C# and Rust database reports both `default` and `security-extended` profiles;
+4. every successful Go, C# and Rust database reports both `default` and `security-extended` profiles;
 5. each supported language present has a real database and query execution or a precise gap;
 6. the accepted manifest contains profile-specific `codeql-*` observation shards;
 7. `query_codeql` returns the same accepted observations; and

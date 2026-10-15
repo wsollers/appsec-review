@@ -57,6 +57,8 @@ Operations, one page per job or service:
 - [`operations/security-tagging.md`](operations/security-tagging.md) — security tagging.
 - [`operations/document-issue-analysis.md`](operations/document-issue-analysis.md) — source-mapped document candidate ledger.
 - [`operations/retrieval-mcp.md`](operations/retrieval-mcp.md) — local retrieval MCP gateway.
+- [`operations/swift-execution-policy.md`](operations/swift-execution-policy.md) — the global
+  `tools.enable_swift` gate (`src/appsec_review/swift_policy.py`) and its durable coverage gap.
 - [`operations/metrics.md`](operations/metrics.md) — derived run metrics.
 
 Records, task prompts, and schemas:

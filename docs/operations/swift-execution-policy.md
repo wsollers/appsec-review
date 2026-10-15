@@ -8,7 +8,9 @@ When the setting is `false`, `.swift` files remain in the target catalog so the 
 their existence. They are removed before analysis planning and are not admitted to Tree-sitter,
 build, CodeQL, source-history, evidence-collection, security-tagging, or review-prioritization
 scopes. Evidence tools receive a policy-staged target containing only their non-Swift accepted
-inputs. Accepted language-build and history handoffs and non-catalog retrieval shards are checked
+inputs (`tool-spotbugs`, `tool-blint` and `tool-grype`, which read produced artifacts rather than
+source, are exempt from staging in `job_evidence_collection`). Accepted language-build and history
+handoffs and non-catalog retrieval shards are checked
 again at consumption time; a Swift path or typed Swift language value fails closed. The sole
 downstream exception is the coverage-matrix row that preserves the catalog count and forces every
 analysis lane to `unavailable` with the durable `KNOWN_GAP`. Absence of Swift findings is therefore

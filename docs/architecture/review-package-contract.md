@@ -48,7 +48,12 @@ exact route registration is not proof of control enforcement.
 Each `context` entry is typed `{id, kind, role}`. `kind` is the retrieval entity kind of `id`.
 `role` is one of `source`, `artifact`, `component`, `build_unit`, `duplicate_of`, `flow`,
 `priority`, `history`, `hotspot`, `tag`, or (v4) `entry_point`, `sink`, `path`, `guard` and
-`range`. Bare identity lists are not accepted.
+`range`. Bare identity lists are not accepted. Since the engineering-signal and profile-data
+wiring, `review/units.py` also emits `test_coverage`, `profile_hotspot`, `dependency` and
+`openssf_scorecard` context roles from the accepted `job_test_coverage`, `job_profile_data` and
+`job_dependency_intelligence` producers registered in `review/scope.py`. Open question:
+`review-packages.schema.json` still enumerates only the roles listed above for
+`inference_context.role`, so the schema and the assembler disagree on the new roles.
 
 ### Code-graph context (version 4)
 
@@ -223,8 +228,12 @@ resolution, manifest/hash tampering rejection, package-scoped MCP denial, blind-
 cursor rebinding denial and reuse invalidation when one upstream shard changes. An empty query
 with partial coverage must remain a gap.
 
-Dagster should expose `accept_manifest → assemble_scope → assemble_packages → red fan-out →
-normalize → blue and blind-verifier fan-out → adjudicate → publish` as visible dependencies.
+Dagster exposes the job's units as visible dependencies. The implemented topology
+(`[jobs.job_inference_security_review.steps]` in `appsec-review.toml`) is `scope.accept_manifest →
+scope.assemble_scope → packages.assemble_lead_packages / packages.assemble_hunt_packages →
+lead_review.teams / hunt_review.teams` (each team unit runs red, normalization, triage, blue and
+verifier cells) `→ merge.claims → adjudicate.apply_policy → scoring.score_claims →
+completeness.audit → publication.publish_claim_ledger / publication.publish_handoff`.
 Assembly and publication use immutable application attempts and a serialized accepted handoff;
 Dagster schedules and records node outcomes. Every expected worker cell has one terminal record.
 Ordinary producer/worker failures become scoped gaps; integrity and membership failures stop

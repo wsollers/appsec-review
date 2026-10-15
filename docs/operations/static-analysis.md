@@ -16,7 +16,7 @@ scanners to run. In Dagster's `wave1_review`, it runs after `job_target_analysis
 | source SAST | OpenGrep | Cataloged C, C++, and Java files; runs only the SEI CERT rule pack, which Semgrep also runs |
 | software inventory | Syft | Cataloged directory/manifests; directory, artifact, and OCI/archive coverage are distinct |
 | vulnerability matching | OSV Scanner, Grype | Cataloged manifests/SBOM plus a verified immutable local database; Grype also requires the Syft SBOM |
-| configuration | Hadolint, Checkov, Trivy, Zizmor | Explicit Dockerfiles, typed Terraform/HCL, structurally identified CloudFormation, and GitHub workflows; arbitrary YAML is excluded |
+| configuration | Hadolint, Checkov, Trivy, Zizmor | Explicit Dockerfiles, typed Terraform/HCL, structurally identified CloudFormation, and GitHub workflows; arbitrary YAML is excluded. Open question: `TOOL_INPUT_SUPPORT` declares `tool-checkov` and `tool-trivy` for Terraform/HCL and Dockerfiles only, so the pre-launch filter drops workflow and CloudFormation inputs as `SKIPPED_NA` even though the Checkov adapter still builds `github_actions` and `cloudformation` families |
 | binary hardening | BLint | Accepted cataloged built binaries only |
 
 Every enabled `kind = "tool"` entry whose tool manifest does not set `static_adapter = false` must

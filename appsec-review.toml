@@ -896,7 +896,7 @@ user = "10001:10001"
 # with `docker image inspect audit-buildenv-typescript:local --format '{{.Id}}'`.
 [jobs.job_project_build.settings.profiles.node]
 tag = "audit-buildenv-typescript:local"
-image_id = "sha256:67d1625340c935c54f966af7a08a689448c3cdacc111b0dc0ac317a6a89e5cd2"
+image_id = "sha256:26f9760d4946202d2cd7ea9231ddbdfbe2d7924cc2728a65e5a6fbe343f24932"
 user = "10001:10001"
 [jobs.job_project_build.settings.profiles.dotnet]
 tag = "audit-buildenv-dotnet:local"

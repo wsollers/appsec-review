@@ -85,7 +85,7 @@ shard; `planned` = inputs are available but no producer exists yet.
 | Runtime application config (JSON/YAML/INI defaults) | planned `job_deployment_topology` | `deployment` | declared | default bounds, feature flags, debug toggles | operator overrides | planned |
 | CI/CD definitions | `job_ci_configuration_analysis` | `ci_*`, `ci_findings` | observed / tool_finding | pipeline trust, secrets exposure, build provenance risk | — | indexed |
 | Secrets (source, build envp, artifacts) | `job_evidence_collection` (Gitleaks), build capture scan | `observations`, `build_security` | tool_finding | secret presence with redacted fingerprint | validity of the secret | indexed |
-| SBOM and dependency vulnerabilities (Syft, Grype, OSV-Scanner, Trivy, cve-bin-tool) | `job_evidence_collection`, `job_artifact_security_analysis` | `components`, `observations` | observed / tool_finding | package identity, matched advisories | that the vulnerable function is reachable | indexed (Grype disabled by config) |
+| SBOM and dependency vulnerabilities (Syft, Grype, OSV-Scanner; Trivy covers IaC/Dockerfile misconfiguration only and cve-bin-tool has no scan adapter) | `job_evidence_collection`, `job_artifact_security_analysis` | `components`, `observations` | observed / tool_finding | package identity, matched advisories | that the vulnerable function is reachable | indexed (Grype disabled by config) |
 | Normalized dependency inventory, native identities, maximal exposure and OpenSSF Scorecard | `job_dependency_intelligence` | `inventory` | observed / inferred / external context | evidence-backed dependency candidates, conservative exposure priority, and repository-practice context | production deployment, vulnerable-version applicability, artifact/source equivalence, or a vulnerability finding | indexed; every normalized identity is offered to bounded advisory lookup |
 | Imported test-coverage reports | `job_test_coverage` | `analysis` | observed context | bounded line/branch/function counts bound to accepted source hashes | security of covered code, vulnerability of uncovered code, or live execution when origin is `accepted-input` | indexed for LCOV, Cobertura, JaCoCo and LLVM JSON; missing or ambiguous data is a gap |
 | Imported execution profiles | `job_profile_data` | `analysis` | observed context | bounded within-build function/symbol hotness ranks | defect probability, attacker reachability, security of cold code, or a vulnerability finding | indexed for supported textual formats; opaque formats are gaps |
@@ -128,7 +128,7 @@ regular expressions, globs, filesystem paths, or shell.
 | `search` | exists | FTS over accepted shards | `query`, `indexes`, `kinds`, `limit`, `cursor` | ranking is `nomination`; extend to `docs` and `tests` shards |
 | `find` | exists | exact entity lookup | `identity`, `kind`, `name`, `path`, `indexes`, `limit`, `cursor` | |
 | `read_excerpt` | exists | source text | `identity`, `context_lines` | re-hashes file; optional `expanded=true` once the expansion map exists |
-| `trace` | exists | typed relation graph | `identity`, `relations`, `depth`, `limit` | generic relations; dataflow semantics stay in `query_dataflow` |
+| `trace` | exists | typed relation graph | `identity`, `relations`, `depth`, `limit` | generic relations; dataflow semantics stay in `query_code_graph` (which superseded the `query_dataflow` sketch) |
 | `resolve_evidence` | exists | evidence → resolving location/artifact | `identity`, `limit` | |
 | `coverage` | exists | gaps and shard status | `indexes`, `limit`, `cursor` | must be called before any negative conclusion |
 | `query_artifacts` | exists | produced artifacts | identity, kind, build unit, package | |
@@ -195,7 +195,7 @@ bound without a `range_fact` that says so.
 ### Packages
 
 - **Finding package** (one upstream lead): lead identity, resolving source/artifact, the tool path
-  if any, `query_dataflow` path ids that correlate to it, guard/range facts at the sink, build
+  if any, `query_code_graph` `dataflow_path` ids that correlate to it, guard/range facts at the sink, build
   hardening of the linked artifact, contract and deployment records for the entrypoint, open proof
   obligations, coverage gaps, and the allowed retrieval scope. Identities and small typed facts only.
 - **Hunt package** (one component or trust boundary): entrypoints with exposure and contracts,
@@ -284,6 +284,7 @@ flowchart TD
   DI --> RD
   ST --> RD
   RD --> RPA[job_review_package_assembly]
+  RPA --> DIA[job_document_issue_analysis]
 
   C -.-> IC[job_interface_contracts]
   C -.-> TD[job_test_and_doc_indexing]
@@ -301,7 +302,7 @@ flowchart TD
   OW --> AM
   CI --> AM
   RD --> AM
-  AM -.-> R[job_inference_security_review]
+  AM --> R[job_inference_security_review]
   R -.-> RP[job_remediation_planning] -.-> RV[job_remediation_validation] -.-> G[job_final_publication_gate] -.-> FR[job_final_report_publication]
 ```
 

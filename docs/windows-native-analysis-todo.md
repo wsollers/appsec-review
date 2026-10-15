@@ -6,7 +6,9 @@
   approved. Keep `analyze_cpp_project` generic, keep target execution disabled for the first
   acceptance, export immutable evidence, and verify teardown.
 
-This scoped TODO exists because `docs/TODO.md` and `docs/agent-reader.md` already had concurrent
-uncommitted edits when the design was added. Add the design and this entry to shared documentation
-navigation only after those edits are reconciled; do not copy this task wholesale into the shared
+This scoped TODO was created while `docs/TODO.md` and `docs/agent-reader.md` had concurrent
+uncommitted edits. Both the design and this entry are now linked from
+[`agent-reader.md`](agent-reader.md) and [`architecture/README.md`](architecture/README.md); the
+related Linux-first sequencing lives under "Add Windows and large native-build coverage after the
+Linux acceptance gate" in [`TODO.md`](TODO.md). Do not copy this task wholesale into the shared
 TODO.

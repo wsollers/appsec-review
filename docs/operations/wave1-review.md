@@ -102,8 +102,10 @@ accepted manifest while preserving old attempt receipts and reusing unaffected p
 and shards. Dagster step selection can rerun a producer branch and its manifest/publication closure
 without rerunning independent branches.
 
-Checkov 3.3.19 is bounded to typed Terraform/HCL, exact Dockerfile names, structurally recognized
-GitHub Actions workflows, and structurally recognized CloudFormation templates. Arbitrary YAML is
+Checkov 3.3.19 is bounded to typed Terraform/HCL, Dockerfile names (`Dockerfile`, `Dockerfile.*`,
+`*.dockerfile`, `Containerfile*`), structurally recognized GitHub Actions workflows, and
+structurally recognized CloudFormation templates (see the open question on the last two in
+[`static-analysis.md`](static-analysis.md)). Arbitrary YAML is
 not IaC merely by extension. Unsupported Checkov families are named gaps. Hadolint, Trivy, Checkov,
 and Zizmor retain separate producer scopes and shard identities so overlapping coverage is visible.
 

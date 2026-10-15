@@ -56,9 +56,12 @@ hash-pinned in `containers/tools/infer/assets.lock.json`, packaged without build
 access, and executed under the central scanner boundary. The adapter rewrites the normalized
 compilation database to stable read-only container paths and uses Infer's bundled LLVM/Clang 21
 frontend. It does not rerun the target build or execute target binaries. That frontend parses each
-unit against the system C/C++ headers, so the Infer image is built `FROM`
-`appsec-review/tool-native-cpp:1.0.0` (the offline Ubuntu toolchain headers) rather than the bare
-Ubuntu base, where every unit failed with `'stdio.h' file not found`.
+unit against the system C/C++ headers, so the Infer image is built `FROM` the shared
+`appsec-review/buildenv-native-toolchain:noble-gcc13.3-clang18.1` (catalog dependency
+`buildenv-native-toolchain`; `containers/tools/infer/Dockerfile`), the same toolchain headers the
+family build images use, rather than the bare Ubuntu base, where every unit failed with
+`'stdio.h' file not found`. Open question: `containers/tools/infer/tool.toml` still names
+`dependency = "appsec-review/tool-native-cpp:1.0.0"`.
 
 The producer retains Infer's JSON report, execution receipt, compilation database, and log as
 run-owned artifacts. Each observation resolves through the accepted source mapping and is indexed
@@ -83,7 +86,9 @@ weakness labels, or local defect map is present in the scan root.
 
 ## Joern status
 
-Joern no longer runs inside this job. The independent `job_cpg_analysis` consumes this job's
+Joern is deprecated and shipped disabled (`jobs.job_cpg_analysis.settings.enabled = false`), so it
+is absent from the default graph; `job_clang_static_analysis` and `job_cpp_symbol_index` are the
+consumers of this handoff that run by default. When enabled, the independent `job_cpg_analysis` consumes this job's
 accepted handoff, runs the pinned `tool-joern` c2cpg frontend per accepted project, and retains each
 CPG as run-owned evidence. Until bounded CPG/PDG export, source mapping, functional fixtures, and
 security acceptance exist, it publishes a `BLOCKED` shard with zero observations and `unavailable`

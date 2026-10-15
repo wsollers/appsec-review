@@ -76,7 +76,10 @@ cells, scoring and MCP sessions; contract defaults apply only when a run binds n
 ## Orchestration
 
 In Dagster `wave1_review`, the job runs after `job_codeql_analysis`, `job_cpp_compiled_analysis`,
-`job_cpp_symbol_index`, `job_tree_sitter_ast` and `job_review_prioritization`. It runs before
+`job_clang_static_analysis`, `job_cpp_symbol_index`, `job_tree_sitter_ast` and
+`job_review_prioritization`. The export it consumes is bounded by
+`jobs.job_codeql_analysis.settings.export_queries` (`row_limit`, `max_bytes`, `timeout_seconds`),
+not by `settings.graph`. It runs before
 `job_security_tagging` and `job_review_data_indexing`, which keeps the manifest publishers in one
 chain. Its units run in the `index` pool. The CLI graph (`appsec-review start`, `resume`,
 `plan-resume`) runs it between `job_review_prioritization` and `job_review_data_indexing`, and

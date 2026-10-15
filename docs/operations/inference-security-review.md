@@ -325,7 +325,8 @@ and per lane.
 Decision 4 separates the findings the handoff publishes:
 
 - `remediation_intake` lists only `confirmed` finding packages, with their ship-block status.
-  `job_remediation_planning` reads only this list.
+  It is the only finding list `job_remediation_planning` reads (the handoff's `planned_consumers`
+  also give that job `score_packages` and `gap_ids`).
 - `verification_backlog` lists `supported` finding packages labelled `unconfirmed`, with the
   required predicates that still lack direct support (`missing_predicates`) and their gap ids.
   No remediation job reads it. A backlog item enters remediation only after a later review

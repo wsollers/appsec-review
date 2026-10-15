@@ -334,6 +334,12 @@ limit on `appsec/pool`. The adapter assigns each node a pool from its unit id:
 | `index` | `*_index` tasks. |
 | `application` | Everything else. |
 
+Two jobs route by job before these step-name heuristics (`_JOB_STEP_POOLS` and
+`_JOB_DEFAULT_POOLS` in `orchestration/dagster/adapter.py`): every non-lifecycle unit of
+`job_code_graph_index` runs in `index`, and `job_inference_security_review` runs `lead_review`
+and `hunt_review` in `inference_teams` (limit 2), `scoring` in `inference_score` (limit 4),
+`publication` in `lifecycle` and everything else in `application`.
+
 The checked-in configuration limits every pool except `application`, which has no configured
 limit and is bounded only by `max_concurrent`.
 

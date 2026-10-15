@@ -1,7 +1,10 @@
 # Deferred container acceptance work
 
-- Build environments: split dependency resolution from offline analysis; pin each language closure;
-  share only explicit LSP payload layers; add per-language compile and language-server fixtures.
+- Build environments: ten pinned family images are enabled (`containers/buildenv/README.md`), with
+  dependency resolution done in derived project images rather than offline. Remaining: share only
+  explicit LSP payload layers and add language-server fixtures; per-family compile fixtures exist
+  under `tests/fixtures/build_toolchains/` and run in
+  `tests/integration/test_family_project_builds.py`.
 - Native analysis: compiler tracing and C/C++ build/AST/IR/ELF evidence (`tool-native-cpp`), Infer
   (`tool-infer`), C/C++ symbol indexing (`tool-clangd-indexer`), and CPG production (`tool-joern`)
   are enabled narrow images, and CodeQL images are packaged outside the catalog
@@ -22,3 +25,14 @@
   functional fixtures.
 - Report rendering: resolve a minimal hashed TeX closure and add deterministic render verification.
 - Dagster: orchestration is an application deployment concern; do not restore its archived image.
+- Image-ID pins are host-local (owner decision, 2026-10-15). Results are never compared across
+  hosts, slight container drift between hosts is acceptable, and a changed pin means rerunning, not
+  a defect. The committed `image_id` pins in `appsec-review.toml`, `containers/catalog.toml` and
+  `containers/tools/codeql/assets.lock.json` currently name whichever host last re-pinned
+  (Zarathustra, 2026-10-15), so every other host fails its pin checks until it re-pins. Remaining:
+  resolve each pinned tag to the local host's image ID when a run starts and bind that observed ID
+  into the run's resolved configuration (a changed image then invalidates reuse and forces a
+  rerun), drop the cross-host equality assertions in the live and integration tests
+  (`tests/integration/test_node_project_builds.py`, `tests/test_live_android_build.py`, the
+  `APPSEC_REVIEW_BUILDENV_PINS=local` opt-in in `tests/integration/test_family_project_builds.py`),
+  and keep asset locks (SHA-256 of downloaded inputs) exact, since those are reproducible.

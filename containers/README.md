@@ -81,7 +81,11 @@ a read-only target mount, and one writable scratch mount. Image definitions pack
 Application jobs own arguments and translate tool output into findings.
 
 A catalog entry may pin `image_id`; the application executor then refuses to run a local image
-whose id differs (`src/appsec_review/container_runtime/executor.py`). Every enabled tool is
+whose id differs (`src/appsec_review/container_runtime/executor.py`). Image-ID pins are host-local:
+a rebuilt image's id is not reproducible across hosts, results are never compared across hosts,
+and a changed pin means rerunning, not a defect (asset locks stay exact). `job_tool_image_rebuild`
+reports stale pins and `appsec-review update-image-pins` rewrites them; see
+[`buildenv/README.md`](buildenv/README.md) and the last bullet of [`TODO.md`](TODO.md). Every enabled tool is
 expected to have a static evidence-collection adapter unless its `tool.toml` sets
 `static_adapter = false`; tools with that opt-out are run by their own jobs instead. `tool-ghidra`
 is the one tool run by a pre-run command, `appsec-review binary-decompile`, which raises memory,

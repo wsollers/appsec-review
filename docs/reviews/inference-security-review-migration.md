@@ -54,3 +54,11 @@ job and is exercised by `tests/review/` and the Dagster acceptance in
 - Live full-catalog OWASP/model validation and a pinned Joern/CPG closure remain upstream gaps.
 - Organization ship-blocking policy, PoC authorization workflow, evidence freshness windows, and
   final downstream job names require owner decisions.
+
+Superseded in part (2026-10-15): the owner decisions above were recorded on 2026-10-12 and
+`ship-block-policy/1`, verifier model distinctness, remediation intake, the planned downstream job
+names, the closed `security-predicates/1` vocabulary and the `red-discovery-result/1` contract are
+implemented (`src/appsec_review/review/ship_block.py`, `independence.py`, `models.py`,
+`red_discovery.py`); see "Decisions and open questions" in
+[`../architecture/inference-security-review.md`](../architecture/inference-security-review.md#decisions-and-open-questions).
+PoC authorization (decision 3) remains open and no PoC execution path exists.
