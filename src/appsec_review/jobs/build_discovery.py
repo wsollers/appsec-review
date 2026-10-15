@@ -4,7 +4,7 @@ from collections import defaultdict
 import hashlib
 from pathlib import Path, PurePosixPath
 import re
-from typing import Any, Mapping, Sequence
+from typing import Any, Callable, Mapping, Sequence
 
 
 BUILD_DESCRIPTOR_SCHEMA = "appsec-review/build-descriptor-package/1"
@@ -29,6 +29,8 @@ _MARKERS: dict[str, tuple[str, str]] = {
     "setup.py": ("python", "python"),
     "setup.cfg": ("python", "python"),
     "composer.json": ("php", "composer"),
+    # A phpize extension: config.m4 declares PHP_NEW_EXTENSION and phpize drives the C build.
+    "config.m4": ("php", "phpize"),
 }
 _SUFFIX_MARKERS: dict[str, tuple[str, str]] = {
     ".csproj": ("dotnet", "dotnet"),
@@ -56,9 +58,20 @@ _CONTEXT_NAMES = {
     "packages.lock.json", "Directory.Packages.props", "NuGet.Config", "tsconfig.json",
     "binding.gyp", "config.m4", "go.sum", "go.work.sum",
 }
+# Families whose own packaging tool drives a C/C++ compile inside the same build (node-gyp,
+# setuptools, phpize, clang --target=wasm32). C/C++ sources under such a root are the unit's
+# typed ``native_components``, not a second direct-native unit that would need its own build.
+NATIVE_COMPONENT_OWNER_FAMILIES = frozenset({"node", "python", "php", "wasm"})
+_BUILD_SCRIPT_NAMES = frozenset({"build.sh"})
+_WASM_SCRIPT = re.compile(r"--target[= ]wasm32|\bwasm32-|(?:^|\s)(?:emcc|em\+\+)(?:\s|$)", re.M)
 _NODE_ANCESTOR_CONTEXT_NAMES = {
     "package.json", "package-lock.json", "pnpm-lock.yaml", "yarn.lock",
 }
+
+
+def _is_context_name(name: str) -> bool:
+    # requirements-build.txt, requirements-dev.txt, ... carry pinned build-backend inputs.
+    return name in _CONTEXT_NAMES or (name.startswith("requirements") and name.endswith(".txt"))
 
 
 def _is_node_ancestor_context(path: PurePosixPath) -> bool:
@@ -78,7 +91,7 @@ _PROFILE_COMMANDS: dict[str, frozenset[str]] = {
     "node": frozenset({"npm", "npx", "pnpm", "yarn", "node", "tsc", "asc", "wasm-opt", "wasm-tools"}),
     "dotnet": frozenset({"dotnet", "msbuild"}),
     "python": frozenset({"python", "python3", "pip", "pip3"}),
-    "php": frozenset({"php", "composer"}),
+    "php": frozenset({"php", "composer", "phpize", "make"}),
     "wasm": frozenset({"cargo", "rustc", "clang", "clang++", "cmake", "wasm-tools", "wasm-opt",
                         "wasm-ld", "emcc", "em++", "emar", "asc"}),
 }
@@ -109,7 +122,18 @@ def required_image_profile(unit: Mapping[str, Any]) -> str:
 def build_recipe_inference_policy(unit: Mapping[str, Any]) -> dict[str, Any]:
     """Expose the validator's bounded command contract to recipe inference."""
     profile = required_image_profile(unit)
-    policy: dict[str, Any] = {"required_image_profile": profile}
+    policy: dict[str, Any] = {"required_image_profile": profile,
+                              "allowed_executables": sorted(_PROFILE_COMMANDS.get(profile, ()))}
+    if profile == "php" and unit.get("build_system") == "phpize":
+        policy["allowed_executables"].append("./configure")
+    components = [str(item.get("path")) for item in unit.get("native_components", ())
+                  if isinstance(item, Mapping)]
+    if components:
+        policy["native_components"] = {
+            "sources": components,
+            "contract": ("these C/C++ sources are compiled by this unit's own build tool in the "
+                         "same container; do not plan a separate native build for them"),
+        }
     if profile == "android":
         policy["gradle"] = {
             "allowed_executables": ["gradle", "gradlew"],
@@ -174,9 +198,26 @@ def _id(root: str, family: str, system: str) -> str:
     return f"build-unit-{value}"
 
 
-def discover_build_units(files: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
-    """Group accepted build descriptors into stable, repository-independent build units."""
+def _wasm_build_script(path: PurePosixPath, read_text: Callable[[str], str | None] | None) -> bool:
+    if read_text is None or path.name not in _BUILD_SCRIPT_NAMES:
+        return False
+    text = read_text(path.as_posix())
+    return bool(text) and bool(_WASM_SCRIPT.search(text or ""))
+
+
+def _component(item: Mapping[str, Any]) -> dict[str, Any]:
+    return {"path": item["path"], "sha256": item["sha256"], "size_bytes": item["size_bytes"]}
+
+
+def discover_build_units(files: Sequence[Mapping[str, Any]], *,
+                         read_text: Callable[[str], str | None] | None = None) -> list[dict[str, Any]]:
+    """Group accepted build descriptors into stable, repository-independent build units.
+
+    ``read_text`` returns the bounded text of a cataloged file. It lets a build script that
+    targets wasm32 route its C sources to the wasm family instead of a direct-native unit.
+    """
     groups: dict[tuple[str, str, str], list[Mapping[str, Any]]] = defaultdict(list)
+    components: dict[tuple[str, str, str], list[Mapping[str, Any]]] = defaultdict(list)
     for item in files:
         path = PurePosixPath(str(item["path"]))
         marker = _marker(path)
@@ -185,6 +226,11 @@ def discover_build_units(files: Sequence[Mapping[str, Any]]) -> list[dict[str, A
         family, system = marker
         root = path.parent.as_posix()
         groups[(root, family, system)].append(item)
+    for item in files:
+        path = PurePosixPath(str(item["path"]))
+        root = path.parent.as_posix()
+        if _wasm_build_script(path, read_text) and not any(key[0] == root for key in groups):
+            groups[(root, "wasm", "clang")].append(item)
     for root, family, _system in [
         key for key in tuple(groups) if key[2] in {"cmake", "autotools", "meson"}
     ]:
@@ -213,6 +259,14 @@ def discover_build_units(files: Sequence[Mapping[str, Any]]) -> list[dict[str, A
                (root.as_posix() == "." or path == root or root in path.parents)
                for root, existing_family in descriptor_roots):
             continue
+        if family == "native":
+            owners = [key for key in groups if key[1] in NATIVE_COMPONENT_OWNER_FAMILIES and
+                      (key[0] == "." or PurePosixPath(key[0]) in path.parents)]
+            if owners:
+                # The nearest owning package root compiles this source in its own build.
+                owner = max(owners, key=lambda key: (len(PurePosixPath(key[0]).parts), key))
+                components[owner].append(item)
+                continue
         parts = path.parts
         conventional = next((index for index, part in enumerate(parts[:-1])
                              if part in {"src", "source"}), None)
@@ -230,6 +284,53 @@ def discover_build_units(files: Sequence[Mapping[str, Any]]) -> list[dict[str, A
             "markers": [{"path": item["path"], "sha256": item["sha256"],
                          "size_bytes": item["size_bytes"]} for item in ordered],
             "provenance": "deterministic-marker",
+        })
+        native = components.get((root, family, system))
+        if native:
+            values[-1]["native_components"] = [
+                _component(value) for value in sorted(native, key=lambda value: str(value["path"]))]
+    return values
+
+
+_INTERPRETED_SUFFIXES = {".py": "python", ".php": "php"}
+SOURCE_ONLY_SCOPE_SOURCE_LIMIT = 256
+
+
+def source_only_scopes(files: Sequence[Mapping[str, Any]],
+                       units: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """Name interpreted source trees that no build unit owns.
+
+    Such a scope has no material build: it is recorded as not applicable for build capture and
+    compiler artifacts, so its absence from the build lanes is explicit rather than silent.
+    A scope root is the shallowest directory that directly holds a source of its language.
+    """
+    unit_roots = [PurePosixPath(str(unit["root"])) for unit in units]
+    owned = lambda path: any(root.as_posix() == "." or root in path.parents for root in unit_roots)
+    candidates = [(PurePosixPath(str(item["path"])), _INTERPRETED_SUFFIXES[PurePosixPath(
+        str(item["path"])).suffix.lower()], item) for item in files
+        if PurePosixPath(str(item["path"])).suffix.lower() in _INTERPRETED_SUFFIXES]
+    holders: dict[str, set[PurePosixPath]] = defaultdict(set)
+    for path, language, _item in candidates:
+        if not owned(path):
+            holders[language].add(path.parent)
+    scopes: dict[tuple[str, str], list[Mapping[str, Any]]] = defaultdict(list)
+    for path, language, item in candidates:
+        if owned(path):
+            continue
+        root = min((parent for parent in (path.parent, *path.parent.parents)
+                    if parent in holders[language]), key=lambda value: len(value.parts))
+        scopes[(root.as_posix(), language)].append(item)
+    values = []
+    for (root, language), items in sorted(scopes.items()):
+        ordered = sorted(items, key=lambda value: str(value["path"]))
+        values.append({
+            "scope_id": "source-scope-" + hashlib.sha256(
+                f"{root}\0{language}".encode()).hexdigest()[:20],
+            "root": root, "language": language, "family": language,
+            "source_count": len(ordered),
+            "sources": [{"path": value["path"], "sha256": value["sha256"]}
+                        for value in ordered[:SOURCE_ONLY_SCOPE_SOURCE_LIMIT]],
+            "sources_truncated": len(ordered) > SOURCE_ONLY_SCOPE_SOURCE_LIMIT,
         })
     return values
 
@@ -253,6 +354,9 @@ def descriptor_package(target_root: Path, unit: Mapping[str, Any], files: Sequen
     root = str(unit["root"])
     candidates: list[Mapping[str, Any]] = []
     marker_paths = {str(item["path"]) for item in unit["markers"]}
+    # Native component sources are what the family build compiles; the planner needs them to
+    # write the compile command (for example a clang --target=wasm32 translation of build.sh).
+    component_paths = {str(item["path"]) for item in unit.get("native_components", ())}
     for item in files:
         path = PurePosixPath(str(item["path"]))
         under = root == "." or path.as_posix() == root or path.as_posix().startswith(root + "/")
@@ -264,7 +368,8 @@ def descriptor_package(target_root: Path, unit: Mapping[str, Any], files: Sequen
         )
         if not under and not ancestor_context:
             continue
-        if (str(item["path"]) in marker_paths or path.name in _CONTEXT_NAMES or
+        if (str(item["path"]) in marker_paths or str(item["path"]) in component_paths or
+                _is_context_name(path.name) or
                 path.name.startswith("Dockerfile") or ancestor_context):
             candidates.append(item)
     documents = []
@@ -386,8 +491,8 @@ def normalize_build_recipe(recipe: Mapping[str, Any], unit: Mapping[str, Any] | 
     return value
 
 
-_GO_SUBCOMMANDS = {"build", "generate", "mod"}
-_GO_MOD_SUBCOMMANDS = {"download", "verify", "vendor"}
+GO_SUBCOMMANDS = frozenset({"build", "generate", "mod"})
+GO_MOD_SUBCOMMANDS = frozenset({"download", "verify", "vendor"})
 # These options replace the toolchain, the working directory, or the source tree the accepted
 # recipe names, so observed tool identities would no longer describe the accepted build.
 _GO_FORBIDDEN_OPTIONS = ("-toolexec", "-exec", "-overlay", "-C", "-modfile")
@@ -409,10 +514,10 @@ def go_recipe_errors(recipe: Mapping[str, Any]) -> tuple[str, ...]:
             continue
         values = [str(value) for value in argv[1:]]
         subcommand = values[0]
-        if subcommand not in _GO_SUBCOMMANDS:
+        if subcommand not in GO_SUBCOMMANDS:
             errors.append(f"go subcommand is unsupported: {subcommand}")
             continue
-        if subcommand == "mod" and (len(values) < 2 or values[1] not in _GO_MOD_SUBCOMMANDS):
+        if subcommand == "mod" and (len(values) < 2 or values[1] not in GO_MOD_SUBCOMMANDS):
             errors.append("go mod subcommand is unsupported: " + (values[1] if len(values) > 1 else "<missing>"))
         builds += subcommand == "build"
         errors.extend(_go_option_errors(values[1:]))
@@ -497,7 +602,12 @@ def validate_build_recipe(recipe: Mapping[str, Any], unit: Mapping[str, Any]) ->
                 errors.append(f"{field}[{index}] is not a bounded argv array")
                 continue
             executable = PurePosixPath(argv[0]).name
-            if executable not in allowed or argv[0] != executable:
+            if (profile == "php" and unit.get("build_system") == "phpize" and
+                    argv[0] == "./configure"):
+                # phpize generates this configure script from the accepted config.m4; it is the
+                # extension's build driver, the same role CMake's generated files play.
+                executable = "./configure"
+            elif executable not in allowed or argv[0] != executable:
                 errors.append(f"{field}[{index}] executable is not allowlisted for {profile}")
                 continue
             if any("\n" in arg or "\r" in arg or arg in {";", "&&", "||", "|"} for arg in argv):

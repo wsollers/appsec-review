@@ -420,6 +420,20 @@ def evaluate_applicability(*, feature: ProcessingFeature, policy: str,
                          action=ApplicabilityAction.GAP, disposition=ProcessingDisposition.GAP,
                          reason=ReasonCode.INVENTORY_UNAVAILABLE)
 
+    if (feature in {ProcessingFeature.BUILD_CAPTURE, ProcessingFeature.COMPILER_ARTIFACTS} and
+            facts.build_system == "source-only" and not facts.material_build):
+        # A scope no build unit owns (plain interpreted sources) has nothing to execute or
+        # collect. "required" governs material builds; here it is positively not applicable.
+        if policy not in {"required", "auto"}:
+            raise ValueError("build processing policy is unsupported")
+        return _decision(feature=feature, facts=facts, policy=policy,
+                         configuration_sha256=configuration_sha256,
+                         action=ApplicabilityAction.SKIP,
+                         disposition=ProcessingDisposition.SKIPPED_NA,
+                         reason=(ReasonCode.MATERIAL_BUILD_ABSENT
+                                 if feature is ProcessingFeature.BUILD_CAPTURE
+                                 else ReasonCode.ARTIFACT_CAPABILITY_ABSENT))
+
     if feature is ProcessingFeature.BUILD_CAPTURE:
         if policy == "required":
             return _decision(feature=feature, facts=facts, policy=policy,

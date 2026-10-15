@@ -1014,7 +1014,7 @@ tools = ["emcc", "em++", "emar"]
 indicators = []
 
 [jobs.job_language_build.settings.wasm.producers.wasi_sdk]
-families = ["native"]
+families = ["native", "wasm"]
 tools = ["clang", "clang++", "cmake", "make", "ninja", "wasm-ld"]
 indicators = ["wasm32-wasi", "wasi-sdk", ".wasm"]
 

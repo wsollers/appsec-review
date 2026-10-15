@@ -14,9 +14,10 @@ from typing import Any
 from appsec_review.container_runtime import BuildContainerExecutor, BuildProfile
 from appsec_review.jobs.cataloging import source_fingerprint
 from appsec_review.jobs.job_language_build.job import (
-    _dispatches, _mapped_files, _probe_environment, _snapshot,
+    _captured_command, _dispatches, _mapped_files, _probe_environment, _snapshot,
 )
 from appsec_review.jobs.job_project_build.job import _normalized_argv
+from appsec_review.jobs.job_language_build import native_components
 from appsec_review.runtime import UnitContext
 from appsec_review.storage import FileLock, atomic_json, canonical_json, file_sha256, protected_json
 
@@ -309,14 +310,32 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
     operational_recipe = {**recipe, "build_system": dispatch.get("build_system")}
     environment = _probe_environment(operational_recipe)
     raw_commands = [*recipe["configure_commands"], *recipe["build_commands"]]
+    native_sources = bool(dispatch.get("native_components"))
+    captures: list[tuple[int, Any]] = []
+    capture_root = root / "attempts" / unit.job.attempt_id / "execution-capture"
+    if capture_root.exists():
+        shutil.rmtree(capture_root)
     for ordinal, raw in enumerate(raw_commands, 1):
         argv = _capture_argv(recipe, raw)
         command_id = hashlib.sha256(canonical_json({"attempt": unit.job.attempt_id,
             "unit": build_unit_id, "ordinal": ordinal, "argv": list(argv)})).hexdigest()
         command_started_at, command_started = datetime.now(timezone.utc).isoformat(), time.monotonic()
         try:
-            result = executor.execute(argv, workspace=workspace, working_directory=str(recipe["source_dir"]),
-                                      environment=environment)
+            if native_sources:
+                # C/C++ native_components compile here: the single execution capture is the
+                # authority for those compiles, which then flow to the native analysis jobs.
+                result, verified, capture_identity = _captured_command(
+                    unit, executor, argv, workspace=workspace,
+                    working_directory=str(recipe["source_dir"]), environment=environment,
+                    capture_directory=capture_root / f"command-{ordinal:03d}",
+                    build_unit_id=build_unit_id, family=str(dispatch["family"]))
+                captures.append((ordinal, verified))
+                gaps.extend(f"execution capture command {ordinal}: {gap}" for gap in verified.gaps)
+            else:
+                capture_identity = None
+                result = executor.execute(argv, workspace=workspace,
+                                          working_directory=str(recipe["source_dir"]),
+                                          environment=environment)
         except (RuntimeError, OSError) as exc:
             raise ProducerUnavailable(str(exc)) from exc
         exact = protected / f"{command_id}.json"
@@ -343,6 +362,8 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
             "protected_argv": {"path": exact.relative_to(unit.job.run_root).as_posix(),
                                "sha256": file_sha256(exact), "size_bytes": exact.stat().st_size},
             "image_id": image["image_id"], "build_unit_id": build_unit_id})
+        if capture_identity is not None:
+            commands[-1]["execution_capture"] = capture_identity
         unit.job.events.write("WASM_BUILD_COMMAND_COMPLETED", unit_id=unit.unit_id,
             build_unit_id=build_unit_id, command_id=command_id, tool=Path(argv[0]).name,
             disposition="FAILED" if failed else "SUCCEEDED", result_count=0,
@@ -356,6 +377,11 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
     artifacts, catalog_gaps = _catalog(unit.job.run_root, workspace, before,
         int(settings["artifact_count_limit"]), build_unit_id)
     gaps.extend(catalog_gaps)
+    native_database, native_gaps = native_components.publish(
+        root, unit.job.run_root, dispatch=dispatch, workspace=workspace, captures=captures)
+    gaps.extend(native_gaps)
+    native_rows = native_components.invocation_rows(
+        captures, family=str(dispatch["family"]), source_dir=str(recipe["source_dir"]))
     if not any(item["kind"] in {"wasm-module", "wasm-component"} for item in artifacts) and not gaps:
         gaps.append("accepted WebAssembly recipe produced no retained wasm module or component")
     observed = [row for command in commands for row in _observed_invocations(
@@ -363,6 +389,7 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
             "stdout": (unit.job.run_root / command["stdout"]["path"]).read_bytes(),
             "stderr": (unit.job.run_root / command["stderr"]["path"]).read_bytes(),
         })(), command["command_id"])]
+    observed.extend(native_rows)
     observed_path = protected / f"observed-tool-invocations-{unit.job.attempt_id}.json"
     protected_json(observed_path,
         {"schema": "appsec-review/protected-tool-invocations/1", "rows": observed})
@@ -407,6 +434,12 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
         "started_at": started_at, "completed_at": datetime.now(timezone.utc).isoformat(),
         "duration_ms": int((time.monotonic()-started)*1000),
         "executor_identity": EXECUTOR_IDENTITY, "capture_identity": CAPTURE_IDENTITY}
+    if native_database is not None:
+        receipt["family"] = "wasm"
+        receipt["recipe"] = dict(recipe)
+        receipt["native_components"] = list(native_database["native_components"])
+        receipt["native_compile_database"] = {
+            key: native_database[key] for key in ("path", "sha256", "entry_count", "family")}
     if status == "SUCCEEDED":
         cache.parent.mkdir(parents=True, exist_ok=True)
         with FileLock(cache.parent / "build.lock"):

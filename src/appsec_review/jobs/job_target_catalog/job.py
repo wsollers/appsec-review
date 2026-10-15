@@ -12,7 +12,7 @@ from typing import Any
 from appsec_review.jobs.cataloging import BUILD_FILES, PROJECT_FILES, inventory, write_json
 from appsec_review.jobs.build_discovery import (
     android_descriptor_facts, descriptor_package, discover_build_units, required_image_profile,
-    unsupported_build_gaps,
+    source_only_scopes, unsupported_build_gaps,
 )
 from appsec_review.indexing.target_documents import (
     KINDS, InventoryIntegrityError, collect_target_documents, select_document_inventory,
@@ -122,9 +122,25 @@ def build_job(*, fail_task: str | None = None) -> Job:
             if name in BUILD_FILES or name in PROJECT_FILES or Path(item["path"]).suffix in {".csproj", ".sln", ".vcxproj"}:
                 systems.append({"path": item["path"], "kind": name, "sha256": item["sha256"]})
         files = unit.output("repository_discovery.partition_repository")["files"]
-        units = discover_build_units(files)
+        target = _target(unit).resolve()
+        sizes = {str(item["path"]): int(item.get("size_bytes", 0)) for item in files}
+
+        def read_text(relative: str) -> str | None:
+            # Bounded build-script read for routing only; the bytes never become instructions.
+            if sizes.get(relative, 0) > 64 * 1024:
+                return None
+            path = (target / relative).resolve()
+            if target not in path.parents or not path.is_file() or path.is_symlink():
+                return None
+            try:
+                return path.read_text(encoding="utf-8")
+            except (OSError, UnicodeError):
+                return None
+
+        units = discover_build_units(files, read_text=read_text)
         gaps = unsupported_build_gaps(files, units)
         doc = {"schema": "appsec-review/build-systems/2", "systems": systems, "build_units": units,
+               "source_only_scopes": source_only_scopes(files, units),
                "gaps": gaps or ([] if units else ["no recognized build system"])}
         return {"artifact": _artifact(unit, "build-systems.json", doc), **doc}
 

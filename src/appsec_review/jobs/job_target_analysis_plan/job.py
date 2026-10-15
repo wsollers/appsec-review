@@ -127,6 +127,7 @@ def _accepted_catalog(run_root: Path) -> dict[str, Any]:
         "components": tuple(components.get("components", ())),
         "build_files": tuple(by_path[key] for key in sorted(by_path)),
         "build_units": tuple(targets.get("targets", ())),
+        "source_only_scopes": tuple(builds.get("source_only_scopes", ())),
         "compile_databases": tuple(compile_databases.get("files", ())),
         "accepted_artifacts": tuple(item for item in targets.get("targets", ()) if item.get("artifact_kind") == "built"),
         "gaps": tuple(gaps),

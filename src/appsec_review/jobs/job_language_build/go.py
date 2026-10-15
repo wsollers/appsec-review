@@ -10,7 +10,7 @@ from typing import Any
 
 from appsec_review.config import GoBuildSettings
 from appsec_review.container_runtime import VerifiedCapture
-from appsec_review.jobs.build_discovery import go_recipe_errors
+from appsec_review.jobs.build_discovery import GO_MOD_SUBCOMMANDS, GO_SUBCOMMANDS, go_recipe_errors
 from appsec_review.storage import canonical_json, file_sha256
 
 from . import elf
@@ -78,8 +78,15 @@ def build_argv(argv: Sequence[str], settings: GoBuildSettings | None = None) -> 
     The trace is never parsed for provenance; process-exec syscall events are the authority.
     """
     values = [str(value) for value in argv]
-    if len(values) < 2 or values[0] != "go" or values[1] not in {"build", "generate", "list"}:
+    # The accepted-recipe contract (GO_SUBCOMMANDS, shared with recipe validation) plus the
+    # executor-owned `go list` package catalog. `go mod download|verify|vendor` are dependency
+    # preparation steps of an accepted recipe and run unchanged.
+    if len(values) < 2 or values[0] != "go" or values[1] not in {*GO_SUBCOMMANDS, "list"}:
         raise ValueError("Go build command is unsupported")
+    if values[1] == "mod":
+        if len(values) < 3 or values[2] not in GO_MOD_SUBCOMMANDS:
+            raise ValueError("Go module command is unsupported")
+        return tuple(values)
     if values[1] in {"build", "generate"} and "-x" not in values[2:]:
         values.insert(2, "-x")
     if (settings is not None and settings.offline and values[1] in {"build", "generate"} and

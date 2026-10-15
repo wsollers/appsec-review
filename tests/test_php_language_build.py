@@ -122,7 +122,7 @@ def test_php_composer_executor_catalogs_lock_packages_autoload_archives_and_prot
     calls: list[tuple[str, ...]] = []
     run_id, fingerprint = _accepted(config, target, calls)
     outcome = GraphRunner(config, [build_language(executor_factory=lambda unit, profile:
-        ComposerExecutor(calls, truncate=True))]).run(
+        capturing_fake(profile, ComposerExecutor(calls, truncate=True)))]).run(
             target_root=target, source_fingerprint=fingerprint, run_id=run_id)
     assert outcome["status"] in {"SUCCEEDED", "COMPLETED_WITH_GAPS"}
     receipt = next(item for item in load_accepted_language_build(config.runtime.runs_dir / run_id)["receipts"]
@@ -135,9 +135,10 @@ def test_php_composer_executor_catalogs_lock_packages_autoload_archives_and_prot
     assert receipt["package_relationships"]
     assert receipt["composer_policy"]["network"] == "allowed"
     assert all("argv" not in command for command in receipt["commands"])
-    assert receipt["commands"][0]["stdout"]["truncated"] is True
-    assert receipt["commands"][0]["stdout"]["total_bytes"] == 32
-    assert receipt["commands"][0]["stdout"]["diagnostic_tail"]
+    # Capture-backed PHP builds retain each stream completely; nothing is truncated.
+    stdout = receipt["commands"][0]["stdout"]
+    assert stdout["storage"] == "complete-file" and stdout["truncated"] is False
+    assert stdout["total_bytes"] == stdout["captured_bytes"]
     assert "--no-plugins" in calls[-2]
     mcp = RetrievalMcpAdapter(RetrievalCore(config.runtime.runs_dir, run_id))
     response = mcp.call("search", {"query": "distributable-archive", "indexes": ["build"], "limit": 10})
@@ -151,7 +152,7 @@ def test_php_sibling_failure_isolated_checkpoint_reuse_and_dag_family_lane(tmp_p
     config, target = _fixture(tmp_path, ("good", "bad"))
     run_id, fingerprint = _accepted(config, target, [])
     first = GraphRunner(config, [build_language(executor_factory=lambda unit, profile:
-        ComposerExecutor([], fail_roots={"bad"}))]).run(
+        capturing_fake(profile, ComposerExecutor([], fail_roots={"bad"})))]).run(
             target_root=target, source_fingerprint=fingerprint, run_id=run_id)
     assert first["status"] == "COMPLETED_WITH_GAPS"
     receipts = [item for item in load_accepted_language_build(config.runtime.runs_dir / run_id)["receipts"]
@@ -159,13 +160,13 @@ def test_php_sibling_failure_isolated_checkpoint_reuse_and_dag_family_lane(tmp_p
     assert {item["root"]: item["terminal_status"] for item in receipts} == {
         "bad": "FAILED", "good": "SUCCEEDED"}
     calls: list[tuple[str, ...]] = []
-    GraphRunner(config, [build_language(executor_factory=lambda unit, profile: ComposerExecutor(calls))]).run(
+    GraphRunner(config, [build_language(executor_factory=lambda unit, profile: capturing_fake(profile, ComposerExecutor(calls)))]).run(
         target_root=target, source_fingerprint=fingerprint, run_id=run_id, force_from="job_language_build")
     resumed = {item["root"]: item for item in
         load_accepted_language_build(config.runtime.runs_dir / run_id)["receipts"] if item["family"] == "php"}
     assert resumed["good"]["checkpoint_reused"] is True
     assert resumed["bad"]["checkpoint_reused"] is False
-    graph = plan_jobs((build_language(executor_factory=lambda unit, profile: ComposerExecutor([])),), config)
+    graph = plan_jobs((build_language(executor_factory=lambda unit, profile: capturing_fake(profile, ComposerExecutor([]))),), config)
     assert graph.node("job_language_build.execute.php").dependencies == ("job_language_build.load.php",)
 
 
