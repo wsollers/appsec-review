@@ -64,7 +64,7 @@ def test_container_docs_track_current_enabled_inventory() -> None:
                          .read_text(encoding="utf-8").split())
     assert f"contains {len(enabled)} images: {counts['tool']} tool images" in readme
     assert f"{counts['tool']} enabled tool images plus {counts['base']} bases" in migration
-    assert counts == {"tool": 30, "base": 4, "buildenv": 7}
+    assert counts == {"tool": 30, "base": 4, "buildenv": 9}
 
 
 def test_dependency_order_puts_base_before_tool() -> None:

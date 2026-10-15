@@ -24,6 +24,11 @@ path_bytes_limit = 4096
 file_inventory_count_limit = 1000000
 response_file_count_limit = 10000
 response_file_bytes_limit = 1048576
+# Debug period: keep each command's raw per-process strace files beside record.json. They pass
+# through the capture secret scan, are hashed in the record, and stop at raw_trace_bytes_limit
+# bytes per command with explicit truncation flags.
+retain_raw_traces = true
+raw_trace_bytes_limit = 67108864
 tool_call_count_limit = 10000
 secret_finding_count_limit = 1000
 
@@ -848,6 +853,8 @@ repair_attempts = 3
 
 [jobs.job_project_build.settings.build_capture]
 event_count_limit = 250000
+retain_raw_traces = true
+raw_trace_bytes_limit = 67108864
 
 [jobs.job_project_build.settings.model]
 enabled = true
@@ -976,6 +983,8 @@ rust = "required"
 
 [jobs.job_language_build.settings.build_capture]
 event_count_limit = 250000
+retain_raw_traces = true
+raw_trace_bytes_limit = 67108864
 
 [jobs.job_language_build.settings.go]
 offline = false

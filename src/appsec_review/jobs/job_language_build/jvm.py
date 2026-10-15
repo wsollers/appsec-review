@@ -98,7 +98,10 @@ def _instrumentation(workspace: Path, source_dir: str, settings: Mapping[str, An
             f"printf '%s\\0%s\\0%s\\0' '{tool}' \"${{APPSEC_JVM_PARENT_COMMAND:-unknown}}\" \"$#\" >> \"$trace\"\n"
             "for arg in \"$@\"; do printf '%s\\0' \"$arg\" >> \"$trace\"; done\n"
             f"exec {shlex.quote(str(real))} \"$@\"\n", encoding="utf-8", newline="\n")
-        script.chmod(0o700)
+        # The build container may run as a different numeric identity than the orchestrator
+        # that wrote this run-owned wrapper (the configured profile user when the orchestrator
+        # is root). The wrapper holds no secrets, so it must be executable by that identity.
+        script.chmod(0o755)
     logical = f"/workspace/{source_dir}/.appsec-review-jvm"
     return trace, logical
 
@@ -115,6 +118,13 @@ def _environment(recipe: Mapping[str, Any], workspace: Path, settings: Mapping[s
     environment["APPSEC_JVM_TRACE"] = logical + "/invocations.bin"
     environment["PATH"] = logical + "/bin:" + str(system_paths[profile])
     environment.setdefault("MAVEN_OPTS", "-Dmaven.repo.local=/opt/project-deps/maven")
+    if str(recipe.get("build_system", "")) == "maven":
+        # maven-compiler-plugin compiles in-process through javax.tools by default, so no javac
+        # process ever reaches the instrumented wrapper and nested provenance is lost. Forking
+        # through the wrapper keeps the accepted goals while making each compilation observable.
+        environment["MAVEN_OPTS"] = (environment["MAVEN_OPTS"] +
+                                     " -Dmaven.compiler.fork=true"
+                                     f" -Dmaven.compiler.executable={logical}/bin/javac")
     if profile == "android":
         # The derived image is read-only at execution time. Gradle extracts native runtime files
         # beneath its user home, so the Android execution profile must use its executable tmpfs.

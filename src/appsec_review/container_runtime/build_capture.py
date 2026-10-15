@@ -212,7 +212,8 @@ class BuildExecutionRecorder:
                collector_errors: Sequence[str] = (),
                secret_scan: Mapping[str, Any] | None = None,
                file_inventory: Mapping[str, Any] | None = None,
-               response_files: tuple[Sequence[Mapping[str, Any]], Sequence[str]] | None = None) -> Path:
+               response_files: tuple[Sequence[Mapping[str, Any]], Sequence[str]] | None = None,
+               raw_traces: Mapping[str, Any] | None = None) -> Path:
         if self._stream is None:
             raise RuntimeError("capture recorder is already finished")
         self._stream.close()
@@ -299,6 +300,14 @@ class BuildExecutionRecorder:
             for gap in response_gaps:
                 record["coverage"]["complete"] = False
                 record["coverage"]["gaps"].append(str(gap))
+        if raw_traces is not None and not raw_traces.get("enabled"):
+            record["raw_traces"] = {"enabled": False}
+        elif raw_traces is not None:
+            # Debug material only: hashed after the secret-scan disposition, never evidence.
+            record["raw_traces"] = {**dict(raw_traces), "records": [
+                {**dict(entry), "sha256": _sha256(self.root / str(entry["uri"]))}
+                if entry.get("retained") else dict(entry)
+                for entry in raw_traces.get("records", ())]}
         if secret_scan is not None:
             record["secret_scan"] = dict(secret_scan)
             gap = secret_scan.get("coverage_gap")
@@ -719,6 +728,21 @@ def _verify_capture_record(record_path: Path, *, run_root: Path, scope: CaptureS
         verified_calls.append({"uri": member["uri"], "sha256": member["sha256"], "record": tool})
     if "file_inventory" in document:
         _capture_member(capture_root, document["file_inventory"])
+    raw_traces = document.get("raw_traces", {"enabled": False})
+    if not isinstance(raw_traces, Mapping) or not isinstance(raw_traces.get("enabled"), bool):
+        raise CaptureIntegrityError("build execution raw traces are invalid")
+    if raw_traces["enabled"]:
+        records = raw_traces.get("records")
+        if not isinstance(records, list):
+            raise CaptureIntegrityError("build execution raw traces are invalid")
+        retained_bytes = 0
+        for member in records:
+            if not isinstance(member, Mapping) or not isinstance(member.get("retained"), bool):
+                raise CaptureIntegrityError("build execution raw trace record is invalid")
+            if member["retained"]:
+                retained_bytes += _capture_member(capture_root, member).stat().st_size
+        if retained_bytes > int(raw_traces.get("bytes_limit", 0)):
+            raise CaptureIntegrityError("build execution raw traces exceed their byte bound")
     response_files = document.get("response_files", {"retained": 0, "records": []})
     if not isinstance(response_files, Mapping) or not isinstance(response_files.get("records"), list):
         raise CaptureIntegrityError("build execution response files are invalid")

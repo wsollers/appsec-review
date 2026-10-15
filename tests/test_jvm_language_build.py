@@ -447,3 +447,67 @@ def test_direct_mixed_jvm_sources_receive_a_deterministic_build_only_recipe(tmp_
     assert not any(word in {"run", "test", "exec"} for command in recipe["build_commands"]
                    for word in command)
     assert recipe["expected_outputs"] == ["mixed/build/classes", "mixed/build/appsec-review.jar"]
+
+
+def _jvm_settings() -> dict:
+    config = load_config(ROOT / "appsec-review.toml")
+    return dict(config.job("job_language_build").settings["jvm"])
+
+
+def test_maven_compilation_is_forked_through_the_instrumented_javac(tmp_path: Path) -> None:
+    from appsec_review.jobs.job_language_build.jvm import _environment
+
+    # maven-compiler-plugin defaults to in-process javax.tools compilation, which no wrapper can
+    # observe; live runs then reported "nested JVM tool provenance was not emitted".
+    recipe = {"image_profile": "java", "source_dir": "projects/java/case-034",
+              "build_system": "maven", "environment": {}}
+    (tmp_path / "projects" / "java" / "case-034").mkdir(parents=True)
+    environment, _trace = _environment(recipe, tmp_path, _jvm_settings())
+    options = environment["MAVEN_OPTS"].split()
+    assert "-Dmaven.compiler.fork=true" in options
+    assert ("-Dmaven.compiler.executable=/workspace/projects/java/case-034/"
+            ".appsec-review-jvm/bin/javac") in options
+    assert "-Dmaven.repo.local=/tmp/appsec-review-maven" in options
+    assert "-Dmaven.repo.local.tail=/opt/project-deps/maven" in options
+    wrapper = tmp_path / "projects" / "java" / "case-034" / ".appsec-review-jvm" / "bin" / "javac"
+    # A root orchestrator runs the container as the profile user, which must execute the wrapper.
+    assert wrapper.stat().st_mode & 0o777 == 0o755
+
+    direct, _trace = _environment({**recipe, "build_system": "javac"}, tmp_path, _jvm_settings())
+    assert "maven.compiler.fork" not in direct["MAVEN_OPTS"]
+
+
+def test_build_system_environment_generalizes_to_multi_module_layouts(tmp_path: Path) -> None:
+    """Synthetic multi-module Maven reactor and multi-project Gradle build (not multivuln): the
+    environment derives only from build_system and the accepted source root, so every reactor
+    module's compiler fork and every Gradle subproject's cache use the same unit-level paths."""
+    from appsec_review.jobs.job_language_build.jvm import _environment
+
+    reactor = tmp_path / "services" / "billing"
+    for module in ("billing-api", "billing-core", "billing-app"):
+        (reactor / module / "src" / "main" / "java").mkdir(parents=True)
+        (reactor / module / "pom.xml").write_text("<project/>\n", encoding="utf-8")
+    (reactor / "pom.xml").write_text("<project><modules><module>billing-api</module>"
+                                     "<module>billing-core</module><module>billing-app</module>"
+                                     "</modules></project>\n", encoding="utf-8")
+    maven = {"image_profile": "java", "source_dir": "services/billing", "build_system": "maven",
+             "environment": {"MAVEN_OPTS": "-Xmx1g"}}
+    environment, trace = _environment(maven, tmp_path, _jvm_settings())
+    options = environment["MAVEN_OPTS"].split()
+    assert options.count("-Dmaven.compiler.fork=true") == 1 and "-Xmx1g" in options
+    assert ("-Dmaven.compiler.executable=/workspace/services/billing/.appsec-review-jvm/bin/javac"
+            in options)
+    assert trace == reactor / ".appsec-review-jvm" / "invocations.bin"
+
+    gradle_root = tmp_path / "mobile"
+    for project in ("app", "feature-login", "core-network"):
+        (gradle_root / project).mkdir(parents=True)
+        (gradle_root / project / "build.gradle.kts").write_text("plugins { java }\n", encoding="utf-8")
+    (gradle_root / "settings.gradle.kts").write_text(
+        'include(":app", ":feature-login", ":core-network")\n', encoding="utf-8")
+    gradle = {"image_profile": "java", "source_dir": "mobile", "build_system": "gradle",
+              "environment": {}}
+    environment, _trace = _environment(gradle, tmp_path, _jvm_settings())
+    assert environment["GRADLE_USER_HOME"] == "/tmp/appsec-review-gradle"
+    assert environment["GRADLE_RO_DEP_CACHE"] == "/opt/project-deps/gradle/caches"
+    assert "maven.compiler.fork" not in environment["MAVEN_OPTS"]

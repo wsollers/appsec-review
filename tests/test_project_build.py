@@ -288,13 +288,28 @@ def test_probe_environment_uses_writable_networked_maven_repository() -> None:
     recipe = {"build_system": "maven", "source_dir": "projects/java/sample",
               "environment": {"MAVEN_OPTS": "-Dmaven.artifact.threads=1"}}
     assert _probe_environment(recipe)["MAVEN_OPTS"] == (
-        "-Dmaven.repo.local=/tmp/appsec-review-maven -Dmaven.artifact.threads=1")
+        "-Dmaven.repo.local=/tmp/appsec-review-maven "
+        "-Dmaven.repo.local.tail=/opt/project-deps/maven -Dmaven.artifact.threads=1")
 
 
 def test_probe_environment_supplies_writable_maven_repository_without_user_options() -> None:
     recipe = {"build_system": "maven", "source_dir": ".", "environment": {}}
     assert _probe_environment(recipe)["MAVEN_OPTS"] == (
-        "-Dmaven.repo.local=/tmp/appsec-review-maven")
+        "-Dmaven.repo.local=/tmp/appsec-review-maven "
+        "-Dmaven.repo.local.tail=/opt/project-deps/maven")
+
+
+def test_probe_environment_keeps_gradle_home_writable_with_read_only_image_cache() -> None:
+    # The derived image restores into /opt/project-deps/gradle, which is read-only at run time.
+    # Gradle must lock and write elsewhere while still reading the restored modules.
+    for recipe in ({"build_system": "gradle", "source_dir": ".", "environment": {}},
+                   {"build_system": "gradle", "source_dir": ".",
+                    "environment": {"GRADLE_USER_HOME": "/opt/project-deps/gradle"}}):
+        environment = _probe_environment(recipe)
+        assert environment["GRADLE_USER_HOME"] == "/tmp/appsec-review-gradle"
+        assert environment["GRADLE_RO_DEP_CACHE"] == "/opt/project-deps/gradle/caches"
+    assert "GRADLE_USER_HOME" not in _probe_environment(
+        {"build_system": "maven", "source_dir": ".", "environment": {}})
 
 
 def test_networked_node_restore_uses_writable_scratch_caches() -> None:
@@ -324,7 +339,7 @@ def test_probe_environment_disables_cargo_incremental_state_the_host_cannot_read
         "build_system": "cmake", "source_dir": "native", "environment": {}})
 
 
-def test_kotlin_direct_recipe_pins_a_compatible_jdk_toolchain(tmp_path: Path) -> None:
+def test_kotlin_direct_recipe_uses_the_profile_image_toolchain(tmp_path: Path) -> None:
     target = tmp_path / "target"
     source = target / "kotlin" / "src"
     source.mkdir(parents=True)
@@ -335,10 +350,11 @@ def test_kotlin_direct_recipe_pins_a_compatible_jdk_toolchain(tmp_path: Path) ->
     unit = SimpleNamespace(job=SimpleNamespace(target_root=target))
     recipe = _deterministic_jvm_recipe(unit, action)
     assert recipe is not None
-    assert recipe["system_packages"] == ["kotlin", "openjdk-17-jdk-headless"]
-    assert recipe["environment"]["JAVA_HOME"] == "/usr/lib/jvm/java-17-openjdk-amd64"
-    assert recipe["environment"]["PATH"].startswith(
-        "/usr/lib/jvm/java-17-openjdk-amd64/bin:")
+    # The Java image carries kotlinc and its JDK. Packages here would be stripped by planning and
+    # a JAVA_HOME would name a JDK the pinned image does not contain.
+    assert recipe["system_packages"] == []
+    assert recipe["environment"] == {}
+    assert recipe["build_commands"][0][:2] == ["kotlinc", "src/Main.kt"]
 
 
 def test_project_probe_copies_accepted_parent_dependency_files(tmp_path: Path) -> None:

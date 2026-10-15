@@ -178,13 +178,27 @@ recommended_destination = "containers/buildenv/cpp/profiles/resolute.Dockerfile"
 
 [[images]]
 id = "audit-buildenv-dotnet"
-state = "deferred"
-kind = "redesign"
+state = "enabled"
+kind = "buildenv"
 legacy_class = 2
+version = "sdk8.0.131-sdk10.0.112-apphost8.0.31"
+tag = "audit-buildenv-dotnet:local"
+context = "containers/buildenv/dotnet"
+dockerfile = "Dockerfile"
+dependencies = []
 architectures = ["linux/amd64"]
-purpose = ".NET build/debug and C# language-server environment."
-reason = "Replace NodeSource curl-to-shell; authenticate csharp-ls acquisition; refresh SDK support decision; share common LSP layers"
-recommended_destination = "containers/buildenv/dotnet/"
+assets_lock = "containers/buildenv/dotnet/assets.lock.json"
+build_network = "default"
+upstream = "ubuntu:24.04@sha256:008173c23f95b170204355c12626cb5a965d779a7e1283b09e9cffbb1bf33ca3"
+upstream_manifest_bytes = 6688
+upstream_manifest_sha256 = "008173c23f95b170204355c12626cb5a965d779a7e1283b09e9cffbb1bf33ca3"
+license = "MIT (.NET SDK and runtime) plus mixed Ubuntu packages"
+license_source = ".NET and Ubuntu package metadata"
+provenance = "Digest-pinned Ubuntu base with version-pinned Ubuntu .NET 8.0 and 10.0 SDK packages plus the hash-locked nuget.org linux-x64 8.0.31 apphost pack"
+signature_verification = "base manifest and downloaded archive SHA-256 values verified; Ubuntu packages verified by apt"
+probe_argv = ["/bin/sh", "-c", "dotnet --list-sdks && test -f /usr/lib/dotnet/packs/Microsoft.NETCore.App.Host.linux-x64/8.0.31/runtimes/linux-x64/native/apphost && strace -V && python3 --version && id -u"]
+probe_expect = ["8.0.131", "10.0.112", "strace -- version 6.8", "10001"]
+purpose = "Pinned non-root .NET (net8.0 and net10.0 SDK) build and capture environment; language servers are out of scope."
 
 [[images]]
 id = "audit-buildenv-go"
@@ -207,13 +221,27 @@ probe_argv = ["/bin/sh", "-c", "sh /opt/native-toolchain/check-toolchain.sh && g
 probe_expect = ["13.3.0", "go1.23.1 linux/amd64", "10001"]
 [[images]]
 id = "audit-buildenv-java"
-state = "deferred"
-kind = "redesign"
+state = "enabled"
+kind = "buildenv"
 legacy_class = 2
+version = "jdk21-maven3.9.9-gradle8.9-kotlin2.0.21"
+tag = "audit-buildenv-java:local"
+context = "containers/buildenv/java"
+dockerfile = "Dockerfile"
+dependencies = []
 architectures = ["linux/amd64"]
-purpose = "Java build/debug and JDT language-server environment."
-reason = "Prefetch and verify apt keys/repository metadata; replace NodeSource curl-to-shell; refresh JDK/JDTLS support decision; share common LSP layers"
-recommended_destination = "containers/buildenv/java/"
+assets_lock = "containers/buildenv/java/assets.lock.json"
+build_network = "default"
+upstream = "ubuntu:24.04@sha256:008173c23f95b170204355c12626cb5a965d779a7e1283b09e9cffbb1bf33ca3"
+upstream_manifest_bytes = 6688
+upstream_manifest_sha256 = "008173c23f95b170204355c12626cb5a965d779a7e1283b09e9cffbb1bf33ca3"
+license = "GPL-2.0-only WITH Classpath-exception-2.0 (OpenJDK), Apache-2.0 (Maven, Gradle, Kotlin), and mixed Ubuntu packages"
+license_source = "OpenJDK, Maven, Gradle, Kotlin, and Ubuntu package metadata"
+provenance = "Digest-pinned Ubuntu base with version-pinned OpenJDK 21 packages plus hash-locked official Maven, Gradle, and Kotlin compiler archives"
+signature_verification = "base manifest and downloaded archive SHA-256 values verified; Ubuntu packages verified by apt"
+probe_argv = ["/bin/sh", "-c", "javac -version && /usr/bin/javac -version && /usr/bin/jar --version && mvn -v && GRADLE_USER_HOME=/tmp/gradle gradle --version && /usr/bin/kotlinc -version && strace -V && python3 --version && id -u"]
+probe_expect = ["javac 21.", "Apache Maven 3.9.9", "Gradle 8.9", "kotlinc-jvm 2.0.21", "strace -- version 6.8", "10001"]
+purpose = "Pinned non-root Java/Kotlin (javac, kotlinc, Maven, Gradle) build and capture environment; language servers are out of scope."
 
 [[images]]
 id = "audit-buildenv-php"

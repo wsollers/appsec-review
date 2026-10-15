@@ -1,0 +1,12 @@
+{
+  "schema": "appsec-review/assets-lock/1",
+  "project": "JVM (Java/Kotlin) build environment",
+  "license": "Apache-2.0 (Maven, Gradle, Kotlin compiler) plus bundled third-party notices",
+  "tool_version": "jdk21-maven3.9.9-gradle8.9-kotlin2.0.21",
+  "architecture": "linux/amd64",
+  "artifacts": [
+    {"path":"downloads/gradle-8.9-bin.zip","url":"https://github.com/gradle/gradle-distributions/releases/download/v8.9.0/gradle-8.9-bin.zip","bytes":136114148,"sha256":"d725d707bfabd4dfdc958c624003b3c80accc03f7037b5122c4b1d0ef15cecab","version":"8.9","license":"Apache-2.0","license_source":"https://github.com/gradle/gradle/blob/v8.9/LICENSE","provenance":"Gradle official distribution as mirrored by the gradle/gradle-distributions release; identical bytes and SHA-256 to services.gradle.org","signature_verification":{"status":"not-performed","reason":"official services.gradle.org SHA-256 release checksum verified"}},
+    {"path":"downloads/kotlin-compiler-2.0.21.zip","url":"https://github.com/JetBrains/kotlin/releases/download/v2.0.21/kotlin-compiler-2.0.21.zip","bytes":85822011,"sha256":"0352c0a45bd22f80f6b26e485cd04da8047baa5de54865281fb9f89a4a7bcf2a","version":"2.0.21","license":"Apache-2.0","license_source":"https://github.com/JetBrains/kotlin/blob/v2.0.21/license/LICENSE.txt","provenance":"JetBrains Kotlin official GitHub release archive","signature_verification":{"status":"not-performed","reason":"official release .sha256 checksum verified"}},
+    {"path":"downloads/apache-maven-3.9.9-bin.tar.gz","url":"https://archive.apache.org/dist/maven/maven-3/3.9.9/binaries/apache-maven-3.9.9-bin.tar.gz","bytes":9102945,"sha256":"7a9cdf674fc1703d6382f5f330b3d110ea1b512b51f1652846d9e4e8a588d766","version":"3.9.9","license":"Apache-2.0","license_source":"https://github.com/apache/maven/blob/maven-3.9.9/LICENSE","provenance":"Apache Maven official binary distribution from the Apache release archive","signature_verification":{"status":"not-performed","reason":"official SHA-512 release checksum verified; its OpenPGP signature was not verified"}}
+  ]
+}
