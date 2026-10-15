@@ -9,6 +9,6 @@
   },
   "target": {
     "repository": "https://github.com/wsollers/appsec-multi-vuln",
-    "commit": "f298ef82f761771ac0d234f7a7a3618f9a66194c"
+    "commit": "91b3e12ee270126d5b912ac36eebedf5a87e4597"
   }
 }
