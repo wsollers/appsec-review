@@ -88,6 +88,13 @@ python -m pip install -e .
 python -m pip install pytest
 ```
 
+Install the `treesitter` extra to run the tree-sitter parser tests on the host. It pins the versions
+the `tool-tree-sitter` image installs:
+
+```bash
+python -m pip install -e ".[treesitter]"
+```
+
 Install the optional Dagster extras only if you want to run the Dagster tests on the host:
 
 ```bash
