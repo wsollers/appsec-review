@@ -18,7 +18,18 @@
     "build_commands": {"$ref": "#/$defs/commands", "minItems": 1},
     "expected_outputs": {"type": "array", "maxItems": 64, "items": {"type": "string", "maxLength": 512}},
     "network_required": {"type": "boolean"},
-    "reason": {"type": "string", "minLength": 1, "maxLength": 4096}
+    "reason": {"type": "string", "minLength": 1, "maxLength": 4096},
+    "image_repairs": {
+      "description": "Present only on a recipe produced by an accepted image repair (appsec-review/build-image-repair/2). Its environment is also merged into environment.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["environment", "package_manager", "dependency_restores"],
+      "properties": {
+        "environment": {"type": "object", "maxProperties": 16, "additionalProperties": {"type": "string", "maxLength": 512}},
+        "package_manager": {"type": ["string", "null"], "maxLength": 32},
+        "dependency_restores": {"type": "array", "maxItems": 8, "items": {"type": "object", "additionalProperties": false, "required": ["manager", "manifest"], "properties": {"manager": {"enum": ["pip", "npm", "pnpm", "yarn", "cargo", "go", "mvn", "gradle", "dotnet", "composer"]}, "manifest": {"type": "string", "maxLength": 512}}}}
+      }
+    }
   },
   "$defs": {"commands": {"type": "array", "maxItems": 16, "items": {"type": "array", "minItems": 1, "maxItems": 128, "items": {"type": "string", "maxLength": 2048}}}}
 }

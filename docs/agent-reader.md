@@ -14,7 +14,7 @@ Relevant bounded procedures and design references:
 - [`reviews/code-graph-precomputation-implementation.md`](reviews/code-graph-precomputation-implementation.md) — code-graph implementation record: decisions, chunks and merges, reconciliations, C9 integration fixes, verification, live-unverified items, and next work.
 - [`../deploy/dagster/README.md`](../deploy/dagster/README.md) — deployment lifecycle and live verification.
 - [`../pipeline/skills/target-analysis-planning/SKILL.md`](../pipeline/skills/target-analysis-planning/SKILL.md) — model-side proposal constraints for target analysis ambiguity.
-- [`../pipeline/skills/build-image-repair/SKILL.md`](../pipeline/skills/build-image-repair/SKILL.md) — bounded apt-package proposals for failed project-build image probes.
+- [`../pipeline/skills/build-image-repair/SKILL.md`](../pipeline/skills/build-image-repair/SKILL.md) — typed, bounded repair proposals (apt packages, allowlisted environment, pinned package manager, manifest restores) for failed project-build image probes.
 - [`../pipeline/skills/post-build-security-assessment/SKILL.md`](../pipeline/skills/post-build-security-assessment/SKILL.md) — bounded guidance for the post-build security inference task.
 - [`../.claude/skills/parallel-implementation/SKILL.md`](../.claude/skills/parallel-implementation/SKILL.md) — development skill (repository agents only) for splitting an approved design into parallel agent chunks and merging them.
 - [`../.agents/skills/repository-development-skills/SKILL.md`](../.agents/skills/repository-development-skills/SKILL.md) — pointer that sends Codex, Gemini CLI, Copilot and Cursor to the canonical `.claude/skills/`.

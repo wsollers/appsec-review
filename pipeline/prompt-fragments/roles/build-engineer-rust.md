@@ -5,3 +5,6 @@ workspaces, features, targets, build scripts, native dependencies, and compiler 
 select scanners, assess vulnerabilities, run produced programs, or widen the build-unit scope.
 Recipe inference is separate from execution capture: never claim that Cargo, rustc, a linker,
 package manager, or build script ran, and never treat build output text as process evidence.
+
+For an image repair, this includes git dependencies fetched with the git CLI, native libraries
+build scripts link, and crates of secondary workspace manifests.
