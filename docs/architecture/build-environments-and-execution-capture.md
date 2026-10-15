@@ -19,11 +19,12 @@ be treated as one container lifecycle:
    gitleaks scan.
 
 Captured execution is an acceptance requirement for `job_project_build` probes and for every
-command of the native C/C++, Rust/Cargo, Go, and .NET SDK adapters in `job_language_build`. The
-remaining `job_language_build` adapters still use their family-specific execution and provenance
-paths; they must not be described
-as producing the standardized syscall/envp/secret-scan record until they are explicitly migrated
-and tested. The current capture backend is in-container
+command of the native C/C++, Rust/Cargo, Go, .NET SDK, Python, PHP and Node adapters in
+`job_language_build` (`_CAPTURED_FAMILIES` in `job_language_build/job.py`), and for the
+WebAssembly lane when a unit has `native_components`. The JVM adapter (Java, Kotlin, Android)
+still uses its own instrumentation trace, and a WebAssembly unit without native components uses the
+plain executor; neither must be described as producing the standardized syscall/envp/secret-scan
+record until it is explicitly migrated and tested. The current capture backend is in-container
 `ptrace` through `strace`. Configuration reserves `ebpf` as a future backend, but the executor
 rejects it because a safe, build-cgroup-scoped implementation has not been completed.
 
@@ -85,10 +86,13 @@ fixes its executable and version.
 The language-family images referenced by `jobs.job_project_build.settings.profiles` are a separate
 current-state concern. Each profile declares a local tag, immutable image ID, and numeric non-root
 user. `BuildContainerExecutor.resolve` refuses to run when the local tag no longer resolves to the
-configured image ID. The corresponding legacy build-environment entries in `containers/catalog.toml`
-remain marked `deferred`; therefore the enabled catalog packager is not yet the authoritative
-producer of every configured family image. A future migration must enable narrow, reproducible
-language-only images before removing this explicit local-image contract.
+configured image ID. The ten build-environment entries in `containers/catalog.toml` (the shared
+`buildenv-native-toolchain` plus `audit-buildenv-{cpp,go,python,php,rust-wasm,typescript,java,
+android,dotnet}`) are `enabled`, `kind = "buildenv"`, and every configured profile points at one
+of them (`rust` and `wasm` share `audit-buildenv-rust-wasm:local`); only the former
+`audit-buildenv-cpp-resolute` variant stays `deferred`. The catalog builder is therefore the
+producer of every family image, and the image-ID pin remains the local-image contract (pins are
+host-local; see [`../../containers/buildenv/README.md`](../../containers/buildenv/README.md)).
 
 ## Deriving dependency-bearing project images
 
@@ -278,7 +282,8 @@ names, secrets passed in argv, and secrets printed by build tools are handled by
 After the build command terminates, the recorder flushes normalized events and assembles a
 temporary scan corpus containing:
 
-- raw strace files, which include pre-redaction argv and envp;
+- raw strace files, which include pre-redaction argv and envp (and, when
+  `retain_raw_traces` is on, the redacted copies retained under `raw-traces/`);
 - a raw top-level invocation object containing argv and supplied environment;
 - normalized `events.jsonl`;
 - top-level stdout and stderr; and
@@ -303,12 +308,19 @@ the sanitized stream bytes so later project-build logs cannot reintroduce a dete
 
 If gitleaks is unavailable, times out, exits with any code other than `0` or `1`, writes no report,
 returns an invalid report, or otherwise fails, the path fails closed: all retained executable
-paths, argv, envp, file-open paths, tool environments, and captured streams are conservatively
-redacted, the raw corpus is removed, and the execution record contains an explicit coverage gap.
+paths, argv, envp, file-open paths, tool environments, captured streams, and retained raw traces
+are conservatively redacted, the raw corpus is removed, and the execution record contains an
+explicit coverage gap.
 A report written by a scanner that then failed is not used.
 Scanner failure writes an empty normalized findings artifact only alongside the explicit failure
 gap; it is never treated as a successful zero-findings result or clean coverage. After either a
-successful or failed scan, all raw strace files and the temporary corpus are deleted.
+successful or failed scan, the original raw strace files and the temporary corpus are deleted.
+With `build_capture.retain_raw_traces = true` (the shipped value) a redacted copy of each
+per-process trace is first retained under `raw-traces/` by `container_runtime/raw_traces.py`,
+bounded by `raw_trace_bytes_limit`, hashed, recorded in `record.json` (`raw_traces`), verified by
+`verify_capture_record`, and subject to the same gitleaks disposition as other retained files; see
+"Raw strace retention" in [`../operations/language-build.md`](../operations/language-build.md).
+Raw traces are debug material, never evidence.
 
 ## Run-owned records and validation
 
@@ -325,6 +337,8 @@ execution-capture/command-001/
       record.json
       stdout
       stderr
+  raw-traces/            # only with retain_raw_traces = true; redacted, bounded trace.<pid> copies
+    trace.21
   secret-scan/
     execution.json
     gitleaks.json
@@ -392,8 +406,10 @@ tables fail loading.
 The canonical resolved document and hash are retained under each run's `data/configuration/` and
 are bound into handoff, job-configuration, and resume identities. The checked-in overrides retain
 the verified behavior: native C/C++, Go, .NET, and Rust capture/artifact collection remain
-`required`; C/C++, Go, Java/Kotlin, and C# CodeQL remain build-replay capable; and
-JavaScript/TypeScript, Python, Rust, and Actions remain source/no-build capable.
+`required` and Node is `auto` (`compiler_artifact_collection_overrides` in `appsec-review.toml`,
+so syntax-only and metadata-only Node lifecycles resolve to `SKIPPED_NA`); C/C++, Go,
+Java/Kotlin, and C# CodeQL remain build-replay capable; and JavaScript/TypeScript, Python, Ruby,
+Rust, and Actions remain source/no-build capable.
 
 The shared evaluator consumes the resolved policy, project/language identity, accepted descriptor
 package, declared artifact types and CodeQL capabilities, and exact descriptor path/hash
@@ -448,7 +464,17 @@ evidence covers the new CMake C, Python native-extension, WebAssembly, JavaScrip
 lifecycle, and Node native-addon fixtures. It does not claim Kotlin compilation, Android assembly,
 Composer lifecycle execution, or a phpize build because those specialized toolchains were absent
 on the validation host. Those absences remain named fixture-validation gaps, not evidence that the
-expected applicability is wrong or that the projects are clean.
+expected applicability is wrong or that the projects are clean. Since then the real-image
+integration tests `tests/integration/test_family_project_builds.py` (native, Go, Python, PHP
+Composer and phpize, Rust, WebAssembly families), `test_jvm_dotnet_project_builds.py` (direct
+`javac`, Kotlin `case-084`, Android `case-092`, .NET) and `test_node_project_builds.py` exercise
+those rows through `job_project_build` and `job_language_build`; they run only where the pinned
+images exist, and a pass on one host is not a Dagster acceptance. Open question: several matrix
+rows quote the corpus's own command (`javac src/Main.java`, `./build.sh`, `npm ci && npm run
+build` for `case-088`) and output path, while the pipeline derives its own deterministic recipe
+(`build/classes/Main.class` plus `build/appsec-review.jar` for `case-016` and `case-084`,
+`phpize`/`configure`/`make` for `case-090`, a single `clang --target=wasm32` command for
+`case-091`, and `SKIPPED_NA` compiler artifacts for `case-088`); the matrix keeps the corpus view.
 
 Adding a language or project type does not add another syscall parser or capture loop. It
 supplies a small descriptor/classifier/artifact policy, registers that descriptor with the shared
@@ -517,8 +543,10 @@ Interpreted trees that no unit owns (`.py` and `.php` sources) are published as
 `MATERIAL_BUILD_ABSENT` for build capture and `ARTIFACT_CAPABILITY_ABSENT` for compiler artifacts.
 Their absence from the build lanes is therefore explicit.
 
-The C/C++ toolchain all family images compile with is defined once in
-`containers/buildenv/native-toolchain/` (see its README).
+The C/C++ toolchain the C/C++, Go, Python, PHP, Rust/WebAssembly and Node images compile with is
+defined once in `containers/buildenv/native-toolchain/` (see its README); they build `FROM` it.
+The Java, Android and .NET images start from their own digest-pinned bases and carry no C/C++
+compiler (see [`../../containers/buildenv/README.md`](../../containers/buildenv/README.md)).
 
 ## Generic captured-build extension contract
 
@@ -580,8 +608,9 @@ Each native receipt publishes `appsec-review/native-capture-provenance/1` facts 
 capture identities. Capture loss, redacted execs, unmatched wrapper calls, or an unobserved compiler
 make provenance incomplete and prevent checkpointing. The native fixture acceptance verifies a
 compile database, objects, a static library, executable, split debug data, link map, loader facts,
-Clang AST, LLVM IR, complete streams, gitleaks artifacts, envp evidence, and the absence of raw
-traces and scan inputs. AST and IR are separate analysis-stage outputs when they are not part of
+Clang AST, LLVM IR, complete streams, gitleaks artifacts, envp evidence, and the absence of the
+original raw traces and scan inputs (retained redacted copies under `raw-traces/` are allowed when
+`retain_raw_traces` is on). AST and IR are separate analysis-stage outputs when they are not part of
 the accepted language-build recipe.
 
 ## Rust language-build integration
@@ -649,7 +678,7 @@ The bounded Rust fixture acceptance derives a dependency-bearing project image w
 runs metadata and build commands through the capture boundary, and verifies an executable, rlib,
 rmeta, dependency metadata, ELF loader facts, Cargo packages/resolve edges, rustc, a linker driver,
 and dependency build-script execution. It also proves exact-name envp redaction, gitleaks removal of
-a synthetic secret, complete retained streams, raw-trace cleanup, and default plus
+a synthetic secret, complete retained streams, cleanup of the original raw traces, and default plus
 `security-extended` Rust CodeQL execution. Rust CodeQL remains source/no-build analysis layered onto
 the accepted Rust image so its semantic analyzer can load Cargo metadata; it is not compiler replay.
 There is no Rust compiler-native AST or IR producer in the current graph. Tree-sitter supplies a
@@ -731,9 +760,11 @@ bind them as dependency inputs and the derived project image restores modules ag
 All implemented capture configuration is typed and centralized in `appsec-review.toml`. Global
 settings define the
 backend, syscall/argv/envp/path/tool-call/stream/finding limits, envp enablement, and exact redaction
-names. A job may override a bounded subset such as `event_count_limit`; omitted values inherit the
-global configuration. The resolved immutable configuration is copied into the run like every other
-job setting.
+names. `job_project_build` and `job_language_build` may override any `[build_capture]` key in
+their `settings.build_capture` table (the shipped overrides set `event_count_limit = 250000`,
+`retain_raw_traces = true` and `raw_trace_bytes_limit = 67108864`); omitted values inherit the
+global configuration, and no other job may override it. The resolved immutable configuration is
+copied into the run like every other job setting.
 The conditional tri-state controls are typed fields of the same schema: `[build_capture] mode`
 (`required`, `auto`, or `disabled`; default `required`) and the `job_language_build`
 `compiler_artifact_collection_mode` setting, both validated by `config/loader.py` and frozen in the
@@ -754,9 +785,12 @@ Global `[build_capture]` limits (shipped value; allowed range):
 | `file_inventory_count_limit` | 1000000 | 1-10,000,000 | post-build file inventory rows |
 | `response_file_count_limit` | 10000 | 1-1,000,000 | snapshotted response files |
 | `response_file_bytes_limit` | 1048576 | 1-64 MiB | bytes per snapshotted response file |
+| `retain_raw_traces` | true | Boolean | keep redacted, bounded per-process strace copies under `raw-traces/` (debug material) |
+| `raw_trace_bytes_limit` | 67108864 | 1-1 GiB | retained raw-trace bytes per command; crossing it is flagged, not a gap |
 
-`backend` is `ptrace` or `ebpf`; `envp_redact_names` holds at most 256 unique exact names. Reaching
-a count limit is a named coverage gap.
+The global table must name every key, so the "Default" column lists the shipped values rather
+than loader defaults. `backend` is `ptrace` or `ebpf`; `envp_redact_names` holds at most 256
+unique exact names. Reaching a count limit is a named coverage gap.
 
 The main implementation surfaces are:
 
@@ -767,20 +801,29 @@ The main implementation surfaces are:
 - `containers/build-capture/tool-wrapper.py` — exact known-tool calls and streams;
 - `src/appsec_review/container_runtime/build_capture.py` — normalization, execution record, and
   the shared record verifier;
+- `src/appsec_review/container_runtime/raw_traces.py` and `capture_files.py` — redacted raw-trace
+  retention and the post-build file inventory/response-file snapshots;
 - `src/appsec_review/jobs/job_project_build/job.py` — project-build run integration;
 - `src/appsec_review/jobs/job_language_build/capture.py` — the typed descriptor and generic
   successful-exec reconciliation used by native, Rust, and .NET (Go reconciles in `go.py`);
-- `src/appsec_review/jobs/job_language_build/job.py`, `native.py`, `go.py`, `rust.py`, and
-  `dotnet.py` — shared routing plus language-specific recipes, classification, artifacts, and
-  metadata;
+- `src/appsec_review/jobs/job_language_build/job.py`, `native.py`, `go.py`, `rust.py`,
+  `dotnet.py`, `python.py`, `php.py`, `node.py`, `jvm.py`, `wasm.py`, and `native_components.py` —
+  shared routing plus language-specific recipes, classification, artifacts, and metadata;
+- `src/appsec_review/jobs/build_discovery.py` (unit routing and recipe validation),
+  `src/appsec_review/jobs/job_post_build_security_assessment/hardening.py` (per-family binary
+  hardening expectations), and `containers/buildenv/*` (the family images);
 - `src/appsec_review/jobs/job_language_build/elf.py` and `go.py` — bounded ELF, Go build-fact, and
   package-catalog readers; and
 - `tests/test_build_capture.py`, `tests/test_build_container_executor.py`,
   `tests/test_captured_build_reconciliation.py`, `tests/test_project_build.py`,
   `tests/test_go_language_build.py`, `tests/test_rust_language_build.py`,
   `tests/test_go_build_facts.py`, `tests/test_elf_loader_facts.py`,
-  `tests/test_language_build.py`, and `tests/test_live_build_toolchains.py` — unit and live
-  contracts. `tests/capture_fakes.py` replaces
+  `tests/test_language_build.py`, `tests/test_language_build_python.py`,
+  `tests/test_language_build_node.py`, `tests/test_jvm_language_build.py`,
+  `tests/test_raw_trace_retention.py`, `tests/test_native_components.py`,
+  `tests/test_family_binary_assessment.py`, `tests/test_live_build_toolchains.py`, and the
+  real-image `tests/integration/test_{family,jvm_dotnet,node}_project_builds.py` — unit, live and
+  integration contracts. `tests/capture_fakes.py` replaces
   only the Docker CLI, so unit fakes exercise the real normalizer, scan, sanitizer, and recorder.
 
 ## Acceptance sequence
@@ -788,8 +831,8 @@ The main implementation surfaces are:
 Changes advance in language order with small fixture projects. For a family, focused unit tests must
 first prove configuration, parsing, caps, redaction, failure behavior, hash repair, and job
 acceptance. A live container test then proves real configure/build output, observed compiler argv,
-envp capture, mandatory connect instrumentation, gitleaks execution, raw-trace removal, and expected
-artifacts. A synthetic secret test proves detection and absence from retained files. Only after the
+envp capture, mandatory connect instrumentation, gitleaks execution, removal of the original raw
+traces (and redaction of any retained copies), and expected artifacts. A synthetic secret test proves detection and absence from retained files. Only after the
 language fixtures and downstream CodeQL/AST/IR evidence checks are successful should a fresh
 Dagster acceptance workflow be used as integrated evidence. Historical, interrupted, or partially
 covered runs do not satisfy that gate.

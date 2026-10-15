@@ -1,8 +1,9 @@
 # Post-build security assessment
 
 The `post_build_security_assessment` Dagster job consumes the accepted
-`job_cpp_compiled_analysis` handoff. In `wave1_review` it is ordered after compilation and compiled
-analysis. Static evidence collection is a sibling branch; CodeQL and OWASP wait for the accepted
+`job_cpp_compiled_analysis` handoff and, for the binaries of every other build family, the accepted
+`job_language_build` handoff (see "Binaries of every build family" below). In `wave1_review` it is
+ordered after compilation and compiled analysis. Static evidence collection is a sibling branch; CodeQL and OWASP wait for the accepted
 post-build handoff.
 
 ## What it retains
@@ -75,7 +76,13 @@ Summary of the table:
 | Rust (x86_64-unknown-linux-gnu) | PIE, full RELRO, immediate binding, non-executable stack | stack protector, CET, FORTIFY |
 | .NET native AOT | PE `/DYNAMICBASE`, `/NXCOMPAT`, `/HIGHENTROPYVA` | `/GS`, SafeSEH (64-bit) |
 
-For .NET native AOT, ELF defaults and Control Flow Guard are `unknown`.
+For .NET native AOT, ELF defaults and Control Flow Guard are `unknown`. A family with no table
+(`unknown_family` in `hardening.py`: Python, PHP, Node, Java or WebAssembly units that produced a
+binary without captured compiles) makes every check `NOT_APPLICABLE` with the reason that no
+documented default exists; Node, Python, PHP and WebAssembly units that did capture compile
+actions are assessed flag-driven like native units (`_FLAG_DRIVEN_FAMILIES` in `assessment.py`).
+Open question: `family_build_cases` admits any artifact with ELF, PE or Mach-O magic, so ordinary
+managed .NET assemblies (PE) are also judged by the .NET native AOT table.
 
 Native and mixed units keep the requested-versus-actual checks driven by their captured compile and
 link flags. The pinned `nm`/`readelf` cross-check comes from the C/C++ lane's binary branch. Family

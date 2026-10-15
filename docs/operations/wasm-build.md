@@ -17,7 +17,14 @@ stderr, and useful truncation tails are separate protected artifacts with SHA-25
 observed byte counts, configured limits, timeout/exit status, duration, image identity, and attempt
 identity. Retrieval and central logs receive only tool names, roles, hashes, dispositions, bounded
 artifact facts, and explicit gaps. Verbose producer streams are parsed only for tool invocations
-that actually appeared; missing nested compiler or linker provenance is a gap.
+that actually appeared; missing nested compiler or linker provenance is a gap. A unit whose
+accepted plan lists `native_components` (a `build.sh` or clang `--target=wasm32` producer) runs
+every command under the standardized execution capture instead (`wasm.py`), and its receipt adds
+`family = "wasm"`, `native_components`, a `native_compile_database` built from the observed
+compiler execs, and capture-derived invocation rows; `job_cpp_compiled_analysis` then consumes
+those compiles. Both the `rust` and `wasm` profiles run in `audit-buildenv-rust-wasm`, whose
+C-to-wasm32 clang comes from the shared native toolchain. Produced WebAssembly modules are not
+ELF/PE/Mach-O and are not inspected by the post-build hardening assessment.
 
 The artifact catalog recognizes modules, components, WAT, source maps and debug metadata,
 JavaScript/TypeScript bindings, WIT/WAI interface metadata, native side modules, libraries,
