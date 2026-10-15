@@ -42,7 +42,7 @@ from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from appsec_review.storage import FileLock, atomic_json, canonical_json, file_sha256, protected_json
 from appsec_review.swift_policy import reject_swift_derived, swift_enabled_from_run
 
-from . import capture as captured_build, dotnet, elf, go, jvm, native, native_components, node, php, python, rust
+from . import capture as captured_build, dotnet, elf, go, gradle_provenance, jvm, native, native_components, node, php, python, rust
 from .capture import CapturedBuildDescriptor, link_rows as captured_link_rows, reconcile_captured_build
 from appsec_review.jobs.job_language_build.datasets import CONSUMES, DATASETS
 
@@ -1633,6 +1633,7 @@ def build_job(*, executor_factory=None) -> Job:
                    "execute.rust", "execute.php", "execute.java", "execute.wasm")))
     implementation = hashlib.sha256(Path(__file__).read_bytes() +
         Path(applicability_contract.__file__).read_bytes() + Path(jvm.__file__).read_bytes() +
+        Path(gradle_provenance.__file__).read_bytes() +
         Path(captured_build.__file__).read_bytes() + Path(elf.__file__).read_bytes() +
         Path(go.__file__).read_bytes() + Path(python.__file__).read_bytes() + Path(rust.__file__).read_bytes() +
         Path(wasm.__file__).read_bytes() + Path(native_components.__file__).read_bytes() +
