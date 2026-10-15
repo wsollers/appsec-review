@@ -56,8 +56,9 @@ GitHub only adds review-process facts on top of it.
 ## Placement in the graph
 
 ```text
-job_model_connectivity -> job_review_intake -> job_target_catalog -> job_source_history_analysis -> job_target_analysis_plan -> ...
-                                       \-> job_ci_configuration_analysis ---/   (Dagster wave1_review)
+job_model_connectivity -> job_tool_image_rebuild -> job_review_intake -> job_target_catalog
+  -> job_source_history_analysis -> job_target_analysis_plan -> ...
+job_target_catalog -> job_ci_configuration_analysis -> job_target_analysis_plan   (Dagster wave1_review)
 ```
 
 The direct CLI graph runs the job between the catalog and the plan. In Dagster's `wave1_review` it

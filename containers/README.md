@@ -1,16 +1,17 @@
 # Container packaging
 
 `catalog.toml` is the inventory for every image built by `build.py`. For the legacy audit it
-accounts for all 42 audited legacy image variants. The current enabled inventory contains 36
-images: 30 tool images, four narrow shared runtime bases, and two build environments (Android and
-Node/TypeScript). An
+accounts for all 42 audited legacy image variants. The current enabled inventory contains 42
+images: 30 tool images, four narrow shared runtime bases, and eight build environments (the shared
+native toolchain plus the C/C++, Go, Python, PHP, Rust/WebAssembly, Node/TypeScript and Android
+buildenvs). An
 entry is always `enabled`, `deferred`, `replaced`, or `retired`; absence is not a decision.
 
 The catalog also enables tools that were not derived from the legacy archive: `tool-actionlint`,
 `tool-cppcheck`, `tool-native-cpp`, `tool-tree-sitter`, `tool-sqlite-fts`, `tool-git`, `tool-pmd`,
 `tool-opengrep`, `tool-infer`, `tool-clangd-indexer`, `tool-clang-static-analysis`, `tool-joern`, and
 `tool-ghidra`. The authoritative catalog currently enables 30 tool images; the other enabled
-entries are the four bases, `audit-buildenv-android`, and `audit-buildenv-typescript`.
+entries are the four bases and the eight build environments under `containers/buildenv/`.
 
 CodeQL is the exception: its licensed source image is operator-provided and its derived
 `appsec-review-codeql:*` analysis images are built by the CodeQL job
@@ -51,6 +52,9 @@ steps run with networking disabled. Logs and the machine-readable summary are wr
 `runs/container-builds/<run-id>/`; each result records status, duration, image id, tag, digest, and
 log paths. Any failed, blocked, or skipped image makes the command fail, including with
 `--continue-on-error`.
+`--timeout-seconds` bounds each `docker build` (default 1800, 60..14400). A review run rebuilds the
+catalog through this builder in `job_tool_image_rebuild` before intake and fails when any image does
+not build; see [`../docs/operations/tool-image-rebuild.md`](../docs/operations/tool-image-rebuild.md).
 
 Some locked assets cannot be downloaded by the launcher and must be placed in `downloads/` by hand
 before a build: the `tool-native-cpp` `.deb` closure (its lock URL is the archive root; see

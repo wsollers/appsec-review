@@ -17,6 +17,10 @@ from appsec_review.retrieval import (EntityKind, EntityRecord, IndexBuilder, Ind
 from appsec_review.retrieval.index import INDEX_SCHEMA, load_verified_manifest
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from appsec_review.storage import atomic_bytes, atomic_json, canonical_json, file_sha256
+from appsec_review.tool_inputs import (
+    InputDecision, not_applicable_summary, osv_reported_no_package_sources, partition_formats,
+)
+from appsec_review.applicability import ReasonCode
 
 from .formats import ArchiveLimits, builtin_observation, classify
 from .scanners import ADAPTERS, ContainerScannerRunner
@@ -106,17 +110,22 @@ def _accepted_artifacts(run_root: Path) -> dict[str, Any]:
             "producer_gaps": list(dict.fromkeys(producer_gaps)) }
 
 
+def _support_key(capability: str) -> str | None:
+    return f"artifact:{ADAPTERS[capability].tool_id}" if capability in ADAPTERS else None
+
+
 def _applicable(capability: str, classification: Mapping[str, Any]) -> bool:
+    """Built-in inspectors by family; pinned scanners by their declared supported formats."""
     family, fmt = classification.get("family"), classification.get("format")
+    key = _support_key(capability)
+    if key is not None:
+        return not partition_formats(key, (("artifact", fmt),)).not_applicable
     if capability == "inventory": return True
     if capability == "native": return family in {"native", "dotnet"}
     if capability == "jvm": return family == "jvm"
     if capability == "spotbugs": return family == "jvm"
     if capability == "wasm": return family == "wasm"
     if capability == "packages": return bool(classification.get("container")) or family in {"node", "python", "php"}
-    if capability == "blint": return family in {"native", "dotnet", "jvm", "wasm", "python", "node", "php"}
-    if capability == "syft": return True
-    if capability in {"grype", "osv"}: return True
     return False
 
 
@@ -187,6 +196,7 @@ def _scan_one(unit: UnitContext, artifact: Mapping[str, Any], capability: str,
     exit_code: int | None = 0
     timed_out = False
     parser_payload: bytes | None = None
+    not_applicable: Mapping[str, Any] | None = None
     execution_receipt: Mapping[str, Any] | None = None
     tool_identity: Mapping[str, Any] = (dict(resolved_tool_identity) if resolved_tool_identity else
         {"scanner": scanner_identity, "rules": scanner_identity, "image": None})
@@ -217,7 +227,15 @@ def _scan_one(unit: UnitContext, artifact: Mapping[str, Any], capability: str,
             execution_receipt = receipt_value if isinstance(receipt_value, Mapping) else None
             if resolved_tool_identity and dict(tool_identity) != dict(resolved_tool_identity):
                 raise FrameworkIntegrityError("executed scanner identity differs from fingerprinted identity")
-            if timed_out: gaps.append(f"{capability} scanner timed out")
+            if (capability == "osv" and not timed_out and not raw.get("truncated") and
+                    osv_reported_no_package_sources(exit_code, stdout + b"\n" + stderr)):
+                # osv-scanner's documented exit-128 report for an artifact none of its pinned
+                # extractors read: SKIPPED_NA for this artifact, not a scanner failure.
+                not_applicable = InputDecision(
+                    str(artifact["artifact_id"]), "artifact:tool-osv-scanner",
+                    ReasonCode.TOOL_REPORTED_UNSUPPORTED_INPUT,
+                    "osv-scanner reported no package sources in this artifact").as_dict()
+            elif timed_out: gaps.append(f"{capability} scanner timed out")
             elif exit_code not in ADAPTERS[capability].accepted_exit_codes:
                 gaps.append(f"{capability} scanner exited {exit_code}")
             if raw.get("truncated"): gaps.append(f"{capability} scanner output was truncated")
@@ -244,8 +262,9 @@ def _scan_one(unit: UnitContext, artifact: Mapping[str, Any], capability: str,
         "observation": observation, "gaps": gaps, "exit_code": exit_code, "timed_out": timed_out,
         "duration_ms": int((time.monotonic() - started) * 1000),
         "raw_artifacts": raw_artifacts, "execution_receipt": execution_receipt,
-        "reused": False,
-        "terminal_status": "COMPLETED_WITH_GAPS" if gaps else "SUCCEEDED"}
+        "reused": False, "not_applicable": not_applicable,
+        "terminal_status": ("SKIPPED_NA" if not_applicable is not None else
+                            "COMPLETED_WITH_GAPS" if gaps else "SUCCEEDED")}
     checkpoint.parent.mkdir(parents=True, exist_ok=True)
     atomic_json(checkpoint, result)
     return result
@@ -308,19 +327,32 @@ def build_job(*, scanner_runner: ScannerRunner | None = None) -> Job:
                         "terminal_status": "NOT_APPLICABLE"}
             effective_runner = scanner_runner
             observations, gaps = [], []
+            skipped: list[Mapping[str, Any]] = []
+            key = _support_key(capability)
             for artifact in loaded["artifacts"]:
                 path = _safe_file(unit.job.run_root, artifact)
                 classification = classify(path, artifact)
-                if not _applicable(capability, classification):
+                if key is not None:
+                    # Declared format support decides before launch; unsupported is SKIPPED_NA.
+                    decision = partition_formats(key, ((str(artifact["artifact_id"]),
+                                                        classification.get("format")),))
+                    if decision.not_applicable:
+                        skipped.extend(item.as_dict() for item in decision.not_applicable)
+                        continue
+                elif not _applicable(capability, classification):
                     continue
                 if effective_runner is None and capability in ADAPTERS:
                     effective_runner = ContainerScannerRunner(
                         unit.job.repository_root, unit.job.run_root, unit.unit_root)
                 result = _scan_one(unit, artifact, capability, effective_runner)
+                if result.get("terminal_status") == "SKIPPED_NA" and result.get("not_applicable"):
+                    skipped.append(result["not_applicable"])
+                    continue
                 observations.append(result)
                 gaps.extend(f"{artifact['artifact_id']}: {gap}" for gap in result["gaps"])
             return {"capability": capability, "observations": observations,
                     "observation_count": len(observations), "gaps": gaps,
+                    "not_applicable_inputs": not_applicable_summary(skipped),
                     "terminal_status": "COMPLETED_WITH_GAPS" if gaps else "SUCCEEDED" if observations else "NOT_APPLICABLE"}
         return handler
 
@@ -382,8 +414,9 @@ def build_job(*, scanner_runner: ScannerRunner | None = None) -> Job:
 
     def publish(unit: UnitContext) -> Mapping[str, Any]:
         loaded, indexed = unit.output("load.accepted_artifacts"), unit.output("index.observations")
-        capabilities = {capability: {key: unit.output(f"analyze.{capability}")[key]
-                        for key in ("observation_count", "gaps", "terminal_status")} for capability in CAPABILITIES}
+        capabilities = {capability: {key: unit.output(f"analyze.{capability}").get(key)
+                        for key in ("observation_count", "gaps", "terminal_status", "not_applicable_inputs")}
+                        for capability in CAPABILITIES}
         document = {"schema": SCHEMA, "source_fingerprint": unit.job.source_fingerprint,
             "language_build_handoff_sha256": loaded["language_build_handoff_sha256"],
             "artifact_index": loaded["artifact_index"], "artifact_count": loaded["artifact_count"],

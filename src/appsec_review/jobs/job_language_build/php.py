@@ -16,10 +16,12 @@ _ARCHIVE_SUFFIXES = (".phar", ".zip", ".tar", ".tar.gz", ".tgz")
 def validate_php_dispatch(dispatch: Mapping[str, Any]) -> list[str]:
     """Validate the language-family constraints that are stricter than a generic recipe."""
     recipe = dispatch.get("recipe")
-    if not isinstance(recipe, Mapping) or dispatch.get("build_system") != "composer":
-        return ["PHP execution requires an accepted Composer recipe"]
+    if not isinstance(recipe, Mapping) or dispatch.get("build_system") not in {"composer", "phpize"}:
+        return ["PHP execution requires an accepted Composer or phpize recipe"]
     dependencies = {PurePosixPath(str(value)).name for value in recipe.get("dependency_files", ())}
     gaps: list[str] = []
+    if dispatch.get("build_system") == "phpize":
+        return [] if "config.m4" in dependencies else ["phpize extension metadata is unavailable"]
     if "composer.json" not in dependencies:
         gaps.append("Composer project metadata is unavailable")
     return gaps
@@ -64,7 +66,14 @@ def _load_json(path: Path, *, max_bytes: int = 16 * 1024 * 1024) -> Any:
 def composer_metadata(workspace: Path, source_dir: str) -> tuple[dict[str, Any], list[str]]:
     root = workspace / Path(*PurePosixPath(source_dir).parts)
     manifest_path, lock_path = root / "composer.json", root / "composer.lock"
-    manifest, lock = _load_json(manifest_path), _load_json(lock_path)
+    gaps: list[str] = []
+    manifest = _load_json(manifest_path)
+    if lock_path.is_file() and not lock_path.is_symlink():
+        lock = _load_json(lock_path)
+    else:
+        # An unlocked project resolves its declared constraints at build time.
+        lock = {}
+        gaps.append("composer.lock is absent; dependency versions were resolved at build time")
     if not isinstance(manifest, Mapping) or not isinstance(lock, Mapping):
         raise ValueError("Composer metadata roots must be objects")
     packages: list[dict[str, Any]] = []
@@ -104,10 +113,10 @@ def composer_metadata(workspace: Path, source_dir: str) -> tuple[dict[str, Any],
                                    "commands_sha256": hashlib.sha256(encoded).hexdigest()})
     return ({"schema": "appsec-review/php-composer-metadata/1", "root_package": root_name,
              "composer_json": {"sha256": file_sha256(manifest_path), "size_bytes": manifest_path.stat().st_size},
-             "composer_lock": {"sha256": file_sha256(lock_path), "size_bytes": lock_path.stat().st_size,
-                               "content_hash": lock.get("content-hash")},
+             "composer_lock": ({"sha256": file_sha256(lock_path), "size_bytes": lock_path.stat().st_size,
+                                "content_hash": lock.get("content-hash")} if lock else None),
              "packages": packages, "relationships": relationships, "scripts": script_records,
-             "plugins": [item for item in packages if item["name"].startswith("composer/")]}, [])
+             "plugins": [item for item in packages if item["name"].startswith("composer/")]}, gaps)
 
 
 def artifact_kind(path: Path, relative: str, before: Mapping[str, str]) -> str | None:
@@ -127,7 +136,7 @@ def artifact_kind(path: Path, relative: str, before: Mapping[str, str]) -> str |
 
 
 def catalog(run_root: Path, workspace: Path, before: Mapping[str, str], limit: int,
-            build_unit_id: str) -> tuple[list[dict[str, Any]], list[str]]:
+            build_unit_id: str, build_system: str = "composer") -> tuple[list[dict[str, Any]], list[str]]:
     artifacts: list[dict[str, Any]] = []
     gaps: list[str] = []
     for path in sorted(workspace.rglob("*")):
@@ -150,8 +159,10 @@ def catalog(run_root: Path, workspace: Path, before: Mapping[str, str], limit: i
         if len(artifacts) >= limit:
             gaps.append("PHP artifact catalog truncated at configured count bound")
             break
-    if not any(item["kind"] == "generated-autoload" for item in artifacts):
+    if build_system == "composer" and not any(item["kind"] == "generated-autoload" for item in artifacts):
         gaps.append("Composer autoload generation produced no retained autoload artifact")
+    if build_system == "phpize" and not any(item["kind"] == "native-extension" for item in artifacts):
+        gaps.append("phpize build produced no retained native extension module")
     return artifacts, gaps
 
 
@@ -159,10 +170,13 @@ def invocation_kind(tool: str, argv: Sequence[str]) -> str:
     name = PurePosixPath(tool).name
     if name == "composer":
         subcommand = next((value for value in argv[1:] if not str(value).startswith("-")), "")
-        return {"dump-autoload": "autoload-generator", "archive": "package-builder",
-                "install": "dependency-installer"}.get(str(subcommand), "composer-build-driver")
-    if name in {"phpize", "php-config"}:
+        return {"dump-autoload": "autoload-generator", "dumpautoload": "autoload-generator",
+                "archive": "package-builder", "install": "dependency-installer",
+                "update": "dependency-installer"}.get(str(subcommand), "composer-build-driver")
+    if name in {"phpize", "php-config", "configure"}:
         return "native-extension-configurer"
+    if name in {"make", "gmake"}:
+        return "build-driver"
     if name in {"cc", "gcc", "clang", "c++", "g++", "clang++"}:
         return "compiler-driver"
     if name in {"ld", "ld.lld"}:
@@ -170,3 +184,17 @@ def invocation_kind(tool: str, argv: Sequence[str]) -> str:
     if name in {"ar", "llvm-ar"}:
         return "archiver"
     return "php-build-driver"
+
+
+def generates_autoloader(argv: Sequence[str]) -> bool:
+    """Whether a Composer invocation writes the autoloader as part of its documented behavior.
+
+    `install` and `update` dump the autoloader unless `--no-autoloader` is given;
+    `dump-autoload` does nothing else.
+    """
+    if not argv or PurePosixPath(str(argv[0])).name != "composer":
+        return False
+    subcommand = next((str(value) for value in argv[1:] if not str(value).startswith("-")), "")
+    if subcommand in {"dump-autoload", "dumpautoload"}:
+        return True
+    return subcommand in {"install", "update"} and "--no-autoloader" not in {str(value) for value in argv}

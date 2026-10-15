@@ -37,6 +37,11 @@ them:
    - a mismatch fails the job.
 4. The scope ID hashes the case, its case snapshot, and its compile database, so any source or
    command change yields a new scope, and therefore new checkpoints.
+5. Only compile units a Clang frontend can process (`.c`, `.cc`, `.cpp`, `.cxx`, `.c++`, `.m`,
+   `.mm`, `.i`, `.ii`; declared once as `clang:compile-unit` in `appsec_review.tool_inputs`) are
+   written to the container compile database. Assembly, CUDA, resource, and other entries are
+   `SKIPPED_NA` in each scope's `not_applicable_inputs`, never a missing-translation-unit gap. A
+   scope with no supported unit is not launched and is listed in `not_applicable_scopes`.
 
 Tools see only the run-owned case root, mounted read-only at `/target`, plus a read-write
 `/scratch`. The compile commands are rewritten to `/target/source/...` paths (driver normalized to

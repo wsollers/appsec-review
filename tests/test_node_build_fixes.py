@@ -141,7 +141,7 @@ def test_recipe_installer_owns_node_modules_in_probe_and_language_build(tmp_path
         image_resolver_factory=lambda unit: _ImageResolver(target))]).run(
             target_root=target, source_fingerprint=fingerprint, run_id=upstream["run_id"])
     outcome = GraphRunner(config, [build_language(
-        executor_factory=lambda unit, profile: _NodeExecutor(calls))]).run(
+        executor_factory=lambda unit, profile: capturing_fake(profile, _NodeExecutor(calls)))]).run(
             target_root=target, source_fingerprint=fingerprint, run_id=upstream["run_id"])
     receipts = load_accepted_language_build(config.runtime.runs_dir / upstream["run_id"])["receipts"]
     assert outcome["status"] == "SUCCEEDED", [item.get("gaps") for item in receipts]

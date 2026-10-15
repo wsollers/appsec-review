@@ -225,7 +225,12 @@ def test_job_isolates_scanner_failure_retains_raw_output_and_indexes_siblings(tm
     assert accepted["observation_count"] >= 5
     assert accepted["capabilities"]["grype"]["terminal_status"] == "COMPLETED_WITH_GAPS"
     assert accepted["capabilities"]["syft"]["observation_count"] == 1
-    assert set(calls) == {"blint", "syft", "grype", "osv"}
+    # blint parses ELF/PE/Mach-O/APK only: the WebAssembly fixture is SKIPPED_NA, never launched.
+    assert set(calls) == {"syft", "grype", "osv"}
+    blint = accepted["capabilities"]["blint"]
+    assert blint["terminal_status"] == "NOT_APPLICABLE" and not blint["gaps"]
+    assert blint["not_applicable_inputs"]["count"] == 1
+    assert blint["not_applicable_inputs"]["items"][0]["reason_code"] == "INPUT_FORMAT_UNSUPPORTED"
     raw = list((run_root / "data" / "jobs" / "job_artifact_security_analysis" / "attempts").rglob("stdout.bin"))
     assert raw and all(path.is_file() for path in raw)
     manifest = run_root / accepted["index_manifest"]["path"]

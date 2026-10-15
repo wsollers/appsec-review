@@ -76,6 +76,11 @@ class ReasonCode(str, Enum):
     EVIDENCE_INCOMPLETE = "EVIDENCE_INCOMPLETE"
     ARTIFACT_VALIDATION_FAILED = "ARTIFACT_VALIDATION_FAILED"
     PROCESSING_SUCCEEDED = "PROCESSING_SUCCEEDED"
+    # Per-input tool support (appsec_review.tool_inputs): an input outside a tool's declared
+    # formats is never launched; a tool's own recognized "unsupported input" report is used only
+    # where the declaration cannot be decided exactly before launch.
+    INPUT_FORMAT_UNSUPPORTED = "INPUT_FORMAT_UNSUPPORTED"
+    TOOL_REPORTED_UNSUPPORTED_INPUT = "TOOL_REPORTED_UNSUPPORTED_INPUT"
 
 
 @dataclass(frozen=True, slots=True)
@@ -419,6 +424,20 @@ def evaluate_applicability(*, feature: ProcessingFeature, policy: str,
                          configuration_sha256=configuration_sha256,
                          action=ApplicabilityAction.GAP, disposition=ProcessingDisposition.GAP,
                          reason=ReasonCode.INVENTORY_UNAVAILABLE)
+
+    if (feature in {ProcessingFeature.BUILD_CAPTURE, ProcessingFeature.COMPILER_ARTIFACTS} and
+            facts.build_system == "source-only" and not facts.material_build):
+        # A scope no build unit owns (plain interpreted sources) has nothing to execute or
+        # collect. "required" governs material builds; here it is positively not applicable.
+        if policy not in {"required", "auto"}:
+            raise ValueError("build processing policy is unsupported")
+        return _decision(feature=feature, facts=facts, policy=policy,
+                         configuration_sha256=configuration_sha256,
+                         action=ApplicabilityAction.SKIP,
+                         disposition=ProcessingDisposition.SKIPPED_NA,
+                         reason=(ReasonCode.MATERIAL_BUILD_ABSENT
+                                 if feature is ProcessingFeature.BUILD_CAPTURE
+                                 else ReasonCode.ARTIFACT_CAPABILITY_ABSENT))
 
     if feature is ProcessingFeature.BUILD_CAPTURE:
         if policy == "required":

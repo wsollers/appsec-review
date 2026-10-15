@@ -19,12 +19,25 @@ from appsec_review.retrieval.index import load_verified_manifest
 from appsec_review.storage import (
     ArtifactIntegrityError, canonical_json, file_sha256, run_artifact, verify_run_artifact,
 )
+from appsec_review.tool_inputs import InputDecision, not_applicable_summary, partition_paths
 
 
 SCOPE_SCHEMA = "appsec-review/cpp-index-scope/1"
 CHECKPOINT_SCHEMA = "appsec-review/cpp-index-scope-checkpoint/2"
 SOURCE_MOUNT = "/target/source"
 _CXX_SUFFIXES = frozenset({".cc", ".cpp", ".cxx", ".c++", ".mm"})
+# Every scope tool (clang-tidy, the Clang Static Analyzer, clangd-indexer, Joern's compile database)
+# is a Clang-family frontend; compile units outside its declared support are never handed to it.
+COMPILE_UNIT_SUPPORT = "clang:compile-unit"
+
+
+def partition_compile_commands(compile_commands: Any) -> tuple[list[Mapping[str, Any]], tuple[InputDecision, ...]]:
+    """Split accepted compile commands into Clang-supported units and SKIPPED_NA decisions."""
+    rows = list(compile_commands)
+    partition = partition_paths(COMPILE_UNIT_SUPPORT, [str(row["target_path"]) for row in rows])
+    unsupported = {item.path for item in partition.not_applicable}
+    return ([row for row in rows if str(row["target_path"]) not in unsupported],
+            partition.not_applicable)
 
 
 def _read_json_artifact(run_root: Path, identity: Mapping[str, Any]) -> Any:
@@ -115,7 +128,15 @@ class IndexScope:
     _by_relative: Mapping[str, Mapping[str, Any]] = field(default_factory=dict, repr=False, compare=False)
 
     def container_compile_database(self) -> list[dict[str, Any]]:
-        return container_compile_database(self.root, self.compile_commands)
+        """Container compile database of the Clang-supported compile units only."""
+        supported, _ = partition_compile_commands(self.compile_commands)
+        return container_compile_database(self.root, supported)
+
+    def unsupported_compile_units(self) -> tuple[InputDecision, ...]:
+        return partition_compile_commands(self.compile_commands)[1]
+
+    def not_applicable_inputs(self) -> dict[str, Any]:
+        return not_applicable_summary(self.unsupported_compile_units())
 
     def accepted_file(self, container_path: str) -> Mapping[str, Any] | None:
         """Map ``/target/source/<relative>`` back to the accepted mapping entry, if any."""
@@ -128,6 +149,7 @@ class IndexScope:
         return {"schema": SCOPE_SCHEMA, "scope_id": self.scope_id, "case_id": self.case_id,
                 "project_id": self.project_id, "root": self.root, "case_snapshot": self.case_snapshot,
                 "file_count": len(self.files), "compile_unit_count": len(self.compile_commands),
+                "supported_compile_unit_count": len(self.container_compile_database()),
                 "compile_database": dict(self.compile_database)}
 
 

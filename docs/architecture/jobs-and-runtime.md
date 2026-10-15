@@ -31,13 +31,14 @@ input, output, tool, and acceptance contracts.
 
 ## Registered jobs
 
-`runtime/registry.py` registers 27 jobs. Each has a `[jobs.<job_id>]` table in
+`runtime/registry.py` registers 32 jobs. Each has a `[jobs.<job_id>]` table in
 `appsec-review.toml`, and its Dagster job is named from that table's `name`.
 
 | Job | Purpose | Operations |
 | --- | --- | --- |
 | `job_third_party_data_sync` | NVD (with `index/nvd.sqlite`), OSV, MITRE, CISA KEV, FIRST EPSS and cve-bin-tool feed snapshots (scheduled, outside reviews) | [third-party-data-sync](../operations/third-party-data-sync.md) |
 | `job_model_connectivity` | Mandatory fresh provider/model connectivity gate | [below](#inference-entry-point-and-model-preflight) |
+| `job_tool_image_rebuild` | Mandatory rebuild of every catalog tool image; any failed image fails the run | [tool-image-rebuild](../operations/tool-image-rebuild.md) |
 | `job_review_intake` | Configuration and target intake | [below](#inference-entry-point-and-model-preflight) |
 | `job_target_catalog` | Bounded target catalog and source index | [target-analysis-planning](../operations/target-analysis-planning.md) |
 | `job_source_history_analysis` | Git/GitHub history instability signals | [source-history-analysis](../operations/source-history-analysis.md) |
@@ -179,6 +180,31 @@ language-build, and CodeQL artifacts and handoffs. They are checkpoint inputs, p
 resume invalidation, and feed completeness accounting; `GAP` is retriable and blocks clean claims,
 while either skip remains explicit without becoming a gap or evidence of security.
 
+### Per-input tool support
+
+The same dispositions apply to each input a job hands to an external tool. The inputs every
+tool consumer can process are declared once, typed, in `src/appsec_review/tool_inputs.py`
+(`TOOL_INPUT_SUPPORT`): file suffixes, names, or path shapes for source/configuration scanners,
+bounded-magic artifact formats for produced-artifact scanners, and translation-unit suffixes for
+Clang-family compile databases. Target-analysis planning, evidence collection, CI configuration
+analysis, artifact security analysis, and the C/C++ scope jobs partition their candidates through
+that table **before launch**:
+
+- an input outside a tool's declared support is never launched; it is recorded as `SKIPPED_NA`
+  with reason code `INPUT_FORMAT_UNSUPPORTED` and a reason, in a separately counted
+  `not_applicable_inputs` summary that is neither a gap nor a failure;
+- a tool whose every planned input is unsupported publishes `NOT_APPLICABLE` with
+  `coverage_disposition: SKIPPED_NA` and no gap;
+- only where support cannot be decided exactly before launch is a tool's own documented
+  "unsupported input" report accepted after the run (`TOOL_REPORTED_UNSUPPORTED_INPUT`): ShellCheck
+  SC1071, Semgrep/OpenGrep skip reasons that mean no rule or language applies, and osv-scanner's
+  exit-128 "No package sources found" for one produced artifact. Every other error stays a gap;
+- a supported input on which the tool fails, times out, is OOM-killed, truncates, or whose image
+  or database is unavailable remains a `GAP`/`FAILED` exactly as before;
+- a cataloged source file that no declared source analyzer supports is never treated as clean:
+  evidence collection publishes it as `unsupported_coverage` (kind `unsupported-language`) and a
+  named `unsupported-language coverage` gap.
+
 ## NVD synchronization
 
 `job_third_party_data_sync.nvd_sync` is a standalone, network-enabled reference publisher. It bootstraps from the official
@@ -261,6 +287,13 @@ built outside the registry has no check wired and reports `NOT_APPLICABLE` rathe
 models were confirmed. `jobs.job_model_connectivity.settings.timeout_seconds` bounds each provider
 request or probe. Review intake retains its bound preflight receipt when intake itself executes, but
 the dedicated first job is the authoritative fresh check when a run is resumed.
+
+`job_tool_image_rebuild` follows the model gate and precedes intake in every review graph. It is
+also always executed and non-propagating. It rebuilds the selected `containers/catalog.toml` images
+through `containers/build.py`, records one receipt per image, and fails the run, never recording a
+gap, when any image does not build. Setting `jobs.job_tool_image_rebuild.settings.enabled = false`
+makes intake follow the model gate directly. See
+[`../operations/tool-image-rebuild.md`](../operations/tool-image-rebuild.md).
 
 ## Target analysis planning
 

@@ -14,7 +14,7 @@ import appsec_review.applicability as applicability_contract
 from appsec_review.application_paths import application_root
 from appsec_review.applicability import (
     ApplicabilityAction, ProcessingFeature, decision_from_mapping,
-    evaluate_applicability, facts_from_build_unit, finalize_processing,
+    evaluate_applicability, facts_from_build_unit, finalize_processing, source_only_facts,
     resolved_configuration_identity,
 )
 from appsec_review.container_runtime import (
@@ -892,6 +892,45 @@ def _deterministic_native_recipe(unit: UnitContext, action: Mapping[str, Any]) -
     return recipe
 
 
+_PHP_EXTENSION = re.compile(r"PHP_NEW_EXTENSION\(\s*\[?([A-Za-z_][A-Za-z0-9_]{0,63})\]?")
+_PHP_ARGUMENT = re.compile(r"PHP_ARG_(ENABLE|WITH)\(\s*\[?([A-Za-z_][A-Za-z0-9_-]{0,63})\]?")
+
+
+def _deterministic_phpize_recipe(unit: UnitContext, action: Mapping[str, Any]) -> Mapping[str, Any] | None:
+    """The phpize extension lifecycle (phpize, configure, make) from the accepted config.m4."""
+    if action.get("family") != "php" or action.get("build_system") != "phpize":
+        return None
+    root = str(action["root"])
+    source = _safe_root(unit.job.target_root or Path(), root)
+    marker = source / "config.m4"
+    if not marker.is_file() or marker.is_symlink() or marker.stat().st_size > 64 * 1024:
+        return None
+    text = marker.read_text(encoding="utf-8", errors="replace")
+    extension, argument = _PHP_EXTENSION.search(text), _PHP_ARGUMENT.search(text)
+    if extension is None:
+        return None
+    marker_path = "config.m4" if root == "." else f"{root}/config.m4"
+    configure = ["./configure"]
+    if argument is not None:
+        configure.append(f"--{'enable' if argument.group(1) == 'ENABLE' else 'with'}-{argument.group(2)}")
+    module = f"modules/{extension.group(1)}.so"
+    recipe = {"schema": "appsec-review/build-recipe/1", "build_unit_id": action["build_unit_id"],
+              "image_profile": "php", "source_dir": root, "build_dir": root,
+              "system_packages": [], "environment": {}, "dependency_files": [marker_path],
+              "configure_commands": [["phpize"], configure],
+              "build_commands": [["make", "-j1"]],
+              "expected_outputs": [module if root == "." else f"{root}/{module}"],
+              "network_required": False,
+              "reason": "Deterministic offline phpize extension recipe derived from the accepted config.m4."}
+    pseudo_unit = {"build_unit_id": action["build_unit_id"], "family": "php", "root": root,
+                   "build_system": "phpize", "markers": [{"path": marker_path}],
+                   "descriptor_package": {"documents": [{"path": marker_path}]}}
+    errors = validate_build_recipe(recipe, pseudo_unit)
+    if errors:
+        raise ValueError("deterministic phpize recipe is invalid: " + "; ".join(errors))
+    return recipe
+
+
 def _deterministic_jvm_recipe(unit: UnitContext, action: Mapping[str, Any]) -> Mapping[str, Any] | None:
     if action.get("family") != "java" or action.get("build_system") != "javac":
         return None
@@ -969,7 +1008,8 @@ def build_job(*, executor_factory=None, image_resolver_factory=None,
         resolved_actions = []
         for item in actions:
             deterministic = (_deterministic_native_recipe(unit, item) or
-                             _deterministic_jvm_recipe(unit, item))
+                             _deterministic_jvm_recipe(unit, item) or
+                             _deterministic_phpize_recipe(unit, item))
             selected = deterministic if deterministic is not None else item.get("recipe")
             recipe_fields: dict[str, Any] = {}
             if isinstance(selected, Mapping):
@@ -979,6 +1019,7 @@ def build_job(*, executor_factory=None, image_resolver_factory=None,
                     "requires_inference": False,
                     "recipe_provenance": (
                         "deterministic-cmake-marker" if deterministic is not None and item.get("family") == "native"
+                        else "deterministic-phpize-marker" if deterministic is not None and item.get("family") == "php"
                         else "deterministic-jvm-source-set" if deterministic is not None
                         else "accepted-inference-default-image"),
                 }
@@ -999,6 +1040,22 @@ def build_job(*, executor_factory=None, image_resolver_factory=None,
                                 "build_capture_decision": decision.as_dict()})
             elif decision.action is ApplicabilityAction.GAP:
                 gaps.append(f"{decision.project_id}: {decision.reason_code.value}")
+        artifact_policy = (unit.job.config.settings.get("compiler_artifact_collection_mode", "required")
+                           if isinstance(unit.job.config.settings, Mapping) else "required")
+        for scope in accepted["build_topology"].get("source_only_scopes", ()):
+            # Interpreted code no build unit owns: recorded as not applicable, never omitted.
+            facts = source_only_facts(
+                project_id=str(scope["scope_id"]), language=str(scope["language"]),
+                root=str(scope["root"]), sources=scope.get("sources", ()),
+                inventory_complete=not scope.get("sources_truncated", False))
+            for feature, feature_policy in ((ProcessingFeature.BUILD_CAPTURE, policy),
+                                            (ProcessingFeature.COMPILER_ARTIFACTS, artifact_policy)):
+                decision = evaluate_applicability(
+                    feature=feature, policy=str(feature_policy), facts=facts,
+                    configuration_sha256=configuration_sha256)
+                decisions.append(decision.as_dict())
+                if decision.action is ApplicabilityAction.GAP:
+                    gaps.append(f"{decision.project_id}: {decision.reason_code.value}")
         return {"actions": actions, "scanner_selections": accepted["scanner_selections"],
                 "action_count": len(actions), "processing_decisions": decisions,
                 "terminal_status": "GAP" if gaps else "SUCCEEDED", "gaps": gaps}
@@ -1163,6 +1220,8 @@ def build_job(*, executor_factory=None, image_resolver_factory=None,
                          "markers": list(entry["action"].get("markers", ())),
                          "descriptor_package": dict(entry["action"].get("descriptor_package", {})),
                          "descriptor_facts": dict(entry["action"].get("descriptor_facts", {})),
+                         "native_components": [dict(item) for item in
+                                               entry["action"].get("native_components", ())],
                          "required_image_profile": entry["action"].get(
                              "required_image_profile", accepted_recipe.get("image_profile")),
                          "processing_facts": dict(entry["action"].get("processing_facts", {})),

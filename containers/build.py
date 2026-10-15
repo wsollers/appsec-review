@@ -26,6 +26,9 @@ CATALOG = CONTAINERS / "catalog.toml"
 RUN_ROOT = ROOT / "runs" / "container-builds"
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
 SAFE_ID = re.compile(r"^[a-z0-9][a-z0-9.-]*$")
+# Per-image ``docker build`` bound; ``build --timeout-seconds`` overrides it within the limits below.
+BUILD_TIMEOUT_SECONDS = 1800
+BUILD_TIMEOUT_RANGE = (60, 14400)
 
 
 def load_catalog() -> dict[str, Any]:
@@ -264,7 +267,8 @@ def run_logged(argv: list[str], log_path: Path, timeout: int) -> subprocess.Comp
                               text=True, timeout=timeout, check=False)
 
 
-def build_one(item: dict[str, Any], run_dir: Path) -> dict[str, Any]:
+def build_one(item: dict[str, Any], run_dir: Path, *,
+              timeout_seconds: int = BUILD_TIMEOUT_SECONDS) -> dict[str, Any]:
     started = time.monotonic()
     image_id = item["id"]
     fetch_log = run_dir / "logs" / f"{image_id}.fetch.log"
@@ -291,7 +295,11 @@ def build_one(item: dict[str, Any], run_dir: Path) -> dict[str, Any]:
         for name, extra in sorted(item.get("build_contexts", {}).items()):
             argv += ["--build-context", f"{name}={safe_path(extra)}"]
         argv.append(str(context))
-        completed = run_logged(argv, build_log, 1800)
+        try:
+            completed = run_logged(argv, build_log, timeout_seconds)
+        except subprocess.TimeoutExpired:
+            result["error"] = f"docker build timed out after {timeout_seconds} seconds"
+            return result
         if completed.returncode != 0:
             result["error"] = f"docker build exited {completed.returncode}"
             return result
@@ -313,6 +321,9 @@ def build_one(item: dict[str, Any], run_dir: Path) -> dict[str, Any]:
 def execute_build(args: argparse.Namespace, catalog: dict[str, Any]) -> int:
     requested = selected_ids(args, catalog)
     ordered = dependency_order(requested, catalog)
+    timeout_seconds = int(getattr(args, "timeout_seconds", BUILD_TIMEOUT_SECONDS))
+    if not BUILD_TIMEOUT_RANGE[0] <= timeout_seconds <= BUILD_TIMEOUT_RANGE[1]:
+        raise ValueError(f"build timeout must be within {BUILD_TIMEOUT_RANGE}: {timeout_seconds}")
     run_id = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ") + f"-{os.getpid()}"
     run_dir = RUN_ROOT / run_id
     run_dir.mkdir(parents=True, exist_ok=False)
@@ -335,7 +346,8 @@ def execute_build(args: argparse.Namespace, catalog: dict[str, Any]) -> int:
                     pending.remove(image_id)
                     failed = True
                 elif not failed or args.continue_on_error:
-                    running[pool.submit(build_one, catalog["by_id"][image_id], run_dir)] = image_id
+                    running[pool.submit(build_one, catalog["by_id"][image_id], run_dir,
+                                         timeout_seconds=timeout_seconds)] = image_id
                     pending.remove(image_id)
                 if len(running) >= jobs:
                     break
@@ -356,7 +368,7 @@ def execute_build(args: argparse.Namespace, catalog: dict[str, Any]) -> int:
                 print(f"{results[image_id]['status'].upper():7} {image_id}")
     summary = {
         "schema": "appsec-review/container-build-summary/1", "run_id": run_id,
-        "catalog": str(CATALOG.relative_to(ROOT)), "jobs": jobs,
+        "catalog": str(CATALOG.relative_to(ROOT)), "jobs": jobs, "timeout_seconds": timeout_seconds,
         "continue_on_error": bool(args.continue_on_error),
         "results": [results[image_id] for image_id in ordered],
     }
@@ -596,6 +608,8 @@ def parser() -> argparse.ArgumentParser:
         if name == "build":
             command.add_argument("--continue-on-error", action="store_true")
             command.add_argument("--jobs", type=int, default=2)
+            command.add_argument("--timeout-seconds", type=int, default=BUILD_TIMEOUT_SECONDS,
+                                 help="per-image docker build timeout")
         elif name == "smoke":
             command.add_argument("--functional", action="store_true")
     return root

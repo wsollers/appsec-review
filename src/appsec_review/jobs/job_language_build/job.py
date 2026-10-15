@@ -42,7 +42,7 @@ from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from appsec_review.storage import FileLock, atomic_json, canonical_json, file_sha256, protected_json
 from appsec_review.swift_policy import reject_swift_derived, swift_enabled_from_run
 
-from . import capture as captured_build, dotnet, elf, go, jvm, native, node, php, python, rust
+from . import capture as captured_build, dotnet, elf, go, jvm, native, native_components, node, php, python, rust
 from .capture import CapturedBuildDescriptor, link_rows as captured_link_rows, reconcile_captured_build
 from appsec_review.jobs.job_language_build.datasets import CONSUMES, DATASETS
 
@@ -82,7 +82,8 @@ _TOOL_KINDS = {
     "compile": "compiler", "asm": "assembler", "link": "linker", "cgo": "cgo",
     "pack": "package-builder", "go": "build-driver", "gcc": "compiler",
 }
-_CAPTURED_FAMILIES = frozenset({*CAPTURE_DESCRIPTORS, "go"})
+# Every family whose build can compile native code runs under the single execution capture.
+_CAPTURED_FAMILIES = frozenset({*CAPTURE_DESCRIPTORS, "go", "python", "php", "node"})
 _CAPTURE_GAP = "execution capture command"
 
 
@@ -833,12 +834,14 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
             return _node_gap_receipt(unit, dispatch, accepted, node_dependency, node_gaps)
     php_policy: dict[str, Any] = {}
     php_metadata: dict[str, Any] | None = None
+    php_metadata_gaps: list[str] = []
     if family == "php":
         php_errors = php.validate_php_dispatch(dispatch)
         php_policy = php.composer_policy(unit.job.config.settings)
         if php_policy["require_lockfile"] and php_errors:
             raise ValueError("accepted PHP dispatch is invalid: " + "; ".join(php_errors))
-        php_metadata, _ = php.composer_metadata(workspace, str(recipe["source_dir"]))
+        if dispatch.get("build_system") == "composer":
+            php_metadata, php_metadata_gaps = php.composer_metadata(workspace, str(recipe["source_dir"]))
     if family == "dotnet":
         projects, topology_gaps, platform_gaps = dotnet.project_topology(workspace)
         recipe_gaps = list(dotnet.validate_recipe(recipe, workspace))
@@ -1030,11 +1033,18 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
         raise FrameworkIntegrityError("target changed during generic language-build execution")
     if family == "php":
         artifacts, catalog_gaps = php.catalog(unit.job.run_root, workspace, before,
-            int(unit.job.config.settings["artifact_count_limit"]), build_unit_id)
+            int(unit.job.config.settings["artifact_count_limit"]), build_unit_id,
+            str(dispatch.get("build_system", "composer")))
     else:
         artifacts, catalog_gaps = _catalog(unit.job.run_root, workspace, before,
                                            int(unit.job.config.settings["artifact_count_limit"]), build_unit_id, family)
-    gaps.extend([*python_metadata_gaps, *catalog_gaps])
+    gaps.extend([*python_metadata_gaps, *php_metadata_gaps, *catalog_gaps])
+    # The unit's own build compiled its native_components under this same capture.
+    native_database, native_gaps = native_components.publish(
+        root, unit.job.run_root, dispatch=dispatch, workspace=workspace, captures=captures)
+    gaps.extend(native_gaps)
+    native_rows = native_components.invocation_rows(
+        captures, family=family, source_dir=str(recipe["source_dir"])) if native_database else []
     build_metadata: list[dict[str, Any]] = []
     if family == "go":
         # Build facts are read by the bounded in-repository parser; no produced file is executed
@@ -1136,16 +1146,27 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
         streams = [stream for command in commands for stream in (
             (unit.job.run_root / command["stdout"]["path"]).read_bytes(),
             (unit.job.run_root / command["stderr"]["path"]).read_bytes())]
-        compile_rows = python.tool_invocations(commands, streams, workspace, projects)
+        compile_rows = [*python.tool_invocations(commands, streams, workspace, projects), *native_rows]
         link_rows, normalized_links = [], []
         if not compile_rows:
             gaps.append("Python package build did not expose a package-builder or compiler invocation")
     elif family == "php":
-        compile_rows = [{"ordinal": command["ordinal"], "tool": command["tool"],
-                         "tool_kind": command["tool_kind"], "directory": command["working_directory"],
-                         "argv_sha256": command["argv_sha256"], "inputs": [], "outputs": [],
-                         "mapping": "top-level-protected-command", "mapping_confidence": 1.0}
-                        for command in commands]
+        autoload_retained = any(item.get("kind") == "generated-autoload" for item in artifacts)
+        compile_rows = []
+        for command in commands:
+            executed = php.policy_argv(_normalized_argv(recipe, list(command_plan[command["ordinal"] - 1][1])),
+                                       php_policy)
+            kind = command["tool_kind"]
+            if (kind == "dependency-installer" and command["exit_code"] == 0 and autoload_retained and
+                    php.generates_autoloader(executed)):
+                # Composer install/update dump the autoloader; the retained vendor/composer
+                # autoload files are the evidence that this invocation generated it.
+                kind = "autoload-generator"
+            compile_rows.append({"ordinal": command["ordinal"], "tool": command["tool"],
+                                 "tool_kind": kind, "directory": command["working_directory"],
+                                 "argv_sha256": command["argv_sha256"], "inputs": [], "outputs": [],
+                                 "mapping": "top-level-protected-command", "mapping_confidence": 1.0})
+        compile_rows.extend(native_rows)
         link_rows, normalized_links = [], []
         if not any(row["tool_kind"] in {"autoload-generator", "package-builder", "code-generator",
                                         "compiler-driver", "linker", "archiver"} for row in compile_rows):
@@ -1218,6 +1239,10 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
     if family == "python":
         receipt["package_relationships"] = python_relationships
         receipt["package_members"] = package_members
+    if native_database is not None:
+        receipt["native_components"] = list(native_database["native_components"])
+        receipt["native_compile_database"] = {
+            key: native_database[key] for key in ("path", "sha256", "entry_count", "family")}
     if family == "php":
         receipt["composer"] = php_metadata
         receipt["composer_policy"] = php_policy
@@ -1610,7 +1635,7 @@ def build_job(*, executor_factory=None) -> Job:
         Path(applicability_contract.__file__).read_bytes() + Path(jvm.__file__).read_bytes() +
         Path(captured_build.__file__).read_bytes() + Path(elf.__file__).read_bytes() +
         Path(go.__file__).read_bytes() + Path(python.__file__).read_bytes() + Path(rust.__file__).read_bytes() +
-        Path(wasm.__file__).read_bytes() +
+        Path(wasm.__file__).read_bytes() + Path(native_components.__file__).read_bytes() +
         (b"injected" if executor_factory else b"container")).hexdigest()
     return Job("job_language_build", "language_build", UnitExecutor(units).execute,
                input_validators=(_validate_config,), schema_identity=SCHEMA,

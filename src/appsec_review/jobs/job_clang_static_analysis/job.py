@@ -32,7 +32,7 @@ from .datasets import CONSUMES, DATASETS
 JOB_ID = "job_clang_static_analysis"
 TOOL_ID = "tool-clang-static-analysis"
 OUTPUT_SCHEMA = "appsec-review/clang-static-output/1"
-ADAPTER = "clang-static-adapter/2"
+ADAPTER = "clang-static-adapter/3"
 ENGINES = ("clang-tidy", "clang-static-analyzer")
 
 
@@ -133,6 +133,13 @@ def _engine_argv(engine: str, settings: Mapping[str, Any]) -> tuple[str, ...]:
     selection = settings["clang_tidy_checks"] if action == "tidy" else settings["clang_analyzer_checkers"]
     return ("/opt/appsec/clang-static.py", action, "/scratch/compile_commands.json",
             f"/scratch/{action}.json", str(settings["max_diagnostics_per_scope"]), ",".join(selection))
+
+
+def _not_applicable_scope(scope: IndexScope) -> dict[str, Any]:
+    """A scope whose compile units are all outside Clang support: SKIPPED_NA, never launched."""
+    return {"scope_id": scope.scope_id, "case_id": scope.case_id, "project_id": scope.project_id,
+            "terminal_status": "SKIPPED_NA", "gaps": [],
+            "not_applicable_inputs": scope.not_applicable_inputs()}
 
 
 def _analyze_scope(unit: UnitContext, scope: IndexScope, executor_factory: Any) -> dict[str, Any]:
@@ -236,7 +243,8 @@ def _analyze_scope(unit: UnitContext, scope: IndexScope, executor_factory: Any) 
     result = {"scope_id": scope.scope_id, "case_id": scope.case_id, "project_id": scope.project_id,
               "accepted_compile_database": dict(scope.compile_database), "executions": executions,
               "observation_count": accepted_count, "index_identity": asdict(index),
-              "gaps": list(dict.fromkeys(gaps)), "terminal_status": status}
+              "gaps": list(dict.fromkeys(gaps)), "terminal_status": status,
+              "not_applicable_inputs": scope.not_applicable_inputs()}
     save_scope_checkpoint(root / "checkpoint.json", identity, result)
     return result
 
@@ -265,14 +273,16 @@ def build_job(*, executor_factory: Any = None) -> Job:
         planned = {item["scope_id"] for item in unit.output("load.accepted_cpp")["scopes"]}
         if {scope.scope_id for scope in scopes} != planned:
             raise ValueError("accepted C++ scopes changed between load and analysis")
+        runnable = [scope for scope in scopes if scope.container_compile_database()]
+        skipped = [_not_applicable_scope(scope) for scope in scopes if not scope.container_compile_database()]
         with ThreadPoolExecutor(max_workers=max(1, _settings(unit)["workers"])) as pool:
-            results = list(pool.map(lambda scope: _analyze_scope(unit, scope, executor_factory), scopes))
+            results = list(pool.map(lambda scope: _analyze_scope(unit, scope, executor_factory), runnable))
         gaps = [f"{item['case_id']}: {gap}" for item in results for gap in item["gaps"]]
         gaps.extend(f"{case_id}: {reason}" for case_id, reason in unavailable.items())
         status = "NOT_APPLICABLE" if not results and not unavailable else (
             "SUCCEEDED" if results and not gaps else "COMPLETED_WITH_GAPS")
         return {"scopes": results, "scope_count": len(results), "gaps": gaps,
-                "terminal_status": status}
+                "not_applicable_scopes": skipped, "terminal_status": status}
 
     def publish(unit: UnitContext) -> Mapping[str, Any]:
         loaded, analyzed = unit.output("load.accepted_cpp"), unit.output("analyze.scopes")

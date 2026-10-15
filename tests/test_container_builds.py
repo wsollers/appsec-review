@@ -64,7 +64,7 @@ def test_container_docs_track_current_enabled_inventory() -> None:
                          .read_text(encoding="utf-8").split())
     assert f"contains {len(enabled)} images: {counts['tool']} tool images" in readme
     assert f"{counts['tool']} enabled tool images plus {counts['base']} bases" in migration
-    assert counts == {"tool": 30, "base": 4, "buildenv": 2}
+    assert counts == {"tool": 30, "base": 4, "buildenv": 8}
 
 
 def test_dependency_order_puts_base_before_tool() -> None:
@@ -98,7 +98,7 @@ def test_continue_on_error_still_returns_failure(monkeypatch, tmp_path: Path) ->
     catalog = container_build.load_catalog()
     monkeypatch.setattr(container_build, "RUN_ROOT", tmp_path)
 
-    def fake_build(item, run_dir):
+    def fake_build(item, run_dir, **_options):
         status = "failed" if item["id"] == "base-ubuntu" else "passed"
         return {"id": item["id"], "tag": item["tag"], "status": status,
                 "duration_seconds": 0.01, "digest": None, "fetch_log": None,
@@ -122,7 +122,7 @@ def test_parallel_builds_never_exceed_jobs(monkeypatch, tmp_path: Path) -> None:
     active = 0
     maximum = 0
 
-    def fake_build(item, run_dir):
+    def fake_build(item, run_dir, **_options):
         nonlocal active, maximum
         with guard:
             active += 1
@@ -172,3 +172,35 @@ def test_named_build_contexts_are_validated_and_passed_to_docker(monkeypatch, tm
     assert argv[argv.index("--build-context") + 1] == (
         "shared=" + str(container_build.safe_path("containers/tools/shared")))
     assert "--network=none" in argv
+
+
+def test_build_timeout_is_passed_to_each_image_and_bounded(monkeypatch, tmp_path: Path) -> None:
+    catalog = container_build.load_catalog()
+    monkeypatch.setattr(container_build, "RUN_ROOT", tmp_path)
+    seen = []
+
+    def fake_build(item, run_dir, *, timeout_seconds):
+        seen.append(timeout_seconds)
+        return {"id": item["id"], "tag": item["tag"], "status": "passed", "duration_seconds": 0.01,
+                "digest": "sha256:fixture", "fetch_log": None, "build_log": None}
+
+    monkeypatch.setattr(container_build, "build_one", fake_build)
+    args = container_build.parser().parse_args(["build", "base-ubuntu", "--timeout-seconds", "120"])
+    assert container_build.execute_build(args, catalog) == 0
+    assert seen == [120]
+    assert json.loads(next(tmp_path.glob("*/summary.json")).read_text())["timeout_seconds"] == 120
+    with pytest.raises(ValueError, match="build timeout"):
+        container_build.execute_build(container_build.parser().parse_args(
+            ["build", "base-ubuntu", "--timeout-seconds", "5"]), catalog)
+
+
+def test_a_docker_build_timeout_is_a_failed_image(monkeypatch, tmp_path: Path) -> None:
+    item = container_build.load_catalog()["by_id"]["base-ubuntu"]
+    monkeypatch.setattr(container_build, "fetch_one", lambda item, log: None)
+
+    def expire(argv, log, timeout):
+        raise subprocess.TimeoutExpired(argv, timeout)
+
+    monkeypatch.setattr(container_build, "run_logged", expire)
+    result = container_build.build_one(item, tmp_path, timeout_seconds=60)
+    assert result["status"] == "failed" and result["error"] == "docker build timed out after 60 seconds"

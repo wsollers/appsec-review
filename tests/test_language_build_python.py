@@ -125,7 +125,7 @@ def test_python_build_catalogs_packages_provenance_streams_and_mcp(tmp_path: Pat
     config, target = _fixture(tmp_path)
     executor = PythonExecutor(truncate=True)
     run_id, fingerprint = _run_project(config, target, executor)
-    outcome = GraphRunner(config, [build_language(executor_factory=lambda unit, profile: executor)]).run(
+    outcome = GraphRunner(config, [build_language(executor_factory=lambda unit, profile: capturing_fake(profile, executor))]).run(
         target_root=target, source_fingerprint=fingerprint, run_id=run_id)
     assert outcome["status"] in {"SUCCEEDED", "COMPLETED_WITH_GAPS"}
     receipt = load_accepted_language_build(config.runtime.runs_dir / run_id)["receipts"][0]
@@ -141,15 +141,15 @@ def test_python_build_catalogs_packages_provenance_streams_and_mcp(tmp_path: Pat
     assert link_database.name == "link-commands.json"
     assert workspace not in link_database.parents
     command = receipt["commands"][0]
-    assert command["stdout"]["truncated"] is True
-    assert command["stdout"]["total_bytes"] > command["stdout"]["captured_bytes"]
-    assert command["stdout"]["diagnostic_tail"]["sha256"]
+    # Capture-backed Python builds retain each stream completely; nothing is truncated.
+    assert command["stdout"]["storage"] == "complete-file" and command["stdout"]["truncated"] is False
+    assert command["stdout"]["total_bytes"] == command["stdout"]["captured_bytes"]
     protected = config.runtime.runs_dir / run_id / command["protected_argv"]["path"]
     assert "--no-isolation" in protected.read_text(encoding="utf-8")
     response = RetrievalCore(config.runtime.runs_dir, run_id).search(query="wheel", indexes=("build",))
     encoded = json.dumps(response)
     assert response["results"] and "SENSITIVE-RAW-OUTPUT" not in encoded and "--no-isolation" not in encoded
-    graph = plan_jobs((build_language(executor_factory=lambda unit, profile: executor),), config)
+    graph = plan_jobs((build_language(executor_factory=lambda unit, profile: capturing_fake(profile, executor)),), config)
     assert graph.node("job_language_build.execute.python").dependencies == ("job_language_build.load.python",)
 
 
@@ -172,17 +172,17 @@ def test_python_failure_is_gap_and_checkpoint_tamper_stops_reuse(tmp_path: Path)
     probe = PythonExecutor()
     run_id, fingerprint = _run_project(config, target, probe)
     outcome = GraphRunner(config, [build_language(executor_factory=lambda unit, profile:
-        PythonExecutor(fail_real=True))]).run(target_root=target, source_fingerprint=fingerprint, run_id=run_id)
+        capturing_fake(profile, PythonExecutor(fail_real=True)))]).run(target_root=target, source_fingerprint=fingerprint, run_id=run_id)
     assert outcome["status"] == "COMPLETED_WITH_GAPS"
     assert load_accepted_language_build(config.runtime.runs_dir / run_id)["receipts"][0]["terminal_status"] == "FAILED"
 
     good = PythonExecutor()
-    GraphRunner(config, [build_language(executor_factory=lambda unit, profile: good)]).run(
+    GraphRunner(config, [build_language(executor_factory=lambda unit, profile: capturing_fake(profile, good))]).run(
         target_root=target, source_fingerprint=fingerprint, run_id=run_id, force_from="job_language_build")
     receipt = load_accepted_language_build(config.runtime.runs_dir / run_id)["receipts"][0]
     artifact = config.runtime.runs_dir / run_id / receipt["artifacts"][0]["path"]
     artifact.write_bytes(b"tampered")
     with pytest.raises(RuntimeError, match="execute.python"):
-        GraphRunner(config, [build_language(executor_factory=lambda unit, profile: PythonExecutor())]).run(
+        GraphRunner(config, [build_language(executor_factory=lambda unit, profile: capturing_fake(profile, PythonExecutor()))]).run(
             target_root=target, source_fingerprint=fingerprint, run_id=run_id,
             force_from="job_language_build")

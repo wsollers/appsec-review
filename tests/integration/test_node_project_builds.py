@@ -236,6 +236,8 @@ def test_node_project_builds_through_the_pipeline(tmp_path: Path, case: NodeCase
             continue
         assert receipt["gaps"] == [], receipt["gaps"]
         assert receipt["commands"] and all(command["exit_code"] == 0 for command in receipt["commands"])
+        assert all((command.get("execution_capture") or {}).get("complete") is True
+                   for command in receipt["commands"]), "language build ran without complete capture"
         workspace = run_root / receipt["workspace"]
         produced = {item["workspace_path"]: item for item in receipt["artifacts"]
                     if item.get("artifact_origin") == "build-output"}
@@ -252,6 +254,8 @@ def test_node_project_builds_through_the_pipeline(tmp_path: Path, case: NodeCase
                         and any(str(value).endswith(unit.native_compile)
                                 for value in event.get("argv", ()))]
             assert compiles, "node-gyp g++ compile invocation was not captured"
+            # The language build publishes the same compiles as the unit's native components.
+            assert receipt.get("native_components"), receipt.keys()
             addon = workspace / "build" / "Release" / "case087.node"
             assert addon.read_bytes()[:4] == b"\x7fELF"
     if case.project == "node-addon/case-087":
