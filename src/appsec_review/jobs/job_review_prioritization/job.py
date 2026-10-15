@@ -12,7 +12,6 @@ from collections import Counter, defaultdict
 from collections.abc import Mapping
 from dataclasses import asdict
 import hashlib
-import os
 from pathlib import Path, PurePosixPath
 import re
 from typing import Any
@@ -868,8 +867,8 @@ def build_job() -> Job:
     sources = sorted(Path(__file__).parent.glob("*.py"))
     implementation = hashlib.sha256(b"".join(path.read_bytes() for path in sources)).hexdigest()
 
-    def runtime_identity() -> str:
-        root = Path(os.environ.get("APPSEC_REVIEW_CONFIG", "appsec-review.toml")).resolve().parent
+    def runtime_identity(repository_root: Path) -> str:
+        root = Path(repository_root).resolve()
         try:
             return file_sha256(root / "rules" / "semgrep" / "rules.lock.json")
         except OSError:

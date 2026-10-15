@@ -32,6 +32,7 @@ from appsec_review.jobs.job_codeql_analysis.job import (
     _query_profiles,
     _stage_manifest_workspace,
     _validate_scope_assets,
+    publication_status,
 )
 from appsec_review.storage import canonical_json
 
@@ -303,6 +304,19 @@ def test_missing_runtime_extractor_is_not_silently_planned() -> None:
     )
     assert not plan.scopes
     assert "pinned runtime did not report the required extractor" in plan.gaps[0]
+
+
+def test_uncovered_planned_source_is_completed_with_gaps_not_succeeded() -> None:
+    # A Python-only target on a host whose CodeQL runtime is unavailable plans source:python as a
+    # TOOLCHAIN_UNAVAILABLE gap with no scope; the empty result must not publish as SUCCEEDED.
+    gap = {"project_id": "source:python", "disposition": "GAP", "reason_code": "TOOLCHAIN_UNAVAILABLE"}
+    covered = {"project_id": "source:python", "disposition": "SUCCEEDED", "reason_code": "PROCESSING_SUCCEEDED"}
+    skipped = {"project_id": "source:go", "disposition": "SKIPPED_NA", "reason_code": "SOURCE_ABSENT"}
+    assert publication_status([gap], []) == "COMPLETED_WITH_GAPS"
+    assert publication_status([covered, gap], [{"terminal_status": "SUCCEEDED"}]) == "COMPLETED_WITH_GAPS"
+    assert publication_status([covered], [{"terminal_status": "FAILED"}]) == "COMPLETED_WITH_GAPS"
+    assert publication_status([covered, skipped], [{"terminal_status": "SUCCEEDED"}]) == "SUCCEEDED"
+    assert publication_status([], []) == "SUCCEEDED"
 
 
 def test_manual_requires_commands_but_source_modes_prohibit_them() -> None:

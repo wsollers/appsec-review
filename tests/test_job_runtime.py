@@ -127,3 +127,31 @@ def test_unit_executor_attempts_independent_branch_and_skips_only_dependents(tmp
     assert result["units"]["first.fetch"]["status"] == "FAILED"
     assert result["units"]["first.publish"]["status"] == "SKIPPED"
     assert result["units"]["second.publish"]["status"] == "SUCCEEDED"
+
+
+RUNTIME_IDENTITY_JOBS = ("job_ci_configuration_analysis", "job_evidence_collection",
+                         "job_review_prioritization", "job_source_history_analysis")
+
+
+@pytest.mark.parametrize("job_id", RUNTIME_IDENTITY_JOBS)
+def test_runtime_identity_reads_the_configured_repository_root_not_the_working_directory(
+        job_id: str, tmp_path: Path, monkeypatch) -> None:
+    # `appsec-review --config /checkout/appsec-review.toml start ...` from another directory must
+    # read the checkout's catalog, rule locks and tool manifests, not ./containers or ./rules.
+    from appsec_review.runtime.registry import builtin_registry
+
+    repository = Path(__file__).resolve().parents[1]
+    job = builtin_registry().build(job_id)
+    assert job.runtime_identity is not None
+    monkeypatch.delenv("APPSEC_REVIEW_CONFIG", raising=False)
+    monkeypatch.chdir(repository)
+    expected = job.identities(repository)
+    monkeypatch.chdir(tmp_path)
+    assert job.identities(repository) == expected
+    empty = tmp_path / "empty-root"
+    empty.mkdir()
+    # The identity follows the root it is given, so a different checkout is a different runtime.
+    try:
+        assert job.identities(empty)["implementation"] != expected["implementation"]
+    except FileNotFoundError:
+        pass  # a root without a container catalog cannot be identified at all

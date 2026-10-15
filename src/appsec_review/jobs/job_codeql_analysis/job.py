@@ -11,7 +11,7 @@ from typing import Any
 
 import appsec_review.applicability as applicability_contract
 from appsec_review.applicability import (
-    ApplicabilityAction, decision_from_mapping, finalize_processing,
+    ApplicabilityAction, ProcessingDisposition, decision_from_mapping, finalize_processing,
     resolved_configuration_identity,
 )
 from appsec_review.codeql import CodeQLExecutor, CodeQLImageResolver, load_sarif, tree_manifest
@@ -1030,6 +1030,19 @@ def _validate_scope_assets(scope: CodeQLScope, settings: CodeQLAnalysisSettings,
             f"CodeQL {scope.language} custom query assets differ from the lock")
 
 
+def publication_status(processing_decisions: Sequence[Mapping[str, Any]],
+                       scopes: Sequence[Mapping[str, Any]]) -> str:
+    """CodeQL's terminal status: missing planned coverage is COMPLETED_WITH_GAPS, never SUCCEEDED.
+
+    A planned language or project whose processing decision is a GAP (for example no extractor in
+    the pinned runtime) or a scope that did not succeed leaves source unanalyzed, so an empty result
+    must not read as a clean analysis.
+    """
+    uncovered = (any(item.get("disposition") == ProcessingDisposition.GAP.value for item in processing_decisions)
+                 or any(item.get("terminal_status") != "SUCCEEDED" for item in scopes))
+    return "COMPLETED_WITH_GAPS" if uncovered else "SUCCEEDED"
+
+
 def build_job() -> Job:
     def plan(unit: UnitContext) -> Mapping[str, Any]:
         settings = _settings(unit)
@@ -1217,6 +1230,7 @@ def build_job() -> Job:
             receipt=artifact, scope_count=len(scopes), gap_count=len(gaps),
             metrics_semantics="appsec-review/review-metrics-semantics/1")
         return {"schema": SCHEMA, "artifact": artifact,
+                "terminal_status": publication_status(processing_decisions, scopes),
                 "index_manifest": _artifact(unit.job.run_root, destination),
                 "item_count": normalized["observation_count"], "scope_count": len(scopes),
                 "gaps": gaps, "non_applicable": list(plan_value.non_applicable),

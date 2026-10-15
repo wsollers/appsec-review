@@ -46,6 +46,9 @@ re-hashes every handoff artifact, and summarises every accepted shard
 (row counts are recomputed, not trusted). It emits one row per dataset with its disposition
 (`indexed`, `artifact_only`, `protected`, `unavailable`), query route, exception reason, producer
 attempt, shard or artifact references and coverage state.
+Files the job runtime writes for every job are claimed as runtime receipts: attempt claims, status,
+results, handoffs and logs, per-task receipts, and the `inputs/retrieval-manifest.json` that
+`JobRunner` pins into an attempt inheriting more than one upstream index lineage.
 The inventory also records this job's own reports and shard. Its own shard row names the
 `inventory/dataset-inventory` identity; the shard's SHA-256 resolves through the verified accepted
 manifest because a shard cannot contain its own content hash.

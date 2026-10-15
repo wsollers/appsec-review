@@ -25,7 +25,9 @@ evaluator selects `build` only when the accepted descriptor and materialized bui
 the build capability; it selects `source` only for a declared source/no-build capability.
 `disabled` records `SKIPPED_POLICY`, unsupported languages with positive accepted evidence record
 `SKIPPED_NA`, and missing extractors, replayable commands, toolchains, databases, SARIF, or required
-evidence remain `GAP`.
+evidence remain `GAP`. Any `GAP` decision, or any scope that did not succeed, makes the published
+`acceptance.publish_handoff` `terminal_status` and the job `COMPLETED_WITH_GAPS`; an empty CodeQL
+result is `SUCCEEDED` only when every planned language and project was analyzed.
 
 Auxiliary build evidence such as package-catalog commands is never replayed as compilation. When
 the accepted producer labels commands, CodeQL selects only the ordered `configure` and `build`

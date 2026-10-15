@@ -21,6 +21,10 @@ from .datasets import CONSUMES, DATASETS
 
 
 JOB_ID = "job_document_issue_analysis"
+# The ledger holds private candidates only; until independent review publishes findings the job's
+# coverage is always partial, and this names why so an empty ledger never reads as clean.
+UNADJUDICATED_GAP = ("document issue candidates are not adjudicated: finding publication is not "
+                     "implemented, so an empty ledger says nothing about target security")
 
 
 def _schema_path() -> Path:
@@ -95,8 +99,9 @@ def build_job() -> Job:
                     "sha256": file_sha256(path), "size_bytes": path.stat().st_size}
         unit.job.events.write("DOCUMENT_ISSUES_PUBLISHED", **ledger["counts"])
         return {"schema": SCHEMA, "artifact": artifact, "artifacts": [artifact],
-                "counts": ledger["counts"], "gaps": [gap["gap_id"] for candidate in ledger["candidates"]
-                                           for gap in candidate["coverage_gaps"]],
+                "counts": ledger["counts"],
+                "gaps": [UNADJUDICATED_GAP, *(gap["gap_id"] for candidate in ledger["candidates"]
+                                              for gap in candidate["coverage_gaps"])],
                 "terminal_status": "COMPLETED_WITH_GAPS"}
 
     units = (Unit("analysis.map_and_adjudicate", analyze, output_validators=(_validate_output,)),)

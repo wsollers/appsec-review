@@ -447,7 +447,7 @@ class JobRunner:
                     "schema", "artifact", "identity", "pointer", "metadata_path", "item_count",
                     "gaps", "index_manifest", "index_identity", "terminal_status", "dispositions",
                 ) if key in output}
-        identities = job.identities()
+        identities = job.identities(self.config.runtime.repository_root)
         handoff = {"schema": "appsec-review/job-handoff/1", "job_id": job.job_id,
                    "attempt_id": context.attempt_id, "status": "ACCEPTED",
                    "completion_status": completion_status, "outputs": handoff_outputs,
@@ -616,7 +616,7 @@ class JobRunner:
                          duration_ms=max(0, int((datetime.fromisoformat(completed) -
                                                 datetime.fromisoformat(started)).total_seconds() * 1000)))
             result_path = attempt_root / "result.json"
-            identities = job.identities()
+            identities = job.identities(self.config.runtime.repository_root)
             artifacts = [{
                 "path": result_path.relative_to(run_root).as_posix(),
                 "sha256": file_sha256(result_path),

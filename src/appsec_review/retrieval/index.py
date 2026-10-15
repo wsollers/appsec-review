@@ -204,8 +204,15 @@ def write_manifest(
 
 
 def load_verified_manifest(run_root: Path, path: Path, expected_sha256: str | None = None,
-                           _seen: frozenset[Path] = frozenset()) -> tuple[Mapping[str, Any], str]:
-    """Verify the manifest and every immutable shard before opening any database."""
+                           _seen: frozenset[Path] = frozenset(),
+                           verified: dict[tuple[Path, str], Mapping[str, Any]] | None = None,
+                           ) -> tuple[Mapping[str, Any], str]:
+    """Verify the manifest and every immutable shard before opening any database.
+
+    ``verified`` memoizes manifests already verified in full, keyed by path and content hash, so
+    an ancestor shared by several upstream lineages is verified once per call (or once per caller
+    that passes the same mapping) instead of once per path through the lineage graph.
+    """
     run_root = Path(run_root).resolve()
     resolved = Path(path).resolve()
     if resolved in _seen:
@@ -216,6 +223,10 @@ def load_verified_manifest(run_root: Path, path: Path, expected_sha256: str | No
     actual = file_sha256(resolved)
     if expected_sha256 is not None and actual != expected_sha256:
         raise ValueError("index manifest integrity mismatch")
+    if verified is None:
+        verified = {}
+    if (resolved, actual) in verified:
+        return verified[(resolved, actual)], actual
     document = json.loads(resolved.read_text(encoding="utf-8"))
     if document.get("schema") != MANIFEST_SCHEMA:
         raise ValueError("unsupported index manifest schema")
@@ -228,7 +239,8 @@ def load_verified_manifest(run_root: Path, path: Path, expected_sha256: str | No
         upstream_path = (run_root / str(upstream.get("path", ""))).resolve()
         if upstream_path == resolved:
             raise ValueError("index manifest references itself")
-        load_verified_manifest(run_root, upstream_path, str(upstream.get("sha256", "")), seen_manifests)
+        load_verified_manifest(run_root, upstream_path, str(upstream.get("sha256", "")), seen_manifests,
+                               verified)
     seen: set[tuple[str, str]] = set()
     entity_ids: set[str] = set()
     relations: list[tuple[str, str, str, str]] = []
@@ -278,4 +290,5 @@ def load_verified_manifest(run_root: Path, path: Path, expected_sha256: str | No
     for relation_id, source_id, target_id, shard_id in relations:
         if source_id not in entity_ids or target_id not in entity_ids:
             raise ValueError(f"relation closure mismatch: {shard_id}/{relation_id}")
+    verified[(resolved, actual)] = document
     return document, actual

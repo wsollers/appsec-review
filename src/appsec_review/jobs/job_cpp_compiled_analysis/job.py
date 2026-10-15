@@ -11,7 +11,7 @@ import shlex
 import shutil
 from typing import Any
 from appsec_review.container_runtime import ContainerExecutor, ExecutionRequest, load_catalog
-from appsec_review.jobs.cpp_index_scopes import container_compile_database
+from appsec_review.jobs.cpp_index_scopes import container_compile_database, project_prefix, workspace_root
 from appsec_review.jobs.job_language_build import load_accepted_language_build
 from appsec_review.jobs.job_language_build.native_components import (
     compile_commands as native_component_compile_commands,
@@ -175,10 +175,10 @@ def _mapped_path(value: str, case_root: Path, target_root: str) -> str:
     normalized = value.replace("\\", "/")
     source = (case_root / "source").as_posix()
     if normalized == "/scratch/source" or normalized == source:
-        return target_root
+        return project_prefix(target_root).rstrip("/") or "."
     for prefix in ("/scratch/source/", source + "/"):
         if normalized.startswith(prefix):
-            return target_root.rstrip("/") + "/" + normalized[len(prefix):]
+            return project_prefix(target_root) + normalized[len(prefix):]
     return normalized
 
 
@@ -214,7 +214,7 @@ def _sanitize_arguments(row: Mapping[str, Any], case_root: Path, source_path: st
             continue
         mapped = value.replace(str(case_root).replace("\\", "/"), "/scratch")
         if target_root:
-            mapped = mapped.replace("/workspace/" + target_root.strip("/"), "/scratch/source")
+            mapped = mapped.replace(workspace_root(target_root), "/scratch/source")
         if value in paired:
             result.append(value)
             continue
@@ -246,7 +246,7 @@ def _output_path(row: Mapping[str, Any], root: Path, target_root: str = "") -> s
     if not normalized.startswith("/") and not re.match(r"^[A-Za-z]:/", normalized):
         normalized = posixpath.normpath(posixpath.join(directory, normalized))
     prefixes = ((root / "build").as_posix(), "/scratch/build",
-                "/workspace/" + target_root.strip("/") + "/build" if target_root else "")
+                workspace_root(target_root) + "/build" if target_root else "")
     for prefix in prefixes:
         if normalized == prefix:
             return "build"
@@ -299,14 +299,15 @@ def normalize_compile_db(root: Path, mapping: Mapping[str, Any]) -> list[dict[st
         if "-cc1" in raw_arguments:
             continue
         target_path = _mapped_path(str(row["file"]), root, target_root)
-        if not target_path.startswith(target_root.rstrip("/") + "/"):
+        prefix = project_prefix(target_root)
+        if not target_path.startswith(prefix) or target_path.startswith("/"):
             normalized_file = str(row["file"]).replace("\\", "/")
             matches = [item for item in mapping.get("files", ())
                        if normalized_file.endswith("/" + str(item["scratch_path"])[len("source/"):])]
             if len(matches) != 1:
                 raise ValueError(f"compile database path does not resolve uniquely: {row['file']}")
             target_path = str(matches[0]["target_path"])
-        scratch_source = "/scratch/source/" + target_path[len(target_root.rstrip("/") + "/"):]
+        scratch_source = "/scratch/source/" + target_path[len(prefix):]
         arguments = _sanitize_arguments(row, root, scratch_source, target_root)
         source_record = next((item for item in mapping.get("files", ())
                               if item.get("target_path") == target_path), None)
@@ -825,7 +826,7 @@ def native_analysis_actions(accepted: Mapping[str, Any], target_root: Path) -> l
         if receipt.get("family") != "native" and not mixed:
             continue
         root = PurePosixPath(str(receipt.get("root", "")))
-        if not root.parts or root.is_absolute() or ".." in root.parts:
+        if root.is_absolute() or ".." in root.parts:
             raise ValueError("accepted native build root is invalid")
         source = (target / Path(*root.parts)).resolve(strict=True)
         if (source != target and target not in source.parents) or not source.is_dir():
@@ -846,6 +847,49 @@ def native_analysis_actions(accepted: Mapping[str, Any], target_root: Path) -> l
                                                     else "build-system"),
                         "source_count": len(native_sources)})
     return actions
+
+
+def unbuilt_native_gap(receipt: Mapping[str, Any], root: str) -> str:
+    """Name a planned C/C++ unit that has no build: the unit, the upstream failure, the failing job."""
+    upstream = receipt.get("upstream_failure")
+    if isinstance(upstream, Mapping):
+        job_id, status = upstream.get("job_id"), upstream.get("terminal_status")
+        reason = upstream.get("reason")
+    else:
+        job_id, status = "job_language_build", receipt.get("terminal_status")
+        gaps = [str(value) for value in receipt.get("gaps", ()) if value]
+        reason = gaps[0] if gaps else "no reason recorded"
+    return (f"{receipt.get('build_unit_id')} ({root}): C/C++ analysis unavailable because the native "
+            f"build failed upstream in {job_id} ({status}): {reason}")
+
+
+def _unbuilt_project(unit: UnitContext, action: Mapping[str, Any]) -> dict[str, Any]:
+    """A planned C/C++ project with no build workspace, kept as a blocked project with its gap."""
+    receipt = action["receipt"]
+    relative = PurePosixPath(str(action["root"]))
+    target_source = (unit.job.target_root or Path()).resolve() / Path(*relative.parts)
+    files = []
+    for path in _source_files(target_source):
+        if ".git" in path.relative_to(target_source).parts:
+            continue
+        relative_file = path.relative_to(target_source).as_posix()
+        files.append({"target_path": project_prefix(str(action["root"])) + relative_file,
+                      "scratch_path": None, "sha256": file_sha256(path)})
+    mapping = {"schema": "appsec-review/cpp-source-mapping/3", "project_key": str(action["project_key"]),
+               "project_id": action["project_id"], "display_name": relative.name,
+               "build_system": action.get("build_system"), "root": action["root"],
+               "case_snapshot": hashlib.sha256(canonical_json(files)).hexdigest(), "files": files,
+               "language_build_fingerprint": receipt.get("fingerprint"),
+               "language_build_handoff_sha256": action["language_build_handoff_sha256"],
+               "family": action.get("family", "native"),
+               "native_components": list(action.get("native_components", ())),
+               "compile_database_origin": action.get("compile_database_origin", "build-system")}
+    gap = unbuilt_native_gap(receipt, str(action["root"]))
+    unit.job.events.write("CPP_BUILD_PROJECT_UNBUILT", project_key=str(action["project_key"]),
+                          project_id=action["project_id"], build_system=action.get("build_system"))
+    return {"mapping": mapping, "artifact": None, "project_key": str(action["project_key"]),
+            "profile": action.get("build_system"), "build_receipt": dict(receipt),
+            "terminal_status": "BLOCKED", "gaps": [gap]}
 
 
 def build_job(*, executor_factory=None) -> Job:
@@ -884,6 +928,11 @@ def build_job(*, executor_factory=None) -> Job:
             case_root = _case_root(unit, project_key)
             if case_root.exists():
                 shutil.rmtree(case_root)
+            if receipt.get("terminal_status") != "SUCCEEDED" and not receipt.get("workspace"):
+                # The unit was planned but never built (upstream project build or language build
+                # failed before a workspace existed): keep it as a named, blocked project.
+                projects[project_key] = _unbuilt_project(unit, action)
+                continue
             workspace = (unit.job.run_root / str(receipt.get("workspace", ""))).resolve()
             if unit.job.run_root.resolve() not in workspace.parents or not workspace.is_dir() or workspace.is_symlink():
                 raise ValueError("accepted native build workspace is unavailable or outside the run")
@@ -940,7 +989,7 @@ def build_job(*, executor_factory=None) -> Job:
                 original = target_source / Path(*PurePosixPath(relative_file).parts)
                 if not original.is_file() or original.is_symlink() or file_sha256(original) != file_sha256(path):
                     raise ValueError("accepted native source mapping changed")
-                files.append({"target_path": f"{action['root']}/{relative_file}",
+                files.append({"target_path": project_prefix(str(action["root"])) + relative_file,
                               "scratch_path": f"source/{relative_file}", "sha256": file_sha256(path)})
             mapping = {"schema": "appsec-review/cpp-source-mapping/3", "project_key": project_key,
                        "project_id": action["project_id"], "display_name": relative.name,
@@ -959,8 +1008,10 @@ def build_job(*, executor_factory=None) -> Job:
             unit.job.events.write("CPP_BUILD_PROJECT_PREPARED", project_key=project_key,
                                   project_id=mapping["project_id"], source_count=len(mapping["files"]),
                                   build_system=action["build_system"])
-        return {"projects": projects, "project_count": len(projects),
-                "terminal_status": "SUCCEEDED" if projects else "NOT_APPLICABLE", "gaps": []}
+        gaps = [gap for project in projects.values() if project.get("terminal_status") != "SUCCEEDED"
+                for gap in project.get("gaps", ())]
+        return {"projects": projects, "project_count": len(projects), "gaps": gaps,
+                "terminal_status": "COMPLETED_WITH_GAPS" if gaps else "SUCCEEDED" if projects else "NOT_APPLICABLE"}
 
     def catalog(unit: UnitContext) -> Mapping[str, Any]:
         projects = {}
