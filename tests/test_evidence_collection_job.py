@@ -113,6 +113,12 @@ def test_job_has_explicit_dispositions_and_reuses_only_successful_tool_checkpoin
     assert calls[len(before):] == ["tool-shellcheck"]
     output = resumed["jobs"]["job_evidence_collection"]["result"]["outputs"]["evidence_publication.publish_handoff"]
     assert len(output["dispositions"]) == len(planned)
+    # Every producer's observation shard is reachable through the published manifest.
+    manifest = json.loads((config.runtime.runs_dir / run_id / output["index_manifest"]["path"]).read_text(
+        encoding="utf-8"))
+    registered = {(item["name"], item["shard_id"]) for item in manifest["indexes"]
+                  if item.get("producer", {}).get("job") == "job_evidence_collection"}
+    assert registered == {("observations", item["shard_id"]) for item in output["dispositions"]}
     assert {item["terminal_status"] for item in output["dispositions"]} <= {"SUCCEEDED", "PARTIAL", "NOT_APPLICABLE", "BLOCKED"}
     telemetry = [json.loads(line) for line in (
         config.runtime.runs_dir / run_id / "data" / "logs" / "pipeline.jsonl"
