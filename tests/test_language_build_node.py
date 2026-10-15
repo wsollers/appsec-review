@@ -397,7 +397,7 @@ def test_node_build_publishes_protected_provenance_and_sanitized_mcp_evidence(tm
         image_resolver_factory=lambda unit: _ImageResolver(target))]).run(
             target_root=target, source_fingerprint=fingerprint, run_id=upstream["run_id"])
     outcome = GraphRunner(config, [build_language(
-        executor_factory=lambda unit, profile: _NodeExecutor(calls))]).run(
+        executor_factory=lambda unit, profile: capturing_fake(profile, _NodeExecutor(calls)))]).run(
             target_root=target, source_fingerprint=fingerprint, run_id=upstream["run_id"])
     assert outcome["status"] == "SUCCEEDED"
     # The probe and the build each exposed the image-owned dependencies before running npm.
@@ -414,8 +414,10 @@ def test_node_build_publishes_protected_provenance_and_sanitized_mcp_evidence(tm
     assert link_database.name == "link-commands.json"
     assert workspace not in link_database.parents
     command = receipt["commands"][0]
-    assert command["stdout"]["total_bytes"] == 1000 and command["stdout"]["truncated"] is True
-    assert command["stdout"]["diagnostic_tail"]["sha256"]
+    # Node language builds run under the same verified execution capture as the probe, which
+    # retains complete stdout/stderr files instead of a truncated preview.
+    assert command["execution_capture"]["complete"] is True
+    assert command["stdout"]["sha256"] and command["stdout"]["truncated"] is False
     protected = config.runtime.runs_dir / upstream["run_id"] / receipt["protected_compile_commands"]["path"]
     protected_text = protected.read_text(encoding="utf-8")
     assert '"webpack"' in protected_text and '"--mode"' in protected_text

@@ -9,6 +9,7 @@ import re
 import shlex
 from typing import Any
 
+from appsec_review.jobs.job_project_build.job import node_installer_command
 from appsec_review.storage import canonical_json, file_sha256
 
 
@@ -471,6 +472,9 @@ def invocation_rows(workspace: Path, source_dir: str, argv: Sequence[str], *, su
     if not success or tool not in {"npm", "pnpm", "yarn"}:
         return rows, gaps
     if tool == "npm" and "pack" in argv:
+        return rows, gaps
+    if node_installer_command(argv):
+        # A dependency restore runs no named package script; its own row is the provenance.
         return rows, gaps
     package = _package_document(workspace, source_dir)
     script_name = _script_name(argv, tool)

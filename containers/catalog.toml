@@ -293,13 +293,24 @@ replaced_by = ["audit-buildenv-rust-wasm"]
 
 [[images]]
 id = "audit-buildenv-typescript"
-state = "deferred"
-kind = "redesign"
+state = "enabled"
+kind = "buildenv"
 legacy_class = 2
+version = "node22.23.3-pnpm9.15.9-yarn1.22.22"
+tag = "audit-buildenv-typescript:local"
+context = "containers/buildenv/typescript"
+dockerfile = "Dockerfile"
+dependencies = ["buildenv-native-toolchain"]
 architectures = ["linux/amd64"]
-purpose = "Node/TypeScript build and language-server environment."
-reason = "Refresh Node support decision; retain npm lock integrity; separate target dependency installation from language server; share common LSP layers"
-recommended_destination = "containers/buildenv/typescript/"
+assets_lock = "containers/buildenv/typescript/assets.lock.json"
+build_network = "none"
+license = "MIT (Node.js, pnpm), BSD-2-Clause (Yarn), and mixed Ubuntu packages from the shared toolchain"
+license_source = "Node.js, pnpm, and Yarn release licenses; Ubuntu package metadata"
+provenance = "Built FROM the shared native toolchain plus hash-locked official Node.js archive and npm-registry pnpm/Yarn tarballs"
+signature_verification = "downloaded archive SHA-256 values verified; Node.js SHASUMS256 and npm registry shasums cross-checked"
+purpose = "Non-root Node/TypeScript (npm, pnpm, Yarn, node-gyp on the shared C/C++ toolchain) build and capture environment; language servers are out of scope."
+probe_argv = ["/bin/sh", "-c", "sh /opt/native-toolchain/check-toolchain.sh && node --version && npm --version && pnpm --version && yarn --version && test -f /opt/node/include/node/node_api.h && id -u"]
+probe_expect = ["13.3.0", "v22.23.3", "10.9.9", "9.15.9", "1.22.22", "10001"]
 
 [[images]]
 id = "audit-codeql"

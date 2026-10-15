@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 import hashlib
 import json
 from pathlib import Path, PurePosixPath
@@ -277,13 +277,29 @@ def _probe_environment(recipe: Mapping[str, Any]) -> dict[str, str]:
     return environment
 
 
-def _node_recipe_restores_dependencies(recipe: Mapping[str, Any]) -> bool:
-    installers = {"npm": {"ci", "install"}, "pnpm": {"install"}, "yarn": {"install"}}
-    for argv in recipe.get("configure_commands", ()):
-        if (isinstance(argv, list) and len(argv) >= 2
-                and str(argv[1]) in installers.get(str(argv[0]), set())):
-            return True
+_NODE_INSTALLERS = {"npm": {"ci", "install", "i"}, "pnpm": {"install", "i"}, "yarn": {"install"}}
+_NODE_VALUED_OPTIONS = {"--prefix", "--dir", "--cwd", "-C"}
+
+
+def node_installer_command(argv: Sequence[Any]) -> bool:
+    """Return whether argv is a package-manager dependency restore (e.g. `npm --prefix x ci`)."""
+    if not argv:
+        return False
+    values = [str(value) for value in argv[1:]]
+    index = 0
+    while index < len(values):
+        if values[index] in _NODE_VALUED_OPTIONS:
+            index += 2
+            continue
+        if not values[index].startswith("-"):
+            return values[index] in _NODE_INSTALLERS.get(str(argv[0]), set())
+        index += 1
     return False
+
+
+def _node_recipe_restores_dependencies(recipe: Mapping[str, Any]) -> bool:
+    return any(isinstance(argv, list) and node_installer_command(argv)
+               for argv in recipe.get("configure_commands", ()))
 
 
 def _probe_stream(run_root: Path, path: Path, result: Any, name: str, limit: int) -> dict[str, Any]:

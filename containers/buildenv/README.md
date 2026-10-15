@@ -12,6 +12,7 @@ carries MCP/LSP payloads; analysis tooling lives in its own images.
 | `audit-buildenv-python` | `python/` | + Python 3.12.3 headers, pip 24.0, venv | `python` |
 | `audit-buildenv-php` | `php/` | + PHP 8.3.6 CLI/dev (phpize, php-config), Composer 2.7.1, Autotools | `php` |
 | `audit-buildenv-rust-wasm` | `rust-wasm/` | + hash-locked Rust 1.90.0 with wasm32-unknown-unknown and wasm32-wasip1 | `rust`, `wasm` |
+| `audit-buildenv-typescript` | `typescript/` | + hash-locked Node 22.23.3 (npm 10.9.9), pnpm 9.15.9, Yarn 1.22.22; node-gyp uses the shared compiler | `node` |
 | `audit-buildenv-android` | `android/` | JDK 17, Gradle 8.9, Android SDK 35 | `android` |
 
 All family images except Android build `FROM` the shared native toolchain (see
@@ -23,9 +24,9 @@ Build them in dependency order (the builder resolves `dependencies`):
 
 ```sh
 python3 containers/build.py build buildenv-native-toolchain audit-buildenv-cpp audit-buildenv-go \
-  audit-buildenv-python audit-buildenv-php audit-buildenv-rust-wasm
+  audit-buildenv-python audit-buildenv-php audit-buildenv-rust-wasm audit-buildenv-typescript
 python3 containers/build.py smoke buildenv-native-toolchain audit-buildenv-cpp audit-buildenv-go \
-  audit-buildenv-python audit-buildenv-php audit-buildenv-rust-wasm
+  audit-buildenv-python audit-buildenv-php audit-buildenv-rust-wasm audit-buildenv-typescript
 ```
 
 ## Profile image pins
@@ -45,5 +46,5 @@ The Rust/WebAssembly image backs both the `rust` and `wasm` profiles; update bot
 
 ## Still deferred
 
-`.NET`, Java and TypeScript build environments are owned by their own work streams; the former
+`.NET` and Java build environments are owned by their own work streams; the former
 `audit-buildenv-cpp-resolute` variant remains deferred in the catalog.

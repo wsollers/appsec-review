@@ -168,7 +168,8 @@ def test_every_compiler_artifact_mode_is_typed(mode: ProcessingMode, tmp_path: P
     ))
     settings = config.job("job_language_build").typed_settings
     assert settings.compiler_artifact_collection_mode is mode
-    assert settings.compiler_artifact_mode("node") is mode
+    assert settings.compiler_artifact_mode("python") is mode
+    assert settings.compiler_artifact_mode("node") is ProcessingMode.AUTO
 
 
 @pytest.mark.parametrize("mode", list(ProcessingMode))
@@ -254,7 +255,8 @@ def test_mode_override_targets_and_duplicate_definitions_are_rejected(tmp_path: 
     with pytest.raises(ValueError, match="must be a table"):
         _variant(tmp_path / "malformed", (
             '[jobs.job_language_build.settings.compiler_artifact_collection_overrides]\n'
-            'native = "required"\ngo = "required"\ndotnet = "required"\nrust = "required"',
+            'native = "required"\ngo = "required"\ndotnet = "required"\nrust = "required"\n'
+            'node = "auto"',
             'compiler_artifact_collection_overrides = "required"'))
     with pytest.raises(ValueError, match="unknown compiler-artifact override targets"):
         _variant(tmp_path, ('rust = "required"', 'rust = "required"\nruby = "auto"'))

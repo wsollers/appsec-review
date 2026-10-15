@@ -891,6 +891,9 @@ user = "10001:10001"
 tag = "audit-buildenv-android:local"
 image_id = "sha256:a6a4105f8021f64ad5b4c9451b4b8f00cb0521322a4384163b71649145f89f45"
 user = "10001:10001"
+# Built from containers/buildenv/typescript/ (see its README). Image IDs are host-specific; after
+# rebuilding with `python3 containers/build.py build audit-buildenv-typescript`, replace image_id
+# with `docker image inspect audit-buildenv-typescript:local --format '{{.Id}}'`.
 [jobs.job_project_build.settings.profiles.node]
 tag = "audit-buildenv-typescript:local"
 image_id = "sha256:67d1625340c935c54f966af7a08a689448c3cdacc111b0dc0ac317a6a89e5cd2"
@@ -981,11 +984,15 @@ artifact_count_limit = 10000
 compiler_artifact_collection_mode = "required"
 
 # Bounded language-family overrides. Omitted families inherit the required default above.
+# Node is "auto": its descriptor-backed applicability facts still require produced artifacts for
+# transpilation, bundling, and node-gyp addons, while syntax-only (`node --check`) and
+# metadata-only lifecycles resolve to SKIPPED_NA instead of an artifact-validation gap.
 [jobs.job_language_build.settings.compiler_artifact_collection_overrides]
 native = "required"
 go = "required"
 dotnet = "required"
 rust = "required"
+node = "auto"
 
 [jobs.job_language_build.settings.build_capture]
 event_count_limit = 250000
