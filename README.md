@@ -21,8 +21,10 @@ architecture index is [`docs/architecture/README.md`](docs/architecture/README.m
 - [Build the tool container images](#build-the-tool-container-images)
 - [Sync third-party metadata](#sync-third-party-metadata)
 - [Run a review](#run-a-review)
+- [Prepare an end-to-end run](#prepare-an-end-to-end-run)
 - [Run the Dagster deployment](#run-the-dagster-deployment)
 - [Run the tests](#run-the-tests)
+- [Working with other agent sessions](#working-with-other-agent-sessions)
 - [Where things live](#where-things-live)
 
 ## What you need
@@ -86,6 +88,14 @@ python3 -m venv .venv
 python -m pip install --upgrade pip
 python -m pip install -e .
 python -m pip install pytest
+```
+
+Give every checkout its own `.venv`. An editable install points at the checkout it was installed
+from, so a test run that borrows another checkout's environment tests that checkout's code. Confirm
+the import path before trusting a run:
+
+```bash
+python -c "import appsec_review; print(appsec_review.__file__)"   # must be inside this checkout
 ```
 
 Install the optional Dagster extras only if you want to run the Dagster tests on the host:
@@ -235,28 +245,42 @@ Native Windows:
 git clone https://github.com/wsollers/appsec-multi-vuln.git targets\appsec-multi-vuln
 ```
 
-To reproduce the recorded acceptance evidence, check out the commit pinned in
-[`docs/reviews/native-evaluator-guide.lock.json`](docs/reviews/native-evaluator-guide.lock.json):
+Reviews run against the target commit pinned in
+[`docs/reviews/native-evaluator-guide.lock.json`](docs/reviews/native-evaluator-guide.lock.json),
+which also pins the evaluator guide commit. Check it out before a review, and move the target only
+between runs, never while a run or test suite reads it:
 
 ```bash
 git -C targets/appsec-multi-vuln checkout 29943842cc0c6a8ed5171417b0bccf5c6769f4ef
 ```
 
-Do **not** clone the evaluator guide (`appsec-multi-vuln-guide`) under `targets/` or anywhere a
-review can see it. It holds the ground truth, and `tests/test_blind_target_isolation.py` verifies
-that reviews stay blind to it. If you need it for evaluation, keep it outside this repository and
-point `APPSEC_EVALUATOR_GUIDE` at it.
+The target is blind: it carries no answers, and `tests/test_blind_target_isolation.py` fails if
+its paths or prose name a weakness. Do **not** clone the evaluator guide (`appsec-multi-vuln-guide`)
+under `targets/` or anywhere a review can see it. It holds the answer key and a per-defect inventory
+(`data/defect-inventory.json`, validated with its `scripts/defect_inventory.py`). If you need it for
+evaluation, keep it outside this repository and point `APPSEC_EVALUATOR_GUIDE` at it.
 
 Any other target works the same way: clone it beneath `targets/` and pass its path with `--target`
 (direct CLI) or `APPSEC_REVIEW_TARGET` (Dagster).
 
 ## Build the tool container images
 
-[`containers/catalog.toml`](containers/catalog.toml) is the inventory of scanner and runtime base
-images. The Bash and PowerShell launchers call the same engine,
-[`containers/build.py`](containers/build.py). Pinned downloads are checked against
-`assets.lock.json` before each build, and Docker build steps run without network access. Results go
-to `runs/container-builds/<run-id>/`. See [`containers/README.md`](containers/README.md) for details.
+[`containers/catalog.toml`](containers/catalog.toml) is the inventory of every image: tool images,
+shared runtime bases, and the language build environments under `containers/buildenv/` (built on a
+shared native toolchain image). The Bash and PowerShell launchers call the same engine,
+[`containers/build.py`](containers/build.py). Downloads are checked against `assets.lock.json`
+before each build, and Docker build steps run without network access. Results go to
+`runs/container-builds/<run-id>/`. See [`containers/README.md`](containers/README.md) for details.
+
+Two images need their inputs acquired before the first build:
+
+```bash
+containers/tools/native-cpp/acquire_assets.sh        # C/C++ package closure for tool-native-cpp
+```
+
+`tool-tree-sitter` takes its wheels and grammars from
+[`containers/tools/tree-sitter/acquire_assets.py`](containers/tools/tree-sitter/README.md), run in
+the acquisition container its README describes.
 
 Linux or WSL:
 
@@ -282,10 +306,24 @@ To build only a few images:
 containers/build-all.sh build tool-gitleaks tool-semgrep tool-infer
 ```
 
-The CodeQL image needs a licensed base image that you supply. No proprietary CodeQL payload is
-committed; see [`containers/tools/codeql/LICENSE.md`](containers/tools/codeql/LICENSE.md) and
+The CodeQL image needs a licensed base image that you supply (`audit-codeql:local`), and the pinned
+`audit-codeql:custom-2.27.0` is layered on it with `containers/tools/codeql/Dockerfile.custom-source`.
+No proprietary CodeQL payload is committed; see
+[`containers/tools/codeql/LICENSE.md`](containers/tools/codeql/LICENSE.md) and
 [`docs/operations/codeql-analysis.md`](docs/operations/codeql-analysis.md). Without it, CodeQL scopes
 are recorded as coverage gaps.
+
+Images move forward; they are not reproduced byte for byte. Upstream archives change, so a rebuild
+or re-acquisition can produce new bytes and a new image ID. When that happens, rebuild, smoke the
+image, and record the result: the new size and SHA-256 in its `assets.lock.json`, and the new image
+ID in its pins (`image_id` in the catalog, the build profiles in `appsec-review.toml`, and CodeQL's
+`source_image_id`). Pins are host-local and are never compared across machines. See
+[Moving forward, not reproducing](containers/README.md#moving-forward-not-reproducing).
+
+Every review also rebuilds the enabled catalog images at its start (`job_tool_image_rebuild`). A
+build failure fails the run before intake; a rebuilt image whose ID differs from its pin is recorded
+as `TOOL_IMAGE_PIN_MISMATCH`, and `appsec-review update-image-pins --run-id <run-id> --write` rewrites
+those pins for review. See [`docs/operations/tool-image-rebuild.md`](docs/operations/tool-image-rebuild.md).
 
 ## Sync third-party metadata
 
@@ -295,7 +333,7 @@ six branches:
 | Branch | Publishes to | Contents |
 | --- | --- | --- |
 | `nvd_sync` | `data/feeds/nvd/` | NVD CVE 2.0 yearly feeds, then incremental last-modified windows. |
-| `osv_sync` | `data/feeds/osv/` | Configured OSV ecosystem archives plus a SQLite lookup index. |
+| `osv_sync` | `data/feeds/osv/` | OSV archives for PyPI, crates.io, npm, Go, Maven, Packagist, NuGet and RubyGems (about 291,000 records, 573 MB uncompressed) plus a SQLite lookup index. |
 | `mitre_sync` | `data/feeds/mitre/` | Enterprise ATT&CK, CAPEC, and CWE (all three mandatory); Mobile and ICS ATT&CK are optional selections. |
 | `cve_bin_tool_db_build` | `data/feeds/cve-bin-tool/` | cve-bin-tool database built offline in Docker from the NVD snapshot above. |
 | `kev_sync` | `data/feeds/kev/` | CISA Known Exploited Vulnerabilities catalog and SQLite lookup index. |
@@ -424,6 +462,28 @@ order is an execution order rather than a claim that every adjacent job consumes
 `third_party_data_sync` remains a separate scheduled metadata job.
 See [`docs/operations/wave1-review.md`](docs/operations/wave1-review.md).
 
+## Prepare an end-to-end run
+
+A review host runs a new end-to-end review in this order. Record the commit of every result (`git
+rev-parse HEAD` in this repository and in the target), and do not pull, reinstall or switch branches
+in a checkout while a run or test suite uses it.
+
+1. Update this checkout to `origin/main` and reinstall into its own `.venv`; confirm the import path
+   as shown in the setup section.
+2. Check out the target at the commit pinned in the evaluator lock
+   ([Download the acceptance target](#download-the-acceptance-target)).
+3. Build and smoke every enabled image, acquiring inputs first where needed
+   ([Build the tool container images](#build-the-tool-container-images)). Record new image IDs in
+   their pins on that host.
+4. Sync third-party metadata if it is older than you want
+   ([Sync third-party metadata](#sync-third-party-metadata)).
+5. Run the nothing-to-find review on the pinned images
+   ([End-to-end review of a target with nothing to find](#end-to-end-review-of-a-target-with-nothing-to-find)).
+   It must pass: a finding on that target is a false positive to fix, and a failed job is a break to
+   fix, before a real review is trusted.
+6. Start the review ([Run a review](#run-a-review) or the Dagster `wave1_review` job) and leave the
+   checkout and target alone until it finishes.
+
 ## Run the Dagster deployment
 
 Use `~/projects/appsec-review` for WSL and a native drive checkout for Windows. Each has its own
@@ -550,12 +610,30 @@ handoff artifact verify, and that the dataset publication audit has no violation
 A security observation on this target is a false positive in the rule that raised it; report the
 rule rather than changing the target.
 
+Run long suites in a dedicated worktree with its own `.venv`
+(`git worktree add ../appsec-review-<name> <commit>`) rather than in a checkout another session or
+a review uses.
+
 Run the deployment test suite in its pinned image:
 
 ```bash
 docker build --file deploy/dagster/Dockerfile --target test --tag appsec-review-dagster-test .
 docker run --rm appsec-review-dagster-test
 ```
+
+## Working with other agent sessions
+
+Several agent sessions (cloud sessions, sessions on review hosts, Codex) may change, build and test
+this repository at once. GitHub is their shared record: claim work early with a draft pull request,
+keep pull requests small, merge `origin/main` before pushing, and never rebase or force-push a
+shared branch. Host-specific values have single owners: image pins belong to the session on the
+review host that built and smoked those images, asset locks to the session that acquired them, and
+target checkouts to the repository owner. The procedure is
+[`.claude/skills/multi-session-coordination/SKILL.md`](.claude/skills/multi-session-coordination/SKILL.md).
+
+After a batch of merged pull requests, reconcile the docs with the code delta recorded in
+[`docs/docs-sync.json`](docs/docs-sync.json) using
+[`.claude/skills/docs-sync/SKILL.md`](.claude/skills/docs-sync/SKILL.md).
 
 ## Where things live
 
