@@ -76,6 +76,11 @@ class ReasonCode(str, Enum):
     EVIDENCE_INCOMPLETE = "EVIDENCE_INCOMPLETE"
     ARTIFACT_VALIDATION_FAILED = "ARTIFACT_VALIDATION_FAILED"
     PROCESSING_SUCCEEDED = "PROCESSING_SUCCEEDED"
+    # Per-input tool support (appsec_review.tool_inputs): an input outside a tool's declared
+    # formats is never launched; a tool's own recognized "unsupported input" report is used only
+    # where the declaration cannot be decided exactly before launch.
+    INPUT_FORMAT_UNSUPPORTED = "INPUT_FORMAT_UNSUPPORTED"
+    TOOL_REPORTED_UNSUPPORTED_INPUT = "TOOL_REPORTED_UNSUPPORTED_INPUT"
 
 
 @dataclass(frozen=True, slots=True)

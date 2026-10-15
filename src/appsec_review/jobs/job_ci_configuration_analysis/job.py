@@ -21,6 +21,7 @@ from appsec_review.retrieval.core import resolve_context_manifest
 from appsec_review.retrieval.index import load_verified_manifest
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from appsec_review.storage import atomic_json, canonical_json, file_sha256
+from appsec_review.tool_inputs import not_applicable_summary, partition_paths
 
 from .discovery import PROVIDERS, discover
 from .static_rules import RULESET_IDENTITY, hierarchy, scan_text
@@ -38,6 +39,13 @@ class ToolSpec:
     @property
     def key(self) -> str:
         return f"{self.provider}_{self.name}"
+
+    @property
+    def input_support(self) -> str | None:
+        """Declared input support key (appsec_review.tool_inputs) for external linters."""
+        if self.mode != "external":
+            return None
+        return f"ci:{self.tool_id}" + (f":{self.framework}" if self.framework else "")
 
 
 SPECS = (
@@ -187,6 +195,22 @@ def _scan(unit: UnitContext, spec: ToolSpec, executor_factory: ExecutorFactory,
         artifact = _write(unit, "raw-observations.json", raw)
         return {"provider": spec.provider, "tool_id": spec.tool_id, "terminal_status": "NOT_APPLICABLE",
                 "raw_artifact": artifact, "record_count": 0, "gaps": raw["gaps"], "executions": []}
+    not_applicable = ()
+    if spec.input_support is not None:
+        # Definitions outside the linter's declared input support are SKIPPED_NA and never launched.
+        partition = partition_paths(spec.input_support, [item["path"] for item in definitions])
+        not_applicable = partition.not_applicable
+        supported = set(partition.supported)
+        definitions = [item for item in definitions if item["path"] in supported]
+        if not definitions:
+            summary = not_applicable_summary(not_applicable)
+            raw = {"schema": "appsec-review/ci-raw-observations/1", "provider": spec.provider,
+                   "tool_id": spec.tool_id, "definitions": [], "records": [], "gaps": [],
+                   "not_applicable_inputs": summary, "terminal_status": "NOT_APPLICABLE"}
+            artifact = _write(unit, "raw-observations.json", raw)
+            return {"provider": spec.provider, "tool_id": spec.tool_id, "terminal_status": "NOT_APPLICABLE",
+                    "coverage_disposition": "SKIPPED_NA", "raw_artifact": artifact, "record_count": 0,
+                    "gaps": [], "executions": [], "not_applicable_inputs": summary}
     if spec.mode == "discovery":
         gaps.append("supported_discovery_without_linter: definition cataloged but no provider linter is enabled")
     elif spec.mode == "static":
@@ -244,11 +268,12 @@ def _scan(unit: UnitContext, spec: ToolSpec, executor_factory: ExecutorFactory,
            "definitions": definitions, "records": records, "gaps": list(dict.fromkeys(gaps)),
            "executions": executions, "image_id": image_id if spec.mode == "external" else None,
            "ruleset_identity": RULESET_IDENTITY if spec.mode == "static" else None,
+           "not_applicable_inputs": not_applicable_summary(not_applicable),
            "terminal_status": terminal}
     artifact = _write(unit, "raw-observations.json", raw)
     return {"provider": spec.provider, "tool_id": spec.tool_id, "terminal_status": terminal,
             "raw_artifact": artifact, "record_count": len(records), "gaps": raw["gaps"],
-            "executions": executions}
+            "executions": executions, "not_applicable_inputs": raw["not_applicable_inputs"]}
 
 
 def _normalize(unit: UnitContext, scan_id: str) -> Mapping[str, Any]:
@@ -363,7 +388,8 @@ def _index(unit: UnitContext, spec: ToolSpec, normalize_id: str) -> Mapping[str,
     return {"provider": spec.provider, "tool_id": spec.tool_id, "terminal_status": output["terminal_status"],
             "artifact": _artifact(unit.job.run_root, path), "index_identity": asdict(identity),
             "normalized_artifact": output["normalized_artifact"], "record_count": len(records),
-            "gaps": output.get("gaps", []), "records": records}
+            "gaps": output.get("gaps", []), "records": records,
+            "not_applicable_inputs": output.get("not_applicable_inputs") or not_applicable_summary(())}
 
 
 def _correlate(unit: UnitContext, index_ids: tuple[str, ...]) -> Mapping[str, Any]:
@@ -421,13 +447,18 @@ def _coverage(unit: UnitContext, index_ids: tuple[str, ...]) -> Mapping[str, Any
                    for provider in PROVIDERS}
     tools = []
     gaps = list(classified["gaps"])
+    skipped: list[Mapping[str, Any]] = []
     for unit_id in index_ids:
         output = unit.output(unit_id)
+        not_applicable = output.get("not_applicable_inputs") or not_applicable_summary(())
         tools.append({key: output[key] for key in ("provider", "tool_id", "terminal_status", "record_count")}
-                     | {"gaps": output.get("gaps", [])})
+                     | {"gaps": output.get("gaps", []),
+                        "not_applicable_input_count": int(not_applicable.get("count", 0))})
+        skipped.extend(not_applicable.get("items", ()))
         gaps.extend(output.get("gaps", []))
     coverage = {"schema": "appsec-review/ci-coverage/1", "definitions_by_provider": by_provider,
                 "tools": tools, "gaps": list(dict.fromkeys(gaps)),
+                "not_applicable_inputs": not_applicable_summary(skipped),
                 "coverage_status": "complete" if not gaps else "partial"}
     return {"artifact": _write(unit, "coverage.json", coverage), **coverage}
 

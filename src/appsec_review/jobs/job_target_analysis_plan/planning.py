@@ -9,6 +9,7 @@ from typing import Any
 from appsec_review.storage import canonical_json
 from appsec_review.jobs.build_discovery import BUILD_RECIPE_SCHEMA, validate_build_recipe
 from appsec_review.jobs.component_ownership import resolve_ownership
+from appsec_review.tool_inputs import SOURCE_SUFFIXES as TOOL_SOURCE_SUFFIXES, supports_path
 
 
 PLAN_SCHEMA = "appsec-review/target-analysis-plan/1"
@@ -28,10 +29,7 @@ BUILD_SYSTEMS = frozenset({
     "node-gyp", "php-extension", "python", "rustc", "typescript", "wasm",
 })
 
-SOURCE_SUFFIXES = {
-    ".py", ".js", ".jsx", ".ts", ".tsx", ".java", ".kt", ".go", ".rs",
-    ".c", ".h", ".cc", ".cpp", ".cxx", ".hh", ".hpp", ".hxx", ".cs", ".rb", ".php", ".swift", ".sh",
-}
+SOURCE_SUFFIXES = TOOL_SOURCE_SUFFIXES
 
 
 def _under(path: str, root: str) -> bool:
@@ -163,44 +161,16 @@ def ambiguity_reasons(summary: Mapping[str, Any]) -> list[str]:
 
 
 def _scanner_scope(tool_id: str, files: tuple[Mapping[str, Any], ...], artifacts: tuple[Mapping[str, Any], ...]) -> tuple[str, ...]:
-    def paths(predicate) -> tuple[str, ...]:
-        return tuple(str(item["path"]) for item in files if predicate(PurePosixPath(str(item["path"])), item))
-    if tool_id in {"tool-gitleaks", "tool-syft"}:
-        return tuple(str(item["path"]) for item in files)
-    if tool_id == "tool-semgrep":
-        return paths(lambda path, item: path.suffix.lower() in SOURCE_SUFFIXES)
-    if tool_id == "tool-opengrep":
-        # OpenGrep runs only the SEI CERT rule pack (C, C++, and Java).
-        return paths(lambda path, item: path.suffix.lower() in {
-            ".c", ".cc", ".cpp", ".cxx", ".h", ".hh", ".hpp", ".hxx", ".java"})
-    if tool_id == "tool-gosec":
-        return paths(lambda path, item: path.suffix.lower() == ".go")
-    if tool_id == "tool-cppcheck":
-        return paths(lambda path, item: path.suffix.lower() in {
-            ".c", ".cc", ".cpp", ".cxx", ".h", ".hh", ".hpp", ".hxx"})
-    if tool_id == "tool-mobsfscan":
-        return paths(lambda path, item: path.suffix.lower() in {".java", ".kt", ".swift"})
-    if tool_id == "tool-pmd":
-        return paths(lambda path, item: path.suffix.lower() == ".java")
-    if tool_id == "tool-shellcheck":
-        return paths(lambda path, item: path.suffix.lower() == ".sh")
-    if tool_id in {"tool-phpcs", "tool-phpstan", "tool-psalm"}:
-        return paths(lambda path, item: path.suffix.lower() == ".php")
-    if tool_id == "tool-spotbugs":
-        return tuple(str(item["path"]) for item in artifacts if PurePosixPath(str(item["path"])).suffix.lower() in {".jar", ".war", ".ear", ".class"})
-    if tool_id == "tool-osv-scanner":
-        return paths(lambda path, item: path.name in {"requirements.txt", "poetry.lock", "Pipfile.lock"})
-    if tool_id == "tool-grype":
-        return tuple(str(item["path"]) for item in files)
-    if tool_id == "tool-hadolint":
-        return paths(lambda path, item: path.name == "Dockerfile" or path.name.startswith("Dockerfile."))
-    if tool_id in {"tool-checkov", "tool-trivy"}:
-        return paths(lambda path, item: path.suffix.lower() in {".tf", ".tfvars", ".hcl"} or path.name == "Dockerfile" or path.name.startswith("Dockerfile."))
-    if tool_id == "tool-zizmor":
-        return paths(lambda path, item: str(path).startswith(".github/workflows/") and path.suffix.lower() in {".yml", ".yaml"})
-    if tool_id == "tool-blint":
-        return tuple(str(item["path"]) for item in artifacts if PurePosixPath(str(item["path"])).suffix.lower() in {".dll", ".exe", ".so", ".dylib", ".a", ".o"})
-    return ()
+    """Deterministic scanner scope from the single declared tool input support table.
+
+    Planning and execution read the same declarations (appsec_review.tool_inputs), so a planned
+    input is always one the tool can parse; anything else is never placed in a scanner scope.
+    """
+    if tool_id not in SCANNERS:
+        return ()
+    if tool_id in {"tool-spotbugs", "tool-blint"}:
+        return tuple(str(item["path"]) for item in artifacts if supports_path(tool_id, str(item["path"])))
+    return tuple(str(item["path"]) for item in files if supports_path(tool_id, str(item["path"])))
 
 
 def history_priority(history: Mapping[str, Any] | None, catalog: Mapping[str, Any]) -> dict[str, Any]:

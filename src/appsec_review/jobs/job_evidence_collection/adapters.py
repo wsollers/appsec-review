@@ -11,25 +11,26 @@ from typing import Any, Callable, Iterable, Mapping
 import xml.etree.ElementTree as ET
 
 from appsec_review.storage import canonical_json
+from appsec_review.tool_inputs import (
+    C_CPP_SOURCE, IAC_SUFFIXES, NATIVE_BINARIES, SEI_CERT_SOURCE, SOURCE_SUFFIXES,
+    semgrep_skip_not_applicable, shellcheck_unsupported_dialect, supports_path,
+)
 
 
-SOURCE_EXTENSIONS = {
-    ".py", ".js", ".jsx", ".ts", ".tsx", ".java", ".kt", ".go", ".rs",
-    ".c", ".h", ".cc", ".cpp", ".cxx", ".hh", ".hpp", ".hxx",
-    ".cs", ".rb", ".php", ".swift", ".sh",
-}
-CPP_EXTENSIONS = {".c", ".h", ".cc", ".cpp", ".cxx", ".hh", ".hpp", ".hxx"}
+# Supported-input declarations live once in appsec_review.tool_inputs; these names are views.
+SOURCE_EXTENSIONS = SOURCE_SUFFIXES
+CPP_EXTENSIONS = C_CPP_SOURCE
 CPP_TRANSLATION_UNITS = {".c", ".cc", ".cpp", ".cxx"}
-IAC_EXTENSIONS = {".tf", ".tfvars", ".hcl"}
+IAC_EXTENSIONS = IAC_SUFFIXES
 MANIFEST_NAMES = {
     "package.json", "package-lock.json", "yarn.lock", "pnpm-lock.yaml", "pyproject.toml",
     "requirements.txt", "poetry.lock", "Pipfile.lock", "go.mod", "go.sum", "Cargo.toml",
     "Cargo.lock", "pom.xml", "build.gradle", "build.gradle.kts", "composer.json",
     "composer.lock", "Gemfile", "Gemfile.lock",
 }
-BINARY_EXTENSIONS = {".jar", ".war", ".ear", ".class", ".dll", ".exe", ".so", ".dylib", ".a", ".o"}
+BINARY_EXTENSIONS = NATIVE_BINARIES
 # Languages of the SEI CERT rule pack (rules/sei-cert); OpenGrep runs that pack only.
-SEI_CERT_EXTENSIONS = CPP_EXTENSIONS | {".java"}
+SEI_CERT_EXTENSIONS = SEI_CERT_SOURCE
 SEI_CERT_RULE_PREFIX = "appsec-review.sei-cert."
 SEI_CERT_MOUNT = "/rules-sei-cert"
 SEI_CERT_METADATA = ("pack", "cert", "cert_also", "cert_standard", "cert_url", "coverage", "confidence",
@@ -130,13 +131,13 @@ def _select_files(kind: str, predicate: Callable[[str, Mapping[str, Any]], bool]
 
 
 def _all_source(catalog: ScanCatalog) -> Applicability:
-    paths = _paths(catalog, lambda path, item: PurePosixPath(path).suffix.lower() in SOURCE_EXTENSIONS)
+    paths = _paths(catalog, lambda path, item: supports_path("tool-semgrep", path))
     return Applicability(bool(paths), f"catalog contains {len(paths)} source input(s)" if paths else
                          "target catalog contains no supported source files", paths, "source_files")
 
 
 def _sei_cert_source(catalog: ScanCatalog) -> Applicability:
-    paths = _paths(catalog, lambda path, item: PurePosixPath(path).suffix.lower() in SEI_CERT_EXTENSIONS)
+    paths = _paths(catalog, lambda path, item: supports_path("tool-opengrep", path))
     kotlin = _paths(catalog, lambda path, item: PurePosixPath(path).suffix.lower() in {".kt", ".kts"})
     gaps = (f"SEI CERT rule pack has no Kotlin rules; {len(kotlin)} Kotlin file(s) are outside its scope",) if kotlin else ()
     return Applicability(bool(paths), f"catalog contains {len(paths)} C, C++, or Java input(s)" if paths else
@@ -160,7 +161,7 @@ def _syft(catalog: ScanCatalog) -> Applicability:
 
 def _spotbugs(catalog: ScanCatalog) -> Applicability:
     files = tuple(sorted(str(item.get("path")) for item in catalog.artifacts
-                         if PurePosixPath(str(item.get("path"))).suffix.lower() in {".jar", ".war", ".ear", ".class"}))
+                         if supports_path("tool-spotbugs", str(item.get("path")))))
     return Applicability(bool(files), "catalog contains accepted JVM bytecode" if files else
                          "no accepted JVM bytecode artifact is present; target code is not compiled by the scanner",
                          files, "jvm_bytecode", () if files else ("JVM source-only coverage is unavailable",))
@@ -168,7 +169,7 @@ def _spotbugs(catalog: ScanCatalog) -> Applicability:
 
 def _blint(catalog: ScanCatalog) -> Applicability:
     files = tuple(sorted(str(item.get("path")) for item in catalog.artifacts
-                         if PurePosixPath(str(item.get("path"))).suffix.lower() in BINARY_EXTENSIONS))
+                         if supports_path("tool-blint", str(item.get("path")))))
     return Applicability(bool(files), "catalog contains accepted native/binary artifacts" if files else
                          "no accepted binary artifact is present", files, "built_binary",
                           () if files else ("source files are not treated as built binaries",))
@@ -194,8 +195,7 @@ def _checkov(catalog: ScanCatalog) -> Applicability:
     terraform = _paths(catalog, lambda path, item: PurePosixPath(path).suffix.lower() in IAC_EXTENSIONS)
     if terraform:
         families["terraform"] = terraform
-    dockerfiles = _paths(catalog, lambda path, item: (
-        PurePosixPath(path).name == "Dockerfile" or PurePosixPath(path).name.startswith("Dockerfile.")))
+    dockerfiles = _paths(catalog, lambda path, item: supports_path("tool-hadolint", path))
     if dockerfiles:
         families["dockerfile"] = dockerfiles
     workflows = tuple(path for path in _paths(catalog, lambda path, item:
@@ -242,7 +242,7 @@ def _safe_catalog_file(catalog: ScanCatalog, relative: str, *, limit: int) -> by
 
 
 def _cppcheck(catalog: ScanCatalog) -> Applicability:
-    files = _paths(catalog, lambda path, item: PurePosixPath(path).suffix.lower() in CPP_EXTENSIONS)
+    files = _paths(catalog, lambda path, item: supports_path("tool-cppcheck", path))
     if not files:
         return Applicability(False, "target catalog contains no C/C++ source files", (), "cpp_source")
     families: dict[str, tuple[str, ...]] = {}
@@ -284,7 +284,7 @@ def _cppcheck_args(executable: str, selection: Applicability) -> tuple[str, ...]
 
 
 def _pmd(catalog: ScanCatalog) -> Applicability:
-    files = _paths(catalog, lambda path, item: PurePosixPath(path).suffix.lower() == ".java")
+    files = _paths(catalog, lambda path, item: supports_path("tool-pmd", path))
     gaps = (
         "dependency classpath was not constructed or downloaded; rules requiring complete external type resolution may be incomplete",
         "PMD source analysis is not JVM bytecode coverage; SpotBugs requires accepted JVM bytecode",
@@ -399,8 +399,29 @@ def _semgrep_parser(payload: bytes) -> list[dict[str, Any]]:
     paths = document.get("paths", {}) if isinstance(document, Mapping) else {}
     for skipped in (paths.get("skipped") or []) if isinstance(paths, Mapping) else []:
         if isinstance(skipped, Mapping):
+            if semgrep_skip_not_applicable(skipped.get("reason")):
+                # No rule or language of the configured packs applies: SKIPPED_NA, not a gap.
+                records.append({"gap_only": True, "not_applicable_input": str(skipped.get("path")),
+                                "not_applicable_reason": f"engine skipped target: {skipped.get('reason')}"})
+                continue
             records.append({"gap_only": True,
                             "coverage_gap": f"engine skipped {skipped.get('path')}: {skipped.get('reason')}"})
+    return records
+
+
+def _shellcheck_parser(payload: bytes) -> list[dict[str, Any]]:
+    """ShellCheck json1; SC1071 (unsupported shell dialect) is SKIPPED_NA for that file, not a finding."""
+    value = _json(payload)
+    items = value if isinstance(value, list) else value.get("comments", [])
+    records: list[dict[str, Any]] = []
+    for item in items:
+        if isinstance(item, Mapping) and shellcheck_unsupported_dialect(item):
+            records.append({"gap_only": True, "not_applicable_input": str(item.get("file")),
+                            "not_applicable_reason": "tool-shellcheck reported SC1071: "
+                            "ShellCheck only supports sh/bash/dash/ksh scripts"})
+            continue
+        records.append(_record(item, rule=("rule_id", "RuleID", "check_id", "id", "code"),
+                               message=("message", "Description", "description", "text")))
     return records
 
 
@@ -547,20 +568,17 @@ def _phpcs_parser(payload: bytes) -> list[dict[str, Any]]:
 
 
 def _registry() -> dict[str, ToolAdapter]:
-    lang = lambda extension: _select_files("source_files", lambda p, i: PurePosixPath(p).suffix.lower() in extension,
-                                           missing=f"target catalog contains no {', '.join(extension)} source")
-    dockerfiles = _select_files("dockerfiles", lambda p, i: PurePosixPath(p).name.lower().startswith("dockerfile"),
+    lang = lambda tool_id, label: _select_files("source_files", lambda p, i: supports_path(tool_id, p),
+                                                missing=f"target catalog contains no {label} source")
+    dockerfiles = _select_files("dockerfiles", lambda p, i: supports_path("tool-hadolint", p),
                                 missing="target catalog contains no Dockerfiles")
-    iac = _select_files("iac_files", lambda p, i: PurePosixPath(p).suffix.lower() in IAC_EXTENSIONS or
-                        PurePosixPath(p).name.lower() in {"cloudformation.yaml", "cloudformation.yml", "template.yaml", "template.yml"},
+    iac = _select_files("iac_files", lambda p, i: supports_path("tool-trivy", p),
                         missing="target catalog contains no supported IaC files")
-    workflows = _select_files("workflows", lambda p, i: p.startswith(".github/workflows/") and
-                              PurePosixPath(p).suffix.lower() in {".yml", ".yaml"},
+    workflows = _select_files("workflows", lambda p, i: supports_path("tool-zizmor", p),
                               missing="target catalog contains no GitHub Actions workflows")
-    manifests = _select_files("python_dependency_manifests", lambda p, i: PurePosixPath(p).name in {
-        "requirements.txt", "poetry.lock", "Pipfile.lock"
-    }, missing="target catalog contains no Python dependency lockfile covered by the synchronized OSV snapshot",
-        gaps=("the synchronized OSV snapshot currently covers PyPI only",))
+    manifests = _select_files("python_dependency_manifests", lambda p, i: supports_path("tool-osv-scanner", p),
+                              missing="target catalog contains no Python dependency lockfile covered by the synchronized OSV snapshot",
+                              gaps=("the synchronized OSV snapshot currently covers PyPI only",))
     adapters = [
         ToolAdapter("tool-gitleaks", "secrets", frozenset({0, 1}), "/scratch/output.json", _gitleaks,
                     lambda exe, sel: (exe, "dir", "/target", "--no-banner", "--redact", "--report-format", "json",
@@ -576,26 +594,26 @@ def _registry() -> dict[str, ToolAdapter]:
                           "--output", "/scratch/output.json"), _semgrep_parser,
                     ("runs the SEI CERT rule pack only; the Semgrep security baseline is Semgrep-specific",
                      *SEI_CERT_LIMITATIONS)),
-        ToolAdapter("tool-gosec", "source_sast", frozenset({0, 1}), "/scratch/output.json", lang({".go"}),
+        ToolAdapter("tool-gosec", "source_sast", frozenset({0, 1}), "/scratch/output.json", lang("tool-gosec", "Go"),
                     _args("-fmt=json", "-out=/scratch/output.json", "-no-fail"), _gosec_parser,
                     ("dependency/build context may be incomplete in offline mode",)),
         ToolAdapter("tool-mobsfscan", "source_sast", frozenset({0, 1}), "/scratch/output.json",
-                    lang({".java", ".kt", ".swift"}), _args("--json", "-o", "/scratch/output.json"), _mobsfscan_parser),
+                    lang("tool-mobsfscan", "Java, Kotlin, or Swift"), _args("--json", "-o", "/scratch/output.json"), _mobsfscan_parser),
         ToolAdapter("tool-cppcheck", "source_sast", frozenset({0}), "/scratch/output.xml", _cppcheck,
                     _cppcheck_args, _cppcheck_parser,
                     ("source mode is not compiler-backed analysis; compile metadata is sanitized and never executed",)),
         ToolAdapter("tool-pmd", "source_sast", frozenset({0, 4}), "/scratch/output.json", _pmd,
                     _pmd_args, _pmd_parser,
                     ("security-focused ruleset only; general PMD code-quality rules are excluded",)),
-        ToolAdapter("tool-shellcheck", "source_sast", frozenset({0, 1}), None, lang({".sh"}),
-                    _args("--format", "json1"), _list_parser),
-        ToolAdapter("tool-phpcs", "source_sast", frozenset({0, 1, 2, 3}), None, lang({".php"}),
+        ToolAdapter("tool-shellcheck", "source_sast", frozenset({0, 1}), None, lang("tool-shellcheck", "shell script"),
+                    _args("--format", "json1"), _shellcheck_parser),
+        ToolAdapter("tool-phpcs", "source_sast", frozenset({0, 1, 2, 3}), None, lang("tool-phpcs", "PHP"),
                     _args("--report=json", "--standard=PSR12"), _phpcs_parser,
                     ("project-specific coding standard is not inferred",)),
-        ToolAdapter("tool-phpstan", "source_sast", frozenset({0, 1}), None, lang({".php"}),
+        ToolAdapter("tool-phpstan", "source_sast", frozenset({0, 1}), None, lang("tool-phpstan", "PHP"),
                     _args("analyse", "--no-progress", "--error-format=json", "--memory-limit=768M"), _phpstan_parser,
                     ("Composer dependencies are not installed by the scanner",)),
-        ToolAdapter("tool-psalm", "source_sast", frozenset({0, 1, 2}), None, lang({".php"}),
+        ToolAdapter("tool-psalm", "source_sast", frozenset({0, 1, 2}), None, lang("tool-psalm", "PHP"),
                     _args("--output-format=json", "--no-progress", "--no-cache"), _list_parser,
                     ("project config and installed dependency stubs may be required",)),
         ToolAdapter("tool-spotbugs", "source_sast", frozenset({0}), "/scratch/output.xml", _spotbugs,

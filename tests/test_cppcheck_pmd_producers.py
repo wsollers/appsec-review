@@ -101,9 +101,10 @@ def test_parser_diagnostics_become_gaps_instead_of_observations() -> None:
         {"rule_id": "missingIncludeSystem", "coverage_gap": "include context missing",
          "gap_only": True},
     ]
-    observations, gaps = _separate_parser_diagnostics(records)
+    observations, gaps, not_applicable = _separate_parser_diagnostics(records)
     assert [item["rule_id"] for item in observations] == ["real-finding"]
     assert gaps == ["include context missing"]
+    assert not_applicable == []  # missing includes on supported C/C++ stay gaps, never SKIPPED_NA
 
 
 def test_negative_applicability_is_language_specific() -> None:
