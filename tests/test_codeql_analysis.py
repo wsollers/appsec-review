@@ -189,6 +189,34 @@ def test_go_extended_suite_missing_from_lock_reproduces_review_failure() -> None
         _validate_scope_assets(scope, settings, broken_lock)
 
 
+def test_codeql_timeout_removes_its_container_before_its_volume(tmp_path: Path) -> None:
+    calls: list[tuple[str, ...]] = []
+
+    def runner(argv, _timeout):
+        calls.append(tuple(argv))
+        if argv[:3] == ("docker", "image", "inspect"):
+            return 0, (IMAGE + "\n").encode(), b"", False
+        if "/opt/appsec/codeql_runner.py" in argv:
+            return None, b"", b"", True
+        return 0, b"", b"", False
+
+    image = CodeQLImage("appsec-review/codeql-derived-image/2", "a" * 64, IMAGE, IMAGE,
+                        "build:local", IMAGE, "codeql:local", "10001:10001",
+                        "b" * 64, "c" * 64, False, "manifest.json")
+    settings = SimpleNamespace(inventory_timeout_seconds=30, database_timeout_seconds=30,
+                               query_timeout_seconds=30, output_bytes=1024, threads=2, ram_mb=1024)
+    (tmp_path / "scratch").mkdir()
+    result = CodeQLExecutor(image=image, run_root=tmp_path, settings=settings, runner=runner).execute(
+        "database", ("--language", "csharp", "--database", "database"),
+        scratch_root=tmp_path / "scratch")
+    database_run = next(call for call in calls if "/opt/appsec/codeql_runner.py" in call)
+    name = database_run[database_run.index("--name") + 1]
+    removal = calls.index(("docker", "rm", "--force", name))
+    volume_removal = next(index for index, call in enumerate(calls) if call[:3] == ("docker", "volume", "rm"))
+    assert calls.index(database_run) < removal < volume_removal
+    assert result.timed_out is True
+
+
 def test_codeql_build_execution_uses_bridge_network(tmp_path: Path) -> None:
     calls: list[tuple[str, ...]] = []
 

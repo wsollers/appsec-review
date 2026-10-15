@@ -7,6 +7,7 @@ from pathlib import Path
 import shutil
 import sqlite3
 import subprocess
+import uuid
 from typing import Any, Callable, Mapping
 
 from appsec_review.container_runtime.identity import application_runtime_user
@@ -96,17 +97,25 @@ def _docker_builder(settings: CveBinToolSettings, input_dir: Path, output_dir: P
     image_id = inspect.stdout.strip()
     bind_input = _docker_bind_source(input_dir.resolve())
     bind_output = _docker_bind_source(output_dir.resolve())
+    container_name = f"appsec-review-cve-bin-tool-{uuid.uuid4().hex}"
     command = [
-        "docker", "run", "--rm", "--network", "none", "--read-only", "--cap-drop", "ALL",
+        "docker", "run", "--rm", "--name", container_name, "--network", "none", "--read-only",
+        "--cap-drop", "ALL",
         "--security-opt", "no-new-privileges", "--pids-limit", "128", "--user",
         application_runtime_user("65532:65532"),
         "--tmpfs", "/tmp:rw,nosuid,nodev,size=256m", "-v", f"{bind_input}:/input:ro",
         "-v", f"{bind_output}:/output:rw", "--entrypoint", "python", settings.image,
         "/opt/builder/build_db.py", "/input", "/output",
     ]
-    completed = subprocess.run(command, stdin=subprocess.DEVNULL, capture_output=True, text=True,
-                               encoding="utf-8", errors="replace",
-                               timeout=settings.run_timeout_seconds, check=False)
+    try:
+        completed = subprocess.run(command, stdin=subprocess.DEVNULL, capture_output=True, text=True,
+                                   encoding="utf-8", errors="replace",
+                                   timeout=settings.run_timeout_seconds, check=False)
+    except subprocess.TimeoutExpired:
+        # Killing the docker client leaves the container running; remove it before failing.
+        subprocess.run(["docker", "rm", "--force", container_name], stdin=subprocess.DEVNULL,
+                       capture_output=True, timeout=60, check=False)
+        raise
     (output_dir / "builder.stderr.txt").write_text(completed.stderr[-1_000_000:], encoding="utf-8")
     if completed.returncode != 0:
         raise RuntimeError(f"cve-bin-tool database build failed with exit {completed.returncode}")
