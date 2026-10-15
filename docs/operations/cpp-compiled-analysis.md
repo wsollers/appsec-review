@@ -75,8 +75,8 @@ timeout, OOM, nonzero exit, or unmapped result path is an explicit coverage gap.
 
 The target is scanned without evaluator answers. Target-specific ground truth, expected detections,
 source-to-sink mappings, and remediation notes live only in the separate evaluator-guide
-repository, outside the target and `runs/` roots. The framework retains only the repository,
-commit, and artifact hashes in
+repository, outside the target and `runs/` roots. The framework retains only the repository
+and commit of each in
 [`../reviews/native-evaluator-guide.lock.json`](../reviews/native-evaluator-guide.lock.json).
 Tests reject answer-bearing target paths or prose and reject evaluator-guide material in run-owned
 artifacts. Evaluators may read the guide only after a blind run completes; it is never mounted into
