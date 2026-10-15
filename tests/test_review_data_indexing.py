@@ -430,13 +430,19 @@ def _facts(core: RetrievalCore, query_set: str) -> list[dict[str, Any]]:
             return results
 
 
+def _catalog_fts_image_id() -> str:
+    catalog = tomllib.loads((ROOT / "containers" / "catalog.toml").read_text(encoding="utf-8"))
+    return next(image["image_id"] for image in catalog["images"] if image["id"] == fts_worker.TOOL_ID)
+
+
 @pytest.fixture()
 def accepted(tmp_path_factory):
     # Shard paths are deep; a short root keeps Windows paths under MAX_PATH.
     tmp_path = tmp_path_factory.mktemp("r")
     config = _configured(tmp_path)
     run_id, run_root, target, ids = _accepted_run(tmp_path, config)
-    image_id = "sha256:29c26f5f95b21855ada7cafce12f3bfa44c97a0f12e685f6a6c9084123109a27"
+    # Image-ID pins are host-local; the fake reports whatever the catalog currently pins.
+    image_id = _catalog_fts_image_id()
     executor = LocalSqliteFts(run_root, image_id)
     outcome = _run(config, run_id, target, executor)
     return config, run_id, run_root, target, ids, outcome, executor
@@ -694,7 +700,7 @@ def test_inventory_audit_matrices_links_and_fts_validation(accepted) -> None:
     matrix_sets = {name for item in sources for name in item["payload"]["query_sets"]}
     assert not matrix_sets & set(RETIRED_GRAPH_SETS)
     fts = core.query_dataset_inventory(cell_type="fts_validation")["results"][0]["payload"]
-    assert fts["status"] == "verified" and fts["image_id"].startswith("sha256:29c26f5f")
+    assert fts["status"] == "verified" and fts["image_id"] == executor.image_id
     assert executor.calls == ["probe", "build", "verify"]
     package = core.find(kind="dependency_package", indexes=("links",))["results"]
     assert package and package[0]["payload"]["identity_basis"] == "name-only"
