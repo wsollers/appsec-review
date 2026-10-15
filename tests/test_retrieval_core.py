@@ -476,3 +476,46 @@ def test_mcp_core_parity_schema_serialization_and_live_stdio_smoke(tmp_path: Pat
     assert len({item["details"]["mcp_invocation_id"] for item in completed}) == 14
     children = [item for item in records if item["event_type"] == "RETRIEVAL_SUBOP_COMPLETED"]
     assert children and all(item["details"]["parent_invocation_id"] for item in children)
+
+
+def _builder_fixture(tmp_path: Path) -> tuple[IndexBuilder, str, str]:
+    snapshot = "s" * 64
+    source = LogicalIdentity.derive(EntityKind.EXECUTABLE, snapshot, {"native": "server"}).value
+    action = LogicalIdentity.derive(EntityKind.BUILD_ACTION, snapshot, {"native": "link:1"}).value
+    builder = IndexBuilder(tmp_path / "shard.sqlite", name="artifacts", fingerprint="f" * 64,
+                           target_snapshot=snapshot)
+    return builder, source, action
+
+
+def test_builder_merges_repeated_relations_deterministically(tmp_path: Path) -> None:
+    import sqlite3
+
+    builder, source, action = _builder_fixture(tmp_path)
+    weak = RelationRecord(RelationKind.GENERATED_FROM, source, action, False, 0.5, "heuristic", {"n": 1})
+    strong = RelationRecord(RelationKind.GENERATED_FROM, source, action, False, 0.75, "heuristic", {"n": 2})
+    for relation in (weak, strong, weak):
+        builder.add_relation(relation)
+    builder.build()
+    database = sqlite3.connect(builder.path)
+    try:
+        assert database.execute("SELECT relation_id, confidence, payload_json FROM relations").fetchall() == [
+            (strong.relation_id, 0.75, '{"n": 2}')]
+        metadata = dict(database.execute("SELECT key, value FROM metadata"))
+    finally:
+        database.close()
+    assert metadata["relation_duplicates_merged"] == "2"
+    assert json.loads(metadata["relation_kind_counts"]) == {RelationKind.GENERATED_FROM.value: 1}
+
+
+def test_builder_collapses_identical_entities_and_rejects_conflicting_ones(tmp_path: Path) -> None:
+    builder, source, _ = _builder_fixture(tmp_path)
+    entity = EntityRecord(LogicalIdentity.parse(source), "server", "server", "", {"kind": "elf"})
+    builder.add_entity(entity)
+    builder.add_entity(entity)
+    builder.build()
+    conflicting, _, _ = _builder_fixture(tmp_path / "conflict")
+    conflicting.add_entity(entity)
+    conflicting.add_entity(EntityRecord(LogicalIdentity.parse(source), "server", "server", "", {"kind": "pe"}))
+    with pytest.raises(ValueError, match="conflicting entities"):
+        conflicting.build()
+    assert not conflicting.path.exists()

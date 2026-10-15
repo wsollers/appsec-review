@@ -100,7 +100,36 @@ class IndexBuilder:
             raise ValueError("invalid coverage status")
         self.coverage.append((area, status, gap))
 
+    def _unique_entities(self) -> list[EntityRecord]:
+        """Collapse repeated entities; one identity carrying different content is a producer bug."""
+
+        unique: dict[str, EntityRecord] = {}
+        for record in self.entities:
+            previous = unique.setdefault(record.identity.value, record)
+            if previous != record:
+                raise ValueError(f"index shard {self.name}/{self.shard_id} has conflicting entities "
+                                 f"for identity {record.identity.value}")
+        return [unique[key] for key in sorted(unique)]
+
+    def _unique_relations(self) -> tuple[list[RelationRecord], int]:
+        """Merge relations sharing a relation_id, keeping the strongest observation.
+
+        A relation_id covers kind, endpoints, exactness and ambiguity, so repeats differ at most in
+        confidence and payload (several tool invocations reporting one output, for example). The
+        kept record is chosen by confidence, then by canonical payload, so the shard is identical
+        whatever order the producer emitted them in.
+        """
+
+        unique: dict[str, RelationRecord] = {}
+        for relation in self.relations:
+            previous = unique.get(relation.relation_id)
+            if previous is None or _relation_rank(relation) > _relation_rank(previous):
+                unique[relation.relation_id] = relation
+        return [unique[key] for key in sorted(unique)], len(self.relations) - len(unique)
+
     def build(self) -> str:
+        entities = self._unique_entities()
+        relations, merged_relations = self._unique_relations()
         self.path.parent.mkdir(parents=True, exist_ok=True)
         if self.path.exists():
             raise ValueError(f"immutable index shard already exists: {self.name}/{self.shard_id}")
@@ -147,12 +176,13 @@ class IndexBuilder:
                 "schema": INDEX_SCHEMA, "name": self.name, "fingerprint": self.fingerprint,
                 "target_snapshot": self.target_snapshot, "shard_id": self.shard_id,
                 "entity_kind_counts": json.dumps(dict(sorted(Counter(
-                    item.identity.kind.value for item in self.entities).items()))),
+                    item.identity.kind.value for item in entities).items()))),
                 "relation_kind_counts": json.dumps(dict(sorted(Counter(
-                    item.kind.value for item in self.relations).items()))),
+                    item.kind.value for item in relations).items()))),
+                "relation_duplicates_merged": str(merged_relations),
             }
             database.executemany("INSERT INTO metadata VALUES (?, ?)", sorted(metadata.items()))
-            for record in sorted(self.entities, key=lambda item: item.identity.value):
+            for record in entities:
                 identity = record.identity.value
                 database.execute("INSERT INTO entities VALUES (?, ?, ?, ?, ?, ?)", (
                     identity, record.identity.kind.value, record.native_id[:4096], record.name[:4096],
@@ -171,7 +201,7 @@ class IndexBuilder:
                     ))
                 database.execute("INSERT INTO search_fts(identity, name, path, text) VALUES (?, ?, ?, ?)",
                                  (identity, record.name, location_path, record.text))
-            for relation in sorted(self.relations, key=lambda item: item.relation_id):
+            for relation in relations:
                 database.execute("INSERT INTO relations VALUES (?, ?, ?, ?, ?, ?, ?, ?)", (
                     relation.relation_id, relation.kind.value, relation.source_id, relation.target_id,
                     int(relation.exact), relation.confidence, relation.ambiguity,
@@ -184,6 +214,10 @@ class IndexBuilder:
             database.close()
         temporary.replace(self.path)
         return file_sha256(self.path)
+
+
+def _relation_rank(relation: RelationRecord) -> tuple[float, str]:
+    return relation.confidence, json.dumps(sanitize_producer_data(relation.payload or {}), sort_keys=True)
 
 
 def write_manifest(
