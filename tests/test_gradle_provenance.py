@@ -33,9 +33,39 @@ def _settings() -> dict:
     return dict(load_config(ROOT / "appsec-review.toml").job("job_language_build").settings["jvm"])
 
 
-def _synthetic_project(root: Path, *, kotlin: bool = True, toolchain: str | None = None) -> None:
-    """A dependency-free multi-module build: java-library, application, and optionally Kotlin."""
-    modules = ["lib", "app"] + (["kt"] if kotlin else [])
+# The Android Gradle Plugin pattern without the Android Gradle Plugin (which needs the network). A
+# JavaCompile is registered lazily from an afterEvaluate (variant API) callback, so its own configure
+# action runs when the task is realized during task-graph calculation, after projectsEvaluated.
+# Like AGP's JavaCompileCreationAction, that action reads the task's javaCompiler (AGP does so to
+# pick the JDK whose jlink builds its JDK image), which finalizes the property because JavaCompile
+# declares it finalizeValueOnRead. It also resets the fork options, and a build-owned doFirst
+# action resets them again just before compilation. With `pinned`, the action first sets
+# javaCompiler explicitly and then reads it, which leaves no point at which an init script can
+# replace it: that compilation must stay a declared record with a named gap.
+_LATE_CONFIGURED_MODULE = """plugins { id 'java-base' }
+def toolchains = extensions.getByType(JavaToolchainService)
+afterEvaluate {
+  def compile = tasks.register('compileDebugJavaWithJavac', JavaCompile) { task ->
+    if (@PINNED@) task.javaCompiler.set(toolchains.compilerFor { })
+    def jdkImageHome = task.javaCompiler.get().metadata.installationPath
+    task.source = fileTree('src/main/java')
+    task.classpath = files()
+    task.destinationDirectory = layout.buildDirectory.dir('intermediates/javac/debug/classes')
+    task.options.fork = false
+    task.options.forkOptions.executable = null
+    task.doFirst { task.options.fork = false; task.options.forkOptions.executable = null }
+  }
+  tasks.named('assemble') { dependsOn compile }
+}
+"""
+
+
+def _synthetic_project(root: Path, *, kotlin: bool = True, toolchain: str | None = None,
+                       late: bool = False) -> None:
+    """A dependency-free multi-module build: java-library, application, optionally Kotlin, and
+    optionally a module whose JavaCompile is configured late, the way the Android Gradle Plugin
+    configures its variant compile tasks."""
+    modules = ["lib", "app"] + (["kt"] if kotlin else []) + (["droid", "pinned"] if late else [])
     root.mkdir(parents=True, exist_ok=True)
     (root / "settings.gradle").write_text(
         "rootProject.name = 'synthetic'\ninclude " + ", ".join(f"'{name}'" for name in modules) + "\n",
@@ -58,6 +88,12 @@ def _synthetic_project(root: Path, *, kotlin: bool = True, toolchain: str | None
     (root / "app" / "build.gradle").write_text(
         "plugins { id 'application' }\ndependencies { implementation project(':lib') }\n"
         "application { mainClass = 'app.Main' }\n", encoding="utf-8")
+    for name in ("droid", "pinned") if late else ():
+        sources = root / name / "src" / "main" / "java" / name
+        sources.mkdir(parents=True)
+        (sources / "Activity.java").write_text(f"package {name}; public class Activity {{}}\n", encoding="utf-8")
+        (root / name / "build.gradle").write_text(
+            _LATE_CONFIGURED_MODULE.replace("@PINNED@", str(name == "pinned").lower()), encoding="utf-8")
     if kotlin:
         sources = root / "kt" / "src" / "main" / "kotlin" / "kt"
         sources.mkdir(parents=True)
@@ -250,6 +286,64 @@ def test_multi_module_records_separate_observed_execs_from_declared_tasks(tmp_pa
                     "only build-tool-declared provenance is available"]
 
 
+def test_late_configured_compile_tasks_keep_the_mirror_fork(tmp_path: Path) -> None:
+    """The Android Gradle Plugin configures its JavaCompile when the task is realized, after
+    projectsEvaluated, and reads javaCompiler there, which finalizes it. The init script therefore
+    replaces the toolchain as soon as java-base has applied its convention (before any later
+    configure action), again after evaluation, and applies the fork immediately before the task's
+    own compile action, after every build-owned doFirst action."""
+    script = gradle_provenance.INIT_SCRIPT
+    early = script.index("appsecReplaceJavaToolchain(task, 'java-base-applied')")
+    late = script.index("appsecReplaceJavaToolchain(task, 'projects-evaluated')")
+    assert script.rindex("gradle.beforeProject", 0, early) < script.rindex("plugins.withId('java-base')", 0, early)
+    assert early < script.index("gradle.projectsEvaluated") < late < script.index("gradle.taskGraph.whenReady")
+    # whenReady is too late to replace a toolchain: the task graph has already read it.
+    assert "appsecReplaceJavaToolchain" not in script[script.index("gradle.taskGraph.whenReady"):]
+    assert "if (appsecIsMirror(home)) return compiler" in script
+    assert "task.actions.add(index, action)" in script and "task.doFirst(action)" in script
+
+    # Records of a fake run: the late task forked through the mirror replaced at java-base time
+    # (the post-evaluation replacement found it final) and was observed; a task whose plugin set
+    # and read its toolchain in one configure action could not be, and is a named gap.
+    workspace = tmp_path / "workspace"
+    (workspace / "mobile").mkdir(parents=True)
+    trace, _logical = _instrumentation(workspace, "mobile", _settings())
+    base = "/workspace/mobile"
+    classes = f"{base}/app/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes"
+    _record(trace.with_name("invocations.d"), "0001-1", "javac", [f"@{base}/app/build/tmp/args.txt"],
+            {f"{base}/app/build/tmp/args.txt": f"-d\n{classes}\n{base}/app/src/main/java/a/A.java\n"})
+    late = {"task_type": "org.gradle.api.tasks.compile.JavaCompile", "compiler": "javac"}
+    _task_records(trace.parent, [
+        {"record_kind": "configured", "task_path": ":app:compileDebugJavaWithJavac", **late,
+         "toolchain_replacement": "mirror", "replacement_phases": ["java-base-applied"],
+         "replacement_errors": ["projects-evaluated: java.lang.IllegalStateException"],
+         "pre_compile_hook": "before-task-action", "observation": "fork-requested"},
+        {"record_kind": "before-compile", "task_path": ":app:compileDebugJavaWithJavac", **late,
+         "destination_directory": classes, "source_files": [f"{base}/app/src/main/java/a/A.java"],
+         "fork": True},
+        {"record_kind": "completed", "task_path": ":app:compileDebugJavaWithJavac", **late, "did_work": True},
+        {"record_kind": "configured", "task_path": ":lib:compileDebugJavaWithJavac", **late,
+         "replacement_errors": ["java-base-applied: java.lang.IllegalStateException"],
+         "observation": "fork-unavailable",
+         "reason": "the task javaCompiler toolchain was final before it could be replaced"},
+        {"record_kind": "before-compile", "task_path": ":lib:compileDebugJavaWithJavac", **late,
+         "destination_directory": f"{base}/lib/build/classes", "fork": False},
+        {"record_kind": "completed", "task_path": ":lib:compileDebugJavaWithJavac", **late, "did_work": True},
+    ])
+    rows, _trace_gaps = _trace_rows(trace, workspace, 100, 1 << 20)
+    records, _gaps = gradle_provenance.read_task_records(trace.parent / "gradle-tasks.jsonl", 1 << 20, 100)
+    declared, gaps = gradle_provenance.declared_compilations(
+        records, rows, lambda values: _mapped(workspace, "mobile", values))
+    by_task = {row["task_path"]: row for row in declared}
+    app, lib = by_task[":app:compileDebugJavaWithJavac"], by_task[":lib:compileDebugJavaWithJavac"]
+    assert app["observed_invocation_ordinals"] == [1]
+    assert app["instrumentation"]["replacement_phases"] == ["java-base-applied"]
+    assert app["instrumentation"]["pre_compile_hook"] == "before-task-action"
+    assert lib["instrumentation"]["reason"].startswith("the task javaCompiler toolchain was final")
+    assert gaps == ["Gradle task :lib:compileDebugJavaWithJavac ran javac without an observed compiler "
+                    "exec; only build-tool-declared provenance is available"]
+
+
 def test_android_dex_tasks_are_declared_gaps_and_dex_outputs_are_cataloged(tmp_path: Path) -> None:
     workspace = tmp_path / "workspace"
     (workspace / "mobile").mkdir(parents=True)
@@ -298,11 +392,14 @@ def _java_feature_version() -> str:
 def test_live_gradle_forks_every_java_compilation_through_the_instrumented_mirror(
         tmp_path: Path, parallel: bool) -> None:
     """A real Gradle build of the synthetic java-library + application project, offline. The lib
-    module also pins an explicit toolchain, so the mirror must satisfy toolchain validation."""
+    module also pins an explicit toolchain, so the mirror must satisfy toolchain validation. Two
+    more modules configure their JavaCompile late, the Android Gradle Plugin way (see
+    _LATE_CONFIGURED_MODULE): `droid` must still fork through the mirror despite its finalizing
+    read and its fork resets; `pinned` cannot, and stays a declared record with a named gap."""
     gradle = Path(os.environ["APPSEC_GRADLE_HOME"]) / "bin" / "gradle"
     workspace = tmp_path / "workspace"
     project = workspace / "multi"
-    _synthetic_project(project, kotlin=False, toolchain=_java_feature_version())
+    _synthetic_project(project, kotlin=False, toolchain=_java_feature_version(), late=True)
     trace, _logical = _instrumentation(workspace, "multi", _settings())
     root = trace.parent
     argv, _facts = gradle_provenance.instrument_argv(
@@ -315,6 +412,8 @@ def test_live_gradle_forks_every_java_compilation_through_the_instrumented_mirro
     assert completed.returncode == 0, completed.stdout[-4000:] + completed.stderr[-4000:]
     assert (project / "lib" / "build" / "classes" / "java" / "main" / "lib" / "Greeter.class").is_file()
     assert (project / "app" / "build" / "classes" / "java" / "main" / "app" / "Main.class").is_file()
+    late_classes = "build/intermediates/javac/debug/classes"
+    assert (project / "droid" / late_classes / "droid" / "Activity.class").is_file()
 
     # The build container sees the run-owned workspace at /workspace; this host run sees it at
     # tmp_path. Translate the recorded paths to the container view the parser resolves.
@@ -323,16 +422,19 @@ def test_live_gradle_forks_every_java_compilation_through_the_instrumented_mirro
     rows, trace_gaps = _trace_rows(trace, workspace, 1000, 1 << 24, "multi")
     assert trace_gaps == []
     compilations = [row for row in rows if row["tool"] == "javac"]
-    assert len(compilations) == 2
+    assert len(compilations) == 3
     inputs = {item["workspace_path"] for row in compilations for item in row["inputs"]}
-    assert {"multi/lib/src/main/java/lib/Greeter.java", "multi/app/src/main/java/app/Main.java"} <= inputs
+    assert {"multi/lib/src/main/java/lib/Greeter.java", "multi/app/src/main/java/app/Main.java",
+            "multi/droid/src/main/java/droid/Activity.java"} == inputs
     outputs = {item["workspace_path"] for row in compilations for item in row["outputs"]}
-    assert {"multi/lib/build/classes/java/main", "multi/app/build/classes/java/main"} <= outputs
+    assert {"multi/lib/build/classes/java/main", "multi/app/build/classes/java/main",
+            f"multi/droid/{late_classes}"} <= outputs
     assert all(row["argfiles"] and row["parent_command_id"] == PARENT for row in compilations)
     # javac rows carry hash-resolved class outputs, nested and anonymous classes included.
     classes = {item["workspace_path"] for row in compilations for item in row["outputs"]
                if item.get("mapping") == "javac-derived-class" and item.get("sha256")}
     assert classes == {"multi/lib/build/classes/java/main/lib/Greeter.class",
+                       f"multi/droid/{late_classes}/droid/Activity.class",
                        "multi/app/build/classes/java/main/app/Main.class",
                        "multi/app/build/classes/java/main/app/Main$Inner.class",
                        "multi/app/build/classes/java/main/app/Main$1.class"}
@@ -342,15 +444,32 @@ def test_live_gradle_forks_every_java_compilation_through_the_instrumented_mirro
     assert record_gaps == []
     declared, gaps = gradle_provenance.declared_compilations(
         records, rows, lambda values: _mapped(workspace, "multi", values))
-    assert gaps == []
+    pinned_task = ":pinned:compileDebugJavaWithJavac"
+    assert gaps == [f"Gradle task {pinned_task} ran javac without an observed compiler exec; "
+                    "only build-tool-declared provenance is available"]
     by_task = {row["task_path"]: row for row in declared}
-    assert set(by_task) == {":lib:compileJava", ":app:compileJava"}
+    pinned = by_task.pop(pinned_task)
+    observed = list(by_task.values())
+    assert set(by_task) == {":lib:compileJava", ":app:compileJava", ":droid:compileDebugJavaWithJavac"}
     assert all(row["observed_invocation_ordinals"] and row["did_work"] and
-               row["instrumentation"]["observation"] == "fork-requested" for row in declared)
-    assert all(row["instrumentation"]["toolchain_replacement"] == "mirror" for row in declared)
+               row["instrumentation"]["observation"] == "fork-requested" and
+               row["instrumentation"]["pre_compile_hook"] == "before-task-action" for row in observed)
+    assert all(row["instrumentation"]["toolchain_replacement"] == "mirror" for row in observed)
+    # The late task's own configure action finalized javaCompiler before projectsEvaluated, so only
+    # the replacement made when java-base applied could take effect.
+    droid = by_task[":droid:compileDebugJavaWithJavac"]["instrumentation"]
+    assert droid["replacement_phases"] == ["java-base-applied"]
+    assert droid["replacement_errors"] == ["projects-evaluated: java.lang.IllegalStateException"]
     # The explicit lib toolchain and the app's default both resolve to the real JDK behind the mirror.
-    assert {row["declared_settings"]["toolchain_home"] for row in declared} == {
-        row["instrumentation"]["toolchain_home"] for row in declared}
+    assert {row["declared_settings"]["toolchain_home"] for row in observed} == {
+        row["instrumentation"]["toolchain_home"] for row in observed}
+    # A toolchain set and read inside the same configure action can never be replaced: the
+    # compilation ran in-process and is recorded as declared, with the reason.
+    assert pinned["observed_invocation_ordinals"] == [] and pinned["did_work"]
+    assert pinned["instrumentation"]["observation"] == "fork-unavailable"
+    assert pinned["instrumentation"]["reason"] == "the task javaCompiler toolchain was final before it could be replaced"
+    assert pinned["declared_settings"]["fork"] is False
+    assert [item["workspace_path"] for item in pinned["inputs"]] == ["multi/pinned/src/main/java/pinned/Activity.java"]
     gaps = []
     _remove_jdk_mirrors(root, gaps)
     assert gaps == [] and not (root / "jdk").exists()

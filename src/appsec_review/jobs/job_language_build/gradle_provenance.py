@@ -7,7 +7,8 @@ observe Maven's forked javac never run. A run-owned init script closes that gap 
   command-line compiler of a run-owned JDK mirror. The mirror links every entry of the task's own
   toolchain JDK except `bin/javac` and `bin/java`, which are instrumented wrappers, so Gradle's
   toolchain probe still sees a complete JDK of the same version and the observed exec is the real
-  compiler with Gradle's exact `@argfile`;
+  compiler with Gradle's exact `@argfile`. A task whose toolchain a plugin fixed before the init
+  script could replace it compiles in-process and stays declared, with the reason;
 * Kotlin JVM compile tasks are asked to compile out of process; when their toolchain is the Gradle
   JVM, the launcher is the mirror's instrumented `java`, so the `K2JVMCompiler` exec is observed;
 * every compile and Android dex task also emits a build-tool-declared record (task path,
@@ -172,10 +173,19 @@ if (appsecRootPath) {
       [task_path: task.path, task_type: appsecType(task), compiler: compiler, record_kind: 'configured'])) })
   }
 
-  def appsecReplaceJavaToolchain = { task ->
+  def appsecIsMirror = { File home ->
+    home.parentFile?.canonicalFile == new File(appsecRoot, 'jdk').canonicalFile && new File(home, '.complete').isFile()
+  }
+  def appsecReplaceJavaToolchain = { task, String phase ->
     // Gradle 8 validates a fork executable against the canonical home of the task's javaCompiler
     // toolchain, so the toolchain itself is replaced, lazily, by the mirror of whatever JDK the
     // task would have used (explicit toolchain, java extension toolchain, or the Gradle JVM).
+    // JavaCompile declares javaCompiler finalizeValueOnRead: the first read anywhere (the task
+    // graph, or a plugin reading it while configuring the task, as the Android Gradle Plugin does
+    // to choose the JDK for its jlink image) fixes the value, after which it cannot be replaced.
+    // The replacement is therefore applied twice: once before any plugin's own configure action
+    // can read the java-base convention, and once after every project is evaluated, to wrap an
+    // explicit value a build script set later. Wrapping a mirror again is a no-op.
     Map facts = appsecFactsFor(task, 'javac')
     try {
       def objects = task.project.objects
@@ -189,7 +199,9 @@ if (appsecRootPath) {
       task.javaCompiler.replace { original ->
         original.map { compiler ->
           try {
-            File mirror = appsecMirror(compiler.metadata.installationPath.asFile)
+            File home = compiler.metadata.installationPath.asFile
+            if (appsecIsMirror(home)) return compiler
+            File mirror = appsecMirror(home)
             return toolchains.compilerFor(fromJavaHome.invoke(null, factory, mirror)).get()
           } catch (Throwable error) {
             facts.mirror_error = error.getClass().name
@@ -198,19 +210,47 @@ if (appsecRootPath) {
         }
       }
       facts.toolchain_replacement = 'mirror'
+      facts.replacement_phases = ((facts.replacement_phases ?: []) + [phase]) as List
     } catch (Throwable error) {
-      facts.replacement_error = error.getClass().name
+      // The value is already final: something read javaCompiler before this phase, or a plugin
+      // called finalizeValue() or disallowChanges() on it.
+      facts.replacement_errors = ((facts.replacement_errors ?: []) + [phase + ': ' + error.getClass().name]) as List
     }
+  }
+  def appsecOwnAction = { action ->
+    def type = action.getClass()
+    while (type != null) {
+      if (type.name == 'org.gradle.api.internal.project.taskfactory.StandardTaskAction') return true
+      type = type.superclass
+    }
+    return false
+  }
+  // Run a pre-compile action immediately before the task's own compile action, after every
+  // build-owned doFirst action, so nothing configured earlier can reset the fork options before
+  // javac starts. When the task's own action cannot be identified, fall back to doFirst.
+  def appsecBeforeTaskAction = { task, Map facts, Closure body ->
+    Action<Task> action = { Task ignored -> body.call() } as Action<Task>
+    try {
+      int index = task.actions.findIndexOf { appsecOwnAction(it) }
+      if (index >= 0) {
+        task.actions.add(index, action)
+        facts.pre_compile_hook = 'before-task-action'
+        return
+      }
+    } catch (Throwable error) {
+      facts.pre_compile_hook_error = error.getClass().name
+    }
+    task.doFirst(action)
+    facts.pre_compile_hook = 'do-first'
   }
   def appsecConfigureJava = { task ->
     Map facts = appsecFactsFor(task, 'javac')
-    task.doFirst {
+    appsecBeforeTaskAction(task, facts) {
       try {
         def compiler = task.javaCompiler.get()
         File home = compiler.metadata.installationPath.asFile
-        File marker = new File(home, '.complete')
-        if (home.parentFile?.canonicalFile == new File(appsecRoot, 'jdk').canonicalFile && marker.isFile()) {
-          facts.toolchain_home = marker.getText('UTF-8')
+        if (appsecIsMirror(home)) {
+          facts.toolchain_home = new File(home, '.complete').getText('UTF-8')
           if (task.options.forkOptions.javaHome != null) {
             facts.replaced_fork_java_home = task.options.forkOptions.javaHome.path
             task.options.forkOptions.javaHome = null
@@ -223,6 +263,9 @@ if (appsecRootPath) {
         } else {
           facts.toolchain_home = home.path
           facts.observation = 'fork-unavailable'
+          facts.reason = facts.mirror_error ? 'the JDK mirror could not be created (' + facts.mirror_error + ')' :
+              (facts.replacement_errors ? 'the task javaCompiler toolchain was final before it could be replaced' :
+               'the task javaCompiler toolchain was changed after the mirror replacement')
         }
       } catch (Throwable error) {
         facts.observation = 'fork-unavailable'
@@ -285,12 +328,21 @@ if (appsecRootPath) {
   appsecWrite([record_kind: 'session', gradle_version: gradle.gradleVersion,
                gradle_java_home: System.getProperty('java.home'),
                gradle_java_version: System.getProperty('java.version')])
-  // After every build script and plugin has configured its tasks, but before the task graph
-  // reads (and finalizes) any toolchain, so the replacement wraps the toolchain each task chose.
+  // Right after java-base applies its javaCompiler convention, and so before any task a plugin
+  // registers later runs its own configure action (configure actions run in registration order).
+  gradle.beforeProject { project ->
+    project.plugins.withId('java-base') {
+      project.tasks.withType(org.gradle.api.tasks.compile.JavaCompile).configureEach { task ->
+        appsecReplaceJavaToolchain(task, 'java-base-applied')
+      }
+    }
+  }
+  // After every build script and plugin has configured its projects, but before the task graph
+  // reads (and so finalizes) any toolchain.
   gradle.projectsEvaluated {
     gradle.allprojects { project ->
       project.tasks.withType(org.gradle.api.tasks.compile.JavaCompile).configureEach { task ->
-        appsecReplaceJavaToolchain(task)
+        appsecReplaceJavaToolchain(task, 'projects-evaluated')
       }
       project.tasks.configureEach { task ->
         if (appsecExtends(task, 'org.jetbrains.kotlin.gradle.tasks.KotlinCompile')) appsecReplaceKotlinLauncher(task)
@@ -404,8 +456,9 @@ def declared_compilations(records: Sequence[Mapping[str, Any]], observed: Sequen
                                      "tool": record.get("compiler")})
         if kind == "configured":
             row["instrumentation"] = {name: record.get(name) for name in (
-                "observation", "toolchain_replacement", "replacement_error", "mirror_error",
-                "toolchain_home", "fork_executable",
+                "observation", "toolchain_replacement", "replacement_phases", "replacement_errors",
+                "mirror_error",
+                "toolchain_home", "fork_executable", "pre_compile_hook", "pre_compile_hook_error",
                 "replaced_fork_java_home", "replaced_fork_executable", "execution_strategy",
                 "execution_strategy_error", "launcher_home", "reason", "error") if record.get(name) is not None}
         elif kind in {"before-compile", "dex-task"}:

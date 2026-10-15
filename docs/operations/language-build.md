@@ -167,18 +167,41 @@ appends only options: `--no-daemon`, `--no-build-cache`, `--no-configuration-cac
 or a configuration-cache replay would hide compilation. The command receipt's `instrumentation`
 field records the script hash and every added or removed argument.
 
-- **Java (`JavaCompile`, including AGP's `compile*JavaWithJavac`).** After all projects are
-  evaluated, and before the task graph reads any toolchain, each task's `javaCompiler` is replaced
-  lazily by a mirror of the JDK the task would have used: an explicit task toolchain, the `java`
-  extension toolchain, or the Gradle JVM. The mirror, under `.appsec-review-jvm/jdk/<hash>/`, links
-  every entry of that JDK except `bin/javac` and `bin/java`, which are the recording wrappers. Gradle
-  therefore probes a complete JDK of the same version, and its fork-executable validation (which
-  compares canonical toolchain homes) passes. Just before compilation, the task is set to
-  `fork = true` with `forkOptions.executable` set to the mirror `javac`. Gradle then runs the
-  command-line compiler with its exact `@argfile`, and that compilation is an observed exec. The
-  mirror is removed after the build. The replacement uses Gradle's own internal
-  `SpecificInstallationToolchainSpec`. The pinned Gradle 8.9 and Gradle 8.14 were verified offline.
-  On another version the fallback below applies.
+- **Java (`JavaCompile`, including AGP's `compile*JavaWithJavac`).** Each task's `javaCompiler` is
+  replaced lazily by a mirror of the JDK the task would have used: an explicit task toolchain, the
+  `java` extension toolchain, or the Gradle JVM. The mirror, under `.appsec-review-jvm/jdk/<hash>/`,
+  links every entry of that JDK except `bin/javac` and `bin/java`, which are the recording wrappers.
+  Gradle therefore probes a complete JDK of the same version, and its fork-executable validation
+  (which compares the canonical home of `forkOptions.executable` with the `javaCompiler` home)
+  passes. The replacement uses Gradle's own internal `SpecificInstallationToolchainSpec`.
+  - *When it is replaced.* `JavaCompile` declares `javaCompiler` `finalizeValueOnRead`: the first
+    read fixes the value, and later changes fail with `IllegalStateException`. The task graph reads
+    it, so `taskGraph.whenReady` is always too late. AGP reads it too, inside the configure action of
+    its lazily registered variant task (it chooses the JDK whose `jlink` builds its JDK image from
+    it), and that action runs at task realization, after `projectsEvaluated`. A replacement made only
+    after evaluation therefore found AGP's toolchain already final: the task compiled in-process, and
+    AGP's `jlink` ran from the real JDK. The init script now replaces the toolchain twice. The first
+    replacement is registered from `gradle.beforeProject` through `plugins.withId('java-base')`, so
+    it runs right after java-base sets its `javaCompiler` convention and before the configure action
+    of any task a plugin registers later (Gradle runs configure actions in registration order). The
+    second runs after all projects are evaluated and wraps an explicit toolchain a build script set
+    later. Wrapping a mirror again is a no-op. The task record lists the phases that took effect
+    (`replacement_phases`) and the phases that found the value final (`replacement_errors`).
+  - *Forking.* Immediately before the task's own compile action, after every build-owned `doFirst`
+    action, the task is set to `fork = true` with `forkOptions.executable` set to the mirror `javac`.
+    A target action that resets the fork options therefore cannot undo it. If Gradle's internal task
+    action cannot be identified, the hook falls back to `doFirst` (`pre_compile_hook` records which).
+    Gradle then runs the command-line compiler with its exact `@argfile`, and that compilation is an
+    observed exec. The mirror is removed after the build.
+  - *What cannot be observed.* A plugin that sets `javaCompiler` explicitly and reads it in the same
+    configure action, or that calls `finalizeValue()` or `disallowChanges()` on it before the first
+    replacement, leaves no point at which the toolchain can be replaced. Forking to the mirror `javac`
+    without replacing the toolchain fails Gradle's validation, and the real JDK cannot be
+    instrumented in place. Such a task compiles in-process. It is recorded as `fork-unavailable`, with
+    the `reason` that the toolchain was final before it could be replaced, and stays a declared
+    record with a named gap.
+  - The pinned Gradle 8.9 and Gradle 8.14 were verified offline. On another version the fallback
+    below applies.
 - **Kotlin (KGP `KotlinCompile`, including kapt stub tasks).** The init script sets
   `compilerExecutionStrategy` to `OUT_OF_PROCESS`. When the Kotlin toolchain is the Gradle JVM,
   which means the `java` extension toolchain is unset or has the same major version, the init script
@@ -205,7 +228,11 @@ dexing of external libraries is not recorded at all. An Android build that dexes
 with gaps. NO-SOURCE and up-to-date tasks (`did_work: false`) compiled nothing and are not gaps.
 `tests/test_gradle_provenance.py` covers this with fakes. It also runs a real offline build of a
 synthetic java-library and application project, with and without `--parallel`, when
-`APPSEC_GRADLE_HOME` names a Gradle distribution.
+`APPSEC_GRADLE_HOME` names a Gradle distribution. That build includes two modules that configure a
+`JavaCompile` the AGP way, without AGP (which needs the network). One reads its toolchain during
+late realization and resets the fork options in configuration and in a `doFirst` action; it must
+still fork through the mirror. The other sets and reads its toolchain in one configure action; it
+must remain a declared record with a named gap.
 Maven/Gradle build-driver commands and their separate stdout/stderr artifacts always retain
 hashes, original and retained sizes, configured bounds, truncation and diagnostic-tail state,
 exit/timeout state, duration, image, command, and attempt identities.

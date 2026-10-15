@@ -101,9 +101,13 @@ def _image_id(tag: str) -> str | None:
 
 
 def _egress(tag: str, url: str) -> bool:
-    """Whether a build container on the executor's network can complete TLS to ``url``."""
-    probe = ("import sys, urllib.request\n"
+    """Whether a build container on the executor's network can complete TLS to ``url``.
+
+    Any HTTP response, an error status included, proves connectivity: repository roots such as
+    Google's Maven repository serve no index and answer 404, while builds fetch concrete paths."""
+    probe = ("import sys, urllib.error, urllib.request\n"
              "try:\n urllib.request.urlopen(sys.argv[1], timeout=20)\n"
+             "except urllib.error.HTTPError:\n pass\n"
              "except Exception as exc:\n print(type(exc).__name__, exc); sys.exit(1)\n")
     result = subprocess.run(["docker", "run", "--rm", "--network", "bridge", "--entrypoint",
                              "python3", tag, "-c", probe, url],
