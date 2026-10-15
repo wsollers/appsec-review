@@ -78,6 +78,23 @@ atomic; a response path outside the workspace, an over-limit or removed response
 response identity is an explicit coverage gap or integrity failure rather than silently omitted
 provenance.
 
+### Raw strace retention (debug period)
+
+`build_capture.retain_raw_traces` (shipped `true` globally and in both build jobs' overrides) keeps
+each command's raw per-process `strace` files instead of discarding them after normalization. They
+are copied to `raw-traces/trace.<pid>` beside `record.json` in the run-owned
+`execution-capture/command-NNN/` directory, up to `build_capture.raw_trace_bytes_limit` bytes per
+command (shipped 64 MiB; 1 byte to 1 GiB). A file that crosses the bound keeps only whole lines below
+it, and every later file is listed as not retained; each entry in `record.json`'s `raw_traces`
+records the source size, retained bytes and lines, a `truncated` flag and, when retained, its
+SHA-256 (taken after redaction). Values of `envp_redact_names` variables are redacted on copy, and
+each full raw trace is part of the capture's gitleaks corpus; a finding (or a failed scan) redacts the
+retained copy through the same path as the other retained capture files. Raw traces are debug
+material, never evidence: truncation is not a coverage gap. A collector row the normalizer cannot
+parse is still a named coverage gap and now names its location, for example
+`unparsed openat row: trace.21:2 (retained as raw-traces/trace.21 line 2)`, or says why the raw
+trace was not retained. Set `retain_raw_traces = false` to return to discarding raw traces.
+
 Receipts catalog generated sources, compile databases, objects, static/shared libraries,
 executables, LLVM bitcode/IR, debug data, and link maps. Loader dependencies of ELF executables and
 shared libraries are read from the dynamic section by a bounded in-repository parser that loads and
@@ -270,7 +287,8 @@ counts, dispositions, gap counts, and durations—not command text or environmen
 loading. Values below are the shipped `appsec-review.toml` defaults. Global capture limits live in
 `[build_capture]` (see the configuration section of
 [`../architecture/build-environments-and-execution-capture.md`](../architecture/build-environments-and-execution-capture.md));
-`settings.build_capture` overrides a subset for this job (shipped: `event_count_limit = 250000`).
+`settings.build_capture` overrides a subset for this job (shipped: `event_count_limit = 250000`,
+`retain_raw_traces = true`, `raw_trace_bytes_limit = 67108864`).
 
 | Key | Default | Meaning |
 | --- | --- | --- |

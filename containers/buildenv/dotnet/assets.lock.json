@@ -1,0 +1,10 @@
+{
+  "schema": "appsec-review/assets-lock/1",
+  "project": ".NET build environment",
+  "license": "MIT (.NET runtime apphost pack) plus bundled third-party notices",
+  "tool_version": "sdk8.0.131-sdk10.0.112-apphost8.0.31",
+  "architecture": "linux/amd64",
+  "artifacts": [
+    {"path":"downloads/microsoft.netcore.app.host.linux-x64.8.0.31.nupkg","url":"https://api.nuget.org/v3-flatcontainer/microsoft.netcore.app.host.linux-x64/8.0.31/microsoft.netcore.app.host.linux-x64.8.0.31.nupkg","bytes":4985716,"sha256":"3061fc6678cce1f645a7ade66cb3699288c8d93ed3be9bcd82fa633867eb4c81","version":"8.0.31","license":"MIT","license_source":"https://github.com/dotnet/runtime/blob/v8.0.31/LICENSE.TXT","provenance":"Microsoft-published NuGet package from nuget.org; matches the Ubuntu 8.0.31 runtime and targeting pack","signature_verification":{"status":"not-performed","reason":"NuGet repository and author signatures not verified; locally computed SHA-256 pinned with the official nuget.org URL and size"}}
+  ]
+}

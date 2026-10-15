@@ -36,6 +36,8 @@ needs a `settings.profiles.<family>` entry with a pinned `tag`, `image_id`, and 
 | `force_buildability_probe` | false | Boolean; bypass the cross-run probe cache |
 | `repair_attempts` | 3 | integer 3-10; image-repair attempts after a failed default probe |
 | `build_capture.event_count_limit` | 250000 | job override of the global `[build_capture]` limit |
+| `build_capture.retain_raw_traces` | true | keep secret-scanned, hashed raw strace files under `raw-traces/` (debug period; see language-build.md) |
+| `build_capture.raw_trace_bytes_limit` | 67108864 | retained raw-trace bytes per command; truncation is flagged in `record.json` |
 
 `settings.model` must define exactly `enabled`, `provider`, `model`, `reasoning`,
 `max_input_tokens`, `max_output_tokens`, and `timeout_seconds` (positive integers for the limits).

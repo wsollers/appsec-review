@@ -88,6 +88,10 @@ class BuildCaptureConfig:
     file_inventory_count_limit: int = 1_000_000
     response_file_count_limit: int = 10_000
     response_file_bytes_limit: int = 1024 * 1024
+    # Debug retention of the collector's raw per-process trace files (secret-scanned, hashed,
+    # and bounded per command). Off unless central configuration enables it.
+    retain_raw_traces: bool = False
+    raw_trace_bytes_limit: int = 64 * 1024 * 1024
 
     def __post_init__(self) -> None:
         if self.backend not in {"ptrace", "ebpf"}:
@@ -123,6 +127,11 @@ class BuildCaptureConfig:
             raise ValueError("build capture response_file_count_limit is invalid")
         if not 1 <= self.response_file_bytes_limit <= 64 * 1024 * 1024:
             raise ValueError("build capture response_file_bytes_limit is invalid")
+        if not isinstance(self.retain_raw_traces, bool):
+            raise ValueError("build capture retain_raw_traces must be a Boolean")
+        if (type(self.raw_trace_bytes_limit) is not int or
+                not 1 <= self.raw_trace_bytes_limit <= 1024 * 1024 * 1024):
+            raise ValueError("build capture raw_trace_bytes_limit is invalid")
 
 
 def _build_capture(value: object, *, base: BuildCaptureConfig | None = None,
@@ -134,7 +143,8 @@ def _build_capture(value: object, *, base: BuildCaptureConfig | None = None,
                "envp_bytes_limit", "envp_redact_names", "path_bytes_limit",
                "tool_call_count_limit",
                "secret_finding_count_limit", "file_inventory_count_limit",
-               "response_file_count_limit", "response_file_bytes_limit"}
+               "response_file_count_limit", "response_file_bytes_limit",
+               "retain_raw_traces", "raw_trace_bytes_limit"}
     unknown = set(value) - allowed
     if unknown:
         raise ValueError(f"{field} has unknown settings: {', '.join(sorted(unknown))}")
@@ -147,6 +157,13 @@ def _build_capture(value: object, *, base: BuildCaptureConfig | None = None,
     capture_envp = value.get("capture_envp", base.capture_envp if base else None)
     if not isinstance(capture_envp, bool):
         raise ValueError(f"{field}.capture_envp must be a Boolean")
+    retain_raw_traces = value.get("retain_raw_traces", base.retain_raw_traces if base else None)
+    if not isinstance(retain_raw_traces, bool):
+        raise ValueError(f"{field}.retain_raw_traces must be a Boolean")
+    raw_trace_bytes_limit = value.get(
+        "raw_trace_bytes_limit", base.raw_trace_bytes_limit if base else None)
+    if type(raw_trace_bytes_limit) is not int:
+        raise ValueError(f"{field}.raw_trace_bytes_limit must be an integer")
     return BuildCaptureConfig(
         backend=str(value.get("backend", base.backend if base else "")),
         event_count_limit=int(value.get(
@@ -169,6 +186,8 @@ def _build_capture(value: object, *, base: BuildCaptureConfig | None = None,
             "secret_finding_count_limit", base.secret_finding_count_limit if base else 0)),
         mode=_processing_mode(value.get(
             "mode", base.mode.value if base else ProcessingMode.REQUIRED.value), f"{field}.mode"),
+        retain_raw_traces=retain_raw_traces,
+        raw_trace_bytes_limit=raw_trace_bytes_limit,
         **{name: int(value[name]) if name in value else getattr(base, name)
            for name in ("file_inventory_count_limit", "response_file_count_limit",
                         "response_file_bytes_limit")

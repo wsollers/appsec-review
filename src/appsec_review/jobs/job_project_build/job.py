@@ -236,16 +236,24 @@ def _probe_environment(recipe: Mapping[str, Any]) -> dict[str, str]:
         # The derived image cache is immutable at probe time. Maven's go-offline goal is not
         # complete for every historical plugin (notably resources-plugin 2.6), so keep the
         # actual build repository writable and let the networked build container fill any gaps.
+        # The image-restored repository stays visible as Maven 3.9's read-only tail instead of
+        # being downloaded again into the writable head.
         options = environment.get("MAVEN_OPTS", "").strip()
-        environment["MAVEN_OPTS"] = "-Dmaven.repo.local=/tmp/appsec-review-maven" + (
-            f" {options}" if options else "")
+        environment["MAVEN_OPTS"] = (
+            "-Dmaven.repo.local=/tmp/appsec-review-maven "
+            "-Dmaven.repo.local.tail=/opt/project-deps/maven" + (f" {options}" if options else ""))
+    if str(recipe.get("build_system", "")) == "gradle":
+        # Gradle locks and writes beneath its user home, which the read-only image root cannot
+        # hold. Use writable scratch and expose the image-restored cache read-only.
+        environment["GRADLE_USER_HOME"] = "/tmp/appsec-review-gradle"
+        environment["GRADLE_RO_DEP_CACHE"] = "/opt/project-deps/gradle/caches"
     if str(recipe.get("build_system", "")) == "cargo":
         # rustc creates incremental session locks owner-only (0700) as the container user, so
         # the orchestrating user could not hash the workspace it must catalog. A run-owned
         # workspace is built once; incremental state has no reader.
         environment["CARGO_INCREMENTAL"] = "0"
     for key, protected in project_dependency_environment(recipe).items():
-        if key == "MAVEN_OPTS":
+        if key in {"MAVEN_OPTS", "GRADLE_USER_HOME"}:
             continue
         if key not in environment:
             continue  # The derived image already carries the protected value.
@@ -904,15 +912,14 @@ def _deterministic_jvm_recipe(unit: UnitContext, action: Mapping[str, Any]) -> M
             javac.extend(["-classpath", "build/classes"])
         commands.append([*javac, "-d", "build/classes", *java_sources])
     commands.append(["jar", "--create", "--file", "build/appsec-review.jar", "-C", "build/classes", "."])
-    kotlin_environment = ({
-        "JAVA_HOME": "/usr/lib/jvm/java-17-openjdk-amd64",
-        "PATH": "/usr/lib/jvm/java-17-openjdk-amd64/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
-    } if kotlin_sources else {})
+    # The pinned Java profile image owns the JDK and the Kotlin compiler. A deterministic recipe
+    # must not name apt packages (planning strips them, leaving the first probe without the
+    # toolchain they implied) or a JAVA_HOME that only exists after such a repair.
     recipe = {
         "schema": "appsec-review/build-recipe/1", "build_unit_id": action["build_unit_id"],
         "image_profile": "java", "source_dir": root, "build_dir": build_dir,
-        "system_packages": (["kotlin", "openjdk-17-jdk-headless"] if kotlin_sources else []),
-        "environment": kotlin_environment, "dependency_files": target_paths,
+        "system_packages": [],
+        "environment": {}, "dependency_files": target_paths,
         "configure_commands": [], "build_commands": commands,
         "expected_outputs": [classes_dir, jar_path], "network_required": False,
         "reason": "Deterministic offline JVM compilation derived from bounded Java/Kotlin source markers.",

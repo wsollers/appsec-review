@@ -22,6 +22,7 @@ from .build_capture import (
     PATH_FIELDS, REQUIRED_EVENT_KINDS, BuildExecutionRecorder, CaptureScope, record_strace_files,
 )
 from .capture_files import CaptureRoots, build_file_inventory, read_events, snapshot_response_files
+from .raw_traces import reference_raw_traces, retain_raw_traces
 
 
 def repository_root() -> Path:
@@ -324,6 +325,11 @@ class BuildContainerExecutor:
         self._take_tool_call_ownership(capture_root)
         trace_paths = tuple(capture_root.glob("trace*"))
         parse_errors = record_strace_files(trace_paths, recorder)
+        raw_traces = (retain_raw_traces(capture_root, trace_paths,
+                                        bytes_limit=capture_config.raw_trace_bytes_limit,
+                                        envp_redact_names=capture_config.envp_redact_names)
+                      if capture_config.retain_raw_traces else None)
+        parse_errors = reference_raw_traces(parse_errors, raw_traces)
         recorder.flush()
         roots = CaptureRoots("/workspace", root, logical_capture, self.profile.image_id,
                              posixpath.normpath(f"/workspace/{working_directory}"))
@@ -335,7 +341,7 @@ class BuildContainerExecutor:
         secret_scan = self._scan_capture_secrets(
             capture_root, trace_paths=trace_paths,
             finding_limit=capture_config.secret_finding_count_limit,
-            argv=argv, environment=capture_environment)
+            argv=argv, environment=capture_environment, raw_traces=raw_traces)
         record_argv = (["<redacted: secret detected by gitleaks>"]
                        if secret_scan.pop("redact_invocation", False) else argv)
         # The inventory reads the sanitized events, so redacted paths never reach it.
@@ -357,7 +363,8 @@ class BuildContainerExecutor:
             argv=record_argv, working_directory=working_directory, exit_code=code, timed_out=timed_out,
             stdout_path=stdout_path, stderr_path=stderr_path, collector_errors=parse_errors,
             secret_scan=secret_scan, file_inventory=inventory,
-            response_files=(response_files, response_gaps))
+            response_files=(response_files, response_gaps),
+            raw_traces=raw_traces if raw_traces is not None else {"enabled": False})
         stdout_size, stderr_size = stdout_path.stat().st_size, stderr_path.stat().st_size
         with stdout_path.open("rb") as stream:
             retained_stdout = stream.read(self.output_bytes)
@@ -407,7 +414,8 @@ class BuildContainerExecutor:
 
     def _scan_capture_secrets(self, capture_root: Path, *, trace_paths: Sequence[Path],
                               finding_limit: int, argv: Sequence[str],
-                              environment: Mapping[str, str]) -> dict[str, Any]:
+                              environment: Mapping[str, str],
+                              raw_traces: Mapping[str, Any] | None = None) -> dict[str, Any]:
         """Scan raw argv/envp and retained streams, then remove raw syscall material."""
         # Keep the disposable mirror beside ``execution-capture`` rather than beneath the
         # already-deep command directory.  Language-build paths can otherwise cross the
@@ -429,6 +437,11 @@ class BuildContainerExecutor:
         for trace in trace_paths:
             if trace.is_file():
                 retain(trace, f"syscalls/{trace.name}", sanitize=False)
+        # Retained raw traces are scanned in full above; a finding anywhere in a trace redacts
+        # its retained (possibly truncated) copy through the same disposition path.
+        for item in (raw_traces or {}).get("records", ()):
+            if item.get("retained"):
+                persistent[f"syscalls/{item['source']}"] = capture_root / str(item["uri"])
         for name in ("stdout", "stderr"):
             retain(capture_root / name, f"streams/{name}", sanitize=True)
         retain(capture_root / "events.jsonl", "events.jsonl", sanitize=True)

@@ -119,8 +119,8 @@ decision would weaken the recorded acceptance contract.
 
 ## Status update (2026-10-14)
 
-The counts above describe the 2026-10-08 acceptance. The catalog has since grown to 29 enabled tool
-images plus 4 bases and the Android build environment, adding tools not derived from the legacy archive (see
+The counts above describe the 2026-10-08 acceptance. The catalog has since grown to 30 enabled tool
+images plus 4 bases and the Android, Java/Kotlin, and .NET build environments, adding tools not derived from the legacy archive (see
 `containers/README.md`). Not every enabled tool has an asset lock: `tool-sqlite-fts` packages a
 repository-owned script on `base-python` and has none. `job_evidence_collection` now registers 20
 adapters, including `tool-opengrep` for the SEI CERT rule pack; the eight tools whose `tool.toml`

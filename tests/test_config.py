@@ -46,8 +46,13 @@ def test_default_config_declares_midnight_nvd_schedule() -> None:
     assert config.build_capture == BuildCaptureConfig(
         "ptrace", 100000, 256, 16384, True, 1024, 131072,
         ("AWS_SECRET_ACCESS_KEY", "GITHUB_TOKEN", "NODE_AUTH_TOKEN", "NUGET_AUTH_TOKEN",
-         "PIP_INDEX_URL"), 4096, 10000, 1000)
+         "PIP_INDEX_URL"), 4096, 10000, 1000,
+        retain_raw_traces=True, raw_trace_bytes_limit=64 * 1024 * 1024)
     assert config.job("job_project_build").build_capture.event_count_limit == 250000
+    for job_id in ("job_project_build", "job_language_build"):
+        capture = config.job(job_id).build_capture
+        assert capture.retain_raw_traces is True
+        assert capture.raw_trace_bytes_limit == 64 * 1024 * 1024
     assert config.job("job_language_build").build_capture.event_count_limit == 250000
     assert config.job("job_codeql_analysis").build_capture == config.build_capture
     assert set(job.steps) == {"nvd_sync", "osv_sync", "mitre_sync", "cve_bin_tool_db_build", "kev_sync", "epss_sync"}
