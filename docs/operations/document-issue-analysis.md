@@ -11,5 +11,5 @@ artifact reference to `data/document-issues/<content-sha256>/ledger.json`. The l
 document evidence, source mapping, proof obligations, mapping ambiguity, and coverage gaps.
 It is private candidate material. `findings` and `scoring_inputs` are empty until independent
 review and finding publication are implemented. An empty finding list says nothing about target
-security. Changed accepted source bytes, package bytes, or handoff hashes stop the job rather
+security, so the job is always `COMPLETED_WITH_GAPS` and its first named gap says so. Changed accepted source bytes, package bytes, or handoff hashes stop the job rather
 than creating a clean result.
