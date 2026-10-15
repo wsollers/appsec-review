@@ -5,6 +5,7 @@ from dataclasses import asdict, dataclass
 import hashlib
 import json
 from pathlib import Path, PurePosixPath
+import re
 import shutil
 from typing import Any
 
@@ -83,6 +84,146 @@ def node_dependency_root(recipe: Mapping[str, Any]) -> str:
     return parent.as_posix()
 
 
+# Package managers a repair may select because the family build image already pins them
+# (containers/buildenv/typescript installs Node.js 22.23.3 with its bundled npm, pnpm 9.15.9 and
+# Yarn 1.22.22). Other families pin exactly one manager, so there is nothing to select.
+PINNED_PACKAGE_MANAGERS: dict[str, dict[str, str]] = {
+    "node": {"npm": "bundled with Node.js 22.23.3", "pnpm": "9.15.9", "yarn": "1.22.22"},
+}
+_NODE_LOCKS = {"package-lock.json": "npm", "pnpm-lock.yaml": "pnpm", "yarn.lock": "yarn"}
+_REPAIR_ENV_KEY = re.compile(r"^[A-Z][A-Z0-9_]{0,63}$")
+_REPAIR_ENV_VALUE = re.compile(r"^[A-Za-z0-9._=,:+/ -]{1,512}$")
+
+
+def _image_repairs(recipe: Mapping[str, Any]) -> Mapping[str, Any]:
+    value = recipe.get("image_repairs")
+    return value if isinstance(value, Mapping) else {}
+
+
+def _node_lockless_manager(recipe: Mapping[str, Any]) -> str:
+    selected = _image_repairs(recipe).get("package_manager")
+    if selected is not None:
+        return str(selected)
+    commands = [*recipe.get("configure_commands", ()), *recipe.get("build_commands", ())]
+    managers = {PurePosixPath(str(argv[0])).name for argv in commands
+                if isinstance(argv, list) and argv} & {"npm", "pnpm", "yarn"}
+    if len(managers) > 1:
+        raise ValueError("Node dependency restore accepts one package manager")
+    return next(iter(managers), "npm")
+
+
+def restore_manager(build_system: str, recipe: Mapping[str, Any], manifest: str) -> str | None:
+    """The family package manager that restores ``manifest`` into the image, or ``None``.
+
+    Only manifests whose dependencies land where the later build reads them qualify: the shared
+    pip target, Cargo home, Go module cache, Maven repository, Gradle cache, and NuGet folder for
+    any accepted manifest; the single Node and Composer dependency roots for those families.
+    """
+    path = PurePosixPath(manifest)
+    name = path.name
+    accepted = {str(value) for value in recipe.get("dependency_files", ())}
+    if build_system == "python":
+        return "pip" if re.fullmatch(r"requirements[A-Za-z0-9_.-]*\.txt", name) else None
+    if build_system == "node":
+        if name not in {"package.json", *_NODE_LOCKS} or (
+                path.parent.as_posix() != node_dependency_root(recipe)):
+            return None
+        locks = [lock for lock in _NODE_LOCKS if (path.parent / lock).as_posix() in accepted]
+        if len(locks) > 1:
+            return None
+        return _NODE_LOCKS[locks[0]] if locks else _node_lockless_manager(recipe)
+    if build_system == "cargo":
+        return "cargo" if name == "Cargo.toml" else None
+    if build_system == "go":
+        return "go" if name in {"go.mod", "go.work"} else None
+    if build_system == "maven":
+        return "mvn" if name == "pom.xml" else None
+    if build_system == "gradle":
+        return "gradle" if name in {"build.gradle", "build.gradle.kts", "settings.gradle",
+                                    "settings.gradle.kts"} else None
+    if build_system == "dotnet":
+        return "dotnet" if path.suffix in {".csproj", ".fsproj", ".vbproj", ".sln"} else None
+    if build_system == "composer":
+        return ("composer" if name == "composer.json" and
+                path.parent.as_posix() == PurePosixPath(str(recipe.get("source_dir", "."))).as_posix()
+                else None)
+    return None
+
+
+def repair_restore_commands(recipe: Mapping[str, Any]) -> list[tuple[str, tuple[str, ...]]]:
+    """Render each typed repair restore as ``(working directory, argv)``; no free-form text."""
+    restores = _image_repairs(recipe).get("dependency_restores", ())
+    if not isinstance(restores, (list, tuple)) or len(restores) > 8:
+        raise ValueError("image repair dependency restores are invalid")
+    build_system = str(recipe.get("build_system", ""))
+    accepted = {str(value) for value in recipe.get("dependency_files", ())}
+    result = []
+    for item in restores:
+        manifest = str(item.get("manifest", "")) if isinstance(item, Mapping) else ""
+        path = PurePosixPath(manifest)
+        if (manifest not in accepted or not path.parts or path.is_absolute() or ".." in path.parts):
+            raise ValueError(f"image repair restore manifest is not accepted: {manifest[:512]}")
+        manager = restore_manager(build_system, recipe, manifest)
+        if manager is None or manager != item.get("manager"):
+            raise ValueError(f"image repair restore manager is invalid for {manifest[:512]}")
+        directory = "/opt/project" if path.parent.as_posix() == "." else f"/opt/project/{path.parent}"
+        name = path.name
+        if manager == "pip":
+            argv: tuple[str, ...] = ("python", "-m", "pip", "install", "--target", "/opt/project-deps",
+                                     "-r", name)
+        elif build_system == "node":
+            locked = any((path.parent / lock).as_posix() in accepted for lock in _NODE_LOCKS)
+            argv = {("npm", True): ("npm", "ci", "--ignore-scripts", "--no-audit", "--no-fund"),
+                    ("npm", False): ("npm", "install", "--ignore-scripts", "--no-audit", "--no-fund"),
+                    ("pnpm", True): ("pnpm", "install", "--frozen-lockfile", "--ignore-scripts"),
+                    ("pnpm", False): ("pnpm", "install", "--no-frozen-lockfile", "--ignore-scripts"),
+                    ("yarn", True): ("yarn", "install", "--frozen-lockfile", "--ignore-scripts",
+                                     "--non-interactive"),
+                    ("yarn", False): ("yarn", "install", "--ignore-scripts", "--non-interactive"),
+                    }[(manager, locked)]
+        elif manager == "cargo":
+            locked = (path.parent / "Cargo.lock").as_posix() in accepted
+            argv = ("cargo", "fetch", "--locked") if locked else ("cargo", "fetch")
+        elif manager == "go":
+            argv = ("go", "mod", "download")
+        elif manager == "mvn":
+            argv = ("mvn", "-B", "-DskipTests", "-f", name, "dependency:go-offline")
+        elif manager == "gradle":
+            argv = ("gradle", "--no-daemon", "dependencies")
+        elif manager == "dotnet":
+            argv = ("dotnet", "restore", name)
+        else:
+            argv = ("composer", "install", "--no-interaction", "--no-scripts", "--no-plugins",
+                    "--prefer-dist", "--no-progress")
+        result.append((directory, argv))
+    return result
+
+
+def repair_environment(recipe: Mapping[str, Any]) -> dict[str, str]:
+    """The validated repair environment the image carries (set before any restore runs)."""
+    value = _image_repairs(recipe).get("environment", {})
+    if not isinstance(value, Mapping) or len(value) > 16:
+        raise ValueError("image repair environment is invalid")
+    for key, item in value.items():
+        if not isinstance(key, str) or not _REPAIR_ENV_KEY.fullmatch(key) or not isinstance(
+                item, str) or not _REPAIR_ENV_VALUE.fullmatch(item):
+            raise ValueError("image repair environment is invalid")
+    return {str(key): str(item) for key, item in sorted(value.items())}
+
+
+def _cargo_placeholder_dirs(recipe: Mapping[str, Any]) -> list[str]:
+    directories = set()
+    if str(recipe.get("build_system", "")) != "cargo":
+        return []
+    if bool(recipe.get("network_required")):
+        directories.add(PurePosixPath(str(recipe["source_dir"])).as_posix())
+    for directory, argv in repair_restore_commands(recipe):
+        if argv[0] == "cargo":
+            relative = directory[len("/opt/project"):].lstrip("/")
+            directories.add(relative or ".")
+    return sorted(directories)
+
+
 def _restore_command(recipe: Mapping[str, Any]) -> tuple[str, ...] | None:
     system = str(recipe.get("build_system", ""))
     files = {PurePosixPath(str(value)).name for value in recipe.get("dependency_files", ())}
@@ -103,12 +244,7 @@ def _restore_command(recipe: Mapping[str, Any]) -> tuple[str, ...] | None:
         if len(locks) > 1:
             raise ValueError("Node dependency restore accepts at most one supported lockfile")
         if not locks:
-            commands = [*recipe.get("configure_commands", ()), *recipe.get("build_commands", ())]
-            managers = {PurePosixPath(str(argv[0])).name for argv in commands
-                        if isinstance(argv, list) and argv} & {"npm", "pnpm", "yarn"}
-            if len(managers) > 1:
-                raise ValueError("Node dependency restore accepts one package manager")
-            manager = next(iter(managers), "npm")
+            manager = _node_lockless_manager(recipe)
             if manager == "pnpm":
                 return ("pnpm", "install", "--no-frozen-lockfile", "--ignore-scripts")
             if manager == "yarn":
@@ -210,12 +346,11 @@ class ProjectImageResolver:
         for ordinal, relative in enumerate(sorted(hashes)):
             lines.append("COPY --chown=" + profile.user + " " + json.dumps(
                 [f"inputs/{ordinal:04d}", f"/opt/project/{relative}"], separators=(",", ":")))
-        if str(recipe.get("build_system", "")) == "cargo" and bool(recipe.get("network_required")):
+        for directory in _cargo_placeholder_dirs(recipe):
             # Cargo validates that a manifest has a target before it will fetch dependencies.
             # Project images intentionally contain descriptors only, so provide a harmless
             # image-local target. The real source tree replaces this path in the build workspace.
-            source = str(recipe["source_dir"])
-            prefix = "" if source == "." else source + "/"
+            prefix = "" if directory == "." else directory + "/"
             lines.append("COPY --chown=" + profile.user + " " + json.dumps(
                 ["cargo-placeholder.rs", f"/opt/project/{prefix}src/main.rs"],
                 separators=(",", ":")))
@@ -225,18 +360,28 @@ class ProjectImageResolver:
                       f"USER {profile.user}", "ENV HOME=/opt/project-home"))
         for key, value in sorted(project_dependency_environment(recipe).items()):
             lines.append(f"ENV {key}={value}")
-        lines.append(f"WORKDIR /opt/project/{recipe['source_dir']}")
+        # Typed image-repair environment precedes every restore, so it governs them too.
+        for key, value in repair_environment(recipe).items():
+            lines.append(f"ENV {key}={json.dumps(value)}")
+        workdir = f"WORKDIR /opt/project/{recipe['source_dir']}"
+        lines.append(workdir)
         restore = _restore_command({**recipe, "build_system": recipe.get("build_system")})
         if bool(recipe.get("network_required")):
             if restore is None:
                 raise ValueError("network-required recipe has no supported deterministic dependency restore")
             lines.append(_json_instruction("RUN", restore))
+        repair_restores = repair_restore_commands(recipe)
+        for directory, argv in repair_restores:
+            lines.extend((f"WORKDIR {directory}", _json_instruction("RUN", argv)))
+        if repair_restores:
+            lines.append(workdir)
         return identity, ("\n".join(lines) + "\n").encode("utf-8")
 
     def resolve(self, recipe: Mapping[str, Any], profile: BuildProfile) -> tuple[ProjectImage, bytes, bytes]:
         hashes = dependency_hashes(self.target_root, recipe)
         identity, dockerfile = self.definition(recipe, profile)
-        customized = bool(recipe.get("system_packages")) or bool(recipe.get("network_required"))
+        customized = (bool(recipe.get("system_packages")) or bool(recipe.get("network_required")) or
+                      bool(recipe.get("image_repairs")))
         if self._inspect(profile.tag) != profile.image_id:
             raise ValueError(f"base build image identity changed: {profile.name}")
         if not customized:
@@ -278,7 +423,7 @@ class ProjectImageResolver:
                 source = _safe_dependency(self.target_root, relative)
                 staged = inputs / f"{ordinal:04d}"
                 shutil.copyfile(source, staged)
-            if str(recipe.get("build_system", "")) == "cargo" and bool(recipe.get("network_required")):
+            if _cargo_placeholder_dirs(recipe):
                 (context / "cargo-placeholder.rs").write_text("fn main() {}\n", encoding="utf-8")
             packages = tuple(str(value) for value in recipe.get("system_packages", ()))
             dockerfile_path = context / "Dockerfile"

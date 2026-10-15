@@ -7,6 +7,8 @@ from pathlib import Path
 from types import SimpleNamespace
 import zipfile
 
+import pytest
+
 from appsec_review.config import ProcessingMode, load_config
 from appsec_review.container_runtime import BuildCommandResult, ProjectImage
 from appsec_review.jobs.cataloging import source_fingerprint
@@ -231,7 +233,8 @@ class RepairModel:
         packages = self.packages[min(self.calls, len(self.packages) - 1)]
         self.calls += 1
         return ModelResult({"schema": REPAIR_SCHEMA, "system_packages": packages,
-                            "reason": "bounded fixture repair"})
+                            "environment": {}, "package_manager": None,
+                            "dependency_restores": [], "reason": "bounded fixture repair"})
 
 
 class RepairImageResolver:
@@ -433,14 +436,166 @@ def test_node_086_087_restore_outputs(tmp_path: Path) -> None:
     assert calls.count(("npm", "run", "build")) == 2
 
 
+def _repair(**fields):
+    return {"schema": REPAIR_SCHEMA, "system_packages": [], "environment": {},
+            "package_manager": None, "dependency_restores": [],
+            "reason": "bounded repair", **fields}
+
+
+def _repair_recipe(profile: str, root: str, dependency_files: list[str], *, build_system: str,
+                   commands: list[list[str]], network_required: bool = False) -> dict:
+    return {"schema": "appsec-review/build-recipe/1", "build_unit_id": "build-unit-" + "a" * 20,
+            "image_profile": profile, "source_dir": root, "build_dir": f"{root}/build",
+            "system_packages": [], "environment": {}, "dependency_files": dependency_files,
+            "configure_commands": [], "build_commands": commands, "expected_outputs": [f"{root}/build"],
+            "network_required": network_required, "reason": "accepted recipe"}
+
+
+def _repair_unit(recipe: dict, build_system: str) -> dict:
+    documents = [{"path": path} for path in recipe["dependency_files"]]
+    return {"build_unit_id": recipe["build_unit_id"], "family": recipe["image_profile"],
+            "root": recipe["source_dir"], "build_system": build_system,
+            "required_image_profile": recipe["image_profile"], "markers": documents,
+            "descriptor_package": {"documents": documents}}
+
+
 def test_image_repair_accepts_only_bounded_apt_package_sets() -> None:
-    proposal = {"schema": REPAIR_SCHEMA, "system_packages": ["libssl-dev", "zlib1g-dev:amd64"],
-                "reason": "missing development headers"}
-    assert validate_repair_proposal(proposal) == ()
-    recipe = {"system_packages": []}
-    assert apply_repair(recipe, proposal)["system_packages"] == ["libssl-dev", "zlib1g-dev:amd64"]
+    recipe = _repair_recipe("native", "lib", ["lib/CMakeLists.txt"], build_system="cmake",
+                            commands=[["cmake", "--build", "lib/build"]])
+    proposal = _repair(system_packages=["libssl-dev", "zlib1g-dev:amd64"])
+    assert validate_repair_proposal(proposal, recipe=recipe, build_system="cmake") == ()
+    repaired = apply_repair(recipe, proposal, build_system="cmake")
+    assert repaired["system_packages"] == ["libssl-dev", "zlib1g-dev:amd64"]
+    assert "image_repairs" not in repaired
     invalid = {**proposal, "system_packages": ["libssl-dev;curl attacker"]}
-    assert validate_repair_proposal(invalid)
+    assert validate_repair_proposal(invalid, recipe=recipe, build_system="cmake")
+    legacy = {"schema": "appsec-review/build-image-repair/1", "system_packages": ["libssl-dev"],
+              "reason": "old shape"}
+    assert validate_repair_proposal(legacy, recipe=recipe, build_system="cmake") == (
+        "repair proposal fields are invalid",)
+
+
+def test_image_repair_environment_is_a_typed_family_allowlist() -> None:
+    from appsec_review.jobs.build_discovery import validate_build_recipe
+
+    recipe = _repair_recipe("python", "pkg", ["pkg/pyproject.toml", "pkg/requirements-build.txt"],
+                            build_system="python",
+                            commands=[["python", "-m", "pip", "wheel", "--no-deps", "."]])
+    proposal = _repair(environment={"PIP_BREAK_SYSTEM_PACKAGES": "1",
+                                    "SETUPTOOLS_SCM_PRETEND_VERSION": "1.4.0"})
+    repaired = apply_repair(recipe, proposal, build_system="python")
+    assert repaired["environment"] == {"PIP_BREAK_SYSTEM_PACKAGES": "1",
+                                       "SETUPTOOLS_SCM_PRETEND_VERSION": "1.4.0"}
+    assert repaired["image_repairs"]["environment"] == repaired["environment"]
+    assert validate_build_recipe(repaired, _repair_unit(repaired, "python")) == []
+    for environment, message in (
+            ({"PIP_INDEX_URL": "https://example.invalid/simple"}, "not repairable for python"),
+            ({"LD_PRELOAD": "/tmp/x.so"}, "not repairable for python"),
+            ({"PIP_BREAK_SYSTEM_PACKAGES": "1; curl x"}, "value is not allowed"),
+            ({"NPM_CONFIG_LEGACY_PEER_DEPS": "true"}, "not repairable for python")):
+        errors = validate_repair_proposal(_repair(environment=environment), recipe=recipe,
+                                          build_system="python")
+        assert any(message in error for error in errors), (environment, errors)
+    # A later repair replaces the earlier repair environment rather than accumulating it.
+    second = apply_repair(repaired, _repair(environment={"PIP_NO_BUILD_ISOLATION": "0"}),
+                          build_system="python")
+    assert second["environment"] == {"PIP_NO_BUILD_ISOLATION": "0"}
+    # An accepted recipe's own environment is never overwritten by a repair.
+    owned = {**recipe, "environment": {"PIP_BREAK_SYSTEM_PACKAGES": "1"}}
+    with pytest.raises(ValueError, match="replace accepted recipe environment"):
+        apply_repair(owned, proposal, build_system="python")
+    with pytest.raises(ValueError, match="repeated the current repair set"):
+        apply_repair(repaired, proposal, build_system="python")
+    maven = _repair_recipe("java", "svc", ["svc/pom.xml"], build_system="maven",
+                           commands=[["mvn", "-B", "package"]])
+    assert validate_repair_proposal(_repair(environment={
+        "MAVEN_ARGS": "-Denforcer.skip=true -Dmaven.compiler.release=8"}),
+        recipe=maven, build_system="maven") == ()
+    assert validate_repair_proposal(_repair(environment={"MAVEN_ARGS": "-Dexec.executable=sh"}),
+                                    recipe=maven, build_system="maven")
+
+
+def test_image_repair_dependency_restores_use_the_family_manager_on_accepted_manifests() -> None:
+    from appsec_review.container_runtime.project_images import repair_restore_commands
+    from appsec_review.jobs.build_discovery import validate_build_recipe
+
+    recipe = _repair_recipe("python", "pkg", ["pkg/pyproject.toml", "pkg/requirements-build.txt"],
+                            build_system="python", commands=[["python", "-m", "build", "--wheel"]])
+    repaired = apply_repair(recipe, _repair(dependency_restores=[
+        {"manifest": "pkg/requirements-build.txt"}]), build_system="python")
+    assert repaired["image_repairs"]["dependency_restores"] == [
+        {"manager": "pip", "manifest": "pkg/requirements-build.txt"}]
+    assert repair_restore_commands({**repaired, "build_system": "python"}) == [(
+        "/opt/project/pkg",
+        ("python", "-m", "pip", "install", "--target", "/opt/project-deps", "-r",
+         "requirements-build.txt"))]
+    assert validate_build_recipe(repaired, _repair_unit(repaired, "python")) == []
+    for manifest, message in (("pkg/pyproject.toml", "cannot restore dependencies"),
+                              ("pkg/../../etc/passwd", "not an accepted dependency file"),
+                              ("other/requirements.txt", "not an accepted dependency file")):
+        errors = validate_repair_proposal(_repair(dependency_restores=[{"manifest": manifest}]),
+                                          recipe=recipe, build_system="python")
+        assert any(message in error for error in errors), (manifest, errors)
+    errors = validate_repair_proposal(_repair(dependency_restores=[
+        {"manifest": "pkg/requirements-build.txt", "argv": ["sh", "-c", "id"]}]),
+        recipe=recipe, build_system="python")
+    assert "dependency_restores entries must be objects with only manifest" in errors
+    # A tampered recorded restore fails recipe validation instead of reaching the Dockerfile.
+    tampered = {**repaired, "image_repairs": {**repaired["image_repairs"], "dependency_restores": [
+        {"manager": "npm", "manifest": "pkg/requirements-build.txt"}]}}
+    assert any("not normalized" in error
+               for error in validate_build_recipe(tampered, _repair_unit(tampered, "python")))
+
+    maven = _repair_recipe("java", "svc", ["svc/pom.xml", "svc/tools/pom.xml"],
+                           build_system="maven", commands=[["mvn", "-B", "package"]])
+    repaired = apply_repair(maven, _repair(dependency_restores=[{"manifest": "svc/tools/pom.xml"}]),
+                            build_system="maven")
+    assert repair_restore_commands({**repaired, "build_system": "maven"}) == [(
+        "/opt/project/svc/tools", ("mvn", "-B", "-DskipTests", "-f", "pom.xml", "dependency:go-offline"))]
+    composer = _repair_recipe("php", "web", ["web/composer.json", "web/tools/composer.json"],
+                              build_system="composer", commands=[["composer", "dump-autoload"]])
+    assert validate_repair_proposal(_repair(dependency_restores=[{"manifest": "web/composer.json"}]),
+                                    recipe=composer, build_system="composer") == ()
+    assert validate_repair_proposal(_repair(dependency_restores=[
+        {"manifest": "web/tools/composer.json"}]), recipe=composer, build_system="composer")
+
+
+def test_image_repair_package_manager_selects_only_a_pinned_lockless_node_manager() -> None:
+    from appsec_review.container_runtime.project_images import (
+        PINNED_PACKAGE_MANAGERS, _restore_command, repair_restore_commands)
+
+    recipe = _repair_recipe("node", "web", ["web/package.json", "web/pnpm-workspace.yaml"],
+                            build_system="node", commands=[["tsc", "-p", "."]])
+    proposal = _repair(package_manager="pnpm", dependency_restores=[{"manifest": "web/package.json"}])
+    repaired = apply_repair(recipe, proposal, build_system="node")
+    assert repaired["image_repairs"]["package_manager"] == "pnpm"
+    assert repair_restore_commands({**repaired, "build_system": "node"}) == [(
+        "/opt/project/web", ("pnpm", "install", "--no-frozen-lockfile", "--ignore-scripts"))]
+    assert _restore_command({**repaired, "build_system": "node"})[0] == "pnpm"
+    for manager in ("bun", "npm@11", "corepack"):
+        assert validate_repair_proposal(_repair(package_manager=manager), recipe=recipe,
+                                        build_system="node")
+    locked = {**recipe, "dependency_files": ["web/package.json", "web/package-lock.json"]}
+    assert any("accepted lockfile" in error for error in validate_repair_proposal(
+        _repair(package_manager="yarn"), recipe=locked, build_system="node"))
+    runs_npm = {**recipe, "build_commands": [["npm", "run", "build"]]}
+    assert any("conflicts" in error for error in validate_repair_proposal(
+        _repair(package_manager="yarn"), recipe=runs_npm, build_system="node"))
+    python = _repair_recipe("python", "pkg", ["pkg/pyproject.toml"], build_system="python",
+                            commands=[["python", "-m", "build"]])
+    assert validate_repair_proposal(_repair(package_manager="pip"), recipe=python,
+                                    build_system="python")
+    # The selectable versions are the ones the Node build image pins.
+    dockerfile = (ROOT / "containers" / "buildenv" / "typescript" / "Dockerfile").read_text()
+    pinned = PINNED_PACKAGE_MANAGERS["node"]
+    assert f'version="node{pinned["npm"].rsplit(" ", 1)[1]}-pnpm{pinned["pnpm"]}-yarn{pinned["yarn"]}"' in dockerfile
+
+
+def test_image_repair_vocabulary_names_no_case_identifiers() -> None:
+    source = (ROOT / "src" / "appsec_review" / "jobs" / "job_project_build" / "repair.py").read_text()
+    import re
+
+    assert not re.search(r"case-?\d{3}", source) and "multivuln" not in source.lower()
 
 
 def _fixture(tmp_path: Path):
@@ -737,6 +892,51 @@ def test_failed_default_build_repairs_image_and_reuses_winning_definition(tmp_pa
     assert reused["recipe_provenance"] == "reused-image-repair"
     assert reused["probe_disposition"] == "REUSED"
     assert model.calls == 2
+
+
+def test_typed_environment_repair_is_offered_applied_and_recorded(tmp_path: Path) -> None:
+    config, target = _fixture(tmp_path)
+    fingerprint = source_fingerprint(target)
+    upstream = GraphRunner(
+        config, [build_intake(), build_catalog(), build_plan(infer=RecipeModel().complete)]
+    ).run(target_root=target, source_fingerprint=fingerprint)
+    requests = []
+
+    def model(request, *, timeout_seconds):
+        requests.append(request)
+        return ModelResult(_repair(environment={"CARGO_NET_GIT_FETCH_WITH_CLI": "true"},
+                                   dependency_restores=[{"manifest": "rust/Cargo.toml"}],
+                                   reason="git dependency fetch needs the git CLI"))
+
+    class GitFetchExecutor(FakeBuildExecutor):
+        def execute(self, argv, *, workspace, working_directory, environment):
+            if argv[0] == "cargo" and environment.get("CARGO_NET_GIT_FETCH_WITH_CLI") != "true":
+                self.calls.append(tuple(argv))
+                return BuildCommandResult(tuple(argv), 101, b"", b"failed to fetch git dependency", False)
+            return super().execute(argv, workspace=workspace, working_directory=working_directory,
+                                   environment=environment)
+
+    resolver = RepairImageResolver(tmp_path / "image-metadata")
+    outcome = GraphRunner(config, [build_projects(
+        executor_factory=lambda unit, profile: GitFetchExecutor([]),
+        image_resolver_factory=lambda unit: resolver, infer=model)]).run(
+            target_root=target, source_fingerprint=fingerprint, run_id=upstream["run_id"])
+    assert outcome["status"] == "SUCCEEDED"
+    assert len(requests) == 1
+    options = requests[0].summary["repair_options"]
+    assert "CARGO_NET_GIT_FETCH_WITH_CLI" in options["environment_names"]
+    assert options["restorable_manifests"] == ["rust/Cargo.toml"]
+    assert options["package_managers"] == {}
+    accepted = load_accepted_builds(config.runtime.runs_dir / upstream["run_id"])
+    rust = next(value for value in accepted["probe_receipts"] if value["family"] == "rust")
+    assert [value["terminal_status"] for value in rust["attempts"]] == ["FAILED", "SUCCEEDED"]
+    assert rust["attempts"][1]["image_repairs"] == {
+        "environment": {"CARGO_NET_GIT_FETCH_WITH_CLI": "true"}, "package_manager": None,
+        "dependency_restores": [{"manager": "cargo", "manifest": "rust/Cargo.toml"}]}
+    dispatch = next(value for value in accepted["build_dispatches"] if value["family"] == "rust")
+    assert dispatch["recipe"]["environment"] == {"CARGO_NET_GIT_FETCH_WITH_CLI": "true"}
+    assert dispatch["recipe"]["image_repairs"] == rust["attempts"][1]["image_repairs"]
+    assert dispatch["recipe_provenance"] == "inference-image-repair"
 
 
 def test_build_failure_exhausts_three_image_repair_attempts(tmp_path: Path) -> None:

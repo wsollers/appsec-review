@@ -16,3 +16,6 @@ dependency image, so `configure_commands` is normally empty.
 Include `go.mod` and every supplied `go.sum`, `go.work`, or `go.work.sum` in `dependency_files`. Give
 each command package an explicit output with `-o` inside `build_dir`, relative to `source_dir`, and
 list that file in `expected_outputs` so the produced executable can be cataloged.
+
+For an image repair, this includes module mode selection and VCS stamping in a workspace without
+`.git`.

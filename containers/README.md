@@ -8,6 +8,16 @@ Java/Kotlin and .NET
 buildenvs). An
 entry is always `enabled`, `deferred`, `replaced`, or `retired`; absence is not a decision.
 
+## Moving forward, not reproducing
+
+Images are built to work on the host that runs reviews, then recorded. Byte-identical rebuilds and
+cross-host comparison are not goals. Upstream archives move, so an acquisition or rebuild may
+produce new bytes; that is expected. When an image breaks or an asset no longer matches, re-acquire
+from the current upstream, rebuild, smoke it, and record the result: the new asset size and SHA-256
+in its `assets.lock.json` and the new image ID in its pins. A lock or pin records what a working
+build used. It is not a target to recreate. Do not chase an old hash or compare image IDs between
+machines.
+
 The catalog also enables tools that were not derived from the legacy archive: `tool-actionlint`,
 `tool-cppcheck`, `tool-native-cpp`, `tool-tree-sitter`, `tool-sqlite-fts`, `tool-git`, `tool-pmd`,
 `tool-opengrep`, `tool-infer`, `tool-clangd-indexer`, `tool-clang-static-analysis`, `tool-joern`, and

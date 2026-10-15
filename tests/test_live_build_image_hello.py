@@ -43,13 +43,16 @@ CASES = (
               (("GOCACHE", "/tmp/go-cache"),)),
     HelloCase("java", {"Hello.java": 'class Hello { public static void main(String[] a) { System.out.println("Hello World"); } }\n'},
               (("javac", "Hello.java"),), "Hello.class", ("java", "Hello")),
+    HelloCase("android", {"Hello.java": 'class Hello { public static void main(String[] a) { System.out.println("Hello World"); } }\n'},
+              (("javac", "Hello.java"), ("d8", "--output", ".", "Hello.class")),
+              "classes.dex", ("java", "Hello")),
     HelloCase("node", {"hello.js": 'console.log("Hello World");\n',
                        "package.json": '{"name":"hello-capture","version":"1.0.0","scripts":{"hello":"node hello.js"}}\n'},
               (("npm", "run", "hello"),)),
-    HelloCase("dotnet", {"hello.csproj": '<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net9.0</TargetFramework><UseAppHost>false</UseAppHost></PropertyGroup></Project>\n',
+    HelloCase("dotnet", {"hello.csproj": '<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net8.0</TargetFramework><UseAppHost>false</UseAppHost></PropertyGroup></Project>\n',
                          "Program.cs": 'System.Console.WriteLine("Hello World");\n'},
               (("dotnet", "build", "hello.csproj", "-p:NuGetAudit=false", "--verbosity", "quiet"),),
-              "bin/Debug/net9.0/hello.dll", ("dotnet", "bin/Debug/net9.0/hello.dll"),
+              "bin/Debug/net8.0/hello.dll", ("dotnet", "bin/Debug/net8.0/hello.dll"),
               (("DOTNET_CLI_HOME", "/tmp/dotnet"), ("NUGET_PACKAGES", "/tmp/nuget"))),
     HelloCase("python", {"hello.py": 'print("Hello World")\n'}, (("python", "hello.py"),)),
     HelloCase("php", {"hello.php": '<?php echo "Hello World\\n";\n'}, (("php", "hello.php"),)),
@@ -65,16 +68,35 @@ def _result_detail(result) -> str:
         result.stderr_tail or result.stderr).decode("utf-8", "replace")[-3000:]
 
 
+def _configured_profiles():
+    job = load_config(ROOT / "appsec-review.toml").job("job_project_build")
+    return job, profiles_from_settings(job.settings["profiles"])
+
+
+def test_every_configured_build_profile_has_a_hello_world_case() -> None:
+    _job, profiles = _configured_profiles()
+    assert sorted(case.profile for case in CASES) == sorted(profiles)
+
+
+def _skip_unless_image_is_present(tag: str) -> None:
+    """Skip when this host has no such image; a present image is verified by resolve()."""
+
+    try:
+        inspected = subprocess.run(["docker", "image", "inspect", tag],
+                                   capture_output=True, timeout=60, check=False)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        pytest.skip(f"docker is unavailable for live build image {tag}: {exc}")
+    if inspected.returncode != 0:
+        detail = inspected.stderr.decode("utf-8", "replace").strip()
+        pytest.skip(f"live build image is unavailable: {tag}: {detail}")
+
+
 @pytest.mark.parametrize("case", CASES, ids=lambda case: case.profile)
 def test_configured_build_image_captures_hello_world(tmp_path: Path, case: HelloCase) -> None:
-    config = load_config(ROOT / "appsec-review.toml")
-    job = config.job("job_project_build")
-    profiles = profiles_from_settings(job.settings["profiles"])
-    assert {case.profile for case in CASES} == set(profiles)
-    inspected = subprocess.run(["docker", "image", "inspect", profiles[case.profile].tag],
-                               capture_output=True, timeout=60, check=False)
-    if inspected.returncode != 0:
-        pytest.skip(f"live build image is unavailable: {profiles[case.profile].tag}")
+    job, profiles = _configured_profiles()
+    if case.profile not in profiles:
+        pytest.fail(f"hello-world case has no configured build profile: {case.profile}")
+    _skip_unless_image_is_present(profiles[case.profile].tag)
     assert job.build_capture is not None
 
     run_root = tmp_path / "run"

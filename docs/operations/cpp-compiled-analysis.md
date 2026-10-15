@@ -31,6 +31,19 @@ Compiler logs are not heuristically parsed. Normalization accepts only bounded c
 semantics needed by Clang replay, removes output/dependency-generation actions, maps source paths,
 and binds every unit to the case, source snapshot, command hash, compiler image, and source hash.
 
+Compiles captured from other families (phpize under `buildenv-php`, setuptools under
+`buildenv-python`) keep their absolute system include directories, such as
+`/usr/include/php/20230831/main` and `/usr/include/python3.12`. `tool-native-cpp` installs the same
+PHP and Python development packages at the versions those build environments pin, so these paths
+resolve to the same headers in the replay; see `containers/tools/native-cpp/README.md`. Joined
+`-isystem`, `-iquote` and `-idirafter` forms are retained like `-I`.
+
+The AST and IR replays write a per-unit receipt. When only some units fail, the job indexes the
+others and records one gap per failed unit: a missing header is named
+(`<path>: ast replay header not found in tool-native-cpp: php.h (...)`), and other failures carry
+the exit code and the first compiler error line. A missing header is never read as an empty or
+clean unit.
+
 A build or analysis-tool failure is returned as a terminal gap. Sibling projects and branches keep
 running, and their immutable shards remain usable. Corrupt source mappings, escaped paths, changed
 artifact hashes, malformed compile databases, duplicate shards, or invalid manifests are framework

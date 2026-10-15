@@ -63,8 +63,11 @@ the named `runs/container-builds/<builder-run-id>/logs/<image-id>.build.log`.
 
 Some consumers pin an image tag to an exact image ID: catalog entries with `image_id`, the
 project-build profiles (`jobs.job_project_build.settings.profiles.<family>.tag`/`image_id`), and
-`source_image_tag`/`source_image_id` settings such as CodeQL's. A rebuild that is not bit-for-bit
-reproducible yields a new image ID, which those consumers' own pin checks would reject later.
+`source_image_tag`/`source_image_id` settings such as CodeQL's. A rebuild normally yields a new image
+ID, which those consumers' own pin checks would reject later. That is expected, not a defect: images
+move forward and pins record the working ones on the review host (see
+[`containers/README.md`](../../containers/README.md#moving-forward-not-reproducing)). Update the pins
+after a successful rebuild.
 
 `selection.resolve_images` collects every pin, from the catalog and from enabled jobs' settings in the
 run's frozen configuration, whose tag this run rebuilds. After a successful build, each pin is

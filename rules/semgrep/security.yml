@@ -15,5 +15,6 @@ rules:
     languages: [bash]
     message: Quote shell variable expansions used as command arguments.
     severity: WARNING
-    patterns:
-      - pattern: $CMD $ARG
+    # ${$X} matches only a bare parameter expansion such as $dir or ${dir}; a quoted "$dir", an
+    # assignment and a plain word do not match. ($CMD $ARG matched every two-word command.)
+    pattern: $CMD ... ${$X} ...

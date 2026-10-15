@@ -327,8 +327,11 @@ assistance publishes an explicit build-planning gap and leaves recipes absent.
 is validated by the same recipe allowlist, and is marked `deterministic-cmake-marker`; it does not
 generalize to ambiguous build systems. Project-build execution first probes the default pinned
 family image. A failed probe may trigger at least three centrally bounded inference-guided image
-repairs. The repair schema permits only a validated complete apt package set; commands and all
-other recipe fields remain immutable. A successful repair promotes the exact Dockerfile, derived
+repairs. The repair schema permits only typed, bounded data: a complete apt package set, a
+complete environment drawn from a per-family allowlist, a package manager the family image already
+pins, and restores of accepted dependency manifests by the family's own package manager. Commands,
+paths, dependency files, and outputs remain immutable; see
+[`../operations/project-build.md`](../operations/project-build.md). A successful repair promotes the exact Dockerfile, derived
 image digest, and repaired operational recipe into a cache keyed by the original recipe identity,
 so unchanged recipes reuse the accepted image while changed recipes return to the default probe.
 

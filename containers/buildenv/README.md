@@ -47,15 +47,17 @@ The id is produced by building the image on the host that runs reviews and readi
 `docker image inspect <tag> --format '{{.Id}}'` (`build.py build` also records it as `digest` in its
 summary). It is not reproducible across hosts: apt archive state, layer timestamps and builder
 metadata all change the id even when the Dockerfile and pins are identical. Pins are therefore
-host-local (owner decision, 2026-10-15): results are never compared across hosts, slight container
-drift between hosts is acceptable, and a changed pin means rerunning, not a defect. Asset locks
-(SHA-256 of downloaded inputs) stay exact. Pins are updated per host after a deliberate rebuild,
-either by hand or with `appsec-review update-image-pins --run-id <run-id> --write` after a review
-run's `job_tool_image_rebuild` reported them as mismatched (see
+host-local (owner decision, 2026-10-15): images move forward, results are never compared across
+hosts, slight container drift between hosts is acceptable, and a changed pin means rerunning, not a
+defect (see [Moving forward, not reproducing](../README.md#moving-forward-not-reproducing)). Asset
+locks record the SHA-256 of the downloaded inputs a working build used; when upstream moves,
+re-acquire and record the new hash. After rebuilding and smoking an image, update its pin by hand or
+with `appsec-review update-image-pins --run-id <run-id> --write` after a review run's
+`job_tool_image_rebuild` reported it as mismatched (see
 [`../../docs/operations/tool-image-rebuild.md`](../../docs/operations/tool-image-rebuild.md)); the
-pipeline never rewrites them on its own. When a Dockerfile here changes, rebuild the image and
-update the pin in the same change for that host. The committed pins name whichever host last
-re-pinned (see the last bullet of [`../TODO.md`](../TODO.md)).
+pipeline never rewrites pins on its own. When a Dockerfile here changes, rebuild the image and update
+the pin in the same change. The committed pins name whichever host last re-pinned (see the last
+bullet of [`../TODO.md`](../TODO.md)).
 
 The Rust/WebAssembly image backs both the `rust` and `wasm` profiles; update both pins together.
 

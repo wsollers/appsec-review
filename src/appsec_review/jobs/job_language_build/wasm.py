@@ -11,6 +11,7 @@ import shutil
 import time
 from typing import Any
 
+from appsec_review.jobs.artifact_kinds import require_artifact_kind
 from appsec_review.container_runtime import BuildContainerExecutor, BuildProfile
 from appsec_review.jobs.cataloging import source_fingerprint
 from appsec_review.jobs.job_language_build.job import (
@@ -166,7 +167,7 @@ def _catalog(run_root: Path, workspace: Path, before: Mapping[str, str], limit: 
         if kind is None or before.get(relative) == digest:
             continue
         artifacts.append({"path": path.relative_to(run_root).as_posix(), "workspace_path": relative,
-                          "sha256": digest, "size_bytes": path.stat().st_size, "kind": kind,
+                          "sha256": digest, "size_bytes": path.stat().st_size, "kind": require_artifact_kind(kind),
                           "build_unit_id": build_unit_id, "mapping": "exact-workspace-path",
                           "mapping_confidence": 1.0})
         if len(artifacts) >= limit:

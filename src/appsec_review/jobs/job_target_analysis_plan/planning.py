@@ -7,7 +7,9 @@ from pathlib import PurePosixPath
 from typing import Any
 
 from appsec_review.storage import canonical_json
-from appsec_review.jobs.build_discovery import BUILD_RECIPE_SCHEMA, validate_build_recipe
+from appsec_review.jobs.build_discovery import (
+    BUILD_RECIPE_SCHEMA, DISCOVERED_BUILD_SYSTEMS, validate_build_recipe,
+)
 from appsec_review.jobs.component_ownership import resolve_ownership
 from appsec_review.tool_inputs import SOURCE_SUFFIXES as TOOL_SOURCE_SUFFIXES, supports_path
 
@@ -23,10 +25,9 @@ SCANNERS = (
     "tool-spotbugs", "tool-syft", "tool-trivy", "tool-zizmor",
 )
 MANDATORY_BASELINE = frozenset({"tool-gitleaks", "tool-semgrep", "tool-syft"})
-BUILD_SYSTEMS = frozenset({
-    "autotools", "bazel", "cargo", "cmake", "composer", "container", "direct-native",
-    "dotnet", "go", "gradle", "javac", "make", "maven", "meson", "msbuild", "node",
-    "node-gyp", "php-extension", "python", "rustc", "typescript", "wasm",
+# Discovery's own vocabulary plus systems a plan may name for components discovery does not mark.
+BUILD_SYSTEMS = DISCOVERED_BUILD_SYSTEMS | frozenset({
+    "bazel", "container", "node-gyp", "php-extension", "typescript",
 })
 
 SOURCE_SUFFIXES = TOOL_SOURCE_SUFFIXES

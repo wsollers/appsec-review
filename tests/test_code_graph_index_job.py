@@ -368,8 +368,18 @@ def test_dagster_ops_and_wave_dependencies_match_the_configured_topology() -> No
     assert upstream("code_graph_index__begin") >= {
         "codeql_analysis__finalize", "review_prioritization__finalize", "cpp_symbol_index__finalize",
         "cpp_compiled_analysis__finalize"}
-    assert "code_graph_index__finalize" in upstream("review_data_indexing__begin")
+    def ancestors(node: str) -> set[str]:
+        found, pending = set(), [node]
+        while pending:
+            for parent in upstream(pending.pop()) - found:
+                found.add(parent)
+                pending.append(parent)
+        return found
+
     assert "code_graph_index__finalize" in upstream("security_tagging__begin")
+    # Data indexing closes the wave after the derived leaves only, so the graph index precedes it
+    # through tagging rather than as a direct edge.
+    assert "code_graph_index__finalize" in ancestors("review_data_indexing__begin")
     assert upstream("code_graph_index__normalize__scopes") >= {"code_graph_index__load__accepted_inputs"}
     assert upstream("code_graph_index__acceptance__publish_handoff") >= {"code_graph_index__correlate__scopes"}
 

@@ -123,6 +123,22 @@ class JvmExecutor:
                       "kotlinc", parent, "3", "-d", "target/classes", "src/main/kotlin/example/Mixed.kt",
                       "jar", parent, "3", "cf", "target/app.jar", "target/classes"]
             trace.write_bytes(b"\0".join(item.encode() for item in fields) + b"\0")
+            if "--init-script" in argv:
+                # Emulate the run-owned Gradle init script: a session record and, for an APK
+                # assembly, the in-process D8 dex task it can only declare.
+                records = [{"record_kind": "session", "gradle_version": "8.9"}]
+                if any(str(value).lower().endswith(":assembledebug") for value in argv):
+                    records += [
+                        {"record_kind": "dex-task", "task_path": ":app:mergeDexDebug", "compiler": "d8",
+                         "task_type": "com.android.build.gradle.internal.tasks.DexMergingTask",
+                         "output_files": [f"/workspace/{working_directory}/app/build/intermediates/dex"],
+                         "input_file_count": 2},
+                        {"record_kind": "completed", "task_path": ":app:mergeDexDebug",
+                         "compiler": "d8", "did_work": True}]
+                (trace.parent / "gradle-tasks.jsonl").write_text("".join(
+                    json.dumps({"schema": "appsec-review/gradle-task-record/1",
+                                "parent_command_id": parent, **record}) + "\n" for record in records),
+                    encoding="utf-8")
         stdout = b"build output contains private detail"
         stderr = b"diagnostic tail " + b"x" * 64
         return BuildCommandResult(tuple(argv), 2 if failed else 0, stdout[:8] if self.truncate else stdout,
@@ -239,10 +255,22 @@ def test_android_gradle_dispatch_survives_project_to_language_execution(tmp_path
     outcome = GraphRunner(config, [build_language(executor_factory=executor_factory)]).run(
             target_root=target, source_fingerprint=fingerprint, run_id=run_id)
 
-    assert outcome["status"] == "SUCCEEDED"
+    # In-process D8 dexing is declared by the init script but never observed: a named gap.
+    assert outcome["status"] == "COMPLETED_WITH_GAPS"
     receipt = load_accepted_language_build(run_root)["receipts"][0]
     assert receipt["terminal_status"] == "SUCCEEDED" and receipt["family"] == "java"
-    assert calls.count(("gradle", "--no-daemon", ":app:assembleDebug")) == 2
+    assert receipt["gaps"][0].startswith(
+        "Android dex task :app:mergeDexDebug ran D8 in-process inside Gradle")
+    assert not any("not emitted" in gap or "did not report" in gap for gap in receipt["gaps"])
+    (dex,) = receipt["declared_compilations"]
+    assert dex["tool"] == "d8" and dex["evidence_kind"] == "build-tool-declared"
+    assert "declared_arguments" not in dex and dex["declared_arguments_sha256"]
+    # Project-build ran the accepted command; language-build ran it with provenance instrumentation.
+    assert calls.count(("gradle", "--no-daemon", ":app:assembleDebug")) == 1
+    (instrumented,) = [call for call in calls if "--init-script" in call]
+    assert instrumented[:3] == ("gradle", "--no-daemon", ":app:assembleDebug")
+    assert instrumented[-1].endswith("/.appsec-review-jvm/gradle/appsec-provenance.init.gradle")
+    assert receipt["commands"][0]["instrumentation"]["gradle_init_script"]["path"] == instrumented[-1]
     assert [profile.name for profile in profiles] == ["android"]
     assert environments and "/opt/gradle/gradle-8.9/bin" in environments[0]["PATH"].split(":")
     assert environments[0]["GRADLE_USER_HOME"] == "/tmp/gradle"

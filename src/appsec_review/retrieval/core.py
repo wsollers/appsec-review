@@ -243,6 +243,17 @@ class RetrievalCore:
         if not _RUN_ID.fullmatch(run_id):
             raise ValueError("invalid run id")
         self.run_root = RunStore(Path(runs_dir)).resolve(run_id)
+        if graph_settings is None:
+            # The run-bound jobs.job_code_graph_index.settings.graph bounds, so review cells and MCP
+            # sessions use the caps the run was configured with; contract defaults when unconfigured.
+            # This verifies the run-bound configuration before manifest loading consults it (for
+            # the Swift policy), so a tampered configuration is a retrieval integrity failure.
+            from appsec_review.graph.settings import RunConfigurationError, run_graph_settings
+            try:
+                graph_settings = run_graph_settings(self.run_root)
+            except RunConfigurationError as exc:
+                raise RetrievalIntegrityError(str(exc)) from exc
+        self.graph_settings = graph_settings
         if manifest_path is None:
             manifest_path, accepted_sha = resolve_accepted_manifest(self.run_root)
         else:
@@ -265,15 +276,6 @@ class RetrievalCore:
         self.run_id = run_id
         self.target_root = Path(str(self.manifest["target_root"])).resolve()
         self.limits = limits or RetrievalLimits()
-        if graph_settings is None:
-            # The run-bound jobs.job_code_graph_index.settings.graph bounds, so review cells and MCP
-            # sessions use the caps the run was configured with; contract defaults when unconfigured.
-            from appsec_review.graph.settings import RunConfigurationError, run_graph_settings
-            try:
-                graph_settings = run_graph_settings(self.run_root)
-            except RunConfigurationError as exc:
-                raise RetrievalIntegrityError(str(exc)) from exc
-        self.graph_settings = graph_settings
         self.clock = clock
         grouped: dict[str, list[Mapping[str, Any]]] = {}
         for item in self.manifest["indexes"]:

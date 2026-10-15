@@ -456,3 +456,38 @@ def test_tamper_corruption_and_concurrent_reuse_stop_or_reuse_safely(tmp_path: P
     path.write_bytes(b"corrupt")
     with pytest.raises(ValueError, match="integrity|corrupt"):
         RetrievalCore(config.runtime.runs_dir, RUN_ID)
+
+
+def test_captured_invocation_parent_attributes_outputs_and_unproduced_artifacts_stay_ambiguous(
+        tmp_path: Path) -> None:
+    config, target, snapshot, run_root, receipts, accepted_path, handoff_path, latest = _seed(tmp_path)
+    receipt = receipts[0]
+    obj, executable = receipt["artifacts"]
+    command_id = receipt["commands"][0]["command_id"]
+    # The capture of command 1 observed the compiler naming the object; nothing named the
+    # executable, which must stay an ambiguous producer mapping rather than be attributed.
+    receipt["tool_invocations"] = [{
+        "tool": "cc", "tool_kind": "compiler", "parent_command_id": command_id,
+        "origin": "execution-capture:command-001:event-7", "argv_sha256": "c" * 64,
+        "mapping_confidence": 1.0, "inputs": [],
+        "outputs": [{"workspace_path": obj["workspace_path"], "sha256": obj["sha256"]}],
+    }]
+    _publish_changed_language_receipts(run_root, receipts, accepted_path, handoff_path, latest)
+
+    GraphRunner(config, [build_job()]).run(target_root=target, source_fingerprint=snapshot, run_id=RUN_ID)
+    manifest = RetrievalCore(config.runtime.runs_dir, RUN_ID).manifest["indexes"]
+
+    def relations(artifact):
+        identity = canonical_artifact_identity(snapshot, receipt["build_unit_id"], artifact).value
+        shard = next(item for item in manifest
+                     if item["shard_id"] == f"relations-{identity.rsplit(':', 1)[-1][:24]}")
+        with sqlite3.connect(run_root / shard["relative_path"]) as database:
+            return database.execute(
+                "SELECT exact, confidence, ambiguity FROM relations WHERE kind='GENERATED_FROM'").fetchall()
+
+    assert relations(obj) == [(1, 1.0, None)]
+    assert relations(executable) == [
+        (0, 0.25, "receipt did not attribute the artifact to a unique producing action")]
+    gaps = load_accepted_artifact_index(run_root)["gaps"]
+    assert f"{executable['workspace_path']}: producing action mapping is ambiguous" in gaps
+    assert not any(obj["workspace_path"] in gap for gap in gaps)
