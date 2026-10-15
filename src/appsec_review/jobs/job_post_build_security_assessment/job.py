@@ -121,6 +121,38 @@ def _is_binary(path: Path) -> bool:
         return False
 
 
+_PE_CLR_DIRECTORY = 14  # IMAGE_DIRECTORY_ENTRY_COM_DESCRIPTOR
+
+
+def _is_managed_pe(path: Path) -> bool:
+    """A PE image with a CLR runtime header holds .NET IL, not native code to harden-check.
+
+    Native AOT output has no CLR header and stays a family case. A truncated or malformed header is
+    not proven managed, so the file is still inspected.
+    """
+    try:
+        with path.open("rb") as stream:
+            dos = stream.read(64)
+            if len(dos) < 64 or not dos.startswith(b"MZ"):
+                return False
+            stream.seek(int.from_bytes(dos[0x3C:0x40], "little"))
+            header = stream.read(24 + 240)
+    except OSError:
+        return False
+    if len(header) < 26 or header[:4] != b"PE\0\0":
+        return False
+    optional = header[24:]
+    magic = int.from_bytes(optional[:2], "little")
+    if magic not in (0x10B, 0x20B):
+        return False
+    count_at, directories_at = (92, 96) if magic == 0x10B else (108, 112)
+    entry = directories_at + _PE_CLR_DIRECTORY * 8
+    if len(optional) < entry + 8 or int.from_bytes(optional[count_at:count_at + 4], "little") <= _PE_CLR_DIRECTORY:
+        return False
+    rva, size = optional[entry:entry + 4], optional[entry + 4:entry + 8]
+    return int.from_bytes(rva, "little") != 0 and int.from_bytes(size, "little") != 0
+
+
 def family_build_cases(language: Mapping[str, Any], run_root: Path) -> dict[str, dict[str, Any]]:
     """Accepted non-native builds whose produced binaries need ELF/PE/Mach-O inspection.
 
@@ -128,6 +160,8 @@ def family_build_cases(language: Mapping[str, Any], run_root: Path) -> dict[str,
     through the C/C++ lane, with their captured compile flags. Every other successful build
     (Go and Rust executables, .NET native AOT output, prebuilt extension modules inside wheels)
     is a family case judged by its family's documented hardening expectations.
+    Managed .NET assemblies (PE images with a CLR runtime header) carry IL, not native code, and
+    are not family-case artifacts.
     """
     cases: dict[str, dict[str, Any]] = {}
     for receipt in language.get("receipts", ()):
@@ -141,7 +175,7 @@ def family_build_cases(language: Mapping[str, Any], run_root: Path) -> dict[str,
             path = (run_root / str(item.get("path", ""))).resolve()
             if run_root.resolve() not in path.parents or not path.is_file() or path.is_symlink():
                 continue
-            if _is_binary(path) or str(item.get("kind")) == "wheel":
+            if (_is_binary(path) and not _is_managed_pe(path)) or str(item.get("kind")) == "wheel":
                 artifacts.append({key: item[key] for key in ("path", "sha256", "size_bytes", "kind")
                                   if key in item})
         if artifacts:

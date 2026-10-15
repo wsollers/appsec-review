@@ -2107,8 +2107,8 @@ workers = 2
 [jobs.job_security_tagging.steps.publication.tasks.publish_handoff]
 
 # Near-terminal inference security review (docs/architecture/inference-security-review.md).
-# Typed and validated by config/inference_review.py. Not yet registered: the loader resolves it
-# under pending_jobs until the runtime job exists. teams.review_teams and the Dagster pool limits are
+# Typed and validated by config/inference_review.py; registered in runtime/registry.py.
+# teams.review_teams and the Dagster pool limits are
 # capacity, settable by a local overlay (APPSEC_REVIEW_CONFIG_OVERLAY) and never fingerprinted.
 [jobs.job_inference_security_review]
 name = "inference_security_review"

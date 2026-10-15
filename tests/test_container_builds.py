@@ -204,3 +204,29 @@ def test_a_docker_build_timeout_is_a_failed_image(monkeypatch, tmp_path: Path) -
     monkeypatch.setattr(container_build, "run_logged", expire)
     result = container_build.build_one(item, tmp_path, timeout_seconds=60)
     assert result["status"] == "failed" and result["error"] == "docker build timed out after 60 seconds"
+
+
+def _final_base(dockerfile: Path) -> str:
+    """Resolve the final stage's base image through named build stages."""
+    stages: dict[str, str] = {}
+    base = ""
+    for line in dockerfile.read_text(encoding="utf-8").splitlines():
+        parts = line.split()
+        if len(parts) >= 2 and parts[0].upper() == "FROM":
+            image = parts[1]
+            base = stages.get(image, image)
+            if len(parts) >= 4 and parts[2].upper() == "AS":
+                stages[parts[3]] = base
+    return base
+
+
+def test_tool_manifest_dependency_names_the_dockerfile_final_base() -> None:
+    mismatches = {}
+    for manifest in sorted((ROOT / "containers" / "tools").glob("*/tool.toml")):
+        dockerfile = manifest.parent / "Dockerfile"
+        dependency = tomllib.loads(manifest.read_text(encoding="utf-8")).get("dependency")
+        if dependency is None or not dockerfile.is_file():
+            continue
+        if _final_base(dockerfile) != dependency:
+            mismatches[manifest.parent.name] = (dependency, _final_base(dockerfile))
+    assert mismatches == {}

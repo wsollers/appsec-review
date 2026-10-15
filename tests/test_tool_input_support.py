@@ -393,3 +393,21 @@ def test_clang_scope_without_supported_units_is_not_launched(tmp_path: Path, mon
     skipped = result["not_applicable_scopes"][0]
     assert skipped["terminal_status"] == "SKIPPED_NA"
     assert skipped["not_applicable_inputs"]["items"][0]["path"] == "native/start.S"
+
+
+def test_checkov_workflow_and_cloudformation_selection_survives_the_pre_launch_filter() -> None:
+    from types import MappingProxyType
+
+    from appsec_review.jobs.job_evidence_collection.adapters import Applicability
+    from appsec_review.jobs.job_evidence_collection.job import _filter_supported_inputs
+
+    families = {"terraform": ("main.tf",), "dockerfile": ("Dockerfile",),
+                "github_actions": (".github/workflows/ci.yml",),
+                "cloudformation": ("infra/stack.yaml", "infra/stack.json")}
+    files = tuple(sorted(path for paths in families.values() for path in paths))
+    selection = Applicability(True, "typed configuration", files, "checkov_typed_configuration",
+                              (), MappingProxyType(families))
+    kept, skipped = _filter_supported_inputs(selection, adapter_registry()["tool-checkov"], None)
+    assert skipped == () and kept.files == files
+    # Formats Checkov does not parse are still dropped before launch.
+    assert partition_paths("tool-checkov", ["notes.md", "app.py"]).supported == ()

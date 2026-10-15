@@ -210,3 +210,33 @@ def test_captured_family_compiles_become_a_compile_database_and_native_analysis_
     assert actions["pkgs/a"]["family"] == "python"
     assert actions["pkgs/a"]["compile_database_origin"] == "captured-native-components"
     assert actions["tools/cli"]["compile_database_origin"] == "build-system"
+
+
+def _pe(*, managed: bool, pe32_plus: bool = True) -> bytes:
+    """Minimal PE image; ``managed`` sets the CLR runtime header (data directory 14)."""
+    dos = bytearray(64)
+    dos[:2] = b"MZ"
+    dos[0x3C:0x40] = (64).to_bytes(4, "little")
+    optional = bytearray(240 if pe32_plus else 224)
+    optional[:2] = (0x20B if pe32_plus else 0x10B).to_bytes(2, "little")
+    count_at, directories_at = (108, 112) if pe32_plus else (92, 96)
+    optional[count_at:count_at + 4] = (16).to_bytes(4, "little")
+    if managed:
+        entry = directories_at + 14 * 8
+        optional[entry:entry + 8] = (0x2008).to_bytes(4, "little") + (72).to_bytes(4, "little")
+    coff = bytearray(20)
+    coff[16:18] = len(optional).to_bytes(2, "little")
+    return bytes(dos) + b"PE\0\0" + bytes(coff) + bytes(optional)
+
+
+def test_managed_dotnet_assemblies_are_not_family_cases_but_native_aot_pe_is(tmp_path: Path) -> None:
+    receipts = [
+        _receipt(tmp_path, "dotnet", "build-unit-il", {"App.dll": _pe(managed=True),
+                                                       "Lib.dll": _pe(managed=True, pe32_plus=False)},
+                 kinds={"App.dll": "assembly", "Lib.dll": "assembly"}),
+        _receipt(tmp_path, "dotnet", "build-unit-aot", {"app.exe": _pe(managed=False), "App.dll": _pe(managed=True)},
+                 kinds={"app.exe": "executable", "App.dll": "assembly"}),
+    ]
+    cases = family_build_cases({"receipts": receipts}, tmp_path)
+    assert set(cases) == {"family-build-unit-aot"}
+    assert [item["kind"] for item in cases["family-build-unit-aot"]["artifacts"]] == ["executable"]
