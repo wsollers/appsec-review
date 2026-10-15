@@ -14,7 +14,16 @@ set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 base="$(sed -n 's/^FROM \(ubuntu:24.04@sha256:[0-9a-f]\{64\}\) AS build$/\1/p' "$here/Dockerfile")"
 [[ -n "$base" ]] || { echo "pinned ubuntu base not found in Dockerfile" >&2; exit 1; }
+# clang-18, cmake and bear drive the replays. The PHP and Python development headers are the ones
+# containers/buildenv/php and containers/buildenv/python install, at the same pinned versions, so a
+# phpize or setuptools compile captured there replays here against the same absolute include paths
+# (/usr/include/php/20230831/..., /usr/include/python3.12). Keep these pins equal to those images';
+# python3-dev pulls python3.12-dev and libpython3.12-dev, which carry Python.h and pyconfig.h.
+php_version="8.3.6-0ubuntu0.24.04.11"
+python_version="3.12.3-0ubuntu2.1"
 packages="clang-18 cmake bear"
+packages+=" php8.3-cli=$php_version php8.3-dev=$php_version"
+packages+=" python3-dev=$python_version"
 mkdir -p "$here/downloads"
 
 docker run --rm --pull=missing -e DEBIAN_FRONTEND=noninteractive -e PACKAGES="$packages" \
