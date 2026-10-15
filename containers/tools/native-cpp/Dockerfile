@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
-# The exact 166-package closure is acquired separately, recorded in assets.lock.json,
-# and supplied from the ignored downloads cache. Docker dependency resolution is offline.
+# The exact package closure is acquired by acquire_assets.sh, recorded in assets.lock.json and
+# packages.manifest, and supplied from the ignored downloads cache. Docker dependency resolution is offline.
 FROM ubuntu:24.04@sha256:008173c23f95b170204355c12626cb5a965d779a7e1283b09e9cffbb1bf33ca3 AS build
 ARG DEBIAN_FRONTEND=noninteractive
 COPY downloads/native-cpp-debs.tar /tmp/native-cpp-debs.tar

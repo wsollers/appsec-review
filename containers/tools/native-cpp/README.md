@@ -3,10 +3,22 @@
 `appsec-review/tool-native-cpp:1.0.0` is the tool image declared by `tool-native-cpp` in
 [`containers/catalog.toml`](../../catalog.toml).
 
-Its only external artifact, the 166-package `.deb` closure, is pinned by exact byte size and
-SHA-256 in `assets.lock.json`. The closure is acquired separately (its lock URL is the Ubuntu
-archive root, not a downloadable file), so place it at `downloads/native-cpp-debs.tar` before
-building. The launcher verifies it and stops if it is missing or does not match.
+Its only external artifact is the `.deb` closure for `clang-18`, `cmake` and `bear`, pinned by
+exact byte size and SHA-256 in `assets.lock.json`. `packages.manifest` lists every package, version
+and SHA-256 in it. The lock URL is the Ubuntu archive root, not a downloadable file, so acquire the
+closure first:
+
+```text
+containers/tools/native-cpp/acquire_assets.sh
+```
+
+The script resolves the closure inside the Dockerfile's pinned Ubuntu base, so it is exactly what the
+offline install needs. APT verifies the signed archive metadata and each package hash, and the tar is
+written deterministically to `downloads/native-cpp-debs.tar`. The Ubuntu archive moves as updates
+are published, so a later acquisition can give a different closure. When it does, build and smoke
+the image, then record the new tar size and SHA-256 in `assets.lock.json` and commit the new
+`downloads/packages.manifest` as `packages.manifest`. The launcher verifies the tar and stops if it
+is missing or does not match the lock.
 
 ## Build
 
