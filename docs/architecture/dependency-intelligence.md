@@ -21,7 +21,8 @@ retrieval shard named `dependency-intelligence`. The shard contains:
 
 After repository inference, a distinct deterministic unit canonicalizes repository identities and
 groups every referring `dependency_id`. Scorecard retrieval consumes only that repository inventory,
-so each unique repository causes at most one cache lookup and one remote request per run. The result
+so each unique repository causes at most one cache lookup and one remote retrieval per run (up to
+`retries + 1` HTTP attempts; shipped `retries = 1`). The result
 is then associated back to every dependency in the group; repository deduplication never discards
 the package, SBOM, native provenance, exposure, CVE, or advisory identities.
 

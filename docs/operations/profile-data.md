@@ -8,7 +8,9 @@ The configured topology is `load.accepted_inputs`, `normalize.profile_data`,
 `index.profile_data`, then `acceptance.publish_handoff`. Central bounds limit accepted artifacts,
 bytes per artifact, rows per artifact, bytes per line, and frames per sample. Changing a parser,
 normalizer, mapping identity, bound, accepted handoff, report hash, or target snapshot invalidates
-reuse; do not put these values in a target file or prompt.
+reuse; do not put these values in a target file or prompt. The identity values in the settings
+must equal the code constants (`job_profile_data/job.py`); any other value fails configuration
+loading rather than invalidating shards.
 
 ## Accepted reports
 

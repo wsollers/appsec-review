@@ -4,9 +4,12 @@ This directory builds `appsec-review/tool-joern:4.0.630`: an offline, non-root i
 reviewed Joern 4.0.630 C/C++ closure (the core Joern libraries plus the `c2cpg` frontend) on the
 repository's digest-pinned Java 21 base.
 
-**Status: the image is available, but it provides no coverage yet.** The C++ job's Joern branch
-still publishes a `BLOCKED` shard. Bounded CPG/PDG export, source mapping, functional fixtures, and
-security acceptance belong to later work items (see `docs/operations/cpp-compiled-analysis.md`).
+**Status: deprecated (2026-10-12); the image is available, but it provides no coverage.** Its
+consumer is the independent `job_cpg_analysis`, shipped disabled
+(`jobs.job_cpg_analysis.settings.enabled = false`) and absent from the default review graph; when
+enabled it still publishes only a `BLOCKED` shard. CodeQL is the code-graph producer (see "Why
+Joern is deprecated" in `docs/architecture/code-graph-precomputation.md` and
+`docs/operations/cpp-index-jobs.md`).
 A successful build or version probe is not CPG coverage.
 
 ## Files

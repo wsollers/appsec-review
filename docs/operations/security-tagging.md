@@ -3,9 +3,11 @@
 `security_tagging` assigns basis-qualified tags from the
 [security tag taxonomy](../architecture/security-tag-taxonomy.md) to code subjects. It reads only
 the accepted retrieval manifest (`data/indices/accepted.json`), never the target tree. In the
-`wave1_review` Dagster graph it runs after `codeql_analysis`, the last retrieval-manifest publisher,
-and after `owasp_control_assessment` and `job_review_prioritization` when those are registered.
-`job_review_data_indexing` follows it, then `job_review_package_assembly` is the terminal job.
+`wave1_review` Dagster graph it runs after `codeql_analysis` and after `owasp_control_assessment`,
+`job_review_prioritization` and `job_code_graph_index` (the last retrieval-manifest publisher)
+when those are registered (`orchestration/dagster/adapter.py`). `job_review_data_indexing`
+follows it, then `job_review_package_assembly`, and `job_document_issue_analysis` is the terminal
+job.
 Run it standalone only after an accepted manifest exists; without one the input validator fails the
 job.
 

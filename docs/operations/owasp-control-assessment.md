@@ -2,7 +2,8 @@
 
 Run the `owasp_control_assessment` Dagster job only after the accepted component, evidence, build,
 compiled, and retrieval manifests exist. In the full `wave1_review` graph it is placed after
-evidence publication. The standalone job also accepts a hash-owned qualification input at
+evidence publication and also waits for CodeQL, artifact-security analysis, Tree-sitter and
+post-build assessment (`orchestration/dagster/adapter.py`). The standalone job also accepts a hash-owned qualification input at
 `runs/<run-id>/data/inputs/owasp-workbench.json`; that path is for deterministic integration tests,
 not a way to bypass accepted production indexes.
 

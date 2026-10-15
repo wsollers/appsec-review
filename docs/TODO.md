@@ -270,11 +270,15 @@ resume, and sibling failure cannot suppress expected coverage or convert any gap
 
 Cross-language CodeQL now provides hash-pinned offline extractors and query packs, exact protected
 compiled-build replay, source/no-build analysis, bounded SARIF normalization, independent
-database/query checkpoints, and accepted MCP retrieval. Remaining work is deliberately narrower:
-provide an accepted .NET build environment for C#, accepted Cargo locks and analyzer prerequisites
+database/query checkpoints, and accepted MCP retrieval. The pinned `audit-buildenv-dotnet` image
+now backs the `dotnet` profile, and the accepted .NET fixture run recorded in
+[`operations/language-build.md`](operations/language-build.md) created a C# database with both
+suites. Remaining work is deliberately narrower: accepted Cargo locks and analyzer prerequisites
 for Rust, a pinned Bundler execution lane for Ruby package lifecycles, and Go recipes that perform
 the real accepted compilation rather than dependency download alone. Visual Basic, F#, and Swift
-remain explicit unsupported-platform gaps. Preserve the
+remain explicit unsupported-platform gaps (Swift execution is also gated off by
+`tools.enable_swift`; see [`operations/swift-execution-policy.md`](operations/swift-execution-policy.md)).
+Preserve the
 current selective invalidation boundary: query-pack changes must not rebuild Clang AST, LLVM IR,
 or an otherwise reusable CodeQL database.
 

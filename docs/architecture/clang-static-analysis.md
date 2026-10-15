@@ -13,8 +13,10 @@ For every applicable scope the job runs two actions from the same pinned offline
 - Clang-Tidy with centrally configured check families; and
 - Clang Static Analyzer (`clang --analyze`) with centrally configured checker families.
 
-The image inherits the hash-locked LLVM 18 closure from `tool-native-cpp` and adds only a bounded
-repository-owned adapter. Runtime networking is disabled, the accepted scope is mounted read-only,
+The image inherits the hash-locked LLVM 18 closure from `tool-native-cpp` and adds the pinned
+`clang-tidy-18` packages plus a bounded repository-owned adapter. Every Static Analyzer diagnostic
+is labelled `warning` (normalized to medium reported severity); clang-tidy `error` diagnostics
+normalize to high. Runtime networking is disabled, the accepted scope is mounted read-only,
 and only run-owned scratch is writable. The actions are independent: failure of one action is a
 named gap and does not discard valid observations from the other.
 

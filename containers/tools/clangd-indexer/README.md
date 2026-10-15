@@ -6,9 +6,10 @@ database and emits a static symbol and reference index (declarations, definition
 relations). It accepts both GCC/Clang-style and **clang-cl (MSVC-style)** compile commands, which
 is why it was chosen as the first C++ indexer for MSVC/Unreal-scale codebases.
 
-**Status: the image is available, but it provides no coverage yet.** Normalizing the index into
-retrieval shards, per-TU batching, and job integration are later work. A successful build or
-smoke run is not index coverage.
+**Status: integrated.** `job_cpp_symbol_index` runs this image per accepted C/C++ scope and
+normalizes the index into `analysis` shards with per-scope coverage (see
+`docs/operations/cpp-index-jobs.md`). Per-TU batching for very large scopes remains open in
+`docs/TODO.md`. A successful build or smoke run is not index coverage.
 
 ## Files
 

@@ -137,7 +137,8 @@ Status as of C9: every "CodeQL `<family>`" entry above is implemented and verifi
 the real normalizer, cross-checker, correlator, graph job and review against hand-authored
 recordings. None has yet been produced by the export pack in the pinned CodeQL image, so the
 column describes code that exists, not facts observed on a real database. The Clang/LLVM entries
-are unchanged until section 12 lands.
+are unchanged until the rest of section 12 lands; only K4 (the standalone
+`job_clang_static_analysis` producer) is implemented.
 
 #### Why Joern is deprecated
 
@@ -667,8 +668,10 @@ earlier shards, like `job_cpp_symbol_index`.
   with an integrity error rather than silently mixing exports from two attempts.
 - Dagster `wave1_review`: `job_code_graph_index` depends on `job_codeql_analysis`,
   `job_review_prioritization` and, when registered, `job_cpp_symbol_index`,
-  `job_cpp_compiled_analysis` and `job_tree_sitter_ast`; `job_review_data_indexing` adds it as a
-  dependency. Each unit is a visible op; per-scope results are op metadata with counts and gaps.
+  `job_cpp_compiled_analysis`, `job_clang_static_analysis` and `job_tree_sitter_ast`
+  (`orchestration/dagster/adapter.py`); `job_security_tagging` depends on it, and
+  `job_review_data_indexing` joins every terminal manifest publisher after it. Each unit is a
+  visible op; per-scope results are op metadata with counts and gaps.
 
 ### 7.4 Coverage and gap accounting
 
@@ -734,7 +737,7 @@ Fallbacks when a producer is unavailable, each a named gap and never a clean res
 | Situation | Published state |
 |---|---|
 | Scope has no CodeQL database (planning gap, failed build) | every family `unavailable` with the CodeQL scope gap; packages carry `code_graph: unavailable`; `sink_up`/`entry_down` fall back to `persona_sweep` with `required_source_unavailable` |
-| Export query timed out or exceeded `max_export_bytes` | families from that query `unavailable`; other families from the same database stay usable |
+| Export query timed out or exceeded `max_export_bytes` | design: families from that query `unavailable`, other families from the same database stay usable. As implemented, the CodeQL `export` action runs every query of a scope as one unit bounded by `jobs.job_codeql_analysis.settings.export_queries.{row_limit,max_bytes,timeout_seconds}`; a timeout, non-zero exit or over-size export marks the whole scope's export `FAILED` and the graph job publishes all of that scope's families `unavailable` (see [`../operations/code-graph-index.md`](../operations/code-graph-index.md)). `settings.graph.max_export_bytes` is re-checked when the graph job loads the export and exceeding it is an integrity error; `max_paths_per_sink` and `max_path_steps` bound normalization (`graph/normalize.py`), not export cost; `graph.export_timeout_seconds` is a fallback default only |
 | clangd/IR/AST shard absent for a C/C++ scope | `cross_check.state = not_covered`; facts stay `direct_eligible` (cross-check is a second opinion, not a prerequisite) |
 | Export pack or catalog hash differs from the lock | framework-integrity failure in `plan.inventory` (same rule as the SARIF suites) |
 | Tree-sitter-only language | no graph facts; the language matrix row says so; no syntactic call-site substitute is published in this batch |
@@ -1002,8 +1005,9 @@ retrieval yields direct `dataflow_path` support on `attacker_input_control`; the
 carries `taint_path = graph_dataflow_path`, `attacker_control = local` (`environment` source class)
 and `guard_absent = graph_fact`; the `sink_up` hunter's graph queries execute with nothing withheld;
 the review completeness ledger and the indexing language matrix both name the `code_graph` lane as
-unavailable for Python; and the default `job_cpg_analysis` publishes `unavailable` rows and runs no
-container. The claim is `supported`, not `confirmed`: every role uses one model profile, so the
+unavailable for Python; and the default `job_cpg_analysis` is disabled, absent from the plan, and
+runs no container (the `cpg_graph` lane is `unavailable` in the coverage matrix). The claim is
+`supported`, not `confirmed`: every role uses one model profile, so the
 verifier is not provider-independent, and no graph family satisfies `security_impact`. The live
 tier exists and skips without the image; `deploy/dagster/verification/code-graph-acceptance.json`
 is not written, because no live run has happened.
@@ -1199,8 +1203,10 @@ parallel; K3 needs K1; K5 is optional; K6 integrates.
 coverage gaps directly into an `observations` shard instead of running as an
 `job_evidence_collection` adapter or emitting SARIF. Analyzer traces remain bounded data on each
 observation. Findings enter the existing source-SAST review lane according to normal severity and
-admissibility rules; `alpha.security.*` remains normalized to medium and therefore does not receive
-special lane-A admission.
+admissibility rules; every Clang Static Analyzer diagnostic (including `alpha.security.*`) is
+labelled `warning` by the adapter and so normalizes to medium reported severity, while clang-tidy
+`error` diagnostics normalize to high; alpha checkers therefore receive no special lane-A
+admission.
 
 **Owned files:**
 - `containers/tools/clang-static-analysis/`: the offline image and bounded JSON adapter over the
@@ -1247,8 +1253,8 @@ unless K3 or a later rule needs CodeQL-side CFG detail beyond guards.
     and tested;
   - mark section 12 as implemented, recording deviations;
   - update `docs/operations/cpp-compiled-analysis.md` (IR debug locations, AST macro mapping,
-    dominator output), `docs/operations/cpp-index-jobs.md`, `docs/operations/static-analysis.md` (the
-    Clang Static Analyzer producer) and `docs/operations/code-graph-index.md` (new producers and
+    dominator output), `docs/operations/cpp-index-jobs.md`, `docs/operations/clang-static-analysis.md`
+    (the K4 producer page) and `docs/operations/code-graph-index.md` (new producers and
     cross-check rules);
   - update R3/"Dependencies and current gaps" in `inference-security-review.md` if eligibility
     behaviour changed;
@@ -1270,9 +1276,9 @@ unless K3 or a later rule needs CodeQL-side CFG detail beyond guards.
 
 ### 12.4 Decisions for this phase (user, 2026-10-12; K4 implementation reconciled 2026-10-14)
 
-1. **Static Analyzer `alpha.security.*` checkers:** enabled. Their findings are normalized to
-   `medium` reported severity, so they appear on lane B hunt menus instead of being admitted to
-   lane A.
+1. **Static Analyzer `alpha.security.*` checkers:** enabled. Like every other Static Analyzer
+   diagnostic they are labelled `warning` and normalize to `medium` reported severity, so they
+   appear on lane B hunt menus instead of being admitted to lane A.
 2. **Where K4 runs:** in the separate `tool-clang-static-analysis` image. Changing analyzer checkers then
    never changes the identity of `tool-native-cpp`, the compile-replay image every C/C++ fact
    depends on.

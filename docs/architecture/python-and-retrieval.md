@@ -8,7 +8,7 @@ fingerprinted SQLite/FTS shards; application jobs call `appsec_review.retrieval`
 
 One run may contain `source`, `observations`, `components`, `build`, `artifacts`,
 `build_security`, `compiled`, `analysis`, `evidence`, `history`, `tags`, `priority`,
-`precomputed`, `inventory`, and `links` shards (`INDEX_NAMES` in `retrieval/index.py`). A producer rebuilds only the shards whose fingerprints change. A fingerprint binds the
+`precomputed`, `inventory`, `links`, `documents`, and `graph` shards (`INDEX_NAMES` in `retrieval/index.py`). A producer rebuilds only the shards whose fingerprints change. A fingerprint binds the
 target snapshot, producer artifacts, tool/image/rule identity, parser and normalizer identities,
 mapping implementation, schema, and upstream manifests. Thus an observation change does not
 invalidate an unrelated compile or AST shard, while a composed evidence index or finding package
@@ -38,7 +38,7 @@ and transport changes rebuild nothing.
 
 The C++ compiled-analysis job adds one physical build shard, Clang AST shard, LLVM IR shard, and
 binary/symbol shard per accepted case. The independent clangd job adds one symbol shard per accepted
-case, and the independent Joern job adds one CPG-observation shard per accepted case. The separate cross-language
+case, and the deprecated Joern job (disabled by default) would add one CPG-observation shard per accepted case. The separate cross-language
 CodeQL job adds an observation shard per accepted language scope. A
 blocked producer still publishes an unavailable-coverage shard with zero observations, so absence
 cannot be mistaken for clean coverage. Compile and linker relationships that lack an exact output
@@ -75,10 +75,12 @@ identity. Supported kinds (`EntityKind` in `retrieval/model.py`) are `source_fil
 `finding_package`, `change`, `history_signal`, `hotspot`, `change_context_signal`, `review_unit`,
 `deployment_event`, `tag_assignment`, `priority_item`, `review_signal`, `review_flow_step`,
 `review_context_file`, `precomputed_fact`, `dataset`, `dataset_audit`, `coverage_cell`,
-`dependency_package`, and `advisory`. Relations use the fixed vocabulary `DECLARES`, `DEFINES`,
+`dependency_package`, `advisory`, `document_record`, and the code-graph kinds `call_site`,
+`sink_site`, `entry_point`, `flow_summary`, `dataflow_path`, `guard_fact`, and `range_fact`.
+Relations use the fixed vocabulary `DECLARES`, `DEFINES`,
 `REFERENCES`, `CALLS`, `CONTAINS`, `GENERATED_FROM`, `COMPILES_TO`, `LINKS_INTO`, `DEPENDS_ON`,
 `OBSERVED_AT`, `DERIVED_FROM`, `SUPPORTS`, `CONTRADICTS`, `FLOWS_TO` (ordered CodeQL flow
-steps), `SAME_AS`, and `AFFECTED_BY`.
+steps), `GUARDS`, `SAME_AS`, and `AFFECTED_BY`.
 
 A resolving source location binds the target snapshot, normalized relative path, file hash,
 byte/line/column span, producer-native location, mapping method, confidence, and ambiguity.

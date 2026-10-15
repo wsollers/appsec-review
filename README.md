@@ -363,7 +363,7 @@ model_connectivity -> tool_image_rebuild -> review_intake -> target_catalog -> s
   -> tree_sitter_ast -> project_build -> language_build
   -> artifact_indexing -> test_coverage -> profile_data -> artifact_security_analysis
   -> cpp_compiled_analysis -> clang_static_analysis -> cpp_symbol_index
-  -> cpg_analysis -> evidence_collection -> dependency_intelligence
+  -> cpg_analysis (deprecated; only when enabled) -> evidence_collection -> dependency_intelligence
   -> change_context_analysis -> codeql_analysis -> review_prioritization
   -> code_graph_index -> review_data_indexing -> review_package_assembly
   -> document_issue_analysis
@@ -398,7 +398,12 @@ Other options: the global `--config <path-or-file-URI>` (before the subcommand) 
 configuration other than `appsec-review.toml`; `logs` also filters by `--step`, `--task`, and
 `--attempt`; `plan-resume` accepts the same `--force-from <job-id>` as `resume`; and
 `appsec-review run <job-id> [--run-id <run-id>] [--trigger manual|schedule]` dispatches one job,
-optionally into an existing run.
+optionally into an existing run. Two further subcommands run outside a review graph:
+`appsec-review binary-decompile` (pre-run Ghidra decompilation; see
+[`docs/operations/binary-decompilation.md`](docs/operations/binary-decompilation.md)) and
+`appsec-review update-image-pins --run-id <run-id> [--write]` (rewrites image-ID pins reported
+stale by a run's tool-image rebuild; see
+[`docs/operations/tool-image-rebuild.md`](docs/operations/tool-image-rebuild.md)).
 
 Without installing the package, run the module from the source tree instead:
 
@@ -523,7 +528,7 @@ docker run --rm appsec-review-dagster-test
 | `containers/` | Tool and base image definitions, pinned asset locks, build launchers. |
 | `deploy/dagster/` | Compose stack, bootstrap, lifecycle, and verification scripts. |
 | `tools/` | cve-bin-tool database builder and the Grype snapshot publisher. |
-| `rules/` | Checked-in rules: SEI CERT and Semgrep packs, C++ CERT CodeQL mappings, PMD; mounted read-only in Dagster. |
+| `rules/` | Checked-in rules: SEI CERT and Semgrep packs, C++ CERT CodeQL mappings, PMD, and the CodeQL graph-export query pack (`codeql-graph-export/`); mounted read-only in Dagster. |
 | `pipeline/` | Review-worker guidance: governing rules, personas, stacks, roles, tasks, the guidance registry, and registered runtime skills (`pipeline/skills/`). |
 | `.claude/skills/` | Canonical development skills for agents working on this repository; never loaded by jobs or shipped in runtime images. |
 | `.agents/skills/` | One pointer skill that sends Codex, Gemini CLI, Copilot and Cursor to `.claude/skills/`. |

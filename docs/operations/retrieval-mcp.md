@@ -97,8 +97,10 @@ intelligence, documents and review packages; the complete list and product contr
 [`indexing-and-query-reuse.md`](../architecture/indexing-and-query-reuse.md).
 `job_review_data_indexing` publishes the stage-1 sets (`build_provenance`, `artifact_inventory`,
 `dependency_advisories`, `scanner_correlation`, `ci_trust`, `history_context`, `control_evidence`,
-`reference_intelligence`, `symbol_links`, `document_context`); the stage-3 sets (`hotspot_context`,
-`review_package`) return an unavailable gap until they are built. The former graph sets
+`reference_intelligence`, `symbol_links`, `document_context`); the unpublished sets
+(`hotspot_context`, `review_package`, `redacted_secret_exposure`, `contract_enforcement`,
+`deployment_exposure`, `test_intent`; `QUERY_SETS` in `retrieval/precomputed.py`) return an
+unavailable gap until they are built. The former graph sets
 (`call_graph`, `control_flow`, `dataflow`, `sarif_correlation`, `ast_ir_cpg_mapping`,
 `guards_ranges`, `entrypoint_paths`) are retired and rejected as invalid; use `query_code_graph`.
 It never executes analyzers or target code during retrieval.
