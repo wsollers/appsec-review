@@ -65,12 +65,17 @@ def dependency_hashes(target_root: Path, recipe: Mapping[str, Any]) -> dict[str,
 def project_recipe_identity(recipe: Mapping[str, Any], profile: BuildProfile,
                             hashes: Mapping[str, str]) -> str:
     operational_recipe = {key: value for key, value in recipe.items() if key != "reason"}
-    return hashlib.sha256(canonical_json({
+    value = {
         "schema": SCHEMA, "generator": GENERATOR_IDENTITY, "recipe": operational_recipe,
         "base_image_id": profile.image_id, "dependency_hashes": hashes,
         "platform": str(recipe.get("platform", "linux")),
         "architecture": str(recipe.get("architecture", "native")),
-    })).hexdigest()
+    }
+    if node_workspace_layout(recipe):
+        # Only images that carry the workspace layout step change identity; every other
+        # recipe keeps its cached image.
+        value["node_layout"] = NODE_WORKSPACE_LAYOUT_IDENTITY
+    return hashlib.sha256(canonical_json(value)).hexdigest()
 
 
 def node_dependency_root(recipe: Mapping[str, Any]) -> str:
@@ -82,6 +87,49 @@ def node_dependency_root(recipe: Mapping[str, Any]) -> str:
         return source.as_posix()
     parent = locks[0].parent
     return parent.as_posix()
+
+
+# The build executor mounts the run-owned build workspace here (see BuildContainerExecutor).
+BUILD_WORKSPACE_MOUNT = "/workspace"
+NODE_WORKSPACE_LAYOUT_IDENTITY = "appsec-review/node-workspace-layout/1"
+# Runs in the image after the dependency restore. It gives the built unit its own node_modules
+# directory (pnpm and non-hoisted npm/Yarn installs keep member dependencies there), and
+# re-points workspace links, links from node_modules into the project tree rather than into
+# another package, at the build workspace: the image holds only member manifests, while the
+# build workspace holds their sources and build outputs.
+_NODE_WORKSPACE_LAYOUT_SCRIPT = (
+    'const fs=require("fs"),path=require("path");'
+    'const [project,workspace,source]=process.argv.slice(1);'
+    'fs.mkdirSync(path.join(project,source,"node_modules"),{recursive:true});'
+    'const relink=(link)=>{let real;try{real=fs.realpathSync(link);}catch(error){return;}'
+    'const rel=path.relative(project,real);'
+    'if(!rel||rel.startsWith("..")||path.isAbsolute(rel)||rel.split(path.sep).includes("node_modules"))return;'
+    'fs.unlinkSync(link);fs.symlinkSync(path.join(workspace,rel),link);};'
+    'const modules=(dir)=>{for(const entry of fs.readdirSync(dir,{withFileTypes:true})){'
+    'const item=path.join(dir,entry.name);'
+    'if(entry.isDirectory()&&entry.name.startsWith("@"))modules(item);'
+    'else if(entry.isSymbolicLink())relink(item);}};'
+    'const visit=(dir,depth)=>{if(depth>8)return;'
+    'for(const entry of fs.readdirSync(dir,{withFileTypes:true})){'
+    'if(!entry.isDirectory())continue;const item=path.join(dir,entry.name);'
+    'if(entry.name==="node_modules")modules(item);else visit(item,depth+1);}};'
+    'visit(project,0);'
+)
+
+
+def node_workspace_layout(recipe: Mapping[str, Any]) -> bool:
+    """Whether a Node image restores a workspace tree (or an ancestor root) for this unit."""
+    if str(recipe.get("build_system", "")) != "node" or not bool(recipe.get("network_required")):
+        return False
+    manifests = [value for value in recipe.get("dependency_files", ())
+                 if PurePosixPath(str(value)).name == "package.json"]
+    source = PurePosixPath(str(recipe.get("source_dir", "."))).as_posix()
+    return len(manifests) > 1 or node_dependency_root(recipe) != source
+
+
+def node_workspace_layout_command(recipe: Mapping[str, Any]) -> tuple[str, ...]:
+    source = PurePosixPath(str(recipe.get("source_dir", "."))).as_posix()
+    return ("node", "-e", _NODE_WORKSPACE_LAYOUT_SCRIPT, "/opt/project", BUILD_WORKSPACE_MOUNT, source)
 
 
 # Package managers a repair may select because the family build image already pins them
@@ -373,6 +421,8 @@ class ProjectImageResolver:
         repair_restores = repair_restore_commands(recipe)
         for directory, argv in repair_restores:
             lines.extend((f"WORKDIR {directory}", _json_instruction("RUN", argv)))
+        if node_workspace_layout(recipe):
+            lines.append(_json_instruction("RUN", node_workspace_layout_command(recipe)))
         if repair_restores:
             lines.append(workdir)
         return identity, ("\n".join(lines) + "\n").encode("utf-8")

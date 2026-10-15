@@ -32,7 +32,7 @@ from appsec_review.jobs.artifact_kinds import binary_role, require_artifact_kind
 from appsec_review.jobs.build_bookkeeping import (
     BookkeepingExclusions, bookkeeping_reason, cargo_profile_directories,
 )
-from appsec_review.jobs.build_discovery import validate_build_recipe
+from appsec_review.jobs.build_discovery import copied_source_symlink, validate_build_recipe
 from appsec_review.jobs.cataloging import source_fingerprint, write_json
 from appsec_review.inference import Infer, ModelRequest
 from appsec_review.jobs.job_target_analysis_plan import load_accepted_plan
@@ -91,9 +91,9 @@ def _copy_source(unit: UnitContext, action: Mapping[str, Any], workspace: Path) 
             raise ValueError("probe workspace deletion escaped the run-owned build root")
         shutil.rmtree(workspace)
     workspace.mkdir(parents=True, exist_ok=True)
-    for path in source.rglob("*"):
-        if path.is_symlink():
-            raise ValueError(f"build source contains an unsupported symlink: {path.relative_to(target)}")
+    link = copied_source_symlink(source, _IGNORED)
+    if link is not None:
+        raise ValueError(f"build source contains an unsupported symlink: {link.relative_to(target)}")
     shutil.copytree(source, destination, dirs_exist_ok=True, ignore=shutil.ignore_patterns(*sorted(_IGNORED)))
     root = str(action["root"])
     recipe = action.get("recipe")

@@ -247,7 +247,15 @@ def facts_from_build_unit(unit: Mapping[str, Any]) -> ProjectProcessingFacts:
     gaps = package.get("gaps")
     if not isinstance(documents, list) or not isinstance(gaps, list):
         raise ValueError("descriptor package inventory shape is invalid")
-    identities = _sources(documents)
+    inventory = package.get("inventory", [])
+    if not isinstance(inventory, list):
+        raise ValueError("descriptor package inventory shape is invalid")
+    # Identity-only inventory (a lockfile beyond the content bound, workspace member manifests)
+    # is accepted source identity without content; a document already carrying it counts once.
+    documented = {(item.get("path"), item.get("sha256")) for item in documents
+                  if isinstance(item, Mapping)}
+    identities = _sources([*documents, *(item for item in inventory if not isinstance(item, Mapping) or
+                                         (item.get("path"), item.get("sha256")) not in documented)])
     contents: dict[str, str] = {}
     for item in documents:
         content = item.get("content")

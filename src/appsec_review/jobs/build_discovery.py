@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections import defaultdict
 import hashlib
 import json
+import os
 from pathlib import Path, PurePosixPath
 import re
 from typing import Any, Callable, Mapping, Sequence
@@ -355,6 +356,220 @@ def unsupported_build_gaps(files: Sequence[Mapping[str, Any]],
     ]
 
 
+NODE_LOCKFILES = ("package-lock.json", "pnpm-lock.yaml", "yarn.lock")
+# Dependency lockfiles are inventory, not prose a planner reads: their identity (path and catalog
+# sha256) pins what the dependency restore installs. One larger than the descriptor content bound
+# is carried by identity alone instead of becoming an inventory gap.
+_LOCKFILE_NAMES = frozenset({
+    *NODE_LOCKFILES, "Cargo.lock", "composer.lock", "poetry.lock", "Pipfile.lock", "pylock.toml",
+    "gradle.lockfile", "packages.lock.json", "go.sum", "go.work.sum",
+})
+# Members a workspace inventory may name. A recipe carries every member manifest, and recipes
+# accept at most 64 dependency files.
+NODE_WORKSPACE_MEMBER_LIMIT = 48
+_WORKSPACE_DECLARATION_BYTES = 64 * 1024
+_WORKSPACE_LISTING_LIMIT = 512
+
+
+def _workspace_pattern(pattern: str) -> re.Pattern[str] | None:
+    """Compile one npm/Yarn/pnpm workspace glob over workspace-relative directory paths."""
+    value = pattern.strip()
+    while value.startswith("./"):
+        value = value[2:]
+    value = value.rstrip("/")
+    if not value or value.startswith("/") or "\\" in value:
+        return None
+    segments = value.split("/")
+    if any(segment in {"", ".", ".."} for segment in segments):
+        return None
+    parts = []
+    for index, segment in enumerate(segments):
+        last = index == len(segments) - 1
+        if segment == "**":
+            parts.append("[^/]+(?:/[^/]+)*" if last else "(?:[^/]+/)*")
+            continue
+        text = "".join("[^/]*" if char == "*" else "[^/]" if char == "?" else re.escape(char)
+                       for char in segment)
+        parts.append(text if last else text + "/")
+    return re.compile("".join(parts))
+
+
+def _pnpm_workspace_patterns(text: str) -> list[str] | None:
+    """Read the ``packages`` list of a pnpm-workspace.yaml; ``None`` when it is not that shape."""
+    patterns: list[str] | None = None
+    for raw in text.splitlines():
+        line = raw.split(" #", 1)[0].rstrip()
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        if not raw[:1].isspace():
+            if patterns is not None:
+                break
+            key, _, rest = line.partition(":")
+            if key.strip() == "packages":
+                if rest.strip() not in {"", "[]"}:
+                    flow = rest.strip()
+                    if not (flow.startswith("[") and flow.endswith("]")):
+                        return None
+                    return [item.strip().strip("'\"") for item in flow[1:-1].split(",")
+                            if item.strip()]
+                patterns = []
+            continue
+        if patterns is None:
+            continue
+        item = line.strip()
+        if not item.startswith("- "):
+            return None
+        patterns.append(item[2:].strip().strip("'\""))
+    return patterns
+
+
+def _read_bounded(target_root: Path, item: Mapping[str, Any]) -> str | None:
+    if int(item["size_bytes"]) > _WORKSPACE_DECLARATION_BYTES:
+        return None
+    path = (target_root / Path(*PurePosixPath(str(item["path"])).parts)).resolve()
+    if target_root.resolve() not in path.parents or not path.is_file() or path.is_symlink():
+        raise ValueError("workspace declaration escaped the accepted target")
+    try:
+        return path.read_text(encoding="utf-8")
+    except UnicodeError:
+        return None
+
+
+def _workspace_declaration(target_root: Path, directory: PurePosixPath,
+                           by_path: Mapping[str, Mapping[str, Any]]
+                           ) -> tuple[str, str, list[str] | None] | None:
+    """Return (manager, declaration path, patterns) for a directory that declares a workspace."""
+    pnpm = (directory / "pnpm-workspace.yaml").as_posix()
+    if pnpm in by_path:
+        text = _read_bounded(target_root, by_path[pnpm])
+        return "pnpm", pnpm, (_pnpm_workspace_patterns(text) if text is not None else None)
+    manifest = (directory / "package.json").as_posix()
+    if manifest not in by_path:
+        return None
+    text = _read_bounded(target_root, by_path[manifest])
+    if text is None:
+        return None
+    try:
+        document = json.loads(text)
+    except json.JSONDecodeError:
+        return None
+    declared = document.get("workspaces") if isinstance(document, Mapping) else None
+    if declared is None:
+        return None
+    if isinstance(declared, Mapping):
+        declared = declared.get("packages")
+    if not isinstance(declared, list) or any(not isinstance(item, str) for item in declared):
+        return "npm", manifest, None
+    return "npm", manifest, list(declared)
+
+
+def node_workspace(target_root: Path, unit: Mapping[str, Any],
+                   files: Sequence[Mapping[str, Any]]) -> tuple[dict[str, Any] | None, list[str]]:
+    """Resolve the npm, Yarn, or pnpm workspace a Node build unit roots or belongs to.
+
+    A workspace member's dependency inventory is the workspace root's lockfile, and a root's
+    inventory includes every member manifest: package managers install a workspace as one tree
+    and link members into it. Only accepted catalog files are consulted (the catalog excludes
+    ``node_modules`` and symlinks); a declared member the catalog could not accept, a missing
+    or ambiguous root lockfile, or an unreadable declaration is a named inventory gap.
+    """
+    if unit.get("family") != "node":
+        return None, []
+    by_path = {str(item["path"]): item for item in files}
+    unit_root = PurePosixPath(str(unit["root"]))
+    manifests = sorted(PurePosixPath(path).parent for path in by_path
+                       if PurePosixPath(path).name == "package.json")
+    for directory in (unit_root, *unit_root.parents):
+        declaration = _workspace_declaration(target_root, directory, by_path)
+        if declaration is None:
+            continue
+        manager, declared_by, patterns = declaration
+        prefix = "" if directory.as_posix() == "." else directory.as_posix() + "/"
+        label = directory.as_posix()
+        if patterns is None:
+            if directory != unit_root:
+                continue
+            return None, [f"{declared_by}: workspace declaration could not be read; "
+                          "the workspace dependency inventory is unavailable"]
+        includes = [(raw, _workspace_pattern(raw)) for raw in patterns if not raw.startswith("!")]
+        excludes = [_workspace_pattern(raw[1:]) for raw in patterns if raw.startswith("!")]
+        gaps = [f"{declared_by}: workspace pattern is unsupported: {raw[:256]}"
+                for raw, compiled in includes if compiled is None]
+        members = []
+        for candidate in manifests:
+            if candidate == directory or (directory.as_posix() != "." and directory not in candidate.parents):
+                continue
+            relative = candidate.as_posix()[len(prefix):]
+            if "node_modules" in candidate.parts:
+                continue
+            if (any(compiled is not None and compiled.fullmatch(relative) for _raw, compiled in includes) and
+                    not any(compiled is not None and compiled.fullmatch(relative) for compiled in excludes)):
+                members.append(candidate.as_posix())
+        role = ("root" if directory == unit_root else
+                "member" if unit_root.as_posix() in members else None)
+        if role is None:
+            # A nested project the workspace does not claim installs on its own.
+            return None, []
+        base = target_root / Path(*directory.parts)
+        for raw, compiled in includes:
+            if compiled is None:
+                continue
+            literal = []
+            for segment in raw.strip().removeprefix("./").rstrip("/").split("/"):
+                if any(char in segment for char in "*?[{"):
+                    break
+                literal.append(segment)
+            parent = base.joinpath(*literal) if literal else base
+            if not any(char in raw for char in "*?[{"):
+                if parent.is_symlink():
+                    gaps.append(f"{prefix}{'/'.join(literal)}: workspace member is a symlink; "
+                                "its manifest is outside the accepted inventory")
+                elif (PurePosixPath(prefix + "/".join(literal)) / "package.json").as_posix() not in by_path:
+                    gaps.append(f"{prefix}{'/'.join(literal)}: declared workspace member has no "
+                                "accepted package.json")
+                continue
+            if parent.is_symlink() or not parent.is_dir():
+                continue
+            for index, entry in enumerate(sorted(parent.iterdir())):
+                if index >= _WORKSPACE_LISTING_LIMIT:
+                    gaps.append(f"{declared_by}: workspace member listing bound reached")
+                    break
+                relative = "/".join([*literal, entry.name])
+                if entry.is_symlink() and compiled.fullmatch(relative) and not any(
+                        value is not None and value.fullmatch(relative) for value in excludes):
+                    gaps.append(f"{prefix}{relative}: workspace member is a symlink; "
+                                "its manifest is outside the accepted inventory")
+        if len(members) > NODE_WORKSPACE_MEMBER_LIMIT:
+            gaps.append(f"{declared_by}: workspace declares more than {NODE_WORKSPACE_MEMBER_LIMIT} "
+                        "members; the workspace dependency inventory is unbounded")
+            members = members[:NODE_WORKSPACE_MEMBER_LIMIT]
+        locks = [(directory / name).as_posix() for name in NODE_LOCKFILES
+                 if (directory / name).as_posix() in by_path]
+        if manager == "pnpm":
+            locks = [path for path in locks if path.endswith("pnpm-lock.yaml")] or locks
+        if not locks:
+            gaps.append(f"{label}: workspace dependency inventory unavailable: no "
+                        "package-lock.json, pnpm-lock.yaml, or yarn.lock at the workspace root")
+        elif len(locks) > 1:
+            gaps.append(f"{label}: workspace dependency inventory is ambiguous: "
+                        + ", ".join(locks))
+        lockfile = locks[0] if len(locks) == 1 else None
+        if lockfile is not None and manager == "npm":
+            manager = {"pnpm-lock.yaml": "pnpm", "yarn.lock": "yarn"}.get(
+                PurePosixPath(lockfile).name, "npm")
+        inventory = sorted({declared_by, (directory / "package.json").as_posix(),
+                            *([lockfile] if lockfile else []),
+                            *((PurePosixPath(member) / "package.json").as_posix() for member in members)}
+                           & set(by_path))
+        return {"root": label, "role": role, "manager": manager, "declaration": declared_by,
+                "lockfile": lockfile, "members": members, "inventory": inventory}, gaps
+    return None, []
+
+
+def _identity(item: Mapping[str, Any]) -> dict[str, Any]:
+    return {"path": item["path"], "sha256": item["sha256"], "size_bytes": item["size_bytes"]}
+
+
 def descriptor_package(target_root: Path, unit: Mapping[str, Any], files: Sequence[Mapping[str, Any]],
                        *, max_files: int = 24, max_file_bytes: int = 64 * 1024,
                        max_total_bytes: int = 256 * 1024) -> dict[str, Any]:
@@ -364,6 +579,8 @@ def descriptor_package(target_root: Path, unit: Mapping[str, Any], files: Sequen
     # Native component sources are what the family build compiles; the planner needs them to
     # write the compile command (for example a clang --target=wasm32 translation of build.sh).
     component_paths = {str(item["path"]) for item in unit.get("native_components", ())}
+    workspace, gaps = node_workspace(target_root, unit, files)
+    workspace_root = PurePosixPath(workspace["root"]) if workspace else None
     for item in files:
         path = PurePosixPath(str(item["path"]))
         under = root == "." or path.as_posix() == root or path.as_posix().startswith(root + "/")
@@ -373,6 +590,9 @@ def descriptor_package(target_root: Path, unit: Mapping[str, Any], files: Sequen
             path.parent != unit_root and
             (path.parent == PurePosixPath(".") or path.parent in unit_root.parents)
         )
+        if workspace_root is not None and ancestor_context and path.name in NODE_LOCKFILES:
+            # A workspace member's lockfile is the workspace root's, never a further ancestor's.
+            ancestor_context = path.parent == workspace_root
         if not under and not ancestor_context:
             continue
         if (str(item["path"]) in marker_paths or str(item["path"]) in component_paths or
@@ -381,13 +601,17 @@ def descriptor_package(target_root: Path, unit: Mapping[str, Any], files: Sequen
             candidates.append(item)
     documents = []
     total = 0
-    gaps = []
+    by_path = {str(item["path"]): item for item in files}
+    inventory = {path: _identity(by_path[path]) for path in (workspace or {}).get("inventory", ())}
     for item in sorted(candidates, key=lambda value: str(value["path"])):
         if len(documents) >= max_files:
             gaps.append("descriptor file-count bound reached")
             break
         size = int(item["size_bytes"])
         if size > max_file_bytes or total + size > max_total_bytes:
+            if PurePosixPath(str(item["path"])).name in _LOCKFILE_NAMES:
+                inventory[str(item["path"])] = _identity(item)
+                continue
             gaps.append(f"{item['path']}: descriptor content omitted by byte bound")
             continue
         path = (target_root / Path(*PurePosixPath(str(item["path"])).parts)).resolve()
@@ -400,10 +624,52 @@ def descriptor_package(target_root: Path, unit: Mapping[str, Any], files: Sequen
             continue
         documents.append({"path": item["path"], "sha256": item["sha256"], "content": text})
         total += size
-    return {"schema": BUILD_DESCRIPTOR_SCHEMA, "build_unit": dict(unit), "documents": documents,
-            "bounds": {"max_files": max_files, "max_file_bytes": max_file_bytes,
-                       "max_total_bytes": max_total_bytes, "actual_files": len(documents),
-                       "actual_bytes": total}, "gaps": gaps}
+    for relative in inventory:
+        path = (target_root / Path(*PurePosixPath(relative).parts)).resolve()
+        if target_root.resolve() not in path.parents or not path.is_file() or path.is_symlink():
+            raise ValueError("dependency inventory escaped the accepted target")
+    package = {"schema": BUILD_DESCRIPTOR_SCHEMA, "build_unit": dict(unit), "documents": documents,
+               "bounds": {"max_files": max_files, "max_file_bytes": max_file_bytes,
+                          "max_total_bytes": max_total_bytes, "actual_files": len(documents),
+                          "actual_bytes": total}, "gaps": gaps}
+    if inventory:
+        # Identity-only dependency inventory: the restore pins these exact bytes, but the
+        # planner never needs their content.
+        package["inventory"] = [inventory[path] for path in sorted(inventory)]
+    if workspace is not None:
+        package["workspace"] = {key: value for key, value in workspace.items() if key != "inventory"}
+    return package
+
+
+def copied_source_symlink(source: Path, ignored: frozenset[str] | set[str]) -> Path | None:
+    """Return the first symlink a build-source copy would carry, or ``None``.
+
+    Directories the copy ignores are never entered: an installed ``node_modules`` holds
+    package-manager links (workspace members, ``.bin`` entries) that are not build source.
+    """
+    for directory, dirnames, filenames in os.walk(source, topdown=True, followlinks=False):
+        base = Path(directory)
+        kept = []
+        for name in sorted(dirnames):
+            if name in ignored:
+                continue
+            if (base / name).is_symlink():
+                return base / name
+            kept.append(name)
+        dirnames[:] = kept
+        for name in sorted(filenames):
+            if name not in ignored and (base / name).is_symlink():
+                return base / name
+    return None
+
+
+def descriptor_inventory_paths(unit: Mapping[str, Any]) -> list[str]:
+    """Every accepted descriptor path of a unit: its content documents and identity inventory."""
+    package = unit.get("descriptor_package", {})
+    if not isinstance(package, Mapping):
+        return []
+    return sorted({str(item["path"]) for key in ("documents", "inventory")
+                   for item in package.get(key, ()) if isinstance(item, Mapping) and "path" in item})
 
 
 def android_descriptor_facts(package: Mapping[str, Any]) -> dict[str, Any] | None:
@@ -468,9 +734,26 @@ def normalize_build_recipe(recipe: Mapping[str, Any], unit: Mapping[str, Any] | 
     if value.get("image_profile") == "node" and isinstance(unit, Mapping):
         dependencies = list(value.get("dependency_files", ()))
         root = PurePosixPath(str(unit.get("root", ".")))
+        package = unit.get("descriptor_package", {})
+        workspace = package.get("workspace") if isinstance(package, Mapping) else None
+        if isinstance(workspace, Mapping):
+            # A workspace installs as one tree at its root: the root manifest and lockfile and
+            # every member manifest, whichever unit (root or member) the recipe builds.
+            lockfile = workspace.get("lockfile")
+            if lockfile:
+                dependencies = [path for path in dependencies
+                                if PurePosixPath(str(path)).name not in NODE_LOCKFILES or path == lockfile]
+            for item in package.get("inventory", ()):
+                path = str(item.get("path", "")) if isinstance(item, Mapping) else ""
+                if path and path not in dependencies:
+                    dependencies.append(path)
+            if lockfile and value.get("network_required") is False:
+                # Members' and root devDependencies (often the compiler itself) are hoisted
+                # into the workspace tree only by the locked workspace restore.
+                value["network_required"] = True
         has_lock = any(PurePosixPath(str(path)).name in {
             "package-lock.json", "pnpm-lock.yaml", "yarn.lock"} for path in dependencies)
-        for item in unit.get("descriptor_package", {}).get("documents", ()):
+        for item in (*package.get("documents", ()), *package.get("inventory", ())):
             path = PurePosixPath(str(item.get("path", "")))
             is_lock = path.name in {"package-lock.json", "pnpm-lock.yaml", "yarn.lock"}
             if (path.parent != root and
@@ -609,9 +892,7 @@ def validate_build_recipe(recipe: Mapping[str, Any], unit: Mapping[str, Any]) ->
                 errors.append(f"environment value is invalid: {key}")
     dependencies = recipe.get("dependency_files")
     marker_paths = {str(item["path"]) for item in unit.get("markers", ())}
-    accepted_paths = marker_paths | {
-        str(item["path"]) for item in unit.get("descriptor_package", {}).get("documents", ())
-    }
+    accepted_paths = marker_paths | set(descriptor_inventory_paths(unit))
     if (not isinstance(dependencies, list) or len(dependencies) > 64 or
             any(not isinstance(item, str) or not _relative(item) for item in dependencies)):
         errors.append("dependency_files must be bounded normalized relative paths")

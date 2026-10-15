@@ -118,6 +118,21 @@ shared tool images, which is offline after locked-asset fetch. The derived image
 caches below `/opt/project-deps`; the later build container receives matching typed environment
 paths. Lifecycle scripts are disabled where the package manager supports that policy.
 
+Node workspaces (npm and Yarn `workspaces`, pnpm `pnpm-workspace.yaml`) install as one tree at the
+workspace root. Discovery resolves the workspace a Node unit roots or belongs to from accepted
+catalog files only, and records it in the unit's descriptor package as `workspace` (root, role,
+manager, lockfile, members). Its `inventory` lists, by catalog identity, the root manifest and
+lockfile and every member manifest, together with any lockfile larger than the descriptor content
+bound, which is carried by identity rather than reported as a gap. Recipe normalization adds that
+inventory to every root and member recipe, so the image restores the whole workspace. A workspace
+without exactly one root lockfile, a declared member that is a symlink or has no accepted
+manifest, or more than 48 members is an inventory gap, and build capture records it as
+`INVENTORY_UNAVAILABLE`. After the restore, a workspace image creates the unit's own
+`node_modules` and re-points workspace links (links from `node_modules` into the project tree) at
+`/workspace`, where the build workspace holds member sources. The build links both the workspace
+root's and the unit's `node_modules` to the image. Installed `node_modules` links in a target
+checkout are never copied, so they are not build-source symlinks.
+
 The project-image cache is keyed by the full recipe identity. Reuse requires the manifest, retained
 Dockerfile hash, and current local image ID to agree. A missing or changed image, Dockerfile, or
 manifest rejects the cache entry. Docker daemon mutation is narrowly serialized, while unrelated

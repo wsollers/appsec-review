@@ -26,7 +26,7 @@ from appsec_review.container_runtime import (
 )
 from appsec_review.container_runtime.build_capture import REQUIRED_EVENT_KINDS
 from appsec_review.container_runtime.project_images import node_dependency_root, project_recipe_identity
-from appsec_review.jobs.build_discovery import validate_build_recipe
+from appsec_review.jobs.build_discovery import copied_source_symlink, validate_build_recipe
 from appsec_review.jobs.cataloging import source_fingerprint, write_json
 from appsec_review.jobs.job_project_build import load_accepted_builds
 from appsec_review.jobs.job_project_build.job import (
@@ -214,11 +214,10 @@ def _copy_source(unit: UnitContext, dispatch: Mapping[str, Any], workspace: Path
         shutil.rmtree(workspace)
     destination = workspace if dispatch["root"] == "." else workspace / Path(*PurePosixPath(str(dispatch["root"])).parts)
     destination.parent.mkdir(parents=True, exist_ok=True)
-    for path in source.rglob("*"):
-        if path.is_symlink():
-            raise ValueError("build source contains an unsupported symlink")
-    shutil.copytree(source, destination, ignore=shutil.ignore_patterns(
-        ".git", ".hg", ".svn", "build", "target", "node_modules"))
+    ignored = frozenset({".git", ".hg", ".svn", "build", "target", "node_modules"})
+    if copied_source_symlink(source, ignored) is not None:
+        raise ValueError("build source contains an unsupported symlink")
+    shutil.copytree(source, destination, ignore=shutil.ignore_patterns(*sorted(ignored)))
     root = str(dispatch["root"])
     recipe = dispatch.get("recipe")
     for relative in recipe.get("dependency_files", ()) if isinstance(recipe, Mapping) else ():
