@@ -3,7 +3,6 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 import hashlib
 import json
-import os
 from pathlib import Path, PurePosixPath
 import re
 import shutil
@@ -1048,8 +1047,8 @@ def build_job(*, executor_factory: ExecutorFactory | None = None, fail_tool: str
     source_files = (Path(__file__), Path(__file__).with_name("adapters.py"), Path(__file__).with_name("evidence.py"))
     implementation = hashlib.sha256(b"".join(path.read_bytes() for path in source_files) + str(fail_tool).encode()).hexdigest()
 
-    def runtime_identity() -> str:
-        root = Path(os.environ.get("APPSEC_REVIEW_CONFIG", "appsec-review.toml")).resolve().parent
+    def runtime_identity(repository_root: Path) -> str:
+        root = Path(repository_root).resolve()
         catalog = load_catalog(root)
         static_tools = {tool_id: tool for tool_id, tool in catalog.tools.items()
                         if tool.metadata.get("static_adapter", True) is not False}

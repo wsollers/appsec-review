@@ -1239,8 +1239,8 @@ def build_job(*, executor_factory: ExecutorFactory | None = None,
                                     (b"custom-executor" if executor_factory else b"container-only") +
                                     (b"custom-transport" if github_transport else b"https-transport")).hexdigest()
 
-    def runtime_identity() -> str:
-        root = Path(os.environ.get("APPSEC_REVIEW_CONFIG", "appsec-review.toml")).resolve().parent
+    def runtime_identity(repository_root: Path) -> str:
+        root = Path(repository_root).resolve()
         identities = {}
         for tool_id in (TOOL_ID, TREE_SITTER_TOOL):
             try:

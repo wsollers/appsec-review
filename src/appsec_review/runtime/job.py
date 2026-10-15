@@ -53,7 +53,9 @@ class Job:
     schema_identity: str = "appsec-review/job-result/1"
     implementation_identity: str | None = None
     validation_identity: str | None = None
-    runtime_identity: Callable[[], str] | None = None
+    # Identity of runtime assets outside the job's source (tool catalog entries, rule locks), read
+    # from the repository root of the loaded configuration, never the working directory.
+    runtime_identity: Callable[[Path], str] | None = None
     units: tuple["Unit", ...] = ()
     result_transform: Callable[[JobContext, Mapping[str, Any]], Mapping[str, Any]] | None = None
     worker_lookup: Callable[[str, str], int] | None = None
@@ -84,7 +86,7 @@ class Job:
     def finalize_result(self, context: JobContext, result: Mapping[str, Any]) -> Mapping[str, Any]:
         return self.result_transform(context, result) if self.result_transform is not None else result
 
-    def identities(self) -> Mapping[str, str]:
+    def identities(self, repository_root: Path) -> Mapping[str, str]:
         def identity(values: tuple[object, ...], explicit: str | None = None) -> str:
             digest = hashlib.sha256()
             if explicit is not None:
@@ -100,7 +102,7 @@ class Job:
         return {
             "implementation": identity(
                 (self.handler, Job.execute,
-                 self.runtime_identity() if self.runtime_identity is not None else ""),
+                 self.runtime_identity(repository_root) if self.runtime_identity is not None else ""),
                 self.implementation_identity,
             ),
             "schema": self.schema_identity,

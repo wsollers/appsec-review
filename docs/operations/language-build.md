@@ -5,6 +5,11 @@ current execution implementations include Linux native, Rust/Cargo, JVM/Java/Kot
 Node/JavaScript/TypeScript, Python packaging, PHP/Composer, Linux-capable .NET SDK projects and
 solutions, and WebAssembly output producers. Accepted Windows-only and .NET Framework projects
 publish explicit `NOT_APPLICABLE` receipts.
+A planned unit that `job_project_build` probed but could not build (for example its build image is
+unavailable) is never an absent lane: its family publishes a `BLOCKED` receipt with
+`upstream_failure` (`job_id`, `terminal_status`, `reason`) and a gap naming the unit, the failure and
+`job_project_build`, so the job is `COMPLETED_WITH_GAPS`. `NOT_APPLICABLE` means the target has no
+planned unit of that family.
 Bundler is intentionally not an execution lane: an accepted `Gemfile` produces a named gap stating
 that no pinned Ruby build profile or executor exists and that gem installation, lifecycle hooks,
 packaging, and native extensions were not run. Ruby source-mode Tree-sitter and CodeQL coverage do

@@ -17,6 +17,7 @@ from appsec_review.retrieval.index import load_verified_manifest
 from appsec_review.review_packages import assemble_review_packages, publish_review_packages, verify_review_packages
 from appsec_review.document_issues import adjudicate, analyze_document_hunts
 from appsec_review.jobs.job_document_issue_analysis import build_job as build_document_issues
+from appsec_review.jobs.job_document_issue_analysis.job import UNADJUDICATED_GAP
 from appsec_review.jobs.job_review_package_assembly import build_job as build_packages
 from appsec_review.mcp.adapter import RetrievalMcpAdapter
 from appsec_review.mcp.capability import ScopedRetrievalMcpAdapter, issue_capability
@@ -229,6 +230,12 @@ def test_document_issue_path_keeps_claims_private_and_resolves_source(tmp_path: 
     assert len(ledgers) == 1
     ledger = json.loads(ledgers[0].read_text(encoding="utf-8"))
     assert ledger["findings"] == ledger["scoring_inputs"] == []
+    # The job is always partial while findings are unpublished, and it names that gap first.
+    pointer = json.loads((run_root / "data/jobs/job_document_issue_analysis/latest.json").read_text(encoding="utf-8"))
+    handoff = json.loads((run_root / pointer["handoff_path"]).read_text(encoding="utf-8"))
+    published = handoff["outputs"]["analysis.map_and_adjudicate"]
+    assert handoff["completion_status"] == published["terminal_status"] == "COMPLETED_WITH_GAPS"
+    assert published["gaps"][0] == UNADJUDICATED_GAP
     route = next(item for item in ledger["candidates"] if item["subject"] == "route:GET /api/v1/orders/{id}")
     assert route["mapping_status"] == "unique"
     assert route["state"] == "insufficient_evidence"

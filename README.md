@@ -512,6 +512,44 @@ Use a named base directory beneath `test/tmp/` for focused or concurrent session
 python -m pytest -q tests/test_static_adapters.py --basetemp=test/tmp/static-adapters
 ```
 
+### End-to-end review of a target with nothing to find
+
+`tests/integration/test_nothing_review.py` runs the review graph that `appsec-review start` runs
+(the CLI graph filtered by each job's `settings.enabled`) through `GraphRunner` against a benign
+repository it creates under its base directory: `README.md`, `greeter.py`, `src/add.c` and a
+`CMakeLists.txt`, committed with a fixed author and date. No live model is called: a replay
+transport stands in for the configured providers, reports every configured model available and
+answers the planning request with the CMake recipe. The test's configuration copy disables
+`job_tool_image_rebuild`; every other job is the registered job. Both tiers assert that every enabled
+job has an accepted handoff (or, in the first tier, a named reason it could not run), that missing
+coverage is a named gap and makes its job `COMPLETED_WITH_GAPS` rather than `SUCCEEDED`, that every
+evidence tool has a disposition with a reason when it did not run, that the accepted index holds no
+security observation, that the run-bound configuration, the hash-pinned guidance bundles and every
+handoff artifact verify, and that the dataset publication audit has no violation.
+
+- **No-Docker tier** (runs anywhere, about a minute). A `docker` stub that reports an unreachable
+  daemon is first on `PATH`, so the tier behaves the same on a host with images. A job that needs a
+  container image (or only the handoff of such a job) is recorded with the image it named, removed,
+  and the same run is resumed.
+
+  ```bash
+  python -m pytest -p no:cacheprovider tests/integration/test_nothing_review.py \
+    -k without_container_images --basetemp=test/tmp/nothing-review
+  ```
+
+- **Full tier** (a review host with the pinned images, such as Zarathustra). It uses the real Docker
+  daemon, runs the whole graph in one pass, requires every job to finish, and asserts that every
+  scanner that ran observed nothing. It skips, naming what is missing, when the daemon, an enabled
+  catalog tool image or a build-profile image is unavailable.
+
+  ```bash
+  python -m pytest -p no:cacheprovider tests/integration/test_nothing_review.py \
+    -k with_pinned_images --basetemp=test/tmp/nothing-review-full -rs
+  ```
+
+A security observation on this target is a false positive in the rule that raised it; report the
+rule rather than changing the target.
+
 Run the deployment test suite in its pinned image:
 
 ```bash
