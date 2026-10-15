@@ -49,6 +49,12 @@ _SOURCE_MARKERS: dict[str, tuple[str, str]] = {
     ".rs": ("rust", "rustc"),
     ".go": ("go", "go"), ".wat": ("wasm", "wasm"),
 }
+# Every build system discovery can assign to a unit. Planning registers exactly these, so a unit
+# discovery emits can never be rejected as unregistered by the plan validator.
+WASM_C_BUILD_SYSTEM = "clang"
+DISCOVERED_BUILD_SYSTEMS = frozenset(
+    {system for _, system in (*_MARKERS.values(), *_SUFFIX_MARKERS.values(), *_SOURCE_MARKERS.values())}
+    | {WASM_C_BUILD_SYSTEM})
 _CONTEXT_NAMES = {
     "README", "README.md", "README.rst", "Dockerfile", "build.sh", "build.ps1",
     "build.gradle", "build.gradle.kts", "gradle.properties", "settings.gradle", "settings.gradle.kts", "gradle.lockfile",
@@ -231,7 +237,7 @@ def discover_build_units(files: Sequence[Mapping[str, Any]], *,
         path = PurePosixPath(str(item["path"]))
         root = path.parent.as_posix()
         if _wasm_build_script(path, read_text) and not any(key[0] == root for key in groups):
-            groups[(root, "wasm", "clang")].append(item)
+            groups[(root, "wasm", WASM_C_BUILD_SYSTEM)].append(item)
     for root, family, _system in [
         key for key in tuple(groups) if key[2] in {"cmake", "autotools", "meson"}
     ]:
