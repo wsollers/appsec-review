@@ -407,8 +407,10 @@ def test_rlib_and_static_library_ar_archives_list_members(tmp_path: Path) -> Non
 def test_infer_image_carries_system_headers_for_its_clang() -> None:
     dockerfile = (ROOT / "containers" / "tools" / "infer" / "Dockerfile").read_text(encoding="utf-8")
     final_from = [line for line in dockerfile.splitlines() if line.startswith("FROM ")][-1]
-    assert final_from == "FROM appsec-review/tool-native-cpp:1.0.0"
-    assert "test -f /usr/include/stdio.h" in dockerfile
+    # The C/C++ build environment's own base, so Infer parses against the headers the compile
+    # database was produced with, and no hand-placed asset is needed to build it.
+    assert final_from == "FROM appsec-review/buildenv-native-toolchain:noble-gcc13.3-clang18.1"
+    assert "test -f /usr/include/stdio.h" in dockerfile and "test -d /usr/include/c++/13" in dockerfile
     catalog = (ROOT / "containers" / "catalog.toml").read_text(encoding="utf-8")
     block = catalog.split('id = "tool-infer"', 1)[1].split("[[images]]", 1)[0]
-    assert 'dependencies = ["tool-native-cpp"]' in block
+    assert 'dependencies = ["buildenv-native-toolchain"]' in block
