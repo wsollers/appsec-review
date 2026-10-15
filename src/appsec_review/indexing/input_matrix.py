@@ -4,8 +4,8 @@ Reconciliation compares this matrix with the resolved registry/configuration and
 inventory rows. The matrix is a review check, not an allowlist: the dataset audit still enforces
 every configured step. ``runtime`` names a non-job producer (the runtime itself or a future
 inference/publication lane); ``planned:<job>`` names a producer that is not built or not yet
-registered. Once ``<job>`` is registered, reconciliation treats it as that job, so the planned
-code-graph producer ``job_code_graph_index`` needs no matrix change when it lands.
+registered. Once ``<job>`` is registered, reconciliation treats it as that job, so a planned
+producer needs no matrix change when it lands.
 
 Code-graph facts are not precomputed query sets: the retired graph set names never appear in the
 query-set column. The ``graph`` index is accounted by the ``code_graph`` lane of the language and
@@ -60,9 +60,9 @@ INPUT_SOURCES: tuple[tuple[str, tuple[str, ...], str, tuple[str, ...], tuple[str
     ("clangd_symbols", ("job_cpp_symbol_index",), "current", ("symbol_links",), ("core", "query_precomputed")),
     # Not a graph producer; see code-graph-precomputation.md.
     ("joern_cpg", ("job_cpg_analysis",), "artifact_only", (), ("coverage",)),
-    # CodeQL is the primary graph producer: its export is normalized into the graph index by the
-    # planned job_code_graph_index and read through query_code_graph.
-    ("codeql_sarif", ("job_codeql_analysis", "planned:job_code_graph_index"), "current", ("scanner_correlation",),
+    # CodeQL is the primary graph producer: its export is normalized into the graph index by
+    # job_code_graph_index and read through query_code_graph.
+    ("codeql_sarif", ("job_codeql_analysis", "job_code_graph_index"), "current", ("scanner_correlation",),
      ("query_codeql", "query_code_graph", "query_observations", "query_precomputed")),
     ("post_build_assessment", ("job_post_build_security_assessment",), "current",
      ("build_provenance", "review_package"), ("query_build_security",)),

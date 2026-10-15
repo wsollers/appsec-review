@@ -51,9 +51,9 @@ Each `context` entry is typed `{id, kind, role}`. `kind` is the retrieval entity
 `range`. Bare identity lists are not accepted. Since the engineering-signal and profile-data
 wiring, `review/units.py` also emits `test_coverage`, `profile_hotspot`, `dependency` and
 `openssf_scorecard` context roles from the accepted `job_test_coverage`, `job_profile_data` and
-`job_dependency_intelligence` producers registered in `review/scope.py`. Open question:
-`review-packages.schema.json` still enumerates only the roles listed above for
-`inference_context.role`, so the schema and the assembler disagree on the new roles.
+`job_dependency_intelligence` producers registered in `review/scope.py`. They are named once in
+`review/units.py::SIGNAL_CONTEXT_ROLES`, and `review-packages.schema.json` enumerates them for
+`inference_context.role`; `tests/review/test_packages.py` keeps the two in step.
 
 ### Code-graph context (version 4)
 

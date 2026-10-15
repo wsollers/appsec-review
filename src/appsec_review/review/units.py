@@ -36,6 +36,11 @@ KEV_POINTS = DEFAULT_RANK_WEIGHTS.advisory_kev
 EPSS_POINTS = DEFAULT_RANK_WEIGHTS.advisory_epss
 CUTOFF_REASON = "below_hunt_cutoff"
 _UNLOCATED = "unlocated"
+# Context roles for engineering-signal and dependency entries; each must appear in the
+# `inference_context.role` enum of docs/schemas/review-packages.schema.json.
+COVERAGE_ROLE, PROFILE_ROLE = "test_coverage", "profile_hotspot"
+DEPENDENCY_ROLE, SCORECARD_ROLE = "dependency", "openssf_scorecard"
+SIGNAL_CONTEXT_ROLES = frozenset({COVERAGE_ROLE, PROFILE_ROLE, DEPENDENCY_ROLE, SCORECARD_ROLE})
 # Ranked-selection producers publish only selected items: no record for a unit is unknown, not zero.
 # Exhaustive producers (tags, normalized leads) make an absent record a true zero.
 _SIGNAL_PRODUCERS = {"lps": "review_prioritization", "sii": "source_history", "hotspot": "source_history",
@@ -61,7 +66,7 @@ def _engineering_context(scope: AcceptedScope
             payload = row["payload"]
             path = payload.get("path")
             aggregate = payload.get("totals") is not None
-            entry = context_entry(row["identity"], "test_coverage", sha)
+            entry = context_entry(row["identity"], COVERAGE_ROLE, sha)
             if isinstance(path, str) and path:
                 by_path[path].append(entry)
             if aggregate and isinstance(payload.get("build_unit_id"), str):
@@ -71,7 +76,7 @@ def _engineering_context(scope: AcceptedScope
         sha = scope.shard_sha256(shard)
         for row in scope.store.entities((shard,), kinds=("hotspot",)):
             payload = row["payload"]
-            entry = context_entry(row["identity"], "profile_hotspot", sha)
+            entry = context_entry(row["identity"], PROFILE_ROLE, sha)
             if isinstance(payload.get("source"), str) and payload["source"]:
                 by_path[payload["source"]].append(entry)
             if isinstance(payload.get("build_unit_id"), str):
@@ -81,7 +86,7 @@ def _engineering_context(scope: AcceptedScope
     for shard in dependencies.shards:
         sha = scope.shard_sha256(shard)
         for row in scope.store.entities((shard,), kinds=("dependency_package", "review_signal")):
-            role = "dependency" if row["kind"] == "dependency_package" else "openssf_scorecard"
+            role = DEPENDENCY_ROLE if row["kind"] == "dependency_package" else SCORECARD_ROLE
             dependencies_context.append(context_entry(row["identity"], role, sha))
     return by_path, by_build, dependencies_context
 

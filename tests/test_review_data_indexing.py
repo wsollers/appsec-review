@@ -966,15 +966,16 @@ def test_retired_graph_sets_are_schema_errors_not_unavailable_gaps() -> None:
             core.query_precomputed(query_set=name)
 
 
-def test_input_matrix_resolves_the_planned_graph_producer_once_registered() -> None:
+def test_input_matrix_names_the_graph_producer_and_resolves_planned_producers_once_registered() -> None:
     codeql = next(item for item in input_matrix.INPUT_SOURCES if item[0] == "codeql_sarif")
-    assert codeql[1] == ("job_codeql_analysis", "planned:job_code_graph_index")
+    assert codeql[1] == ("job_codeql_analysis", "job_code_graph_index")
     assert "query_code_graph" in codeql[4]
     joern = next(item for item in input_matrix.INPUT_SOURCES if item[0] == "joern_cpg")
     assert joern[2] == "artifact_only" and joern[3] == ()
-    assert input_matrix.resolve_producer("planned:job_code_graph_index", set()) == "planned:job_code_graph_index"
-    assert input_matrix.resolve_producer("planned:job_code_graph_index", {"job_code_graph_index"}) == \
-        "job_code_graph_index"
+    assert input_matrix.resolve_producer("planned:job_deployment_topology", set()) == \
+        "planned:job_deployment_topology"
+    assert input_matrix.resolve_producer("planned:job_deployment_topology", {"job_deployment_topology"}) == \
+        "job_deployment_topology"
     registry = ["job_codeql_analysis", "job_code_graph_index"]
     jobs = [{"job_id": "job_codeql_analysis", "status": "accepted"},
             {"job_id": "job_code_graph_index", "status": "accepted"}]
@@ -982,9 +983,6 @@ def test_input_matrix_resolves_the_planned_graph_producer_once_registered() -> N
     assert not any("job_code_graph_index" in item for item in discrepancies)
     states = next(item for item in rows if item["source"] == "codeql_sarif")["producer_states"]
     assert [item["status"] for item in states] == ["accepted", "accepted"]
-    rows, _ = input_matrix.reconcile(["job_codeql_analysis"], jobs[:1], [], {}, "job_review_data_indexing")
-    states = next(item for item in rows if item["source"] == "codeql_sarif")["producer_states"]
-    assert states[1] == {"producer": "planned:job_code_graph_index", "status": "planned"}
     rows, discrepancies = input_matrix.reconcile(
         ["job_codeql_analysis"], jobs[:1], [], {}, "job_review_data_indexing",
         disabled_jobs=["job_cpg_analysis"])
