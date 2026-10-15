@@ -10,6 +10,7 @@ import pytest
 
 from appsec_review import inference
 from appsec_review.config import load_config
+from appsec_review.config.loader import PENDING_JOBS
 from appsec_review.inference import anthropic_api, check_models, claude_cli, openai_api
 from appsec_review.jobs.cataloging import source_fingerprint
 from appsec_review.jobs.job_model_connectivity import build_job as build_connectivity
@@ -43,6 +44,24 @@ def _fixture(tmp_path: Path, *, extra: str = ""):
     target.mkdir()
     (target / "main.py").write_text("def main():\n    return 1\n", encoding="utf-8")
     return load_config(config_path), target
+
+
+def _repository_document() -> dict:
+    import tomllib
+
+    return tomllib.loads((ROOT / "appsec-review.toml").read_text(encoding="utf-8"))
+
+
+def _repository_model_jobs() -> set[str]:
+    """Jobs whose central settings declare a ``model`` table or ``models`` tables."""
+    jobs = _repository_document()["jobs"]
+    return {job_id for job_id, job in jobs.items() if job_id not in PENDING_JOBS and (
+        isinstance(job.get("settings", {}).get("model"), dict)
+        or any(isinstance(item, dict) for item in job.get("settings", {}).get("models", {}).values()))}
+
+
+def _repository_required_count() -> int:
+    return len(configured_models(_repository_document()))
 
 
 def _serving(*available: str):
@@ -83,12 +102,9 @@ def test_every_model_the_configuration_names_is_required_including_disabled_and_
 
 
 def test_repository_configuration_names_only_providers_the_preflight_can_check() -> None:
-    import tomllib
-
-    required = configured_models(tomllib.loads((ROOT / "appsec-review.toml").read_text(encoding="utf-8")))
-    assert {item["job_id"] for item in required} == {
-        "job_target_analysis_plan", "job_project_build", "job_post_build_security_assessment",
-        "job_owasp_control_assessment", "job_inference_security_review"}
+    required = configured_models(_repository_document())
+    assert required
+    assert {item["job_id"] for item in required} == _repository_model_jobs()
     assert {item["provider"] for item in required} <= set(inference.MODEL_CHECKS) & set(inference.PROVIDERS)
 
 
@@ -103,7 +119,7 @@ def test_intake_confirms_every_configured_model_before_publishing(tmp_path: Path
     assert calls == [("claude-cli", ("claude-haiku-5-5",), 120)]
     document = _preflight(config, outcome["run_id"])
     assert document["schema"] == PREFLIGHT_SCHEMA and document["unavailable"] == []
-    assert len(document["required"]) == 5
+    assert len(document["required"]) == _repository_required_count()
     assert document["providers"]["claude-cli"]["models"]["claude-haiku-5-5"]["available"] is True
     assert document["providers"]["claude-cli"]["listed"] == ["claude-haiku-5-5"]
 
@@ -155,7 +171,7 @@ def test_an_unwired_intake_reports_that_no_check_ran(tmp_path: Path) -> None:
     result = json.loads(next((config.runtime.runs_dir / outcome["run_id"]).rglob(
         "attempts/*/result.json")).read_text(encoding="utf-8"))
     verify = result["outputs"]["model_preflight.verify_models"]
-    assert verify["terminal_status"] == "NOT_APPLICABLE" and len(verify["required"]) == 5
+    assert verify["terminal_status"] == "NOT_APPLICABLE" and len(verify["required"]) == _repository_required_count()
 
 
 def test_registry_wires_the_real_check_into_the_first_job_of_a_review(monkeypatch, tmp_path: Path) -> None:

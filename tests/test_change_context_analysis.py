@@ -117,11 +117,11 @@ def test_github_enrichment_captures_review_timeline_without_identities() -> None
     snapshot, merged_head = "c" * 40, "d" * 40
     responses = {
         f"/repos/acme/widget/commits/{snapshot}": (200, {"sha": snapshot}),
-        f"/repos/acme/widget/commits/{snapshot}/pulls?per_page=10": (200, [
+        f"/repos/acme/widget/commits/{snapshot}/pulls?per_page=100&page=1": (200, [
             {"number": 3, "merged_at": "2023-11-14T23:00:00Z", "created_at": "2023-11-14T22:00:00Z",
              "merge_commit_sha": snapshot, "user": {"login": "author"}, "head": {"sha": merged_head}}]),
         "/repos/acme/widget/pulls/3": (200, {"merged_by": {"login": "lead"}, "head": {"sha": merged_head}}),
-        "/repos/acme/widget/pulls/3/reviews?per_page=100": (200, [
+        "/repos/acme/widget/pulls/3/reviews?per_page=100&page=1": (200, [
             {"state": "APPROVED", "user": {"login": "lead"}, "commit_id": merged_head,
              "submitted_at": "2023-11-14T22:04:00Z"},
             {"state": "APPROVED", "user": {"login": "author"}, "commit_id": merged_head,
