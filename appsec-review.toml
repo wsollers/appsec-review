@@ -265,6 +265,45 @@ workers = 1
 workers = 1
 [jobs.job_model_connectivity.steps.publication.tasks.publish_handoff]
 
+[jobs.job_tool_image_rebuild]
+name = "tool_image_rebuild"
+workers = 1
+
+[jobs.job_tool_image_rebuild.settings]
+# Rebuild the container tool images through containers/build.py after the model gate and before
+# review intake. Any image that does not build fails the run; it is never recorded as a gap.
+# Disabling the job makes it transparent to every graph (intake then follows the model gate).
+enabled = true
+# Catalog image ids to rebuild; empty selects every enabled image in containers/catalog.toml.
+# Dependencies (base images) are always built first, in catalog dependency order.
+images = []
+# Concurrent docker builds (builder --jobs, 1..8).
+parallelism = 2
+# Per-image docker build bound (builder --timeout-seconds) and bound on the whole builder run.
+image_timeout_seconds = 1800
+total_timeout_seconds = 14400
+# Keep building independent images after a failure so one run names every failing image.
+continue_on_error = true
+# Bytes of builder stderr/stdout and of each failed image's build log kept in the failure report.
+log_tail_bytes = 8192
+# Rebuilt image IDs are compared with every pin naming a rebuilt tag: catalog `image_id` values and
+# enabled jobs' `tag`/`image_id` (for example project-build profiles) and `source_image_tag`/
+# `source_image_id` settings. "fail" stops the run naming each stale pin; "report" records the
+# mismatch and leaves enforcement to the consuming job's own pin check.
+pin_mismatch = "fail"
+
+[jobs.job_tool_image_rebuild.steps.selection]
+workers = 1
+[jobs.job_tool_image_rebuild.steps.selection.tasks.resolve_images]
+
+[jobs.job_tool_image_rebuild.steps.build]
+workers = 1
+[jobs.job_tool_image_rebuild.steps.build.tasks.build_images]
+
+[jobs.job_tool_image_rebuild.steps.publication]
+workers = 1
+[jobs.job_tool_image_rebuild.steps.publication.tasks.publish_handoff]
+
 [jobs.job_review_intake]
 name = "review_intake"
 workers = 1

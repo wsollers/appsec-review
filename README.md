@@ -358,7 +358,8 @@ host fetched the official listing and archive and verified the published SHA-256
 The direct CLI runs this linear graph:
 
 ```text
-model_connectivity -> review_intake -> target_catalog -> source_history_analysis -> target_analysis_plan
+model_connectivity -> tool_image_rebuild -> review_intake -> target_catalog -> source_history_analysis
+  -> target_analysis_plan
   -> tree_sitter_ast -> project_build -> language_build
   -> artifact_indexing -> test_coverage -> profile_data -> artifact_security_analysis
   -> cpp_compiled_analysis -> clang_static_analysis -> cpp_symbol_index

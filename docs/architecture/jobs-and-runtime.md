@@ -31,13 +31,14 @@ input, output, tool, and acceptance contracts.
 
 ## Registered jobs
 
-`runtime/registry.py` registers 27 jobs. Each has a `[jobs.<job_id>]` table in
+`runtime/registry.py` registers 32 jobs. Each has a `[jobs.<job_id>]` table in
 `appsec-review.toml`, and its Dagster job is named from that table's `name`.
 
 | Job | Purpose | Operations |
 | --- | --- | --- |
 | `job_third_party_data_sync` | NVD (with `index/nvd.sqlite`), OSV, MITRE, CISA KEV, FIRST EPSS and cve-bin-tool feed snapshots (scheduled, outside reviews) | [third-party-data-sync](../operations/third-party-data-sync.md) |
 | `job_model_connectivity` | Mandatory fresh provider/model connectivity gate | [below](#inference-entry-point-and-model-preflight) |
+| `job_tool_image_rebuild` | Mandatory rebuild of every catalog tool image; any failed image fails the run | [tool-image-rebuild](../operations/tool-image-rebuild.md) |
 | `job_review_intake` | Configuration and target intake | [below](#inference-entry-point-and-model-preflight) |
 | `job_target_catalog` | Bounded target catalog and source index | [target-analysis-planning](../operations/target-analysis-planning.md) |
 | `job_source_history_analysis` | Git/GitHub history instability signals | [source-history-analysis](../operations/source-history-analysis.md) |
@@ -261,6 +262,13 @@ built outside the registry has no check wired and reports `NOT_APPLICABLE` rathe
 models were confirmed. `jobs.job_model_connectivity.settings.timeout_seconds` bounds each provider
 request or probe. Review intake retains its bound preflight receipt when intake itself executes, but
 the dedicated first job is the authoritative fresh check when a run is resumed.
+
+`job_tool_image_rebuild` follows the model gate and precedes intake in every review graph. It is
+also always executed and non-propagating. It rebuilds the selected `containers/catalog.toml` images
+through `containers/build.py`, records one receipt per image, and fails the run, never recording a
+gap, when any image does not build. Setting `jobs.job_tool_image_rebuild.settings.enabled = false`
+makes intake follow the model gate directly. See
+[`../operations/tool-image-rebuild.md`](../operations/tool-image-rebuild.md).
 
 ## Target analysis planning
 
