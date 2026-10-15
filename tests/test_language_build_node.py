@@ -104,8 +104,10 @@ def test_node_lifecycle_validation_blocks_test_runners_and_target_applications(t
         "build": "node index.js", "postbuild": "vitest run",
     }}), encoding="utf-8")
     gaps = node.validate_lifecycle_scripts(tmp_path, "web", [["npm", "run", "build"]])
-    assert "package lifecycle script build may execute a target application" in gaps
-    assert "package lifecycle script postbuild requests a test runner" in gaps
+    assert ("package lifecycle script build may execute a target application: "
+            "web/package.json#scripts.build → node index.js") in gaps
+    assert ("package lifecycle script postbuild requests a test runner: "
+            "web/package.json#scripts.postbuild → vitest run") in gaps
 
 
 def test_checkpoint_workspace_manifest_tampering_is_framework_integrity_failure(tmp_path: Path) -> None:
@@ -325,7 +327,8 @@ class _NodeRecipeModel:
                 "image_profile": "node", "source_dir": root, "build_dir": f"{root}/dist",
                 "system_packages": [], "environment": {},
                 "dependency_files": [f"{root}/package.json", f"{root}/package-lock.json"],
-                "configure_commands": [], "build_commands": [["npm", "--prefix", root, "run", "build"]],
+                # Commands run in source_dir, so no --prefix: `--prefix web` there would name web/web.
+                "configure_commands": [], "build_commands": [["npm", "run", "build"]],
                 "expected_outputs": [f"{root}/dist"], "network_required": True,
                 "reason": "lockfile-bound Node fixture",
             })
@@ -399,7 +402,7 @@ def test_node_build_publishes_protected_provenance_and_sanitized_mcp_evidence(tm
     outcome = GraphRunner(config, [build_language(
         executor_factory=lambda unit, profile: capturing_fake(profile, _NodeExecutor(calls)))]).run(
             target_root=target, source_fingerprint=fingerprint, run_id=upstream["run_id"])
-    assert outcome["status"] == "SUCCEEDED"
+    assert outcome["status"] == "SUCCEEDED", outcome
     # The probe and the build each exposed the image-owned dependencies before running npm.
     assert calls.count(("prepare-node-dependencies", "web", "web")) == 2
     receipt = load_accepted_language_build(config.runtime.runs_dir / upstream["run_id"])["receipts"][0]
