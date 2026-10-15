@@ -13,6 +13,9 @@ from typing import Any
 from appsec_review.container_runtime import ContainerExecutor, ExecutionRequest, load_catalog
 from appsec_review.jobs.cpp_index_scopes import container_compile_database
 from appsec_review.jobs.job_language_build import load_accepted_language_build
+from appsec_review.jobs.job_language_build.native_components import (
+    compile_commands as native_component_compile_commands,
+)
 from appsec_review.retrieval import (
     EntityKind, EntityRecord, IndexBuilder, IndexIdentity, LogicalIdentity, RelationKind,
     RelationRecord, SourceLocation, index_fingerprint, write_manifest,
@@ -749,33 +752,56 @@ def _validate_config(context, _result) -> None:
         raise ValueError("C++ acceptance task configuration is invalid")
 
 
+def native_analysis_actions(accepted: Mapping[str, Any], target_root: Path) -> list[dict[str, Any]]:
+    """Select every accepted build whose C/C++ compiles the native analysis lane replays.
+
+    Native units qualify by family. Any other family qualifies when its single execution
+    capture recorded compiles of the unit's ``native_components`` (node-gyp, phpize,
+    setuptools, clang --target=wasm32); those compiles are the project's compile database.
+    """
+    actions = []
+    target = target_root.resolve(strict=True)
+    for receipt in accepted["receipts"]:
+        # Native units, and any family build whose native_components compiled C/C++ under
+        # its single execution capture (node-gyp, phpize, setuptools, clang wasm32).
+        component_database = receipt.get("native_compile_database")
+        mixed = (isinstance(component_database, Mapping) and
+                 int(component_database.get("entry_count", 0)) > 0 and
+                 receipt.get("terminal_status") == "SUCCEEDED")
+        if receipt.get("family") != "native" and not mixed:
+            continue
+        root = PurePosixPath(str(receipt.get("root", "")))
+        if not root.parts or root.is_absolute() or ".." in root.parts:
+            raise ValueError("accepted native build root is invalid")
+        source = (target / Path(*root.parts)).resolve(strict=True)
+        if (source != target and target not in source.parents) or not source.is_dir():
+            raise ValueError(f"accepted C/C++ project escapes the target: {root}")
+        native_sources = [path for path in source.rglob("*") if path.is_file() and not path.is_symlink()
+                          and path.suffix.lower() in {".c", ".cc", ".cpp", ".cxx", ".c++", ".m", ".mm"}]
+        if not native_sources:
+            continue
+        actions.append({"root": root.as_posix(), "build_system": receipt.get("build_system"),
+                        "build_unit_id": receipt["build_unit_id"], "receipt": dict(receipt),
+                        "language_build_handoff_sha256": accepted["language_build_handoff_sha256"],
+                        "project_key": str(receipt["build_unit_id"]),
+                        "project_id": f"cpp:{root.as_posix()}",
+                        "family": str(receipt.get("family", "native")),
+                        "native_components": [dict(item) for item in receipt.get("native_components", ())],
+                        "compile_database_origin": ("captured-native-components" if mixed and
+                                                    receipt.get("family") != "native"
+                                                    else "build-system"),
+                        "source_count": len(native_sources)})
+    return actions
+
+
 def build_job(*, executor_factory=None) -> Job:
 
     def plan(unit: UnitContext) -> Mapping[str, Any]:
         accepted = load_accepted_language_build(unit.job.run_root)
         if accepted.get("source_fingerprint") != unit.job.source_fingerprint:
             raise ValueError("C++ analysis target snapshot differs from accepted language build")
-        actions = []
         target = (unit.job.target_root or Path()).resolve(strict=True)
-        for receipt in accepted["receipts"]:
-            if receipt.get("family") != "native":
-                continue
-            root = PurePosixPath(str(receipt.get("root", "")))
-            if not root.parts or root.is_absolute() or ".." in root.parts:
-                raise ValueError("accepted native build root is invalid")
-            source = (target / Path(*root.parts)).resolve(strict=True)
-            if (source != target and target not in source.parents) or not source.is_dir():
-                raise ValueError(f"accepted C/C++ project escapes the target: {root}")
-            native_sources = [path for path in source.rglob("*") if path.is_file() and not path.is_symlink()
-                              and path.suffix.lower() in {".c", ".cc", ".cpp", ".cxx", ".c++", ".m", ".mm"}]
-            if not native_sources:
-                continue
-            actions.append({"root": root.as_posix(), "build_system": receipt.get("build_system"),
-                            "build_unit_id": receipt["build_unit_id"], "receipt": dict(receipt),
-                            "language_build_handoff_sha256": accepted["language_build_handoff_sha256"],
-                            "project_key": str(receipt["build_unit_id"]),
-                            "project_id": f"cpp:{root.as_posix()}",
-                            "source_count": len(native_sources)})
+        actions = native_analysis_actions(accepted, target)
         keys = [str(item["project_key"]) for item in actions]
         if len(set(keys)) != len(keys):
             raise ValueError("accepted C/C++ project identities are not unique")
@@ -845,6 +871,15 @@ def build_job(*, executor_factory=None) -> Job:
                 shutil.copytree(built, build)
             else:
                 build.mkdir(parents=True)
+            if action.get("compile_database_origin") == "captured-native-components":
+                identity = receipt["native_compile_database"]
+                database = (unit.job.run_root / str(identity.get("path", ""))).resolve()
+                if (unit.job.run_root.resolve() not in database.parents or not database.is_file() or
+                        database.is_symlink() or file_sha256(database) != identity.get("sha256")):
+                    raise ValueError("accepted native component compile database identity changed")
+                rows = native_component_compile_commands(json.loads(database.read_text(encoding="utf-8")))
+                # The family build's captured compiles are this project's compile database.
+                (build / "compile_commands.json").write_text(json.dumps(rows), encoding="utf-8")
             files = []
             for path in _source_files(source):
                 relative_file = path.relative_to(source).as_posix()
@@ -858,7 +893,10 @@ def build_job(*, executor_factory=None) -> Job:
                        "build_system": action.get("build_system"), "root": action["root"],
                        "case_snapshot": hashlib.sha256(canonical_json(files)).hexdigest(), "files": files,
                        "language_build_fingerprint": receipt.get("fingerprint"),
-                       "language_build_handoff_sha256": action["language_build_handoff_sha256"]}
+                       "language_build_handoff_sha256": action["language_build_handoff_sha256"],
+                       "family": action.get("family", "native"),
+                       "native_components": list(action.get("native_components", ())),
+                       "compile_database_origin": action.get("compile_database_origin", "build-system")}
             artifact = _json_artifact(unit, _case_root(unit, project_key) / "source-mapping.json", mapping)
             projects[project_key] = {"mapping": mapping, "artifact": artifact,
                                      "project_key": project_key, "profile": action["build_system"],

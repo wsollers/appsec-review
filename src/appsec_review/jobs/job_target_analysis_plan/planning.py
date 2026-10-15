@@ -264,6 +264,7 @@ def deterministic_plan(catalog: Mapping[str, Any], summary: Mapping[str, Any],
                                "descriptor_package": dict(item.get("descriptor_package", {})),
                                "project_type": item.get("project_type", "generic"),
                                "descriptor_facts": dict(item.get("descriptor_facts", {})),
+                               "native_components": [dict(value) for value in item.get("native_components", ())],
                                "required_image_profile": item.get("required_image_profile", item["family"]),
                                "recipe": None, "requires_inference": True, "executable": False}
                               for item in catalog.get("build_units", ())],
@@ -271,6 +272,7 @@ def deterministic_plan(catalog: Mapping[str, Any], summary: Mapping[str, Any],
             "compile_units": [{"compile_database": item["path"], "status": "cataloged-unexpanded"}
                               for item in compile_databases],
             "generated_sources": generated, "targets": list(artifacts),
+            "source_only_scopes": [dict(value) for value in catalog.get("source_only_scopes", ())],
             "link_outputs": [item for item in artifacts if PurePosixPath(str(item["path"])).suffix.lower()
                              in {".exe", ".dll", ".so", ".dylib", ".a"}],
             "relationships": [{"kind": "component_build_root", "component_id": component["component_id"],

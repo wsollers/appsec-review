@@ -279,6 +279,7 @@ android {
     assert required_image_profile(unit) == "android"
     assert build_recipe_inference_policy(unit) == {
         "required_image_profile": "android",
+        "allowed_executables": ["gradle", "gradlew"],
         "gradle": {
             "allowed_executables": ["gradle", "gradlew"],
             "allowed_task_suffixes": ["assemble", "assembleDebug"],

@@ -14,7 +14,7 @@ from .build_executor import BuildProfile, Runner, _run
 
 
 SCHEMA = "appsec-review/project-build-image/1"
-GENERATOR_IDENTITY = "appsec-review/project-dockerfile/7"
+GENERATOR_IDENTITY = "appsec-review/project-dockerfile/8"
 
 
 class ProjectImageBuildError(RuntimeError):
@@ -128,10 +128,24 @@ def _restore_command(recipe: Mapping[str, Any]) -> tuple[str, ...] | None:
     if system == "composer":
         return ("composer", "install", "--no-interaction", "--no-scripts", "--no-plugins",
                 "--prefer-dist", "--no-progress")
-    requirements = sorted(name for name in files if name.startswith("requirements") and name.endswith(".txt"))
+    source = PurePosixPath(str(recipe.get("source_dir", ".")))
+    requirements = sorted(
+        (PurePosixPath(str(value)) for value in recipe.get("dependency_files", ())
+         if PurePosixPath(str(value)).name.startswith("requirements") and
+         PurePosixPath(str(value)).name.endswith(".txt")), key=lambda value: value.as_posix())
     if system == "python" and requirements:
-        return ("python", "-m", "pip", "install", "--target",
-                "/opt/project-deps", "-r", requirements[0])
+        # Every accepted requirements file (for example requirements-build.txt pinning the
+        # build backend) is restored; the image WORKDIR is the source directory.
+        arguments: list[str] = []
+        for value in requirements:
+            if source.as_posix() == ".":
+                path = value.as_posix()
+            elif source in value.parents:
+                path = value.relative_to(source).as_posix()
+            else:
+                path = "/opt/project/" + value.as_posix()
+            arguments.extend(("-r", path))
+        return ("python", "-m", "pip", "install", "--target", "/opt/project-deps", *arguments)
     return None
 
 
