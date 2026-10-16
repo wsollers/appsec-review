@@ -14,6 +14,9 @@ Relevant bounded procedures and design references:
 - [`architecture/seeded-neighborhoods.md`](architecture/seeded-neighborhoods.md) — seeded neighborhoods for the Clang AST/IR, Clang-Tidy/Static Analyzer and CPG producers: shared seeding module, card `producers`, flow, diagnostics and symbol exposure.
 - [`architecture/seeded-codeql-neighborhoods.md`](architecture/seeded-codeql-neighborhoods.md) — seeded, bounded-depth CodeQL neighborhoods around findings, database cards and their MCP tools.
 - [`operations/code-graph-index.md`](operations/code-graph-index.md) — `job_code_graph_index` inputs, units, shards, resume and verification.
+- [`architecture/svf-alias-producer.md`](architecture/svf-alias-producer.md) — proposed SVF points-to cross-check producer (design only, not implemented).
+- [`architecture/graph-alias-slice-layout-modes.md`](architecture/graph-alias-slice-layout-modes.md) — proposed alias, slice, type-layout and buffer-bound `query_code_graph` modes and sink CFG context (design only, not implemented).
+- [`reviews/detector-coverage-checklist.md`](reviews/detector-coverage-checklist.md) — detector coverage checklist (use after free, double free, null dereference, overflows, uninitialized reads, integer overflow, format string, TOCTOU, command injection, taint, bounds checks) against the registered rule packs and configured scanners, with proposed remediations.
 - [`reviews/code-graph-precomputation-implementation.md`](reviews/code-graph-precomputation-implementation.md) — code-graph implementation record: decisions, chunks and merges, reconciliations, C9 integration fixes, verification, live-unverified items, and next work.
 - [`../deploy/dagster/README.md`](../deploy/dagster/README.md) — deployment lifecycle and live verification.
 - [`../pipeline/skills/target-analysis-planning/SKILL.md`](../pipeline/skills/target-analysis-planning/SKILL.md) — model-side proposal constraints for target analysis ambiguity.

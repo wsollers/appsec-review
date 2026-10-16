@@ -72,6 +72,14 @@ Repository authority remains in [`../../AGENTS.md`](../../AGENTS.md). This page 
   and the parallel implementation and test plan (implemented through C9 for C/C++, offline-verified;
   record in [`../reviews/code-graph-precomputation-implementation.md`](../reviews/code-graph-precomputation-implementation.md);
   operations in [`../operations/code-graph-index.md`](../operations/code-graph-index.md)).
+- [`svf-alias-producer.md`](svf-alias-producer.md) — proposed SVF points-to producer: pinned
+  `tool-svf` image, `job_svf_alias_analysis`, and `graph-cross-check/3` rules for indirect calls
+  and guard operand aliasing (design only, not implemented).
+- [`graph-alias-slice-layout-modes.md`](graph-alias-slice-layout-modes.md) — proposed
+  `query_code_graph` modes `aliases`, `slice_backward`/`slice_forward`, `type_layout` and
+  `buffer_bounds` over precomputed CodeQL and SVF facts, the internal `control_flow` family and
+  sink CFG context, and why no raw CFG mode is added (design only, not implemented); the detector
+  coverage checklist is in [`../reviews/detector-coverage-checklist.md`](../reviews/detector-coverage-checklist.md).
 
 Operations pages not listed above:
 
