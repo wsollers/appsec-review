@@ -49,7 +49,7 @@ vocabulary (R4) or the adjudication table (R5).
 | `aliases` | `points_to_set` (the SVF design's S0 kind) | `job_svf_alias_analysis`, republished by `job_code_graph_index` | indirect for every predicate |
 | `slice_backward`, `slice_forward` | `program_slice` | CodeQL export `Slices.ql` | indirect for every predicate |
 | `type_layout` | `type_layout` | CodeQL export `TypeLayouts.ql`, cross-checked by Clang record layouts | indirect for every predicate |
-| `buffer_bounds` | `buffer_bound` | CodeQL export `BufferBounds.ql` over `TypeLayouts.ql` and allocation sites | indirect for every predicate in phase 1 (open question 1) |
+| `buffer_bounds` | `buffer_bound` | CodeQL export `BufferBounds.ql` over `TypeLayouts.ql` and allocation sites | indirect for every predicate in phase 1 (settled question 1) |
 | (none) | `control_flow` (internal, K5) | CodeQL export `ControlFlow.ql` | not model-facing, not citable |
 
 Every new family is **indirect for every predicate**. D3 stands: a reviewer must not rebuild
@@ -201,7 +201,7 @@ hit is a gap on the fact and on the coverage row; an empty family for a scope wh
   `dataflow_path`, payload `{step_n}`), so a cell that holds a path can ask `aliases` about any
   pointer step that is also a sink, guard or source operand. Steps that are none of those have no
   points-to row, which the path's `aliases` response states as the gap `step_not_queried`
-  (S-D3 keeps the analysis query-driven; see open question 3).
+  (S-D3 keeps the analysis query-driven; settled question 3).
 - **Cross-check.** The `points_to_set` row is itself the cross-check input for `guard_fact` (SVF
   design, 7.2); it carries `cross_check.state = not_covered` and `producer.name = svf`. A
   `guard_fact` the SVF answer contradicted carries `CONTRADICTS` to this row, so `aliases` on that
@@ -346,7 +346,7 @@ hit is a gap on the fact and on the coverage row; an empty family for a scope wh
 
   `size_operand` joins the sink's length argument to its `range_fact`, so one row shows capacity
   and the interval that is written into it. The row does not compare them: the comparison is a
-  review judgment over two citable facts (open question 1).
+  review judgment over two citable facts (settled question 1).
 - **Mode.** `buffer_bounds(subject)`: all `buffer_bound` rows of a `sink_site`, or of every memory
   sink contained by a function `symbol`. Order `(operand_index, identity)`; `sink_class` filter is
   accepted for the `symbol` subject.
@@ -427,7 +427,7 @@ A subject kind a mode does not accept is a `schema_violation`, not an empty resu
   grant is added.
 - `retrieval.graph_families` lists the new families when their shards apply to the package scope in
   any state but `unavailable`. Packages embed none of the new rows in phase 1 (no new context
-  roles); open question 4 covers a `buffer_bound` role for lane A memory leads.
+  roles); open question 1 covers a `buffer_bound` role for lane A memory leads.
 - Role grants are unchanged: the four roles that hold `query_code_graph` get the modes with it.
   `pipeline/guidance/registry.json` and `_ROLE_TOOLS` do not change. The verifier's bounded prompt
   sentence does not change; no prompt may instruct a worker to treat a slice or alias row as a
@@ -545,7 +545,7 @@ layouts, `tool-svf` for aliases) refreshes recordings and fails until a recordin
 the same change as the query, as C1 does today. All pytest sessions use a unique
 `--basetemp=test/tmp/<chunk>`.
 
-## 10. Risks, open questions, and what is deliberately not done
+## 10. Risks, settled and open questions, and what is deliberately not done
 
 ### Risks
 
@@ -554,27 +554,33 @@ the same change as the query, as C1 does today. All pytest sessions use a unique
 | `Slices.ql` cost on large scopes (closure per subject) | QL-side node bound; `max_slices_per_scope`; the query can be left out of the suite per language until measured; a timeout fails only this scope's export, as today |
 | Slices let a model argue reachability in prose | indirect for every predicate; `on_paths` points at the citable `dataflow_path`; the validator's direct set is unchanged |
 | Record layouts differ between CodeQL's extractor and the replayed Clang (flags, target) | cross-check `/4` makes it visible as `disagree`; the layout stays indirect; the gap text names both sizes |
-| Buffer bounds invite "fits, therefore safe" | the row never compares capacity to the size operand; both facts are cited and R5 decides; open question 1 keeps the promotion explicit |
+| Buffer bounds invite "fits, therefore safe" | the row never compares capacity to the size operand; both facts are cited and R5 decides; settled question 1 keeps the promotion explicit |
 | `points_to_set` rows expose SVF internals | abstract objects are allocation-site locations plus field index; no node ids or IR names are served (SVF design, section 4) |
 | Schema growth of `query_code_graph` | five closed enum values, no new parameter; the mode table is the only place that grows |
 
+### Settled questions
+
+Decided by the user on 2026-10-16; each takes the recommendation the first draft proposed.
+
+1. **`buffer_bound` stays indirect in phase 1.** No `graph-fact-predicates/2` rule makes a
+   `buffer_bound` with exact capacity plus a constant `range_fact` upper bound a direct
+   contradiction of `missing_or_ineffective_guard`. The promotion is reconsidered only after live
+   rows exist, with the same evidence the K-phase truth-up produces.
+2. **`slice_forward` accepts `sink_site` subjects.** It answers "what does the result of this read
+   feed" for `memory_read` sinks, bounded by the same slice settings. If live use shows no
+   citations, the subject kind is dropped.
+3. **SVF queries only sink, guard and source operands.** Pointer steps of a `dataflow_path` that
+   are none of those keep the `step_not_queried` gap. When coverage is short,
+   `max_operand_queries_per_module` is raised before the query classes are widened.
+4. **One design document.** The five modes share the `query_code_graph` contract, the central
+   configuration and the chunk plan, so they stay in this document rather than one per capability.
+
 ### Open questions
 
-1. **Promote `buffer_bound` + `range_fact` to a direct contradiction of
-   `missing_or_ineffective_guard`?** A `graph-fact-predicates/2` rule could make a `buffer_bound`
-   with exact capacity direct when the sink's `range_fact` upper bound is a known constant below
-   it. Recommendation: not in phase 1; collect live rows first and decide with the same evidence
-   the K-phase truth-up produces.
-2. **`slice_forward` from `sink_site`:** useful for "what does the result of this read feed"
-   (`memory_read` sinks), rarely for writes. Recommendation: accept the subject, bound by the same
-   settings, and drop it if live use shows no citations.
-3. **Query every `dataflow_path` pointer step in SVF, not only sink, guard and source operands?**
-   This would remove `step_not_queried` at the cost of many more operand queries per module.
-   Recommendation: no in phase 1; raise `max_operand_queries_per_module` before widening classes.
-4. **Package context role `buffer_bound` for lane A memory leads?** It would put capacity next to
+1. **Package context role `buffer_bound` for lane A memory leads?** It would put capacity next to
    the sink in the lead package. Recommendation: after G6's live counts, as a v5 package schema
    change with its own `max_context_entries` accounting.
-5. **Catalog `memory_free` sink class and `memory_read` entries.** The checklist (R-UAF, R-OOB-R)
+2. **Catalog `memory_free` sink class and `memory_read` entries.** The checklist (R-UAF, R-OOB-R)
    proposes them; they are catalog changes with their own pin, not part of this design's chunks.
    Recommendation: land them as a catalog revision before G3 so `cfg_context` can use them.
 
