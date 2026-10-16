@@ -427,7 +427,7 @@ A subject kind a mode does not accept is a `schema_violation`, not an empty resu
   grant is added.
 - `retrieval.graph_families` lists the new families when their shards apply to the package scope in
   any state but `unavailable`. Packages embed none of the new rows in phase 1 (no new context
-  roles); open question 1 covers a `buffer_bound` role for lane A memory leads.
+  roles); settled question 5 adds a `buffer_bound` role for lane A memory leads in chunk G7.
 - Role grants are unchanged: the four roles that hold `query_code_graph` get the modes with it.
   `pipeline/guidance/registry.json` and `_ROLE_TOOLS` do not change. The verifier's bounded prompt
   sentence does not change; no prompt may instruct a worker to treat a slice or alias row as a
@@ -522,21 +522,23 @@ job_code_graph_index
 
 ## 9. Implementation chunks
 
-Following `.claude/skills/parallel-implementation/SKILL.md`. G0 lands first. G1, G2 and G3 run in
-parallel after G0 and are independent of SVF. G4 needs S0 to S4 of the SVF design and K1. G5 needs
-the families of whichever producer chunks landed and can ship modes incrementally (a mode whose
-family has no producer returns the `unavailable` gap, which is already the behavior for a missing
-shard). G6 integrates.
+Following `.claude/skills/parallel-implementation/SKILL.md`. G0 lands first, then GC (both edit
+`graph/contract.py`). G1 and G2 run in parallel after G0; G3 runs after G0 and GC (settled question 6). G1 to G3 are independent of SVF. G4
+needs S0 to S4 of the SVF design and K1. G5 needs the families of whichever producer chunks landed
+and can ship modes incrementally (a mode whose family has no producer returns the `unavailable` gap,
+which is already the behavior for a missing shard). G6 integrates. G7 follows G6's live counts.
 
 | Chunk | Owned files | Done when |
 |---|---|---|
 | **G0** Contract | `graph/contract.py` (families, modes, vocabularies, identities, settings), `retrieval/model.py` (kinds), `tests/graph/test_contract.py` | enums closed and sorted-stable; identities deterministic; `GRAPH_FACT_PREDICATES` unchanged and asserted to exclude the new families; settings validate |
+| **GC** Catalog revision 2 | `graph/contract.py` (`memory_free` in `SINK_CLASSES`), `rules/codeql-graph-export/catalog.json` revision 2 (checklist R-UAF `memory_free` entries, R-OOB-R `memory_read` entries), `GraphExport.qll` `sink` predicate, catalog pin in TOML, `tests/graph/test_contract.py` | the native fixture exports `memory_free` sinks for `free`, `delete`/`delete[]`, `realloc` argument 0 and `munmap`, and `memory_read` sinks for array-input buffers and `ArrayExpr` reads; catalog pin and pack hash change together; a removed class fails the contract test |
 | **G1** Slices | `rules/codeql-graph-export/cpp/Slices.ql`, `columns.json`, `graph/normalize.py` (`program_slice`, `on_paths` join), `tests/graph/test_normalize_slices.py`, synthetic export fixtures | golden slices for: a sink whose operand flows from a parameter through one summary hop; a guard on another variable appearing as a `condition` node; a declaration without initializer; a slice cut at the node bound with `frontier` nodes; a path-step join; byte-identical across shuffled rows |
 | **G2** Layouts and bounds | `TypeLayouts.ql`, `BufferBounds.ql`, `columns.json`, `graph/normalize.py` (two families), `graph/crosscheck.py` (`graph-cross-check/4`), `containers/tools/native-cpp/native.py` (`layouts` mode), `job_cpp_compiled_analysis` (`layouts` branch), `tests/graph/test_layouts.py`, `tests/test_cpp_layout_dump.py` | golden layouts for a packed struct, a union, a flexible array member, a class with a vtable and a base; every basis row of 4.4 has a fixture; a Clang offset that differs yields `disagree`; absent dump yields `not_covered` |
 | **G3** CFG context | `ControlFlow.ql`, `graph/normalize.py` (`control_flow`, `cfg_context`, `graph-normalize/2`), `tests/graph/test_cfg_context.py` | `in_loop` and `error_path_candidate` match a hand-checked fixture; a function over the block bound publishes a coverage gap and `"unknown"` context; `control_flow` entities are never reachable through `trace` from a model-facing row |
 | **G4** Aliases | `jobs/job_svf_alias_analysis` (source operands, `publish_points_to_sets`), `jobs/job_code_graph_index` (republication), `graph/normalize.py` (`REFERENCES` to path steps), `tests/graph/test_points_to_sets.py` | the six SVF fixture programs produce the expected `alias_answers`; an open-world module never yields `no_alias`; disabled publication leaves the family `unavailable` byte-identically |
 | **G5** Retrieval modes | `retrieval/graph.py`, `mcp/schema.py`, `docs/schemas/retrieval-mcp-tools.json`, `tests/test_retrieval_code_graph.py` | every mode on fixture shards; subject-kind validation per mode; `depth` rejected; slice node paging with a bound cursor; scoped adapter withholds rows of unlisted scopes and admits referenced identities of listed ones; `TOOLS` equality test |
 | **G6** Integration and docs | `tests/integration/test_code_graph_end_to_end.py` additions, `tests/live/test_code_graph_live.py` additions, `docs/operations/code-graph-index.md`, `docs/operations/retrieval-mcp.md`, `code-graph-precomputation.md` producer table, this document's status | offline: a lead package's verifier retrieves the sink's slice, bounds and layout and the claim stays `supported` with unchanged direct relations (the new rows are indirect and change no verdict); live: per-family export cost and row counts on the native fixture and the acceptance target recorded in the verification JSON |
+| **G7** Package role | review-package contract (v5 package schema: `buffer_bound` context role for lane A memory leads, its own `max_context_entries` accounting), package assembly, `tests/review/` package tests, `review-package-contract.md` | starts after G6's live counts are recorded; a lane A memory lead package carries the sink's `buffer_bound` rows within its own bound and records truncation as a gap; v4 packages are rejected by v5 consumers, not reinterpreted; the rows stay indirect |
 
 Test tiers: every chunk is offline-first over hand-authored or recorded exports under
 `tests/fixtures/graph/codeql_export/synthetic/`, with golden facts under
@@ -545,7 +547,7 @@ layouts, `tool-svf` for aliases) refreshes recordings and fails until a recordin
 the same change as the query, as C1 does today. All pytest sessions use a unique
 `--basetemp=test/tmp/<chunk>`.
 
-## 10. Risks, settled and open questions, and what is deliberately not done
+## 10. Risks, settled questions, and what is deliberately not done
 
 ### Risks
 
@@ -574,15 +576,16 @@ Decided by the user on 2026-10-16; each takes the recommendation the first draft
    `max_operand_queries_per_module` is raised before the query classes are widened.
 4. **One design document.** The five modes share the `query_code_graph` contract, the central
    configuration and the chunk plan, so they stay in this document rather than one per capability.
+5. **A `buffer_bound` package context role for lane A memory leads.** It puts capacity next to the
+   sink in the lead package. It lands after G6's live counts as a v5 package schema change with its
+   own `max_context_entries` accounting (chunk G7); until then packages embed none of the new rows.
+6. **The catalog revision lands before G3.** The checklist's R-UAF `memory_free` sink class and
+   R-OOB-R `memory_read` entries ship as catalog revision 2 with its own pin (chunk GC), so
+   `cfg_context.block_dominated_by_free_of_operand` and slices from read sinks have sinks to anchor
+   on. The other checklist follow-ups (R-INT, R-TOCTOU, R-CSA, R-CERT, R-LIVE) are not scheduled by
+   this decision.
 
-### Open questions
-
-1. **Package context role `buffer_bound` for lane A memory leads?** It would put capacity next to
-   the sink in the lead package. Recommendation: after G6's live counts, as a v5 package schema
-   change with its own `max_context_entries` accounting.
-2. **Catalog `memory_free` sink class and `memory_read` entries.** The checklist (R-UAF, R-OOB-R)
-   proposes them; they are catalog changes with their own pin, not part of this design's chunks.
-   Recommendation: land them as a catalog revision before G3 so `cfg_context` can use them.
+No questions remain open.
 
 ### Deliberately not done
 

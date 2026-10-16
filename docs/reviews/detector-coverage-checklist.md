@@ -90,8 +90,8 @@ types actually produced) are live-tier work, not design work.
 
 | Id | Change | Where | Depends on |
 |---|---|---|---|
-| R-UAF | `memory_free` sink class; `free`, `delete`/`delete[]` (via `DeallocationFunction` model if cpp-all exposes it, else API names), `realloc` argument 0, `munmap` | `graph/contract.py` `SINK_CLASSES`, `rules/codeql-graph-export/catalog.json` revision 2, catalog pin in TOML | none |
-| R-OOB-R | `memory_read` catalog entries: `ArrayFunction` input buffers (`hasArrayInput`), `ArrayExpr` reads, `memcmp`, `strlen` | catalog revision 2, `GraphExport.qll` `sink` predicate | none |
+| R-UAF | `memory_free` sink class; `free`, `delete`/`delete[]` (via `DeallocationFunction` model if cpp-all exposes it, else API names), `realloc` argument 0, `munmap` | `graph/contract.py` `SINK_CLASSES`, `rules/codeql-graph-export/catalog.json` revision 2, catalog pin in TOML | none; scheduled before G3 as design chunk GC |
+| R-OOB-R | `memory_read` catalog entries: `ArrayFunction` input buffers (`hasArrayInput`), `ArrayExpr` reads, `memcmp`, `strlen` | catalog revision 2, `GraphExport.qll` `sink` predicate | none; scheduled before G3 as design chunk GC |
 | R-INT | `integer_conversion` catalog entries: allocation size arguments and array index expressions after a narrowing or sign-changing conversion | catalog revision 2 | none |
 | R-TOCTOU | `path_check` sink class and `toctou_candidate` join | contract, catalog revision 2, `graph-normalize/2`, `control_flow` family (design G3) | design chunk G3 |
 | R-CSA | enable `optin.cplusplus.UninitializedObject` and the clang 18 taint checker under its real name | `appsec-review.toml` `clang_analyzer_checkers`, `tests/test_clang_static_analysis.py` | live verification of checker names on clang 18.1.3 |
