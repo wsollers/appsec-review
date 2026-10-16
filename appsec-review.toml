@@ -1222,6 +1222,8 @@ archive_expanded_bytes = 536870912
 archive_member_bytes = 134217728
 archive_ratio_limit = 1000
 archive_depth_limit = 4
+# Container memory for osv-scanner on produced lockfiles (see job_evidence_collection osv_memory).
+osv_memory = "3g"
 
 [jobs.job_artifact_security_analysis.settings.scanner_identities]
 blint = "tool-blint:3.4.0:adapter-2"
@@ -1879,6 +1881,11 @@ workers = 8
 
 [jobs.job_evidence_collection.settings]
 tool_retries = 1
+# osv-scanner offline mode loads each needed ecosystem's whole all.zip into memory (npm alone is
+# 368 MB of JSON; one npm project peaks above 2.2 GB), so it alone runs above the uniform 1g
+# scanner limit. One invocation runs per target project, at most this many lockfiles each.
+osv_memory = "3g"
+osv_max_lockfiles_per_invocation = 50
 
 [jobs.job_evidence_collection.steps.secrets]
 workers = 1

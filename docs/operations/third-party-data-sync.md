@@ -69,8 +69,9 @@ schedule live in `appsec-review.toml` under the semantic job/step/task hierarchy
   with configured result limits. Inference queries that index; it does not scan ZIP archives. The
   default `ecosystems` are PyPI, crates.io, npm, Go, Maven, Packagist, NuGet, and RubyGems: every
   ecosystem whose lockfiles osv-scanner extracts offline and the build families produce. Each
-  published `sources/<ecosystem>.zip` is mounted for osv-scanner's offline database, so a lockfile
-  of an ecosystem left out here is a named coverage gap. Measured 2026-10-15 the eight archives are
+  published `sources/<ecosystem>.zip` can be mounted for osv-scanner's offline database (each launch
+  mounts only the ecosystems its lockfiles need; see [`static-analysis.md`](static-analysis.md)), so
+  a lockfile of an ecosystem left out here is a named coverage gap. Measured 2026-10-15 the eight archives are
   291,048 records and 573 MB uncompressed (npm alone 218 MB compressed, 230,351 records), inside the
   configured `max_archive_bytes`, `max_uncompressed_bytes`, and `max_records` bounds. An advisory
   published in several ecosystem archives (for example a GHSA record) is stored and counted once

@@ -87,7 +87,21 @@ project root (`Cargo.lock`, npm/yarn/pnpm locks, `go.mod`, `pom.xml` and Gradle 
 `composer.lock`, `packages.lock.json`, `Gemfile.lock`, Python requirements/Poetry/Pipfile/PDM locks,
 and others in `OSV_LOCKFILE_ECOSYSTEMS`), each passed with `--lockfile`; inputs whose ecosystem the
 snapshot lacks are withheld with the gap "offline OSV snapshot lacks ecosystem <X>" because
-osv-scanner aborts the whole offline run for one missing ecosystem database. Gosec receives each
+osv-scanner aborts the whole offline run for one missing ecosystem database. OSV Scanner runs once
+per project: each lockfile belongs to its deepest cataloged project root (or, outside every project,
+to its own directory), and a project with more than
+`jobs.job_evidence_collection.settings.osv_max_lockfiles_per_invocation` lockfiles (default 50) is
+split into chunks. Each launch mounts only the ecosystem databases its own lockfiles need, because
+offline mode loads every mounted `all.zip` whole: npm alone is 368 MB of JSON, and one npm project
+peaks above 2.2 GB. For that reason osv-scanner, and only osv-scanner, runs under
+`osv_memory` (default `3g`) instead of the uniform 1g scanner limit; the receipt records the
+effective limit and `memory_source = "request"`. `job_artifact_security_analysis` applies its own
+`osv_memory` setting and likewise mounts only the produced lockfile's ecosystem. Retries, events
+(which carry `project_root`), raw artifacts and byte bounds apply per launch. A failed, timed-out or
+OOM-killed project becomes a gap naming it, such as "tool-osv-scanner was OOM-killed for project
+web (2 lockfile(s))", while the other projects' observations are kept: the task is `PARTIAL`, and
+`FAILED` only when every launch fails. Its `scanner_output` is a merged osv-scanner-shaped document
+(`osv-scanner-merged.json`) listing each successful project's bounded output. Gosec receives each
 selected file's package directory, never a `.go` file. Trivy runs with `--skip-check-update` and
 uses the checks embedded in the pinned binary; a checks-bundle download fallback on stderr is a
 named gap. BLint is invoked with `--reports /scratch` and its report files are assembled as in

@@ -216,12 +216,15 @@ def test_artifact_runner_withholds_lockfile_whose_ecosystem_is_not_synchronized(
 
 
 class RecordingExecutor(evidence_tests.FakeExecutor):
-    def __init__(self, repository: Path, run_root: Path, calls: list[str], requests: dict):
+    def __init__(self, repository: Path, run_root: Path, calls: list[str], requests: dict,
+                 history: list | None = None):
         super().__init__(repository, run_root, calls)
         self.requests = requests
+        self.history = history if history is not None else []
 
     def execute(self, request):
         self.requests[request.tool_id] = request
+        self.history.append(request)
         result = super().execute(request)
         if request.tool_id == "tool-osv-scanner":
             (request.scratch_root / "output.json").write_text('{"results": []}', encoding="utf-8")
@@ -245,20 +248,27 @@ def test_evidence_osv_selects_every_lockfile_in_any_root_and_names_unsynchronize
     fingerprint = source_fingerprint(target)
     calls: list[str] = []
     requests: dict = {}
-    factory = lambda unit: RecordingExecutor(unit.job.repository_root, unit.job.run_root, calls, requests)
+    history: list = []
+    factory = lambda unit: RecordingExecutor(unit.job.repository_root, unit.job.run_root, calls, requests,
+                                             history)
     outcome = GraphRunner(config, [build_intake(), build_catalog(), build_analysis_plan(),
                                    build_evidence(executor_factory=factory)]).run(
         target_root=target, source_fingerprint=fingerprint)
-    request = requests["tool-osv-scanner"]
-    argv = request.argv
-    launched = {argv[index + 1] for index, value in enumerate(argv) if value == "--lockfile"}
-    assert launched == {"/target/services/billing/Cargo.lock", "/target/web/package-lock.json",
-                        "/target/web/admin/yarn.lock", "/target/tools/requirements.txt",
-                        "/target/package-lock.json"}  # the shared fixture's root lockfile
-    assert "--recursive" not in argv
-    assert {mount.target for mount in request.extra_mounts} >= {
-        "/database/osv-scanner/PyPI/all.zip", "/database/osv-scanner/crates.io/all.zip",
-        "/database/osv-scanner/npm/all.zip"}
+    # One launch per project (web/admin has no manifest of its own, so it belongs to web); a
+    # lockfile outside every project groups by its directory. Each mounts only what it needs.
+    launches = {}
+    for request in (item for item in history if item.tool_id == "tool-osv-scanner"):
+        argv = request.argv
+        assert "--recursive" not in argv
+        lockfiles = tuple(argv[index + 1] for index, value in enumerate(argv) if value == "--lockfile")
+        launches[lockfiles] = {mount.target for mount in request.extra_mounts
+                               if mount.target.startswith("/database/")}
+    assert launches == {
+        ("/target/package-lock.json",): {"/database/osv-scanner/npm/all.zip"},  # shared fixture root
+        ("/target/services/billing/Cargo.lock",): {"/database/osv-scanner/crates.io/all.zip"},
+        ("/target/tools/requirements.txt",): {"/database/osv-scanner/PyPI/all.zip"},
+        ("/target/web/admin/yarn.lock", "/target/web/package-lock.json"): {"/database/osv-scanner/npm/all.zip"},
+    }
     dispositions = outcome["jobs"]["job_evidence_collection"]["result"]["outputs"][
         "evidence_publication.publish_handoff"]["dispositions"]
     osv = next(item for item in dispositions if item["tool_id"] == "tool-osv-scanner")

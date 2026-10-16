@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterable, Mapping
+from dataclasses import dataclass, field
 import hashlib
 import json
 from pathlib import Path, PurePosixPath
@@ -35,9 +36,13 @@ from appsec_review.jobs.job_third_party_data_sync.publication import verify_curr
 from appsec_review.rulepacks.sei_cert.pack import PackError, PackIdentity, verify_pack
 from appsec_review.jobs.job_evidence_collection.datasets import CONSUMES, DATASETS
 from appsec_review.applicability import ReasonCode
+from appsec_review.config.evidence_collection import (
+    EvidenceCollectionSettings, parse_evidence_collection_settings,
+)
+from appsec_review.container_runtime.executor import ExecutionResult
 from appsec_review.osv_offline import (
-    DATABASE_ROOT as OSV_DATABASE_ROOT, ENVIRONMENT as OSV_DB_ENVIRONMENT, offline_database_mounts,
-    snapshot_ecosystems,
+    DATABASE_ROOT as OSV_DATABASE_ROOT, ENVIRONMENT as OSV_DB_ENVIRONMENT, database_mount_target,
+    offline_database_mounts, snapshot_ecosystems,
 )
 from appsec_review.tool_inputs import (
     TOOL_INPUT_SUPPORT, InputDecision, bounded_diagnostic, not_applicable_summary,
@@ -338,7 +343,8 @@ def _prerequisites(unit: UnitContext, adapter: ToolAdapter, selection: Applicabi
         selection, missing_gap = _osv_split_by_snapshot(selection, ecosystems)
         if not selection.files:
             return selection, (), {}, missing_gap
-        mounts.extend(offline_database_mounts(ecosystems))
+        # Offline mode loads every mounted database whole; never mount one no lockfile needs.
+        mounts.extend(offline_database_mounts(ecosystems, {osv_ecosystem(path) for path in selection.files}))
         environment[OSV_DB_ENVIRONMENT] = OSV_DATABASE_ROOT
     if adapter.tool_id == "tool-grype":
         try:
@@ -486,6 +492,271 @@ def _write_evidence(unit: UnitContext, adapter: ToolAdapter, catalog: ScanCatalo
     return envelope, destination
 
 
+def _settings(unit: UnitContext) -> EvidenceCollectionSettings:
+    typed = unit.job.config.typed_settings
+    if isinstance(typed, EvidenceCollectionSettings):
+        return typed
+    return parse_evidence_collection_settings(unit.job.config.settings)
+
+
+@dataclass(frozen=True, slots=True)
+class _Invocation:
+    """One container launch: a tool's whole selection, or one bounded chunk of one OSV project."""
+
+    selection: Applicability
+    mounts: tuple[Mount, ...]
+    project_root: str | None = None
+    # Names the launch in gaps, e.g. "project web (2 lockfile(s))"; empty for whole-selection runs.
+    subject: str = ""
+
+
+@dataclass(slots=True)
+class _InvocationOutcome:
+    raw_paths: tuple[Path, ...] = ()
+    output: Path | None = None
+    result: ExecutionResult | None = None
+    observations: list[dict[str, Any]] = field(default_factory=list)
+    gaps: list[str] = field(default_factory=list)
+    not_applicable: list[InputDecision] = field(default_factory=list)
+    error_class: str | None = None
+    attempt: int = 0
+
+
+def osv_project_groups(paths: Iterable[str],
+                       projects: Iterable[Mapping[str, Any]]) -> dict[str, tuple[str, ...]]:
+    """Assign each lockfile to its deepest containing cataloged project root.
+
+    A lockfile under no project root groups by its parent directory. Roots are target-relative
+    POSIX paths; ``.`` is the target root and contains every path.
+    """
+    roots = {PurePosixPath(str(item["root"])).as_posix() for item in projects if item.get("root") is not None}
+    groups: dict[str, list[str]] = {}
+    for path in sorted(set(paths)):
+        pure = PurePosixPath(path)
+        containing = [root for root in roots
+                      if root == "." or pure.parts[:len(PurePosixPath(root).parts)] == PurePosixPath(root).parts]
+        root = (max(containing, key=lambda item: 0 if item == "." else len(PurePosixPath(item).parts))
+                if containing else pure.parent.as_posix())
+        groups.setdefault(root, []).append(path)
+    return {root: tuple(groups[root]) for root in sorted(groups)}
+
+
+def _plan_invocations(adapter: ToolAdapter, catalog: ScanCatalog, selection: Applicability,
+                      mounts: tuple[Mount, ...], max_lockfiles: int) -> list[_Invocation]:
+    """One launch for most tools; for osv-scanner one per project, in chunks of ``max_lockfiles``.
+
+    osv-scanner's offline mode loads each mounted ecosystem database whole, so each launch mounts
+    only the databases its own lockfiles need, and one project's failure loses only that project.
+    """
+    if adapter.tool_id != "tool-osv-scanner":
+        return [_Invocation(selection, mounts)]
+    database_targets = {mount.target for mount in mounts
+                        if mount.target.startswith(f"{OSV_DATABASE_ROOT}/osv-scanner/")}
+    shared = tuple(mount for mount in mounts if mount.target not in database_targets)
+    invocations: list[_Invocation] = []
+    for root, paths in osv_project_groups(selection.files, catalog.projects).items():
+        chunks = [paths[index:index + max_lockfiles] for index in range(0, len(paths), max_lockfiles)]
+        name = "at the target root" if root == "." else root
+        for number, chunk in enumerate(chunks, start=1):
+            needed = {database_mount_target(str(osv_ecosystem(path))) for path in chunk}
+            part = f"chunk {number}/{len(chunks)}, " if len(chunks) > 1 else ""
+            invocations.append(_Invocation(
+                Applicability(True, selection.reason, chunk, selection.coverage_kind, selection.gaps,
+                              selection.families),
+                (*shared, *(mount for mount in mounts if mount.target in needed & database_targets)),
+                root, f" for project {name} ({part}{len(chunk)} lockfile(s))"))
+    return invocations
+
+
+def _run_invocation(unit: UnitContext, adapter: ToolAdapter, catalog: ScanCatalog,
+                    invocation: _Invocation, index: int, *, executor: ContainerExecutor, tool: Any,
+                    image_id: str, fail_tool: str | None, retries: int, swift_present: bool,
+                    environment: Mapping[str, str], memory: str | None,
+                    input_identities: Mapping[str, str]) -> _InvocationOutcome:
+    """Launch one invocation with bounded retries; failures become gaps naming the invocation."""
+    selection, mounts, subject = invocation.selection, invocation.mounts, invocation.subject
+    outcome = _InvocationOutcome()
+    project_fields: dict[str, Any] = ({} if invocation.project_root is None else
+                                      {"project_root": invocation.project_root,
+                                       "lockfile_count": len(selection.files)})
+    tool_identity = {"name": tool.name, "version": tool.version, "image_id": image_id}
+    for attempt in range(retries + 1):
+        outcome.attempt = attempt
+        outcome.observations = []
+        if invocation.project_root is None:
+            scratch = unit.unit_root / "scratch" / f"attempt_{attempt + 1:02d}"
+            invocation_key = f"{attempt + 1}"
+        else:
+            scratch = unit.unit_root / "scratch" / f"invocation_{index + 1:03d}" / f"attempt_{attempt + 1:02d}"
+            invocation_key = f"invocation-{index + 1}:{attempt + 1}"
+        invocation_id = hashlib.sha256(
+            f"{unit.job.run_id}:{unit.job.attempt_id}:{unit.unit_id}:{invocation_key}".encode()).hexdigest()
+        invoked = time.monotonic()
+        unit.job.events.write("TOOL_INVOCATION_STARTED", unit_id=unit.unit_id,
+                              tool_invocation_id=invocation_id, tool_id=adapter.tool_id,
+                              tool_identity=tool_identity, input_identities=dict(input_identities),
+                              retry_count=attempt, **project_fields)
+        if adapter.tool_id == "tool-trivy":
+            staged = scratch / "inputs"
+            for relative in selection.files:
+                source = (unit.job.target_root or Path()) / relative
+                destination = staged / relative
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(source, destination)
+        execution_target = unit.job.target_root or Path()
+        if swift_present and not unit.job.tools.enable_swift and adapter.tool_id not in {
+                "tool-spotbugs", "tool-blint", "tool-grype"}:
+            stage_id = hashlib.sha256(canonical_json({
+                "tool": adapter.tool_id, "files": list(selection.files),
+                "catalog": catalog.handoff_sha256,
+            })).hexdigest()[:16]
+            staged_target = unit.job.run_root / ".scratch" / "swift-policy-targets" / stage_id
+            staged_target.mkdir(parents=True, exist_ok=True)
+            hashes = {str(item["path"]): str(item.get("sha256", "")) for item in catalog.files}
+            for relative in selection.files:
+                if relative not in hashes:
+                    continue
+                source = (execution_target / relative).resolve()
+                if (execution_target.resolve() not in source.parents or source.is_symlink()
+                        or not source.is_file() or file_sha256(source) != hashes[relative]):
+                    raise ValueError(f"accepted scanner input changed or escapes the target: {relative}")
+                destination = staged_target / relative
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                if destination.exists():
+                    if destination.is_symlink() or file_sha256(destination) != hashes[relative]:
+                        raise ValueError(f"staged scanner input identity changed: {relative}")
+                else:
+                    shutil.copyfile(source, destination)
+            execution_target = staged_target
+        gaps: list[str] = []
+        try:
+            if fail_tool == adapter.tool_id:
+                raise RuntimeError(f"injected bounded failure: {adapter.tool_id}{subject}")
+            result = executor.execute(ExecutionRequest(
+                tool_id=adapter.tool_id, argv=adapter.argv(tool.executable, selection),
+                target_root=execution_target, scratch_root=scratch,
+                extra_mounts=mounts, environment=environment, memory=memory,
+            ))
+            outcome.result = result
+            attempt_paths = (unit.job.run_root / result.stdout_path,
+                             unit.job.run_root / result.stderr_path,
+                             unit.job.run_root / result.receipt_path)
+            outcome.raw_paths = (*outcome.raw_paths, *attempt_paths)
+            if result.stdout_truncated:
+                gaps.append(f"stdout was truncated at the configured byte bound{subject}")
+            if result.stderr_truncated:
+                gaps.append(f"stderr was truncated at the configured byte bound{subject}")
+            if result.timed_out:
+                raise RuntimeError(f"{adapter.tool_id} timed out{subject}")
+            if result.oom_killed:
+                raise RuntimeError(f"{adapter.tool_id} was OOM-killed{subject}")
+            if result.exit_code not in adapter.accepted_exit_codes:
+                stderr = attempt_paths[1].read_bytes() if attempt_paths[1].is_file() else b""
+                missing = (osv_missing_ecosystems(stderr)
+                           if adapter.tool_id == "tool-osv-scanner" else ())
+                if missing:
+                    raise RuntimeError(osv_missing_ecosystem_gap(
+                        missing, f"the lockfiles{subject}" if subject else "the selected lockfiles"))
+                detail = bounded_diagnostic(stderr)
+                raise RuntimeError(f"{adapter.tool_id} exited with {result.exit_code}{subject}" +
+                                   (f": {detail}" if detail else ""))
+            if adapter.collector is not None:
+                try:
+                    adapter.collector(scratch)
+                except (OSError, ValueError, UnicodeError) as exc:
+                    raise RuntimeError(f"{adapter.tool_id} report could not be assembled{subject} "
+                                       f"({type(exc).__name__}: {exc})") from exc
+            if adapter.stderr_gaps is not None and attempt_paths[1].is_file():
+                gaps.extend(adapter.stderr_gaps(attempt_paths[1].read_bytes()))
+            output = scratch / adapter.output_file.removeprefix("/scratch/") if adapter.output_file else attempt_paths[0]
+            if not output.is_file():
+                raise RuntimeError(f"{adapter.tool_id} did not produce its expected output{subject}")
+            if output.stat().st_size > tool.output_bytes:
+                raise RuntimeError(f"{adapter.tool_id} output artifact exceeded its byte bound{subject}")
+            if output not in outcome.raw_paths:
+                outcome.raw_paths = (*outcome.raw_paths, output)
+            try:
+                parsed = adapter.parse(output.read_bytes())
+                observations, parser_gaps, reported_not_applicable = _separate_parser_diagnostics(
+                    parsed, adapter.tool_id)
+                reject_swift_derived(
+                    observations, enabled=unit.job.tools.enable_swift,
+                    context=f"{adapter.tool_id} observations")
+                gaps.extend(parser_gaps)
+                if adapter.tool_id == "tool-checkov":
+                    known = {item.path for item in reported_not_applicable}
+                    reported_not_applicable.extend(
+                        InputDecision(path, adapter.tool_id, ReasonCode.TOOL_REPORTED_UNSUPPORTED_INPUT,
+                                      "Checkov accepted the input and reported no check, skip, or parse error")
+                        for path in checkov_unreported_inputs(output.read_bytes(), selection.files)
+                        if path not in known)
+                if adapter.tool_id in SEI_CERT_TOOLS:
+                    dropped_gaps, dropped_na = semgrep_unscanned_inputs(
+                        output.read_bytes(), selection.files,
+                        semgrep_rule_languages(_semgrep_rule_files(repository_root=unit.job.repository_root,
+                                                                   tool_id=adapter.tool_id)),
+                        _container_relative)
+                    gaps.extend(dropped_gaps)
+                    known = {item.path for item in reported_not_applicable}
+                    reported_not_applicable.extend(
+                        InputDecision(path, adapter.tool_id, ReasonCode.TOOL_REPORTED_UNSUPPORTED_INPUT, reason)
+                        for path, reason in dropped_na if path not in known)
+            except (ValueError, KeyError, TypeError, UnicodeError, json.JSONDecodeError) as exc:
+                raise RuntimeError(f"{adapter.tool_id} parser incompatibility{subject} "
+                                   f"({type(exc).__name__})") from exc
+            outcome.output = output
+            outcome.observations = observations
+            outcome.not_applicable = reported_not_applicable
+            outcome.gaps.extend(gaps)
+            outcome.error_class = None
+            effective_gaps = list(dict.fromkeys((*selection.gaps, *adapter.limitations, *outcome.gaps)))
+            unit.job.events.write("TOOL_INVOCATION_COMPLETED", unit_id=unit.unit_id,
+                                  tool_invocation_id=invocation_id, tool_id=adapter.tool_id,
+                                  tool_identity=tool_identity, disposition="SUCCEEDED", retry_count=attempt,
+                                  result_count=len(observations), gap_count=len(effective_gaps),
+                                  gaps=effective_gaps[:50], checkpoint_reused=False,
+                                  truncated=result.stdout_truncated or result.stderr_truncated,
+                                  duration_ms=max(0, int((time.monotonic() - invoked) * 1000)),
+                                  **project_fields)
+            return outcome
+        except (RuntimeError, subprocess.SubprocessError) as exc:
+            outcome.error_class = type(exc).__name__
+            outcome.observations = []
+            outcome.gaps.extend((*gaps, str(exc)))
+            unit.job.events.write("TOOL_INVOCATION_COMPLETED", unit_id=unit.unit_id,
+                                  tool_invocation_id=invocation_id, tool_id=adapter.tool_id,
+                                  tool_identity=tool_identity, disposition="FAILED", retry_count=attempt,
+                                  error_class=outcome.error_class, result_count=0,
+                                  gap_count=len(outcome.gaps), gaps=outcome.gaps[-50:],
+                                  checkpoint_reused=False, truncated=False,
+                                  duration_ms=max(0, int((time.monotonic() - invoked) * 1000)),
+                                  **project_fields)
+    return outcome
+
+
+def _merge_osv_outputs(unit: UnitContext, invocations: list[_Invocation],
+                       outcomes: list[_InvocationOutcome]) -> Path:
+    """One osv-scanner-shaped document holding every successful project's ``results``.
+
+    Each per-project output stays a raw artifact under its own byte bound; this merged view is
+    the task's ``scanner_output`` and records which bounded output each result came from.
+    """
+    results: list[Any] = []
+    sources: list[dict[str, Any]] = []
+    for invocation, outcome in zip(invocations, outcomes):
+        if outcome.output is None:
+            continue
+        document = json.loads(outcome.output.read_bytes())
+        results.extend(document.get("results", []) if isinstance(document, Mapping) else [])
+        sources.append({"project_root": invocation.project_root,
+                        "lockfiles": list(invocation.selection.files),
+                        "output": _artifact(unit.job.run_root, outcome.output)})
+    destination = unit.unit_root / "osv-scanner-merged.json"
+    atomic_json(destination, {"schema": "appsec-review/osv-scanner-merged-output/1",
+                              "results": results, "invocations": sources})
+    return destination
+
+
 def _execute_tool(unit: UnitContext, adapter: ToolAdapter, catalog: ScanCatalog,
                   executor_factory: ExecutorFactory, fail_tool: str | None,
                   planned: Applicability | None = None, *, swift_present: bool = False) -> Mapping[str, Any]:
@@ -590,162 +861,45 @@ def _execute_tool(unit: UnitContext, adapter: ToolAdapter, catalog: ScanCatalog,
             )
             return {**checkpoint["output"], "checkpoint_reused": True,
                     "checkpoint": _artifact(unit.job.run_root, checkpoint_path)}
-        configured_retries = int(unit.job.config.settings.get("tool_retries", 1))
-        if not 0 <= configured_retries <= 3:
-            raise ValueError("tool_retries must be between zero and three")
-        raw_paths: tuple[Path, ...] = ()
-        result = None
-        output = None
-        observations: list[dict[str, Any]] = []
-        gaps: list[str] = []
-        reported_not_applicable: list[InputDecision] = []
-        error_class = None
-        for attempt in range(configured_retries + 1):
-            scratch = unit.unit_root / "scratch" / f"attempt_{attempt + 1:02d}"
-            invocation_id = hashlib.sha256(
-                f"{unit.job.run_id}:{unit.job.attempt_id}:{unit.unit_id}:{attempt + 1}".encode()).hexdigest()
-            invoked = time.monotonic()
-            unit.job.events.write("TOOL_INVOCATION_STARTED", unit_id=unit.unit_id,
-                                  tool_invocation_id=invocation_id, tool_id=adapter.tool_id,
-                                  tool_identity={"name": tool.name, "version": tool.version,
-                                                 "image_id": image_id},
-                                  input_identities=_extra_identity(mounts), retry_count=attempt)
-            if adapter.tool_id == "tool-trivy":
-                staged = scratch / "inputs"
-                for relative in selection.files:
-                    source = (unit.job.target_root or Path()) / relative
-                    destination = staged / relative
-                    destination.parent.mkdir(parents=True, exist_ok=True)
-                    shutil.copyfile(source, destination)
-            execution_target = unit.job.target_root or Path()
-            if swift_present and not unit.job.tools.enable_swift and adapter.tool_id not in {
-                    "tool-spotbugs", "tool-blint", "tool-grype"}:
-                stage_id = hashlib.sha256(canonical_json({
-                    "tool": adapter.tool_id, "files": list(selection.files),
-                    "catalog": catalog.handoff_sha256,
-                })).hexdigest()[:16]
-                staged_target = unit.job.run_root / ".scratch" / "swift-policy-targets" / stage_id
-                staged_target.mkdir(parents=True, exist_ok=True)
-                hashes = {str(item["path"]): str(item.get("sha256", "")) for item in catalog.files}
-                for relative in selection.files:
-                    if relative not in hashes:
-                        continue
-                    source = (execution_target / relative).resolve()
-                    if (execution_target.resolve() not in source.parents or source.is_symlink()
-                            or not source.is_file() or file_sha256(source) != hashes[relative]):
-                        raise ValueError(f"accepted scanner input changed or escapes the target: {relative}")
-                    destination = staged_target / relative
-                    destination.parent.mkdir(parents=True, exist_ok=True)
-                    if destination.exists():
-                        if destination.is_symlink() or file_sha256(destination) != hashes[relative]:
-                            raise ValueError(f"staged scanner input identity changed: {relative}")
-                    else:
-                        shutil.copyfile(source, destination)
-                execution_target = staged_target
-            try:
-                if fail_tool == adapter.tool_id:
-                    raise RuntimeError(f"injected bounded failure: {adapter.tool_id}")
-                result = executor.execute(ExecutionRequest(
-                    tool_id=adapter.tool_id, argv=adapter.argv(tool.executable, selection),
-                    target_root=execution_target, scratch_root=scratch,
-                    extra_mounts=mounts, environment=environment,
-                ))
-                attempt_paths = (unit.job.run_root / result.stdout_path,
-                                 unit.job.run_root / result.stderr_path,
-                                 unit.job.run_root / result.receipt_path)
-                raw_paths = (*raw_paths, *attempt_paths)
-                if result.stdout_truncated:
-                    gaps.append("stdout was truncated at the configured byte bound")
-                if result.stderr_truncated:
-                    gaps.append("stderr was truncated at the configured byte bound")
-                if result.timed_out:
-                    raise RuntimeError(f"{adapter.tool_id} timed out")
-                if result.oom_killed:
-                    raise RuntimeError(f"{adapter.tool_id} was OOM-killed")
-                if result.exit_code not in adapter.accepted_exit_codes:
-                    stderr = attempt_paths[1].read_bytes() if attempt_paths[1].is_file() else b""
-                    missing = (osv_missing_ecosystems(stderr)
-                               if adapter.tool_id == "tool-osv-scanner" else ())
-                    if missing:
-                        raise RuntimeError(osv_missing_ecosystem_gap(missing, "the selected lockfiles"))
-                    detail = bounded_diagnostic(stderr)
-                    raise RuntimeError(f"{adapter.tool_id} exited with {result.exit_code}" +
-                                       (f": {detail}" if detail else ""))
-                if adapter.collector is not None:
-                    try:
-                        adapter.collector(scratch)
-                    except (OSError, ValueError, UnicodeError) as exc:
-                        raise RuntimeError(f"{adapter.tool_id} report could not be assembled "
-                                           f"({type(exc).__name__}: {exc})") from exc
-                if adapter.stderr_gaps is not None and attempt_paths[1].is_file():
-                    gaps.extend(adapter.stderr_gaps(attempt_paths[1].read_bytes()))
-                output = scratch / adapter.output_file.removeprefix("/scratch/") if adapter.output_file else attempt_paths[0]
-                if not output.is_file():
-                    raise RuntimeError(f"{adapter.tool_id} did not produce its expected output")
-                if output.stat().st_size > tool.output_bytes:
-                    raise RuntimeError(f"{adapter.tool_id} output artifact exceeded its byte bound")
-                if output not in raw_paths:
-                    raw_paths = (*raw_paths, output)
-                try:
-                    parsed = adapter.parse(output.read_bytes())
-                    observations, parser_gaps, reported_not_applicable = _separate_parser_diagnostics(
-                        parsed, adapter.tool_id)
-                    reject_swift_derived(
-                        observations, enabled=unit.job.tools.enable_swift,
-                        context=f"{adapter.tool_id} observations")
-                    gaps.extend(parser_gaps)
-                    if adapter.tool_id == "tool-checkov":
-                        known = {item.path for item in reported_not_applicable}
-                        reported_not_applicable.extend(
-                            InputDecision(path, adapter.tool_id, ReasonCode.TOOL_REPORTED_UNSUPPORTED_INPUT,
-                                          "Checkov accepted the input and reported no check, skip, or parse error")
-                            for path in checkov_unreported_inputs(output.read_bytes(), selection.files)
-                            if path not in known)
-                    if adapter.tool_id in SEI_CERT_TOOLS:
-                        dropped_gaps, dropped_na = semgrep_unscanned_inputs(
-                            output.read_bytes(), selection.files,
-                            semgrep_rule_languages(_semgrep_rule_files(repository_root=unit.job.repository_root,
-                                                                       tool_id=adapter.tool_id)),
-                            _container_relative)
-                        gaps.extend(dropped_gaps)
-                        known = {item.path for item in reported_not_applicable}
-                        reported_not_applicable.extend(
-                            InputDecision(path, adapter.tool_id, ReasonCode.TOOL_REPORTED_UNSUPPORTED_INPUT, reason)
-                            for path, reason in dropped_na if path not in known)
-                except (ValueError, KeyError, TypeError, UnicodeError, json.JSONDecodeError) as exc:
-                    raise RuntimeError(f"{adapter.tool_id} parser incompatibility ({type(exc).__name__})") from exc
-                error_class = None
-                effective_gaps = list(dict.fromkeys((*selection.gaps, *adapter.limitations, *gaps)))
-                unit.job.events.write("TOOL_INVOCATION_COMPLETED", unit_id=unit.unit_id,
-                                      tool_invocation_id=invocation_id, tool_id=adapter.tool_id,
-                                      tool_identity={"name": tool.name, "version": tool.version,
-                                                     "image_id": image_id},
-                                      disposition="SUCCEEDED", retry_count=attempt,
-                                      result_count=len(observations), gap_count=len(effective_gaps),
-                                      gaps=effective_gaps[:50], checkpoint_reused=False,
-                                      truncated=result.stdout_truncated or result.stderr_truncated,
-                                      duration_ms=max(0, int((time.monotonic() - invoked) * 1000)))
-                break
-            except (RuntimeError, subprocess.SubprocessError) as exc:
-                error_class = type(exc).__name__
-                gaps.append(str(exc))
-                unit.job.events.write("TOOL_INVOCATION_COMPLETED", unit_id=unit.unit_id,
-                                      tool_invocation_id=invocation_id, tool_id=adapter.tool_id,
-                                      tool_identity={"name": tool.name, "version": tool.version,
-                                                     "image_id": image_id},
-                                      disposition="FAILED", retry_count=attempt, error_class=error_class,
-                                      result_count=0, gap_count=len(gaps), gaps=gaps[-50:],
-                                      checkpoint_reused=False, truncated=False,
-                                      duration_ms=max(0, int((time.monotonic() - invoked) * 1000)))
-                if attempt < configured_retries:
-                    continue
-        terminal = "FAILED" if error_class is not None else ("PARTIAL" if gaps else "SUCCEEDED")
+        settings = _settings(unit)
+        configured_retries = settings.tool_retries
+        invocations = _plan_invocations(adapter, catalog, selection, mounts,
+                                        settings.osv_max_lockfiles_per_invocation)
+        input_identities = _extra_identity(mounts)
+        memory = settings.osv_memory if adapter.tool_id == "tool-osv-scanner" else None
+        outcomes = [
+            _run_invocation(unit, adapter, catalog, invocation, index, executor=executor, tool=tool,
+                            image_id=image_id, fail_tool=fail_tool, retries=configured_retries,
+                            swift_present=swift_present, environment=environment, memory=memory,
+                            input_identities={target: value for target, value in input_identities.items()
+                                              if target in {mount.target for mount in invocation.mounts}})
+            for index, invocation in enumerate(invocations)]
+        raw_paths = tuple(path for outcome in outcomes for path in outcome.raw_paths)
+        observations = [record for outcome in outcomes for record in outcome.observations]
+        gaps = [gap for outcome in outcomes for gap in outcome.gaps]
+        reported_not_applicable = [item for outcome in outcomes for item in outcome.not_applicable]
+        failed = [outcome for outcome in outcomes if outcome.error_class is not None]
+        # One failed project is a named gap beside the others' evidence; FAILED only when none ran.
+        error_class = failed[-1].error_class if len(failed) == len(outcomes) else None
+        terminal = "FAILED" if error_class is not None else ("PARTIAL" if failed or gaps else "SUCCEEDED")
+        results = [outcome.result for outcome in outcomes if outcome.result is not None]
+        result = results[-1] if results else None
+        outputs = [outcome.output for outcome in outcomes if outcome.output is not None]
+        partitioned = any(invocation.project_root is not None for invocation in invocations)
+        if partitioned and outputs:
+            output = _merge_osv_outputs(unit, invocations, outcomes)
+        else:
+            output = outputs[-1] if outputs else None
+        tool_identity: dict[str, Any] = {
+            "id": adapter.tool_id, "name": tool.name, "version": tool.version,
+            "image_tag": tool.tag, "image_id": image_id,
+            "attempt_count": sum(outcome.attempt + 1 for outcome in outcomes),
+            "error_class": error_class}
+        if partitioned:
+            tool_identity.update({"invocation_count": len(outcomes), "failed_invocation_count": len(failed),
+                                  "memory": memory})
         envelope, evidence_path = _write_evidence(
-            unit, adapter, catalog, selection,
-            tool_identity={"id": adapter.tool_id, "name": tool.name, "version": tool.version,
-                           "image_tag": tool.tag, "image_id": image_id,
-                           "attempt_count": configured_retries + 1 if error_class else attempt + 1,
-                           "error_class": error_class},
+            unit, adapter, catalog, selection, tool_identity=tool_identity,
             raw_artifacts=raw_paths, observations=observations, terminal_status=terminal, gaps=tuple(gaps),
             not_applicable=(*not_applicable, *reported_not_applicable),
         )
@@ -758,15 +912,26 @@ def _execute_tool(unit: UnitContext, adapter: ToolAdapter, catalog: ScanCatalog,
                           if result is not None else None),
             "record_count": envelope["record_count"], "gaps": envelope["exclusions_and_gaps"],
             "not_applicable_inputs": envelope["not_applicable_inputs"],
-            "checkpoint_identity": identity, "retry_count": attempt if error_class is None else configured_retries,
+            "checkpoint_identity": identity,
+            "retry_count": max(outcome.attempt for outcome in outcomes),
         }
+        if partitioned:
+            output_value["invocations"] = [
+                {"project_root": invocation.project_root, "lockfile_count": len(invocation.selection.files),
+                 "terminal_status": "FAILED" if outcome.error_class else "SUCCEEDED",
+                 "retry_count": outcome.attempt,
+                 "scanner_output": (_rel(unit.job.run_root, outcome.output)
+                                    if outcome.output is not None else None),
+                 "execution": (_artifact(unit.job.run_root, unit.job.run_root / outcome.result.receipt_path)
+                               if outcome.result is not None else None)}
+                for invocation, outcome in zip(invocations, outcomes)]
         if terminal in {"SUCCEEDED", "PARTIAL"}:
             checkpoint_root.mkdir(parents=True, exist_ok=True)
             checkpoint_artifacts = [output_value["artifact"]]
-            if output_value["execution"] is not None:
-                checkpoint_artifacts.append(output_value["execution"])
-            if output is not None:
-                checkpoint_artifacts.append(_artifact(unit.job.run_root, output))
+            for item in results:
+                checkpoint_artifacts.append(_artifact(unit.job.run_root, unit.job.run_root / item.receipt_path))
+            for path in (*outputs, *((output,) if output is not None and output not in outputs else ())):
+                checkpoint_artifacts.append(_artifact(unit.job.run_root, path))
             atomic_json(checkpoint_path, {
                 "schema": "appsec-review/tool-task-checkpoint/1", "identity": identity,
                 "output": output_value, "artifacts": checkpoint_artifacts,

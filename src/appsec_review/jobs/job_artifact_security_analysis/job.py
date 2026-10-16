@@ -25,6 +25,7 @@ from appsec_review.applicability import ReasonCode
 
 from .formats import ArchiveLimits, builtin_observation, classify
 from .scanners import ADAPTERS, ContainerScannerRunner
+from appsec_review.config.evidence_collection import memory_limit
 from appsec_review.jobs.job_artifact_security_analysis.datasets import CONSUMES, DATASETS
 
 
@@ -305,6 +306,8 @@ def _validate_config(context, _result) -> None:
         raise ValueError("artifact-security bounds must be positive integers")
     if not isinstance(context.config.settings["scanner_identities"], Mapping):
         raise ValueError("artifact-security scanner identities must be a table")
+    memory_limit(context.config.settings.get("osv_memory"),
+                 "jobs.job_artifact_security_analysis.settings.osv_memory")
 
 
 def load_accepted_artifact_security_analysis(run_root: Path) -> Mapping[str, Any]:
@@ -362,7 +365,8 @@ def build_job(*, scanner_runner: ScannerRunner | None = None) -> Job:
                     continue
                 if effective_runner is None and capability in ADAPTERS:
                     effective_runner = ContainerScannerRunner(
-                        unit.job.repository_root, unit.job.run_root, unit.unit_root)
+                        unit.job.repository_root, unit.job.run_root, unit.unit_root,
+                        osv_memory=str(unit.job.config.settings["osv_memory"]))
                 result = _scan_one(unit, artifact, capability, effective_runner)
                 if result.get("terminal_status") == "SKIPPED_NA" and result.get("not_applicable"):
                     skipped.append(result["not_applicable"])
