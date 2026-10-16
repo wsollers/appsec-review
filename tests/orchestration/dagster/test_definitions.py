@@ -532,3 +532,49 @@ workers = 1
     events = [__import__("json").loads(line) for line in next((tmp_path / "runs").glob(
         "*/data/logs/pipeline.jsonl")).read_text(encoding="utf-8").splitlines()]
     assert any(item["event_type"] == "TASK_STARTED" and item["task_id"] == "scan" for item in events)
+
+
+def test_standalone_launch_binds_tagged_upstream_handoffs(tmp_path: Path) -> None:
+    import hashlib
+    import json
+
+    run_root = tmp_path / "runs" / "2026-10-16-0004"
+    handoff = run_root / "data" / "jobs" / "job_review_intake" / "attempts" / "attempt_0001" / "handoff.json"
+    handoff.parent.mkdir(parents=True)
+    handoff.write_text(json.dumps({"job_id": "job_review_intake", "status": "ACCEPTED"}), encoding="utf-8")
+    digest = hashlib.sha256(handoff.read_bytes()).hexdigest()
+    (run_root / "data" / "jobs" / "job_review_intake" / "latest.json").write_text(json.dumps({
+        "handoff_path": handoff.relative_to(run_root).as_posix(), "handoff_sha256": digest}), encoding="utf-8")
+    begun: list[dict[str, object]] = []
+
+    class Runner:
+        def __init__(self, config):
+            pass
+
+        def begin_attempt(self, job, **kwargs):
+            begun.append(kwargs)
+            return {"run_id": kwargs["run_id"], "attempt_id": "attempt_0001", "trigger": "manual",
+                    "orchestration": kwargs["orchestration"], "attempt_path": "attempt",
+                    "source_fingerprint": "none", "upstream_handoffs": kwargs["upstream_handoffs"],
+                    "started_at": "2026-10-08T00:00:00+00:00"}
+
+        def execute_or_reuse_unit(self, job, claim, unit_id):
+            return {"value": 1}
+
+        def finalize_attempt(self, job, claim):
+            return {"status": {"run_id": claim["run_id"], "attempt_id": "attempt_0001",
+                               "trigger": "manual", "status": "SUCCEEDED"},
+                    "handoff_sha256": "b" * 64, "attempt_root": str(tmp_path / "attempt"),
+                    "result": {"steps": {}, "units": {}, "outputs": {},
+                               "failed_units": [], "skipped_units": []}}
+
+    definitions = build_definitions(_config(tmp_path), registry=_registry(), runner_factory=Runner)
+    job = definitions.get_job_def("fixture")
+    tags = {"appsec/application_run_id": "2026-10-16-0004",
+            "appsec/upstream_handoffs": json.dumps({"job_review_intake": digest})}
+    assert job.execute_in_process(tags=tags).success
+    assert begun[0]["run_id"] == "2026-10-16-0004"
+    assert begun[0]["upstream_handoffs"] == {"job_review_intake": digest}
+    tags["appsec/upstream_handoffs"] = json.dumps({"job_review_intake": "0" * 64})
+    assert not job.execute_in_process(tags=tags, raise_on_error=False).success
+    assert len(begun) == 1

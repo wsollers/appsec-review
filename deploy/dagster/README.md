@@ -275,6 +275,74 @@ python deploy/dagster/bin/run_report.py --stale-seconds 3600
 python deploy/dagster/bin/lifecycle.py config
 ```
 
+## Stepwise acceptance of wave1_review
+
+`stepwise.py` runs every `wave1_review` job as its own single-job Dagster job, one at a time,
+against one application run. Each launch goes through the webserver into the packaged code location,
+so a job runs with the same uid/gid, mounts and Docker socket as in `wave1_review`. The job order
+and each job's upstream handoffs come from the packaged code location
+(`python -m appsec_review.orchestration.topology`), so the code-location image must contain that
+module. The launcher names the accepted upstream handoffs in the `appsec/upstream_handoffs` run tag.
+The job's begin op checks each one against the run's `latest.json` pointer, so a standalone job binds
+the same handoffs it would receive inside the graph.
+
+```bash
+python3 deploy/dagster/bin/stepwise.py init --target /opt/app/targets/appsec-multi-vuln
+python3 deploy/dagster/bin/stepwise.py accept --job model_connectivity --tag TAG
+python3 deploy/dagster/bin/stepwise.py next           # launch, wait, check the next job
+python3 deploy/dagster/bin/stepwise.py check --job JOB  # re-check without relaunching
+python3 deploy/dagster/bin/stepwise.py accept --job JOB --tag TAG
+# ...repeat next/accept for every job, then run a full wave1_review (review_run.py submit)...
+python3 deploy/dagster/bin/stepwise.py compare --app-run FULL_RUN_ID --tag TAG
+```
+
+- `init` launches the first job without a run id, so the job allocates the application run the
+  same way Dagster does. `--target` must equal the code location's `APPSEC_REVIEW_TARGET`. The walk
+  state is stored at `runs/metadata/stepwise/<app-run>/state.json`.
+- `check` prints the Dagster status with each failed step's root cause, the job's terminal status,
+  its deduplicated gaps with counts, and any PARTIAL or FAILED units. It then audits everything the
+  job wrote under `runs/<app-run>/`, `runs/metadata/` and `data/`. The audit flags owners that differ
+  from `APPSEC_UID:APPSEC_GID`, root-owned entries, entries the operator cannot read, world-writable
+  entries, dangling or escaping symlinks, scratch or temporary leftovers, an attempt still marked
+  RUNNING after Dagster finished, and missing or mismatched receipts, handoffs and artifacts. The
+  check fails on a Dagster failure or on any audit finding. Gaps are reported but never fail it. The
+  full report is written under `runs/metadata/stepwise/<app-run>/checks/`.
+- `accept` re-runs the check and refuses if it fails. It also refuses unless the target checkout's
+  `HEAD` is the commit `TAG` names. It writes the normalized output to
+  `test/acceptance/<TAG>/<job>.json`, with a `<job>.provenance.json` sidecar that records the corpus
+  tag, target commit, repository commit, application run and Dagster run. It then records a seed of
+  the run (below). Jobs are accepted strictly in graph order.
+- `compare` normalizes each job of a full run and diffs it against the accepted files. Each
+  difference is classed as `job-status`, `gap-added`, `gap-removed`, `finding-added`,
+  `finding-removed`, `coverage` or `volatile`. The command exits non-zero on anything other than
+  `volatile`.
+
+**Seeds.** Each `accept` freezes the run as it stands after that job: the whole of `runs/<app-run>/`,
+plus the shared inputs a job can read, which are `runs/metadata/` (without the stepwise, error-state
+and recovery records) and `data/`. The per-entry manifest is committed as
+`test/acceptance/<TAG>/seeds/after-<job>.manifest.json`. It lists each entry's path, type, sha256,
+size, mode, and owner role (`deployment` means `APPSEC_UID:APPSEC_GID`). Each manifest is a delta
+against the previous seed and is pinned to that seed's full digest. The bytes are kept out of git in
+a content-addressed store, `data/acceptance-seeds/blobs/` (ignored). Successive seeds share every
+unchanged file. Shared files over 1 MiB are recorded by digest only.
+
+```bash
+python3 deploy/dagster/bin/stepwise.py seed --tag TAG --after JOB [--replace]
+python3 deploy/dagster/bin/stepwise.py next           # runs the job after JOB on the seeded run
+python3 deploy/dagster/bin/stepwise.py verify-job --tag TAG --job JOB [--replace]
+```
+
+`seed` restores the run under its original run id, byte for byte, then checks every hash, mode
+and owner. The id cannot be rewritten: the retrieval manifests that handoffs hash carry `run_id`, so
+a new id would change every downstream handoff identity. A different `runtime.runs_dir` also changes
+the resolved configuration the run is bound to. As a result, only one copy of a given seed run can be
+live at a time. `--replace` moves the existing tree and walk state to
+`runs/metadata/stepwise/displaced/`. If shared inputs have drifted from the seed, the restore fails
+unless you pass `--restore-shared` (write the stored bytes back) or `--allow-shared-drift`.
+`verify-job` seeds the job's graph-order predecessor, which contains every upstream the job reads.
+It then runs the job, checks it, and diffs its normalized output against the accepted file. This is
+the known-good regression check for a single job.
+
 ## Serial smoke tests
 
 Run each platform on that actual host: `windows` from native PowerShell, `wsl` from a WSL shell,
