@@ -22,6 +22,7 @@ from appsec_review.graph.contract import FAMILY_KINDS, GRAPH_INDEX, QUERY_CODE_G
 from appsec_review.mcp.schema import TOOLS
 from appsec_review.retrieval.graph import request_error as graph_request_error
 from appsec_review.retrieval.index import INDEX_NAMES
+from appsec_review.retrieval.neighborhood import LIST_CODEQL_DATABASES, QUERY_CODEQL_NEIGHBORHOOD
 from appsec_review.review.identity import sha256_hex
 from appsec_review.review.models import IntegrityError, Role
 
@@ -46,11 +47,13 @@ TOOL_INDEXES: Mapping[str, frozenset[str]] = {
     "query_observations": frozenset({"observations", "precomputed"}),
     "query_dataset_inventory": frozenset({"inventory"}),
     QUERY_CODE_GRAPH: frozenset({GRAPH_INDEX}),
+    LIST_CODEQL_DATABASES: frozenset({GRAPH_INDEX}),
+    QUERY_CODEQL_NEIGHBORHOOD: frozenset({GRAPH_INDEX}),
 }
 INDEX_PARAMETER_TOOLS = frozenset({"search", "find", "coverage"})
 IDENTITY_TOOLS = frozenset({"read_excerpt", "trace", "resolve_evidence"})
 IDENTITY_PARAMETERS = frozenset({"identity", "subject", "source", "artifact", "artifact_identity",
-                                 "producing_build_action"})
+                                 "producing_build_action", "database", "observation"})
 # Parameter names that address the filesystem or a query language are never grantable.
 FORBIDDEN_PARAMETERS = frozenset({"path", "paths", "glob", "regex", "pattern", "sql", "query_sql",
                                   "expression", "file", "directory", "url"})
@@ -58,7 +61,8 @@ _LOGICAL_ID = re.compile(r"^asr:[a-z][a-z0-9_]*:[0-9a-f]{64}$")
 # Entity kinds a ``graph`` shard publishes: the seven fact families plus the CodeQL-export function
 # symbols that contain them. Each carries ``payload.scope.scope_id`` (graph-fact/1 and the graph job's
 # symbol payload), which is what a scope-bound graph grant is checked against.
-GRAPH_ROW_KINDS = frozenset({*(kind.value for kind in FAMILY_KINDS.values()), "symbol"})
+GRAPH_ROW_KINDS = frozenset({*(kind.value for kind in FAMILY_KINDS.values()), "symbol", "codeql_database",
+                             "ir_entity", "tool_observation"})
 _SCOPE_ID = re.compile(r"^[!-~]{1,256}$")   # printable, no whitespace; compared by equality only
 _PATH_LIKE = re.compile(r"(^[/~]|^[A-Za-z]:[\\/]|\.\.|\\|\x00|^file:|://)")
 _REGEX_LIKE = re.compile(r"(\.\*|\.\+|\(\?|\[\^|\[[^\]]*-[^\]]*\]|\{\d+(,\d*)?\}|\||(?<!\w)\^|\$$)")
@@ -270,6 +274,8 @@ class CellCapability:
             normalized.setdefault("depth", min(2, self.max_depth))
         if tool == QUERY_CODE_GRAPH and int(parameters.get("depth", 1)) > self.max_depth:
             return deny("depth_cap_exceeded", "graph closure depth exceeds the cell depth cap")
+        if tool == QUERY_CODEQL_NEIGHBORHOOD and int(parameters.get("depth", 0)) > self.max_depth:
+            return deny("depth_cap_exceeded", "neighborhood depth exceeds the cell depth cap")
         if queries_used >= self.max_queries:
             return deny("query_cap_exceeded", "the cell query budget is exhausted")
         return Authorized(tool, normalized, sha256_hex({"tool": tool, "parameters": normalized}))

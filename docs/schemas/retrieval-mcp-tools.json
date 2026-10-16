@@ -198,6 +198,32 @@
       ]
     },
     {
+      "name": "list_codeql_databases",
+      "required": [],
+      "properties": [
+        "language",
+        "limit",
+        "cursor"
+      ]
+    },
+    {
+      "name": "query_codeql_neighborhood",
+      "required": [
+        "database"
+      ],
+      "properties": [
+        "database",
+        "seed",
+        "symbol",
+        "observation",
+        "direction",
+        "depth",
+        "limit",
+        "include",
+        "cursor"
+      ]
+    },
+    {
       "name": "query_observations",
       "required": [],
       "properties": [
@@ -213,6 +239,10 @@
         "start_line",
         "end_line",
         "shard",
+        "seed",
+        "function",
+        "fix_it",
+        "min_trace_length",
         "limit",
         "cursor"
       ]

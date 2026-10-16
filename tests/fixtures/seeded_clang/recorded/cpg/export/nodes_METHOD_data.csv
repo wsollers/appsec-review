@@ -1,0 +1,26 @@
+107374182400,METHOD,src/net.cpp:<global>,TYPE_DECL,static void log_event(int code) { (void)code; },1,47,src/net.cpp,log_event:void(int),<empty>,,false,2,2,log_event,,,1,void(int)
+107374182401,METHOD,src/net.cpp:<global>,TYPE_DECL,<global>,1,1,src/net.cpp,src/net.cpp:<global>,<empty>,,false,1,9,<global>,,,1,
+107374182402,METHOD,src/net.cpp:<global>,TYPE_DECL,"int handle_packet(const char *pkt, int n) {
+  char buf[32];
+  log_event(n);
+  int r = copy_field(buf, pkt, n);
+  if (r < 0) return r;
+  return buf[0];
+}",1,1,src/net.cpp,"handle_packet:int(char*,int)",<empty>,,false,3,9,handle_packet,,,1,"int(char*,int)"
+107374182403,METHOD,src/util.cpp:<global>,TYPE_DECL,"static int clamp_len(int n) {
+  if (n < 0) return 0;
+  if (n > 64) return 64;
+  return n;
+}",1,1,src/util.cpp,clamp_len:int(int),<empty>,,false,3,7,clamp_len,,,1,int(int)
+107374182404,METHOD,src/util.cpp:<global>,TYPE_DECL,<global>,1,1,src/util.cpp,src/util.cpp:<global>,<empty>,,false,1,16,<global>,,,1,
+107374182405,METHOD,src/util.cpp:<global>,TYPE_DECL,"int checked_len(int n) {
+  return clamp_len(n);
+}",1,1,src/util.cpp,checked_len:int(int),<empty>,,false,8,10,checked_len,,,1,int(int)
+107374182406,METHOD,src/util.cpp:<global>,TYPE_DECL,"int copy_field(char *dst, const char *src, int n) {
+  int len = checked_len(n);
+  if (src == nullptr) return -1;
+  memcpy(dst, src, n);
+  return len;
+}",1,1,src/util.cpp,"copy_field:int(char*,char*,int)",<empty>,,false,11,16,copy_field,,,1,"int(char*,char*,int)"
+107374182407,METHOD,<includes>:<global>,NAMESPACE_BLOCK,<global>,,,<includes>,<includes>:<global>,<empty>,,false,1,,<global>,,,1,
+107374182408,METHOD,src/util.cpp:<global>,TYPE_DECL,"void *memcpy(void *dst, const void *src, unsigned long n);",17,68,src/util.cpp,memcpy,<empty>,,false,2,2,memcpy,,,1,"void*(void*,void*,longunsigned)"

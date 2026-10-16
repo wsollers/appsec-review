@@ -33,27 +33,19 @@ suite = "graph-export.qls"
 image = "audit-codeql:custom-2.27.0"
 library = "codeql/cpp-all@12.1.0"
 verify = "check-only"
+# `query-packs --warm` really compiles this pack into the persistent CodeQL compile cache.
+warm = true
 state = "enabled"
 description = "Repository-authored code-graph export tables (call sites, sources, sinks, guards, paths, ranges, flow summaries)."
 
 [[packs]]
 id = "cert-cpp-coding-standards"
-# KNOWN BROKEN - the gate is expected to fail this entry until the image is fixed.
-#
-# The pack declares codeql/common-cpp-coding-standards@2.62.0 and advanced-security/qtil@0.0.3
-# (codeql-pack.lock.yml), and neither is present anywhere in the image: containers/tools/codeql/
-# Dockerfile.custom-source extracts only `cert-cpp-coding-standards.tgz` from
-# coding-standards-codeql-packs.zip and never extracts the sibling member packs. The pack
-# therefore cannot resolve its imports, which is why every run records
-# "CodeQL cert-cpp query suite completed with zero observations; this is not a clean
-# classification" - the suite has never produced a finding.
-#
-# The repository copy under rules/cpp-cert/codeql/cert is a partial vendored snapshot with the
-# same missing dependencies, so it cannot be verified either. Verify the in-image pack, because
-# that is the one the review loads.
-#
-# Fix: extract every member pack from the licensed zip in Dockerfile.custom-source, rebuild
-# audit-codeql:custom-2.27.0, re-pin source_image_id, then re-run this gate.
+# Verified in the in-image pack (the one the review loads): all 117 queries type-check against
+# codeql/cpp-all@12.1.0 in audit-codeql:custom-2.27.0 with networking disabled. The pack's own
+# dependencies (codeql/common-cpp-coding-standards@2.62.0, advanced-security/qtil@0.0.3) are bundled
+# in cert-cpp-coding-standards.tgz under .codeql/libraries, so Dockerfile.custom-source needs no
+# further member packs. The repository copy under rules/cpp-cert/codeql/cert is a partial vendored
+# snapshot and is not verified (cert-cpp-vendored-snapshot, deferred).
 image_path = "/opt/codeql/custom-queries/cert-cpp"
 # 117 queries; --check-only needs well over the 1800 s default on this host.
 timeout_seconds = 7200

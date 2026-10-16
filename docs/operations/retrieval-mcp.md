@@ -125,6 +125,21 @@ line range. Each result carries the native severity, normalized value, normaliza
 rule (`appsec-review/reported-severity/1`) and its lead state. Results order by reported severity
 and are tool observations, never confirmed findings. Non-complete scanner coverage is returned as
 gaps; suppression and duplicate filters need the accepted `scanner_correlation` shard.
+Seeded Clang-Tidy and Static Analyzer observations add four optional filters: `seed` (`path:line`, a
+ledger location the diagnostic was labelled against), `function` (the IR function holding it),
+`fix_it` (boolean; a fix-it is reported, never applied) and `min_trace_length` (analyzer path steps).
+An observation without those fields never matches them; malformed values fail with
+`invalid observation filter: <name>`.
+
+`query_codeql_neighborhood` also accepts `include` values `flow` (LLVM IR blocks, edges, dominators and
+def-use and, where Clang's CFG dump matched, the source-level `source_cfg`, with the seed's block and its
+dominators), `diagnostics` (analyzer results with traces), `symbols` (clangd symbols in their own `clangd`
+identity space, never a raw USR, cross-referenced to the CodeQL symbol) and `cpg` (Joern functions with
+name-matched calls, branches and reaching-definition counts; absent with a `producer_not_run` gap while the
+deprecated Joern job is not enabled). A function the producers did not cover is an `outside_precomputed_neighborhood` gap.
+Grants follow the scope check of the graph path. Contract: `docs/architecture/seeded-neighborhoods.md`
+section 9.
+
 
 The `links` index holds `job_review_data_indexing` cross-domain link shards in five families
 (`representation`, `finding_source`, `package_advisory`, `symbol_syntax`, `history_code`). Query it

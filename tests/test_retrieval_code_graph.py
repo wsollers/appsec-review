@@ -62,10 +62,15 @@ def _relation(kind: RelationKind, source: str, target: str, **payload: Any) -> R
     return RelationRecord(kind, source, target, True, 1.0, payload=payload or None)
 
 
-def build_graph_run(tmp_path: Path, *, omit: Iterable[str] = ()) -> tuple[Path, dict[str, str]]:
+def build_graph_run(tmp_path: Path, *, omit: Iterable[str] = (),
+                    extra_graph_shards: Iterable[tuple[str, list[EntityRecord], Mapping[str, Any],
+                                                       list[tuple[str, str, str | None]]]] = ()
+                    ) -> tuple[Path, dict[str, str]]:
     """Stage an accepted run with source, component, CodeQL observation and per-family graph shards.
 
     Returns ``(runs_dir, ids)``. ``omit`` drops whole graph families (their shards are not published).
+    ``extra_graph_shards`` publishes further ``graph`` shards as ``(shard_id, entities, producer, coverage)``,
+    e.g. the CodeQL database cards of ``tests/test_codeql_neighborhood_tools.py``.
     """
     omit = set(omit)
     runs = tmp_path / "runs"
@@ -254,6 +259,9 @@ def build_graph_run(tmp_path: Path, *, omit: Iterable[str] = ()) -> tuple[Path, 
         build(c.GRAPH_INDEX, f"{SCOPE}.{family.value}", entities, relations,
               {"job": "job_code_graph_index", "family": family.value, "scope_id": SCOPE},
               [(f"graph:{SCOPE}:{family.value}", status, gap)])
+
+    for shard_id, entities, producer, coverage in extra_graph_shards:
+        build(c.GRAPH_INDEX, shard_id, list(entities), [], producer, list(coverage))
 
     manifest_path = run_root / "data" / "indices" / "manifests" / "graph-fixture.json"
     write_manifest(manifest_path, run_id=RUN_ID, target_snapshot=SNAPSHOT, target_root=target, indexes=index_values)

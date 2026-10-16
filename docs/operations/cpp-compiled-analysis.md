@@ -98,6 +98,22 @@ security acceptance exist, it publishes a `BLOCKED` shard with zero observations
 coverage per project. See [`cpp-index-jobs.md`](cpp-index-jobs.md) and
 `containers/tools/joern/README.md`.
 
+## Seeded mode
+
+With `jobs.job_codeql_analysis.settings.export_queries.mode = "seeded"` (the central default) the IR and
+AST branches replay only the translation units that contain a finding location, publish only the
+call-graph neighborhood of the seed functions (depth and seed limit from the same setting) and add a
+flow summary per function (blocks, edges, dominators, post-dominators, def-use). A third replay, `native.py cfg`
+(`clang --analyze` with `debug.DumpCFG`), is parsed by `clang_cfg.py` into a source-level `clang::CFG` per
+function and attached to the matching flow row as `source_cfg` (short circuits, loops, `switch` and
+destructors as blocks; blocks carry no line numbers, named `source_cfg_no_block_lines`; overloads are
+`source_cfg_ambiguous`; a failed replay is `source_cfg_unavailable` and costs only the CFG). Bounds are in
+`[jobs.job_cpp_compiled_analysis.settings.seeded_bounds]` (`function_limit`, `unit_limit`, `block_limit`,
+`include_scan_files`); every bound hit is a named gap. Zero seeds is a clean skip with a gap and the job
+is `COMPLETED_WITH_GAPS`; a failed replay is a gap on the seeds that unit carried. `mode = "whole_program"`
+keeps the previous behavior. The `native.py` change alters the `tool-native-cpp` image identity: rebuild
+and re-pin it. Contract: `docs/architecture/seeded-neighborhoods.md`.
+
 ## Evidence and recovery
 
 Bulk products live under ignored `runs/<run-id>/`. Accepted `build`, `compiled`, `analysis`, and

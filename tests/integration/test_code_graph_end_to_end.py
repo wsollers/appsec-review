@@ -268,6 +268,8 @@ class FakeExecutor:
             output = scratch_root / values["--output"]
             output.parent.mkdir(parents=True, exist_ok=True)
             output.write_text(json.dumps(_sarif(results)), encoding="utf-8")
+        elif action == "compile":
+            pass  # the export pack precompile warms a cache; the fake has nothing to compile
         elif action == "export":
             subroot = (scratch_root / values["--database"] / "source-subroot.txt").read_text(encoding="utf-8")
             recording = {"src": "synthetic", "native": "native"}[subroot]
@@ -439,6 +441,8 @@ def _offline_fts(unit):
 
 @pytest.fixture(scope="module")
 def pipeline(tmp_path_factory) -> SimpleNamespace:
+    # The export precompile remembers warm caches per process; this test asserts the cold compile ran.
+    codeql_job._PRECOMPILED.clear()
     base = tmp_path_factory.mktemp("e2e")
     target = base / "target"
     (target / "src").mkdir(parents=True)
@@ -451,6 +455,12 @@ def pipeline(tmp_path_factory) -> SimpleNamespace:
                                       encoding="utf-8")
     snapshot = source_fingerprint(target)
     loaded = load_config(ROOT / "appsec-review.toml")
+    # The recordings are whole-program exports; a seeded scope would need seeds from evidence.
+    codeql_config = loaded.jobs["job_codeql_analysis"]
+    codeql_settings = codeql_config.typed_settings
+    loaded = replace(loaded, jobs={**loaded.jobs, "job_codeql_analysis": replace(
+        codeql_config, typed_settings=replace(codeql_settings, export_queries=replace(
+            codeql_settings.export_queries, mode="whole_program")))})
     config = replace(loaded, runtime=replace(loaded.runtime, runs_dir=base / "runs", data_dir=base / "data",
                                              metadata_dir=base / "runs" / "metadata"))
     runner = JobRunner(config)
@@ -503,7 +513,7 @@ def test_codeql_publishes_what_the_graph_job_reads_and_build_units_match(pipelin
     by_root = {item["root"]: item for item in exports.values()}
     assert by_root["src"]["export_status"] == by_root["native"]["export_status"] == "SUCCEEDED"
     assert by_root["svc"]["export_status"] == "NOT_APPLICABLE"
-    assert {action for action, _scope in FakeExecutor.calls} == {"inventory", "database", "query", "export"}
+    assert {action for action, _scope in FakeExecutor.calls} == {"inventory", "database", "query", "export", "compile"}
     graph = _outputs(pipeline.graph)
     loaded = graph["load.accepted_inputs"]
     assert {scope["scope_id"] for scope in loaded["scopes"]} == set(exports)
@@ -637,7 +647,9 @@ def test_a_byte_flip_in_any_graph_shard_fails_scope_acceptance(pipeline) -> None
     path, sha = resolve_accepted_manifest(pipeline.run_root)
     manifest, _ = load_verified_manifest(pipeline.run_root, path, sha)
     shards = [item for item in manifest["indexes"] if item["name"] == GRAPH_INDEX]
-    assert len(shards) == 21
+    # Seven family shards for each of three scopes plus one database card and one producers shard per scope.
+    assert len(shards) == 27
+    assert sum(item["producer"].get("kind") == "codeql_database" for item in shards) == 3
     accept_manifest(pipeline.run_root)
     for shard in shards:
         target = pipeline.run_root / shard["relative_path"]

@@ -134,7 +134,7 @@ class ContainerExecutor:
         # The scanner inherits the application uid/gid. Keep the writable boundary limited to its
         # run-owned scratch; target, rules, and database mounts remain read-only.
         scratch.chmod(0o777)
-        if not request.argv or request.argv[0] != tool.executable:
+        if not request.argv or request.argv[0] not in (tool.executable, *tool.additional_executables):
             raise ValueError(f"argv must begin with the cataloged executable for {tool.tool_id}")
         if any(not isinstance(arg, str) or "\0" in arg for arg in request.argv):
             raise ValueError("argv contains an unsafe value")
@@ -210,7 +210,7 @@ class ContainerExecutor:
             command.extend(("--mount", spec))
         for key, value in sorted((request.environment or {}).items()):
             command.extend(("--env", f"{key}={value}"))
-        command.extend(("--entrypoint", tool.executable, image_id, *request.argv[1:]))
+        command.extend(("--entrypoint", request.argv[0], image_id, *request.argv[1:]))
         started = _stamp()
         outcome = self.runner(command, tool.timeout_seconds)
         if outcome.timed_out:

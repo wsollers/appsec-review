@@ -38,7 +38,6 @@ SOURCE_SUFFIXES = frozenset({
 })
 SEI_CERT_SOURCE = C_CPP_SOURCE | {".java"}
 IAC_SUFFIXES = frozenset({".tf", ".tfvars", ".hcl"})
-CHECKOV_STRUCTURED_SUFFIXES = frozenset({".yml", ".yaml", ".json"})
 JVM_BYTECODE = frozenset({".jar", ".war", ".ear", ".class"})
 NATIVE_BINARIES = frozenset({".dll", ".exe", ".so", ".dylib", ".a", ".o"})
 # Compile-database translation units a Clang frontend (clang-tidy, the Clang Static Analyzer,
@@ -220,13 +219,9 @@ _declare(
     InputSupport("tool-osv-scanner", "lockfiles and manifests osv-scanner extracts offline",
                  predicate=_is_osv_lockfile),
     InputSupport("tool-hadolint", "Dockerfiles and Containerfiles", predicate=_is_dockerfile),
-    # The adapter selects workflows and CloudFormation templates structurally (job_evidence_collection
-    # adapters._checkov); this declaration admits the formats it parses so the pre-launch filter
-    # does not drop them.
-    InputSupport("tool-checkov", "Terraform/HCL files, Dockerfiles, and YAML/JSON GitHub Actions "
-                 "workflows and CloudFormation templates",
-                 predicate=lambda path: (path.suffix.lower() in IAC_SUFFIXES | CHECKOV_STRUCTURED_SUFFIXES or
-                                         _is_dockerfile(path))),
+    # Checkov is the arbiter of what it recognizes: every cataloged file is offered, and inputs it
+    # reports nothing for are recorded as not applicable (job_evidence_collection).
+    InputSupport("tool-checkov", "any cataloged file", any_input=True),
     InputSupport("tool-trivy", "Terraform/HCL files and Dockerfiles",
                  predicate=lambda path: path.suffix.lower() in IAC_SUFFIXES or _is_dockerfile(path)),
     InputSupport("tool-zizmor", "GitHub Actions workflow files", predicate=_is_github_workflow),

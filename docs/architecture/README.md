@@ -36,6 +36,12 @@ Repository authority remains in [`../../AGENTS.md`](../../AGENTS.md). This page 
   paths, and the LLM Prioritization Score.
 - [`../operations/review-prioritization.md`](../operations/review-prioritization.md) — prioritization
   configuration, outputs, retrieval examples, and coverage limits.
+- [`seeded-codeql-neighborhoods.md`](seeded-codeql-neighborhoods.md) — CodeQL graph export seeded
+  from finding locations to a configured depth, the per-database card, and the
+  `list_codeql_databases` / `query_codeql_neighborhood` MCP tools (phase 3 of the code graph).
+- [`seeded-neighborhoods.md`](seeded-neighborhoods.md) — the seeded rule for the Clang AST/IR,
+  Clang-Tidy/Static Analyzer and CPG producers, the shared seeding module, the card's `producers` list
+  and the flow, diagnostics and symbols exposure.
 - [`cross-language-codeql.md`](cross-language-codeql.md) — cross-language CodeQL scope and integration design.
 - [`../SEI-CERT.md`](../SEI-CERT.md) — SEI CERT coverage overview, official-standard links, and status totals.
 - [`sei-cert-rule-pack.md`](sei-cert-rule-pack.md) — SEI CERT Semgrep/OpenGrep rule pack, CERT

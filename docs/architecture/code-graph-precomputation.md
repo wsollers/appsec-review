@@ -1,12 +1,15 @@
 # Code-graph precomputation for direct review evidence
 
-Status: implemented through C9 (integration and acceptance) for C/C++, offline-verified. The
+Status: implemented through C9 (integration and acceptance) for C/C++, offline-verified, with the
+export pack since compiled and run live on the pinned image against a calibration database
+(`tests/live/test_codeql_pack_shapes.py`). Phase 3 (section 13, seeded neighborhoods) changes how
+the export is scoped: from findings outward to a configured depth instead of whole program. The
 CodeQL export pack, the export step, `job_code_graph_index`, `query_code_graph`, graph
 admissibility, package v4 graph context, the `code_graph` lane and the scoring factors run end to
-end in `tests/integration/test_code_graph_end_to_end.py` against recorded exports. Live-unverified:
-the export queries have never run in the pinned CodeQL image, so the recordings are hand-authored
-(section 10, "C9 Integration and acceptance"); Java/Kotlin, JavaScript/TypeScript and Python packs
-are not written. Section 12 is partially implemented: K4 now runs as the independent
+end in `tests/integration/test_code_graph_end_to_end.py` against recorded exports. The end-to-end
+recordings are still hand-authored (section 10, "C9 Integration and acceptance") and the Live
+acceptance record is not written; Java/Kotlin, JavaScript/TypeScript and Python packs are not
+written. Section 12 is partially implemented: K4 now runs as the independent
 `job_clang_static_analysis` producer, while K1, K2, K3, and optional K5 remain planned. The
 implementation record is
 [`../reviews/code-graph-precomputation-implementation.md`](../reviews/code-graph-precomputation-implementation.md).
@@ -521,6 +524,10 @@ for `callers`/`callees` and is capped at `min(4, settings.max_call_depth)`; othe
 | `sarif_path` | `tool_observation` (CodeQL) | correlated `dataflow_path` rows with the correlation state per `code_flow`; a `broken` correlation returns the state and a gap, not a fabricated path | `(code_flow, identity)` |
 
 A subject kind the mode does not accept is a `schema_violation` denial, not an empty result.
+
+Phase 3 adds two tools beside `query_code_graph` for seeded scopes: `list_codeql_databases` and
+`query_codeql_neighborhood` (section 13, specified in
+[`seeded-codeql-neighborhoods.md`](seeded-codeql-neighborhoods.md)).
 
 ### 5.3 Bounds, pagination, determinism
 
@@ -1286,7 +1293,63 @@ unless K3 or a later rule needs CodeQL-side CFG detail beyond guards.
 3. **K3 guard disagreement:** makes the guard fact ineligible, the same rule as call-site
    disagreement. The verifier sees the `CONTRADICTS` relation either way.
 
+### 12.4a Seeded Clang producers
+
+The Clang AST/IR, Clang-Tidy/Static Analyzer and CPG jobs have a seeded mode (phase 3, section 13) that
+replays only the translation units holding a finding location. The whole-program path described in 12.2
+is the `whole_program` mode and is unchanged. See [`seeded-neighborhoods.md`](seeded-neighborhoods.md).
+
 ### 12.5 Joern removal
 
 If no run enables `jobs.job_cpg_analysis.settings.enabled` within one release cycle after this phase,
 remove `job_cpg_analysis` and `tool-joern` entirely rather than carrying them.
+
+## 13. Phase 3: seeded neighborhoods (2026-10-16)
+
+The whole-program export does not scale to a million-line application, and a review only reads the
+code around its findings. Phase 3 therefore runs the export **from the findings outward**.
+
+### Decisions (user, 2026-10-16)
+
+1. **D6 Scope of the export:** finding locations seed the export. The queries cover the functions
+   within `seed_depth` (n, a job setting, default 3, hard cap 8) call-graph steps of the function
+   containing each finding. `whole_program` remains an explicit mode.
+2. **D7 Where it lives:** it is part of the precomputed index build, not a live call. The seeded
+   result is published into the existing `graph` index (same families, same shards) plus one
+   database card per scope.
+3. **D8 Model access:** models "infer away" from the precomputed neighborhood through MCP with
+   bounded context. A project may have several databases, so a model first lists the cards
+   (`list_codeql_databases`) to learn which database holds what, then expands one
+   (`query_codeql_neighborhood`). No MCP call runs CodeQL.
+4. **D9 Honesty:** a seeded scope's coverage is always `partial`. Missing facts outside the
+   neighborhood, past the depth, or beyond a bound are named gaps, never evidence of absence
+   (section 4.9 applies unchanged).
+
+### Design
+
+The pack, fixtures, normalizer, graph families and `query_code_graph` are reused. Only the scope of
+the export changes: two plain CSV files bound with `--external` supply the mode, depth and seed
+lines to every query. The full contract (settings, seed extraction and ledger, QL predicates,
+record and manifest fields, the card, the tool schemas and the gap vocabulary) is
+[`seeded-codeql-neighborhoods.md`](seeded-codeql-neighborhoods.md).
+
+Phase 3 extends the same rule to the other producers: Clang AST and LLVM IR, Clang-Tidy and the Static
+Analyzer, and (enabled path only) the CPG run from the findings outward through one shared seeding
+module, publish into the same `graph` index as the producers `clang-ast`, `llvm-ir`, `clang-static` and
+`joern-cpg`, and appear in each database card's `producers` list. Flow graphs, analyzer diagnostics and
+clangd symbols are read through `query_codeql_neighborhood` (`include`) and `query_observations`. The
+contract is [`seeded-neighborhoods.md`](seeded-neighborhoods.md).
+
+### Open items
+
+- Measured seeded versus whole-program wall time on a 20k-100k LOC project (calibration database
+  only so far).
+- One batched `run-queries` over all seven queries instead of serial runs.
+- Running `query-packs --warm` automatically from image rebuild. The compile itself is already a
+  separate cached `compile` action, and `containers/build.py query-packs --warm` precompiles it
+  into the payload-keyed cache volume.
+- Java/Kotlin, JavaScript/TypeScript and Python packs would reuse the same two external
+  predicates.
+- Seeded Clang producers: container-level measurements, source-level `clang::CFG`, a bounded CPG
+  export and the remaining workflow consumers (`docs/TODO.md`, "Measure and extend seeded Clang
+  neighborhoods").

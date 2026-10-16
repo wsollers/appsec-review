@@ -71,11 +71,8 @@ boundary.
 
 ## Known broken
 
-`cert-cpp-coding-standards` fails verification, and the entry says why.
-`containers/tools/codeql/Dockerfile.custom-source` extracts only `cert-cpp-coding-standards.tgz`
-from the licensed `coding-standards-codeql-packs.zip`, so the pack's own dependencies —
-`codeql/common-cpp-coding-standards@2.62.0` and `advanced-security/qtil@0.0.3` — are absent from
-the image. The pack cannot resolve its imports, which is why every run reports
-`CodeQL cert-cpp query suite completed with zero observations; this is not a clean
-classification`: the suite has never produced a finding. Fixing it means extracting every member
-pack from the zip, rebuilding `audit-codeql:custom-2.27.0` and re-pinning `source_image_id`.
+No registered pack is known broken. `cert-cpp-coding-standards` type-checked clean (117 queries,
+about 49 minutes with `--check-only`, hence its 7200 s timeout) in the rebuilt
+`audit-codeql:custom-2.27.0`. That proves the queries compile; whether the suite produces findings
+on a target still has to be confirmed by a review run, because earlier runs reported
+`CodeQL cert-cpp query suite completed with zero observations; this is not a clean classification`.

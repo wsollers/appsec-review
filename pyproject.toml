@@ -17,6 +17,13 @@ appsec-review-mcp = "appsec_review.mcp.stdio:main"
 # Validator, evaluation harness, and tests for rules/sei-cert. The review runtime does not need it.
 # Pinned to the version in deploy/dagster/requirements.lock.txt.
 rulepacks = ["PyYAML==6.0.3"]
+# Host test dependencies: tests/review and others use hypothesis, and the SEI CERT rule-pack tests use
+# PyYAML. PyYAML is pinned to the deploy/dagster/requirements.lock.txt version.
+test = [
+    "pytest>=8",
+    "hypothesis==6.170.0",
+    "PyYAML==6.0.3",
+]
 dagster = [
     "dagster==1.13.21",
     "dagster-postgres==0.29.21",

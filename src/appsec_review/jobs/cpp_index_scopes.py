@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 import hashlib
 import json
 from pathlib import Path, PurePosixPath
+import shutil
 from typing import Any, Mapping
 
 from appsec_review.retrieval.index import load_verified_manifest
@@ -226,26 +227,36 @@ def tool_identity(repository_root: Path, tool_id: str) -> dict[str, Any]:
 def execute_scope_tool(unit: Any, scope: IndexScope, tool_id: str, argv: tuple[str, ...],
                        scratch: Path, executor_factory: Any = None, *,
                        file_size_limit_bytes: int | None = None,
-                       inputs: Mapping[str, Any] | None = None) -> dict[str, Any]:
+                       compile_rows: list[dict[str, Any]] | None = None,
+                       inputs: dict[str, Path] | None = None,
+                       documents: Mapping[str, Any] | None = None) -> dict[str, Any]:
     """Run one catalog tool against a scope: case root read-only at /target, scratch read-write.
 
-    The container compile database is written to ``/scratch/compile_commands.json`` first, followed
-    by each ``inputs`` document as ``/scratch/<name>`` JSON. A ``file_size_limit_bytes`` is enforced
-    by the kernel (RLIMIT_FSIZE) on every file the tool writes, so a bounded output can never outgrow
-    its limit on the run volume.
+    The container compile database is written to ``/scratch/compile_commands.json`` first. A
+    ``file_size_limit_bytes`` is enforced by the kernel (RLIMIT_FSIZE) on every file the tool
+    writes, so a bounded output can never outgrow its limit on the run volume. ``compile_rows``
+    replaces the scope's whole database with a seeded subset; ``None`` keeps every supported unit.
+    ``inputs`` copies run-owned files into the fresh scratch first (name -> source), for a tool that
+    consumes an earlier tool's output without sharing its scratch (and so its hash-bound receipt).
+    ``documents`` are written as ``/scratch/<name>`` JSON (name -> value), for tool requests such
+    as the SVF module plan.
     """
     from appsec_review.container_runtime import ContainerExecutor, ExecutionRequest, load_catalog
     from appsec_review.storage import tool_input_json
 
     if scratch.exists():
-        import shutil
         shutil.rmtree(scratch)
     scratch.mkdir(parents=True)
     compile_database = scratch / "compile_commands.json"
-    tool_input_json(compile_database, scope.container_compile_database())
-    for name, document in sorted((inputs or {}).items()):
-        if "/" in name or "\\" in name or name in {"", ".", "..", "compile_commands.json"}:
-            raise ValueError(f"scope tool input name is not a plain scratch file name: {name!r}")
+    tool_input_json(compile_database, scope.container_compile_database() if compile_rows is None else compile_rows)
+    for name, source in sorted((inputs or {}).items()):
+        if "/" in name or name.startswith(".") or source.is_symlink() or not source.is_file():
+            raise ValueError(f"scope tool input is not a plain run-owned file: {name}")
+        shutil.copyfile(source, scratch / name)
+    for name, document in sorted((documents or {}).items()):
+        if "/" in name or "\\" in name or name.startswith(".") or name == "compile_commands.json" \
+                or name in (inputs or {}):
+            raise ValueError(f"scope tool document name is not a plain scratch file name: {name!r}")
         tool_input_json(scratch / name, document)
     executor = (executor_factory(unit) if executor_factory is not None else
                 ContainerExecutor(load_catalog(unit.job.repository_root), unit.job.run_root))

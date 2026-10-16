@@ -10,6 +10,7 @@ import re
 import shlex
 import shutil
 from typing import Any
+from appsec_review import seeding
 from appsec_review.container_runtime import ContainerExecutor, ExecutionRequest, load_catalog
 from appsec_review.jobs.cpp_index_scopes import container_compile_database, project_prefix, workspace_root
 from appsec_review.jobs.job_language_build import load_accepted_language_build
@@ -25,6 +26,7 @@ from appsec_review.retrieval.index import load_verified_manifest
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from appsec_review.storage import atomic_json, canonical_json, file_sha256, tool_input_json
 from appsec_review.jobs.job_cpp_compiled_analysis.datasets import CONSUMES, DATASETS
+from appsec_review.jobs.job_cpp_compiled_analysis import seeded
 
 SCHEMA = "appsec-review/cpp-compiled-analysis/2"
 PROJECT_TASKS = ("projects",)
@@ -89,21 +91,22 @@ def _load_checkpoint(unit: UnitContext, case_id: str, stage: str, identity: str)
             artifact = (unit.job.run_root / value["path"]).resolve()
             if unit.job.run_root.resolve() not in artifact.parents or not artifact.is_file() or file_sha256(artifact) != value["sha256"]:
                 return None
-    if result.get("terminal_status") != "SUCCEEDED":
+    if result.get("terminal_status") != "SUCCEEDED" and result.get("checkpointable") is not True:
         return None
     return {**result, "checkpoint_reused": True}
 
 
 def _save_checkpoint(unit: UnitContext, case_id: str, stage: str, identity: str,
                      result: Mapping[str, Any]) -> None:
-    if result.get("terminal_status") != "SUCCEEDED":
+    if result.get("terminal_status") != "SUCCEEDED" and result.get("checkpointable") is not True:
         return
     atomic_json(_case_root(unit, case_id) / "checkpoints" / f"{stage}.json",
                 {"schema": "appsec-review/cpp-checkpoint/1", "identity": identity,
                  "project_key": case_id, "stage": stage, "result": dict(result)})
 
 
-def _run_tool(unit: UnitContext, case_id: str, argv: tuple[str, ...], executor_factory=None) -> Mapping[str, Any]:
+def _run_tool(unit: UnitContext, case_id: str, argv: tuple[str, ...], executor_factory=None,
+              label: str = "") -> Mapping[str, Any]:
     root = _case_root(unit, case_id)
     executor = (executor_factory(unit) if executor_factory is not None else
                 ContainerExecutor(load_catalog(unit.job.repository_root), unit.job.run_root))
@@ -112,7 +115,7 @@ def _run_tool(unit: UnitContext, case_id: str, argv: tuple[str, ...], executor_f
         target_root=unit.job.target_root or unit.job.repository_root, scratch_root=root,
     ))
     receipt = root / "execution.json"
-    retained = unit.unit_root / f"{case_id}-execution.json"
+    retained = unit.unit_root / (f"{case_id}-{label}-execution.json" if label else f"{case_id}-execution.json")
     retained.parent.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(receipt, retained)
     return {"execution": _artifact(unit.job.run_root, retained), "exit_code": result.exit_code,
@@ -389,13 +392,16 @@ def _new_builder(unit: UnitContext, name: str, case_id: str, branch: str,
 
 
 def _finish_index(unit: UnitContext, builder: IndexBuilder, path: Path, fingerprint: str,
-                  shard: str, name: str, branch: str, gaps: list[str]) -> Mapping[str, Any]:
+                  shard: str, name: str, branch: str, gaps: list[str],
+                  seeded: Mapping[str, Any] | None = None) -> Mapping[str, Any]:
     reused = path.exists()
     sha = file_sha256(path) if reused else builder.build()
+    producer: dict[str, Any] = {"job": "job_cpp_compiled_analysis", "unit": unit.unit_id, "branch": branch}
+    if seeded is not None:
+        producer["seeded"] = dict(seeded)
     identity = IndexIdentity(name, "appsec-review/retrieval-index/2", sha, fingerprint,
                              path.relative_to(unit.job.run_root).as_posix(),
-                             {"job": "job_cpp_compiled_analysis", "unit": unit.unit_id,
-                              "branch": branch}, tuple(gaps), shard)
+                             producer, tuple(gaps), shard)
     return {"index_identity": asdict(identity), "index_reused": reused,
             "artifact": _artifact(unit.job.run_root, path), "gaps": gaps,
             "terminal_status": "COMPLETED_WITH_GAPS" if gaps else "SUCCEEDED"}
@@ -520,14 +526,45 @@ def _load_ast_document(path: Path) -> Mapping[str, Any]:
     return {"kind": "TranslationUnitDecl", "inner": documents}
 
 
+def _callee_decl(node: Mapping[str, Any]) -> Any:
+    """The declaration a call or reference names. Clang nests a call's callee under ``inner``."""
+    declaration = node.get("referencedDecl") or node.get("referencedMemberDecl")
+    if declaration is not None or str(node.get("kind", "")) != "CallExpr":
+        return declaration
+    frontier = [node]
+    for _ in range(4):
+        following = []
+        for value in frontier:
+            for child in value.get("inner", ()) if isinstance(value.get("inner"), list) else ():
+                if not isinstance(child, Mapping):
+                    continue
+                found = child.get("referencedDecl") or child.get("referencedMemberDecl")
+                if found is not None:
+                    return found
+                following.append(child)
+        frontier = following
+    return None
+
+
 def _ast_index(unit: UnitContext, case_id: str, catalog: Mapping[str, Any], execution: Mapping[str, Any],
                failures: Mapping[int, str] | None = None) -> Mapping[str, Any]:
-    root = _case_root(unit, case_id)
     gaps: list[str] = []
     failures = failures or {}
     builder, path, fingerprint, shard = _new_builder(unit, "analysis", case_id, "ast",
         [execution["execution"], catalog["compile_database"]], gaps,
-        {"tool": "clang-18", "image": execution["image_id"]}, catalog["mapping"]["case_snapshot"])
+        {"tool": "clang-18", "image": execution["image_id"], "callee_decl": 1},
+        catalog["mapping"]["case_snapshot"])
+    count = _add_ast_entities(unit, case_id, catalog, failures, builder, shard, gaps)
+    builder.add_coverage("clang-ast", "partial" if gaps else "complete", "; ".join(gaps[:10]) or None)
+    result = dict(_finish_index(unit, builder, path, fingerprint, shard, "analysis", "ast", gaps))
+    result["entity_count"] = count
+    return result
+
+
+def _add_ast_entities(unit: UnitContext, case_id: str, catalog: Mapping[str, Any],
+                      failures: Mapping[int, str], builder: IndexBuilder, shard: str,
+                      gaps: list[str]) -> int:
+    root = _case_root(unit, case_id)
     count = 0
     seen_entities: set[str] = set()
     for index, command in enumerate(catalog["compile_commands"]):
@@ -545,7 +582,8 @@ def _ast_index(unit: UnitContext, case_id: str, catalog: Mapping[str, Any], exec
             if kind not in {"FunctionDecl", "CXXMethodDecl", "VarDecl", "RecordDecl", "CallExpr",
                             "DeclRefExpr", "FieldDecl", "ParmVarDecl", "TypedefDecl"}:
                 continue
-            name = str(node.get("name") or node.get("referencedDecl", {}).get("name") or kind)
+            declared = _callee_decl(node)
+            name = str(node.get("name") or (declared.get("name") if isinstance(declared, Mapping) else None) or kind)
             loc = node.get("loc", {}) if isinstance(node.get("loc"), Mapping) else {}
             line = int(loc.get("line", 1)) if str(loc.get("line", "1")).isdigit() else 1
             column = int(loc.get("col", 1)) if str(loc.get("col", "1")).isdigit() else 1
@@ -560,16 +598,13 @@ def _ast_index(unit: UnitContext, case_id: str, catalog: Mapping[str, Any], exec
                 continue
             seen_entities.add(identity.value)
             builder.add_entity(EntityRecord(identity, native, name, f"{kind} {name}",
-                {"kind": kind, "type": node.get("type"), "referenced_decl": node.get("referencedDecl"),
+                {"kind": kind, "type": node.get("type"), "referenced_decl": _callee_decl(node),
                  "project_id": catalog["mapping"]["project_id"],
                  "compile_unit_id": command["compile_unit_id"], "shard_id": shard},
                 _location(unit.job.source_fingerprint, unit.job.target_root or Path(),
                           command["target_path"], line, column)))
             count += 1
-    builder.add_coverage("clang-ast", "partial" if gaps else "complete", "; ".join(gaps[:10]) or None)
-    result = dict(_finish_index(unit, builder, path, fingerprint, shard, "analysis", "ast", gaps))
-    result["entity_count"] = count
-    return result
+    return count
 
 
 _IR_ENTITY = re.compile(r"^define\s+.*?@(?P<name>[^\s(]+)\(")
@@ -892,6 +927,11 @@ def _unbuilt_project(unit: UnitContext, action: Mapping[str, Any]) -> dict[str, 
             "terminal_status": "BLOCKED", "gaps": [gap]}
 
 
+def _implementation_files() -> tuple[Path, ...]:
+    here = Path(__file__).parent
+    return (Path(__file__), here / "seeded.py", here / "llvm_ir.py", *seeding.implementation_sources())
+
+
 def build_job(*, executor_factory=None) -> Job:
 
     def plan(unit: UnitContext) -> Mapping[str, Any]:
@@ -1078,7 +1118,14 @@ def build_job(*, executor_factory=None) -> Job:
     def branch(name: str):
         def handler(unit: UnitContext) -> Mapping[str, Any]:
             projects = {}
-            for case_id, cataloged in unit.output("catalog.projects")["projects"].items():
+            all_projects = unit.output("catalog.projects")["projects"]
+            seeded_settings = seeded.settings_of(unit) if name in {"ir", "ast"} else None
+            seed_plan = None
+            if seeded_settings is not None and seeded_settings.seeded:
+                buildable = {case_id: value for case_id, value in all_projects.items() if not _terminal_gap(value)}
+                seed_plan = seeded.plan_for(unit, buildable, seeded_settings) if buildable else None
+            ir_projects = unit.output("ir.projects")["projects"] if name == "ast" and seed_plan is not None else {}
+            for case_id, cataloged in all_projects.items():
                 gap = _terminal_gap(cataloged)
                 if gap:
                     builder, path, fingerprint, shard = _new_builder(unit,
@@ -1098,6 +1145,10 @@ def build_job(*, executor_factory=None) -> Job:
                         "artifact_catalog": cataloged["artifact_catalog"]["sha256"],
                         "link_database": cataloged["link_database"]["sha256"],
                     })
+                if seed_plan is not None:
+                    identity_values.update(seeded.identity_values(
+                        seeded_settings, seed_plan.for_scope(case_id),
+                        **({"ir": ir_projects.get(case_id, {}).get("handoff_sha256")} if name == "ast" else {})))
                 identity = _checkpoint_identity(
                     unit, case_id, f"branch-{name}", identity_values,
                     tool_id="tool-infer" if name == "infer" else "tool-native-cpp")
@@ -1105,13 +1156,20 @@ def build_job(*, executor_factory=None) -> Job:
                 if reused is not None:
                     projects[case_id] = reused
                     continue
-                if name == "compiled":
+                if seed_plan is not None:
+                    result = (seeded.ir_result(unit, case_id, cataloged, seeded_settings, seed_plan, executor_factory)
+                              if name == "ir" else
+                              seeded.ast_result(unit, case_id, cataloged, seeded_settings, seed_plan,
+                                                ir_projects.get(case_id), executor_factory))
+                elif name == "compiled":
                     result = _build_entities(unit, case_id, cataloged)
                 elif name == "infer":
                     execution = _run_infer(unit, case_id, cataloged, executor_factory)
                     result = _infer_index(unit, case_id, cataloged, execution)
                 else:
                     tool_mode = "symbols" if name == "binary" else name
+                    if name in {"ast", "ir"}:
+                        seeded.clear_replay(unit, case_id, name)   # a stale seeded subset must never be replayed
                     execution = _run_tool(unit, case_id, (tool_mode,), executor_factory)
                     tool_gap = (None if execution["exit_code"] == 0 else
                                 f"{case_id} {name} failed with exit {execution['exit_code']}")
@@ -1187,12 +1245,15 @@ def build_job(*, executor_factory=None) -> Job:
     units: list[Unit] = [Unit("plan.accepted_cpp_plan", plan)]
     units.append(Unit("prepare.projects", prepare, ("plan.accepted_cpp_plan",)))
     units.append(Unit("catalog.projects", catalog, ("prepare.projects",)))
-    for name in BRANCHES:
-        units.append(Unit(f"{name}.projects", branch(name), ("catalog.projects",)))
+    # The seeded AST replays the translation units that define the seeded IR neighborhood, so it
+    # runs after the IR; the central step order (BRANCHES) is unchanged.
+    for name in ("compiled", "ir", "ast", "infer", "binary"):
+        dependencies_of = ("catalog.projects", "ir.projects") if name == "ast" else ("catalog.projects",)
+        units.append(Unit(f"{name}.projects", branch(name), dependencies_of))
     dependencies = tuple(f"{name}.projects" for name in BRANCHES)
     units.append(Unit("acceptance.publish_handoff", publish, dependencies))
     values = tuple(units)
-    implementation = hashlib.sha256(Path(__file__).read_bytes() +
+    implementation = hashlib.sha256(b"".join(path.read_bytes() for path in _implementation_files()) +
                                     (b"injected-executor" if executor_factory else b"container-executor")).hexdigest()
     return Job("job_cpp_compiled_analysis", "cpp_compiled_analysis", UnitExecutor(values).execute,
                input_validators=(_validate_config,), schema_identity=SCHEMA,

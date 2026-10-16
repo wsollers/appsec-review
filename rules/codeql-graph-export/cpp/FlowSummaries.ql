@@ -83,6 +83,7 @@ query predicate flow_summaries(
   string to_kind, int to_index, string to_name, string to_model, string flow_kind
 ) {
   exists(GraphExport::SourceFunction f |
+    GraphExport::exported(f) and
     function_name = f.getQualifiedName() and
     GraphExport::locationColumns(f.getLocation(), function_path, function_start_line,
       function_start_column, _, _) and

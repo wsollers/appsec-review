@@ -133,9 +133,78 @@ configured `catalog_sha256` pin.
 
 Verification status: the export step runs offline in `tests/test_codeql_export_step.py` and, inside
 the real job with an injected executor, in `tests/integration/test_code_graph_end_to_end.py`. Both
-play back hand-authored recordings. The export queries have not yet run in the pinned CodeQL image;
-`tests/live/test_codeql_graph_export_live.py` and `tests/live/test_code_graph_live.py` are the
-operator tiers that will refresh and verify the recordings.
+play back hand-authored recordings. The pack has compiled and run in the pinned image against the
+calibration database (`tests/live/test_codeql_pack_shapes.py`);
+`tests/live/test_codeql_graph_export_live.py` and `tests/live/test_code_graph_live.py` remain the
+operator tiers that refresh and verify the recordings.
+
+### Query precompilation
+
+Compiling the export pack is the slow part of a first export: a cold `codeql query compile
+--threads 8` over the nine export queries took 599 s through `build.py query-packs --warm` and
+1053 s through the runner's `compile` action (`--ram 8192`, run alongside other host load) on
+Zarathustra (the first query, `CallSites`, takes the longest at 10 minutes because it compiles the
+shared libraries; the smallest, `Seeds` and `Neighborhood`, about a minute), and 25-33 s when the
+compile cache is warm. After the payload was rebuilt as `sha256:4e6f3afa...2bee` the volume
+`appsec-codeql-compile-6152bec784c6efd0` compiled cold in 735 s (two duplicate `--warm` runs shared
+the volume and the host load stayed near 12, so this is an upper bound) and then warm in 25 s. An earlier measurement of seven queries took 887 s, and compiling the first
+query and then the rest in separate concurrent processes was slower (1144 s: 522 s, then about 10
+minutes of contended processes), so the `compile` action uses a single multi-threaded invocation. Evaluation does not recompile: the seeded export binds `exportScope` and
+`exportSeed` with `--external` at evaluation time, so compiled queries are independent of the
+project, the database and the scope.
+
+- **Cache.** `$HOME/.codeql/compile-cache` is persisted in the docker volume
+  `appsec-codeql-compile-<sha256(key)[:16]>`, mounted at `/codeql-cache` and linked by the runner.
+  The key is the pinned CodeQL payload image (`image.source_image_id`), not the derived project
+  image, so every project image and every runner-script edit shares one warm cache. A new CodeQL
+  payload starts cold by design.
+  Entries are readable only by the uid that wrote them, so `build.py query-packs --warm` runs as
+  the same uid the job does (the host process owner, `application_runtime_user`), and both
+  re-assert ownership of the volume recursively before use. A cache written as a different uid is
+  a silent miss: the job recompiled from cold (1053 s) against a volume warmed as uid 10001.
+- **`compile` action.** `codeql_runner.py compile` compiles the whole pack with
+  `codeql query compile --threads` into the cache and writes nothing else. It has its own
+  timeout, CPU and memory limits (`compile_timeout_seconds` 3600, `compile_threads` 8,
+  `compile_ram_mb` 8192 in `[codeql_analysis.export_queries]`) so a cold compile does not consume
+  the export timeout or the two-thread evaluation cap. These settings do not enter the export
+  identity.
+- **Job behaviour.** `job_codeql_analysis` runs the `compile` action once per pack identity per
+  process (per-key lock, in-memory memo) before the first export action. A compile that fails or
+  times out makes that export `FAILED` with a named gap; it is never read as "no flows".
+  Events use tool id `codeql-graph-export-compile`.
+- **Warming ahead of time.** `python containers/build.py query-packs` type-checks the registered
+  packs (`--check-only`, no cache). `python containers/build.py query-packs --warm` performs the
+  real compile into the same volume, for packs registered with `warm = true` in
+  `rules/registry.toml` (currently `graph-export-cpp`). Run it once per host and after a CodeQL
+  payload change. The cache is per host, so a fresh host pays the cold cost on its first export
+  unless it has been warmed.
+- **Other CodeQL packs.** `cert-cpp-coding-standards` is type-checked, not warmed (its 117 queries
+  took 48 min 36 s with `--check-only` on the rebuilt payload, so the registry gives it a 7200 s
+  timeout); registering it with `warm = true` would add that cost to every payload rebuild; it was
+  left off. Its dependencies ship inside the
+  `cert-cpp-coding-standards.tgz` member of the licensed zip, so the image needs no other member
+  packs.
+- **Detecting a cold cache.** A compile event longer than a couple of minutes, or an export that
+  fails with a compile timeout, means the volume was empty or the payload changed.
+
+### Seeded export
+
+By default the export is seeded from finding locations instead of running over the whole program
+([design](../architecture/seeded-codeql-neighborhoods.md)). Additional `export_queries` settings:
+
+- `mode`: `seeded` (default) or `whole_program`.
+- `seed_depth`: call-graph steps (callers and callees) from each seed function; default 3,
+  `0` exports the seed functions only, capped by `max_seed_depth` (8).
+- `seed_limit`: maximum distinct seeds per scope (default 200); the overflow is a named gap.
+
+Seeds are the locations of `tool_observation` entities from `job_evidence_collection`. The job
+writes `scope.csv` and `seeds.csv` next to the staged database and the runner binds them with
+`--external`. Mode, depth, limit and the seed set are part of the export identity, so changing any
+reruns the export. A scope with no resolvable seed does not run the export; it is `partial` with the
+gap "seeded export skipped". Each export record carries a `seeded` section with the seed ledger
+(`resolved`, `unresolved`, `file_not_in_database`, `over_limit`), the neighborhood function count
+and the per-depth histogram. `job_code_graph_index` publishes one database card per scope; models
+list the cards with `list_codeql_databases` and expand one with `query_codeql_neighborhood`.
 
 ## Evidence and retrieval
 

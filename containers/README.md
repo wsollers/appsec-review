@@ -96,8 +96,7 @@ the first error with its file and line. Logs are written under
 The registry pins the analysis library each pack is written against (`library`), and verification
 asserts that version is installed before compiling. Image smoke tests prove a tool starts; they do
 not prove our queries still compile against the library the image ships. See
-[`../rules/README.md`](../rules/README.md) for the field reference and for the pack that is
-currently known broken.
+[`../rules/README.md`](../rules/README.md) for the field reference.
 
 ## Runtime boundary
 

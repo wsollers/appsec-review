@@ -4,8 +4,10 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import hashlib
 import json
+import re
 import os
 from pathlib import Path, PurePosixPath
 import shutil
@@ -45,10 +47,35 @@ def _run(argv: list[str], *, cwd: Path, environment: dict[str, str]) -> None:
         raise RuntimeError(f"CodeQL child process exited {completed.returncode}")
 
 
+_COMPILED = re.compile(r"^Done \[\d+/\d+ comp (?:(\d+)m)?([\d.]+)s\] (\S+?)\.?$")
+
+
+def _run_compile(argv: list[str], *, cwd: Path, environment: dict[str, str]) -> dict[str, float]:
+    """Run ``query compile`` echoing its progress; return per-query compile seconds it reported."""
+    process = subprocess.Popen(argv, cwd=cwd, env=environment, stdin=subprocess.DEVNULL,
+                               stderr=subprocess.PIPE, text=True, errors="replace")
+    seconds: dict[str, float] = {}
+    for line in process.stderr:
+        sys.stderr.write(line)
+        matched = _COMPILED.match(line.strip())
+        if matched:
+            seconds[Path(matched.group(3)).name] = int(matched.group(1) or 0) * 60 + float(matched.group(2))
+    if process.wait() != 0:
+        raise RuntimeError(f"CodeQL child process exited {process.returncode}")
+    return seconds
+
+
 def _environment() -> dict[str, str]:
     value = dict(os.environ)
     value.update({"HOME": "/tmp/codeql-home", "LANG": "C.UTF-8", "LC_ALL": "C.UTF-8", "TZ": "UTC"})
     Path(value["HOME"]).mkdir(parents=True, exist_ok=True)
+    cache = Path("/codeql-cache")
+    if cache.is_dir():
+        # Persistent, content-addressed compilation cache mounted by the executor.
+        link = Path(value["HOME"]) / ".codeql" / "compile-cache"
+        link.parent.mkdir(parents=True, exist_ok=True)
+        if not link.exists() and not link.is_symlink():
+            link.symlink_to(cache)
     if value.get("ANDROID_SDK_ROOT") or value.get("ANDROID_HOME"):
         # Android's Gradle plugin needs mutable dependency and preference homes during the
         # traced replay. Keep both under the run-owned scratch mount; the derived CodeQL image
@@ -362,6 +389,35 @@ def export_document(query: dict, tuples: list, *, total_rows: int, row_limit: in
             "bqrs_sha256": bqrs_sha256}
 
 
+EXPORT_SCOPE_MODES = ("whole_program", "seeded")
+
+
+def _read_export_scope(scope_path: Path, seeds_path: Path) -> dict:
+    """Validate the two CSV inputs bound to the pack's external predicates; return the scope record.
+
+    ``scope.csv`` is one row ``<mode>,<depth>`` and ``seeds.csv`` has header-less rows
+    ``<path>,<start_line>,<end_line>`` (empty in ``whole_program`` mode).
+    """
+    with scope_path.open(newline="", encoding="utf-8") as stream:
+        scope_rows = [row for row in csv.reader(stream) if row]
+    if len(scope_rows) != 1 or len(scope_rows[0]) != 2:
+        raise ValueError("CodeQL export scope file must hold exactly one <mode>,<depth> row")
+    mode, depth_text = scope_rows[0]
+    if mode not in EXPORT_SCOPE_MODES or not depth_text.isascii() or not depth_text.isdigit():
+        raise ValueError("CodeQL export scope file has an unsupported mode or depth")
+    with seeds_path.open(newline="", encoding="utf-8") as stream:
+        seed_rows = [row for row in csv.reader(stream) if row]
+    seeds = set()
+    for row in seed_rows:
+        if (len(row) != 3 or not row[0] or any(not value.isascii() or not value.isdigit() for value in row[1:])
+                or not 1 <= int(row[1]) <= int(row[2])):
+            raise ValueError("CodeQL export seeds file rows must be <path>,<start_line>,<end_line>")
+        seeds.add((row[0], int(row[1]), int(row[2])))
+    if mode == "whole_program" and seeds:
+        raise ValueError("CodeQL export seeds file must be empty in whole_program mode")
+    return {"mode": mode, "depth": int(depth_text), "seed_count": len(seeds)}
+
+
 def _verify_export_pack(entry: dict, pack: Path, columns_path: Path) -> None:
     digest, count = _relative_tree(pack)
     suite = pack / _safe_relative(entry["query_suite"])
@@ -370,6 +426,45 @@ def _verify_export_pack(entry: dict, pack: Path, columns_path: Path) -> None:
             suite.is_symlink() or _sha256(suite) != entry["query_suite_sha256"] or
             _sha256(columns_path) != entry["columns_sha256"]):
         raise ValueError("CodeQL export pack identity differs from the reviewed asset lock")
+
+
+def _compile_pack(pack: Path, query_files: list[str], *, threads: int, ram: int, scratch: Path,
+                  environment: dict[str, str]) -> tuple[dict[str, float], int]:
+    """Compile every export query in one invocation; return per-query seconds and elapsed ms.
+
+    CodeQL's compilation cache is content addressed under HOME, so a persistent cache mount turns a
+    repeat into a hit. One invocation lets CodeQL compile independent queries in parallel with
+    ``--threads``; the scope and the seeds are bound at evaluation time, so the compiled queries
+    (and the cache) are identical for every scope.
+    """
+    started = time.monotonic()
+    seconds = _run_compile(
+        [CODEQL, "query", "compile", "--threads", str(threads), "--ram", str(ram), "--",
+         *(str(pack / _safe_relative(file)) for file in query_files)],
+        cwd=scratch, environment=environment)
+    return seconds, int((time.monotonic() - started) * 1000)
+
+
+def compile_export(args: argparse.Namespace, scratch: Path | None = None) -> None:
+    """Warm the compilation cache for the hash-pinned export pack without touching a database."""
+    scratch = (scratch or Path("/scratch")).resolve(strict=True)
+    pack = _scratch_path(scratch, args.pack, strict=True)
+    columns_path = _scratch_path(scratch, args.columns, strict=True)
+    lock_path = _scratch_path(scratch, args.asset_lock, strict=True)
+    lock = json.loads(lock_path.read_text(encoding="utf-8"))
+    if lock.get("schema") != "appsec-review/codeql-assets-lock/2":
+        raise ValueError("CodeQL asset lock schema is unsupported")
+    entry = lock.get("export_query_packs", {}).get(args.language)
+    if not isinstance(entry, dict):
+        raise ValueError(f"CodeQL asset lock has no {args.language} export pack")
+    _verify_export_pack(entry, pack, columns_path)
+    queries = export_queries(json.loads(columns_path.read_text(encoding="utf-8")), args.language)
+    query_files = list(dict.fromkeys(query["query_file"] for query in queries))
+    seconds, elapsed = _compile_pack(pack, query_files, threads=args.threads, ram=args.ram,
+                                     scratch=scratch, environment=_environment())
+    sys.stdout.write(json.dumps({"schema": "appsec-review/codeql-compile/1", "language": args.language,
+                                 "query_count": len(query_files), "compile_ms": elapsed,
+                                 "compile_s": seconds}, sort_keys=True) + "\n")
 
 
 def export(args: argparse.Namespace, scratch: Path | None = None) -> None:
@@ -385,6 +480,8 @@ def export(args: argparse.Namespace, scratch: Path | None = None) -> None:
     columns_path = _scratch_path(scratch, args.columns, strict=True)
     lock_path = _scratch_path(scratch, args.asset_lock, strict=True)
     output = _scratch_path(scratch, args.output_dir, strict=False)
+    scope_path = _scratch_path(scratch, args.scope_file, strict=True)
+    seeds_path = _scratch_path(scratch, args.seeds_file, strict=True)
     if args.row_limit < 1 or args.max_bytes < 1:
         raise ValueError("CodeQL export bounds must be positive")
     lock = json.loads(lock_path.read_text(encoding="utf-8"))
@@ -394,14 +491,28 @@ def export(args: argparse.Namespace, scratch: Path | None = None) -> None:
     if not isinstance(entry, dict):
         raise ValueError(f"CodeQL asset lock has no {args.language} export pack")
     _verify_export_pack(entry, pack, columns_path)
+    scope = _read_export_scope(scope_path, seeds_path)
     queries = export_queries(json.loads(columns_path.read_text(encoding="utf-8")), args.language)
     if output.exists() and any(output.iterdir()):
         raise ValueError("CodeQL export output directory is not empty")
     output.mkdir(parents=True, exist_ok=True)
     environment = _environment()
-    _run([CODEQL, "database", "run-queries", "--threads", str(args.threads), "--ram", str(args.ram),
-          "--", str(database_path), str(pack / _safe_relative(entry["query_suite"]))],
-         cwd=scratch, environment=environment)
+    # Compile every export query in one invocation first (CodeQL's compilation cache is content
+    # addressed under HOME, so a persistent cache mount makes this a no-op on later runs), then
+    # evaluate them serially so each query's evaluation time is attributable and bounded alone.
+    query_files = list(dict.fromkeys(query["query_file"] for query in queries))
+    compile_seconds, compile_ms = _compile_pack(pack, query_files, threads=args.threads, ram=args.ram,
+                                                 scratch=scratch, environment=environment)
+    evaluate_ms: dict[str, int] = {}
+    # The scope and the seeds are bound to the pack's external predicates at evaluation time, so
+    # the compiled queries (and the compile cache) are identical for every scope.
+    external = [f"--external=exportScope={scope_path}", f"--external=exportSeed={seeds_path}"]
+    for file in query_files:
+        started = time.monotonic()
+        _run([CODEQL, "database", "run-queries", "--threads", str(args.threads), "--ram", str(args.ram),
+              *external, "--", str(database_path), str(pack / _safe_relative(file))],
+             cwd=scratch, environment=environment)
+        evaluate_ms[file] = int((time.monotonic() - started) * 1000)
     results = database_path / "results" / Path(*PurePosixPath(entry["query_pack"]).parts)
     written, rows_manifest = 0, []
     for query in queries:
@@ -440,12 +551,15 @@ def export(args: argparse.Namespace, scratch: Path | None = None) -> None:
                               "bytes": len(data), "row_count": total,
                               "exported_rows": len(document["rows"]),
                               "truncated": document["truncated"],
-                              "bqrs_sha256": document["bqrs_sha256"], "decode_ms": decode_ms})
+                              "bqrs_sha256": document["bqrs_sha256"], "decode_ms": decode_ms,
+                              "evaluate_ms": evaluate_ms[query["query_file"]],
+                              "compile_s": compile_seconds.get(Path(query["query_file"]).name)})
     (output / "export-manifest.json").write_bytes(_canonical({
         "schema": EXPORT_MANIFEST_SCHEMA, "export_schema": EXPORT_SCHEMA, "language": args.language,
         "pack": {key: entry[key] for key in ("query_id", "query_pack", "query_pack_version",
                                               "tree_sha256", "file_count", "columns_sha256")},
-        "row_limit": args.row_limit, "max_bytes": args.max_bytes,
+        "row_limit": args.row_limit, "max_bytes": args.max_bytes, "compile_ms": compile_ms,
+        "scope": scope,
         "exports": sorted(rows_manifest, key=lambda item: item["query_id"]),
     }))
 
@@ -477,6 +591,13 @@ def parser() -> argparse.ArgumentParser:
     query_parser.add_argument("--threads", type=int, required=True)
     query_parser.add_argument("--ram", type=int, required=True)
     query_parser.add_argument("--max-paths", type=int, required=True)
+    compile_parser = sub.add_parser("compile")
+    compile_parser.add_argument("--pack", required=True)
+    compile_parser.add_argument("--columns", required=True)
+    compile_parser.add_argument("--asset-lock", required=True)
+    compile_parser.add_argument("--language", choices=("cpp",), required=True)
+    compile_parser.add_argument("--threads", type=int, required=True)
+    compile_parser.add_argument("--ram", type=int, required=True)
     export_parser = sub.add_parser("export")
     export_parser.add_argument("--database", required=True)
     export_parser.add_argument("--pack", required=True)
@@ -484,6 +605,8 @@ def parser() -> argparse.ArgumentParser:
     export_parser.add_argument("--asset-lock", required=True)
     export_parser.add_argument("--language", choices=("cpp",), required=True)
     export_parser.add_argument("--output-dir", required=True)
+    export_parser.add_argument("--scope-file", required=True)
+    export_parser.add_argument("--seeds-file", required=True)
     export_parser.add_argument("--row-limit", type=int, required=True)
     export_parser.add_argument("--max-bytes", type=int, required=True)
     export_parser.add_argument("--threads", type=int, required=True)
@@ -511,7 +634,7 @@ if __name__ == "__main__":
     try:
         parsed = parser().parse_args()
         {"inventory": inventory, "database": database, "query": query,
-         "export": export}[parsed.action](parsed)
+         "export": export, "compile": compile_export}[parsed.action](parsed)
     except Exception as exc:
         print(f"codeql-runner: {type(exc).__name__}: {exc}", file=sys.stderr)
         exit_code = 2

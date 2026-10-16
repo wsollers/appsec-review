@@ -84,7 +84,7 @@ def plan_modules(compile_rows: Sequence[Mapping[str, Any]], link_commands: Seque
             by_object.setdefault(output, index)
     producers = {str(item["output_path"]): item for item in link_commands}
 
-    def expand(path: str, seen: frozenset[str]) -> tuple[set[int], list[str], list[str]]:
+    def resolve_input(path: str, seen: frozenset[str]) -> tuple[set[int], list[str], list[str]]:
         if path in by_object:
             return {by_object[path]}, [], []
         if _is_shared(path):
@@ -97,7 +97,7 @@ def plan_modules(compile_rows: Sequence[Mapping[str, Any]], link_commands: Seque
             reasons: list[str] = []
             notes: list[str] = []
             for member in command.get("input_paths", ()):
-                found, more_reasons, more_notes = expand(str(member), seen | {path})
+                found, more_reasons, more_notes = resolve_input(str(member), seen | {path})
                 indexes |= found
                 reasons += more_reasons
                 notes += more_notes
@@ -114,7 +114,7 @@ def plan_modules(compile_rows: Sequence[Mapping[str, Any]], link_commands: Seque
         reasons: list[str] = []
         notes: list[str] = []
         for path in producers[output].get("input_paths", ()):
-            found, more_reasons, more_notes = expand(str(path), frozenset({output}))
+            found, more_reasons, more_notes = resolve_input(str(path), frozenset({output}))
             indexes |= found
             reasons += more_reasons
             notes += more_notes

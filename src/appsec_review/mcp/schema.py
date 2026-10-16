@@ -7,6 +7,8 @@ from typing import Any
 from .owasp import QUERY_TOOL_SCHEMA
 from appsec_review.graph.contract import MAX_TOOL_DEPTH, MAX_TOOL_LIMIT, QUERY_CODE_GRAPH, Mode, SinkClass, SourceClass
 from appsec_review.retrieval.index import INDEX_NAMES
+from appsec_review.retrieval.neighborhood import (
+    DIRECTIONS, INCLUDES, LANGUAGE_PATTERN, LIST_CODEQL_DATABASES, QUERY_CODEQL_NEIGHBORHOOD, SEED_PATTERN)
 from appsec_review.retrieval.observations import OBSERVATION_CLASSES, REPORTED_SEVERITIES
 from appsec_review.retrieval.precomputed import QUERY_SETS
 
@@ -153,7 +155,26 @@ TOOLS: tuple[dict[str, Any], ...] = (
          "limit": {"type": "integer", "minimum": 1, "maximum": MAX_TOOL_LIMIT},
          "cursor": {"type": "string", "maxLength": 4096},
      }}},
-    {"name": "query_observations", "description": "Filter accepted scanner observations by exact scanner, rule, normalized reported severity, suppression/duplicate state, source/artifact and location; returns native severity and the normalization rule. Tool observations are never confirmed findings.",
+    {"name": LIST_CODEQL_DATABASES, "description": "List the accepted CodeQL database cards (language, root, build unit, seeding mode and depth, seed ledger, coverage, gaps); pass a card's database identity to query_codeql_neighborhood. No analysis runs during retrieval.",
+     "inputSchema": {"type": "object", "additionalProperties": False, "properties": {
+         "language": {"type": "string", "pattern": LANGUAGE_PATTERN},
+         "limit": {"type": "integer", "minimum": 1, "maximum": MAX_TOOL_LIMIT},
+         "cursor": {"type": "string", "maxLength": 4096},
+     }}},
+    {"name": QUERY_CODEQL_NEIGHBORHOOD, "description": "Read the precomputed call closure around one seed, symbol or observation of one CodeQL database, with the requested fact families; outside the precomputed neighborhood, depth and frontier bounds are named gaps, never absence. No analysis runs during retrieval.",
+     "inputSchema": {"type": "object", "additionalProperties": False, "required": ["database"], "properties": {
+         "database": {"type": "string", "pattern": "^asr:codeql_database:[0-9a-f]{64}$"},
+         "seed": {"type": "string", "pattern": SEED_PATTERN, "maxLength": 4096},
+         "symbol": {"type": "string", "minLength": 1, "maxLength": 4096},
+         "observation": {"type": "string", "pattern": "^asr:tool_observation:[0-9a-f]{64}$"},
+         "direction": {"type": "string", "enum": list(DIRECTIONS)},
+         "depth": {"type": "integer", "minimum": 0, "maximum": MAX_TOOL_DEPTH},
+         "limit": {"type": "integer", "minimum": 1, "maximum": MAX_TOOL_LIMIT},
+         "include": {"type": "array", "items": {"type": "string", "enum": list(INCLUDES)}, "uniqueItems": True,
+                     "minItems": 1, "maxItems": len(INCLUDES)},
+         "cursor": {"type": "string", "maxLength": 4096},
+     }}},
+    {"name": "query_observations", "description": "Filter accepted scanner observations by exact scanner, rule, normalized reported severity, suppression/duplicate state, source/artifact and location; returns native severity and the normalization rule. Tool observations are never confirmed findings; rule is the analyzer check, and seed (path:line), function, fix_it and min_trace_length select seeded Clang-Tidy / Clang Static Analyzer diagnostics.",
      "inputSchema": {"type": "object", "additionalProperties": False, "properties": {
          "scanner": {"type": "string", "maxLength": 4096},
          "rule": {"type": "string", "maxLength": 4096},
@@ -167,6 +188,10 @@ TOOLS: tuple[dict[str, Any], ...] = (
          "start_line": {"type": "integer", "minimum": 1},
          "end_line": {"type": "integer", "minimum": 1},
          "shard": {"type": "string", "pattern": "^[A-Za-z0-9_.-]{1,128}$"},
+         "seed": {"type": "string", "pattern": SEED_PATTERN, "maxLength": 4096},
+         "function": {"type": "string", "minLength": 1, "maxLength": 4096},
+         "fix_it": {"type": "boolean"},
+         "min_trace_length": {"type": "integer", "minimum": 0, "maximum": 100000},
          "limit": {"type": "integer", "minimum": 1, "maximum": 100},
          "cursor": {"type": "string", "maxLength": 4096},
      }}},

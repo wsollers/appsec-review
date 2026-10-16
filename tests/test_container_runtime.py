@@ -30,11 +30,11 @@ def test_application_runtime_user_keeps_non_root_fallback_for_root_process(monke
     assert application_runtime_user("10001:10001") == "10001:10001"
 
 
-def catalog(tmp_path: Path, *, expected: str | None = DIGEST) -> ContainerCatalog:
+def catalog(tmp_path: Path, *, expected: str | None = DIGEST, additional: tuple[str, ...] = ()) -> ContainerCatalog:
     policy = MappingProxyType({"tmpfs": ["/tmp:rw,nosuid,nodev,noexec,size=128m"]})
     tool = ToolImage("tool-fixture", "fixture", "1", "fixture:1", "/bin/fixture",
                      "10001:10001", "none", "1g", "2", 256, 10, 8, expected,
-                     tmp_path / "tool.toml", MappingProxyType({}))
+                     tmp_path / "tool.toml", MappingProxyType({}), additional_executables=additional)
     return ContainerCatalog(tmp_path / "catalog.toml", tmp_path / "policy.toml", policy,
                             MappingProxyType({"tool-fixture": tool}))
 
@@ -95,3 +95,26 @@ def test_executor_records_timeout_and_failure_state(tmp_path: Path) -> None:
     result = ContainerExecutor(catalog(tmp_path), tmp_path / "run", runner=runner).execute(
         ExecutionRequest("tool-fixture", ("/bin/fixture",), target, tmp_path / "run" / "scratch"))
     assert result.timed_out and result.terminal_status == "TIMEOUT" and result.exit_code is None
+
+
+def test_a_declared_additional_executable_is_the_entrypoint_and_nothing_else_is_accepted(tmp_path: Path) -> None:
+    calls: list[list[str]] = []
+
+    def runner(argv, timeout):
+        calls.append(list(argv))
+        if tuple(argv[:3]) == ("docker", "image", "inspect"):
+            return CommandOutcome(0, (DIGEST + "\n").encode(), b"")
+        return CommandOutcome(0, b"", b"")
+
+    target = tmp_path / "target"
+    target.mkdir()
+    executor = ContainerExecutor(catalog(tmp_path, additional=("/bin/fixture-export",)), tmp_path / "run", runner=runner)
+    executor.execute(ExecutionRequest("tool-fixture", ("/bin/fixture-export", "--out", "/scratch/x"), target,
+                                      tmp_path / "run" / "scratch"))
+    docker = next(call for call in calls if call[:2] == ["docker", "run"])
+    assert docker[docker.index("--entrypoint") + 1] == "/bin/fixture-export"
+    for other in ("/bin/sh", "fixture-export"):
+        with pytest.raises(ValueError, match="cataloged executable"):
+            executor.execute(ExecutionRequest("tool-fixture", (other,), target, tmp_path / "run" / "scratch"))
+    with pytest.raises(ValueError, match="absolute"):
+        catalog(tmp_path, additional=("relative-tool",))

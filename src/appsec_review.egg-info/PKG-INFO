@@ -1,0 +1,13 @@
+Metadata-Version: 2.4
+Name: appsec-review
+Version: 0.0.0
+Summary: Evidence-backed application security review orchestration
+Requires-Python: >=3.11
+Requires-Dist: jsonschema>=4.20
+Requires-Dist: tzdata; platform_system == "Windows"
+Provides-Extra: rulepacks
+Requires-Dist: PyYAML==6.0.3; extra == "rulepacks"
+Provides-Extra: dagster
+Requires-Dist: dagster==1.13.21; extra == "dagster"
+Requires-Dist: dagster-postgres==0.29.21; extra == "dagster"
+Requires-Dist: dagster-webserver==1.13.21; extra == "dagster"

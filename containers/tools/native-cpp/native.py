@@ -108,8 +108,16 @@ def emit_link_commands() -> None:
     (BUILD / "link-commands.json").write_text(json.dumps(receipts, sort_keys=True), encoding="utf-8")
 
 
-def load_commands() -> list[dict]:
+def load_commands(mode: str = "") -> list[dict]:
+    """The rows to replay: a seeded run's selected subset when the job wrote one, else every row.
+
+    ``replay-<mode>.json`` is written by the seeded job beside the normalized database; its rows are
+    renumbered from zero, so the receipt and ``tu-NNNN`` outputs index the subset, never the whole
+    program. An AST row may carry ``ast_filters``: one declaration name per entry.
+    """
     path = ROOT / "normalized-compile-commands.json"
+    if mode and (ROOT / f"replay-{mode}.json").is_file():
+        path = ROOT / f"replay-{mode}.json"
     value = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(value, list) or len(value) > 4096:
         raise ValueError("invalid normalized compile database")
@@ -136,7 +144,7 @@ def ast_filter(source: str) -> str:
 
 
 def replay(mode: str) -> int:
-    commands = load_commands()
+    commands = load_commands(mode)
     destination = OUT / mode
     destination.mkdir(parents=True, exist_ok=True)
     results = []
@@ -144,25 +152,40 @@ def replay(mode: str) -> int:
         arguments = list(row["arguments"])
         source = row["file"]
         stem = f"tu-{index:04d}"
+        filters = [str(name) for name in row.get("ast_filters") or () if str(name)][:400] if mode == "ast" else []
         if mode == "ast":
             output = destination / f"{stem}.json"
-            argv = [arguments[0], *arguments[1:], "-Xclang", "-ast-dump=json",
-                    "-Xclang", "-ast-dump-filter", "-Xclang", ast_filter(source),
-                    "-fsyntax-only"]
+            argvs = [[arguments[0], *arguments[1:], "-Xclang", "-ast-dump=json",
+                      "-Xclang", "-ast-dump-filter", "-Xclang", name, "-fsyntax-only"]
+                     for name in (filters or [ast_filter(source)])]
+        elif mode == "cfg":
+            # Source-level clang::CFG text (debug.DumpCFG) for the unit; the plist the analyzer writes
+            # is discarded. The checker prints to stderr, which is what is retained.
+            output = destination / f"{stem}.cfg.txt"
+            argvs = [[arguments[0], *arguments[1:], "--analyze", "-Xanalyzer", "-analyzer-checker=debug.DumpCFG",
+                      "-Xanalyzer", "-analyzer-output=text", "-o", str(destination / f"{stem}.plist")]]
         else:
             output = destination / f"{stem}.ll"
-            argv = [arguments[0], *arguments[1:], "-emit-llvm", "-S", "-g", "-O0", "-o", str(output)]
+            argvs = [[arguments[0], *arguments[1:], "-emit-llvm", "-S", "-g", "-O0", "-o", str(output)]]
         try:
-            completed = subprocess.run(argv, cwd=SOURCE, stdin=subprocess.DEVNULL,
-                                       stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                       timeout=180, check=False, env={"PATH": os.environ["PATH"],
-                                       "HOME": "/tmp", "LANG": "C.UTF-8", "LC_ALL": "C.UTF-8",
-                                       "TZ": "UTC"})
+            code, stdout, stderr = 0, b"", b""
+            for argv in argvs:
+                completed = subprocess.run(argv, cwd=SOURCE, stdin=subprocess.DEVNULL,
+                                           stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                           timeout=180, check=False, env={"PATH": os.environ["PATH"],
+                                           "HOME": "/tmp", "LANG": "C.UTF-8", "LC_ALL": "C.UTF-8",
+                                           "TZ": "UTC"})
+                code = code or completed.returncode
+                stdout += completed.stdout
+                stderr += completed.stderr
             if mode == "ast":
-                output.write_bytes(completed.stdout[:64 * 1024 * 1024])
-            results.append({"index": index, "source": source, "exit_code": completed.returncode,
+                output.write_bytes(stdout[:64 * 1024 * 1024])
+            elif mode == "cfg":
+                output.write_bytes(stderr[:16 * 1024 * 1024])
+                (destination / f"{stem}.plist").unlink(missing_ok=True)
+            results.append({"index": index, "source": source, "exit_code": code,
                             "output": output.relative_to(ROOT).as_posix(),
-                            "stderr": completed.stderr.decode("utf-8", "replace")[:8192]})
+                            "stderr": stderr.decode("utf-8", "replace")[:8192]})
         except subprocess.TimeoutExpired:
             results.append({"index": index, "source": source, "exit_code": None,
                             "output": output.relative_to(ROOT).as_posix(), "timeout": True})
@@ -202,7 +225,7 @@ def main() -> int:
         return configure(sys.argv[2])
     if mode == "compile" and len(sys.argv) == 3:
         return compile_case(sys.argv[2])
-    if mode in {"ast", "ir"}:
+    if mode in {"ast", "ir", "cfg"}:
         return replay(mode)
     if mode == "symbols":
         return symbols()

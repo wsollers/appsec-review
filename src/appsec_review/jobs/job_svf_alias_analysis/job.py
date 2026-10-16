@@ -347,7 +347,7 @@ def _analyze_scope(unit: UnitContext, scope: IndexScope, link_commands: list[Map
     try:
         execution = execute_scope_tool(unit, scope, TOOL_ID, ARGV, scratch, executor_factory,
                                        file_size_limit_bytes=settings["max_module_output_bytes"] + 1,
-                                       inputs={"plan.json": _plan_document(plan.modules, settings)})
+                                       documents={"plan.json": _plan_document(plan.modules, settings)})
     except Exception as exc:
         gaps.append(f"tool-svf image unavailable: {type(exc).__name__}: {exc}")
     if execution:

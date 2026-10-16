@@ -43,10 +43,13 @@ def test_live_graph_export_pack_compiles_runs_and_matches_the_native_recording(l
     shutil.copytree(ROOT / "rules" / "codeql-graph-export" / "cpp", scratch / "export-pack")
     shutil.copyfile(ROOT / "rules" / "codeql-graph-export" / "columns.json", scratch / "export-columns.json")
     shutil.copyfile(ROOT / "containers" / "tools" / "codeql" / "assets.lock.json", scratch / "assets.lock.json")
+    (scratch / "scope.csv").write_text("whole_program,0\n", encoding="utf-8")
+    (scratch / "seeds.csv").write_text("", encoding="utf-8")
     bounds = contract.GraphSettings()
     export = executor.execute("export", graph_export_arguments(
         database="query-database", pack="export-pack", columns="export-columns.json",
         asset_lock="assets.lock.json", language="cpp", output_dir="exports",
+        scope_file="scope.csv", seeds_file="seeds.csv",
         row_limit=bounds.max_facts_per_family_per_scope, max_bytes=bounds.max_export_bytes,
         threads=settings.threads, ram_mb=settings.ram_mb), scratch_root=scratch)
     detail = (run_root / export.stderr_path).read_text(encoding="utf-8", errors="replace")

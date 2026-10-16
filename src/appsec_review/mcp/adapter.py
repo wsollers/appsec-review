@@ -4,11 +4,14 @@ from __future__ import annotations
 
 import json
 import time
-from typing import Any, Mapping
+from typing import Any, Iterable, Mapping
 
 from appsec_review.mcp.schema import TOOLS
 from appsec_review.mcp.owasp import query_owasp_workbench
 from appsec_review.retrieval import RetrievalCore
+from appsec_review.retrieval.neighborhood import LIST_CODEQL_DATABASES, QUERY_CODEQL_NEIGHBORHOOD
+
+SCOPED_GRAPH_TOOLS = frozenset({LIST_CODEQL_DATABASES, QUERY_CODEQL_NEIGHBORHOOD})
 
 
 class RetrievalMcpAdapter:
@@ -16,7 +19,10 @@ class RetrievalMcpAdapter:
         self.core = core
         self._tools = {item["name"] for item in TOOLS}
 
-    def call(self, name: str, arguments: Mapping[str, Any]) -> dict[str, Any]:
+    def call(self, name: str, arguments: Mapping[str, Any], *,
+             graph_scopes: Iterable[str] | None = None) -> dict[str, Any]:
+        """``graph_scopes`` is not a tool argument: only the capability layer sets it, to restrict the
+        CodeQL database cards the two neighborhood tools can see to the scopes a review grants."""
         if name not in self._tools:
             raise ValueError("unknown MCP retrieval tool")
         if not isinstance(arguments, Mapping):
@@ -25,13 +31,15 @@ class RetrievalMcpAdapter:
         unknown = set(arguments) - allowed
         if unknown:
             raise ValueError(f"unknown tool arguments: {sorted(unknown)}")
+        if graph_scopes is not None and name not in SCOPED_GRAPH_TOOLS:
+            raise ValueError("graph_scopes applies only to the CodeQL neighborhood tools")
         method = (lambda **values: query_owasp_workbench(
             self.core.run_root.parent, self.core.run_id, values
         )) if name == "query_owasp_workbench" else getattr(self.core, name)
         started = time.monotonic()
         token, invocation = self.core.begin_mcp_invocation(name, arguments)
         try:
-            result = method(**dict(arguments))
+            result = method(**dict(arguments), **({} if graph_scopes is None else {"graph_scopes": list(graph_scopes)}))
         except BaseException as exc:
             self.core.complete_mcp_invocation(token, invocation, error=exc,
                                               duration_ms=max(0, int((time.monotonic() - started) * 1000)))

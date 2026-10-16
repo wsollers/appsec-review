@@ -117,6 +117,8 @@ class Producer(StrEnum):
     CLANGD = "clangd"
     LLVM_IR = "llvm-ir"
     CLANG_AST = "clang-ast"
+    CLANG_STATIC = "clang-static"
+    JOERN_CPG = "joern-cpg"
     SVF = "svf"
 
 

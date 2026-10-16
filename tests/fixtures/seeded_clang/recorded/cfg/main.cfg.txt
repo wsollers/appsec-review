@@ -1,0 +1,28 @@
+int main()
+ [B2 (ENTRY)]
+   Succs (1): B1
+
+ [B1]
+   1: "hello"
+   2: [B1.1] (ImplicitCastExpr, ArrayToPointerDecay, const char *)
+   3: const char *data = "hello";
+   4: handle_packet
+   5: [B1.4] (ImplicitCastExpr, FunctionToPointerDecay, int (*)(const char *, int))
+   6: data
+   7: [B1.6] (ImplicitCastExpr, LValueToRValue, const char *)
+   8: 5
+   9: [B1.5]([B1.7], [B1.8])
+  10: parse_record
+  11: [B1.10] (ImplicitCastExpr, FunctionToPointerDecay, int (*)(const char *, int))
+  12: data
+  13: [B1.12] (ImplicitCastExpr, LValueToRValue, const char *)
+  14: 5
+  15: [B1.11]([B1.13], [B1.14])
+  16: [B1.9] + [B1.15]
+  17: return [B1.16];
+   Preds (1): B2
+   Succs (1): B0
+
+ [B0 (EXIT)]
+   Preds (1): B1
+

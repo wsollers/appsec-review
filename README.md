@@ -6,9 +6,9 @@ evidence collection) against a local target checkout. Every job writes immutable
 `runs/<run-id>/`. Missing, skipped, or failed coverage is recorded as a named gap, never as a clean
 result.
 
-The repository is mid-rebuild. Repository-agent rules live in [`AGENTS.md`](AGENTS.md); navigation
-for the rest of the documentation is in [`docs/agent-reader.md`](docs/agent-reader.md), and the
-architecture index is [`docs/architecture/README.md`](docs/architecture/README.md).
+The repository is mid-rebuild. Repository-agent rules live only in [`AGENTS.md`](AGENTS.md), which
+governs. [`docs/agent-reader.md`](docs/agent-reader.md) is navigation for agents and adds no rules;
+the architecture index is [`docs/architecture/README.md`](docs/architecture/README.md).
 
 ## Contents
 
@@ -40,6 +40,69 @@ architecture index is [`docs/architecture/README.md`](docs/architecture/README.m
 
 All runtime settings (models, timeouts, worker counts, schedules, feed sources) live in
 [`appsec-review.toml`](appsec-review.toml). Change them there rather than in prompts or scripts.
+
+### Software inventory
+
+Everything below is declared in the file named in the last column; nothing else is required.
+
+**Required to run**
+
+| Requirement | Needed for | Where declared |
+| --- | --- | --- |
+| Python >= 3.11 and `jsonschema>=4.20` (`tzdata` on Windows), installed by `pip install -e .` | The package and the `appsec-review` and `appsec-review-mcp` commands | `pyproject.toml` (`requires-python`, `dependencies`) |
+| Docker with `docker buildx` (`--load`, `--network none`) | Tool and build-environment images, project builds, CodeQL image layering | `containers/build.py`, `src/appsec_review/codeql/runtime.py`, `src/appsec_review/container_runtime/project_images.py` |
+| Claude Code CLI `claude` on `PATH`, signed in | Model calls; `provider = "claude-cli"` | `appsec-review.toml`, `src/appsec_review/inference/claude_cli.py` |
+| Tool images (below), built locally | Every analysis job that is not a coverage gap | `containers/catalog.toml` |
+
+**Required to test (host virtual environment, `pip install -e ".[test]"`)**
+
+| Requirement | Needed for | Where declared |
+| --- | --- | --- |
+| `pytest>=8`, `hypothesis==6.170.0`, `PyYAML==6.0.3` | The suite (`tests/review` uses Hypothesis; the SEI CERT rule-pack tests use PyYAML) | `pyproject.toml` (`test` extra) |
+| `git` | Source-history, change-context, SAST-flow and nothing-to-find tests (skipped without it) | `tests/` (`shutil.which("git")`) |
+| Target checkout `targets/appsec-multi-vuln` | Tests that read the acceptance target (skipped when absent) | `tests/conftest.py`; [Download the acceptance target](#download-the-acceptance-target) |
+
+**Optional or opt-in**
+
+| Requirement | Needed for | Where declared |
+| --- | --- | --- |
+| `dagster` extra (`dagster`, `dagster-postgres`, `dagster-webserver`, all pinned) | Dagster tests on the host; otherwise they are skipped. The deployment image installs its own pinned set | `pyproject.toml`, `deploy/dagster/requirements.txt` and `requirements.lock.txt` |
+| `rulepacks` extra (`PyYAML==6.0.3`) | Validating or evaluating `rules/sei-cert/` without the full `test` extra | `pyproject.toml` |
+| Docker Compose v2 plugin | The Dagster stack | `deploy/dagster/compose*.yaml` |
+| Host `semgrep` or `opengrep` (or `APPSEC_REVIEW_SEMGREP` / `APPSEC_REVIEW_OPENGREP`) | Rule-pack engine tests (skipped without it; some use the pinned Semgrep image instead) | `src/appsec_review/rulepacks/sei_cert/engines.py`, `tests/test_semgrep_rules.py`, `tests/test_cpp_cert_rules.py` |
+| `bash`, and `pwsh` | The launcher-parity test (skipped without both) | `tests/test_container_builds.py` |
+| `java` and `APPSEC_GRADLE_HOME` | Gradle provenance test | `tests/test_gradle_provenance.py` |
+| `APPSEC_LIVE_SEEDED_CLANG=1`, `clang++-18` for the compiler check, and the built `tool-native-cpp`, `tool-clang-static-analysis` and `tool-joern` images for the container check | `tests/live/test_seeded_clang_live.py` | that file |
+| `APPSEC_RUN_LIVE_INFERENCE=1` and a signed-in `claude` | Live model recipe inference in `tests/test_live_build_toolchains.py` | that file |
+| `APPSEC_MULTI_VULN_WORKSPACE`, `APPSEC_CPP_ACCEPTANCE_TARGET`, `APPSEC_REVIEW_BUILDENV_PINS=local` | Live code-graph, C++ acceptance and build-image tests | `tests/live/test_code_graph_live.py`, `tests/orchestration/dagster/test_post_build_security.py`, `tests/integration/test_family_project_builds.py` |
+| Built tool, build-environment and CodeQL images | Live, integration and full-tier tests (skipped, naming the missing image) | `containers/catalog.toml` |
+| `NVD_API_KEY` | Authenticated NVD rate during metadata sync | `docs/operations/third-party-data-sync.md` |
+
+**Tool images.** `containers/catalog.toml` is the authoritative list (30 tool images, four runtime
+bases, ten build environments); [`containers/README.md`](containers/README.md) explains building
+them, and each `containers/tools/<name>/tool.toml` or `Dockerfile` pins its inputs. By purpose:
+C/C++ (`native-cpp` toolchain with Clang 18, `clang-static-analysis` with Clang-Tidy and the Static
+Analyzer, `clangd-indexer`, `cppcheck`, `infer`), code property graph and binaries (`joern`,
+`ghidra`, `blint`, `tree-sitter`), SAST (`semgrep`, `opengrep`, `gosec`, `pmd`, `spotbugs`,
+`phpstan`, `phpcs`, `psalm`, `mobsfscan`, `shellcheck`), secrets, IaC and CI (`gitleaks`, `checkov`,
+`hadolint`, `actionlint`, `zizmor`), dependencies and SBOM (`trivy`, `grype`, `syft`,
+`osv-scanner`, `cve-bin-tool`, `sbomasm`, `microsoft-sbom-tool`), and support (`git`, `sqlite-fts`).
+Clang 18 comes from those images, not from the host; the host needs `clang++-18` only for the
+opt-in live test above.
+
+**CodeQL** is not in the catalog. Its licensed payload (CLI, extractors, query packs) is not in this
+repository: you supply a licensed base image tagged `audit-codeql:local`, download
+`coding-standards-codeql-packs.zip` (`github/codeql-coding-standards@v2.62.0`) into
+`containers/tools/codeql/`, and layer `audit-codeql:custom-2.27.0` with `Dockerfile.custom-source`.
+Its image ID and the hash of `assets.lock.json` are then pinned in `appsec-review.toml`. See
+[`containers/tools/codeql/README.md`](containers/tools/codeql/README.md),
+[`LICENSE.md`](containers/tools/codeql/LICENSE.md) and
+[`docs/operations/codeql-analysis.md`](docs/operations/codeql-analysis.md). Without it, CodeQL
+scopes are recorded as coverage gaps.
+
+Hash-pinned downloads for the images are fetched and checked by `containers/build.py` against each
+`assets.lock.json`; `tool-native-cpp` and `tool-tree-sitter` need their inputs acquired first (see
+[Build the tool container images](#build-the-tool-container-images)).
 
 ## Platform choice
 
@@ -86,8 +149,7 @@ cd appsec-review
 python3 -m venv .venv
 . .venv/bin/activate
 python -m pip install --upgrade pip
-python -m pip install -e .
-python -m pip install pytest
+python -m pip install -e ".[test]"
 ```
 
 Give every checkout its own `.venv`. An editable install points at the checkout it was installed
@@ -104,8 +166,9 @@ Install the optional Dagster extras only if you want to run the Dagster tests on
 python -m pip install -e ".[dagster]"
 ```
 
-Install the `rulepacks` extra (PyYAML) to validate or evaluate the SEI CERT rule pack under
-`rules/sei-cert/`; without it the SEI CERT rule-pack tests are skipped:
+The `test` extra already includes PyYAML. Install the smaller `rulepacks` extra instead only to
+validate or evaluate the SEI CERT rule pack under `rules/sei-cert/` without the rest of the test
+dependencies (the SEI CERT rule-pack tests are skipped when PyYAML is missing):
 
 ```bash
 python -m pip install -e ".[rulepacks]"
@@ -177,8 +240,7 @@ cd appsec-review
 python3 -m venv .venv
 . .venv/bin/activate
 python -m pip install --upgrade pip
-python -m pip install -e .
-python -m pip install pytest
+python -m pip install -e ".[test]"
 appsec-review schedules
 ```
 
@@ -204,8 +266,7 @@ cd appsec-review
 py -3.12 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
-python -m pip install -e .
-python -m pip install pytest
+python -m pip install -e ".[test]"
 appsec-review schedules
 ```
 
@@ -559,9 +620,12 @@ deletes the Dagster and PostgreSQL volumes. The full operator guide, including r
 
 ## Run the tests
 
-Pytest keeps its temporary and cache state under `test/tmp/` (configured in `pyproject.toml`).
-Tests that need the acceptance target expect `targets/appsec-multi-vuln`, and the Dagster tests are
-skipped when the `dagster` extra is not installed.
+Install the host test dependencies first (`python -m pip install -e ".[test]"`; add `.[dagster]`
+for the Dagster tests). Pytest keeps its temporary and cache state under `test/tmp/` (configured in
+`pyproject.toml`). Tests that need the acceptance target expect `targets/appsec-multi-vuln`, the
+Dagster tests are skipped when the `dagster` extra is not installed, and live or image-dependent
+tests are skipped, naming what is missing, until the opt-in requirements in the
+[Software inventory](#software-inventory) are met.
 
 ```bash
 python -m pytest -q

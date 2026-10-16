@@ -274,8 +274,9 @@ def test_cpp_job_graph_is_project_batched_and_repository_independent(tmp_path: P
     plan = plan_jobs((job,), config)
     assert PROJECT_TASKS == ("projects",)
     assert len(job.units) == 9
+    # The seeded AST replays the units that define the seeded IR neighborhood, so it follows the IR.
     assert plan.node("job_cpp_compiled_analysis.ast.projects").dependencies == (
-        "job_cpp_compiled_analysis.catalog.projects",)
+        "job_cpp_compiled_analysis.catalog.projects", "job_cpp_compiled_analysis.ir.projects")
     assert plan.node("job_cpp_compiled_analysis.ir.projects").dependencies == (
         "job_cpp_compiled_analysis.catalog.projects",)
     assert plan.node("job_cpp_compiled_analysis.infer.projects").dependencies == (

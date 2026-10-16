@@ -266,6 +266,57 @@ concurrency with partitioned resumability. Telemetry must report artifact/byte t
 launches, and saved work. Acceptance tests must prove that deduplication, filtering, cache reuse,
 resume, and sibling failure cannot suppress expected coverage or convert any gap into a clean result.
 
+## Measure and extend seeded CodeQL neighborhoods
+
+Design: `docs/architecture/seeded-codeql-neighborhoods.md`. Remaining after the first
+implementation:
+
+- measure seeded versus whole-program export time on a 20k-100k LOC project, and tune the default
+  `seed_depth` and `seed_limit` from the numbers;
+- measure one batched `codeql database run-queries` over all queries against serial runs;
+- wire `query-packs --warm` into `job_tool_image_rebuild` (the compile is now a separate cached
+  action, and `query-packs --warm` precompiles it; see the operations doc), and make the live
+  CodeQL tests opt-in;
+- add seeded packs for Java/Kotlin, JavaScript/TypeScript and Python using the same two external
+  predicates (`exportScope`, `exportSeed`);
+- profile the slow `job_evidence_collection` tests.
+
+## Measure and extend seeded Clang neighborhoods
+
+Design: `docs/architecture/seeded-neighborhoods.md`. The Clang AST/LLVM IR, Clang-Tidy/Static
+Analyzer and (enabled-only) CPG producers run from the findings outward and publish through the
+`graph` index. Remaining after the first implementation:
+
+- measure seeded versus whole-program wall time on a 20k-100k LOC project, then tune `seeded_bounds`
+  and `seed_depth`. The opt-in live tests (`tests/live/test_seeded_clang_live.py`) now run the real
+  containers on the 12-unit fixture and on a small defective file (numbers in
+  `docs/architecture/seeded-neighborhoods.md` section 12), but not at scale;
+- cross-TU callers in translation units that were not replayed appear only as the standing
+  `frontier` gap; extend the unit selection if the measurements show it matters;
+- `--exclude-regex` is unverified against a live c2cpg at scale;
+- `joern-cpg` rows still reach the graph index only as `producer_neighborhood` `cpg` rows, and the
+  seeded CPG shard carries the generic `JOERN_GAP` wording (`jobs/job_cpg_analysis/job.py`; asserted
+  in `tests/test_joern_tool.py`, which must keep "no CPG coverage is claimed");
+- the `JOERN_CPG` call-site input to the graph cross-check is not wired: add it to
+  `SECONDARY_KINDS` / `CrossCheckInputs` in `graph/crosscheck.py` (and `assign_secondary`) before
+  claiming a third opinion on call sites;
+- workflow consumers that should read seeded Clang facts but do not yet. Analyzer-only `sink_site`
+  facts (inexact, `analyzer_only`) already flow into hunt-package `unit_context` through the graph
+  families; everything else below is unread:
+  - `job_review_prioritization` ranking: diagnostic density and guard/dominance facts per file
+    (`jobs/job_review_prioritization/semantic.py`, `rules.py`, `scoring.py`, plus a new basis term in
+    the basis taxonomy);
+  - hunt-unit construction: clangd callers/callees to widen a unit (`review/packages.py` unit
+    building, `GraphContext.unit_context`);
+  - review scoring: analyzer severity and trace length as a signal (`review/scoring/factors.py`,
+    `risk_model.py`);
+  - package flow context: `ir_entity` flow rows are not in `_GRAPH_KINDS` or `GRAPH_ROLES`
+    (`review/packages.py`), so `GraphContext.lead_context` cannot cite them; this needs the package
+    schema extended;
+- already wired, with no change: review source-SAST selection reads the `job_clang_static_analysis`
+  observation shard (now the seeded subset, with its gaps), and package assembly reads the `graph`
+  families per scope.
+
 ## Close the remaining CodeQL platform and accepted-build gaps
 
 Cross-language CodeQL now provides hash-pinned offline extractors and query packs, exact protected
@@ -338,16 +389,18 @@ Done:
   accepted compile commands and retains each CPG as hash-identified, run-owned evidence;
 - the `noexec` `/tmp` zstd JNI fix in the image.
 
-The job still publishes a `BLOCKED` shard with zero observations per scope. Remaining work:
+Also done: the seeded job runs c2cpg on the seeded units only and a bounded `joern-export --repr all
+--format neo4jcsv` (`jobs/job_cpg_analysis/export.py`), so the seeded shard carries real function
+observations (a live run on the fixture exported 6 functions). The whole-program shard is still
+`BLOCKED` with zero observations. Remaining work:
 
-- a bounded CPG/PDG exporter (a repository-owned `joern --script`; scripts compile and run fully
-  offline in the image);
-- the index contract and source mapping;
+- a bounded whole-program CPG/PDG exporter;
+- the index contract and source mapping beyond the seeded `cpg` rows;
 - slicing;
 - exporter security probes;
-- live functional fixtures.
+- live functional fixtures at scale.
 
-Then replace the blocked shard with real observations. Also resolve the per-tool resource profile
+Also resolve the per-tool resource profile
 (Joern needs far more than 1 GiB at scale) and license attribution for JARs without embedded
 metadata. Do not put the full CPG into MCP responses.
 

@@ -65,6 +65,8 @@ def graph_cell(shards: ShardSet, selected: Sequence[Mapping[str, Any]], unavaila
     unknown: list[str] = []
     for shard in selected:
         shard_id = str(shard.get("shard_id", "default"))
+        if shard.get("producer", {}).get("kind") in {"codeql_database", "producer_neighborhood"}:
+            continue  # a database card or a producer-neighborhood shard describes a scope; neither is a fact family
         family = str(shard.get("producer", {}).get("family") or "")
         if family not in statuses:
             unknown.append(shard_id)

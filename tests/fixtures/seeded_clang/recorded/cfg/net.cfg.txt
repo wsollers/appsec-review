@@ -1,0 +1,63 @@
+static void log_event(int code)
+ [B2 (ENTRY)]
+   Succs (1): B1
+
+ [B1]
+   1: code
+   2: (void)[B1.1] (CStyleCastExpr, ToVoid, void)
+   Preds (1): B2
+   Succs (1): B0
+
+ [B0 (EXIT)]
+   Preds (1): B1
+
+int handle_packet(const char *pkt, int n)
+ [B4 (ENTRY)]
+   Succs (1): B3
+
+ [B1]
+   1: buf
+   2: [B1.1] (ImplicitCastExpr, ArrayToPointerDecay, char *)
+   3: 0
+   4: [B1.2][[B1.3]]
+   5: [B1.4] (ImplicitCastExpr, LValueToRValue, char)
+   6: [B1.5] (ImplicitCastExpr, IntegralCast, int)
+   7: return [B1.6];
+   Preds (1): B3
+   Succs (1): B0
+
+ [B2]
+   1: r
+   2: [B2.1] (ImplicitCastExpr, LValueToRValue, int)
+   3: return [B2.2];
+   Preds (1): B3
+   Succs (1): B0
+
+ [B3]
+   1: char buf[32];
+   2: log_event
+   3: [B3.2] (ImplicitCastExpr, FunctionToPointerDecay, void (*)(int))
+   4: n
+   5: [B3.4] (ImplicitCastExpr, LValueToRValue, int)
+   6: [B3.3]([B3.5])
+   7: copy_field
+   8: [B3.7] (ImplicitCastExpr, FunctionToPointerDecay, int (*)(char *, const char *, int))
+   9: buf
+  10: [B3.9] (ImplicitCastExpr, ArrayToPointerDecay, char *)
+  11: pkt
+  12: [B3.11] (ImplicitCastExpr, LValueToRValue, const char *)
+  13: n
+  14: [B3.13] (ImplicitCastExpr, LValueToRValue, int)
+  15: [B3.8]([B3.10], [B3.12], [B3.14])
+  16: int r = copy_field(buf, pkt, n);
+  17: r
+  18: [B3.17] (ImplicitCastExpr, LValueToRValue, int)
+  19: 0
+  20: [B3.18] < [B3.19]
+   T: if [B3.20]
+   Preds (1): B4
+   Succs (2): B2 B1
+
+ [B0 (EXIT)]
+   Preds (2): B1 B2
+

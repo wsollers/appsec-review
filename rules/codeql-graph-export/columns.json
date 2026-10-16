@@ -945,6 +945,82 @@
               "meaning": "conversion expression: 1-based inclusive end column; 0 when outside the source root"
             }
           ]
+        },
+        {
+          "query_id": "seed_functions",
+          "query_file": "Seeds.ql",
+          "result_set": "seed_functions",
+          "description": "seeded mode only (no rows in whole_program): one row per (seed location, source-root function whose definition overlaps the seed lines); not part of a graph family",
+          "columns": [
+            {
+              "name": "seed_path",
+              "type": "string",
+              "meaning": "seed location: path relative to the database source root, as given in seeds.csv"
+            },
+            {
+              "name": "seed_start_line",
+              "type": "int",
+              "meaning": "seed location: 1-based first line"
+            },
+            {
+              "name": "seed_end_line",
+              "type": "int",
+              "meaning": "seed location: 1-based last line (inclusive)"
+            },
+            {
+              "name": "function_name",
+              "type": "string",
+              "meaning": "qualified name of the function containing the seed lines"
+            },
+            {
+              "name": "function_path",
+              "type": "string",
+              "meaning": "function location: path relative to the database source root"
+            },
+            {
+              "name": "function_start_line",
+              "type": "int",
+              "meaning": "function location: 1-based start line"
+            },
+            {
+              "name": "function_start_column",
+              "type": "int",
+              "meaning": "function location: 1-based start column"
+            }
+          ]
+        },
+        {
+          "query_id": "neighborhood",
+          "query_file": "Neighborhood.ql",
+          "result_set": "neighborhood",
+          "description": "seeded mode only (no rows in whole_program): one row per exported function with its minimum call-graph distance from a seed function; not part of a graph family",
+          "columns": [
+            {
+              "name": "function_name",
+              "type": "string",
+              "meaning": "qualified name of the function"
+            },
+            {
+              "name": "function_path",
+              "type": "string",
+              "meaning": "function location: path relative to the database source root"
+            },
+            {
+              "name": "function_start_line",
+              "type": "int",
+              "meaning": "function location: 1-based start line"
+            },
+            {
+              "name": "function_start_column",
+              "type": "int",
+              "meaning": "function location: 1-based start column"
+            },
+            {
+              "name": "depth",
+              "type": "int",
+              "meaning": "minimum number of call-graph steps (callers, callees, virtual overrides) from a seed function; 0 for a seed function"
+            }
+          ]
         }
       ]
     }

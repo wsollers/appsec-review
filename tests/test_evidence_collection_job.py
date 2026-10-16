@@ -419,3 +419,37 @@ def test_sei_cert_pack_change_never_reuses_checkpoint_under_old_identity(
         assert new["verified"] is True and new["tree_sha256"] != old["tree_sha256"]
         assert new["rule_files_sha256"] == old["rule_files_sha256"]
         assert new["lock_sha256"] != old["lock_sha256"]
+
+
+def test_checkov_runs_every_planned_input_unrestricted_and_unrecognized_inputs_are_not_applicable() -> None:
+    import json
+
+    from appsec_review.jobs.job_evidence_collection.adapters import (
+        Applicability, adapter_registry, checkov_unreported_inputs)
+
+    adapter = adapter_registry()["tool-checkov"]
+    planned = Applicability(True, "planned", ("CMakePresets.json", "Dockerfile", "infra/main.tf", "sub/deep/main.tf"),
+                            "checkov_typed_configuration")
+    argv = adapter.argv("/opt/checkov", planned)
+    assert "--framework" not in argv and "--quiet" not in argv
+    assert argv[argv.index("-f") + 1:] == ("/target/CMakePresets.json", "/target/Dockerfile",
+                                           "/target/infra/main.tf", "/target/sub/deep/main.tf")
+
+    def check(path: str) -> dict[str, object]:
+        return {"check_id": "CKV_X", "check_name": "x", "file_path": path, "file_line_range": [1, 2]}
+
+    # Real report paths: dockerfile "/target/..", terraform relative to its common root.
+    report = json.dumps([
+        {"check_type": "dockerfile", "results": {"passed_checks": [check("/target/Dockerfile")], "failed_checks": []}},
+        {"check_type": "terraform", "results": {"passed_checks": [check("/infra/main.tf")],
+                                                "failed_checks": [check("/sub/deep/main.tf")]}},
+    ]).encode()
+    assert checkov_unreported_inputs(report, planned.files) == ["CMakePresets.json"]
+    # Checkov recognized nothing at all: a summary-only report leaves every input not applicable.
+    summary_only = b'{"passed": 0, "failed": 0, "skipped": 0, "parsing_errors": 0}'
+    assert checkov_unreported_inputs(summary_only, planned.files) == sorted(planned.files)
+    # A parse error is a reported outcome (a gap), never a not-applicable claim.
+    broken = json.dumps({"check_type": "cloudformation", "results": {"parsing_errors": ["/../target/bad.yaml"]}}).encode()
+    assert checkov_unreported_inputs(broken, ("bad.yaml",)) == []
+    parsed = adapter.parse(broken)
+    assert parsed == [{"gap_only": True, "coverage_gap": "checkov could not parse /../target/bad.yaml"}]

@@ -1,0 +1,35 @@
+int parse_record(const char *rec, int n)
+ [B2 (ENTRY)]
+   Succs (1): B1
+
+ [B1]
+   1: char out[16];
+   2: copy_field
+   3: [B1.2] (ImplicitCastExpr, FunctionToPointerDecay, int (*)(char *, const char *, int))
+   4: out
+   5: [B1.4] (ImplicitCastExpr, ArrayToPointerDecay, char *)
+   6: rec
+   7: [B1.6] (ImplicitCastExpr, LValueToRValue, const char *)
+   8: n
+   9: [B1.8] (ImplicitCastExpr, LValueToRValue, int)
+  10: [B1.3]([B1.5], [B1.7], [B1.9])
+  11: int copied = copy_field(out, rec, n);
+  12: helper_a
+  13: [B1.12] (ImplicitCastExpr, FunctionToPointerDecay, int (*)(int))
+  14: copied
+  15: [B1.14] (ImplicitCastExpr, LValueToRValue, int)
+  16: [B1.13]([B1.15])
+  17: out
+  18: [B1.17] (ImplicitCastExpr, ArrayToPointerDecay, char *)
+  19: 0
+  20: [B1.18][[B1.19]]
+  21: [B1.20] (ImplicitCastExpr, LValueToRValue, char)
+  22: [B1.21] (ImplicitCastExpr, IntegralCast, int)
+  23: [B1.16] + [B1.22]
+  24: return [B1.23];
+   Preds (1): B2
+   Succs (1): B0
+
+ [B0 (EXIT)]
+   Preds (1): B1
+
