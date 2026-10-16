@@ -493,6 +493,79 @@ def _codeql_check_only(pack: dict[str, Any], log_path: Path) -> tuple[bool, str]
     return True, "check-only compile clean"
 
 
+COMPILE_CACHE_MOUNT = "/codeql-cache"
+WARM_TIMEOUT_SECONDS = 3600
+PACK_STAGE_PATH = "/scratch/export/pack"
+CACHE_FALLBACK_OWNER = "10001:10001"
+
+
+def cache_owner() -> str:
+    """uid:gid the job runs CodeQL as: the host process owner, else the image's runtime user.
+
+    Mirrors ``appsec_review.container_runtime.identity.application_runtime_user``. The compile cache
+    must be written by the same uid the job later reads it as; a cache populated as another uid
+    is unreadable to the job's CodeQL (it silently recompiles for the full cold time).
+    """
+    getuid, getgid = getattr(os, "geteuid", None), getattr(os, "getegid", None)
+    if getuid is not None and getgid is not None and getuid() > 0 and getgid() > 0:
+        return f"{getuid()}:{getgid()}"
+    return CACHE_FALLBACK_OWNER
+
+
+def compile_cache_volume(image_id: str) -> str:
+    """Name of the volume job_codeql_analysis mounts (appsec_review.codeql.runtime.compile_cache_volume)."""
+    return "appsec-codeql-compile-" + hashlib.sha256(image_id.encode()).hexdigest()[:16]
+
+
+def _codeql_warm(pack: dict[str, Any], log_path: Path) -> tuple[bool, str]:
+    """Really compile every query of a CodeQL pack into the persistent compile-cache volume.
+
+    ``--check-only`` stops before query planning, so it leaves the multi-minute work to the first
+    analysis run. This does that work once, offline, into the exact volume (named from the pinned
+    CodeQL image id) and at the exact pack path the job uses, so the first analysis starts warm.
+    """
+    inspected = subprocess.run([docker_binary(), "image", "inspect", pack["image"], "--format", "{{.Id}}"],
+                               capture_output=True, text=True, check=False)
+    image_id = inspected.stdout.strip()
+    if inspected.returncode != 0 or not image_id:
+        return False, f"image {pack['image']} is not present"
+    volume = compile_cache_volume(image_id)
+    owner = cache_owner()
+    root = safe_path(pack["path"])
+    for argv in ([docker_binary(), "volume", "create", "--label", "appsec-review=codeql-compile-cache", volume],
+                 [docker_binary(), "run", "--rm", "--network", "none", "--read-only", "--user", "0:0",
+                  "--security-opt", "no-new-privileges", "--mount", f"type=volume,src={volume},dst={COMPILE_CACHE_MOUNT}",
+                  "--entrypoint", "chown", image_id, "-R", owner, COMPILE_CACHE_MOUNT]):
+        prepared = subprocess.run(argv, capture_output=True, text=True, check=False)
+        if prepared.returncode != 0:
+            return False, f"cache volume {volume} could not be prepared: {prepared.stderr.strip()[:120]}"
+    threads = int(pack.get("warm_threads", 8))
+    script = (
+        "set -eu\n"
+        "mkdir -p /tmp/codeql-home/.codeql\n"
+        f"ln -s {COMPILE_CACHE_MOUNT} /tmp/codeql-home/.codeql/compile-cache\n"
+        f"cd {PACK_STAGE_PATH}\n"
+        f"exec /opt/codeql/codeql query compile --threads={threads} -- "
+        "$(find . -name '*.ql' -not -path './.codeql/*' -print | sort)\n")
+    container = _pack_container_name(pack["id"])
+    argv = [docker_binary(), "run", "--rm", "--name", container, "--network", "none", "--read-only",
+            "--user", owner, "--cap-drop", "ALL", "--security-opt", "no-new-privileges",
+            "--tmpfs", "/tmp:rw,noexec,nosuid,size=2g", "--env", "HOME=/tmp/codeql-home",
+            "--mount", f"type=volume,src={volume},dst={COMPILE_CACHE_MOUNT}",
+            "--mount", f"type=bind,src={root.resolve().as_posix()},dst={PACK_STAGE_PATH},readonly",
+            "--entrypoint", "sh", image_id, "-c", script]
+    timeout = int(pack.get("warm_timeout_seconds", WARM_TIMEOUT_SECONDS))
+    started = time.monotonic()
+    result = _run_pack_container(argv, log_path, timeout, container)
+    if result is None:
+        return False, f"warm compile exceeded warm_timeout_seconds={timeout}"
+    if result.returncode != 0:
+        text = log_path.read_text(encoding="utf-8", errors="replace")
+        errors = [line for line in text.splitlines() if line.startswith("ERROR:")]
+        return False, f"warm compile exit {result.returncode}" + (f"; first: {errors[0][:120]}" if errors else "")
+    return True, f"compiled into {volume} in {time.monotonic() - started:.0f}s"
+
+
 def _engine_validate(pack: dict[str, Any], log_path: Path) -> tuple[bool, str]:
     """Engine-native validation for non-CodeQL packs."""
     root = safe_path(pack["path"])
@@ -540,7 +613,12 @@ def query_packs(args: argparse.Namespace, _catalog: dict[str, Any]) -> int:
             print(f"SKIPPED {pack['id']:<30} state={pack['state']}")
             continue
         log_path = run_dir / "logs" / f"{pack['id']}.verify.log"
-        if pack["engine"] == "codeql":
+        if pack["engine"] == "codeql" and args.warm:
+            if not pack.get("warm"):
+                print(f"SKIPPED {pack['id']:<30} not registered for a warm compile")
+                continue
+            ok, detail = _codeql_warm(pack, run_dir / "logs" / f"{pack['id']}.warm.log")
+        elif pack["engine"] == "codeql":
             ok, detail = _codeql_check_only(pack, log_path)
         else:
             ok, detail = _engine_validate(pack, log_path)
@@ -773,6 +851,9 @@ def parser() -> argparse.ArgumentParser:
     sub.add_parser("validate")
     packs = sub.add_parser("query-packs")
     packs.add_argument("ids", nargs="*")
+    packs.add_argument("--warm", action="store_true",
+                       help="really compile warm-registered CodeQL packs into the persistent compile cache "
+                            "(minutes when cold) instead of the type-check-only verification")
     for name in ("build", "smoke", "security"):
         command = sub.add_parser(name)
         command.add_argument("ids", nargs="*")

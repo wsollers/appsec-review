@@ -98,3 +98,54 @@ def test_builder_loads_the_registry() -> None:
     builder = _builder()
     ids = [pack["id"] for pack in builder.load_registry()["packs"]]
     assert "graph-export-cpp" in ids
+
+
+def test_the_export_pack_is_registered_for_a_warm_compile() -> None:
+    packs = {pack["id"]: pack for pack in _registry()["packs"]}
+    assert packs["graph-export-cpp"].get("warm") is True
+    assert not any(pack.get("warm") for pack in packs.values() if pack["engine"] != "codeql")
+
+
+def test_warm_compile_targets_the_volume_and_pack_path_the_job_uses(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from types import SimpleNamespace
+
+    from appsec_review.codeql.runtime import CodeQLImage, compile_cache_volume
+
+    builder = _builder()
+    image_id = "sha256:" + "7" * 64
+    calls: list[list[str]] = []
+
+    def fake_run(argv, **_kwargs):
+        calls.append(list(argv))
+        return SimpleNamespace(returncode=0, stdout=image_id + "\n", stderr="")
+
+    seen: list[list[str]] = []
+    monkeypatch.setattr(builder.subprocess, "run", fake_run)
+    monkeypatch.setattr(builder, "_run_pack_container",
+                        lambda argv, log, timeout, container: seen.append(argv) or SimpleNamespace(returncode=0))
+    pack = {pack["id"]: pack for pack in _registry()["packs"]}["graph-export-cpp"]
+    ok, detail = builder._codeql_warm(pack, tmp_path / "warm.log")
+    assert ok
+
+    derived = CodeQLImage("appsec-review/codeql-derived-image/2", "a" * 64, image_id, "b", "t", "c", "t",
+                          "10001:10001", "d" * 64, "e" * 64, False, "m")
+    volume = compile_cache_volume(derived)
+    assert builder.compile_cache_volume(image_id) == volume and volume in detail
+    [argv] = seen
+    assert f"type=volume,src={volume},dst=/codeql-cache" in argv
+    assert any(value.endswith(",dst=/scratch/export/pack,readonly") for value in argv)
+    assert argv[argv.index("--network") + 1] == "none"
+    assert "query compile" in argv[-1] and "--check-only" not in argv[-1]
+    # The cache must be written as the uid the job reads it as (application_runtime_user), and
+    # chowned recursively to it; another uid's entries are unreadable and force a cold recompile.
+    from appsec_review.container_runtime.identity import application_runtime_user
+    owner = application_runtime_user("10001:10001")
+    assert builder.cache_owner() == owner and argv[argv.index("--user") + 1] == owner
+    [chown] = [call for call in calls if "chown" in call]
+    assert chown[-3:] == ["-R", owner, "/codeql-cache"]
+
+
+def test_warm_flag_is_parsed_and_skips_packs_that_are_not_registered() -> None:
+    args = _builder().parser().parse_args(["query-packs", "--warm", "cert-cpp-coding-standards"])
+    assert args.warm is True
