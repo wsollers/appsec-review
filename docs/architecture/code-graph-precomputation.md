@@ -38,6 +38,7 @@ in the last column establishes each fact.
 | `job_cpg_analysis` (Joern) | Deprecated and disabled by default (`jobs.job_cpg_analysis.settings.enabled = false`): it is omitted from execution plans and produces no run artifacts. When enabled it retains `cpg.bin` and publishes a `BLOCKED` shard with zero observations, as before. | Nothing retrievable. | `jobs/job_cpg_analysis/job.py` (`JOERN_GAP`), `runtime/selection.py`, `indexing/matrix.py` (`cpg_graph` lane always `unavailable`) |
 | `job_cpp_compiled_analysis` LLVM IR branch | Unchanged: `define` lines as `ir_entity`, uniquely resolvable direct `call @name` as exact `CALLS`; TU-level ambiguous locations. Used as a C4 cross-check input (`ir-name-same-tu`). | CFG, def-use, dominators, guards, ranges, source-exact locations (section 12, K1/K3). | `jobs/job_cpp_compiled_analysis/job.py::_ir_index` |
 | `job_cpp_compiled_analysis` Clang AST branch | Unchanged: bounded JSON AST walk; `CallExpr` nodes are a C4 cross-check input. | Resolved callee identity, CFG, dataflow, macro spelling ranges (section 12, K2). | `jobs/job_cpp_compiled_analysis/job.py::_ast_index` |
+| `job_svf_alias_analysis` (SVF, opt-in) | `points_to_set` and `indirect_call_targets` records with exact `DILocation` points per linked module, each marked closed- or open-world; consumed by `graph/svf_crosscheck.py` after the clangd/IR/AST cross-check (`svf-cross-check/1`). | A primary fact of any family; may-alias never contradicts, and open-world modules never contradict. | `jobs/job_svf_alias_analysis/`, `graph/svf_crosscheck.py`, [`svf-alias-producer.md`](svf-alias-producer.md) |
 | `job_cpp_symbol_index` (clangd) | Unchanged: `symbol` entities and aggregated `CALLS`/`REFERENCES` edges; the primary C4 cross-check input for `call_site`. | Dispatch method, dataflow, guards. | `jobs/job_cpp_symbol_index/`, `docs/operations/cpp-index-jobs.md` |
 | `job_tree_sitter_ast` | Concrete syntax nodes with exact spans. | Semantic symbols, resolved calls, dataflow. | `docs/architecture/tree-sitter-ast.md` |
 | `job_review_prioritization` | `review_flow_step` entities with `FLOWS_TO` relations (`codeql-semantic-paths`); C4 links them `SAME_AS` onto correlated path steps. | General graph edges. | `docs/architecture/review-prioritization.md` |
@@ -266,7 +267,7 @@ definition byte span is equal, otherwise `ambiguous` with the method `name-and-f
 | `GUARD_POLARITY` | `true_branch`, `false_branch`, `unknown` |
 | `CROSS_CHECK_STATES` | `agree`, `disagree`, `not_covered`, `partial` |
 | `COVERAGE` | `complete`, `partial`, `unavailable` (shared with every other index) |
-| `PRODUCERS` | `codeql-export`, `clangd`, `llvm-ir`, `clang-ast` |
+| `PRODUCERS` | `codeql-export`, `clangd`, `llvm-ir`, `clang-ast`, `svf` (opt-in points-to cross-check; [`svf-alias-producer.md`](svf-alias-producer.md)) |
 
 Sink and source classes are assigned by the versioned catalog `rules/codeql-graph-export/catalog.json`
 (`appsec-review/graph-catalog/1`), which maps CodeQL model identities (for C/C++: the

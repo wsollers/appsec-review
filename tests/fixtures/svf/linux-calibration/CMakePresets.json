@@ -1,0 +1,34 @@
+{
+  "version": 6,
+  "configurePresets": [
+    {
+      "name": "baseline",
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/build/baseline",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo"
+      }
+    },
+    {
+      "name": "address",
+      "inherits": "baseline",
+      "binaryDir": "${sourceDir}/build/address",
+      "cacheVariables": {
+        "CALIBRATION_ADDRESS_INSTRUMENTATION": "ON"
+      }
+    },
+    {
+      "name": "thread",
+      "inherits": "baseline",
+      "binaryDir": "${sourceDir}/build/thread",
+      "cacheVariables": {
+        "CALIBRATION_THREAD_INSTRUMENTATION": "ON"
+      }
+    }
+  ],
+  "buildPresets": [
+    {"name": "baseline", "configurePreset": "baseline"},
+    {"name": "address", "configurePreset": "address"},
+    {"name": "thread", "configurePreset": "thread"}
+  ]
+}

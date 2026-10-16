@@ -36,6 +36,7 @@ from appsec_review.graph.catalog import Catalog, load_catalog
 from appsec_review.graph.contract import Coverage, Family, GraphSettings, Producer
 from appsec_review.graph.correlate import correlate
 from appsec_review.graph.crosscheck import CrossCheckInputs, cross_check, read_secondary
+from appsec_review.graph.svf_crosscheck import read_svf, svf_cross_check
 from appsec_review.graph.normalize import COLUMNS_PATH, EXPORT_UPSTREAM_INDEX, normalize_scope
 from appsec_review.graph.settings import RunConfigurationError, catalog_pins, run_configuration
 from appsec_review.indexing.store import ShardSet
@@ -218,20 +219,31 @@ def build_job(*, catalog_path: Path | None = None) -> Job:
             secondary = {producer: tuple(
                 read_secondary(shard_set, shard, producer,
                                tool_version=str((shard.get("producer") or {}).get("tool_version") or "unknown"))
-                for shard in scope["inputs"]["secondary"][producer.value]) for producer in s.SECONDARY_PRODUCERS}
+                for shard in scope["inputs"]["secondary"].get(producer.value, ())) for producer in s.CALL_EDGE_PRODUCERS}
+            svf = tuple(read_svf(shard_set, shard) for shard in scope["inputs"]["secondary"].get(Producer.SVF.value, ()))
             result = cross_check(facts, CrossCheckInputs(clangd=secondary[Producer.CLANGD],
                                                          llvm_ir=secondary[Producer.LLVM_IR],
                                                          clang_ast=secondary[Producer.CLANG_AST]),
                                  target_snapshot=unit.job.source_fingerprint, scope=_scope_block(scope),
                                  sources=sources, graph_symbols=symbols)
+            svf_result = svf_cross_check(result.facts, svf, target_snapshot=unit.job.source_fingerprint,
+                                         scope=_scope_block(scope))
             summary = dict(result.summary)
-            calls = [fact for fact in result.facts if fact.family is Family.CALL_SITE]
+            summary["svf"] = dict(svf_result.summary)
+            for state, count in svf_result.summary.get("states", {}).items():
+                summary.setdefault("svf_states", {})[state] = count
+            calls = [fact for fact in svf_result.facts if fact.family is Family.CALL_SITE]
             disagreements = int(summary["states"].get("disagree", 0))
-            secondary_only = sum(int(value) for value in summary.get("secondary_only", {}).values())
+            svf_disagreements = int(svf_result.summary.get("states", {}).get("disagree", 0))
+            secondary_only = sum(int(value) for value in summary.get("secondary_only", {}).values()) + \
+                int(svf_result.summary.get("secondary_only", 0))
             gaps = [*summary.get("gaps", ())]
             if disagreements:
                 gaps.append(f"cross_check_disagreements: {disagreements} call_site facts are contradicted by a "
                             "secondary producer and are not direct-eligible")
+            if svf_disagreements:
+                gaps.append(f"svf_cross_check_disagreements: {svf_disagreements} facts are contradicted by closed-world "
+                            "SVF points-to results and are not direct-eligible")
             if secondary_only:
                 gaps.append(f"secondary_only: {secondary_only} call sites are reported only by a secondary producer "
                             "(missing CodeQL coverage, not a CodeQL negative)")
@@ -239,7 +251,8 @@ def build_job(*, catalog_path: Path | None = None) -> Job:
                 "cross_check_disagreements": disagreements, "secondary_only": secondary_only})
                 if row.family is Family.CALL_SITE else row for row in coverage]
             stage = s.write_stage(run_root, scope["scope_id"], "crosschecked", s.encode_stage(
-                scope["scope_id"], result.facts, symbols, [*relations, *result.relations], coverage,
+                scope["scope_id"], svf_result.facts, symbols,
+                [*relations, *result.relations, *svf_result.relations], coverage,
                 {"cross_check": summary}))
             return {"scope_id": scope["scope_id"], "stage": stage, "states": summary["states"],
                     "secondary_only": secondary_only, "symbol_links": summary.get("symbol_links", 0),

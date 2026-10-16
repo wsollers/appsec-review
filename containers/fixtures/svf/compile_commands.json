@@ -1,0 +1,6 @@
+[
+  {"directory": "/target/source", "file": "/target/source/callbacks.c", "arguments": ["clang", "-std=c11", "-c", "/target/source/callbacks.c", "-o", "/target/build/callbacks.o"]},
+  {"directory": "/target/source", "file": "/target/source/guard.c", "arguments": ["clang", "-std=c11", "-O2", "-c", "/target/source/guard.c", "-o", "/target/build/guard.o"]},
+  {"directory": "/target/source", "file": "/target/source/main.c", "arguments": ["clang", "-std=c11", "-c", "/target/source/main.c", "-o", "/target/build/main.o"]},
+  {"directory": "/target/source", "file": "/target/source/plugin.c", "arguments": ["clang", "-std=c11", "-D_GNU_SOURCE", "-c", "/target/source/plugin.c", "-o", "/target/build/plugin.o"]}
+]

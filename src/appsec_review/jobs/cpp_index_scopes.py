@@ -225,12 +225,14 @@ def tool_identity(repository_root: Path, tool_id: str) -> dict[str, Any]:
 
 def execute_scope_tool(unit: Any, scope: IndexScope, tool_id: str, argv: tuple[str, ...],
                        scratch: Path, executor_factory: Any = None, *,
-                       file_size_limit_bytes: int | None = None) -> dict[str, Any]:
+                       file_size_limit_bytes: int | None = None,
+                       inputs: Mapping[str, Any] | None = None) -> dict[str, Any]:
     """Run one catalog tool against a scope: case root read-only at /target, scratch read-write.
 
-    The container compile database is written to ``/scratch/compile_commands.json`` first. A
-    ``file_size_limit_bytes`` is enforced by the kernel (RLIMIT_FSIZE) on every file the tool
-    writes, so a bounded output can never outgrow its limit on the run volume.
+    The container compile database is written to ``/scratch/compile_commands.json`` first, followed
+    by each ``inputs`` document as ``/scratch/<name>`` JSON. A ``file_size_limit_bytes`` is enforced
+    by the kernel (RLIMIT_FSIZE) on every file the tool writes, so a bounded output can never outgrow
+    its limit on the run volume.
     """
     from appsec_review.container_runtime import ContainerExecutor, ExecutionRequest, load_catalog
     from appsec_review.storage import tool_input_json
@@ -241,6 +243,10 @@ def execute_scope_tool(unit: Any, scope: IndexScope, tool_id: str, argv: tuple[s
     scratch.mkdir(parents=True)
     compile_database = scratch / "compile_commands.json"
     tool_input_json(compile_database, scope.container_compile_database())
+    for name, document in sorted((inputs or {}).items()):
+        if "/" in name or "\\" in name or name in {"", ".", "..", "compile_commands.json"}:
+            raise ValueError(f"scope tool input name is not a plain scratch file name: {name!r}")
+        tool_input_json(scratch / name, document)
     executor = (executor_factory(unit) if executor_factory is not None else
                 ContainerExecutor(load_catalog(unit.job.repository_root), unit.job.run_root))
     result = executor.execute(ExecutionRequest(tool_id=tool_id, argv=argv,

@@ -1,348 +1,256 @@
-# SVF points-to producer (design)
+# SVF points-to producer
 
-Status: **proposed, not implemented.** This design adds SVF (Static Value-Flow Analysis) as an
-independent C/C++ points-to producer that cross-checks existing `graph` facts. It does not change
-which producer is primary. CodeQL stays the primary producer of every fact family
-([`code-graph-precomputation.md`](code-graph-precomputation.md) D1). SVF joins clangd, LLVM IR and
-the Clang AST as a secondary producer under the same cross-check, eligibility and contradiction
-rules.
+Status: **implemented 2026-10-16, opt-in.** It is verified offline against recorded real tool output,
+and live against the pinned image on a synthetic fixture and on a copied multi-vulnerability C/C++
+project. Operations are in [`../operations/svf-alias-analysis.md`](../operations/svf-alias-analysis.md),
+and the image is documented in [`containers/tools/svf/`](../../containers/tools/svf/README.md).
+
+SVF (Static Value-Flow Analysis) is an independent C/C++ points-to producer that cross-checks
+existing `graph` facts. It does not change which producer is primary. CodeQL stays the primary
+producer of every fact family ([`code-graph-precomputation.md`](code-graph-precomputation.md) D1).
+SVF joins clangd, LLVM IR and the Clang AST as a secondary producer, under the same eligibility and
+contradiction rules.
 
 Licence: SVF is `AGPL-3.0-or-later`. This repository uses it internally, does not redistribute it
-and is not a commercial product, so the licence has been accepted for this use. The image still
-records the licence, its source and its third-party notices like every other tool image.
+and is not a commercial product, so the owner accepted the licence for this use. The image still
+records the licence, the source and the third-party notices
+([`LICENSE.md`](../../containers/tools/svf/LICENSE.md)).
 
 ## 1. What problem this solves
 
 CodeQL leaves two specific holes in C/C++ graph facts, and both come from pointers:
 
-| Hole today | Where it shows | What points-to adds |
+| Hole | Where it shows | What points-to adds |
 |---|---|---|
-| Indirect calls with no resolved targets | `call_site` facts with `dispatch = unresolved_indirect`; `callers`/`callees` closures stop at them | A whole-module target set for each function-pointer call, computed from the actual linked program |
-| A guard checks a pointer, but nothing links that pointer to the sink operand | `guard_fact` with `constrains_sink_operand = unknown` (4.6) | A may-alias or no-alias answer for the guard operand and the sink operand |
+| Indirect calls with no resolved targets | `call_site` facts with `dispatch = unresolved_indirect`; `callers`/`callees` closures stop at them | a whole-module target set for each function-pointer call, computed from the linked program |
+| A guard checks a pointer, but nothing links that pointer to the sink operand | `guard_fact` with `constrains_sink_operand = unknown` (4.6) | a may-alias or no-alias answer for the guard operand and the sink operand |
 
 Callback tables, plugin structs and hand-rolled vtables in C code produce most of these holes, and
 they are also where many memory-safety bugs live.
-
-Out of scope: interprocedural taint (CodeQL's job), memory-SSA value-flow paths, and leak or
-double-free checking with SVF's `saber`. Section 9 lists what is deliberately not done.
 
 ## 2. Decisions
 
 ### S-D1 SVF is a cross-check producer and adds no model-facing family
 
-SVF output enters the `graph` index only through `job_code_graph_index`'s cross-check step. The
-rules are the existing D1 rules:
+SVF output enters the `graph` index only through `job_code_graph_index`'s cross-check unit
+(`graph/svf_crosscheck.py`), which runs after the clangd/IR/AST cross-check:
 
-- **Agreement** sets `cross_check.state = agree`. It never makes a fact eligible on its own.
-- **Disagreement** sets `disagree`, adds a `CONTRADICTS` relation to the SVF record, and makes the
-  fact ineligible.
-- **SVF-only results** become `secondary_only` facts with `producer = svf` and
-  `direct_eligible = false`.
+- Agreement sets the SVF producer state to `agree`. It never makes a fact eligible on its own.
+- Disagreement sets `disagree`, adds a `CONTRADICTS` relation to the SVF record, and makes the fact
+  ineligible.
+- Evidence too weak to contradict is recorded as a `not_covered` producer entry with its detail.
+  This covers open-world exclusions, SVF targets for an unresolved call, and an alias answer when
+  CodeQL's constraint is `unknown`. It never changes the fact's state or eligibility, because
+  `partial` already removes eligibility under `graph-fact-admissibility/1`.
+- An unresolved CodeQL call that SVF resolves gains one `secondary_only` call-site fact per target
+  (`producer = svf`, `direct_eligible = false`, linked `DERIVED_FROM` the SVF record).
 
-No `aliases` mode is added to `query_code_graph`, and no new R4 predicate mapping is added. D3
-applies: points-to sets are inputs to cross-checking, not something a reviewer should rebuild
-reachability from in prose. Section 9 covers a possible later indirect-only mode.
+Each SVF verdict is its own producer entry, `{"name": "svf", "rule": "svf-cross-check/1", ...}`,
+inside the fact's unchanged `graph-cross-check/1` block. The block state is the most doubtful
+producer state. `query_code_graph` gains no `aliases` mode and no new R4 predicate mapping (D3
+applies).
 
-### S-D2 Andersen first, demand-driven refinement only for queried operands
+### S-D2 Andersen, and only closed-world negatives contradict
 
-The main analysis is SVF's field-sensitive Andersen analysis (`AndersenWaveDiff`). It is
-flow-insensitive and context-insensitive, and it runs over one linked module per link unit.
-Andersen **over-approximates** relative to the modeled program, which sets what each answer means:
+The analysis is SVF's field-sensitive `AndersenWaveDiff`. It is flow-insensitive and
+context-insensitive, and it runs over one linked module per link unit. Andersen over-approximates
+the modeled program, so:
 
-- **may-alias / target ∈ set** is weak evidence. It might be spurious, so it can confirm but never
-  contradict.
-- **no-alias / target ∉ set** is strong evidence, but *only when the query is closed-world*
-  (section 5.3). It is the only SVF answer that can produce `disagree`.
+- **target ∈ set / may-alias** can only confirm or add doubt;
+- **target ∉ set / no-alias** contradicts only when every consulted record is complete (not
+  truncated, no incomplete reasons) and its module is closed-world (5.3).
 
-Demand-driven refinement (SVF DDA, flow- and context-sensitive) is optional and runs only for
-operands CodeQL facts actually ask about, each with its own budget (`dda_query_budget`). It can turn
-a may-alias into a no-alias. It is off by default until live acceptance shows it helps.
+SVF's demand-driven refinement (DDA) is not used.
 
-### S-D3 The analysis is query-driven from CodeQL facts, not a full points-to dump
+### S-D3 The driver exports pointer sites; the cross-check joins by source span
 
-A full points-to dump of a real program is unbounded and mostly irrelevant. The job asks only
-about:
+This replaces the earlier plan to query only CodeQL-reported operands. The driver exports every
+pointer site in the module and the cross-check joins by span, which keeps the job independent of
+`job_codeql_analysis`: there is no DAG cycle and no dependency on a CodeQL export that has not run
+live yet. The driver exports, within its bounds:
 
-1. every IR call instruction whose callee is not a constant function, so indirect-call target sets
-   are complete for the module (bounded by `max_indirect_calls`);
-2. the sink operand of each CodeQL `sink_site` in classes `memory_write`, `memory_read` and
-   `allocation_size`;
-3. the condition operands of each CodeQL `guard_fact` for those sinks.
+- dereferenced pointers: loads and stores whose address is not a direct local or global;
+- pointer arguments of direct calls, with the argument index and callee name;
+- both operands of pointer comparisons;
+- every indirect call with its sorted, demangled target names.
 
-Items 2 and 3 come from the accepted raw CodeQL export, which is why the job depends on
-`job_codeql_analysis` (section 6).
+Each site carries its own `DILocation` (inlined-at chains resolve to the outermost call). The
+cross-check finds SVF records whose point lies inside a CodeQL span: the call expression for
+`call_site`, the condition for `guard_fact`, and the sink expression filtered by sink class and
+argument index for the sink operand. Mapping happens in the driver itself, so the planned K1 chunk
+is not a prerequisite.
 
-### S-D4 Bitcode comes from the compiler of record; SVF's own LLVM only reads it
+### S-D4 Bitcode comes from the compiler of record
 
-`tool-native-cpp` compiles with clang-18. SVF 3.3 (May 2026) builds against LLVM 21.1. Textual IR
-(`.ll`) is not stable across LLVM major versions, but bitcode is readable by later versions. So:
-
-- `native.py`'s `ir` mode additionally runs the image's `llvm-as-18` over each `tu-NNNN.ll` it
-  already writes, producing `tu-NNNN.bc` from the **same** IR, without a second compile.
-- The SVF image never compiles target code. It links (`llvm-link` 21) and analyzes the clang-18
-  bitcode.
-- LLVM's auto-upgrade may drop debug metadata it considers malformed. Each module's stripped
-  `!dbg` count is recorded, and a non-zero count is the gap `debug_info_upgraded_lossy` on that
-  module.
-
-Rebuilding the target with clang-21 is rejected. It would analyze a program that is not the one
-CodeQL and clangd saw.
+The `tool-svf` runtime stage is `tool-native-cpp`. The wrapper replays each accepted compile command
+with clang-18 at `-O0 -g` to bitcode, keeping every semantic flag and dropping output, optimization,
+LTO, sanitizer, dependency-file and `-Werror` flags. LLVM 21.1, which SVF-3.3 requires, only links
+and reads that bitcode. Every module goes through `llvm-link-21`, even a single unit, so the bitcode
+upgrade is uniform. Its "ignoring invalid debug info" warnings are counted as
+`debug_info_upgraded_lossy`. Neither `tool-native-cpp` nor `job_cpp_compiled_analysis` changes.
 
 ### S-D5 One linked module per link unit
 
-`job_cpp_compiled_analysis` already retains `normalized-link-commands.json`. Each link command
-(executable or shared library) becomes one module: `llvm-link` over the bitcode of exactly the
-object files that command consumes.
+`plan_modules` (`jobs/job_svf_alias_analysis/planning.py`) reads the accepted
+`compile_commands[].output_path` and `link_commands`:
 
-- A TU that no link command consumes is analyzed as a single-TU module, with the gap
-  `not_in_link_unit`. Such a module is never closed-world.
-- A link failure (duplicate definitions, ODR conflicts) makes the module `unavailable`, with the
-  linker's bounded stderr kept as the gap text.
-- Static archives are expanded to their member objects when the link database names them. When it
-  does not, the gap is `archive_members_unresolved`.
+- each non-archive link command (executable or shared library) becomes one module, from the bitcode
+  of exactly the objects it consumes;
+- a static archive is expanded through its own captured archive command and is never a module of
+  its own;
+- a shared-library input stays external (noted); its functions reach the module only as externals,
+  which the driver judges like any other;
+- unresolved archives and inputs are named open-world reasons (`archive_members_unresolved`,
+  `link_input_unresolved`);
+- a compile unit no link consumes becomes a single-unit module with `not_in_link_unit`;
+- modules beyond `max_modules_per_scope` are omitted with a gap.
 
-## 3. Prerequisites
+## 3. Tool image `tool-svf`
 
-| Prerequisite | Why | State |
+`containers/tools/svf/`, catalog entry `tool-svf` pinned by `image_id`. The build is offline from
+the hash-locked inputs: the SVF-3.3 source, the RTTI LLVM 21.1.0 and Z3 4.8.8 distributions SVF's
+`build.sh` names, and a `.deb` tar of the zlib, zstd and libxml2 headers used only by the build
+stage. The runtime contains:
+
+- `svf.py`: `version`, and `run plan.json result.json`;
+- `svf-alias-export`: the repository-owned driver, built inside the SVF tree against `SvfCore` and
+  `SvfLLVM`;
+- `llvm-link-21`, `libLLVM.so`, `libz3.so` and `extapi.bc`.
+
+The image runs under the central container policy (no network, read-only root, non-root, 1 GiB,
+600 s per scope). It does not get the larger allowance an earlier draft proposed.
+
+The driver writes `appsec-review/svf-alias-output/1`. Abstract objects are keyed per module by
+allocation site, name, field and SVF node. Stack objects take their name and line from
+`dbg.declare` records, globals and functions from their debug metadata. String literals and constant
+globals fold into SVF's one shared constant object, `obj:constant:shared`, which is a real read-only
+object, not unknown memory. Black-hole and dummy objects add `unknown_object` to the site's
+incomplete reasons instead of becoming keys.
+
+## 4. Analysis contract
+
+### 4.1 Plan (`appsec-review/svf-plan/1`) and run result (`appsec-review/svf-run/1`)
+
+The job writes `/scratch/plan.json` with its planned modules (id, kind, label, compile indexes) and
+the driver bounds. The wrapper writes `/scratch/result.json` with:
+
+- one record per compile unit (`produced`, exit status, bounded stderr);
+- one record per module, with `status` (`analyzed`, `no_bitcode`, `link_failed`, `too_large`,
+  `andersen_time_limit`, `analysis_failed`), `gaps`, `debug_info_warnings` and the relative path of
+  the driver document.
+
+The job rejects an output path that escapes scratch, a malformed envelope and any bound overrun.
+
+### 4.2 Published records (`appsec-review/svf-alias-record/1`)
+
+| Entity kind | One record is | Key payload |
 |---|---|---|
-| K1 (exact IR debug locations) | Mapping a CodeQL source span to an IR value needs decoded `DILocation`s | planned ([`code-graph-precomputation.md`](code-graph-precomputation.md) section 12) |
-| CodeQL export pack verified on a real database | Query operands come from real export rows, not hand-authored recordings | blocked on this host: pinned CodeQL and C++ build image IDs differ from the local images |
-| Matching scope identities | SVF modules must join CodeQL scopes by `build_unit_id` | to verify in S0 (section 8) |
+| `points_to_set` | one pointer site | `role` (`load`, `store`, `call_arg`, `compare`), `operand`, `callee`, `function`, `points_to` keys, referenced `objects`, `truncated`, `incomplete_reasons`, `complete` |
+| `indirect_call_targets` | one indirect call | `function`, `targets` (`name`, `demangled`), `target_count`, `truncated`, `complete` |
 
-S1 and S2 can start before K1 lands. S3 and S4 need it.
+Every record also carries the module identity, kind and label, `module_closed_world`,
+`open_world_reasons` and up to 64 `unmodeled_externals`. Locations are exact points (`llvm-dilocation`).
+A column of 0 is an ambiguous whole-line location, which the cross-check skips. Sites outside
+accepted sources, such as system headers, are counted and not published.
 
-## 4. Tool image `tool-svf`
+### 4.3 When a negative answer is trustworthy (`closed_world`)
 
-`containers/tools/svf/`, registered in `containers/catalog.toml` with `dependencies = []` (it
-carries its own LLVM).
+A module is closed-world only when none of these reasons apply:
 
-| Item | Value |
-|---|---|
-| SVF | release tag `SVF-3.3`, source archive pinned by SHA-256 in `assets.lock.json` |
-| LLVM | 21.1.0 RTTI build that SVF's `build.sh` expects, pinned by SHA-256 |
-| Z3 | 4.15.4, pinned by SHA-256 |
-| Build | multi-stage offline build from prefetched assets (`acquire_assets.sh`, the `native-cpp` pattern). No `git clone` and no network in the final stage |
-| Driver | `/opt/appsec/svf-alias-export`: a small repository-owned C++ program linked against `libSvfLLVM`. It reads a JSON request and writes one bounded JSON result (`appsec-review/svf-alias-output/1`). Upstream `wpa`/`dvf` CLIs are not used, because their text output is not a stable contract |
-| Wrapper | `/opt/appsec/svf.py`: `version`, `link` (runs `llvm-link`, reports stripped debug metadata), `analyze` (runs the driver under the time budget) |
-| `tool.toml` | `license = "AGPL-3.0-or-later"`, `network = "none"`, `user = "10001:10001"`, read-only root, read-only target mount, scratch read-write, `drop-all`, `no-new-privileges`, `memory = "8g"`, `cpus = "2"`, `timeout_seconds = 1800` |
-| `LICENSE.md` / `inventory.json` | SVF, LLVM (Apache-2.0 WITH LLVM-exception), Z3 (MIT), and SVF's vendored fastcluster, SparseBitVector and cJSON notices |
+- planner reasons: `not_in_link_unit`, `archive_members_unresolved`, `link_input_unresolved`;
+- `missing_bitcode` for any of its units;
+- driver reasons:
+  - `dynamic_loading`: it references `dlopen`, `dlsym` or the Windows equivalents;
+  - `pointer_inline_asm`: it contains inline assembly with pointer operands or results;
+  - `unmodeled_external_functions`: it calls an external with a pointer argument or result that
+    neither SVF's ExtAPI models nor the driver's explicit non-capturing list covers. That list holds
+    deallocators, formatted output, read-only string and memory inspection, the `ato*` family,
+    pthread mutex calls and exception helpers.
 
-The driver is the only code in the image the repository writes, and it is small. It loads the
-module, builds the SVF IR, runs Andersen, resolves each requested operand to a `PAG`/`SVFIR` node,
-and emits points-to sets as abstract-object identities (allocation site plus field index) with
-their `DILocation`. It never prints raw LLVM value names into retained fields that the index
-serves.
-
-## 5. Analysis contract
-
-### 5.1 Request (per module)
-
-```json
-{"schema": "appsec-review/svf-alias-request/1",
- "module": "module.bc",
- "queries": [{"query_id": "q-…", "kind": "operand", "file": "src/codec.c", "line": 88, "column": 12,
-              "operand_role": "sink" | "guard", "fact_identity": "asr:sink_site:…"},
-             {"query_id": "q-…", "kind": "indirect_calls"}],
- "bounds": {"field_limit": 64, "max_pts_size": 256, "max_indirect_calls": 20000,
-            "max_targets_per_call": 64, "andersen_time_limit_seconds": 900,
-            "dda_query_budget": 0}}
-```
-
-### 5.2 Result (per module)
-
-```json
-{"schema": "appsec-review/svf-alias-output/1",
- "svf_version": "SVF-3.3", "llvm_version": "21.1.0",
- "module": {"sha256": "…", "functions": 0, "pointer_nodes": 0, "abstract_objects": 0,
-            "closed_world": true, "open_world_reasons": []},
- "andersen": {"completed": true, "seconds": 0.0},
- "operand_results": [{"query_id": "q-…", "mapping": "exact" | "ambiguous" | "unmapped",
-                      "points_to": [{"object": "obj-…", "alloc_site": {"file": "…", "line": 0, "column": 0},
-                                     "kind": "stack" | "heap" | "global" | "function", "field": 0}],
-                      "truncated": false, "incomplete_reasons": []}],
- "indirect_calls": [{"call": {"file": "…", "line": 0, "column": 0}, "caller": "…",
-                     "targets": ["…"], "truncated": false, "incomplete_reasons": []}],
- "gaps": []}
-```
-
-Alias answers are computed in the job, not the driver, from two `operand_results` of the same
-module:
-
-| Condition | Answer |
-|---|---|
-| The sets intersect | `may_alias` |
-| They are disjoint, both are complete (not truncated, no `incomplete_reasons`) and the module is `closed_world` | `no_alias` |
-| Anything else | `unknown`, with the reasons |
-
-### 5.3 When a no-answer is trustworthy (`closed_world`)
-
-A module is `closed_world` only when all of these hold. Every reason it fails is listed in
-`open_world_reasons`, and an open-world module can only produce `agree`, `partial` or
-`not_covered`:
-
-- every object its link command consumes was linked (no `not_in_link_unit`,
-  `archive_members_unresolved` or missing bitcode);
-- it does not reference `dlopen`, `dlsym`, `LoadLibrary` or `GetProcAddress`;
-- every external function it calls with a pointer argument or result is modeled in SVF's ExtAPI
-  table. Unmodeled ones are listed by name, up to a bound;
-- it has no inline assembly that touches pointers;
-- Andersen completed within its time budget.
-
-Per query, `incomplete_reasons` also covers `points_to_truncated` (more than `max_pts_size`),
-`field_limit_collapsed` (struct wider than `field_limit`, so fields merged) and `varargs`.
-
-### 5.4 Mapping source spans to IR values
-
-Each query uses K1's `DILocation` decoding. An operand is `exact` when exactly one IR
-pointer-typed value's `DILocation` matches the CodeQL span's line and column for the expected role
-(the store or load address for memory sinks, the compared value for guards). Zero matches is
-`unmapped`; several is `ambiguous`. Neither may produce `disagree`. Macro-expanded spans use K2's
-spelling ranges when they exist and are otherwise `ambiguous`.
-
-## 6. Job `job_svf_alias_analysis`
-
-### 6.1 Units
+## 5. Job `job_svf_alias_analysis`
 
 ```text
-job_svf_alias_analysis
-  load.accepted_inputs -> plan.modules -> link.modules -> analyze.modules -> acceptance.publish_handoff
-      ^ accepted: cpp_compiled_analysis (IR bitcode, normalized-link-commands.json, source hashes),
-        codeql_analysis (graph export manifest and rows for sink_site and guard_fact)
+load.accepted_cpp -> analyze.scopes -> acceptance.publish_handoff
 ```
 
-- **`plan.modules`**: groups bitcode by link command (S-D5), builds each module's request from the
-  CodeQL rows of the matching scope, and applies `max_modules_per_scope`.
-- **`link.modules`** and **`analyze.modules`**: run one container per module, up to the job's
-  `workers`. A failure is a module-level gap and never stops sibling modules.
-- **`acceptance.publish_handoff`**: publishes one `alias` shard per `(scope, module)` with a
-  coverage row, through `cpp_index_scopes.publish_scope_indexes` like
-  `job_clang_static_analysis`.
+- **One container per accepted scope.** Module failures are module-level coverage rows and never
+  stop sibling modules.
+- **One `analysis` shard per scope, `svf-<scope_id>`.** It holds one coverage row per module
+  (`svf:<project>:<label>`) and is published through `publish_scope_indexes` (prefix `svf`), the
+  same way as `job_clang_static_analysis`.
+- **Placement.** In Dagster the job depends on `job_cpp_compiled_analysis`. `job_codeql_analysis`
+  and `job_code_graph_index` list it among their dependencies when it is registered. The graph job
+  assigns SVF shards to CodeQL scopes by located paths, like the other secondary shards, and also
+  restores them from the job's own accepted handoff.
+- **Checkpoint identity.** It covers the accepted scope, link commands, settings, tool identity and
+  adapter version. A reused checkpoint re-verifies every artifact it references.
+- **Configuration.** The job is `enabled = false` in `appsec-review.toml`. Settings are listed in the
+  operations page.
 
-### 6.2 Shard contents
+## 6. Cross-check rules (`svf-cross-check/1`)
 
-New `EntityKind` values (contract chunk S0):
+### 6.1 `call_site` indirect calls
 
-| Kind | One record is |
+Indirect-call records are matched to a fact when their point lies inside its call span. Targets from
+every module covering that span are unioned. Names are compared by unqualified function name
+(`function_tail`), which strips parameter lists and template arguments by matching brackets from the
+end, so `ns::(anonymous namespace)::f(unsigned long)` matches `f`.
+
+| CodeQL fact | SVF result | Producer state |
+|---|---|---|
+| `function_pointer_resolved` or `virtual_resolved` | callee ∈ targets | `agree` |
+| same | callee ∉ targets, all records complete and closed-world | `disagree`, `CONTRADICTS` to each record |
+| same | callee ∉ targets otherwise | `not_covered`, with detail |
+| `unresolved_indirect` | targets non-empty | `not_covered`, with detail; one `secondary_only` fact per target |
+| any | no record inside the span | no SVF entry |
+
+### 6.2 `guard_fact` operand aliasing
+
+The guard's condition span supplies `compare` sites. The sink's expression span supplies sink-operand
+sites: `store` or `call_arg` for `memory_write`, `load` or `call_arg` for `memory_read`, and
+`call_arg` for `allocation_size`, with `call_arg` restricted to the sink's `argument_index`. Within
+each module, operands with empty points-to sets (such as `NULL`) are dropped:
+
+- **may-alias** when any compare set intersects any sink set;
+- **no-alias** when all sets are disjoint and every record is complete and closed-world;
+- **unknown** otherwise.
+
+Across modules, any may-alias wins, and no-alias needs every module to agree.
+
+| CodeQL `constrains_sink_operand` | SVF answer | Producer state |
+|---|---|---|
+| `true` | may-alias | `agree` |
+| `true` | no-alias | `disagree`, `CONTRADICTS` to the consulted records |
+| `false` | no-alias | `agree` |
+| `false` | may-alias | `partial` |
+| `unknown` | may-alias or no-alias | `not_covered`, with the answer in the detail |
+| any | unknown, no pointer compare, or no SVF record | no SVF entry |
+
+SVF never changes `constrains_sink_operand` or any other CodeQL result field.
+
+## 7. Verification
+
+| Tier | What it proves |
 |---|---|
-| `points_to_set` | one queried operand's bounded points-to set, located at the operand span, with the `fact_identity` it was asked for |
-| `indirect_call_targets` | one IR indirect call instruction with its SVF target set, located at the call span |
+| `tests/test_svf_alias_analysis.py` | module planning (archives, shared libraries, unlinked units, bounds); scope analysis over recorded real output (records, exact points, closed-world marking, coverage rows); every failure mode (container exit, timeout, missing image, malformed or missing result, module failures, bound overruns, output escape, missing bitcode, lossy debug info, sites outside accepted sources); checkpoint reuse; settings and topology validation |
+| `tests/test_svf_tool.py` | wrapper flag rewriting; compile, link and analysis outcomes, and plan validation, with the process runner faked |
+| `tests/graph/test_svf_crosscheck.py` | every row of 6.1 and 6.2 over a shard the job publishes from recorded output; determinism; `function_tail`; graph-job routing of SVF shards |
+| `tests/live/test_svf_live.py` | the real pinned image through the real container executor. On the synthetic fixture (`containers/fixtures/svf`) the live output must equal the offline recordings. On `linux-calibration`, a static archive and a shared library link into two executables, and one source is compiled twice: three modules are planned and analyzed, two are closed-world, the function-pointer dispatch resolves to exactly its two targets, and the mismatched `new[]`/`delete` site carries its heap object |
 
-Relations reuse existing kinds: `CALLS` from `indirect_call_targets` to each target `symbol`, when
-a target resolves to an accepted clangd or graph symbol, and `DERIVED_FROM` to the `ir_entity` the
-call came from.
-
-### 6.3 Configuration (`appsec-review.toml`)
-
-```toml
-[jobs.job_svf_alias_analysis]
-name = "svf_alias_analysis"
-workers = 2
-
-[jobs.job_svf_alias_analysis.settings]
-enabled = false                    # opt-in until live acceptance passes
-max_modules_per_scope = 32
-max_module_bitcode_bytes = 268435456
-field_limit = 64
-max_pts_size = 256
-max_indirect_calls = 20000
-max_targets_per_call = 64
-max_operand_queries_per_module = 5000
-andersen_time_limit_seconds = 900
-dda_query_budget = 0               # 0 disables demand-driven refinement
-max_output_bytes = 33554432
-```
-
-The container memory limit stays in `tool.toml`. When it is disabled, the job is omitted from
-execution plans, just like `job_cpg_analysis`.
-
-### 6.4 Placement, fingerprints and resume
-
-- **Dagster `wave1_review`.** The job depends on `job_cpp_compiled_analysis` and
-  `job_codeql_analysis`. `job_code_graph_index` depends on it when it is registered, the same way
-  it treats `job_clang_static_analysis`.
-- **Module checkpoint identity.** It binds the bitcode hashes, the link command, the CodeQL export
-  manifest hash, the request bounds, the image ID, the driver version and the job implementation
-  hash. A changed CodeQL export reruns only `plan` and `analyze`. It never relinks, because module
-  bytes are independent of queries.
-- **Invalidation.** A SARIF suite change does not rerun this job. A changed export pack or catalog
-  does, because the query set changes.
-
-## 7. Cross-check rules (`graph-cross-check/3`)
-
-K1 owns `graph-cross-check/2`. This design adds `/3` in `graph/crosscheck.py` and
-`Producer.SVF = "svf"` in `graph/contract.py`.
-
-### 7.1 `call_site` indirect calls
-
-Matching is by exact call span. This needs K1, and calls without one are `not_covered`.
-
-| CodeQL fact | SVF result | State |
-|---|---|---|
-| `function_pointer_resolved` or `virtual_resolved`, targets T | SVF set S ⊇ T | `agree` (extra SVF targets are listed in the cross-check record, not published as facts) |
-| same | some t ∈ T is not in S, and both the module and the call are complete | `disagree`, with a `CONTRADICTS` relation to the `indirect_call_targets` record |
-| same | some t ∈ T is not in S, but the call is incomplete or the module is open-world | `partial` |
-| `unresolved_indirect` | S non-empty | one `secondary_only` `call_site` fact per target (`producer = svf`, `dispatch = function_pointer_resolved`, ineligible). The original fact keeps `unresolved_indirect` and links to the new facts with `DERIVED_FROM` |
-| any | span unmapped, module unavailable or no SVF shard | `not_covered` |
-
-The `callers`/`callees` closure (4.2) may traverse `secondary_only` SVF edges. Each row reached that
-way carries `producer = svf` and stays ineligible, so the reviewer sees where the closure depends on
-points-to.
-
-### 7.2 `guard_fact` operand aliasing (pointer operands only)
-
-| CodeQL `constrains_sink_operand` | SVF answer for (guard operand, sink operand) | State |
-|---|---|---|
-| `true` | `may_alias` | `agree` |
-| `true` | `no_alias` (closed-world, both exact) | `disagree`, with `CONTRADICTS`, so the guard fact is ineligible |
-| `unknown` | `may_alias` or `no_alias` | `partial`; the answer is recorded on the cross-check, and the fact stays `unknown` and ineligible as today |
-| `false` | `may_alias` | `partial`; may-alias cannot overturn CodeQL's answer |
-| any | `unknown`, non-pointer operands, or no SVF shard | `not_covered` |
-
-SVF never sets `constrains_sink_operand` and never makes a fact eligible. It can only add doubt.
-This follows R3: static evidence is a second opinion, and absence is a gap.
-
-## 8. Implementation chunks
-
-Following `.claude/skills/parallel-implementation/SKILL.md`. S0 lands first. After that, S1 and S2
-run in parallel. S3 and S4 need S0, K1 and the live-verified CodeQL export. S5 integrates.
-
-| Chunk | Owned files | Done when |
-|---|---|---|
-| **S0** Contract | `graph/contract.py` (`Producer.SVF`, `graph-cross-check/3` constant), `retrieval/model.py` (two entity kinds), `docs/schemas/svf-alias-*.schema.json`; a check that CodeQL and compiled-analysis scopes share `build_unit_id` | contract tests pass and schemas validate fixtures |
-| **S1** Bitcode emission | `containers/tools/native-cpp/native.py` (`llvm-as-18` after each `.ll`), `job_cpp_compiled_analysis` (retain `.bc` as run-owned artifacts) | the native fixture yields `.bc` files whose hashes are recorded; `.ll` output is unchanged |
-| **S2** Image | `containers/tools/svf/` (Dockerfile, `acquire_assets.sh`, `assets.lock.json`, `tool.toml`, `LICENSE.md`, `inventory.json`, `svf.py`, `driver/`), `containers/catalog.toml` | offline build; `version` matches; fixture modules give the expected JSON; the security acceptance (no network, read-only, non-root) passes |
-| **S3** Job | `src/appsec_review/jobs/job_svf_alias_analysis/`, `appsec-review.toml`, Dagster adapter registration, `docs/operations/svf-alias-analysis.md` | recorded driver outputs drive unit tests for planning, bounds, every gap in 5.3 and resume; disabled-by-default omission is tested |
-| **S4** Cross-check | `graph/crosscheck.py`, `tests/graph/test_svf_crosscheck.py` | every row of the tables in 7.1 and 7.2 has a test; no SVF shard leaves every fact `not_covered` with byte-identical output |
-| **S5** Integration | `indexing/matrix.py` (`svf_alias` input row as a cross-check input), this doc's status, `code-graph-precomputation.md` producer table, `tests/live/test_svf_alias_live.py` | the live tier runs on the acceptance target and the status columns record what was observed |
-
-Fixture programs (`containers/fixtures/svf/`), each with recorded expectations:
-
-1. a callback table dispatched through a struct field, where CodeQL is `unresolved_indirect` and
-   SVF resolves the targets;
-2. two struct fields of the same object, which must stay distinct under the field limit;
-3. a NULL check on an alias of the written pointer (`agree`), and on an unrelated pointer
-   (`disagree`);
-4. a `dlopen`/`dlsym` program, which must be open-world, so no `disagree` is possible;
-5. two TUs defining the same symbol, which must produce a link failure gap;
-6. a struct wider than the field limit, which must produce `field_limit_collapsed`.
-
-## 9. Risks and what is deliberately not done
+## 8. Risks and what is deliberately not done
 
 | Risk | Mitigation |
 |---|---|
-| Andersen memory and time grow quickly on large C++ modules | per-module time limit and container memory limit; over budget is a module `unavailable` gap; `max_module_bitcode_bytes` skips oversized modules up front |
-| SVF's C++ modeling (templates, exceptions, `std::function`) is weaker than its C modeling | virtual-call cross-check uses only C++ functions whose SVF results are complete; the coverage row counts C++ modules separately; expected value is highest for C |
-| Debug metadata lost in the LLVM 18 → 21 upgrade | counted per module (S-D4); a lost location makes queries `unmapped`, never wrong |
-| Spurious may-alias from a context-insensitive heap | may-alias can never contradict (S-D2) |
-| ExtAPI misses library functions | unmodeled externals make the module open-world (5.3) |
-| Upstream SVF changes its API between releases | the driver pins one release; updating it is a deliberate image bump with fixture re-acceptance |
+| Andersen memory and time on large C++ modules | the central 1 GiB/600 s policy plus per-module limits; overruns are module gaps |
+| SVF's C++ runtime coverage | unmodeled C++ runtime calls (threads, exceptions, `__cxa_atexit`) correctly make modules open-world, so SVF rarely contradicts on heavy C++; its value is highest for C |
+| Debug metadata lost in the LLVM 18 → 21 upgrade | counted per module; a lost location only removes matches |
+| Spurious may-alias from the context-insensitive heap | may-alias never contradicts |
+| Upstream SVF API changes | one pinned release; a bump is a deliberate image rebuild, re-recording and repin |
 
 Not done, on purpose:
 
-- **No `aliases` mode for reviewers yet.** If live use shows a need, it would be indirect-only for
-  every predicate and require its own decision against D3.
-- **No SVFG value-flow paths.** Paths stay CodeQL's (`dataflow_path`). A second path producer would
-  need its own path-correlation rules.
-- **No `saber` leak or double-free findings.** Those would be a source-SAST producer like K4, not a
-  cross-check, and need their own severity normalization.
+- **No reviewer-facing `aliases` mode.** It would need its own decision against D3 and would be
+  indirect-only.
+- **No SVFG value-flow paths.** Paths stay with CodeQL (`dataflow_path`).
+- **No `saber` leak or double-free findings.** Those would be a source-SAST producer like K4.
 - **No optimized-build analysis.** Like every IR producer here, this is `-O0` only.

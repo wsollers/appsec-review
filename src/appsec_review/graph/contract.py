@@ -117,6 +117,7 @@ class Producer(StrEnum):
     CLANGD = "clangd"
     LLVM_IR = "llvm-ir"
     CLANG_AST = "clang-ast"
+    SVF = "svf"
 
 
 FAMILY_KINDS: Mapping[Family, EntityKind] = {family: EntityKind(family.value) for family in Family}

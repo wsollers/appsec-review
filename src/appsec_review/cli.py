@@ -23,7 +23,8 @@ GRAPH_JOB_IDS = ("job_model_connectivity", "job_tool_image_rebuild", "job_review
                  "job_project_build", "job_language_build", "job_artifact_indexing", "job_test_coverage",
                  "job_profile_data",
                  "job_artifact_security_analysis",
-                 "job_cpp_compiled_analysis", "job_clang_static_analysis", "job_cpp_symbol_index", "job_cpg_analysis",
+                 "job_cpp_compiled_analysis", "job_clang_static_analysis", "job_svf_alias_analysis",
+                 "job_cpp_symbol_index", "job_cpg_analysis",
                  "job_evidence_collection", "job_dependency_intelligence", "job_change_context_analysis",
                  "job_codeql_analysis",
                  "job_review_prioritization", "job_code_graph_index", "job_review_data_indexing")

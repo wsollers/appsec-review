@@ -1321,6 +1321,43 @@ workers = 4
 workers = 1
 [jobs.job_clang_static_analysis.steps.acceptance.tasks.publish_handoff]
 
+# SVF points-to cross-check producer (docs/architecture/svf-alias-producer.md). Opt-in: its records
+# only add doubt to graph facts, and large C++ modules may exceed the central 1 GiB/600 s tool policy,
+# which is then reported as a module gap.
+[jobs.job_svf_alias_analysis]
+name = "svf_alias_analysis"
+workers = 2
+
+[jobs.job_svf_alias_analysis.settings]
+enabled = false
+workers = 2
+max_modules_per_scope = 32
+max_module_bitcode_bytes = 268435456
+max_module_output_bytes = 8388608
+max_output_bytes = 1048576
+field_limit = 64
+max_sites = 20000
+max_pts_size = 256
+max_indirect_calls = 20000
+max_targets_per_call = 64
+max_unmodeled_names = 64
+compile_timeout_seconds = 120
+link_timeout_seconds = 120
+module_timeout_seconds = 300
+andersen_time_limit_seconds = 240
+
+[jobs.job_svf_alias_analysis.steps.load]
+workers = 1
+[jobs.job_svf_alias_analysis.steps.load.tasks.accepted_cpp]
+
+[jobs.job_svf_alias_analysis.steps.analyze]
+workers = 2
+[jobs.job_svf_alias_analysis.steps.analyze.tasks.scopes]
+
+[jobs.job_svf_alias_analysis.steps.acceptance]
+workers = 1
+[jobs.job_svf_alias_analysis.steps.acceptance.tasks.publish_handoff]
+
 [jobs.job_codeql_analysis]
 name = "codeql_analysis"
 workers = 2

@@ -1,0 +1,13 @@
+{
+  "schema": "appsec-review/svf-plan/1",
+  "modules": [
+    {"module_id": "m-app", "kind": "link", "label": "build/app", "compile_indexes": [0, 1, 2]},
+    {"module_id": "m-plugin", "kind": "translation_unit", "label": "plugin.c", "compile_indexes": [3]}
+  ],
+  "bounds": {
+    "max_module_bitcode_bytes": 67108864, "max_module_output_bytes": 8388608, "field_limit": 64,
+    "max_sites": 2000, "max_pts_size": 64, "max_indirect_calls": 200, "max_targets_per_call": 16,
+    "max_unmodeled_names": 16, "compile_timeout_seconds": 60, "link_timeout_seconds": 60,
+    "module_timeout_seconds": 120, "andersen_time_limit_seconds": 60
+  }
+}

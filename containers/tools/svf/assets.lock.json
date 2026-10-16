@@ -1,0 +1,59 @@
+{
+  "schema": "appsec-review/assets-lock/1",
+  "image_id": "tool-svf",
+  "tool_version": "3.3.0",
+  "project": "https://github.com/SVF-tools/SVF",
+  "license": "AGPL-3.0-or-later",
+  "architecture": "linux/amd64",
+  "generated_from": "SVF-3.3 release and the LLVM 21.1.0 / Z3 4.8.8 inputs its build.sh names, selected 2026-10-16",
+  "artifacts": [
+    {
+      "name": "SVF-3.3.tar.gz",
+      "url": "https://github.com/SVF-tools/SVF/archive/refs/tags/SVF-3.3.tar.gz",
+      "path": "downloads/SVF-3.3.tar.gz",
+      "sha256": "1fe7be0df5badded4bfdc7f67c5a037a0f5892e2e0ac8008c799940f4331af20",
+      "bytes": 5523562,
+      "version": "SVF-3.3",
+      "license": "AGPL-3.0-or-later",
+      "license_source": "LICENSE.TXT in the source archive",
+      "provenance": "GitHub release tag source archive",
+      "signature_verification": {"status": "not-published", "reason": "the release publishes no signature; exact bytes are locked here"}
+    },
+    {
+      "name": "llvm-21.1.0-ubuntu22-rtti-x86-64.tar.gz",
+      "url": "https://github.com/bjjwwang/SVF-LLVM/releases/download/21.1.0/llvm-21.1.0-ubuntu22-rtti-x86-64.tar.gz",
+      "path": "downloads/llvm-21.1.0-ubuntu22-rtti-x86-64.tar.gz",
+      "sha256": "3fc791d06760fd325f0ba9f2cb45ec5a1b2df1652a06a577751935edabd809f3",
+      "bytes": 291179567,
+      "version": "21.1.0",
+      "license": "Apache-2.0 WITH LLVM-exception",
+      "license_source": "LLVM project license",
+      "provenance": "RTTI-enabled LLVM build that SVF-3.3 build.sh (UbuntuLLVM_RTTI) downloads",
+      "signature_verification": {"status": "not-published", "reason": "the release publishes no signature; exact bytes are locked here"}
+    },
+    {
+      "name": "z3-4.8.8-x64-ubuntu-16.04.zip",
+      "url": "https://github.com/Z3Prover/z3/releases/download/z3-4.8.8/z3-4.8.8-x64-ubuntu-16.04.zip",
+      "path": "downloads/z3-4.8.8-x64-ubuntu-16.04.zip",
+      "sha256": "6534f26427ee4f02835d17c3472f5ce750f34b4898c35cdd4223459b3589664e",
+      "bytes": 39530699,
+      "version": "4.8.8",
+      "license": "MIT",
+      "license_source": "LICENSE.txt in the release archive",
+      "provenance": "Z3 release named by SVF-3.3 build.sh (UbuntuZ3)",
+      "signature_verification": {"status": "not-published", "reason": "the release publishes no signature; exact bytes are locked here"}
+    },
+    {
+      "name": "svf-build-debs.tar",
+      "url": "https://archive.ubuntu.com/ubuntu/",
+      "path": "downloads/svf-build-debs.tar",
+      "sha256": "0f99153a6f7b4186a6b4ec343261460ea5afb87dc7129d3d21a297dc6ce0a334",
+      "bytes": 2816000,
+      "version": "ubuntu-24.04-2026-10-16",
+      "license": "various; zlib, BSD-3-Clause and MIT per package copyright files",
+      "license_source": "https://packages.ubuntu.com/noble/",
+      "provenance": "deterministic tar of the zlib1g-dev, libzstd-dev and libxml2-dev closure resolved inside tool-native-cpp by acquire_assets.sh; used by the build stage only; versions and SHA-256 in packages.manifest",
+      "signature_verification": {"status": "verified", "reason": "APT Release metadata signatures were verified during acquisition; bundle SHA-256 and byte size are enforced"}
+    }
+  ]
+}

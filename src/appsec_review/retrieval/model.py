@@ -69,6 +69,9 @@ class EntityKind(StrEnum):
     DATAFLOW_PATH = "dataflow_path"
     GUARD_FACT = "guard_fact"
     RANGE_FACT = "range_fact"
+    # SVF points-to cross-check inputs (docs/architecture/svf-alias-producer.md, section 6.2).
+    POINTS_TO_SET = "points_to_set"
+    INDIRECT_CALL_TARGETS = "indirect_call_targets"
 
 
 class RelationKind(StrEnum):

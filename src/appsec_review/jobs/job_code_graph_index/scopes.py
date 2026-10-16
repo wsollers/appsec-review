@@ -41,7 +41,10 @@ SCOPE_IDENTITY_SCHEMA = "appsec-review/code-graph-scope/1"
 SUCCEEDED = "SUCCEEDED"
 RULES = {"normalize": NORMALIZE_RULE, "cross_check": CROSS_CHECK_RULE, "correlation": CORRELATION_RULE,
          "admissibility": ADMISSIBILITY_RULE}
-SECONDARY_PRODUCERS = (Producer.CLANGD, Producer.LLVM_IR, Producer.CLANG_AST)
+SECONDARY_PRODUCERS = (Producer.CLANGD, Producer.LLVM_IR, Producer.CLANG_AST, Producer.SVF)
+# Producers read through ``crosscheck.read_secondary``; SVF rows are read by ``svf_crosscheck.read_svf``.
+CALL_EDGE_PRODUCERS = (Producer.CLANGD, Producer.LLVM_IR, Producer.CLANG_AST)
+SVF_JOB = "job_svf_alias_analysis"
 # Bound on the coverage-gap lines naming individual broken SARIF correlations per scope.
 MAX_BROKEN_GAPS = 20
 
@@ -227,10 +230,12 @@ def secondary_producer(shard: Mapping[str, Any]) -> Producer | None:
         return Producer.LLVM_IR
     if producer.get("job") == "job_cpp_compiled_analysis" and producer.get("branch") == "ast":
         return Producer.CLANG_AST
+    if producer.get("job") == SVF_JOB and shard_id.startswith("svf-") and not shard_id.startswith("svf-coverage-"):
+        return Producer.SVF
     return None
 
 
-SECONDARY_JOBS = ("job_cpp_symbol_index", "job_cpp_compiled_analysis")
+SECONDARY_JOBS = ("job_cpp_symbol_index", "job_cpp_compiled_analysis", SVF_JOB)
 
 
 def restored_secondary(run_root: Path, present: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:

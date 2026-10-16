@@ -818,6 +818,22 @@ build_args = { TOOL_VERSION = "1.0.0" }
 purpose = "Offline Clang-Tidy and Clang Static Analyzer over accepted C/C++ compilation databases."
 
 [[images]]
+id = "tool-svf"
+state = "enabled"
+kind = "tool"
+version = "3.3.0"
+tag = "appsec-review/tool-svf:3.3.0"
+image_id = "sha256:77acbfaf5e9e93839ee38b5a1389532cd31acd3447470084b675b43e2d773b94"
+context = "containers/tools/svf"
+dockerfile = "Dockerfile"
+dependencies = ["tool-native-cpp"]
+architectures = ["linux/amd64"]
+tool_manifest = "containers/tools/svf/tool.toml"
+assets_lock = "containers/tools/svf/assets.lock.json"
+build_args = { TOOL_VERSION = "3.3.0" }
+purpose = "Offline SVF-3.3 Andersen points-to and indirect-call analysis over clang-18 bitcode of accepted C/C++ scopes (AGPL-3.0-or-later; internal use, not redistributed)."
+
+[[images]]
 id = "tool-joern"
 state = "enabled"
 kind = "tool"
