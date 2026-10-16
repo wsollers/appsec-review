@@ -333,6 +333,17 @@ Preserve the
 current selective invalidation boundary: query-pack changes must not rebuild Clang AST, LLVM IR,
 or an otherwise reusable CodeQL database.
 
+## Make CodeQL database throughput tunable end to end
+
+Run `2026-10-16-0004` (WSL host, 24 CPUs, 16 GB shared WSL limit) built 13 of 55 database scopes in
+about 20 minutes. `concurrency = 2`, `threads = 2` and `ram_mb = 4096` are already configurable,
+but at most two builds overlapped, and only briefly. Gaps of up to 7 minutes passed between
+`TOOL_INVOCATION_STARTED` events with no CodeQL container running, apparently preparing the next
+scope. Measure and name that per-scope preparation in telemetry, and make its parallelism a setting
+if it runs serially. Reconcile the two overlapping knobs (`steps.database.workers` and
+`settings.concurrency`) so one value controls the fan-out. Document how to size concurrency ×
+`ram_mb` against the host memory limit, and set per-host values for the review hosts.
+
 ## Define and test the CodeQL checkpoint identity matrix
 
 Document a matrix of identity inputs against the derived image, database, query, normalization,
