@@ -55,6 +55,8 @@ id = "cert-cpp-coding-standards"
 # Fix: extract every member pack from the licensed zip in Dockerfile.custom-source, rebuild
 # audit-codeql:custom-2.27.0, re-pin source_image_id, then re-run this gate.
 image_path = "/opt/codeql/custom-queries/cert-cpp"
+# 117 queries; --check-only needs well over the 1800 s default on this host.
+timeout_seconds = 7200
 engine = "codeql"
 language = "cpp"
 suite = "codeql-suites/cert-cpp-default.qls"

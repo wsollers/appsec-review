@@ -504,3 +504,41 @@ Outstanding, in order:
    routing.
 5. Design a target kind for a review whose only input is a binary.
 6. Measure memory, time, and file counts on a large real binary and tune the defaults.
+
+## Decide how to assert correctness for large query-set jobs
+
+`docs/processes/acceptance-and-regression-testing.md` makes each job assert that its output is the
+correct response to its inputs, through `Unit.output_validators`. Four contract classes carry most
+of that: schema, conservation, internal consistency, and cross-job agreement. They caught every
+defect found during the 2026-10-15 bring-up without needing an oracle.
+
+**They do not reach jobs whose output is a large, open-ended result set.** `job_codeql_analysis`
+runs 117 CERT C++ queries plus the default suites; `job_evidence_collection` drives twenty
+scanners. For those, "is this the correct answer?" is a question about each rule's semantics, and
+no conservation or consistency property answers it. The strongest contract available today is the
+weak one the pipeline already applies: a required producer that returns zero results is a coverage
+gap, not a clean classification.
+
+What needs deciding, roughly in order of expected value:
+
+- **Per-rule corpus expectations.** `rules/sei-cert/multivuln.json` already carries
+  `expected_findings`, `expected_exclusions` and `known_false_negatives` against a pinned target
+  commit. That is a machine-readable oracle for the SEI CERT rule set and should be the model for
+  the rest. Decide whether it is authoritative, and extend the same shape to CodeQL's own suites.
+- **Rule liveness.** Assert that every enabled rule produces at least one result somewhere across
+  the corpus. A rule that never fires is either dead weight or broken, and today nothing notices.
+  This is cheap and would have caught the CERT suite yielding nothing at rule granularity.
+- **Metamorphic pairs.** For each rule, a vulnerable snippet must yield a result and its fixed
+  counterpart must not. Testable without a full oracle, and it pins rule semantics rather than
+  aggregate counts.
+- **The engine's own test framework.** CodeQL ships `codeql test run` with `.qlref`/`.expected`
+  files, and the upstream coding-standards repository already uses it. Query semantics probably
+  belong there, not in our pipeline, with our contracts asserting only that the suite ran, resolved
+  and produced accounted-for output.
+- **Result envelopes rather than exact sets.** Where an exact expected set is unmaintainable, assert
+  bounds (counts per rule, per family) so drift is visible without pinning every row.
+
+This is a separate layer from the job contract, and both are required. The job contract asks
+whether a job produced the declared number of correct outputs for its input. Query unit tests ask
+whether a single query returns the correct rows for a known database. Neither substitutes for the
+other, and conflating them is how a suite that runs but answers wrongly passes.

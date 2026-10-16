@@ -414,6 +414,30 @@ def load_registry() -> dict[str, Any]:
     return document
 
 
+def _pack_container_name(pack_id: str) -> str:
+    """A named container can be removed when the client dies; an unnamed one cannot be found."""
+    return f"appsec-review-packverify-{pack_id}-{os.getpid()}"
+
+
+def _remove_container(name: str) -> None:
+    subprocess.run([docker_binary(), "rm", "--force", name],
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+
+
+def _run_pack_container(argv: list[str], log_path: Path, timeout: int,
+                        container: str) -> subprocess.CompletedProcess[str] | None:
+    """Run a verification container, or return None when it exceeded ``timeout``.
+
+    ``docker run`` killed by a timeout only kills the client: the container keeps running and keeps
+    the CPU. Removing it by name is the only way to stop the work.
+    """
+    try:
+        return run_logged(argv, log_path, timeout)
+    except subprocess.TimeoutExpired:
+        _remove_container(container)
+        return None
+
+
 def _codeql_check_only(pack: dict[str, Any], log_path: Path) -> tuple[bool, str]:
     """Type-check every query in a CodeQL pack inside its pinned image, offline.
 
@@ -436,12 +460,20 @@ def _codeql_check_only(pack: dict[str, Any], log_path: Path) -> tuple[bool, str]
         f"{{ echo \"PACK_LIBRARY_ABSENT {library}@{version}\" >&2; exit 3; }}\n"
         + stage +
         "cd /tmp/pack\n"
+        # Only the pack's own queries. A self-contained pack vendors its dependency closure
+        # under .codeql/libraries/, and those bundled packs carry queries of their own that are
+        # not independently resolvable; compiling them reports the dependency as missing.
         "exec /opt/codeql/codeql query compile --check-only --threads=4 -- "
-        "$(find . -name '*.ql' -print | sort)\n"
+        "$(find . -name '*.ql' -not -path './.codeql/*' -print | sort)\n"
     )
-    argv = [docker_binary(), "run", "--rm", "--network", "none", *mount,
+    container = _pack_container_name(pack["id"])
+    argv = [docker_binary(), "run", "--rm", "--name", container, "--network", "none", *mount,
             "--entrypoint", "sh", pack["image"], "-c", script]
-    result = run_logged(argv, log_path, PACK_VERIFY_TIMEOUT_SECONDS)
+    timeout = int(pack.get("timeout_seconds", PACK_VERIFY_TIMEOUT_SECONDS))
+    result = _run_pack_container(argv, log_path, timeout, container)
+    if result is None:
+        # A timeout is not a compile failure; reporting it as one sent us chasing the wrong cause.
+        return False, f"verification exceeded timeout_seconds={timeout}"
     # run_logged sends both streams to log_path, so the CompletedProcess carries no text. The
     # first line is the argv echo, which quotes the probe script; scanning it would match the
     # marker in the command text rather than in the container's output.
@@ -476,10 +508,14 @@ def _engine_validate(pack: dict[str, Any], log_path: Path) -> tuple[bool, str]:
         if not isinstance(suite, str) or not suite:
             return False, "pmd pack declares no suite to validate"
         inner = f"exec pmd check --rulesets /pack/{suite} --dir /pack --format text --no-progress"
-    argv = [docker_binary(), "run", "--rm", "--network", "none",
+    container = _pack_container_name(pack["id"])
+    argv = [docker_binary(), "run", "--rm", "--name", container, "--network", "none",
             "--volume", f"{root.resolve().as_posix()}:/pack:ro",
             "--entrypoint", "sh", pack["image"], "-c", f"set -eu\n{inner}\n"]
-    result = run_logged(argv, log_path, PACK_VERIFY_TIMEOUT_SECONDS)
+    timeout = int(pack.get("timeout_seconds", PACK_VERIFY_TIMEOUT_SECONDS))
+    result = _run_pack_container(argv, log_path, timeout, container)
+    if result is None:
+        return False, f"verification exceeded timeout_seconds={timeout}"
     if result.returncode != 0:
         lines = [line for line in log_path.read_text(encoding="utf-8", errors="replace").splitlines()
                  if line.strip() and not line.startswith("argv=")]
