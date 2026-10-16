@@ -15,7 +15,12 @@ import GraphExport
 module FunctionPointerConfig implements DataFlow::ConfigSig {
   predicate isSource(DataFlow::Node n) { n.asExpr() instanceof FunctionAccess }
 
-  predicate isSink(DataFlow::Node n) { n.asExpr() = any(ExprCall c).getExpr() }
+  // Only calls in exported functions: in "seeded" mode this prunes the whole-database flow
+  // to the pointer calls whose targets are published. A function address registered anywhere
+  // (a source) still reaches them.
+  predicate isSink(DataFlow::Node n) {
+    exists(ExprCall c | n.asExpr() = c.getExpr() and GraphExport::exportedExpr(c))
+  }
 }
 
 module FunctionPointerFlow = DataFlow::Global<FunctionPointerConfig>;
@@ -26,17 +31,6 @@ Function pointerTarget(ExprCall call) {
     sink.asExpr() = call.getExpr() and
     result = source.asExpr().(FunctionAccess).getTarget()
   )
-}
-
-/** Every defined override (including the static target) a virtual call may dispatch to. */
-Function virtualCandidate(FunctionCall call) {
-  call.isVirtual() and
-  (
-    result = call.getTarget()
-    or
-    result = call.getTarget().(MemberFunction).getAnOverridingFunction+()
-  ) and
-  result.hasDefinition()
 }
 
 /** The dispatch class of a direct (non-virtual, non-pointer) call to `target`. */
@@ -51,10 +45,10 @@ string directDispatch(Function target) {
 
 /** The callee and dispatch of `call`, with the number of candidate callees. */
 predicate callee(Call call, Function target, string dispatch, int candidateCount) {
-  exists(virtualCandidate(call)) and
-  target = virtualCandidate(call) and
+  exists(GraphExport::virtualCandidate(call)) and
+  target = GraphExport::virtualCandidate(call) and
   dispatch = "virtual_resolved" and
-  candidateCount = count(Function f | f = virtualCandidate(call))
+  candidateCount = count(Function f | f = GraphExport::virtualCandidate(call))
   or
   not call.(FunctionCall).isVirtual() and
   target = call.getTarget() and
@@ -80,7 +74,9 @@ query predicate call_sites(
   int argument_count, string in_loop
 ) {
   exists(Call call, GraphExport::SourceFunction caller |
-    caller = call.getEnclosingFunction() and GraphExport::inSource(call)
+    caller = call.getEnclosingFunction() and
+    GraphExport::inSource(call) and
+    GraphExport::exported(caller)
   |
     caller_name = caller.getQualifiedName() and
     GraphExport::locationColumns(caller.getLocation(), caller_path, caller_start_line,

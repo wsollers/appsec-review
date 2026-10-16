@@ -21,7 +21,8 @@ IMAGE_SCHEMA = "appsec-review/codeql-derived-image/2"
 EXECUTION_SCHEMA = "appsec-review/codeql-execution/2"
 EXPORT_MANIFEST_SCHEMA = "appsec-review/codeql-graph-export-manifest/1"
 EXPORT_MANIFEST_NAME = "export-manifest.json"
-ACTIONS = frozenset({"inventory", "database", "query", "export"})
+COMPILE_CACHE_MOUNT = "/codeql-cache"
+ACTIONS = frozenset({"inventory", "database", "query", "export", "compile"})
 
 
 class RuntimeSettings(Protocol):
@@ -44,9 +45,16 @@ def action_timeout(settings: RuntimeSettings, action: str) -> int:
             from appsec_review.graph.contract import GraphSettings
             value = GraphSettings().export_timeout_seconds
         return int(value)
+    if action == "compile":
+        return int(getattr(settings, "compile_timeout_seconds", None) or action_timeout(settings, "export"))
     return {"inventory": settings.inventory_timeout_seconds,
             "database": settings.database_timeout_seconds,
             "query": settings.query_timeout_seconds}[action]
+
+
+def compile_cache_volume(image: "CodeQLImage") -> str:
+    """Docker volume holding the content-addressed query compile cache for one CodeQL payload."""
+    return "appsec-codeql-compile-" + hashlib.sha256(image.source_image_id.encode()).hexdigest()[:16]
 
 
 def _stamp() -> str:
@@ -234,7 +242,7 @@ class CodeQLExecutor:
         # Query and graph export may run concurrently for one scope. Export owns only its staged
         # ``export`` tree plus the scope root used to create ``exports``; traversing sibling query
         # scratch here races query cleanup and can turn a valid producer run into a host EIO.
-        access_root = scratch / "export" if action == "export" else scratch
+        access_root = scratch / "export" if action in {"export", "compile"} else scratch
         access_paths = ((scratch, access_root, *access_root.rglob("*"))
                         if access_root != scratch else (scratch, *scratch.rglob("*")))
         for path in access_paths:
@@ -255,7 +263,10 @@ class CodeQLExecutor:
         effective = resolve_host_bind_path(scratch, self.runner)
         timeout = action_timeout(self.settings, action)
         # Export reads a staged database and pack without network access.
-        network = "none" if action == "export" else "bridge"
+        network = "none" if action in {"export", "compile"} else "bridge"
+        threads, ram_mb = ((int(getattr(self.settings, "compile_threads", self.settings.threads)),
+                            int(getattr(self.settings, "compile_ram_mb", self.settings.ram_mb)))
+                           if action == "compile" else (self.settings.threads, self.settings.ram_mb))
         database_name = None
         volume_name = None
         if action in {"database", "query"}:
@@ -274,12 +285,33 @@ class CodeQLExecutor:
             mounts.extend(("--mount", f"type=volume,src={volume_name},dst=/scratch/{database_name}"))
             if action == "query":
                 mounts.extend(("--mount", f"type=bind,src={effective},dst=/source,readonly"))
+        # CodeQL's compilation cache is content addressed, so a volume shared by every query,
+        # export and compile execution only ever turns a recompile into a hit. It is keyed by the
+        # pinned CodeQL payload image, not the derived image, so every project environment (and
+        # every edit of the runner script) reuses one warm cache. It is an optimization: a failure
+        # to provision it must not fail the analysis. Ownership is re-asserted recursively: entries
+        # written under another uid (``build.py query-packs --warm`` or a different host user) are
+        # otherwise unreadable to this execution's CodeQL, which then recompiles from cold.
+        cache_volume = None
+        if action in {"query", "export", "compile"}:
+            cache_volume = compile_cache_volume(self.image)
+            created = self.runner(("docker", "volume", "create",
+                "--label", "appsec-review=codeql-compile-cache", cache_volume), 60)
+            initialized = self.runner(("docker", "run", "--rm", "--network", "none",
+                "--read-only", "--user", "0:0", "--security-opt", "no-new-privileges",
+                "--mount", f"type=volume,src={cache_volume},dst={COMPILE_CACHE_MOUNT}",
+                "--entrypoint", "chown", self.image.image_id, "-R", runtime_user,
+                COMPILE_CACHE_MOUNT), 60) if not created[3] and created[0] == 0 else created
+            if initialized[3] or initialized[0] != 0:
+                cache_volume = None
+            else:
+                mounts.extend(("--mount", f"type=volume,src={cache_volume},dst={COMPILE_CACHE_MOUNT}"))
         container_name = f"appsec-review-codeql-{uuid4().hex}"
         command = [
             "docker", "run", "--rm", "--name", container_name, "--network", network, "--read-only",
             "--user", runtime_user, "--cap-drop", "ALL",
-            "--security-opt", "no-new-privileges", "--cpus", str(self.settings.threads),
-            "--memory", f"{self.settings.ram_mb + 1024}m", "--pids-limit", "2048",
+            "--security-opt", "no-new-privileges", "--cpus", str(threads),
+            "--memory", f"{ram_mb + 1024}m", "--pids-limit", "2048",
             "--tmpfs", "/tmp:rw,noexec,nosuid,size=2g", *mounts, "--workdir", "/scratch",
             "--env", "HOME=/tmp/codeql-home", "--env", "LANG=C.UTF-8", "--env", "LC_ALL=C.UTF-8",
             "--env", "TZ=UTC", "--entrypoint", "python3", self.image.image_id,
@@ -336,10 +368,11 @@ class CodeQLExecutor:
             stderr_path.relative_to(self.run_root).as_posix(), stdout_sha, stderr_sha,
             stdout_total, stderr_total, stdout_truncated, stderr_truncated, stdout_tail, stderr_tail,
             {"network": network, "root_filesystem": "read-only", "user": runtime_user,
-             "cap_drop": ["ALL"], "no_new_privileges": True, "threads": self.settings.threads,
-             "ram_mb": self.settings.ram_mb, "timeout_seconds": timeout,
+             "cap_drop": ["ALL"], "no_new_privileges": True, "threads": threads,
+             "ram_mb": ram_mb, "timeout_seconds": timeout,
              "output_bytes": self.settings.output_bytes, "capture_mode": "head-tail",
-             "database_storage": "disposable-docker-volume" if volume_name else "run-bind"},
+             "database_storage": "disposable-docker-volume" if volume_name else "run-bind",
+             "compile_cache": "persistent-docker-volume" if cache_volume else "none"},
         )
         atomic_json(log_root / "receipt.json", asdict(result))
         return result
@@ -389,10 +422,15 @@ class GraphExportIntegrityError(ValueError):
 
 
 def graph_export_arguments(*, database: str, pack: str, columns: str, asset_lock: str, language: str,
-                           output_dir: str, row_limit: int, max_bytes: int, threads: int,
-                           ram_mb: int) -> tuple[str, ...]:
-    """Runner argv for the ``export`` action; every path is relative to the execution scratch."""
-    for value in (database, pack, columns, asset_lock, output_dir):
+                           output_dir: str, scope_file: str, seeds_file: str, row_limit: int,
+                           max_bytes: int, threads: int, ram_mb: int) -> tuple[str, ...]:
+    """Runner argv for the ``export`` action; every path is relative to the execution scratch.
+
+    ``scope_file`` (``<mode>,<depth>``) and ``seeds_file`` (``<path>,<start_line>,<end_line>`` rows)
+    are staged CSV files the runner binds to the pack's external predicates
+    (docs/architecture/seeded-codeql-neighborhoods.md section 5).
+    """
+    for value in (database, pack, columns, asset_lock, output_dir, scope_file, seeds_file):
         logical = PurePosixPath(value)
         if not logical.parts or logical.is_absolute() or ".." in logical.parts:
             raise ValueError("CodeQL export path must be scratch-relative")
@@ -400,8 +438,23 @@ def graph_export_arguments(*, database: str, pack: str, columns: str, asset_lock
         if isinstance(value, bool) or not isinstance(value, int) or value < 1:
             raise ValueError("CodeQL export bounds must be positive integers")
     return ("--database", database, "--pack", pack, "--columns", columns, "--asset-lock", asset_lock,
-            "--language", language, "--output-dir", output_dir, "--row-limit", str(row_limit),
+            "--language", language, "--output-dir", output_dir, "--scope-file", scope_file,
+            "--seeds-file", seeds_file, "--row-limit", str(row_limit),
             "--max-bytes", str(max_bytes), "--threads", str(threads), "--ram", str(ram_mb))
+
+
+def graph_compile_arguments(*, pack: str, columns: str, asset_lock: str, language: str,
+                            threads: int, ram_mb: int) -> tuple[str, ...]:
+    """Runner argv for the ``compile`` action, which warms the persistent query compile cache."""
+    for value in (pack, columns, asset_lock):
+        logical = PurePosixPath(value)
+        if not logical.parts or logical.is_absolute() or ".." in logical.parts:
+            raise ValueError("CodeQL compile path must be scratch-relative")
+    for value in (threads, ram_mb):
+        if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+            raise ValueError("CodeQL compile bounds must be positive integers")
+    return ("--pack", pack, "--columns", columns, "--asset-lock", asset_lock, "--language", language,
+            "--threads", str(threads), "--ram", str(ram_mb))
 
 
 def load_graph_exports(root: Path, *, bytes_limit: int) -> dict[str, Mapping[str, Any]]:

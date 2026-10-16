@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict
 import hashlib
 import json
 from pathlib import Path, PurePosixPath
 import shutil
+import threading
 from typing import Any
 
 import appsec_review.applicability as applicability_contract
@@ -16,10 +17,11 @@ from appsec_review.applicability import (
 )
 from appsec_review.codeql import CodeQLExecutor, CodeQLImageResolver, load_sarif, tree_manifest
 from appsec_review.codeql.runtime import (
-    EXPORT_MANIFEST_NAME, EXPORT_MANIFEST_SCHEMA, GraphExportIntegrityError, graph_export_arguments, load_asset_lock,
+    EXPORT_MANIFEST_NAME, EXPORT_MANIFEST_SCHEMA, GraphExportIntegrityError, compile_cache_volume,
+    graph_compile_arguments, graph_export_arguments, load_asset_lock,
     load_graph_exports,
 )
-from appsec_review.config import CodeQLAnalysisSettings
+from appsec_review.config import CodeQLAnalysisSettings, CodeQLExportSettings
 from appsec_review.jobs.cataloging import source_fingerprint
 from appsec_review.jobs.job_evidence_collection.job import load_target_catalog
 from appsec_review.jobs.job_language_build import load_accepted_language_build
@@ -36,6 +38,7 @@ from .planning import (
     CodeQLPlan, CodeQLScope, build_codeql_plan, export_lock_mismatches, plan_graph_exports,
     replay_commands,
 )
+from appsec_review import seeding
 from .sarif import NORMALIZER_IDENTITY, normalize_sarif
 from appsec_review.jobs.job_codeql_analysis.datasets import CONSUMES, DATASETS
 
@@ -47,6 +50,7 @@ EXPORT_CHECKPOINT_SCHEMA = "appsec-review/codeql-export-checkpoint/1"
 GRAPH_EXPORTS_SCHEMA = "appsec-review/codeql-graph-exports/1"
 _RUNNER = ("containers", "tools", "codeql", "codeql_runner.py")
 _ASSET_LOCK = ("containers", "tools", "codeql", "assets.lock.json")
+SCOPE_FILE, SEEDS_FILE = "scope.csv", "seeds.csv"
 
 
 class FrameworkIntegrityError(ValueError):
@@ -655,13 +659,17 @@ def _verify_export_sources(repository_root: Path, profile: Mapping[str, Any],
 
 
 def _export_identity(database: Mapping[str, Any], profile: Mapping[str, Any],
-                     settings: CodeQLAnalysisSettings, *, runner_sha256: str) -> str:
+                     settings: CodeQLAnalysisSettings, *, runner_sha256: str,
+                     seeds: Iterable[tuple[str, int, int]] | None = None) -> str:
     """Export checkpoint identity (plan section 7.2).
 
     It binds the database identity and tree, the export pack (not the catalog, which only the
     downstream normalizer reads), the export bounds and the runner. Query suites, SARIF limits and
-    normalizers are deliberately absent, so a SARIF change never invalidates an export.
+    normalizers are deliberately absent, so a SARIF change never invalidates an export. The export
+    scope (mode, and in seeded mode the depth, seed limit and sorted seed set) is bound too, so any
+    change of what seeds the neighborhood re-runs the export.
     """
+    export = settings.export_queries
     return hashlib.sha256(canonical_json({
         "schema": EXPORT_CHECKPOINT_SCHEMA,
         "database_identity": database["database_identity"],
@@ -672,6 +680,7 @@ def _export_identity(database: Mapping[str, Any], profile: Mapping[str, Any],
         "bounds": {"row_limit": settings.export_queries.row_limit,
                    "max_bytes": settings.export_queries.max_bytes,
                    "timeout_seconds": settings.export_queries.timeout_seconds},
+        "export_scope": seeding.identity_fragment(export.mode, export.seed_depth, export.seed_limit, seeds),
         "runner_sha256": runner_sha256,
     })).hexdigest()
 
@@ -680,8 +689,14 @@ def _default_export_executor(image: Any, run_root: Path, settings: CodeQLAnalysi
     return CodeQLExecutor(image=image, run_root=run_root, settings=settings)
 
 
-def _stage_export(unit: UnitContext, scope_root: Path, staging: Path, profile: Mapping[str, Any]) -> None:
-    """Disposable database copy plus the repository-owned pack, columns and lock in scratch."""
+def _stage_export(unit: UnitContext, scope_root: Path, staging: Path, profile: Mapping[str, Any],
+                  *, mode: str = "whole_program", depth: int = 0,
+                  seed_rows: Iterable[tuple[str, int, int]] = ()) -> None:
+    """Disposable database copy plus the repository-owned pack, columns, lock and export scope in scratch.
+
+    ``scope.csv`` and ``seeds.csv`` are the header-less external predicate inputs of the QL pack
+    (seeded-codeql-neighborhoods.md section 5); ``seeds.csv`` is empty in whole-program mode.
+    """
     repository = unit.job.repository_root
     staging.mkdir(parents=True)
     shutil.copytree(scope_root / "database", staging / "database")
@@ -690,13 +705,17 @@ def _stage_export(unit: UnitContext, scope_root: Path, staging: Path, profile: M
     _make_workspace_accessible(staging / "pack")
     shutil.copyfile(repository / str(profile["columns_path"]), staging / "columns.json")
     shutil.copyfile(repository.joinpath(*_ASSET_LOCK), staging / "assets.lock.json")
-    for path in (staging / "columns.json", staging / "assets.lock.json"):
+    (staging / SCOPE_FILE).write_text(seeding.scope_csv(mode, depth), encoding="utf-8")
+    (staging / SEEDS_FILE).write_text(
+        seeding.seeds_csv(seed_rows if mode == "seeded" else ()), encoding="utf-8")
+    for path in (staging / "columns.json", staging / "assets.lock.json", staging / SCOPE_FILE,
+                 staging / SEEDS_FILE):
         path.chmod(0o444)
     staging.chmod(0o777)
 
 
 def _verify_export_manifest(root: Path, scope: CodeQLScope, profile: Mapping[str, Any],
-                            settings: CodeQLAnalysisSettings) -> Mapping[str, Any]:
+                            settings: CodeQLAnalysisSettings, *, seed_count: int = 0) -> Mapping[str, Any]:
     manifest = json.loads((root / EXPORT_MANIFEST_NAME).read_text(encoding="utf-8"))
     pack = manifest.get("pack")
     if (manifest.get("language") != scope.language or not isinstance(pack, Mapping) or
@@ -707,6 +726,14 @@ def _verify_export_manifest(root: Path, scope: CodeQLScope, profile: Mapping[str
             manifest.get("row_limit") != settings.export_queries.row_limit or
             manifest.get("max_bytes") != settings.export_queries.max_bytes):
         raise GraphExportIntegrityError("graph export manifest differs from the configured pack or bounds")
+    recorded = manifest.get("scope")
+    if recorded is not None:
+        export = settings.export_queries
+        seeded = export.mode == "seeded"
+        if (not isinstance(recorded, Mapping) or recorded.get("mode") != export.mode or
+                (seeded and recorded.get("depth") != export.seed_depth) or
+                recorded.get("seed_count") != (seed_count if seeded else 0)):
+            raise GraphExportIntegrityError("graph export manifest scope differs from the configured export scope")
     return manifest
 
 
@@ -716,12 +743,33 @@ def _export_base(scope: CodeQLScope, database: Mapping[str, Any]) -> dict[str, A
             "export_identity": None, "export_reused": False}
 
 
+def _require_seed_reports(documents: Mapping[str, Mapping[str, Any]], settings: CodeQLAnalysisSettings) -> None:
+    """A seeded export must carry both report queries; their absence is an invalid export."""
+    if settings.export_queries.mode == "seeded" and not {"seed_functions", "neighborhood"} <= set(documents):
+        raise GraphExportIntegrityError("seeded graph export lacks its seed_functions or neighborhood report")
+
+
+def _seeded_record(settings: CodeQLAnalysisSettings, scope_seeds: seeding.ScopeSeeds,
+                   plan: seeding.SeedPlan | None, documents: Mapping[str, Mapping[str, Any]]) -> dict[str, Any]:
+    """Spec section 6 ``seeded`` object of one exported scope."""
+    export = settings.export_queries
+    if export.mode != "seeded":
+        return seeding.whole_program_section()
+    return seeding.seeded_section(
+        depth=export.seed_depth, seed_limit=export.seed_limit, scope_seeds=scope_seeds,
+        plan=plan or seeding.SeedPlan(), seed_functions=documents.get("seed_functions"),
+        neighborhood=documents.get("neighborhood"))
+
+
 def _export_success(unit: UnitContext, base: Mapping[str, Any], identity: str, root: Path,
                     manifest: Mapping[str, Any], documents: Mapping[str, Mapping[str, Any]],
-                    *, reused: bool, execution: Mapping[str, Any] | None) -> dict[str, Any]:
+                    *, reused: bool, execution: Mapping[str, Any] | None,
+                    seeded: Mapping[str, Any] | None = None) -> dict[str, Any]:
     truncated = sorted(query_id for query_id, document in documents.items() if document["truncated"])
     gaps = [f"CodeQL graph export {query_id} truncated at {manifest['row_limit']} rows"
             for query_id in truncated]
+    seeded = seeding.whole_program_section() if seeded is None else seeded
+    gaps.extend(gap for gap in seeded["gaps"] if gap not in gaps)
     value = {**base, "export_status": "SUCCEEDED", "export_identity": identity, "export_reused": reused,
              "export_pack": dict(manifest["pack"]),
              "export_manifest": _artifact(unit.job.run_root, root / EXPORT_MANIFEST_NAME),
@@ -731,15 +779,29 @@ def _export_success(unit: UnitContext, base: Mapping[str, Any], identity: str, r
              "export_count": len(documents),
              "row_count": sum(int(document["row_count"]) for document in documents.values()),
              "exported_rows": sum(len(document["rows"]) for document in documents.values()),
-             "truncated_queries": truncated, "gaps": gaps}
+             "truncated_queries": truncated, "seeded": dict(seeded), "gaps": gaps}
     if execution is not None:
         value["export_execution"] = execution
     return value
 
 
+def _seed_plan(unit: UnitContext, scopes: Sequence[CodeQLScope]) -> seeding.SeedPlan:
+    """Seeds of every scope from the accepted upstream observation shards (seeded mode only)."""
+    manifests = unit.output("plan.inventory").get("upstream_manifests", ())
+    try:
+        return seeding.extract_seeds(unit.job.run_root, manifests, scopes,
+                                     seed_limit=_settings(unit).export_queries.seed_limit)
+    except seeding.SeedIntegrityError as exc:
+        raise FrameworkIntegrityError(str(exc)) from exc
+
+
 def _export_one(unit: UnitContext, database: Mapping[str, Any], *,
-                executor_factory: Any = None) -> Mapping[str, Any]:
-    """Run (or verify and reuse) the hash-pinned graph export of one scope's database."""
+                executor_factory: Any = None, seed_plan: seeding.SeedPlan | None = None) -> Mapping[str, Any]:
+    """Run (or verify and reuse) the hash-pinned graph export of one scope's database.
+
+    In seeded mode the export runs only when the scope has seeds; a scope without any is SKIPPED
+    with a named gap and a ``seeded`` ledger, never reported as a clean export.
+    """
     settings = _settings(unit)
     scope = _scope_from(database["scope"])
     base = _export_base(scope, database)
@@ -752,8 +814,18 @@ def _export_one(unit: UnitContext, database: Mapping[str, Any], *,
         return {**base, "export_status": "SKIPPED",
                 "gaps": ["CodeQL graph export skipped because database creation failed"]}
     run_root = unit.job.run_root
+    export = settings.export_queries
+    seeded_mode = export.mode == "seeded"
+    plan = seed_plan if seed_plan is not None or not seeded_mode else _seed_plan(unit, [scope])
+    scope_seeds = plan.for_scope(scope.scope_id) if plan is not None else seeding.ScopeSeeds(scope.scope_id)
+    if seeded_mode and not scope_seeds.seeds:
+        section = seeding.skipped_section(depth=export.seed_depth, seed_limit=export.seed_limit,
+                                          scope_seeds=scope_seeds, plan=plan or seeding.SeedPlan())
+        return {**base, "export_status": "SKIPPED", "reason": seeding.NO_SEEDS_GAP,
+                "seeded": section, "gaps": list(section["gaps"])}
+    seed_rows = scope_seeds.rows if seeded_mode else ()
     runner_sha256 = file_sha256(unit.job.repository_root.joinpath(*_RUNNER))
-    identity = _export_identity(database, profile, settings, runner_sha256=runner_sha256)
+    identity = _export_identity(database, profile, settings, runner_sha256=runner_sha256, seeds=seed_rows)
     scope_root = run_root / "data" / "codeql" / "scopes" / scope.scope_id
     exports_root, staging = scope_root / "exports", scope_root / "export"
     checkpoint_path = scope_root / "export-checkpoint.json"
@@ -765,13 +837,16 @@ def _export_one(unit: UnitContext, database: Mapping[str, Any], *,
         unit.job.events.write("TOOL_INVOCATION_STARTED", **event, checkpoint_reused=True)
         try:
             documents = load_graph_exports(exports_root, bytes_limit=settings.export_queries.max_bytes)
-            manifest = _verify_export_manifest(exports_root, scope, profile, settings)
+            manifest = _verify_export_manifest(exports_root, scope, profile, settings,
+                                               seed_count=len(seed_rows))
+            _require_seed_reports(documents, settings)
         except (OSError, ValueError) as exc:
             raise FrameworkIntegrityError("accepted CodeQL graph export changed after its checkpoint") from exc
         if file_sha256(exports_root / EXPORT_MANIFEST_NAME) != existing.get("manifest_sha256"):
             raise FrameworkIntegrityError("accepted CodeQL graph export manifest changed after its checkpoint")
         value = _export_success(unit, base, identity, exports_root, manifest, documents,
-                                reused=True, execution=None)
+                                reused=True, execution=None,
+                                seeded=_seeded_record(settings, scope_seeds, plan, documents))
         unit.job.events.write("TOOL_INVOCATION_COMPLETED", **event, disposition="SUCCEEDED",
                               duration_ms=0, result_count=value["exported_rows"],
                               gap_count=len(value["gaps"]), checkpoint_reused=True,
@@ -779,18 +854,27 @@ def _export_one(unit: UnitContext, database: Mapping[str, Any], *,
                               metrics_receipt=_artifact(run_root, checkpoint_path))
         return value
     checkpoint_path.unlink(missing_ok=True)
-    for path in (exports_root, staging, scope_root / "executions" / "export"):
+    for path in (exports_root, staging, scope_root / "executions" / "export",
+                 scope_root / "executions" / "compile"):
         if path.is_dir():
             shutil.rmtree(path)
-    _stage_export(unit, scope_root, staging, profile)
+    _stage_export(unit, scope_root, staging, profile, mode=export.mode,
+                  depth=export.seed_depth if seeded_mode else 0, seed_rows=seed_rows)
     from appsec_review.codeql import CodeQLImage
     image = CodeQLImage(**_safe_json(run_root, database["image"]))
     executor = (executor_factory or _default_export_executor)(image, run_root, settings)
+    compiled = _precompile_export_pack(unit, image, executor, scope_root, profile, settings,
+                                       language=scope.language, event=event)
+    if compiled is not None:
+        shutil.rmtree(staging)
+        return {**base, "export_status": "FAILED", "export_identity": identity,
+                "export_execution": compiled["execution"], "gaps": compiled["gaps"]}
     argv = graph_export_arguments(
         database="export/database", pack="export/pack", columns="export/columns.json",
         asset_lock="export/assets.lock.json", language=scope.language, output_dir="exports",
         row_limit=settings.export_queries.row_limit, max_bytes=settings.export_queries.max_bytes,
-        threads=settings.threads, ram_mb=settings.ram_mb)
+        threads=settings.threads, ram_mb=settings.ram_mb, scope_file=f"export/{SCOPE_FILE}",
+        seeds_file=f"export/{SEEDS_FILE}")
     unit.job.events.write("TOOL_INVOCATION_STARTED", **event, image_id=image.image_id)
     result = executor.execute("export", argv, scratch_root=scope_root)
     shutil.rmtree(staging)
@@ -802,7 +886,9 @@ def _export_one(unit: UnitContext, database: Mapping[str, Any], *,
     if status == "SUCCEEDED":
         try:
             documents = load_graph_exports(exports_root, bytes_limit=settings.export_queries.max_bytes)
-            manifest = _verify_export_manifest(exports_root, scope, profile, settings)
+            manifest = _verify_export_manifest(exports_root, scope, profile, settings,
+                                               seed_count=len(seed_rows))
+            _require_seed_reports(documents, settings)
         except (OSError, ValueError) as exc:
             status, gaps = "FAILED", [f"CodeQL graph export produced an invalid bounded export ({type(exc).__name__})"]
     execution = _execution_artifact(unit, scope_root, "export")
@@ -819,13 +905,58 @@ def _export_one(unit: UnitContext, database: Mapping[str, Any], *,
                 "terminal_status": "SUCCEEDED",
                 "manifest_sha256": file_sha256(exports_root / EXPORT_MANIFEST_NAME)})
     return _export_success(unit, base, identity, exports_root, manifest, documents,
-                           reused=False, execution=execution)
+                           reused=False, execution=execution,
+                           seeded=_seeded_record(settings, scope_seeds, plan, documents))
+
+
+_PRECOMPILE_LOCKS: dict[str, threading.Lock] = {}
+_PRECOMPILED: set[str] = set()
+_PRECOMPILE_GUARD = threading.Lock()
+
+
+def _precompile_export_pack(unit: UnitContext, image: Any, executor: Any, scope_root: Path,
+                            profile: Mapping[str, Any], settings: CodeQLAnalysisSettings, *,
+                            language: str, event: Mapping[str, Any]) -> Mapping[str, Any] | None:
+    """Fill the persistent compile cache before evaluation, under its own timeout and resources.
+
+    A cold compile of the export pack costs minutes of CPU and would otherwise be charged to the
+    evaluation timeout. Scopes that share the cache wait for the first compile and then hit it.
+    Returns ``None`` when the cache is warm and a failure record (a named gap, never a clean
+    result) when the compile fails or times out.
+    """
+    key = f"{compile_cache_volume(image)}:{profile['tree_sha256']}"
+    with _PRECOMPILE_GUARD:
+        lock = _PRECOMPILE_LOCKS.setdefault(key, threading.Lock())
+    with lock:
+        if key in _PRECOMPILED:
+            return None
+        argv = graph_compile_arguments(
+            pack="export/pack", columns="export/columns.json", asset_lock="export/assets.lock.json",
+            language=language, threads=settings.compile_threads, ram_mb=settings.compile_ram_mb)
+        compile_event = {**event, "tool_id": "codeql-graph-export-compile"}
+        unit.job.events.write("TOOL_INVOCATION_STARTED", **compile_event, image_id=image.image_id)
+        result = executor.execute("compile", argv, scratch_root=scope_root)
+        failed = result.timed_out or result.exit_code != 0
+        gaps = (["CodeQL graph export query compile timed out"] if result.timed_out else
+                [f"CodeQL graph export query compile exited {result.exit_code}"] if failed else [])
+        execution = _execution_artifact(unit, scope_root, "compile")
+        unit.job.events.write("TOOL_INVOCATION_COMPLETED", **compile_event, image_id=image.image_id,
+                              disposition="FAILED" if failed else "SUCCEEDED",
+                              duration_ms=result.duration_ms, result_count=0, gap_count=len(gaps),
+                              gaps=gaps, checkpoint_reused=False,
+                              truncated=result.stdout_truncated or result.stderr_truncated,
+                              metrics_receipt=execution)
+        if failed:
+            return {"execution": execution, "gaps": gaps}
+        _PRECOMPILED.add(key)
+        return None
 
 
 def _export_isolated(unit: UnitContext, database: Mapping[str, Any], *,
-                     executor_factory: Any = None) -> Mapping[str, Any]:
+                     executor_factory: Any = None,
+                     seed_plan: seeding.SeedPlan | None = None) -> Mapping[str, Any]:
     try:
-        return _export_one(unit, database, executor_factory=executor_factory)
+        return _export_one(unit, database, executor_factory=executor_factory, seed_plan=seed_plan)
     except (RuntimeError, TimeoutError) as exc:
         scope = _scope_from(database["scope"])
         return {**_export_base(scope, database), "export_status": "FAILED",
@@ -844,9 +975,13 @@ def _export_scopes(unit: UnitContext, *, executor_factory: Any = None) -> Mappin
                 value.get("terminal_status") == "SUCCEEDED"):
             _verify_export_sources(unit.job.repository_root, profile, settings)
             verified.add(language)
+    plan = None
+    if settings.export_queries.mode == "seeded" and verified:
+        # One pass over the accepted observation shards seeds every scope.
+        plan = _seed_plan(unit, [_scope_from(value["scope"]) for value in values])
     with ThreadPoolExecutor(max_workers=settings.concurrency) as pool:
         results = list(pool.map(lambda value: _export_isolated(
-            unit, value, executor_factory=executor_factory), values))
+            unit, value, executor_factory=executor_factory, seed_plan=plan), values))
     gaps = [gap for item in results for gap in item.get("gaps", ())]
     document = {"schema": GRAPH_EXPORTS_SCHEMA, "source_fingerprint": unit.job.source_fingerprint,
                 "settings": asdict(settings.export_queries), "exports": results}
@@ -1000,6 +1135,11 @@ def _validate_config(context, _result) -> None:
     for step, tasks in expected.items():
         if tuple(context.config.step(step).tasks) != tasks:
             raise ValueError(f"CodeQL analysis task configuration mismatch: {step}")
+    settings = getattr(context.config, "typed_settings", None)
+    if isinstance(settings, CodeQLAnalysisSettings):
+        # Re-run the typed validation: mode, 0 <= seed_depth <= max_seed_depth <= ceiling, seed_limit >= 1.
+        CodeQLExportSettings(**{name: getattr(settings.export_queries, name)
+                                for name in CodeQLExportSettings.__dataclass_fields__})
 
 
 def _validate_scope_assets(scope: CodeQLScope, settings: CodeQLAnalysisSettings,
@@ -1243,7 +1383,7 @@ def build_job() -> Job:
         Unit("plan.inventory", plan),
         Unit("database.scopes", databases, ("plan.inventory",)),
         Unit("query.scopes", queries, ("database.scopes",)),
-        Unit("export.scopes", _export_scopes, ("database.scopes",)),
+        Unit("export.scopes", _export_scopes, ("database.scopes", "plan.inventory")),
         Unit("normalize.scopes", normalize, ("query.scopes",)),
         Unit("acceptance.publish_handoff", publish, ("normalize.scopes", "export.scopes")),
     )
@@ -1251,6 +1391,7 @@ def build_job() -> Job:
         Path(__file__).read_bytes() + Path(applicability_contract.__file__).read_bytes() +
         Path(__file__).with_name("planning.py").read_bytes() +
         Path(__file__).with_name("sarif.py").read_bytes() +
+        Path(seeding.__file__).with_name("ledger.py").read_bytes() +
         Path(__file__).parents[2].joinpath("codeql", "runtime.py").read_bytes()).hexdigest()
     validation = hashlib.sha256(Path(__file__).read_bytes() + b"validation").hexdigest()
     return Job("job_codeql_analysis", "codeql_analysis", UnitExecutor(units).execute,

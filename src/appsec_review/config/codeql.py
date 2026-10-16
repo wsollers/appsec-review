@@ -93,6 +93,9 @@ class CodeQLCustomQuerySettings:
 _EXPORT_RULES_ROOT = ("rules", "codeql-graph-export")
 # C/C++ is the only language with a graph export pack in this change (code-graph plan D5).
 _EXPORT_LANGUAGES = frozenset({"cpp"})
+EXPORT_MODES = ("seeded", "whole_program")
+# Hard ceiling of ``max_seed_depth``: deeper neighborhoods approach the whole program.
+SEED_DEPTH_CEILING = 8
 
 
 def _positive_int(value: object, field_name: str) -> int:
@@ -160,11 +163,29 @@ class CodeQLExportSettings:
     row_limit: int = field(default_factory=lambda: _default_export_bounds()[0])
     max_bytes: int = field(default_factory=lambda: _default_export_bounds()[1])
     timeout_seconds: int = field(default_factory=lambda: _default_export_bounds()[2])
+    mode: str = "seeded"
+    seed_depth: int = 3
+    max_seed_depth: int = 8
+    seed_limit: int = 200
+    compile_timeout_seconds: int = 3600
+    compile_threads: int = 8
+    compile_ram_mb: int = 8192
 
     def __post_init__(self) -> None:
         _strict_bool(self.enabled, "CodeQL export_queries.enabled")
-        for name in ("row_limit", "max_bytes", "timeout_seconds"):
+        for name in ("row_limit", "max_bytes", "timeout_seconds", "seed_limit", "compile_timeout_seconds",
+                     "compile_threads", "compile_ram_mb"):
             _positive_int(getattr(self, name), f"CodeQL export_queries.{name}")
+        if not isinstance(self.mode, str) or self.mode not in EXPORT_MODES:
+            raise ValueError("CodeQL export_queries.mode must be one of: " + ", ".join(EXPORT_MODES))
+        for name in ("seed_depth", "max_seed_depth"):
+            value = getattr(self, name)
+            if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+                raise ValueError(f"CodeQL export_queries.{name} must be a non-negative integer")
+        if self.max_seed_depth > SEED_DEPTH_CEILING:
+            raise ValueError(f"CodeQL export_queries.max_seed_depth must not exceed {SEED_DEPTH_CEILING}")
+        if self.seed_depth > self.max_seed_depth:
+            raise ValueError("CodeQL export_queries.seed_depth must not exceed max_seed_depth")
 
 
 @dataclass(frozen=True, slots=True)
@@ -252,6 +273,19 @@ class CodeQLAnalysisSettings:
     def export_timeout_seconds(self) -> int:
         """Timeout of the runner ``export`` action (read by ``codeql.runtime.action_timeout``)."""
         return self.export_queries.timeout_seconds
+
+    @property
+    def compile_timeout_seconds(self) -> int:
+        """Timeout of the runner ``compile`` action, which warms the persistent compile cache."""
+        return self.export_queries.compile_timeout_seconds
+
+    @property
+    def compile_threads(self) -> int:
+        return self.export_queries.compile_threads
+
+    @property
+    def compile_ram_mb(self) -> int:
+        return self.export_queries.compile_ram_mb
 
     def __post_init__(self) -> None:
         if self.enabled == (self.execution_mode is CodeQLExecutionMode.DISABLED):
@@ -423,7 +457,7 @@ def _export_settings(value: object) -> CodeQLExportSettings:
         return CodeQLExportSettings()
     if not isinstance(value, Mapping):
         raise ValueError("jobs.job_codeql_analysis.settings.export_queries must be a table")
-    unknown = set(value) - {"enabled", "row_limit", "max_bytes", "timeout_seconds"}
+    unknown = set(value) - set(CodeQLExportSettings.__dataclass_fields__)
     if unknown:
         raise ValueError("jobs.job_codeql_analysis.settings.export_queries has unknown settings: " +
                          ", ".join(sorted(unknown)))

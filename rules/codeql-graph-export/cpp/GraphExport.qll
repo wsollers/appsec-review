@@ -28,6 +28,21 @@ import semmle.code.cpp.models.interfaces.CommandExecution
 import semmle.code.cpp.models.interfaces.FlowSource
 
 module GraphExport {
+  /**
+   * Export scope, bound at evaluation time (`codeql database run-queries --external`) from the
+   * one-row CSV `<mode>,<depth>`. `mode` is "whole_program" (everything is exported, `depth` is
+   * ignored) or "seeded" (only the neighborhood of the seed functions is exported). See
+   * docs/architecture/seeded-codeql-neighborhoods.md.
+   */
+  external predicate exportScope(string mode, int depth);
+
+  /**
+   * Seed locations, bound from the header-less CSV `<path>,<start_line>,<end_line>`: a path
+   * relative to the database source root and a 1-based inclusive line range. Empty in
+   * "whole_program" mode.
+   */
+  external predicate exportSeed(string path, int startLine, int endLine);
+
   /** Holds when `l` exports as the five location columns. */
   predicate locationColumns(
     Location l, string path, int startLine, int startColumn, int endLine, int endColumn
@@ -52,6 +67,83 @@ module GraphExport {
   /** A function whose definition lies inside the source root. */
   class SourceFunction extends Function {
     SourceFunction() { this.hasDefinition() and inSource(this.getDefinition()) }
+  }
+
+  /** Holds in "whole_program" mode, where every function is exported. */
+  predicate wholeProgram() { exportScope("whole_program", _) }
+
+  /** The call-graph radius of the neighborhood in "seeded" mode. */
+  private int scopeDepth() { exportScope("seeded", result) }
+
+  /** Every defined override (including the static target) a virtual call may dispatch to. */
+  Function virtualCandidate(FunctionCall call) {
+    call.isVirtual() and
+    (
+      result = call.getTarget()
+      or
+      result = call.getTarget().(MemberFunction).getAnOverridingFunction+()
+    ) and
+    result.hasDefinition()
+  }
+
+  /** `caller` contains a call to `callee`, directly or as a virtual override candidate. */
+  private predicate callEdge(SourceFunction caller, SourceFunction callee) {
+    exists(Call call | call.getEnclosingFunction() = caller |
+      callee = call.getTarget()
+      or
+      callee = virtualCandidate(call)
+    )
+  }
+
+  /**
+   * `f` is a source-root function whose definition (declarator through closing brace) overlaps
+   * the seed lines `[startLine, endLine]` of `path`. Every overlapping function matches, so a
+   * lambda and the function enclosing it both seed.
+   */
+  predicate seedMatch(string path, int startLine, int endLine, SourceFunction f) {
+    exportSeed(path, startLine, endLine) and
+    f.getDefinition().getFile().getRelativePath() = path and
+    startLine <= functionEndLine(f) and
+    endLine >= f.getDefinition().getLocation().getStartLine()
+  }
+
+  private int functionEndLine(SourceFunction f) {
+    result = f.getBlock().getLocation().getEndLine()
+    or
+    not exists(f.getBlock()) and result = f.getDefinition().getLocation().getEndLine()
+  }
+
+  /** A function that contains finding lines (a seed). */
+  predicate seedFunction(SourceFunction f) { seedMatch(_, _, _, f) }
+
+  /**
+   * `f` is within `distance` call-graph steps of a seed function, following call edges in either
+   * direction. The recursion is monotone and bounded by the scope depth; it yields every
+   * distance a walk can realise, so take the minimum for the shortest.
+   */
+  predicate near(SourceFunction f, int distance) {
+    not wholeProgram() and
+    (
+      seedFunction(f) and distance = 0
+      or
+      exists(SourceFunction other, int previous |
+        near(other, previous) and
+        (callEdge(other, f) or callEdge(f, other)) and
+        distance = previous + 1 and
+        distance <= scopeDepth()
+      )
+    )
+  }
+
+  /** `f` is exported: every function in "whole_program" mode, else the seeded neighborhood. */
+  predicate exported(Function f) { wholeProgram() or near(f, _) }
+
+  /** `e` lies in an exported function, or outside any function in "whole_program" mode. */
+  predicate exportedExpr(Expr e) { wholeProgram() or exported(e.getEnclosingFunction()) }
+
+  /** The dataflow node lies in an exported function. */
+  predicate exportedNode(DataFlow::Node n) {
+    wholeProgram() or exported(n.getEnclosingCallable().getUnderlyingCallable().(Function))
   }
 
   /** Comma-joined sorted basenames of every file that declares `f` (the catalog `declared_in`). */
@@ -207,6 +299,7 @@ module GraphExport {
    */
   predicate sink(Expr sinkExpr, Expr operand, int arg, string model, string api) {
     inSource(sinkExpr) and
+    exportedExpr(sinkExpr) and
     (
       exists(Call call | sinkExpr = call |
         apiCallSink(call, operand, arg, api) and model = "api"
@@ -284,6 +377,7 @@ module GraphExport {
     DataFlow::Node n, string model, string sourceType, string kind, string api, int index
   ) {
     (inSource(n.asExpr()) or inSource(n.asParameter(_)) or inSource(n.asDefiningArgument())) and
+    exportedNode(n) and
     (
       model = modelClass(n) and
       sourceType = n.(FlowSource).getSourceType() and

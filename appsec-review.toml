@@ -1329,12 +1329,12 @@ workers = 2
 enabled = true
 execution_mode = "auto"
 source_image_tag = "audit-codeql:custom-2.27.0"
-source_image_id = "sha256:d6c9d6f58b646cf56d446960394cc3a41e1ca612ba655c64a4a06036f8b11af4"
+source_image_id = "sha256:4e6f3afab224f8ee156095eb073516f60d0a86c51402e3dd9f4fe2f844682bee"
 version = "2.27.0"
 commit = "b47b3e59262c95aff4eeb84ac72d09e25a9c37e9"
 cli_sha256 = "5c905275695b4efcaa02ea380f6e60b01310fa3dff0fa8c442bf0638bb46055a"
 license_sha256 = "d0d6cfdc857c1e0153bbd2b6f0d4ab42dfc38acec9b97b2f7f55c1f51ffe9fbf"
-asset_lock_sha256 = "5bb291ee1280b6b31b0f938f0f91f90d5b559d9d38067a925fd6756a5cc1eda0"
+asset_lock_sha256 = "a69cd8b10a63aa646addda89130366494f167b4a6a41295ec8a3e8cba33b5659"
 runtime_user = "10001:10001"
 retention = "run-owned"
 concurrency = 2
@@ -1358,6 +1358,17 @@ enabled = true
 row_limit = 200000
 max_bytes = 268435456
 timeout_seconds = 1800
+# Seeded mode exports only the call-graph neighborhood (seed_depth steps) of finding locations;
+# "whole_program" keeps the full export. See docs/architecture/seeded-codeql-neighborhoods.md.
+mode = "seeded"
+seed_depth = 3
+max_seed_depth = 8
+seed_limit = 200
+# The precompile action fills the persistent query compile cache before evaluation. A cold compile
+# is minutes of CPU, so it has its own timeout and resources, separate from timeout_seconds.
+compile_timeout_seconds = 3600
+compile_threads = 8
+compile_ram_mb = 8192
 
 [jobs.job_codeql_analysis.settings.languages.cpp]
 enabled = true
@@ -1393,12 +1404,12 @@ source_path = "rules/codeql-graph-export/cpp"
 query_pack = "appsec-review/graph-export-cpp"
 query_pack_version = "1.0.0"
 query_suite = "graph-export.qls"
-query_suite_sha256 = "4af4c3f7f908796b9d13103e53d7e23b1a57b70fedcbec9dbd440c8dedecf6af"
+query_suite_sha256 = "c0120cc191ba3f7378f8e759c08b21e85c7cf32cf40426b1e15256775f8040e6"
 query_pack_sha256 = "5a1b7d2794951859393831f0bdaad3ab369718340806862ae3e036fe4e348bde"
-tree_sha256 = "4c9623fa4d2e4c3069a5f5af08632975084c557b8fa033f0c4ab16d82441f7d0"
-file_count = 10
+tree_sha256 = "2379fcf1f429ad21b269a4d7e0b039493e193e79c6315f5b9f3c317da3395271"
+file_count = 12
 columns_path = "rules/codeql-graph-export/columns.json"
-columns_sha256 = "c45c27ee19b1ccd4d15b4b2308a9ace0a5545d38836f2c905d379f2e3e69dfe0"
+columns_sha256 = "91c13be2a39348fbb8b710d85b87cbd2fdbd23f425ae337ab2e02fb201ce7097"
 catalog_path = "rules/codeql-graph-export/catalog.json"
 catalog_sha256 = "1a290cf270f5469f02aaf6c10432457101c128ec17a0b340272ccc6b1ef7a0a5"
 

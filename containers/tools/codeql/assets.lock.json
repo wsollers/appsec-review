@@ -2,7 +2,7 @@
   "schema": "appsec-review/codeql-assets-lock/2",
   "source_image": {
     "tag": "audit-codeql:custom-2.27.0",
-    "image_id": "sha256:d6c9d6f58b646cf56d446960394cc3a41e1ca612ba655c64a4a06036f8b11af4"
+    "image_id": "sha256:4e6f3afab224f8ee156095eb073516f60d0a86c51402e3dd9f4fe2f844682bee"
   },
   "codeql": {
     "version": "2.27.0",
@@ -67,12 +67,12 @@
       "query_pack": "appsec-review/graph-export-cpp",
       "query_pack_version": "1.0.0",
       "query_suite": "graph-export.qls",
-      "query_suite_sha256": "4af4c3f7f908796b9d13103e53d7e23b1a57b70fedcbec9dbd440c8dedecf6af",
+      "query_suite_sha256": "c0120cc191ba3f7378f8e759c08b21e85c7cf32cf40426b1e15256775f8040e6",
       "query_pack_sha256": "5a1b7d2794951859393831f0bdaad3ab369718340806862ae3e036fe4e348bde",
-      "tree_sha256": "4c9623fa4d2e4c3069a5f5af08632975084c557b8fa033f0c4ab16d82441f7d0",
-      "file_count": 10,
+      "tree_sha256": "2379fcf1f429ad21b269a4d7e0b039493e193e79c6315f5b9f3c317da3395271",
+      "file_count": 12,
       "columns_path": "rules/codeql-graph-export/columns.json",
-      "columns_sha256": "c45c27ee19b1ccd4d15b4b2308a9ace0a5545d38836f2c905d379f2e3e69dfe0",
+      "columns_sha256": "91c13be2a39348fbb8b710d85b87cbd2fdbd23f425ae337ab2e02fb201ce7097",
       "catalog_path": "rules/codeql-graph-export/catalog.json",
       "catalog_sha256": "1a290cf270f5469f02aaf6c10432457101c128ec17a0b340272ccc6b1ef7a0a5"
     }

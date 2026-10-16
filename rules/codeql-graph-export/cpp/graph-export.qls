@@ -6,3 +6,5 @@
 - query: Paths.ql
 - query: Guards.ql
 - query: Ranges.ql
+- query: Seeds.ql
+- query: Neighborhood.ql

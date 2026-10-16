@@ -24,6 +24,11 @@ module GraphTaintConfig implements DataFlow::ConfigSig {
   predicate isSource(DataFlow::Node n) { GraphExport::source(n, _, _, _, _, _) }
 
   predicate isSink(DataFlow::Node n) { GraphExport::sinkNode(n, _, _) }
+
+  // In "seeded" mode flows stay inside the exported neighborhood, which bounds the global
+  // analysis; in "whole_program" mode nothing is a barrier. Sources and sinks are already
+  // restricted to exported functions by GraphExport::source and GraphExport::sinkNode.
+  predicate isBarrier(DataFlow::Node n) { not GraphExport::exportedNode(n) }
 }
 
 module GraphTaint = TaintTracking::Global<GraphTaintConfig>;

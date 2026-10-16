@@ -8,7 +8,7 @@ this change.
 
 | Path | Content |
 |---|---|
-| `cpp/` | The query pack `appsec-review/graph-export-cpp` 1.0.0: `qlpack.yml`, `graph-export.qls`, the shared library `GraphExport.qll` and the seven queries `CallSites`, `SinkSites`, `SourceSites`, `FlowSummaries`, `Paths`, `Guards` and `Ranges`. |
+| `cpp/` | The query pack `appsec-review/graph-export-cpp` 1.0.0: `qlpack.yml`, `graph-export.qls`, the shared library `GraphExport.qll`, the seven graph queries `CallSites`, `SinkSites`, `SourceSites`, `FlowSummaries`, `Paths`, `Guards` and `Ranges`, and the two seeded-scope reports `Seeds` and `Neighborhood`. |
 | `columns.json` | `appsec-review/codeql-graph-export-columns/1`: the closed, ordered column contract for every export `query_id`. This is the C1 → C3 format contract. |
 | `catalog.json`, `catalog.schema.json` | `appsec-review/graph-catalog/1`: classifies export rows into the closed `SinkClass`/`SourceClass` vocabularies of `src/appsec_review/graph/contract.py`. |
 
@@ -35,6 +35,8 @@ query predicate is one export, its result-set name is the `query_id`, and the ex
 | `path_flows`, `path_edges`, `path_sanitizers` | `Paths.ql` | `dataflow_path` |
 | `guards` | `Guards.ql` | `guard_fact` |
 | `ranges`, `range_conversions` | `Ranges.ql` | `range_fact` |
+| `seed_functions` | `Seeds.ql` | none (seeded-scope report) |
+| `neighborhood` | `Neighborhood.ql` | none (seeded-scope report) |
 
 `columns.json` lists, for each `query_id`, the exact ordered column names, their type and their
 meaning. The QL parameter names equal those names (enforced by
@@ -74,6 +76,36 @@ checked by `contract.validate_export`) with exactly the keys `schema`, `query_id
 `row_count` is CodeQL's total row count from `bqrs info`. `truncated` is true when that exceeds the
 decoded rows, which are then the first `row_limit` rows in BQRS order.
 
+## Export scope: whole program or seeded
+
+Every query is restricted by the export scope
+([`docs/architecture/seeded-codeql-neighborhoods.md`](../../docs/architecture/seeded-codeql-neighborhoods.md)).
+`GraphExport.qll` declares two external predicates that the runner binds at evaluation time with
+`codeql database run-queries --external=<name>=<file.csv>`; the compiled queries and the compile
+cache are therefore identical for every scope:
+
+| external predicate | CSV (no header) | content |
+|---|---|---|
+| `exportScope(string mode, int depth)` | `scope.csv` | one row, `whole_program,0` or `seeded,<n>` |
+| `exportSeed(string path, int startLine, int endLine)` | `seeds.csv` | one row per seed, path relative to the database source root; empty in `whole_program` mode |
+
+* `whole_program` exports everything, byte-identical to the pack before seeding existed.
+* `seeded` exports the neighborhood of the seeds. `seedFunction(f)` holds for each source-root
+  function whose definition (declarator through closing brace) overlaps a seed's lines; nested
+  lambdas and the function enclosing them both seed. `near(f, d)` is the bidirectional closure
+  over call edges (direct targets plus virtual overrides) with `d <= n`; `exported(f)` is
+  `whole_program` or `near(f, _)`. Function-pointer targets are not edges of the closure.
+* `call_sites` exports the calls of exported callers (the frontier callee appears as a target but
+  is not expanded), and its function-pointer dataflow only sinks at calls in exported functions.
+  `sink_sites`, `source_sites`, `guards`, `ranges` and `range_conversions` apply `exported` to the
+  enclosing function in `GraphExport::sink` and `GraphExport::source`. `flow_summaries` applies it
+  to the summarized function. `Paths.ql` restricts its sources and sinks the same way and makes
+  every node outside an exported function a barrier, so the global flow stays inside the
+  neighborhood.
+* `seed_functions` and `neighborhood` report how the seeds resolved (the `neighborhood` depth is the
+  minimum call-graph distance from a seed function). Both are empty in `whole_program` mode and
+  belong to no graph family.
+
 ## File layout and runner action
 
 The runner action `export` (`containers/tools/codeql/codeql_runner.py`) runs inside the derived
@@ -82,6 +114,7 @@ CodeQL image with `--network none`. All of its paths are relative to the executi
 ```text
 export --database <db-copy> --pack <staged-pack-dir> --columns <staged columns.json>
        --asset-lock <staged assets.lock.json> --language cpp --output-dir <dir>
+       --scope-file <scope.csv> --seeds-file <seeds.csv>
        --row-limit <n> --max-bytes <n> --threads <n> --ram <mb>
 ```
 
@@ -92,14 +125,19 @@ pack is repository-owned and is not part of the licensed image. The runner then:
 1. checks that the staged pack's location-independent tree hash (`sha256  relative/path` lines,
    sorted by relative path), file count, `qlpack.yml`, suite and `columns.json` equal
    `export_query_packs.cpp` in `containers/tools/codeql/assets.lock.json`;
-2. runs `codeql database run-queries --threads --ram -- <db> <pack>/graph-export.qls`;
+2. relies on the compile cache populated beforehand by the separate `compile` action (or
+   `containers/build.py query-packs --warm`; cold 10-22 minutes, warm about 45 seconds),
+   compiles every query once (`codeql query compile`), then runs `codeql database run-queries
+   --threads --ram --external=exportScope=<scope.csv> --external=exportSeed=<seeds.csv> -- <db>
+   <pack>/<query>.ql` for each query file;
 3. for each `query_id` in `columns.json` order, runs `codeql bqrs info --format=json` to get the
    true row count and the column arity, then `codeql bqrs decode --format=json --result-set
    <query_id> --rows <row-limit>`;
 4. writes `<output-dir>/<query_id>.json` (canonical JSON) and `<output-dir>/export-manifest.json`.
 
 `export-manifest.json` (`appsec-review/codeql-graph-export-manifest/1`) records the language, the
-pack identity, the bounds, and for each export its `path`, `sha256`, `bytes`, `row_count`,
+pack identity, the bounds, the export `scope` (`mode`, `depth`, `seed_count`; the runner validates
+`scope.csv` and `seeds.csv` first, and a `whole_program` scope must have no seeds), and for each export its `path`, `sha256`, `bytes`, `row_count`,
 `exported_rows`, `truncated`, `bqrs_sha256` and `decode_ms`. The output directory holds exactly
 these files. `appsec_review.codeql.runtime.load_graph_exports` re-verifies a directory against
 its manifest and the export contract. Any extra, missing or changed file is a

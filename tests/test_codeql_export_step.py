@@ -13,7 +13,9 @@ from typing import Any
 
 import pytest
 
-from appsec_review.codeql.runtime import action_timeout, graph_export_arguments, load_asset_lock
+from appsec_review.codeql.runtime import (
+    action_timeout, graph_compile_arguments, graph_export_arguments, load_asset_lock,
+)
 from appsec_review.config import load_config, parse_codeql_settings
 from appsec_review.graph.contract import GraphSettings
 from appsec_review.indexing.inventory import Claim, FileClaims, runtime_claims, scan_run_tree
@@ -57,8 +59,10 @@ def _runner_module():
 RUNNER = _runner_module()
 
 
-def _settings():
-    return load_config(ROOT / "appsec-review.toml").job(JOB).typed_settings
+def _settings(mode: str = "whole_program"):
+    """The central settings; these whole-program tests pin the mode, seeded mode has its own tests."""
+    settings = load_config(ROOT / "appsec-review.toml").job(JOB).typed_settings
+    return replace(settings, export_queries=replace(settings.export_queries, mode=mode))
 
 
 def _scope(language: str, root: str, unit: str) -> CodeQLScope:
@@ -104,12 +108,22 @@ def _database(tmp_path: Path, scope: CodeQLScope, *, identity: str = "d" * 64,
             "database_tree_sha256": "7" * 64, "image": image_artifact, "gaps": []}
 
 
+@pytest.fixture(autouse=True)
+def _cold_compile_cache():
+    from appsec_review.jobs.job_codeql_analysis import job as codeql_job
+    codeql_job._PRECOMPILED.clear()
+    yield
+    codeql_job._PRECOMPILED.clear()
+
+
 class FakeExecutor:
     """Stands in for CodeQLExecutor: checks the staged scratch, then plays back C1's recording."""
 
     def __init__(self, *, outcome: dict[str, tuple[int | None, bool]] | None = None,
                  tamper: bool = False) -> None:
         self.calls: list[tuple[str, tuple[str, ...], Path]] = []
+        self.compiles: list[tuple[str, ...]] = []
+        self.compile_outcome: tuple[int | None, bool] = (0, False)
         self.outcome = outcome or {}
         self.tamper = tamper
 
@@ -118,13 +132,27 @@ class FakeExecutor:
         return self
 
     def execute(self, action: str, argv, *, scratch_root: Path):
+        if action == "compile":
+            self.compiles.append(tuple(argv))
+            assert tuple(argv) == graph_compile_arguments(
+                pack="export/pack", columns="export/columns.json", asset_lock="export/assets.lock.json",
+                language="cpp", threads=8, ram_mb=8192)
+            assert (scratch_root / "export" / "pack" / "qlpack.yml").is_file()
+            atomic_json(scratch_root / "executions" / action / "receipt.json",
+                        {"schema": "appsec-review/codeql-execution/2", "action": action})
+            code, timed_out = self.compile_outcome
+            return SimpleNamespace(exit_code=code, timed_out=timed_out, duration_ms=7,
+                                   stdout_truncated=False, stderr_truncated=False)
         self.calls.append((action, tuple(argv), scratch_root))
         values = dict(zip(argv[::2], argv[1::2]))
         assert action == "export" and values["--language"] == "cpp"
         assert tuple(argv) == graph_export_arguments(
             database="export/database", pack="export/pack", columns="export/columns.json",
             asset_lock="export/assets.lock.json", language="cpp", output_dir="exports",
-            row_limit=200000, max_bytes=268435456, threads=2, ram_mb=4096)
+            row_limit=200000, max_bytes=268435456, threads=2, ram_mb=4096,
+            scope_file="export/scope.csv", seeds_file="export/seeds.csv")
+        assert (scratch_root / values["--scope-file"]).read_text(encoding="utf-8") == "whole_program,0\n"
+        assert (scratch_root / values["--seeds-file"]).read_text(encoding="utf-8") == ""
         # The staged pack, columns and lock pass the runner's own lock check.
         lock = json.loads((scratch_root / values["--asset-lock"]).read_text(encoding="utf-8"))
         RUNNER._verify_export_pack(lock["export_query_packs"]["cpp"], scratch_root / values["--pack"],
@@ -172,7 +200,7 @@ def test_export_writes_exports_and_manifest_publishes_hashes_and_reuses(tmp_path
         "size_bytes": (NATIVE / "export-manifest.json").stat().st_size}
     assert {item["query_id"]: item["sha256"] for item in exported["export_files"]} == {
         path.stem: file_sha256(path) for path in NATIVE.glob("*.json") if path.name != "export-manifest.json"}
-    assert exported["export_count"] == 10 and exported["truncated_queries"] == []
+    assert exported["export_count"] == 12 and exported["truncated_queries"] == []
     assert exported["export_pack"]["tree_sha256"] == load_asset_lock(ROOT)["export_query_packs"]["cpp"]["tree_sha256"]
     assert exported["export_execution"]["path"].endswith("/executions/export/receipt.json")
     index = json.loads((run_root / output["artifact"]["path"]).read_text(encoding="utf-8"))
@@ -182,9 +210,12 @@ def test_export_writes_exports_and_manifest_publishes_hashes_and_reuses(tmp_path
     assert output["dispositions"] == [
         {"scope_id": cpp.scope_id, "language": "cpp", "action": "export", "terminal_status": "SUCCEEDED"},
         {"scope_id": go.scope_id, "language": "go", "action": "export", "terminal_status": "NOT_APPLICABLE"}]
-    events = [name for name, details in unit.job.events.records]
-    assert events == ["TOOL_INVOCATION_STARTED", "TOOL_INVOCATION_COMPLETED"]
-    assert all(details["tool_id"] == "codeql-graph-export" for _name, details in unit.job.events.records)
+    export_events = [(name, details) for name, details in unit.job.events.records
+                     if details["tool_id"] == "codeql-graph-export"]
+    assert [name for name, _details in export_events] == ["TOOL_INVOCATION_STARTED", "TOOL_INVOCATION_COMPLETED"]
+    compile_events = [name for name, details in unit.job.events.records
+                      if details["tool_id"] == "codeql-graph-export-compile"]
+    assert compile_events == ["TOOL_INVOCATION_STARTED", "TOOL_INVOCATION_COMPLETED"]
 
     rerun = _export_scopes(_unit(tmp_path, databases), executor_factory=_never)
     reused = next(item for item in rerun["exports"] if item["scope_id"] == cpp.scope_id)
@@ -334,9 +365,12 @@ def _raw_settings() -> dict[str, Any]:
 
 def test_typed_export_settings_are_strict_and_default_to_the_graph_contract() -> None:
     settings = parse_codeql_settings(_raw_settings())
-    assert asdict(settings.export_queries) == {"enabled": True, "row_limit": 200000,
-                                               "max_bytes": 268435456, "timeout_seconds": 1800}
+    assert asdict(settings.export_queries) == {
+        "enabled": True, "row_limit": 200000, "max_bytes": 268435456, "timeout_seconds": 1800,
+        "mode": "seeded", "seed_depth": 3, "max_seed_depth": 8, "seed_limit": 200,
+        "compile_timeout_seconds": 3600, "compile_threads": 8, "compile_ram_mb": 8192}
     assert action_timeout(settings, "export") == settings.export_timeout_seconds == 1800
+    assert action_timeout(settings, "compile") == settings.compile_timeout_seconds == 3600
     assert [item.query_id for item in settings.languages["cpp"].export_queries] == ["graph-export-cpp"]
     assert all(not settings.languages[name].export_queries for name in settings.languages if name != "cpp")
 
@@ -352,6 +386,14 @@ def test_typed_export_settings_are_strict_and_default_to_the_graph_contract() ->
             (lambda value: value["export_queries"].update(row_limit=0), "positive integer"),
             (lambda value: value["export_queries"].update(max_bytes=True), "positive integer"),
             (lambda value: value["export_queries"].update(enabled="yes"), "Boolean"),
+            (lambda value: value["export_queries"].update(mode="whole-program"), "mode must be one of"),
+            (lambda value: value["export_queries"].update(mode=1), "mode must be one of"),
+            (lambda value: value["export_queries"].update(seed_depth=-1), "seed_depth must be a non-negative"),
+            (lambda value: value["export_queries"].update(seed_depth=True), "seed_depth must be a non-negative"),
+            (lambda value: value["export_queries"].update(seed_depth=4, max_seed_depth=3),
+             "seed_depth must not exceed max_seed_depth"),
+            (lambda value: value["export_queries"].update(max_seed_depth=9), "must not exceed 8"),
+            (lambda value: value["export_queries"].update(seed_limit=0), "seed_limit must be a positive"),
             (lambda value: value["languages"]["go"].update(
                 export_queries=copy.deepcopy(value["languages"]["cpp"]["export_queries"])), "only for: cpp"),
             (lambda value: value["languages"]["cpp"]["export_queries"].append(
@@ -378,7 +420,7 @@ def test_config_topology_requires_the_export_step() -> None:
         _validate_config(SimpleNamespace(config=missing), None)
     job = build_job()
     units = {unit.unit_id: unit.dependencies for unit in job.units}
-    assert units["export.scopes"] == ("database.scopes",)
+    assert units["export.scopes"] == ("database.scopes", "plan.inventory")
     assert set(units["acceptance.publish_handoff"]) == {"normalize.scopes", "export.scopes"}
     assert [unit.unit_id.split(".")[0] for unit in job.units] == list(config.steps)
 
@@ -410,3 +452,27 @@ def test_dataset_declarations_account_for_exports_separately_from_scope_material
     assert tree.unaccounted_count == 0 and not tree.scan_errors
     assert {key[2]: group.count for key, group in tree.groups.items()} == {
         kind: len(paths) for kind, paths in files.items()}
+
+
+def test_precompile_runs_once_for_scopes_sharing_a_cache_and_before_each_export(tmp_path: Path) -> None:
+    databases = [_database(tmp_path, _scope("cpp", "native", "a")), _database(tmp_path, _scope("cpp", "other", "b"))]
+    executor = FakeExecutor()
+    output = _export_scopes(_unit(tmp_path, databases), executor_factory=executor.factory)
+    assert output["export_count"] == 2 and len(executor.calls) == 2
+    assert len(executor.compiles) == 1, "the second scope must hit the cache the first one warmed"
+    assert (tmp_path / "run").exists()
+    receipts = sorted((tmp_path / "run").rglob("executions/compile/receipt.json"))
+    assert len(receipts) == 1
+
+
+@pytest.mark.parametrize("outcome,gap", [((None, True), "compile timed out"), ((3, False), "compile exited 3")])
+def test_a_failed_precompile_is_a_named_gap_and_never_runs_the_export(tmp_path: Path, outcome, gap) -> None:
+    executor = FakeExecutor()
+    executor.compile_outcome = outcome
+    output = _export_scopes(_unit(tmp_path, [_database(tmp_path, _scope("cpp", "native", "a"))]),
+                            executor_factory=executor.factory)
+    [item] = output["exports"]
+    assert item["export_status"] == "FAILED" and any(gap in value for value in item["gaps"])
+    assert executor.calls == [] and output["export_count"] == 0
+    assert output["terminal_status"] == "COMPLETED_WITH_GAPS"
+    assert not list((tmp_path / "run").rglob("export-checkpoint.json"))

@@ -21,6 +21,7 @@ from appsec_review.codeql.runtime import (
     CodeQLImage,
     GraphExportIntegrityError,
     action_timeout,
+    graph_compile_arguments,
     graph_export_arguments,
     load_asset_lock,
     load_graph_exports,
@@ -46,6 +47,7 @@ RUNNER = _runner()
 COLUMNS = json.loads((PACK_ROOT / "columns.json").read_text(encoding="utf-8"))
 QUERIES = COLUMNS["languages"]["cpp"]["queries"]
 QUERY_IDS = [query["query_id"] for query in QUERIES]
+SCOPE_REPORT_QUERIES = {"seed_functions", "neighborhood"}  # seeded-mode reports, outside every graph family
 CATALOG = json.loads((PACK_ROOT / "catalog.json").read_text(encoding="utf-8"))
 LOCK_ENTRY = load_asset_lock(ROOT)["export_query_packs"]["cpp"]
 
@@ -88,6 +90,11 @@ class FakeCodeQL:
         Path(argv[argv.index("--output") + 1]).write_text(json.dumps(
             {result_set: {"columns": [], "tuples": rows[:limit]}}), encoding="utf-8")
 
+    def compile(self, argv: list[str], *, cwd: Path, environment: dict[str, str]) -> dict[str, float]:
+        self.calls.append(list(argv))
+        assert argv[1:3] == ["query", "compile"] and cwd.is_dir()
+        return {Path(value).name: 1.5 for value in argv[argv.index("--") + 1:]}
+
     def capture(self, argv: list[str], *, cwd: Path, environment: dict[str, str]) -> bytes:
         self.calls.append(list(argv))
         assert argv[1:4] == ["bqrs", "info", "--format=json"]
@@ -105,6 +112,8 @@ def _stage(tmp_path: Path) -> Path:
     shutil.copytree(PACK_ROOT / "cpp", scratch / "export-pack")
     shutil.copyfile(PACK_ROOT / "columns.json", scratch / "export-columns.json")
     shutil.copyfile(ROOT / "containers" / "tools" / "codeql" / "assets.lock.json", scratch / "assets.lock.json")
+    (scratch / "scope.csv").write_text("whole_program,0\n", encoding="utf-8")
+    (scratch / "seeds.csv").write_text("", encoding="utf-8")
     return scratch
 
 
@@ -112,6 +121,7 @@ def _args(**overrides) -> argparse.Namespace:
     argv = graph_export_arguments(
         database="query-database", pack="export-pack", columns="export-columns.json",
         asset_lock="assets.lock.json", language="cpp", output_dir="exports",
+        scope_file=overrides.pop("scope_file", "scope.csv"), seeds_file=overrides.pop("seeds_file", "seeds.csv"),
         row_limit=overrides.pop("row_limit", 1000), max_bytes=overrides.pop("max_bytes", 1 << 24),
         threads=2, ram_mb=2048)
     return RUNNER.parser().parse_args(["export", *argv])
@@ -119,6 +129,7 @@ def _args(**overrides) -> argparse.Namespace:
 
 def _fake(monkeypatch: pytest.MonkeyPatch, fake: FakeCodeQL) -> None:
     monkeypatch.setattr(RUNNER, "_run", fake.run)
+    monkeypatch.setattr(RUNNER, "_run_compile", fake.compile)
     monkeypatch.setattr(RUNNER, "_capture", fake.capture)
     monkeypatch.setattr(RUNNER, "_environment", lambda: {"TZ": "UTC", "HOME": "/tmp/codeql-home"})
 
@@ -136,8 +147,13 @@ def test_export_argv_runs_queries_then_bounded_decode_per_result_set(
     RUNNER.export(_args(), scratch=scratch)
 
     database, pack = str(scratch / "query-database"), str(scratch / "export-pack")
-    assert fake.calls[0] == [RUNNER.CODEQL, "database", "run-queries", "--threads", "2", "--ram", "2048",
-                             "--", database, f"{pack}/graph-export.qls"]
+    files = list(dict.fromkeys(query["query_file"] for query in QUERIES))
+    assert fake.calls[0] == [RUNNER.CODEQL, "query", "compile", "--threads", "2", "--ram", "2048", "--",
+                             *(f"{pack}/{file}" for file in files)]
+    assert fake.calls[1:1 + len(files)] == [
+        [RUNNER.CODEQL, "database", "run-queries", "--threads", "2", "--ram", "2048",
+         f"--external=exportScope={scratch / 'scope.csv'}", f"--external=exportSeed={scratch / 'seeds.csv'}",
+         "--", database, f"{pack}/{file}"] for file in files]
     expected = []
     for query in QUERIES:
         bqrs = fake.bqrs_files[query["result_set"]]
@@ -145,7 +161,7 @@ def test_export_argv_runs_queries_then_bounded_decode_per_result_set(
         expected.append([RUNNER.CODEQL, "bqrs", "decode", "--format=json", "--result-set", query["result_set"],
                          "--rows", "1000", "--output", str(scratch / "exports" / f".{query['query_id']}.decoded.json"),
                          "--", bqrs])
-    assert fake.calls[1:] == expected
+    assert fake.calls[1 + len(files):] == expected
     # Offline: no CLI call can download packs or reach the network.
     assert not any(re.search(r"download|https?:|registry", value) for call in fake.calls for value in call)
     exports = load_graph_exports(scratch / "exports", bytes_limit=1 << 24)
@@ -158,6 +174,75 @@ def test_export_argv_runs_queries_then_bounded_decode_per_result_set(
     manifest = json.loads((scratch / "exports" / "export-manifest.json").read_text(encoding="utf-8"))
     assert manifest["pack"]["tree_sha256"] == LOCK_ENTRY["tree_sha256"]
     assert manifest["row_limit"] == 1000 and all(not item["truncated"] for item in manifest["exports"])
+    assert isinstance(manifest["compile_ms"], int)
+    assert manifest["scope"] == {"mode": "whole_program", "depth": 0, "seed_count": 0}
+    assert all(item["evaluate_ms"] >= 0 and item["compile_s"] == 1.5 for item in manifest["exports"])
+
+
+def test_seeded_scope_is_bound_to_every_evaluation_and_recorded_in_the_manifest(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    scratch = _stage(tmp_path)
+    (scratch / "scope.csv").write_text("seeded,3\n", encoding="utf-8")
+    (scratch / "seeds.csv").write_text('src/a.cpp,10,12\nsrc/a.cpp,10,12\n"src/b,c.cpp",5,5\n', encoding="utf-8")
+    fake = FakeCodeQL(_synthetic_rows())
+    _fake(monkeypatch, fake)
+
+    RUNNER.export(_args(), scratch=scratch)
+
+    evaluations = [call for call in fake.calls if call[1:3] == ["database", "run-queries"]]
+    assert len(evaluations) == len({query["query_file"] for query in QUERIES})
+    for call in evaluations:
+        assert call.count(f"--external=exportScope={scratch / 'scope.csv'}") == 1
+        assert call.count(f"--external=exportSeed={scratch / 'seeds.csv'}") == 1
+        assert call.index("--") > call.index(f"--external=exportSeed={scratch / 'seeds.csv'}")
+    assert not any("--external" in value for call in fake.calls if call[1:3] == ["query", "compile"]
+                   for value in call), "the compile step must not depend on the scope"
+    manifest = json.loads((scratch / "exports" / "export-manifest.json").read_text(encoding="utf-8"))
+    assert manifest["scope"] == {"mode": "seeded", "depth": 3, "seed_count": 2}
+    load_graph_exports(scratch / "exports", bytes_limit=1 << 24)  # extra manifest keys stay tolerated
+
+
+@pytest.mark.parametrize(("scope", "seeds", "message"), [
+    ("seeded\n", "", "<mode>,<depth>"),
+    ("seeded,3\nseeded,4\n", "", "<mode>,<depth>"),
+    ("whole,0\n", "", "unsupported mode"),
+    ("seeded,-1\n", "", "unsupported mode or depth"),
+    ("seeded,2\n", "a.cpp,10\n", "<path>,<start_line>,<end_line>"),
+    ("seeded,2\n", "a.cpp,12,10\n", "<path>,<start_line>,<end_line>"),
+    ("seeded,2\n", "a.cpp,x,10\n", "<path>,<start_line>,<end_line>"),
+    ("whole_program,0\n", "a.cpp,1,2\n", "empty in whole_program"),
+])
+def test_export_rejects_a_malformed_scope_or_seeds_file_before_running_codeql(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch, scope: str, seeds: str, message: str) -> None:
+    scratch = _stage(tmp_path)
+    (scratch / "scope.csv").write_text(scope, encoding="utf-8")
+    (scratch / "seeds.csv").write_text(seeds, encoding="utf-8")
+    fake = FakeCodeQL(_synthetic_rows())
+    _fake(monkeypatch, fake)
+    with pytest.raises(ValueError, match=re.escape(message)):
+        RUNNER.export(_args(), scratch=scratch)
+    assert fake.calls == []
+
+
+def test_export_requires_both_scope_arguments_and_scratch_relative_paths() -> None:
+    complete = graph_export_arguments(
+        database="d", pack="p", columns="c", asset_lock="l", language="cpp", output_dir="o",
+        scope_file="export/scope.csv", seeds_file="export/seeds.csv", row_limit=1, max_bytes=1, threads=1, ram_mb=1)
+    assert complete[complete.index("--scope-file"):complete.index("--scope-file") + 4] == (
+        "--scope-file", "export/scope.csv", "--seeds-file", "export/seeds.csv")
+    parsed = RUNNER.parser().parse_args(["export", *complete])
+    assert (parsed.scope_file, parsed.seeds_file) == ("export/scope.csv", "export/seeds.csv")
+    for option in ("--scope-file", "--seeds-file"):
+        trimmed = list(complete)
+        at = trimmed.index(option)
+        del trimmed[at:at + 2]
+        with pytest.raises(SystemExit):
+            RUNNER.parser().parse_args(["export", *trimmed])
+    for bad in ({"scope_file": "../scope.csv"}, {"seeds_file": "/abs/seeds.csv"}):
+        with pytest.raises(ValueError, match="scratch-relative"):
+            graph_export_arguments(
+                database="d", pack="p", columns="c", asset_lock="l", language="cpp", output_dir="o",
+                **{"scope_file": "s", "seeds_file": "e", **bad}, row_limit=1, max_bytes=1, threads=1, ram_mb=1)
 
 
 def test_row_bound_truncates_and_keeps_the_true_row_count(
@@ -206,10 +291,12 @@ def test_export_byte_bound_and_result_set_contract_fail_the_action(
 def test_export_paths_must_stay_in_scratch() -> None:
     with pytest.raises(ValueError, match="scratch-relative"):
         graph_export_arguments(database="../db", pack="p", columns="c", asset_lock="l", language="cpp",
-                               output_dir="o", row_limit=1, max_bytes=1, threads=1, ram_mb=1)
+                               output_dir="o", scope_file="s", seeds_file="e", row_limit=1, max_bytes=1,
+                               threads=1, ram_mb=1)
     with pytest.raises(ValueError, match="positive"):
         graph_export_arguments(database="db", pack="p", columns="c", asset_lock="l", language="cpp",
-                               output_dir="o", row_limit=0, max_bytes=1, threads=1, ram_mb=1)
+                               output_dir="o", scope_file="s", seeds_file="e", row_limit=0, max_bytes=1,
+                               threads=1, ram_mb=1)
 
 
 def test_decode_of_recorded_bqrs_json_yields_the_export_object() -> None:
@@ -270,7 +357,11 @@ def test_executor_export_action_runs_without_network_and_with_export_timeout(
     monkeypatch.setattr(Path, "is_symlink", guarded_is_symlink)
     result = CodeQLExecutor(image=image, run_root=tmp_path, settings=settings, runner=runner).execute(
         "export", ("--language", "cpp"), scratch_root=scratch)
-    command, timeout = next(call for call in calls if call[0][:2] == ("docker", "run"))
+    command, timeout = next(call for call in calls
+                            if call[0][:2] == ("docker", "run") and "/opt/appsec/codeql_runner.py" in call[0])
+    assert any(value.startswith("type=volume,src=appsec-codeql-compile-") and value.endswith(",dst=/codeql-cache")
+               for value in command) and result.limits["compile_cache"] == "persistent-docker-volume"
+    assert not any(call[0][:3] == ("docker", "volume", "rm") for call in calls)
     expected_user = (f"{os.geteuid()}:{os.getegid()}" if hasattr(os, "geteuid") and
                      os.geteuid() > 0 and os.getegid() > 0 else image.runtime_user)
     assert command[command.index("--user") + 1] == expected_user
@@ -326,18 +417,53 @@ def test_columns_contract_is_closed_and_equals_the_ql_query_predicates() -> None
     predicates = _query_predicates()
     assert sorted(predicates) == sorted(QUERY_IDS)
     for query in QUERIES:
-        assert set(query) == {"query_id", "query_file", "result_set", "family", "description", "columns"}
+        reports = query["query_id"] in SCOPE_REPORT_QUERIES
+        assert set(query) == {"query_id", "query_file", "result_set", "description", "columns"} | (
+            set() if reports else {"family"})
         assert query["result_set"] == query["query_id"]
-        contract.Family(query["family"])
+        if not reports:
+            contract.Family(query["family"])
         assert all(set(column) == {"name", "type", "meaning"} and column["meaning"] for column in query["columns"])
         assert predicates[query["query_id"]] == (
             query["query_file"], [(column["type"], column["name"]) for column in query["columns"]])
-    assert {query["family"] for query in QUERIES} == {family.value for family in contract.Family}
+    assert {query["family"] for query in QUERIES if "family" in query} == {family.value for family in contract.Family}
     suite = (PACK_ROOT / "cpp" / "graph-export.qls").read_text(encoding="utf-8")
     assert sorted(re.findall(r"- query: (\S+)", suite)) == sorted({query["query_file"] for query in QUERIES})
     for path in (PACK_ROOT / "cpp").glob("*.ql"):
         text = path.read_text(encoding="utf-8")
         assert "LIVE-UNVERIFIED" in text and "@kind table" in text and "select " not in text
+
+
+def test_seeded_scope_report_queries_are_outside_every_graph_family() -> None:
+    from appsec_review.graph.normalize import FAMILY_QUERIES, export_columns
+
+    in_families = {query_id for queries in FAMILY_QUERIES.values() for query_id in queries}
+    assert SCOPE_REPORT_QUERIES == {"seed_functions", "neighborhood"} and not SCOPE_REPORT_QUERIES & in_families
+    assert in_families | SCOPE_REPORT_QUERIES == set(QUERY_IDS) == set(export_columns("cpp"))
+    by_id = {query["query_id"]: query for query in QUERIES}
+    assert [column["name"] for column in by_id["seed_functions"]["columns"]] == [
+        "seed_path", "seed_start_line", "seed_end_line", "function_name", "function_path",
+        "function_start_line", "function_start_column"]
+    assert [column["name"] for column in by_id["neighborhood"]["columns"]] == [
+        "function_name", "function_path", "function_start_line", "function_start_column", "depth"]
+    assert (by_id["seed_functions"]["query_file"], by_id["neighborhood"]["query_file"]) == (
+        "Seeds.ql", "Neighborhood.ql")
+
+
+def test_pack_declares_the_scope_externals_and_restricts_every_query_by_exported() -> None:
+    library = (PACK_ROOT / "cpp" / "GraphExport.qll").read_text(encoding="utf-8")
+    assert "external predicate exportScope(string mode, int depth);" in library
+    assert "external predicate exportSeed(string path, int startLine, int endLine);" in library
+    for name in ("seedFunction", "near", "exported", "wholeProgram"):
+        assert re.search(rf"\bpredicate {name}\(", library), name
+    # sink() and source() carry the scope restriction for SinkSites, Guards, Ranges, Paths and
+    # SourceSites; the other queries apply it to their own function.
+    assert "exportedExpr(sinkExpr)" in library and "exportedNode(n)" in library
+    for name in ("CallSites.ql", "FlowSummaries.ql"):
+        assert "GraphExport::exported(" in (PACK_ROOT / "cpp" / name).read_text(encoding="utf-8"), name
+    assert "GraphExport::exportedNode(n)" in (PACK_ROOT / "cpp" / "Paths.ql").read_text(encoding="utf-8")
+    for name in ("Seeds.ql", "Neighborhood.ql"):
+        assert "not GraphExport::wholeProgram()" in (PACK_ROOT / "cpp" / name).read_text(encoding="utf-8")
 
 
 # --------------------------------------------------------------------------- catalog
@@ -524,3 +650,68 @@ def test_manifest_check_rejects_unlisted_files_bounds_and_rows_that_disagree(tmp
     manifest_path.write_bytes(RUNNER._canonical(manifest))
     with pytest.raises(GraphExportIntegrityError, match="differs from its manifest row"):
         load_graph_exports(exports, bytes_limit=1 << 24)
+
+
+def test_compile_action_compiles_the_verified_pack_once_without_a_database(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    scratch = _stage(tmp_path)
+    shutil.rmtree(scratch / "query-database")
+    fake = FakeCodeQL(_synthetic_rows())
+    _fake(monkeypatch, fake)
+    argv = graph_compile_arguments(pack="export-pack", columns="export-columns.json",
+                                   asset_lock="assets.lock.json", language="cpp", threads=8, ram_mb=8192)
+
+    RUNNER.compile_export(RUNNER.parser().parse_args(["compile", *argv]), scratch=scratch)
+
+    files = list(dict.fromkeys(query["query_file"] for query in QUERIES))
+    assert fake.calls == [[RUNNER.CODEQL, "query", "compile", "--threads", "8", "--ram", "8192", "--",
+                           *(f"{scratch / 'export-pack'}/{file}" for file in files)]]
+    report = json.loads(capsys.readouterr().out)
+    assert report["schema"] == "appsec-review/codeql-compile/1" and report["query_count"] == len(files)
+    assert set(report["compile_s"]) == set(files)
+
+
+def test_compile_action_refuses_a_pack_that_differs_from_the_lock(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    scratch = _stage(tmp_path)
+    (scratch / "export-pack" / "CallSites.ql").write_text("// tampered\n", encoding="utf-8")
+    fake = FakeCodeQL(_synthetic_rows())
+    _fake(monkeypatch, fake)
+    argv = graph_compile_arguments(pack="export-pack", columns="export-columns.json",
+                                   asset_lock="assets.lock.json", language="cpp", threads=2, ram_mb=2048)
+    with pytest.raises(ValueError, match="differs from the reviewed asset lock"):
+        RUNNER.compile_export(RUNNER.parser().parse_args(["compile", *argv]), scratch=scratch)
+    assert fake.calls == []
+
+
+def test_executor_compile_action_has_its_own_timeout_resources_and_a_payload_keyed_cache(
+        tmp_path: Path) -> None:
+    settings = SimpleNamespace(inventory_timeout_seconds=30, database_timeout_seconds=30,
+                               query_timeout_seconds=30, output_bytes=1024, threads=2, ram_mb=1024,
+                               export_timeout_seconds=7, compile_timeout_seconds=99, compile_threads=6,
+                               compile_ram_mb=5000)
+    assert action_timeout(settings, "compile") == 99
+    scratch = tmp_path / "scratch"
+    (scratch / "export").mkdir(parents=True)
+    volumes = set()
+    for derived in (IMAGE, "sha256:" + "b" * 64):
+        calls: list[tuple[tuple[str, ...], int]] = []
+
+        def runner(argv, timeout, derived=derived, calls=calls):
+            calls.append((tuple(argv), timeout))
+            if argv[:3] == ("docker", "image", "inspect"):
+                return 0, (derived + "\n").encode(), b"", False
+            return 0, b"ok", b"", False
+
+        image = CodeQLImage("appsec-review/codeql-derived-image/2", "a" * 64, "sha256:" + "5" * 64, IMAGE,
+                            "build:local", derived, "codeql:local", "10001:10001", "b" * 64, "c" * 64,
+                            False, "manifest.json")
+        CodeQLExecutor(image=image, run_root=tmp_path, settings=settings, runner=runner).execute(
+            "compile", ("--language", "cpp"), scratch_root=scratch)
+        command, timeout = next(call for call in calls
+                                if call[0][:2] == ("docker", "run") and "/opt/appsec/codeql_runner.py" in call[0])
+        assert timeout == 99
+        assert command[command.index("--cpus") + 1] == "6" and command[command.index("--memory") + 1] == "6024m"
+        assert command[command.index("--network") + 1] == "none"
+        assert command[-3:] == ("compile", "--language", "cpp")
+        volumes.update(value for value in command if value.startswith("type=volume,src=appsec-codeql-compile-"))
+    assert len(volumes) == 1, "every derived image over one CodeQL payload shares one compile cache"
