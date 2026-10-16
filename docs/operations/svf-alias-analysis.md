@@ -14,18 +14,31 @@ load.accepted_cpp -> analyze.scopes -> acceptance.publish_handoff
 
 All settings are positive integers except `enabled`, and are validated before any unit runs.
 
-| Setting | Bounds |
-| --- | --- |
-| `workers` | concurrent accepted C/C++ scopes (one container each) |
-| `max_modules_per_scope` | planned modules analyzed per scope; the rest are a named gap |
-| `max_module_bitcode_bytes` | a larger linked module is `too_large` and is not analyzed |
-| `max_module_output_bytes`, `max_output_bytes` | driver document per module, and the run result |
-| `field_limit` | SVF's field-sensitivity limit; wider structs merge fields (`field_limit_collapsed`) |
-| `max_sites`, `max_pts_size`, `max_indirect_calls`, `max_targets_per_call`, `max_unmodeled_names` | driver export bounds; reaching one sets `truncated` and makes the module's coverage `partial` |
-| `compile_timeout_seconds`, `link_timeout_seconds`, `module_timeout_seconds` | per compile unit, per link, and per analysis wall clock inside the container |
-| `andersen_time_limit_seconds` | SVF's own Andersen limit; must be below `module_timeout_seconds` |
-| `max_objects_per_module` | `memory_object` records published per module; the rest are a named coverage reason |
-| `max_accessors_per_object` | accessor fan-in kept per memory object (frees first); `accessor_total` counts all |
+| Setting | Shipped value | Controls |
+| --- | --- | --- |
+| `enabled` | `false` | opt-in; a disabled job is omitted from execution plans |
+| `workers` | 2 | concurrent accepted C/C++ scopes (one container each) |
+| `max_modules_per_scope` | 32 | planned modules analyzed per scope; the rest are a named gap |
+| `max_module_bitcode_bytes` | 268435456 (256 MiB) | a larger linked module is `too_large` and is not analyzed |
+| `max_module_output_bytes` | 8388608 (8 MiB) | driver document per module |
+| `max_output_bytes` | 1048576 (1 MiB) | the run result document |
+| `field_limit` | 64 | SVF's field-sensitivity limit; wider structs merge fields (`field_limit_collapsed`) |
+| `max_sites` | 20000 | pointer sites exported per module |
+| `max_pts_size` | 256 | objects kept per points-to set |
+| `max_indirect_calls` | 20000 | indirect calls exported per module |
+| `max_targets_per_call` | 64 | targets kept per indirect call |
+| `max_unmodeled_names` | 64 | unmodeled external names listed per module |
+| `compile_timeout_seconds` | 120 | per compile unit, inside the container |
+| `link_timeout_seconds` | 120 | per module link |
+| `module_timeout_seconds` | 300 | per module analysis wall clock |
+| `andersen_time_limit_seconds` | 240 | SVF's own Andersen limit; must be below `module_timeout_seconds` |
+| `max_objects_per_module` | 5000 | `memory_object` records published per module (fan-in index size) |
+| `max_accessors_per_object` | 64 | accessor fan-in kept per memory object (frees first); `accessor_total` counts all |
+
+Reaching an export bound sets `truncated` and makes the module's coverage `partial`. Every value is
+a required key in `[jobs.job_svf_alias_analysis.settings]`; the code has no fallback, so tune them
+in `appsec-review.toml`. The time limits are below the earliest design draft's (an Andersen limit of
+900 s) because the whole scope must finish inside the central 600 s tool policy.
 
 The whole scope also runs under the central container policy (1 GiB memory, 600 s). A large C++
 module that exceeds it shows up as an OOM or timeout gap.

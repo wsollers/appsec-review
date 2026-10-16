@@ -337,3 +337,22 @@ def test_accessor_classes_cover_frees_writes_reads_compares_and_passes() -> None
     assert accessor_class({"role": "call_arg", "callee": "free"}) == "free"
     assert accessor_class({"role": "call_arg", "callee": "memcpy"}) == "pass"
     assert [accessor_class({"role": role}) for role in ("store", "load", "compare")] == ["write", "read", "compare"]
+
+
+def test_central_configuration_ships_the_design_tunables() -> None:
+    """The depth and fan-in/fan-out tunables in appsec-review.toml equal design section 7.1."""
+    import re
+    import tomllib
+    root = Path(__file__).parents[1]
+    document = tomllib.loads((root / "appsec-review.toml").read_text(encoding="utf-8"))
+    design = (root / "docs" / "architecture" / "svf-alias-producer.md").read_text(encoding="utf-8")
+    table = design.split("### 7.1 Tunables", 1)[1].split("\n## ", 1)[0]
+    rows = re.findall(r"^\| `(\w+)` \| `([\w.]+)` \| [^|]+ \| (\d+) \|", table, flags=re.M)
+    assert {name for name, _table, _value in rows} == {
+        "max_accessors_per_object", "max_objects_per_module", "max_memory_context_entries", "max_callers",
+        "caller_depth"}
+    for name, location, value in rows:
+        settings = document
+        for part in location.split("."):
+            settings = settings[part]
+        assert settings[name] == int(value), (location, name)
