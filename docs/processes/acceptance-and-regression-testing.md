@@ -123,13 +123,14 @@ and digests** (host-specific by design), randomized scratch names (`.appsec-revi
 diff is unreadable, and byte comparison across hosts is impossible in principle.
 
 ### Phase 5 — corpus acceptance against the answer key
-The outermost layer, and the only one needing an oracle. The corpus is blind
-(`appsec-multi-vuln@2994384`) and the expected defects live in the evaluator guide's per-defect
-inventory; that inventory, not a previous run, is the oracle. `test/acceptance/expectations.toml`
-maps each case to the defects that must be found with a resolving location, the producers that must
-have run, and the gaps that are accepted. Reported as a found/missed/spurious matrix per case and
-family, so the result is a measurement rather than a pass/fail bit. Effort 2-4 days, dominated by
-whether the inventory is machine-readable.
+The outermost layer, and the only one needing an oracle. The corpus is blind (`appsec-multi-vuln`
+at a pinned tag; see Decisions). The oracle is a reviewed good run, accepted one job at a time: not
+an arbitrary previous run, but one whose every job output was checked and accepted before the next
+job was. `test/acceptance/expectations.toml` maps each case to the defects that must be found with a
+resolving location, the producers that must have run, and the gaps that are accepted. Reported as a
+found/missed/spurious matrix per case and family, so the result is a measurement rather than a
+pass/fail bit; spurious findings are left to the refutation stage. Effort 2-4 days, dominated by the
+job-by-job acceptance of the first good run.
 
 ## What these contracts do not reach
 
@@ -156,12 +157,15 @@ least one rule set.
   those enshrines the defects.
 - **Not a smoke test.** Smoke proves a tool starts.
 
-## Decisions required
+## Decisions (2026-10-16)
 
-1. **Does a required-producer coverage gap fail the run by default?** Phase 2 is shaped by this.
-   Failing by default is the honest setting and will stop runs that currently complete.
-2. **Spurious-finding policy for phase 5** — hard fail, or report against a declared budget? A hard
-   fail makes every rule improvement a test failure.
-3. **Is the evaluator inventory machine-readable?** The single biggest cost driver for phase 5.
-4. **Where baselines and expectations live.** `test/acceptance/` is committed and reviewable;
-   `runs/` is not committed, so a baseline must be a deliberate reviewed artifact.
+1. **A required-producer coverage gap does not fail the run by default.** It stays a named gap in
+   the run's results; Phase 2 makes it legible, not fatal.
+2. **Spurious findings are reported, not failed.** Phase 5 lists them; the refutation stage votes
+   them down and eliminates them from the final report. Missed expected defects are the failure.
+3. **The answer key is a reviewed good run, built one job at a time.** Each job's normalized output
+   is accepted individually, in graph order, once its inputs are accepted, and becomes that job's
+   expectation. A job is not accepted while it carries an unexplained gap (see Non-goals).
+4. **Baselines and expectations live under `test/acceptance/`,** committed and reviewed. The
+   corpus is pinned to an `appsec-multi-vuln` tag (to be named; the earlier pin `2994384` is not
+   in the local target history), and every expectation records that tag and its commit.
