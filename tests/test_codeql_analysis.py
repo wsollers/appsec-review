@@ -246,6 +246,36 @@ def test_codeql_build_execution_uses_bridge_network(tmp_path: Path) -> None:
     assert (tmp_path / "scratch" / "database").is_dir()
 
 
+def test_codeql_execution_survives_a_moved_derived_tag_but_not_a_missing_image(tmp_path: Path) -> None:
+    moved = "sha256:" + "9" * 64
+    present = {IMAGE}
+
+    def runner(argv, _timeout):
+        if argv[:3] == ("docker", "image", "inspect"):
+            reference = argv[3]
+            if reference == "codeql:local":
+                return 0, (moved + "\n").encode(), b"", False
+            if reference in present:
+                return 0, (reference + "\n").encode(), b"", False
+            return 1, b"", b"Error: No such image", False
+        if "/opt/appsec/codeql_runner.py" in argv:
+            (tmp_path / "scratch" / "database-export").mkdir(exist_ok=True)
+        return 0, b"ok", b"", False
+
+    image = CodeQLImage("appsec-review/codeql-derived-image/2", "a" * 64, IMAGE, IMAGE,
+                        "build:local", IMAGE, "codeql:local", "10001:10001",
+                        "b" * 64, "c" * 64, False, "manifest.json")
+    settings = SimpleNamespace(inventory_timeout_seconds=30, database_timeout_seconds=30,
+                               query_timeout_seconds=30, output_bytes=1024, threads=2, ram_mb=1024)
+    executor = CodeQLExecutor(image=image, run_root=tmp_path, settings=settings, runner=runner)
+    arguments = ("--language", "csharp", "--database", "database")
+    # Another process rebuilt the same identity and moved the tag; the pinned id still runs.
+    assert executor.execute("database", arguments, scratch_root=tmp_path / "scratch").image_id == IMAGE
+    present.clear()
+    with pytest.raises(ValueError, match="is unavailable: Error: No such image"):
+        executor.execute("database", arguments, scratch_root=tmp_path / "scratch")
+
+
 def source(path: str, digest: str = "a" * 64) -> dict[str, object]:
     return {"path": path, "sha256": digest, "size_bytes": 12}
 

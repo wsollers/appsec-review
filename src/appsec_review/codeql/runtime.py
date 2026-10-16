@@ -256,10 +256,16 @@ class CodeQLExecutor:
                 # accessible to the next action; unrelated ownership is an integrity error.
                 if path.stat().st_uid != container_uid:
                     raise
-        inspected = self.runner(("docker", "image", "inspect", self.image.image_tag,
+        # Every container below runs by image id, so the id must exist; the human tag may legitimately
+        # move when another process rebuilds the same identity on the shared daemon.
+        inspected = self.runner(("docker", "image", "inspect", self.image.image_id,
                                  "--format", "{{.Id}}"), 60)
         if inspected[3] or inspected[0] != 0 or inspected[1].decode().strip() != self.image.image_id:
-            raise ValueError("CodeQL derived image identity changed")
+            reason = ("timed out" if inspected[3] else
+                      inspected[2][:512].decode("utf-8", "replace").strip() or
+                      f"resolved {inspected[1].decode('utf-8', 'replace').strip()}")
+            raise ValueError(f"CodeQL derived image {self.image.image_id} ({self.image.image_tag}) "
+                             f"is unavailable: {reason}")
         effective = resolve_host_bind_path(scratch, self.runner)
         timeout = action_timeout(self.settings, action)
         # Export reads a staged database and pack without network access.
