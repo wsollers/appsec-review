@@ -11,6 +11,7 @@ Relevant bounded procedures and design references:
 - [`operations/review-data-indexing.md`](operations/review-data-indexing.md) — dataset inventory and publication audit, lead menus, stage-1 products, and offline FTS validation; design in [`architecture/indexing-and-query-reuse.md`](architecture/indexing-and-query-reuse.md).
 - [`architecture/code-graph-precomputation.md`](architecture/code-graph-precomputation.md) — code-graph strategy, `graph` index, `query_code_graph`, R3 admissibility update, job topology, rollout, the chunked implementation and test plan (implemented through C9, offline-verified), and the partially implemented Clang phase (K4 static analysis is complete; K1-K3 and optional K5 remain planned).
 - [`operations/code-graph-index.md`](operations/code-graph-index.md) — `job_code_graph_index` inputs, units, shards, resume and verification.
+- [`architecture/svf-alias-producer.md`](architecture/svf-alias-producer.md) — proposed SVF points-to cross-check producer (design only, not implemented).
 - [`reviews/code-graph-precomputation-implementation.md`](reviews/code-graph-precomputation-implementation.md) — code-graph implementation record: decisions, chunks and merges, reconciliations, C9 integration fixes, verification, live-unverified items, and next work.
 - [`../deploy/dagster/README.md`](../deploy/dagster/README.md) — deployment lifecycle and live verification.
 - [`../pipeline/skills/target-analysis-planning/SKILL.md`](../pipeline/skills/target-analysis-planning/SKILL.md) — model-side proposal constraints for target analysis ambiguity.

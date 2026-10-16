@@ -66,6 +66,9 @@ Repository authority remains in [`../../AGENTS.md`](../../AGENTS.md). This page 
   and the parallel implementation and test plan (implemented through C9 for C/C++, offline-verified;
   record in [`../reviews/code-graph-precomputation-implementation.md`](../reviews/code-graph-precomputation-implementation.md);
   operations in [`../operations/code-graph-index.md`](../operations/code-graph-index.md)).
+- [`svf-alias-producer.md`](svf-alias-producer.md) — proposed SVF points-to producer: pinned
+  `tool-svf` image, `job_svf_alias_analysis`, and `graph-cross-check/3` rules for indirect calls
+  and guard operand aliasing (design only, not implemented).
 
 Operations pages not listed above:
 
