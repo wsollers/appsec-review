@@ -46,6 +46,27 @@ whose export is `SKIPPED`, `FAILED` or `NOT_APPLICABLE` still publishes all seve
 only an `unavailable` row that names the export status and reason, and no entities, so the
 inventory audit reports these shards as `unavailable` rather than missing.
 
+## Producer neighborhoods
+
+Beside the card the job publishes one `producer_neighborhood` shard per scope,
+`graph-<scope_id>-producers`. It holds the flow (`ir_entity`), diagnostic (`tool_observation`) and
+linked clangd `symbol` rows of the seeded Clang AST/IR, Clang-Tidy/Static Analyzer and clangd producers,
+bounded per kind with `limit_reached` gaps, and each card carries
+`producers: [{name, state, seeded, depth, gaps}]`. When a producer's own secondary shard was dropped by
+the upstream selection, the job restores it from that producer's accepted handoff. A producer with no
+accepted output is a `producer_not_run` gap. The shard also carries the `cpg` rows of an enabled Joern job.
+
+## Analyzer sinks
+
+`crosscheck.scopes` passes the accepted `clang-static` diagnostics to `graph.analyzers.apply_analyzer_sinks`
+(rule `graph-analyzer-sinks/1`). A diagnostic whose check is in the reviewed check-to-sink-class table and
+whose line lies inside an exact CodeQL `sink_site` of the same class adds `clang-static` as an agreeing
+cross-check producer to that fact. Any other mapped diagnostic becomes an analyzer-only `sink_site` fact
+(inexact, `partial`, never direct-eligible; at most 500 per scope, `analyzer_sinks_limit`). Unmapped checks
+and unlocated diagnostics are counted in `analyzer_checks_unmapped` and `analyzer_diagnostics_unlocated`
+gaps on the `sink_site` coverage row; the per-scope summary is under `cross_check.analyzer_sinks`. See
+`docs/architecture/seeded-neighborhoods.md` section 9.
+
 ## Resume and invalidation
 
 A scope's checkpoint (`data/code-graph/scopes/<scope>/checkpoint.json`) binds:

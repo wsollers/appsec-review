@@ -908,6 +908,17 @@ def load_config(path: str | Path = "appsec-review.toml", *, overlay: str | Path 
             typed_settings=typed_settings,
             build_capture=resolved_capture,
         )
+    codeql_job = jobs.get("job_codeql_analysis")
+    if codeql_job is not None:
+        # One run-bound seeding definition: CodeQL's export_queries is the source, every other seeded
+        # producer receives the same mode, depth and seed limit (docs/architecture/seeded-neighborhoods.md).
+        from dataclasses import replace
+        from .seeding import SEEDED_JOB_BOUNDS, resolve_seeded_settings
+        for seeded_job_id in SEEDED_JOB_BOUNDS:
+            seeded_job = jobs.get(seeded_job_id)
+            if seeded_job is not None:
+                jobs[seeded_job_id] = replace(seeded_job, settings=MappingProxyType(resolve_seeded_settings(
+                    seeded_job_id, seeded_job.settings, codeql_job.typed_settings.export_queries)))
     orchestration = document.get("orchestration", {})
     if not isinstance(orchestration, dict):
         raise ValueError("[orchestration] must be a table")

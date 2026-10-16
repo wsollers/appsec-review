@@ -1,0 +1,46 @@
+int helper_g(int v)
+ [B6 (ENTRY)]
+   Succs (1): B5
+
+ [B1]
+   1: total
+   2: [B1.1] (ImplicitCastExpr, LValueToRValue, int)
+   3: return [B1.2];
+   Preds (1): B4
+   Succs (1): B0
+
+ [B2]
+   1: i
+   2: ++[B2.1]
+   Preds (1): B3
+   Succs (1): B4
+
+ [B3]
+   1: total
+   2: i
+   3: [B3.2] (ImplicitCastExpr, LValueToRValue, int)
+   4: [B3.1] += [B3.3]
+   Preds (1): B4
+   Succs (1): B2
+
+ [B4]
+   1: i
+   2: [B4.1] (ImplicitCastExpr, LValueToRValue, int)
+   3: v
+   4: [B4.3] (ImplicitCastExpr, LValueToRValue, int)
+   5: [B4.2] < [B4.4]
+   T: for (...; [B4.5]; ...)
+   Preds (2): B2 B5
+   Succs (2): B3 B1
+
+ [B5]
+   1: 0
+   2: int total = 0;
+   3: 0
+   4: int i = 0;
+   Preds (1): B6
+   Succs (1): B4
+
+ [B0 (EXIT)]
+   Preds (1): B1
+

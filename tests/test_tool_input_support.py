@@ -44,7 +44,7 @@ from tests import test_evidence_collection_job as evidence_tests
 def test_dockerfile_tools_accept_only_dockerfiles() -> None:
     paths = ["Dockerfile", "deploy/Dockerfile.prod", "build/app.dockerfile", "Containerfile",
              "Dockerfile.md", "dockerfile_utils.py", "docs/Dockerfile.txt", "Dockerfile.tmpl"]
-    for tool in ("tool-hadolint", "tool-checkov", "tool-trivy"):
+    for tool in ("tool-hadolint", "tool-trivy"):
         partition = partition_paths(tool, paths)
         assert partition.supported == ("Dockerfile", "deploy/Dockerfile.prod", "build/app.dockerfile",
                                        "Containerfile")
@@ -68,7 +68,7 @@ def test_planner_and_adapters_share_one_declaration() -> None:
     files = tuple({"path": path, "sha256": "a" * 64} for path in (
         "Dockerfile", "dockerfile_utils.py", "Dockerfile.md", "main.tf", "app.py", "notes.md"))
     assert _scanner_scope("tool-hadolint", files, ()) == ("Dockerfile",)
-    assert _scanner_scope("tool-checkov", files, ()) == ("Dockerfile", "main.tf")
+    assert _scanner_scope("tool-checkov", files, ()) == tuple(item["path"] for item in files)
     assert _scanner_scope("tool-semgrep", files, ()) == ("dockerfile_utils.py", "app.py")
     assert set(adapter_registry()) <= set(TOOL_INPUT_SUPPORT)
 
@@ -159,7 +159,7 @@ def test_evidence_unsupported_shell_dialect_is_never_launched_and_not_a_gap(tmp_
     assert disposition["terminal_status"] == "SUCCEEDED"
     assert disposition["not_applicable_input_count"] == 1
     assert not any("legacy.sh" in gap for gap in published["gaps"])
-    skipped = [item for item in published["not_applicable_inputs"]["items"] if item["path"] == "legacy.sh"]
+    skipped = [item for item in published["not_applicable_inputs"]["items"] if item["path"] == "legacy.sh" and item["tool"] == "tool-shellcheck"]
     assert skipped and skipped[0]["disposition"] == "SKIPPED_NA"
     assert skipped[0]["reason_code"] == "INPUT_FORMAT_UNSUPPORTED" and "zsh" in skipped[0]["reason"]
 
@@ -199,7 +199,7 @@ def test_evidence_tool_reported_unsupported_dialect_is_skipped_na(tmp_path: Path
     disposition = _disposition(published, "tool-shellcheck")
     assert disposition["terminal_status"] == "SUCCEEDED" and disposition["record_count"] == 0
     assert disposition["not_applicable_input_count"] == 1
-    item = next(value for value in published["not_applicable_inputs"]["items"] if value["path"] == "run.sh")
+    item = next(value for value in published["not_applicable_inputs"]["items"] if value["path"] == "run.sh" and value["tool"] == "tool-shellcheck")
     assert item["reason_code"] == "TOOL_REPORTED_UNSUPPORTED_INPUT"
 
 
@@ -395,19 +395,12 @@ def test_clang_scope_without_supported_units_is_not_launched(tmp_path: Path, mon
     assert skipped["not_applicable_inputs"]["items"][0]["path"] == "native/start.S"
 
 
-def test_checkov_workflow_and_cloudformation_selection_survives_the_pre_launch_filter() -> None:
-    from types import MappingProxyType
-
+def test_checkov_is_offered_every_planned_file_and_arbitrates_recognition_itself() -> None:
     from appsec_review.jobs.job_evidence_collection.adapters import Applicability
     from appsec_review.jobs.job_evidence_collection.job import _filter_supported_inputs
 
-    families = {"terraform": ("main.tf",), "dockerfile": ("Dockerfile",),
-                "github_actions": (".github/workflows/ci.yml",),
-                "cloudformation": ("infra/stack.yaml", "infra/stack.json")}
-    files = tuple(sorted(path for paths in families.values() for path in paths))
-    selection = Applicability(True, "typed configuration", files, "checkov_typed_configuration",
-                              (), MappingProxyType(families))
+    files = ("CMakePresets.json", "Dockerfile", ".github/workflows/ci.yml", "app.py", "notes.md", "pkg/stack.json")
+    selection = Applicability(True, "planned", files, "checkov_typed_configuration")
     kept, skipped = _filter_supported_inputs(selection, adapter_registry()["tool-checkov"], None)
     assert skipped == () and kept.files == files
-    # Formats Checkov does not parse are still dropped before launch.
-    assert partition_paths("tool-checkov", ["notes.md", "app.py"]).supported == ()
+    assert partition_paths("tool-checkov", ["notes.md", "app.py"]).supported == ("notes.md", "app.py")

@@ -53,8 +53,23 @@ def _manifest(staged: Staged) -> dict[str, Any]:
     return document
 
 
-def _graph(document: dict[str, Any]) -> list[dict[str, Any]]:
+def _all_graph(document: dict[str, Any]) -> list[dict[str, Any]]:
     return [item for item in document["indexes"] if item["name"] == GRAPH_INDEX]
+
+
+def _cards(document: dict[str, Any]) -> list[dict[str, Any]]:
+    return [item for item in _all_graph(document) if item["producer"].get("kind") == "codeql_database"]
+
+
+def _producers(document: dict[str, Any]) -> list[dict[str, Any]]:
+    """The per-scope ``producer_neighborhood`` shards (docs/architecture/seeded-neighborhoods.md section 9)."""
+    return [item for item in _all_graph(document) if item["producer"].get("kind") == "producer_neighborhood"]
+
+
+def _graph(document: dict[str, Any]) -> list[dict[str, Any]]:
+    """The per-(scope, family) fact shards; the per-scope cards are ``_cards``, the producer shards ``_producers``."""
+    return [item for item in _all_graph(document)
+            if item["producer"].get("kind") not in {"codeql_database", "producer_neighborhood"}]
 
 
 @pytest.fixture()
@@ -98,7 +113,17 @@ def test_one_graph_shard_per_scope_and_family_with_producer_keys_and_coverage(pu
     handoff = accepted_handoff(staged.run_root, JOB_ID)
     assert handoff is not None and handoff.handoff["outputs"]["acceptance.publish_handoff"]["index_manifest"][
         "path"] == resolve_accepted_manifest(staged.run_root)[0].relative_to(staged.run_root).as_posix()
-    assert _outputs(outcome)["acceptance.publish_handoff"]["counts"]["shards"] == 28
+    # One database card shard per CodeQL scope rides next to the 28 fact-family shards.
+    assert sorted(item["producer"]["scope_id"] for item in _cards(document)) == sorted(
+        (*SUCCEEDED_SCOPES, *UNAVAILABLE_SCOPES))
+    assert all(item["shard_id"] == f"graph-{item['producer']['scope_id']}-database"
+               and "family" not in item["producer"] for item in _cards(document))
+    counts = _outputs(outcome)["acceptance.publish_handoff"]["counts"]
+    assert sorted(item["producer"]["scope_id"] for item in _producers(document)) == sorted(
+        (*SUCCEEDED_SCOPES, *UNAVAILABLE_SCOPES))
+    assert all(item["shard_id"] == f"graph-{item['producer']['scope_id']}-producers"
+               and "family" not in item["producer"] for item in _producers(document))
+    assert counts["shards"] == 36 and counts["databases"] == 4
 
 
 def test_upstream_shards_are_composed_never_dropped(published) -> None:
@@ -168,14 +193,14 @@ def test_broken_sarif_flows_are_dataflow_path_coverage_gaps(published) -> None:
 
 def test_rerun_reuses_every_scope_checkpoint(published) -> None:
     staged, first = published
-    before = {item["shard_id"]: item["sha256"] for item in _graph(_manifest(staged))}
+    before = {item["shard_id"]: item["sha256"] for item in _all_graph(_manifest(staged))}
     second = _run(staged)
     outputs = _outputs(second)
     assert outputs["load.accepted_inputs"]["reused_count"] == 4
     assert outputs["normalize.scopes"]["scopes"] == [] and outputs["crosscheck.scopes"]["scopes"] == []
     assert outputs["correlate.scopes"]["reused_count"] == 4
     assert all(item["checkpoint_reused"] for item in outputs["correlate.scopes"]["scopes"])
-    assert {item["shard_id"]: item["sha256"] for item in _graph(_manifest(staged))} == before
+    assert {item["shard_id"]: item["sha256"] for item in _all_graph(_manifest(staged))} == before
     assert second["status"]["attempt_id"] != first["status"]["attempt_id"]
 
 
@@ -190,7 +215,7 @@ def _changed_catalog(tmp_path: Path) -> Path:
 def test_catalog_change_rebuilds_only_graph_shards(published, tmp_path: Path, monkeypatch) -> None:
     staged, _ = published
     document = _manifest(staged)
-    graph_before = {item["shard_id"]: item["sha256"] for item in _graph(document)}
+    graph_before = {item["shard_id"]: item["sha256"] for item in _all_graph(document)}
     others_before = sorted((item["name"], item["shard_id"], item["sha256"]) for item in document["indexes"]
                            if item["name"] != GRAPH_INDEX)
     export_checkpoints = {scope: file_sha256(staged.export_dir(scope).parent / "export-checkpoint.json")
@@ -205,10 +230,10 @@ def test_catalog_change_rebuilds_only_graph_shards(published, tmp_path: Path, mo
     assert outputs["load.accepted_inputs"]["reused_count"] == 0
     assert len(outputs["normalize.scopes"]["scopes"]) == 2
     after = _manifest(staged)
-    graph_after = {item["shard_id"]: item["sha256"] for item in _graph(after)}
+    graph_after = {item["shard_id"]: item["sha256"] for item in _all_graph(after)}
     assert graph_after.keys() == graph_before.keys()
     assert all(graph_after[shard_id] != sha for shard_id, sha in graph_before.items())
-    assert {item["producer"]["catalog_sha256"] for item in _graph(after)} == {
+    assert {item["producer"]["catalog_sha256"] for item in _all_graph(after)} == {
         outputs["load.accepted_inputs"]["catalog"]["sha256"]}
     assert sorted((item["name"], item["shard_id"], item["sha256"]) for item in after["indexes"]
                   if item["name"] != GRAPH_INDEX) == others_before
@@ -313,7 +338,7 @@ def test_dataset_declarations_pass_the_inventory_audit_including_unavailable_sha
     staged, _ = published
     config = staged.config
     steps = {job_id: tuple(config.job(job_id).steps) for job_id in (JOB_ID, "job_codeql_analysis")}
-    graph = _graph(_manifest(staged))
+    graph = [*_graph(_manifest(staged)), *_producers(_manifest(staged))]
     handoffs = {JOB_ID: accepted_handoff(staged.run_root, JOB_ID),
                 "job_codeql_analysis": accepted_handoff(staged.run_root, "job_codeql_analysis")}
     inventory = build_inventory(InventoryInputs(
@@ -325,7 +350,7 @@ def test_dataset_declarations_pass_the_inventory_audit_including_unavailable_sha
     assert violations == []
     rows = [row for row in inventory["rows"] if row["job_id"] == JOB_ID]
     facts = {row["scope"]: row["disposition"] for row in rows if row["output_kind"] == "code_graph_facts"}
-    assert len(facts) == 28
+    assert len(facts) == 32  # 28 fact-family shards and one producer_neighborhood shard per scope
     assert {facts[f"graph-{scope}-{family}"] for scope in UNAVAILABLE_SCOPES for family in FAMILIES} == {"unavailable"}
     assert {facts[f"graph-{NATIVE}-{family}"] for family in FAMILIES} == {"indexed"}
     kinds = {row["output_kind"]: row["disposition"] for row in rows if row["output_kind"].startswith("code_graph_")
@@ -395,3 +420,83 @@ def test_configuration_topology_validation_rejects_a_missing_step(staged: Staged
     context = SimpleNamespace(config=replace(config, steps=MappingProxyType(steps)))
     with pytest.raises(ValueError, match="topology"):
         job.input_validators[0](context, None)
+
+
+# ------------------------------------------------------------------------------ database card (spec section 7)
+
+
+def _scope(**overrides: Any) -> dict[str, Any]:
+    scope: dict[str, Any] = {
+        "scope_id": "cpp-main", "language": "c/c++", "source_languages": ["c/c++"], "root": "src",
+        "build_unit_id": "native-main", "database_identity": "db-1", "export_status": "SUCCEEDED",
+        "export_manifest": {"sha256": "a" * 64}, "export_pack": {"tree_sha256": "b" * 64, "columns_sha256": "c" * 64},
+        "seeded": {"mode": "seeded", "depth": 2, "seed_limit": 200, "seed_count": 3, "resolved_seed_count": 2,
+                   "neighborhood_function_count": 7, "depth_histogram": {"0": 2, "1": 5},
+                   "seeds": [{"path": "src/a.c", "start_line": 3, "end_line": 3, "status": "resolved",
+                              "functions": ["f"], "sources": [{"scanner": "cppcheck", "rule": "r"}]}],
+                   "gaps": []}}
+    scope.update(overrides)
+    return scope
+
+
+def _rows(status: Any) -> list[Any]:
+    from appsec_review.graph.normalize import CoverageRow
+
+    return [CoverageRow("cpp-main", family, status, (), 4) for family in Family]
+
+
+def test_seeded_scope_family_coverage_is_partial_with_the_neighborhood_gap() -> None:
+    from appsec_review.graph.contract import Coverage
+    from appsec_review.jobs.job_code_graph_index.scopes import apply_seeded_coverage
+
+    rows = apply_seeded_coverage(_scope(), _rows(Coverage.COMPLETE))
+    gap = ("seeded_neighborhood: facts cover functions within 2 call steps of 2 finding locations; "
+           "absence outside it is not evidence")
+    assert {row.status for row in rows} == {Coverage.PARTIAL} and all(gap in row.gaps for row in rows)
+    unavailable = apply_seeded_coverage(_scope(), _rows(Coverage.UNAVAILABLE))
+    assert {row.status for row in unavailable} == {Coverage.UNAVAILABLE}
+    whole = _scope(seeded={"mode": "whole_program", "depth": None})
+    assert {row.status for row in apply_seeded_coverage(whole, _rows(Coverage.COMPLETE))} == {Coverage.COMPLETE}
+
+
+def test_database_card_identity_payload_and_coverage() -> None:
+    from appsec_review.graph.contract import Coverage
+    from appsec_review.jobs.job_code_graph_index.scopes import apply_seeded_coverage, database_card
+    from appsec_review.retrieval import EntityKind
+
+    rows = apply_seeded_coverage(_scope(), _rows(Coverage.COMPLETE))
+    card = database_card(_scope(), snapshot="snap", coverage=rows)
+    assert card.identity.kind is EntityKind.CODEQL_DATABASE and card.identity.value.startswith("asr:codeql_database:")
+    assert card.payload["schema"] == "appsec-review/codeql-database/1" and card.payload["coverage"] == "partial"
+    assert card.payload["mode"] == "seeded" and card.payload["seed_depth"] == 2
+    assert card.payload["scope"]["scope_id"] == "cpp-main" and card.location is None
+    assert any(gap.startswith("seeded_neighborhood:") for gap in card.payload["gaps"])
+    assert database_card(_scope(), snapshot="snap", coverage=rows).identity == card.identity
+    other = database_card(_scope(database_identity="db-2"), snapshot="snap", coverage=rows)
+    assert other.identity != card.identity
+
+
+def test_non_succeeded_scope_cards_are_unavailable_or_partial_with_a_gap() -> None:
+    from appsec_review.graph.contract import Coverage
+    from appsec_review.jobs.job_code_graph_index.scopes import database_card
+
+    failed = database_card(_scope(export_status="FAILED", reason="boom"), snapshot="snap",
+                           coverage=_rows(Coverage.UNAVAILABLE))
+    assert failed.payload["coverage"] == "unavailable"
+    assert any(gap.startswith("export_unavailable:") and "boom" in gap for gap in failed.payload["gaps"])
+    skipped_seeded = _scope(export_status="SKIPPED")
+    skipped_seeded["seeded"] = {**skipped_seeded["seeded"], "resolved_seed_count": 0, "seed_count": 0, "seeds": []}
+    skipped = database_card(skipped_seeded, snapshot="snap", coverage=_rows(Coverage.UNAVAILABLE))
+    assert skipped.payload["coverage"] == "partial" and skipped.payload["gaps"]
+    assert failed.identity != skipped.identity
+
+
+def test_published_cards_are_listed_by_the_retrieval_tool(published) -> None:
+    staged, _ = published
+    core = RetrievalCore(staged.runs, staged.run_id)
+    cards = _cards(_manifest(staged))
+    assert cards and all(card["producer"]["kind"] == "codeql_database" for card in cards)
+    listed = core.list_codeql_databases()["results"]
+    assert {row["payload"]["scope_id"] for row in listed} == {card["producer"]["scope_id"] for card in cards}
+    assert all(row["kind"] == "codeql_database" and row["identity"].startswith("asr:codeql_database:")
+               for row in listed)

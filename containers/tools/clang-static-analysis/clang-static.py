@@ -45,27 +45,41 @@ def _run(argv: list[str]) -> tuple[int, str, bool]:
     return completed.returncode, completed.stdout[:MAX_CAPTURE].decode("utf-8", "replace"), truncated
 
 
+FIX_IT = re.compile(r"^fix-it:\"")
+
+
 def _text_diagnostics(text: str, *, engine: str, default_rule: str) -> list[dict[str, Any]]:
     values = []
     for line in text.splitlines():
+        if FIX_IT.match(line) and values:
+            values[-1]["fix_it"] = True          # presence only: a fix-it is never applied
+            continue
         match = DIAGNOSTIC.match(line)
         if not match or match.group("severity") == "note":
             continue
         values.append({"rule_id": match.group("rule") or default_rule,
                        "message": match.group("message"), "severity": match.group("severity"),
                        "path": match.group("path"), "line": int(match.group("line")),
-                       "column": int(match.group("column")), "notes": []})
+                       "column": int(match.group("column")), "notes": [], "fix_it": False})
     return values
 
 
-def tidy(database: Path, checks: str) -> tuple[list[dict[str, Any]], bool, int]:
+def _unit(row: dict[str, Any], code: int, output: str) -> dict[str, Any]:
+    """Per-translation-unit outcome, so a seeded run can name the seeds a failed unit carried."""
+    failure = next((line for line in output.splitlines() if " error: " in line or "fatal error" in line), "")
+    return {"file": row["file"], "exit_code": code, "message": failure[:512] if code else ""}
+
+
+def tidy(database: Path, checks: str, units: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], bool, int]:
     rows = _database(database)
     diagnostics: list[dict[str, Any]] = []
     truncated = False
     exit_code = 0
     for row in rows:
         code, output, limited = _run(["clang-tidy-18", "-p", str(database.parent),
-                                      f"--checks={checks}", "--quiet", row["file"]])
+                                      f"--checks={checks}", "--quiet",
+                                      "--extra-arg=-fdiagnostics-parseable-fixits", row["file"]])
+        units.append(_unit(row, code, output))
         exit_code = exit_code or code
         truncated = truncated or limited
         diagnostics.extend(_text_diagnostics(output, engine="clang-tidy",
@@ -95,11 +109,13 @@ def _plist_diagnostics(path: Path) -> list[dict[str, Any]]:
         result.append({"rule_id": str(rule), "message": str(diagnostic.get("description", rule)),
                        "severity": "warning", "path": str(files[file_index]),
                        "line": int(location.get("line", 1)), "column": int(location.get("col", 1)),
-                       "notes": notes})
+                       "notes": notes,
+                       "fix_it": any(piece.get("fixits") for piece in diagnostic.get("path", [])
+                                     if isinstance(piece, dict))})
     return result
 
 
-def analyze(database: Path, checkers: str) -> tuple[list[dict[str, Any]], bool, int]:
+def analyze(database: Path, checkers: str, units: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], bool, int]:
     rows = _database(database)
     diagnostics: list[dict[str, Any]] = []
     truncated = False
@@ -114,6 +130,7 @@ def analyze(database: Path, checkers: str) -> tuple[list[dict[str, Any]], bool, 
             arguments += ["--analyze", "-Xanalyzer", f"-analyzer-checker={checkers}",
                           "-Xanalyzer", "-analyzer-output=plist-multi-file", "-o", str(output_path)]
             code, output, limited = _run(arguments)
+            units.append(_unit(row, code, output))
             exit_code = exit_code or code
             truncated = truncated or limited
             plist_diagnostics = _plist_diagnostics(output_path)
@@ -136,14 +153,16 @@ def main(argv: list[str]) -> int:
     maximum_diagnostics = int(maximum)
     if not 1 <= maximum_diagnostics <= 100000:
         raise ValueError("invalid diagnostic bound")
-    diagnostics, capture_truncated, exit_code = (tidy(Path(database_name), selection)
+    units: list[dict[str, Any]] = []
+    diagnostics, capture_truncated, exit_code = (tidy(Path(database_name), selection, units)
                                                   if action == "tidy"
-                                                  else analyze(Path(database_name), selection))
+                                                  else analyze(Path(database_name), selection, units))
     bounded = diagnostics[:maximum_diagnostics]
     Path(output_name).write_text(json.dumps({
         "schema": SCHEMA,
         "engine": "clang-tidy" if action == "tidy" else "clang-static-analyzer",
         "diagnostics": bounded,
+        "units": units,
         "truncated": capture_truncated or len(diagnostics) > maximum_diagnostics,
     }, sort_keys=True), encoding="utf-8")
     return exit_code

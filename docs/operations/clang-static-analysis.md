@@ -39,3 +39,20 @@ python -m pytest -q tests/test_clang_static_analysis.py tests/test_clang_static_
 
 These tests validate bounded normalization and injected execution. The tool-image acceptance is a
 separate container check; a mocked run never proves that the pinned image is locally available.
+
+## Seeded mode
+
+In seeded mode the job writes only the translation units that contain a finding location into the compile
+database the analyzers read (`jobs/job_clang_static_analysis/seeded.py`; bounds in
+`[jobs.job_clang_static_analysis.settings.seeded_bounds]`). There is no whole-program fallback. Every
+diagnostic in those units is kept and labelled `at_seed`, `in_seed_function`, `in_neighborhood`,
+`outside_neighborhood` or, without an accepted seeded IR neighborhood, `unclassified` with a named gap.
+Diagnostics carry the check id, severity, fix-it presence and trace length, and are filterable through
+`query_observations`. A unit that fails to compile or analyze is a gap on its seeds and is not
+checkpointed; an unsupported unit is `not_applicable`; zero seeds is a clean skip with a gap
+(`COMPLETED_WITH_GAPS`). The driver writes a per-unit outcome list (`units`) beside the diagnostics so a
+failed unit is named; fix-its are detected from `-fdiagnostics-parseable-fixits` and plist fix-it hunks and
+never applied. In the code-graph index, checks in the reviewed table `graph/analyzers.py` can corroborate a
+CodeQL `sink_site` or add an inexact analyzer-only one (`docs/architecture/seeded-neighborhoods.md`
+section 9). The `clang-static.py` change alters the `tool-clang-static-analysis` image
+identity: rebuild and re-pin it. Contract: `docs/architecture/seeded-neighborhoods.md`.

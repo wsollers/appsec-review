@@ -465,11 +465,17 @@ def build_definitions(
             wave_jobs.append(registry.build("job_artifact_security_analysis"))
             wave_dependencies["job_artifact_security_analysis"] = (("job_artifact_indexing",)
                 if "job_artifact_indexing" in registered else ("job_language_build",))
+        if "job_evidence_collection" in registered:
+            # Registered before the seeded Clang producers: their seeds are the finding locations this
+            # job's accepted observations carry (docs/architecture/seeded-neighborhoods.md, section 2).
+            wave_jobs.append(registry.build("job_evidence_collection"))
+            wave_dependencies["job_evidence_collection"] = ("job_target_analysis_plan",)
         if "job_cpp_compiled_analysis" in registered:
             wave_jobs.append(registry.build("job_cpp_compiled_analysis"))
-            wave_dependencies["job_cpp_compiled_analysis"] = (("job_language_build",)
+            wave_dependencies["job_cpp_compiled_analysis"] = ((("job_language_build",)
                 if "job_language_build" in registered else
                 ("job_project_build",) if "job_project_build" in registered else ("job_target_analysis_plan",))
+                + (("job_evidence_collection",) if "job_evidence_collection" in registered else ()))
         if "job_clang_static_analysis" in registered and "job_cpp_compiled_analysis" in registered:
             wave_jobs.append(registry.build("job_clang_static_analysis"))
             wave_dependencies["job_clang_static_analysis"] = ("job_cpp_compiled_analysis",)
@@ -483,9 +489,6 @@ def build_definitions(
             wave_dependencies["job_post_build_security_assessment"] = (("job_cpp_compiled_analysis",)
                 if "job_cpp_compiled_analysis" in registered else
                 ("job_project_build",) if "job_project_build" in registered else ("job_target_analysis_plan",))
-        if "job_evidence_collection" in registered:
-            wave_jobs.append(registry.build("job_evidence_collection"))
-            wave_dependencies["job_evidence_collection"] = ("job_target_analysis_plan",)
         if "job_dependency_intelligence" in registered:
             wave_jobs.append(registry.build("job_dependency_intelligence"))
             wave_dependencies["job_dependency_intelligence"] = tuple(job_id for job_id in (

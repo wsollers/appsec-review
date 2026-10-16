@@ -3,7 +3,9 @@
 Every output kind this job may emit is declared here so the publication audit can account for it.
 A declaration is a contract; it is not evidence that the output was produced. A scope without a
 usable CodeQL export still publishes its ``graph`` shards, holding only ``unavailable`` coverage rows,
-so the audit reports those shards with disposition ``unavailable`` instead of a missing output.
+so the audit reports those shards with disposition ``unavailable`` instead of a missing output. Every
+scope also publishes one database-card shard (``graph-<scope_id>-database``) and one producer-neighborhood
+shard (``graph-<scope_id>-producers``: flow graphs, analyzer diagnostics and clangd symbols).
 """
 
 from __future__ import annotations
@@ -19,10 +21,14 @@ CONSUMES = (
 DATASETS = (
     indexed("code_graph_facts", "correlate", "graph", "appsec-review/graph-fact/1",
             "Normalized, cross-checked and SARIF-correlated code-graph facts, one shard per CodeQL scope and "
-            "fact family, with a coverage row per (scope, family); unavailable scopes publish coverage only.",
+            "fact family, with a coverage row per (scope, family); unavailable scopes publish coverage only. "
+            "Each scope adds one codeql_database card shard (seed ledger, mode, depth, per-family coverage, "
+            "producers) and one producer_neighborhood shard (IR flow graphs, Clang analyzer diagnostics, "
+            "linked clangd symbols).",
             indexes=("graph",), prefixes=("graph-",),
             route="query_code_graph (callers, callees, sinks, entry_points, paths, guards, ranges, summary, "
-                  "sarif_path)"),
+                  "sarif_path); list_codeql_databases; query_codeql_neighborhood "
+                  "(include flow, diagnostics, symbols); query_observations (seed, function, fix_it, min_trace_length)"),
     artifact_only("code_graph_stages", "normalize", "graph", "appsec-review/code-graph-stage/1",
                   "Per-scope normalized and cross-checked intermediate fact sets handed between units.",
                   artifacts=(_SCOPES + "/work/**",),

@@ -28,12 +28,17 @@ class ToolImage:
     expected_image_id: str | None
     manifest_path: Path
     metadata: Mapping[str, Any]
+    # Further absolute entrypoints of the same image that a job may name as ``argv[0]`` (for example the
+    # export driver that ships beside the main tool). Declared in ``tool.toml``; empty for most tools.
+    additional_executables: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.tool_id.startswith("tool-"):
             raise ValueError(f"not a tool image id: {self.tool_id}")
         if not self.executable.startswith("/"):
             raise ValueError(f"tool executable must be absolute: {self.tool_id}")
+        if any(not value.startswith("/") for value in self.additional_executables):
+            raise ValueError(f"tool additional executables must be absolute: {self.tool_id}")
         if self.network != "none":
             raise ValueError(f"static tool requests runtime network: {self.tool_id}")
         if not re.fullmatch(r"[1-9][0-9]*:[1-9][0-9]*", self.user):
@@ -56,6 +61,13 @@ class ContainerCatalog:
             return self.tools[tool_id]
         except KeyError as exc:
             raise KeyError(f"enabled catalog tool is unavailable: {tool_id}") from exc
+
+
+def _additional_executables(manifest: Mapping[str, Any], tool_id: str) -> tuple[str, ...]:
+    value = manifest.get("additional_executables", [])
+    if not isinstance(value, list) or any(not isinstance(item, str) for item in value):
+        raise ValueError(f"additional_executables must be a list of strings: {tool_id}")
+    return tuple(value)
 
 
 def load_catalog(repository_root: Path, path: Path | None = None) -> ContainerCatalog:
@@ -111,5 +123,6 @@ def load_catalog(repository_root: Path, path: Path | None = None) -> ContainerCa
             expected_image_id=image.get("image_id"),
             manifest_path=manifest_path,
             metadata=MappingProxyType(dict(manifest)),
+            additional_executables=_additional_executables(manifest, tool_id),
         )
     return ContainerCatalog(source, policy, MappingProxyType(dict(policy_value)), MappingProxyType(tools))

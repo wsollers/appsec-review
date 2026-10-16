@@ -14,7 +14,7 @@ import re
 import sqlite3
 import time
 import uuid
-from typing import TYPE_CHECKING, Any, Callable, Iterable, Mapping
+from typing import TYPE_CHECKING, Any, Callable, Iterable, Mapping, Sequence
 
 from appsec_review.observability import PipelineLog
 from appsec_review.retrieval.index import (
@@ -1167,6 +1167,26 @@ class RetrievalCore:
         return query_code_graph(self, self.graph_settings, mode=mode, subject=subject, depth=depth,
                                 sink_class=sink_class, source_class=source_class, limit=limit, cursor=cursor)
 
+    def list_codeql_databases(
+        self, *, language: str | None = None, limit: int = 20, cursor: str | None = None,
+        graph_scopes: Iterable[str] | None = None,
+    ) -> dict[str, Any]:
+        """List the accepted CodeQL database cards; see ``retrieval/neighborhood.py``."""
+        from appsec_review.retrieval.neighborhood import list_codeql_databases
+        return list_codeql_databases(self, language=language, limit=limit, cursor=cursor, graph_scopes=graph_scopes)
+
+    def query_codeql_neighborhood(
+        self, *, database: str, seed: str | None = None, symbol: str | None = None,
+        observation: str | None = None, direction: str = "both", depth: int | None = None, limit: int = 20,
+        include: Sequence[str] | None = None, cursor: str | None = None,
+        graph_scopes: Iterable[str] | None = None,
+    ) -> dict[str, Any]:
+        """Read the precomputed call closure around one subject of one database; no CodeQL runs."""
+        from appsec_review.retrieval.neighborhood import query_codeql_neighborhood
+        return query_codeql_neighborhood(
+            self, self.graph_settings, database=database, seed=seed, symbol=symbol, observation=observation,
+            direction=direction, depth=depth, limit=limit, include=include, cursor=cursor, graph_scopes=graph_scopes)
+
     def _lead_states(self, deadline: float) -> tuple[dict[str, Mapping[str, Any]], list[str]]:
         """Suppression and duplicate state from the accepted scanner_correlation lead facts."""
         shards = [shard for shard in self.indexes.get("precomputed", ())
@@ -1196,9 +1216,16 @@ class RetrievalCore:
         observation_class: str | None = None, suppressed: bool | None = None, duplicate: bool | None = None,
         source: str | None = None, artifact: str | None = None, path: str | None = None,
         start_line: int | None = None, end_line: int | None = None, shard: str | None = None,
-        limit: int = 20, cursor: str | None = None,
+        seed: str | None = None, function: str | None = None, fix_it: bool | None = None,
+        min_trace_length: int | None = None, limit: int = 20, cursor: str | None = None,
     ) -> dict[str, Any]:
         """Filter accepted observation shards by exact scanner, rule, reported severity, suppression and scope.
+
+        ``seed`` (``path:line``), ``function``, ``fix_it`` and ``min_trace_length`` select the seeded
+        Clang-Tidy / Clang Static Analyzer diagnostics (docs/architecture/seeded-neighborhoods.md section 9):
+        the seed is a ledger location the diagnostic was labelled against, the function is the IR function
+        that holds it, ``fix_it`` is whether the check proposes a fix-it, and the trace length is the number
+        of analyzer path steps. An observation that carries none of those fields never matches them.
 
         Severity is normalized from the indexed payload by a versioned rule; raw scanner output is never
         read. Results are tool observations ordered by reported severity; they are never confirmed findings.
@@ -1230,11 +1257,25 @@ class RetrievalCore:
             raise ValueError("a line filter requires an exact path")
         if shard is not None and not re.fullmatch(r"[A-Za-z0-9_.-]{1,128}", shard):
             raise ValueError("invalid observation shard")
+        seed_path, seed_line = None, None
+        if seed is not None:
+            if not isinstance(seed, str) or not re.fullmatch(r"^.{1,4096}:[0-9]{1,9}$", seed):
+                raise ValueError("invalid observation filter: seed")
+            seed_path, _, text = seed.rpartition(":")
+            seed_path, seed_line = normalize_relative_path(seed_path), int(text)
+        if function is not None and (not isinstance(function, str) or not 1 <= len(function) <= 4096):
+            raise ValueError("invalid observation filter: function")
+        if fix_it is not None and not isinstance(fix_it, bool):
+            raise ValueError("invalid observation filter: fix_it")
+        if min_trace_length is not None and (isinstance(min_trace_length, bool) or not isinstance(min_trace_length, int)
+                                             or not 0 <= min_trace_length <= 100_000):
+            raise ValueError("invalid observation filter: min_trace_length")
         if not 1 <= limit <= self.limits.max_results:
             raise ValueError("result limit exceeds bound")
         parameters = {"scanner": scanner, "rule": rule, "severity": severity, "observation_class": observation_class,
                       "suppressed": suppressed, "duplicate": duplicate, "source": source, "artifact": artifact,
                       "path": path, "start_line": start_line, "end_line": end_line, "shard": shard,
+                      "seed": seed, "function": function, "fix_it": fix_it, "min_trace_length": min_trace_length,
                       "limit": limit, "cursor": cursor}
         request_hash = self._request_hash("query_observations", parameters)
         offset = self._offset(cursor, request_hash)
@@ -1286,6 +1327,9 @@ class RetrievalCore:
                             continue
                         if rule is not None and rule_of(payload) != rule:
                             continue
+                        if not self._analyzer_filters(payload, row["path"], seed_path, seed_line, function, fix_it,
+                                                      min_trace_length):
+                            continue
                         reported = normalize_reported_severity(payload)
                         if severity is not None and reported["value"] != severity:
                             continue
@@ -1312,6 +1356,29 @@ class RetrievalCore:
             page = [item[2] for item in found[offset:offset + limit]]
             return page, gaps, len(found) > offset + limit, offset
         return self._execute("query_observations", parameters, operation)
+
+    @staticmethod
+    def _analyzer_filters(payload: Mapping[str, Any], location_path: str | None, seed_path: str | None,
+                          seed_line: int | None, function: str | None, fix_it: bool | None,
+                          min_trace_length: int | None) -> bool:
+        """The seeded-analyzer filters of ``query_observations``; an observation without the field never matches."""
+        label = payload.get("seeded") if isinstance(payload.get("seeded"), Mapping) else None
+        if seed_path is not None:
+            seeds = (label or {}).get("seeds") or ()
+            hit = any(isinstance(entry, (list, tuple)) and len(entry) == 3 and isinstance(entry[1], int)
+                      and isinstance(entry[2], int) and entry[1] <= seed_line <= entry[2]
+                      and (entry[0] == seed_path or str(location_path or "").endswith("/" + seed_path)
+                           or location_path == seed_path) for entry in seeds)
+            if not hit:
+                return False
+        if function is not None and (label or {}).get("function") != function:
+            return False
+        if fix_it is not None and ("fix_it" not in payload or bool(payload["fix_it"]) is not fix_it):
+            return False
+        if min_trace_length is not None and int(payload.get("trace_length", -1) if isinstance(
+                payload.get("trace_length"), int) else -1) < min_trace_length:
+            return False
+        return True
 
     def query_dataset_inventory(
         self, *, record_type: str | None = None, job: str | None = None, family: str | None = None,

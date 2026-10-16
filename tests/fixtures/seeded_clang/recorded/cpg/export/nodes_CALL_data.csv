@@ -1,0 +1,16 @@
+30064771072,CALL,-1,,,(void)code,35,STATIC_DISPATCH,,2,<operator>.cast,<operator>.cast,,,1,,,,void
+30064771073,CALL,-1,,,buf[32],8,STATIC_DISPATCH,,4,<operator>.assignment,<operator>.assignment,,,2,,,,void
+30064771074,CALL,2,,,buf[32],8,STATIC_DISPATCH,,4,<operator>.alloc,<operator>.alloc,,,2,,,,char[32]
+30064771075,CALL,-1,,,log_event(n),3,STATIC_DISPATCH,,5,log_event:void(int),log_event,,,3,,void(int),,void
+30064771076,CALL,-1,,,"r = copy_field(buf, pkt, n)",7,STATIC_DISPATCH,,6,<operator>.assignment,<operator>.assignment,,,5,,,,void
+30064771077,CALL,2,,,"copy_field(buf, pkt, n)",11,STATIC_DISPATCH,,6,<unresolvedNamespace>.copy_field:<unresolvedSignature>(3),copy_field,,,2,,<unresolvedSignature>,,ANY
+30064771078,CALL,-1,,,r < 0,7,STATIC_DISPATCH,,7,<operator>.lessThan,<operator>.lessThan,,,1,,,,ANY
+30064771079,CALL,-1,,,buf[0],10,STATIC_DISPATCH,,8,<operator>.indirectIndexAccess,<operator>.indirectIndexAccess,,,1,,,,ANY
+30064771080,CALL,-1,,,n < 0,7,STATIC_DISPATCH,,4,<operator>.lessThan,<operator>.lessThan,,,1,,,,ANY
+30064771081,CALL,-1,,,n > 64,7,STATIC_DISPATCH,,5,<operator>.greaterThan,<operator>.greaterThan,,,1,,,,ANY
+30064771082,CALL,-1,,,clamp_len(n),10,STATIC_DISPATCH,,9,clamp_len:int(int),clamp_len,,,1,,int(int),,int
+30064771083,CALL,-1,,,len = checked_len(n),7,STATIC_DISPATCH,,12,<operator>.assignment,<operator>.assignment,,,2,,,,void
+30064771084,CALL,2,,,checked_len(n),13,STATIC_DISPATCH,,12,checked_len:int(int),checked_len,,,2,,int(int),,int
+30064771085,CALL,-1,,,src == nullptr,7,STATIC_DISPATCH,,13,<operator>.equals,<operator>.equals,,,1,,,,ANY
+30064771086,CALL,-1,,,-1,30,STATIC_DISPATCH,,13,<operator>.minus,<operator>.minus,,,1,,,,ANY
+30064771087,CALL,-1,,,"memcpy(dst, src, n)",3,STATIC_DISPATCH,,14,memcpy,memcpy,,,4,,,,void*

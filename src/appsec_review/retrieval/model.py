@@ -69,6 +69,8 @@ class EntityKind(StrEnum):
     DATAFLOW_PATH = "dataflow_path"
     GUARD_FACT = "guard_fact"
     RANGE_FACT = "range_fact"
+    # Seeded-CodeQL database card (docs/architecture/seeded-codeql-neighborhoods.md, section 7).
+    CODEQL_DATABASE = "codeql_database"
 
 
 class RelationKind(StrEnum):

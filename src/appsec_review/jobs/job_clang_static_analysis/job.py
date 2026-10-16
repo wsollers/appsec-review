@@ -15,8 +15,9 @@ import json
 from pathlib import Path
 from typing import Any, Mapping
 
+from appsec_review import seeding
 from appsec_review.jobs.cpp_index_scopes import (
-    IndexScope, accepted_cpp_scopes, artifact, checkpoint_identity, execute_scope_tool,
+    SOURCE_MOUNT, IndexScope, project_prefix, accepted_cpp_scopes, artifact, checkpoint_identity, execute_scope_tool,
     publish_scope_indexes, save_scope_checkpoint, scope_checkpoint, tool_identity,
 )
 from appsec_review.jobs.engineering_contracts import CLANG_STATIC_HANDOFF_SCHEMA
@@ -26,13 +27,14 @@ from appsec_review.retrieval import (
 )
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from appsec_review.storage import atomic_json, canonical_json, file_sha256
+from . import seeded
 from .datasets import CONSUMES, DATASETS
 
 
 JOB_ID = "job_clang_static_analysis"
 TOOL_ID = "tool-clang-static-analysis"
 OUTPUT_SCHEMA = "appsec-review/clang-static-output/1"
-ADAPTER = "clang-static-adapter/3"
+ADAPTER = "clang-static-adapter/4"
 ENGINES = ("clang-tidy", "clang-static-analyzer")
 
 
@@ -100,7 +102,7 @@ def _read_output(path: Path, *, engine: str, max_bytes: int, max_diagnostics: in
             "line": int(item["line"]), "column": int(item["column"]),
             "end_line": max(int(item.get("end_line", item["line"])), int(item["line"])),
             "end_column": max(int(item.get("end_column", item["column"])), int(item["column"])),
-            "notes": notes,
+            "notes": notes, "fix_it": item.get("fix_it") is True,
         })
     return records, gaps
 
@@ -142,14 +144,39 @@ def _not_applicable_scope(scope: IndexScope) -> dict[str, Any]:
             "not_applicable_inputs": scope.not_applicable_inputs()}
 
 
-def _analyze_scope(unit: UnitContext, scope: IndexScope, executor_factory: Any) -> dict[str, Any]:
+def _read_units(path: Path, *, max_bytes: int) -> list[dict[str, Any]] | None:
+    """The wrapper's per-translation-unit outcomes, or ``None`` when it did not report any."""
+    if not path.is_file() or path.is_symlink() or path.stat().st_size > max_bytes:
+        return None
+    try:
+        document = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, ValueError):
+        return None
+    units = document.get("units") if isinstance(document, Mapping) else None
+    if not isinstance(units, list) or not all(
+            isinstance(item, Mapping) and isinstance(item.get("file"), str) for item in units):
+        return None
+    return [{"file": item["file"], "exit_code": item.get("exit_code"), "message": str(item.get("message") or "")[:512]}
+            for item in units]
+
+
+def _source_of(container_path: str) -> str:
+    prefix = SOURCE_MOUNT + "/"
+    return container_path[len(prefix):] if container_path.startswith(prefix) else container_path
+
+
+def _analyze_scope(unit: UnitContext, scope: IndexScope, executor_factory: Any,
+                   run: seeded.Run | None = None) -> dict[str, Any]:
     settings = _settings(unit)
     root = unit.job.run_root / "data" / "clang-static" / scope.scope_id
-    identity = checkpoint_identity({
+    values: dict[str, Any] = {
         "schema": CLANG_STATIC_HANDOFF_SCHEMA, "adapter": ADAPTER, "scope": scope.as_dict(),
         "settings": settings, "tool": tool_identity(unit.job.repository_root, TOOL_ID)
         if executor_factory is None else {"tool_id": TOOL_ID, "injected_executor": True},
-    })
+    }
+    if run is not None:
+        values.update(seeded.identity_values(run.settings, run.scope_seeds, run.hood))
+    identity = checkpoint_identity(values)
     reused = scope_checkpoint(root / "checkpoint.json", identity, unit.job.run_root, scope)
     if reused is not None:
         return dict(reused)
@@ -158,43 +185,90 @@ def _analyze_scope(unit: UnitContext, scope: IndexScope, executor_factory: Any) 
     gaps: list[str] = []
     executions: dict[str, Any] = {}
     raw_artifacts: list[Mapping[str, Any]] = [dict(scope.compile_database)]
-    for engine in ENGINES:
+    selection = None
+    rows: list[dict[str, Any]] | None = None
+    engines = ENGINES
+    if run is not None:
+        if run.scope_seeds.seeds:
+            selection = seeded.select(scope, run.scope_seeds, run.settings)
+            gaps.extend(selection.gaps)
+            rows = list(selection.container_rows)
+            engines = ENGINES if rows else ()
+        else:
+            engines = ()
+    engine_failed: set[str] = set()
+    failed_units: dict[tuple[str, str], str] = {}
+    for engine in engines:
         scratch = root / ("tidy" if engine == "clang-tidy" else "analyze")
         try:
             execution = execute_scope_tool(
                 unit, scope, TOOL_ID, _engine_argv(engine, settings), scratch, executor_factory,
-                file_size_limit_bytes=settings["max_output_bytes"] + 1,
+                file_size_limit_bytes=settings["max_output_bytes"] + 1, compile_rows=rows,
             )
         except Exception as exc:
             gaps.append(f"{engine} tool/image unavailable: {type(exc).__name__}: {exc}")
+            engine_failed.add(engine)
             continue
         executions[engine] = execution
         raw_artifacts.extend((execution["receipt"], execution["compile_database"]))
         if execution["timed_out"]:
             gaps.append(f"{engine} timed out")
+            engine_failed.add(engine)
             continue
         if execution["oom_killed"]:
             gaps.append(f"{engine} was OOM-killed")
+            engine_failed.add(engine)
             continue
         if execution["file_size_limit_reached"] or execution["stdout_truncated"] or execution["stderr_truncated"]:
             gaps.append(f"{engine} output was truncated or exceeded its execution bound")
-            continue
-        if execution["exit_code"] != 0:
-            gaps.append(f"{engine} exited with status {execution['exit_code']}")
+            engine_failed.add(engine)
             continue
         output_path = scratch / ("tidy.json" if engine == "clang-tidy" else "analyze.json")
+        units = _read_units(output_path, max_bytes=settings["max_output_bytes"]) if run is not None else None
+        bad = [item for item in units or () if item["exit_code"] != 0]
+        if execution["exit_code"] != 0 and not (run is not None and bad):
+            gaps.append(f"{engine} exited with status {execution['exit_code']}")
+            engine_failed.add(engine)
+            continue
+        for item in bad:
+            rel = _source_of(item["file"])
+            failed_units[(engine, rel)] = item["message"] or f"exit {item['exit_code']}"
+            gaps.append(f"{engine} failed on {project_prefix(scope.root)}{rel}: {failed_units[(engine, rel)]}")
         parsed, parse_gaps = _read_output(output_path, engine=engine,
                                           max_bytes=settings["max_output_bytes"],
                                           max_diagnostics=settings["max_diagnostics_per_scope"])
         gaps.extend(parse_gaps)
+        if parse_gaps and not parsed:
+            engine_failed.add(engine)
         if output_path.is_file() and not output_path.is_symlink() and output_path.stat().st_size <= settings["max_output_bytes"]:
             raw_artifacts.append(artifact(unit.job.run_root, output_path))
         records.extend(parsed)
 
+    section = ledger = compact = None
+    if run is not None:
+        failed: dict[tuple[str, int, int], str] = {}
+        for key, rels in (selection.by_seed if selection else {}).items():
+            if engine_failed or any((engine, rel) in failed_units for engine in ENGINES for rel in rels):
+                failed[key] = seeding.record.REASON_RUN_FAILED
+        section = seeded.section_for(run, selection, failed)
+        if not run.scope_seeds.seeds:
+            section["gaps"] = [seeding.NO_SEEDS_GAP, *section["gaps"]]
+        elif not run.hood.known:
+            gaps.append(seeded.NEIGHBORHOOD_UNAVAILABLE)
+        gaps.extend(gap for gap in section["gaps"] if gap not in gaps)
+        ledger_path = root / "seeded-ledger.json"
+        atomic_json(ledger_path, {"schema": seeding.record.RECORD_SCHEMA, "branch": "clang-static",
+                                  "project": scope.case_id, "seeded": section})
+        ledger = artifact(unit.job.run_root, ledger_path)
+        compact = seeding.compact_record({**section, "gaps": list(dict.fromkeys(gaps))}, ledger=ledger,
+                                         skipped=not run.scope_seeds.seeds)
+        raw_artifacts.append(ledger)
+
     shard = f"clang-static-{scope.scope_id}"
     fingerprint = index_fingerprint(
         name="observations", target_snapshot=scope.case_snapshot, producer_artifacts=raw_artifacts,
-        tool_identity={"tool": TOOL_ID, "executions": {key: value.get("image_digest") for key, value in executions.items()}},
+        tool_identity={"tool": TOOL_ID, "executions": {key: value.get("image_digest") for key, value in executions.items()},
+                       **({"seeded": values["seeded"]} if run is not None else {})},
         parser_identity=ADAPTER, normalizer_identity=ADAPTER, mapping_identity="accepted-cpp-source-map/1",
     )
     path = unit.job.run_root / "data" / "indices" / "observations" / f"{fingerprint}-{hashlib.sha256(shard.encode()).hexdigest()[:16]}.sqlite"
@@ -202,6 +276,7 @@ def _analyze_scope(unit: UnitContext, scope: IndexScope, executor_factory: Any) 
                            target_snapshot=unit.job.source_fingerprint, shard_id=shard)
     accepted_count = 0
     source_entities: set[str] = set()
+    labels: dict[str, int] = {}
     for record in records:
         location, accepted = _location(scope, record)
         if location is None or accepted is None:
@@ -219,33 +294,49 @@ def _analyze_scope(unit: UnitContext, scope: IndexScope, executor_factory: Any) 
                 {"sha256": accepted["sha256"], "scope_id": scope.scope_id}, location,
             ))
             source_entities.add(source_id.value)
+        payload = {"tool_id": TOOL_ID, "scanner": record["engine"], "category": "source_sast",
+                   "native_rule_id": record["rule_id"],
+                   "message": record["message"], "reported_severity": record["severity"],
+                   "project_id": scope.project_id, "trace": record["notes"], "evidence_id": evidence_id,
+                   "trace_length": len(record["notes"]), "fix_it": bool(record.get("fix_it"))}
+        if run is not None:
+            relative = str(accepted["scratch_path"])[len("source/"):]
+            placement = seeded.classify(relative, int(record["line"]), run.scope_seeds, run.hood)
+            payload["seeded"] = placement
+            labels[placement["label"]] = labels.get(placement["label"], 0) + 1
         builder.add_entity(EntityRecord(
             observation, evidence_id, str(record["rule_id"]),
-            f"{record['rule_id']} {record['message']}",
-            {"tool_id": TOOL_ID, "scanner": record["engine"], "category": "source_sast",
-             "native_rule_id": record["rule_id"],
-             "message": record["message"], "reported_severity": record["severity"],
-             "project_id": scope.project_id, "trace": record["notes"], "evidence_id": evidence_id},
-            location,
+            f"{record['rule_id']} {record['message']}", payload, location,
         ))
         builder.add_relation(RelationRecord(RelationKind.OBSERVED_AT, observation.value,
                                             source_id.value, True, 1.0))
         accepted_count += 1
-    coverage_status = "complete" if not gaps else "partial"
-    builder.add_coverage(f"clang-static:{scope.project_id}", coverage_status,
-                         None if not gaps else "; ".join(gaps)[:16384])
+    gaps = list(dict.fromkeys(gaps))
+    if run is None:
+        coverage_status, coverage_text = ("complete" if not gaps else "partial"), (None if not gaps else "; ".join(gaps)[:16384])
+    else:
+        coverage_status = "unavailable" if engines and engine_failed >= set(engines) else "partial"
+        coverage_text = "; ".join([seeding.coverage_gap(section), *gaps])[:16384]
+    builder.add_coverage(f"clang-static:{scope.project_id}", coverage_status, coverage_text)
     sha = builder.build()
+    producer: dict[str, Any] = {"job": JOB_ID, "unit": unit.unit_id, "scope_id": scope.scope_id,
+                                "project_root": scope.root}
+    if compact is not None:
+        producer["seeded"] = compact
     index = IndexIdentity("observations", "appsec-review/retrieval-index/2", sha, fingerprint,
-                          path.relative_to(unit.job.run_root).as_posix(),
-                          {"job": JOB_ID, "unit": unit.unit_id, "scope_id": scope.scope_id},
-                          tuple(dict.fromkeys(gaps)), shard)
+                          path.relative_to(unit.job.run_root).as_posix(), producer,
+                          tuple(gaps), shard)
     status = "SUCCEEDED" if not gaps else "COMPLETED_WITH_GAPS"
     result = {"scope_id": scope.scope_id, "case_id": scope.case_id, "project_id": scope.project_id,
               "accepted_compile_database": dict(scope.compile_database), "executions": executions,
               "observation_count": accepted_count, "index_identity": asdict(index),
-              "gaps": list(dict.fromkeys(gaps)), "terminal_status": status,
+              "gaps": gaps, "terminal_status": status,
               "not_applicable_inputs": scope.not_applicable_inputs()}
-    save_scope_checkpoint(root / "checkpoint.json", identity, result)
+    if run is not None:
+        result.update(seeded=compact, ledger=ledger, diagnostic_labels=dict(sorted(labels.items())),
+                      analyzed_units=[seeded.UNIT_PREFIX + _source_of(row["file"]) for row in (rows or ())])
+    if run is None or not (engine_failed or failed_units):
+        save_scope_checkpoint(root / "checkpoint.json", identity, result)
     return result
 
 
@@ -269,14 +360,24 @@ def build_job(*, executor_factory: Any = None) -> Job:
                 "scopes": [scope.as_dict() for scope in scopes], "unavailable": unavailable}
 
     def analyze(unit: UnitContext) -> Mapping[str, Any]:
-        _accepted, scopes, unavailable = accepted_cpp_scopes(unit.job.run_root)
+        accepted, scopes, unavailable = accepted_cpp_scopes(unit.job.run_root)
         planned = {item["scope_id"] for item in unit.output("load.accepted_cpp")["scopes"]}
         if {scope.scope_id for scope in scopes} != planned:
             raise ValueError("accepted C++ scopes changed between load and analysis")
         runnable = [scope for scope in scopes if scope.container_compile_database()]
         skipped = [_not_applicable_scope(scope) for scope in scopes if not scope.container_compile_database()]
+        seeded_settings = seeded.settings_of(unit)
+        plan = seeded.plan_for(unit, runnable, seeded_settings) if seeded_settings.seeded and runnable else None
+
+        def run_for(scope: IndexScope) -> seeded.Run | None:
+            if plan is None:
+                return None
+            return seeded.Run(seeded_settings, plan, plan.for_scope(scope.case_id),
+                              seeded.neighborhood_of(accepted, scope.case_id))
+
         with ThreadPoolExecutor(max_workers=max(1, _settings(unit)["workers"])) as pool:
-            results = list(pool.map(lambda scope: _analyze_scope(unit, scope, executor_factory), runnable))
+            results = list(pool.map(lambda scope: _analyze_scope(unit, scope, executor_factory, run_for(scope)),
+                                    runnable))
         gaps = [f"{item['case_id']}: {gap}" for item in results for gap in item["gaps"]]
         gaps.extend(f"{case_id}: {reason}" for case_id, reason in unavailable.items())
         status = "NOT_APPLICABLE" if not results and not unavailable else (
@@ -307,7 +408,8 @@ def build_job(*, executor_factory: Any = None) -> Job:
         Unit("acceptance.publish_handoff", publish, ("load.accepted_cpp", "analyze.scopes")),
     )
     implementation = hashlib.sha256(
-        b"".join(path.read_bytes() for path in sorted(Path(__file__).parent.glob("*.py"))) +
+        b"".join(path.read_bytes() for path in
+                 (*sorted(Path(__file__).parent.glob("*.py")), *seeding.implementation_sources())) +
         (b"injected-executor" if executor_factory else b"container-executor")
     ).hexdigest()
     return Job(JOB_ID, "clang_static_analysis", UnitExecutor(units).execute,

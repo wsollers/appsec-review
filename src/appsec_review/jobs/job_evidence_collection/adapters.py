@@ -13,7 +13,7 @@ import xml.etree.ElementTree as ET
 from appsec_review import blint_report
 from appsec_review.storage import canonical_json
 from appsec_review.tool_inputs import (
-    C_CPP_SOURCE, IAC_SUFFIXES, NATIVE_BINARIES, SEI_CERT_SOURCE, SOURCE_SUFFIXES,
+    C_CPP_SOURCE, NATIVE_BINARIES, SEI_CERT_SOURCE, SOURCE_SUFFIXES,
     semgrep_skip_not_applicable, shellcheck_unsupported_dialect, supports_path,
 )
 
@@ -22,7 +22,6 @@ from appsec_review.tool_inputs import (
 SOURCE_EXTENSIONS = SOURCE_SUFFIXES
 CPP_EXTENSIONS = C_CPP_SOURCE
 CPP_TRANSLATION_UNITS = {".c", ".cc", ".cpp", ".cxx"}
-IAC_EXTENSIONS = IAC_SUFFIXES
 MANIFEST_NAMES = {
     "package.json", "package-lock.json", "yarn.lock", "pnpm-lock.yaml", "pyproject.toml",
     "requirements.txt", "poetry.lock", "Pipfile.lock", "go.mod", "go.sum", "Cargo.toml",
@@ -182,57 +181,18 @@ def _blint(catalog: ScanCatalog) -> Applicability:
                           () if files else ("source files are not treated as built binaries",))
 
 
-def _bounded_structure(catalog: ScanCatalog, path: str) -> str:
-    if catalog.target_root is None:
-        return ""
-    candidate = (catalog.target_root / PurePosixPath(path)).resolve()
-    if catalog.target_root.resolve() not in candidate.parents or not candidate.is_file():
-        return ""
-    try:
-        data = candidate.read_bytes()
-        if len(data) > 2 * 1024 * 1024:
-            return ""
-        return data.decode("utf-8")
-    except (OSError, UnicodeError):
-        return ""
-
-
 def _checkov(catalog: ScanCatalog) -> Applicability:
-    families: dict[str, tuple[str, ...]] = {}
-    terraform = _paths(catalog, lambda path, item: PurePosixPath(path).suffix.lower() in IAC_EXTENSIONS)
-    if terraform:
-        families["terraform"] = terraform
-    dockerfiles = _paths(catalog, lambda path, item: supports_path("tool-hadolint", path))
-    if dockerfiles:
-        families["dockerfile"] = dockerfiles
-    workflows = tuple(path for path in _paths(catalog, lambda path, item:
-        path.startswith(".github/workflows/") and PurePosixPath(path).suffix.lower() in {".yml", ".yaml"})
-        if re.search(r"(?m)^(?:on|['\"]on['\"]):\s*", _bounded_structure(catalog, path)) and
-           re.search(r"(?m)^jobs:\s*", _bounded_structure(catalog, path)))
-    if workflows:
-        families["github_actions"] = workflows
-    cloudformation = tuple(path for path in _paths(catalog, lambda path, item:
-        PurePosixPath(path).suffix.lower() in {".yml", ".yaml", ".json"})
-        if re.search(r"(?m)^(?:AWSTemplateFormatVersion|Resources):\s*", _bounded_structure(catalog, path)))
-    if cloudformation:
-        families["cloudformation"] = cloudformation
-    selected = tuple(sorted({path for paths in families.values() for path in paths}))
-    yaml_candidates = _paths(catalog, lambda path, item: PurePosixPath(path).suffix.lower() in {".yml", ".yaml"})
-    excluded_yaml = sorted(set(yaml_candidates) - set(workflows) - set(cloudformation))
-    gaps = []
-    if excluded_yaml:
-        gaps.append(f"{len(excluded_yaml)} YAML file(s) lacked supported IaC/workflow structural evidence")
-    gaps.append("Kubernetes, Helm, Bicep, ARM, Serverless, and other Checkov frameworks are not enabled by this bounded adapter")
-    reason = ("catalog contains " + ", ".join(f"{len(paths)} {family}" for family, paths in sorted(families.items())) +
-              " input(s)") if selected else "target catalog contains no structurally supported Checkov inputs"
-    return Applicability(bool(selected), reason, selected, "checkov_typed_configuration",
-                         tuple(gaps), MappingProxyType(families))
+    selected = _paths(catalog, lambda path, item: supports_path("tool-checkov", path))
+    reason = (f"catalog contains {len(selected)} candidate Checkov input(s); Checkov decides which it recognizes"
+              if selected else "target catalog contains no Terraform, Dockerfile, YAML, or JSON inputs")
+    return Applicability(bool(selected), reason, selected, "checkov_typed_configuration")
 
 
 def _checkov_args(executable: str, selection: Applicability) -> tuple[str, ...]:
-    frameworks = tuple(sorted(selection.families))
-    return (executable, "--quiet", "--compact", "--output", "json",
-            "--framework", *frameworks, "-f", *(_target(path) for path in selection.files))
+    # No --framework restriction and no --quiet: Checkov arbitrates which inputs it recognizes, and
+    # only the non-quiet report lists passed checks, which is how a clean input is told from an
+    # input Checkov did not recognize (see checkov_unreported_inputs).
+    return (executable, "--compact", "--output", "json", "-f", *(_target(path) for path in selection.files))
 
 
 def _safe_catalog_file(catalog: ScanCatalog, relative: str, *, limit: int) -> bytes | None:
@@ -537,7 +497,49 @@ def _checkov_parser(payload: bytes) -> list[dict[str, Any]]:
             lines = item["start_line"]
             item["start_line"] = lines[0] if lines else 1
             item["end_line"] = lines[-1] if lines else 1
+    for path in _checkov_parsing_errors(documents):
+        result.append({"gap_only": True, "coverage_gap": f"checkov could not parse {path}"})
     return result
+
+
+def _checkov_parsing_errors(documents: Iterable[Any]) -> list[str]:
+    return sorted({str(path) for document in documents if isinstance(document, Mapping)
+                   for path in document.get("results", {}).get("parsing_errors", []) or []})
+
+
+def _checkov_reported_paths(payload: bytes) -> set[str]:
+    value = _json(payload)
+    documents = value if isinstance(value, list) else [value]
+    reported: set[str] = set()
+    for document in documents:
+        if not isinstance(document, Mapping):
+            continue
+        results = document.get("results", {})
+        for key in ("passed_checks", "failed_checks", "skipped_checks"):
+            reported.update(str(item.get("file_path")) for item in results.get(key, []) or []
+                            if isinstance(item, Mapping) and item.get("file_path"))
+    reported.update(_checkov_parsing_errors(documents))
+    return reported
+
+
+def checkov_unreported_inputs(payload: bytes, inputs: Iterable[str]) -> list[str]:
+    """Planned inputs Checkov ran over but reported no check, skip, or parse error for.
+
+    Checkov is the arbiter of what it recognizes: an input it accepted and produced nothing for is
+    not applicable to this step. Its report paths are mount-relative with inconsistent roots
+    (``/target/x``, ``/../target/x``, or relative to the framework's common root), so an input
+    counts as reported when its path ends with any reported path on a component boundary; an
+    ambiguous match errs toward "reported", never toward a false not-applicable claim.
+    """
+    candidates: set[str] = set()
+    for reported in _checkov_reported_paths(payload):
+        parts = [part for part in PurePosixPath(reported).parts if part not in {"/", "..", "."}]
+        if parts:
+            candidates.add("/".join(parts))
+            if parts[0] == "target" and len(parts) > 1:
+                candidates.add("/".join(parts[1:]))
+    return sorted(path for path in inputs
+                  if not any(path == candidate or path.endswith("/" + candidate) for candidate in candidates))
 
 
 def _trivy_parser(payload: bytes) -> list[dict[str, Any]]:
@@ -754,8 +756,7 @@ def _registry() -> dict[str, ToolAdapter]:
         ToolAdapter("tool-hadolint", "configuration", frozenset({0, 1}), None, dockerfiles,
                     _args("--format", "json"), _list_parser),
         ToolAdapter("tool-checkov", "configuration", frozenset({0, 1}), None, _checkov,
-                    _checkov_args, _checkov_parser,
-                    ("framework selection is restricted to typed Terraform, Dockerfile, GitHub Actions, and CloudFormation inputs",)),
+                    _checkov_args, _checkov_parser),
         ToolAdapter("tool-trivy", "configuration", frozenset({0}), "/scratch/output.json",
                     lambda catalog: Applicability(
                         bool((files := tuple(sorted(set(dockerfiles(catalog).files + iac(catalog).files))))),

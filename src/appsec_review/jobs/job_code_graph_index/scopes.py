@@ -15,6 +15,7 @@ import json
 from pathlib import Path, PurePosixPath
 from typing import Any
 
+from appsec_review import seeding
 from appsec_review.codeql.runtime import GraphExportIntegrityError, load_graph_exports
 from appsec_review.graph.contract import (
     ADMISSIBILITY_RULE, CROSS_CHECK_RULE, GRAPH_INDEX, NORMALIZE_RULE, Coverage, Family, GraphFact, GraphSettings,
@@ -24,9 +25,11 @@ from appsec_review.graph.correlate import CORRELATION_RULE
 from appsec_review.graph.crosscheck import SourceFile
 from appsec_review.graph.normalize import COLUMNS_PATH, CoverageRow
 from appsec_review.indexing.store import ShardSet, accepted_handoff, handoff_manifests, open_shard, shard_key
+from appsec_review.jobs.job_code_graph_index import producers
 from appsec_review.jobs.job_codeql_analysis.job import GRAPH_EXPORTS_SCHEMA
 from appsec_review.retrieval import (
-    EntityRecord, IndexBuilder, IndexIdentity, LogicalIdentity, RelationKind, RelationRecord, SourceLocation,
+    EntityKind, EntityRecord, IndexBuilder, IndexIdentity, LogicalIdentity, RelationKind, RelationRecord,
+    SourceLocation,
 )
 from appsec_review.retrieval.index import INDEX_SCHEMA
 from appsec_review.review.models import IntegrityError
@@ -42,8 +45,21 @@ SUCCEEDED = "SUCCEEDED"
 RULES = {"normalize": NORMALIZE_RULE, "cross_check": CROSS_CHECK_RULE, "correlation": CORRELATION_RULE,
          "admissibility": ADMISSIBILITY_RULE}
 SECONDARY_PRODUCERS = (Producer.CLANGD, Producer.LLVM_IR, Producer.CLANG_AST)
+# Producers whose seeded output is observations, not graph shards: they reach the database card only.
+ANALYZER_JOBS = {"job_clang_static_analysis": Producer.CLANG_STATIC, "job_cpg_analysis": Producer.JOERN_CPG}
+CARD_PRODUCER_ORDER = (Producer.CODEQL_EXPORT, Producer.LLVM_IR, Producer.CLANG_AST, Producer.CLANG_STATIC,
+                       Producer.CLANGD, Producer.JOERN_CPG)
+MAX_PRODUCER_GAPS = 5
 # Bound on the coverage-gap lines naming individual broken SARIF correlations per scope.
 MAX_BROKEN_GAPS = 20
+# The database card (docs/architecture/seeded-codeql-neighborhoods.md section 7).
+DATABASE_CARD_SCHEMA = "appsec-review/codeql-database/1"
+DATABASE_KIND = "codeql_database"
+# The flow / diagnostics / clangd-symbol rows of a scope (docs/architecture/seeded-neighborhoods.md section 9).
+PRODUCERS_KIND = producers.PRODUCERS_KIND
+MAX_CARD_SEEDS = 200
+MAX_CARD_SOURCES = 8
+MAX_CARD_GAPS = 20
 
 
 def digest(value: Any) -> str:
@@ -55,6 +71,7 @@ def implementation_identity() -> str:
     source = Path(__file__).resolve()
     package = source.parents[2]
     files = [*sorted(source.parent.glob("*.py")), *sorted((package / "graph").glob("*.py")),
+             *seeding.implementation_sources(),
              package / "codeql" / "runtime.py", package / "jobs" / "job_codeql_analysis" / "sarif.py"]
     value = hashlib.sha256()
     for path in files:
@@ -77,6 +94,48 @@ def read_artifact(run_root: Path, identity: Mapping[str, Any]) -> Any:
     if file_sha256(path) != identity.get("sha256"):
         raise IntegrityError(f"run-owned artifact changed: {identity.get('path')}")
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def bounded_seeded(value: Any) -> dict[str, Any] | None:
+    """The export record's ``seeded`` ledger, re-bounded; ``None`` for a record that carries none.
+
+    The ledger is producer data: seeds are capped at the section 6 bound, sources per seed at
+    ``MAX_CARD_SOURCES`` and strings at 300 characters, so a card can never grow with the target.
+    """
+    if not isinstance(value, Mapping):
+        return None
+
+    def text(item: Any) -> str:
+        return str(item)[:300]
+
+    def count(item: Any) -> int | None:
+        return item if isinstance(item, int) and not isinstance(item, bool) and item >= 0 else None
+
+    seeds = []
+    for seed in list(value.get("seeds") or ())[:MAX_CARD_SEEDS]:
+        if not isinstance(seed, Mapping):
+            continue
+        sources = [{key: text(source[key]) for key in ("scanner", "rule", "severity", "observation_id")
+                    if source.get(key) is not None}
+                   for source in list(seed.get("sources") or ())[:MAX_CARD_SOURCES] if isinstance(source, Mapping)]
+        seeds.append({"path": text(seed.get("path", "")), "start_line": count(seed.get("start_line")),
+                      "end_line": count(seed.get("end_line")), "status": text(seed.get("status", "")),
+                      "functions": [text(name) for name in list(seed.get("functions") or ())[:16]],
+                      "sources": sorted(sources, key=canonical_json)})
+    histogram = value.get("depth_histogram")
+    return {
+        "mode": text(value.get("mode") or "whole_program"), "depth": count(value.get("depth")),
+        "seed_limit": count(value.get("seed_limit")), "seed_count": count(value.get("seed_count")) or 0,
+        "resolved_seed_count": count(value.get("resolved_seed_count")) or 0,
+        "neighborhood_function_count": count(value.get("neighborhood_function_count")) or 0,
+        "depth_histogram": {text(key): count(item) or 0 for key, item in sorted(histogram.items())}
+        if isinstance(histogram, Mapping) else {},
+        "seeds": seeds, "gaps": [text(gap) for gap in list(value.get("gaps") or ())[:MAX_CARD_GAPS]],
+    }
+
+
+def is_seeded(scope: Mapping[str, Any]) -> bool:
+    return (scope.get("seeded") or {}).get("mode") == "seeded"
 
 
 # --------------------------------------------------------------------------- accepted CodeQL inputs
@@ -131,6 +190,9 @@ def load_codeql_inputs(run_root: Path, source_fingerprint: str) -> dict[str, Any
             "build_unit_id": planned.get("build_unit_id"), "database_identity": item.get("database_identity"),
             "export_status": status, "reason": item.get("reason"),
             "export_gaps": [str(gap) for gap in item.get("gaps", ())],
+            "source_languages": sorted({str(value) for value in planned.get("source_languages") or ()}
+                                       or {str(planned["language"])}),
+            "seeded": bounded_seeded(item.get("seeded")),
             "files": sorted(({"path": str(entry["path"]), "sha256": str(entry["sha256"])}
                              for entry in planned.get("files", ())), key=lambda entry: entry["path"]),
         }
@@ -230,7 +292,15 @@ def secondary_producer(shard: Mapping[str, Any]) -> Producer | None:
     return None
 
 
-SECONDARY_JOBS = ("job_cpp_symbol_index", "job_cpp_compiled_analysis")
+SECONDARY_JOBS = ("job_cpp_symbol_index", "job_cpp_compiled_analysis", *ANALYZER_JOBS)
+
+
+def analyzer_producer(shard: Mapping[str, Any]) -> Producer | None:
+    """clang-static or joern-cpg: an ``observations`` shard of the analyzer job whose producer names a project."""
+    producer = shard.get("producer") or {}
+    if shard.get("name") != "observations" or "project_root" not in producer:
+        return None
+    return ANALYZER_JOBS.get(str(producer.get("job")))
 
 
 def restored_secondary(run_root: Path, present: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:
@@ -250,7 +320,8 @@ def restored_secondary(run_root: Path, present: Iterable[Mapping[str, Any]]) -> 
             continue
         for manifest in handoff_manifests(run_root, accepted.handoff):
             for shard in manifest["document"].get("indexes", ()):
-                if (shard.get("producer") or {}).get("job") != job_id or secondary_producer(shard) is None:
+                if (shard.get("producer") or {}).get("job") != job_id or (
+                        secondary_producer(shard) is None and analyzer_producer(shard) is None):
                     continue
                 key = shard_key(shard)
                 if key not in by_key and key not in restored:
@@ -283,6 +354,28 @@ def assign_secondary(run_root: Path, shards: Iterable[Mapping[str, Any]],
     return assigned
 
 
+def project_root_key(value: Any) -> str:
+    text = str(value or "").strip("/")
+    return "" if text in {"", "."} else text
+
+
+def assign_analyzers(shards: Iterable[Mapping[str, Any]],
+                     scopes: Sequence[Mapping[str, Any]]) -> dict[str, dict[str, list[dict[str, Any]]]]:
+    """clang-static and joern-cpg shards go to every CodeQL scope of the same project root, by name."""
+    roots: dict[str, list[str]] = {}
+    for scope in scopes:
+        roots.setdefault(project_root_key(scope.get("root")), []).append(str(scope["scope_id"]))
+    assigned = {str(scope["scope_id"]): {producer.value: [] for producer in ANALYZER_JOBS.values()}
+                for scope in scopes}
+    for shard in sorted(shards, key=shard_key):
+        producer = analyzer_producer(shard)
+        if producer is None:
+            continue
+        for scope_id in roots.get(project_root_key(shard["producer"]["project_root"]), ()):
+            assigned[scope_id][producer.value].append(dict(shard))
+    return assigned
+
+
 def observation_shards(shard_set: ShardSet, scope: Mapping[str, Any]) -> list[dict[str, Any]]:
     prefix = f"codeql-{scope['language']}-{scope['scope_id']}-"
     return [dict(shard) for shard in shard_set.select(index="observations", job=CODEQL_JOB, prefix=prefix)]
@@ -304,12 +397,15 @@ def scope_identity(scope: Mapping[str, Any], *, snapshot: str, catalog_sha256: s
         "language": scope["language"], "root": scope["root"], "build_unit_id": scope["build_unit_id"],
         "database_identity": scope["database_identity"], "export_status": scope["export_status"],
         "reason": scope.get("reason"), "export_gaps": scope.get("export_gaps", []),
+        "seeded": scope.get("seeded"), "source_languages": scope.get("source_languages"),
         "export_manifest_sha256": (scope.get("export_manifest") or {}).get("sha256"),
         "export_pack": scope.get("export_pack"), "files": scope["files"], "catalog_sha256": catalog_sha256,
         "columns_sha256": columns_sha256, "rules": RULES, "settings": asdict(settings),
         "tool_version": tool_version, "implementation": implementation,
         "secondary": {name: [shard_ref(item) for item in values]
                       for name, values in sorted(inputs["secondary"].items())},
+        "analyzers": {name: [shard_ref(item) for item in values]
+                      for name, values in sorted((inputs.get("analyzers") or {}).items())},
         "observations": [shard_ref(item) for item in inputs["observations"]],
         "priority": None if inputs["priority"] is None else [shard_ref(item) for item in inputs["priority"]],
     })
@@ -427,6 +523,149 @@ def with_gaps(row: CoverageRow, gaps: Sequence[str], *, partial: bool = True, fa
                        row.facts if facts is None else facts, merged)
 
 
+def seeded_gap(seeded: Mapping[str, Any]) -> str:
+    return seeding.coverage_gap(seeded)
+
+
+def apply_seeded_coverage(scope: Mapping[str, Any], coverage: Sequence[CoverageRow]) -> list[CoverageRow]:
+    """Section 7: a seeded scope's usable family rows are ``partial`` with the neighborhood gap.
+
+    Seeded output is a sample around findings, never a claim about the program, so no seeded
+    family is ever ``complete``. An ``unavailable`` row stays unavailable (it has no facts to qualify).
+    """
+    if not is_seeded(scope):
+        return list(coverage)
+    gap = seeded_gap(scope["seeded"])
+    return [row if row.status is Coverage.UNAVAILABLE else with_gaps(row, [gap]) for row in coverage]
+
+
+def database_coverage(scope: Mapping[str, Any], coverage: Sequence[CoverageRow]) -> tuple[Coverage, list[str]]:
+    """The card's own coverage state and gap lines.
+
+    A usable export is as covered as its family rows. A scope without one is ``unavailable``, except
+    a seeded scope whose export was skipped for lack of finding locations: that scope is ``partial``
+    (specification section 4), never clean.
+    """
+    seeded = scope.get("seeded") or {}
+    gaps = list(seeded.get("gaps") or ())
+    statuses = {row.status for row in coverage}
+    if scope["export_status"] == SUCCEEDED:
+        if statuses == {Coverage.COMPLETE}:
+            state = Coverage.COMPLETE
+        elif statuses == {Coverage.UNAVAILABLE}:
+            state = Coverage.UNAVAILABLE
+        else:
+            state = Coverage.PARTIAL
+        if is_seeded(scope):
+            state = Coverage.PARTIAL if state is not Coverage.UNAVAILABLE else state
+            gaps.append(seeded_gap(seeded))
+    else:
+        detail = scope.get("reason") or "; ".join(scope.get("export_gaps") or ()) or "no usable graph export"
+        gaps.append(f"export_unavailable: CodeQL graph export {(scope['export_status'] or 'UNKNOWN').lower()}: "
+                    f"{detail}")
+        skipped = is_seeded(scope) and not seeded.get("resolved_seed_count")
+        state = Coverage.PARTIAL if skipped else Coverage.UNAVAILABLE
+    for row in coverage:
+        gaps.extend(row.gaps[:2])
+    return state, [gap[:300] for gap in dict.fromkeys(gaps)][:MAX_CARD_GAPS]
+
+
+def _producer_entry(name: Producer, seeded: Mapping[str, Any] | None, *, shards: int = 1,
+                    failed: bool = False) -> dict[str, Any]:
+    """One ``producers`` row of the database card: what ran, whether it was seeded, how deep, what is missing."""
+    if not shards:
+        return {"name": name.value, "state": "not_run", "seeded": False, "depth": None,
+                "gaps": [f"producer_not_run: no accepted {name.value} output covers this database's project"]}
+    record = seeded or {}
+    mode = record.get("mode") or "whole_program"
+    if mode != "seeded":
+        state = "failed" if failed else "whole_program"
+    elif record.get("skipped") or not record.get("seed_count"):
+        state = "skipped"
+    elif not record.get("resolved_seed_count"):
+        state = "failed"
+    else:
+        state = "seeded"
+    gaps = [str(gap)[:300] for gap in dict.fromkeys(record.get("gaps") or ())][:MAX_PRODUCER_GAPS]
+    return {"name": name.value, "state": state, "seeded": mode == "seeded",
+            "depth": record.get("depth") if mode == "seeded" else None, "gaps": gaps}
+
+
+def _merge_entries(name: Producer, records: Sequence[Mapping[str, Any] | None]) -> dict[str, Any]:
+    """Several shards of one producer in one scope: the weakest state, the deepest depth, the gaps united."""
+    entries = [_producer_entry(name, record) for record in records]
+    if not entries:
+        return _producer_entry(name, None, shards=0)
+    rank = {"failed": 0, "skipped": 1, "whole_program": 2, "seeded": 3, "not_run": 4}
+    state = min((entry["state"] for entry in entries), key=lambda item: rank[item])
+    depths = [entry["depth"] for entry in entries if entry["depth"] is not None]
+    gaps = [gap for entry in entries for gap in entry["gaps"]]
+    return {"name": name.value, "state": state, "seeded": any(entry["seeded"] for entry in entries),
+            "depth": max(depths) if depths else None,
+            "gaps": [gap for gap in dict.fromkeys(gaps)][:MAX_PRODUCER_GAPS]}
+
+
+def card_producers(scope: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """Section 7: every producer that can serve this database and what it contributed, in a fixed order.
+
+    The CodeQL entry comes from the export's own ledger. The others come from the ``seeded`` record each
+    accepted shard carries in its producer identity; a producer with no accepted shard is ``not_run``,
+    never an omission, so a consumer sees which neighborhoods exist before opening any of them.
+    """
+    inputs = scope.get("inputs") or {}
+    codeql = scope.get("seeded")
+    rows = {Producer.CODEQL_EXPORT.value: _producer_entry(
+        Producer.CODEQL_EXPORT, codeql, failed=scope["export_status"] != SUCCEEDED
+        and not (codeql or {}).get("skipped"))}
+    for table in ("secondary", "analyzers"):
+        for name, shards in sorted((inputs.get(table) or {}).items()):
+            rows[name] = _merge_entries(Producer(name), [(shard.get("producer") or {}).get("seeded")
+                                                         for shard in shards])
+    for producer in CARD_PRODUCER_ORDER:
+        rows.setdefault(producer.value, _producer_entry(producer, None, shards=0))
+    return [rows[producer.value] for producer in CARD_PRODUCER_ORDER]
+
+
+def database_card(scope: Mapping[str, Any], *, snapshot: str, coverage: Sequence[CoverageRow]) -> EntityRecord:
+    """One ``codeql_database`` card (``appsec-review/codeql-database/1``) per CodeQL scope.
+
+    The card answers "which databases exist, what each was seeded from, how deep, and what is not
+    covered" without opening a family shard. Its identity derives from the snapshot, the scope, the
+    database identity and the export identity, so a different database, export pack, seed set, mode or
+    depth is a different card. It carries no source location: a database has no single span.
+    """
+    seeded = scope.get("seeded") or {}
+    manifest = (scope.get("export_manifest") or {}).get("sha256")
+    pack = scope.get("export_pack") or {}
+    export_identity = digest({"manifest_sha256": manifest, "pack_tree_sha256": pack.get("tree_sha256"),
+                              "columns_sha256": pack.get("columns_sha256")}) if manifest else None
+    state, gaps = database_coverage(scope, coverage)
+    identity = LogicalIdentity.derive(EntityKind.CODEQL_DATABASE, snapshot, {
+        "scope_id": scope["scope_id"], "database_identity": scope.get("database_identity"),
+        "export_identity": export_identity, "export_status": scope["export_status"]})
+    block = {"scope_id": scope["scope_id"], "language": scope["language"], "build_unit_id": scope["build_unit_id"],
+             "component_id": None}
+    payload = {
+        "schema": DATABASE_CARD_SCHEMA, "scope": block, "scope_id": scope["scope_id"],
+        "language": scope["language"], "source_languages": list(scope.get("source_languages") or ()),
+        "root": scope["root"], "build_unit_id": scope["build_unit_id"], "component_id": None,
+        "database_identity": scope.get("database_identity"), "export_identity": export_identity,
+        "export_status": scope["export_status"],
+        "mode": seeded.get("mode") or "whole_program", "seed_depth": seeded.get("depth"),
+        "seed_limit": seeded.get("seed_limit"), "seed_count": seeded.get("seed_count", 0),
+        "resolved_seed_count": seeded.get("resolved_seed_count", 0),
+        "neighborhood_function_count": seeded.get("neighborhood_function_count", 0),
+        "seeded": seeded, "producers": card_producers(scope), "coverage": state.value,
+        "families": {row.family.value: {"status": row.status.value, "facts": row.facts,
+                                        "counts": dict(sorted(row.counts.items()))} for row in coverage},
+        "gaps": gaps,
+    }
+    text = (f"codeql database {scope['scope_id']} {scope['language']} {payload['mode']} "
+            f"seeds {payload['resolved_seed_count']} of {payload['seed_count']}")
+    return EntityRecord(identity, str(scope["scope_id"]), f"{scope['language']} database {scope['scope_id']}", text,
+                        payload, None)
+
+
 # --------------------------------------------------------------------------- shard publication
 
 
@@ -434,16 +673,31 @@ def shard_id_for(scope_id: str, family: Family) -> str:
     return f"graph-{scope_id}-{family.value}"
 
 
-def _producer(scope: Mapping[str, Any], family: Family, catalog_sha256: str, unit_id: str) -> dict[str, Any]:
-    return {"job": JOB_ID, "unit": unit_id, "family": family.value, "language": scope["language"],
-            "scope_id": scope["scope_id"], "build_unit_id": scope["build_unit_id"], "rule": NORMALIZE_RULE,
-            "catalog_sha256": catalog_sha256}
+def database_shard_id(scope_id: str) -> str:
+    """Shard ids may not hold ``:`` (``[A-Za-z0-9_.-]{1,128}``), so the card shard is ``graph-<scope>-database``."""
+    return f"graph-{scope_id}-database"
 
 
-def _publish_one(run_root: Path, *, scope: Mapping[str, Any], family: Family, snapshot: str, identity: str,
-                 entities: Sequence[EntityRecord], relations: Sequence[RelationRecord], row: CoverageRow,
-                 catalog_sha256: str, unit_id: str) -> dict[str, Any]:
-    shard_id = shard_id_for(scope["scope_id"], family)
+def producers_shard_id(scope_id: str) -> str:
+    return f"graph-{scope_id}-producers"
+
+
+def _producer(scope: Mapping[str, Any], family: Family | None, catalog_sha256: str, unit_id: str,
+              kind: str = DATABASE_KIND) -> dict[str, Any]:
+    value = {"job": JOB_ID, "unit": unit_id, "language": scope["language"], "scope_id": scope["scope_id"],
+             "build_unit_id": scope["build_unit_id"], "rule": NORMALIZE_RULE, "catalog_sha256": catalog_sha256}
+    # A fact-family shard names its family; the database-card shard names its kind instead, so no
+    # consumer mistakes it for a seven-family fact shard.
+    return {**value, "family": family.value} if family is not None else {**value, "kind": kind}
+
+
+def _publish_one(run_root: Path, *, scope: Mapping[str, Any], family: Family | None, snapshot: str, identity: str,
+                 entities: Sequence[EntityRecord], relations: Sequence[RelationRecord],
+                 area: str, status: str, gaps: Sequence[str], catalog_sha256: str, unit_id: str,
+                 kind: str = DATABASE_KIND) -> dict[str, Any]:
+    shard_id = (shard_id_for(scope["scope_id"], family) if family is not None else
+                producers_shard_id(scope["scope_id"]) if kind == PRODUCERS_KIND else
+                database_shard_id(scope["scope_id"]))
     fingerprint = digest({"schema": INDEX_SCHEMA, "index": GRAPH_INDEX, "shard_id": shard_id,
                           "scope_identity": identity})
     path = run_root / "data" / "indices" / GRAPH_INDEX / shard_id / f"{fingerprint}.sqlite"
@@ -461,18 +715,24 @@ def _publish_one(run_root: Path, *, scope: Mapping[str, Any], family: Family, sn
         if relation.relation_id not in relation_ids:
             relation_ids.add(relation.relation_id)
             builder.add_relation(relation)
-    builder.add_coverage(row.area, row.status.value, row.gap)
+    builder.add_coverage(area, status, "; ".join(gaps)[:4096] or None)
     sha = builder.build()
-    gaps = tuple(gap[:300] for gap in row.gaps[:50])
     index = IndexIdentity(GRAPH_INDEX, INDEX_SCHEMA, sha, fingerprint, path.relative_to(run_root).as_posix(),
-                          _producer(scope, family, catalog_sha256, unit_id), gaps, shard_id)
+                          _producer(scope, family, catalog_sha256, unit_id, kind),
+                          tuple(gap[:300] for gap in gaps[:50]), shard_id)
     return asdict(index)
 
 
 def publish_scope(run_root: Path, *, scope: Mapping[str, Any], snapshot: str, identity: str,
                   facts: Sequence[GraphFact], symbols: Sequence[EntityRecord], relations: Sequence[RelationRecord],
-                  coverage: Sequence[CoverageRow], catalog_sha256: str, unit_id: str) -> list[dict[str, Any]]:
-    """One ``graph`` shard per family; symbols ride in ``call_site``, each relation with its fact endpoint."""
+                  coverage: Sequence[CoverageRow], catalog_sha256: str, unit_id: str,
+                  card: EntityRecord | None = None,
+                  neighborhood: producers.ProducerRows | None = None) -> list[dict[str, Any]]:
+    """One ``graph`` shard per family plus the database-card shard and the producer-neighborhood shard.
+
+    Symbols ride in ``call_site``, each relation with its fact endpoint. ``card`` (the scope's
+    :func:`database_card`) is published as one more shard of the same index; it is not a fact family.
+    """
     family_of = {fact.identity.value: fact.family for fact in facts}
     symbol_ids = {item.identity.value for item in symbols}
     grouped: dict[Family, list[RelationRecord]] = {family: [] for family in Family}
@@ -490,9 +750,23 @@ def publish_scope(run_root: Path, *, scope: Mapping[str, Any], snapshot: str, id
         entities = [fact.to_entity() for fact in facts if fact.family is family]
         if family is Family.CALL_SITE:
             entities.extend(symbols)
+        row = rows[family]
         shards.append(_publish_one(run_root, scope=scope, family=family, snapshot=snapshot, identity=identity,
-                                   entities=entities, relations=grouped[family], row=rows[family],
-                                   catalog_sha256=catalog_sha256, unit_id=unit_id))
+                                   entities=entities, relations=grouped[family], area=row.area,
+                                   status=row.status.value, gaps=row.gaps, catalog_sha256=catalog_sha256,
+                                   unit_id=unit_id))
+    if card is not None:
+        state = card.payload["coverage"]
+        shards.append(_publish_one(run_root, scope=scope, family=None, snapshot=snapshot, identity=identity,
+                                   entities=[card], relations=(), area=f"graph:{scope['scope_id']}:database",
+                                   status=state, gaps=card.payload["gaps"], catalog_sha256=catalog_sha256,
+                                   unit_id=unit_id))
+    if neighborhood is not None:
+        shards.append(_publish_one(run_root, scope=scope, family=None, snapshot=snapshot, identity=identity,
+                                   entities=neighborhood.entities, relations=(),
+                                   area=f"graph:{scope['scope_id']}:producers", status=neighborhood.status,
+                                   gaps=neighborhood.gaps, catalog_sha256=catalog_sha256, unit_id=unit_id,
+                                   kind=PRODUCERS_KIND))
     return shards
 
 

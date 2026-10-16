@@ -301,7 +301,8 @@
         "flow_summary",
         "dataflow_path",
         "guard_fact",
-        "range_fact"
+        "range_fact",
+        "codeql_database"
       ]
     },
     "poc_status": {

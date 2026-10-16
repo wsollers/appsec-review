@@ -13,12 +13,16 @@ docs/architecture/code-graph-precomputation.md (D4, sections 7.1 to 7.4) is norm
     ``graph.normalize.normalize_scope`` per scope that needs a rebuild.
 ``crosscheck.scopes``
     ``graph.crosscheck.cross_check`` with only that scope's own secondary shards; disagreements and
-    ``secondary_only`` facts make the ``call_site`` coverage row partial.
+    ``secondary_only`` facts make the ``call_site`` coverage row partial. When a ``clang-static`` shard is
+    accepted, ``graph.analyzers.apply_analyzer_sinks`` corroborates CodeQL ``sink_site`` facts with mapped
+    Clang-Tidy / Static Analyzer diagnostics and adds inexact, never direct-eligible analyzer-only sinks.
 ``correlate.scopes``
     ``graph.correlate.correlate`` with the scope's CodeQL observations (and the prioritization shard
-    when accepted); broken flows become ``dataflow_path`` coverage gaps. Publishes one ``graph`` shard
-    per ``(scope, family)`` and the scope checkpoint. A scope without a usable export publishes seven
-    coverage-only shards with ``unavailable`` rows and no entities.
+    when accepted); broken flows become ``dataflow_path`` coverage gaps. A seeded scope's family rows
+    are ``partial`` with the neighborhood gap. Publishes one ``graph`` shard per ``(scope, family)``,
+    one database-card shard (``graph-<scope_id>-database``, ``appsec-review/codeql-database/1``) and
+    the scope checkpoint. A scope without a usable export publishes seven coverage-only shards with
+    ``unavailable`` rows and no entities, plus its card.
 ``acceptance.publish_handoff``
     Composes the graph shards onto the current accepted manifest, replacing only this job's earlier
     shards.
@@ -32,6 +36,7 @@ import hashlib
 from pathlib import Path
 from typing import Any
 
+from appsec_review.graph.analyzers import apply_analyzer_sinks
 from appsec_review.graph.catalog import Catalog, load_catalog
 from appsec_review.graph.contract import Coverage, Family, GraphSettings, Producer
 from appsec_review.graph.correlate import correlate
@@ -148,6 +153,7 @@ def build_job(*, catalog_path: Path | None = None) -> Job:
         implementation = s.implementation_identity()
         restored = s.restored_secondary(run_root, shard_set.shards)
         secondary = s.assign_secondary(run_root, [*shard_set.shards, *restored], codeql["scopes"])
+        analyzers = s.assign_analyzers([*shard_set.shards, *restored], codeql["scopes"])
         priority = s.priority_shards(shard_set) or None
         values: list[dict[str, Any]] = []
         for record in codeql["scopes"]:
@@ -157,6 +163,7 @@ def build_job(*, catalog_path: Path | None = None) -> Job:
                 s.scope_sources(unit.job.target_root, scope["files"])
             scope["inputs"] = {
                 "secondary": secondary.get(scope["scope_id"], {producer.value: [] for producer in s.SECONDARY_PRODUCERS}),
+                "analyzers": analyzers.get(scope["scope_id"], {}),
                 "observations": s.observation_shards(shard_set, scope), "priority": priority}
             scope["identity"] = s.scope_identity(
                 scope, snapshot=unit.job.source_fingerprint, catalog_sha256=current.sha256, columns_sha256=columns,
@@ -225,7 +232,23 @@ def build_job(*, catalog_path: Path | None = None) -> Job:
                                  target_snapshot=unit.job.source_fingerprint, scope=_scope_block(scope),
                                  sources=sources, graph_symbols=symbols)
             summary = dict(result.summary)
-            calls = [fact for fact in result.facts if fact.family is Family.CALL_SITE]
+            facts_out = result.facts
+            analyzer_shards = scope["inputs"]["analyzers"].get(Producer.CLANG_STATIC.value) or []
+            sink_gaps: list[str] = []
+            sink_counts: dict[str, int] = {}
+            if analyzer_shards:
+                analyzer_set = ShardSet(run_root, analyzer_shards)
+                analyzer = apply_analyzer_sinks(
+                    result.facts, list(analyzer_set.entities(analyzer_set.shards, kinds=("tool_observation",))),
+                    [{"index": ref["name"], "shard_id": ref["shard_id"], "sha256": ref["sha256"]}
+                     for ref in map(s.shard_ref, analyzer_shards)], target_snapshot=unit.job.source_fingerprint,
+                    scope=_scope_block(scope))
+                facts_out, sink_gaps = analyzer.facts, list(analyzer.summary["gaps"])
+                sink_counts = {"analyzer_corroborated": int(analyzer.summary["corroborated"]),
+                               "analyzer_only": int(analyzer.summary["analyzer_only"])}
+                summary["analyzer_sinks"] = dict(analyzer.summary)
+            calls = [fact for fact in facts_out if fact.family is Family.CALL_SITE]
+            sinks = [fact for fact in facts_out if fact.family is Family.SINK_SITE]
             disagreements = int(summary["states"].get("disagree", 0))
             secondary_only = sum(int(value) for value in summary.get("secondary_only", {}).values())
             gaps = [*summary.get("gaps", ())]
@@ -238,8 +261,12 @@ def build_job(*, catalog_path: Path | None = None) -> Job:
             coverage = [s.with_gaps(row, gaps, facts=len(calls), counts={
                 "cross_check_disagreements": disagreements, "secondary_only": secondary_only})
                 if row.family is Family.CALL_SITE else row for row in coverage]
+            if analyzer_shards:
+                coverage = [s.with_gaps(row, sink_gaps, partial=False, facts=len(sinks), counts=sink_counts)
+                            if row.family is Family.SINK_SITE else row for row in coverage]
+                gaps.extend(sink_gaps)
             stage = s.write_stage(run_root, scope["scope_id"], "crosschecked", s.encode_stage(
-                scope["scope_id"], result.facts, symbols, [*relations, *result.relations], coverage,
+                scope["scope_id"], facts_out, symbols, [*relations, *result.relations], coverage,
                 {"cross_check": summary}))
             return {"scope_id": scope["scope_id"], "stage": stage, "states": summary["states"],
                     "secondary_only": secondary_only, "symbol_links": summary.get("symbol_links", 0),
@@ -264,9 +291,13 @@ def build_job(*, catalog_path: Path | None = None) -> Job:
                 return dict(scope["reused"])
             if scope["export_status"] != s.SUCCEEDED:
                 coverage = s.unavailable_coverage(scope)
+                card = s.database_card(scope, snapshot=unit.job.source_fingerprint, coverage=coverage)
+                neighborhood = s.producers.build(run_root, scope=scope, snapshot=unit.job.source_fingerprint,
+                                                 relations=())
                 shards = s.publish_scope(run_root, scope=scope, snapshot=unit.job.source_fingerprint,
                                          identity=scope["identity"], facts=(), symbols=(), relations=(),
-                                         coverage=coverage, catalog_sha256=catalog_sha, unit_id=unit.unit_id)
+                                         coverage=coverage, catalog_sha256=catalog_sha, unit_id=unit.unit_id,
+                                         card=card, neighborhood=neighborhood)
                 summary: dict[str, Any] = {}
             else:
                 facts, symbols, relations, coverage = s.decode_stage(
@@ -291,15 +322,22 @@ def build_job(*, catalog_path: Path | None = None) -> Job:
                                 "code flows are not listed")
                 coverage = [s.with_gaps(row, gaps, counts={"sarif_correlation_broken": len(broken)})
                             if row.family is Family.DATAFLOW_PATH else row for row in coverage]
+                coverage = s.apply_seeded_coverage(scope, coverage)
+                card = s.database_card(scope, snapshot=unit.job.source_fingerprint, coverage=coverage)
+                neighborhood = s.producers.build(run_root, scope=scope, snapshot=unit.job.source_fingerprint,
+                                                 relations=[*relations, *result.relations])
                 shards = s.publish_scope(run_root, scope=scope, snapshot=unit.job.source_fingerprint,
                                          identity=scope["identity"], facts=facts, symbols=symbols,
                                          relations=[*relations, *result.relations], coverage=coverage,
-                                         catalog_sha256=catalog_sha, unit_id=unit.unit_id)
+                                         catalog_sha256=catalog_sha, unit_id=unit.unit_id, card=card,
+                                         neighborhood=neighborhood)
             gaps = [f"{row.area}: {row.status.value}" + (f": {row.gap}" if row.gap else "")
                     for row in coverage if row.status is not Coverage.COMPLETE]
             value = {"scope_id": scope["scope_id"], "language": scope["language"],
                      "build_unit_id": scope["build_unit_id"], "export_status": scope["export_status"],
                      "shards": shards, "coverage": s.coverage_dicts(coverage),
+                     "database": {"identity": card.identity.value, "mode": card.payload["mode"],
+                                  "coverage": card.payload["coverage"], "gaps": card.payload["gaps"]},
                      "counts": {"facts": sum(row.facts for row in coverage),
                                 "code_flows": int(summary.get("code_flows", 0) or 0),
                                 "correlation_states": dict(summary.get("states", {}))},
@@ -327,7 +365,8 @@ def build_job(*, catalog_path: Path | None = None) -> Job:
                    for item in (*upstream["indexes"], *restored)}
         consumed = {(shard["name"], shard["shard_id"], shard["sha256"])
                     for scope in loaded["scopes"] for values in (
-                        *scope["inputs"]["secondary"].values(), scope["inputs"]["observations"],
+                        *scope["inputs"]["secondary"].values(), *scope["inputs"]["analyzers"].values(),
+                        scope["inputs"]["observations"],
                         scope["inputs"]["priority"] or ()) for shard in map(s.shard_ref, values)}
         missing = sorted(consumed - present)
         if missing:
@@ -347,7 +386,7 @@ def build_job(*, catalog_path: Path | None = None) -> Job:
         for scope in published["scopes"]:
             for row in scope["coverage"]:
                 families[row["family"]][row["status"]] += 1
-        counts = {"scopes": len(published["scopes"]), "shards": len(indexes),
+        counts = {"scopes": len(published["scopes"]), "databases": len(published["scopes"]), "shards": len(indexes),
                   "reused_scopes": published["reused_count"],
                   "facts": sum(int(scope["counts"]["facts"]) for scope in published["scopes"])}
         summary_path = unit.unit_root / "code-graph-summary.json"
@@ -355,7 +394,7 @@ def build_job(*, catalog_path: Path | None = None) -> Job:
                                    "catalog": loaded["catalog"], "counts": counts, "families": families,
                                    "scopes": [{key: scope[key] for key in (
                                        "scope_id", "language", "build_unit_id", "export_status", "coverage",
-                                       "counts", "gaps")} for scope in published["scopes"]],
+                                       "database", "counts", "gaps")} for scope in published["scopes"]],
                                    "gaps": published["gaps"]})
         unit.job.events.write("CODE_GRAPH_INDEX_COMPLETED", **counts, gap_count=len(published["gaps"]))
         return {"schema": SCHEMA, "artifact": s.artifact(run_root, summary_path),

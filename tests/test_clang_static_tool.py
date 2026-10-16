@@ -26,8 +26,25 @@ def test_clang_tidy_text_diagnostic_is_normalized() -> None:
     assert records == [{
         "rule_id": "bugprone-unused-return-value", "message": "unchecked return",
         "severity": "warning", "path": "/target/source/main.cpp", "line": 7,
-        "column": 9, "notes": [],
+        "column": 9, "notes": [], "fix_it": False,
     }]
+
+
+def test_clang_tidy_fix_it_hint_is_a_boolean_only() -> None:
+    driver = _driver()
+    records = driver._text_diagnostics(
+        "/target/source/main.cpp:7:9: warning: use nullptr [modernize-use-nullptr]\n"
+        'fix-it:"/target/source/main.cpp":{7:9-7:10}:"nullptr"\n',
+        engine="clang-tidy", default_rule="driver",
+    )
+    assert records[0]["fix_it"] is True and "nullptr\"" not in str(records[0]["notes"])
+
+
+def test_unit_outcome_names_the_compiler_failure() -> None:
+    driver = _driver()
+    unit = driver._unit({"file": "/target/source/a.cpp"}, 1, "x\n/target/source/a.cpp:1:1: error: boom\n")
+    assert unit["exit_code"] == 1 and "boom" in unit["message"]
+    assert driver._unit({"file": "/target/source/a.cpp"}, 0, "")["message"] == ""
 
 
 def test_static_analyzer_plist_retains_path_notes(tmp_path: Path) -> None:

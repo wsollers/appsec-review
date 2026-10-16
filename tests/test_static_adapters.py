@@ -95,23 +95,18 @@ def test_evidence_collapses_exact_duplicates_but_preserves_distinct_observations
 
 
 @pytest.mark.requires_target("appsec-multi-vuln")
-def test_checkov_typed_multi_vuln_scope_includes_supported_families_not_arbitrary_yaml() -> None:
+def test_checkov_multi_vuln_scope_offers_every_admitted_input_and_leaves_recognition_to_checkov() -> None:
     target = Path(__file__).parents[1] / "targets" / "appsec-multi-vuln"
     snapshot = inventory(target)
     catalog = ScanCatalog(source_fingerprint(target), "a" * 64, tuple(snapshot["files"]), (), (), target)
     adapter = adapter_registry()["tool-checkov"]
     selected = adapter.applicability(catalog)
     assert selected.applicable
-    assert {"dockerfile", "github_actions"} <= set(selected.families)
-    assert "projects/python/case-078/config.yaml" not in selected.files
-    assert any(path.endswith("Dockerfile") for path in selected.families["dockerfile"])
-    workflows = {f".github/workflows/{path.name}" for path in (target / ".github" / "workflows").iterdir()
-                 if path.suffix in {".yml", ".yaml"}}
-    assert {".github/workflows/ci.yml", ".github/workflows/codeql.yml"} <= workflows
-    assert set(selected.families["github_actions"]) == workflows
+    assert any(path.endswith("Dockerfile") for path in selected.files)
+    assert {".github/workflows/ci.yml", ".github/workflows/codeql.yml"} <= set(selected.files)
+    assert "projects/python/case-078/config.yaml" in selected.files and "README.md" in selected.files
     argv = adapter.argv("/opt/tool/bin/checkov", selected)
-    assert "--framework" in argv and "dockerfile" in argv and "github_actions" in argv
-    assert any("structural evidence" in gap for gap in selected.gaps)
+    assert "--framework" not in argv
 
 
 def test_sei_cert_engines_share_the_pack_and_keep_engine_diagnostics_as_gaps() -> None:

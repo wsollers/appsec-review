@@ -1262,6 +1262,18 @@ workers = 8
 [jobs.job_cpp_compiled_analysis.settings]
 lane = "cpp"
 
+# Seeded mode (jobs.job_codeql_analysis.settings.export_queries.mode) replays and parses only the
+# translation units that contain a finding location, and indexes only the neighborhood functions.
+# The mode, depth and seed limit come from CodeQL's export_queries; these are this producer's bounds:
+# neighborhood functions per project, replayed translation units per project, basic blocks per
+# function, and files read when mapping a header seed to the units that include it.
+# See docs/architecture/seeded-neighborhoods.md.
+[jobs.job_cpp_compiled_analysis.settings.seeded_bounds]
+function_limit = 400
+unit_limit = 64
+block_limit = 2000
+include_scan_files = 4000
+
 [jobs.job_cpp_compiled_analysis.steps.plan]
 workers = 1
 [jobs.job_cpp_compiled_analysis.steps.plan.tasks.accepted_cpp_plan]
@@ -1308,6 +1320,12 @@ max_output_bytes = 16777216
 max_diagnostics_per_scope = 10000
 clang_tidy_checks = ["clang-analyzer-*", "bugprone-*", "cert-*", "concurrency-*", "performance-*", "portability-*"]
 clang_analyzer_checkers = ["core", "cplusplus", "deadcode", "security", "unix", "alpha.security.*"]
+
+# Seeded mode analyzes only the translation units that contain a finding location (see
+# jobs.job_cpp_compiled_analysis.settings.seeded_bounds for the shared meaning).
+[jobs.job_clang_static_analysis.settings.seeded_bounds]
+unit_limit = 64
+include_scan_files = 4000
 
 [jobs.job_clang_static_analysis.steps.load]
 workers = 1
@@ -1651,6 +1669,11 @@ enabled = false
 # Joern is memory-heavy; scopes run one at a time until a per-tool resource profile is reviewed.
 workers = 1
 max_cpg_bytes = 2147483648
+
+# Only read when enabled = true: the CPG is built for the seeded translation units alone.
+[jobs.job_cpg_analysis.settings.seeded_bounds]
+unit_limit = 64
+include_scan_files = 4000
 
 [jobs.job_cpg_analysis.steps.load]
 workers = 1

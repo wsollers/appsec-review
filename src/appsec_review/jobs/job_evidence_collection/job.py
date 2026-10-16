@@ -17,6 +17,7 @@ from appsec_review.jobs.job_evidence_collection.adapters import (
     SEI_CERT_MOUNT,
     ToolAdapter,
     adapter_registry,
+    checkov_unreported_inputs,
     semgrep_rule_languages,
     semgrep_unscanned_inputs,
 )
@@ -693,6 +694,13 @@ def _execute_tool(unit: UnitContext, adapter: ToolAdapter, catalog: ScanCatalog,
                         observations, enabled=unit.job.tools.enable_swift,
                         context=f"{adapter.tool_id} observations")
                     gaps.extend(parser_gaps)
+                    if adapter.tool_id == "tool-checkov":
+                        known = {item.path for item in reported_not_applicable}
+                        reported_not_applicable.extend(
+                            InputDecision(path, adapter.tool_id, ReasonCode.TOOL_REPORTED_UNSUPPORTED_INPUT,
+                                          "Checkov accepted the input and reported no check, skip, or parse error")
+                            for path in checkov_unreported_inputs(output.read_bytes(), selection.files)
+                            if path not in known)
                     if adapter.tool_id in SEI_CERT_TOOLS:
                         dropped_gaps, dropped_na = semgrep_unscanned_inputs(
                             output.read_bytes(), selection.files,

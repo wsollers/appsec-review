@@ -647,7 +647,9 @@ def test_a_byte_flip_in_any_graph_shard_fails_scope_acceptance(pipeline) -> None
     path, sha = resolve_accepted_manifest(pipeline.run_root)
     manifest, _ = load_verified_manifest(pipeline.run_root, path, sha)
     shards = [item for item in manifest["indexes"] if item["name"] == GRAPH_INDEX]
-    assert len(shards) == 21
+    # Seven family shards for each of three scopes plus one database card and one producers shard per scope.
+    assert len(shards) == 27
+    assert sum(item["producer"].get("kind") == "codeql_database" for item in shards) == 3
     accept_manifest(pipeline.run_root)
     for shard in shards:
         target = pipeline.run_root / shard["relative_path"]

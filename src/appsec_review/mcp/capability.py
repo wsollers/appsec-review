@@ -14,9 +14,12 @@ from appsec_review.graph.contract import FAMILY_KINDS, GRAPH_INDEX, QUERY_CODE_G
 from appsec_review.mcp.adapter import RetrievalMcpAdapter
 from appsec_review.retrieval.graph import request_error as graph_request_error
 from appsec_review.retrieval.model import canonical_json
+from appsec_review.retrieval.neighborhood import (
+    LIST_CODEQL_DATABASES, QUERY_CODEQL_NEIGHBORHOOD, SUMMARY_KIND)
 
 
-_REVIEW_TOOLS = frozenset({"find", "read_excerpt", "query_precomputed", QUERY_CODE_GRAPH})
+_REVIEW_TOOLS = frozenset({"find", "read_excerpt", "query_precomputed", QUERY_CODE_GRAPH,
+                           LIST_CODEQL_DATABASES, QUERY_CODEQL_NEIGHBORHOOD})
 # Canonical review roles (code-graph-precomputation.md 5.4) plus the earlier short aliases.
 _ROLE_TOOLS = {
     "hypothesis_hunter": _REVIEW_TOOLS,
@@ -28,9 +31,14 @@ _ROLE_TOOLS = {
     "verifier": _REVIEW_TOOLS,
 }
 _GRAPH_ARGUMENTS = frozenset({"mode", "subject", "depth", "sink_class", "source_class", "limit", "cursor"})
-# Graph-shard entity kinds (the seven fact families and the CodeQL-export symbols); see
+# Graph-shard entity kinds (the seven fact families, the CodeQL-export symbols, and the producer-neighborhood
+# IR-flow and analyzer-diagnostic rows); see
 # review/capability.py ``GRAPH_ROW_KINDS``. Each carries the CodeQL ``payload.scope.scope_id``.
-_GRAPH_ROW_KINDS = frozenset({*(kind.value for kind in FAMILY_KINDS.values()), "symbol"})
+_LIST_ARGUMENTS = frozenset({"language", "limit", "cursor"})
+_NEIGHBORHOOD_ARGUMENTS = frozenset({"database", "seed", "symbol", "observation", "direction", "depth", "limit",
+                                     "include", "cursor"})
+_GRAPH_ROW_KINDS = frozenset({*(kind.value for kind in FAMILY_KINDS.values()), "symbol", "codeql_database",
+                              "ir_entity", "tool_observation"})
 _LOGICAL_ID = re.compile(r"^asr:[a-z][a-z0-9_]*:[0-9a-f]{64}$")
 
 
@@ -132,6 +140,14 @@ class ScopedRetrievalMcpAdapter:
         scope = payload.get("scope") if isinstance(payload, Mapping) else None
         return isinstance(scope, Mapping) and scope.get("scope_id") in grant["graph_scopes"]
 
+    @staticmethod
+    def _neighborhood_summary(item: Any, name: str, args: Mapping[str, Any], grant: Mapping[str, Any]) -> bool:
+        """The identity-less summary row of a neighborhood answer, for the database the caller named."""
+        return (name == QUERY_CODEQL_NEIGHBORHOOD and isinstance(item, Mapping) and "identity" not in item
+                and item.get("kind") == SUMMARY_KIND and item.get("index") == GRAPH_INDEX
+                and item.get("database") == args.get("database") and isinstance(item.get("subject"), Mapping)
+                and GRAPH_INDEX in grant["indexes"])
+
     def _unwrap_cursor(self, cursor: str, name: str, arguments: Mapping[str, Any]) -> tuple[str, int]:
         try:
             raw = _decode(cursor)
@@ -177,19 +193,39 @@ class ScopedRetrievalMcpAdapter:
                 raise ValueError("query is outside review package")
             if args.get("limit", 20) > grant["max_page_size"] or args.get("depth", 1) > grant["max_depth"]:
                 raise ValueError("page or depth exceeds review capability")
+        elif name == LIST_CODEQL_DATABASES:
+            if GRAPH_INDEX not in grant["indexes"] or set(args) - _LIST_ARGUMENTS:
+                raise ValueError("query is outside review package")
+            if args.get("limit", 20) > grant["max_page_size"]:
+                raise ValueError("page exceeds review capability")
+        elif name == QUERY_CODEQL_NEIGHBORHOOD:
+            # The database identity must have been received in a scope-checked list_codeql_databases row
+            # (or be granted by the package); the core additionally hides ungranted scopes' cards.
+            if (GRAPH_INDEX not in grant["indexes"] or args.get("database") not in entities or
+                set(args) - _NEIGHBORHOOD_ARGUMENTS):
+                raise ValueError("query is outside review package")
+            if args.get("limit", 20) > grant["max_page_size"] or args.get("depth", 0) > grant["max_depth"]:
+                raise ValueError("page or depth exceeds review capability")
         page = 1
         if args.get("cursor") is not None:
             args["cursor"], page = self._unwrap_cursor(args["cursor"], name, arguments)
             if page > grant["max_pages"]:
                 raise ValueError("review capability page bound exceeded")
-        result = self._adapter.call(name, args)
+        if name in {LIST_CODEQL_DATABASES, QUERY_CODEQL_NEIGHBORHOOD}:
+            result = self._adapter.call(name, args, graph_scopes=grant["graph_scopes"])
+        else:
+            result = self._adapter.call(name, args)
         if len(canonical_json(result)) > grant["max_response_bytes"]:
             raise ValueError("retrieval response exceeds review capability")
         # Refuse publication if a producer result contains a different top-level identity, unless it is
         # a graph row of a CodeQL scope the package grants (never a kind-wide or cross-scope grant).
         granted: set[str] = set()
         for item in result.get("results", ()):
-            if self._graph_row(item, grant):
+            if self._neighborhood_summary(item, name, args, grant):
+                granted.update(entry["identity"] for entry in item["subject"].get("symbols", ())
+                               if isinstance(entry, Mapping) and isinstance(entry.get("identity"), str)
+                               and _LOGICAL_ID.fullmatch(entry["identity"]))
+            elif self._graph_row(item, grant):
                 granted.add(item["identity"])
                 granted.update(identity for identity in _identities(item.get("payload"))
                                if identity.split(":", 2)[1] in _GRAPH_ROW_KINDS)

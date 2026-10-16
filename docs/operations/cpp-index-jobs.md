@@ -111,6 +111,23 @@ Settings in `[jobs.job_cpg_analysis.settings]`:
 The Joern image ships zstd-jni's native library, copied at build time from the hash-pinned JAR, and
 points the JVM at it. Without it, writing a CPG fails, because the runtime `/tmp` is `noexec`.
 
+## Seeded mode
+
+`job_cpg_analysis` (enabled path only; the disabled state is unchanged and runs no container) builds the
+CPG of the seeded translation units only: the subset compile database holds the selected units and c2cpg
+is told to skip every other C/C++ source (`jobs/job_cpg_analysis/seeded.py`). With no seeds no container
+runs. After c2cpg the job runs `joern-export --repr all --format neo4jcsv` on the CPG (a second execution
+of `tool-joern`, argv[0] allowed by `additional_executables` in its `tool.toml`) into a fresh scratch
+directory, and `jobs/job_cpg_analysis/export.py` reduces the CSV to one bounded row per function of the
+seeded files: signature, lines, calls matched by callee name (`callee_resolved` records whether Joern
+resolved the target), branches with their condition expressions, operator-call count and reaching-definition
+edge count. c2cpg exports no call-graph or control-flow edge files, so those are the named gaps
+`cpg_calls_name_matched` and `cpg_no_cfg_edges`; coverage is `partial` (`cpg_export_partial`). A failed or
+oversized export publishes no rows, is coverage `unavailable` with `cpg_export_unavailable`, and the CPG stays
+run-owned evidence. The raw CSV tree is not retained. The ledger states which seeds the CPG covers. `job_cpp_symbol_index` is unchanged (whole
+tree); its symbols are read through the seeded neighborhood (`include=["symbols"]` on
+`query_codeql_neighborhood`). Contract: `docs/architecture/seeded-neighborhoods.md`.
+
 ## Files each job stores
 
 All of these live under `runs/<run-id>/` and are never committed.

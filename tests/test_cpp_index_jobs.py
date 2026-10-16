@@ -127,8 +127,17 @@ def _with_joern(tmp_path: Path, enabled: bool):
     return load_config(path)
 
 
+def _whole_program(tmp_path: Path):
+    """These tests cover the whole-program path; seeded mode is covered by tests/test_seeded_*.py."""
+    path = tmp_path / "appsec-review.toml"
+    path.write_text(path.read_text(encoding="utf-8").replace('mode = "seeded"', 'mode = "whole_program"'),
+                    encoding="utf-8")
+    return load_config(path)
+
+
 def _accepted_cpp(tmp_path: Path, *, max_cpg_bytes: int | None = None, joern: bool = True):
     config, target = _fixture(tmp_path)
+    _whole_program(tmp_path)
     # Joern is off by default; the CPG tests below exercise the explicitly enabled path.
     config = _with_joern(tmp_path, joern)
     if max_cpg_bytes is not None:
