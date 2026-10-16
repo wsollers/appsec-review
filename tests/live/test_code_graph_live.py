@@ -54,15 +54,19 @@ def _export(settings, run_root: Path, image, workspace: Path, name: str, command
         "--ram", str(settings.ram_mb)), scratch_root=scratch)
     assert not database.timed_out and database.exit_code == 0, (
         run_root / database.stderr_path).read_text(encoding="utf-8", errors="replace")[-12000:]
-    shutil.copytree(ROOT / "rules" / "codeql-graph-export" / "cpp", scratch / "export-pack")
-    shutil.copyfile(ROOT / "rules" / "codeql-graph-export" / "columns.json", scratch / "export-columns.json")
-    shutil.copyfile(ROOT / "containers" / "tools" / "codeql" / "assets.lock.json", scratch / "assets.lock.json")
-    (scratch / "scope.csv").write_text("whole_program,0\n", encoding="utf-8")
-    (scratch / "seeds.csv").write_text("", encoding="utf-8")
+    # The executor's export action reads only the staged ``export`` tree, exactly as the job stages it.
+    staged = scratch / "export"
+    shutil.copytree(scratch / "database", staged / "database")
+    shutil.copytree(ROOT / "rules" / "codeql-graph-export" / "cpp", staged / "pack")
+    shutil.copyfile(ROOT / "rules" / "codeql-graph-export" / "columns.json", staged / "columns.json")
+    shutil.copyfile(ROOT / "containers" / "tools" / "codeql" / "assets.lock.json", staged / "assets.lock.json")
+    (staged / "scope.csv").write_text("whole_program,0\n", encoding="utf-8")
+    (staged / "seeds.csv").write_text("", encoding="utf-8")
     bounds = contract.GraphSettings()
     export = executor.execute("export", graph_export_arguments(
-        database="database", pack="export-pack", columns="export-columns.json", asset_lock="assets.lock.json",
-        language="cpp", output_dir="exports", scope_file="scope.csv", seeds_file="seeds.csv", row_limit=bounds.max_facts_per_family_per_scope,
+        database="export/database", pack="export/pack", columns="export/columns.json",
+        asset_lock="export/assets.lock.json", language="cpp", output_dir="exports",
+        scope_file="export/scope.csv", seeds_file="export/seeds.csv", row_limit=bounds.max_facts_per_family_per_scope,
         max_bytes=bounds.max_export_bytes, threads=settings.threads, ram_mb=settings.ram_mb),
         scratch_root=scratch)
     assert not export.timed_out and export.exit_code == 0, (
