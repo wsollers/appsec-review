@@ -38,6 +38,10 @@ class ExecutionRequest:
     # writes past it (SIGXFSZ, or EFBIG where the signal is ignored), so a producer cannot grow a
     # run-owned artifact beyond its configured bound before the application inspects it.
     file_size_limit_bytes: int | None = None
+    # Container memory limit for this one execution instead of the catalog tool's policy value,
+    # for a tool whose data set (osv-scanner's offline databases) needs more than the uniform
+    # scanner limit. Isolation settings are never overridable.
+    memory: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -86,6 +90,7 @@ class ExecutionResult:
 Runner = Callable[[Sequence[str], int], CommandOutcome]
 # ``docker run`` reports a process killed by a signal as 128 + signal number.
 FILE_SIZE_SIGNAL_EXIT = 128 + int(getattr(signal, "SIGXFSZ", 25))
+_MEMORY_LIMIT = re.compile(r"[1-9][0-9]{0,5}[mg]")
 
 
 def _stamp() -> str:
@@ -143,6 +148,9 @@ class ContainerExecutor:
         limit = request.file_size_limit_bytes
         if limit is not None and (type(limit) is not int or limit < 1):
             raise ValueError("file size limit must be a positive byte count")
+        if request.memory is not None and (not isinstance(request.memory, str)
+                                           or not _MEMORY_LIMIT.fullmatch(request.memory)):
+            raise ValueError("memory override must look like 512m or 3g")
         mounts = (Mount(target, "/target", True), Mount(scratch, "/scratch", False), *request.extra_mounts)
         seen: set[str] = set()
         for mount in mounts:
@@ -183,6 +191,7 @@ class ContainerExecutor:
         tool = self.catalog.tool(request.tool_id)
         runtime_user = application_runtime_user(tool.user)
         _, mounts = self._validate(request, tool)
+        memory = request.memory or tool.memory
         image_id = self.resolve_image(tool)
         raw = request.scratch_root / "raw"
         raw.mkdir(parents=True, exist_ok=True)
@@ -193,7 +202,7 @@ class ContainerExecutor:
             "docker", "run", "--rm", "--name", name,
             "--network", "none", "--read-only", "--user", runtime_user,
             "--cap-drop", "ALL", "--security-opt", "no-new-privileges",
-            "--cpus", tool.cpus, "--memory", tool.memory,
+            "--cpus", tool.cpus, "--memory", memory,
             "--pids-limit", str(tool.pids_limit),
             "--tmpfs", str(self.catalog.policy["tmpfs"][0]),
             "--workdir", request.working_directory,
@@ -227,7 +236,8 @@ class ContainerExecutor:
         limits = {
             "network": "none", "user": runtime_user, "root_filesystem": "read-only",
             "cap_drop": ["ALL"], "no_new_privileges": True, "cpus": tool.cpus,
-            "memory": tool.memory, "pids": tool.pids_limit,
+            "memory": memory, "memory_source": "request" if request.memory else "catalog",
+            "pids": tool.pids_limit,
             "tmpfs": list(self.catalog.policy["tmpfs"]),
             "timeout_seconds": tool.timeout_seconds, "stdout_bytes": tool.output_bytes,
             "stderr_bytes": tool.output_bytes, "file_size_bytes": request.file_size_limit_bytes,

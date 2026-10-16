@@ -122,8 +122,10 @@ def _execution_token(capability: str, artifact: Mapping[str, Any]) -> str:
 class ContainerScannerRunner:
     """Run pinned scanners with one produced artifact mounted read-only as data."""
 
-    def __init__(self, repository_root: Path, run_root: Path, scratch_root: Path):
+    def __init__(self, repository_root: Path, run_root: Path, scratch_root: Path, *,
+                 osv_memory: str | None = None):
         self.repository_root = repository_root
+        self.osv_memory = osv_memory
         self.run_root = run_root
         self.scratch_root = scratch_root
         self.catalog = load_catalog(repository_root)
@@ -172,6 +174,7 @@ class ContainerScannerRunner:
         scratch.mkdir(parents=True, exist_ok=True)
         mounts: list[Mount] = []
         environment: dict[str, str] = {}
+        memory = None
         if capability == "grype":
             snapshot = self._feeds[capability]
             mounts.append(Mount(Path(str(snapshot["directory"])), "/database", True))
@@ -184,12 +187,15 @@ class ContainerScannerRunner:
                 return {"stdout": b"", "stderr": gap.encode(), "exit_code": None, "timed_out": False,
                         "truncated": False, "precondition_gap": gap, "tool_identity": identity,
                         "execution_receipt": None}
-            mounts.extend(offline_database_mounts(self._osv_ecosystems))
+            # Offline mode loads every mounted database into memory: mount only this lockfile's.
+            mounts.extend(offline_database_mounts(
+                self._osv_ecosystems, () if ecosystem is None else (ecosystem,)))
             environment[OSV_DB_ENVIRONMENT] = OSV_DATABASE_ROOT
+            memory = self.osv_memory
         tool = self.catalog.tool(adapter.tool_id)
         result = self.executor.execute(ExecutionRequest(adapter.tool_id,
             adapter.argv(tool.executable, path.name), path.parent, scratch,
-            extra_mounts=tuple(mounts), environment=environment))
+            extra_mounts=tuple(mounts), environment=environment, memory=memory))
         stdout = (self.run_root / result.stdout_path).read_bytes()
         stderr = (self.run_root / result.stderr_path).read_bytes()
         output = scratch / PurePosixPath(adapter.output_file).name

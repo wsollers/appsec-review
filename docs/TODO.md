@@ -266,6 +266,18 @@ concurrency with partitioned resumability. Telemetry must report artifact/byte t
 launches, and saved work. Acceptance tests must prove that deduplication, filtering, cache reuse,
 resume, and sibling failure cannot suppress expected coverage or convert any gap into a clean result.
 
+## Match OSV advisories against the snapshot's own index
+
+Match OSV advisories against the snapshot's own index/osv.sqlite so memory scales with a project's
+dependencies, not the ecosystem database size. osv-scanner 1.9.2's `--experimental-offline` mode
+loads each needed ecosystem's whole `all.zip` into memory: npm.zip is 208 MB compressed, 368 MB of
+JSON, 230k advisories, and a single npm project alone was measured peaking at 2.2 GB or more. The
+live run 2026-10-16-0004 was OOM-killed at the uniform 1g scanner limit. Evidence collection now
+runs one invocation per project and raises only osv-scanner's limit (`osv_memory`, default `3g`),
+which bounds the blast radius but still pays the full ecosystem cost per launch. Extracting package
+versions with osv-scanner (or the catalog) and looking them up in the indexed snapshot would make
+the cost proportional to the dependencies actually present.
+
 ## Measure and extend seeded CodeQL neighborhoods
 
 Design: `docs/architecture/seeded-codeql-neighborhoods.md`. Remaining after the first

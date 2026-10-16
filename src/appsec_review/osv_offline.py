@@ -2,14 +2,15 @@
 
 osv-scanner 1.9.2 reads ``$OSV_SCANNER_LOCAL_DB_CACHE_DIRECTORY/osv-scanner/<ecosystem>/all.zip``.
 The synchronized snapshot (job_third_party_data_sync osv_sync) publishes one
-``sources/<quoted ecosystem>.zip`` per configured ecosystem. Every published ecosystem is bind
-mounted read-only at its expected path, so nothing is copied and no ecosystem is hardcoded: the
-scanner sees exactly what ``osv_sync.ecosystems`` synchronized.
+``sources/<quoted ecosystem>.zip`` per configured ecosystem. Each ecosystem an invocation's
+lockfiles need is bind mounted read-only at its expected path, so nothing is copied and no
+ecosystem is hardcoded. Offline mode loads every database present in that layout into memory
+(npm.zip alone expands to 368 MB of JSON), so callers mount only the ecosystems they need.
 """
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from pathlib import Path
 import re
 from types import MappingProxyType
@@ -37,7 +38,19 @@ def snapshot_ecosystems(snapshot_directory: Path) -> Mapping[str, Path]:
     return MappingProxyType(found)
 
 
-def offline_database_mounts(ecosystems: Mapping[str, Path]) -> tuple[Mount, ...]:
-    """Read-only per-ecosystem file mounts in osv-scanner's offline local-database layout."""
-    return tuple(Mount(archive, f"{DATABASE_ROOT}/osv-scanner/{name}/all.zip", True)
-                 for name, archive in sorted(ecosystems.items()))
+def database_mount_target(ecosystem: str) -> str:
+    """Where osv-scanner's offline mode reads one ecosystem's database."""
+    return f"{DATABASE_ROOT}/osv-scanner/{ecosystem}/all.zip"
+
+
+def offline_database_mounts(ecosystems: Mapping[str, Path],
+                            needed: Iterable[str] | None = None) -> tuple[Mount, ...]:
+    """Read-only per-ecosystem file mounts in osv-scanner's offline local-database layout.
+
+    ``needed`` restricts the mounts to those ecosystems (names absent from the snapshot are
+    ignored; callers name them as gaps before launch). ``None`` mounts every ecosystem.
+    """
+    wanted = None if needed is None else set(needed)
+    return tuple(Mount(archive, database_mount_target(name), True)
+                 for name, archive in sorted(ecosystems.items())
+                 if wanted is None or name in wanted)

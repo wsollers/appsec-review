@@ -33,8 +33,11 @@ metadata report is a gap ("blint produced no per-binary analysis report"), never
 
 osv-scanner 1.9.2 is invoked as `scan --experimental-offline --lockfile /target/<name>`: it selects
 an extractor by file name and has no extractor for jars, wheels, Go/Rust binaries, objects, or
-package metadata such as `PKG-INFO` or `composer.json` when handed the file. Every ecosystem in the
-verified OSV snapshot is bind-mounted read-only at `/database/osv-scanner/<ecosystem>/all.zip`. A
+package metadata such as `PKG-INFO` or `composer.json` when handed the file. Only the lockfile's own
+ecosystem from the verified OSV snapshot is bind-mounted read-only at
+`/database/osv-scanner/<ecosystem>/all.zip`, because offline mode loads every mounted database
+whole, and the container runs under `jobs.job_artifact_security_analysis.settings.osv_memory`
+(default `3g`) instead of the uniform 1g scanner limit (npm's database alone is 368 MB of JSON). A
 lockfile whose ecosystem the snapshot lacks is not launched and records the gap "offline OSV
 snapshot lacks ecosystem <X>"; the same text replaces osv-scanner's exit-127 "could not find local
 databases" report. Its exit-128 "No package sources found" report (an empty lockfile) is accepted as
