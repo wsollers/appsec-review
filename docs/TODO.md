@@ -299,6 +299,31 @@ environment should retain provenance without forcing unrelated databases or quer
 Back the matrix with table-driven tests that change one dimension at a time and prove both required
 invalidation and required reuse across unrelated languages, projects, scopes, and query profiles.
 
+## Graph modes: aliases, slices, type layouts, buffer bounds, sink CFG context
+
+Design: [`architecture/graph-alias-slice-layout-modes.md`](architecture/graph-alias-slice-layout-modes.md)
+(proposed, not implemented). Chunks G0 to G7 and GC there; G4 depends on the SVF producer chunks S0 to S4
+in [`architecture/svf-alias-producer.md`](architecture/svf-alias-producer.md) and on K1.
+
+- G0 contract: five families and modes, vocabularies, identities, `GraphSettings` bounds.
+- GC catalog revision 2 (R-UAF `memory_free` sink class, R-OOB-R `memory_read` entries); lands
+  after G0 and before G3.
+- G1 `Slices.ql` and the `program_slice` normalizer (data, control and summary edges; `on_paths`
+  join; `frontier` and `declaration_without_initializer` nodes).
+- G2 `TypeLayouts.ql`, `BufferBounds.ql`, the `layouts` branch of `job_cpp_compiled_analysis`
+  (`-fdump-record-layouts-simple`) and `graph-cross-check/4`.
+- G3 `ControlFlow.ql` as the internal `control_flow` family and `sink_site.result.cfg_context`
+  (`graph-normalize/2`); no model-facing CFG mode.
+- G4 `aliases` mode over republished `points_to_set` records, source-operand queries in the SVF job.
+- G5 retrieval modes, schema mirror, scoped-adapter tests; G6 integration, live counts, docs truth-up.
+- G7 `buffer_bound` package context role for lane A memory leads (v5 package schema), after G6's
+  live counts.
+
+Catalog and scanner follow-ups from
+[`reviews/detector-coverage-checklist.md`](reviews/detector-coverage-checklist.md) not covered by
+GC (R-INT `integer_conversion` entries, R-TOCTOU `path_check` and the `toctou_candidate` join,
+R-CSA checker names on clang 18, R-CERT pack extraction, R-LIVE recording of the expanded upstream suite and Infer/CSA issue types).
+
 ## Joern bounded export and acceptance
 
 **Deprecated (2026-10-12).** Joern is off by default (`jobs.job_cpg_analysis.settings.enabled =

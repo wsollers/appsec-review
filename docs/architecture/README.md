@@ -70,6 +70,11 @@ Repository authority remains in [`../../AGENTS.md`](../../AGENTS.md). This page 
   pinned `tool-svf` image, `job_svf_alias_analysis`, and `svf-cross-check/1` rules for indirect
   calls and guard operand aliasing (operations in
   [`../operations/svf-alias-analysis.md`](../operations/svf-alias-analysis.md)).
+- [`graph-alias-slice-layout-modes.md`](graph-alias-slice-layout-modes.md) — proposed
+  `query_code_graph` modes `aliases`, `slice_backward`/`slice_forward`, `type_layout` and
+  `buffer_bounds` over precomputed CodeQL and SVF facts, the internal `control_flow` family and
+  sink CFG context, and why no raw CFG mode is added (design only, not implemented); the detector
+  coverage checklist is in [`../reviews/detector-coverage-checklist.md`](../reviews/detector-coverage-checklist.md).
 
 Operations pages not listed above:
 

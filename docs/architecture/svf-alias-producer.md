@@ -237,7 +237,25 @@ SVF never changes `constrains_sink_operand` or any other CodeQL result field.
 | `tests/graph/test_svf_crosscheck.py` | every row of 6.1 and 6.2 over a shard the job publishes from recorded output; determinism; `function_tail`; graph-job routing of SVF shards |
 | `tests/live/test_svf_live.py` | the real pinned image through the real container executor. On the synthetic fixture (`containers/fixtures/svf`) the live output must equal the offline recordings. On `linux-calibration`, a static archive and a shared library link into two executables, and one source is compiled twice: three modules are planned and analyzed, two are closed-world, the function-pointer dispatch resolves to exactly its two targets, and the mismatched `new[]`/`delete` site carries its heap object |
 
-## 8. Risks and what is deliberately not done
+## 8. Relationship to the proposed `aliases` mode
+
+[`graph-alias-slice-layout-modes.md`](graph-alias-slice-layout-modes.md) proposes a reviewer-facing
+`aliases` mode that republishes this job's records into `graph` shards. It was written against the
+earlier, query-driven draft of this design, and the shared vocabulary matches: `points_to_set`,
+`Producer.SVF`, and the `may_alias`/`no_alias`/`unknown` answers.
+
+Three of its assumptions differ from what is implemented:
+
+- **`operand.fact_identity`.** Records carry exact source points, not CodeQL operand identities
+  (S-D3). The republishing step has to join by span, exactly as `graph/svf_crosscheck.py` does,
+  rather than read an identity from the record.
+- **DDA refinement and `dda_budget_exhausted`.** DDA is not run (S-D2).
+- **`build_unit_id` join.** Scope assignment uses located paths, the same rule as the other
+  secondary shards.
+
+That design must reconcile these points before its G chunks start.
+
+## 9. Risks and what is deliberately not done
 
 | Risk | Mitigation |
 |---|---|
