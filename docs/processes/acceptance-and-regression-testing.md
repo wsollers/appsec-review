@@ -112,9 +112,11 @@ the full `artifacts[].kind` set (`object` 152, `executable` 38, `shared-library`
 target, zero promoted findings. Effort ~2 days.
 
 ### Phase 4 — the comparison tool
-`appsec-review compare --baseline <x> --candidate <run-root>`: normalize both runs, diff into
-`job-status` / `gap-added` / `finding-added` / `coverage` / `volatile`, exit non-zero on anything
-but `volatile`. Primarily a diagnostic — "what changed between these two runs" was the question
+Implemented as `deploy/dagster/bin/stepwise.py compare`, with the logic in `appsec_review.acceptance`
+(operator procedure: [`deploy/dagster/README.md`](../../deploy/dagster/README.md#stepwise-acceptance-of-wave1_review)).
+It normalizes each job of a run and diffs it against the accepted outputs, classifying every
+difference as `job-status`, `gap-added`, `gap-removed`, `finding-added`, `finding-removed`,
+`coverage` or `volatile`, and exits non-zero on anything but `volatile`. Primarily a diagnostic — "what changed between these two runs" was the question
 that consumed most of the bring-up, answered by hand. Effort ~1 day.
 
 Normalization must mask: run and attempt ids, timestamps and durations, absolute paths, **image ids
@@ -123,6 +125,13 @@ and digests** (host-specific by design), randomized scratch names (`.appsec-revi
 diff is unreadable, and byte comparison across hosts is impossible in principle.
 
 ### Phase 5 — corpus acceptance against the answer key
+The answer key is a reviewed run of `appsec-multi-vuln`, pinned at a tag recorded at acceptance
+time and accepted job by job with `stepwise.py`. Each accepted output is committed as
+`test/acceptance/<tag>/<job>.json`. A known-good seed of the run after each job is recorded alongside
+it, which lets `stepwise.py verify-job` re-run any single job from a byte-identical starting
+state. A required-producer coverage gap is reported, not fatal, and spurious findings are reported
+for refuters to remove rather than failing the comparison.
+
 The outermost layer, and the only one needing an oracle. The corpus is blind
 (`appsec-multi-vuln@2994384`) and the expected defects live in the evaluator guide's per-defect
 inventory; that inventory, not a previous run, is the oracle. `test/acceptance/expectations.toml`

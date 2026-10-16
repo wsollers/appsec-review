@@ -97,3 +97,6 @@ images/audit-buildenv-java/jdtls.tar.gz
 
 # Dagster's generated local secret; the tracked example documents its shape.
 /deploy/dagster/.env
+# Stepwise acceptance seed bytes (content-addressed blobs); the manifests are committed under
+# test/acceptance/<tag>/seeds/.
+/data/acceptance-seeds/

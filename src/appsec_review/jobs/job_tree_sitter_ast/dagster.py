@@ -11,6 +11,7 @@ from types import MappingProxyType
 from dagster import DynamicOut, DynamicOutput, In, Nothing, Out, graph, multiprocess_executor, op
 
 from appsec_review.jobs.cataloging import source_fingerprint
+from appsec_review.orchestration.topology import launch_upstream_handoffs
 from appsec_review.runtime import UnitContext
 from appsec_review.storage import atomic_json
 
@@ -31,7 +32,8 @@ def build_dagster_job(config, runner_factory):
             run_id=tags.get("appsec/application_run_id"),
             trigger="schedule" if "dagster/schedule_name" in tags else "manual",
             orchestration={"system": "dagster", "run_id": context.run_id, "node": context.op.name},
-            target_root=target, source_fingerprint=source_fingerprint(target))
+            target_root=target, source_fingerprint=source_fingerprint(target),
+            upstream_handoffs=launch_upstream_handoffs(config.runtime.runs_dir, tags, in_graph=False) or {})
         context.instance.add_run_tags(context.run_id, {
             "appsec/application_run_id": str(claim["run_id"]),
             "appsec/trigger": str(claim["trigger"]),
