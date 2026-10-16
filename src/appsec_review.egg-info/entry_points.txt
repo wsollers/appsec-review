@@ -1,3 +1,0 @@
-[console_scripts]
-appsec-review = appsec_review.cli:main
-appsec-review-mcp = appsec_review.mcp.stdio:main
