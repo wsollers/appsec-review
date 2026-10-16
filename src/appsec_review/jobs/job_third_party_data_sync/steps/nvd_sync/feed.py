@@ -295,6 +295,20 @@ class NvdPublisher:
             snapshot_id = manifest.get("parent_snapshot_id")
         return list(reversed(chain))
 
+    def _extendable(self, current: Mapping[str, Any]) -> bool:
+        """Whether an incremental layer can be indexed on top of ``current``.
+
+        It can when the parent's index is intact, or when every manifest in its chain stored the
+        metadata blobs a replay rebuilds the index from. A ``/1`` chain stored only raw feed blobs,
+        so a missing ``/1`` index cannot be replayed and the feed is bootstrapped afresh instead.
+        """
+        snapshot_id = str(current["snapshot_id"])
+        parent = json.loads((self.root / "snapshots" / snapshot_id / "manifest.json").read_text(encoding="utf-8"))
+        if self._parent_index(parent) is not None:
+            return True
+        return all("metadata_blob" in record for manifest in self._chain(snapshot_id)
+                   for layer in manifest.get("layers", []) for record in layer.get("pages", [layer]))
+
     def _parent_index(self, parent: Mapping[str, Any]) -> Path | None:
         entry = (parent.get("files") or {}).get(nvd_index.LOGICAL_PATH)
         path = self.root / "snapshots" / str(parent["snapshot_id"]) / nvd_index.LOGICAL_PATH
@@ -479,7 +493,8 @@ class NvdPublisher:
                 atomic_json(attempt_path, {"attempt_id": attempt_id, "status": "RUNNING",
                                            "coordinator_id": coordinator_id,
                                            "input_snapshot_id": current.get("snapshot_id") if current else None})
-                index_path, manifest = (self._incremental(staging, current, api_key) if current
+                index_path, manifest = (self._incremental(staging, current, api_key)
+                                        if current and self._extendable(current)
                                         else self._bootstrap(staging, api_key))
                 pointer = self._publish(manifest, index_path)
                 atomic_json(attempt_path, {"attempt_id": attempt_id, "status": "COMPLETE",

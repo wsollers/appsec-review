@@ -183,3 +183,38 @@ def test_tampered_blob_fails_verification(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="blob integrity"):
         publisher.verify()
+
+
+def test_a_v1_parent_without_an_index_is_bootstrapped_not_replayed(tmp_path: Path) -> None:
+    raw = json.dumps({"format": "NVD_CVE", "version": "2.0",
+                      "vulnerabilities": [vulnerability("CVE-2026-1000")]}, separators=(",", ":")).encode()
+    instant = datetime(2026, 10, 8, tzinfo=timezone.utc)
+    config = load_config(write_config(tmp_path))
+    settings = NvdSettings.from_mapping(tmp_path, config.job("job_third_party_data_sync").step("nvd_sync").settings)
+    feed_root = tmp_path / "data" / "feeds" / "nvd"
+    # A /1 snapshot stored raw feed blobs only: no metadata blobs and no index to extend.
+    legacy = "sha256-0000000000000001"
+    (feed_root / "snapshots" / legacy).mkdir(parents=True)
+    legacy_manifest = feed_root / "snapshots" / legacy / "manifest.json"
+    legacy_manifest.write_text(json.dumps({
+        "schema": "appsec-review/nvd-snapshot-manifest/1", "snapshot_id": legacy, "feed_id": "nvd",
+        "feed_schema": "NVD_CVE/2.0", "mode": "bootstrap", "parent_snapshot_id": None,
+        "captured_at": "2026-10-04T23:24:33+00:00", "cursor": "2026-10-04T23:23:40.624Z",
+        "coverage": {"first_year": 2026, "last_year": 2026}, "record_count": 1, "limitations": [],
+        "layers": [{"kind": "year", "year": 2026, "blob": {"path": "blobs/legacy.json.gz"},
+                    "record_count": 1, "source_url": "https://nvd.example.test/2026.json.gz"}]}),
+        encoding="utf-8")
+    (feed_root / "current.json").write_text(json.dumps({
+        "schema": "appsec-review/nvd-current-pointer/1", "feed_id": "nvd", "snapshot_id": legacy,
+        "manifest_sha256": hashlib.sha256(legacy_manifest.read_bytes()).hexdigest(),
+        "cursor": "2026-10-04T23:23:40.624Z", "published_at": "2026-10-04T23:24:33+00:00"}),
+        encoding="utf-8")
+    publisher = NvdPublisher(settings, client=FakeClient(raw), clock=lambda: instant, pause=lambda _: None)
+
+    pointer = publisher.sync("after-legacy")
+
+    manifest = json.loads((feed_root / "snapshots" / pointer["snapshot_id"] / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["mode"] == "bootstrap" and manifest.get("parent_snapshot_id") is None
+    assert json.loads((feed_root / "current.json").read_text(encoding="utf-8"))["snapshot_id"] == pointer["snapshot_id"]
+    assert (feed_root / "snapshots" / legacy / "manifest.json").is_file()
+    assert publisher.verify()["chain_length"] == 1
