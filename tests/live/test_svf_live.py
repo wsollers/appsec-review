@@ -206,6 +206,17 @@ def test_multivuln_cpp_project_links_archives_and_resolves_its_function_pointer(
     assert all(row["payload"]["objects"][key]["kind"] == "heap" for row in deletes for key in row["payload"]["points_to"])
     assert heap
 
+    # The object index pairs the array allocation with its scalar free from the records alone.
+    allocation = [row["payload"] for row in entities if row["kind"] == "memory_object"
+                  and row["payload"]["object_key"] in heap]
+    assert allocation, "the new[] allocation must have a memory_object record"
+    for item in allocation:
+        assert item["allocator"] == "_Znam" and item["allocator_demangled"].startswith("operator new[]")
+        frees = [a for a in item["accessors"] if a["class"] == "free"]
+        assert frees and all(a["callee"].startswith("_ZdlPv") for a in frees)
+        assert item["accessors"][0]["class"] == "free" and item["complete"] is True
+    assert result["counts"]["memory_objects"] > 0
+
     sources = _sources(accepted)
     shard = dict(result["index_identity"])
     svf = read_svf(ShardSet(run_root, [shard]), shard)

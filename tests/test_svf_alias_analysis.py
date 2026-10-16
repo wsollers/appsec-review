@@ -287,3 +287,53 @@ def test_central_configuration_declares_the_job_disabled_by_default() -> None:
     assert tuple(job["steps"]) == ("load", "analyze", "acceptance")
     built = build_job()
     assert built.job_id == JOB_ID and {item.output_kind for item in built.datasets} >= {"svf_alias_sets"}
+
+
+# --------------------------------------------------------------------------- memory-object fan-in
+
+
+def test_each_object_publishes_allocator_and_accessor_fan_in_with_frees_first(tmp_path: Path) -> None:
+    run_root, _scope, _executor, result = _run(tmp_path)
+    entities = _entities(run_root, result)
+    objects = {(item["path"], item["line"]): item["payload"] for item in entities if item["kind"] == "memory_object"
+               and item["payload"]["module_kind"] == "link"}
+    checked = objects[("native/guard.c", 14)]
+    assert checked["schema"] == "appsec-review/svf-memory-object/1"
+    assert (checked["kind"], checked["allocator"], checked["allocator_demangled"]) == ("heap", "malloc", "malloc")
+    assert checked["allocation"]["in_accepted_source"] is True
+    assert [(a["class"], a["line"]) for a in checked["accessors"]] == [("free", 19), ("compare", 16)]
+    assert checked["accessor_counts"] == {"free": 1, "write": 0, "read": 0, "compare": 1, "pass": 0}
+    assert checked["complete"] is True and checked["truncated"] is False
+    written = objects[("native/guard.c", 15)]
+    assert [a["class"] for a in written["accessors"]] == ["free", "write"]
+    assert result["counts"]["memory_objects"] >= 2
+    keys = {item["payload"]["object_key"] for item in entities if item["kind"] == "memory_object"}
+    assert "obj:constant:shared" not in keys  # the shared constant object never gets an accessor index
+
+    shard = run_root / result["index_identity"]["relative_path"]
+    references = _rows(shard, "SELECT payload_json FROM relations WHERE kind = 'REFERENCES'")
+    assert references and all(json.loads(row["payload_json"])["rule"] == "svf-memory-object/1" for row in references)
+
+
+def test_accessor_and_object_bounds_truncate_with_named_reasons(tmp_path: Path) -> None:
+    run_root, _scope, _executor, result = _run(tmp_path / "a", settings={**SETTINGS, "max_accessors_per_object": 1})
+    objects = [item["payload"] for item in _entities(run_root, result) if item["kind"] == "memory_object"]
+    assert all(len(item["accessors"]) <= 1 for item in objects)
+    truncated = [item for item in objects if item["truncated"]]
+    assert truncated and all(item["complete"] is False and item["accessor_total"] > 1 for item in truncated)
+    assert "accessor bound reached" in _coverage(run_root, result)["svf:cpp:native:build/app"][1]
+
+    run_root, _scope, _executor, result = _run(tmp_path / "b", settings={**SETTINGS, "max_objects_per_module": 1})
+    app = [item for item in _entities(run_root, result)
+           if item["kind"] == "memory_object" and item["payload"]["module_kind"] == "link"]
+    assert len(app) == 1
+    assert "memory-object bound reached" in _coverage(run_root, result)["svf:cpp:native:build/app"][1]
+
+
+def test_accessor_classes_cover_frees_writes_reads_compares_and_passes() -> None:
+    from appsec_review.jobs.job_svf_alias_analysis.job import accessor_class
+    assert accessor_class({"role": "call_arg", "callee": "_ZdaPv"}) == "free"
+    assert accessor_class({"role": "call_arg", "callee": "_ZdlPvm"}) == "free"
+    assert accessor_class({"role": "call_arg", "callee": "free"}) == "free"
+    assert accessor_class({"role": "call_arg", "callee": "memcpy"}) == "pass"
+    assert [accessor_class({"role": role}) for role in ("store", "load", "compare")] == ["write", "read", "compare"]

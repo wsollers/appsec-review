@@ -148,6 +148,9 @@ class PackageAssemblySettings:
     max_page_size: int
     max_pages: int
     max_depth: int
+    max_memory_context_entries: int
+    max_callers: int
+    caller_depth: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -578,7 +581,7 @@ def parse_inference_review_settings(value: Mapping[str, Any]) -> InferenceSecuri
     field = f"{_PREFIX}.packages"
     packages_value = _table(settings["packages"], field, {
         "hunt_menu_partition_size", "unit_max_files", "max_context_entries", "max_package_bytes",
-        "max_page_size", "max_pages", "max_depth"})
+        "max_page_size", "max_pages", "max_depth", "max_memory_context_entries", "max_callers", "caller_depth"})
     packages = PackageAssemblySettings(
         hunt_menu_partition_size=_int(packages_value["hunt_menu_partition_size"],
                                       f"{field}.hunt_menu_partition_size", 1, 10_000),
@@ -588,6 +591,10 @@ def parse_inference_review_settings(value: Mapping[str, Any]) -> InferenceSecuri
         max_page_size=_int(packages_value["max_page_size"], f"{field}.max_page_size", 1, 100),
         max_pages=_int(packages_value["max_pages"], f"{field}.max_pages", 1, 100),
         max_depth=_int(packages_value["max_depth"], f"{field}.max_depth", 1, 8),
+        max_memory_context_entries=_int(packages_value["max_memory_context_entries"],
+                                        f"{field}.max_memory_context_entries", 1, 1_000),
+        max_callers=_int(packages_value["max_callers"], f"{field}.max_callers", 1, 1_000),
+        caller_depth=_int(packages_value["caller_depth"], f"{field}.caller_depth", 1, 4),
     )
     if packages.hunt_menu_partition_size > LEAD_ACCOUNTING_CEILING:
         raise ValueError(f"{field}.hunt_menu_partition_size must not exceed {LEAD_ACCOUNTING_CEILING}: every lead "

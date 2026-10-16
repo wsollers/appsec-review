@@ -2,7 +2,8 @@
 
 Status: **implemented 2026-10-16, opt-in.** It is verified offline against recorded real tool output,
 and live against the pinned image on a synthetic fixture and on a copied multi-vulnerability C/C++
-project. Operations are in [`../operations/svf-alias-analysis.md`](../operations/svf-alias-analysis.md),
+project. Section 7 adds finding-level context: an object-centric accessor index, and memory and
+caller context joined to every C/C++ finding-lead package. Operations are in [`../operations/svf-alias-analysis.md`](../operations/svf-alias-analysis.md),
 and the image is documented in [`containers/tools/svf/`](../../containers/tools/svf/README.md).
 
 SVF (Static Value-Flow Analysis) is an independent C/C++ points-to producer that cross-checks
@@ -147,11 +148,15 @@ The job rejects an output path that escapes scratch, a malformed envelope and an
 |---|---|---|
 | `points_to_set` | one pointer site | `role` (`load`, `store`, `call_arg`, `compare`), `operand`, `callee`, `function`, `points_to` keys, referenced `objects`, `truncated`, `incomplete_reasons`, `complete` |
 | `indirect_call_targets` | one indirect call | `function`, `targets` (`name`, `demangled`), `target_count`, `truncated`, `complete` |
+| `memory_object` | one heap, stack or global abstract object referenced by a published site (4.4) | `object_key`, `kind`, `name`, `field`, `allocator` and `allocator_demangled`, `allocation`, `accessors`, `accessor_counts`, `accessor_total`, `accessors_outside_accepted_sources`, `truncated`, `complete` |
 
 Every record also carries the module identity, kind and label, `module_closed_world`,
 `open_world_reasons` and up to 64 `unmodeled_externals`. Locations are exact points (`llvm-dilocation`).
 A column of 0 is an ambiguous whole-line location, which the cross-check skips. Sites outside
 accepted sources, such as system headers, are counted and not published.
+
+The driver records each heap object's allocating function, for example `malloc`, `_Znam`
+(`operator new[]`) or a project wrapper. It also gives every site its function's demangled name.
 
 ### 4.3 When a negative answer is trustworthy (`closed_world`)
 
@@ -166,6 +171,33 @@ A module is closed-world only when none of these reasons apply:
     neither SVF's ExtAPI models nor the driver's explicit non-capturing list covers. That list holds
     deallocators, formatted output, read-only string and memory inspection, the `ato*` family,
     pthread mutex calls and exception helpers.
+
+### 4.4 Object-centric accessor index (`svf-memory-object/1`)
+
+A memory finding is judged by the other sites that touch the same object: a use after a free, a
+second free, no free at all, or an array allocator paired with a scalar free. The job builds that
+fan-in by inverting each module's points-to sets once. Andersen sets are already transitively
+closed over copies, fields and calls, so a deeper walk would add nothing.
+
+- **One `memory_object` record** per heap, stack or global object referenced by a published site.
+  Functions and SVF's shared constant object get none.
+- **Accessors.** Each accessor is the published site's identity, its class, role, callee, function
+  and location. Classes are:
+  - `free`: a pointer argument to `free`, `realloc` or any `operator delete` overload;
+  - `write`: a store;
+  - `read`: a load;
+  - `compare`: a comparison;
+  - `pass`: any other pointer argument.
+
+  Accessors are ordered by class in that order, then by location. At most
+  `max_accessors_per_object` are kept, `accessor_counts` and `accessor_total` count all of them,
+  and `accessors_outside_accepted_sources` counts sites in system headers.
+- **Relations.** Each accessor site has a `REFERENCES` relation to its object.
+- **Completeness.** A list is `complete` only when it is untruncated, the module exported every
+  site, and the module is closed-world. An incomplete list is never evidence that other accesses
+  do not exist.
+- **Object bound.** Objects beyond `max_objects_per_module` are not published, and the module's
+  coverage names the bound.
 
 ## 5. Job `job_svf_alias_analysis`
 
@@ -228,16 +260,62 @@ Across modules, any may-alias wins, and no-alias needs every module to agree.
 
 SVF never changes `constrains_sink_operand` or any other CodeQL result field.
 
-## 7. Verification
+## 7. Finding context in review packages
+
+Packages are where finding information reaches a reviewer. Schema v5
+([review-package contract](review-package-contract.md#memory-and-caller-context-version-5)) adds
+two lead-level contexts. Both apply to every finding-lead package, from any scanner: CodeQL, the
+Clang Static Analyzer, clang-tidy, cppcheck or Semgrep.
+
+- **Memory context** (`review/memory_context.py`). For a C/C++ lead, the package embeds three roles
+  joined by the lead's path and line, with no relation to any particular scanner needed:
+  - `points_to`: the SVF pointer-site records on that line;
+  - `indirect_call`: its indirect-call records;
+  - `memory_object`: the objects those sites reference, with allocation site, allocator and
+    accessor fan-in.
+
+  Missing, open-world, incomplete and bounded context is a named `svf_points_to` gap.
+- **Caller context** (`GraphContext.callers` in `review/packages.py`). The lead's enclosing function
+  comes from the SVF records on its line, from `sink_site.enclosing_function`, or from `call_site`
+  callers on that line. The package embeds the `call_site` facts reaching that function,
+  breadth-first to `caller_depth` levels. This is a depth fan-out because call context really is
+  transitive. SVF's `secondary_only` edges take part, so callers are found through function
+  pointers. Name-based matches, truncation and an unknown enclosing function are named
+  `code_graph_callers` gaps.
+
+Two kinds of context get two shapes, deliberately. Alias context is a one-level fan-in by object,
+because points-to is already a closure. Call context is a bounded depth walk, because each level
+is new information.
+
+### 7.1 Tunables
+
+Depth and fan-out are configuration, not code constants. Each is a required key in
+`appsec-review.toml`, validated when the job's configuration loads.
+
+| Setting | Table | Controls | Shipped value | Bounds |
+|---|---|---|---|---|
+| `max_accessors_per_object` | `jobs.job_svf_alias_analysis.settings` | accessor fan-in kept per memory object | 64 | ≥ 1 |
+| `max_objects_per_module` | `jobs.job_svf_alias_analysis.settings` | memory objects published per module | 5000 | ≥ 1 |
+| `max_memory_context_entries` | `jobs.job_inference_security_review.settings.packages` | SVF entries per finding-lead package | 24 | 1–1000 |
+| `max_callers` | `jobs.job_inference_security_review.settings.packages` | caller fan-out per finding-lead package | 16 | 1–1000 |
+| `caller_depth` | `jobs.job_inference_security_review.settings.packages` | caller levels walked from the enclosing function | 2 | 1–4 |
+
+The job's other export bounds (sites, points-to size, indirect calls, targets) are listed in the
+[operations page](../operations/svf-alias-analysis.md). Raising a bound changes the identity of the
+scope checkpoint (SVF job) or of the package input fingerprint (review job), so the affected
+artifacts are rebuilt instead of reused.
+
+## 8. Verification
 
 | Tier | What it proves |
 |---|---|
 | `tests/test_svf_alias_analysis.py` | module planning (archives, shared libraries, unlinked units, bounds); scope analysis over recorded real output (records, exact points, closed-world marking, coverage rows); every failure mode (container exit, timeout, missing image, malformed or missing result, module failures, bound overruns, output escape, missing bitcode, lossy debug info, sites outside accepted sources); checkpoint reuse; settings and topology validation |
 | `tests/test_svf_tool.py` | wrapper flag rewriting; compile, link and analysis outcomes, and plan validation, with the process runner faked |
 | `tests/graph/test_svf_crosscheck.py` | every row of 6.1 and 6.2 over a shard the job publishes from recorded output; determinism; `function_tail`; graph-job routing of SVF shards |
-| `tests/live/test_svf_live.py` | the real pinned image through the real container executor. On the synthetic fixture (`containers/fixtures/svf`) the live output must equal the offline recordings. On `linux-calibration`, a static archive and a shared library link into two executables, and one source is compiled twice: three modules are planned and analyzed, two are closed-world, the function-pointer dispatch resolves to exactly its two targets, and the mismatched `new[]`/`delete` site carries its heap object |
+| `tests/review/test_packages_memory_context.py` | v5 lead packages: a C/C++ lead from any scanner gets the SVF records at its line and their objects; callers to `caller_depth` with name-match, `max_callers` and depth gaps; a line without records, a file outside every module, a non-C lead and a run without SVF each get the right gap or none; `max_memory_context_entries` keeps objects first; open-world records are kept with a `partial` gap; reassembly is byte-identical; packages validate against the schema |
+| `tests/live/test_svf_live.py` | the real pinned image through the real container executor. On the synthetic fixture (`containers/fixtures/svf`) the live output must equal the offline recordings. On `linux-calibration`, a static archive and a shared library link into two executables, and one source is compiled twice: three modules are planned and analyzed, two are closed-world, the function-pointer dispatch resolves to exactly its two targets, and the mismatched `new[]`/`delete` site carries its heap object, whose `memory_object` names allocator `_Znam` and lists the scalar `operator delete` as its first, `free`-class accessor |
 
-## 8. Relationship to the proposed `aliases` mode
+## 9. Relationship to the proposed `aliases` mode
 
 [`graph-alias-slice-layout-modes.md`](graph-alias-slice-layout-modes.md) proposes a reviewer-facing
 `aliases` mode that republishes this job's records into `graph` shards. It was written against the
@@ -253,9 +331,10 @@ Three of its assumptions differ from what is implemented:
 - **`build_unit_id` join.** Scope assignment uses located paths, the same rule as the other
   secondary shards.
 
-That design must reconcile these points before its G chunks start.
+That design must reconcile these points before its G chunks start. Its G7 package chunk also
+planned to claim package schema v5, which section 7 now uses, so G7 needs v6.
 
-## 9. Risks and what is deliberately not done
+## 10. Risks and what is deliberately not done
 
 | Risk | Mitigation |
 |---|---|
@@ -267,8 +346,11 @@ That design must reconcile these points before its G chunks start.
 
 Not done, on purpose:
 
-- **No reviewer-facing `aliases` mode.** It would need its own decision against D3 and would be
-  indirect-only.
+- **No reviewer-facing `aliases` mode.** Lead packages already embed the records (section 7); a query
+  mode would need its own decision against D3 and would be indirect-only.
+- **No defect verdicts.** The object index exposes allocator and free pairing, accessor order and
+  completeness. It never declares a mismatch, use-after-free or double free; judging them is the
+  reviewer's job, cited from these records.
 - **No SVFG value-flow paths.** Paths stay with CodeQL (`dataflow_path`).
 - **No `saber` leak or double-free findings.** Those would be a source-SAST producer like K4.
 - **No optimized-build analysis.** Like every IR producer here, this is `-O0` only.

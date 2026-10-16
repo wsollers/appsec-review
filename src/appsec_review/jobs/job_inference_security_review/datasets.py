@@ -27,7 +27,7 @@ PLANNED_CONSUMERS: tuple[dict[str, object], ...] = tuple(
     ))
 PLANNED_CONSUMER_JOBS = tuple(str(item["job_id"]) for item in PLANNED_CONSUMERS)
 DATASETS = (
-    artifact_only("review_packages", "packages", "inference_review", "appsec-review/review-package/4",
+    artifact_only("review_packages", "packages", "inference_review", "appsec-review/review-package/5",
                   "Lane A finding-lead and lane B hunt packages with their verified package manifest.",
                   artifacts=(_A + "/steps/packages/**",),
                   reason="packages are run-owned review inputs bound to one accepted manifest; consumers read "

@@ -24,7 +24,8 @@ from appsec_review.jobs.cpp_index_scopes import (
 )
 from appsec_review.jobs.engineering_contracts import SVF_ALIAS_HANDOFF_SCHEMA
 from appsec_review.retrieval import (
-    EntityKind, EntityRecord, IndexBuilder, IndexIdentity, LogicalIdentity, SourceLocation, index_fingerprint,
+    EntityKind, EntityRecord, IndexBuilder, IndexIdentity, LogicalIdentity, RelationKind, RelationRecord,
+    SourceLocation, index_fingerprint,
 )
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from appsec_review.storage import atomic_json
@@ -38,6 +39,8 @@ PLAN_SCHEMA = "appsec-review/svf-plan/1"
 RESULT_SCHEMA = "appsec-review/svf-run/1"
 DRIVER_SCHEMA = "appsec-review/svf-alias-output/1"
 FACT_SCHEMA = "appsec-review/svf-alias-record/1"
+OBJECT_SCHEMA = "appsec-review/svf-memory-object/1"
+OBJECT_RULE = "svf-memory-object/1"
 ADAPTER = "svf-alias-adapter/1"
 MAPPING_METHOD = "llvm-dilocation"
 ARGV = ("/opt/appsec/svf.py", "run", "/scratch/plan.json", "/scratch/result.json")
@@ -45,10 +48,17 @@ SHARD_PREFIX = "svf"
 DEBUG_INFO_UPGRADED_LOSSY = "debug_info_upgraded_lossy"
 MISSING_BITCODE = "missing_bitcode"
 _ROLES = frozenset({"load", "store", "call_arg", "compare"})
+# Accessor classes of a memory object, in the order its bounded accessor list keeps them.
+ACCESSOR_ORDER = ("free", "write", "read", "compare", "pass")
+_DEALLOCATORS = frozenset({"free", "cfree", "realloc", "reallocarray"})
+_DEALLOCATOR_PREFIXES = ("_ZdlPv", "_ZdaPv")   # every operator delete / delete[] overload
+# Objects whose accessor fan-in is meaningful; functions and SVF's shared constant object are not.
+_OBJECT_KINDS = frozenset({"heap", "stack", "global"})
 _POSITIVE = ("workers", "max_modules_per_scope", "max_module_bitcode_bytes", "max_module_output_bytes",
              "max_output_bytes", "field_limit", "max_sites", "max_pts_size", "max_indirect_calls",
              "max_targets_per_call", "max_unmodeled_names", "compile_timeout_seconds", "link_timeout_seconds",
-             "module_timeout_seconds", "andersen_time_limit_seconds")
+             "module_timeout_seconds", "andersen_time_limit_seconds", "max_objects_per_module",
+             "max_accessors_per_object")
 _DRIVER_BOUNDS = ("max_module_bitcode_bytes", "max_module_output_bytes", "field_limit", "max_sites",
                   "max_pts_size", "max_indirect_calls", "max_targets_per_call", "max_unmodeled_names",
                   "compile_timeout_seconds", "link_timeout_seconds", "module_timeout_seconds",
@@ -182,7 +192,8 @@ def _module_records(scope: IndexScope, sources: _Sources, planned: PlannedModule
         points_to = [str(key) for key in site["points_to"]]
         incomplete = [str(item) for item in site["incomplete_reasons"]]
         payload = {**base, "role": site["role"], "operand": site.get("operand"), "callee": site.get("callee"),
-                   "function": site.get("function"), "points_to": points_to,
+                   "function": site.get("function"), "function_demangled": site.get("function_demangled"),
+                   "points_to": points_to,
                    "objects": {key: objects[key] for key in points_to if isinstance(objects.get(key), Mapping)},
                    "truncated": bool(site.get("truncated")), "incomplete_reasons": incomplete,
                    "complete": not site.get("truncated") and not incomplete}
@@ -216,6 +227,91 @@ def _module_records(scope: IndexScope, sources: _Sources, planned: PlannedModule
                        f"{planned.label}")
     reasons += [f"open world ({reason}) in module {planned.label}" for reason in open_world]
     return records, counts, reasons
+
+
+def accessor_class(payload: Mapping[str, Any]) -> str:
+    """free | write | read | compare | pass for one pointer-site record."""
+    role = payload.get("role")
+    if role == "call_arg":
+        callee = str(payload.get("callee") or "")
+        return "free" if callee in _DEALLOCATORS or callee.startswith(_DEALLOCATOR_PREFIXES) else "pass"
+    return {"store": "write", "load": "read", "compare": "compare"}.get(str(role), "pass")
+
+
+def _memory_objects(scope: IndexScope, sources: _Sources, planned: PlannedModule, document: Mapping[str, Any],
+                    sites: list[EntityRecord], settings: Mapping[str, Any]
+                    ) -> tuple[list[EntityRecord], list[RelationRecord], int, list[str]]:
+    """Invert one module's points-to sets into per-object accessor fan-in (design section 4.4).
+
+    Andersen sets are already transitively closed over copies, fields and calls, so one inversion is
+    the whole fan-in; no deeper walk adds information. Each object keeps its allocation site and
+    allocator plus at most ``max_accessors_per_object`` accessors ordered free, write, read, compare,
+    pass, then by location; the rest are counted. A list is complete only when it is untruncated,
+    the module exported every site and the module is closed-world.
+    """
+    raw_counts: dict[str, int] = {}
+    for site in document["sites"]:
+        for key in site.get("points_to", ()):
+            raw_counts[str(key)] = raw_counts.get(str(key), 0) + 1
+    accessors: dict[str, list[EntityRecord]] = {}
+    for record in sites:
+        for key in record.payload["points_to"]:
+            if (document["objects"].get(key) or {}).get("kind") in _OBJECT_KINDS:
+                accessors.setdefault(key, []).append(record)
+    keys = sorted(accessors)
+    reasons: list[str] = []
+    if len(keys) > settings["max_objects_per_module"]:
+        reasons.append(f"memory-object bound reached in module {planned.label}: "
+                       f"{len(keys) - settings['max_objects_per_module']} of {len(keys)} objects not published")
+        keys = keys[:settings["max_objects_per_module"]]
+    bound = settings["max_accessors_per_object"]
+    module = sites[0].payload
+    objects: list[EntityRecord] = []
+    relations: list[RelationRecord] = []
+    for key in keys:
+        detail = document["objects"][key]
+        raw_location = detail.get("location") or {}
+        location = sources.point(raw_location.get("file"), raw_location.get("line"), raw_location.get("column"))
+        identity = LogicalIdentity.derive(EntityKind.MEMORY_OBJECT, scope.case_snapshot, {
+            "scope_id": scope.scope_id, "module_id": planned.module_id, "object_key": key})
+        ordered = sorted(accessors[key], key=lambda item: (
+            ACCESSOR_ORDER.index(accessor_class(item.payload)), item.location.path, item.location.start_line,
+            item.location.start_column, item.identity.value))
+        counts = {name: 0 for name in ACCESSOR_ORDER}
+        for item in ordered:
+            counts[accessor_class(item.payload)] += 1
+        kept = ordered[:bound]
+        truncated = len(ordered) > bound
+        payload = {
+            "schema": OBJECT_SCHEMA, "rule": OBJECT_RULE, "producer": "svf", "tool_version": module["tool_version"],
+            "scope_id": scope.scope_id, "module_id": planned.module_id, "module_label": planned.label,
+            "module_kind": planned.kind, "module_closed_world": module["module_closed_world"],
+            "open_world_reasons": module["open_world_reasons"], "object_key": key, "kind": detail.get("kind"),
+            "name": detail.get("name") or None, "field": detail.get("field", 0),
+            "allocator": detail.get("allocator"), "allocator_demangled": detail.get("allocator_demangled"),
+            "allocation": ({"file": raw_location.get("file"), "line": raw_location.get("line"),
+                            "column": raw_location.get("column"), "in_accepted_source": location is not None}
+                           if raw_location else None),
+            "accessors": [{"site": item.identity.value, "class": accessor_class(item.payload),
+                           "role": item.payload["role"], "callee": item.payload.get("callee"),
+                           "function": item.payload.get("function"),
+                           "function_demangled": item.payload.get("function_demangled"),
+                           "path": item.location.path, "line": item.location.start_line,
+                           "column": item.location.start_column} for item in kept],
+            "accessor_counts": counts, "accessor_total": len(ordered), "truncated": truncated,
+            "accessors_outside_accepted_sources": max(0, raw_counts.get(key, 0) - len(ordered)),
+            "complete": not truncated and not document.get("sites_truncated") and bool(module["module_closed_world"]),
+            "authority": "computed points-to over accepted bitcode; a cross-check input, not a finding",
+        }
+        label = detail.get("allocator_demangled") or detail.get("kind") or "object"
+        objects.append(EntityRecord(identity, key, f"{detail.get('kind')} object ({label})",
+                                    f"memory object {detail.get('kind')} {label}", payload, location))
+        for item in ordered:
+            relations.append(RelationRecord(RelationKind.REFERENCES, item.identity.value, identity.value, True, 1.0,
+                                            None, {"rule": OBJECT_RULE, "class": accessor_class(item.payload)}))
+        if truncated:
+            reasons.append(f"accessor bound reached for {key} in module {planned.label}")
+    return objects, relations, len(keys), list(dict.fromkeys(reasons))
 
 
 def _plan_document(modules: tuple[PlannedModule, ...], settings: Mapping[str, Any]) -> dict[str, Any]:
@@ -282,9 +378,10 @@ def _analyze_scope(unit: UnitContext, scope: IndexScope, link_commands: list[Map
     shard = f"{SHARD_PREFIX}-{scope.scope_id}"
     sources = _Sources(scope)
     records: list[EntityRecord] = []
+    relations: list[RelationRecord] = []
     module_rows: list[tuple[str, str, str | None]] = []
     totals = {"modules": len(plan.modules), "analyzed": 0, "closed_world": 0, "sites": 0, "indirect_calls": 0,
-              "outside_accepted_sources": 0}
+              "outside_accepted_sources": 0, "memory_objects": 0}
     for planned in plan.modules:
         outcome = outcomes.get(planned.module_id)
         label = f"{SHARD_PREFIX}:{scope.project_id}:{planned.label}"
@@ -311,7 +408,14 @@ def _analyze_scope(unit: UnitContext, scope: IndexScope, link_commands: list[Map
             continue
         raw_artifacts.append(artifact(unit.job.run_root, output))
         module_records, counts, reasons = _module_records(scope, sources, planned, outcome, document, tool_version)
+        sites = [item for item in module_records if item.identity.kind is EntityKind.POINTS_TO_SET]
+        objects, object_relations, object_count, object_reasons = (
+            _memory_objects(scope, sources, planned, document, sites, settings) if sites else ([], [], 0, []))
         records.extend(module_records)
+        records.extend(objects)
+        relations.extend(object_relations)
+        reasons = [*reasons, *object_reasons]
+        totals["memory_objects"] += object_count
         totals["analyzed"] += 1
         totals["closed_world"] += int(module_records[0].payload["module_closed_world"]) if module_records else int(
             not planned.open_world_reasons and not document["module"]["open_world_reasons"] and not module_gaps)
@@ -332,6 +436,8 @@ def _analyze_scope(unit: UnitContext, scope: IndexScope, link_commands: list[Map
                            target_snapshot=unit.job.source_fingerprint, shard_id=shard)
     for record in records:
         builder.add_entity(record)
+    for relation in relations:
+        builder.add_relation(relation)
     for label, status, reason in module_rows:
         builder.add_coverage(label, status, reason)
     if not module_rows:

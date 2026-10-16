@@ -198,7 +198,7 @@ def test_every_v4_package_validates_and_names_its_graph_families(graph_assembly)
     for package in graph_assembly.packages:
         document = package.document()
         validator.validate(document)
-        assert document["schema"] == PACKAGE_SCHEMA == "appsec-review/review-package/4"
+        assert document["schema"] == PACKAGE_SCHEMA == "appsec-review/review-package/5"
         assert document["retrieval"]["graph_families"] == sorted(set(document["retrieval"]["graph_families"]))
         assert "graph" in document["retrieval"]["indexes"]
     bad = _native_hunt(graph_assembly)

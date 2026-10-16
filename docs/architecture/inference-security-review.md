@@ -1029,6 +1029,9 @@ max_package_bytes = 65536
 max_page_size = 20
 max_pages = 5
 max_depth = 4
+max_memory_context_entries = 24  # lane A C/C++ SVF context per lead (review-package-contract.md, v5)
+max_callers = 16                 # caller call-site fan-out per lead
+caller_depth = 2                 # caller levels walked from the lead's enclosing function (1-4)
 
 [jobs.job_inference_security_review.settings.budgets]
 budget_team_packages = 200       # split between lanes by lead_budget_share

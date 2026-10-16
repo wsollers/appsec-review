@@ -32,7 +32,7 @@ SETTINGS = {
     "max_module_output_bytes": 8388608, "max_output_bytes": 1048576, "field_limit": 64, "max_sites": 2000,
     "max_pts_size": 64, "max_indirect_calls": 200, "max_targets_per_call": 16, "max_unmodeled_names": 16,
     "compile_timeout_seconds": 60, "link_timeout_seconds": 60, "module_timeout_seconds": 120,
-    "andersen_time_limit_seconds": 60,
+    "andersen_time_limit_seconds": 60, "max_objects_per_module": 500, "max_accessors_per_object": 64,
 }
 
 

@@ -960,7 +960,11 @@
             "test_coverage",
             "profile_hotspot",
             "dependency",
-            "openssf_scorecard"
+            "openssf_scorecard",
+            "points_to",
+            "indirect_call",
+            "memory_object",
+            "caller"
           ]
         }
       }
@@ -1896,7 +1900,7 @@
       ],
       "properties": {
         "schema": {
-          "const": "appsec-review/review-package/4"
+          "const": "appsec-review/review-package/5"
         },
         "kind": {
           "enum": [
@@ -1939,7 +1943,7 @@
           "$ref": "#/$defs/inference_sha"
         },
         "assembly_rule": {
-          "const": "appsec-review/assemble-review-packages/4"
+          "const": "appsec-review/assemble-review-packages/5"
         },
         "scope": {
           "$ref": "#/$defs/inference_scope"

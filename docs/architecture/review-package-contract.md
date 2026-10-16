@@ -1,7 +1,7 @@
 # Review package and finding-lead contract
 
-Status: implementation contract. Inference review packages are schema version 4
-(`appsec-review/review-package/4`, assembly rule `assemble-review-packages/4`); the catalog-derived
+Status: implementation contract. Inference review packages are schema version 5
+(`appsec-review/review-package/5`, assembly rule `assemble-review-packages/5`); the catalog-derived
 document packages below stay at version 3. Accepted-manifest scope assembly, lane A
 finding-lead packages for every lead family, lane B review-unit ranking and hunt packages,
 membership audits and the package manifest are implemented in `src/appsec_review/review/`
@@ -10,6 +10,8 @@ from `advisories.py` and `references.py`). The inference job consumes these pack
 (`job_inference_security_review`). Version 3 added lead `advisory_context`, `advisory_summary`,
 `weaknesses` and `admission_reasons`, and the `advisory_kev`/`advisory_epss` rank signals.
 Version 4 adds accepted code-graph context (see [Code-graph context](#code-graph-context-version-4)).
+Version 5 adds lead-level memory and caller context for C/C++ leads (see
+[Memory and caller context](#memory-and-caller-context-version-5)).
 
 This contract specializes [inference security review](inference-security-review.md). Its
 machine-checkable shape is [review-packages.schema.json](../schemas/review-packages.schema.json).
@@ -88,6 +90,57 @@ applying shard covers it in any state but `unavailable`.
 
 Graph context is a search aid. An embedded identity is evidence only when a cell cites it and
 `resolve_relation` re-resolves it under `evidence-admissibility/2`.
+
+### Memory and caller context (version 5)
+
+Lane A only. Every finding lead gets this context, whatever scanner reported it. The rules are
+`package-memory-context/1` (`review/memory_context.py`) and `package-graph-context/2`; the design is
+in [`svf-alias-producer.md`](svf-alias-producer.md) section 7.
+
+- **Memory context (C/C++ leads).** The lead's path and line are joined to the accepted
+  `job_svf_alias_analysis` shards in the `analysis` index:
+  - role `points_to`: the `points_to_set` records of the pointer sites on that line;
+  - role `indirect_call`: its `indirect_call_targets` records;
+  - role `memory_object`: the `memory_object` records those sites reference, each carrying its
+    allocation site, allocator and bounded accessor fan-in.
+
+  Every gap uses producer `svf_points_to`:
+  - `missing` when no SVF shard is accepted (the job is opt-in);
+  - `ambiguous` for a lead without a line;
+  - `unavailable` when the line holds no record or the file is in no analyzed module;
+  - `partial` when a record comes from an open-world module or is incomplete;
+  - `truncated` beyond `max_memory_context_entries`, which keeps objects first, then sites, then
+    indirect calls.
+
+  Leads in other languages get neither entries nor gaps.
+- **Caller context.** The lead's enclosing function comes from three places: the SVF records on its
+  line, the `sink_site.enclosing_function` of graph facts on that line, and the caller of `call_site`
+  facts on that line. Role `caller` lists the accepted `call_site` facts reaching that function,
+  breadth-first to `caller_depth` levels and at most `max_callers` entries, in (depth, identity)
+  order. A call matches by callee symbol when both sides have one, otherwise by unqualified name;
+  `secondary_only` facts from SVF and clangd have no callee symbol. Gaps use producer
+  `code_graph_callers`:
+  - `ambiguous` when any match was by name;
+  - `truncated` beyond `max_callers`;
+  - `unavailable` when no accepted fact names the enclosing function.
+
+The three bounds are tunables of the review job, set in `appsec-review.toml` under
+`[jobs.job_inference_security_review.settings.packages]` and validated at load. They are required
+keys with no code default on the job path:
+
+| Setting | Meaning | Bounds |
+|---|---|---|
+| `max_memory_context_entries` | SVF entries per lead package | 1–1000 |
+| `max_callers` | caller call-site entries per lead package (fan-out) | 1–1000 |
+| `caller_depth` | caller levels walked from the enclosing function | 1–4 |
+
+The entries still count toward `max_context_entries` and `max_package_bytes`, under the same
+role-balanced truncation as every other role. Like graph context, this is a search aid: an
+embedded identity is evidence only when a cell cites it and it re-resolves.
+
+The proposed `buffer_bound` role in
+[`graph-alias-slice-layout-modes.md`](graph-alias-slice-layout-modes.md) (chunk G7) planned to
+claim version 5. It now needs version 6.
 
 `input_fingerprint` hashes canonical JSON of the accepted manifest hash, package scope, all
 sorted referenced shard hashes (including every applying graph shard), lead IDs, rule versions

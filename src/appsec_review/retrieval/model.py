@@ -72,6 +72,7 @@ class EntityKind(StrEnum):
     # SVF points-to cross-check inputs (docs/architecture/svf-alias-producer.md, section 6.2).
     POINTS_TO_SET = "points_to_set"
     INDIRECT_CALL_TARGETS = "indirect_call_targets"
+    MEMORY_OBJECT = "memory_object"
 
 
 class RelationKind(StrEnum):

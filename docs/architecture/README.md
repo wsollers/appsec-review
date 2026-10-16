@@ -68,7 +68,8 @@ Repository authority remains in [`../../AGENTS.md`](../../AGENTS.md). This page 
   operations in [`../operations/code-graph-index.md`](../operations/code-graph-index.md)).
 - [`svf-alias-producer.md`](svf-alias-producer.md) — SVF points-to cross-check producer (opt-in):
   pinned `tool-svf` image, `job_svf_alias_analysis`, and `svf-cross-check/1` rules for indirect
-  calls and guard operand aliasing (operations in
+  calls and guard operand aliasing, a memory-object accessor index, and memory and caller context in
+  C/C++ finding-lead packages, with depth and fan-out as TOML tunables (operations in
   [`../operations/svf-alias-analysis.md`](../operations/svf-alias-analysis.md)).
 - [`graph-alias-slice-layout-modes.md`](graph-alias-slice-layout-modes.md) — proposed
   `query_code_graph` modes `aliases`, `slice_backward`/`slice_forward`, `type_layout` and

@@ -21,6 +21,12 @@ hunt package embeds, per unit, ``sink_site`` and ``entry_point`` identities take
 class within ``max_context_entries``; the rest are counted in ``omitted_context``. Graph context is
 a search aid: each embedded identity is cited and re-resolved like any other.
 
+Schema v5 adds lead-level C/C++ context (docs/architecture/svf-alias-producer.md section 7):
+``points_to``, ``indirect_call`` and ``memory_object`` entries joining the lead's source line to
+accepted ``job_svf_alias_analysis`` records, whatever scanner reported the lead, and ``caller``
+entries naming the accepted ``call_site`` facts that reach the lead's enclosing function, to
+``caller_depth`` (default 2). Missing, partial and bounded context is a named gap.
+
 Packages are canonical JSON. ``package_id`` is the kind plus the SHA-256 of the canonical body
 without ``package_id``; arrays sort by stable identity; nothing time- or order-dependent enters a
 package. Reassembly from the same accepted inputs is byte-identical. A missing producer is a
@@ -37,12 +43,14 @@ from pathlib import Path
 from typing import Any
 
 from appsec_review.graph.contract import FAMILY_KINDS, GRAPH_INDEX, Family
+from appsec_review.graph.svf_crosscheck import function_tail
 from appsec_review.indexing.store import ShardSet, shard_key
 from appsec_review.retrieval.model import LogicalIdentity
 from appsec_review.retrieval.observations import REPORTED_SEVERITIES, SEVERITY_ORDER
 from appsec_review.review import advisories as advisory_reference
 from appsec_review.review.identity import sha256_hex
 from appsec_review.review.lead_families import FAMILIES, FAMILY_RULES, Lead, LeadCollection, collect_leads
+from appsec_review.review.memory_context import MEMORY_CONTEXT_RULE, MemoryContext
 from appsec_review.review.models import IntegrityError, Predicate
 from appsec_review.review.ranking import DEFAULT_RANK_WEIGHTS, RankWeights
 from appsec_review.review.references import CweReference
@@ -54,9 +62,11 @@ from appsec_review.storage import atomic_bytes, file_sha256
 from appsec_review.storage.atomic import canonical_json
 
 
-PACKAGE_SCHEMA = "appsec-review/review-package/4"
-ASSEMBLY_RULE = "appsec-review/assemble-review-packages/4"
-GRAPH_CONTEXT_RULE = "appsec-review/package-graph-context/1"
+PACKAGE_SCHEMA = "appsec-review/review-package/5"
+ASSEMBLY_RULE = "appsec-review/assemble-review-packages/5"
+GRAPH_CONTEXT_RULE = "appsec-review/package-graph-context/2"
+CALLER_ROLE = "caller"
+CALLER_PRODUCER = "code_graph_callers"
 GRAPH_PRODUCER = "code_graph"
 # Graph fact kind -> package context role (schema v4). call_site and flow_summary are not embedded.
 GRAPH_ROLES: Mapping[str, str] = {"entry_point": "entry_point", "sink_site": "sink", "dataflow_path": "path",
@@ -96,6 +106,9 @@ class PackageSettings:
     max_page_size: int = 20
     max_pages: int = 5
     max_depth: int = 4
+    max_memory_context_entries: int = 24
+    max_callers: int = 16
+    caller_depth: int = 2
     rank_weights: RankWeights = DEFAULT_RANK_WEIGHTS   # lane B rank weights (``settings.ranking``)
 
     def __post_init__(self) -> None:
@@ -108,13 +121,14 @@ class PackageSettings:
         object.__setattr__(self, "admit_severities", tuple(sorted(admitted, key=SEVERITY_ORDER.__getitem__)))
         if not isinstance(self.admit_kev, bool):
             raise ValueError("admit_kev must be a Boolean")
-        for name in ("hunt_menu_partition_size", "unit_max_files", "max_context_entries", "max_package_bytes"):
+        for name in ("hunt_menu_partition_size", "unit_max_files", "max_context_entries", "max_package_bytes",
+                     "max_memory_context_entries", "max_callers"):
             value = getattr(self, name)
             if isinstance(value, bool) or not isinstance(value, int) or value < 1:
                 raise ValueError(f"{name} must be a positive integer")
         if isinstance(self.hunt_max_units, bool) or not isinstance(self.hunt_max_units, int) or self.hunt_max_units < 0:
             raise ValueError("hunt_max_units must be a non-negative integer")
-        for name, bound in (("max_page_size", 100), ("max_pages", 100), ("max_depth", 8)):
+        for name, bound in (("max_page_size", 100), ("max_pages", 100), ("max_depth", 8), ("caller_depth", 4)):
             value = getattr(self, name)
             if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= bound:
                 raise ValueError(f"{name} must be between 1 and {bound}")
@@ -241,6 +255,18 @@ class _Fact:
 
 
 @dataclass(frozen=True, slots=True)
+class _Call:
+    identity: str
+    caller_symbol: str | None
+    caller_name: str                   # unqualified caller name (function_tail of its display)
+    callee_symbol: str | None
+    callee_name: str
+    path: str | None
+    line: int | None
+    shard_sha256: str
+
+
+@dataclass(frozen=True, slots=True)
 class _GraphShard:
     label: str
     sha256: str
@@ -293,6 +319,9 @@ class GraphContext:
         self.shards: list[_GraphShard] = []
         self.facts: dict[str, _Fact] = {}
         self.correlated: dict[str, set[str]] = defaultdict(set)
+        self.calls: list[_Call] = []
+        # (path, line) -> enclosing functions named by sink_site and call_site facts on that line.
+        self.enclosing: dict[tuple[str, int], set[tuple[str | None, str]]] = defaultdict(set)
         store = scope.store
         family_names = {item.value for item in Family}
         for shard in sorted(shards, key=shard_key):
@@ -322,6 +351,20 @@ class GraphContext:
                     scope_ids.add(scope_id)
                 if path:
                     paths.add(str(path))
+                line = (row.get("location") or {}).get("start_line")
+                if kind == "call_site":
+                    caller, callee = result.get("caller") or {}, result.get("callee") or {}
+                    call = _Call(str(row["identity"]), _identity_or_none(caller.get("symbol")),
+                                 function_tail(caller.get("display")), _identity_or_none(callee.get("symbol")),
+                                 function_tail(callee.get("display")), str(path) if path else None,
+                                 int(line) if line else None, sha)
+                    self.calls.append(call)
+                    if path and line:
+                        self.enclosing[(str(path), int(line))].add((call.caller_symbol, call.caller_name))
+                elif kind == "sink_site" and path and line:
+                    function = result.get("enclosing_function") or {}
+                    self.enclosing[(str(path), int(line))].add(
+                        (_identity_or_none(function.get("symbol")), function_tail(function.get("display"))))
                 klass = (result.get("sink_class") if kind == "sink_site" else
                          result.get("source_class") if kind == "entry_point" else None)
                 self.facts[str(row["identity"])] = _Fact(
@@ -401,6 +444,57 @@ class GraphContext:
                 entries.append(context_entry(fact.identity, GRAPH_ROLES[fact.kind], fact.shard_sha256))
         return entries
 
+    def enclosing_functions(self, path: str | None, line: int | None) -> set[tuple[str | None, str]]:
+        """(symbol, unqualified name) of the functions graph facts place on one source line."""
+        if not path or not line:
+            return set()
+        return {item for item in self.enclosing.get((str(path), int(line)), set()) if item[1]}
+
+    def callers(self, functions: Iterable[tuple[str | None, str]], *, depth: int, limit: int
+                ) -> tuple[list[ContextEntry], int, bool]:
+        """``call_site`` facts reaching ``functions``, breadth-first to ``depth``, at most ``limit``.
+
+        A call matches by callee symbol when both sides have one, and otherwise by unqualified name
+        (``secondary_only`` facts from SVF or clangd carry no callee symbol). Returns the entries in
+        (depth, identity) order, the number of matches beyond ``limit``, and whether any match was by
+        name, which a caller of this method reports as an ambiguity gap.
+        """
+        frontier = {(symbol, name) for symbol, name in functions if name}
+        seen_functions = set(frontier)
+        chosen: list[ContextEntry] = []
+        taken: set[str] = set()
+        omitted = 0
+        by_name = False
+        for _level in range(depth):
+            symbols = {symbol for symbol, _name in frontier if symbol}
+            names = {name for _symbol, name in frontier}
+            unsymbolled = {name for symbol, name in frontier if not symbol}
+            matches = []
+            for call in self.calls:
+                if call.identity in taken:
+                    continue
+                if call.callee_symbol is not None and call.callee_symbol in symbols:
+                    matches.append(call)
+                elif call.callee_name in (names if call.callee_symbol is None else unsymbolled):
+                    matches.append(call)
+                    by_name = True
+            matches.sort(key=lambda item: item.identity)
+            next_frontier: set[tuple[str | None, str]] = set()
+            for call in matches:
+                taken.add(call.identity)
+                if len(chosen) < limit:
+                    chosen.append(context_entry(call.identity, CALLER_ROLE, call.shard_sha256))
+                else:
+                    omitted += 1
+                caller = (call.caller_symbol, call.caller_name)
+                if call.caller_name and caller not in seen_functions:
+                    seen_functions.add(caller)
+                    next_frontier.add(caller)
+            if not next_frontier:
+                break
+            frontier = next_frontier
+        return chosen, omitted, by_name
+
     def unit_context(self, paths: Iterable[str], budget: int) -> tuple[list[ContextEntry], int]:
         """Sink and entry-point identities in ``paths``, round-robin by (role, class), bounded."""
         members = set(paths)
@@ -433,6 +527,7 @@ class _Assembler:
         self.cwe_reference = cwe_reference
         self.reference_weaknesses = _reference_weaknesses(scope)
         self.graph = GraphContext(scope)
+        self.memory = MemoryContext(scope, max_entries=settings.max_memory_context_entries)
 
     def weaknesses(self, lead: Lead) -> list[dict[str, Any]]:
         """Weakness blocks for the lead's rule CWEs and its advisories' NVD CWEs (bounded)."""
@@ -506,7 +601,8 @@ class _Assembler:
             "lead_ids": lead_ids, "rules": {"assembly": ASSEMBLY_RULE, "obligations": OBLIGATION_RULE,
                                             "rank": RANK_RULE, "families": FAMILY_RULES,
                                             "advisory_context": advisory_reference.CONTEXT_RULE,
-                                            "graph_context": GRAPH_CONTEXT_RULE},
+                                            "graph_context": GRAPH_CONTEXT_RULE,
+                                            "memory_context": MEMORY_CONTEXT_RULE},
             "cwe_reference": self.cwe_reference.record() if self.cwe_reference is not None else None,
             "caps": self.settings.record()})
         body = {
@@ -551,10 +647,33 @@ class _Assembler:
         context.extend(context_entry(identity, "flow") for identity in lead.flow_ids)
         context.extend(self.graph.lead_context(lead.observation_id))
         partition_key = f"lead/{lead.observation_id}"
+        memory = self.memory.lead_context(lead.path, lead.start_line, partition_key)
+        context.extend(memory.entries)
+        context_gaps = list(memory.gaps)
+        functions = self.graph.enclosing_functions(lead.path, lead.start_line) | {
+            (None, name) for name in memory.functions}
+        if functions:
+            callers, caller_omitted, by_name = self.graph.callers(
+                functions, depth=self.settings.caller_depth, limit=self.settings.max_callers)
+            context.extend(callers)
+            if caller_omitted:
+                context_gaps.append(ScopeGap(CALLER_PRODUCER, partition_key, "truncated",
+                                             f"{caller_omitted} caller call site(s) exceeded max_callers="
+                                             f"{self.settings.max_callers}"))
+            if by_name:
+                context_gaps.append(ScopeGap(CALLER_PRODUCER, partition_key, "ambiguous",
+                                             "some callers were matched by unqualified function name because a "
+                                             "call site or the enclosing function has no symbol; overloads and "
+                                             "same-named functions may be included"))
+        elif lead.path and lead.start_line and self.graph.available:
+            context_gaps.append(ScopeGap(CALLER_PRODUCER, partition_key, "unavailable",
+                                         "no accepted fact names the function enclosing the lead's line; callers "
+                                         "are not listed"))
         families, graph_shards, graph_gaps = self.graph.families(unit_id, (lead.path,) if lead.path else (),
                                                                  partition_key)
         capped, omitted, gaps = self._cap(context, partition_key, lead.family)
         gaps.extend(graph_gaps)
+        gaps.extend(context_gaps)
         gaps.extend(gap for gap in self.collection.gaps if gap.producer == lead.family)
         if not lead.location_exact:
             gaps.append(ScopeGap(lead.family, partition_key, "ambiguous",

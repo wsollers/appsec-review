@@ -1345,6 +1345,8 @@ compile_timeout_seconds = 120
 link_timeout_seconds = 120
 module_timeout_seconds = 300
 andersen_time_limit_seconds = 240
+max_objects_per_module = 5000
+max_accessors_per_object = 64
 
 [jobs.job_svf_alias_analysis.steps.load]
 workers = 1
@@ -2215,6 +2217,10 @@ max_package_bytes = 65536
 max_page_size = 20
 max_pages = 5
 max_depth = 4
+# Finding-lead context (schema v5): SVF records at the lead's line and its callers in the code graph.
+max_memory_context_entries = 24
+max_callers = 16
+caller_depth = 2
 
 [jobs.job_inference_security_review.settings.budgets]
 budget_team_packages = 200

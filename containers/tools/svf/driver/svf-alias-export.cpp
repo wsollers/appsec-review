@@ -369,6 +369,7 @@ private:
         record["role"] = role;
         record["operand"] = static_cast<int64_t>(operand);
         record["function"] = functionName(&function);
+        record["function_demangled"] = llvm::demangle(functionName(&function));
         if (!callee.empty()) record["callee"] = callee;
         record["points_to"] = std::move(pts);
         record["truncated"] = truncated;
@@ -410,10 +411,16 @@ private:
                          : base->isStack() ? "stack" : base->isGlobalObj() ? "global" : "other";
         Loc loc;
         std::string name = base->getName();
+        std::string allocator;
         auto value = objectValues_.find(base->getId());
         if (value != objectValues_.end()) {
             const Value* allocation = value->second;
             if (const auto* instruction = dyn_cast<Instruction>(allocation)) loc = locationOf(*instruction);
+            // A heap object is named by the function that allocated it (malloc, operator new[], a
+            // wrapper), so a free can be paired with its allocator from the record alone.
+            if (const auto* call = dyn_cast<CallBase>(allocation))
+                if (const auto* callee = dyn_cast<Function>(call->getCalledOperand()->stripPointerCasts()))
+                    allocator = callee->getName().str();
             auto declared = declares_.find(allocation);
             if (declared != declares_.end()) {
                 if (!loc.valid()) loc = declared->second.first;
@@ -443,6 +450,10 @@ private:
         keys_[id] = key;
         json::Object record{{"kind", kind}, {"name", name}, {"field", field}};
         if (loc.valid()) record["location"] = locJson(loc);
+        if (!allocator.empty()) {
+            record["allocator"] = allocator;
+            record["allocator_demangled"] = llvm::demangle(allocator);
+        }
         objects_[key] = std::move(record);
         return key;
     }
