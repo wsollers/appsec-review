@@ -286,9 +286,10 @@ implementation:
 - measure seeded versus whole-program export time on a 20k-100k LOC project, and tune the default
   `seed_depth` and `seed_limit` from the numbers;
 - measure one batched `codeql database run-queries` over all queries against serial runs;
-- wire `query-packs --warm` into `job_tool_image_rebuild` (the compile is now a separate cached
-  action, and `query-packs --warm` precompiles it; see the operations doc), and make the live
-  CodeQL tests opt-in;
+- make `query-packs --warm` a routine step of the host image procedure after a CodeQL image
+  rebuild (the compile is now a separate cached action that `query-packs --warm` precompiles; the
+  pipeline no longer builds images, see `docs/operations/image-pin-verification.md`), and make the
+  live CodeQL tests opt-in;
 - add seeded packs for Java/Kotlin, JavaScript/TypeScript and Python using the same two external
   predicates (`exportScope`, `exportSeed`);
 - profile the slow `job_evidence_collection` tests.

@@ -6,7 +6,7 @@ Relevant bounded procedures and design references:
 
 - [`architecture/README.md`](architecture/README.md) — full architecture navigation.
 - [`operations/wave1-review.md`](operations/wave1-review.md) — direct CLI scope, resume behavior, and the Dagster entrypoint.
-- [`operations/tool-image-rebuild.md`](operations/tool-image-rebuild.md) — mandatory pre-intake rebuild of the catalog tool images and its failure report.
+- [`operations/image-pin-verification.md`](operations/image-pin-verification.md) — mandatory pre-intake verification that local images match their pins, its failure report, and the host rebuild/re-pin/reload procedure.
 - [`operations/inference-security-review.md`](operations/inference-security-review.md) — model selection and upgrade, local capacity overlay, and outcomes for the inference security review; design in [`architecture/inference-security-review.md`](architecture/inference-security-review.md).
 - [`operations/review-data-indexing.md`](operations/review-data-indexing.md) — dataset inventory and publication audit, lead menus, stage-1 products, and offline FTS validation; design in [`architecture/indexing-and-query-reuse.md`](architecture/indexing-and-query-reuse.md).
 - [`architecture/code-graph-precomputation.md`](architecture/code-graph-precomputation.md) — code-graph strategy, `graph` index, `query_code_graph`, R3 admissibility update, job topology, rollout, the chunked implementation and test plan (implemented through C9, offline-verified), and the partially implemented Clang phase (K4 static analysis is complete; K1-K3 and optional K5 remain planned).

@@ -66,9 +66,11 @@ log paths. Any failed, blocked, or skipped image makes the command fail, includi
 from their asset lock, so a requirements bump must update the lock too;
 `tests/test_container_requirements_lock.py` checks that every `requirements.txt` pin with a locked
 wheel names that wheel's version and SHA-256.
-`--timeout-seconds` bounds each `docker build` (default 1800, 60..14400). A review run rebuilds the
-catalog through this builder in `job_tool_image_rebuild` before intake and fails when any image does
-not build; see [`../docs/operations/tool-image-rebuild.md`](../docs/operations/tool-image-rebuild.md).
+`--timeout-seconds` bounds each `docker build` (default 1800, 60..14400). The review pipeline never
+runs this builder: the operator rebuilds and re-pins images on the host, and every review verifies in
+`job_image_pin_verification`, before intake, that each enabled image and pin resolves locally to
+exactly its pinned image; see
+[`../docs/operations/image-pin-verification.md`](../docs/operations/image-pin-verification.md).
 
 Some locked assets cannot be downloaded by the launcher and must be placed in `downloads/` before a
 build: the `tool-native-cpp` `.deb` closure produced with its `acquire_assets.sh` (its lock URL is
@@ -108,8 +110,9 @@ Application jobs own arguments and translate tool output into findings.
 A catalog entry may pin `image_id`; the application executor then refuses to run a local image
 whose id differs (`src/appsec_review/container_runtime/executor.py`). Image-ID pins are host-local:
 a rebuilt image's id is not reproducible across hosts, results are never compared across hosts,
-and a changed pin means rerunning, not a defect (asset locks stay exact). `job_tool_image_rebuild`
-reports stale pins and `appsec-review update-image-pins` rewrites them; see
+and a changed pin means rerunning, not a defect (asset locks stay exact). `job_image_pin_verification`
+fails a review whose local images do not match their pins, and `appsec-review update-image-pins`
+re-pins them on the host; see
 [`buildenv/README.md`](buildenv/README.md) and the last bullet of [`TODO.md`](TODO.md). Every enabled tool is
 expected to have a static evidence-collection adapter unless its `tool.toml` sets
 `static_adapter = false`; tools with that opt-out are run by their own jobs instead. `tool-ghidra`

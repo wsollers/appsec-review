@@ -274,7 +274,7 @@ def _run(url: str, run_id: str, repository: Path, document: dict,
     application_run_id = tags.get("appsec/application_run_id")
     if run.get("pipelineName") in {
         "wave1_review", "ci_configuration_review", "project_build_review", "model_connectivity",
-        "tool_image_rebuild", "artifact_indexing", "artifact_security_analysis", "codeql_analysis",
+        "image_pin_verification", "artifact_indexing", "artifact_security_analysis", "codeql_analysis",
     }:
         if not application_run_id:
             raise SystemExit("Dagster Wave 1 run does not contain the application run id")
@@ -293,12 +293,12 @@ def _run(url: str, run_id: str, repository: Path, document: dict,
             raise SystemExit("application orchestration receipt does not link to the Dagster run")
         jobs = {}
         job_ids = (("job_model_connectivity",) if run.get("pipelineName") == "model_connectivity" else
-        ("job_tool_image_rebuild",) if run.get("pipelineName") == "tool_image_rebuild" else
+        ("job_image_pin_verification",) if run.get("pipelineName") == "image_pin_verification" else
         ("job_artifact_indexing",) if run.get("pipelineName") == "artifact_indexing" else
         ("job_artifact_security_analysis",) if run.get("pipelineName") == "artifact_security_analysis" else
         ("job_codeql_analysis",) if run.get("pipelineName") == "codeql_analysis" else (
             "job_model_connectivity",
-            "job_tool_image_rebuild",
+            "job_image_pin_verification",
             "job_review_intake",
             "job_target_catalog",
             "job_target_analysis_plan",
@@ -311,17 +311,17 @@ def _run(url: str, run_id: str, repository: Path, document: dict,
             "job_evidence_collection",
             "job_codeql_analysis",
         ) if run.get("pipelineName") == "wave1_review" else ((
-            "job_model_connectivity", "job_tool_image_rebuild", "job_review_intake", "job_target_catalog",
+            "job_model_connectivity", "job_image_pin_verification", "job_review_intake", "job_target_catalog",
             "job_ci_configuration_analysis",
         ) if run.get("pipelineName") == "ci_configuration_review" else (
-            "job_model_connectivity", "job_tool_image_rebuild", "job_review_intake", "job_target_catalog",
+            "job_model_connectivity", "job_image_pin_verification", "job_review_intake", "job_target_catalog",
             "job_target_analysis_plan", "job_project_build",
             "job_language_build", "job_artifact_indexing", "job_artifact_security_analysis",
         )))
-        # A disabled tool-image rebuild is transparent to every composite graph.
-        if run.get("pipelineName") != "tool_image_rebuild" and not _job_enabled(
-                "job_tool_image_rebuild", document["jobs"].get("job_tool_image_rebuild", {})):
-            job_ids = tuple(job_id for job_id in job_ids if job_id != "job_tool_image_rebuild")
+        # A disabled image-pin verification is transparent to every composite graph.
+        if run.get("pipelineName") != "image_pin_verification" and not _job_enabled(
+                "job_image_pin_verification", document["jobs"].get("job_image_pin_verification", {})):
+            job_ids = tuple(job_id for job_id in job_ids if job_id != "job_image_pin_verification")
         if run.get("pipelineName") == "wave1_review":
             step_keys = {str(item.get("stepKey", "")) for item in run.get("stepStats", [])}
             job_ids = tuple(job_id for job_id in job_ids if any(
@@ -350,7 +350,7 @@ def _run(url: str, run_id: str, repository: Path, document: dict,
                 raise SystemExit(f"{job_id} accepted attempt lacks its originating Dagster link")
             publication_units = {
                 "job_model_connectivity": "publication.publish_handoff",
-                "job_tool_image_rebuild": "publication.publish_handoff",
+                "job_image_pin_verification": "publication.publish_handoff",
                 "job_review_intake": "publish_intake.publish_handoff",
                 "job_target_catalog": "publish_catalog.publish_handoff",
                 "job_target_analysis_plan": "plan_acceptance.publish_handoff",

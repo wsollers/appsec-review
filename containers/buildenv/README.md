@@ -52,10 +52,10 @@ hosts, slight container drift between hosts is acceptable, and a changed pin mea
 defect (see [Moving forward, not reproducing](../README.md#moving-forward-not-reproducing)). Asset
 locks record the SHA-256 of the downloaded inputs a working build used; when upstream moves,
 re-acquire and record the new hash. After rebuilding and smoking an image, update its pin by hand or
-with `appsec-review update-image-pins --run-id <run-id> --write` after a review run's
-`job_tool_image_rebuild` reported it as mismatched (see
-[`../../docs/operations/tool-image-rebuild.md`](../../docs/operations/tool-image-rebuild.md)); the
-pipeline never rewrites pins on its own. When a Dockerfile here changes, rebuild the image and update
+with `appsec-review update-image-pins --write`, which re-pins each moved tag to its local image (see
+[`../../docs/operations/image-pin-verification.md`](../../docs/operations/image-pin-verification.md));
+the pipeline never builds images or rewrites pins on its own, and `job_image_pin_verification` fails
+a review whose local images no longer match their pins. When a Dockerfile here changes, rebuild the image and update
 the pin in the same change. The committed pins name whichever host last re-pinned (see the last
 bullet of [`../TODO.md`](../TODO.md)).
 

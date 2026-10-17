@@ -381,10 +381,12 @@ ID in its pins (`image_id` in the catalog, the build profiles in `appsec-review.
 `source_image_id`). Pins are host-local and are never compared across machines. See
 [Moving forward, not reproducing](containers/README.md#moving-forward-not-reproducing).
 
-Every review also rebuilds the enabled catalog images at its start (`job_tool_image_rebuild`). A
-build failure fails the run before intake; a rebuilt image whose ID differs from its pin is recorded
-as `TOOL_IMAGE_PIN_MISMATCH`, and `appsec-review update-image-pins --run-id <run-id> --write` rewrites
-those pins for review. See [`docs/operations/tool-image-rebuild.md`](docs/operations/tool-image-rebuild.md).
+The pipeline never builds images. The operator rebuilds them on the host with `containers/build.py`
+and re-pins them with `appsec-review update-image-pins --write`. Every review then verifies at its
+start (`job_image_pin_verification`) that every enabled catalog image, build profile and CodeQL source
+image resolves on the local daemon to exactly its pin, and fails before intake naming every missing
+image or moved tag. See
+[`docs/operations/image-pin-verification.md`](docs/operations/image-pin-verification.md).
 
 ## Sync third-party metadata
 
@@ -457,7 +459,7 @@ host fetched the official listing and archive and verified the published SHA-256
 The direct CLI runs this linear graph:
 
 ```text
-model_connectivity -> tool_image_rebuild -> review_intake -> target_catalog -> source_history_analysis
+model_connectivity -> image_pin_verification -> review_intake -> target_catalog -> source_history_analysis
   -> target_analysis_plan
   -> tree_sitter_ast -> project_build -> language_build
   -> artifact_indexing -> test_coverage -> profile_data -> artifact_security_analysis
@@ -501,9 +503,9 @@ configuration other than `appsec-review.toml`; `logs` also filters by `--step`, 
 optionally into an existing run. Two further subcommands run outside a review graph:
 `appsec-review binary-decompile` (pre-run Ghidra decompilation; see
 [`docs/operations/binary-decompilation.md`](docs/operations/binary-decompilation.md)) and
-`appsec-review update-image-pins --run-id <run-id> [--write]` (rewrites image-ID pins reported
-stale by a run's tool-image rebuild; see
-[`docs/operations/tool-image-rebuild.md`](docs/operations/tool-image-rebuild.md)).
+`appsec-review update-image-pins [--write]` (re-pins every configured image-ID pin to the image its
+tag resolves to on the local daemon after a host rebuild; see
+[`docs/operations/image-pin-verification.md`](docs/operations/image-pin-verification.md)).
 
 Without installing the package, run the module from the source tree instead:
 
@@ -645,7 +647,7 @@ repository it creates under its base directory: `README.md`, `greeter.py`, `src/
 `CMakeLists.txt`, committed with a fixed author and date. No live model is called: a replay
 transport stands in for the configured providers, reports every configured model available and
 answers the planning request with the CMake recipe. The test's configuration copy disables
-`job_tool_image_rebuild`; every other job is the registered job. Both tiers assert that every enabled
+`job_image_pin_verification`; every other job is the registered job. Both tiers assert that every enabled
 job has an accepted handoff (or, in the first tier, a named reason it could not run), that missing
 coverage is a named gap and makes its job `COMPLETED_WITH_GAPS` rather than `SUCCEEDED`, that every
 evidence tool has a disposition with a reason when it did not run, that the accepted index holds no

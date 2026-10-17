@@ -895,9 +895,9 @@ def load_config(path: str | Path = "appsec-review.toml", *, overlay: str | Path 
         elif job_id == "job_inference_security_review":
             from .inference_review import parse_inference_review_settings
             typed_settings = parse_inference_review_settings(settings)
-        elif job_id == "job_tool_image_rebuild":
-            from .tool_image_rebuild import parse_tool_image_rebuild_settings
-            typed_settings = parse_tool_image_rebuild_settings(settings)
+        elif job_id == "job_image_pin_verification":
+            from .image_pin_verification import parse_image_pin_verification_settings
+            typed_settings = parse_image_pin_verification_settings(settings)
         elif job_id == "job_evidence_collection":
             from .evidence_collection import parse_evidence_collection_settings
             typed_settings = parse_evidence_collection_settings(settings)
