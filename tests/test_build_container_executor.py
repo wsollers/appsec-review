@@ -112,6 +112,33 @@ def test_build_executor_pins_image_and_runs_argv_without_shell(tmp_path: Path) -
     assert result.exit_code == 0 and result.stdout == b"built"
 
 
+@pytest.mark.skipif(os.name == "nt", reason="POSIX modes")
+def test_build_workspace_is_writable_only_while_the_build_container_runs(tmp_path: Path) -> None:
+    image_id = "sha256:" + "a" * 64
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "main.c").write_text("int main(void){return 0;}\n", encoding="utf-8")
+    seen: list[int] = []
+
+    def runner(argv, timeout):
+        if argv[:3] == ("docker", "image", "inspect"):
+            return 0, image_id.encode(), b"", False
+        if argv[:2] == ("docker", "inspect"):
+            return 0, json.dumps([{"Destination": "/", "Source": "/"}]).encode(), b"", False
+        seen.append(project.stat().st_mode & 0o777)
+        (project / "out").mkdir(mode=0o777)
+        (project / "out").chmod(0o777)
+        return 0, b"", b"", False
+
+    executor = BuildContainerExecutor(BuildProfile("native", "build:local", image_id, "10001:10001"),
+                                      timeout_seconds=90, output_bytes=1024, runner=runner)
+    executor.resolve()
+    executor.execute(("make",), workspace=tmp_path, working_directory="project", environment={})
+    assert seen and seen[0] & 0o007 == 0o007
+    for path in (tmp_path, project, project / "main.c", project / "out"):
+        assert path.stat().st_mode & 0o022 == 0, path
+
+
 def test_build_executor_exposes_image_owned_node_modules(tmp_path: Path) -> None:
     image_id = "sha256:" + "b" * 64
     calls = []

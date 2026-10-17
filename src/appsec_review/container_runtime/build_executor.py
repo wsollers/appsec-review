@@ -205,6 +205,19 @@ class BuildContainerExecutor:
                 if path.stat().st_uid != container_uid:
                     raise
 
+    def _restrict_workspace(self, root: Path) -> None:
+        """Close the build container's write window: no group- or world-writable workspace entry."""
+        uid = os.geteuid() if hasattr(os, "geteuid") else None
+        for path in (root, *root.rglob("*")):
+            try:
+                if path.is_symlink() or (uid is not None and path.lstat().st_uid != uid):
+                    continue
+                mode = path.stat().st_mode
+                if mode & 0o022:
+                    path.chmod(mode & ~0o022)
+            except OSError:
+                continue  # a container-owned entry the host cannot change; the audit names it
+
     def _prepare(self, *, workspace: Path, working_directory: str,
                  environment: Mapping[str, str]) -> tuple[Path, list[str]]:
         root = workspace.resolve(strict=True)
@@ -243,8 +256,11 @@ class BuildContainerExecutor:
         _root, command = self._prepare(
             workspace=workspace, working_directory=working_directory, environment=environment)
         command.extend(("--entrypoint", argv[0], self.profile.image_id, *argv[1:]))
-        code, stdout, stderr, timed_out = self.runner(command, self.timeout_seconds)
-        self._stop_on_timeout(command, timed_out)
+        try:
+            code, stdout, stderr, timed_out = self.runner(command, self.timeout_seconds)
+            self._stop_on_timeout(command, timed_out)
+        finally:
+            self._restrict_workspace(_root)
         stdout_truncated, stderr_truncated = len(stdout) > self.output_bytes, len(stderr) > self.output_bytes
         tail_bytes = min(32768, self.output_bytes)
         return BuildCommandResult(
@@ -327,15 +343,18 @@ class BuildContainerExecutor:
                         str(capture_config.tool_call_count_limit), logical_wrappers,
                         "1" if capture_config.capture_envp else "0", *argv))
         stdout_path, stderr_path = capture_root / "stdout", capture_root / "stderr"
-        if self.runner is _run:
-            code, timed_out = _run_to_files(
-                command, self.timeout_seconds, stdout_path, stderr_path)
-            self._stop_on_timeout(command, timed_out)
-        else:
-            code, stdout, stderr, timed_out = self.runner(command, self.timeout_seconds)
-            self._stop_on_timeout(command, timed_out)
-            stdout_path.write_bytes(stdout)
-            stderr_path.write_bytes(stderr)
+        try:
+            if self.runner is _run:
+                code, timed_out = _run_to_files(
+                    command, self.timeout_seconds, stdout_path, stderr_path)
+                self._stop_on_timeout(command, timed_out)
+            else:
+                code, stdout, stderr, timed_out = self.runner(command, self.timeout_seconds)
+                self._stop_on_timeout(command, timed_out)
+                stdout_path.write_bytes(stdout)
+                stderr_path.write_bytes(stderr)
+        finally:
+            self._restrict_workspace(root)
         self._take_tool_call_ownership(capture_root)
         trace_paths = tuple(capture_root.glob("trace*"))
         parse_errors = record_strace_files(trace_paths, recorder)
@@ -379,6 +398,11 @@ class BuildContainerExecutor:
             secret_scan=secret_scan, file_inventory=inventory,
             response_files=(response_files, response_gaps),
             raw_traces=raw_traces if raw_traces is not None else {"enabled": False})
+        # The driver's TMPDIR only had to outlive the response-file snapshot taken above.
+        for scratch in (root / Path(*PurePosixPath(working_directory).parts)).glob(
+                ".appsec-review-build-scratch.*"):
+            if scratch.is_dir() and not scratch.is_symlink():
+                shutil.rmtree(scratch, ignore_errors=True)
         stdout_size, stderr_size = stdout_path.stat().st_size, stderr_path.stat().st_size
         with stdout_path.open("rb") as stream:
             retained_stdout = stream.read(self.output_bytes)

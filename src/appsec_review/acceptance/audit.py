@@ -84,7 +84,10 @@ def audit_tree(
         needed = os.R_OK | os.X_OK if stat_module.S_ISDIR(info.st_mode) else os.R_OK
         if not access(str(path), needed):
             findings.append(AuditFinding("unreadable", str(path), f"mode={stat_module.filemode(info.st_mode)}"))
-        if not in_scratch and SCRATCH_NAMES.match(path.name) and str(path) not in kept:
+        # Inside a copied build workspace, tmp-like names belong to the target's own toolchain
+        # (CMake, Gradle); only the capture driver's scratch is the pipeline's to clean up.
+        target_owned = "workspace" in path.parts and not path.name.startswith(".appsec-review-build-scratch.")
+        if not in_scratch and not target_owned and SCRATCH_NAMES.match(path.name) and str(path) not in kept:
             findings.append(AuditFinding("scratch-leftover", str(path), "scratch or temporary entry persisted"))
 
     for root in roots:

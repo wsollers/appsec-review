@@ -111,3 +111,12 @@ def test_scratch_referenced_by_the_job_records_is_evidence_not_a_leftover(tmp_pa
     findings = audit_job_writes(run, "job_x", attempt, expected_uid=UID, expected_gid=GID, since=None)
     leftovers = {item.path for item in findings if item.kind == "scratch-leftover"}
     assert leftovers == {str(stray)}
+
+
+def test_target_toolchain_tmp_in_a_build_workspace_is_not_a_leftover(tmp_path: Path) -> None:
+    run = tmp_path / RUN_ID
+    tree = run / "data" / "build" / "probes" / "u" / "workspace" / "projects" / "native"
+    (tree / "build" / "CMakeFiles" / "CompilerIdC" / "tmp").mkdir(parents=True)
+    (tree / ".appsec-review-build-scratch.AoX3Ze").mkdir()
+    findings = audit_tree([run], expected_uid=UID, expected_gid=GID)
+    assert _kinds(findings).get("scratch-leftover") == {".appsec-review-build-scratch.AoX3Ze"}
