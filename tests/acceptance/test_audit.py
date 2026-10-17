@@ -95,3 +95,19 @@ def test_running_attempt_after_terminal_dagster_run_is_stale(tmp_path: Path) -> 
     kinds = {item.kind for item in audit_job_writes(run, "job_x", attempt, expected_uid=UID, expected_gid=GID,
                                                      since=None, dagster_status="FAILURE")}
     assert "stale-status" in kinds
+
+
+def test_scratch_referenced_by_the_job_records_is_evidence_not_a_leftover(tmp_path: Path) -> None:
+    run = tmp_path / RUN_ID
+    attempt = make_job(run, "job_x", dagster_run_id="d1")
+    task = attempt / "steps" / "scan" / "tasks" / "tool"
+    kept = task / "scratch" / "file_0001" / "raw"
+    kept.mkdir(parents=True)
+    (kept / "stdout.bin").write_bytes(b"out")
+    stray = attempt / "steps" / "scan" / "tasks" / "other" / "scratch"
+    stray.mkdir(parents=True)
+    (task / "result.json").write_text(
+        '{"raw": ["' + (kept / "stdout.bin").relative_to(run).as_posix() + '"]}', encoding="utf-8")
+    findings = audit_job_writes(run, "job_x", attempt, expected_uid=UID, expected_gid=GID, since=None)
+    leftovers = {item.path for item in findings if item.kind == "scratch-leftover"}
+    assert leftovers == {str(stray)}

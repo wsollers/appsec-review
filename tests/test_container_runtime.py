@@ -95,6 +95,26 @@ def test_executor_records_timeout_and_failure_state(tmp_path: Path) -> None:
     result = ContainerExecutor(catalog(tmp_path), tmp_path / "run", runner=runner).execute(
         ExecutionRequest("tool-fixture", ("/bin/fixture",), target, tmp_path / "run" / "scratch"))
     assert result.timed_out and result.terminal_status == "TIMEOUT" and result.exit_code is None
+    assert (tmp_path / "run" / "scratch").stat().st_mode & 0o777 == 0o755
+
+
+def test_scratch_is_writable_only_while_the_scanner_runs(tmp_path: Path) -> None:
+    target = tmp_path / "target"
+    target.mkdir()
+    scratch = tmp_path / "run" / "scratch"
+    modes: list[int] = []
+
+    def runner(argv, timeout):
+        if tuple(argv[:3]) == ("docker", "image", "inspect"):
+            return CommandOutcome(0, (DIGEST + "\n").encode(), b"")
+        modes.append(scratch.stat().st_mode & 0o777)
+        raise OSError("docker vanished")
+
+    with pytest.raises(OSError):
+        ContainerExecutor(catalog(tmp_path), tmp_path / "run", runner=runner).execute(
+            ExecutionRequest("tool-fixture", ("/bin/fixture",), target, scratch))
+    assert modes == [0o777]
+    assert scratch.stat().st_mode & 0o777 == 0o755
 
 
 def test_a_declared_additional_executable_is_the_entrypoint_and_nothing_else_is_accepted(tmp_path: Path) -> None:

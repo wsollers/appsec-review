@@ -39,12 +39,18 @@ def _within(path: Path, roots: Iterable[Path]) -> bool:
 def audit_tree(
     roots: Iterable[Path], *, expected_uid: int, expected_gid: int, since: float | None = None,
     allowed_link_roots: Iterable[Path] = (), exclude: Iterable[Path] = (),
+    retained: Iterable[Path] = (),
     lstat: Callable[[str], os.stat_result] = os.lstat,
     access: Callable[[str, int], bool] = os.access,
 ) -> list[AuditFinding]:
-    """Audit entries under ``roots`` changed at or after ``since`` (every entry when ``None``)."""
+    """Audit entries under ``roots`` changed at or after ``since`` (every entry when ``None``).
+
+    ``retained`` names scratch-named directories that the job's own records reference as evidence;
+    they are not leftovers.
+    """
 
     findings: list[AuditFinding] = []
+    kept = {str(Path(item)) for item in retained}
     link_roots = tuple(Path(os.path.realpath(root)) for root in allowed_link_roots)
     excluded = tuple(Path(item) for item in exclude)
 
@@ -78,7 +84,7 @@ def audit_tree(
         needed = os.R_OK | os.X_OK if stat_module.S_ISDIR(info.st_mode) else os.R_OK
         if not access(str(path), needed):
             findings.append(AuditFinding("unreadable", str(path), f"mode={stat_module.filemode(info.st_mode)}"))
-        if not in_scratch and SCRATCH_NAMES.match(path.name):
+        if not in_scratch and SCRATCH_NAMES.match(path.name) and str(path) not in kept:
             findings.append(AuditFinding("scratch-leftover", str(path), "scratch or temporary entry persisted"))
 
     for root in roots:
@@ -164,6 +170,32 @@ def audit_attempt(run_root: Path, job_id: str, attempt_root: Path | None, *,
     return findings
 
 
+def retained_directories(run_root: Path, attempt_root: Path) -> set[Path]:
+    """Every directory on the path to a run-relative file the attempt's JSON records reference."""
+
+    run_root = Path(run_root)
+    referenced: set[Path] = set()
+
+    def visit(value: object) -> None:
+        if isinstance(value, Mapping):
+            for item in value.values():
+                visit(item)
+        elif isinstance(value, list):
+            for item in value:
+                visit(item)
+        elif isinstance(value, str) and "/" in value and not value.startswith(("/", "sha256:")):
+            candidate = run_root / value
+            if candidate.exists():
+                referenced.update(parent for parent in candidate.parents if run_root in parent.parents)
+
+    for record in Path(attempt_root).rglob("*.json"):
+        try:
+            visit(json.loads(record.read_text(encoding="utf-8")))
+        except (OSError, ValueError):
+            continue
+    return referenced
+
+
 def audit_job_writes(run_root: Path, job_id: str, attempt_root: Path | None, *, expected_uid: int,
                      expected_gid: int, since: float | None, extra_roots: Iterable[Path] = (),
                      exclude: Iterable[Path] = (), dagster_status: str | None = None,
@@ -171,13 +203,16 @@ def audit_job_writes(run_root: Path, job_id: str, attempt_root: Path | None, *, 
     """Tree audit of the run (and any shared roots) plus the attempt's receipt checks."""
 
     run_root = Path(run_root)
+    retained = retained_directories(run_root, attempt_root) if attempt_root is not None else set()
     tree = audit_tree([run_root, *extra_roots], expected_uid=expected_uid, expected_gid=expected_gid,
-                      since=since, allowed_link_roots=[run_root], exclude=exclude, **options)
+                      since=since, allowed_link_roots=[run_root], exclude=exclude, retained=retained,
+                      **options)
     if attempt_root is not None and since is not None:
         # The attempt is always audited in full, whatever its timestamps say.
         tree = sorted(set(tree) | set(audit_tree([attempt_root], expected_uid=expected_uid,
                                                   expected_gid=expected_gid, since=None,
-                                                  allowed_link_roots=[run_root], **options)))
+                                                  allowed_link_roots=[run_root], retained=retained,
+                                                  **options)))
     return [*tree, *audit_attempt(run_root, job_id, attempt_root, dagster_status=dagster_status)]
 
 

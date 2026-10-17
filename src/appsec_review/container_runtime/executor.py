@@ -221,9 +221,13 @@ class ContainerExecutor:
             command.extend(("--env", f"{key}={value}"))
         command.extend(("--entrypoint", request.argv[0], image_id, *request.argv[1:]))
         started = _stamp()
-        outcome = self.runner(command, tool.timeout_seconds)
-        if outcome.timed_out:
-            self._run_control(("docker", "kill", name))
+        try:
+            outcome = self.runner(command, tool.timeout_seconds)
+            if outcome.timed_out:
+                self._run_control(("docker", "kill", name))
+        finally:
+            # The scanner's write window has closed: retained scratch evidence is not world-writable.
+            request.scratch_root.resolve().chmod(0o755)
         completed = _stamp()
         stdout = outcome.stdout[:tool.output_bytes]
         stderr = outcome.stderr[:tool.output_bytes]
