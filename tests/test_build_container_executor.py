@@ -192,6 +192,7 @@ def test_build_executor_uses_in_container_driver_for_bounded_syscall_capture(tmp
                  "Match": "REDACTED", "Secret": "REDACTED", "Fingerprint": "invocation:1"},
             ]) + "\n", encoding="utf-8")
             return 1, b"", b"", False
+        (workspace / "native" / ".appsec-review-build-scratch.Ab12Cd").mkdir(exist_ok=True)
         (capture / "trace.7").write_text(
             f'1700000000.0 execve("/usr/bin/clang++", ["clang++"], '
             f'["SECRET_INPUT={synthetic_secret}"]) = 0\n'
@@ -227,6 +228,10 @@ def test_build_executor_uses_in_container_driver_for_bounded_syscall_capture(tmp
         path.read_text(encoding="utf-8", errors="replace")
         for path in capture.rglob("*") if path.is_file())
     assert not tuple(capture.glob("trace*"))
+    assert not tuple((workspace / "native").glob(".appsec-review-build-scratch.*"))
+    if os.name != "nt":
+        assert [path for path in (capture, *capture.rglob("*"))
+                if not path.is_symlink() and path.stat().st_mode & 0o022] == []
 
 
 def test_capture_secret_scan_failure_redacts_retained_inputs_and_records_gap(tmp_path: Path) -> None:

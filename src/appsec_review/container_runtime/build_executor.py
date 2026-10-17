@@ -355,6 +355,7 @@ class BuildContainerExecutor:
                 stderr_path.write_bytes(stderr)
         finally:
             self._restrict_workspace(root)
+            capture_root.chmod(0o755)  # the build container's write window into the capture closed
         self._take_tool_call_ownership(capture_root)
         trace_paths = tuple(capture_root.glob("trace*"))
         parse_errors = record_strace_files(trace_paths, recorder)
@@ -578,8 +579,11 @@ class BuildContainerExecutor:
                 "--redact=100", "--report-format", "json", "--report-path",
                 "/scratch/gitleaks.json", "--exit-code", "1",
             ]
-            code, stdout, stderr, timed_out = self.runner(command, tool.timeout_seconds)
-            self._stop_on_timeout(command, timed_out)
+            try:
+                code, stdout, stderr, timed_out = self.runner(command, tool.timeout_seconds)
+                self._stop_on_timeout(command, timed_out)
+            finally:
+                scan_root.chmod(0o755)  # gitleaks wrote its report; close its write window
             scan_code, scan_timed_out = code, timed_out
             stdout_path.write_bytes(stdout[:tool.output_bytes])
             stderr_path.write_bytes(stderr[:tool.output_bytes])
