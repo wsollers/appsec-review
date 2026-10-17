@@ -365,8 +365,8 @@ def test_wave1_exposes_real_producer_shard_topology() -> None:
         mapping = graph.dependency_structure.input_to_upstream_outputs_for_node(node)
         return {output.node_name for outputs in mapping.values() for output in outputs}
 
-    assert upstream("tool_image_rebuild__begin") == {"model_connectivity__finalize"}
-    assert upstream("review_intake__begin") == {"tool_image_rebuild__finalize"}
+    assert upstream("image_pin_verification__begin") == {"model_connectivity__finalize"}
+    assert upstream("review_intake__begin") == {"image_pin_verification__finalize"}
 
     assert "evidence_collection__secrets__gitleaks_scan" in upstream(
         "evidence_collection__secrets__gitleaks_normalize")

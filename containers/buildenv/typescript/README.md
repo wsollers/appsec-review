@@ -34,6 +34,6 @@ The resulting image ID is not reproducible across hosts, because apt and layer m
 timestamps. After every build, copy the inspected ID into
 `[jobs.job_project_build.settings.profiles.node].image_id`. The executor refuses to run any other
 image under the `node` profile, and `deploy/dagster/bin/review_run.py` refuses to submit a review
-when the local tag resolves to a different ID. After a tool-image rebuild run,
-`appsec-review update-image-pins` can apply the same edit (see
-`docs/operations/tool-image-rebuild.md`).
+when the local tag resolves to a different ID. After a host rebuild,
+`appsec-review update-image-pins --write` can apply the same edit (see
+`docs/operations/image-pin-verification.md`).

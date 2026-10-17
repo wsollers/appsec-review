@@ -6,7 +6,7 @@ accepted handoffs, but they do not currently expose the same review topology.
 The direct `start`, `plan-resume`, and `resume` commands run this linear graph:
 
 ```text
-model_connectivity -> tool_image_rebuild -> review_intake -> target_catalog -> source_history_analysis
+model_connectivity -> image_pin_verification -> review_intake -> target_catalog -> source_history_analysis
   -> target_analysis_plan
   -> tree_sitter_ast -> project_build -> language_build
   -> artifact_indexing -> test_coverage -> profile_data -> artifact_security_analysis
@@ -18,10 +18,11 @@ model_connectivity -> tool_image_rebuild -> review_intake -> target_catalog -> s
   -> document_issue_analysis
 ```
 
-Both surfaces rebuild the catalog's container tool images in `tool_image_rebuild` after the model
-gate and before intake; any image that does not build fails the run (see
-[`tool-image-rebuild.md`](tool-image-rebuild.md)). Setting
-`jobs.job_tool_image_rebuild.settings.enabled = false` removes that step from both graphs.
+Both surfaces verify in `image_pin_verification`, after the model gate and before intake, that every
+enabled catalog image, build profile and CodeQL source image resolves on the local daemon to exactly
+its pin; any missing image or moved tag fails the run (see
+[`image-pin-verification.md`](image-pin-verification.md)). The pipeline never builds images. Setting
+`jobs.job_image_pin_verification.settings.enabled = false` removes that step from both graphs.
 
 The direct graph does not include CI configuration analysis, post-build security assessment, OWASP
 control assessment, or security tagging, and `third_party_data_sync` runs separately (`appsec-review

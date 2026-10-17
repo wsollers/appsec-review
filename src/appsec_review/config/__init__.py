@@ -16,7 +16,7 @@ from .inference_review import (
     semantic_settings_sha256, semantic_settings_view,
 )
 
-from .tool_image_rebuild import ToolImageRebuildSettings, parse_tool_image_rebuild_settings
+from .image_pin_verification import ImagePinVerificationSettings, parse_image_pin_verification_settings
 
 from .loader import (
     AppConfig, BuildCaptureConfig, CppCompiledAnalysisSettings, DagsterConfig, DotnetBuildSettings, GoBuildSettings, JobConfig, JvmBuildSettings, LanguageBuildSettings, NodeBuildSettings, PhpBuildSettings, ProcessingMode, PythonBuildSettings, RuntimeConfig, RustBuildSettings,
@@ -34,5 +34,5 @@ __all__ = [
     "OVERLAY_ENVIRONMENT", "PENDING_JOBS", "PackageAssemblySettings", "PocEligibilityRule", "PocSettings", "RetrySettings", "RoleSettings",
     "RoundSettings", "RoutingSettings", "ScoringProviderSettings", "ScoringSettings", "TeamSettings",
     "overlay_capacity_keys", "parse_inference_review_settings", "semantic_settings_sha256",
-    "semantic_settings_view", "ToolImageRebuildSettings", "parse_tool_image_rebuild_settings",
+    "semantic_settings_view", "ImagePinVerificationSettings", "parse_image_pin_verification_settings",
 ]

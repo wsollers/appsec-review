@@ -1,10 +1,10 @@
 # Central registry of analysis rule and query packs.
 #
 # Every pack the review graph may load is registered here exactly once. The registry is the
-# authoritative inventory: `containers/build.py query-packs` verifies each entry, and
-# `job_tool_image_rebuild` runs that verification at the start of a review, so a pack that does
-# not compile fails the run before any target work begins. A pack that is absent from this file
-# is not verified and must not be loaded.
+# authoritative inventory: `containers/build.py query-packs` verifies each entry. The operator runs
+# that verification on the host after rebuilding the images it depends on (see
+# docs/operations/image-pin-verification.md); the review pipeline does not. A pack that is absent
+# from this file is not verified and must not be loaded.
 #
 # Fields
 #   path            repository-relative pack root (holds qlpack.yml for CodeQL packs)

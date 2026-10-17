@@ -14,10 +14,11 @@ from appsec_review.jobs.cataloging import source_fingerprint
 
 
 # The deterministic review graph in execution order; ``start``, ``resume`` and ``--force-from`` all
-# use it. ``job_tool_image_rebuild`` rebuilds every catalog tool image after the model gate and
-# before intake, and fails the run when any image does not build. ``job_code_graph_index``
+# use it. ``job_image_pin_verification`` runs after the model gate and before intake and fails the run
+# when any enabled catalog image or configured image-ID pin does not resolve on the local daemon to
+# exactly its pinned image; it never builds an image. ``job_code_graph_index``
 # consumes CodeQL and prioritization output and must precede the indexing job that accounts for it.
-GRAPH_JOB_IDS = ("job_model_connectivity", "job_tool_image_rebuild", "job_review_intake", "job_target_catalog",
+GRAPH_JOB_IDS = ("job_model_connectivity", "job_image_pin_verification", "job_review_intake", "job_target_catalog",
                  "job_source_history_analysis",
                  "job_target_analysis_plan", "job_tree_sitter_ast",
                  "job_project_build", "job_language_build", "job_artifact_indexing", "job_test_coverage",
@@ -79,12 +80,10 @@ def parser() -> argparse.ArgumentParser:
                         help="verify existing publications without running Ghidra")
 
     pins = commands.add_parser(
-        "update-image-pins", help="rewrite stale image-ID pins from a run's tool-image rebuild record")
-    pins.add_argument("--run-id", required=True)
+        "update-image-pins",
+        help="re-pin every configured image-ID pin to the image its tag resolves to on the local daemon")
     pins.add_argument("--write", action="store_true",
                       help="apply the edits; without it the planned edits are only printed")
-    pins.add_argument("--no-image-check", action="store_true",
-                      help="do not require the local image for each tag to be the rebuilt image")
 
     commands.add_parser("schedules", help="print configured schedules")
     return root
@@ -107,19 +106,22 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
 
     if args.command == "update-image-pins":
-        from appsec_review.jobs.job_tool_image_rebuild.pins import PinUpdateError, docker_inspector, update_pins
+        from appsec_review.container_runtime.build_executor import _run
+        from appsec_review.jobs.job_image_pin_verification import pins as image_pins
         config_path = Path(args.config)
         if not config_path.is_file():
             config_path = config.runtime.repository_root / "appsec-review.toml"
         try:
-            report = update_pins(runs_dir=config.runtime.runs_dir, run_id=args.run_id, config_path=config_path,
-                                 catalog_path=config.runtime.repository_root / "containers" / "catalog.toml",
-                                 write=args.write, inspect=None if args.no_image_check else docker_inspector)
-        except PinUpdateError as exc:
-            print(json.dumps({"run_id": args.run_id, "error": str(exc)}, sort_keys=True))
+            report = image_pins.update_pins(
+                config_path=config_path,
+                catalog_path=config.runtime.repository_root / "containers" / "catalog.toml",
+                write=args.write, runner=_run)
+        except image_pins.PinUpdateError as exc:
+            print(json.dumps({"error": str(exc)}, sort_keys=True))
             return 1
         print(json.dumps(report, sort_keys=True, indent=2))
-        return 0 if all(edit["status"] in {"planned", "applied"} for edit in report["edits"]) else 1
+        return 0 if not report["unpinned_missing"] and all(
+            edit["status"] in {"planned", "applied"} for edit in report["edits"]) else 1
 
     if args.command == "binary-decompile":
         from appsec_review.binary_decompilation import (

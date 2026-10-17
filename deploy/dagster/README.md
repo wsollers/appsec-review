@@ -144,7 +144,7 @@ retained capture artifacts; the verifier fails if any such receipt is missing, f
 With the current registry, the cross-job dependencies are:
 
 ```text
-model_connectivity -> tool_image_rebuild -> review_intake -> target_catalog -> ci_configuration_analysis
+model_connectivity -> image_pin_verification -> review_intake -> target_catalog -> ci_configuration_analysis
   -> target_analysis_plan
 target_catalog -> source_history_analysis -> target_analysis_plan
 target_analysis_plan -> tree_sitter_ast -> change_context_analysis
@@ -188,9 +188,9 @@ The code location also defines:
   namespaced `standalone__`; a standalone launch joins the application run named by its
   `appsec/application_run_id` tag, and its input validators require that run's accepted upstream
   handoffs;
-- `ci_configuration_review`: `model_connectivity -> tool_image_rebuild -> review_intake -> target_catalog ->
+- `ci_configuration_review`: `model_connectivity -> image_pin_verification -> review_intake -> target_catalog ->
   ci_configuration_analysis`;
-- `project_build_review`: `model_connectivity -> tool_image_rebuild -> review_intake -> target_catalog ->
+- `project_build_review`: `model_connectivity -> image_pin_verification -> review_intake -> target_catalog ->
   target_analysis_plan -> project_build -> language_build -> artifact_indexing -> artifact_security_analysis`.
 
 The configured schedule and a manual launch enter the same generated semantic DAG. Schedule cron,

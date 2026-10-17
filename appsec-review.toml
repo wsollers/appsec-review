@@ -276,45 +276,31 @@ workers = 1
 workers = 1
 [jobs.job_model_connectivity.steps.publication.tasks.publish_handoff]
 
-[jobs.job_tool_image_rebuild]
-name = "tool_image_rebuild"
+[jobs.job_image_pin_verification]
+name = "image_pin_verification"
 workers = 1
 
-[jobs.job_tool_image_rebuild.settings]
-# Rebuild the container tool images through containers/build.py after the model gate and before
-# review intake. Any image that does not build fails the run; it is never recorded as a gap.
-# Disabling the job makes it transparent to every graph (intake then follows the model gate).
+[jobs.job_image_pin_verification.settings]
+# Verify, after the model gate and before review intake, that every enabled image in
+# containers/catalog.toml, every enabled job's `tag`/`image_id` pin (the project-build profiles) and
+# `source_image_tag`/`source_image_id` pin (CodeQL) resolve on the local Docker daemon to exactly
+# their pinned image IDs. It only runs `docker image inspect`; it never builds. Any missing image or
+# moved tag fails the run naming every mismatch. Images are built and re-pinned on the host by the
+# operator (docs/operations/image-pin-verification.md). Disabling the job makes it transparent to
+# every graph (intake then follows the model gate).
 enabled = true
-# Catalog image ids to rebuild; empty selects every enabled image in containers/catalog.toml.
-# Dependencies (base images) are always built first, in catalog dependency order.
-images = []
-# Concurrent docker builds (builder --jobs, 1..8).
-parallelism = 2
-# Per-image docker build bound (builder --timeout-seconds) and bound on the whole builder run.
-image_timeout_seconds = 1800
-total_timeout_seconds = 14400
-# Keep building independent images after a failure so one run names every failing image.
-continue_on_error = true
-# Bytes of builder stderr/stdout and of each failed image's build log kept in the failure report.
-log_tail_bytes = 8192
-# Rebuilt image IDs are compared with every pin naming a rebuilt tag: catalog `image_id` values and
-# enabled jobs' `tag`/`image_id` (for example project-build profiles) and `source_image_tag`/
-# `source_image_id` settings. "report" (default) records each mismatch and leaves enforcement to the
-# consuming job's own pin check; `appsec-review update-image-pins --run-id <id>` then rewrites the
-# stale pins from the run's rebuild record for review. "fail" stops the run naming each stale pin.
-pin_mismatch = "report"
 
-[jobs.job_tool_image_rebuild.steps.selection]
+[jobs.job_image_pin_verification.steps.selection]
 workers = 1
-[jobs.job_tool_image_rebuild.steps.selection.tasks.resolve_images]
+[jobs.job_image_pin_verification.steps.selection.tasks.resolve_pins]
 
-[jobs.job_tool_image_rebuild.steps.build]
+[jobs.job_image_pin_verification.steps.verification]
 workers = 1
-[jobs.job_tool_image_rebuild.steps.build.tasks.build_images]
+[jobs.job_image_pin_verification.steps.verification.tasks.inspect_images]
 
-[jobs.job_tool_image_rebuild.steps.publication]
+[jobs.job_image_pin_verification.steps.publication]
 workers = 1
-[jobs.job_tool_image_rebuild.steps.publication.tasks.publish_handoff]
+[jobs.job_image_pin_verification.steps.publication.tasks.publish_handoff]
 
 [jobs.job_review_intake]
 name = "review_intake"

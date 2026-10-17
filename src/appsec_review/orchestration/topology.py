@@ -30,8 +30,8 @@ _SHA256 = re.compile(r"[0-9a-f]{64}")
 
 
 def gate_ids(registered: Set[str]) -> tuple[str, ...]:
-    """Pre-intake gates in dispatch order: the live model check, then the tool-image rebuild."""
-    return tuple(job_id for job_id in ("job_model_connectivity", "job_tool_image_rebuild")
+    """Pre-intake gates in dispatch order: the live model check, then the image-pin verification."""
+    return tuple(job_id for job_id in ("job_model_connectivity", "job_image_pin_verification")
                  if job_id in registered)
 
 

@@ -415,7 +415,7 @@ def build_definitions(
                 )
             )
     # Pre-intake gates run in this order in every composite review graph: the live model check, then
-    # the tool-image rebuild. A disabled gate is transparent, so intake follows the last enabled one.
+    # the image-pin verification. A disabled gate is transparent, so intake follows the last enabled one.
     gates = gate_ids(registered)
     gate_deps = gate_dependencies(registered)
 

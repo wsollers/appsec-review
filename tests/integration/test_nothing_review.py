@@ -13,9 +13,9 @@ Two substitutions keep the run deterministic and offline, and neither bypasses a
   every configured model available; the planning request is answered with the recipe a build
   engineer derives from ``CMakeLists.txt``. Any other request is refused and recorded, and the test
   fails if one arrives.
-* Tool-image rebuild. ``job_tool_image_rebuild`` is disabled in this test's configuration copy (the
-  documented switch that makes it transparent). Rebuilding every catalog image is its own concern;
-  the full tier instead requires the images to be present already.
+* Image-pin verification. ``job_image_pin_verification`` is disabled in this test's configuration
+  copy (the documented switch that makes it transparent). Verifying every catalog image and pin is
+  its own concern; the full tier instead skips, naming what is missing, when an image is absent.
 
 Tiers:
 
@@ -139,13 +139,13 @@ def _target(base: Path) -> Path:
 
 
 def _config(base: Path) -> AppConfig:
-    """The repository configuration with run state under ``base`` and the image rebuild disabled."""
+    """The repository configuration with run state under ``base`` and the image-pin gate disabled."""
     text = (ROOT / "appsec-review.toml").read_text(encoding="utf-8")
-    header = "[jobs.job_tool_image_rebuild.settings]\n"
+    header = "[jobs.job_image_pin_verification.settings]\n"
     start = text.index(header) + len(header)
     end = text.index("\n[", start)
     section = text[start:end]
-    assert section.count("enabled = true") == 1, "the image-rebuild dispatch switch moved"
+    assert section.count("enabled = true") == 1, "the image-pin verification dispatch switch moved"
     text = text[:start] + section.replace("enabled = true", "enabled = false") + text[end:]
     runs = (base / "runs").as_posix()
     for old, new in (('runs_dir = "runs"', f'runs_dir = "{runs}"'),
