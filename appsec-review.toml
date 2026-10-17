@@ -889,7 +889,7 @@ image_id = "sha256:cc81776ed3fcaa8e9bcc09153e37ff83edc1980d21a252db09733e0afeb3d
 user = "10001:10001"
 [jobs.job_project_build.settings.profiles.android]
 tag = "audit-buildenv-android:local"
-image_id = "sha256:5d8b74d80399c92c4d174ec4cd6337c7458ad95ef02434153940e32109e5a007"
+image_id = "sha256:5df9d8dfca365b0b8157a0b282b74e8bdc59d5544467ccee63b841c2d72aecfd"
 user = "10001:10001"
 # Built from containers/buildenv/typescript/ (see its README). Image IDs are host-specific; after
 # rebuilding with `python3 containers/build.py build audit-buildenv-typescript`, replace image_id
