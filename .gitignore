@@ -29,6 +29,7 @@
 __pycache__/
 *.pyc
 .venv/
+*.egg-info/
 # Pytest owns this disposable tree. Focused or concurrent sessions use named
 # descendants; tests/conftest.py rejects scratch paths anywhere else.
 /test/tmp/
@@ -57,25 +58,8 @@ images/audit-buildenv-java/jdtls.tar.gz
 # dependency_snapshot_sync.py and never committed.
 /appsec-review-process/offline/
 
-.claude/worktrees/agent-a07ef96e3c1e186f6
-
-.claude/worktrees/agent-a233808d8c5aa6b62
-
-.claude/worktrees/agent-a6e7b57fb83395897
-
-.claude/worktrees/agent-a74109b9d8dda9688
-
-.claude/worktrees/agent-aa85b4abaf8175fcb
-
-.claude/worktrees/agent-ab83e68e3cd0ff477
-
-.claude/worktrees/agent-ae975910cdc771eb8
-
-.claude/worktrees/agent-af204f1947111feb3
-
-.claude/worktrees/continuation-prompts
-
-.claude/worktrees/port-scripts
+# Agent worktrees are disposable checkouts of branches, never repository source.
+/.claude/worktrees/
 # Local Claude handoffs, diffs, and generated diagrams are not repository source.
 /Claude outputs/
 # Mutable OSV feed state (see docs/osv-feed.md); never committed.
@@ -87,6 +71,8 @@ images/audit-buildenv-java/jdtls.tar.gz
 # Mutable KEV and EPSS snapshots are local reference data, never repository source.
 /data/feeds/kev/
 /data/feeds/epss/
+# Mutable OpenSSF Scorecard cache (blobs, entries, locks); never committed.
+/data/feeds/openssf-scorecard/
 
 # Host-local seeds and keys (dependency DB seeds, demo HMAC key): never source.
 .artifacts/
