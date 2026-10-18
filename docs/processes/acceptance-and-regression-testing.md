@@ -178,3 +178,12 @@ least one rule set.
 4. **Baselines and expectations live under `test/acceptance/`,** committed and reviewed. The
    corpus is pinned to an `appsec-multi-vuln` tag (to be named; the earlier pin `2994384` is not
    in the local target history), and every expectation records that tag and its commit.
+
+## Decisions (2026-10-18)
+
+5. **Local and Dagster parity comes first, on a small corpus.** Every job is walked through both
+   drivers from the same seed with `stepwise.py parity` before it is accepted, on the blind
+   `targets/cpp-multivuln` corpus at tag `cpp-multivuln-v1`. Its answer key is
+   `test/acceptance/cpp-multivuln-v1/expectations.toml`. Model-backed jobs replay the Dagster
+   run's recorded responses. Further corpora are added only after the whole chain matches; see
+   [`local-dagster-parity.md`](local-dagster-parity.md).

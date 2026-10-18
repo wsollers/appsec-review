@@ -5,7 +5,7 @@
 
 [corpus]
 name = "cpp-multivuln"
-tag = "v1"
+tag = "cpp-multivuln-v1"
 commit = "9acaa34035af45f531197a9d9a56032ebbed1908"
 build = "cmake -S . -B build && cmake --build build"
 

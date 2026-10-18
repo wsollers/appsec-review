@@ -343,6 +343,43 @@ unless you pass `--restore-shared` (write the stored bytes back) or `--allow-sha
 It then runs the job, checks it, and diffs its normalized output against the accepted file. This is
 the known-good regression check for a single job.
 
+**Parity.** `parity` proves that the local launcher (`appsec-review run`) and Dagster produce the
+same output for one job from the same starting state
+([`docs/processes/local-dagster-parity.md`](../../docs/processes/local-dagster-parity.md)).
+
+```bash
+# deploy/dagster/.env: APPSEC_REVIEW_TARGET=/opt/app/targets/cpp-multivuln and
+# APPSEC_REVIEW_MODEL_RECORDING=record, then recreate the stack.
+python3 deploy/dagster/bin/stepwise.py parity --tag cpp-multivuln-v1 --job model_connectivity \
+  --target /opt/app/targets/cpp-multivuln
+python3 deploy/dagster/bin/stepwise.py accept --job model_connectivity --tag cpp-multivuln-v1
+python3 deploy/dagster/bin/stepwise.py parity --tag cpp-multivuln-v1 --job JOB [--replace]
+```
+
+For each job, `parity` does the following, one step at a time:
+
+1. Restores the seed of the job's predecessor. The first job instead starts a new run, and its
+   local side gets an empty run bound to the same configuration.
+2. Runs the job through Dagster, which records every model response.
+3. Moves the Dagster run tree, its walk state and every shared path it added aside. Shared files
+   it changed are restored from the seed store.
+4. Restores the same seed again and runs `appsec-review run JOB --upstream-from-run` with model
+   replay.
+5. Audits and normalizes the local output, then puts the Dagster side back for `accept`.
+
+The verdict is one of these:
+
+- `PARITY OK` (exit 0): both sides succeeded and no difference is outside the masked volatile
+  fields.
+- `DIFFERENT` (exit 3): the outputs differ.
+- `INVALID COMPARISON` (exit 3): the two handoffs disagree on implementation, configuration,
+  validation, source fingerprint, input or upstream identity, such as when the code-location
+  image was built from another commit.
+- `RUN FAILED` (exit 1): either side failed, or the local write audit found something.
+
+The report, both normalized outputs, the local log and the recordings are kept under
+`runs/metadata/stepwise/parity/<app-run>/<job>/<time>/`, beside both parked trees.
+
 ## Serial smoke tests
 
 Run each platform on that actual host: `windows` from native PowerShell, `wsl` from a WSL shell,

@@ -5,6 +5,8 @@ x-dagster-environment: &dagster-environment
   DAGSTER_POSTGRES_PASSWORD: ${DAGSTER_POSTGRES_PASSWORD:?Run deploy/dagster/bin/bootstrap.py first}
   APPSEC_REVIEW_CONFIG: /opt/app/appsec-review.toml
   APPSEC_REVIEW_TARGET: ${APPSEC_REVIEW_TARGET:-/opt/app/targets/appsec-multi-vuln}
+  # "record" during a stepwise parity walk (docs/processes/local-dagster-parity.md); empty otherwise.
+  APPSEC_REVIEW_MODEL_RECORDING: ${APPSEC_REVIEW_MODEL_RECORDING:-}
 
 x-dagster-service: &dagster-service
   image: appsec-review-dagster:${APPSEC_DEPLOYMENT_PLATFORM:?Run deploy/dagster/bin/bootstrap.py first}

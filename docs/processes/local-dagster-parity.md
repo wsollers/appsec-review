@@ -24,11 +24,14 @@ it is a bug to fix or a volatile field the normalizer missed.
 
 ## What the code already establishes
 
-1. **One implementation, two drivers.** The Dagster `begin` op calls `JobRunner.begin_attempt`,
-   one op per unit calls `execute_or_reuse_unit`, and a `finalize` op calls `finalize_attempt`
-   (`orchestration/dagster/adapter.py`). `appsec-review run JOB` calls `JobRunner.run`, which runs
-   the same units in process, one after another. Parity therefore tests the drivers (claim
-   inputs, unit scheduling, environment), not two implementations.
+1. **Two drivers, one lifecycle (after this change).** The Dagster `begin` op claims an attempt
+   with `JobRunner.begin_or_reuse_attempt`, one op per unit calls `execute_or_reuse_unit`, and a
+   `finalize` op calls `finalize_attempt` (`orchestration/dagster/adapter.py`). Before this work,
+   `appsec-review run JOB` and `GraphRunner` instead called `JobRunner._run_legacy`. That path
+   ran the job-level handler in one call, wrote no claim, ran no claim-time input validators and
+   built the handoff itself. It was replaced by `appsec_review.runtime.launch`, which every driver
+   now uses (section 2). Parity therefore tests the drivers (claim inputs, unit scheduling,
+   environment), not two implementations.
 2. **The configuration is path-free.** The resolved configuration hash of the host checkout and
    of the Dagster code location are identical (`78bbf5bf…` for run `2026-10-17-0003`), so a local
    run can continue a run tree Dagster created without failing `_bind_configuration`.
@@ -49,16 +52,30 @@ target is therefore tagged `cpp-multivuln-v1`, and its answer key moves to
 `test/acceptance/cpp-multivuln-v1/expectations.toml`. Baselines, provenance and seed manifests
 land beside it, as they do for `AcceptanceTest`.
 
-### 2. One definition of a job's inputs
+### 2. One launcher: started the same, validated the same
 
-- Move the set of target-consuming jobs out of `adapter.py` into the topology/registry, so the
-  Dagster op and the CLI read the same definition.
-- Add to `appsec-review run`:
-  - `--target PATH`, passed as `target_root`, with its source fingerprint, for target-consuming jobs;
-  - `--upstream-from-run`, which resolves each declared upstream job's handoff digest from
-    `runs/<id>/data/jobs/<job>/latest.json`. This is the same rule `stepwise.launch_next` uses to
-    build the Dagster tag, factored into one shared function.
-- A local claim records `orchestration = {"system": "local"}`. That is masked like the Dagster id.
+`appsec_review.runtime.launch` is the only way an attempt starts:
+
+- `TARGET_JOBS` and `launch_inputs` decide which jobs receive the target root and its source
+  fingerprint. Before, a private set inside the Dagster op decided this. Both the Dagster op
+  (including the standalone Tree-sitter job) and the CLI now call them.
+- `begin` claims the attempt with `begin_or_reuse_attempt`, exactly as the Dagster op does.
+  Claim-time input validators run there.
+- `complete` runs every unit through `execute_or_reuse_unit` in dependency order and finalizes
+  with `finalize_attempt`, where output validators run. As in Dagster, a failed unit does not
+  stop independent units; its dependents are skipped, the job is not finalized, and the attempt
+  is marked FAILED with a `job reported partial failure: <units>` error.
+- `JobRunner.run`, which `GraphRunner` uses, is the same claim-units-finalize sequence.
+  `_run_legacy` is deleted.
+
+`appsec-review run` gains:
+
+- `--target PATH`, defaulting to `APPSEC_REVIEW_TARGET` exactly as the Dagster op does;
+- `--upstream-from-run`, which binds the run's accepted handoff of every upstream job
+  `wave1_review` would pass. It uses `topology.accepted_upstream_handoffs`, which verifies the
+  set the same way a tagged Dagster launch is verified.
+
+A local claim records `orchestration = {"system": "local"}`.
 
 ### 3. `stepwise.py parity --tag TAG --job JOB`
 

@@ -7,6 +7,8 @@
   compare --app-run ID --tag TAG      diff a full wave1_review run against the accepted outputs
   seed --tag TAG --after JOB          restore the known-good run tree taken when JOB was accepted
   verify-job --tag TAG --job JOB      seed JOB's predecessor, run JOB, check it, diff its accepted output
+  parity --tag TAG --job JOB          from JOB's predecessor seed, run JOB through Dagster and the local
+                                      launcher, one after the other, and diff the two outputs
 
 Every job runs as its own single-job Dagster job in the packaged code location (same uid/gid,
 mounts and Docker socket as wave1_review). Upstream handoffs are named in the
@@ -20,7 +22,9 @@ import argparse
 from collections import Counter
 from datetime import datetime, timezone
 import json
+import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import time
@@ -37,7 +41,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from appsec_review.acceptance.audit import audit_job_writes, summarize  # noqa: E402
 from appsec_review.acceptance.diff import CLASSES, diff_job_outputs, failing  # noqa: E402
 from appsec_review.acceptance.normalize import Masks, gap_summary, locate_attempt, normalize_job_output  # noqa: E402
-from appsec_review.acceptance.seed import BlobStore, SeedError, resolve_chain, restore, snapshot  # noqa: E402
+from appsec_review.acceptance.seed import BlobStore, SeedError, resolve_chain, restore, scan, snapshot  # noqa: E402
 from appsec_review.acceptance.state import StateError, StepwiseState, valid_corpus_tag  # noqa: E402
 
 DEPLOYMENT = ROOT / "deploy" / "dagster"
@@ -465,6 +469,235 @@ def command_verify_job(args) -> int:
     return 1 if status or failing(differences) else 0
 
 
+# -- parity: the same job through Dagster and through the local launcher ------------------------
+# docs/processes/local-dagster-parity.md. Both sides start from the same restored state, one after
+# the other; the Dagster tree is the one kept for acceptance.
+PARITY_ROOT = STATE_ROOT / "parity"
+SHARED_ROOTS = ("runs/metadata", "data")
+MODEL_RECORDING = "APPSEC_REVIEW_MODEL_RECORDING"
+MODEL_REPLAY_DIR = "APPSEC_REVIEW_MODEL_REPLAY_DIR"
+IDENTITY_KEYS = ("implementation_identity", "schema_identity", "validation_identity", "resolved_config_sha256",
+                 "job_config_sha256", "source_fingerprint", "input_identity", "upstream_handoff_sha256")
+
+
+def _ids() -> tuple[int, int]:
+    environment = read_environment(DEPLOYMENT / ".env")
+    return int(environment.get("APPSEC_UID", "0")), int(environment.get("APPSEC_GID", "0"))
+
+
+def _shared_scan() -> dict[str, dict]:
+    uid, gid = _ids()
+    entries, _ = scan(ROOT, SHARED_ROOTS, expected_uid=uid, expected_gid=gid, exclude=SEED_EXCLUDE)
+    return entries
+
+
+def _shared_delta(before: dict[str, dict], after: dict[str, dict]) -> tuple[list[str], list[str]]:
+    """Top-level shared paths a run added, and shared files it changed."""
+    added = sorted(path for path in set(after) - set(before) if path.rsplit("/", 1)[0] in before)
+    changed = sorted(path for path in set(after) & set(before)
+                     if after[path]["type"] == "file" and after[path] != before[path])
+    return added, changed
+
+
+def _move(source: Path, destination: Path) -> None:
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    source.rename(destination)
+
+
+def _park(app_run_id: str, destination: Path, added: list[str]) -> None:
+    """Move one side's run tree, walk state and added shared paths out of the way."""
+    for source, name in ((ROOT / "runs" / app_run_id, "run"), (STATE_ROOT / app_run_id, "state")):
+        if source.exists():
+            _move(source, destination / name)
+    for path in added:
+        if (ROOT / path).exists() or (ROOT / path).is_symlink():
+            _move(ROOT / path, destination / "shared" / path)
+
+
+def _unpark(app_run_id: str, source: Path, added: list[str]) -> None:
+    for name, target in (("run", ROOT / "runs" / app_run_id), ("state", STATE_ROOT / app_run_id)):
+        if (source / name).exists():
+            _move(source / name, target)
+    for path in added:
+        if (source / "shared" / path).exists() or (source / "shared" / path).is_symlink():
+            _move(source / "shared" / path, ROOT / path)
+
+
+def _save_files(paths: list[str], destination: Path) -> None:
+    for path in paths:
+        (destination / path).parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(ROOT / path, destination / path)
+
+
+def _restore_files(paths: list[str], source: Path) -> None:
+    for path in paths:
+        shutil.copy2(source / path, ROOT / path)
+
+
+def _handoff(attempt: Path | None) -> dict | None:
+    path = attempt / "handoff.json" if attempt else None
+    return json.loads(path.read_text(encoding="utf-8")) if path and path.is_file() else None
+
+
+def _identity_mismatches(dagster: dict | None, local: dict | None) -> list[dict]:
+    if dagster is None or local is None:
+        return [{"key": "handoff", "dagster": dagster is not None, "local": local is not None}]
+    return [{"key": key, "dagster": dagster.get(key), "local": local.get(key)}
+            for key in IDENTITY_KEYS if dagster.get(key) != local.get(key)]
+
+
+def _run_local(job_id: str, app_run_id: str, target: Path, replay: Path, log: Path) -> int:
+    environment = {**os.environ, MODEL_RECORDING: "replay", MODEL_REPLAY_DIR: str(replay),
+                   "APPSEC_REVIEW_TARGET": str(target)}
+    command = [str(ROOT / ".venv" / "bin" / "python"), "-m", "appsec_review", "run", job_id,
+               "--run-id", app_run_id, "--target", str(target), "--upstream-from-run"]
+    print(f"local: {' '.join(command[2:])}", flush=True)
+    log.parent.mkdir(parents=True, exist_ok=True)
+    with log.open("w", encoding="utf-8") as handle:
+        result = subprocess.run(command, cwd=ROOT, env=environment, stdout=handle, stderr=subprocess.STDOUT,
+                                check=False)
+    print(f"local exit={result.returncode} log={relative(log)}", flush=True)
+    return result.returncode
+
+
+def _dagster_first(args, topology: dict) -> tuple[StepwiseState, Path]:
+    """Launch the first wave job; it allocates the application run the walk then follows."""
+    if not args.target:
+        raise StateError(f"{topology['jobs'][0]['job_id']} starts a walk; pass --target <container path>")
+    first = topology["jobs"][0]
+    dagster_run_id = str(uuid4())
+    launch(first["name"], dagster_run_id, {})
+    run = wait(args.url, dagster_run_id, args.interval_seconds)
+    app_run_id = run["tag_map"].get("appsec/application_run_id")
+    if not app_run_id:
+        raise RuntimeError(f"{first['name']} did not allocate an application run")
+    state = StepwiseState.create(app_run_id, target=args.target, topology=topology)
+    state.record_launch(first["job_id"], dagster_run_id)
+    path = StepwiseState.path_for(STATE_ROOT, app_run_id)
+    state.save(path)
+    check(args, state, path, first["job_id"])
+    return StepwiseState.load(path), path
+
+
+def command_parity(args) -> int:
+    tag = valid_corpus_tag(args.tag)
+    topology = packaged_topology()
+    ids = [item["job_id"] for item in topology["jobs"]]
+    job_id = next((item["job_id"] for item in topology["jobs"] if args.job in {item["job_id"], item["name"]}), None)
+    if job_id is None:
+        raise StateError(f"job is not in wave1_review: {args.job}")
+    position = ids.index(job_id)
+    recording = compose("exec", "-T", "code-location", "sh", "-c", f"printenv {MODEL_RECORDING} || true").strip()
+    if recording != "record":
+        raise RuntimeError(f"the code location must run with {MODEL_RECORDING}=record for a parity walk; "
+                           "set it in deploy/dagster/.env and recreate the stack")
+    configured = compose("exec", "-T", "code-location", "printenv", "APPSEC_REVIEW_TARGET").strip()
+
+    # 1-2. Dagster from the previous job's seed (or a new run for the first job).
+    if position == 0:
+        if args.target != configured:
+            raise RuntimeError(f"the code location reviews {configured}, not {args.target}")
+        shared_before = _shared_scan()
+        state, path = _dagster_first(args, topology)
+    else:
+        state, path = seed_run(args, tag, ids[position - 1])
+        if state.target != configured:
+            raise RuntimeError(f"the code location reviews {configured}, but the seed reviews {state.target}")
+        shared_before = _shared_scan()
+        launch_next(args, state, path)
+        state = StepwiseState.load(path)
+    app_run_id = state.app_run_id
+    run_root = ROOT / "runs" / app_run_id
+    masks = masks_for(app_run_id, state.target)
+    dagster_run_id = state.job(job_id)["dagster_run_ids"][-1]
+    dagster_status = get_run(args.url, dagster_run_id)["status"]
+    dagster_attempt = locate_attempt(run_root, job_id, dagster_run_id)
+    dagster_output = normalize_job_output(run_root, job_id, masks, attempt_root=dagster_attempt)
+    dagster_handoff = _handoff(dagster_attempt)
+    walk = PARITY_ROOT / app_run_id / job_id / datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    walk.mkdir(parents=True)
+    (walk / "dagster.json").write_text(json.dumps(dagster_output, indent=1, sort_keys=True) + "\n", encoding="utf-8")
+    recordings = walk / "recordings"
+    if (run_root / "data" / "inference-recordings").is_dir():
+        shutil.copytree(run_root / "data" / "inference-recordings", recordings)
+    else:
+        recordings.mkdir()
+
+    # 3. Put the starting state back: park Dagster's tree, additions and changed shared files.
+    added, changed = _shared_delta(shared_before, _shared_scan())
+    _save_files(changed, walk / "dagster" / "changed")
+    _park(app_run_id, walk / "dagster", added)
+    local_added: list[str] = []
+    try:
+        if position == 0:
+            # The first job starts from an empty run bound to the same configuration.
+            (run_root / "data" / "jobs").mkdir(parents=True)
+            shutil.copytree(walk / "dagster" / "run" / "data" / "configuration", run_root / "data" / "configuration")
+            if changed:
+                raise StateError(f"{job_id} changed {len(changed)} shared files and has no seed to restore them")
+        else:
+            seed_args = argparse.Namespace(**{**vars(args), "replace": False, "restore_shared": bool(changed),
+                                              "run_id": None})
+            seed_run(seed_args, tag, ids[position - 1])
+        # 4. The local launcher, replaying the Dagster run's model responses.
+        local_before = _shared_scan()
+        started = time.time()
+        exit_code = _run_local(job_id, app_run_id, host_path(state.target), recordings, walk / "local.log")
+        local_attempt = locate_attempt(run_root, job_id)
+        local_output = normalize_job_output(run_root, job_id, masks, attempt_root=local_attempt)
+        local_handoff = _handoff(local_attempt)
+        uid, gid = _ids()
+        audit = audit_job_writes(run_root, job_id, local_attempt, expected_uid=uid, expected_gid=gid,
+                                 since=started - 2, extra_roots=[ROOT / "runs" / "metadata", ROOT / "data"],
+                                 exclude=[STATE_ROOT, SEED_STORE],
+                                 dagster_status="SUCCESS" if exit_code == 0 else "FAILURE")
+        (walk / "local.json").write_text(json.dumps(local_output, indent=1, sort_keys=True) + "\n", encoding="utf-8")
+        local_added, local_changed = _shared_delta(local_before, _shared_scan())
+        _save_files(local_changed, walk / "local" / "changed")
+    finally:
+        # 7. Keep the Dagster side in place for acceptance.
+        _park(app_run_id, walk / "local", local_added)
+        _restore_files(changed, walk / "dagster" / "changed")
+        _unpark(app_run_id, walk / "dagster", added)
+
+    # 5-6. Same inputs and code on both sides, then the same output.
+    mismatches = _identity_mismatches(dagster_handoff, local_handoff)
+    differences = diff_job_outputs(dagster_output, local_output, job_id)
+    failures = failing(differences)
+    both_succeeded = dagster_status == "SUCCESS" and exit_code == 0 and not audit
+    verdict = ("PARITY OK" if both_succeeded and not mismatches and not failures else
+               "RUN FAILED" if not both_succeeded else
+               "INVALID COMPARISON" if mismatches else "DIFFERENT")
+    counts = Counter(item.kind for item in differences)
+    summary = {side: {"status": document["status"], "findings": sum(item["count"] for item in document["findings"]),
+                      "gaps": sum(item["count"] for item in document["gaps"]), "units": len(document["units"])}
+               for side, document in (("dagster", dagster_output), ("local", local_output))}
+    report = {"schema": "appsec-review/parity-report/1", "verdict": verdict, "job_id": job_id, "corpus_tag": tag,
+              "application_run_id": app_run_id, "repository_commit": git("rev-parse", "HEAD", cwd=ROOT),
+              "dagster": {"dagster_run_id": dagster_run_id, "status": dagster_status, **summary["dagster"],
+                          "tool_identity": (dagster_handoff or {}).get("tool_identity")},
+              "local": {"exit_code": exit_code, **summary["local"], "audit": summarize(audit),
+                        "tool_identity": (local_handoff or {}).get("tool_identity")},
+              "identity_mismatches": mismatches, "shared_added": {"dagster": added, "local": local_added},
+              "differences": [item.as_dict() for item in differences]}
+    (walk / "report.json").write_text(json.dumps(report, indent=1) + "\n", encoding="utf-8")
+    print(f"== parity {job_id} {verdict}")
+    for side in ("dagster", "local"):
+        print(f"   {side}: " + " ".join(f"{key}={value}" for key, value in report[side].items()
+                                         if key not in {"tool_identity", "dagster_run_id"}))
+    for item in mismatches:
+        print(f"   identity {item['key']}: dagster={str(item['dagster'])[:120]} local={str(item['local'])[:120]}")
+    print("   differences " + " ".join(f"{kind}={counts.get(kind, 0)}" for kind in CLASSES))
+    for item in failures[:args.show * 5]:
+        print(f"   {item.kind} {item.path}: dagster={item.expected[:160]} local={item.actual[:160]}")
+    if len(failures) > args.show * 5:
+        print(f"   ... {len(failures) - args.show * 5} more in the report")
+    print(f"   report {relative(walk / 'report.json')}")
+    if verdict == "PARITY OK":
+        print(f"   review it, then: stepwise.py accept --job {job_id} --tag {tag} --app-run {app_run_id}")
+    return {"PARITY OK": 0, "RUN FAILED": 1}.get(verdict, 3)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--url", default="http://127.0.0.1:3000/graphql")
@@ -498,12 +731,21 @@ def main(argv: list[str] | None = None) -> int:
                          help="also restore stored runs/metadata and data inputs that drifted")
         sub.add_argument("--allow-shared-drift", action="store_true",
                          help="proceed although shared inputs differ from the seed")
+    parity = commands.add_parser("parity", help="run one job through Dagster and the local launcher and diff them")
+    parity.add_argument("--tag", required=True)
+    parity.add_argument("--job", required=True)
+    parity.add_argument("--target", help="target path inside the code location (first job only)")
+    parity.add_argument("--replace", action="store_true", help="move an existing run tree and walk aside")
+    parity.add_argument("--restore-shared", action="store_true",
+                        help="also restore stored runs/metadata and data inputs that drifted")
+    parity.add_argument("--allow-shared-drift", action="store_true",
+                        help="proceed although shared inputs differ from the seed")
     args = parser.parse_args(argv)
     if args.interval_seconds < 1:
         parser.error("--interval-seconds must be positive")
     handlers = {"init": command_init, "next": command_next, "check": command_check,
                 "accept": command_accept, "compare": command_compare, "seed": command_seed,
-                "verify-job": command_verify_job}
+                "verify-job": command_verify_job, "parity": command_parity}
     try:
         return handlers[args.command](args)
     except (StateError, SeedError, RuntimeError) as exc:
