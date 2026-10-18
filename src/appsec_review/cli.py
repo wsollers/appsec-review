@@ -43,6 +43,10 @@ def parser() -> argparse.ArgumentParser:
     run.add_argument("job_id")
     run.add_argument("--run-id")
     run.add_argument("--trigger", choices=("manual", "schedule"), default="manual")
+    run.add_argument("--target", type=Path,
+                     help="target checkout for target-reading jobs (default: APPSEC_REVIEW_TARGET)")
+    run.add_argument("--upstream-from-run", action="store_true",
+                     help="bind the run's accepted handoffs of the upstream jobs wave1_review would pass")
 
     start = commands.add_parser("start", help="start the deterministic review graph")
     start.add_argument("--target", type=Path, required=True)
@@ -207,7 +211,24 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if not job_is_enabled(config, args.job_id):
         raise ValueError(f"job is disabled by configuration: {args.job_id}")
-    job = builtin_registry().build(args.job_id)
-    outcome = JobRunner(config).run(job, run_id=args.run_id, trigger=args.trigger)
+    from appsec_review.orchestration.topology import accepted_upstream_handoffs, describe_wave1
+    from appsec_review.runtime.launch import configured_target, launch, launch_inputs
+    from appsec_review.storage import RunStore
+
+    registry = builtin_registry()
+    job = registry.build(args.job_id)
+    upstream: dict[str, str] = {}
+    if args.upstream_from_run:
+        if not args.run_id:
+            parser().error("--upstream-from-run requires --run-id")
+        entry = next((item for item in describe_wave1(config, registry)["jobs"]
+                      if item["job_id"] == args.job_id), None)
+        if entry is None:
+            raise ValueError(f"job is not in wave1_review: {args.job_id}")
+        upstream = accepted_upstream_handoffs(RunStore(config.runtime.runs_dir).resolve(args.run_id),
+                                              entry["upstream_handoffs"])
+    inputs = launch_inputs(job, target=args.target or configured_target(config.runtime.repository_root),
+                           upstream_handoffs=upstream)
+    outcome = launch(JobRunner(config), job, inputs, run_id=args.run_id, trigger=args.trigger)
     print(json.dumps(outcome, sort_keys=True))
     return 0

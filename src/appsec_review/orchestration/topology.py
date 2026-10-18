@@ -234,6 +234,21 @@ def tagged_upstream_handoffs(run_root: Path, raw: str) -> dict[str, str]:
     return verified
 
 
+def accepted_upstream_handoffs(run_root: Path, job_ids: Iterable[str]) -> dict[str, str]:
+    """The run's accepted handoff of every job in ``job_ids``, verified like a tagged set."""
+
+    digests = {}
+    for job_id in job_ids:
+        pointer = Path(run_root) / "data" / "jobs" / job_id / "latest.json"
+        if not pointer.is_file():
+            raise ValueError(f"upstream {job_id} has no accepted handoff in this run")
+        try:
+            digests[job_id] = json.loads(pointer.read_text(encoding="utf-8"))["handoff_sha256"]
+        except (KeyError, ValueError) as exc:
+            raise ValueError(f"accepted pointer for {job_id} is corrupt") from exc
+    return tagged_upstream_handoffs(run_root, json.dumps(digests))
+
+
 def launch_upstream_handoffs(runs_dir: Path, tags: Mapping[str, str], *,
                              in_graph: bool) -> dict[str, str] | None:
     """Return the verified tagged upstream handoffs of a standalone launch, or ``None`` untagged.

@@ -388,12 +388,10 @@ def test_job_rejects_target_drift_after_cpp_acceptance(tmp_path: Path) -> None:
             source_fingerprint="changed-after-cpp-acceptance",
             upstream_handoffs=_cpp_handoffs(runs),
         )
-    result = json.loads((runs / RUN_ID / "data" / "jobs" /
-                         "job_post_build_security_assessment" / "attempts" /
-                         "attempt_0001" / "result.json").read_text(encoding="utf-8"))
-    assert result["units"]["load.accepted_cpp_build"]["error"]["message"] == (
-        "post-build target snapshot differs from accepted build"
-    )
+    receipt = json.loads((runs / RUN_ID / "data" / "jobs" /
+                          "job_post_build_security_assessment" / "attempts" / "attempt_0001" /
+                          "steps" / "load" / "tasks" / "accepted_cpp_build" / "status.json").read_text(encoding="utf-8"))
+    assert receipt["error"]["message"] == "post-build target snapshot differs from accepted build"
 
 
 def _context_inference(request: ModelRequest, *, timeout_seconds: int) -> ModelResult:

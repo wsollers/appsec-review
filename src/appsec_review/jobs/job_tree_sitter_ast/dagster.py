@@ -3,16 +3,14 @@
 from __future__ import annotations
 
 import hashlib
-import os
-from pathlib import Path
 import time
 from types import MappingProxyType
 
 from dagster import DynamicOut, DynamicOutput, In, Nothing, Out, graph, multiprocess_executor, op
 
-from appsec_review.jobs.cataloging import source_fingerprint
 from appsec_review.orchestration.topology import launch_upstream_handoffs
 from appsec_review.runtime import UnitContext
+from appsec_review.runtime.launch import begin as launch_begin, configured_target, launch_inputs
 from appsec_review.storage import atomic_json
 
 from .job import build_job
@@ -26,14 +24,13 @@ def build_dagster_job(config, runner_factory):
         tags={"appsec/pool": "lifecycle"}, pool="lifecycle")
     def begin(context):
         tags = dict(context.dagster_run.tags)
-        target = Path(os.environ.get("APPSEC_REVIEW_TARGET",
-            config.runtime.repository_root / "targets" / "appsec-multi-vuln")).resolve()
-        claim = runner_factory(config).begin_or_reuse_attempt(job,
+        inputs = launch_inputs(job, target=configured_target(config.runtime.repository_root),
+                               upstream_handoffs=launch_upstream_handoffs(
+                                   config.runtime.runs_dir, tags, in_graph=False) or {})
+        claim = launch_begin(runner_factory(config), job, inputs,
             run_id=tags.get("appsec/application_run_id"),
             trigger="schedule" if "dagster/schedule_name" in tags else "manual",
-            orchestration={"system": "dagster", "run_id": context.run_id, "node": context.op.name},
-            target_root=target, source_fingerprint=source_fingerprint(target),
-            upstream_handoffs=launch_upstream_handoffs(config.runtime.runs_dir, tags, in_graph=False) or {})
+            orchestration={"system": "dagster", "run_id": context.run_id, "node": context.op.name})
         context.instance.add_run_tags(context.run_id, {
             "appsec/application_run_id": str(claim["run_id"]),
             "appsec/trigger": str(claim["trigger"]),

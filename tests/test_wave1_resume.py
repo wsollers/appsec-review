@@ -32,11 +32,20 @@ def _fixture(tmp_path: Path):
 
 
 def _counted(job, calls: dict[str, int]):
-    handler = job.handler
-    def wrapped(context):
-        calls[job.job_id] = calls.get(job.job_id, 0) + 1
-        return handler(context)
-    return replace(job, handler=wrapped)
+    """Count each executed attempt of ``job`` once, whichever of its units runs."""
+    attempts: set[tuple[str, str]] = set()
+
+    def wrap(unit):
+        handler = unit.handler
+
+        def wrapped(context):
+            attempt = (context.job.run_id, context.job.attempt_id)
+            if attempt not in attempts:
+                attempts.add(attempt)
+                calls[job.job_id] = calls.get(job.job_id, 0) + 1
+            return handler(context)
+        return replace(unit, handler=wrapped)
+    return replace(job, units=tuple(wrap(unit) for unit in job.units))
 
 
 def test_every_wave1_job_is_reused_without_handler_execution(tmp_path: Path) -> None:
@@ -204,11 +213,13 @@ def test_concurrent_resume_attempts_cannot_claim_same_run(tmp_path: Path) -> Non
     entered = threading.Event()
     release = threading.Event()
     original = build_intake()
+    first_unit = original.units[0]
     def blocked(context):
         entered.set()
         assert release.wait(10)
-        return original.handler(context)
-    jobs = [replace(original, handler=blocked), build_catalog()]
+        return first_unit.handler(context)
+    jobs = [replace(original, units=(replace(first_unit, handler=blocked), *original.units[1:])),
+            build_catalog()]
     first_error: list[BaseException] = []
     def first() -> None:
         try:

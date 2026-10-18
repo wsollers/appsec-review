@@ -32,7 +32,8 @@ class JobRegistry:
 
 
 def builtin_registry() -> JobRegistry:
-    from appsec_review.inference import check_models, infer
+    from appsec_review.inference import check_models, infer as live_infer
+    from appsec_review.inference.recording import recorded
     from appsec_review.jobs.job_model_connectivity import build_job as build_model_connectivity
     from appsec_review.container_runtime.build_executor import _run as run_command
     from appsec_review.jobs.job_image_pin_verification import build_job as build_image_pin_verification
@@ -68,6 +69,8 @@ def builtin_registry() -> JobRegistry:
     from appsec_review.jobs.job_document_issue_analysis import build_job as build_document_issue_analysis
     from appsec_review.jobs.job_inference_security_review import build_job as build_inference_review
 
+    # Parity walks record and replay model responses here (docs/processes/local-dagster-parity.md).
+    infer = recorded(live_infer)
     registry = JobRegistry()
     registry.register("job_model_connectivity", lambda: build_model_connectivity(check_models=check_models))
     registry.register("job_image_pin_verification", lambda: build_image_pin_verification(runner=run_command))

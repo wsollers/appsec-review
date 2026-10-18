@@ -42,10 +42,10 @@ def test_job_composes_validators_around_handler(tmp_path: Path) -> None:
         return {"value": 7}
 
     def post(context, result):
-        assert result == {"value": 7}
+        assert result["outputs"]["work.only"] == {"value": 7}
         calls.append("post")
 
-    job = Job("job_fixture", "fixture", handler, (pre,), (post,))
+    job = Job("job_fixture", "fixture", handler, (pre,), (post,), units=(Unit("work.only", handler),))
     outcome = JobRunner(load_config(write_config(tmp_path))).run(
         job,
         now=datetime(2026, 10, 8, tzinfo=timezone.utc),
@@ -88,7 +88,7 @@ def test_failed_job_has_a_terminal_receipt(tmp_path: Path) -> None:
     def fail(context):
         raise RuntimeError("expected failure")
 
-    job = Job("job_fixture", "fixture", fail)
+    job = Job("job_fixture", "fixture", fail, units=(Unit("work.only", fail),))
     runner = JobRunner(load_config(write_config(tmp_path)))
     with pytest.raises(RuntimeError, match="expected failure"):
         runner.run(job, now=datetime(2026, 10, 8, tzinfo=timezone.utc))
@@ -110,23 +110,29 @@ def test_unit_executor_attempts_independent_branch_and_skips_only_dependents(tmp
         calls.append(context.unit_id)
         return {"ok": True}
 
-    executor = UnitExecutor((
+    units = (
         Unit("first.fetch", fail),
         Unit("second.fetch", succeed),
         Unit("first.publish", succeed, ("first.fetch",)),
         Unit("second.publish", succeed, ("second.fetch",)),
-    ))
+    )
     runner = JobRunner(load_config(write_config(tmp_path)))
-    with pytest.raises(RuntimeError, match="partial failure"):
-        runner.run(Job("job_fixture", "fixture", executor.execute),
+    with pytest.raises(RuntimeError, match="branch failure"):
+        runner.run(Job("job_fixture", "fixture", UnitExecutor(units).execute, units=units),
                    now=datetime(2026, 10, 8, tzinfo=timezone.utc))
 
-    result_path = next((tmp_path / "runs").glob("*/data/jobs/job_fixture/attempts/*/result.json"))
-    result = json.loads(result_path.read_text(encoding="utf-8"))
+    attempt = next((tmp_path / "runs").glob("*/data/jobs/job_fixture/attempts/attempt_0001"))
+
+    def receipt(unit_id: str) -> dict | None:
+        step, task = unit_id.split(".")
+        path = attempt / "steps" / step / "tasks" / task / "status.json"
+        return json.loads(path.read_text(encoding="utf-8")) if path.is_file() else None
+
     assert calls == ["first.fetch", "second.fetch", "second.publish"]
-    assert result["units"]["first.fetch"]["status"] == "FAILED"
-    assert result["units"]["first.publish"]["status"] == "SKIPPED"
-    assert result["units"]["second.publish"]["status"] == "SUCCEEDED"
+    assert receipt("first.fetch")["status"] == "FAILED"
+    assert receipt("first.publish") is None
+    assert receipt("second.publish")["status"] == "SUCCEEDED"
+    assert json.loads((attempt / "status.json").read_text(encoding="utf-8"))["status"] == "FAILED"
 
 
 RUNTIME_IDENTITY_JOBS = ("job_ci_configuration_analysis", "job_evidence_collection",

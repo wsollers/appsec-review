@@ -24,7 +24,7 @@ from appsec_review.config import AppConfig, load_config
 from appsec_review.runtime.registry import JobRegistry, builtin_registry
 from appsec_review.runtime.runner import JobRunner
 from appsec_review.runtime import Job, job_is_enabled, plan_jobs
-from appsec_review.jobs.cataloging import source_fingerprint
+from appsec_review.runtime.launch import begin as launch_begin, configured_target, launch_inputs
 from appsec_review.observability import PipelineLog, write_run_metrics
 from appsec_review.storage import atomic_json
 from appsec_review.orchestration.topology import (
@@ -180,39 +180,18 @@ def _build_dagster_graph(name: str, jobs: tuple[Job, ...], config: AppConfig,
                                          for decision in value.get("resume_decisions", [])],
                 }
                 tags = dict(context.dagster_run.tags)
-                target = Path(os.environ.get(
-                    "APPSEC_REVIEW_TARGET", config.runtime.repository_root / "targets" / "appsec-multi-vuln"
-                )).resolve()
-                target_jobs = {
-                    "job_review_intake", "job_target_catalog", "job_target_analysis_plan",
-                    "job_project_build", "job_language_build", "job_artifact_indexing", "job_test_coverage",
-                    "job_profile_data",
-                    "job_artifact_security_analysis", "job_evidence_collection", "job_dependency_intelligence",
-                    "job_cpp_compiled_analysis",
-                    "job_clang_static_analysis", "job_svf_alias_analysis",
-                    "job_cpp_symbol_index", "job_cpg_analysis", "job_codeql_analysis", "job_code_graph_index",
-                    "job_post_build_security_assessment", "job_owasp_control_assessment",
-                    "job_ci_configuration_analysis", "job_tree_sitter_ast", "job_source_history_analysis",
-                    "job_change_context_analysis", "job_review_prioritization", "job_security_tagging",
-                    "job_review_data_indexing", "job_review_package_assembly", "job_document_issue_analysis",
-                }
-                uses_target = selected.job_id in target_jobs
                 run_id = upstream.get("run_id") or tags.get("appsec/application_run_id")
                 upstream_handoffs = dict(upstream.get("handoffs", {}))
                 tagged = launch_upstream_handoffs(config.runtime.runs_dir, tags,
                                                   in_graph=bool(upstream_values))
                 if tagged is not None:
                     upstream_handoffs = tagged
-                runner = runner_factory(config)
-                begin_method = getattr(runner, "begin_or_reuse_attempt", runner.begin_attempt)
-                claim = begin_method(
-                    selected, run_id=run_id, trigger=_trigger_for_run(tags),
+                inputs = launch_inputs(selected, target=configured_target(config.runtime.repository_root),
+                                       upstream_handoffs=upstream_handoffs)
+                claim = launch_begin(
+                    runner_factory(config), selected, inputs, run_id=run_id, trigger=_trigger_for_run(tags),
                     orchestration={"system": "dagster", "run_id": context.run_id,
-                                   "node": context.op.name},
-                    target_root=target if uses_target else None,
-                    source_fingerprint=source_fingerprint(target) if uses_target else "none",
-                    upstream_handoffs=upstream_handoffs,
-                )
+                                   "node": context.op.name})
                 created_at = getattr(context.dagster_run, "create_timestamp", None)
                 if isinstance(created_at, (int, float)):
                     queue_delay_ms = max(0, int((datetime.now(timezone.utc).timestamp() - created_at) * 1000))
