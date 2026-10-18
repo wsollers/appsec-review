@@ -1,0 +1,66 @@
+# Answer key for the cpp-multivuln corpus: the defects seeded in the blind target.
+# The target carries no defect hints; this file is never sent to a review worker.
+# `producers` are the tools expected to report each defect. They are a hypothesis until the
+# job-by-job walk confirms them; update them from accepted output, never from expectation.
+
+[corpus]
+name = "cpp-multivuln"
+tag = "v1"
+commit = "9acaa34035af45f531197a9d9a56032ebbed1908"
+build = "cmake -S . -B build && cmake --build build"
+
+[[defect]]
+id = "stack-overflow-header-name"
+cwe = "CWE-121"
+path = "src/packet.cpp"
+line = 16
+summary = "memcpy copies an attacker-controlled 16-bit length into the 16-byte Header::name"
+producers = ["codeql", "cppcheck"]
+
+[[defect]]
+id = "use-after-free-end-session"
+cwe = "CWE-416"
+path = "src/session.cpp"
+line = 32
+summary = "end_session reads session->id after close_session deletes it"
+producers = ["clang-static-analyzer"]
+
+[[defect]]
+id = "null-deref-touch-session"
+cwe = "CWE-476"
+path = "src/session.cpp"
+line = 40
+summary = "touch_session dereferences a null session when id <= 0"
+producers = ["clang-static-analyzer", "cppcheck"]
+
+[[defect]]
+id = "integer-overflow-frame-size"
+cwe = "CWE-190"
+path = "src/frame.cpp"
+line = 9
+summary = "width * height * 4 wraps in 32 bits, undersizing the pixel buffer the loop then fills"
+producers = ["codeql"]
+
+[[defect]]
+id = "format-string-log-message"
+cwe = "CWE-134"
+path = "src/log.cpp"
+line = 8
+summary = "log_message passes a caller-controlled string as the fprintf format"
+producers = ["clang-tidy", "codeql", "semgrep"]
+
+[[defect]]
+id = "command-injection-probe-host"
+cwe = "CWE-78"
+path = "src/diag.cpp"
+line = 9
+summary = "probe_host concatenates the host argument into a std::system command line"
+producers = ["codeql", "semgrep"]
+
+[[defect]]
+id = "hardcoded-api-key"
+cwe = "CWE-798"
+path = "src/config.cpp"
+line = 6
+summary = "a service API key is compiled into the binary"
+producers = ["gitleaks"]
