@@ -87,10 +87,12 @@ def test_invocations_chunk_large_projects_and_mount_only_needed_databases(tmp_pa
 class ProjectExecutor(evidence_tests.FakeExecutor):
     """Report one advisory per lockfile; OOM-kill launches that scan a project in ``oom``."""
 
-    def __init__(self, repository: Path, run_root: Path, calls: list[str], history: list, oom: set[str]):
+    def __init__(self, repository: Path, run_root: Path, calls: list[str], history: list, oom: set[str],
+                 empty: set[str] = frozenset()):
         super().__init__(repository, run_root, calls)
         self.history = history
         self.oom = oom
+        self.empty = empty
 
     def execute(self, request):
         result = super().execute(request)
@@ -100,6 +102,11 @@ class ProjectExecutor(evidence_tests.FakeExecutor):
         lockfiles = _lockfiles(request.argv)
         if any(path.removeprefix("/target/").split("/")[0] in self.oom for path in lockfiles):
             return replace(result, exit_code=137, oom_killed=True)
+        if any(path.removeprefix("/target/").split("/")[0] in self.empty for path in lockfiles):
+            (self.run_root / result.stderr_path).write_bytes("".join(
+                f"Scanned {path} file and found 0 packages\n" for path in lockfiles).encode() +
+                b"No package sources found, --help for usage information.\n")
+            return replace(result, exit_code=128)
         document = {"results": [{"source": {"path": path, "type": "lockfile"}, "packages": [{
             "package": {"name": f"pkg-{path.split('/')[-2]}"},
             "vulnerabilities": [{"id": f"GHSA-{path.split('/')[-2]}", "summary": "fixture"}]}]}
@@ -108,7 +115,7 @@ class ProjectExecutor(evidence_tests.FakeExecutor):
         return result
 
 
-def _run(tmp_path: Path, oom: set[str]):
+def _run(tmp_path: Path, oom: set[str], empty: set[str] = frozenset()):
     config, target = evidence_tests.fixture(tmp_path)
     (target / "package-lock.json").unlink()
     for relative, text in {"web/package.json": "{}", "web/package-lock.json": "{}",
@@ -119,7 +126,7 @@ def _run(tmp_path: Path, oom: set[str]):
     _osv_snapshot(tmp_path, ("PyPI", "npm"))
     calls: list[str] = []
     history: list = []
-    factory = lambda unit: ProjectExecutor(unit.job.repository_root, unit.job.run_root, calls, history, oom)
+    factory = lambda unit: ProjectExecutor(unit.job.repository_root, unit.job.run_root, calls, history, oom, empty)
     outcome = GraphRunner(config, [build_intake(), build_catalog(), build_analysis_plan(),
                                    build_evidence(executor_factory=factory)]).run(
         target_root=target, source_fingerprint=source_fingerprint(target))
@@ -257,3 +264,23 @@ def test_evidence_collection_settings_are_typed_and_validated() -> None:
                               ({"osv_mem": "3g"}, "unknown settings")):
         with pytest.raises(ValueError, match=message):
             parse_evidence_collection_settings(settings)
+
+
+def test_a_lockfile_declaring_no_packages_is_a_complete_scan_not_a_gap(tmp_path: Path) -> None:
+    _run_root, scan, history, _events = _run(tmp_path, set(), {"web"})
+    assert len(history) == 2  # no retry: exit 128 with every lockfile scanned at 0 packages
+    assert scan["terminal_status"] == "SUCCEEDED"
+    assert not [gap for gap in scan["gaps"] if "web" in gap]
+    assert {item["project_root"]: item["terminal_status"] for item in scan["invocations"]} == {
+        "api": "SUCCEEDED", "web": "SUCCEEDED"}
+    assert "web/package-lock.json" in json.dumps(scan["not_applicable_inputs"])
+
+
+def test_exit_128_counts_as_no_packages_only_when_every_lockfile_reports_zero() -> None:
+    from appsec_review.osv_offline import no_packages_declared
+    stderr = (b"Scanned /target/a/package-lock.json file and found 0 packages\n"
+              b"No package sources found, --help for usage information.\n")
+    assert no_packages_declared(128, stderr, ["a/package-lock.json"])
+    assert not no_packages_declared(1, stderr, ["a/package-lock.json"])
+    assert not no_packages_declared(128, stderr, ["a/package-lock.json", "b/composer.lock"])
+    assert not no_packages_declared(128, stderr.replace(b"found 0", b"found 3"), ["a/package-lock.json"])

@@ -54,3 +54,21 @@ def offline_database_mounts(ecosystems: Mapping[str, Path],
     return tuple(Mount(archive, database_mount_target(name), True)
                  for name, archive in sorted(ecosystems.items())
                  if wanted is None or name in wanted)
+
+
+_SCANNED = re.compile(r"^Scanned (\S+) file and found (\d+) packages?$", re.MULTILINE)
+EXIT_NO_PACKAGE_SOURCES = 128
+
+
+def no_packages_declared(exit_code: int | None, stderr: bytes, lockfiles: Iterable[str]) -> bool:
+    """osv-scanner 1.9.2 exits 128 when its inputs declare no packages at all.
+
+    That is a complete scan of a dependency-free lockfile, not a failure, but only when the
+    tool itself reports every requested lockfile as scanned with zero packages.
+    """
+    text = stderr.decode("utf-8", "replace")
+    if exit_code != EXIT_NO_PACKAGE_SOURCES or "No package sources found" not in text:
+        return False
+    counts = {path: int(count) for path, count in _SCANNED.findall(text)}
+    wanted = [f"/target/{path.lstrip('/')}" for path in lockfiles]
+    return bool(wanted) and all(counts.get(path) == 0 for path in wanted) and not any(counts.values())

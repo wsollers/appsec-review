@@ -159,6 +159,9 @@ class ContainerExecutor:
                 raise ValueError(f"unsafe or duplicate mount target: {mount.target}")
             if "docker.sock" in source.name.lower() or mount.target.endswith("docker.sock"):
                 raise ValueError("the Docker socket may not be mounted into a scanner")
+            if mount.target.startswith("/scratch/"):
+                # Docker would create the mount point inside the run-owned scratch bind as root.
+                raise ValueError(f"extra mounts may not nest inside /scratch: {mount.target}")
             if mount.target == "/target" and not mount.read_only:
                 raise ValueError("target mount must be read-only")
             if not mount.read_only and mount.target != "/scratch":

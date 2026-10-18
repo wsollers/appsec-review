@@ -34,7 +34,7 @@ def test_cppcheck_source_mode_is_bounded_and_truthfully_gapped() -> None:
     assert selection.coverage_kind == "cpp_source_without_build_context"
     assert any("build flags" in gap for gap in selection.gaps)
     argv = adapter.argv("/opt/cppcheck/bin/cppcheck", selection)
-    assert "--project=/scratch/compile_commands.json" not in argv
+    assert "--project=/inputs/compile_commands.json" not in argv
     assert "/target/src/main.cpp" in argv and "/target/notes.txt" not in argv
 
 
@@ -50,7 +50,7 @@ def test_cppcheck_accepts_one_cataloged_compile_database_without_executing_it(tm
     assert selection.coverage_kind == "cpp_compile_database"
     assert selection.families["compile_database"] == ("compile_commands.json",)
     argv = adapter_registry()["tool-cppcheck"].argv("/opt/cppcheck/bin/cppcheck", selection)
-    assert "--project=/scratch/compile_commands.json" in argv
+    assert "--project=/inputs/compile_commands.json" in argv
     assert not any(value.endswith("src/main.cpp") for value in argv)
 
 
@@ -82,7 +82,7 @@ def test_pmd_scope_parser_and_configuration_error_contract() -> None:
     assert selection.files == ("src/Main.java",)
     assert any("classpath" in gap for gap in selection.gaps)
     assert any("bytecode" in gap for gap in selection.gaps)
-    assert adapter.argv("/opt/pmd/bin/pmd", selection)[-2:] == ("--file-list", "/scratch/pmd-files.txt")
+    assert adapter.argv("/opt/pmd/bin/pmd", selection)[-2:] == ("--file-list", "/inputs/pmd-files.txt")
     payload = json.dumps({"files": [{"filename": "/target/src/Main.java", "violations": [{
         "rule": "RuntimeCommandExecution", "description": "review command execution",
         "priority": 2, "beginline": 4, "endline": 4,

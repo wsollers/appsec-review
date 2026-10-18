@@ -77,6 +77,11 @@ def test_executor_rejects_digest_mismatch_and_docker_socket_mount(tmp_path: Path
     with pytest.raises(ValueError, match="Docker socket"):
         executor.execute(ExecutionRequest("tool-fixture", ("/bin/fixture",), target,
                          tmp_path / "run" / "scratch", (Mount(socket, "/docker.sock"),)))
+    listing = tmp_path / "files.txt"
+    listing.write_text("a\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="nest inside /scratch"):
+        executor.execute(ExecutionRequest("tool-fixture", ("/bin/fixture",), target,
+                         tmp_path / "run" / "scratch", (Mount(listing, "/scratch/files.txt", True),)))
     with pytest.raises(ValueError, match="digest mismatch"):
         executor.resolve_image(executor.catalog.tool("tool-fixture"))
 

@@ -246,7 +246,7 @@ def _cppcheck_args(executable: str, selection: Applicability) -> tuple[str, ...]
     common = (executable, "--enable=warning,style,performance,portability", "--check-level=normal",
               "--inline-suppr", "--xml", "--xml-version=2", "--output-file=/scratch/output.xml")
     if selection.families.get("compile_database"):
-        return (*common, "--project=/scratch/compile_commands.json")
+        return (*common, "--project=/inputs/compile_commands.json")
     return (*common, *(_target(path) for path in selection.files))
 
 
@@ -264,7 +264,7 @@ def _pmd(catalog: ScanCatalog) -> Applicability:
 def _pmd_args(executable: str, selection: Applicability) -> tuple[str, ...]:
     return (executable, "check", "--no-cache", "--no-progress", "--format", "json",
             "--report-file", "/scratch/output.json", "--rulesets", "/rules/java-security.xml",
-            "--file-list", "/scratch/pmd-files.txt")
+            "--file-list", "/inputs/pmd-files.txt")
 
 
 def _target(path: str) -> str:

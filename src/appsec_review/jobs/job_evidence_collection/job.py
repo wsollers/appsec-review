@@ -42,7 +42,7 @@ from appsec_review.config.evidence_collection import (
 from appsec_review.container_runtime.executor import ExecutionResult
 from appsec_review.osv_offline import (
     DATABASE_ROOT as OSV_DATABASE_ROOT, ENVIRONMENT as OSV_DB_ENVIRONMENT, database_mount_target,
-    offline_database_mounts, snapshot_ecosystems,
+    no_packages_declared, offline_database_mounts, snapshot_ecosystems,
 )
 from appsec_review.tool_inputs import (
     TOOL_INPUT_SUPPORT, InputDecision, bounded_diagnostic, not_applicable_summary,
@@ -303,7 +303,7 @@ def _prerequisites(unit: UnitContext, adapter: ToolAdapter, selection: Applicabi
         file_list = unit.unit_root / "inputs" / "pmd-files.txt"
         file_list.parent.mkdir(parents=True, exist_ok=True)
         file_list.write_text("".join(f"/target/{path}\n" for path in selection.files), encoding="utf-8")
-        mounts.append(Mount(file_list, "/scratch/pmd-files.txt", True))
+        mounts.append(Mount(file_list, "/inputs/pmd-files.txt", True))
     if adapter.tool_id == "tool-cppcheck" and selection.families.get("compile_database"):
         if unit.job.target_root is None:
             return selection, (), {}, "target root is unavailable for the compile database"
@@ -333,7 +333,7 @@ def _prerequisites(unit: UnitContext, adapter: ToolAdapter, selection: Applicabi
         compile_database = unit.unit_root / "inputs" / "compile_commands.json"
         compile_database.parent.mkdir(parents=True, exist_ok=True)
         tool_input_json(compile_database, sanitized)
-        mounts.append(Mount(compile_database, "/scratch/compile_commands.json", True))
+        mounts.append(Mount(compile_database, "/inputs/compile_commands.json", True))
     if adapter.tool_id == "tool-osv-scanner":
         try:
             identity = verify_current(unit.job.repository_root / "data" / "feeds" / "osv", "osv")
@@ -650,6 +650,22 @@ def _run_invocation(unit: UnitContext, adapter: ToolAdapter, catalog: ScanCatalo
                 raise RuntimeError(f"{adapter.tool_id} timed out{subject}")
             if result.oom_killed:
                 raise RuntimeError(f"{adapter.tool_id} was OOM-killed{subject}")
+            if (adapter.tool_id == "tool-osv-scanner" and attempt_paths[1].is_file() and
+                    no_packages_declared(result.exit_code, attempt_paths[1].read_bytes(), selection.files)):
+                # Every lockfile was scanned and declares no packages: nothing can match an advisory.
+                outcome.not_applicable = [InputDecision(
+                    path, adapter.tool_id, ReasonCode.TOOL_REPORTED_UNSUPPORTED_INPUT,
+                    "osv-scanner scanned the lockfile and found 0 packages") for path in selection.files]
+                outcome.error_class = None
+                unit.job.events.write("TOOL_INVOCATION_COMPLETED", unit_id=unit.unit_id,
+                                      tool_invocation_id=invocation_id, tool_id=adapter.tool_id,
+                                      tool_identity=tool_identity, disposition="SUCCEEDED", retry_count=attempt,
+                                      result_count=0, gap_count=len(gaps), gaps=gaps[:50],
+                                      checkpoint_reused=False, truncated=False,
+                                      duration_ms=max(0, int((time.monotonic() - invoked) * 1000)),
+                                      **project_fields)
+                outcome.gaps.extend(gaps)
+                return outcome
             if result.exit_code not in adapter.accepted_exit_codes:
                 stderr = attempt_paths[1].read_bytes() if attempt_paths[1].is_file() else b""
                 missing = (osv_missing_ecosystems(stderr)
