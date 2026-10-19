@@ -10,7 +10,8 @@ from typing import Any, Iterable, Mapping
 LANGUAGES = {
     ".py": "Python", ".js": "JavaScript", ".ts": "TypeScript", ".tsx": "TypeScript",
     ".java": "Java", ".kt": "Kotlin", ".go": "Go", ".rs": "Rust", ".c": "C",
-    ".h": "C/C++", ".cc": "C++", ".cpp": "C++", ".cs": "C#", ".rb": "Ruby",
+    ".h": "C/C++", ".cc": "C++", ".cpp": "C++", ".cxx": "C++", ".hh": "C++", ".hpp": "C++", ".hxx": "C++",
+    ".cs": "C#", ".rb": "Ruby",
     ".php": "PHP", ".swift": "Swift", ".sh": "Shell", ".ps1": "PowerShell",
 }
 SOURCE_METRICS_SEMANTICS = "appsec-review/source-counting/1"
@@ -34,6 +35,7 @@ MANIFEST_SUFFIX_ECOSYSTEMS: dict[str, str] = {
 SOURCE_ECOSYSTEMS: dict[str, str] = {
     ".py": "python", ".js": "node", ".ts": "node", ".tsx": "node", ".java": "jvm", ".kt": "jvm",
     ".go": "go", ".rs": "rust", ".c": "native", ".h": "native", ".cc": "native", ".cpp": "native",
+    ".cxx": "native", ".hh": "native", ".hpp": "native", ".hxx": "native",
     ".cs": "dotnet", ".rb": "ruby", ".php": "php",
 }
 PROJECT_FILE_SUFFIXES = frozenset(MANIFEST_SUFFIX_ECOSYSTEMS)
