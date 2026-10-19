@@ -636,7 +636,7 @@ def command_parity(args) -> int:
             if changed:
                 raise StateError(f"{job_id} changed {len(changed)} shared files and has no seed to restore them")
         else:
-            seed_args = argparse.Namespace(**{**vars(args), "replace": False, "restore_shared": bool(changed),
+            seed_args = argparse.Namespace(**{**vars(args), "replace": False, "restore_shared": args.restore_shared or bool(changed),
                                               "run_id": None})
             seed_run(seed_args, tag, ids[position - 1])
         # 4. The local launcher, replaying the Dagster run's model responses.
