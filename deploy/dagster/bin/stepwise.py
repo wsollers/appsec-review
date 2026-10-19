@@ -39,6 +39,7 @@ ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "src"))
 
 from appsec_review.acceptance.audit import audit_job_writes, summarize  # noqa: E402
+from appsec_review.acceptance.content import content_differences  # noqa: E402
 from appsec_review.acceptance.diff import CLASSES, diff_job_outputs, failing  # noqa: E402
 from appsec_review.acceptance.normalize import Masks, gap_summary, locate_attempt, normalize_job_output  # noqa: E402
 from appsec_review.acceptance.seed import BlobStore, SeedError, resolve_chain, restore, scan, snapshot  # noqa: E402
@@ -676,6 +677,10 @@ def command_parity(args) -> int:
                                  exclude=[STATE_ROOT, SEED_STORE],
                                  dagster_status="SUCCESS" if exit_code == 0 else "FAILURE")
         (walk / "local.json").write_text(json.dumps(local_output, indent=1, sort_keys=True) + "\n", encoding="utf-8")
+        # Raw bytes may differ by environment; the content each side published must not.
+        content = content_differences(job_id, walk / "dagster" / "run", dagster_handoff,
+                                      side_masks(app_run_id, state.target, "dagster"), run_root, local_handoff,
+                                      side_masks(app_run_id, state.target, "local"))
         local_added, local_changed = _shared_delta(local_before, _shared_scan())
         _save_files(local_changed, walk / "local" / "changed")
     finally:
@@ -686,7 +691,7 @@ def command_parity(args) -> int:
 
     # 5-6. Same inputs and code on both sides, then the same output.
     mismatches = _identity_mismatches(dagster_handoff, local_handoff)
-    differences = diff_job_outputs(dagster_output, local_output, job_id)
+    differences = diff_job_outputs(dagster_output, local_output, job_id) + content
     failures = failing(differences)
     both_succeeded = dagster_status == "SUCCESS" and exit_code == 0 and not audit
     verdict = ("PARITY OK" if both_succeeded and not mismatches and not failures else

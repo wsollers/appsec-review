@@ -10,7 +10,7 @@ from typing import Any
 from .normalize import canonical
 
 CLASSES = ("job-status", "gap-added", "gap-removed", "finding-added", "finding-removed", "coverage",
-           "volatile")
+           "content", "volatile")
 
 
 @dataclass(frozen=True, order=True)
