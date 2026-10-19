@@ -481,15 +481,42 @@ IDENTITY_KEYS = ("implementation_identity", "schema_identity", "validation_ident
                  "job_config_sha256", "source_fingerprint", "input_identity", "upstream_handoff_sha256")
 
 
+_DAEMON_SOURCES: dict[str, str] = {}
+
+
+def daemon_sources() -> dict[str, str]:
+    """Code-location mount destinations mapped to the source paths the Docker daemon mounts them from.
+
+    A tool container started from the code location is mounted from these sources, so the paths a
+    Dagster run records for its tool mounts are spelled this way (Docker Desktop may report its own
+    staging path rather than the host path).
+    """
+    if not _DAEMON_SOURCES:
+        container = compose("ps", "-q", "code-location").strip()
+        inspected = subprocess.run(["docker", "inspect", container, "--format", "{{json .Mounts}}"],
+                                   text=True, capture_output=True, check=True)
+        _DAEMON_SOURCES.update({str(item["Destination"]): str(item["Source"])
+                                for item in json.loads(inspected.stdout)})
+    return _DAEMON_SOURCES
+
+
 def side_masks(app_run_id: str, target: str, side: str) -> Masks:
     """Masks for one driver's output, built from that driver's own roots only.
 
-    Dagster output is masked with the code location's paths and local output with the host's, so a
-    path written in the other environment's spelling survives masking and shows as a difference.
+    Dagster output is masked with the code location's paths, and with the daemon-visible sources of
+    its run and target mounts; local output with the host's. A path written in the other
+    environment's spelling survives masking and shows as a difference.
     """
     if side == "dagster":
-        return Masks.for_run(app_run_id, runs_roots=[f"{CONTAINER_ROOT}/runs"], repository_roots=[CONTAINER_ROOT],
-                             target_roots=[target])
+        sources = daemon_sources()
+        runs = [f"{CONTAINER_ROOT}/runs"]
+        targets = [target]
+        if f"{CONTAINER_ROOT}/runs" in sources:
+            runs.append(sources[f"{CONTAINER_ROOT}/runs"])
+        targets_mount = f"{CONTAINER_ROOT}/targets"
+        if targets_mount in sources and target.startswith(targets_mount + "/"):
+            targets.append(sources[targets_mount] + target[len(targets_mount):])
+        return Masks.for_run(app_run_id, runs_roots=runs, repository_roots=[CONTAINER_ROOT], target_roots=targets)
     return Masks.for_run(app_run_id, runs_roots=[str(ROOT / "runs")], repository_roots=[str(ROOT)],
                          target_roots=[str(host_path(target))])
 

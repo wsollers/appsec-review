@@ -49,6 +49,7 @@ def walk(tmp_path, monkeypatch):
         monkeypatch.setattr(stepwise, name, value)
     (tmp_path / "data" / "caches").mkdir(parents=True)
     monkeypatch.setattr(stepwise, "_ids", lambda: (1000, 1000))
+    monkeypatch.setattr(stepwise, "daemon_sources", lambda: {})
     monkeypatch.setattr(stepwise, "packaged_topology", lambda: TOPOLOGY)
     environment = {stepwise.MODEL_RECORDING: "record", "APPSEC_REVIEW_TARGET": "/opt/app/targets/relay"}
     monkeypatch.setattr(stepwise, "compose", lambda *arguments: environment[arguments[-1].split()[1]]
@@ -161,3 +162,17 @@ def test_each_side_must_spell_paths_for_its_own_environment(walk, monkeypatch) -
     report = _report(tmp_path)
     assert report["verdict"] == "DIFFERENT"
     assert {item["class"] for item in report["differences"]} >= {"finding-added", "finding-removed"}
+
+
+def test_dagster_paths_may_use_the_daemon_visible_mount_sources(walk, monkeypatch) -> None:
+    tmp_path, _ = walk
+    staging = "/run/desktop/mnt/host/wsl/docker-desktop-bind-mounts/Ubuntu-24.04/abc"
+    monkeypatch.setattr(stepwise, "daemon_sources", lambda: {"/opt/app/runs": staging,
+                                                             "/opt/app/targets": f"{tmp_path}/targets"})
+    # A tool mount recorded by Dagster with the daemon's spelling of the target is correct there.
+    monkeypatch.setattr(stepwise.launch_next, "root", f"{tmp_path}/targets/relay/", raising=False)
+    monkeypatch.setattr(stepwise, "_run_local", _local(tmp_path, findings=2))
+
+    assert stepwise.command_parity(_args()) == 0
+    masks = stepwise.side_masks(RUN, "/opt/app/targets/relay", "dagster")
+    assert masks.text(f"{staging}/{RUN}/data/x.json") == "<run>/data/x.json"
