@@ -480,6 +480,19 @@ IDENTITY_KEYS = ("implementation_identity", "schema_identity", "validation_ident
                  "job_config_sha256", "source_fingerprint", "input_identity", "upstream_handoff_sha256")
 
 
+def side_masks(app_run_id: str, target: str, side: str) -> Masks:
+    """Masks for one driver's output, built from that driver's own roots only.
+
+    Dagster output is masked with the code location's paths and local output with the host's, so a
+    path written in the other environment's spelling survives masking and shows as a difference.
+    """
+    if side == "dagster":
+        return Masks.for_run(app_run_id, runs_roots=[f"{CONTAINER_ROOT}/runs"], repository_roots=[CONTAINER_ROOT],
+                             target_roots=[target])
+    return Masks.for_run(app_run_id, runs_roots=[str(ROOT / "runs")], repository_roots=[str(ROOT)],
+                         target_roots=[str(host_path(target))])
+
+
 def _ids() -> tuple[int, int]:
     environment = read_environment(DEPLOYMENT / ".env")
     return int(environment.get("APPSEC_UID", "0")), int(environment.get("APPSEC_GID", "0"))
@@ -618,11 +631,11 @@ def command_parity(args) -> int:
         state = StepwiseState.load(path)
     app_run_id = state.app_run_id
     run_root = ROOT / "runs" / app_run_id
-    masks = masks_for(app_run_id, state.target)
     dagster_run_id = state.job(job_id)["dagster_run_ids"][-1]
     dagster_status = get_run(args.url, dagster_run_id)["status"]
     dagster_attempt = locate_attempt(run_root, job_id, dagster_run_id)
-    dagster_output = normalize_job_output(run_root, job_id, masks, attempt_root=dagster_attempt)
+    dagster_output = normalize_job_output(run_root, job_id, side_masks(app_run_id, state.target, "dagster"),
+                                          attempt_root=dagster_attempt)
     dagster_handoff = _handoff(dagster_attempt)
     walk = PARITY_ROOT / app_run_id / job_id / datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     walk.mkdir(parents=True)
@@ -654,7 +667,8 @@ def command_parity(args) -> int:
         started = time.time()
         exit_code = _run_local(job_id, app_run_id, host_path(state.target), recordings, walk / "local.log")
         local_attempt = locate_attempt(run_root, job_id)
-        local_output = normalize_job_output(run_root, job_id, masks, attempt_root=local_attempt)
+        local_output = normalize_job_output(run_root, job_id, side_masks(app_run_id, state.target, "local"),
+                                            attempt_root=local_attempt)
         local_handoff = _handoff(local_attempt)
         uid, gid = _ids()
         audit = audit_job_writes(run_root, job_id, local_attempt, expected_uid=uid, expected_gid=gid,

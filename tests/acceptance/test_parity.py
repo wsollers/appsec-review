@@ -28,14 +28,15 @@ IDENTITY = {"implementation_identity": "i", "schema_identity": "s", "validation_
             "input_identity": None, "upstream_handoff_sha256": {"job_review_intake": "u"}}
 
 
-def _attempt(run_root: Path, serial: int, *, dagster_run_id: str | None, findings: int, **identity) -> None:
+def _attempt(run_root: Path, serial: int, *, dagster_run_id: str | None, findings: int, root: str = "",
+             **identity) -> None:
     attempt = run_root / "data" / "jobs" / JOB / "attempts" / f"attempt_{serial:04d}"
     attempt.mkdir(parents=True)
     orchestration = {"system": "dagster", "run_id": dagster_run_id} if dagster_run_id else {"system": "local"}
     (attempt / "claim.json").write_text(json.dumps({"orchestration": orchestration}), encoding="utf-8")
     (attempt / "status.json").write_text(json.dumps({"status": "SUCCEEDED"}), encoding="utf-8")
     (attempt / "result.json").write_text(json.dumps({"outputs": {"catalog.files": {
-        "findings": [{"path": f"src/{index}.cpp"} for index in range(findings)], "gaps": []}}}), encoding="utf-8")
+        "findings": [{"path": f"{root}src/{index}.cpp"} for index in range(findings)], "gaps": []}}}), encoding="utf-8")
     (attempt / "handoff.json").write_text(json.dumps({"status": "ACCEPTED", "artifacts": [],
                                                       **IDENTITY, **identity}), encoding="utf-8")
 
@@ -71,7 +72,8 @@ def walk(tmp_path, monkeypatch):
     def launch_next(args, state, path):
         state.record_launch(JOB, "dagster-1")
         state.save(path)
-        _attempt(tmp_path / "runs" / RUN, 1, dagster_run_id="dagster-1", findings=2)
+        _attempt(tmp_path / "runs" / RUN, 1, dagster_run_id="dagster-1", findings=2,
+                 root=getattr(launch_next, "root", "/opt/app/targets/relay/"))
         (tmp_path / "data" / "caches" / "tool-output.json").write_text("{}", encoding="utf-8")
         return 0
 
@@ -86,7 +88,7 @@ def _args(**overrides) -> argparse.Namespace:
                                  "interval_seconds": 1, "show": 10, **overrides})
 
 
-def _local(tmp_path: Path, findings: int, **identity):
+def _local(tmp_path: Path, findings: int, *, root: str | None = None, **identity):
     def run_local(job_id, app_run_id, target, replay, log):
         run_root = tmp_path / "runs" / app_run_id
         # The local side starts from the seed alone: no Dagster attempt, no Dagster cache entry.
@@ -94,7 +96,8 @@ def _local(tmp_path: Path, findings: int, **identity):
         assert not (run_root / "data" / "jobs" / JOB).exists()
         assert not (tmp_path / "data" / "caches" / "tool-output.json").exists()
         assert target == tmp_path / "targets" / "relay" and replay.is_dir()
-        _attempt(run_root, 1, dagster_run_id=None, findings=findings, **identity)
+        _attempt(run_root, 1, dagster_run_id=None, findings=findings,
+                 root=f"{tmp_path}/targets/relay/" if root is None else root, **identity)
         log.parent.mkdir(parents=True, exist_ok=True)
         log.write_text("ok\n", encoding="utf-8")
         return 0
@@ -146,3 +149,15 @@ def test_parity_refuses_a_code_location_that_does_not_record(walk, monkeypatch) 
     monkeypatch.setattr(stepwise, "compose", lambda *arguments: "")
     with pytest.raises(RuntimeError, match="=record"):
         stepwise.command_parity(_args())
+
+
+def test_each_side_must_spell_paths_for_its_own_environment(walk, monkeypatch) -> None:
+    tmp_path, _ = walk
+    # Dagster recorded the host spelling of the target: correct content, wrong environment.
+    monkeypatch.setattr(stepwise.launch_next, "root", f"{tmp_path}/targets/relay/", raising=False)
+    monkeypatch.setattr(stepwise, "_run_local", _local(tmp_path, findings=2))
+
+    assert stepwise.command_parity(_args()) == 3
+    report = _report(tmp_path)
+    assert report["verdict"] == "DIFFERENT"
+    assert {item["class"] for item in report["differences"]} >= {"finding-added", "finding-removed"}
