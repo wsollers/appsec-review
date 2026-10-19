@@ -485,9 +485,19 @@ def _ids() -> tuple[int, int]:
     return int(environment.get("APPSEC_UID", "0")), int(environment.get("APPSEC_GID", "0"))
 
 
+_SCAN_CACHE: dict[str, dict] = {}
+
+
 def _shared_scan() -> dict[str, dict]:
+    """Listing of the shared roots; files whose size, mtime and inode are unchanged are not rehashed."""
     uid, gid = _ids()
-    entries, _ = scan(ROOT, SHARED_ROOTS, expected_uid=uid, expected_gid=gid, exclude=SEED_EXCLUDE)
+    if not _SCAN_CACHE:
+        cache_path = SEED_STORE / "stat-cache.json"
+        if cache_path.is_file():
+            _SCAN_CACHE.update(json.loads(cache_path.read_text(encoding="utf-8")))
+    entries, cache = scan(ROOT, SHARED_ROOTS, expected_uid=uid, expected_gid=gid, exclude=SEED_EXCLUDE,
+                          cache=_SCAN_CACHE)
+    _SCAN_CACHE.update(cache)
     return entries
 
 
