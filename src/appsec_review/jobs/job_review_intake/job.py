@@ -147,11 +147,11 @@ def build_job(*, check_models: ModelCheck | None = None) -> Job:
         return {"path": str(target), "kind": "directory"}
 
     def validate_target(unit: UnitContext) -> Mapping[str, Any]:
-        snapshot = inventory(_target(unit), Bounds())
+        snapshot = inventory(_target(unit), Bounds(), exclusions=unit.job.config.exclusions)
         if not snapshot["files"]:
             raise ValueError("target has no bounded text files")
         return {"file_count": snapshot["file_count"], "total_bytes": snapshot["total_bytes"],
-                "gaps": snapshot["gaps"]}
+                "gaps": snapshot["gaps"], "configured_exclusions": snapshot["configured_exclusions"]}
 
     def fingerprint_target(unit: UnitContext) -> Mapping[str, Any]:
         actual = source_fingerprint(_target(unit))

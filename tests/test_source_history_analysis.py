@@ -1007,3 +1007,26 @@ def test_github_pagination_inputs_bind_job_identity(tmp_path: Path) -> None:
     assert job_config_sha256(base, "job_source_history_analysis") != job_config_sha256(changed, "job_source_history_analysis")
     with pytest.raises(ValueError):
         _settings(per_page=101)
+
+
+def test_configured_exclusions_leave_the_catalog_and_history_with_their_scope(tmp_path: Path) -> None:
+    config = configured(tmp_path, replacements=(
+        ('[exclusions]\npatterns = [".gitignore"]\n', '[exclusions]\npatterns = [".gitignore", ".gitattributes"]\n'),
+        ("[jobs.job_source_history_analysis.settings.github]\nenabled = false",
+         '[jobs.job_source_history_analysis.exclusions]\npatterns = ["app/helpers.py"]\n\n'
+         "[jobs.job_source_history_analysis.settings.github]\nenabled = false"),
+    ))
+    target = tmp_path / "target"
+    build_repository(target)
+    outcome = run_graph(config, target, LocalDocker())
+    catalog = outcome["jobs"]["job_target_catalog"]["result"]["outputs"]["repository_discovery.partition_repository"]
+    produced = outputs(outcome)
+
+    assert catalog["configured_exclusions"] == [
+        {"path": ".gitattributes", "pattern": ".gitattributes", "scope": "global"}]
+    assert ".gitattributes" not in {item["path"] for item in catalog["files"]}
+    assert produced["resolve_sources.resolve_history_source"]["configured_exclusions"] == [
+        {"path": "app/helpers.py", "pattern": "app/helpers.py", "scope": "job_source_history_analysis"}]
+    eligible = produced["resolve_sources.bind_snapshot"]["eligible"]
+    assert "app/helpers.py" not in eligible and ".gitattributes" not in eligible
+    assert {"app/auth.py", "lib/core.py"} <= set(eligible)

@@ -15,6 +15,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from urllib.parse import unquote, urlparse
 
 from .binary_decompilation import BinaryDecompilationSettings, parse_binary_decompilation
+from .exclusions import PathExclusions, global_exclusions, job_exclusions
 
 
 class ProcessingMode(str, Enum):
@@ -466,6 +467,8 @@ class JobConfig:
     steps: Mapping[str, StepConfig]
     typed_settings: object | None = None
     build_capture: BuildCaptureConfig | None = None
+    # Global [exclusions] patterns followed by the job's own (config/exclusions.py).
+    exclusions: PathExclusions = PathExclusions()
 
     def __post_init__(self) -> None:
         if not re.fullmatch(r"job_[a-z][a-z0-9_]*", self.job_id):
@@ -665,6 +668,7 @@ def load_config(path: str | Path = "appsec-review.toml", *, overlay: str | Path 
     jobs_value = document.get("jobs")
     if not isinstance(jobs_value, dict) or not jobs_value:
         raise ValueError("[jobs] must contain at least one job")
+    excluded_globally = global_exclusions(document)
     jobs: dict[str, JobConfig] = {}
     for job_id, value in jobs_value.items():
         if not isinstance(value, dict):
@@ -910,6 +914,7 @@ def load_config(path: str | Path = "appsec-review.toml", *, overlay: str | Path 
             steps=MappingProxyType(steps),
             typed_settings=typed_settings,
             build_capture=resolved_capture,
+            exclusions=job_exclusions(job_id, value, excluded_globally),
         )
     codeql_job = jobs.get("job_codeql_analysis")
     if codeql_job is not None:

@@ -88,13 +88,14 @@ def build_job(*, fail_task: str | None = None) -> Job:
 
     def partition(unit: UnitContext) -> Mapping[str, Any]:
         maybe_fail(unit)
-        snapshot = inventory(_target(unit))
+        snapshot = inventory(_target(unit), exclusions=unit.job.config.exclusions)
         groups = Counter(item["path"].split("/", 1)[0] for item in snapshot["files"])
         doc = {"schema": "appsec-review/repository-partition/1", "source_fingerprint": unit.job.source_fingerprint,
                "partitions": [{"path": key, "file_count": groups[key]} for key in sorted(groups)],
                **snapshot}
         return {"artifact": _artifact(unit, "repository-partition.json", doc),
-                "files": snapshot["files"], "gaps": snapshot["gaps"]}
+                "files": snapshot["files"], "gaps": snapshot["gaps"],
+                "configured_exclusions": snapshot["configured_exclusions"]}
 
     def census(unit: UnitContext) -> Mapping[str, Any]:
         maybe_fail(unit)

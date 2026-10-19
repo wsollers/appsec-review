@@ -210,6 +210,43 @@ that table **before launch**:
   evidence collection publishes it as `unsupported_coverage` (kind `unsupported-language`) and a
   named `unsupported-language coverage` gap.
 
+### Configured path exclusions
+
+A review can deliberately leave target paths out of analysis (`src/appsec_review/config/exclusions.py`).
+
+```toml
+[exclusions]                                  # every job
+patterns = [".gitignore"]
+
+[jobs.job_source_history_analysis.exclusions] # this job only, after the global patterns
+patterns = ["docs/"]
+```
+
+The patterns match the target-relative path:
+
+- A pattern without `/` matches any path component. `.gitignore` or `*.md` match that file
+  anywhere, and `fixtures` matches every folder of that name.
+- A pattern ending in `/` is a folder. With no other `/`, it matches the folder anywhere;
+  otherwise it is anchored at the target root (`docs/api/`). Everything beneath the folder is
+  excluded.
+- Any other pattern containing `/` is anchored at the target root and globbed against the whole
+  path.
+
+**Where they apply.** Intake and catalog apply the exclusions to their inventory. Every job that
+reads the accepted catalog therefore inherits the global and catalog-level patterns. Source
+history also applies its own job-level patterns to the catalog's file list.
+
+**Job-level tables.** Only `job_review_intake`, `job_target_catalog` and
+`job_source_history_analysis` accept a job-level table. Naming one on any other job fails at
+load, so a pattern is never silently ignored.
+
+**Recording.** Each excluded path is listed once under `configured_exclusions`, with the
+pattern and scope that excluded it. This is a declared scope decision, not a coverage gap.
+
+**What exclusions don't change.** They don't change what is built, and the target's source
+fingerprint still covers every byte. Both tables are frozen into the run's resolved
+configuration, so changing an exclusion changes the run's configuration identity.
+
 ## NVD synchronization
 
 `job_third_party_data_sync.nvd_sync` is a standalone, network-enabled reference publisher. It bootstraps from the official

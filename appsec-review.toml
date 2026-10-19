@@ -1,3 +1,10 @@
+# Target paths every job leaves out of analysis (src/appsec_review/config/exclusions.py). A job may
+# add its own with [jobs.<id>.exclusions]; only jobs that select target files accept one. Excluded
+# paths are listed once in the catalog, never reported as gaps, and still count in the target's
+# source fingerprint.
+[exclusions]
+patterns = [".gitignore"]
+
 [runtime]
 runs_dir = "runs"
 data_dir = "data"

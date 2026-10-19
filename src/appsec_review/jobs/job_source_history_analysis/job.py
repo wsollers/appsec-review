@@ -281,6 +281,12 @@ def build_job(*, executor_factory: ExecutorFactory | None = None,
         swift_count = swift_inventory_count(inputs["files"])
         if not unit.job.tools.enable_swift:
             inputs["files"] = list(filter_swift_files(inputs["files"], enabled=False))
+        # Global exclusions already left the catalog; the job's own patterns apply here.
+        exclusions = unit.job.config.exclusions
+        configured = [{"path": str(item["path"]), **rule.as_dict()} for item in inputs["files"]
+                      if (rule := exclusions.match(str(item["path"]))) is not None]
+        excluded_paths = {item["path"] for item in configured}
+        inputs["files"] = [item for item in inputs["files"] if str(item["path"]) not in excluded_paths]
         if inputs["source_fingerprint"] != unit.job.source_fingerprint:
             raise ValueError("graph target fingerprint does not match the accepted catalog")
         target = unit.job.target_root
@@ -304,6 +310,7 @@ def build_job(*, executor_factory: ExecutorFactory | None = None,
             gaps.append(SWIFT_KNOWN_GAP)
         return {"identity": history_identity(target), "git": git.as_dict(),
                 "github": {"decision": github[0], "reason": github[1]}, "inputs": inputs,
+                "configured_exclusions": configured,
                 "gaps": gaps, "terminal_status": git.decision if git.decision in SKIPPED else _status(gaps)}
 
     def bind(unit: UnitContext) -> Mapping[str, Any]:
