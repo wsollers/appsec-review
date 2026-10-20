@@ -187,3 +187,37 @@ least one rule set.
    `test/acceptance/cpp-multivuln-v1/expectations.toml`. Model-backed jobs replay the Dagster
    run's recorded responses. Further corpora are added only after the whole chain matches; see
    [`local-dagster-parity.md`](local-dagster-parity.md).
+
+
+## System acceptance (SAT/SIT)
+
+`stepwise.py system --tag <tag>` runs one complete `wave1_review` through Dagster (or takes a finished
+run with `--app-run ID`) and checks it end to end. It is the check that the whole graph succeeds and
+produces its final artifacts; per-job parity shows each job behaves the same through both drivers.
+
+| Check | Fails when |
+| --- | --- |
+| Every job of the graph | a job has no accepted handoff, or finished other than `SUCCEEDED` / `COMPLETED_WITH_GAPS` |
+| Evidence integrity | any handoff, artifact or path-and-hash reference does not resolve to its recorded bytes, or a job bound an upstream handoff the run did not accept |
+| Final artifacts | the review packages (`data/review-packages/*/manifest.json` and its pages) or the document-issue ledger are missing, empty, changed, or fail `docs/schemas/document-issue-ledger.schema.json` |
+| Baselines | the normalized output of a job differs from `test/acceptance/<tag>/<job>.json` (`stepwise.py compare`) |
+| Answer key | a defect in `test/acceptance/<tag>/expectations.toml` has no finding on its file and line. Spurious findings are reported and never fail |
+
+The live test is `tests/live/test_wave1_system_live.py`, skipped unless `APPSEC_REVIEW_SYSTEM_ACCEPTANCE=<tag>`
+is set. It needs the Dagster stack running, the Docker daemon, the Claude CLI overlay and the real model.
+
+Two things the checks do not do, found by running them:
+
+- **Parity cannot see two sides that are equally broken.** The Clang static analyzer exited 1 on every
+  translation unit with no diagnostics, and the walk accepted that because both drivers agreed. Only the
+  answer key shows it. `parity` now also refuses a Dagster run whose model calls could not reach a model
+  (`unavailable_model_calls`), after a stack recreated without the CLI overlay produced a degraded baseline.
+- **Model-backed jobs vary between runs.** `job_dependency_intelligence` and `job_target_analysis_plan`
+  (and what is derived from them) differ from their baselines on a fresh run, so `compare` reports them.
+  Baselines are re-normalized with the current masks on both sides before comparing, so adding a mask
+  does not require re-accepting a corpus.
+
+Operating notes: recreate the stack with `docker compose -f compose.yaml -f compose.claude.yaml up -d`, never
+`compose.yaml` alone. A local run that consumes a hash recorded inside the container (the retrieval
+manifest embeds `target_root`) needs `parity --container-paths`, which mounts the checkout at `/opt/app`
+in a rootless namespace for the local side.

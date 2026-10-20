@@ -45,7 +45,8 @@ from appsec_review.acceptance.audit import audit_job_writes, summarize  # noqa: 
 from appsec_review.acceptance.content import content_differences  # noqa: E402
 from appsec_review.acceptance.diff import CLASSES, classify_environment, diff_job_outputs, failing  # noqa: E402
 from appsec_review.acceptance.integrity import attempt_integrity  # noqa: E402
-from appsec_review.acceptance.normalize import Masks, gap_summary, locate_attempt, normalize_job_output  # noqa: E402
+from appsec_review.acceptance.normalize import (  # noqa: E402
+    Masks, gap_summary, locate_attempt, normalize_job_output, normalize_value)
 from appsec_review.acceptance.seed import BlobStore, SeedError, resolve_chain, restore, scan, snapshot  # noqa: E402
 from appsec_review.acceptance.state import StateError, StepwiseState, valid_corpus_tag  # noqa: E402
 from appsec_review.acceptance.system import final_artifact_problems, run_problems  # noqa: E402
@@ -371,12 +372,17 @@ def command_compare(args) -> int:
         expected = json.loads(path.read_text(encoding="utf-8"))
         accepted_jobs.add(expected["job_id"])
         actual = normalize_job_output(run_root, expected["job_id"], masks)
-        differences += diff_job_outputs(expected, None if actual["status"] == "MISSING" else actual,
+        # Baselines keep the normalization they were accepted under. The masks only replace patterns,
+        # so applying today's to both sides keeps an old baseline comparable.
+        differences += diff_job_outputs(normalize_value(expected, masks),
+                                        None if actual["status"] == "MISSING" else normalize_value(actual, masks),
                                         expected["job_id"])
     jobs_root = run_root / "data" / "jobs"
     for job_root in sorted(jobs_root.iterdir()) if jobs_root.is_dir() else []:
         if job_root.name not in accepted_jobs:
             differences += diff_job_outputs(None, normalize_job_output(run_root, job_root.name, masks), job_root.name)
+    # As in parity: an id, hash or path that differs between two runs is not a difference.
+    differences = classify_environment(differences)
     counts = Counter(item.kind for item in differences)
     print(f"compare app_run={args.app_run} tag={tag} jobs={len(accepted_jobs)} "
           + " ".join(f"{kind}={counts.get(kind, 0)}" for kind in CLASSES))

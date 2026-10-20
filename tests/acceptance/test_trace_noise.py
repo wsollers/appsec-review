@@ -128,3 +128,19 @@ def test_package_ids_hashed_over_the_retrieval_manifest_are_masked_but_their_con
     second = {"package_id": "package-2c2bd9d986ac43e14fc77cff", "row_id": "r1", "control": {"id": "V1.1"}}
     assert normalize_value(first, MASKS) == normalize_value(second, MASKS)
     assert normalize_value(first, MASKS) != normalize_value({**second, "row_id": "r2"}, MASKS)
+
+
+def test_run_specific_codeql_unit_ids_and_shard_suffixes_are_masked() -> None:
+    first = {"gap": "graph:codeql-unit-ef4be61360974b0facd05dac:entry_point",
+             "unit": "artifact:data/indices/observations/" + "a" * 64 + "-5e95679de4fdb3a8.sqlite"}
+    second = {"gap": "graph:codeql-unit-612e7dd37a4af081280a679c:entry_point",
+              "unit": "artifact:data/indices/observations/" + "b" * 64 + "-a8e3f02036a0f065.sqlite"}
+    assert normalize_value(first, MASKS) == normalize_value(second, MASKS)
+    assert normalize_value(first, MASKS) != normalize_value({**second, "gap": "graph:other:entry_point"}, MASKS)
+
+
+def test_task_checkpoint_directory_ids_are_masked() -> None:
+    first = "data/task-checkpoints/job_evidence_collection/tool-checkov/509c9b3de2b3f5ea00abb22d/checkpoint.json"
+    second = "data/task-checkpoints/job_evidence_collection/tool-checkov/96a7830483966da19986e633/checkpoint.json"
+    assert normalize_value(first, MASKS) == normalize_value(second, MASKS)
+    assert normalize_value(first, MASKS) != normalize_value(first.replace("tool-checkov", "tool-semgrep"), MASKS)
