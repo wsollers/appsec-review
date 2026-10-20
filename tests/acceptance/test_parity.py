@@ -209,3 +209,27 @@ def test_an_inconsistent_identifier_or_hash_on_either_side_fails(walk, monkeypat
     paths = {item["path"] for item in _report(tmp_path)["differences"] if item["class"] == "integrity"}
     assert {"local:upstream.job_review_intake", "local:handoff.upstream_handoff_sha256",
             "local:latest.json.handoff_sha256"} <= paths
+
+
+def test_the_local_command_is_plain_or_runs_under_a_rootless_opt_app_namespace() -> None:
+    import importlib.util
+    import sys
+
+    bin_dir = Path(__file__).parents[2] / "deploy" / "dagster" / "bin"
+    sys.path.insert(0, str(bin_dir))
+    spec = importlib.util.spec_from_file_location("stepwise_command", bin_dir / "stepwise.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    root = Path("/home/u/checkout")
+    plain = module.local_command("job_x", "2026-10-19-0002", "/home/u/checkout/targets/t", container_paths=False,
+                                 root=root)
+    assert plain[:3] == ["/home/u/checkout/.venv/bin/python", "-m", "appsec_review"]
+    assert plain[plain.index("--target") + 1] == "/home/u/checkout/targets/t"
+    assert "unshare" not in plain
+
+    inside = module.local_command("job_x", "2026-10-19-0002", "/opt/app/targets/t", container_paths=True, root=root)
+    assert inside[:3] == ["unshare", "-Urm", "sh"]
+    assert "mount --bind \"$1\" /opt/app" in inside[4]
+    assert inside[6] == str(root) and inside[7] == "/opt/app/.venv/bin/python"
+    assert inside[inside.index("--target") + 1] == "/opt/app/targets/t" and inside[-1] == "--upstream-from-run"

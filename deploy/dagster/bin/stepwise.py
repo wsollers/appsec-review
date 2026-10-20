@@ -662,12 +662,33 @@ def _identity_mismatches(dagster: dict | None, local: dict | None) -> list[dict]
             for key in IDENTITY_KEYS if dagster.get(key) != local.get(key)]
 
 
-def _run_local(job_id: str, app_run_id: str, target: Path, replay: Path, log: Path) -> int:
+CONTAINER_ROOT = "/opt/app"
+# Runs the command with the checkout bind-mounted at the code location's /opt/app, in a rootless
+# mount namespace (no sudo): paths then resolve to the same spelling as under Dagster, so hashes
+# of artifacts that embed the target or run root (the retrieval manifest) agree across drivers.
+_NAMESPACE = ('mount -t tmpfs tmpfs /opt && mkdir /opt/app && mount --bind "$1" /opt/app && shift && '
+              'cd /opt/app && exec "$@"')
+
+
+def local_command(job_id: str, app_run_id: str, target: str, *, container_paths: bool,
+                  root: Path = ROOT) -> list[str]:
+    """The argv of the local launcher for one job; ``target`` is spelled for the environment it runs in."""
+
+    python = f"{CONTAINER_ROOT}/.venv/bin/python" if container_paths else str(root / ".venv" / "bin" / "python")
+    command = [python, "-m", "appsec_review", "run", job_id, "--run-id", app_run_id, "--target", target,
+               "--upstream-from-run"]
+    if container_paths:
+        return ["unshare", "-Urm", "sh", "-c", _NAMESPACE, "sh", str(root), *command]
+    return command
+
+
+def _run_local(job_id: str, app_run_id: str, target: Path, replay: Path, log: Path, *,
+               container_paths: bool = False) -> int:
+    spelled = str(target)
     environment = {**os.environ, MODEL_RECORDING: "replay", MODEL_REPLAY_DIR: str(replay),
-                   "APPSEC_REVIEW_TARGET": str(target)}
-    command = [str(ROOT / ".venv" / "bin" / "python"), "-m", "appsec_review", "run", job_id,
-               "--run-id", app_run_id, "--target", str(target), "--upstream-from-run"]
-    print(f"local: {' '.join(command[2:])}", flush=True)
+                   "APPSEC_REVIEW_TARGET": spelled}
+    command = local_command(job_id, app_run_id, spelled, container_paths=container_paths)
+    print(f"local: {' '.join(command[-9 if container_paths else 2:])}", flush=True)
     log.parent.mkdir(parents=True, exist_ok=True)
     with log.open("w", encoding="utf-8") as handle:
         result = subprocess.run(command, cwd=ROOT, env=environment, stdout=handle, stderr=subprocess.STDOUT,
@@ -758,9 +779,12 @@ def command_parity(args) -> int:
         # 4. The local launcher, replaying the Dagster run's model responses.
         local_before = _shared_scan()
         started = time.time()
-        exit_code = _run_local(job_id, app_run_id, host_path(state.target), recordings, walk / "local.log")
+        container_paths = bool(getattr(args, "container_paths", False))
+        local_side = "dagster" if container_paths else "local"
+        exit_code = _run_local(job_id, app_run_id, Path(state.target) if container_paths else host_path(state.target),
+                               recordings, walk / "local.log", **({"container_paths": True} if container_paths else {}))
         local_attempt = locate_attempt(run_root, job_id)
-        local_output = normalize_job_output(run_root, job_id, side_masks(app_run_id, state.target, "local"),
+        local_output = normalize_job_output(run_root, job_id, side_masks(app_run_id, state.target, local_side),
                                             attempt_root=local_attempt)
         local_handoff = _handoff(local_attempt)
         uid, gid = _ids()
@@ -772,7 +796,7 @@ def command_parity(args) -> int:
         # Raw bytes may differ by environment; the content each side published must not.
         content = content_differences(job_id, walk / "dagster" / "run", dagster_handoff,
                                       side_masks(app_run_id, state.target, "dagster"), run_root, local_handoff,
-                                      side_masks(app_run_id, state.target, "local"))
+                                      side_masks(app_run_id, state.target, local_side))
         # Ids, hashes and paths may differ between the sides; on each side they must be populated and
         # consistent with the run they belong to.
         parked_attempt = (walk / "dagster" / "run" / dagster_attempt.relative_to(run_root)
@@ -869,6 +893,9 @@ def main(argv: list[str] | None = None) -> int:
                         help="also restore stored runs/metadata and data inputs that drifted")
     parity.add_argument("--allow-shared-drift", action="store_true",
                         help="proceed although shared inputs differ from the seed")
+    parity.add_argument("--container-paths", action="store_true",
+                        help="run the local side with the checkout mounted at /opt/app (rootless namespace) so "
+                             "hashes that embed the target or run root match the Dagster side; no docker group")
     system = commands.add_parser("system", help="run or take a whole wave1_review and check it end to end")
     system.add_argument("--tag", required=True)
     system.add_argument("--app-run", help="evaluate this finished application run instead of starting one")
