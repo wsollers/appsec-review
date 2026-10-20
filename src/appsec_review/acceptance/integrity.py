@@ -55,8 +55,9 @@ def attempt_integrity(job_id: str, run_root: Path, run_id: str, attempt: Path | 
                       side: str, target_root: Path | None = None) -> list[Difference]:
     """Integrity problems of ``attempt`` within ``run_root``, labelled with the driver ``side``.
 
-    A path-and-hash reference under ``data/`` names a run-owned artifact; any other relative one
-    names a target file, checked against ``target_root`` when it is given.
+    A path-and-hash reference under ``data/`` names a run-owned artifact. Any other relative one
+    is checked against ``target_root`` when it is given and the file exists there; one that does not
+    is relative to a build workspace and is skipped.
     """
 
     problems: list[Difference] = []
@@ -122,6 +123,10 @@ def attempt_integrity(job_id: str, run_root: Path, run_id: str, attempt: Path | 
         if base is None:
             continue
         target = (base / relative).resolve()
+        if label == "the target" and not target.is_file():
+            # Not a target file: a path relative to the build workspace (build/..., out/...), which
+            # the catalog hashes where the build ran and not in the checkout.
+            continue
         if base not in target.parents or not target.is_file():
             problem(f"{where}.path", f"a file inside {label}", relative)
             continue

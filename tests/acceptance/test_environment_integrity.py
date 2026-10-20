@@ -119,6 +119,6 @@ def test_target_relative_references_resolve_in_the_target_checkout(tmp_path: Pat
     source.write_text("int main() { return 1; }\n", encoding="utf-8")
     changed = {item.path for item in attempt_integrity(JOB, run_root, RUN, attempt, "local", target)}
     assert "local:result.outputs.catalog.source.file.sha256" in changed
+    # A path that is not in the target is relative to a build workspace and is not checked there.
     source.unlink()
-    missing = {item.path for item in attempt_integrity(JOB, run_root, RUN, attempt, "local", target)}
-    assert "local:result.outputs.catalog.source.file.path" in missing
+    assert attempt_integrity(JOB, run_root, RUN, attempt, "local", target) == []

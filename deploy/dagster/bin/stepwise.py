@@ -741,7 +741,7 @@ def command_parity(args) -> int:
               "application_run_id": app_run_id, "repository_commit": git("rev-parse", "HEAD", cwd=ROOT),
               "dagster": {"dagster_run_id": dagster_run_id, "status": dagster_status, **summary["dagster"],
                           "tool_identity": (dagster_handoff or {}).get("tool_identity")},
-              "local": {"exit_code": exit_code, **summary["local"], "audit": summarize(audit),
+              "local": {"exit_code": exit_code, **summary["local"], "audit": summarize(audit), "audit_findings": [finding.as_dict() for finding in audit],
                         "tool_identity": (local_handoff or {}).get("tool_identity")},
               "identity_mismatches": mismatches, "shared_added": {"dagster": added, "local": local_added},
               "differences": [item.as_dict() for item in differences]}

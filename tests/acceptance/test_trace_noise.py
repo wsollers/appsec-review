@@ -103,3 +103,8 @@ def test_unit_outputs_get_the_same_trace_and_ordering_rules() -> None:
 def test_parenthesized_tool_durations_are_masked() -> None:
     assert (normalize_value("-- Configuring done (0.7s)", MASKS) == normalize_value("-- Configuring done (12s)", MASKS))
     assert normalize_value("-- Configuring done (0.7s)", MASKS) != normalize_value("-- Generating done (0.7s)", MASKS)
+
+
+def test_compiler_pointer_addresses_are_masked() -> None:
+    assert normalize_value("ParmVarDecl 0x56b473e31d50 id", MASKS) == normalize_value("ParmVarDecl 0x5581cc07aa10 id", MASKS)
+    assert normalize_value("flags 0x1f", MASKS) != normalize_value("flags 0x2f", MASKS)

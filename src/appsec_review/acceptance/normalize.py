@@ -36,6 +36,7 @@ _PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"\battempt_\d{4}\b"), "<attempt>"),
     (re.compile(r"(?<=execution-capture:command-\d{3}:event-)\d+"), "<n>"),
     (re.compile(r"\btrace\.\d+\b"), "trace.<n>"),
+    (re.compile(r"\b0x[0-9a-f]{8,16}\b"), "0x<addr>"),
     (re.compile(r"\(\d+(?:\.\d+)?s\)"), "(<duration>)"),
     (re.compile(r"\.appsec-review-build-scratch\.[A-Za-z0-9]+"), ".appsec-review-build-scratch.<random>"),
     (re.compile(r"\.tmp-[A-Za-z0-9_]{6,}"), ".tmp-<random>"),
