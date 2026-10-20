@@ -107,6 +107,15 @@ def _key_mask(key: str) -> str | None:
     return None
 
 
+def _enters_trace(key: str, child: Any, trace: bool) -> bool:
+    return trace or key in _TRACE_PARENTS or (key == "events" and isinstance(child, Mapping) and "observed" in child)
+
+
+def _is_trace_number(key: str, child: Any, trace: bool) -> bool:
+    return (trace and isinstance(child, (int, float)) and not isinstance(child, bool)
+            and not any(word in key.lower() for word in _TRACE_KEEP))
+
+
 def normalize_value(value: Any, masks: Masks, *, summarize: bool = False, trace: bool = False) -> Any:
     """Mask volatile values; with ``summarize``, reduce long lists to a count and a digest.
 
@@ -119,12 +128,10 @@ def normalize_value(value: Any, masks: Masks, *, summarize: bool = False, trace:
         for key, child in value.items():
             name = masks.text(str(key))
             replacement = _key_mask(str(key))
-            inside = trace or str(key) in _TRACE_PARENTS or (
-                str(key) == "events" and isinstance(child, Mapping) and "observed" in child)
+            inside = _enters_trace(str(key), child, trace)
             if replacement is not None and child is not None:
                 result[name] = replacement
-            elif (inside and isinstance(child, (int, float)) and not isinstance(child, bool)
-                  and not any(word in str(key).lower() for word in _TRACE_KEEP)):
+            elif _is_trace_number(str(key), child, inside):
                 result[name] = "<count>"
             else:
                 normalized = normalize_value(child, masks, summarize=summarize, trace=inside)
@@ -148,7 +155,8 @@ def _is_finding_key(key: str) -> bool:
     return key == "findings" or key.endswith("_findings")
 
 
-def _extract(value: Any, masks: Masks, gaps: Counter, findings: Counter, unit: str) -> Any:
+def _extract(value: Any, masks: Masks, gaps: Counter, findings: Counter, unit: str,
+             trace: bool = False) -> Any:
     """Pull gaps and findings out of one unit output and return the remainder normalized."""
 
     if isinstance(value, Mapping):
@@ -163,11 +171,20 @@ def _extract(value: Any, masks: Masks, gaps: Counter, findings: Counter, unit: s
                     findings[(unit, str(key), canonical(normalize_value(finding, masks)))] += 1
                 remainder[f"{key}#count"] = len(child)
                 continue
-            remainder[masks.text(str(key))] = _extract(child, masks, gaps, findings, unit) if _key_mask(
-                str(key)) is None or child is None else _key_mask(str(key))
+            inside = _enters_trace(str(key), child, trace)
+            replacement = _key_mask(str(key))
+            if replacement is not None and child is not None:
+                remainder[masks.text(str(key))] = replacement
+            elif _is_trace_number(str(key), child, inside):
+                remainder[masks.text(str(key))] = "<count>"
+            else:
+                extracted = _extract(child, masks, gaps, findings, unit, inside)
+                if str(key) in _UNORDERED_KEYS and isinstance(extracted, list):
+                    extracted = sorted(extracted, key=canonical)
+                remainder[masks.text(str(key))] = extracted
         return remainder
     if isinstance(value, (list, tuple)):
-        items = [_extract(child, masks, gaps, findings, unit) for child in value]
+        items = [_extract(child, masks, gaps, findings, unit, trace) for child in value]
         if len(items) > LIST_SUMMARY_THRESHOLD:
             return {"<summary>": {"count": len(items), "sha256": digest(sorted(canonical(item) for item in items))}}
         return items

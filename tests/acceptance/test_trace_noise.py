@@ -81,3 +81,20 @@ def test_execution_capture_compares_executed_commands_not_file_level_events(tmp_
     missing = _capture(tmp_path, "missing", [])
     assert [item.path.endswith("#process_exec") for item in _compare(left, different)] == [True, True]
     assert len(_compare(left, missing)) == 1
+
+
+def test_unit_outputs_get_the_same_trace_and_ordering_rules() -> None:
+    from collections import Counter
+
+    from appsec_review.acceptance.normalize import _extract
+
+    def unit(count: int, rows: list) -> dict:
+        return {"receipts": [{"commands": [{"execution_capture": {"events": {"observed": count, "retained": count,
+                                                                             "counts": {"file_open": count - 3}}}}],
+                              "rows": rows}]}
+
+    def extract(value: dict) -> dict:
+        return _extract(value, MASKS, Counter(), Counter(), "execute.native")
+
+    assert extract(unit(8346, [{"tool": "c++"}, {"tool": "as"}])) == extract(unit(8348, [{"tool": "as"}, {"tool": "c++"}]))
+    assert extract(unit(8346, [{"tool": "c++"}])) != extract(unit(8346, [{"tool": "as"}]))
