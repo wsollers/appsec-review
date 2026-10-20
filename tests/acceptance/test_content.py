@@ -78,3 +78,21 @@ def test_an_artifact_published_by_one_side_only_is_reported(tmp_path: Path) -> N
 
     assert [(item.path, item.expected, item.actual) for item in _compare(dagster, local)] == [
         ("data/catalog.json", "<artifact>", "<absent>")]
+
+
+def _with_binary(side: tuple[Path, dict], content: bytes) -> None:
+    run_root, handoff = side
+    (run_root / "data" / "tool.o").write_bytes(content)
+    handoff["artifacts"].append(_artifact(run_root, "data/tool.o"))
+
+
+def test_identical_binary_artifacts_match_and_different_ones_are_reported(tmp_path: Path) -> None:
+    dagster = _side(tmp_path, "dagster", "/opt/app", rows=[], document={})
+    local = _side(tmp_path, "local", "/home/user/checkout", rows=[], document={})
+    _with_binary(dagster, b"\x7fELF\xff\xfe")
+    _with_binary(local, b"\x7fELF\xff\xfe")
+    assert _compare(dagster, local) == []
+
+    (local[0] / "data" / "tool.o").write_bytes(b"\x7fELF\xff\xfd")
+    assert [(item.path, item.actual) for item in _compare(dagster, local)] == [
+        ("data/tool.o", "<different bytes>")]

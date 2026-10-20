@@ -90,6 +90,8 @@ def _compare(job_id: str, masked: str, left: Path, left_masks: Masks, right: Pat
     try:
         text_left, text_right = raw_left.decode("utf-8"), raw_right.decode("utf-8")
     except UnicodeDecodeError:
+        if raw_left == raw_right:
+            return []
         return [Difference(job_id, "content", masked, "<bytes>", "<different bytes>")]
     if left.suffix == ".json":
         try:
