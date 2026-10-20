@@ -82,3 +82,37 @@ def test_the_environment_switch_is_validated_and_scoped(tmp_path, monkeypatch) -
     monkeypatch.setenv(MODE_ENVIRONMENT, "sometimes")
     with pytest.raises(ValueError, match="record or replay"):
         recorded(live)(_request(root), timeout_seconds=5)
+
+
+def test_a_failed_call_is_recorded_and_replays_as_the_same_failure(tmp_path, monkeypatch) -> None:
+    from appsec_review.inference import ModelOutputError
+
+    container = tmp_path / "opt" / "app"
+    (container / "targets" / "relay").mkdir(parents=True)
+
+    def live(request, *, timeout_seconds):
+        if request.summary["note"] == "first":
+            raise ModelOutputError("expected exactly one proposal JSON object, found 0")
+        if request.summary["note"] == "second":
+            raise TimeoutError("model call timed out")
+        return ModelResult({"ok": True}, input_tokens=1, raw_response="{}")
+
+    monkeypatch.setenv(MODE_ENVIRONMENT, "record")
+    with _scope(container, container / "runs" / "r1"):
+        for note in ("first", "second"):
+            with pytest.raises(Exception):
+                recorded(live)(_request(container, note), timeout_seconds=5)
+        recorded(live)(_request(container, "third"), timeout_seconds=5)
+
+    recording._replayed.clear()
+    monkeypatch.setenv(MODE_ENVIRONMENT, "replay")
+    monkeypatch.setenv(REPLAY_ENVIRONMENT, str(container / "runs" / "r1" / recording.RECORDINGS))
+    replay = recorded(lambda *args, **kwargs: pytest.fail("a replay must not call the model"))
+    with _scope(container, container / "runs" / "r1"):
+        with pytest.raises(ModelOutputError) as first:
+            replay(_request(container, "first"), timeout_seconds=5)
+        with pytest.raises(RuntimeError) as second:
+            replay(_request(container, "second"), timeout_seconds=5)
+        assert replay(_request(container, "third"), timeout_seconds=5).proposal == {"ok": True}
+    assert str(first.value) == "expected exactly one proposal JSON object, found 0"
+    assert (type(second.value).__name__, str(second.value)) == ("TimeoutError", "model call timed out")

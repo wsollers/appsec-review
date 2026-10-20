@@ -102,11 +102,20 @@ def request_key(request: ModelRequest | ReviewModelRequest,
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest(), masked
 
 
-def _record(scope: _Scope, key: str, masked: Mapping[str, Any], result: ModelResult) -> None:
+def _record(scope: _Scope, key: str, masked: Mapping[str, Any], result: ModelResult | None,
+            error: BaseException | None = None) -> None:
+    """Record a call's result, or the exception it raised.
+
+    A job reacts to a failed call (a repair request carries the error text), so replay has to raise
+    what the recorded call raised or the next request would differ.
+    """
+
     directory = scope.run_root / RECORDINGS / scope.job_id
     directory.mkdir(parents=True, exist_ok=True)
     document = {"schema": SCHEMA, "job_id": scope.job_id, "key": key, "request": masked,
-                "result": asdict(result)}
+                "result": asdict(result) if result is not None else None}
+    if error is not None:
+        document["error"] = {"type": type(error).__name__, "message": str(error)}
     for sequence in range(10_000):
         path = directory / f"{key}.{sequence:04d}.json"
         try:
@@ -117,6 +126,17 @@ def _record(scope: _Scope, key: str, masked: Mapping[str, Any], result: ModelRes
         except FileExistsError:
             continue
     raise RuntimeError(f"model recording sequence space exhausted for {key}")
+
+
+def _recorded_error(error: Mapping[str, Any]) -> Exception:
+    """The exception a recorded call raised: the known type, or one of the same name and message."""
+
+    from .claude_cli import ModelOutputError
+
+    name, message = str(error.get("type", "RuntimeError")), str(error.get("message", ""))
+    if name == "ModelOutputError":
+        return ModelOutputError(message)
+    return type(name, (RuntimeError,), {})(message)
 
 
 def _keep_miss(root: Path, job_id: str, key: str, sequence: int, masked: Mapping[str, Any]) -> None:
@@ -145,6 +165,8 @@ def _replay(scope: _Scope, key: str, masked: Mapping[str, Any]) -> ModelResult:
     document = json.loads(path.read_text(encoding="utf-8"))
     if document.get("schema") != SCHEMA or document.get("key") != key:
         raise RuntimeError(f"model recording {path.name} does not belong to request {key}")
+    if document.get("error"):
+        raise _recorded_error(document["error"])
     return ModelResult(**document["result"])
 
 
@@ -163,7 +185,11 @@ def recorded(infer: Infer) -> Infer:
         key, masked = request_key(request, scope.literals)
         if mode == "replay":
             return _replay(scope, key, masked)
-        result = infer(request, timeout_seconds=timeout_seconds)
+        try:
+            result = infer(request, timeout_seconds=timeout_seconds)
+        except Exception as error:
+            _record(scope, key, masked, None, error)
+            raise
         _record(scope, key, masked, result)
         return result
 
