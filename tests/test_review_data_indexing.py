@@ -1052,3 +1052,18 @@ def test_audit_accepts_graph_export_dataset_only_with_its_named_reason() -> None
             DatasetDeclaration("graph_exports", "export", "codeql", "appsec-review/codeql-graph-export/1",
                                "internal", "artifact_only", "Bounded raw CodeQL graph exports per scope.",
                                artifacts=pattern, query_route="query_dataset_inventory", reason=reason)
+
+
+def test_model_recordings_written_by_a_parity_walk_are_claimed_not_unaccounted(tmp_path) -> None:
+    from appsec_review.indexing.inventory import FileClaims, runtime_claims, scan_run_tree
+
+    recording = tmp_path / "data" / "inference-recordings" / "job_dependency_intelligence" / "k.0000.json"
+    recording.parent.mkdir(parents=True)
+    recording.write_text("{}", encoding="utf-8")
+    stray = tmp_path / "data" / "stray.bin"
+    stray.write_bytes(b"x")
+
+    tree = scan_run_tree(tmp_path, FileClaims(runtime_claims({})), max_files=100)
+
+    assert tree.unaccounted == ["data/stray.bin"]
+    assert any(key[2] == "model_recordings" for key in tree.groups)
