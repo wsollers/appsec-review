@@ -5,12 +5,17 @@ from __future__ import annotations
 from collections import Counter
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
+import json
+import re
 from typing import Any
 
 from .normalize import canonical
 
 CLASSES = ("job-status", "gap-added", "gap-removed", "finding-added", "finding-removed", "coverage",
-           "content", "volatile")
+           "content", "integrity", "environment", "volatile")
+# Classes that never fail a comparison: raw volatile values, and identifiers, hashes and paths that
+# are populated on both sides but spelled for each side's own run and environment.
+NON_FAILING = frozenset({"volatile", "environment"})
 
 
 @dataclass(frozen=True, order=True)
@@ -104,6 +109,58 @@ def diff_job_outputs(expected: Mapping[str, Any] | None, actual: Mapping[str, An
 
 
 def failing(differences: Iterable[Difference]) -> list[Difference]:
-    """Differences that fail a comparison: everything except volatile ones."""
+    """Differences that fail a comparison: everything except volatile and environment ones."""
 
-    return [item for item in differences if item.kind != "volatile"]
+    return [item for item in differences if item.kind not in NON_FAILING]
+
+
+_HEX = re.compile(r"(?:sha256:)?[0-9a-f]{32,}")
+_IDENTIFIERS = re.compile(r"<(?:run-id|uuid|attempt|sha256|image-digest|dagster_run_id|dagster_node|"
+                          r"container_id|container_name|digest|image_id)>")
+
+
+def _value_kind(encoded: str) -> str | None:
+    """``path``, ``hash`` or ``identifier`` for a populated environment-specific value, else None."""
+    try:
+        value = json.loads(encoded)
+    except ValueError:
+        return None
+    if not isinstance(value, str) or not value.strip():
+        return None
+    if _HEX.fullmatch(value) or value == "<sha256>":
+        return "hash"
+    if _IDENTIFIERS.fullmatch(value):
+        return "identifier"
+    if "/" in value or value.startswith("<") and value.endswith(">"):
+        return "path"
+    return None
+
+
+def _signatures_without_hashes(encoded: str) -> Any:
+    try:
+        return sorted(canonical({key: value for key, value in json.loads(item).items() if key != "sha256"})
+                      for item in json.loads(encoded))
+    except (ValueError, TypeError, AttributeError):
+        return None
+
+
+def classify_environment(differences: Iterable[Difference]) -> list[Difference]:
+    """Reclass coverage and content differences that are only environment spellings.
+
+    Both sides must hold a populated value of the same kind (a path, a hash, or an identifier such
+    as a run, attempt or Dagster id); a missing, empty or differently shaped value still fails.
+    An artifact signature may differ only in its digest, which the content comparison covers.
+    """
+    result = []
+    for item in differences:
+        if item.kind in {"coverage", "content"}:
+            if item.path.startswith("artifacts["):
+                stripped = _signatures_without_hashes(item.expected)
+                if stripped is not None and stripped == _signatures_without_hashes(item.actual):
+                    item = Difference(item.job_id, "environment", item.path, item.expected, item.actual)
+            else:
+                kind = _value_kind(item.expected)
+                if kind is not None and kind == _value_kind(item.actual):
+                    item = Difference(item.job_id, "environment", item.path, item.expected, item.actual)
+        result.append(item)
+    return result

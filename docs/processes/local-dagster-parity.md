@@ -15,9 +15,19 @@ matched on it.
   and the same handoff status;
 - the normalized outputs are identical: findings, gaps, unit dispositions, steps, outputs and
   artifact signatures (`appsec_review.acceptance.normalize`, compared by `diff_job_outputs`);
-- only the classes the normalizer already masks may differ: run, attempt and Dagster ids,
-  timestamps and durations, absolute repository, run and target paths, image ids and digests,
-  randomized scratch names, pids and container names.
+- identifiers, hashes and paths may differ: run, attempt, job and Dagster ids, timestamps and
+  durations, every hash, and paths spelled for each side's own environment. A difference whose
+  two sides are both populated values of the same kind (path, hash or identifier) is classed
+  `environment` and does not fail parity. An artifact signature may differ only in its digest,
+  because the artifact's content is compared separately.
+- on each side, those values must be present and correct (`acceptance/integrity.py`):
+  - the claim, status and handoff name the right run, job and attempt;
+  - the latest pointer names the handoff and its real hash;
+  - every artifact and path-and-hash reference resolves to bytes with the recorded hash;
+  - every upstream handoff hash bound is the one that job accepted in the run, so the chain is
+    consistent from job to job.
+
+  A value missing, empty or wrong on either side fails as `integrity`.
 
 Any other difference stops the walk. The tool prints the difference, and a person decides whether
 it is a bug to fix or a volatile field the normalizer missed.

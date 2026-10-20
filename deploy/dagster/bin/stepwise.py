@@ -40,7 +40,8 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from appsec_review.acceptance.audit import audit_job_writes, summarize  # noqa: E402
 from appsec_review.acceptance.content import content_differences  # noqa: E402
-from appsec_review.acceptance.diff import CLASSES, diff_job_outputs, failing  # noqa: E402
+from appsec_review.acceptance.diff import CLASSES, classify_environment, diff_job_outputs, failing  # noqa: E402
+from appsec_review.acceptance.integrity import attempt_integrity  # noqa: E402
 from appsec_review.acceptance.normalize import Masks, gap_summary, locate_attempt, normalize_job_output  # noqa: E402
 from appsec_review.acceptance.seed import BlobStore, SeedError, resolve_chain, restore, scan, snapshot  # noqa: E402
 from appsec_review.acceptance.state import StateError, StepwiseState, valid_corpus_tag  # noqa: E402
@@ -708,6 +709,12 @@ def command_parity(args) -> int:
         content = content_differences(job_id, walk / "dagster" / "run", dagster_handoff,
                                       side_masks(app_run_id, state.target, "dagster"), run_root, local_handoff,
                                       side_masks(app_run_id, state.target, "local"))
+        # Ids, hashes and paths may differ between the sides; on each side they must be populated and
+        # consistent with the run they belong to.
+        parked_attempt = (walk / "dagster" / "run" / dagster_attempt.relative_to(run_root)
+                          if dagster_attempt is not None else None)
+        integrity = (attempt_integrity(job_id, walk / "dagster" / "run", app_run_id, parked_attempt, "dagster") +
+                     attempt_integrity(job_id, run_root, app_run_id, local_attempt, "local"))
         local_added, local_changed = _shared_delta(local_before, _shared_scan())
         _save_files(local_changed, walk / "local" / "changed")
     finally:
@@ -718,7 +725,7 @@ def command_parity(args) -> int:
 
     # 5-6. Same inputs and code on both sides, then the same output.
     mismatches = _identity_mismatches(dagster_handoff, local_handoff)
-    differences = diff_job_outputs(dagster_output, local_output, job_id) + content
+    differences = classify_environment(diff_job_outputs(dagster_output, local_output, job_id) + content) + integrity
     failures = failing(differences)
     both_succeeded = dagster_status == "SUCCESS" and exit_code == 0 and not audit
     verdict = ("PARITY OK" if both_succeeded and not mismatches and not failures else

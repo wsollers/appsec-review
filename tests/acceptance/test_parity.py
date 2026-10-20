@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import importlib.util
 import json
 from pathlib import Path
@@ -30,15 +31,26 @@ IDENTITY = {"implementation_identity": "i", "schema_identity": "s", "validation_
 
 def _attempt(run_root: Path, serial: int, *, dagster_run_id: str | None, findings: int, root: str = "",
              **identity) -> None:
+    """A consistent accepted attempt: claim, status, handoff and latest pointer agree."""
     attempt = run_root / "data" / "jobs" / JOB / "attempts" / f"attempt_{serial:04d}"
     attempt.mkdir(parents=True)
     orchestration = {"system": "dagster", "run_id": dagster_run_id} if dagster_run_id else {"system": "local"}
-    (attempt / "claim.json").write_text(json.dumps({"orchestration": orchestration}), encoding="utf-8")
-    (attempt / "status.json").write_text(json.dumps({"status": "SUCCEEDED"}), encoding="utf-8")
+    handoff = {**IDENTITY, **identity}
+    common = {"job_id": JOB, "attempt_id": attempt.name, "run_id": RUN}
+    (attempt / "claim.json").write_text(json.dumps({
+        **common, "orchestration": orchestration, "target_root": f"{root or '/opt/app/targets/relay/'}",
+        "source_fingerprint": handoff["source_fingerprint"], "input_identity": handoff["input_identity"],
+        "upstream_handoffs": handoff["upstream_handoff_sha256"]}), encoding="utf-8")
+    (attempt / "status.json").write_text(json.dumps({**common, "status": "SUCCEEDED"}), encoding="utf-8")
     (attempt / "result.json").write_text(json.dumps({"outputs": {"catalog.files": {
         "findings": [{"path": f"{root}src/{index}.cpp"} for index in range(findings)], "gaps": []}}}), encoding="utf-8")
-    (attempt / "handoff.json").write_text(json.dumps({"status": "ACCEPTED", "artifacts": [],
-                                                      **IDENTITY, **identity}), encoding="utf-8")
+    (attempt / "handoff.json").write_text(json.dumps({
+        "job_id": JOB, "attempt_id": attempt.name, "status": "ACCEPTED", "completion_status": "SUCCEEDED",
+        "artifacts": [], **handoff}), encoding="utf-8")
+    digest = hashlib.sha256((attempt / "handoff.json").read_bytes()).hexdigest()
+    (attempt.parent.parent / "latest.json").write_text(json.dumps({
+        "attempt_id": attempt.name, "handoff_path": (attempt / "handoff.json").relative_to(run_root).as_posix(),
+        "handoff_sha256": digest}), encoding="utf-8")
 
 
 @pytest.fixture
@@ -62,7 +74,9 @@ def walk(tmp_path, monkeypatch):
     def seed_run(args, tag, after_job):
         seeds.append(after_job)
         run_root = tmp_path / "runs" / RUN
-        (run_root / "data" / "jobs").mkdir(parents=True)
+        (run_root / "data" / "jobs" / "job_review_intake").mkdir(parents=True)
+        (run_root / "data" / "jobs" / "job_review_intake" / "latest.json").write_text(
+            json.dumps({"handoff_sha256": "u"}), encoding="utf-8")
         (run_root / "seeded.txt").write_text(after_job, encoding="utf-8")
         state = StepwiseState.create(RUN, target="/opt/app/targets/relay", topology=TOPOLOGY)
         state.mark_seeded(after_job, corpus_tag=tag, handoffs={})
@@ -176,3 +190,22 @@ def test_dagster_paths_may_use_the_daemon_visible_mount_sources(walk, monkeypatc
     assert stepwise.command_parity(_args()) == 0
     masks = stepwise.side_masks(RUN, "/opt/app/targets/relay", "dagster")
     assert masks.text(f"{staging}/{RUN}/data/x.json") == "<run>/data/x.json"
+
+
+def test_an_inconsistent_identifier_or_hash_on_either_side_fails(walk, monkeypatch) -> None:
+    tmp_path, _ = walk
+
+    def run_local(job_id, app_run_id, target, replay, log):
+        _local(tmp_path, findings=2)(job_id, app_run_id, target, replay, log)
+        # The local side binds an upstream handoff the run never accepted.
+        handoff = tmp_path / "runs" / app_run_id / "data" / "jobs" / JOB / "attempts" / "attempt_0001" / "handoff.json"
+        document = json.loads(handoff.read_text(encoding="utf-8"))
+        handoff.write_text(json.dumps({**document, "upstream_handoff_sha256": {"job_review_intake": "x"}}),
+                           encoding="utf-8")
+        return 0
+
+    monkeypatch.setattr(stepwise, "_run_local", run_local)
+    assert stepwise.command_parity(_args()) == 3
+    paths = {item["path"] for item in _report(tmp_path)["differences"] if item["class"] == "integrity"}
+    assert {"local:upstream.job_review_intake", "local:handoff.upstream_handoff_sha256",
+            "local:latest.json.handoff_sha256"} <= paths
