@@ -840,3 +840,36 @@ def test_database_tree_manifest_detects_changes(tmp_path: Path) -> None:
     (database / "a").write_text("two", encoding="utf-8")
     after = tree_manifest(database, file_limit=10, bytes_limit=100)
     assert before["tree_sha256"] != after["tree_sha256"]
+
+
+def test_codeql_execution_leaves_nothing_world_writable_even_when_the_runner_opens_it(tmp_path: Path) -> None:
+    scratch = tmp_path / "scratch"
+    scratch.mkdir()
+    sibling = scratch / "export" / "staged"
+    sibling.mkdir(parents=True)
+    sibling.chmod(0o777)
+
+    def runner(argv, _timeout):
+        if argv[:3] == ("docker", "image", "inspect"):
+            return 0, (IMAGE + "\n").encode(), b"", False
+        if "/opt/appsec/codeql_runner.py" in argv:
+            exported = scratch / "database-export" / "db-cpp"
+            exported.mkdir(parents=True)
+            exported.chmod(0o777)
+            (exported / "data.bin").write_bytes(b"x")
+            (exported / "data.bin").chmod(0o666)
+        return 0, b"ok", b"", False
+
+    image = CodeQLImage("appsec-review/codeql-derived-image/2", "a" * 64, IMAGE, IMAGE,
+                        "build:local", IMAGE, "codeql:local", "10001:10001",
+                        "b" * 64, "c" * 64, False, "manifest.json")
+    settings = SimpleNamespace(inventory_timeout_seconds=30, database_timeout_seconds=30,
+                               query_timeout_seconds=30, output_bytes=1024, threads=2, ram_mb=1024)
+    CodeQLExecutor(image=image, run_root=tmp_path, settings=settings, runner=runner).execute(
+        "database", ("--language", "cpp", "--database", "database"), scratch_root=scratch)
+
+    opened = [str(path.relative_to(scratch)) for path in [scratch, *scratch.rglob("*")]
+              if not path.is_symlink() and path.stat().st_mode & 0o002]
+    # A sibling export tree may still be in use by a concurrent action, so a database action leaves it.
+    assert sorted(opened) == ["export", "export/staged"]
+    assert (scratch / "database" / "db-cpp" / "data.bin").is_file()

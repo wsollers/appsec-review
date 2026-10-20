@@ -138,7 +138,7 @@ def _compare(job_id: str, masked: str, left: Path, left_masks: Masks, right: Pat
         return [Difference(job_id, "content", masked, "<bytes>", "<different bytes>")]
     if left.name == "events.jsonl" and left.parent.parent.name == "execution-capture":
         return _compare_executed_commands(job_id, masked, text_left, left_masks, text_right, right_masks)
-    if left.suffix == ".json":
+    if left.suffix in {".json", ".sarif"}:
         try:
             fields = _fields(normalize_value(json.loads(text_left), left_masks),
                              normalize_value(json.loads(text_right), right_masks))

@@ -36,6 +36,9 @@ _PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"\battempt_\d{4}\b"), "<attempt>"),
     (re.compile(r"(?<=execution-capture:command-\d{3}:event-)\d+"), "<n>"),
     (re.compile(r"\btrace\.\d+\b"), "trace.<n>"),
+    (re.compile(r"\b\d{8}T\d{6}\.\d{3}Z"), "<stamp>"),
+    (re.compile(r"\b\d{8}\.\d{6}\.\d{3}\b"), "<stamp>"),
+    (re.compile(r"(?<=extractor/)[0-9a-f]{2}/[0-9a-f]{2}/[0-9a-f]+(?=\.log)"), "<h>/<h>/<h>"),
     (re.compile(r"\b0x[0-9a-f]{8,16}\b"), "0x<addr>"),
     (re.compile(r"\(\d+(?:\.\d+)?s\)"), "(<duration>)"),
     (re.compile(r"\.appsec-review-build-scratch\.[A-Za-z0-9]+"), ".appsec-review-build-scratch.<random>"),
@@ -54,7 +57,9 @@ _VOLATILE_KEYS = {"pid", "pids", "container", "container_id", "container_name", 
                   # Syscall-trace bookkeeping: how many events a traced build produced, how they were
                   # numbered and how large the raw traces were vary from run to run.
                   "event_ordinals", "event_records_observed", "event_records_retained", "capture_events",
-                  "observed_bytes", "retained_bytes", "retained_lines"}
+                  "observed_bytes", "retained_bytes", "retained_lines",
+                  # Sizes of tool output that embeds timings.
+                  "stdout_total_bytes", "stderr_total_bytes"}
 # Inside these mappings every number measures the syscall trace (event counts, byte and line sizes).
 _TRACE_PARENTS = {"raw_traces", "execution_capture"}
 _TRACE_KEEP = ("exit", "status", "code", "signal")

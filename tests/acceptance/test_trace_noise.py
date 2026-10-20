@@ -108,3 +108,16 @@ def test_parenthesized_tool_durations_are_masked() -> None:
 def test_compiler_pointer_addresses_are_masked() -> None:
     assert normalize_value("ParmVarDecl 0x56b473e31d50 id", MASKS) == normalize_value("ParmVarDecl 0x5581cc07aa10 id", MASKS)
     assert normalize_value("flags 0x1f", MASKS) != normalize_value("flags 0x2f", MASKS)
+
+
+def test_codeql_log_names_stamps_and_sarif_timings_are_masked() -> None:
+    first = {"files": {"log/database-init-20261020.175419.010.log": "a",
+                       "diagnostic/cli-diagnostics-add-20261020T175420.979Z.json": "b",
+                       "log/extractor/04/13/e4470.log": "c"},
+             "receipt": {"stderr_total_bytes": 57195}}
+    second = {"files": {"log/database-init-20261020.180019.788.log": "a",
+                        "diagnostic/cli-diagnostics-add-20261020T180020.365Z.json": "b",
+                        "log/extractor/07/26/a2f41.log": "c"},
+              "receipt": {"stderr_total_bytes": 57192}}
+    assert normalize_value(first, MASKS) == normalize_value(second, MASKS)
+    assert normalize_value(first, MASKS) != normalize_value({**second, "files": {}}, MASKS)
