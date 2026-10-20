@@ -7,6 +7,8 @@
   compare --app-run ID --tag TAG      diff a full wave1_review run against the accepted outputs
   seed --tag TAG --after JOB          restore the known-good run tree taken when JOB was accepted
   verify-job --tag TAG --job JOB      seed JOB's predecessor, run JOB, check it, diff its accepted output
+  system --tag TAG [--app-run ID]     run the whole wave1_review in Dagster (or take a finished run), then check
+                                      every job, the final artifacts, the baselines and the answer key
   parity --tag TAG --job JOB          from JOB's predecessor seed, run JOB through Dagster and the local
                                       launcher, one after the other, and diff the two outputs
 
@@ -38,6 +40,7 @@ import review_run
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "src"))
 
+from appsec_review.acceptance.answer_key import collect_findings, evaluate, load_answer_key  # noqa: E402
 from appsec_review.acceptance.audit import audit_job_writes, summarize  # noqa: E402
 from appsec_review.acceptance.content import content_differences  # noqa: E402
 from appsec_review.acceptance.diff import CLASSES, classify_environment, diff_job_outputs, failing  # noqa: E402
@@ -45,6 +48,7 @@ from appsec_review.acceptance.integrity import attempt_integrity  # noqa: E402
 from appsec_review.acceptance.normalize import Masks, gap_summary, locate_attempt, normalize_job_output  # noqa: E402
 from appsec_review.acceptance.seed import BlobStore, SeedError, resolve_chain, restore, scan, snapshot  # noqa: E402
 from appsec_review.acceptance.state import StateError, StepwiseState, valid_corpus_tag  # noqa: E402
+from appsec_review.acceptance.system import final_artifact_problems, run_problems  # noqa: E402
 
 DEPLOYMENT = ROOT / "deploy" / "dagster"
 COMPOSE = ["docker", "compose", "--env-file", str(DEPLOYMENT / ".env"), "-f", str(DEPLOYMENT / "compose.yaml")]
@@ -384,6 +388,66 @@ def command_compare(args) -> int:
     report.write_text(json.dumps([item.as_dict() for item in differences], indent=1) + "\n", encoding="utf-8")
     print(f"   report {report.relative_to(ROOT)}")
     return 1 if failing(differences) else 0
+
+
+def command_system(args) -> int:
+    """System acceptance: one complete wave1_review run, end to end, against the accepted corpus."""
+
+    tag = valid_corpus_tag(args.tag)
+    key_root = ACCEPTANCE_ROOT / tag
+    accepted = sorted(path for path in key_root.glob("job_*.json") if not path.name.endswith(".provenance.json"))
+    if not accepted:
+        raise StateError(f"no accepted outputs under {key_root.relative_to(ROOT)}")
+    provenance = json.loads(accepted[0].with_suffix(".provenance.json").read_text(encoding="utf-8"))
+    topology = packaged_topology()
+    job_ids = [item["job_id"] for item in topology["jobs"]]
+    app_run_id = args.app_run
+    if app_run_id is None:
+        configured = compose("exec", "-T", "code-location", "printenv", "APPSEC_REVIEW_TARGET").strip()
+        if configured != provenance["target"]:
+            raise RuntimeError(f"the code location reviews {configured}, but {tag} was accepted on "
+                               f"{provenance['target']}")
+        dagster_run_id = str(uuid4())
+        review_run.submit(dagster_run_id)
+        run = wait(args.url, dagster_run_id, args.interval_seconds)
+        app_run_id = run["tag_map"].get("appsec/application_run_id")
+        if run["status"] != "SUCCESS" or not app_run_id:
+            for line in failure_messages(args.url, dagster_run_id):
+                print(f"   dagster failure {line}")
+            print(f"system FAILED: the Dagster run ended {run['status']}"
+                  f"{'' if app_run_id else ' without an application run'}")
+            return 1
+    run_root = ROOT / "runs" / app_run_id
+    if not run_root.is_dir():
+        raise StateError(f"no run tree at runs/{app_run_id}")
+
+    problems = run_problems(run_root, app_run_id, job_ids, host_path(provenance["target"]))
+    problems += final_artifact_problems(run_root, ROOT)
+    for item in failing(problems)[:args.show * 5]:
+        print(f"   {item.kind} {item.job_id} {item.path}: {item.expected[:120]} -> {item.actual[:120]}")
+    print(f"system run={app_run_id} jobs={len(job_ids)} integrity_problems={len(failing(problems))}")
+
+    compared = command_compare(argparse.Namespace(tag=tag, app_run=app_run_id, show=args.show))
+
+    masks = masks_for(app_run_id, provenance["target"])
+    outputs = [normalize_job_output(run_root, job_id, masks) for job_id in job_ids]
+    _corpus, defects = load_answer_key(key_root / "expectations.toml")
+    matrix = evaluate(defects, collect_findings(outputs))
+    for defect in defects:
+        state = "found " if defect.id in matrix.found else "MISSED"
+        seen = ",".join(matrix.producers_seen.get(defect.id, ())) or "-"
+        print(f"   answer-key {state} {defect.id} {defect.path}:{defect.line} producers_seen={seen}")
+    print(f"answer key found={len(matrix.found)} missed={len(matrix.missed)} spurious={matrix.spurious}")
+
+    verdict = "SYSTEM OK" if not failing(problems) and compared == 0 and not matrix.failed else "SYSTEM FAILED"
+    report = run_root.parent / "metadata" / "stepwise" / "system" / f"{app_run_id}-{tag}.json"
+    report.parent.mkdir(parents=True, exist_ok=True)
+    report.write_text(json.dumps({
+        "verdict": verdict, "application_run_id": app_run_id, "corpus_tag": tag,
+        "repository_commit": git("rev-parse", "HEAD", cwd=ROOT), "integrity": [item.as_dict() for item in problems],
+        "baseline_compare_exit": compared, "answer_key": matrix.as_dict()}, indent=1) + "\n", encoding="utf-8")
+    print(f"== {verdict}; report {report.relative_to(ROOT)}")
+    return 0 if verdict == "SYSTEM OK" else 1
 
 
 def seed_run(args, tag: str, after_job: str) -> tuple[StepwiseState, Path]:
@@ -805,12 +869,15 @@ def main(argv: list[str] | None = None) -> int:
                         help="also restore stored runs/metadata and data inputs that drifted")
     parity.add_argument("--allow-shared-drift", action="store_true",
                         help="proceed although shared inputs differ from the seed")
+    system = commands.add_parser("system", help="run or take a whole wave1_review and check it end to end")
+    system.add_argument("--tag", required=True)
+    system.add_argument("--app-run", help="evaluate this finished application run instead of starting one")
     args = parser.parse_args(argv)
     if args.interval_seconds < 1:
         parser.error("--interval-seconds must be positive")
     handlers = {"init": command_init, "next": command_next, "check": command_check,
                 "accept": command_accept, "compare": command_compare, "seed": command_seed,
-                "verify-job": command_verify_job, "parity": command_parity}
+                "verify-job": command_verify_job, "parity": command_parity, "system": command_system}
     try:
         return handlers[args.command](args)
     except (StateError, SeedError, RuntimeError) as exc:
