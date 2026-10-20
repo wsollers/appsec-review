@@ -22,7 +22,7 @@
    "count": 12,
    "kind": "json",
    "path": "data/jobs/job_dependency_intelligence/attempts/<attempt>/steps/acceptance/tasks/publish_handoff/dependency-intelligence-handoff.json",
-   "sha256": "1b52e2521dc68eb24b3d4ff857875b024215f36330dd2c29dcb8753a9aaa37b4"
+   "sha256": "57692cb73a198340ec35cb0007da942eeb735c9eacb70c7eb56140045062bffb"
   },
   {
    "count": 15,
@@ -61,6 +61,12 @@
    "sha256": "713f16bc25f32c93ac13d2f7244a413e6426dc0ebbf37376b6d9cb64b8e28ccc"
   },
   {
+   "count": 5,
+   "kind": "json",
+   "path": "data/jobs/job_dependency_intelligence/attempts/<attempt>/steps/scorecards/tasks/fetch/artifacts/scorecards/repository-b60e5403475b32d229aff892.json",
+   "sha256": "751dd308b1953b87fffcfccb741c705d971dbbf3eb6b824c2a3f745418cce87c"
+  },
+  {
    "count": 6,
    "kind": "json",
    "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/attempts/<attempt>/execution-capture/command-001/secret-scan/findings.json",
@@ -82,7 +88,7 @@
    "count": 7,
    "kind": "json",
    "path": "data/indices/manifests/dependency-intelligence-<attempt>.json",
-   "sha256": "f4ab0b5a9442446f504581f4a95c0a3c950040b4a21e3af1a76bb0b141268759"
+   "sha256": "c0c13c18c436a3a9084c19800ab87e14f12a5a5e8eeb2a6266dcb5ffcbfabf7c"
   },
   {
    "count": 9,
@@ -159,33 +165,6 @@
   {
    "count": 1,
    "gap": {
-    "dependency_id": "dependency-49ca151a2b39735549ccded0",
-    "detail": "FileNotFoundError: configured Claude CLI is unavailable: claude",
-    "kind": "model_failure"
-   },
-   "unit": "acceptance.publish_handoff"
-  },
-  {
-   "count": 1,
-   "gap": {
-    "dependency_id": "dependency-49ca151a2b39735549ccded0",
-    "detail": "no supported public repository identity was resolved",
-    "kind": "unresolved_repository"
-   },
-   "unit": "acceptance.publish_handoff"
-  },
-  {
-   "count": 1,
-   "gap": {
-    "dependency_id": "dependency-5bcb84257bcb4f4a9fd4eb42",
-    "detail": "FileNotFoundError: configured Claude CLI is unavailable: claude",
-    "kind": "model_failure"
-   },
-   "unit": "acceptance.publish_handoff"
-  },
-  {
-   "count": 1,
-   "gap": {
     "dependency_id": "dependency-5bcb84257bcb4f4a9fd4eb42",
     "detail": "no supported public repository identity was resolved",
     "kind": "unresolved_repository"
@@ -195,63 +174,9 @@
   {
    "count": 1,
    "gap": {
-    "dependency_id": "dependency-695f9cf0eb24a1ae96c6a4c7",
-    "detail": "FileNotFoundError: configured Claude CLI is unavailable: claude",
-    "kind": "model_failure"
-   },
-   "unit": "acceptance.publish_handoff"
-  },
-  {
-   "count": 1,
-   "gap": {
-    "dependency_id": "dependency-695f9cf0eb24a1ae96c6a4c7",
-    "detail": "no supported public repository identity was resolved",
-    "kind": "unresolved_repository"
-   },
-   "unit": "acceptance.publish_handoff"
-  },
-  {
-   "count": 1,
-   "gap": {
-    "dependency_id": "dependency-7495a7cde0abac949802257a",
-    "detail": "FileNotFoundError: configured Claude CLI is unavailable: claude",
-    "kind": "model_failure"
-   },
-   "unit": "acceptance.publish_handoff"
-  },
-  {
-   "count": 1,
-   "gap": {
     "dependency_id": "dependency-7495a7cde0abac949802257a",
     "detail": "no supported public repository identity was resolved",
     "kind": "unresolved_repository"
-   },
-   "unit": "acceptance.publish_handoff"
-  },
-  {
-   "count": 1,
-   "gap": {
-    "dependency_id": "dependency-7500b160cece310449e144fc",
-    "detail": "FileNotFoundError: configured Claude CLI is unavailable: claude",
-    "kind": "model_failure"
-   },
-   "unit": "acceptance.publish_handoff"
-  },
-  {
-   "count": 1,
-   "gap": {
-    "dependency_id": "dependency-7500b160cece310449e144fc",
-    "detail": "no supported public repository identity was resolved",
-    "kind": "unresolved_repository"
-   },
-   "unit": "acceptance.publish_handoff"
-  },
-  {
-   "count": 1,
-   "gap": {
-    "dependency_id": "dependency-98a18e3182e4630c85436d05",
-    "detail": "FileNotFoundError: configured Claude CLI is unavailable: claude",
-    "kind": "model_failure"
    },
    "unit": "acceptance.publish_handoff"
   },
@@ -268,53 +193,14 @@
    "count": 1,
    "gap": {
     "dependency_id": "dependency-f391a3ac63dfe5757c68ed5e",
-    "detail": "FileNotFoundError: configured Claude CLI is unavailable: claude",
-    "kind": "model_failure"
-   },
-   "unit": "acceptance.publish_handoff"
-  },
-  {
-   "count": 1,
-   "gap": {
-    "dependency_id": "dependency-f391a3ac63dfe5757c68ed5e",
     "detail": "no supported public repository identity was resolved",
     "kind": "unresolved_repository"
    },
    "unit": "acceptance.publish_handoff"
-  },
-  {
-   "count": 1,
-   "gap": "{'dependency_id': 'dependency-49ca151a2b39735549ccded0', 'detail': 'FileNotFoundError: configured Claude CLI is unavailable: claude', 'kind': 'model_failure'}",
-   "unit": "publication.publish_context"
-  },
-  {
-   "count": 1,
-   "gap": "{'dependency_id': 'dependency-49ca151a2b39735549ccded0', 'detail': 'no supported public repository identity was resolved', 'kind': 'unresolved_repository'}",
-   "unit": "publication.publish_context"
-  },
-  {
-   "count": 1,
-   "gap": "{'dependency_id': 'dependency-5bcb84257bcb4f4a9fd4eb42', 'detail': 'FileNotFoundError: configured Claude CLI is unavailable: claude', 'kind': 'model_failure'}",
-   "unit": "publication.publish_context"
   },
   {
    "count": 1,
    "gap": "{'dependency_id': 'dependency-5bcb84257bcb4f4a9fd4eb42', 'detail': 'no supported public repository identity was resolved', 'kind': 'unresolved_repository'}",
-   "unit": "publication.publish_context"
-  },
-  {
-   "count": 1,
-   "gap": "{'dependency_id': 'dependency-695f9cf0eb24a1ae96c6a4c7', 'detail': 'FileNotFoundError: configured Claude CLI is unavailable: claude', 'kind': 'model_failure'}",
-   "unit": "publication.publish_context"
-  },
-  {
-   "count": 1,
-   "gap": "{'dependency_id': 'dependency-695f9cf0eb24a1ae96c6a4c7', 'detail': 'no supported public repository identity was resolved', 'kind': 'unresolved_repository'}",
-   "unit": "publication.publish_context"
-  },
-  {
-   "count": 1,
-   "gap": "{'dependency_id': 'dependency-7495a7cde0abac949802257a', 'detail': 'FileNotFoundError: configured Claude CLI is unavailable: claude', 'kind': 'model_failure'}",
    "unit": "publication.publish_context"
   },
   {
@@ -324,27 +210,7 @@
   },
   {
    "count": 1,
-   "gap": "{'dependency_id': 'dependency-7500b160cece310449e144fc', 'detail': 'FileNotFoundError: configured Claude CLI is unavailable: claude', 'kind': 'model_failure'}",
-   "unit": "publication.publish_context"
-  },
-  {
-   "count": 1,
-   "gap": "{'dependency_id': 'dependency-7500b160cece310449e144fc', 'detail': 'no supported public repository identity was resolved', 'kind': 'unresolved_repository'}",
-   "unit": "publication.publish_context"
-  },
-  {
-   "count": 1,
-   "gap": "{'dependency_id': 'dependency-98a18e3182e4630c85436d05', 'detail': 'FileNotFoundError: configured Claude CLI is unavailable: claude', 'kind': 'model_failure'}",
-   "unit": "publication.publish_context"
-  },
-  {
-   "count": 1,
    "gap": "{'dependency_id': 'dependency-98a18e3182e4630c85436d05', 'detail': 'no supported public repository identity was resolved', 'kind': 'unresolved_repository'}",
-   "unit": "publication.publish_context"
-  },
-  {
-   "count": 1,
-   "gap": "{'dependency_id': 'dependency-f391a3ac63dfe5757c68ed5e', 'detail': 'FileNotFoundError: configured Claude CLI is unavailable: claude', 'kind': 'model_failure'}",
    "unit": "publication.publish_context"
   },
   {
@@ -355,33 +221,6 @@
   {
    "count": 1,
    "gap": {
-    "dependency_id": "dependency-49ca151a2b39735549ccded0",
-    "detail": "FileNotFoundError: configured Claude CLI is unavailable: claude",
-    "kind": "model_failure"
-   },
-   "unit": "publication.publish_context"
-  },
-  {
-   "count": 1,
-   "gap": {
-    "dependency_id": "dependency-49ca151a2b39735549ccded0",
-    "detail": "no supported public repository identity was resolved",
-    "kind": "unresolved_repository"
-   },
-   "unit": "publication.publish_context"
-  },
-  {
-   "count": 1,
-   "gap": {
-    "dependency_id": "dependency-5bcb84257bcb4f4a9fd4eb42",
-    "detail": "FileNotFoundError: configured Claude CLI is unavailable: claude",
-    "kind": "model_failure"
-   },
-   "unit": "publication.publish_context"
-  },
-  {
-   "count": 1,
-   "gap": {
     "dependency_id": "dependency-5bcb84257bcb4f4a9fd4eb42",
     "detail": "no supported public repository identity was resolved",
     "kind": "unresolved_repository"
@@ -391,63 +230,9 @@
   {
    "count": 1,
    "gap": {
-    "dependency_id": "dependency-695f9cf0eb24a1ae96c6a4c7",
-    "detail": "FileNotFoundError: configured Claude CLI is unavailable: claude",
-    "kind": "model_failure"
-   },
-   "unit": "publication.publish_context"
-  },
-  {
-   "count": 1,
-   "gap": {
-    "dependency_id": "dependency-695f9cf0eb24a1ae96c6a4c7",
-    "detail": "no supported public repository identity was resolved",
-    "kind": "unresolved_repository"
-   },
-   "unit": "publication.publish_context"
-  },
-  {
-   "count": 1,
-   "gap": {
-    "dependency_id": "dependency-7495a7cde0abac949802257a",
-    "detail": "FileNotFoundError: configured Claude CLI is unavailable: claude",
-    "kind": "model_failure"
-   },
-   "unit": "publication.publish_context"
-  },
-  {
-   "count": 1,
-   "gap": {
     "dependency_id": "dependency-7495a7cde0abac949802257a",
     "detail": "no supported public repository identity was resolved",
     "kind": "unresolved_repository"
-   },
-   "unit": "publication.publish_context"
-  },
-  {
-   "count": 1,
-   "gap": {
-    "dependency_id": "dependency-7500b160cece310449e144fc",
-    "detail": "FileNotFoundError: configured Claude CLI is unavailable: claude",
-    "kind": "model_failure"
-   },
-   "unit": "publication.publish_context"
-  },
-  {
-   "count": 1,
-   "gap": {
-    "dependency_id": "dependency-7500b160cece310449e144fc",
-    "detail": "no supported public repository identity was resolved",
-    "kind": "unresolved_repository"
-   },
-   "unit": "publication.publish_context"
-  },
-  {
-   "count": 1,
-   "gap": {
-    "dependency_id": "dependency-98a18e3182e4630c85436d05",
-    "detail": "FileNotFoundError: configured Claude CLI is unavailable: claude",
-    "kind": "model_failure"
    },
    "unit": "publication.publish_context"
   },
@@ -464,15 +249,6 @@
    "count": 1,
    "gap": {
     "dependency_id": "dependency-f391a3ac63dfe5757c68ed5e",
-    "detail": "FileNotFoundError: configured Claude CLI is unavailable: claude",
-    "kind": "model_failure"
-   },
-   "unit": "publication.publish_context"
-  },
-  {
-   "count": 1,
-   "gap": {
-    "dependency_id": "dependency-f391a3ac63dfe5757c68ed5e",
     "detail": "no supported public repository identity was resolved",
     "kind": "unresolved_repository"
    },
@@ -481,63 +257,9 @@
   {
    "count": 1,
    "gap": {
-    "dependency_id": "dependency-49ca151a2b39735549ccded0",
-    "detail": "FileNotFoundError: configured Claude CLI is unavailable: claude",
-    "kind": "model_failure"
-   },
-   "unit": "resolution.infer_repositories"
-  },
-  {
-   "count": 1,
-   "gap": {
-    "dependency_id": "dependency-49ca151a2b39735549ccded0",
-    "detail": "no supported public repository identity was resolved",
-    "kind": "unresolved_repository"
-   },
-   "unit": "resolution.infer_repositories"
-  },
-  {
-   "count": 1,
-   "gap": {
-    "dependency_id": "dependency-5bcb84257bcb4f4a9fd4eb42",
-    "detail": "FileNotFoundError: configured Claude CLI is unavailable: claude",
-    "kind": "model_failure"
-   },
-   "unit": "resolution.infer_repositories"
-  },
-  {
-   "count": 1,
-   "gap": {
     "dependency_id": "dependency-5bcb84257bcb4f4a9fd4eb42",
     "detail": "no supported public repository identity was resolved",
     "kind": "unresolved_repository"
-   },
-   "unit": "resolution.infer_repositories"
-  },
-  {
-   "count": 1,
-   "gap": {
-    "dependency_id": "dependency-695f9cf0eb24a1ae96c6a4c7",
-    "detail": "FileNotFoundError: configured Claude CLI is unavailable: claude",
-    "kind": "model_failure"
-   },
-   "unit": "resolution.infer_repositories"
-  },
-  {
-   "count": 1,
-   "gap": {
-    "dependency_id": "dependency-695f9cf0eb24a1ae96c6a4c7",
-    "detail": "no supported public repository identity was resolved",
-    "kind": "unresolved_repository"
-   },
-   "unit": "resolution.infer_repositories"
-  },
-  {
-   "count": 1,
-   "gap": {
-    "dependency_id": "dependency-7495a7cde0abac949802257a",
-    "detail": "FileNotFoundError: configured Claude CLI is unavailable: claude",
-    "kind": "model_failure"
    },
    "unit": "resolution.infer_repositories"
   },
@@ -553,45 +275,9 @@
   {
    "count": 1,
    "gap": {
-    "dependency_id": "dependency-7500b160cece310449e144fc",
-    "detail": "FileNotFoundError: configured Claude CLI is unavailable: claude",
-    "kind": "model_failure"
-   },
-   "unit": "resolution.infer_repositories"
-  },
-  {
-   "count": 1,
-   "gap": {
-    "dependency_id": "dependency-7500b160cece310449e144fc",
-    "detail": "no supported public repository identity was resolved",
-    "kind": "unresolved_repository"
-   },
-   "unit": "resolution.infer_repositories"
-  },
-  {
-   "count": 1,
-   "gap": {
-    "dependency_id": "dependency-98a18e3182e4630c85436d05",
-    "detail": "FileNotFoundError: configured Claude CLI is unavailable: claude",
-    "kind": "model_failure"
-   },
-   "unit": "resolution.infer_repositories"
-  },
-  {
-   "count": 1,
-   "gap": {
     "dependency_id": "dependency-98a18e3182e4630c85436d05",
     "detail": "no supported public repository identity was resolved",
     "kind": "unresolved_repository"
-   },
-   "unit": "resolution.infer_repositories"
-  },
-  {
-   "count": 1,
-   "gap": {
-    "dependency_id": "dependency-f391a3ac63dfe5757c68ed5e",
-    "detail": "FileNotFoundError: configured Claude CLI is unavailable: claude",
-    "kind": "model_failure"
    },
    "unit": "resolution.infer_repositories"
   },
@@ -637,7 +323,7 @@
    },
    "item_count": 7,
    "schema": "appsec-review/dependency-intelligence-handoff/1",
-   "scorecard_count": 0,
+   "scorecard_count": 3,
    "terminal_status": "COMPLETED_WITH_GAPS"
   },
   "inputs.load_accepted": {
@@ -1233,8 +919,23 @@
   },
   "repositories.deduplicate": {
    "dependency_count": 7,
-   "repositories": [],
-   "repository_count": 0,
+   "repositories": [
+    {
+     "dependency_ids": [
+      "dependency-49ca151a2b39735549ccded0",
+      "dependency-695f9cf0eb24a1ae96c6a4c7",
+      "dependency-7500b160cece310449e144fc"
+     ],
+     "repository": {
+      "host": "github.com",
+      "name": "gcc",
+      "owner": "gcc-mirror",
+      "url": "https://github.com/gcc-mirror/gcc"
+     },
+     "repository_id": "repository-b60e5403475b32d229aff892"
+    }
+   ],
+   "repository_count": 1,
    "terminal_status": "SUCCEEDED"
   },
   "resolution.detect_dependencies": {
@@ -2669,9 +2370,21 @@
       }
      ],
      "purl": null,
-     "repository": null,
+     "repository": {
+      "host": "github.com",
+      "name": "gcc",
+      "owner": "gcc-mirror",
+      "url": "https://github.com/gcc-mirror/gcc"
+     },
      "repository_url_observed": null,
-     "resolution_basis": "linker_evidence",
+     "resolution_basis": "model_inference",
+     "resolution_confidence": 0.4,
+     "resolution_evidence_refs": [
+      "execution-capture:command-001:event-<n>",
+      "execution-capture:command-001:event-<n>",
+      "execution-capture:command-002:event-<n>"
+     ],
+     "resolution_rationale": "All 16 observations are link_flag '-lgcc'. This is the GCC runtime support library, which ships with the GCC project, so the GCC source is the plausible upstream. No accepted package metadata (pkg-config, CMake, SBOM, or package manager) in the supplied evidence names a repository, so this is a model inference, not an exact identity. The canonical GCC source tree is hosted on gcc.gnu.org, which is not an allowed host; the github.com gcc-mirror/gcc repository is a mirror of that source. Confidence is low because the mapping rests on a linker short name and may not reflect the distribution or fork that built the observed binaries.",
      "version": null
     },
     {
@@ -3322,9 +3035,21 @@
       }
      ],
      "purl": null,
-     "repository": null,
+     "repository": {
+      "host": "github.com",
+      "name": "gcc",
+      "owner": "gcc-mirror",
+      "url": "https://github.com/gcc-mirror/gcc"
+     },
      "repository_url_observed": null,
-     "resolution_basis": "linker_evidence",
+     "resolution_basis": "model_inference",
+     "resolution_confidence": 0.4,
+     "resolution_evidence_refs": [
+      "execution-capture:command-001:event-<n>",
+      "execution-capture:command-001:event-<n>",
+      "execution-capture:command-002:event-<n>"
+     ],
+     "resolution_rationale": "All observations are the same SONAME, /usr/libexec/gcc/x86_64-linux-gnu/13/liblto_plugin.so, which places the library under the GCC 13 installation tree and is consistent with GCC's LTO plugin. This establishes the GCC toolchain as the likely upstream project. The repository is not established by the supplied evidence: no pkg-config, CMake, SBOM, or package-manager metadata was supplied, and the canonical GCC source host (gcc.gnu.org) is not on the allowlist. The proposed GitHub URL is a community mirror of GCC, selected from general knowledge rather than cited metadata, so it is a non-exact, model-derived mapping. Distribution packaging of GCC 13 may also differ from upstream sources. Confidence is low pending accepted package metadata that names the source repository.",
      "version": null
     },
     {
@@ -3581,18 +3306,338 @@
       }
      ],
      "purl": null,
-     "repository": null,
+     "repository": {
+      "host": "github.com",
+      "name": "gcc",
+      "owner": "gcc-mirror",
+      "url": "https://github.com/gcc-mirror/gcc"
+     },
      "repository_url_observed": null,
-     "resolution_basis": "linker_evidence",
+     "resolution_basis": "model_inference",
+     "resolution_confidence": 0.5,
+     "resolution_evidence_refs": [
+      "<sha256>",
+      "execution-capture:command-001:event-<n>",
+      "execution-capture:command-001:event-<n>",
+      "execution-capture:command-002:event-<n>"
+     ],
+     "resolution_rationale": "Loader evidence (libstdc++.so.6 NEEDED) and repeated -lstdc++ link flags identify the GNU C++ standard library, which is built from the GCC source tree. No pkg-config, CMake, SBOM, or package-manager metadata in the supplied evidence names a repository, so this is a non-exact model inference. The mapping is to a read-only GCC git mirror on an allowed host, not the canonical upstream (gcc.gnu.org, outside the allowlist). Distribution-packaged or vendored builds may differ from this source. Corroboration would require accepted package metadata for the libstdc++ build.",
      "version": null
     }
    ],
    "terminal_status": "COMPLETED_WITH_GAPS"
   },
   "scorecards.fetch": {
-   "cache_hit_count": 0,
-   "records": [],
-   "repository_count": 0,
+   "cache_hit_count": 1,
+   "records": [
+    {
+     "cache": {
+      "age_seconds": "<duration>",
+      "fetched_at": "<timestamp>",
+      "repository_key": "<sha256>",
+      "response_sha256": "<sha256>",
+      "status": "hit"
+     },
+     "check_count": 14,
+     "checks": [
+      {
+       "name": "Code-Review",
+       "reason": "Found 0/30 approved changesets -- score normalized to 0",
+       "score": 0
+      },
+      {
+       "name": "Maintained",
+       "reason": "30 commit(s) and 0 issue activity found in the last 90 days -- score normalized to 10",
+       "score": 10
+      },
+      {
+       "name": "Packaging",
+       "reason": "packaging workflow not detected",
+       "score": -1
+      },
+      {
+       "name": "Dangerous-Workflow",
+       "reason": "no workflows found",
+       "score": -1
+      },
+      {
+       "name": "Token-Permissions",
+       "reason": "No tokens found",
+       "score": -1
+      },
+      {
+       "name": "CII-Best-Practices",
+       "reason": "no effort to earn an OpenSSF best practices badge detected",
+       "score": 0
+      },
+      {
+       "name": "Security-Policy",
+       "reason": "security policy file not detected",
+       "score": 0
+      },
+      {
+       "name": "License",
+       "reason": "license file detected",
+       "score": 10
+      },
+      {
+       "name": "Signed-Releases",
+       "reason": "no releases found",
+       "score": -1
+      },
+      {
+       "name": "Branch-Protection",
+       "reason": "branch protection not enabled on development/release branches",
+       "score": 0
+      },
+      {
+       "name": "SAST",
+       "reason": "no SAST tool detected",
+       "score": 0
+      },
+      {
+       "name": "Fuzzing",
+       "reason": "project is fuzzed",
+       "score": 10
+      },
+      {
+       "name": "Binary-Artifacts",
+       "reason": "no binaries found in the repo",
+       "score": 10
+      },
+      {
+       "name": "Pinned-Dependencies",
+       "reason": "dependency not pinned by hash detected -- score normalized to 0",
+       "score": 0
+      }
+     ],
+     "commit": null,
+     "context_only": true,
+     "date": "2026-10-12",
+     "dependency_id": "dependency-49ca151a2b39735549ccded0",
+     "repository": {
+      "host": "github.com",
+      "name": "gcc",
+      "owner": "gcc-mirror",
+      "url": "https://github.com/gcc-mirror/gcc"
+     },
+     "repository_id": "repository-b60e5403475b32d229aff892",
+     "request_url": "https://api.securityscorecards.dev/projects/github.com/gcc-mirror/gcc",
+     "response_artifact": {
+      "path": "data/jobs/job_dependency_intelligence/attempts/<attempt>/steps/scorecards/tasks/fetch/artifacts/scorecards/repository-b60e5403475b32d229aff892.json",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     "schema": "appsec-review/openssf-scorecard-record/1",
+     "score": 4.1,
+     "security_finding": false
+    },
+    {
+     "cache": {
+      "age_seconds": "<duration>",
+      "fetched_at": "<timestamp>",
+      "repository_key": "<sha256>",
+      "response_sha256": "<sha256>",
+      "status": "hit"
+     },
+     "check_count": 14,
+     "checks": [
+      {
+       "name": "Code-Review",
+       "reason": "Found 0/30 approved changesets -- score normalized to 0",
+       "score": 0
+      },
+      {
+       "name": "Maintained",
+       "reason": "30 commit(s) and 0 issue activity found in the last 90 days -- score normalized to 10",
+       "score": 10
+      },
+      {
+       "name": "Packaging",
+       "reason": "packaging workflow not detected",
+       "score": -1
+      },
+      {
+       "name": "Dangerous-Workflow",
+       "reason": "no workflows found",
+       "score": -1
+      },
+      {
+       "name": "Token-Permissions",
+       "reason": "No tokens found",
+       "score": -1
+      },
+      {
+       "name": "CII-Best-Practices",
+       "reason": "no effort to earn an OpenSSF best practices badge detected",
+       "score": 0
+      },
+      {
+       "name": "Security-Policy",
+       "reason": "security policy file not detected",
+       "score": 0
+      },
+      {
+       "name": "License",
+       "reason": "license file detected",
+       "score": 10
+      },
+      {
+       "name": "Signed-Releases",
+       "reason": "no releases found",
+       "score": -1
+      },
+      {
+       "name": "Branch-Protection",
+       "reason": "branch protection not enabled on development/release branches",
+       "score": 0
+      },
+      {
+       "name": "SAST",
+       "reason": "no SAST tool detected",
+       "score": 0
+      },
+      {
+       "name": "Fuzzing",
+       "reason": "project is fuzzed",
+       "score": 10
+      },
+      {
+       "name": "Binary-Artifacts",
+       "reason": "no binaries found in the repo",
+       "score": 10
+      },
+      {
+       "name": "Pinned-Dependencies",
+       "reason": "dependency not pinned by hash detected -- score normalized to 0",
+       "score": 0
+      }
+     ],
+     "commit": null,
+     "context_only": true,
+     "date": "2026-10-12",
+     "dependency_id": "dependency-695f9cf0eb24a1ae96c6a4c7",
+     "repository": {
+      "host": "github.com",
+      "name": "gcc",
+      "owner": "gcc-mirror",
+      "url": "https://github.com/gcc-mirror/gcc"
+     },
+     "repository_id": "repository-b60e5403475b32d229aff892",
+     "request_url": "https://api.securityscorecards.dev/projects/github.com/gcc-mirror/gcc",
+     "response_artifact": {
+      "path": "data/jobs/job_dependency_intelligence/attempts/<attempt>/steps/scorecards/tasks/fetch/artifacts/scorecards/repository-b60e5403475b32d229aff892.json",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     "schema": "appsec-review/openssf-scorecard-record/1",
+     "score": 4.1,
+     "security_finding": false
+    },
+    {
+     "cache": {
+      "age_seconds": "<duration>",
+      "fetched_at": "<timestamp>",
+      "repository_key": "<sha256>",
+      "response_sha256": "<sha256>",
+      "status": "hit"
+     },
+     "check_count": 14,
+     "checks": [
+      {
+       "name": "Code-Review",
+       "reason": "Found 0/30 approved changesets -- score normalized to 0",
+       "score": 0
+      },
+      {
+       "name": "Maintained",
+       "reason": "30 commit(s) and 0 issue activity found in the last 90 days -- score normalized to 10",
+       "score": 10
+      },
+      {
+       "name": "Packaging",
+       "reason": "packaging workflow not detected",
+       "score": -1
+      },
+      {
+       "name": "Dangerous-Workflow",
+       "reason": "no workflows found",
+       "score": -1
+      },
+      {
+       "name": "Token-Permissions",
+       "reason": "No tokens found",
+       "score": -1
+      },
+      {
+       "name": "CII-Best-Practices",
+       "reason": "no effort to earn an OpenSSF best practices badge detected",
+       "score": 0
+      },
+      {
+       "name": "Security-Policy",
+       "reason": "security policy file not detected",
+       "score": 0
+      },
+      {
+       "name": "License",
+       "reason": "license file detected",
+       "score": 10
+      },
+      {
+       "name": "Signed-Releases",
+       "reason": "no releases found",
+       "score": -1
+      },
+      {
+       "name": "Branch-Protection",
+       "reason": "branch protection not enabled on development/release branches",
+       "score": 0
+      },
+      {
+       "name": "SAST",
+       "reason": "no SAST tool detected",
+       "score": 0
+      },
+      {
+       "name": "Fuzzing",
+       "reason": "project is fuzzed",
+       "score": 10
+      },
+      {
+       "name": "Binary-Artifacts",
+       "reason": "no binaries found in the repo",
+       "score": 10
+      },
+      {
+       "name": "Pinned-Dependencies",
+       "reason": "dependency not pinned by hash detected -- score normalized to 0",
+       "score": 0
+      }
+     ],
+     "commit": null,
+     "context_only": true,
+     "date": "2026-10-12",
+     "dependency_id": "dependency-7500b160cece310449e144fc",
+     "repository": {
+      "host": "github.com",
+      "name": "gcc",
+      "owner": "gcc-mirror",
+      "url": "https://github.com/gcc-mirror/gcc"
+     },
+     "repository_id": "repository-b60e5403475b32d229aff892",
+     "request_url": "https://api.securityscorecards.dev/projects/github.com/gcc-mirror/gcc",
+     "response_artifact": {
+      "path": "data/jobs/job_dependency_intelligence/attempts/<attempt>/steps/scorecards/tasks/fetch/artifacts/scorecards/repository-b60e5403475b32d229aff892.json",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     "schema": "appsec-review/openssf-scorecard-record/1",
+     "score": 4.1,
+     "security_finding": false
+    }
+   ],
+   "repository_count": 1,
    "request_count": 0,
    "terminal_status": "SUCCEEDED"
   }
@@ -3789,13 +3834,18 @@
    },
    {
     "path": "data/indices/manifests/dependency-intelligence-<attempt>.json",
-    "sha256": "f14eb5fd546f80fc31915574b7c36f6462599a04cd2b09cfe27e2415e726be61",
-    "size_bytes": 3022
+    "sha256": "fd4bbc5ee55a6f5c16e63a15210105bb87f77c25456f1c44af306842db21c49e",
+    "size_bytes": 1421
    },
    {
     "path": "data/jobs/job_dependency_intelligence/attempts/<attempt>/steps/acceptance/tasks/publish_handoff/dependency-intelligence-handoff.json",
-    "sha256": "c9bacbac03fdce5ed6f1d884bdaf55893b3f5b3cb863935fdf16b1e74672c22d",
-    "size_bytes": 37016
+    "sha256": "80864d0034ff1fc363c08b0e35d64e7d05ddc06ba1350afa617526a68a32649b",
+    "size_bytes": 43742
+   },
+   {
+    "path": "data/jobs/job_dependency_intelligence/attempts/<attempt>/steps/scorecards/tasks/fetch/artifacts/scorecards/repository-b60e5403475b32d229aff892.json",
+    "sha256": "e9cdcfffe2cee675d6243e424b56679d0e2c115b8bc17c277e60d318a9406836",
+    "size_bytes": 11575
    }
   ]
  }

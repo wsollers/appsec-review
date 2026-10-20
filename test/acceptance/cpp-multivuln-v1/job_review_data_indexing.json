@@ -10,25 +10,25 @@
    "count": 16,
    "kind": "json",
    "path": "data/jobs/job_review_data_indexing/attempts/<attempt>/steps/load/tasks/accepted_inputs/accepted-inputs.json",
-   "sha256": "f1574f85c65dbd3f2c8629c8d3babbea39cca82ef09b465f7ac345de932e9042"
+   "sha256": "aea3acc283237cfc0e75400b7ca8ba703b13c81b283b8cfadaa8df1fbbc9c39a"
   },
   {
    "count": 7,
    "kind": "json",
    "path": "data/indices/manifests/review-data-indexing-<attempt>.json",
-   "sha256": "484e31921edfc75efb0bba7e6356bf5d6cd28403144ffee5d93ca5c88dd1276d"
+   "sha256": "251271a46555380ffeb7a33dcd3db3a6acd0b8f27aaf0c0eefb71c160b0c5bb3"
   },
   {
    "count": 7,
    "kind": "json",
    "path": "data/jobs/job_review_data_indexing/attempts/<attempt>/steps/audit/tasks/inventory/inventory.json",
-   "sha256": "b92af780fe4ea0657ba84ef685ddbccf604c398dd76e60a0643147eeebc47ad7"
+   "sha256": "d96b7ed5b3e2a04ba2f2466143d81a7dcfff0c524afdf0dcdca8e669b9bfe4d3"
   },
   {
    "count": 9,
    "kind": "json",
    "path": "data/jobs/job_review_data_indexing/attempts/<attempt>/steps/matrix/tasks/coverage/coverage-matrices.json",
-   "sha256": "daeb4405d39812d0179edbdd0cdcd0f04c5e7bb75897b8803e921fdd1a9266ae"
+   "sha256": "e1c51366d4b4ad8562b65c055cd24344a8c83a4baff817b3b1420e8426cce1a5"
   }
  ],
  "failed_units": [],
@@ -211,42 +211,27 @@
   },
   {
    "count": 2,
-   "gap": "inventory/dependency-intelligence: dependency-49ca151a2b39735549ccded0: partial: FileNotFoundError: configured Claude CLI is unavailable: claude",
+   "gap": "inventory/dependency-intelligence: dependency-5bcb84257bcb4f4a9fd4eb42: partial: no supported public repository identity was resolved",
    "unit": "precompute.dependency_advisories"
   },
   {
    "count": 2,
-   "gap": "inventory/dependency-intelligence: dependency-5bcb84257bcb4f4a9fd4eb42: partial: FileNotFoundError: configured Claude CLI is unavailable: claude",
+   "gap": "inventory/dependency-intelligence: dependency-7495a7cde0abac949802257a: partial: no supported public repository identity was resolved",
    "unit": "precompute.dependency_advisories"
   },
   {
    "count": 2,
-   "gap": "inventory/dependency-intelligence: dependency-695f9cf0eb24a1ae96c6a4c7: partial: FileNotFoundError: configured Claude CLI is unavailable: claude",
+   "gap": "inventory/dependency-intelligence: dependency-98a18e3182e4630c85436d05: partial: no supported public repository identity was resolved",
    "unit": "precompute.dependency_advisories"
   },
   {
    "count": 2,
-   "gap": "inventory/dependency-intelligence: dependency-7495a7cde0abac949802257a: partial: FileNotFoundError: configured Claude CLI is unavailable: claude",
+   "gap": "inventory/dependency-intelligence: dependency-f391a3ac63dfe5757c68ed5e: partial: no supported public repository identity was resolved",
    "unit": "precompute.dependency_advisories"
   },
   {
    "count": 2,
-   "gap": "inventory/dependency-intelligence: dependency-7500b160cece310449e144fc: partial: FileNotFoundError: configured Claude CLI is unavailable: claude",
-   "unit": "precompute.dependency_advisories"
-  },
-  {
-   "count": 2,
-   "gap": "inventory/dependency-intelligence: dependency-98a18e3182e4630c85436d05: partial: FileNotFoundError: configured Claude CLI is unavailable: claude",
-   "unit": "precompute.dependency_advisories"
-  },
-  {
-   "count": 2,
-   "gap": "inventory/dependency-intelligence: dependency-f391a3ac63dfe5757c68ed5e: partial: FileNotFoundError: configured Claude CLI is unavailable: claude",
-   "unit": "precompute.dependency_advisories"
-  },
-  {
-   "count": 2,
-   "gap": "inventory/dependency-intelligence: dependency-intelligence: partial: {'dependency_id': 'dependency-f391a3ac63dfe5757c68ed5e', 'detail': 'FileNotFoundError: configured Claude CLI is unavailable: claude', 'kind': 'model_failure'}",
+   "gap": "inventory/dependency-intelligence: dependency-intelligence: partial: {'dependency_id': 'dependency-f391a3ac63dfe5757c68ed5e', 'detail': 'no supported public repository identity was resolved', 'kind': 'unresolved_repository'}",
    "unit": "precompute.dependency_advisories"
   },
   {
@@ -1402,28 +1387,28 @@
   "artifacts": [
    {
     "path": "data/indexing/fts/<attempt>/receipt.json",
-    "sha256": "686316dfc547dfe0894adb1c8548e50ee9f757508ded1d9efafcc89f0af579bd",
+    "sha256": "e2b0d44ecf3064b920397fba8b73a5b46b3eb28f13f7128ea24c4520f73218a1",
     "size_bytes": 3503
    },
    {
     "path": "data/indices/manifests/review-data-indexing-<attempt>.json",
-    "sha256": "e8dd0d78bfc6f65fff6a8e364c09ec308b80cd9c587d75bec2edf829fdc15af3",
-    "size_bytes": 97322
+    "sha256": "766359b30f51ab4843687a91ed7115414dce7dd8dd79f653f85b66230dc62466",
+    "size_bytes": 95233
    },
    {
     "path": "data/jobs/job_review_data_indexing/attempts/<attempt>/steps/audit/tasks/inventory/inventory.json",
-    "sha256": "fa558190fbc71c8edc6657162babd6e1e83150b002d9564570f66ee40c60182a",
-    "size_bytes": 583960
+    "sha256": "18d12f1cde109900ebea642dab1ab8cebef7aac3f1f2cf606f3dd61989fab87d",
+    "size_bytes": 583388
    },
    {
     "path": "data/jobs/job_review_data_indexing/attempts/<attempt>/steps/load/tasks/accepted_inputs/accepted-inputs.json",
-    "sha256": "978b675202ae994e6f26c449f1c467c291e627dc99eceeb701e6840e07d4a9e7",
-    "size_bytes": 116643
+    "sha256": "707aa54ff779310e49ac892bffb08fa1f85051097fccb0a73d0089c69f5cc534",
+    "size_bytes": 115042
    },
    {
     "path": "data/jobs/job_review_data_indexing/attempts/<attempt>/steps/matrix/tasks/coverage/coverage-matrices.json",
-    "sha256": "8b81f01ef65913c3fd2624f9438daf31dff91c1f41e6e5881d6e16070feb6612",
-    "size_bytes": 57047
+    "sha256": "e14cca071037aaa7aa892135b7c464e8c5a729d29c26d3cd6d563ea37498811a",
+    "size_bytes": 56662
    }
   ]
  }

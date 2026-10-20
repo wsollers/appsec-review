@@ -91,7 +91,7 @@
   "artifacts": [
    {
     "path": "data/document-issues/<sha256>/ledger.json",
-    "sha256": "d703bc6fddd51bf6666c20d490b2832468a3ab0928b008dd46e6aa3c28fd3c4a",
+    "sha256": "df09f5fc445b7c9f07a7c532f236aa6896c6327890b5f0891c2a7c6f550904f7",
     "size_bytes": 607
    }
   ]

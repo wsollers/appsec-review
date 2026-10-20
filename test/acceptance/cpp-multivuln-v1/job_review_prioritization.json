@@ -28,7 +28,7 @@
    "count": 5,
    "kind": "json",
    "path": "data/jobs/job_review_prioritization/attempts/<attempt>/steps/extract/tasks/semantic_evidence/artifacts/semantic-evidence.json",
-   "sha256": "52a8fd673e13b3bfcb3cfa800efbc320df9f82d2000a56833a7ad65126aa28db"
+   "sha256": "f5e1271e55a601c8bed072f9428c7b47c161cf84ff3f4d1e04411f38524b70a5"
   },
   {
    "count": 7,
@@ -46,7 +46,7 @@
    "count": 9,
    "kind": "json",
    "path": "data/jobs/job_review_prioritization/attempts/<attempt>/steps/prioritize/tasks/score/artifacts/priority.json",
-   "sha256": "f9af83040a12d17a78ffd5d34066a7d8facc799d3850c8902675f7f53895bd01"
+   "sha256": "0b595d67fd86daaa87f5c3b6d429d3fd93615461bf43490f146dfaabb6d19d1f"
   }
  ],
  "failed_units": [],
@@ -265,7 +265,7 @@
   "artifacts": [
    {
     "path": "data/indices/manifests/review-prioritization-<attempt>.json",
-    "sha256": "d63271ec790879bfe32218f6c08b51aa0c36e2e092a1f681850ffeaaa71deff9",
+    "sha256": "34538d5ae76e811cdd7ac868b5a5e34154f03be5d1589728b30d3b8a639f02b7",
     "size_bytes": 58994
    },
    {
@@ -275,7 +275,7 @@
    },
    {
     "path": "data/jobs/job_review_prioritization/attempts/<attempt>/steps/extract/tasks/semantic_evidence/artifacts/semantic-evidence.json",
-    "sha256": "e018695b9abcc721d5af0274d2e9bf8a8488ceb50febbe816dad2fbf04f9e2d1",
+    "sha256": "dd3a81a9deab33385ffbe5e994e7aeb3a55c4fe72760d5ae26bb228d69bd5987",
     "size_bytes": 5167
    },
    {
@@ -290,12 +290,12 @@
    },
    {
     "path": "data/jobs/job_review_prioritization/attempts/<attempt>/steps/prioritize/tasks/score/artifacts/priority.json",
-    "sha256": "75839b8f2174921ae2756864081a1680bb6db0a0592f94ff528165fd3b3a1561",
+    "sha256": "20dfe62c8be50d5a9712955335b07a05819af999e67b781aca4283392781d103",
     "size_bytes": 37069
    },
    {
     "path": "data/jobs/job_review_prioritization/attempts/<attempt>/steps/publish/tasks/publish_handoff/artifacts/review-prioritization.json",
-    "sha256": "fe122992965d0a06881ceb36ecf72b3351a958293475bc4be1dfb54f0193727b",
+    "sha256": "bf8818f6e3ccf25326565e4b5dfc7511a73dc8731aa84354062480f1975e410b",
     "size_bytes": 5035
    },
    {

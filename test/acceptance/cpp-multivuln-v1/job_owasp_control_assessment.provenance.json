@@ -1,13 +1,13 @@
 {
-  "accepted_at": "2026-10-20T18:39:06.995176+00:00",
+  "accepted_at": "2026-10-20T19:52:43.012077+00:00",
   "application_run_id": "2026-10-19-0002",
   "attempt": "attempt_0001",
   "corpus_tag": "cpp-multivuln-v1",
-  "dagster_run_id": "16b58ef0-1e20-4ba5-92f7-c39361f681d3",
-  "handoff_sha256": "7bffad2b3bed5eaa772dd2c003a19e09e3ad4f4dc8c3ef9930397ce1fe719f6a",
+  "dagster_run_id": "5c50895a-1474-4e1b-976b-4b17a156a134",
+  "handoff_sha256": "dd32e03951b8edbd91a77418d20f04652fb38510f8983f196c920478e8323570",
   "job_id": "job_owasp_control_assessment",
-  "repository_commit": "f3cd7581e0ba97ac7d45fd6ce1a498d9c2c2c34a",
-  "repository_dirty": false,
+  "repository_commit": "c06742d45c21250dfdc1d430c5d4cfed09e57c86",
+  "repository_dirty": true,
   "schema": "appsec-review/acceptance-provenance/1",
   "target": "/opt/app/targets/cpp-multivuln",
   "target_commit": "9acaa34035af45f531197a9d9a56032ebbed1908"

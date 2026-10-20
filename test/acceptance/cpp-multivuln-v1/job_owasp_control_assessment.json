@@ -64,7 +64,7 @@
    "count": 7,
    "kind": "json",
    "path": "data/jobs/job_owasp_control_assessment/attempts/<attempt>/inputs/retrieval-manifest.json",
-   "sha256": "d76d1c4d2669276eb863f733902cc664eacd8f4cee50bd345e0016dea8fe43d3"
+   "sha256": "317e2f21b48fd312fef2b1048f093469b289de9b2460a09c1b16238fef491c04"
   }
  ],
  "failed_units": [],
@@ -1668,7 +1668,7 @@
   "artifacts": [
    {
     "path": "data/indexes/owasp/manifests/<sha256>.json",
-    "sha256": "1a2109a8583b758e4aa77cdbdbb0babfa38566704c5619d58ca98c9bc325ca50",
+    "sha256": "dd370223d6607c2c66f1ad4214c9842b09c5f665572348105b8fa41beb18956a",
     "size_bytes": 6421
    },
    {
@@ -1688,12 +1688,12 @@
    },
    {
     "path": "data/jobs/job_owasp_control_assessment/attempts/<attempt>/artifacts/owasp-workbench/finding-packages.json",
-    "sha256": "314bc4addd2a4efc943e73b2af8b7692f713403715851483bd002362f5bd245d",
+    "sha256": "68de7fc3838bee1a2881934afa7df1e0de7a140db5b93b557c382e65e714d670",
     "size_bytes": 8413
    },
    {
     "path": "data/jobs/job_owasp_control_assessment/attempts/<attempt>/artifacts/owasp-workbench/owasp-workbench-result.json",
-    "sha256": "cb9a515bd057a7a2a61d686a13e0d87dcd12075146610f69e983d1aa907ffdfd",
+    "sha256": "dd2f513593f079e2a3ac41406ed4a773d34725d40d498a74e0728b097618a132",
     "size_bytes": 2125
    },
    {
@@ -1713,12 +1713,12 @@
    },
    {
     "path": "data/jobs/job_owasp_control_assessment/attempts/<attempt>/artifacts/owasp-workbench/verified-results.json",
-    "sha256": "231f3b384c8e9b978fc5eb0844cd6c9ad833050865e52813f7cf8ab966888bb2",
+    "sha256": "24f2dfdf7d4297195a1df054b3d496d6cb941c64e1c498ed46cf3387ce95981f",
     "size_bytes": 1836
    },
    {
     "path": "data/jobs/job_owasp_control_assessment/attempts/<attempt>/inputs/retrieval-manifest.json",
-    "sha256": "c7213fe42f9037c2619466201d20f95f04ee3be0d0e27d1a42dcfcfdf44dd5f7",
+    "sha256": "889e4efa346f2f2725f3703a9441ec3cc8906fff73ba02695b9f63badc85b60c",
     "size_bytes": 60164
    }
   ]
