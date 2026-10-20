@@ -7,6 +7,7 @@
   compare --app-run ID --tag TAG      diff a full wave1_review run against the accepted outputs
   seed --tag TAG --after JOB          restore the known-good run tree taken when JOB was accepted
   verify-job --tag TAG --job JOB      seed JOB's predecessor, run JOB, check it, diff its accepted output
+  model-contract --tag TAG --from DIR record the accepted run's model inputs and valid responses
   system --tag TAG [--app-run ID]     run the whole wave1_review in Dagster (or take a finished run), then check
                                       every job, the final artifacts, the baselines and the answer key
   parity --tag TAG --job JOB          from JOB's predecessor seed, run JOB through Dagster and the local
@@ -45,6 +46,7 @@ from appsec_review.acceptance.audit import audit_job_writes, summarize  # noqa: 
 from appsec_review.acceptance.content import content_differences  # noqa: E402
 from appsec_review.acceptance.diff import CLASSES, classify_environment, diff_job_outputs, failing  # noqa: E402
 from appsec_review.acceptance.integrity import attempt_integrity  # noqa: E402
+from appsec_review.acceptance import model_contract  # noqa: E402
 from appsec_review.acceptance.normalize import (  # noqa: E402
     Masks, gap_summary, locate_attempt, normalize_job_output, normalize_value)
 from appsec_review.acceptance.seed import BlobStore, SeedError, resolve_chain, restore, scan, snapshot  # noqa: E402
@@ -368,15 +370,20 @@ def command_compare(args) -> int:
     masks = masks_for(args.app_run, provenance["target"])
     differences = []
     accepted_jobs = set()
+    # Jobs that depend on a model answer which differs from the accepted run are still compared, but
+    # their differences are attributable to the model and are reported, not asserted.
+    attributable_jobs = set(getattr(args, "skip_jobs", ()) or ())
+    attributable: list = []
     for path in expected_files:
         expected = json.loads(path.read_text(encoding="utf-8"))
         accepted_jobs.add(expected["job_id"])
         actual = normalize_job_output(run_root, expected["job_id"], masks)
         # Baselines keep the normalization they were accepted under. The masks only replace patterns,
         # so applying today's to both sides keeps an old baseline comparable.
-        differences += diff_job_outputs(normalize_value(expected, masks),
-                                        None if actual["status"] == "MISSING" else normalize_value(actual, masks),
-                                        expected["job_id"])
+        found = diff_job_outputs(normalize_value(expected, masks),
+                                 None if actual["status"] == "MISSING" else normalize_value(actual, masks),
+                                 expected["job_id"])
+        (attributable if expected["job_id"] in attributable_jobs else differences).extend(found)
     jobs_root = run_root / "data" / "jobs"
     for job_root in sorted(jobs_root.iterdir()) if jobs_root.is_dir() else []:
         if job_root.name not in accepted_jobs:
@@ -384,16 +391,42 @@ def command_compare(args) -> int:
     # As in parity: an id, hash or path that differs between two runs is not a difference.
     differences = classify_environment(differences)
     counts = Counter(item.kind for item in differences)
+    attributable = classify_environment(attributable)
+    held = {item.job_id for item in failing(attributable)}
     print(f"compare app_run={args.app_run} tag={tag} jobs={len(accepted_jobs)} "
           + " ".join(f"{kind}={counts.get(kind, 0)}" for kind in CLASSES))
     for difference in failing(differences)[:args.show * 5]:
         print(f"   {difference.kind} {difference.job_id} {difference.path}: "
               f"{difference.expected[:160]} -> {difference.actual[:160]}")
+    if attributable_jobs:
+        print(f"   {len(failing(attributable))} difference(s) in {len(held)} of {len(attributable_jobs)} job(s) that "
+              f"depend on a changed model answer are attributable to the model and not asserted: "
+              f"{', '.join(sorted(held)) or 'none'}")
     report = run_root.parent / "metadata" / "stepwise" / "compare" / f"{args.app_run}-{tag}.json"
     report.parent.mkdir(parents=True, exist_ok=True)
-    report.write_text(json.dumps([item.as_dict() for item in differences], indent=1) + "\n", encoding="utf-8")
+    report.write_text(json.dumps([item.as_dict() for item in [*differences, *attributable]], indent=1) + "\n",
+                      encoding="utf-8")
     print(f"   report {report.relative_to(ROOT)}")
     return 1 if failing(differences) else 0
+
+
+def command_model_contract(args) -> int:
+    """Record, from an accepted run's recordings, the model inputs and valid responses later runs are held to."""
+
+    tag = valid_corpus_tag(args.tag)
+    key_root = ACCEPTANCE_ROOT / tag
+    provenance = json.loads(next(iter(sorted(key_root.glob("job_*.provenance.json")))).read_text(encoding="utf-8"))
+    masks = Masks.for_run(provenance["application_run_id"])
+    calls = [call for directory in args.sources for call in model_contract.load_calls(Path(directory))]
+    if not calls:
+        raise StateError("no recorded model calls under the given directories")
+    document = model_contract.baseline_document(calls, masks, run_id=provenance["application_run_id"])
+    destination = key_root / "model-contract.json"
+    destination.write_text(json.dumps(document, indent=1, sort_keys=True) + "\n", encoding="utf-8")
+    for job, entry in document["jobs"].items():
+        print(f"   {job}: {len(entry['requests'])} request(s), {len(entry['responses'])} valid response(s)")
+    print(f"model contract -> {relative(destination)}")
+    return 0
 
 
 def command_system(args) -> int:
@@ -433,7 +466,22 @@ def command_system(args) -> int:
         print(f"   {item.kind} {item.job_id} {item.path}: {item.expected[:120]} -> {item.actual[:120]}")
     print(f"system run={app_run_id} jobs={len(job_ids)} integrity_problems={len(failing(problems))}")
 
-    compared = command_compare(argparse.Namespace(tag=tag, app_run=app_run_id, show=args.show))
+    contract_file = key_root / "model-contract.json"
+    contract = model_contract.ContractReport()
+    skipped: set[str] = set()
+    if contract_file.is_file():
+        run_masks = Masks.for_run(app_run_id)
+        contract = model_contract.check(json.loads(contract_file.read_text(encoding="utf-8")),
+                                        model_contract.load_calls(run_root / model_contract.RECORDINGS), run_masks, ROOT)
+        skipped = model_contract.tainted_jobs(contract.response_changed, topology["jobs"])
+        for line in [*contract.input_problems, *contract.response_problems]:
+            print(f"   model-contract {line}")
+        print(f"model contract inputs_ok={not contract.input_problems} responses_complete={not contract.response_problems} "
+              f"failed_attempts={sum(contract.failed_attempts.values())} "
+              f"answers_changed={','.join(sorted(contract.response_changed)) or '-'}")
+    else:
+        print(f"   model-contract: no {relative(contract_file)}; model-backed jobs are compared with the baseline")
+    compared = command_compare(argparse.Namespace(tag=tag, app_run=app_run_id, show=args.show, skip_jobs=skipped))
 
     masks = masks_for(app_run_id, provenance["target"])
     outputs = [normalize_job_output(run_root, job_id, masks) for job_id in job_ids]
@@ -445,13 +493,15 @@ def command_system(args) -> int:
         print(f"   answer-key {state} {defect.id} {defect.path}:{defect.line} producers_seen={seen}")
     print(f"answer key found={len(matrix.found)} missed={len(matrix.missed)} spurious={matrix.spurious}")
 
-    verdict = "SYSTEM OK" if not failing(problems) and compared == 0 and not matrix.failed else "SYSTEM FAILED"
+    verdict = ("SYSTEM OK" if not failing(problems) and compared == 0 and not matrix.failed and not contract.failed
+               else "SYSTEM FAILED")
     report = run_root.parent / "metadata" / "stepwise" / "system" / f"{app_run_id}-{tag}.json"
     report.parent.mkdir(parents=True, exist_ok=True)
     report.write_text(json.dumps({
         "verdict": verdict, "application_run_id": app_run_id, "corpus_tag": tag,
         "repository_commit": git("rev-parse", "HEAD", cwd=ROOT), "integrity": [item.as_dict() for item in problems],
-        "baseline_compare_exit": compared, "answer_key": matrix.as_dict()}, indent=1) + "\n", encoding="utf-8")
+        "baseline_compare_exit": compared, "model_contract": contract.as_dict(),
+        "answer_key": matrix.as_dict()}, indent=1) + "\n", encoding="utf-8")
     print(f"== {verdict}; report {report.relative_to(ROOT)}")
     return 0 if verdict == "SYSTEM OK" else 1
 
@@ -927,6 +977,10 @@ def main(argv: list[str] | None = None) -> int:
     parity.add_argument("--container-paths", action="store_true",
                         help="run the local side with the checkout mounted at /opt/app (rootless namespace) so "
                              "hashes that embed the target or run root match the Dagster side; no docker group")
+    contract = commands.add_parser("model-contract", help="record the accepted run's model inputs and valid responses")
+    contract.add_argument("--tag", required=True)
+    contract.add_argument("--from", dest="sources", action="append", required=True,
+                          help="a recordings directory (<job>/<key>.<n>.json); repeatable")
     system = commands.add_parser("system", help="run or take a whole wave1_review and check it end to end")
     system.add_argument("--tag", required=True)
     system.add_argument("--app-run", help="evaluate this finished application run instead of starting one")
@@ -935,7 +989,7 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--interval-seconds must be positive")
     handlers = {"init": command_init, "next": command_next, "check": command_check,
                 "accept": command_accept, "compare": command_compare, "seed": command_seed,
-                "verify-job": command_verify_job, "parity": command_parity, "system": command_system}
+                "verify-job": command_verify_job, "parity": command_parity, "system": command_system, "model-contract": command_model_contract}
     try:
         return handlers[args.command](args)
     except (StateError, SeedError, RuntimeError) as exc:

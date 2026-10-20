@@ -200,6 +200,7 @@ produces its final artifacts; per-job parity shows each job behaves the same thr
 | Every job of the graph | a job has no accepted handoff, or finished other than `SUCCEEDED` / `COMPLETED_WITH_GAPS` |
 | Evidence integrity | any handoff, artifact or path-and-hash reference does not resolve to its recorded bytes, or a job bound an upstream handoff the run did not accept |
 | Final artifacts | the review packages (`data/review-packages/*/manifest.json` and its pages) or the document-issue ledger are missing, empty, changed, or fail `docs/schemas/document-issue-ledger.schema.json` |
+| Model contract | a model-backed job sent a request the accepted run did not, or a request never got a complete response (below) |
 | Baselines | the normalized output of a job differs from `test/acceptance/<tag>/<job>.json` (`stepwise.py compare`) |
 | Answer key | a defect in `test/acceptance/<tag>/expectations.toml` has no finding on its file and line. Spurious findings are reported and never fail |
 
@@ -212,10 +213,22 @@ Two things the checks do not do, found by running them:
   translation unit with no diagnostics, and the walk accepted that because both drivers agreed. Only the
   answer key shows it. `parity` now also refuses a Dagster run whose model calls could not reach a model
   (`unavailable_model_calls`), after a stack recreated without the CLI overlay produced a degraded baseline.
-- **Model-backed jobs vary between runs.** `job_dependency_intelligence` and `job_target_analysis_plan`
-  (and what is derived from them) differ from their baselines on a fresh run, so `compare` reports them.
-  Baselines are re-normalized with the current masks on both sides before comparing, so adding a mask
-  does not require re-accepting a corpus.
+- **A model's answer is never asserted.** It varies from run to run. For every model call the system
+  run asserts the contract around it instead (`appsec_review.acceptance.model_contract`):
+  1. *Inputs match.* The first-attempt requests of the run, normalized like output (event numbers, hashes
+     and run ids masked), equal those recorded from the accepted run in
+     `test/acceptance/<tag>/model-contract.json`. Repair requests carry the previous failure and are not
+     compared.
+  2. *Responses are complete.* Every request ends with a response that names its schema, validates against
+     the schema file where one exists (`docs/schemas`), and obeys the rules its consumer applies: for a
+     dependency-repository proposal a candidate id, a confidence of 0 to 0.95, evidence references taken
+     from those the request supplied, and a rationale. A request whose every attempt failed is a violation.
+     Failed attempts that a repair recovers are counted and reported.
+  Record the accepted run's contract with `stepwise.py model-contract --tag <tag> --from <recordings dir>`.
+  A job whose valid answers differ from the accepted ones, and every job downstream of it, is still
+  compared with its baseline, but those differences are reported as attributable to the model and do not
+  fail the run; every other job is compared strictly. Baselines are re-normalized with the current masks
+  on both sides before comparing, so adding a mask does not require re-accepting a corpus.
 
 Operating notes: recreate the stack with `docker compose -f compose.yaml -f compose.claude.yaml up -d`, never
 `compose.yaml` alone. A local run that consumes a hash recorded inside the container (the retrieval
