@@ -258,3 +258,59 @@ def read_sections(stream: BinaryIO, image: Image) -> tuple[Section, ...]:
                            "section name")
         sections.append(Section(text, kind, flags, offset, size))
     return tuple(sections)
+
+
+SYMBOL_PARSER_IDENTITY = "appsec-review/elf-symbol-names/1"
+_SHT_SYMTAB, _SHT_DYNSYM = 2, 11
+_SYMBOL_ENTRY_LIMIT = 4_000_000
+_SYMBOL_NAME_LIMIT = 4096
+_SYMBOL_TABLES = ((".dynsym", ".dynstr", _SHT_DYNSYM), (".symtab", ".strtab", _SHT_SYMTAB))
+
+
+def symbol_names(path: Path, prefixes: tuple[str, ...]) -> dict[str, Any]:
+    """Names in the ELF symbol tables that start with one of ``prefixes``.
+
+    Only the section header table, ``.dynsym``/``.dynstr`` and ``.symtab``/``.strtab`` are read, each
+    bounded by the file it lives in. Nothing is loaded or executed. ``defined`` and ``undefined``
+    name the symbols the file defines and the ones it imports, so an instrumented object that calls
+    a runtime and a binary that carries the runtime can both be recognized. ``tables`` lists which
+    symbol tables the file has; a file with none (stripped, or no section headers) proves nothing
+    either way, and the caller must treat that as unknown rather than clean.
+    """
+    with path.open("rb") as stream:
+        image = read_image(stream)
+        sections = read_sections(stream, image)
+        by_name = {item.name: item for item in sections}
+        defined: set[str] = set()
+        undefined: set[str] = set()
+        tables: list[str] = []
+        entry = 24 if image.wide else 16
+        for symbol_name, string_name, kind in _SYMBOL_TABLES:
+            symbols, strings = by_name.get(symbol_name), by_name.get(string_name)
+            if symbols is None or strings is None or symbols.kind != kind or strings.kind != _SHT_STRTAB:
+                continue
+            if symbols.size % entry or symbols.size // entry > _SYMBOL_ENTRY_LIMIT:
+                raise ValueError(f"ELF {symbol_name} size is invalid")
+            table = read_exact(stream, symbols.offset, symbols.size, image.file_size)
+            text = read_exact(stream, strings.offset, strings.size, image.file_size)
+            tables.append(symbol_name)
+            for index in range(symbols.size // entry):
+                if image.wide:
+                    name_offset, _info, _other, section_index = struct.unpack_from(
+                        image.order + "IBBH", table, index * entry)
+                else:
+                    name_offset, _value, _size, _info, _other, section_index = struct.unpack_from(
+                        image.order + "IIIBBH", table, index * entry)
+                if name_offset == 0:
+                    continue
+                if name_offset >= len(text):
+                    raise ValueError(f"ELF {symbol_name} name lies outside {string_name}")
+                end = text.find(b"\0", name_offset, name_offset + _SYMBOL_NAME_LIMIT)
+                if end < 0:
+                    raise ValueError(f"ELF {symbol_name} name is unterminated or too long")
+                raw = text[name_offset:end]
+                if not raw.startswith(tuple(value.encode() for value in prefixes)):
+                    continue
+                (undefined if section_index == 0 else defined).add(raw.decode("utf-8", "replace"))
+    return {"tables": tables, "defined": sorted(defined), "undefined": sorted(undefined),
+            "parser": SYMBOL_PARSER_IDENTITY}
