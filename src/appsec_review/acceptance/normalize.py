@@ -36,6 +36,7 @@ _PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"\battempt_\d{4}\b"), "<attempt>"),
     (re.compile(r"(?<=execution-capture:command-\d{3}:event-)\d+"), "<n>"),
     (re.compile(r"\btrace\.\d+\b"), "trace.<n>"),
+    (re.compile(r"\bpackage-[0-9a-f]{24}\b"), "package-<id>"),
     (re.compile(r"\b\d{8}T\d{6}\.\d{3}Z"), "<stamp>"),
     (re.compile(r"\b\d{8}\.\d{6}\.\d{3}\b"), "<stamp>"),
     (re.compile(r"(?<=extractor/)[0-9a-f]{2}/[0-9a-f]{2}/[0-9a-f]+(?=\.log)"), "<h>/<h>/<h>"),

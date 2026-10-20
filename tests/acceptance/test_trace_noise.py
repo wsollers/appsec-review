@@ -121,3 +121,10 @@ def test_codeql_log_names_stamps_and_sarif_timings_are_masked() -> None:
               "receipt": {"stderr_total_bytes": 57192}}
     assert normalize_value(first, MASKS) == normalize_value(second, MASKS)
     assert normalize_value(first, MASKS) != normalize_value({**second, "files": {}}, MASKS)
+
+
+def test_package_ids_hashed_over_the_retrieval_manifest_are_masked_but_their_content_is_not() -> None:
+    first = {"package_id": "package-ac30fc5651ff3c7374154428", "row_id": "r1", "control": {"id": "V1.1"}}
+    second = {"package_id": "package-2c2bd9d986ac43e14fc77cff", "row_id": "r1", "control": {"id": "V1.1"}}
+    assert normalize_value(first, MASKS) == normalize_value(second, MASKS)
+    assert normalize_value(first, MASKS) != normalize_value({**second, "row_id": "r2"}, MASKS)
