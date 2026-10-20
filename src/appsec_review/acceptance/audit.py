@@ -18,6 +18,22 @@ import stat as stat_module
 
 SCRATCH_NAMES = re.compile(
     r"^(\.appsec-review-build-scratch\..+|\.tmp-.+|.+\.tmp|.+\.partial|tmp|scratch|\.scratch)$")
+
+
+def _tool_owned(path: Path) -> bool:
+    """Whether ``path`` is inside a tree a build or analysis tool owns.
+
+    That is a copied build workspace, the C/C++ analysis job's copy of a build tree
+    (``cpp/projects/<unit>/build``) and an Infer output directory (``infer-out``), where tools
+    create their own ``tmp`` directories.
+    """
+
+    parts = path.parts
+    if "workspace" in parts or "infer-out" in parts:
+        return True
+    return any(parts[i:i + 2] == ("cpp", "projects") and "build" in parts[i + 3:] for i in range(len(parts) - 1))
+
+
 TERMINAL_STATUSES = {"SUCCEEDED", "COMPLETED_WITH_GAPS", "FAILED"}
 ACCEPTED_STATUSES = {"SUCCEEDED", "COMPLETED_WITH_GAPS"}
 
@@ -86,7 +102,7 @@ def audit_tree(
             findings.append(AuditFinding("unreadable", str(path), f"mode={stat_module.filemode(info.st_mode)}"))
         # Inside a copied build workspace, tmp-like names belong to the target's own toolchain
         # (CMake, Gradle); only the capture driver's scratch is the pipeline's to clean up.
-        target_owned = "workspace" in path.parts and not path.name.startswith(".appsec-review-build-scratch.")
+        target_owned = _tool_owned(path) and not path.name.startswith(".appsec-review-build-scratch.")
         if not in_scratch and not target_owned and SCRATCH_NAMES.match(path.name) and str(path) not in kept:
             findings.append(AuditFinding("scratch-leftover", str(path), "scratch or temporary entry persisted"))
 

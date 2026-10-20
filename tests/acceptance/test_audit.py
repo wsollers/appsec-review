@@ -120,3 +120,14 @@ def test_target_toolchain_tmp_in_a_build_workspace_is_not_a_leftover(tmp_path: P
     (tree / ".appsec-review-build-scratch.AoX3Ze").mkdir()
     findings = audit_tree([run], expected_uid=UID, expected_gid=GID)
     assert _kinds(findings).get("scratch-leftover") == {".appsec-review-build-scratch.AoX3Ze"}
+
+
+def test_tool_owned_tmp_in_cpp_analysis_trees_is_not_a_leftover(tmp_path: Path) -> None:
+    run = tmp_path / RUN_ID
+    unit = run / "data" / "cpp" / "projects" / "build-unit-x"
+    (unit / "build" / "CMakeFiles" / "3.28.3" / "CompilerIdCXX" / "tmp").mkdir(parents=True)
+    (unit / "analysis" / "infer-run" / "infer-out" / "tmp").mkdir(parents=True)
+    (unit / "analysis" / "tmp").mkdir(parents=True)
+    findings = audit_tree([run], expected_uid=UID, expected_gid=GID)
+    leftovers = {item.path for item in findings if item.kind == "scratch-leftover"}
+    assert leftovers == {str(unit / "analysis" / "tmp")}
