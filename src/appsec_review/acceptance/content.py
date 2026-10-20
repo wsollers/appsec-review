@@ -10,7 +10,9 @@ environment's paths or when SQLite lays pages out differently; content must not.
 
 from __future__ import annotations
 
+from collections import defaultdict
 from collections.abc import Iterable, Mapping
+import hashlib
 import json
 from pathlib import Path
 import sqlite3
@@ -23,16 +25,66 @@ ROW_EXAMPLES = 5
 FIELD_EXAMPLES = 20
 
 
-def _pairs(left: Iterable[Mapping[str, Any]], left_masks: Masks, right: Iterable[Mapping[str, Any]],
-           right_masks: Masks) -> tuple[list[tuple[str, Mapping, Mapping]], list[tuple[str, str]]]:
-    """Artifacts paired by masked path, and the masked paths present on one side only."""
+def _content_key(root: Path, artifact: Mapping[str, Any], masks: Masks) -> str:
+    """A digest of an artifact's content as ``_compare`` sees it: masked, and field-wise for JSON."""
+
+    path = Path(root) / str(artifact.get("path", ""))
+    try:
+        if path.suffix == ".sqlite":
+            return hashlib.sha256(canonical(_sqlite_rows(path, masks)).encode("utf-8")).hexdigest()
+        raw = path.read_bytes()
+    except (OSError, sqlite3.Error):
+        return "<unreadable>"
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError:
+        return hashlib.sha256(raw).hexdigest()
+    if path.suffix in {".json", ".sarif"}:
+        try:
+            return hashlib.sha256(canonical(normalize_value(json.loads(text), masks)).encode("utf-8")).hexdigest()
+        except ValueError:
+            pass
+    return hashlib.sha256(masks.text(text).encode("utf-8")).hexdigest()
+
+
+def _pairs(left: Iterable[Mapping[str, Any]], left_masks: Masks, left_run: Path,
+           right: Iterable[Mapping[str, Any]], right_masks: Masks,
+           right_run: Path) -> tuple[list[tuple[str, Mapping, Mapping]], list[tuple[str, str]]]:
+    """Artifacts paired by masked path, and the masked paths present on one side only.
+
+    Several artifacts can share one masked path (content-addressed names such as
+    ``finding_lead-<sha256>.json``), and their raw hashes differ between environments. Those are
+    paired by normalized content, equal content first, so one changed file is one difference rather
+    than a cascade of mismatched pairs.
+    """
+
     grouped: dict[str, tuple[list, list]] = {}
     for side, artifacts, masks in ((0, left, left_masks), (1, right, right_masks)):
         for artifact in artifacts:
             grouped.setdefault(masks.text(str(artifact.get("path", ""))), ([], []))[side].append(artifact)
     pairs, unmatched = [], []
     for masked, (lefts, rights) in sorted(grouped.items()):
-        lefts, rights = sorted(lefts, key=canonical), sorted(rights, key=canonical)
+        if len(lefts) > 1 or len(rights) > 1:
+            keyed_left = sorted(((_content_key(left_run, item, left_masks), canonical(item), item) for item in lefts),
+                                key=lambda row: row[:2])
+            keyed_right = sorted(((_content_key(right_run, item, right_masks), canonical(item), item) for item in rights),
+                                 key=lambda row: row[:2])
+            waiting: dict[str, list] = defaultdict(list)
+            for key, _canon, item in keyed_right:
+                waiting[key].append(item)
+            rest_left, matched_right = [], set()
+            for key, _canon, item in keyed_left:
+                if waiting[key]:
+                    partner = waiting[key].pop(0)
+                    pairs.append((masked, item, partner))
+                    matched_right.add(id(partner))
+                else:
+                    rest_left.append(item)
+            rest_right = [item for _key, _canon, item in keyed_right if id(item) not in matched_right]
+            pairs += [(masked, a, b) for a, b in zip(rest_left, rest_right)]
+            unmatched += [(masked, "left")] * max(0, len(rest_left) - len(rest_right))
+            unmatched += [(masked, "right")] * max(0, len(rest_right) - len(rest_left))
+            continue
         pairs += [(masked, a, b) for a, b in zip(lefts, rights)]
         unmatched += [(masked, "left")] * max(0, len(lefts) - len(rights))
         unmatched += [(masked, "right")] * max(0, len(rights) - len(lefts))
@@ -177,7 +229,8 @@ def content_differences(job_id: str, left_run: Path, left_handoff: Mapping[str, 
         result = dict(handoff.get("resolving_paths") or {}).get("result")
         return [item for item in handoff.get("artifacts", ()) if item.get("path") != result]
 
-    pairs, unmatched = _pairs(published(left_handoff), left_masks, published(right_handoff), right_masks)
+    pairs, unmatched = _pairs(published(left_handoff), left_masks, Path(left_run),
+                              published(right_handoff), right_masks, Path(right_run))
     differences = [Difference(job_id, "content", masked, "<artifact>" if side == "left" else "<absent>",
                               "<artifact>" if side == "right" else "<absent>") for masked, side in unmatched]
     # Identical bytes are compared too: a path written in one environment's spelling by both sides

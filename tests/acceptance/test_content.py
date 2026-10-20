@@ -96,3 +96,30 @@ def test_identical_binary_artifacts_match_and_different_ones_are_reported(tmp_pa
     (local[0] / "data" / "tool.o").write_bytes(b"\x7fELF\xff\xfd")
     assert [(item.path, item.actual) for item in _compare(dagster, local)] == [
         ("data/tool.o", "<different bytes>")]
+
+
+def _packages(tmp_path: Path, name: str, root: str, documents: list[dict], digests: list[str]) -> tuple[Path, dict]:
+    run_root = tmp_path / name / "runs" / RUN
+    artifacts = []
+    for document, digest in zip(documents, digests):
+        relative = f"data/review-packages/{digest * 64}/finding_lead-{digest * 64}.json"
+        path = run_root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps({**document, "target": f"{root}/targets/relay"}), encoding="utf-8")
+        artifacts.append(_artifact(run_root, relative))
+    return run_root, {"artifacts": artifacts}
+
+
+def test_artifacts_sharing_a_masked_path_are_paired_by_content_not_by_hash_order(tmp_path: Path) -> None:
+    first, second, third = {"lead": "a", "n": 1}, {"lead": "b", "n": 2}, {"lead": "c", "n": 3}
+    # The sides name the same three packages with different hashes, so hash order pairs them wrongly.
+    dagster = _packages(tmp_path, "dagster", "/opt/app", [first, second, third], ["1", "5", "9"])
+    local = _packages(tmp_path, "local", "/home/user/checkout", [third, first, second], ["2", "3", "4"])
+    assert _compare(dagster, local) == []
+
+    changed = _packages(tmp_path, "changed", "/home/user/checkout", [third, {**first, "n": 99}, second], ["2", "3", "4"])
+    differences = _compare(dagster, changed)
+    assert [(item.path.rsplit(".", 1)[-1], item.expected, item.actual) for item in differences] == [("n", "1", "99")]
+
+    fewer = _packages(tmp_path, "fewer", "/home/user/checkout", [third, second], ["2", "4"])
+    assert [(item.expected, item.actual) for item in _compare(dagster, fewer)] == [("<artifact>", "<absent>")]
