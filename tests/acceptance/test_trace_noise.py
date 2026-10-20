@@ -98,3 +98,8 @@ def test_unit_outputs_get_the_same_trace_and_ordering_rules() -> None:
 
     assert extract(unit(8346, [{"tool": "c++"}, {"tool": "as"}])) == extract(unit(8348, [{"tool": "as"}, {"tool": "c++"}]))
     assert extract(unit(8346, [{"tool": "c++"}])) != extract(unit(8346, [{"tool": "as"}]))
+
+
+def test_parenthesized_tool_durations_are_masked() -> None:
+    assert (normalize_value("-- Configuring done (0.7s)", MASKS) == normalize_value("-- Configuring done (12s)", MASKS))
+    assert normalize_value("-- Configuring done (0.7s)", MASKS) != normalize_value("-- Generating done (0.7s)", MASKS)
