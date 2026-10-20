@@ -62,7 +62,7 @@ def _token(ordinal: int, kind: str, value: str | None, redacted: bool) -> dict[s
     return token
 
 
-def classify_command(argv: Sequence[str], *, target_prefixes: Sequence[str] = ("/target/source", "/target")) -> list[dict[str, Any]]:
+def classify_command(argv: Sequence[str], *, target_prefixes: Sequence[str] = ("/target/source", "/target", "/workspace")) -> list[dict[str, Any]]:
     """Classify every argv token in order; the raw token is never returned verbatim unless allowlisted."""
     tokens: list[dict[str, Any]] = []
     pending: str | None = None
