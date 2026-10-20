@@ -1,0 +1,138 @@
+{
+ "artifacts": [
+  {
+   "count": 4,
+   "kind": "json",
+   "path": "data/jobs/job_model_connectivity/attempts/<attempt>/steps/connectivity/tasks/verify_models/model-connectivity.json",
+   "sha256": "87213c37a7ec2994393832d04446d25e697b666684934d7b454f762bd87732bd"
+  },
+  {
+   "count": 4,
+   "kind": "json",
+   "path": "data/jobs/job_model_connectivity/attempts/<attempt>/steps/publication/tasks/publish_handoff/model-connectivity-handoff.json",
+   "sha256": "aa51c0cff422467c6ee4cc491c09abcfc9191de8162f6557e0c1a30116b91f83"
+  }
+ ],
+ "failed_units": [],
+ "findings": [],
+ "gaps": [],
+ "handoff": {
+  "completion_status": "SUCCEEDED",
+  "schema_identity": "appsec-review/model-connectivity-job/1",
+  "status": "ACCEPTED",
+  "upstream_jobs": []
+ },
+ "job_id": "job_model_connectivity",
+ "outputs": {
+  "connectivity.resolve_models": {
+   "model_count": 1,
+   "required": [
+    {
+     "enabled": true,
+     "job_id": "job_dependency_intelligence",
+     "model": "claude-haiku-5-5",
+     "provider": "claude-cli",
+     "setting": "settings.model"
+    },
+    {
+     "enabled": true,
+     "job_id": "job_inference_security_review",
+     "model": "claude-haiku-5-5",
+     "provider": "claude-cli",
+     "setting": "settings.models.default"
+    },
+    {
+     "enabled": false,
+     "job_id": "job_owasp_control_assessment",
+     "model": "claude-haiku-5-5",
+     "provider": "claude-cli",
+     "setting": "settings.model"
+    },
+    {
+     "enabled": false,
+     "job_id": "job_post_build_security_assessment",
+     "model": "claude-haiku-5-5",
+     "provider": "claude-cli",
+     "setting": "settings.model"
+    },
+    {
+     "enabled": true,
+     "job_id": "job_project_build",
+     "model": "claude-haiku-5-5",
+     "provider": "claude-cli",
+     "setting": "settings.model"
+    },
+    {
+     "enabled": true,
+     "job_id": "job_target_analysis_plan",
+     "model": "claude-haiku-5-5",
+     "provider": "claude-cli",
+     "setting": "settings.model"
+    }
+   ]
+  },
+  "connectivity.verify_models": {
+   "artifact": {
+    "path": "data/jobs/job_model_connectivity/attempts/<attempt>/steps/connectivity/tasks/verify_models/model-connectivity.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "providers": [
+    "claude-cli"
+   ],
+   "schema": "appsec-review/model-preflight/1",
+   "verified": [
+    "claude-cli/claude-haiku-5-5"
+   ]
+  },
+  "publication.publish_handoff": {
+   "artifact": {
+    "path": "data/jobs/job_model_connectivity/attempts/<attempt>/steps/publication/tasks/publish_handoff/model-connectivity-handoff.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "schema": "appsec-review/model-preflight/1",
+   "verified": [
+    "claude-cli/claude-haiku-5-5"
+   ]
+  }
+ },
+ "schema": "appsec-review/acceptance-job-output/1",
+ "skipped_units": [],
+ "status": "SUCCEEDED",
+ "steps": {
+  "connectivity": "SUCCEEDED",
+  "publication": "SUCCEEDED"
+ },
+ "units": {
+  "connectivity.resolve_models": {
+   "disposition": null,
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "connectivity.verify_models": {
+   "disposition": null,
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "publication.publish_handoff": {
+   "disposition": null,
+   "producer": null,
+   "status": "SUCCEEDED"
+  }
+ },
+ "volatile": {
+  "artifacts": [
+   {
+    "path": "data/jobs/job_model_connectivity/attempts/<attempt>/steps/connectivity/tasks/verify_models/model-connectivity.json",
+    "sha256": "57c87b1edf62f71602ba47a0d67cf15a85d52dc4239d783f5382ae179973724a",
+    "size_bytes": 1092
+   },
+   {
+    "path": "data/jobs/job_model_connectivity/attempts/<attempt>/steps/publication/tasks/publish_handoff/model-connectivity-handoff.json",
+    "sha256": "bece6dd4482380d086b30dae592af077ba5285a6c3def2581631b322d3112d0b",
+    "size_bytes": 349
+   }
+  ]
+ }
+}

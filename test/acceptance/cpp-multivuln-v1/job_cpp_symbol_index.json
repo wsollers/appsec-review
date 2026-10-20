@@ -1,0 +1,235 @@
+{
+ "artifacts": [
+  {
+   "count": 23,
+   "kind": "json",
+   "path": "data/code-index/clangd/cpp-scope-ab6d5db76861721dc145e459/run/execution.json",
+   "sha256": "c37a891ee73267d9d54fe66c3deacc46e8c06d4fc082d56f4b5e6ab141685c1f"
+  },
+  {
+   "count": 6,
+   "kind": "json",
+   "path": "data/jobs/job_cpp_symbol_index/attempts/<attempt>/steps/acceptance/tasks/publish_handoff/cpp-symbol-index-summary.json",
+   "sha256": "2294faaa3d3f44c71cced258346c51b151e995f663035457cd75295df427f7c0"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/code-index/clangd/cpp-scope-ab6d5db76861721dc145e459/run/compile_commands.json",
+   "sha256": "8e580f8b3f3994ff5e1a80ff0559d9d310722458cefd95e8081ff776be68cac4"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/cpp/projects/build-unit-b9c931fa551e02bd12b2/normalized-compile-commands.json",
+   "sha256": "351c51c963ae9bfe3b5e61be2144daaf61c5b0f2f08d9045756c5720f9cfe73d"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/indices/manifests/clangd-<attempt>.json",
+   "sha256": "bd2356ab257adcabdda7e02e5fcf67867131c0162ccfe85dc3b4167d2d0b5813"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/indices/manifests/cpp-compiled-<attempt>.json",
+   "sha256": "a1304f4382d4f221eed293e5901102b0856806d78ef7dd640498256728f5daf9"
+  }
+ ],
+ "failed_units": [],
+ "findings": [],
+ "gaps": [],
+ "handoff": {
+  "completion_status": "SUCCEEDED",
+  "schema_identity": "appsec-review/cpp-symbol-index/1",
+  "status": "ACCEPTED",
+  "upstream_jobs": [
+   "job_ci_configuration_analysis",
+   "job_cpp_compiled_analysis",
+   "job_evidence_collection",
+   "job_language_build",
+   "job_project_build",
+   "job_review_intake",
+   "job_source_history_analysis",
+   "job_target_analysis_plan",
+   "job_target_catalog"
+  ]
+ },
+ "job_id": "job_cpp_symbol_index",
+ "outputs": {
+  "acceptance.publish_handoff": {
+   "artifact": {
+    "path": "data/jobs/job_cpp_symbol_index/attempts/<attempt>/steps/acceptance/tasks/publish_handoff/cpp-symbol-index-summary.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "counts": {
+    "external_symbols": 0,
+    "processed_translation_units": 7,
+    "relations": 43,
+    "symbols": 32,
+    "translation_units": 7
+   },
+   "index_manifest": {
+    "path": "data/indices/manifests/clangd-<attempt>.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "item_count": 32,
+   "schema": "appsec-review/cpp-symbol-index/1",
+   "terminal_status": "SUCCEEDED"
+  },
+  "index.scopes": {
+   "not_applicable_scopes": [],
+   "scope_count": 1,
+   "scopes": [
+    {
+     "accepted_compile_database": {
+      "path": "data/cpp/projects/build-unit-b9c931fa551e02bd12b2/normalized-compile-commands.json",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     "case_id": "build-unit-b9c931fa551e02bd12b2",
+     "counts": {
+      "coverage": "complete",
+      "external_symbols": 0,
+      "processed_translation_units": 7,
+      "relations": 43,
+      "symbols": 32,
+      "translation_units": 7,
+      "unresolved_references": 1
+     },
+     "execution": {
+      "compile_database": {
+       "path": "data/code-index/clangd/cpp-scope-ab6d5db76861721dc145e459/run/compile_commands.json",
+       "sha256": "<sha256>",
+       "size_bytes": "<size_bytes>"
+      },
+      "exit_code": 0,
+      "image_id": "<image_id>",
+      "oom_killed": false,
+      "receipt": {
+       "path": "data/code-index/clangd/cpp-scope-ab6d5db76861721dc145e459/run/execution.json",
+       "sha256": "<sha256>",
+       "size_bytes": "<size_bytes>"
+      },
+      "timed_out": false
+     },
+     "index_identity": {
+      "fingerprint": "<sha256>",
+      "name": "analysis",
+      "producer": {
+       "job": "job_cpp_symbol_index",
+       "scope_id": "cpp-scope-ab6d5db76861721dc145e459",
+       "unit": "index.scopes"
+      },
+      "relative_path": "data/indices/analysis/<sha256>-9526b77cbf64ad30.sqlite",
+      "schema": "appsec-review/retrieval-index/2",
+      "sha256": "<sha256>",
+      "shard_id": "clangd-cpp-scope-ab6d5db76861721dc145e459"
+     },
+     "not_applicable_inputs": {
+      "by_reason": {},
+      "count": 0,
+      "disposition": "SKIPPED_NA",
+      "items": [],
+      "schema": "appsec-review/tool-input-support/1",
+      "truncated": false
+     },
+     "project_id": "cpp:.",
+     "scope_id": "cpp-scope-ab6d5db76861721dc145e459",
+     "terminal_status": "SUCCEEDED"
+    }
+   ],
+   "terminal_status": "SUCCEEDED"
+  },
+  "load.accepted_cpp": {
+   "scopes": [
+    {
+     "case_id": "build-unit-b9c931fa551e02bd12b2",
+     "case_snapshot": "<sha256>",
+     "compile_database": {
+      "path": "data/cpp/projects/build-unit-b9c931fa551e02bd12b2/normalized-compile-commands.json",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     "compile_unit_count": 7,
+     "file_count": 11,
+     "project_id": "cpp:.",
+     "root": ".",
+     "schema": "appsec-review/cpp-index-scope/1",
+     "scope_id": "cpp-scope-ab6d5db76861721dc145e459",
+     "supported_compile_unit_count": 7
+    }
+   ],
+   "unavailable": {},
+   "upstream": {
+    "handoff_sha256": "<sha256>",
+    "manifest": {
+     "path": "data/indices/manifests/cpp-compiled-<attempt>.json",
+     "sha256": "<sha256>"
+    }
+   }
+  }
+ },
+ "schema": "appsec-review/acceptance-job-output/1",
+ "skipped_units": [],
+ "status": "SUCCEEDED",
+ "steps": {
+  "acceptance": "SUCCEEDED",
+  "index": "SUCCEEDED",
+  "load": "SUCCEEDED"
+ },
+ "units": {
+  "acceptance.publish_handoff": {
+   "disposition": "SUCCEEDED",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "index.scopes": {
+   "disposition": "SUCCEEDED",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "load.accepted_cpp": {
+   "disposition": null,
+   "producer": null,
+   "status": "SUCCEEDED"
+  }
+ },
+ "volatile": {
+  "artifacts": [
+   {
+    "path": "data/code-index/clangd/cpp-scope-ab6d5db76861721dc145e459/run/compile_commands.json",
+    "sha256": "49b1f3d4a812cd07c9d167afc7879fd28362689539dbac6cca18f637370ec21a",
+    "size_bytes": 1353
+   },
+   {
+    "path": "data/code-index/clangd/cpp-scope-ab6d5db76861721dc145e459/run/execution.json",
+    "sha256": "a7063e27eee0089dc3f3e3776e7fad116ec1621198e69478de3c5d7519ebfea7",
+    "size_bytes": 1990
+   },
+   {
+    "path": "data/cpp/projects/build-unit-b9c931fa551e02bd12b2/normalized-compile-commands.json",
+    "sha256": "3dcb088a1c8c5ea244744d2f5d290336b4791f444f60e23b14ba5e307138083c",
+    "size_bytes": 4195
+   },
+   {
+    "path": "data/indices/manifests/clangd-<attempt>.json",
+    "sha256": "48637692c8022b9c3ce63b153cb17185cc86a16b5a045557d7f2f4ccde5bd73a",
+    "size_bytes": 33224
+   },
+   {
+    "path": "data/indices/manifests/cpp-compiled-<attempt>.json",
+    "sha256": "125fd38bcc68b5d50746aeefeca3068a3c3b823130d95dbd01727fc2024c361d",
+    "size_bytes": 32277
+   },
+   {
+    "path": "data/jobs/job_cpp_symbol_index/attempts/<attempt>/steps/acceptance/tasks/publish_handoff/cpp-symbol-index-summary.json",
+    "sha256": "8ffe8de2798216a08f9797f3cf6e350d71f5287af041fe810769796cf50e16a7",
+    "size_bytes": 2236
+   }
+  ]
+ }
+}

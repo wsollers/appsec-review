@@ -1,0 +1,2107 @@
+{
+ "artifacts": [
+  {
+   "count": 10,
+   "kind": "json",
+   "path": "data/jobs/job_codeql_analysis/attempts/<attempt>/artifacts/codeql/summary.json",
+   "sha256": "4de6ba83c089294c5c43c736836fe57d9a3889f00de9339eb2c18944e659e3d8"
+  },
+  {
+   "count": 12,
+   "kind": "json",
+   "path": "data/codeql/scopes/codeql-unit-612e7dd37a4af081280a679c/image.json",
+   "sha256": "faf28b62b4eefde596c64a1f819b4ed3ea55349f9581595b067b9cdfddd428fd"
+  },
+  {
+   "count": 19,
+   "kind": "json",
+   "path": "data/jobs/job_artifact_indexing/attempts/<attempt>/handoff.json",
+   "sha256": "7dc1b408ac62ac1031a4fd37480f6712011b3d32de423ad09ed3d94833509d3c"
+  },
+  {
+   "count": 19,
+   "kind": "json",
+   "path": "data/jobs/job_artifact_security_analysis/attempts/<attempt>/handoff.json",
+   "sha256": "2ffe5546e81fcfc1aaefaeb69a6bb57fffa6c70eea36e7c6101c3873fe289152"
+  },
+  {
+   "count": 19,
+   "kind": "json",
+   "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/handoff.json",
+   "sha256": "8e23c2f59184b01a77c1b070f1122285e5ad0b13be26fa061808b49adfc5c667"
+  },
+  {
+   "count": 19,
+   "kind": "json",
+   "path": "data/jobs/job_cpp_compiled_analysis/attempts/<attempt>/handoff.json",
+   "sha256": "60901ea0563b4246ec2a75c7d3aaaa83767b306ad5e18f94d1bc09fcc4acc275"
+  },
+  {
+   "count": 19,
+   "kind": "json",
+   "path": "data/jobs/job_cpp_symbol_index/attempts/<attempt>/handoff.json",
+   "sha256": "b781c481104f57d82331fb3be3a6d024a3942c7d0a59b26e15bfe3f9aaa26ef5"
+  },
+  {
+   "count": 19,
+   "kind": "json",
+   "path": "data/jobs/job_evidence_collection/attempts/<attempt>/handoff.json",
+   "sha256": "dd3e53019970ffafc2a6c5dcfe26fdef0727dd78ccb44597658e458bf0700531"
+  },
+  {
+   "count": 19,
+   "kind": "json",
+   "path": "data/jobs/job_language_build/attempts/<attempt>/handoff.json",
+   "sha256": "04e0b27f245c57ba2bcf7087c7861ecd8437abdd0d3fe2542965de7f760dbb5d"
+  },
+  {
+   "count": 19,
+   "kind": "json",
+   "path": "data/jobs/job_post_build_security_assessment/attempts/<attempt>/handoff.json",
+   "sha256": "7bdb817988fafedbdbe41ae931653262a9d127682c49fb2897d24723a05859ec"
+  },
+  {
+   "count": 19,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/handoff.json",
+   "sha256": "c4f389bb0d6be88eee9ff6c033626042fc02e1483da788958c7fd3acb05d1b5a"
+  },
+  {
+   "count": 19,
+   "kind": "json",
+   "path": "data/jobs/job_tree_sitter_ast/attempts/<attempt>/handoff.json",
+   "sha256": "8cb1eb745f4a1bf029103a413e5b6c229c09da49e004cf697d9639399a084dca"
+  },
+  {
+   "count": 21,
+   "kind": "json",
+   "path": "data/codeql/scopes/codeql-unit-612e7dd37a4af081280a679c/executions/database/receipt.json",
+   "sha256": "f5d7245cb140c7f7f3bba4e419669338f8fe655bffe91b6d1e30af304664fd04"
+  },
+  {
+   "count": 21,
+   "kind": "json",
+   "path": "data/codeql/scopes/codeql-unit-612e7dd37a4af081280a679c/executions/export/receipt.json",
+   "sha256": "5ed16cf6b86012d43f0ac1afa095c71c93194553cd0e5afaaea4e740d418d9f2"
+  },
+  {
+   "count": 21,
+   "kind": "json",
+   "path": "data/codeql/scopes/codeql-unit-612e7dd37a4af081280a679c/queries/cert-cpp/executions/query/receipt.json",
+   "sha256": "10255a6b5f6e7195ec9266b5af2f6d49e122573965da3099ad38a653267386d2"
+  },
+  {
+   "count": 21,
+   "kind": "json",
+   "path": "data/codeql/scopes/codeql-unit-612e7dd37a4af081280a679c/queries/default/executions/query/receipt.json",
+   "sha256": "9838f354ce07cc285d8bc6c09dc50b4c56a9960b1c86f8691c9511223a651fdb"
+  },
+  {
+   "count": 4,
+   "kind": "json",
+   "path": "data/jobs/job_codeql_analysis/attempts/<attempt>/artifacts/codeql/graph-exports.json",
+   "sha256": "74935f736035bd9582cd7e8bb9eb2c8f4b5b36bfb8de62a47ce052c0a93e8492"
+  },
+  {
+   "count": 5,
+   "kind": "json",
+   "path": "data/codeql/scopes/codeql-unit-612e7dd37a4af081280a679c/database-manifest.json",
+   "sha256": "944dcfea544d52a461c8dd1d15b20a6a4ba706d44027f2be79eac0af13cf9403"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/codeql/scopes/codeql-unit-612e7dd37a4af081280a679c/exports/call_sites.json",
+   "sha256": "421891626955d33e08af0a2306845486c167bd602f8927b850c0e4fc6c0e57e6"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/codeql/scopes/codeql-unit-612e7dd37a4af081280a679c/exports/flow_summaries.json",
+   "sha256": "e798524821c27d232b46d748ce6015bf50ea7d70a8755ccce4265ffeb14712ea"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/codeql/scopes/codeql-unit-612e7dd37a4af081280a679c/exports/guards.json",
+   "sha256": "b94a4fb0685186bc57140d0f686d5b2f1c5a528d743da272987de7735b9860e9"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/codeql/scopes/codeql-unit-612e7dd37a4af081280a679c/exports/neighborhood.json",
+   "sha256": "b9e0a0b66c2c1fc5ae1801f72f7a768d55f5c8fceb318bd29c03a9da7db04fe2"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/codeql/scopes/codeql-unit-612e7dd37a4af081280a679c/exports/path_edges.json",
+   "sha256": "355a9ee7c1340af7ad16e073d629aa7917cc88ead87e4f1ef10ac837b0dfe780"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/codeql/scopes/codeql-unit-612e7dd37a4af081280a679c/exports/path_flows.json",
+   "sha256": "63948ec609740d23dc381f288f1cb522728187eca89abc85cd04ab3cd504d07c"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/codeql/scopes/codeql-unit-612e7dd37a4af081280a679c/exports/path_sanitizers.json",
+   "sha256": "59988d9c536c57d227a969f717ac3fda51b0f41fe194c1a88e9240d5b88d4407"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/codeql/scopes/codeql-unit-612e7dd37a4af081280a679c/exports/range_conversions.json",
+   "sha256": "e8b04e84d374423bb2652b2f204b9bc1c043f495d69c35640319279828740611"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/codeql/scopes/codeql-unit-612e7dd37a4af081280a679c/exports/ranges.json",
+   "sha256": "8f7886d57caafcf75dea68af9232f027aa4d3cf5d3697d9e529578973d99a670"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/codeql/scopes/codeql-unit-612e7dd37a4af081280a679c/exports/seed_functions.json",
+   "sha256": "83a568385f1b412e5a1ab572ead85a69fbb597021ee8064a1ad1ff44c606c17b"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/codeql/scopes/codeql-unit-612e7dd37a4af081280a679c/exports/sink_sites.json",
+   "sha256": "b304e0ae185a893405cf88170200422c8e475638a45e226fbc8f60d36199abd2"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/codeql/scopes/codeql-unit-612e7dd37a4af081280a679c/exports/source_sites.json",
+   "sha256": "c5f00a9c05122d38a1cd4fc1f15d7e39a4769e71dcdbc54397f7e6749bc0b9d9"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/indices/manifests/artifact-indexing-<attempt>.json",
+   "sha256": "f656ac78346c0fb3d52d7fb67adb67731b7504eeb6e2c9fc1ffd927bc5b7fd0c"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/indices/manifests/artifact-security-<sha256>.json",
+   "sha256": "ec2989047fb816a476177ed48621fb458e7b2dd7145bb5cc20e76ad398bd4819"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/indices/manifests/build-security-<attempt>.json",
+   "sha256": "54e4279a9dc24f2d0d7a251ccb9c6f7ca573e9ae1e83b993e6fe57fcb00912c0"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/indices/manifests/catalog-<attempt>.json",
+   "sha256": "8171904f2efe24019c502ceb4e9e82886ed71352820fbee789433d5b8f034d5f"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/indices/manifests/change-context-<attempt>.json",
+   "sha256": "afc0155d5a43a8f8500fa30395f698c4e749dd491050068ad49f2a6f0353fa4b"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/indices/manifests/clangd-<attempt>.json",
+   "sha256": "bd2356ab257adcabdda7e02e5fcf67867131c0162ccfe85dc3b4167d2d0b5813"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/indices/manifests/codeql-<attempt>.json",
+   "sha256": "635056b884a63431ef4f9445cced773dc47b91c8347168c40f2e025abc98ce66"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/indices/manifests/cpp-compiled-<attempt>.json",
+   "sha256": "a1304f4382d4f221eed293e5901102b0856806d78ef7dd640498256728f5daf9"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/indices/manifests/evidence-<attempt>.json",
+   "sha256": "9fbee81f7fb34e8444b945a632bc230727f768f8826bbc3f75dc31008c9e4b46"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/indices/manifests/language-build-<attempt>.json",
+   "sha256": "92343d07355066c9492248606edd30f4592f2b8ce5c454014423ca3970e72905"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/indices/manifests/tree-sitter-<attempt>.json",
+   "sha256": "e5726b558e87658b09f12ea1245b6c900beab651552d0334ddebfe3389ab62c6"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/jobs/job_codeql_analysis/attempts/<attempt>/artifacts/codeql/plan.json",
+   "sha256": "462600e69b5f1200a458b6eaafb2e3f3bcd71bc5fc40304700d78d8416febc9d"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/jobs/job_codeql_analysis/attempts/<attempt>/steps/plan/tasks/inventory/inventory/extractor-inventory.json",
+   "sha256": "37e08c517b5cc513f609a25f720239364dd9d4445ead9e43701d6c19e41f3876"
+  },
+  {
+   "count": 9,
+   "kind": "json",
+   "path": "data/codeql/scopes/codeql-unit-612e7dd37a4af081280a679c/exports/export-manifest.json",
+   "sha256": "95a7346c7b6af9eb84b5732ad937bc86673b2c943be7f833aee33f2c8f01da81"
+  },
+  {
+   "coverage_statuses": {
+    "complete": 1
+   },
+   "entity_kinds": {
+    "evidence_artifact": 1,
+    "source_file": 2,
+    "source_span": 9,
+    "tool_observation": 2
+   },
+   "kind": "sqlite",
+   "path": "data/indices/observations/<sha256>-7f7610519040c736.sqlite",
+   "rows": {
+    "coverage": 1,
+    "entities": 14,
+    "locations": 13,
+    "metadata": 8,
+    "relations": 22
+   }
+  },
+  {
+   "coverage_statuses": {
+    "partial": 1
+   },
+   "entity_kinds": {
+    "evidence_artifact": 1
+   },
+   "kind": "sqlite",
+   "path": "data/indices/observations/<sha256>-5e95679de4fdb3a8.sqlite",
+   "rows": {
+    "coverage": 1,
+    "entities": 1,
+    "locations": 0,
+    "metadata": 8,
+    "relations": 0
+   }
+  },
+  {
+   "kind": "file",
+   "path": "data/codeql/scopes/codeql-unit-612e7dd37a4af081280a679c/queries/cert-cpp/sarif/results.sarif"
+  },
+  {
+   "kind": "file",
+   "path": "data/codeql/scopes/codeql-unit-612e7dd37a4af081280a679c/queries/default/sarif/results.sarif"
+  }
+ ],
+ "failed_units": [],
+ "findings": [
+  {
+   "count": 1,
+   "record": {
+    "end_line": null,
+    "kind": "evidence_artifact",
+    "name": "CodeQL cert-cpp execution",
+    "path": null,
+    "start_line": null,
+    "text": ""
+   },
+   "source": "observations",
+   "unit": "artifact:data/indices/observations/<sha256>-5e95679de4fdb3a8.sqlite"
+  },
+  {
+   "count": 1,
+   "record": {
+    "end_line": 49,
+    "kind": "source_file",
+    "name": "main.cpp",
+    "path": "src/main.cpp",
+    "start_line": 49,
+    "text": "src/main.cpp"
+   },
+   "source": "observations",
+   "unit": "artifact:data/indices/observations/<sha256>-7f7610519040c736.sqlite"
+  },
+  {
+   "count": 2,
+   "record": {
+    "end_line": 49,
+    "kind": "source_span",
+    "name": "CodeQL flow step 1",
+    "path": "src/main.cpp",
+    "start_line": 49,
+    "text": "**argv"
+   },
+   "source": "observations",
+   "unit": "artifact:data/indices/observations/<sha256>-7f7610519040c736.sqlite"
+  },
+  {
+   "count": 1,
+   "record": {
+    "end_line": 64,
+    "kind": "source_span",
+    "name": "CodeQL flow step 2",
+    "path": "src/main.cpp",
+    "start_line": 64,
+    "text": "*access to array"
+   },
+   "source": "observations",
+   "unit": "artifact:data/indices/observations/<sha256>-7f7610519040c736.sqlite"
+  },
+  {
+   "count": 1,
+   "record": {
+    "end_line": 64,
+    "kind": "tool_observation",
+    "name": "cpp/tainted-format-string",
+    "path": "src/main.cpp",
+    "start_line": 64,
+    "text": "The value of this argument may come from [a command-line argument](1) and is being used as a formatting argument to relay::log_message(message), which calls fprintf(__fmt)."
+   },
+   "source": "observations",
+   "unit": "artifact:data/indices/observations/<sha256>-7f7610519040c736.sqlite"
+  },
+  {
+   "count": 1,
+   "record": {
+    "end_line": 68,
+    "kind": "source_span",
+    "name": "CodeQL flow step 2",
+    "path": "src/main.cpp",
+    "start_line": 68,
+    "text": "call to basic_string"
+   },
+   "source": "observations",
+   "unit": "artifact:data/indices/observations/<sha256>-7f7610519040c736.sqlite"
+  },
+  {
+   "count": 1,
+   "record": {
+    "end_line": 7,
+    "kind": "source_span",
+    "name": "CodeQL flow step 3",
+    "path": "src/diag.cpp",
+    "start_line": 7,
+    "text": "*host"
+   },
+   "source": "observations",
+   "unit": "artifact:data/indices/observations/<sha256>-7f7610519040c736.sqlite"
+  },
+  {
+   "count": 1,
+   "record": {
+    "end_line": 8,
+    "kind": "source_span",
+    "name": "CodeQL flow step 4",
+    "path": "src/diag.cpp",
+    "start_line": 8,
+    "text": "*host"
+   },
+   "source": "observations",
+   "unit": "artifact:data/indices/observations/<sha256>-7f7610519040c736.sqlite"
+  },
+  {
+   "count": 1,
+   "record": {
+    "end_line": 8,
+    "kind": "source_span",
+    "name": "CodeQL flow step 5",
+    "path": "src/diag.cpp",
+    "start_line": 8,
+    "text": "call to operator+"
+   },
+   "source": "observations",
+   "unit": "artifact:data/indices/observations/<sha256>-7f7610519040c736.sqlite"
+  },
+  {
+   "count": 1,
+   "record": {
+    "end_line": 8,
+    "kind": "source_span",
+    "name": "CodeQL flow step 6",
+    "path": "src/diag.cpp",
+    "start_line": 8,
+    "text": "call to operator+"
+   },
+   "source": "observations",
+   "unit": "artifact:data/indices/observations/<sha256>-7f7610519040c736.sqlite"
+  },
+  {
+   "count": 1,
+   "record": {
+    "end_line": 9,
+    "kind": "source_file",
+    "name": "diag.cpp",
+    "path": "src/diag.cpp",
+    "start_line": 9,
+    "text": "src/diag.cpp"
+   },
+   "source": "observations",
+   "unit": "artifact:data/indices/observations/<sha256>-7f7610519040c736.sqlite"
+  },
+  {
+   "count": 1,
+   "record": {
+    "end_line": 9,
+    "kind": "source_span",
+    "name": "CodeQL flow step 7",
+    "path": "src/diag.cpp",
+    "start_line": 9,
+    "text": "*call to c_str"
+   },
+   "source": "observations",
+   "unit": "artifact:data/indices/observations/<sha256>-7f7610519040c736.sqlite"
+  },
+  {
+   "count": 1,
+   "record": {
+    "end_line": 9,
+    "kind": "tool_observation",
+    "name": "cpp/command-line-injection",
+    "path": "src/diag.cpp",
+    "start_line": 9,
+    "text": "This argument to an OS command is derived from [user input (a command-line argument)](1), dangerously concatenated into [call to operator+](2), and then passed to system(__command)."
+   },
+   "source": "observations",
+   "unit": "artifact:data/indices/observations/<sha256>-7f7610519040c736.sqlite"
+  },
+  {
+   "count": 1,
+   "record": {
+    "end_line": null,
+    "kind": "evidence_artifact",
+    "name": "CodeQL default execution",
+    "path": null,
+    "start_line": null,
+    "text": ""
+   },
+   "source": "observations",
+   "unit": "artifact:data/indices/observations/<sha256>-7f7610519040c736.sqlite"
+  }
+ ],
+ "gaps": [
+  {
+   "count": 1,
+   "gap": "CodeQL cert-cpp query suite completed with zero observations; this is not a clean classification",
+   "unit": "acceptance.publish_handoff"
+  },
+  {
+   "count": 1,
+   "gap": "CodeQL query suite completed with zero observations; this is not a clean classification",
+   "unit": "acceptance.publish_handoff"
+  },
+  {
+   "count": 1,
+   "gap": "build-unit-b9c931fa551e02bd12b2: EVIDENCE_INCOMPLETE",
+   "unit": "acceptance.publish_handoff"
+  },
+  {
+   "count": 1,
+   "gap": "seed_unresolved: 9 of 14 seed locations lie in no function body (file scope, macro or generated code)",
+   "unit": "acceptance.publish_handoff"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "codeql-cpp",
+    "gap": "CodeQL query suite completed with zero observations; this is not a clean classification; CodeQL cert-cpp query suite completed with zero observations; this is not a clean classification",
+    "status": "partial"
+   },
+   "unit": "artifact:data/indices/observations/<sha256>-5e95679de4fdb3a8.sqlite"
+  },
+  {
+   "count": 3,
+   "gap": "seed_unresolved: 9 of 14 seed locations lie in no function body (file scope, macro or generated code)",
+   "unit": "export.scopes"
+  },
+  {
+   "count": 3,
+   "gap": "CodeQL cert-cpp query suite completed with zero observations; this is not a clean classification",
+   "unit": "normalize.scopes"
+  },
+  {
+   "count": 3,
+   "gap": "CodeQL query suite completed with zero observations; this is not a clean classification",
+   "unit": "normalize.scopes"
+  }
+ ],
+ "handoff": {
+  "completion_status": "COMPLETED_WITH_GAPS",
+  "schema_identity": "appsec-review/codeql-analysis-handoff/1",
+  "status": "ACCEPTED",
+  "upstream_jobs": [
+   "job_artifact_indexing",
+   "job_artifact_security_analysis",
+   "job_change_context_analysis",
+   "job_ci_configuration_analysis",
+   "job_clang_static_analysis",
+   "job_cpp_compiled_analysis",
+   "job_cpp_symbol_index",
+   "job_evidence_collection",
+   "job_language_build",
+   "job_post_build_security_assessment",
+   "job_project_build",
+   "job_review_intake",
+   "job_source_history_analysis",
+   "job_target_analysis_plan",
+   "job_target_catalog",
+   "job_tree_sitter_ast"
+  ]
+ },
+ "job_id": "job_codeql_analysis",
+ "outputs": {
+  "acceptance.publish_handoff": {
+   "artifact": {
+    "path": "data/jobs/job_codeql_analysis/attempts/<attempt>/artifacts/codeql/summary.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "dispositions": [
+    {
+     "action": "RUN",
+     "configuration_sha256": "<sha256>",
+     "decision_sha256": "<sha256>",
+     "disposition": "GAP",
+     "feature": "codeql",
+     "inspected_facts": [
+      "build_system=accepted-build-receipt",
+      "capability=codeql-build",
+      "family=native",
+      "inventory_complete=true",
+      "material=accepted-material-build"
+     ],
+     "language": "cpp",
+     "project_id": "build-unit-b9c931fa551e02bd12b2",
+     "reason_code": "EVIDENCE_INCOMPLETE",
+     "resolved_policy": "build",
+     "schema": "appsec-review/applicability-decision/1",
+     "selected_capability": "build",
+     "sources": [
+      {
+       "path": "include/relay/relay.hpp",
+       "sha256": "<sha256>"
+      },
+      {
+       "path": "src/config.cpp",
+       "sha256": "<sha256>"
+      },
+      {
+       "path": "src/diag.cpp",
+       "sha256": "<sha256>"
+      },
+      {
+       "path": "src/frame.cpp",
+       "sha256": "<sha256>"
+      },
+      {
+       "path": "src/log.cpp",
+       "sha256": "<sha256>"
+      },
+      {
+       "path": "src/main.cpp",
+       "sha256": "<sha256>"
+      },
+      {
+       "path": "src/packet.cpp",
+       "sha256": "<sha256>"
+      },
+      {
+       "path": "src/session.cpp",
+       "sha256": "<sha256>"
+      }
+     ]
+    }
+   ],
+   "index_manifest": {
+    "path": "data/indices/manifests/codeql-<attempt>.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "item_count": 2,
+   "non_applicable": [],
+   "processing_decisions": [
+    {
+     "action": "RUN",
+     "configuration_sha256": "<sha256>",
+     "decision_sha256": "<sha256>",
+     "disposition": "GAP",
+     "feature": "codeql",
+     "inspected_facts": [
+      "build_system=accepted-build-receipt",
+      "capability=codeql-build",
+      "family=native",
+      "inventory_complete=true",
+      "material=accepted-material-build"
+     ],
+     "language": "cpp",
+     "project_id": "build-unit-b9c931fa551e02bd12b2",
+     "reason_code": "EVIDENCE_INCOMPLETE",
+     "resolved_policy": "build",
+     "schema": "appsec-review/applicability-decision/1",
+     "selected_capability": "build",
+     "sources": [
+      {
+       "path": "include/relay/relay.hpp",
+       "sha256": "<sha256>"
+      },
+      {
+       "path": "src/config.cpp",
+       "sha256": "<sha256>"
+      },
+      {
+       "path": "src/diag.cpp",
+       "sha256": "<sha256>"
+      },
+      {
+       "path": "src/frame.cpp",
+       "sha256": "<sha256>"
+      },
+      {
+       "path": "src/log.cpp",
+       "sha256": "<sha256>"
+      },
+      {
+       "path": "src/main.cpp",
+       "sha256": "<sha256>"
+      },
+      {
+       "path": "src/packet.cpp",
+       "sha256": "<sha256>"
+      },
+      {
+       "path": "src/session.cpp",
+       "sha256": "<sha256>"
+      }
+     ]
+    }
+   ],
+   "schema": "appsec-review/codeql-analysis-handoff/1",
+   "scope_count": 2,
+   "scope_dispositions": {
+    "codeql-unit-612e7dd37a4af081280a679c:cert-cpp": "SUCCEEDED",
+    "codeql-unit-612e7dd37a4af081280a679c:default": "SUCCEEDED"
+   },
+   "terminal_status": "COMPLETED_WITH_GAPS"
+  },
+  "database.scopes": {
+   "database_count": 1,
+   "database_reused": 0,
+   "databases": [
+    {
+     "database_execution": {
+      "path": "data/codeql/scopes/codeql-unit-612e7dd37a4af081280a679c/executions/database/receipt.json",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     "database_identity": "<sha256>",
+     "database_manifest": {
+      "path": "data/codeql/scopes/codeql-unit-612e7dd37a4af081280a679c/database-manifest.json",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     "database_reused": false,
+     "database_tree_sha256": "<sha256>",
+     "image": {
+      "path": "data/codeql/scopes/codeql-unit-612e7dd37a4af081280a679c/image.json",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     "scope": {
+      "build_receipt_fingerprint": "<sha256>",
+      "build_unit_id": "build-unit-b9c931fa551e02bd12b2",
+      "commands_permitted": true,
+      "environment_identity": "<sha256>",
+      "files": [
+       {
+        "path": "include/relay/relay.hpp",
+        "sha256": "<sha256>",
+        "size_bytes": "<size_bytes>"
+       },
+       {
+        "path": "src/config.cpp",
+        "sha256": "<sha256>",
+        "size_bytes": "<size_bytes>"
+       },
+       {
+        "path": "src/diag.cpp",
+        "sha256": "<sha256>",
+        "size_bytes": "<size_bytes>"
+       },
+       {
+        "path": "src/frame.cpp",
+        "sha256": "<sha256>",
+        "size_bytes": "<size_bytes>"
+       },
+       {
+        "path": "src/log.cpp",
+        "sha256": "<sha256>",
+        "size_bytes": "<size_bytes>"
+       },
+       {
+        "path": "src/main.cpp",
+        "sha256": "<sha256>",
+        "size_bytes": "<size_bytes>"
+       },
+       {
+        "path": "src/packet.cpp",
+        "sha256": "<sha256>",
+        "size_bytes": "<size_bytes>"
+       },
+       {
+        "path": "src/session.cpp",
+        "sha256": "<sha256>",
+        "size_bytes": "<size_bytes>"
+       }
+      ],
+      "language": "cpp",
+      "mode": "manual",
+      "root": ".",
+      "schema": "appsec-review/codeql-scope/1",
+      "scope_id": "codeql-unit-612e7dd37a4af081280a679c",
+      "source_languages": [
+       "C++",
+       "C/C++"
+      ]
+     },
+     "terminal_status": "SUCCEEDED"
+    }
+   ]
+  },
+  "export.scopes": {
+   "artifact": {
+    "path": "data/jobs/job_codeql_analysis/attempts/<attempt>/artifacts/codeql/graph-exports.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "dispositions": [
+    {
+     "action": "export",
+     "language": "cpp",
+     "scope_id": "codeql-unit-612e7dd37a4af081280a679c",
+     "terminal_status": "SUCCEEDED"
+    }
+   ],
+   "export_count": 1,
+   "export_reused": 0,
+   "exports": [
+    {
+     "build_unit_id": "build-unit-b9c931fa551e02bd12b2",
+     "database_identity": "<sha256>",
+     "export_count": 12,
+     "export_execution": {
+      "path": "data/codeql/scopes/codeql-unit-612e7dd37a4af081280a679c/executions/export/receipt.json",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     "export_files": [
+      {
+       "path": "data/codeql/scopes/codeql-unit-612e7dd37a4af081280a679c/exports/call_sites.json",
+       "query_id": "call_sites",
+       "sha256": "<sha256>",
+       "size_bytes": "<size_bytes>"
+      },
+      {
+       "path": "data/codeql/scopes/codeql-unit-612e7dd37a4af081280a679c/exports/flow_summaries.json",
+       "query_id": "flow_summaries",
+       "sha256": "<sha256>",
+       "size_bytes": "<size_bytes>"
+      },
+      {
+       "path": "data/codeql/scopes/codeql-unit-612e7dd37a4af081280a679c/exports/guards.json",
+       "query_id": "guards",
+       "sha256": "<sha256>",
+       "size_bytes": "<size_bytes>"
+      },
+      {
+       "path": "data/codeql/scopes/codeql-unit-612e7dd37a4af081280a679c/exports/neighborhood.json",
+       "query_id": "neighborhood",
+       "sha256": "<sha256>",
+       "size_bytes": "<size_bytes>"
+      },
+      {
+       "path": "data/codeql/scopes/codeql-unit-612e7dd37a4af081280a679c/exports/path_edges.json",
+       "query_id": "path_edges",
+       "sha256": "<sha256>",
+       "size_bytes": "<size_bytes>"
+      },
+      {
+       "path": "data/codeql/scopes/codeql-unit-612e7dd37a4af081280a679c/exports/path_flows.json",
+       "query_id": "path_flows",
+       "sha256": "<sha256>",
+       "size_bytes": "<size_bytes>"
+      },
+      {
+       "path": "data/codeql/scopes/codeql-unit-612e7dd37a4af081280a679c/exports/path_sanitizers.json",
+       "query_id": "path_sanitizers",
+       "sha256": "<sha256>",
+       "size_bytes": "<size_bytes>"
+      },
+      {
+       "path": "data/codeql/scopes/codeql-unit-612e7dd37a4af081280a679c/exports/range_conversions.json",
+       "query_id": "range_conversions",
+       "sha256": "<sha256>",
+       "size_bytes": "<size_bytes>"
+      },
+      {
+       "path": "data/codeql/scopes/codeql-unit-612e7dd37a4af081280a679c/exports/ranges.json",
+       "query_id": "ranges",
+       "sha256": "<sha256>",
+       "size_bytes": "<size_bytes>"
+      },
+      {
+       "path": "data/codeql/scopes/codeql-unit-612e7dd37a4af081280a679c/exports/seed_functions.json",
+       "query_id": "seed_functions",
+       "sha256": "<sha256>",
+       "size_bytes": "<size_bytes>"
+      },
+      {
+       "path": "data/codeql/scopes/codeql-unit-612e7dd37a4af081280a679c/exports/sink_sites.json",
+       "query_id": "sink_sites",
+       "sha256": "<sha256>",
+       "size_bytes": "<size_bytes>"
+      },
+      {
+       "path": "data/codeql/scopes/codeql-unit-612e7dd37a4af081280a679c/exports/source_sites.json",
+       "query_id": "source_sites",
+       "sha256": "<sha256>",
+       "size_bytes": "<size_bytes>"
+      }
+     ],
+     "export_identity": "<sha256>",
+     "export_manifest": {
+      "path": "data/codeql/scopes/codeql-unit-612e7dd37a4af081280a679c/exports/export-manifest.json",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     "export_pack": {
+      "columns_sha256": "<sha256>",
+      "file_count": 12,
+      "query_id": "graph-export-cpp",
+      "query_pack": "appsec-review/graph-export-cpp",
+      "query_pack_version": "1.0.0",
+      "tree_sha256": "<sha256>"
+     },
+     "export_reused": false,
+     "export_status": "SUCCEEDED",
+     "exported_rows": 197,
+     "language": "cpp",
+     "root": ".",
+     "row_count": 197,
+     "scope_id": "codeql-unit-612e7dd37a4af081280a679c",
+     "seeded": {
+      "depth": 3,
+      "depth_histogram": {
+       "0": 4,
+       "1": 6,
+       "2": 5,
+       "3": 1
+      },
+      "mode": "seeded",
+      "neighborhood_function_count": 16,
+      "resolved_seed_count": 5,
+      "seed_count": 14,
+      "seed_limit": 200,
+      "seeds": [
+       {
+        "end_line": 10,
+        "functions": [],
+        "path": "include/relay/relay.hpp",
+        "sources": [
+         {
+          "observation_id": "asr:tool_observation:<sha256>",
+          "rule": "unusedStructMember",
+          "scanner": "tool-cppcheck",
+          "severity": "info"
+         }
+        ],
+        "start_line": 10,
+        "status": "unresolved"
+       },
+       {
+        "end_line": 11,
+        "functions": [],
+        "path": "include/relay/relay.hpp",
+        "sources": [
+         {
+          "observation_id": "asr:tool_observation:<sha256>",
+          "rule": "unusedStructMember",
+          "scanner": "tool-cppcheck",
+          "severity": "info"
+         }
+        ],
+        "start_line": 11,
+        "status": "unresolved"
+       },
+       {
+        "end_line": 12,
+        "functions": [],
+        "path": "include/relay/relay.hpp",
+        "sources": [
+         {
+          "observation_id": "asr:tool_observation:<sha256>",
+          "rule": "unusedStructMember",
+          "scanner": "tool-cppcheck",
+          "severity": "info"
+         }
+        ],
+        "start_line": 12,
+        "status": "unresolved"
+       },
+       {
+        "end_line": 16,
+        "functions": [],
+        "path": "include/relay/relay.hpp",
+        "sources": [
+         {
+          "observation_id": "asr:tool_observation:<sha256>",
+          "rule": "uninitMemberVarNoCtor",
+          "scanner": "tool-cppcheck",
+          "severity": "medium"
+         },
+         {
+          "observation_id": "asr:tool_observation:<sha256>",
+          "rule": "unusedStructMember",
+          "scanner": "tool-cppcheck",
+          "severity": "info"
+         }
+        ],
+        "start_line": 16,
+        "status": "unresolved"
+       },
+       {
+        "end_line": 17,
+        "functions": [],
+        "path": "include/relay/relay.hpp",
+        "sources": [
+         {
+          "observation_id": "asr:tool_observation:<sha256>",
+          "rule": "unusedStructMember",
+          "scanner": "tool-cppcheck",
+          "severity": "info"
+         }
+        ],
+        "start_line": 17,
+        "status": "unresolved"
+       },
+       {
+        "end_line": 18,
+        "functions": [],
+        "path": "include/relay/relay.hpp",
+        "sources": [
+         {
+          "observation_id": "asr:tool_observation:<sha256>",
+          "rule": "uninitMemberVarNoCtor",
+          "scanner": "tool-cppcheck",
+          "severity": "medium"
+         },
+         {
+          "observation_id": "asr:tool_observation:<sha256>",
+          "rule": "unusedStructMember",
+          "scanner": "tool-cppcheck",
+          "severity": "info"
+         }
+        ],
+        "start_line": 18,
+        "status": "unresolved"
+       },
+       {
+        "end_line": 22,
+        "functions": [],
+        "path": "include/relay/relay.hpp",
+        "sources": [
+         {
+          "observation_id": "asr:tool_observation:<sha256>",
+          "rule": "unusedStructMember",
+          "scanner": "tool-cppcheck",
+          "severity": "info"
+         }
+        ],
+        "start_line": 22,
+        "status": "unresolved"
+       },
+       {
+        "end_line": 23,
+        "functions": [],
+        "path": "include/relay/relay.hpp",
+        "sources": [
+         {
+          "observation_id": "asr:tool_observation:<sha256>",
+          "rule": "unusedStructMember",
+          "scanner": "tool-cppcheck",
+          "severity": "info"
+         }
+        ],
+        "start_line": 23,
+        "status": "unresolved"
+       },
+       {
+        "end_line": 24,
+        "functions": [],
+        "path": "include/relay/relay.hpp",
+        "sources": [
+         {
+          "observation_id": "asr:tool_observation:<sha256>",
+          "rule": "unusedStructMember",
+          "scanner": "tool-cppcheck",
+          "severity": "info"
+         }
+        ],
+        "start_line": 24,
+        "status": "unresolved"
+       },
+       {
+        "end_line": 9,
+        "functions": [
+         "relay::probe_host"
+        ],
+        "path": "src/diag.cpp",
+        "sources": [
+         {
+          "observation_id": "asr:tool_observation:<sha256>",
+          "rule": "appsec-review.sei-cert.cpp.env33-c.command-processor-call",
+          "scanner": "tool-opengrep",
+          "severity": "high"
+         },
+         {
+          "observation_id": "asr:tool_observation:<sha256>",
+          "rule": "appsec-review.sei-cert.cpp.env33-c.command-processor-call",
+          "scanner": "tool-semgrep",
+          "severity": "high"
+         }
+        ],
+        "start_line": 9,
+        "status": "resolved"
+       },
+       {
+        "end_line": 8,
+        "functions": [
+         "relay::log_message"
+        ],
+        "path": "src/log.cpp",
+        "sources": [
+         {
+          "observation_id": "asr:tool_observation:<sha256>",
+          "rule": "appsec-review.sei-cert.cpp.fio30-c.nonliteral-format-without-arguments",
+          "scanner": "tool-opengrep",
+          "severity": "medium"
+         },
+         {
+          "observation_id": "asr:tool_observation:<sha256>",
+          "rule": "appsec-review.sei-cert.cpp.fio30-c.nonliteral-format-without-arguments",
+          "scanner": "tool-semgrep",
+          "severity": "medium"
+         }
+        ],
+        "start_line": 8,
+        "status": "resolved"
+       },
+       {
+        "end_line": 58,
+        "functions": [
+         "main"
+        ],
+        "path": "src/main.cpp",
+        "sources": [
+         {
+          "observation_id": "asr:tool_observation:<sha256>",
+          "rule": "appsec-review.sei-cert.cpp.err34-c.unchecked-conversion-function",
+          "scanner": "tool-opengrep",
+          "severity": "medium"
+         },
+         {
+          "observation_id": "asr:tool_observation:<sha256>",
+          "rule": "appsec-review.sei-cert.cpp.err34-c.unchecked-conversion-function",
+          "scanner": "tool-semgrep",
+          "severity": "medium"
+         }
+        ],
+        "start_line": 58,
+        "status": "resolved"
+       },
+       {
+        "end_line": 36,
+        "functions": [
+         "relay::touch_session"
+        ],
+        "path": "src/session.cpp",
+        "sources": [
+         {
+          "observation_id": "asr:tool_observation:<sha256>",
+          "rule": "constVariablePointer",
+          "scanner": "tool-cppcheck",
+          "severity": "info"
+         }
+        ],
+        "start_line": 36,
+        "status": "resolved"
+       },
+       {
+        "end_line": 40,
+        "functions": [
+         "relay::touch_session"
+        ],
+        "path": "src/session.cpp",
+        "sources": [
+         {
+          "observation_id": "asr:tool_observation:<sha256>",
+          "rule": "nullPointer",
+          "scanner": "tool-cppcheck",
+          "severity": "medium"
+         }
+        ],
+        "start_line": 40,
+        "status": "resolved"
+       }
+      ],
+      "status_counts": {
+       "resolved": 5,
+       "unresolved": 9
+      }
+     },
+     "truncated_queries": []
+    }
+   ],
+   "schema": "appsec-review/codeql-graph-exports/1",
+   "terminal_status": "COMPLETED_WITH_GAPS"
+  },
+  "normalize.scopes": {
+   "observation_count": 2,
+   "scopes": [
+    {
+     "database_execution": {
+      "path": "data/codeql/scopes/codeql-unit-612e7dd37a4af081280a679c/executions/database/receipt.json",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     "database_identity": "<sha256>",
+     "database_manifest": {
+      "path": "data/codeql/scopes/codeql-unit-612e7dd37a4af081280a679c/database-manifest.json",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     "database_reused": false,
+     "database_tree_sha256": "<sha256>",
+     "image": {
+      "path": "data/codeql/scopes/codeql-unit-612e7dd37a4af081280a679c/image.json",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     "index": {
+      "path": "data/indices/observations/<sha256>-7f7610519040c736.sqlite",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     "index_identity": {
+      "fingerprint": "<sha256>",
+      "name": "observations",
+      "producer": {
+       "job": "job_codeql_analysis",
+       "language": "cpp",
+       "query_profile": "default",
+       "unit": "normalize.scopes"
+      },
+      "relative_path": "data/indices/observations/<sha256>-7f7610519040c736.sqlite",
+      "schema": "appsec-review/retrieval-index/2",
+      "sha256": "<sha256>",
+      "shard_id": "codeql-cpp-codeql-unit-612e7dd37a4af081280a679c-default"
+     },
+     "observation_count": 2,
+     "query_execution": {
+      "path": "data/codeql/scopes/codeql-unit-612e7dd37a4af081280a679c/queries/default/executions/query/receipt.json",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     "query_identity": "<sha256>",
+     "query_profile": {
+      "file_count": null,
+      "kind": "default",
+      "query_id": "default",
+      "query_lock_sha256": "<sha256>",
+      "query_pack": "codeql/cpp-queries",
+      "query_pack_sha256": "<sha256>",
+      "query_pack_version": "1.8.3",
+      "query_suite": "codeql-suites/cpp-code-scanning.qls",
+      "query_suite_sha256": "<sha256>",
+      "root": null,
+      "tree_sha256": null
+     },
+     "query_reused": false,
+     "sarif": {
+      "path": "data/codeql/scopes/codeql-unit-612e7dd37a4af081280a679c/queries/default/sarif/results.sarif",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     "sarif_result_count": 2,
+     "scope": {
+      "build_receipt_fingerprint": "<sha256>",
+      "build_unit_id": "build-unit-b9c931fa551e02bd12b2",
+      "commands_permitted": true,
+      "environment_identity": "<sha256>",
+      "files": [
+       {
+        "path": "include/relay/relay.hpp",
+        "sha256": "<sha256>",
+        "size_bytes": "<size_bytes>"
+       },
+       {
+        "path": "src/config.cpp",
+        "sha256": "<sha256>",
+        "size_bytes": "<size_bytes>"
+       },
+       {
+        "path": "src/diag.cpp",
+        "sha256": "<sha256>",
+        "size_bytes": "<size_bytes>"
+       },
+       {
+        "path": "src/frame.cpp",
+        "sha256": "<sha256>",
+        "size_bytes": "<size_bytes>"
+       },
+       {
+        "path": "src/log.cpp",
+        "sha256": "<sha256>",
+        "size_bytes": "<size_bytes>"
+       },
+       {
+        "path": "src/main.cpp",
+        "sha256": "<sha256>",
+        "size_bytes": "<size_bytes>"
+       },
+       {
+        "path": "src/packet.cpp",
+        "sha256": "<sha256>",
+        "size_bytes": "<size_bytes>"
+       },
+       {
+        "path": "src/session.cpp",
+        "sha256": "<sha256>",
+        "size_bytes": "<size_bytes>"
+       }
+      ],
+      "language": "cpp",
+      "mode": "manual",
+      "root": ".",
+      "schema": "appsec-review/codeql-scope/1",
+      "scope_id": "codeql-unit-612e7dd37a4af081280a679c",
+      "source_languages": [
+       "C++",
+       "C/C++"
+      ]
+     },
+     "support_count": 9,
+     "terminal_status": "SUCCEEDED"
+    },
+    {
+     "database_execution": {
+      "path": "data/codeql/scopes/codeql-unit-612e7dd37a4af081280a679c/executions/database/receipt.json",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     "database_identity": "<sha256>",
+     "database_manifest": {
+      "path": "data/codeql/scopes/codeql-unit-612e7dd37a4af081280a679c/database-manifest.json",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     "database_reused": false,
+     "database_tree_sha256": "<sha256>",
+     "image": {
+      "path": "data/codeql/scopes/codeql-unit-612e7dd37a4af081280a679c/image.json",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     "index": {
+      "path": "data/indices/observations/<sha256>-5e95679de4fdb3a8.sqlite",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     "index_identity": {
+      "fingerprint": "<sha256>",
+      "name": "observations",
+      "producer": {
+       "job": "job_codeql_analysis",
+       "language": "cpp",
+       "query_profile": "cert-cpp",
+       "unit": "normalize.scopes"
+      },
+      "relative_path": "data/indices/observations/<sha256>-5e95679de4fdb3a8.sqlite",
+      "schema": "appsec-review/retrieval-index/2",
+      "sha256": "<sha256>",
+      "shard_id": "codeql-cpp-codeql-unit-612e7dd37a4af081280a679c-cert-cpp"
+     },
+     "observation_count": 0,
+     "query_execution": {
+      "path": "data/codeql/scopes/codeql-unit-612e7dd37a4af081280a679c/queries/cert-cpp/executions/query/receipt.json",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     "query_identity": "<sha256>",
+     "query_profile": {
+      "file_count": 1971,
+      "kind": "custom",
+      "query_id": "cert-cpp",
+      "query_lock_sha256": "<sha256>",
+      "query_pack": "codeql/cert-cpp-coding-standards",
+      "query_pack_sha256": "<sha256>",
+      "query_pack_version": "2.62.0",
+      "query_suite": "codeql-suites/cert-cpp-default.qls",
+      "query_suite_sha256": "<sha256>",
+      "root": "/opt/codeql/custom-queries/cert-cpp",
+      "tree_sha256": "<sha256>"
+     },
+     "query_reused": false,
+     "sarif": {
+      "path": "data/codeql/scopes/codeql-unit-612e7dd37a4af081280a679c/queries/cert-cpp/sarif/results.sarif",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     "sarif_result_count": 0,
+     "scope": {
+      "build_receipt_fingerprint": "<sha256>",
+      "build_unit_id": "build-unit-b9c931fa551e02bd12b2",
+      "commands_permitted": true,
+      "environment_identity": "<sha256>",
+      "files": [
+       {
+        "path": "include/relay/relay.hpp",
+        "sha256": "<sha256>",
+        "size_bytes": "<size_bytes>"
+       },
+       {
+        "path": "src/config.cpp",
+        "sha256": "<sha256>",
+        "size_bytes": "<size_bytes>"
+       },
+       {
+        "path": "src/diag.cpp",
+        "sha256": "<sha256>",
+        "size_bytes": "<size_bytes>"
+       },
+       {
+        "path": "src/frame.cpp",
+        "sha256": "<sha256>",
+        "size_bytes": "<size_bytes>"
+       },
+       {
+        "path": "src/log.cpp",
+        "sha256": "<sha256>",
+        "size_bytes": "<size_bytes>"
+       },
+       {
+        "path": "src/main.cpp",
+        "sha256": "<sha256>",
+        "size_bytes": "<size_bytes>"
+       },
+       {
+        "path": "src/packet.cpp",
+        "sha256": "<sha256>",
+        "size_bytes": "<size_bytes>"
+       },
+       {
+        "path": "src/session.cpp",
+        "sha256": "<sha256>",
+        "size_bytes": "<size_bytes>"
+       }
+      ],
+      "language": "cpp",
+      "mode": "manual",
+      "root": ".",
+      "schema": "appsec-review/codeql-scope/1",
+      "scope_id": "codeql-unit-612e7dd37a4af081280a679c",
+      "source_languages": [
+       "C++",
+       "C/C++"
+      ]
+     },
+     "support_count": 0,
+     "terminal_status": "SUCCEEDED"
+    }
+   ]
+  },
+  "plan.inventory": {
+   "asset_lock": {
+    "path": "containers/tools/codeql/assets.lock.json",
+    "sha256": "<sha256>"
+   },
+   "export_plan": [
+    {
+     "disposition": "PLANNED",
+     "language": "cpp",
+     "reason": "",
+     "schema": "appsec-review/codeql-graph-export-plan/1",
+     "scope_id": "codeql-unit-612e7dd37a4af081280a679c"
+    }
+   ],
+   "inventory": {
+    "path": "data/jobs/job_codeql_analysis/attempts/<attempt>/steps/plan/tasks/inventory/inventory/extractor-inventory.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "non_applicable": [],
+   "plan": {
+    "path": "data/jobs/job_codeql_analysis/attempts/<attempt>/artifacts/codeql/plan.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "processing_decisions": [
+    {
+     "action": "RUN",
+     "configuration_sha256": "<sha256>",
+     "decision_sha256": "<sha256>",
+     "disposition": null,
+     "feature": "codeql",
+     "inspected_facts": [
+      "build_system=accepted-build-receipt",
+      "capability=codeql-build",
+      "family=native",
+      "inventory_complete=true",
+      "material=accepted-material-build"
+     ],
+     "language": "cpp",
+     "project_id": "build-unit-b9c931fa551e02bd12b2",
+     "reason_code": "CODEQL_BUILD_SELECTED",
+     "resolved_policy": "build",
+     "schema": "appsec-review/applicability-decision/1",
+     "selected_capability": "build",
+     "sources": [
+      {
+       "path": "include/relay/relay.hpp",
+       "sha256": "<sha256>"
+      },
+      {
+       "path": "src/config.cpp",
+       "sha256": "<sha256>"
+      },
+      {
+       "path": "src/diag.cpp",
+       "sha256": "<sha256>"
+      },
+      {
+       "path": "src/frame.cpp",
+       "sha256": "<sha256>"
+      },
+      {
+       "path": "src/log.cpp",
+       "sha256": "<sha256>"
+      },
+      {
+       "path": "src/main.cpp",
+       "sha256": "<sha256>"
+      },
+      {
+       "path": "src/packet.cpp",
+       "sha256": "<sha256>"
+      },
+      {
+       "path": "src/session.cpp",
+       "sha256": "<sha256>"
+      }
+     ]
+    }
+   ],
+   "scope_count": 1,
+   "upstream_handoffs": {
+    "job_artifact_indexing": {
+     "path": "data/jobs/job_artifact_indexing/attempts/<attempt>/handoff.json",
+     "sha256": "<sha256>"
+    },
+    "job_artifact_security_analysis": {
+     "path": "data/jobs/job_artifact_security_analysis/attempts/<attempt>/handoff.json",
+     "sha256": "<sha256>"
+    },
+    "job_change_context_analysis": {
+     "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/handoff.json",
+     "sha256": "<sha256>"
+    },
+    "job_cpp_compiled_analysis": {
+     "path": "data/jobs/job_cpp_compiled_analysis/attempts/<attempt>/handoff.json",
+     "sha256": "<sha256>"
+    },
+    "job_cpp_symbol_index": {
+     "path": "data/jobs/job_cpp_symbol_index/attempts/<attempt>/handoff.json",
+     "sha256": "<sha256>"
+    },
+    "job_evidence_collection": {
+     "path": "data/jobs/job_evidence_collection/attempts/<attempt>/handoff.json",
+     "sha256": "<sha256>"
+    },
+    "job_language_build": {
+     "path": "data/jobs/job_language_build/attempts/<attempt>/handoff.json",
+     "sha256": "<sha256>"
+    },
+    "job_post_build_security_assessment": {
+     "path": "data/jobs/job_post_build_security_assessment/attempts/<attempt>/handoff.json",
+     "sha256": "<sha256>"
+    },
+    "job_target_catalog": {
+     "path": "data/jobs/job_target_catalog/attempts/<attempt>/handoff.json",
+     "sha256": "<sha256>"
+    },
+    "job_tree_sitter_ast": {
+     "path": "data/jobs/job_tree_sitter_ast/attempts/<attempt>/handoff.json",
+     "sha256": "<sha256>"
+    }
+   },
+   "upstream_manifests": [
+    {
+     "path": "data/indices/manifests/catalog-<attempt>.json",
+     "sha256": "<sha256>"
+    },
+    {
+     "path": "data/indices/manifests/language-build-<attempt>.json",
+     "sha256": "<sha256>"
+    },
+    {
+     "path": "data/indices/manifests/artifact-indexing-<attempt>.json",
+     "sha256": "<sha256>"
+    },
+    {
+     "path": "data/indices/manifests/cpp-compiled-<attempt>.json",
+     "sha256": "<sha256>"
+    },
+    {
+     "path": "data/indices/manifests/artifact-security-<sha256>.json",
+     "sha256": "<sha256>"
+    },
+    {
+     "path": "data/indices/manifests/build-security-<attempt>.json",
+     "sha256": "<sha256>"
+    },
+    {
+     "path": "data/indices/manifests/evidence-<attempt>.json",
+     "sha256": "<sha256>"
+    },
+    {
+     "path": "data/indices/manifests/tree-sitter-<attempt>.json",
+     "sha256": "<sha256>"
+    },
+    {
+     "path": "data/indices/manifests/clangd-<attempt>.json",
+     "sha256": "<sha256>"
+    },
+    {
+     "path": "data/indices/manifests/change-context-<attempt>.json",
+     "sha256": "<sha256>"
+    }
+   ]
+  },
+  "query.scopes": {
+   "queries": [
+    {
+     "database_execution": {
+      "path": "data/codeql/scopes/codeql-unit-612e7dd37a4af081280a679c/executions/database/receipt.json",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     "database_identity": "<sha256>",
+     "database_manifest": {
+      "path": "data/codeql/scopes/codeql-unit-612e7dd37a4af081280a679c/database-manifest.json",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     "database_reused": false,
+     "database_tree_sha256": "<sha256>",
+     "image": {
+      "path": "data/codeql/scopes/codeql-unit-612e7dd37a4af081280a679c/image.json",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     "query_execution": {
+      "path": "data/codeql/scopes/codeql-unit-612e7dd37a4af081280a679c/queries/default/executions/query/receipt.json",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     "query_identity": "<sha256>",
+     "query_profile": {
+      "file_count": null,
+      "kind": "default",
+      "query_id": "default",
+      "query_lock_sha256": "<sha256>",
+      "query_pack": "codeql/cpp-queries",
+      "query_pack_sha256": "<sha256>",
+      "query_pack_version": "1.8.3",
+      "query_suite": "codeql-suites/cpp-code-scanning.qls",
+      "query_suite_sha256": "<sha256>",
+      "root": null,
+      "tree_sha256": null
+     },
+     "query_reused": false,
+     "sarif": {
+      "path": "data/codeql/scopes/codeql-unit-612e7dd37a4af081280a679c/queries/default/sarif/results.sarif",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     "sarif_result_count": 2,
+     "scope": {
+      "build_receipt_fingerprint": "<sha256>",
+      "build_unit_id": "build-unit-b9c931fa551e02bd12b2",
+      "commands_permitted": true,
+      "environment_identity": "<sha256>",
+      "files": [
+       {
+        "path": "include/relay/relay.hpp",
+        "sha256": "<sha256>",
+        "size_bytes": "<size_bytes>"
+       },
+       {
+        "path": "src/config.cpp",
+        "sha256": "<sha256>",
+        "size_bytes": "<size_bytes>"
+       },
+       {
+        "path": "src/diag.cpp",
+        "sha256": "<sha256>",
+        "size_bytes": "<size_bytes>"
+       },
+       {
+        "path": "src/frame.cpp",
+        "sha256": "<sha256>",
+        "size_bytes": "<size_bytes>"
+       },
+       {
+        "path": "src/log.cpp",
+        "sha256": "<sha256>",
+        "size_bytes": "<size_bytes>"
+       },
+       {
+        "path": "src/main.cpp",
+        "sha256": "<sha256>",
+        "size_bytes": "<size_bytes>"
+       },
+       {
+        "path": "src/packet.cpp",
+        "sha256": "<sha256>",
+        "size_bytes": "<size_bytes>"
+       },
+       {
+        "path": "src/session.cpp",
+        "sha256": "<sha256>",
+        "size_bytes": "<size_bytes>"
+       }
+      ],
+      "language": "cpp",
+      "mode": "manual",
+      "root": ".",
+      "schema": "appsec-review/codeql-scope/1",
+      "scope_id": "codeql-unit-612e7dd37a4af081280a679c",
+      "source_languages": [
+       "C++",
+       "C/C++"
+      ]
+     },
+     "terminal_status": "SUCCEEDED"
+    },
+    {
+     "database_execution": {
+      "path": "data/codeql/scopes/codeql-unit-612e7dd37a4af081280a679c/executions/database/receipt.json",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     "database_identity": "<sha256>",
+     "database_manifest": {
+      "path": "data/codeql/scopes/codeql-unit-612e7dd37a4af081280a679c/database-manifest.json",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     "database_reused": false,
+     "database_tree_sha256": "<sha256>",
+     "image": {
+      "path": "data/codeql/scopes/codeql-unit-612e7dd37a4af081280a679c/image.json",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     "query_execution": {
+      "path": "data/codeql/scopes/codeql-unit-612e7dd37a4af081280a679c/queries/cert-cpp/executions/query/receipt.json",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     "query_identity": "<sha256>",
+     "query_profile": {
+      "file_count": 1971,
+      "kind": "custom",
+      "query_id": "cert-cpp",
+      "query_lock_sha256": "<sha256>",
+      "query_pack": "codeql/cert-cpp-coding-standards",
+      "query_pack_sha256": "<sha256>",
+      "query_pack_version": "2.62.0",
+      "query_suite": "codeql-suites/cert-cpp-default.qls",
+      "query_suite_sha256": "<sha256>",
+      "root": "/opt/codeql/custom-queries/cert-cpp",
+      "tree_sha256": "<sha256>"
+     },
+     "query_reused": false,
+     "sarif": {
+      "path": "data/codeql/scopes/codeql-unit-612e7dd37a4af081280a679c/queries/cert-cpp/sarif/results.sarif",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     "sarif_result_count": 0,
+     "scope": {
+      "build_receipt_fingerprint": "<sha256>",
+      "build_unit_id": "build-unit-b9c931fa551e02bd12b2",
+      "commands_permitted": true,
+      "environment_identity": "<sha256>",
+      "files": [
+       {
+        "path": "include/relay/relay.hpp",
+        "sha256": "<sha256>",
+        "size_bytes": "<size_bytes>"
+       },
+       {
+        "path": "src/config.cpp",
+        "sha256": "<sha256>",
+        "size_bytes": "<size_bytes>"
+       },
+       {
+        "path": "src/diag.cpp",
+        "sha256": "<sha256>",
+        "size_bytes": "<size_bytes>"
+       },
+       {
+        "path": "src/frame.cpp",
+        "sha256": "<sha256>",
+        "size_bytes": "<size_bytes>"
+       },
+       {
+        "path": "src/log.cpp",
+        "sha256": "<sha256>",
+        "size_bytes": "<size_bytes>"
+       },
+       {
+        "path": "src/main.cpp",
+        "sha256": "<sha256>",
+        "size_bytes": "<size_bytes>"
+       },
+       {
+        "path": "src/packet.cpp",
+        "sha256": "<sha256>",
+        "size_bytes": "<size_bytes>"
+       },
+       {
+        "path": "src/session.cpp",
+        "sha256": "<sha256>",
+        "size_bytes": "<size_bytes>"
+       }
+      ],
+      "language": "cpp",
+      "mode": "manual",
+      "root": ".",
+      "schema": "appsec-review/codeql-scope/1",
+      "scope_id": "codeql-unit-612e7dd37a4af081280a679c",
+      "source_languages": [
+       "C++",
+       "C/C++"
+      ]
+     },
+     "terminal_status": "SUCCEEDED"
+    }
+   ],
+   "query_count": 2,
+   "query_reused": 0
+  }
+ },
+ "schema": "appsec-review/acceptance-job-output/1",
+ "skipped_units": [],
+ "status": "COMPLETED_WITH_GAPS",
+ "steps": {
+  "acceptance": "SUCCEEDED",
+  "database": "SUCCEEDED",
+  "export": "SUCCEEDED",
+  "normalize": "SUCCEEDED",
+  "plan": "SUCCEEDED",
+  "query": "SUCCEEDED"
+ },
+ "units": {
+  "acceptance.publish_handoff": {
+   "disposition": "COMPLETED_WITH_GAPS",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "database.scopes": {
+   "disposition": null,
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "export.scopes": {
+   "disposition": "COMPLETED_WITH_GAPS",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "normalize.scopes": {
+   "disposition": null,
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "plan.inventory": {
+   "disposition": null,
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "query.scopes": {
+   "disposition": null,
+   "producer": null,
+   "status": "SUCCEEDED"
+  }
+ },
+ "volatile": {
+  "artifacts": [
+   {
+    "path": "data/codeql/scopes/codeql-unit-612e7dd37a4af081280a679c/database-manifest.json",
+    "sha256": "aa722d48bc085e772d00038fb96a9f3d09660010520bd7c68cc935e008201ece",
+    "size_bytes": 46511
+   },
+   {
+    "path": "data/codeql/scopes/codeql-unit-612e7dd37a4af081280a679c/executions/database/receipt.json",
+    "sha256": "eb48449c93bf30d55ef4154f1e93dc2a4fe3d77d7ee3741513fc61051e32b44a",
+    "size_bytes": 1237
+   },
+   {
+    "path": "data/codeql/scopes/codeql-unit-612e7dd37a4af081280a679c/executions/export/receipt.json",
+    "sha256": "c31b583aef45e555b7c5d5af913e2e1a6f503122815a8851cf291237a203c9bb",
+    "size_bytes": 1230
+   },
+   {
+    "path": "data/codeql/scopes/codeql-unit-612e7dd37a4af081280a679c/exports/call_sites.json",
+    "sha256": "a13c46b1bfbcb43686d1038d33d665189ad79fa1f39ba656fc9454e5cf3a929e",
+    "size_bytes": 10643
+   },
+   {
+    "path": "data/codeql/scopes/codeql-unit-612e7dd37a4af081280a679c/exports/export-manifest.json",
+    "sha256": "0237103181db5ad1dd7499d1da146258c70c61a9f7ae8db07e2eda8722361d61",
+    "size_bytes": 4784
+   },
+   {
+    "path": "data/codeql/scopes/codeql-unit-612e7dd37a4af081280a679c/exports/flow_summaries.json",
+    "sha256": "5b368cf5eb23bb28787891a904212377d98d21b802bde41c5a232a56b310873c",
+    "size_bytes": 1123
+   },
+   {
+    "path": "data/codeql/scopes/codeql-unit-612e7dd37a4af081280a679c/exports/guards.json",
+    "sha256": "63e0a426d65921d4d9354b87fc377a876f9847a3be15831237c0ce42d188c513",
+    "size_bytes": 6891
+   },
+   {
+    "path": "data/codeql/scopes/codeql-unit-612e7dd37a4af081280a679c/exports/neighborhood.json",
+    "sha256": "50db5f37b14daaac38fbb9badf7b61b2cec0cfd10627d11f93d74fdca33f850d",
+    "size_bytes": 1070
+   },
+   {
+    "path": "data/codeql/scopes/codeql-unit-612e7dd37a4af081280a679c/exports/path_edges.json",
+    "sha256": "fb24e649bd350b9968943194a5f5cc0d04e92ad7a9f84e09cf27a29cc6631a4d",
+    "size_bytes": 5435
+   },
+   {
+    "path": "data/codeql/scopes/codeql-unit-612e7dd37a4af081280a679c/exports/path_flows.json",
+    "sha256": "422ea23e0339d107cc4a2bb1943f86dd16ebc638af25bef99782bcaef7851e3e",
+    "size_bytes": 629
+   },
+   {
+    "path": "data/codeql/scopes/codeql-unit-612e7dd37a4af081280a679c/exports/path_sanitizers.json",
+    "sha256": "2705cb5b6c6b62a96890e6b3170d52178e0ae7310813edb05457c0165f421e8d",
+    "size_bytes": 523
+   },
+   {
+    "path": "data/codeql/scopes/codeql-unit-612e7dd37a4af081280a679c/exports/range_conversions.json",
+    "sha256": "2615d7fa228e1672481b2f9d106ac395b40851fb9c92a02d0dd837d81e1cf202",
+    "size_bytes": 654
+   },
+   {
+    "path": "data/codeql/scopes/codeql-unit-612e7dd37a4af081280a679c/exports/ranges.json",
+    "sha256": "19d9e91b54d001473f16737f8b86bbb6ebc44ac3caf09ef0398c333ded70a50e",
+    "size_bytes": 1551
+   },
+   {
+    "path": "data/codeql/scopes/codeql-unit-612e7dd37a4af081280a679c/exports/seed_functions.json",
+    "sha256": "27937d9b6f9e905ffeb61c81ca8d0936bd527aac3ec432274597d2f916aaf40d",
+    "size_bytes": 648
+   },
+   {
+    "path": "data/codeql/scopes/codeql-unit-612e7dd37a4af081280a679c/exports/sink_sites.json",
+    "sha256": "d952b2c171df347c7a6453f0332f4fd6f822ef4e85d34a0cb38b4814b7f0ec2c",
+    "size_bytes": 2201
+   },
+   {
+    "path": "data/codeql/scopes/codeql-unit-612e7dd37a4af081280a679c/exports/source_sites.json",
+    "sha256": "15f818713503b43d18a436837e9eede95afa9d604ac166b9c214a6d517c25712",
+    "size_bytes": 589
+   },
+   {
+    "path": "data/codeql/scopes/codeql-unit-612e7dd37a4af081280a679c/image.json",
+    "sha256": "6f8fba383a9180261e34c8c8073586d444522d68517b7336e88f57fe73262b38",
+    "size_bytes": 826
+   },
+   {
+    "path": "data/codeql/scopes/codeql-unit-612e7dd37a4af081280a679c/queries/cert-cpp/executions/query/receipt.json",
+    "sha256": "decb0e214c5b964d30c12908dd73f41ec6f21830eb6280581b3ace2648e3a46c",
+    "size_bytes": 1280
+   },
+   {
+    "path": "data/codeql/scopes/codeql-unit-612e7dd37a4af081280a679c/queries/cert-cpp/sarif/results.sarif",
+    "sha256": "f80d247ba9309f5e95115de301edb76ad2680e148dc6de4f81be02bd6e0a104d",
+    "size_bytes": 131923
+   },
+   {
+    "path": "data/codeql/scopes/codeql-unit-612e7dd37a4af081280a679c/queries/default/executions/query/receipt.json",
+    "sha256": "38945ca768bfcd7be4b2a16b50150d3fc79134eae2651949fa2c02c4ec6c5171",
+    "size_bytes": 1280
+   },
+   {
+    "path": "data/codeql/scopes/codeql-unit-612e7dd37a4af081280a679c/queries/default/sarif/results.sarif",
+    "sha256": "ec8d4cbf92a3d3021244303b609807d795a04bb9919da2e54c54ff1426c7f996",
+    "size_bytes": 68480
+   },
+   {
+    "path": "data/indices/manifests/artifact-indexing-<attempt>.json",
+    "sha256": "970de4d6c9047e23a9fce250ba395760c3f25ffa879c1125f5ca6f1828a4b7fd",
+    "size_bytes": 19168
+   },
+   {
+    "path": "data/indices/manifests/artifact-security-<sha256>.json",
+    "sha256": "029326de7ba78cc70b76560d58e314f27c91f59da5c398f7ffaf2b02f6eb1a50",
+    "size_bytes": 2056
+   },
+   {
+    "path": "data/indices/manifests/build-security-<attempt>.json",
+    "sha256": "289f986f8c5bb64baae597095852a845a578d0507f34e914bb8121475e74ee36",
+    "size_bytes": 42342
+   },
+   {
+    "path": "data/indices/manifests/catalog-<attempt>.json",
+    "sha256": "8860a0dcbf9b19fd1386aee427ddc2432f61c84c8b15725107c68072bbaaf513",
+    "size_bytes": 2869
+   },
+   {
+    "path": "data/indices/manifests/change-context-<attempt>.json",
+    "sha256": "e317862b60e783dd9c379194bc8317a830c287cca79e19c25ae46b035be0752a",
+    "size_bytes": 14776
+   },
+   {
+    "path": "data/indices/manifests/clangd-<attempt>.json",
+    "sha256": "48637692c8022b9c3ce63b153cb17185cc86a16b5a045557d7f2f4ccde5bd73a",
+    "size_bytes": 33224
+   },
+   {
+    "path": "data/indices/manifests/codeql-<attempt>.json",
+    "sha256": "236ef45638f910aca6d30d49abaa78331e4eca0f4379cd3ba411847ba15b5ce8",
+    "size_bytes": 3236
+   },
+   {
+    "path": "data/indices/manifests/cpp-compiled-<attempt>.json",
+    "sha256": "125fd38bcc68b5d50746aeefeca3068a3c3b823130d95dbd01727fc2024c361d",
+    "size_bytes": 32277
+   },
+   {
+    "path": "data/indices/manifests/evidence-<attempt>.json",
+    "sha256": "59ee5b6e19e82e1ce8af698499685cbe2970b26ef40028a1ab22eb1d5e2e2a27",
+    "size_bytes": 24146
+   },
+   {
+    "path": "data/indices/manifests/language-build-<attempt>.json",
+    "sha256": "12e050124723e80aae4c18607d7a84f85d691d834c1475cf46b859853965044e",
+    "size_bytes": 13224
+   },
+   {
+    "path": "data/indices/manifests/tree-sitter-<attempt>.json",
+    "sha256": "aa66749e338c4f163a11ff9a4f706a57091c1409126a64357789407e65c53073",
+    "size_bytes": 14166
+   },
+   {
+    "path": "data/indices/observations/<sha256>-5e95679de4fdb3a8.sqlite",
+    "sha256": "d9fa2b66e6db7ded37829940527a85083cafaf4d78656bfd33ed1d1d0bdf0924",
+    "size_bytes": 57344
+   },
+   {
+    "path": "data/indices/observations/<sha256>-7f7610519040c736.sqlite",
+    "sha256": "c9d858d6ea204fb04d137ba0d628d7f7cdc07612a40fc4de7714233268dca2f8",
+    "size_bytes": 94208
+   },
+   {
+    "path": "data/jobs/job_artifact_indexing/attempts/<attempt>/handoff.json",
+    "sha256": "97586f2aa0012411ba3ee3dda57667ac90b6a1f6a8a44df2f6788d647a370876",
+    "size_bytes": 9244
+   },
+   {
+    "path": "data/jobs/job_artifact_security_analysis/attempts/<attempt>/handoff.json",
+    "sha256": "d7fe501f4ec1b1e10923e1bdede059ede58648e24ff6e804f74e87228adbfca3",
+    "size_bytes": 32682
+   },
+   {
+    "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/handoff.json",
+    "sha256": "992da1a682027f973536f4fb8ff01ef35f1a42e2df3a13efa581bd97d87e16c2",
+    "size_bytes": 8017
+   },
+   {
+    "path": "data/jobs/job_codeql_analysis/attempts/<attempt>/artifacts/codeql/graph-exports.json",
+    "sha256": "3724fff0098ca7b341b47820300eb3a1c6e1f555bfddd4d5f7327bf4a7116e1f",
+    "size_bytes": 9846
+   },
+   {
+    "path": "data/jobs/job_codeql_analysis/attempts/<attempt>/artifacts/codeql/plan.json",
+    "sha256": "94e4a32cca18037f915342dd0c6af3c4903325aea4d626a9b53f37a67ec33dbd",
+    "size_bytes": 3154
+   },
+   {
+    "path": "data/jobs/job_codeql_analysis/attempts/<attempt>/artifacts/codeql/summary.json",
+    "sha256": "651bd26a814e114fc75d912670baad84396ef45793df536f0aa9f31f56e19e68",
+    "size_bytes": 13008
+   },
+   {
+    "path": "data/jobs/job_codeql_analysis/attempts/<attempt>/steps/plan/tasks/inventory/inventory/extractor-inventory.json",
+    "sha256": "fee5344db13df6e24182136b0086e7d777456313c4a64e1e9e0d287c897b38a4",
+    "size_bytes": 7238
+   },
+   {
+    "path": "data/jobs/job_cpp_compiled_analysis/attempts/<attempt>/handoff.json",
+    "sha256": "aad3522e17dda7931c455e826af5431077c651893cf61c9cb3de95dcd0e886c4",
+    "size_bytes": 14844
+   },
+   {
+    "path": "data/jobs/job_cpp_symbol_index/attempts/<attempt>/handoff.json",
+    "sha256": "d5a023a2fb22056a93641b2a1f10b36def872aca7e22be53b4521003652671d1",
+    "size_bytes": 3745
+   },
+   {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/handoff.json",
+    "sha256": "37b7069eb6c7e94cce642a2f04814243ca0162fda2c249127611273f3bd2ed26",
+    "size_bytes": 66027
+   },
+   {
+    "path": "data/jobs/job_language_build/attempts/<attempt>/handoff.json",
+    "sha256": "b83c9f41dbd23fd6bf0c447a7d84f545aa55caad071cfe9d6757dd6e765955e0",
+    "size_bytes": 12059
+   },
+   {
+    "path": "data/jobs/job_post_build_security_assessment/attempts/<attempt>/handoff.json",
+    "sha256": "0a85a66b630e931f128ff7ec1f27829ea74eec891db1e7b478d9e3c07e474a03",
+    "size_bytes": 58098
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/handoff.json",
+    "sha256": "44c369f07833ec58975a00e6dacc211fb70ab16d81977a3aa334885f22bb87cf",
+    "size_bytes": 11166
+   },
+   {
+    "path": "data/jobs/job_tree_sitter_ast/attempts/<attempt>/handoff.json",
+    "sha256": "e2c70d7d27fa96d1d7ad80e64cf92f90d2f2752edf567446a382437e87bf3244",
+    "size_bytes": 10339
+   }
+  ]
+ }
+}

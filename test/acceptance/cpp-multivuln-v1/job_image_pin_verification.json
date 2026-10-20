@@ -1,0 +1,123 @@
+{
+ "artifacts": [
+  {
+   "count": 3,
+   "kind": "json",
+   "path": "data/jobs/job_image_pin_verification/attempts/<attempt>/steps/publication/tasks/publish_handoff/image-pin-verification-handoff.json",
+   "sha256": "f05d043aef8be78cd2755227a4fe45303d75713b8e1aecaf7336c2d3f121e53f"
+  },
+  {
+   "count": 4,
+   "kind": "json",
+   "path": "data/jobs/job_image_pin_verification/attempts/<attempt>/steps/selection/tasks/resolve_pins/image-pin-plan.json",
+   "sha256": "a57b94592e67b623f53c2ef2b058ac716aa7272534d3cb39f3034dfbe5da9905"
+  },
+  {
+   "count": 4,
+   "kind": "json",
+   "path": "data/jobs/job_image_pin_verification/attempts/<attempt>/steps/verification/tasks/inspect_images/image-pin-verification.json",
+   "sha256": "03d2b5c59911a187752cfb048b7f637d0620802dac1ee09ef679cba6030912dd"
+  }
+ ],
+ "failed_units": [],
+ "findings": [],
+ "gaps": [],
+ "handoff": {
+  "completion_status": "SUCCEEDED",
+  "schema_identity": "appsec-review/image-pin-verification-job/1",
+  "status": "ACCEPTED",
+  "upstream_jobs": []
+ },
+ "job_id": "job_image_pin_verification",
+ "outputs": {
+  "publication.publish_handoff": {
+   "artifact": {
+    "path": "data/jobs/job_image_pin_verification/attempts/<attempt>/steps/publication/tasks/publish_handoff/image-pin-verification-handoff.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "images": {
+    "<summary>": {
+     "count": 56,
+     "sha256": "0007c8229cf5033745db9e3d873eb13a6da98198ec757fb89d19cec5915cfb4f"
+    }
+   },
+   "pin_count": 56,
+   "schema": "appsec-review/image-pin-verification/1"
+  },
+  "selection.resolve_pins": {
+   "artifact": {
+    "path": "data/jobs/job_image_pin_verification/attempts/<attempt>/steps/selection/tasks/resolve_pins/image-pin-plan.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "pin_count": 56,
+   "pins": {
+    "<summary>": {
+     "count": 56,
+     "sha256": "0285dace28f59a31df256cc2fccb818cce5319285e55dc4df989830611a912d2"
+    }
+   },
+   "schema": "appsec-review/image-pin-plan/1"
+  },
+  "verification.inspect_images": {
+   "artifact": {
+    "path": "data/jobs/job_image_pin_verification/attempts/<attempt>/steps/verification/tasks/inspect_images/image-pin-verification.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "images": {
+    "<summary>": {
+     "count": 56,
+     "sha256": "0007c8229cf5033745db9e3d873eb13a6da98198ec757fb89d19cec5915cfb4f"
+    }
+   },
+   "pin_count": 56,
+   "schema": "appsec-review/image-pin-verification/1"
+  }
+ },
+ "schema": "appsec-review/acceptance-job-output/1",
+ "skipped_units": [],
+ "status": "SUCCEEDED",
+ "steps": {
+  "publication": "SUCCEEDED",
+  "selection": "SUCCEEDED",
+  "verification": "SUCCEEDED"
+ },
+ "units": {
+  "publication.publish_handoff": {
+   "disposition": null,
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "selection.resolve_pins": {
+   "disposition": null,
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "verification.inspect_images": {
+   "disposition": null,
+   "producer": null,
+   "status": "SUCCEEDED"
+  }
+ },
+ "volatile": {
+  "artifacts": [
+   {
+    "path": "data/jobs/job_image_pin_verification/attempts/<attempt>/steps/publication/tasks/publish_handoff/image-pin-verification-handoff.json",
+    "sha256": "fd0a003ce9319b9df98e407f082245d5586dc490cddce9654fd89c0cf773318e",
+    "size_bytes": 14788
+   },
+   {
+    "path": "data/jobs/job_image_pin_verification/attempts/<attempt>/steps/selection/tasks/resolve_pins/image-pin-plan.json",
+    "sha256": "7b89dafa014118fc6d3c8c338a515b193ac0f36249700e9d01206927bb0a8dd2",
+    "size_bytes": 8468
+   },
+   {
+    "path": "data/jobs/job_image_pin_verification/attempts/<attempt>/steps/verification/tasks/inspect_images/image-pin-verification.json",
+    "sha256": "9f99ac0db8b1f09adeaecac3049db17a0495752029fb6ec3619016bc391132d7",
+    "size_bytes": 15458
+   }
+  ]
+ }
+}

@@ -1,0 +1,673 @@
+{
+ "artifacts": [
+  {
+   "count": 16,
+   "kind": "json",
+   "path": "data/jobs/job_security_tagging/attempts/<attempt>/artifacts/security-tagging/handoff.json",
+   "sha256": "267ba29a9e56e76adfe3362f824bf0a779187d4632915ab58255ffa422779bc9"
+  },
+  {
+   "count": 4,
+   "kind": "json",
+   "path": "data/jobs/job_security_tagging/attempts/<attempt>/artifacts/security-tagging/assignments.json",
+   "sha256": "7e24c726d508fdbf39c58487adf5a7c221f9e8af91ca0c9269411c43b090b1dd"
+  },
+  {
+   "count": 4,
+   "kind": "json",
+   "path": "data/jobs/job_security_tagging/attempts/<attempt>/artifacts/security-tagging/coverage-gaps.json",
+   "sha256": "bedad28e762f7f35edcac5a873b061bd2062fd0fee02691ad985acc061c08ad3"
+  },
+  {
+   "count": 4,
+   "kind": "json",
+   "path": "data/jobs/job_security_tagging/attempts/<attempt>/artifacts/security-tagging/derived.json",
+   "sha256": "afef1f6113b04969226bc1ba78057f709187c18ce1dbf81bc3a577825f21b608"
+  },
+  {
+   "count": 4,
+   "kind": "json",
+   "path": "data/jobs/job_security_tagging/attempts/<attempt>/artifacts/security-tagging/observation-facts.json",
+   "sha256": "0f694daa93b56ffd98a8b884750fd9593d7509b9d9a0cb456b4c3a37f8851140"
+  },
+  {
+   "count": 4,
+   "kind": "json",
+   "path": "data/jobs/job_security_tagging/attempts/<attempt>/artifacts/security-tagging/source-facts.json",
+   "sha256": "2c043e11a7cd1a360b8f7c8a033d5edcbec86b176a556f49d48cddbd77bf79ff"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/indices/manifests/tags-<attempt>.json",
+   "sha256": "9d06ce066e487512014ce3f562189670ae7e25ab2a66da4590fe993c062d96b0"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/jobs/job_security_tagging/attempts/<attempt>/inputs/retrieval-manifest.json",
+   "sha256": "09d1c85926ceaf6c3076132fb4c6d3de75b579fbb08ae3100a682e8372013d9c"
+  },
+  {
+   "count": 8,
+   "kind": "json",
+   "path": "data/jobs/job_security_tagging/attempts/<attempt>/artifacts/security-tagging/scope.json",
+   "sha256": "fbf821222fa37dd9f7987352868ce7dd026336beb0e276431fa75ab49255046d"
+  },
+  {
+   "count": 8,
+   "kind": "json",
+   "path": "data/jobs/job_security_tagging/attempts/<attempt>/artifacts/security-tagging/tag-cloud.json",
+   "sha256": "ac1fc17146ea2ad017e5310f56bf97b815c9ca2ad8f092635ba6260a44482820"
+  },
+  {
+   "count": 8,
+   "kind": "json",
+   "path": "data/jobs/job_security_tagging/attempts/<attempt>/artifacts/security-tagging/taxonomy-identity.json",
+   "sha256": "6618c6e0a4ac9ec6936a1f46ed35b769bc79ebeb391f2ada740275a4fb749ce1"
+  }
+ ],
+ "failed_units": [],
+ "findings": [],
+ "gaps": [
+  {
+   "count": 1,
+   "gap": "attack: ATT&CK tactic rollup requires the ATT&CK feed pinned into the run",
+   "unit": "publication.publish_handoff"
+  },
+  {
+   "count": 1,
+   "gap": "capec: CAPEC mechanism-of-attack rollup requires the CAPEC feed pinned into the run",
+   "unit": "publication.publish_handoff"
+  },
+  {
+   "count": 1,
+   "gap": "cwe: CWE-1003 rollup requires the CWE feed pinned into the run",
+   "unit": "publication.publish_handoff"
+  },
+  {
+   "count": 1,
+   "gap": "invoked capability detection is not implemented; func tags are declared from package inventory only",
+   "unit": "publication.publish_handoff"
+  },
+  {
+   "count": 1,
+   "gap": "taint_path, iac_resource, k8s_object, and container_stage crosswalk scopes are not implemented",
+   "unit": "publication.publish_handoff"
+  },
+  {
+   "count": 1,
+   "gap": "upstream CWE->CAPEC->ATT&CK crosswalk is deferred until the MITRE feed is pinned into the run",
+   "unit": "publication.publish_handoff"
+  }
+ ],
+ "handoff": {
+  "completion_status": "COMPLETED_WITH_GAPS",
+  "schema_identity": "appsec-review/security-tagging-handoff/1",
+  "status": "ACCEPTED",
+  "upstream_jobs": [
+   "job_artifact_indexing",
+   "job_artifact_security_analysis",
+   "job_change_context_analysis",
+   "job_ci_configuration_analysis",
+   "job_clang_static_analysis",
+   "job_code_graph_index",
+   "job_codeql_analysis",
+   "job_cpp_compiled_analysis",
+   "job_cpp_symbol_index",
+   "job_evidence_collection",
+   "job_language_build",
+   "job_owasp_control_assessment",
+   "job_post_build_security_assessment",
+   "job_project_build",
+   "job_review_intake",
+   "job_review_prioritization",
+   "job_source_history_analysis",
+   "job_target_analysis_plan",
+   "job_target_catalog",
+   "job_tree_sitter_ast"
+  ]
+ },
+ "job_id": "job_security_tagging",
+ "outputs": {
+  "collection.coverage_gaps": {
+   "artifact": {
+    "path": "data/jobs/job_security_tagging/attempts/<attempt>/artifacts/security-tagging/coverage-gaps.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "item_count": 48,
+   "tag_counts": {
+    "gap:no-ast:component-0001-build-unit-b9c931fa551e02bd12b2-c-071aee371178b2f": 1,
+    "gap:no-ast:cpp-build-unit-b9c931fa551e02bd12b2-ast": 1,
+    "gap:no-ast:cpp-build-unit-b9c931fa551e02bd12b2-ir": 1,
+    "gap:no-ast:target-analysis-plan": 1,
+    "gap:no-ast:tree-sitter-coverage-attempt-0001": 1,
+    "gap:no-build:build-security-build-unit-b9c931fa551e02bd12b2": 1,
+    "gap:no-build:default": 1,
+    "gap:no-build:relations-2fbb7fdb7eb815a992d32f13": 1,
+    "gap:no-sast:artifact-security": 1,
+    "gap:no-sast:blint": 1,
+    "gap:no-sast:ci-azure-checkov": 1,
+    "gap:no-sast:ci-azure-schema": 1,
+    "gap:no-sast:ci-bitbucket-checkov": 1,
+    "gap:no-sast:ci-bitbucket-schema": 1,
+    "gap:no-sast:ci-circleci-checkov": 1,
+    "gap:no-sast:ci-circleci-schema": 1,
+    "gap:no-sast:ci-github-actionlint": 1,
+    "gap:no-sast:ci-github-checkov": 1,
+    "gap:no-sast:ci-github-schema": 1,
+    "gap:no-sast:ci-github-zizmor": 1,
+    "gap:no-sast:ci-gitlab-checkov": 1,
+    "gap:no-sast:ci-gitlab-schema": 1,
+    "gap:no-sast:ci-jenkins-structural": 1,
+    "gap:no-sast:ci-other-discovery": 1,
+    "gap:no-sast:ci-teamcity-structural": 1,
+    "gap:no-sast:clang-static-coverage-attempt-0001": 1,
+    "gap:no-sast:clang-static-cpp-scope-ab6d5db76861721dc145e459": 1,
+    "gap:no-sast:codeql-cpp-codeql-unit-612e7dd37a4af081280a679c-cert-cpp": 1,
+    "gap:no-sast:cpp-build-unit-b9c931fa551e02bd12b2-infer": 1,
+    "gap:no-sast:cppcheck": 1,
+    "gap:no-sast:gitleaks": 1,
+    "gap:no-sast:gosec": 1,
+    "gap:no-sast:grype": 1,
+    "gap:no-sast:hadolint": 1,
+    "gap:no-sast:mobsfscan": 1,
+    "gap:no-sast:opengrep": 1,
+    "gap:no-sast:osv-scanner": 1,
+    "gap:no-sast:phpcs": 1,
+    "gap:no-sast:phpstan": 1,
+    "gap:no-sast:pmd": 1,
+    "gap:no-sast:psalm": 1,
+    "gap:no-sast:semgrep": 1,
+    "gap:no-sast:shellcheck": 1,
+    "gap:no-sast:spotbugs": 1,
+    "gap:no-sast:syft": 1,
+    "gap:no-sast:trivy": 1,
+    "gap:no-sast:zizmor": 1,
+    "gap:scope-failed": 1
+   },
+   "terminal_status": "SUCCEEDED"
+  },
+  "collection.observation_facts": {
+   "artifact": {
+    "path": "data/jobs/job_security_tagging/attempts/<attempt>/artifacts/security-tagging/observation-facts.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "item_count": 66,
+   "tag_counts": {
+    "cert-c:env33-c": 1,
+    "cert-c:err33-c": 3,
+    "cert-c:err34-c": 1,
+    "cwe:134": 1,
+    "cwe:78": 1,
+    "cwe:88": 1,
+    "gap:crosswalk-unmapped": 58
+   },
+   "terminal_status": "SUCCEEDED"
+  },
+  "collection.source_facts": {
+   "artifact": {
+    "path": "data/jobs/job_security_tagging/attempts/<attempt>/artifacts/security-tagging/source-facts.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "item_count": 8,
+   "tag_counts": {
+    "lang:cpp": 8
+   },
+   "terminal_status": "SUCCEEDED"
+  },
+  "crosswalk.apply_crosswalk": {
+   "artifact": {
+    "path": "data/jobs/job_security_tagging/attempts/<attempt>/artifacts/security-tagging/derived.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "item_count": 4,
+   "tag_counts": {
+    "asvs5:v1": 1,
+    "attack:t1059": 1,
+    "capec:88": 1,
+    "gap:catalog-fixture": 1
+   },
+   "terminal_status": "SUCCEEDED"
+  },
+  "integrity.validate_assignments": {
+   "artifact": {
+    "path": "data/jobs/job_security_tagging/attempts/<attempt>/artifacts/security-tagging/assignments.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "basis_counts": {
+    "declared": 8,
+    "derived": 3,
+    "reported": 115
+   },
+   "family_counts": {
+    "code_facts": 8,
+    "controls": 1,
+    "gap": 107,
+    "threat": 2,
+    "weakness": 8
+   },
+   "item_count": 126,
+   "tag_counts": {
+    "asvs5:v1": 1,
+    "attack:t1059": 1,
+    "capec:88": 1,
+    "cert-c:env33-c": 1,
+    "cert-c:err33-c": 3,
+    "cert-c:err34-c": 1,
+    "cwe:134": 1,
+    "cwe:78": 1,
+    "cwe:88": 1,
+    "gap:catalog-fixture": 1,
+    "gap:crosswalk-unmapped": 58,
+    "gap:no-ast:component-0001-build-unit-b9c931fa551e02bd12b2-c-071aee371178b2f": 1,
+    "gap:no-ast:cpp-build-unit-b9c931fa551e02bd12b2-ast": 1,
+    "gap:no-ast:cpp-build-unit-b9c931fa551e02bd12b2-ir": 1,
+    "gap:no-ast:target-analysis-plan": 1,
+    "gap:no-ast:tree-sitter-coverage-attempt-0001": 1,
+    "gap:no-build:build-security-build-unit-b9c931fa551e02bd12b2": 1,
+    "gap:no-build:default": 1,
+    "gap:no-build:relations-2fbb7fdb7eb815a992d32f13": 1,
+    "gap:no-sast:artifact-security": 1,
+    "gap:no-sast:blint": 1,
+    "gap:no-sast:ci-azure-checkov": 1,
+    "gap:no-sast:ci-azure-schema": 1,
+    "gap:no-sast:ci-bitbucket-checkov": 1,
+    "gap:no-sast:ci-bitbucket-schema": 1,
+    "gap:no-sast:ci-circleci-checkov": 1,
+    "gap:no-sast:ci-circleci-schema": 1,
+    "gap:no-sast:ci-github-actionlint": 1,
+    "gap:no-sast:ci-github-checkov": 1,
+    "gap:no-sast:ci-github-schema": 1,
+    "gap:no-sast:ci-github-zizmor": 1,
+    "gap:no-sast:ci-gitlab-checkov": 1,
+    "gap:no-sast:ci-gitlab-schema": 1,
+    "gap:no-sast:ci-jenkins-structural": 1,
+    "gap:no-sast:ci-other-discovery": 1,
+    "gap:no-sast:ci-teamcity-structural": 1,
+    "gap:no-sast:clang-static-coverage-attempt-0001": 1,
+    "gap:no-sast:clang-static-cpp-scope-ab6d5db76861721dc145e459": 1,
+    "gap:no-sast:codeql-cpp-codeql-unit-612e7dd37a4af081280a679c-cert-cpp": 1,
+    "gap:no-sast:cpp-build-unit-b9c931fa551e02bd12b2-infer": 1,
+    "gap:no-sast:cppcheck": 1,
+    "gap:no-sast:gitleaks": 1,
+    "gap:no-sast:gosec": 1,
+    "gap:no-sast:grype": 1,
+    "gap:no-sast:hadolint": 1,
+    "gap:no-sast:mobsfscan": 1,
+    "gap:no-sast:opengrep": 1,
+    "gap:no-sast:osv-scanner": 1,
+    "gap:no-sast:phpcs": 1,
+    "gap:no-sast:phpstan": 1,
+    "gap:no-sast:pmd": 1,
+    "gap:no-sast:psalm": 1,
+    "gap:no-sast:semgrep": 1,
+    "gap:no-sast:shellcheck": 1,
+    "gap:no-sast:spotbugs": 1,
+    "gap:no-sast:syft": 1,
+    "gap:no-sast:trivy": 1,
+    "gap:no-sast:zizmor": 1,
+    "gap:scope-failed": 1,
+    "lang:cpp": 8
+   },
+   "terminal_status": "SUCCEEDED"
+  },
+  "publication.publish_handoff": {
+   "accepted_upstream_manifest": {
+    "path": "data/jobs/job_security_tagging/attempts/<attempt>/inputs/retrieval-manifest.json",
+    "sha256": "<sha256>"
+   },
+   "artifact": {
+    "path": "data/jobs/job_security_tagging/attempts/<attempt>/artifacts/security-tagging/handoff.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "assignment_count": 126,
+   "assignments": {
+    "path": "data/jobs/job_security_tagging/attempts/<attempt>/artifacts/security-tagging/assignments.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "basis_counts": {
+    "declared": 8,
+    "derived": 3,
+    "reported": 115
+   },
+   "claim_policy": "Tags are review routing facts. A derived tag means applicable, never present or satisfied; only reported or confirmed weakness tags cite findings.",
+   "component_topology_sha256": "<sha256>",
+   "family_counts": {
+    "code_facts": 8,
+    "controls": 1,
+    "gap": 107,
+    "threat": 2,
+    "weakness": 8
+   },
+   "gap_tags": [
+    "gap:catalog-fixture",
+    "gap:crosswalk-unmapped",
+    "gap:no-ast:component-0001-build-unit-b9c931fa551e02bd12b2-c-071aee371178b2f",
+    "gap:no-ast:cpp-build-unit-b9c931fa551e02bd12b2-ast",
+    "gap:no-ast:cpp-build-unit-b9c931fa551e02bd12b2-ir",
+    "gap:no-ast:target-analysis-plan",
+    "gap:no-ast:tree-sitter-coverage-attempt-0001",
+    "gap:no-build:build-security-build-unit-b9c931fa551e02bd12b2",
+    "gap:no-build:default",
+    "gap:no-build:relations-2fbb7fdb7eb815a992d32f13",
+    "gap:no-sast:artifact-security",
+    "gap:no-sast:blint",
+    "gap:no-sast:ci-azure-checkov",
+    "gap:no-sast:ci-azure-schema",
+    "gap:no-sast:ci-bitbucket-checkov",
+    "gap:no-sast:ci-bitbucket-schema",
+    "gap:no-sast:ci-circleci-checkov",
+    "gap:no-sast:ci-circleci-schema",
+    "gap:no-sast:ci-github-actionlint",
+    "gap:no-sast:ci-github-checkov",
+    "gap:no-sast:ci-github-schema",
+    "gap:no-sast:ci-github-zizmor",
+    "gap:no-sast:ci-gitlab-checkov",
+    "gap:no-sast:ci-gitlab-schema",
+    "gap:no-sast:ci-jenkins-structural",
+    "gap:no-sast:ci-other-discovery",
+    "gap:no-sast:ci-teamcity-structural",
+    "gap:no-sast:clang-static-coverage-attempt-0001",
+    "gap:no-sast:clang-static-cpp-scope-ab6d5db76861721dc145e459",
+    "gap:no-sast:codeql-cpp-codeql-unit-612e7dd37a4af081280a679c-cert-cpp",
+    "gap:no-sast:cpp-build-unit-b9c931fa551e02bd12b2-infer",
+    "gap:no-sast:cppcheck",
+    "gap:no-sast:gitleaks",
+    "gap:no-sast:gosec",
+    "gap:no-sast:grype",
+    "gap:no-sast:hadolint",
+    "gap:no-sast:mobsfscan",
+    "gap:no-sast:opengrep",
+    "gap:no-sast:osv-scanner",
+    "gap:no-sast:phpcs",
+    "gap:no-sast:phpstan",
+    "gap:no-sast:pmd",
+    "gap:no-sast:psalm",
+    "gap:no-sast:semgrep",
+    "gap:no-sast:shellcheck",
+    "gap:no-sast:spotbugs",
+    "gap:no-sast:syft",
+    "gap:no-sast:trivy",
+    "gap:no-sast:zizmor",
+    "gap:scope-failed"
+   ],
+   "index_manifest": {
+    "path": "data/indices/manifests/tags-<attempt>.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "ownership_rules": {
+    "tables_sha256": "<sha256>",
+    "version": "appsec-review/component-ownership/1"
+   },
+   "schema": "appsec-review/security-tagging-handoff/1",
+   "security_findings#count": 0,
+   "tag_cloud": {
+    "path": "data/jobs/job_security_tagging/attempts/<attempt>/artifacts/security-tagging/tag-cloud.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "target_snapshot": "<sha256>",
+   "taxonomy": {
+    "capability_rules_sha256": "<sha256>",
+    "crosswalk_sha256": "<sha256>",
+    "vocabulary_sha256": "<sha256>"
+   },
+   "terminal_status": "COMPLETED_WITH_GAPS"
+  },
+  "publication.publish_index": {
+   "index_manifest": {
+    "path": "data/indices/manifests/tags-<attempt>.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "shard_count": 5,
+   "shards": [
+    {
+     "fingerprint": "<sha256>",
+     "name": "tags",
+     "producer": {
+      "family": "code_facts",
+      "job": "job_security_tagging"
+     },
+     "relative_path": "data/indices/tags/code-facts/<sha256>.sqlite",
+     "schema": "appsec-review/retrieval-index/2",
+     "sha256": "<sha256>",
+     "shard_id": "code-facts"
+    },
+    {
+     "fingerprint": "<sha256>",
+     "name": "tags",
+     "producer": {
+      "family": "controls",
+      "job": "job_security_tagging"
+     },
+     "relative_path": "data/indices/tags/controls/<sha256>.sqlite",
+     "schema": "appsec-review/retrieval-index/2",
+     "sha256": "<sha256>",
+     "shard_id": "controls"
+    },
+    {
+     "fingerprint": "<sha256>",
+     "name": "tags",
+     "producer": {
+      "family": "gap",
+      "job": "job_security_tagging"
+     },
+     "relative_path": "data/indices/tags/gap/<sha256>.sqlite",
+     "schema": "appsec-review/retrieval-index/2",
+     "sha256": "<sha256>",
+     "shard_id": "gap"
+    },
+    {
+     "fingerprint": "<sha256>",
+     "name": "tags",
+     "producer": {
+      "family": "threat",
+      "job": "job_security_tagging"
+     },
+     "relative_path": "data/indices/tags/threat/<sha256>.sqlite",
+     "schema": "appsec-review/retrieval-index/2",
+     "sha256": "<sha256>",
+     "shard_id": "threat"
+    },
+    {
+     "fingerprint": "<sha256>",
+     "name": "tags",
+     "producer": {
+      "family": "weakness",
+      "job": "job_security_tagging"
+     },
+     "relative_path": "data/indices/tags/weakness/<sha256>.sqlite",
+     "schema": "appsec-review/retrieval-index/2",
+     "sha256": "<sha256>",
+     "shard_id": "weakness"
+    }
+   ]
+  },
+  "publication.publish_tag_cloud": {
+   "artifact": {
+    "path": "data/jobs/job_security_tagging/attempts/<attempt>/artifacts/security-tagging/tag-cloud.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "node_count": 15,
+   "rollup_gaps": [
+    "attack: ATT&CK tactic rollup requires the ATT&CK feed pinned into the run",
+    "capec: CAPEC mechanism-of-attack rollup requires the CAPEC feed pinned into the run",
+    "cwe: CWE-1003 rollup requires the CWE feed pinned into the run"
+   ]
+  },
+  "scope.resolve_inputs": {
+   "accepted_manifest": {
+    "path": "data/jobs/job_security_tagging/attempts/<attempt>/inputs/retrieval-manifest.json",
+    "sha256": "<sha256>"
+   },
+   "artifact": {
+    "path": "data/jobs/job_security_tagging/attempts/<attempt>/artifacts/security-tagging/scope.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "component_count": 1,
+   "component_topology_sha256": "<sha256>",
+   "ownership_rules": {
+    "tables_sha256": "<sha256>",
+    "version": "appsec-review/component-ownership/1"
+   },
+   "terminal_status": "SUCCEEDED"
+  },
+  "taxonomy.load_taxonomy": {
+   "artifact": {
+    "path": "data/jobs/job_security_tagging/attempts/<attempt>/artifacts/security-tagging/taxonomy-identity.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "identities": {
+    "capability_rules_sha256": "<sha256>",
+    "crosswalk_sha256": "<sha256>",
+    "vocabulary_sha256": "<sha256>"
+   },
+   "proposed_namespaces": [
+    "cicd-top10",
+    "k8s-pss",
+    "k8s-top10-2022",
+    "misra-c2012",
+    "misra-cpp2023",
+    "nist53r5",
+    "scorecard",
+    "slsa1",
+    "ssdf"
+   ]
+  }
+ },
+ "schema": "appsec-review/acceptance-job-output/1",
+ "skipped_units": [],
+ "status": "COMPLETED_WITH_GAPS",
+ "steps": {
+  "collection": "SUCCEEDED",
+  "crosswalk": "SUCCEEDED",
+  "integrity": "SUCCEEDED",
+  "publication": "SUCCEEDED",
+  "scope": "SUCCEEDED",
+  "taxonomy": "SUCCEEDED"
+ },
+ "units": {
+  "collection.coverage_gaps": {
+   "disposition": "SUCCEEDED",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "collection.observation_facts": {
+   "disposition": "SUCCEEDED",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "collection.source_facts": {
+   "disposition": "SUCCEEDED",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "crosswalk.apply_crosswalk": {
+   "disposition": "SUCCEEDED",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "integrity.validate_assignments": {
+   "disposition": "SUCCEEDED",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "publication.publish_handoff": {
+   "disposition": "COMPLETED_WITH_GAPS",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "publication.publish_index": {
+   "disposition": null,
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "publication.publish_tag_cloud": {
+   "disposition": null,
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "scope.resolve_inputs": {
+   "disposition": "SUCCEEDED",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "taxonomy.load_taxonomy": {
+   "disposition": null,
+   "producer": null,
+   "status": "SUCCEEDED"
+  }
+ },
+ "volatile": {
+  "artifacts": [
+   {
+    "path": "data/indices/manifests/tags-<attempt>.json",
+    "sha256": "d1b3b3c087242d051fa68e690019a19601ad4bb42bfd97befcc515fad7e5923b",
+    "size_bytes": 72203
+   },
+   {
+    "path": "data/jobs/job_security_tagging/attempts/<attempt>/artifacts/security-tagging/assignments.json",
+    "sha256": "dff821efcb15b91b5535925b5daabafbdbb3b3e63589c5cc6b342c01187ec350",
+    "size_bytes": 182232
+   },
+   {
+    "path": "data/jobs/job_security_tagging/attempts/<attempt>/artifacts/security-tagging/coverage-gaps.json",
+    "sha256": "2e495efb0d876f8d7c89195a6501c0aacb0bf12bf0a2afd936892ee7939c6aed",
+    "size_bytes": 71444
+   },
+   {
+    "path": "data/jobs/job_security_tagging/attempts/<attempt>/artifacts/security-tagging/derived.json",
+    "sha256": "279a5cc5e227a5dd39690fea644e8c3e4afebc7faac2cdb9d2f5c2876064b4d8",
+    "size_bytes": 4368
+   },
+   {
+    "path": "data/jobs/job_security_tagging/attempts/<attempt>/artifacts/security-tagging/handoff.json",
+    "sha256": "31476fe50fca74817376fdbfad95c56f830a19678ab0596eb6bd12052697f042",
+    "size_bytes": 3996
+   },
+   {
+    "path": "data/jobs/job_security_tagging/attempts/<attempt>/artifacts/security-tagging/observation-facts.json",
+    "sha256": "e10e577fe429bff708fbdc2bfa351aee6dcc615c29fff8e0d8f9556dee16e34a",
+    "size_bytes": 93785
+   },
+   {
+    "path": "data/jobs/job_security_tagging/attempts/<attempt>/artifacts/security-tagging/scope.json",
+    "sha256": "5c66cdb09108beb6053e5deb4fd4b2da1d312c676392c94f8e392de47e988383",
+    "size_bytes": 1076
+   },
+   {
+    "path": "data/jobs/job_security_tagging/attempts/<attempt>/artifacts/security-tagging/source-facts.json",
+    "sha256": "891d7b11de154d241018708ffb833ed895c1799a5d226527c23517dd4356c46f",
+    "size_bytes": 12940
+   },
+   {
+    "path": "data/jobs/job_security_tagging/attempts/<attempt>/artifacts/security-tagging/tag-cloud.json",
+    "sha256": "3bec778f2ba722a763e27cb80aa31ee57b47a86197a2fa79937a1946b459eed5",
+    "size_bytes": 5586
+   },
+   {
+    "path": "data/jobs/job_security_tagging/attempts/<attempt>/artifacts/security-tagging/taxonomy-identity.json",
+    "sha256": "4a4a383528d0935783788141d019cca5be5b30c1b5fad1ec8c7403399172db57",
+    "size_bytes": 788
+   },
+   {
+    "path": "data/jobs/job_security_tagging/attempts/<attempt>/inputs/retrieval-manifest.json",
+    "sha256": "64b0c54b251f5cb89bbebe3b6cab9b94f77a8766de21fdcd5a2070e6eacc0adf",
+    "size_bytes": 72355
+   }
+  ]
+ }
+}

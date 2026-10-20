@@ -1,0 +1,5205 @@
+{
+ "artifacts": [
+  {
+   "count": 13,
+   "kind": "json",
+   "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/binary_hardening/tasks/blint_scan/evidence.json",
+   "sha256": "f2c67b3f7c39dde13e643c7d4ad0b54b87b15c2edac4b1fc6c7ec85b614a36ab"
+  },
+  {
+   "count": 13,
+   "kind": "json",
+   "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/configuration/tasks/checkov_scan/evidence.json",
+   "sha256": "e8b3de2c441d60b5de6953e7361df31dd3ebcda36ce5b9afd23fc42d89358401"
+  },
+  {
+   "count": 13,
+   "kind": "json",
+   "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/configuration/tasks/hadolint_scan/evidence.json",
+   "sha256": "70e36db4f672f6139c22835218aad3132c5a16462bb88644f5f7b97ecfd6de84"
+  },
+  {
+   "count": 13,
+   "kind": "json",
+   "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/configuration/tasks/trivy_scan/evidence.json",
+   "sha256": "d27da81770eaaa37c00880e7571efa5e08fb9340bb93fac74d631a13bdfffb2f"
+  },
+  {
+   "count": 13,
+   "kind": "json",
+   "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/configuration/tasks/zizmor_scan/evidence.json",
+   "sha256": "6bec4a6c43fd65b6ccf5b4b373f4d97e6c7a2eecec294383189a18a62f662fac"
+  },
+  {
+   "count": 13,
+   "kind": "json",
+   "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/secrets/tasks/gitleaks_scan/evidence.json",
+   "sha256": "1f5f4bf3c7fed025ae2a1df8e9d36c5f141e2e6a2c23d219e605b434848ce34d"
+  },
+  {
+   "count": 13,
+   "kind": "json",
+   "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/software_inventory/tasks/syft_scan/evidence.json",
+   "sha256": "6d8286adb446cc9938ff59fe8731e59fbf7dd10cc735bfbfc4121be3540d4b0d"
+  },
+  {
+   "count": 13,
+   "kind": "json",
+   "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/source_sast/tasks/cppcheck_scan/evidence.json",
+   "sha256": "454b946c2a5df6f2c47f64840f76f42833f302dc9ac530eb5313d2b687a9be8c"
+  },
+  {
+   "count": 13,
+   "kind": "json",
+   "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/source_sast/tasks/gosec_scan/evidence.json",
+   "sha256": "1d7e884b48004cd2ddbf5619357162660153e200bed5f46181e70c9a0d1d6ad6"
+  },
+  {
+   "count": 13,
+   "kind": "json",
+   "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/source_sast/tasks/mobsfscan_scan/evidence.json",
+   "sha256": "1650a5d810cda182a1ab4d61ace71809fcd125685db28d6682332fb9c4e09a44"
+  },
+  {
+   "count": 13,
+   "kind": "json",
+   "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/source_sast/tasks/opengrep_scan/evidence.json",
+   "sha256": "584387e0fdbdf06d135357c58b21baab6a1705e19cd3c6da57f4a1392a790ccb"
+  },
+  {
+   "count": 13,
+   "kind": "json",
+   "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/source_sast/tasks/phpcs_scan/evidence.json",
+   "sha256": "ef312c617b67c129603dfe4f5bfba7b5494db24e92c8139c393618caf9c6bd74"
+  },
+  {
+   "count": 13,
+   "kind": "json",
+   "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/source_sast/tasks/phpstan_scan/evidence.json",
+   "sha256": "d639acd7893ce65c4deb116d913149109b31c9ed69988bae59a7805058ff5979"
+  },
+  {
+   "count": 13,
+   "kind": "json",
+   "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/source_sast/tasks/pmd_scan/evidence.json",
+   "sha256": "20776bb234da26d81b15c4f47d85f5012b464de259952f818c5989ac0308e979"
+  },
+  {
+   "count": 13,
+   "kind": "json",
+   "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/source_sast/tasks/psalm_scan/evidence.json",
+   "sha256": "cf4f45d26f3e2ec23f5c45495886f1aca26fc0e51b04bae48f9682cba56b1f30"
+  },
+  {
+   "count": 13,
+   "kind": "json",
+   "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/source_sast/tasks/semgrep_scan/evidence.json",
+   "sha256": "5e72ee264561357070cce7e5c77e9f8a4d6f7a84b7d2c6851ed90e4ee06d3cd7"
+  },
+  {
+   "count": 13,
+   "kind": "json",
+   "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/source_sast/tasks/shellcheck_scan/evidence.json",
+   "sha256": "0944a11750950a956367d0cdeea82ff87c69d49d037de7ef90f17cb76f2c394f"
+  },
+  {
+   "count": 13,
+   "kind": "json",
+   "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/source_sast/tasks/spotbugs_scan/evidence.json",
+   "sha256": "dec93cbf73b992b3fcc29761e86476bb706f567de72ae7d8fddbe92e9f3bd903"
+  },
+  {
+   "count": 13,
+   "kind": "json",
+   "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/vulnerability_matching/tasks/grype_scan/evidence.json",
+   "sha256": "7766350e28213891673eaad2ff25b548b5661986efecc54e0266ec94e552934f"
+  },
+  {
+   "count": 13,
+   "kind": "json",
+   "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/vulnerability_matching/tasks/osv_scanner_scan/evidence.json",
+   "sha256": "dbc8e5015305878f819db61050a2ae08f4723f306929cfca8548beff913dabff"
+  },
+  {
+   "count": 23,
+   "kind": "json",
+   "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/configuration/tasks/checkov_scan/scratch/attempt_01/execution.json",
+   "sha256": "a4da7b5a913e639228e2bf76aa034ab43d029d90e34bf40e6a4236da247d5c6f"
+  },
+  {
+   "count": 23,
+   "kind": "json",
+   "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/secrets/tasks/gitleaks_scan/scratch/attempt_01/execution.json",
+   "sha256": "5e2874a0b54bc2f5588b29197b217731056aeb63cc0ba4bc79ad5613e3f5dfa7"
+  },
+  {
+   "count": 23,
+   "kind": "json",
+   "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/software_inventory/tasks/syft_scan/scratch/attempt_01/execution.json",
+   "sha256": "6202de3d7e683cae5cb32271028e359e2ab453138dc6a332c37ea8d36d2680e7"
+  },
+  {
+   "count": 23,
+   "kind": "json",
+   "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/source_sast/tasks/cppcheck_scan/scratch/attempt_01/execution.json",
+   "sha256": "5aaa899e132542aec9da8ed181408d847c84942963adefe6b84d5805e82f8254"
+  },
+  {
+   "count": 23,
+   "kind": "json",
+   "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/source_sast/tasks/opengrep_scan/scratch/attempt_01/execution.json",
+   "sha256": "972d49feb4978ccdd0d8162742f6fd0d9e0428055f8cf50bca7aca45dbc91d64"
+  },
+  {
+   "count": 23,
+   "kind": "json",
+   "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/source_sast/tasks/semgrep_scan/scratch/attempt_01/execution.json",
+   "sha256": "9310e4eb01eb2e057acaf6248fcd9534e02230574d5498c8acd4ca257aff568a"
+  },
+  {
+   "count": 4,
+   "kind": "json",
+   "path": "data/task-checkpoints/job_evidence_collection/tool-checkov/509c9b3de2b3f5ea00abb22d/checkpoint.json",
+   "sha256": "36d84a0f747b6250f00f9936e81190508871a89a82904916989015165ba9a609"
+  },
+  {
+   "count": 4,
+   "kind": "json",
+   "path": "data/task-checkpoints/job_evidence_collection/tool-cppcheck/0cde154a0e585faaa6590298/checkpoint.json",
+   "sha256": "baae67d5b1f8cad2ef701c69674319d0c37ed966d220cf1b93a9f99ce2b7da07"
+  },
+  {
+   "count": 4,
+   "kind": "json",
+   "path": "data/task-checkpoints/job_evidence_collection/tool-gitleaks/bc5df1d9199f6e29ed0d5f2a/checkpoint.json",
+   "sha256": "c12ce302b4555bf1c3a868255f09c08a0e26cd739eafd00055e3ba0a9258a4d4"
+  },
+  {
+   "count": 4,
+   "kind": "json",
+   "path": "data/task-checkpoints/job_evidence_collection/tool-opengrep/fcea9ca5cf71fdf2d72b95fb/checkpoint.json",
+   "sha256": "0e2d9a0a1da2c4004eb026269541ce5b7bda5ab46e1be7d38e9ed19314898b62"
+  },
+  {
+   "count": 4,
+   "kind": "json",
+   "path": "data/task-checkpoints/job_evidence_collection/tool-semgrep/0229759f2592b9e43eac1b11/checkpoint.json",
+   "sha256": "e0f5be82706422349c49e4af3d5451993bef5c5426e21d5dba41e5f60c9f6e70"
+  },
+  {
+   "count": 4,
+   "kind": "json",
+   "path": "data/task-checkpoints/job_evidence_collection/tool-syft/f564408ec458618bff76edea/checkpoint.json",
+   "sha256": "6ec5f3e2d70552aa18b661244fa6a4d977ebaca08f90fc686ce96d873f1cee01"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/indices/manifests/evidence-<attempt>.json",
+   "sha256": "9fbee81f7fb34e8444b945a632bc230727f768f8826bbc3f75dc31008c9e4b46"
+  },
+  {
+   "count": 8,
+   "kind": "json",
+   "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/evidence_publication/tasks/publish_handoff/handoff.json",
+   "sha256": "0b9e4a3fa2f190d46faba3ccf19cf98d08bde28e840a229829bf661898e7bf78"
+  },
+  {
+   "coverage_statuses": {
+    "complete": 1
+   },
+   "entity_kinds": {
+    "evidence_artifact": 1,
+    "tool_observation": 13
+   },
+   "kind": "sqlite",
+   "path": "data/indices/observations/cppcheck/<sha256>.sqlite",
+   "rows": {
+    "coverage": 1,
+    "entities": 14,
+    "locations": 13,
+    "metadata": 8,
+    "relations": 26
+   }
+  },
+  {
+   "coverage_statuses": {
+    "complete": 1
+   },
+   "entity_kinds": {
+    "evidence_artifact": 1,
+    "tool_observation": 3
+   },
+   "kind": "sqlite",
+   "path": "data/indices/observations/opengrep/<sha256>.sqlite",
+   "rows": {
+    "coverage": 1,
+    "entities": 4,
+    "locations": 3,
+    "metadata": 8,
+    "relations": 6
+   }
+  },
+  {
+   "coverage_statuses": {
+    "complete": 1
+   },
+   "entity_kinds": {
+    "evidence_artifact": 1,
+    "tool_observation": 3
+   },
+   "kind": "sqlite",
+   "path": "data/indices/observations/semgrep/<sha256>.sqlite",
+   "rows": {
+    "coverage": 1,
+    "entities": 4,
+    "locations": 3,
+    "metadata": 8,
+    "relations": 6
+   }
+  },
+  {
+   "coverage_statuses": {
+    "complete": 1
+   },
+   "entity_kinds": {
+    "evidence_artifact": 1
+   },
+   "kind": "sqlite",
+   "path": "data/indices/observations/checkov/<sha256>.sqlite",
+   "rows": {
+    "coverage": 1,
+    "entities": 1,
+    "locations": 0,
+    "metadata": 8,
+    "relations": 0
+   }
+  },
+  {
+   "coverage_statuses": {
+    "complete": 1
+   },
+   "entity_kinds": {
+    "evidence_artifact": 1
+   },
+   "kind": "sqlite",
+   "path": "data/indices/observations/gitleaks/<sha256>.sqlite",
+   "rows": {
+    "coverage": 1,
+    "entities": 1,
+    "locations": 0,
+    "metadata": 8,
+    "relations": 0
+   }
+  },
+  {
+   "coverage_statuses": {
+    "complete": 1
+   },
+   "entity_kinds": {
+    "evidence_artifact": 1
+   },
+   "kind": "sqlite",
+   "path": "data/indices/observations/syft/<sha256>.sqlite",
+   "rows": {
+    "coverage": 1,
+    "entities": 1,
+    "locations": 0,
+    "metadata": 8,
+    "relations": 0
+   }
+  },
+  {
+   "coverage_statuses": {
+    "partial": 1
+   },
+   "entity_kinds": {
+    "evidence_artifact": 1
+   },
+   "kind": "sqlite",
+   "path": "data/indices/observations/blint/<sha256>.sqlite",
+   "rows": {
+    "coverage": 1,
+    "entities": 1,
+    "locations": 0,
+    "metadata": 8,
+    "relations": 0
+   }
+  },
+  {
+   "coverage_statuses": {
+    "partial": 1
+   },
+   "entity_kinds": {
+    "evidence_artifact": 1
+   },
+   "kind": "sqlite",
+   "path": "data/indices/observations/gosec/<sha256>.sqlite",
+   "rows": {
+    "coverage": 1,
+    "entities": 1,
+    "locations": 0,
+    "metadata": 8,
+    "relations": 0
+   }
+  },
+  {
+   "coverage_statuses": {
+    "partial": 1
+   },
+   "entity_kinds": {
+    "evidence_artifact": 1
+   },
+   "kind": "sqlite",
+   "path": "data/indices/observations/grype/<sha256>.sqlite",
+   "rows": {
+    "coverage": 1,
+    "entities": 1,
+    "locations": 0,
+    "metadata": 8,
+    "relations": 0
+   }
+  },
+  {
+   "coverage_statuses": {
+    "partial": 1
+   },
+   "entity_kinds": {
+    "evidence_artifact": 1
+   },
+   "kind": "sqlite",
+   "path": "data/indices/observations/hadolint/<sha256>.sqlite",
+   "rows": {
+    "coverage": 1,
+    "entities": 1,
+    "locations": 0,
+    "metadata": 8,
+    "relations": 0
+   }
+  },
+  {
+   "coverage_statuses": {
+    "partial": 1
+   },
+   "entity_kinds": {
+    "evidence_artifact": 1
+   },
+   "kind": "sqlite",
+   "path": "data/indices/observations/mobsfscan/<sha256>.sqlite",
+   "rows": {
+    "coverage": 1,
+    "entities": 1,
+    "locations": 0,
+    "metadata": 8,
+    "relations": 0
+   }
+  },
+  {
+   "coverage_statuses": {
+    "partial": 1
+   },
+   "entity_kinds": {
+    "evidence_artifact": 1
+   },
+   "kind": "sqlite",
+   "path": "data/indices/observations/osv_scanner/<sha256>.sqlite",
+   "rows": {
+    "coverage": 1,
+    "entities": 1,
+    "locations": 0,
+    "metadata": 8,
+    "relations": 0
+   }
+  },
+  {
+   "coverage_statuses": {
+    "partial": 1
+   },
+   "entity_kinds": {
+    "evidence_artifact": 1
+   },
+   "kind": "sqlite",
+   "path": "data/indices/observations/phpcs/<sha256>.sqlite",
+   "rows": {
+    "coverage": 1,
+    "entities": 1,
+    "locations": 0,
+    "metadata": 8,
+    "relations": 0
+   }
+  },
+  {
+   "coverage_statuses": {
+    "partial": 1
+   },
+   "entity_kinds": {
+    "evidence_artifact": 1
+   },
+   "kind": "sqlite",
+   "path": "data/indices/observations/phpstan/<sha256>.sqlite",
+   "rows": {
+    "coverage": 1,
+    "entities": 1,
+    "locations": 0,
+    "metadata": 8,
+    "relations": 0
+   }
+  },
+  {
+   "coverage_statuses": {
+    "partial": 1
+   },
+   "entity_kinds": {
+    "evidence_artifact": 1
+   },
+   "kind": "sqlite",
+   "path": "data/indices/observations/pmd/<sha256>.sqlite",
+   "rows": {
+    "coverage": 1,
+    "entities": 1,
+    "locations": 0,
+    "metadata": 8,
+    "relations": 0
+   }
+  },
+  {
+   "coverage_statuses": {
+    "partial": 1
+   },
+   "entity_kinds": {
+    "evidence_artifact": 1
+   },
+   "kind": "sqlite",
+   "path": "data/indices/observations/psalm/<sha256>.sqlite",
+   "rows": {
+    "coverage": 1,
+    "entities": 1,
+    "locations": 0,
+    "metadata": 8,
+    "relations": 0
+   }
+  },
+  {
+   "coverage_statuses": {
+    "partial": 1
+   },
+   "entity_kinds": {
+    "evidence_artifact": 1
+   },
+   "kind": "sqlite",
+   "path": "data/indices/observations/shellcheck/<sha256>.sqlite",
+   "rows": {
+    "coverage": 1,
+    "entities": 1,
+    "locations": 0,
+    "metadata": 8,
+    "relations": 0
+   }
+  },
+  {
+   "coverage_statuses": {
+    "partial": 1
+   },
+   "entity_kinds": {
+    "evidence_artifact": 1
+   },
+   "kind": "sqlite",
+   "path": "data/indices/observations/spotbugs/<sha256>.sqlite",
+   "rows": {
+    "coverage": 1,
+    "entities": 1,
+    "locations": 0,
+    "metadata": 8,
+    "relations": 0
+   }
+  },
+  {
+   "coverage_statuses": {
+    "partial": 1
+   },
+   "entity_kinds": {
+    "evidence_artifact": 1
+   },
+   "kind": "sqlite",
+   "path": "data/indices/observations/trivy/<sha256>.sqlite",
+   "rows": {
+    "coverage": 1,
+    "entities": 1,
+    "locations": 0,
+    "metadata": 8,
+    "relations": 0
+   }
+  },
+  {
+   "coverage_statuses": {
+    "partial": 1
+   },
+   "entity_kinds": {
+    "evidence_artifact": 1
+   },
+   "kind": "sqlite",
+   "path": "data/indices/observations/zizmor/<sha256>.sqlite",
+   "rows": {
+    "coverage": 1,
+    "entities": 1,
+    "locations": 0,
+    "metadata": 8,
+    "relations": 0
+   }
+  }
+ ],
+ "failed_units": [],
+ "findings": [
+  {
+   "count": 1,
+   "record": {
+    "end_line": null,
+    "kind": "evidence_artifact",
+    "name": "tool-blint evidence",
+    "path": null,
+    "start_line": null,
+    "text": "tool-blint"
+   },
+   "source": "observations",
+   "unit": "artifact:data/indices/observations/blint/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "record": {
+    "end_line": null,
+    "kind": "evidence_artifact",
+    "name": "tool-checkov evidence",
+    "path": null,
+    "start_line": null,
+    "text": "tool-checkov"
+   },
+   "source": "observations",
+   "unit": "artifact:data/indices/observations/checkov/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "record": {
+    "end_line": 10,
+    "kind": "tool_observation",
+    "name": "unusedStructMember",
+    "path": "include/relay/relay.hpp",
+    "start_line": 10,
+    "text": "unusedStructMember struct member 'Header::kind' is never used. source_sast    C/C++"
+   },
+   "source": "observations",
+   "unit": "artifact:data/indices/observations/cppcheck/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "record": {
+    "end_line": 11,
+    "kind": "tool_observation",
+    "name": "unusedStructMember",
+    "path": "include/relay/relay.hpp",
+    "start_line": 11,
+    "text": "unusedStructMember struct member 'Header::length' is never used. source_sast    C/C++"
+   },
+   "source": "observations",
+   "unit": "artifact:data/indices/observations/cppcheck/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "record": {
+    "end_line": 12,
+    "kind": "tool_observation",
+    "name": "unusedStructMember",
+    "path": "include/relay/relay.hpp",
+    "start_line": 12,
+    "text": "unusedStructMember struct member 'Header::name' is never used. source_sast    C/C++"
+   },
+   "source": "observations",
+   "unit": "artifact:data/indices/observations/cppcheck/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "record": {
+    "end_line": 16,
+    "kind": "tool_observation",
+    "name": "uninitMemberVarNoCtor",
+    "path": "include/relay/relay.hpp",
+    "start_line": 16,
+    "text": "uninitMemberVarNoCtor Member variable 'Session::id' has no initializer. Member variables of native types, pointers, or references are left uninitialized when the class is instantiated. That may cause bugs or undefined behavior. source_sast    C/C++"
+   },
+   "source": "observations",
+   "unit": "artifact:data/indices/observations/cppcheck/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "record": {
+    "end_line": 16,
+    "kind": "tool_observation",
+    "name": "unusedStructMember",
+    "path": "include/relay/relay.hpp",
+    "start_line": 16,
+    "text": "unusedStructMember struct member 'Session::id' is never used. source_sast    C/C++"
+   },
+   "source": "observations",
+   "unit": "artifact:data/indices/observations/cppcheck/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "record": {
+    "end_line": 17,
+    "kind": "tool_observation",
+    "name": "unusedStructMember",
+    "path": "include/relay/relay.hpp",
+    "start_line": 17,
+    "text": "unusedStructMember struct member 'Session::peer' is never used. source_sast    C/C++"
+   },
+   "source": "observations",
+   "unit": "artifact:data/indices/observations/cppcheck/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "record": {
+    "end_line": 18,
+    "kind": "tool_observation",
+    "name": "uninitMemberVarNoCtor",
+    "path": "include/relay/relay.hpp",
+    "start_line": 18,
+    "text": "uninitMemberVarNoCtor Member variable 'Session::open' has no initializer. Member variables of native types, pointers, or references are left uninitialized when the class is instantiated. That may cause bugs or undefined behavior. source_sast    C/C++"
+   },
+   "source": "observations",
+   "unit": "artifact:data/indices/observations/cppcheck/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "record": {
+    "end_line": 18,
+    "kind": "tool_observation",
+    "name": "unusedStructMember",
+    "path": "include/relay/relay.hpp",
+    "start_line": 18,
+    "text": "unusedStructMember struct member 'Session::open' is never used. source_sast    C/C++"
+   },
+   "source": "observations",
+   "unit": "artifact:data/indices/observations/cppcheck/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "record": {
+    "end_line": 22,
+    "kind": "tool_observation",
+    "name": "unusedStructMember",
+    "path": "include/relay/relay.hpp",
+    "start_line": 22,
+    "text": "unusedStructMember struct member 'Frame::width' is never used. source_sast    C/C++"
+   },
+   "source": "observations",
+   "unit": "artifact:data/indices/observations/cppcheck/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "record": {
+    "end_line": 23,
+    "kind": "tool_observation",
+    "name": "unusedStructMember",
+    "path": "include/relay/relay.hpp",
+    "start_line": 23,
+    "text": "unusedStructMember struct member 'Frame::height' is never used. source_sast    C/C++"
+   },
+   "source": "observations",
+   "unit": "artifact:data/indices/observations/cppcheck/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "record": {
+    "end_line": 24,
+    "kind": "tool_observation",
+    "name": "unusedStructMember",
+    "path": "include/relay/relay.hpp",
+    "start_line": 24,
+    "text": "unusedStructMember struct member 'Frame::pixels' is never used. source_sast    C/C++"
+   },
+   "source": "observations",
+   "unit": "artifact:data/indices/observations/cppcheck/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "record": {
+    "end_line": 36,
+    "kind": "tool_observation",
+    "name": "constVariablePointer",
+    "path": "src/session.cpp",
+    "start_line": 36,
+    "text": "constVariablePointer Variable 'session' can be declared as pointer to const source_sast    C/C++"
+   },
+   "source": "observations",
+   "unit": "artifact:data/indices/observations/cppcheck/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "record": {
+    "end_line": 40,
+    "kind": "tool_observation",
+    "name": "nullPointer",
+    "path": "src/session.cpp",
+    "start_line": 40,
+    "text": "nullPointer Possible null pointer dereference: session source_sast    C/C++"
+   },
+   "source": "observations",
+   "unit": "artifact:data/indices/observations/cppcheck/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "record": {
+    "end_line": null,
+    "kind": "evidence_artifact",
+    "name": "tool-cppcheck evidence",
+    "path": null,
+    "start_line": null,
+    "text": "tool-cppcheck"
+   },
+   "source": "observations",
+   "unit": "artifact:data/indices/observations/cppcheck/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "record": {
+    "end_line": null,
+    "kind": "evidence_artifact",
+    "name": "tool-gitleaks evidence",
+    "path": null,
+    "start_line": null,
+    "text": "tool-gitleaks"
+   },
+   "source": "observations",
+   "unit": "artifact:data/indices/observations/gitleaks/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "record": {
+    "end_line": null,
+    "kind": "evidence_artifact",
+    "name": "tool-gosec evidence",
+    "path": null,
+    "start_line": null,
+    "text": "tool-gosec"
+   },
+   "source": "observations",
+   "unit": "artifact:data/indices/observations/gosec/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "record": {
+    "end_line": null,
+    "kind": "evidence_artifact",
+    "name": "tool-grype evidence",
+    "path": null,
+    "start_line": null,
+    "text": "tool-grype"
+   },
+   "source": "observations",
+   "unit": "artifact:data/indices/observations/grype/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "record": {
+    "end_line": null,
+    "kind": "evidence_artifact",
+    "name": "tool-hadolint evidence",
+    "path": null,
+    "start_line": null,
+    "text": "tool-hadolint"
+   },
+   "source": "observations",
+   "unit": "artifact:data/indices/observations/hadolint/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "record": {
+    "end_line": null,
+    "kind": "evidence_artifact",
+    "name": "tool-mobsfscan evidence",
+    "path": null,
+    "start_line": null,
+    "text": "tool-mobsfscan"
+   },
+   "source": "observations",
+   "unit": "artifact:data/indices/observations/mobsfscan/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "record": {
+    "end_line": 58,
+    "kind": "tool_observation",
+    "name": "appsec-review.sei-cert.cpp.err34-c.unchecked-conversion-function",
+    "path": "src/main.cpp",
+    "start_line": 58,
+    "text": "appsec-review.sei-cert.cpp.err34-c.unchecked-conversion-function ERR34-C (applies to C++): this conversion function cannot report conversion errors or out-of-range input. Use std::strtol or a related function and check errno, the end pointer, and the range. source_sast    "
+   },
+   "source": "observations",
+   "unit": "artifact:data/indices/observations/opengrep/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "record": {
+    "end_line": 8,
+    "kind": "tool_observation",
+    "name": "appsec-review.sei-cert.cpp.fio30-c.nonliteral-format-without-arguments",
+    "path": "src/log.cpp",
+    "start_line": 8,
+    "text": "appsec-review.sei-cert.cpp.fio30-c.nonliteral-format-without-arguments FIO30-C (applies to C++): the format argument is not a string literal and no data arguments follow. Use a literal format such as \"%s\". source_sast    "
+   },
+   "source": "observations",
+   "unit": "artifact:data/indices/observations/opengrep/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "record": {
+    "end_line": 9,
+    "kind": "tool_observation",
+    "name": "appsec-review.sei-cert.cpp.env33-c.command-processor-call",
+    "path": "src/diag.cpp",
+    "start_line": 9,
+    "text": "appsec-review.sei-cert.cpp.env33-c.command-processor-call ENV33-C (applies to C++): this call invokes a host command processor. Execute a fixed program with an explicit argument vector instead of a shell command string. source_sast    "
+   },
+   "source": "observations",
+   "unit": "artifact:data/indices/observations/opengrep/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "record": {
+    "end_line": null,
+    "kind": "evidence_artifact",
+    "name": "tool-opengrep evidence",
+    "path": null,
+    "start_line": null,
+    "text": "tool-opengrep"
+   },
+   "source": "observations",
+   "unit": "artifact:data/indices/observations/opengrep/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "record": {
+    "end_line": null,
+    "kind": "evidence_artifact",
+    "name": "tool-osv-scanner evidence",
+    "path": null,
+    "start_line": null,
+    "text": "tool-osv-scanner"
+   },
+   "source": "observations",
+   "unit": "artifact:data/indices/observations/osv_scanner/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "record": {
+    "end_line": null,
+    "kind": "evidence_artifact",
+    "name": "tool-phpcs evidence",
+    "path": null,
+    "start_line": null,
+    "text": "tool-phpcs"
+   },
+   "source": "observations",
+   "unit": "artifact:data/indices/observations/phpcs/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "record": {
+    "end_line": null,
+    "kind": "evidence_artifact",
+    "name": "tool-phpstan evidence",
+    "path": null,
+    "start_line": null,
+    "text": "tool-phpstan"
+   },
+   "source": "observations",
+   "unit": "artifact:data/indices/observations/phpstan/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "record": {
+    "end_line": null,
+    "kind": "evidence_artifact",
+    "name": "tool-pmd evidence",
+    "path": null,
+    "start_line": null,
+    "text": "tool-pmd"
+   },
+   "source": "observations",
+   "unit": "artifact:data/indices/observations/pmd/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "record": {
+    "end_line": null,
+    "kind": "evidence_artifact",
+    "name": "tool-psalm evidence",
+    "path": null,
+    "start_line": null,
+    "text": "tool-psalm"
+   },
+   "source": "observations",
+   "unit": "artifact:data/indices/observations/psalm/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "record": {
+    "end_line": 58,
+    "kind": "tool_observation",
+    "name": "appsec-review.sei-cert.cpp.err34-c.unchecked-conversion-function",
+    "path": "src/main.cpp",
+    "start_line": 58,
+    "text": "appsec-review.sei-cert.cpp.err34-c.unchecked-conversion-function ERR34-C (applies to C++): this conversion function cannot report conversion errors or out-of-range input. Use std::strtol or a related function and check errno, the end pointer, and the range. source_sast    "
+   },
+   "source": "observations",
+   "unit": "artifact:data/indices/observations/semgrep/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "record": {
+    "end_line": 8,
+    "kind": "tool_observation",
+    "name": "appsec-review.sei-cert.cpp.fio30-c.nonliteral-format-without-arguments",
+    "path": "src/log.cpp",
+    "start_line": 8,
+    "text": "appsec-review.sei-cert.cpp.fio30-c.nonliteral-format-without-arguments FIO30-C (applies to C++): the format argument is not a string literal and no data arguments follow. Use a literal format such as \"%s\". source_sast    "
+   },
+   "source": "observations",
+   "unit": "artifact:data/indices/observations/semgrep/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "record": {
+    "end_line": 9,
+    "kind": "tool_observation",
+    "name": "appsec-review.sei-cert.cpp.env33-c.command-processor-call",
+    "path": "src/diag.cpp",
+    "start_line": 9,
+    "text": "appsec-review.sei-cert.cpp.env33-c.command-processor-call ENV33-C (applies to C++): this call invokes a host command processor. Execute a fixed program with an explicit argument vector instead of a shell command string. source_sast    "
+   },
+   "source": "observations",
+   "unit": "artifact:data/indices/observations/semgrep/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "record": {
+    "end_line": null,
+    "kind": "evidence_artifact",
+    "name": "tool-semgrep evidence",
+    "path": null,
+    "start_line": null,
+    "text": "tool-semgrep"
+   },
+   "source": "observations",
+   "unit": "artifact:data/indices/observations/semgrep/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "record": {
+    "end_line": null,
+    "kind": "evidence_artifact",
+    "name": "tool-shellcheck evidence",
+    "path": null,
+    "start_line": null,
+    "text": "tool-shellcheck"
+   },
+   "source": "observations",
+   "unit": "artifact:data/indices/observations/shellcheck/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "record": {
+    "end_line": null,
+    "kind": "evidence_artifact",
+    "name": "tool-spotbugs evidence",
+    "path": null,
+    "start_line": null,
+    "text": "tool-spotbugs"
+   },
+   "source": "observations",
+   "unit": "artifact:data/indices/observations/spotbugs/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "record": {
+    "end_line": null,
+    "kind": "evidence_artifact",
+    "name": "tool-syft evidence",
+    "path": null,
+    "start_line": null,
+    "text": "tool-syft"
+   },
+   "source": "observations",
+   "unit": "artifact:data/indices/observations/syft/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "record": {
+    "end_line": null,
+    "kind": "evidence_artifact",
+    "name": "tool-trivy evidence",
+    "path": null,
+    "start_line": null,
+    "text": "tool-trivy"
+   },
+   "source": "observations",
+   "unit": "artifact:data/indices/observations/trivy/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "record": {
+    "end_line": null,
+    "kind": "evidence_artifact",
+    "name": "tool-zizmor evidence",
+    "path": null,
+    "start_line": null,
+    "text": "tool-zizmor"
+   },
+   "source": "observations",
+   "unit": "artifact:data/indices/observations/zizmor/<sha256>.sqlite"
+  }
+ ],
+ "gaps": [
+  {
+   "count": 1,
+   "gap": {
+    "area": "tool-blint",
+    "gap": "not selected by accepted target analysis plan",
+    "status": "partial"
+   },
+   "unit": "artifact:data/indices/observations/blint/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "tool-gosec",
+    "gap": "dependency/build context may be incomplete in offline mode; not selected by accepted target analysis plan",
+    "status": "partial"
+   },
+   "unit": "artifact:data/indices/observations/gosec/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "tool-grype",
+    "gap": "directory coverage only; no cataloged OCI/archive artifact; Grype coverage was configured disabled by tools.disable_grype",
+    "status": "partial"
+   },
+   "unit": "artifact:data/indices/observations/grype/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "tool-hadolint",
+    "gap": "not selected by accepted target analysis plan",
+    "status": "partial"
+   },
+   "unit": "artifact:data/indices/observations/hadolint/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "tool-mobsfscan",
+    "gap": "not selected by accepted target analysis plan",
+    "status": "partial"
+   },
+   "unit": "artifact:data/indices/observations/mobsfscan/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "tool-osv-scanner",
+    "gap": "not selected by accepted target analysis plan",
+    "status": "partial"
+   },
+   "unit": "artifact:data/indices/observations/osv_scanner/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "tool-phpcs",
+    "gap": "project-specific coding standard is not inferred; not selected by accepted target analysis plan",
+    "status": "partial"
+   },
+   "unit": "artifact:data/indices/observations/phpcs/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "tool-phpstan",
+    "gap": "Composer dependencies are not installed by the scanner; not selected by accepted target analysis plan",
+    "status": "partial"
+   },
+   "unit": "artifact:data/indices/observations/phpstan/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "tool-pmd",
+    "gap": "security-focused ruleset only; general PMD code-quality rules are excluded; not selected by accepted target analysis plan",
+    "status": "partial"
+   },
+   "unit": "artifact:data/indices/observations/pmd/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "tool-psalm",
+    "gap": "project config and installed dependency stubs may be required; not selected by accepted target analysis plan",
+    "status": "partial"
+   },
+   "unit": "artifact:data/indices/observations/psalm/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "tool-shellcheck",
+    "gap": "not selected by accepted target analysis plan",
+    "status": "partial"
+   },
+   "unit": "artifact:data/indices/observations/shellcheck/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "tool-spotbugs",
+    "gap": "not selected by accepted target analysis plan",
+    "status": "partial"
+   },
+   "unit": "artifact:data/indices/observations/spotbugs/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "tool-trivy",
+    "gap": "Trivy misconfiguration checks are the set embedded in the pinned Trivy binary; the online checks bundle is never fetched (--skip-check-update); not selected by accepted target analysis plan",
+    "status": "partial"
+   },
+   "unit": "artifact:data/indices/observations/trivy/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "tool-zizmor",
+    "gap": "not selected by accepted target analysis plan",
+    "status": "partial"
+   },
+   "unit": "artifact:data/indices/observations/zizmor/<sha256>.sqlite"
+  },
+  {
+   "count": 2,
+   "gap": "not selected by accepted target analysis plan",
+   "unit": "binary_hardening.blint_index"
+  },
+  {
+   "count": 1,
+   "gap": "not selected by accepted target analysis plan",
+   "unit": "binary_hardening.blint_normalize"
+  },
+  {
+   "count": 1,
+   "gap": "not selected by accepted target analysis plan",
+   "unit": "binary_hardening.blint_scan"
+  },
+  {
+   "count": 2,
+   "gap": "not selected by accepted target analysis plan",
+   "unit": "configuration.hadolint_index"
+  },
+  {
+   "count": 1,
+   "gap": "not selected by accepted target analysis plan",
+   "unit": "configuration.hadolint_normalize"
+  },
+  {
+   "count": 1,
+   "gap": "not selected by accepted target analysis plan",
+   "unit": "configuration.hadolint_scan"
+  },
+  {
+   "count": 2,
+   "gap": "Trivy misconfiguration checks are the set embedded in the pinned Trivy binary; the online checks bundle is never fetched (--skip-check-update)",
+   "unit": "configuration.trivy_index"
+  },
+  {
+   "count": 2,
+   "gap": "not selected by accepted target analysis plan",
+   "unit": "configuration.trivy_index"
+  },
+  {
+   "count": 1,
+   "gap": "Trivy misconfiguration checks are the set embedded in the pinned Trivy binary; the online checks bundle is never fetched (--skip-check-update)",
+   "unit": "configuration.trivy_normalize"
+  },
+  {
+   "count": 1,
+   "gap": "not selected by accepted target analysis plan",
+   "unit": "configuration.trivy_normalize"
+  },
+  {
+   "count": 1,
+   "gap": "Trivy misconfiguration checks are the set embedded in the pinned Trivy binary; the online checks bundle is never fetched (--skip-check-update)",
+   "unit": "configuration.trivy_scan"
+  },
+  {
+   "count": 1,
+   "gap": "not selected by accepted target analysis plan",
+   "unit": "configuration.trivy_scan"
+  },
+  {
+   "count": 2,
+   "gap": "not selected by accepted target analysis plan",
+   "unit": "configuration.zizmor_index"
+  },
+  {
+   "count": 1,
+   "gap": "not selected by accepted target analysis plan",
+   "unit": "configuration.zizmor_normalize"
+  },
+  {
+   "count": 1,
+   "gap": "not selected by accepted target analysis plan",
+   "unit": "configuration.zizmor_scan"
+  },
+  {
+   "count": 3,
+   "gap": "Composer dependencies are not installed by the scanner",
+   "unit": "evidence_publication.assemble_manifest"
+  },
+  {
+   "count": 3,
+   "gap": "Grype coverage was configured disabled by tools.disable_grype",
+   "unit": "evidence_publication.assemble_manifest"
+  },
+  {
+   "count": 5,
+   "gap": "SEI CERT rule pack: C and C++ are analyzed without preprocessing; macro-expanded code is not seen",
+   "unit": "evidence_publication.assemble_manifest"
+  },
+  {
+   "count": 5,
+   "gap": "SEI CERT rule pack: findings evidence only the implemented subset of each mapped CERT rule; CERT rules with REQUIRES_* or UNSUPPORTED_* status produce no findings (rules/sei-cert/COVERAGE.md), so an absence of findings is not CERT conformance",
+   "unit": "evidence_publication.assemble_manifest"
+  },
+  {
+   "count": 3,
+   "gap": "Trivy misconfiguration checks are the set embedded in the pinned Trivy binary; the online checks bundle is never fetched (--skip-check-update)",
+   "unit": "evidence_publication.assemble_manifest"
+  },
+  {
+   "count": 3,
+   "gap": "build flags, include paths, and macros are unavailable; Cppcheck source-mode coverage is incomplete",
+   "unit": "evidence_publication.assemble_manifest"
+  },
+  {
+   "count": 3,
+   "gap": "dependency/build context may be incomplete in offline mode",
+   "unit": "evidence_publication.assemble_manifest"
+  },
+  {
+   "count": 3,
+   "gap": "directory coverage is distinct from built artifact or OCI/archive coverage",
+   "unit": "evidence_publication.assemble_manifest"
+  },
+  {
+   "count": 5,
+   "gap": "directory coverage only; no cataloged OCI/archive artifact",
+   "unit": "evidence_publication.assemble_manifest"
+  },
+  {
+   "count": 3,
+   "gap": "git history is not scanned; coverage is the cataloged worktree",
+   "unit": "evidence_publication.assemble_manifest"
+  },
+  {
+   "count": 27,
+   "gap": "not selected by accepted target analysis plan",
+   "unit": "evidence_publication.assemble_manifest"
+  },
+  {
+   "count": 3,
+   "gap": "project config and installed dependency stubs may be required",
+   "unit": "evidence_publication.assemble_manifest"
+  },
+  {
+   "count": 3,
+   "gap": "project-specific coding standard is not inferred",
+   "unit": "evidence_publication.assemble_manifest"
+  },
+  {
+   "count": 3,
+   "gap": "runs the SEI CERT rule pack only; the Semgrep security baseline is Semgrep-specific",
+   "unit": "evidence_publication.assemble_manifest"
+  },
+  {
+   "count": 3,
+   "gap": "security-focused ruleset only; general PMD code-quality rules are excluded",
+   "unit": "evidence_publication.assemble_manifest"
+  },
+  {
+   "count": 3,
+   "gap": "source mode is not compiler-backed analysis; compile metadata is sanitized and never executed",
+   "unit": "evidence_publication.assemble_manifest"
+  },
+  {
+   "count": 3,
+   "gap": "worktree only; git history is excluded",
+   "unit": "evidence_publication.assemble_manifest"
+  },
+  {
+   "count": 2,
+   "gap": "Composer dependencies are not installed by the scanner",
+   "unit": "evidence_publication.publish_handoff"
+  },
+  {
+   "count": 2,
+   "gap": "Grype coverage was configured disabled by tools.disable_grype",
+   "unit": "evidence_publication.publish_handoff"
+  },
+  {
+   "count": 3,
+   "gap": "SEI CERT rule pack: C and C++ are analyzed without preprocessing; macro-expanded code is not seen",
+   "unit": "evidence_publication.publish_handoff"
+  },
+  {
+   "count": 3,
+   "gap": "SEI CERT rule pack: findings evidence only the implemented subset of each mapped CERT rule; CERT rules with REQUIRES_* or UNSUPPORTED_* status produce no findings (rules/sei-cert/COVERAGE.md), so an absence of findings is not CERT conformance",
+   "unit": "evidence_publication.publish_handoff"
+  },
+  {
+   "count": 2,
+   "gap": "Trivy misconfiguration checks are the set embedded in the pinned Trivy binary; the online checks bundle is never fetched (--skip-check-update)",
+   "unit": "evidence_publication.publish_handoff"
+  },
+  {
+   "count": 2,
+   "gap": "build flags, include paths, and macros are unavailable; Cppcheck source-mode coverage is incomplete",
+   "unit": "evidence_publication.publish_handoff"
+  },
+  {
+   "count": 2,
+   "gap": "dependency/build context may be incomplete in offline mode",
+   "unit": "evidence_publication.publish_handoff"
+  },
+  {
+   "count": 2,
+   "gap": "directory coverage is distinct from built artifact or OCI/archive coverage",
+   "unit": "evidence_publication.publish_handoff"
+  },
+  {
+   "count": 3,
+   "gap": "directory coverage only; no cataloged OCI/archive artifact",
+   "unit": "evidence_publication.publish_handoff"
+  },
+  {
+   "count": 2,
+   "gap": "git history is not scanned; coverage is the cataloged worktree",
+   "unit": "evidence_publication.publish_handoff"
+  },
+  {
+   "count": 14,
+   "gap": "not selected by accepted target analysis plan",
+   "unit": "evidence_publication.publish_handoff"
+  },
+  {
+   "count": 2,
+   "gap": "project config and installed dependency stubs may be required",
+   "unit": "evidence_publication.publish_handoff"
+  },
+  {
+   "count": 2,
+   "gap": "project-specific coding standard is not inferred",
+   "unit": "evidence_publication.publish_handoff"
+  },
+  {
+   "count": 2,
+   "gap": "runs the SEI CERT rule pack only; the Semgrep security baseline is Semgrep-specific",
+   "unit": "evidence_publication.publish_handoff"
+  },
+  {
+   "count": 2,
+   "gap": "security-focused ruleset only; general PMD code-quality rules are excluded",
+   "unit": "evidence_publication.publish_handoff"
+  },
+  {
+   "count": 2,
+   "gap": "source mode is not compiler-backed analysis; compile metadata is sanitized and never executed",
+   "unit": "evidence_publication.publish_handoff"
+  },
+  {
+   "count": 2,
+   "gap": "worktree only; git history is excluded",
+   "unit": "evidence_publication.publish_handoff"
+  },
+  {
+   "count": 2,
+   "gap": "git history is not scanned; coverage is the cataloged worktree",
+   "unit": "secrets.gitleaks_index"
+  },
+  {
+   "count": 2,
+   "gap": "worktree only; git history is excluded",
+   "unit": "secrets.gitleaks_index"
+  },
+  {
+   "count": 1,
+   "gap": "git history is not scanned; coverage is the cataloged worktree",
+   "unit": "secrets.gitleaks_normalize"
+  },
+  {
+   "count": 1,
+   "gap": "worktree only; git history is excluded",
+   "unit": "secrets.gitleaks_normalize"
+  },
+  {
+   "count": 1,
+   "gap": "git history is not scanned; coverage is the cataloged worktree",
+   "unit": "secrets.gitleaks_scan"
+  },
+  {
+   "count": 1,
+   "gap": "worktree only; git history is excluded",
+   "unit": "secrets.gitleaks_scan"
+  },
+  {
+   "count": 2,
+   "gap": "directory coverage is distinct from built artifact or OCI/archive coverage",
+   "unit": "software_inventory.syft_index"
+  },
+  {
+   "count": 2,
+   "gap": "directory coverage only; no cataloged OCI/archive artifact",
+   "unit": "software_inventory.syft_index"
+  },
+  {
+   "count": 1,
+   "gap": "directory coverage is distinct from built artifact or OCI/archive coverage",
+   "unit": "software_inventory.syft_normalize"
+  },
+  {
+   "count": 1,
+   "gap": "directory coverage only; no cataloged OCI/archive artifact",
+   "unit": "software_inventory.syft_normalize"
+  },
+  {
+   "count": 1,
+   "gap": "directory coverage is distinct from built artifact or OCI/archive coverage",
+   "unit": "software_inventory.syft_scan"
+  },
+  {
+   "count": 1,
+   "gap": "directory coverage only; no cataloged OCI/archive artifact",
+   "unit": "software_inventory.syft_scan"
+  },
+  {
+   "count": 2,
+   "gap": "build flags, include paths, and macros are unavailable; Cppcheck source-mode coverage is incomplete",
+   "unit": "source_sast.cppcheck_index"
+  },
+  {
+   "count": 2,
+   "gap": "source mode is not compiler-backed analysis; compile metadata is sanitized and never executed",
+   "unit": "source_sast.cppcheck_index"
+  },
+  {
+   "count": 1,
+   "gap": "build flags, include paths, and macros are unavailable; Cppcheck source-mode coverage is incomplete",
+   "unit": "source_sast.cppcheck_normalize"
+  },
+  {
+   "count": 1,
+   "gap": "source mode is not compiler-backed analysis; compile metadata is sanitized and never executed",
+   "unit": "source_sast.cppcheck_normalize"
+  },
+  {
+   "count": 1,
+   "gap": "build flags, include paths, and macros are unavailable; Cppcheck source-mode coverage is incomplete",
+   "unit": "source_sast.cppcheck_scan"
+  },
+  {
+   "count": 1,
+   "gap": "source mode is not compiler-backed analysis; compile metadata is sanitized and never executed",
+   "unit": "source_sast.cppcheck_scan"
+  },
+  {
+   "count": 2,
+   "gap": "dependency/build context may be incomplete in offline mode",
+   "unit": "source_sast.gosec_index"
+  },
+  {
+   "count": 2,
+   "gap": "not selected by accepted target analysis plan",
+   "unit": "source_sast.gosec_index"
+  },
+  {
+   "count": 1,
+   "gap": "dependency/build context may be incomplete in offline mode",
+   "unit": "source_sast.gosec_normalize"
+  },
+  {
+   "count": 1,
+   "gap": "not selected by accepted target analysis plan",
+   "unit": "source_sast.gosec_normalize"
+  },
+  {
+   "count": 1,
+   "gap": "dependency/build context may be incomplete in offline mode",
+   "unit": "source_sast.gosec_scan"
+  },
+  {
+   "count": 1,
+   "gap": "not selected by accepted target analysis plan",
+   "unit": "source_sast.gosec_scan"
+  },
+  {
+   "count": 2,
+   "gap": "not selected by accepted target analysis plan",
+   "unit": "source_sast.mobsfscan_index"
+  },
+  {
+   "count": 1,
+   "gap": "not selected by accepted target analysis plan",
+   "unit": "source_sast.mobsfscan_normalize"
+  },
+  {
+   "count": 1,
+   "gap": "not selected by accepted target analysis plan",
+   "unit": "source_sast.mobsfscan_scan"
+  },
+  {
+   "count": 2,
+   "gap": "SEI CERT rule pack: C and C++ are analyzed without preprocessing; macro-expanded code is not seen",
+   "unit": "source_sast.opengrep_index"
+  },
+  {
+   "count": 2,
+   "gap": "SEI CERT rule pack: findings evidence only the implemented subset of each mapped CERT rule; CERT rules with REQUIRES_* or UNSUPPORTED_* status produce no findings (rules/sei-cert/COVERAGE.md), so an absence of findings is not CERT conformance",
+   "unit": "source_sast.opengrep_index"
+  },
+  {
+   "count": 2,
+   "gap": "runs the SEI CERT rule pack only; the Semgrep security baseline is Semgrep-specific",
+   "unit": "source_sast.opengrep_index"
+  },
+  {
+   "count": 1,
+   "gap": "SEI CERT rule pack: C and C++ are analyzed without preprocessing; macro-expanded code is not seen",
+   "unit": "source_sast.opengrep_normalize"
+  },
+  {
+   "count": 1,
+   "gap": "SEI CERT rule pack: findings evidence only the implemented subset of each mapped CERT rule; CERT rules with REQUIRES_* or UNSUPPORTED_* status produce no findings (rules/sei-cert/COVERAGE.md), so an absence of findings is not CERT conformance",
+   "unit": "source_sast.opengrep_normalize"
+  },
+  {
+   "count": 1,
+   "gap": "runs the SEI CERT rule pack only; the Semgrep security baseline is Semgrep-specific",
+   "unit": "source_sast.opengrep_normalize"
+  },
+  {
+   "count": 1,
+   "gap": "SEI CERT rule pack: C and C++ are analyzed without preprocessing; macro-expanded code is not seen",
+   "unit": "source_sast.opengrep_scan"
+  },
+  {
+   "count": 1,
+   "gap": "SEI CERT rule pack: findings evidence only the implemented subset of each mapped CERT rule; CERT rules with REQUIRES_* or UNSUPPORTED_* status produce no findings (rules/sei-cert/COVERAGE.md), so an absence of findings is not CERT conformance",
+   "unit": "source_sast.opengrep_scan"
+  },
+  {
+   "count": 1,
+   "gap": "runs the SEI CERT rule pack only; the Semgrep security baseline is Semgrep-specific",
+   "unit": "source_sast.opengrep_scan"
+  },
+  {
+   "count": 2,
+   "gap": "not selected by accepted target analysis plan",
+   "unit": "source_sast.phpcs_index"
+  },
+  {
+   "count": 2,
+   "gap": "project-specific coding standard is not inferred",
+   "unit": "source_sast.phpcs_index"
+  },
+  {
+   "count": 1,
+   "gap": "not selected by accepted target analysis plan",
+   "unit": "source_sast.phpcs_normalize"
+  },
+  {
+   "count": 1,
+   "gap": "project-specific coding standard is not inferred",
+   "unit": "source_sast.phpcs_normalize"
+  },
+  {
+   "count": 1,
+   "gap": "not selected by accepted target analysis plan",
+   "unit": "source_sast.phpcs_scan"
+  },
+  {
+   "count": 1,
+   "gap": "project-specific coding standard is not inferred",
+   "unit": "source_sast.phpcs_scan"
+  },
+  {
+   "count": 2,
+   "gap": "Composer dependencies are not installed by the scanner",
+   "unit": "source_sast.phpstan_index"
+  },
+  {
+   "count": 2,
+   "gap": "not selected by accepted target analysis plan",
+   "unit": "source_sast.phpstan_index"
+  },
+  {
+   "count": 1,
+   "gap": "Composer dependencies are not installed by the scanner",
+   "unit": "source_sast.phpstan_normalize"
+  },
+  {
+   "count": 1,
+   "gap": "not selected by accepted target analysis plan",
+   "unit": "source_sast.phpstan_normalize"
+  },
+  {
+   "count": 1,
+   "gap": "Composer dependencies are not installed by the scanner",
+   "unit": "source_sast.phpstan_scan"
+  },
+  {
+   "count": 1,
+   "gap": "not selected by accepted target analysis plan",
+   "unit": "source_sast.phpstan_scan"
+  },
+  {
+   "count": 2,
+   "gap": "not selected by accepted target analysis plan",
+   "unit": "source_sast.pmd_index"
+  },
+  {
+   "count": 2,
+   "gap": "security-focused ruleset only; general PMD code-quality rules are excluded",
+   "unit": "source_sast.pmd_index"
+  },
+  {
+   "count": 1,
+   "gap": "not selected by accepted target analysis plan",
+   "unit": "source_sast.pmd_normalize"
+  },
+  {
+   "count": 1,
+   "gap": "security-focused ruleset only; general PMD code-quality rules are excluded",
+   "unit": "source_sast.pmd_normalize"
+  },
+  {
+   "count": 1,
+   "gap": "not selected by accepted target analysis plan",
+   "unit": "source_sast.pmd_scan"
+  },
+  {
+   "count": 1,
+   "gap": "security-focused ruleset only; general PMD code-quality rules are excluded",
+   "unit": "source_sast.pmd_scan"
+  },
+  {
+   "count": 2,
+   "gap": "not selected by accepted target analysis plan",
+   "unit": "source_sast.psalm_index"
+  },
+  {
+   "count": 2,
+   "gap": "project config and installed dependency stubs may be required",
+   "unit": "source_sast.psalm_index"
+  },
+  {
+   "count": 1,
+   "gap": "not selected by accepted target analysis plan",
+   "unit": "source_sast.psalm_normalize"
+  },
+  {
+   "count": 1,
+   "gap": "project config and installed dependency stubs may be required",
+   "unit": "source_sast.psalm_normalize"
+  },
+  {
+   "count": 1,
+   "gap": "not selected by accepted target analysis plan",
+   "unit": "source_sast.psalm_scan"
+  },
+  {
+   "count": 1,
+   "gap": "project config and installed dependency stubs may be required",
+   "unit": "source_sast.psalm_scan"
+  },
+  {
+   "count": 2,
+   "gap": "SEI CERT rule pack: C and C++ are analyzed without preprocessing; macro-expanded code is not seen",
+   "unit": "source_sast.semgrep_index"
+  },
+  {
+   "count": 2,
+   "gap": "SEI CERT rule pack: findings evidence only the implemented subset of each mapped CERT rule; CERT rules with REQUIRES_* or UNSUPPORTED_* status produce no findings (rules/sei-cert/COVERAGE.md), so an absence of findings is not CERT conformance",
+   "unit": "source_sast.semgrep_index"
+  },
+  {
+   "count": 1,
+   "gap": "SEI CERT rule pack: C and C++ are analyzed without preprocessing; macro-expanded code is not seen",
+   "unit": "source_sast.semgrep_normalize"
+  },
+  {
+   "count": 1,
+   "gap": "SEI CERT rule pack: findings evidence only the implemented subset of each mapped CERT rule; CERT rules with REQUIRES_* or UNSUPPORTED_* status produce no findings (rules/sei-cert/COVERAGE.md), so an absence of findings is not CERT conformance",
+   "unit": "source_sast.semgrep_normalize"
+  },
+  {
+   "count": 1,
+   "gap": "SEI CERT rule pack: C and C++ are analyzed without preprocessing; macro-expanded code is not seen",
+   "unit": "source_sast.semgrep_scan"
+  },
+  {
+   "count": 1,
+   "gap": "SEI CERT rule pack: findings evidence only the implemented subset of each mapped CERT rule; CERT rules with REQUIRES_* or UNSUPPORTED_* status produce no findings (rules/sei-cert/COVERAGE.md), so an absence of findings is not CERT conformance",
+   "unit": "source_sast.semgrep_scan"
+  },
+  {
+   "count": 2,
+   "gap": "not selected by accepted target analysis plan",
+   "unit": "source_sast.shellcheck_index"
+  },
+  {
+   "count": 1,
+   "gap": "not selected by accepted target analysis plan",
+   "unit": "source_sast.shellcheck_normalize"
+  },
+  {
+   "count": 1,
+   "gap": "not selected by accepted target analysis plan",
+   "unit": "source_sast.shellcheck_scan"
+  },
+  {
+   "count": 2,
+   "gap": "not selected by accepted target analysis plan",
+   "unit": "source_sast.spotbugs_index"
+  },
+  {
+   "count": 1,
+   "gap": "not selected by accepted target analysis plan",
+   "unit": "source_sast.spotbugs_normalize"
+  },
+  {
+   "count": 1,
+   "gap": "not selected by accepted target analysis plan",
+   "unit": "source_sast.spotbugs_scan"
+  },
+  {
+   "count": 2,
+   "gap": "Grype coverage was configured disabled by tools.disable_grype",
+   "unit": "vulnerability_matching.grype_index"
+  },
+  {
+   "count": 2,
+   "gap": "directory coverage only; no cataloged OCI/archive artifact",
+   "unit": "vulnerability_matching.grype_index"
+  },
+  {
+   "count": 1,
+   "gap": "Grype coverage was configured disabled by tools.disable_grype",
+   "unit": "vulnerability_matching.grype_normalize"
+  },
+  {
+   "count": 1,
+   "gap": "directory coverage only; no cataloged OCI/archive artifact",
+   "unit": "vulnerability_matching.grype_normalize"
+  },
+  {
+   "count": 1,
+   "gap": "Grype coverage was configured disabled by tools.disable_grype",
+   "unit": "vulnerability_matching.grype_scan"
+  },
+  {
+   "count": 1,
+   "gap": "directory coverage only; no cataloged OCI/archive artifact",
+   "unit": "vulnerability_matching.grype_scan"
+  },
+  {
+   "count": 2,
+   "gap": "not selected by accepted target analysis plan",
+   "unit": "vulnerability_matching.osv_scanner_index"
+  },
+  {
+   "count": 1,
+   "gap": "not selected by accepted target analysis plan",
+   "unit": "vulnerability_matching.osv_scanner_normalize"
+  },
+  {
+   "count": 1,
+   "gap": "not selected by accepted target analysis plan",
+   "unit": "vulnerability_matching.osv_scanner_scan"
+  }
+ ],
+ "handoff": {
+  "completion_status": "SUCCEEDED",
+  "schema_identity": "appsec-review/evidence-collection-job/1",
+  "status": "ACCEPTED",
+  "upstream_jobs": [
+   "job_ci_configuration_analysis",
+   "job_review_intake",
+   "job_source_history_analysis",
+   "job_target_analysis_plan",
+   "job_target_catalog"
+  ]
+ },
+ "job_id": "job_evidence_collection",
+ "outputs": {
+  "binary_hardening.blint_index": {
+   "artifact": {
+    "path": "data/indices/observations/blint/<sha256>.sqlite",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "checkpoint_reused": false,
+   "index_identity": {
+    "fingerprint": "<sha256>",
+    "name": "observations",
+    "producer": {
+     "job": "job_evidence_collection",
+     "producer": "tool-blint"
+    },
+    "relative_path": "data/indices/observations/blint/<sha256>.sqlite",
+    "schema": "appsec-review/retrieval-index/2",
+    "sha256": "<sha256>",
+    "shard_id": "blint"
+   },
+   "index_reused": false,
+   "not_applicable_inputs": {
+    "by_reason": {},
+    "count": 0,
+    "disposition": "SKIPPED_NA",
+    "items": [],
+    "schema": "appsec-review/tool-input-support/1",
+    "truncated": false
+   },
+   "record_count": 0,
+   "terminal_status": "NOT_APPLICABLE",
+   "tool_id": "tool-blint"
+  },
+  "binary_hardening.blint_normalize": {
+   "artifact": {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/binary_hardening/tasks/blint_scan/evidence.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "capability": "binary_hardening",
+   "checkpoint_reused": false,
+   "normalization_reused": false,
+   "normalized_artifact": {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/binary_hardening/tasks/blint_scan/evidence.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "normalizer_identity": "static-evidence/3",
+   "not_applicable_inputs": {
+    "by_reason": {},
+    "count": 0,
+    "disposition": "SKIPPED_NA",
+    "items": [],
+    "schema": "appsec-review/tool-input-support/1",
+    "truncated": false
+   },
+   "record_count": 0,
+   "terminal_status": "NOT_APPLICABLE",
+   "tool_id": "tool-blint"
+  },
+  "binary_hardening.blint_scan": {
+   "artifact": {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/binary_hardening/tasks/blint_scan/evidence.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "capability": "binary_hardening",
+   "checkpoint_reused": false,
+   "not_applicable_inputs": {
+    "by_reason": {},
+    "count": 0,
+    "disposition": "SKIPPED_NA",
+    "items": [],
+    "schema": "appsec-review/tool-input-support/1",
+    "truncated": false
+   },
+   "record_count": 0,
+   "terminal_status": "NOT_APPLICABLE",
+   "tool_id": "tool-blint"
+  },
+  "configuration.checkov_index": {
+   "artifact": {
+    "path": "data/indices/observations/checkov/<sha256>.sqlite",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "checkpoint_reused": false,
+   "index_identity": {
+    "fingerprint": "<sha256>",
+    "name": "observations",
+    "producer": {
+     "job": "job_evidence_collection",
+     "producer": "tool-checkov"
+    },
+    "relative_path": "data/indices/observations/checkov/<sha256>.sqlite",
+    "schema": "appsec-review/retrieval-index/2",
+    "sha256": "<sha256>",
+    "shard_id": "checkov"
+   },
+   "index_reused": false,
+   "not_applicable_inputs": {
+    "by_reason": {
+     "Checkov accepted the input and reported no check, skip, or parse error": 10
+    },
+    "count": 10,
+    "disposition": "SKIPPED_NA",
+    "items": [
+     {
+      "disposition": "SKIPPED_NA",
+      "path": "CMakeLists.txt",
+      "reason": "Checkov accepted the input and reported no check, skip, or parse error",
+      "reason_code": "TOOL_REPORTED_UNSUPPORTED_INPUT",
+      "tool": "tool-checkov"
+     },
+     {
+      "disposition": "SKIPPED_NA",
+      "path": "README.md",
+      "reason": "Checkov accepted the input and reported no check, skip, or parse error",
+      "reason_code": "TOOL_REPORTED_UNSUPPORTED_INPUT",
+      "tool": "tool-checkov"
+     },
+     {
+      "disposition": "SKIPPED_NA",
+      "path": "include/relay/relay.hpp",
+      "reason": "Checkov accepted the input and reported no check, skip, or parse error",
+      "reason_code": "TOOL_REPORTED_UNSUPPORTED_INPUT",
+      "tool": "tool-checkov"
+     },
+     {
+      "disposition": "SKIPPED_NA",
+      "path": "src/config.cpp",
+      "reason": "Checkov accepted the input and reported no check, skip, or parse error",
+      "reason_code": "TOOL_REPORTED_UNSUPPORTED_INPUT",
+      "tool": "tool-checkov"
+     },
+     {
+      "disposition": "SKIPPED_NA",
+      "path": "src/diag.cpp",
+      "reason": "Checkov accepted the input and reported no check, skip, or parse error",
+      "reason_code": "TOOL_REPORTED_UNSUPPORTED_INPUT",
+      "tool": "tool-checkov"
+     },
+     {
+      "disposition": "SKIPPED_NA",
+      "path": "src/frame.cpp",
+      "reason": "Checkov accepted the input and reported no check, skip, or parse error",
+      "reason_code": "TOOL_REPORTED_UNSUPPORTED_INPUT",
+      "tool": "tool-checkov"
+     },
+     {
+      "disposition": "SKIPPED_NA",
+      "path": "src/log.cpp",
+      "reason": "Checkov accepted the input and reported no check, skip, or parse error",
+      "reason_code": "TOOL_REPORTED_UNSUPPORTED_INPUT",
+      "tool": "tool-checkov"
+     },
+     {
+      "disposition": "SKIPPED_NA",
+      "path": "src/main.cpp",
+      "reason": "Checkov accepted the input and reported no check, skip, or parse error",
+      "reason_code": "TOOL_REPORTED_UNSUPPORTED_INPUT",
+      "tool": "tool-checkov"
+     },
+     {
+      "disposition": "SKIPPED_NA",
+      "path": "src/packet.cpp",
+      "reason": "Checkov accepted the input and reported no check, skip, or parse error",
+      "reason_code": "TOOL_REPORTED_UNSUPPORTED_INPUT",
+      "tool": "tool-checkov"
+     },
+     {
+      "disposition": "SKIPPED_NA",
+      "path": "src/session.cpp",
+      "reason": "Checkov accepted the input and reported no check, skip, or parse error",
+      "reason_code": "TOOL_REPORTED_UNSUPPORTED_INPUT",
+      "tool": "tool-checkov"
+     }
+    ],
+    "schema": "appsec-review/tool-input-support/1",
+    "truncated": false
+   },
+   "record_count": 0,
+   "terminal_status": "SUCCEEDED",
+   "tool_id": "tool-checkov"
+  },
+  "configuration.checkov_normalize": {
+   "artifact": {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/configuration/tasks/checkov_scan/evidence.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "capability": "configuration",
+   "checkpoint": {
+    "path": "data/task-checkpoints/job_evidence_collection/tool-checkov/509c9b3de2b3f5ea00abb22d/checkpoint.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "checkpoint_identity": "<sha256>",
+   "checkpoint_reused": false,
+   "execution": {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/configuration/tasks/checkov_scan/scratch/attempt_01/execution.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "normalization_reused": false,
+   "normalized_artifact": {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/configuration/tasks/checkov_scan/evidence.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "normalizer_identity": "static-evidence/3",
+   "not_applicable_inputs": {
+    "by_reason": {
+     "Checkov accepted the input and reported no check, skip, or parse error": 10
+    },
+    "count": 10,
+    "disposition": "SKIPPED_NA",
+    "items": [
+     {
+      "disposition": "SKIPPED_NA",
+      "path": "CMakeLists.txt",
+      "reason": "Checkov accepted the input and reported no check, skip, or parse error",
+      "reason_code": "TOOL_REPORTED_UNSUPPORTED_INPUT",
+      "tool": "tool-checkov"
+     },
+     {
+      "disposition": "SKIPPED_NA",
+      "path": "README.md",
+      "reason": "Checkov accepted the input and reported no check, skip, or parse error",
+      "reason_code": "TOOL_REPORTED_UNSUPPORTED_INPUT",
+      "tool": "tool-checkov"
+     },
+     {
+      "disposition": "SKIPPED_NA",
+      "path": "include/relay/relay.hpp",
+      "reason": "Checkov accepted the input and reported no check, skip, or parse error",
+      "reason_code": "TOOL_REPORTED_UNSUPPORTED_INPUT",
+      "tool": "tool-checkov"
+     },
+     {
+      "disposition": "SKIPPED_NA",
+      "path": "src/config.cpp",
+      "reason": "Checkov accepted the input and reported no check, skip, or parse error",
+      "reason_code": "TOOL_REPORTED_UNSUPPORTED_INPUT",
+      "tool": "tool-checkov"
+     },
+     {
+      "disposition": "SKIPPED_NA",
+      "path": "src/diag.cpp",
+      "reason": "Checkov accepted the input and reported no check, skip, or parse error",
+      "reason_code": "TOOL_REPORTED_UNSUPPORTED_INPUT",
+      "tool": "tool-checkov"
+     },
+     {
+      "disposition": "SKIPPED_NA",
+      "path": "src/frame.cpp",
+      "reason": "Checkov accepted the input and reported no check, skip, or parse error",
+      "reason_code": "TOOL_REPORTED_UNSUPPORTED_INPUT",
+      "tool": "tool-checkov"
+     },
+     {
+      "disposition": "SKIPPED_NA",
+      "path": "src/log.cpp",
+      "reason": "Checkov accepted the input and reported no check, skip, or parse error",
+      "reason_code": "TOOL_REPORTED_UNSUPPORTED_INPUT",
+      "tool": "tool-checkov"
+     },
+     {
+      "disposition": "SKIPPED_NA",
+      "path": "src/main.cpp",
+      "reason": "Checkov accepted the input and reported no check, skip, or parse error",
+      "reason_code": "TOOL_REPORTED_UNSUPPORTED_INPUT",
+      "tool": "tool-checkov"
+     },
+     {
+      "disposition": "SKIPPED_NA",
+      "path": "src/packet.cpp",
+      "reason": "Checkov accepted the input and reported no check, skip, or parse error",
+      "reason_code": "TOOL_REPORTED_UNSUPPORTED_INPUT",
+      "tool": "tool-checkov"
+     },
+     {
+      "disposition": "SKIPPED_NA",
+      "path": "src/session.cpp",
+      "reason": "Checkov accepted the input and reported no check, skip, or parse error",
+      "reason_code": "TOOL_REPORTED_UNSUPPORTED_INPUT",
+      "tool": "tool-checkov"
+     }
+    ],
+    "schema": "appsec-review/tool-input-support/1",
+    "truncated": false
+   },
+   "record_count": 0,
+   "retry_count": 0,
+   "scanner_output": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/configuration/tasks/checkov_scan/scratch/attempt_01/raw/stdout.bin",
+   "terminal_status": "SUCCEEDED",
+   "tool_id": "tool-checkov"
+  },
+  "configuration.checkov_scan": {
+   "artifact": {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/configuration/tasks/checkov_scan/evidence.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "capability": "configuration",
+   "checkpoint": {
+    "path": "data/task-checkpoints/job_evidence_collection/tool-checkov/509c9b3de2b3f5ea00abb22d/checkpoint.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "checkpoint_identity": "<sha256>",
+   "checkpoint_reused": false,
+   "execution": {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/configuration/tasks/checkov_scan/scratch/attempt_01/execution.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "not_applicable_inputs": {
+    "by_reason": {
+     "Checkov accepted the input and reported no check, skip, or parse error": 10
+    },
+    "count": 10,
+    "disposition": "SKIPPED_NA",
+    "items": [
+     {
+      "disposition": "SKIPPED_NA",
+      "path": "CMakeLists.txt",
+      "reason": "Checkov accepted the input and reported no check, skip, or parse error",
+      "reason_code": "TOOL_REPORTED_UNSUPPORTED_INPUT",
+      "tool": "tool-checkov"
+     },
+     {
+      "disposition": "SKIPPED_NA",
+      "path": "README.md",
+      "reason": "Checkov accepted the input and reported no check, skip, or parse error",
+      "reason_code": "TOOL_REPORTED_UNSUPPORTED_INPUT",
+      "tool": "tool-checkov"
+     },
+     {
+      "disposition": "SKIPPED_NA",
+      "path": "include/relay/relay.hpp",
+      "reason": "Checkov accepted the input and reported no check, skip, or parse error",
+      "reason_code": "TOOL_REPORTED_UNSUPPORTED_INPUT",
+      "tool": "tool-checkov"
+     },
+     {
+      "disposition": "SKIPPED_NA",
+      "path": "src/config.cpp",
+      "reason": "Checkov accepted the input and reported no check, skip, or parse error",
+      "reason_code": "TOOL_REPORTED_UNSUPPORTED_INPUT",
+      "tool": "tool-checkov"
+     },
+     {
+      "disposition": "SKIPPED_NA",
+      "path": "src/diag.cpp",
+      "reason": "Checkov accepted the input and reported no check, skip, or parse error",
+      "reason_code": "TOOL_REPORTED_UNSUPPORTED_INPUT",
+      "tool": "tool-checkov"
+     },
+     {
+      "disposition": "SKIPPED_NA",
+      "path": "src/frame.cpp",
+      "reason": "Checkov accepted the input and reported no check, skip, or parse error",
+      "reason_code": "TOOL_REPORTED_UNSUPPORTED_INPUT",
+      "tool": "tool-checkov"
+     },
+     {
+      "disposition": "SKIPPED_NA",
+      "path": "src/log.cpp",
+      "reason": "Checkov accepted the input and reported no check, skip, or parse error",
+      "reason_code": "TOOL_REPORTED_UNSUPPORTED_INPUT",
+      "tool": "tool-checkov"
+     },
+     {
+      "disposition": "SKIPPED_NA",
+      "path": "src/main.cpp",
+      "reason": "Checkov accepted the input and reported no check, skip, or parse error",
+      "reason_code": "TOOL_REPORTED_UNSUPPORTED_INPUT",
+      "tool": "tool-checkov"
+     },
+     {
+      "disposition": "SKIPPED_NA",
+      "path": "src/packet.cpp",
+      "reason": "Checkov accepted the input and reported no check, skip, or parse error",
+      "reason_code": "TOOL_REPORTED_UNSUPPORTED_INPUT",
+      "tool": "tool-checkov"
+     },
+     {
+      "disposition": "SKIPPED_NA",
+      "path": "src/session.cpp",
+      "reason": "Checkov accepted the input and reported no check, skip, or parse error",
+      "reason_code": "TOOL_REPORTED_UNSUPPORTED_INPUT",
+      "tool": "tool-checkov"
+     }
+    ],
+    "schema": "appsec-review/tool-input-support/1",
+    "truncated": false
+   },
+   "record_count": 0,
+   "retry_count": 0,
+   "scanner_output": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/configuration/tasks/checkov_scan/scratch/attempt_01/raw/stdout.bin",
+   "terminal_status": "SUCCEEDED",
+   "tool_id": "tool-checkov"
+  },
+  "configuration.hadolint_index": {
+   "artifact": {
+    "path": "data/indices/observations/hadolint/<sha256>.sqlite",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "checkpoint_reused": false,
+   "index_identity": {
+    "fingerprint": "<sha256>",
+    "name": "observations",
+    "producer": {
+     "job": "job_evidence_collection",
+     "producer": "tool-hadolint"
+    },
+    "relative_path": "data/indices/observations/hadolint/<sha256>.sqlite",
+    "schema": "appsec-review/retrieval-index/2",
+    "sha256": "<sha256>",
+    "shard_id": "hadolint"
+   },
+   "index_reused": false,
+   "not_applicable_inputs": {
+    "by_reason": {},
+    "count": 0,
+    "disposition": "SKIPPED_NA",
+    "items": [],
+    "schema": "appsec-review/tool-input-support/1",
+    "truncated": false
+   },
+   "record_count": 0,
+   "terminal_status": "NOT_APPLICABLE",
+   "tool_id": "tool-hadolint"
+  },
+  "configuration.hadolint_normalize": {
+   "artifact": {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/configuration/tasks/hadolint_scan/evidence.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "capability": "configuration",
+   "checkpoint_reused": false,
+   "normalization_reused": false,
+   "normalized_artifact": {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/configuration/tasks/hadolint_scan/evidence.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "normalizer_identity": "static-evidence/3",
+   "not_applicable_inputs": {
+    "by_reason": {},
+    "count": 0,
+    "disposition": "SKIPPED_NA",
+    "items": [],
+    "schema": "appsec-review/tool-input-support/1",
+    "truncated": false
+   },
+   "record_count": 0,
+   "terminal_status": "NOT_APPLICABLE",
+   "tool_id": "tool-hadolint"
+  },
+  "configuration.hadolint_scan": {
+   "artifact": {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/configuration/tasks/hadolint_scan/evidence.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "capability": "configuration",
+   "checkpoint_reused": false,
+   "not_applicable_inputs": {
+    "by_reason": {},
+    "count": 0,
+    "disposition": "SKIPPED_NA",
+    "items": [],
+    "schema": "appsec-review/tool-input-support/1",
+    "truncated": false
+   },
+   "record_count": 0,
+   "terminal_status": "NOT_APPLICABLE",
+   "tool_id": "tool-hadolint"
+  },
+  "configuration.trivy_index": {
+   "artifact": {
+    "path": "data/indices/observations/trivy/<sha256>.sqlite",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "checkpoint_reused": false,
+   "index_identity": {
+    "fingerprint": "<sha256>",
+    "name": "observations",
+    "producer": {
+     "job": "job_evidence_collection",
+     "producer": "tool-trivy"
+    },
+    "relative_path": "data/indices/observations/trivy/<sha256>.sqlite",
+    "schema": "appsec-review/retrieval-index/2",
+    "sha256": "<sha256>",
+    "shard_id": "trivy"
+   },
+   "index_reused": false,
+   "not_applicable_inputs": {
+    "by_reason": {},
+    "count": 0,
+    "disposition": "SKIPPED_NA",
+    "items": [],
+    "schema": "appsec-review/tool-input-support/1",
+    "truncated": false
+   },
+   "record_count": 0,
+   "terminal_status": "NOT_APPLICABLE",
+   "tool_id": "tool-trivy"
+  },
+  "configuration.trivy_normalize": {
+   "artifact": {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/configuration/tasks/trivy_scan/evidence.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "capability": "configuration",
+   "checkpoint_reused": false,
+   "normalization_reused": false,
+   "normalized_artifact": {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/configuration/tasks/trivy_scan/evidence.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "normalizer_identity": "static-evidence/3",
+   "not_applicable_inputs": {
+    "by_reason": {},
+    "count": 0,
+    "disposition": "SKIPPED_NA",
+    "items": [],
+    "schema": "appsec-review/tool-input-support/1",
+    "truncated": false
+   },
+   "record_count": 0,
+   "terminal_status": "NOT_APPLICABLE",
+   "tool_id": "tool-trivy"
+  },
+  "configuration.trivy_scan": {
+   "artifact": {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/configuration/tasks/trivy_scan/evidence.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "capability": "configuration",
+   "checkpoint_reused": false,
+   "not_applicable_inputs": {
+    "by_reason": {},
+    "count": 0,
+    "disposition": "SKIPPED_NA",
+    "items": [],
+    "schema": "appsec-review/tool-input-support/1",
+    "truncated": false
+   },
+   "record_count": 0,
+   "terminal_status": "NOT_APPLICABLE",
+   "tool_id": "tool-trivy"
+  },
+  "configuration.zizmor_index": {
+   "artifact": {
+    "path": "data/indices/observations/zizmor/<sha256>.sqlite",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "checkpoint_reused": false,
+   "index_identity": {
+    "fingerprint": "<sha256>",
+    "name": "observations",
+    "producer": {
+     "job": "job_evidence_collection",
+     "producer": "tool-zizmor"
+    },
+    "relative_path": "data/indices/observations/zizmor/<sha256>.sqlite",
+    "schema": "appsec-review/retrieval-index/2",
+    "sha256": "<sha256>",
+    "shard_id": "zizmor"
+   },
+   "index_reused": false,
+   "not_applicable_inputs": {
+    "by_reason": {},
+    "count": 0,
+    "disposition": "SKIPPED_NA",
+    "items": [],
+    "schema": "appsec-review/tool-input-support/1",
+    "truncated": false
+   },
+   "record_count": 0,
+   "terminal_status": "NOT_APPLICABLE",
+   "tool_id": "tool-zizmor"
+  },
+  "configuration.zizmor_normalize": {
+   "artifact": {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/configuration/tasks/zizmor_scan/evidence.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "capability": "configuration",
+   "checkpoint_reused": false,
+   "normalization_reused": false,
+   "normalized_artifact": {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/configuration/tasks/zizmor_scan/evidence.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "normalizer_identity": "static-evidence/3",
+   "not_applicable_inputs": {
+    "by_reason": {},
+    "count": 0,
+    "disposition": "SKIPPED_NA",
+    "items": [],
+    "schema": "appsec-review/tool-input-support/1",
+    "truncated": false
+   },
+   "record_count": 0,
+   "terminal_status": "NOT_APPLICABLE",
+   "tool_id": "tool-zizmor"
+  },
+  "configuration.zizmor_scan": {
+   "artifact": {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/configuration/tasks/zizmor_scan/evidence.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "capability": "configuration",
+   "checkpoint_reused": false,
+   "not_applicable_inputs": {
+    "by_reason": {},
+    "count": 0,
+    "disposition": "SKIPPED_NA",
+    "items": [],
+    "schema": "appsec-review/tool-input-support/1",
+    "truncated": false
+   },
+   "record_count": 0,
+   "terminal_status": "NOT_APPLICABLE",
+   "tool_id": "tool-zizmor"
+  },
+  "evidence_publication.assemble_manifest": {
+   "dispositions": [
+    {
+     "checkpoint_reused": false,
+     "index_reused": false,
+     "not_applicable_input_count": 0,
+     "record_count": 0,
+     "shard_id": "gitleaks",
+     "terminal_status": "SUCCEEDED",
+     "tool_id": "tool-gitleaks"
+    },
+    {
+     "checkpoint_reused": false,
+     "index_reused": false,
+     "not_applicable_input_count": 0,
+     "record_count": 3,
+     "shard_id": "semgrep",
+     "terminal_status": "SUCCEEDED",
+     "tool_id": "tool-semgrep"
+    },
+    {
+     "checkpoint_reused": false,
+     "index_reused": false,
+     "not_applicable_input_count": 0,
+     "record_count": 3,
+     "shard_id": "opengrep",
+     "terminal_status": "SUCCEEDED",
+     "tool_id": "tool-opengrep"
+    },
+    {
+     "checkpoint_reused": false,
+     "index_reused": false,
+     "not_applicable_input_count": 0,
+     "record_count": 0,
+     "shard_id": "gosec",
+     "terminal_status": "NOT_APPLICABLE",
+     "tool_id": "tool-gosec"
+    },
+    {
+     "checkpoint_reused": false,
+     "index_reused": false,
+     "not_applicable_input_count": 0,
+     "record_count": 0,
+     "shard_id": "mobsfscan",
+     "terminal_status": "NOT_APPLICABLE",
+     "tool_id": "tool-mobsfscan"
+    },
+    {
+     "checkpoint_reused": false,
+     "index_reused": false,
+     "not_applicable_input_count": 0,
+     "record_count": 0,
+     "shard_id": "shellcheck",
+     "terminal_status": "NOT_APPLICABLE",
+     "tool_id": "tool-shellcheck"
+    },
+    {
+     "checkpoint_reused": false,
+     "index_reused": false,
+     "not_applicable_input_count": 0,
+     "record_count": 0,
+     "shard_id": "phpcs",
+     "terminal_status": "NOT_APPLICABLE",
+     "tool_id": "tool-phpcs"
+    },
+    {
+     "checkpoint_reused": false,
+     "index_reused": false,
+     "not_applicable_input_count": 0,
+     "record_count": 0,
+     "shard_id": "phpstan",
+     "terminal_status": "NOT_APPLICABLE",
+     "tool_id": "tool-phpstan"
+    },
+    {
+     "checkpoint_reused": false,
+     "index_reused": false,
+     "not_applicable_input_count": 0,
+     "record_count": 0,
+     "shard_id": "psalm",
+     "terminal_status": "NOT_APPLICABLE",
+     "tool_id": "tool-psalm"
+    },
+    {
+     "checkpoint_reused": false,
+     "index_reused": false,
+     "not_applicable_input_count": 0,
+     "record_count": 0,
+     "shard_id": "spotbugs",
+     "terminal_status": "NOT_APPLICABLE",
+     "tool_id": "tool-spotbugs"
+    },
+    {
+     "checkpoint_reused": false,
+     "index_reused": false,
+     "not_applicable_input_count": 0,
+     "record_count": 13,
+     "shard_id": "cppcheck",
+     "terminal_status": "SUCCEEDED",
+     "tool_id": "tool-cppcheck"
+    },
+    {
+     "checkpoint_reused": false,
+     "index_reused": false,
+     "not_applicable_input_count": 0,
+     "record_count": 0,
+     "shard_id": "pmd",
+     "terminal_status": "NOT_APPLICABLE",
+     "tool_id": "tool-pmd"
+    },
+    {
+     "checkpoint_reused": false,
+     "index_reused": false,
+     "not_applicable_input_count": 0,
+     "record_count": 0,
+     "shard_id": "syft",
+     "terminal_status": "SUCCEEDED",
+     "tool_id": "tool-syft"
+    },
+    {
+     "checkpoint_reused": false,
+     "index_reused": false,
+     "not_applicable_input_count": 0,
+     "record_count": 0,
+     "shard_id": "osv_scanner",
+     "terminal_status": "NOT_APPLICABLE",
+     "tool_id": "tool-osv-scanner"
+    },
+    {
+     "checkpoint_reused": false,
+     "index_reused": false,
+     "not_applicable_input_count": 0,
+     "record_count": 0,
+     "shard_id": "grype",
+     "terminal_status": "NOT_APPLICABLE",
+     "tool_id": "tool-grype"
+    },
+    {
+     "checkpoint_reused": false,
+     "index_reused": false,
+     "not_applicable_input_count": 0,
+     "record_count": 0,
+     "shard_id": "hadolint",
+     "terminal_status": "NOT_APPLICABLE",
+     "tool_id": "tool-hadolint"
+    },
+    {
+     "checkpoint_reused": false,
+     "index_reused": false,
+     "not_applicable_input_count": 10,
+     "record_count": 0,
+     "shard_id": "checkov",
+     "terminal_status": "SUCCEEDED",
+     "tool_id": "tool-checkov"
+    },
+    {
+     "checkpoint_reused": false,
+     "index_reused": false,
+     "not_applicable_input_count": 0,
+     "record_count": 0,
+     "shard_id": "trivy",
+     "terminal_status": "NOT_APPLICABLE",
+     "tool_id": "tool-trivy"
+    },
+    {
+     "checkpoint_reused": false,
+     "index_reused": false,
+     "not_applicable_input_count": 0,
+     "record_count": 0,
+     "shard_id": "zizmor",
+     "terminal_status": "NOT_APPLICABLE",
+     "tool_id": "tool-zizmor"
+    },
+    {
+     "checkpoint_reused": false,
+     "index_reused": false,
+     "not_applicable_input_count": 0,
+     "record_count": 0,
+     "shard_id": "blint",
+     "terminal_status": "NOT_APPLICABLE",
+     "tool_id": "tool-blint"
+    }
+   ],
+   "index_manifest": {
+    "path": "data/indices/manifests/evidence-<attempt>.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "item_count": 19,
+   "not_applicable_inputs": {
+    "by_reason": {
+     "Checkov accepted the input and reported no check, skip, or parse error": 10
+    },
+    "count": 10,
+    "disposition": "SKIPPED_NA",
+    "items": [
+     {
+      "disposition": "SKIPPED_NA",
+      "path": "CMakeLists.txt",
+      "reason": "Checkov accepted the input and reported no check, skip, or parse error",
+      "reason_code": "TOOL_REPORTED_UNSUPPORTED_INPUT",
+      "tool": "tool-checkov"
+     },
+     {
+      "disposition": "SKIPPED_NA",
+      "path": "README.md",
+      "reason": "Checkov accepted the input and reported no check, skip, or parse error",
+      "reason_code": "TOOL_REPORTED_UNSUPPORTED_INPUT",
+      "tool": "tool-checkov"
+     },
+     {
+      "disposition": "SKIPPED_NA",
+      "path": "include/relay/relay.hpp",
+      "reason": "Checkov accepted the input and reported no check, skip, or parse error",
+      "reason_code": "TOOL_REPORTED_UNSUPPORTED_INPUT",
+      "tool": "tool-checkov"
+     },
+     {
+      "disposition": "SKIPPED_NA",
+      "path": "src/config.cpp",
+      "reason": "Checkov accepted the input and reported no check, skip, or parse error",
+      "reason_code": "TOOL_REPORTED_UNSUPPORTED_INPUT",
+      "tool": "tool-checkov"
+     },
+     {
+      "disposition": "SKIPPED_NA",
+      "path": "src/diag.cpp",
+      "reason": "Checkov accepted the input and reported no check, skip, or parse error",
+      "reason_code": "TOOL_REPORTED_UNSUPPORTED_INPUT",
+      "tool": "tool-checkov"
+     },
+     {
+      "disposition": "SKIPPED_NA",
+      "path": "src/frame.cpp",
+      "reason": "Checkov accepted the input and reported no check, skip, or parse error",
+      "reason_code": "TOOL_REPORTED_UNSUPPORTED_INPUT",
+      "tool": "tool-checkov"
+     },
+     {
+      "disposition": "SKIPPED_NA",
+      "path": "src/log.cpp",
+      "reason": "Checkov accepted the input and reported no check, skip, or parse error",
+      "reason_code": "TOOL_REPORTED_UNSUPPORTED_INPUT",
+      "tool": "tool-checkov"
+     },
+     {
+      "disposition": "SKIPPED_NA",
+      "path": "src/main.cpp",
+      "reason": "Checkov accepted the input and reported no check, skip, or parse error",
+      "reason_code": "TOOL_REPORTED_UNSUPPORTED_INPUT",
+      "tool": "tool-checkov"
+     },
+     {
+      "disposition": "SKIPPED_NA",
+      "path": "src/packet.cpp",
+      "reason": "Checkov accepted the input and reported no check, skip, or parse error",
+      "reason_code": "TOOL_REPORTED_UNSUPPORTED_INPUT",
+      "tool": "tool-checkov"
+     },
+     {
+      "disposition": "SKIPPED_NA",
+      "path": "src/session.cpp",
+      "reason": "Checkov accepted the input and reported no check, skip, or parse error",
+      "reason_code": "TOOL_REPORTED_UNSUPPORTED_INPUT",
+      "tool": "tool-checkov"
+     }
+    ],
+    "schema": "appsec-review/tool-input-support/1",
+    "truncated": false
+   },
+   "shards": [
+    {
+     "fingerprint": "<sha256>",
+     "name": "observations",
+     "producer": {
+      "job": "job_evidence_collection",
+      "producer": "tool-gitleaks"
+     },
+     "relative_path": "data/indices/observations/gitleaks/<sha256>.sqlite",
+     "schema": "appsec-review/retrieval-index/2",
+     "sha256": "<sha256>",
+     "shard_id": "gitleaks"
+    },
+    {
+     "fingerprint": "<sha256>",
+     "name": "observations",
+     "producer": {
+      "job": "job_evidence_collection",
+      "producer": "tool-semgrep"
+     },
+     "relative_path": "data/indices/observations/semgrep/<sha256>.sqlite",
+     "schema": "appsec-review/retrieval-index/2",
+     "sha256": "<sha256>",
+     "shard_id": "semgrep"
+    },
+    {
+     "fingerprint": "<sha256>",
+     "name": "observations",
+     "producer": {
+      "job": "job_evidence_collection",
+      "producer": "tool-opengrep"
+     },
+     "relative_path": "data/indices/observations/opengrep/<sha256>.sqlite",
+     "schema": "appsec-review/retrieval-index/2",
+     "sha256": "<sha256>",
+     "shard_id": "opengrep"
+    },
+    {
+     "fingerprint": "<sha256>",
+     "name": "observations",
+     "producer": {
+      "job": "job_evidence_collection",
+      "producer": "tool-gosec"
+     },
+     "relative_path": "data/indices/observations/gosec/<sha256>.sqlite",
+     "schema": "appsec-review/retrieval-index/2",
+     "sha256": "<sha256>",
+     "shard_id": "gosec"
+    },
+    {
+     "fingerprint": "<sha256>",
+     "name": "observations",
+     "producer": {
+      "job": "job_evidence_collection",
+      "producer": "tool-mobsfscan"
+     },
+     "relative_path": "data/indices/observations/mobsfscan/<sha256>.sqlite",
+     "schema": "appsec-review/retrieval-index/2",
+     "sha256": "<sha256>",
+     "shard_id": "mobsfscan"
+    },
+    {
+     "fingerprint": "<sha256>",
+     "name": "observations",
+     "producer": {
+      "job": "job_evidence_collection",
+      "producer": "tool-shellcheck"
+     },
+     "relative_path": "data/indices/observations/shellcheck/<sha256>.sqlite",
+     "schema": "appsec-review/retrieval-index/2",
+     "sha256": "<sha256>",
+     "shard_id": "shellcheck"
+    },
+    {
+     "fingerprint": "<sha256>",
+     "name": "observations",
+     "producer": {
+      "job": "job_evidence_collection",
+      "producer": "tool-phpcs"
+     },
+     "relative_path": "data/indices/observations/phpcs/<sha256>.sqlite",
+     "schema": "appsec-review/retrieval-index/2",
+     "sha256": "<sha256>",
+     "shard_id": "phpcs"
+    },
+    {
+     "fingerprint": "<sha256>",
+     "name": "observations",
+     "producer": {
+      "job": "job_evidence_collection",
+      "producer": "tool-phpstan"
+     },
+     "relative_path": "data/indices/observations/phpstan/<sha256>.sqlite",
+     "schema": "appsec-review/retrieval-index/2",
+     "sha256": "<sha256>",
+     "shard_id": "phpstan"
+    },
+    {
+     "fingerprint": "<sha256>",
+     "name": "observations",
+     "producer": {
+      "job": "job_evidence_collection",
+      "producer": "tool-psalm"
+     },
+     "relative_path": "data/indices/observations/psalm/<sha256>.sqlite",
+     "schema": "appsec-review/retrieval-index/2",
+     "sha256": "<sha256>",
+     "shard_id": "psalm"
+    },
+    {
+     "fingerprint": "<sha256>",
+     "name": "observations",
+     "producer": {
+      "job": "job_evidence_collection",
+      "producer": "tool-spotbugs"
+     },
+     "relative_path": "data/indices/observations/spotbugs/<sha256>.sqlite",
+     "schema": "appsec-review/retrieval-index/2",
+     "sha256": "<sha256>",
+     "shard_id": "spotbugs"
+    },
+    {
+     "fingerprint": "<sha256>",
+     "name": "observations",
+     "producer": {
+      "job": "job_evidence_collection",
+      "producer": "tool-cppcheck"
+     },
+     "relative_path": "data/indices/observations/cppcheck/<sha256>.sqlite",
+     "schema": "appsec-review/retrieval-index/2",
+     "sha256": "<sha256>",
+     "shard_id": "cppcheck"
+    },
+    {
+     "fingerprint": "<sha256>",
+     "name": "observations",
+     "producer": {
+      "job": "job_evidence_collection",
+      "producer": "tool-pmd"
+     },
+     "relative_path": "data/indices/observations/pmd/<sha256>.sqlite",
+     "schema": "appsec-review/retrieval-index/2",
+     "sha256": "<sha256>",
+     "shard_id": "pmd"
+    },
+    {
+     "fingerprint": "<sha256>",
+     "name": "observations",
+     "producer": {
+      "job": "job_evidence_collection",
+      "producer": "tool-syft"
+     },
+     "relative_path": "data/indices/observations/syft/<sha256>.sqlite",
+     "schema": "appsec-review/retrieval-index/2",
+     "sha256": "<sha256>",
+     "shard_id": "syft"
+    },
+    {
+     "fingerprint": "<sha256>",
+     "name": "observations",
+     "producer": {
+      "job": "job_evidence_collection",
+      "producer": "tool-osv-scanner"
+     },
+     "relative_path": "data/indices/observations/osv_scanner/<sha256>.sqlite",
+     "schema": "appsec-review/retrieval-index/2",
+     "sha256": "<sha256>",
+     "shard_id": "osv_scanner"
+    },
+    {
+     "fingerprint": "<sha256>",
+     "name": "observations",
+     "producer": {
+      "job": "job_evidence_collection",
+      "producer": "tool-grype"
+     },
+     "relative_path": "data/indices/observations/grype/<sha256>.sqlite",
+     "schema": "appsec-review/retrieval-index/2",
+     "sha256": "<sha256>",
+     "shard_id": "grype"
+    },
+    {
+     "fingerprint": "<sha256>",
+     "name": "observations",
+     "producer": {
+      "job": "job_evidence_collection",
+      "producer": "tool-hadolint"
+     },
+     "relative_path": "data/indices/observations/hadolint/<sha256>.sqlite",
+     "schema": "appsec-review/retrieval-index/2",
+     "sha256": "<sha256>",
+     "shard_id": "hadolint"
+    },
+    {
+     "fingerprint": "<sha256>",
+     "name": "observations",
+     "producer": {
+      "job": "job_evidence_collection",
+      "producer": "tool-checkov"
+     },
+     "relative_path": "data/indices/observations/checkov/<sha256>.sqlite",
+     "schema": "appsec-review/retrieval-index/2",
+     "sha256": "<sha256>",
+     "shard_id": "checkov"
+    },
+    {
+     "fingerprint": "<sha256>",
+     "name": "observations",
+     "producer": {
+      "job": "job_evidence_collection",
+      "producer": "tool-trivy"
+     },
+     "relative_path": "data/indices/observations/trivy/<sha256>.sqlite",
+     "schema": "appsec-review/retrieval-index/2",
+     "sha256": "<sha256>",
+     "shard_id": "trivy"
+    },
+    {
+     "fingerprint": "<sha256>",
+     "name": "observations",
+     "producer": {
+      "job": "job_evidence_collection",
+      "producer": "tool-zizmor"
+     },
+     "relative_path": "data/indices/observations/zizmor/<sha256>.sqlite",
+     "schema": "appsec-review/retrieval-index/2",
+     "sha256": "<sha256>",
+     "shard_id": "zizmor"
+    },
+    {
+     "fingerprint": "<sha256>",
+     "name": "observations",
+     "producer": {
+      "job": "job_evidence_collection",
+      "producer": "tool-blint"
+     },
+     "relative_path": "data/indices/observations/blint/<sha256>.sqlite",
+     "schema": "appsec-review/retrieval-index/2",
+     "sha256": "<sha256>",
+     "shard_id": "blint"
+    }
+   ],
+   "unsupported_coverage": {
+    "count": 0,
+    "gap": null,
+    "kind": "unsupported-language",
+    "languages": {},
+    "paths": [],
+    "truncated": false
+   }
+  },
+  "evidence_publication.publish_handoff": {
+   "artifact": {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/evidence_publication/tasks/publish_handoff/handoff.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "dispositions": [
+    {
+     "checkpoint_reused": false,
+     "index_reused": false,
+     "not_applicable_input_count": 0,
+     "record_count": 0,
+     "shard_id": "gitleaks",
+     "terminal_status": "SUCCEEDED",
+     "tool_id": "tool-gitleaks"
+    },
+    {
+     "checkpoint_reused": false,
+     "index_reused": false,
+     "not_applicable_input_count": 0,
+     "record_count": 3,
+     "shard_id": "semgrep",
+     "terminal_status": "SUCCEEDED",
+     "tool_id": "tool-semgrep"
+    },
+    {
+     "checkpoint_reused": false,
+     "index_reused": false,
+     "not_applicable_input_count": 0,
+     "record_count": 3,
+     "shard_id": "opengrep",
+     "terminal_status": "SUCCEEDED",
+     "tool_id": "tool-opengrep"
+    },
+    {
+     "checkpoint_reused": false,
+     "index_reused": false,
+     "not_applicable_input_count": 0,
+     "record_count": 0,
+     "shard_id": "gosec",
+     "terminal_status": "NOT_APPLICABLE",
+     "tool_id": "tool-gosec"
+    },
+    {
+     "checkpoint_reused": false,
+     "index_reused": false,
+     "not_applicable_input_count": 0,
+     "record_count": 0,
+     "shard_id": "mobsfscan",
+     "terminal_status": "NOT_APPLICABLE",
+     "tool_id": "tool-mobsfscan"
+    },
+    {
+     "checkpoint_reused": false,
+     "index_reused": false,
+     "not_applicable_input_count": 0,
+     "record_count": 0,
+     "shard_id": "shellcheck",
+     "terminal_status": "NOT_APPLICABLE",
+     "tool_id": "tool-shellcheck"
+    },
+    {
+     "checkpoint_reused": false,
+     "index_reused": false,
+     "not_applicable_input_count": 0,
+     "record_count": 0,
+     "shard_id": "phpcs",
+     "terminal_status": "NOT_APPLICABLE",
+     "tool_id": "tool-phpcs"
+    },
+    {
+     "checkpoint_reused": false,
+     "index_reused": false,
+     "not_applicable_input_count": 0,
+     "record_count": 0,
+     "shard_id": "phpstan",
+     "terminal_status": "NOT_APPLICABLE",
+     "tool_id": "tool-phpstan"
+    },
+    {
+     "checkpoint_reused": false,
+     "index_reused": false,
+     "not_applicable_input_count": 0,
+     "record_count": 0,
+     "shard_id": "psalm",
+     "terminal_status": "NOT_APPLICABLE",
+     "tool_id": "tool-psalm"
+    },
+    {
+     "checkpoint_reused": false,
+     "index_reused": false,
+     "not_applicable_input_count": 0,
+     "record_count": 0,
+     "shard_id": "spotbugs",
+     "terminal_status": "NOT_APPLICABLE",
+     "tool_id": "tool-spotbugs"
+    },
+    {
+     "checkpoint_reused": false,
+     "index_reused": false,
+     "not_applicable_input_count": 0,
+     "record_count": 13,
+     "shard_id": "cppcheck",
+     "terminal_status": "SUCCEEDED",
+     "tool_id": "tool-cppcheck"
+    },
+    {
+     "checkpoint_reused": false,
+     "index_reused": false,
+     "not_applicable_input_count": 0,
+     "record_count": 0,
+     "shard_id": "pmd",
+     "terminal_status": "NOT_APPLICABLE",
+     "tool_id": "tool-pmd"
+    },
+    {
+     "checkpoint_reused": false,
+     "index_reused": false,
+     "not_applicable_input_count": 0,
+     "record_count": 0,
+     "shard_id": "syft",
+     "terminal_status": "SUCCEEDED",
+     "tool_id": "tool-syft"
+    },
+    {
+     "checkpoint_reused": false,
+     "index_reused": false,
+     "not_applicable_input_count": 0,
+     "record_count": 0,
+     "shard_id": "osv_scanner",
+     "terminal_status": "NOT_APPLICABLE",
+     "tool_id": "tool-osv-scanner"
+    },
+    {
+     "checkpoint_reused": false,
+     "index_reused": false,
+     "not_applicable_input_count": 0,
+     "record_count": 0,
+     "shard_id": "grype",
+     "terminal_status": "NOT_APPLICABLE",
+     "tool_id": "tool-grype"
+    },
+    {
+     "checkpoint_reused": false,
+     "index_reused": false,
+     "not_applicable_input_count": 0,
+     "record_count": 0,
+     "shard_id": "hadolint",
+     "terminal_status": "NOT_APPLICABLE",
+     "tool_id": "tool-hadolint"
+    },
+    {
+     "checkpoint_reused": false,
+     "index_reused": false,
+     "not_applicable_input_count": 10,
+     "record_count": 0,
+     "shard_id": "checkov",
+     "terminal_status": "SUCCEEDED",
+     "tool_id": "tool-checkov"
+    },
+    {
+     "checkpoint_reused": false,
+     "index_reused": false,
+     "not_applicable_input_count": 0,
+     "record_count": 0,
+     "shard_id": "trivy",
+     "terminal_status": "NOT_APPLICABLE",
+     "tool_id": "tool-trivy"
+    },
+    {
+     "checkpoint_reused": false,
+     "index_reused": false,
+     "not_applicable_input_count": 0,
+     "record_count": 0,
+     "shard_id": "zizmor",
+     "terminal_status": "NOT_APPLICABLE",
+     "tool_id": "tool-zizmor"
+    },
+    {
+     "checkpoint_reused": false,
+     "index_reused": false,
+     "not_applicable_input_count": 0,
+     "record_count": 0,
+     "shard_id": "blint",
+     "terminal_status": "NOT_APPLICABLE",
+     "tool_id": "tool-blint"
+    }
+   ],
+   "index_manifest": {
+    "path": "data/indices/manifests/evidence-<attempt>.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "item_count": 19,
+   "not_applicable_inputs": {
+    "by_reason": {
+     "Checkov accepted the input and reported no check, skip, or parse error": 10
+    },
+    "count": 10,
+    "disposition": "SKIPPED_NA",
+    "items": [
+     {
+      "disposition": "SKIPPED_NA",
+      "path": "CMakeLists.txt",
+      "reason": "Checkov accepted the input and reported no check, skip, or parse error",
+      "reason_code": "TOOL_REPORTED_UNSUPPORTED_INPUT",
+      "tool": "tool-checkov"
+     },
+     {
+      "disposition": "SKIPPED_NA",
+      "path": "README.md",
+      "reason": "Checkov accepted the input and reported no check, skip, or parse error",
+      "reason_code": "TOOL_REPORTED_UNSUPPORTED_INPUT",
+      "tool": "tool-checkov"
+     },
+     {
+      "disposition": "SKIPPED_NA",
+      "path": "include/relay/relay.hpp",
+      "reason": "Checkov accepted the input and reported no check, skip, or parse error",
+      "reason_code": "TOOL_REPORTED_UNSUPPORTED_INPUT",
+      "tool": "tool-checkov"
+     },
+     {
+      "disposition": "SKIPPED_NA",
+      "path": "src/config.cpp",
+      "reason": "Checkov accepted the input and reported no check, skip, or parse error",
+      "reason_code": "TOOL_REPORTED_UNSUPPORTED_INPUT",
+      "tool": "tool-checkov"
+     },
+     {
+      "disposition": "SKIPPED_NA",
+      "path": "src/diag.cpp",
+      "reason": "Checkov accepted the input and reported no check, skip, or parse error",
+      "reason_code": "TOOL_REPORTED_UNSUPPORTED_INPUT",
+      "tool": "tool-checkov"
+     },
+     {
+      "disposition": "SKIPPED_NA",
+      "path": "src/frame.cpp",
+      "reason": "Checkov accepted the input and reported no check, skip, or parse error",
+      "reason_code": "TOOL_REPORTED_UNSUPPORTED_INPUT",
+      "tool": "tool-checkov"
+     },
+     {
+      "disposition": "SKIPPED_NA",
+      "path": "src/log.cpp",
+      "reason": "Checkov accepted the input and reported no check, skip, or parse error",
+      "reason_code": "TOOL_REPORTED_UNSUPPORTED_INPUT",
+      "tool": "tool-checkov"
+     },
+     {
+      "disposition": "SKIPPED_NA",
+      "path": "src/main.cpp",
+      "reason": "Checkov accepted the input and reported no check, skip, or parse error",
+      "reason_code": "TOOL_REPORTED_UNSUPPORTED_INPUT",
+      "tool": "tool-checkov"
+     },
+     {
+      "disposition": "SKIPPED_NA",
+      "path": "src/packet.cpp",
+      "reason": "Checkov accepted the input and reported no check, skip, or parse error",
+      "reason_code": "TOOL_REPORTED_UNSUPPORTED_INPUT",
+      "tool": "tool-checkov"
+     },
+     {
+      "disposition": "SKIPPED_NA",
+      "path": "src/session.cpp",
+      "reason": "Checkov accepted the input and reported no check, skip, or parse error",
+      "reason_code": "TOOL_REPORTED_UNSUPPORTED_INPUT",
+      "tool": "tool-checkov"
+     }
+    ],
+    "schema": "appsec-review/tool-input-support/1",
+    "truncated": false
+   },
+   "schema": "appsec-review/evidence-collection-handoff/1",
+   "unsupported_coverage": {
+    "count": 0,
+    "gap": null,
+    "kind": "unsupported-language",
+    "languages": {},
+    "paths": [],
+    "truncated": false
+   }
+  },
+  "secrets.gitleaks_index": {
+   "artifact": {
+    "path": "data/indices/observations/gitleaks/<sha256>.sqlite",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "checkpoint_reused": false,
+   "index_identity": {
+    "fingerprint": "<sha256>",
+    "name": "observations",
+    "producer": {
+     "job": "job_evidence_collection",
+     "producer": "tool-gitleaks"
+    },
+    "relative_path": "data/indices/observations/gitleaks/<sha256>.sqlite",
+    "schema": "appsec-review/retrieval-index/2",
+    "sha256": "<sha256>",
+    "shard_id": "gitleaks"
+   },
+   "index_reused": false,
+   "not_applicable_inputs": {
+    "by_reason": {},
+    "count": 0,
+    "disposition": "SKIPPED_NA",
+    "items": [],
+    "schema": "appsec-review/tool-input-support/1",
+    "truncated": false
+   },
+   "record_count": 0,
+   "terminal_status": "SUCCEEDED",
+   "tool_id": "tool-gitleaks"
+  },
+  "secrets.gitleaks_normalize": {
+   "artifact": {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/secrets/tasks/gitleaks_scan/evidence.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "capability": "secrets",
+   "checkpoint": {
+    "path": "data/task-checkpoints/job_evidence_collection/tool-gitleaks/bc5df1d9199f6e29ed0d5f2a/checkpoint.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "checkpoint_identity": "<sha256>",
+   "checkpoint_reused": false,
+   "execution": {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/secrets/tasks/gitleaks_scan/scratch/attempt_01/execution.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "normalization_reused": false,
+   "normalized_artifact": {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/secrets/tasks/gitleaks_scan/evidence.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "normalizer_identity": "static-evidence/3",
+   "not_applicable_inputs": {
+    "by_reason": {},
+    "count": 0,
+    "disposition": "SKIPPED_NA",
+    "items": [],
+    "schema": "appsec-review/tool-input-support/1",
+    "truncated": false
+   },
+   "record_count": 0,
+   "retry_count": 0,
+   "scanner_output": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/secrets/tasks/gitleaks_scan/scratch/attempt_01/output.json",
+   "terminal_status": "SUCCEEDED",
+   "tool_id": "tool-gitleaks"
+  },
+  "secrets.gitleaks_scan": {
+   "artifact": {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/secrets/tasks/gitleaks_scan/evidence.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "capability": "secrets",
+   "checkpoint": {
+    "path": "data/task-checkpoints/job_evidence_collection/tool-gitleaks/bc5df1d9199f6e29ed0d5f2a/checkpoint.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "checkpoint_identity": "<sha256>",
+   "checkpoint_reused": false,
+   "execution": {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/secrets/tasks/gitleaks_scan/scratch/attempt_01/execution.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "not_applicable_inputs": {
+    "by_reason": {},
+    "count": 0,
+    "disposition": "SKIPPED_NA",
+    "items": [],
+    "schema": "appsec-review/tool-input-support/1",
+    "truncated": false
+   },
+   "record_count": 0,
+   "retry_count": 0,
+   "scanner_output": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/secrets/tasks/gitleaks_scan/scratch/attempt_01/output.json",
+   "terminal_status": "SUCCEEDED",
+   "tool_id": "tool-gitleaks"
+  },
+  "software_inventory.syft_index": {
+   "artifact": {
+    "path": "data/indices/observations/syft/<sha256>.sqlite",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "checkpoint_reused": false,
+   "index_identity": {
+    "fingerprint": "<sha256>",
+    "name": "observations",
+    "producer": {
+     "job": "job_evidence_collection",
+     "producer": "tool-syft"
+    },
+    "relative_path": "data/indices/observations/syft/<sha256>.sqlite",
+    "schema": "appsec-review/retrieval-index/2",
+    "sha256": "<sha256>",
+    "shard_id": "syft"
+   },
+   "index_reused": false,
+   "not_applicable_inputs": {
+    "by_reason": {},
+    "count": 0,
+    "disposition": "SKIPPED_NA",
+    "items": [],
+    "schema": "appsec-review/tool-input-support/1",
+    "truncated": false
+   },
+   "record_count": 0,
+   "terminal_status": "SUCCEEDED",
+   "tool_id": "tool-syft"
+  },
+  "software_inventory.syft_normalize": {
+   "artifact": {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/software_inventory/tasks/syft_scan/evidence.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "capability": "software_inventory",
+   "checkpoint": {
+    "path": "data/task-checkpoints/job_evidence_collection/tool-syft/f564408ec458618bff76edea/checkpoint.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "checkpoint_identity": "<sha256>",
+   "checkpoint_reused": false,
+   "execution": {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/software_inventory/tasks/syft_scan/scratch/attempt_01/execution.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "normalization_reused": false,
+   "normalized_artifact": {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/software_inventory/tasks/syft_scan/evidence.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "normalizer_identity": "static-evidence/3",
+   "not_applicable_inputs": {
+    "by_reason": {},
+    "count": 0,
+    "disposition": "SKIPPED_NA",
+    "items": [],
+    "schema": "appsec-review/tool-input-support/1",
+    "truncated": false
+   },
+   "record_count": 0,
+   "retry_count": 0,
+   "scanner_output": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/software_inventory/tasks/syft_scan/scratch/attempt_01/output.json",
+   "terminal_status": "SUCCEEDED",
+   "tool_id": "tool-syft"
+  },
+  "software_inventory.syft_scan": {
+   "artifact": {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/software_inventory/tasks/syft_scan/evidence.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "capability": "software_inventory",
+   "checkpoint": {
+    "path": "data/task-checkpoints/job_evidence_collection/tool-syft/f564408ec458618bff76edea/checkpoint.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "checkpoint_identity": "<sha256>",
+   "checkpoint_reused": false,
+   "execution": {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/software_inventory/tasks/syft_scan/scratch/attempt_01/execution.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "not_applicable_inputs": {
+    "by_reason": {},
+    "count": 0,
+    "disposition": "SKIPPED_NA",
+    "items": [],
+    "schema": "appsec-review/tool-input-support/1",
+    "truncated": false
+   },
+   "record_count": 0,
+   "retry_count": 0,
+   "scanner_output": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/software_inventory/tasks/syft_scan/scratch/attempt_01/output.json",
+   "terminal_status": "SUCCEEDED",
+   "tool_id": "tool-syft"
+  },
+  "source_sast.cppcheck_index": {
+   "artifact": {
+    "path": "data/indices/observations/cppcheck/<sha256>.sqlite",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "checkpoint_reused": false,
+   "index_identity": {
+    "fingerprint": "<sha256>",
+    "name": "observations",
+    "producer": {
+     "job": "job_evidence_collection",
+     "producer": "tool-cppcheck"
+    },
+    "relative_path": "data/indices/observations/cppcheck/<sha256>.sqlite",
+    "schema": "appsec-review/retrieval-index/2",
+    "sha256": "<sha256>",
+    "shard_id": "cppcheck"
+   },
+   "index_reused": false,
+   "not_applicable_inputs": {
+    "by_reason": {},
+    "count": 0,
+    "disposition": "SKIPPED_NA",
+    "items": [],
+    "schema": "appsec-review/tool-input-support/1",
+    "truncated": false
+   },
+   "record_count": 13,
+   "terminal_status": "SUCCEEDED",
+   "tool_id": "tool-cppcheck"
+  },
+  "source_sast.cppcheck_normalize": {
+   "artifact": {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/source_sast/tasks/cppcheck_scan/evidence.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "capability": "source_sast",
+   "checkpoint": {
+    "path": "data/task-checkpoints/job_evidence_collection/tool-cppcheck/0cde154a0e585faaa6590298/checkpoint.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "checkpoint_identity": "<sha256>",
+   "checkpoint_reused": false,
+   "execution": {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/source_sast/tasks/cppcheck_scan/scratch/attempt_01/execution.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "normalization_reused": false,
+   "normalized_artifact": {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/source_sast/tasks/cppcheck_scan/evidence.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "normalizer_identity": "static-evidence/3",
+   "not_applicable_inputs": {
+    "by_reason": {},
+    "count": 0,
+    "disposition": "SKIPPED_NA",
+    "items": [],
+    "schema": "appsec-review/tool-input-support/1",
+    "truncated": false
+   },
+   "record_count": 13,
+   "retry_count": 0,
+   "scanner_output": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/source_sast/tasks/cppcheck_scan/scratch/attempt_01/output.xml",
+   "terminal_status": "SUCCEEDED",
+   "tool_id": "tool-cppcheck"
+  },
+  "source_sast.cppcheck_scan": {
+   "artifact": {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/source_sast/tasks/cppcheck_scan/evidence.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "capability": "source_sast",
+   "checkpoint": {
+    "path": "data/task-checkpoints/job_evidence_collection/tool-cppcheck/0cde154a0e585faaa6590298/checkpoint.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "checkpoint_identity": "<sha256>",
+   "checkpoint_reused": false,
+   "execution": {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/source_sast/tasks/cppcheck_scan/scratch/attempt_01/execution.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "not_applicable_inputs": {
+    "by_reason": {},
+    "count": 0,
+    "disposition": "SKIPPED_NA",
+    "items": [],
+    "schema": "appsec-review/tool-input-support/1",
+    "truncated": false
+   },
+   "record_count": 13,
+   "retry_count": 0,
+   "scanner_output": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/source_sast/tasks/cppcheck_scan/scratch/attempt_01/output.xml",
+   "terminal_status": "SUCCEEDED",
+   "tool_id": "tool-cppcheck"
+  },
+  "source_sast.gosec_index": {
+   "artifact": {
+    "path": "data/indices/observations/gosec/<sha256>.sqlite",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "checkpoint_reused": false,
+   "index_identity": {
+    "fingerprint": "<sha256>",
+    "name": "observations",
+    "producer": {
+     "job": "job_evidence_collection",
+     "producer": "tool-gosec"
+    },
+    "relative_path": "data/indices/observations/gosec/<sha256>.sqlite",
+    "schema": "appsec-review/retrieval-index/2",
+    "sha256": "<sha256>",
+    "shard_id": "gosec"
+   },
+   "index_reused": false,
+   "not_applicable_inputs": {
+    "by_reason": {},
+    "count": 0,
+    "disposition": "SKIPPED_NA",
+    "items": [],
+    "schema": "appsec-review/tool-input-support/1",
+    "truncated": false
+   },
+   "record_count": 0,
+   "terminal_status": "NOT_APPLICABLE",
+   "tool_id": "tool-gosec"
+  },
+  "source_sast.gosec_normalize": {
+   "artifact": {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/source_sast/tasks/gosec_scan/evidence.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "capability": "source_sast",
+   "checkpoint_reused": false,
+   "normalization_reused": false,
+   "normalized_artifact": {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/source_sast/tasks/gosec_scan/evidence.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "normalizer_identity": "static-evidence/3",
+   "not_applicable_inputs": {
+    "by_reason": {},
+    "count": 0,
+    "disposition": "SKIPPED_NA",
+    "items": [],
+    "schema": "appsec-review/tool-input-support/1",
+    "truncated": false
+   },
+   "record_count": 0,
+   "terminal_status": "NOT_APPLICABLE",
+   "tool_id": "tool-gosec"
+  },
+  "source_sast.gosec_scan": {
+   "artifact": {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/source_sast/tasks/gosec_scan/evidence.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "capability": "source_sast",
+   "checkpoint_reused": false,
+   "not_applicable_inputs": {
+    "by_reason": {},
+    "count": 0,
+    "disposition": "SKIPPED_NA",
+    "items": [],
+    "schema": "appsec-review/tool-input-support/1",
+    "truncated": false
+   },
+   "record_count": 0,
+   "terminal_status": "NOT_APPLICABLE",
+   "tool_id": "tool-gosec"
+  },
+  "source_sast.mobsfscan_index": {
+   "artifact": {
+    "path": "data/indices/observations/mobsfscan/<sha256>.sqlite",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "checkpoint_reused": false,
+   "index_identity": {
+    "fingerprint": "<sha256>",
+    "name": "observations",
+    "producer": {
+     "job": "job_evidence_collection",
+     "producer": "tool-mobsfscan"
+    },
+    "relative_path": "data/indices/observations/mobsfscan/<sha256>.sqlite",
+    "schema": "appsec-review/retrieval-index/2",
+    "sha256": "<sha256>",
+    "shard_id": "mobsfscan"
+   },
+   "index_reused": false,
+   "not_applicable_inputs": {
+    "by_reason": {},
+    "count": 0,
+    "disposition": "SKIPPED_NA",
+    "items": [],
+    "schema": "appsec-review/tool-input-support/1",
+    "truncated": false
+   },
+   "record_count": 0,
+   "terminal_status": "NOT_APPLICABLE",
+   "tool_id": "tool-mobsfscan"
+  },
+  "source_sast.mobsfscan_normalize": {
+   "artifact": {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/source_sast/tasks/mobsfscan_scan/evidence.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "capability": "source_sast",
+   "checkpoint_reused": false,
+   "normalization_reused": false,
+   "normalized_artifact": {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/source_sast/tasks/mobsfscan_scan/evidence.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "normalizer_identity": "static-evidence/3",
+   "not_applicable_inputs": {
+    "by_reason": {},
+    "count": 0,
+    "disposition": "SKIPPED_NA",
+    "items": [],
+    "schema": "appsec-review/tool-input-support/1",
+    "truncated": false
+   },
+   "record_count": 0,
+   "terminal_status": "NOT_APPLICABLE",
+   "tool_id": "tool-mobsfscan"
+  },
+  "source_sast.mobsfscan_scan": {
+   "artifact": {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/source_sast/tasks/mobsfscan_scan/evidence.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "capability": "source_sast",
+   "checkpoint_reused": false,
+   "not_applicable_inputs": {
+    "by_reason": {},
+    "count": 0,
+    "disposition": "SKIPPED_NA",
+    "items": [],
+    "schema": "appsec-review/tool-input-support/1",
+    "truncated": false
+   },
+   "record_count": 0,
+   "terminal_status": "NOT_APPLICABLE",
+   "tool_id": "tool-mobsfscan"
+  },
+  "source_sast.opengrep_index": {
+   "artifact": {
+    "path": "data/indices/observations/opengrep/<sha256>.sqlite",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "checkpoint_reused": false,
+   "index_identity": {
+    "fingerprint": "<sha256>",
+    "name": "observations",
+    "producer": {
+     "job": "job_evidence_collection",
+     "producer": "tool-opengrep"
+    },
+    "relative_path": "data/indices/observations/opengrep/<sha256>.sqlite",
+    "schema": "appsec-review/retrieval-index/2",
+    "sha256": "<sha256>",
+    "shard_id": "opengrep"
+   },
+   "index_reused": false,
+   "not_applicable_inputs": {
+    "by_reason": {},
+    "count": 0,
+    "disposition": "SKIPPED_NA",
+    "items": [],
+    "schema": "appsec-review/tool-input-support/1",
+    "truncated": false
+   },
+   "record_count": 3,
+   "terminal_status": "SUCCEEDED",
+   "tool_id": "tool-opengrep"
+  },
+  "source_sast.opengrep_normalize": {
+   "artifact": {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/source_sast/tasks/opengrep_scan/evidence.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "capability": "source_sast",
+   "checkpoint": {
+    "path": "data/task-checkpoints/job_evidence_collection/tool-opengrep/fcea9ca5cf71fdf2d72b95fb/checkpoint.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "checkpoint_identity": "<sha256>",
+   "checkpoint_reused": false,
+   "execution": {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/source_sast/tasks/opengrep_scan/scratch/attempt_01/execution.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "normalization_reused": false,
+   "normalized_artifact": {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/source_sast/tasks/opengrep_scan/evidence.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "normalizer_identity": "static-evidence/3",
+   "not_applicable_inputs": {
+    "by_reason": {},
+    "count": 0,
+    "disposition": "SKIPPED_NA",
+    "items": [],
+    "schema": "appsec-review/tool-input-support/1",
+    "truncated": false
+   },
+   "record_count": 3,
+   "retry_count": 0,
+   "scanner_output": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/source_sast/tasks/opengrep_scan/scratch/attempt_01/output.json",
+   "terminal_status": "SUCCEEDED",
+   "tool_id": "tool-opengrep"
+  },
+  "source_sast.opengrep_scan": {
+   "artifact": {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/source_sast/tasks/opengrep_scan/evidence.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "capability": "source_sast",
+   "checkpoint": {
+    "path": "data/task-checkpoints/job_evidence_collection/tool-opengrep/fcea9ca5cf71fdf2d72b95fb/checkpoint.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "checkpoint_identity": "<sha256>",
+   "checkpoint_reused": false,
+   "execution": {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/source_sast/tasks/opengrep_scan/scratch/attempt_01/execution.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "not_applicable_inputs": {
+    "by_reason": {},
+    "count": 0,
+    "disposition": "SKIPPED_NA",
+    "items": [],
+    "schema": "appsec-review/tool-input-support/1",
+    "truncated": false
+   },
+   "record_count": 3,
+   "retry_count": 0,
+   "scanner_output": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/source_sast/tasks/opengrep_scan/scratch/attempt_01/output.json",
+   "terminal_status": "SUCCEEDED",
+   "tool_id": "tool-opengrep"
+  },
+  "source_sast.phpcs_index": {
+   "artifact": {
+    "path": "data/indices/observations/phpcs/<sha256>.sqlite",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "checkpoint_reused": false,
+   "index_identity": {
+    "fingerprint": "<sha256>",
+    "name": "observations",
+    "producer": {
+     "job": "job_evidence_collection",
+     "producer": "tool-phpcs"
+    },
+    "relative_path": "data/indices/observations/phpcs/<sha256>.sqlite",
+    "schema": "appsec-review/retrieval-index/2",
+    "sha256": "<sha256>",
+    "shard_id": "phpcs"
+   },
+   "index_reused": false,
+   "not_applicable_inputs": {
+    "by_reason": {},
+    "count": 0,
+    "disposition": "SKIPPED_NA",
+    "items": [],
+    "schema": "appsec-review/tool-input-support/1",
+    "truncated": false
+   },
+   "record_count": 0,
+   "terminal_status": "NOT_APPLICABLE",
+   "tool_id": "tool-phpcs"
+  },
+  "source_sast.phpcs_normalize": {
+   "artifact": {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/source_sast/tasks/phpcs_scan/evidence.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "capability": "source_sast",
+   "checkpoint_reused": false,
+   "normalization_reused": false,
+   "normalized_artifact": {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/source_sast/tasks/phpcs_scan/evidence.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "normalizer_identity": "static-evidence/3",
+   "not_applicable_inputs": {
+    "by_reason": {},
+    "count": 0,
+    "disposition": "SKIPPED_NA",
+    "items": [],
+    "schema": "appsec-review/tool-input-support/1",
+    "truncated": false
+   },
+   "record_count": 0,
+   "terminal_status": "NOT_APPLICABLE",
+   "tool_id": "tool-phpcs"
+  },
+  "source_sast.phpcs_scan": {
+   "artifact": {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/source_sast/tasks/phpcs_scan/evidence.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "capability": "source_sast",
+   "checkpoint_reused": false,
+   "not_applicable_inputs": {
+    "by_reason": {},
+    "count": 0,
+    "disposition": "SKIPPED_NA",
+    "items": [],
+    "schema": "appsec-review/tool-input-support/1",
+    "truncated": false
+   },
+   "record_count": 0,
+   "terminal_status": "NOT_APPLICABLE",
+   "tool_id": "tool-phpcs"
+  },
+  "source_sast.phpstan_index": {
+   "artifact": {
+    "path": "data/indices/observations/phpstan/<sha256>.sqlite",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "checkpoint_reused": false,
+   "index_identity": {
+    "fingerprint": "<sha256>",
+    "name": "observations",
+    "producer": {
+     "job": "job_evidence_collection",
+     "producer": "tool-phpstan"
+    },
+    "relative_path": "data/indices/observations/phpstan/<sha256>.sqlite",
+    "schema": "appsec-review/retrieval-index/2",
+    "sha256": "<sha256>",
+    "shard_id": "phpstan"
+   },
+   "index_reused": false,
+   "not_applicable_inputs": {
+    "by_reason": {},
+    "count": 0,
+    "disposition": "SKIPPED_NA",
+    "items": [],
+    "schema": "appsec-review/tool-input-support/1",
+    "truncated": false
+   },
+   "record_count": 0,
+   "terminal_status": "NOT_APPLICABLE",
+   "tool_id": "tool-phpstan"
+  },
+  "source_sast.phpstan_normalize": {
+   "artifact": {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/source_sast/tasks/phpstan_scan/evidence.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "capability": "source_sast",
+   "checkpoint_reused": false,
+   "normalization_reused": false,
+   "normalized_artifact": {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/source_sast/tasks/phpstan_scan/evidence.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "normalizer_identity": "static-evidence/3",
+   "not_applicable_inputs": {
+    "by_reason": {},
+    "count": 0,
+    "disposition": "SKIPPED_NA",
+    "items": [],
+    "schema": "appsec-review/tool-input-support/1",
+    "truncated": false
+   },
+   "record_count": 0,
+   "terminal_status": "NOT_APPLICABLE",
+   "tool_id": "tool-phpstan"
+  },
+  "source_sast.phpstan_scan": {
+   "artifact": {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/source_sast/tasks/phpstan_scan/evidence.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "capability": "source_sast",
+   "checkpoint_reused": false,
+   "not_applicable_inputs": {
+    "by_reason": {},
+    "count": 0,
+    "disposition": "SKIPPED_NA",
+    "items": [],
+    "schema": "appsec-review/tool-input-support/1",
+    "truncated": false
+   },
+   "record_count": 0,
+   "terminal_status": "NOT_APPLICABLE",
+   "tool_id": "tool-phpstan"
+  },
+  "source_sast.pmd_index": {
+   "artifact": {
+    "path": "data/indices/observations/pmd/<sha256>.sqlite",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "checkpoint_reused": false,
+   "index_identity": {
+    "fingerprint": "<sha256>",
+    "name": "observations",
+    "producer": {
+     "job": "job_evidence_collection",
+     "producer": "tool-pmd"
+    },
+    "relative_path": "data/indices/observations/pmd/<sha256>.sqlite",
+    "schema": "appsec-review/retrieval-index/2",
+    "sha256": "<sha256>",
+    "shard_id": "pmd"
+   },
+   "index_reused": false,
+   "not_applicable_inputs": {
+    "by_reason": {},
+    "count": 0,
+    "disposition": "SKIPPED_NA",
+    "items": [],
+    "schema": "appsec-review/tool-input-support/1",
+    "truncated": false
+   },
+   "record_count": 0,
+   "terminal_status": "NOT_APPLICABLE",
+   "tool_id": "tool-pmd"
+  },
+  "source_sast.pmd_normalize": {
+   "artifact": {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/source_sast/tasks/pmd_scan/evidence.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "capability": "source_sast",
+   "checkpoint_reused": false,
+   "normalization_reused": false,
+   "normalized_artifact": {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/source_sast/tasks/pmd_scan/evidence.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "normalizer_identity": "static-evidence/3",
+   "not_applicable_inputs": {
+    "by_reason": {},
+    "count": 0,
+    "disposition": "SKIPPED_NA",
+    "items": [],
+    "schema": "appsec-review/tool-input-support/1",
+    "truncated": false
+   },
+   "record_count": 0,
+   "terminal_status": "NOT_APPLICABLE",
+   "tool_id": "tool-pmd"
+  },
+  "source_sast.pmd_scan": {
+   "artifact": {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/source_sast/tasks/pmd_scan/evidence.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "capability": "source_sast",
+   "checkpoint_reused": false,
+   "not_applicable_inputs": {
+    "by_reason": {},
+    "count": 0,
+    "disposition": "SKIPPED_NA",
+    "items": [],
+    "schema": "appsec-review/tool-input-support/1",
+    "truncated": false
+   },
+   "record_count": 0,
+   "terminal_status": "NOT_APPLICABLE",
+   "tool_id": "tool-pmd"
+  },
+  "source_sast.psalm_index": {
+   "artifact": {
+    "path": "data/indices/observations/psalm/<sha256>.sqlite",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "checkpoint_reused": false,
+   "index_identity": {
+    "fingerprint": "<sha256>",
+    "name": "observations",
+    "producer": {
+     "job": "job_evidence_collection",
+     "producer": "tool-psalm"
+    },
+    "relative_path": "data/indices/observations/psalm/<sha256>.sqlite",
+    "schema": "appsec-review/retrieval-index/2",
+    "sha256": "<sha256>",
+    "shard_id": "psalm"
+   },
+   "index_reused": false,
+   "not_applicable_inputs": {
+    "by_reason": {},
+    "count": 0,
+    "disposition": "SKIPPED_NA",
+    "items": [],
+    "schema": "appsec-review/tool-input-support/1",
+    "truncated": false
+   },
+   "record_count": 0,
+   "terminal_status": "NOT_APPLICABLE",
+   "tool_id": "tool-psalm"
+  },
+  "source_sast.psalm_normalize": {
+   "artifact": {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/source_sast/tasks/psalm_scan/evidence.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "capability": "source_sast",
+   "checkpoint_reused": false,
+   "normalization_reused": false,
+   "normalized_artifact": {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/source_sast/tasks/psalm_scan/evidence.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "normalizer_identity": "static-evidence/3",
+   "not_applicable_inputs": {
+    "by_reason": {},
+    "count": 0,
+    "disposition": "SKIPPED_NA",
+    "items": [],
+    "schema": "appsec-review/tool-input-support/1",
+    "truncated": false
+   },
+   "record_count": 0,
+   "terminal_status": "NOT_APPLICABLE",
+   "tool_id": "tool-psalm"
+  },
+  "source_sast.psalm_scan": {
+   "artifact": {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/source_sast/tasks/psalm_scan/evidence.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "capability": "source_sast",
+   "checkpoint_reused": false,
+   "not_applicable_inputs": {
+    "by_reason": {},
+    "count": 0,
+    "disposition": "SKIPPED_NA",
+    "items": [],
+    "schema": "appsec-review/tool-input-support/1",
+    "truncated": false
+   },
+   "record_count": 0,
+   "terminal_status": "NOT_APPLICABLE",
+   "tool_id": "tool-psalm"
+  },
+  "source_sast.semgrep_index": {
+   "artifact": {
+    "path": "data/indices/observations/semgrep/<sha256>.sqlite",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "checkpoint_reused": false,
+   "index_identity": {
+    "fingerprint": "<sha256>",
+    "name": "observations",
+    "producer": {
+     "job": "job_evidence_collection",
+     "producer": "tool-semgrep"
+    },
+    "relative_path": "data/indices/observations/semgrep/<sha256>.sqlite",
+    "schema": "appsec-review/retrieval-index/2",
+    "sha256": "<sha256>",
+    "shard_id": "semgrep"
+   },
+   "index_reused": false,
+   "not_applicable_inputs": {
+    "by_reason": {},
+    "count": 0,
+    "disposition": "SKIPPED_NA",
+    "items": [],
+    "schema": "appsec-review/tool-input-support/1",
+    "truncated": false
+   },
+   "record_count": 3,
+   "terminal_status": "SUCCEEDED",
+   "tool_id": "tool-semgrep"
+  },
+  "source_sast.semgrep_normalize": {
+   "artifact": {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/source_sast/tasks/semgrep_scan/evidence.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "capability": "source_sast",
+   "checkpoint": {
+    "path": "data/task-checkpoints/job_evidence_collection/tool-semgrep/0229759f2592b9e43eac1b11/checkpoint.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "checkpoint_identity": "<sha256>",
+   "checkpoint_reused": false,
+   "execution": {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/source_sast/tasks/semgrep_scan/scratch/attempt_01/execution.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "normalization_reused": false,
+   "normalized_artifact": {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/source_sast/tasks/semgrep_scan/evidence.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "normalizer_identity": "static-evidence/3",
+   "not_applicable_inputs": {
+    "by_reason": {},
+    "count": 0,
+    "disposition": "SKIPPED_NA",
+    "items": [],
+    "schema": "appsec-review/tool-input-support/1",
+    "truncated": false
+   },
+   "record_count": 3,
+   "retry_count": 0,
+   "scanner_output": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/source_sast/tasks/semgrep_scan/scratch/attempt_01/output.json",
+   "terminal_status": "SUCCEEDED",
+   "tool_id": "tool-semgrep"
+  },
+  "source_sast.semgrep_scan": {
+   "artifact": {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/source_sast/tasks/semgrep_scan/evidence.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "capability": "source_sast",
+   "checkpoint": {
+    "path": "data/task-checkpoints/job_evidence_collection/tool-semgrep/0229759f2592b9e43eac1b11/checkpoint.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "checkpoint_identity": "<sha256>",
+   "checkpoint_reused": false,
+   "execution": {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/source_sast/tasks/semgrep_scan/scratch/attempt_01/execution.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "not_applicable_inputs": {
+    "by_reason": {},
+    "count": 0,
+    "disposition": "SKIPPED_NA",
+    "items": [],
+    "schema": "appsec-review/tool-input-support/1",
+    "truncated": false
+   },
+   "record_count": 3,
+   "retry_count": 0,
+   "scanner_output": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/source_sast/tasks/semgrep_scan/scratch/attempt_01/output.json",
+   "terminal_status": "SUCCEEDED",
+   "tool_id": "tool-semgrep"
+  },
+  "source_sast.shellcheck_index": {
+   "artifact": {
+    "path": "data/indices/observations/shellcheck/<sha256>.sqlite",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "checkpoint_reused": false,
+   "index_identity": {
+    "fingerprint": "<sha256>",
+    "name": "observations",
+    "producer": {
+     "job": "job_evidence_collection",
+     "producer": "tool-shellcheck"
+    },
+    "relative_path": "data/indices/observations/shellcheck/<sha256>.sqlite",
+    "schema": "appsec-review/retrieval-index/2",
+    "sha256": "<sha256>",
+    "shard_id": "shellcheck"
+   },
+   "index_reused": false,
+   "not_applicable_inputs": {
+    "by_reason": {},
+    "count": 0,
+    "disposition": "SKIPPED_NA",
+    "items": [],
+    "schema": "appsec-review/tool-input-support/1",
+    "truncated": false
+   },
+   "record_count": 0,
+   "terminal_status": "NOT_APPLICABLE",
+   "tool_id": "tool-shellcheck"
+  },
+  "source_sast.shellcheck_normalize": {
+   "artifact": {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/source_sast/tasks/shellcheck_scan/evidence.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "capability": "source_sast",
+   "checkpoint_reused": false,
+   "normalization_reused": false,
+   "normalized_artifact": {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/source_sast/tasks/shellcheck_scan/evidence.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "normalizer_identity": "static-evidence/3",
+   "not_applicable_inputs": {
+    "by_reason": {},
+    "count": 0,
+    "disposition": "SKIPPED_NA",
+    "items": [],
+    "schema": "appsec-review/tool-input-support/1",
+    "truncated": false
+   },
+   "record_count": 0,
+   "terminal_status": "NOT_APPLICABLE",
+   "tool_id": "tool-shellcheck"
+  },
+  "source_sast.shellcheck_scan": {
+   "artifact": {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/source_sast/tasks/shellcheck_scan/evidence.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "capability": "source_sast",
+   "checkpoint_reused": false,
+   "not_applicable_inputs": {
+    "by_reason": {},
+    "count": 0,
+    "disposition": "SKIPPED_NA",
+    "items": [],
+    "schema": "appsec-review/tool-input-support/1",
+    "truncated": false
+   },
+   "record_count": 0,
+   "terminal_status": "NOT_APPLICABLE",
+   "tool_id": "tool-shellcheck"
+  },
+  "source_sast.spotbugs_index": {
+   "artifact": {
+    "path": "data/indices/observations/spotbugs/<sha256>.sqlite",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "checkpoint_reused": false,
+   "index_identity": {
+    "fingerprint": "<sha256>",
+    "name": "observations",
+    "producer": {
+     "job": "job_evidence_collection",
+     "producer": "tool-spotbugs"
+    },
+    "relative_path": "data/indices/observations/spotbugs/<sha256>.sqlite",
+    "schema": "appsec-review/retrieval-index/2",
+    "sha256": "<sha256>",
+    "shard_id": "spotbugs"
+   },
+   "index_reused": false,
+   "not_applicable_inputs": {
+    "by_reason": {},
+    "count": 0,
+    "disposition": "SKIPPED_NA",
+    "items": [],
+    "schema": "appsec-review/tool-input-support/1",
+    "truncated": false
+   },
+   "record_count": 0,
+   "terminal_status": "NOT_APPLICABLE",
+   "tool_id": "tool-spotbugs"
+  },
+  "source_sast.spotbugs_normalize": {
+   "artifact": {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/source_sast/tasks/spotbugs_scan/evidence.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "capability": "source_sast",
+   "checkpoint_reused": false,
+   "normalization_reused": false,
+   "normalized_artifact": {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/source_sast/tasks/spotbugs_scan/evidence.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "normalizer_identity": "static-evidence/3",
+   "not_applicable_inputs": {
+    "by_reason": {},
+    "count": 0,
+    "disposition": "SKIPPED_NA",
+    "items": [],
+    "schema": "appsec-review/tool-input-support/1",
+    "truncated": false
+   },
+   "record_count": 0,
+   "terminal_status": "NOT_APPLICABLE",
+   "tool_id": "tool-spotbugs"
+  },
+  "source_sast.spotbugs_scan": {
+   "artifact": {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/source_sast/tasks/spotbugs_scan/evidence.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "capability": "source_sast",
+   "checkpoint_reused": false,
+   "not_applicable_inputs": {
+    "by_reason": {},
+    "count": 0,
+    "disposition": "SKIPPED_NA",
+    "items": [],
+    "schema": "appsec-review/tool-input-support/1",
+    "truncated": false
+   },
+   "record_count": 0,
+   "terminal_status": "NOT_APPLICABLE",
+   "tool_id": "tool-spotbugs"
+  },
+  "vulnerability_matching.grype_index": {
+   "artifact": {
+    "path": "data/indices/observations/grype/<sha256>.sqlite",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "checkpoint_reused": false,
+   "index_identity": {
+    "fingerprint": "<sha256>",
+    "name": "observations",
+    "producer": {
+     "job": "job_evidence_collection",
+     "producer": "tool-grype"
+    },
+    "relative_path": "data/indices/observations/grype/<sha256>.sqlite",
+    "schema": "appsec-review/retrieval-index/2",
+    "sha256": "<sha256>",
+    "shard_id": "grype"
+   },
+   "index_reused": false,
+   "not_applicable_inputs": {
+    "by_reason": {},
+    "count": 0,
+    "disposition": "SKIPPED_NA",
+    "items": [],
+    "schema": "appsec-review/tool-input-support/1",
+    "truncated": false
+   },
+   "record_count": 0,
+   "terminal_status": "NOT_APPLICABLE",
+   "tool_id": "tool-grype"
+  },
+  "vulnerability_matching.grype_normalize": {
+   "artifact": {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/vulnerability_matching/tasks/grype_scan/evidence.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "capability": "vulnerability_matching",
+   "checkpoint_reused": false,
+   "coverage_disposition": "CONFIGURED_DISABLED",
+   "execution": null,
+   "normalization_reused": false,
+   "normalized_artifact": {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/vulnerability_matching/tasks/grype_scan/evidence.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "normalizer_identity": "static-evidence/3",
+   "record_count": 0,
+   "retry_count": 0,
+   "scanner_output": null,
+   "terminal_status": "NOT_APPLICABLE",
+   "tool_id": "tool-grype"
+  },
+  "vulnerability_matching.grype_scan": {
+   "artifact": {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/vulnerability_matching/tasks/grype_scan/evidence.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "capability": "vulnerability_matching",
+   "checkpoint_reused": false,
+   "coverage_disposition": "CONFIGURED_DISABLED",
+   "execution": null,
+   "record_count": 0,
+   "retry_count": 0,
+   "scanner_output": null,
+   "terminal_status": "NOT_APPLICABLE",
+   "tool_id": "tool-grype"
+  },
+  "vulnerability_matching.osv_scanner_index": {
+   "artifact": {
+    "path": "data/indices/observations/osv_scanner/<sha256>.sqlite",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "checkpoint_reused": false,
+   "index_identity": {
+    "fingerprint": "<sha256>",
+    "name": "observations",
+    "producer": {
+     "job": "job_evidence_collection",
+     "producer": "tool-osv-scanner"
+    },
+    "relative_path": "data/indices/observations/osv_scanner/<sha256>.sqlite",
+    "schema": "appsec-review/retrieval-index/2",
+    "sha256": "<sha256>",
+    "shard_id": "osv_scanner"
+   },
+   "index_reused": false,
+   "not_applicable_inputs": {
+    "by_reason": {},
+    "count": 0,
+    "disposition": "SKIPPED_NA",
+    "items": [],
+    "schema": "appsec-review/tool-input-support/1",
+    "truncated": false
+   },
+   "record_count": 0,
+   "terminal_status": "NOT_APPLICABLE",
+   "tool_id": "tool-osv-scanner"
+  },
+  "vulnerability_matching.osv_scanner_normalize": {
+   "artifact": {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/vulnerability_matching/tasks/osv_scanner_scan/evidence.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "capability": "vulnerability_matching",
+   "checkpoint_reused": false,
+   "normalization_reused": false,
+   "normalized_artifact": {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/vulnerability_matching/tasks/osv_scanner_scan/evidence.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "normalizer_identity": "static-evidence/3",
+   "not_applicable_inputs": {
+    "by_reason": {},
+    "count": 0,
+    "disposition": "SKIPPED_NA",
+    "items": [],
+    "schema": "appsec-review/tool-input-support/1",
+    "truncated": false
+   },
+   "record_count": 0,
+   "terminal_status": "NOT_APPLICABLE",
+   "tool_id": "tool-osv-scanner"
+  },
+  "vulnerability_matching.osv_scanner_scan": {
+   "artifact": {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/vulnerability_matching/tasks/osv_scanner_scan/evidence.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "capability": "vulnerability_matching",
+   "checkpoint_reused": false,
+   "not_applicable_inputs": {
+    "by_reason": {},
+    "count": 0,
+    "disposition": "SKIPPED_NA",
+    "items": [],
+    "schema": "appsec-review/tool-input-support/1",
+    "truncated": false
+   },
+   "record_count": 0,
+   "terminal_status": "NOT_APPLICABLE",
+   "tool_id": "tool-osv-scanner"
+  }
+ },
+ "schema": "appsec-review/acceptance-job-output/1",
+ "skipped_units": [],
+ "status": "SUCCEEDED",
+ "steps": {
+  "binary_hardening": "SUCCEEDED",
+  "configuration": "SUCCEEDED",
+  "evidence_publication": "SUCCEEDED",
+  "secrets": "SUCCEEDED",
+  "software_inventory": "SUCCEEDED",
+  "source_sast": "SUCCEEDED",
+  "vulnerability_matching": "SUCCEEDED"
+ },
+ "units": {
+  "binary_hardening.blint_index": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": "tool-blint",
+   "status": "SUCCEEDED"
+  },
+  "binary_hardening.blint_normalize": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": "tool-blint",
+   "status": "SUCCEEDED"
+  },
+  "binary_hardening.blint_scan": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": "tool-blint",
+   "status": "SUCCEEDED"
+  },
+  "configuration.checkov_index": {
+   "disposition": "SUCCEEDED",
+   "producer": "tool-checkov",
+   "status": "SUCCEEDED"
+  },
+  "configuration.checkov_normalize": {
+   "disposition": "SUCCEEDED",
+   "producer": "tool-checkov",
+   "status": "SUCCEEDED"
+  },
+  "configuration.checkov_scan": {
+   "disposition": "SUCCEEDED",
+   "producer": "tool-checkov",
+   "status": "SUCCEEDED"
+  },
+  "configuration.hadolint_index": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": "tool-hadolint",
+   "status": "SUCCEEDED"
+  },
+  "configuration.hadolint_normalize": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": "tool-hadolint",
+   "status": "SUCCEEDED"
+  },
+  "configuration.hadolint_scan": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": "tool-hadolint",
+   "status": "SUCCEEDED"
+  },
+  "configuration.trivy_index": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": "tool-trivy",
+   "status": "SUCCEEDED"
+  },
+  "configuration.trivy_normalize": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": "tool-trivy",
+   "status": "SUCCEEDED"
+  },
+  "configuration.trivy_scan": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": "tool-trivy",
+   "status": "SUCCEEDED"
+  },
+  "configuration.zizmor_index": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": "tool-zizmor",
+   "status": "SUCCEEDED"
+  },
+  "configuration.zizmor_normalize": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": "tool-zizmor",
+   "status": "SUCCEEDED"
+  },
+  "configuration.zizmor_scan": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": "tool-zizmor",
+   "status": "SUCCEEDED"
+  },
+  "evidence_publication.assemble_manifest": {
+   "disposition": null,
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "evidence_publication.publish_handoff": {
+   "disposition": null,
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "secrets.gitleaks_index": {
+   "disposition": "SUCCEEDED",
+   "producer": "tool-gitleaks",
+   "status": "SUCCEEDED"
+  },
+  "secrets.gitleaks_normalize": {
+   "disposition": "SUCCEEDED",
+   "producer": "tool-gitleaks",
+   "status": "SUCCEEDED"
+  },
+  "secrets.gitleaks_scan": {
+   "disposition": "SUCCEEDED",
+   "producer": "tool-gitleaks",
+   "status": "SUCCEEDED"
+  },
+  "software_inventory.syft_index": {
+   "disposition": "SUCCEEDED",
+   "producer": "tool-syft",
+   "status": "SUCCEEDED"
+  },
+  "software_inventory.syft_normalize": {
+   "disposition": "SUCCEEDED",
+   "producer": "tool-syft",
+   "status": "SUCCEEDED"
+  },
+  "software_inventory.syft_scan": {
+   "disposition": "SUCCEEDED",
+   "producer": "tool-syft",
+   "status": "SUCCEEDED"
+  },
+  "source_sast.cppcheck_index": {
+   "disposition": "SUCCEEDED",
+   "producer": "tool-cppcheck",
+   "status": "SUCCEEDED"
+  },
+  "source_sast.cppcheck_normalize": {
+   "disposition": "SUCCEEDED",
+   "producer": "tool-cppcheck",
+   "status": "SUCCEEDED"
+  },
+  "source_sast.cppcheck_scan": {
+   "disposition": "SUCCEEDED",
+   "producer": "tool-cppcheck",
+   "status": "SUCCEEDED"
+  },
+  "source_sast.gosec_index": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": "tool-gosec",
+   "status": "SUCCEEDED"
+  },
+  "source_sast.gosec_normalize": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": "tool-gosec",
+   "status": "SUCCEEDED"
+  },
+  "source_sast.gosec_scan": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": "tool-gosec",
+   "status": "SUCCEEDED"
+  },
+  "source_sast.mobsfscan_index": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": "tool-mobsfscan",
+   "status": "SUCCEEDED"
+  },
+  "source_sast.mobsfscan_normalize": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": "tool-mobsfscan",
+   "status": "SUCCEEDED"
+  },
+  "source_sast.mobsfscan_scan": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": "tool-mobsfscan",
+   "status": "SUCCEEDED"
+  },
+  "source_sast.opengrep_index": {
+   "disposition": "SUCCEEDED",
+   "producer": "tool-opengrep",
+   "status": "SUCCEEDED"
+  },
+  "source_sast.opengrep_normalize": {
+   "disposition": "SUCCEEDED",
+   "producer": "tool-opengrep",
+   "status": "SUCCEEDED"
+  },
+  "source_sast.opengrep_scan": {
+   "disposition": "SUCCEEDED",
+   "producer": "tool-opengrep",
+   "status": "SUCCEEDED"
+  },
+  "source_sast.phpcs_index": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": "tool-phpcs",
+   "status": "SUCCEEDED"
+  },
+  "source_sast.phpcs_normalize": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": "tool-phpcs",
+   "status": "SUCCEEDED"
+  },
+  "source_sast.phpcs_scan": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": "tool-phpcs",
+   "status": "SUCCEEDED"
+  },
+  "source_sast.phpstan_index": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": "tool-phpstan",
+   "status": "SUCCEEDED"
+  },
+  "source_sast.phpstan_normalize": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": "tool-phpstan",
+   "status": "SUCCEEDED"
+  },
+  "source_sast.phpstan_scan": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": "tool-phpstan",
+   "status": "SUCCEEDED"
+  },
+  "source_sast.pmd_index": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": "tool-pmd",
+   "status": "SUCCEEDED"
+  },
+  "source_sast.pmd_normalize": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": "tool-pmd",
+   "status": "SUCCEEDED"
+  },
+  "source_sast.pmd_scan": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": "tool-pmd",
+   "status": "SUCCEEDED"
+  },
+  "source_sast.psalm_index": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": "tool-psalm",
+   "status": "SUCCEEDED"
+  },
+  "source_sast.psalm_normalize": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": "tool-psalm",
+   "status": "SUCCEEDED"
+  },
+  "source_sast.psalm_scan": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": "tool-psalm",
+   "status": "SUCCEEDED"
+  },
+  "source_sast.semgrep_index": {
+   "disposition": "SUCCEEDED",
+   "producer": "tool-semgrep",
+   "status": "SUCCEEDED"
+  },
+  "source_sast.semgrep_normalize": {
+   "disposition": "SUCCEEDED",
+   "producer": "tool-semgrep",
+   "status": "SUCCEEDED"
+  },
+  "source_sast.semgrep_scan": {
+   "disposition": "SUCCEEDED",
+   "producer": "tool-semgrep",
+   "status": "SUCCEEDED"
+  },
+  "source_sast.shellcheck_index": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": "tool-shellcheck",
+   "status": "SUCCEEDED"
+  },
+  "source_sast.shellcheck_normalize": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": "tool-shellcheck",
+   "status": "SUCCEEDED"
+  },
+  "source_sast.shellcheck_scan": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": "tool-shellcheck",
+   "status": "SUCCEEDED"
+  },
+  "source_sast.spotbugs_index": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": "tool-spotbugs",
+   "status": "SUCCEEDED"
+  },
+  "source_sast.spotbugs_normalize": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": "tool-spotbugs",
+   "status": "SUCCEEDED"
+  },
+  "source_sast.spotbugs_scan": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": "tool-spotbugs",
+   "status": "SUCCEEDED"
+  },
+  "vulnerability_matching.grype_index": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": "tool-grype",
+   "status": "SUCCEEDED"
+  },
+  "vulnerability_matching.grype_normalize": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": "tool-grype",
+   "status": "SUCCEEDED"
+  },
+  "vulnerability_matching.grype_scan": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": "tool-grype",
+   "status": "SUCCEEDED"
+  },
+  "vulnerability_matching.osv_scanner_index": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": "tool-osv-scanner",
+   "status": "SUCCEEDED"
+  },
+  "vulnerability_matching.osv_scanner_normalize": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": "tool-osv-scanner",
+   "status": "SUCCEEDED"
+  },
+  "vulnerability_matching.osv_scanner_scan": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": "tool-osv-scanner",
+   "status": "SUCCEEDED"
+  }
+ },
+ "volatile": {
+  "artifacts": [
+   {
+    "path": "data/indices/manifests/evidence-<attempt>.json",
+    "sha256": "59ee5b6e19e82e1ce8af698499685cbe2970b26ef40028a1ab22eb1d5e2e2a27",
+    "size_bytes": 24146
+   },
+   {
+    "path": "data/indices/observations/blint/<sha256>.sqlite",
+    "sha256": "3a6ac13a72eadf482c43f10067f749b9719750f7cf9000d668e5ccf429ef02f3",
+    "size_bytes": 57344
+   },
+   {
+    "path": "data/indices/observations/checkov/<sha256>.sqlite",
+    "sha256": "e32099c3b679978509340dfeda339de8935668127afce1685c2e6afff8bd3322",
+    "size_bytes": 57344
+   },
+   {
+    "path": "data/indices/observations/cppcheck/<sha256>.sqlite",
+    "sha256": "de05965a672d628a26a5fb967e932736c4677b7f375d4b732795fbc35786956c",
+    "size_bytes": 110592
+   },
+   {
+    "path": "data/indices/observations/gitleaks/<sha256>.sqlite",
+    "sha256": "2a5308522b3fbe9923bd93a520e7054f43b6b2b5d2a259eac475e9faebbe41da",
+    "size_bytes": 57344
+   },
+   {
+    "path": "data/indices/observations/gosec/<sha256>.sqlite",
+    "sha256": "3340c81a76033a92e08f716d1caee6bf53be8ec4330aeb382acdbdd1c9bb8f12",
+    "size_bytes": 57344
+   },
+   {
+    "path": "data/indices/observations/grype/<sha256>.sqlite",
+    "sha256": "5c8747c379aa47041b3c06d5a6941430b85bbd75134c500ef9461090f17a889a",
+    "size_bytes": 57344
+   },
+   {
+    "path": "data/indices/observations/hadolint/<sha256>.sqlite",
+    "sha256": "202a6e6d2364fb617aea0bee950970883da9fb6d226cbd1be30f5b1e1fae94d9",
+    "size_bytes": 57344
+   },
+   {
+    "path": "data/indices/observations/mobsfscan/<sha256>.sqlite",
+    "sha256": "aa8c656e26b6aef74624c4340f4071660568ff874eae5394013bda75df6a1332",
+    "size_bytes": 57344
+   },
+   {
+    "path": "data/indices/observations/opengrep/<sha256>.sqlite",
+    "sha256": "6219833ae09908dbade4604cf144f330727e4aa038201435829699bedfdf43f7",
+    "size_bytes": 69632
+   },
+   {
+    "path": "data/indices/observations/osv_scanner/<sha256>.sqlite",
+    "sha256": "855fc2efb1c059c1bbe5427fb027b26cb14bc223f36dcd3ad75ae33cc0448c6a",
+    "size_bytes": 57344
+   },
+   {
+    "path": "data/indices/observations/phpcs/<sha256>.sqlite",
+    "sha256": "9014fd9fb40264090b10a6862f598bfc47f86eedfc4cb1f14a4cce908012b245",
+    "size_bytes": 57344
+   },
+   {
+    "path": "data/indices/observations/phpstan/<sha256>.sqlite",
+    "sha256": "513c4b57ca5107f2b04ec8e0e4c65a994b85aff387842e062eac98de2343a8e0",
+    "size_bytes": 57344
+   },
+   {
+    "path": "data/indices/observations/pmd/<sha256>.sqlite",
+    "sha256": "080975a5681aefad79e597b7fd67e2d79dcca7e2d6a98f8a357944881d53679d",
+    "size_bytes": 57344
+   },
+   {
+    "path": "data/indices/observations/psalm/<sha256>.sqlite",
+    "sha256": "84a2eda33695f37ded38d062c524a38f8a88c21c75b01928f362f74822d28686",
+    "size_bytes": 57344
+   },
+   {
+    "path": "data/indices/observations/semgrep/<sha256>.sqlite",
+    "sha256": "9b9988634869271b5120cb79419d64c02a47fc1453d45e8a8d874bc0e26d16ab",
+    "size_bytes": 69632
+   },
+   {
+    "path": "data/indices/observations/shellcheck/<sha256>.sqlite",
+    "sha256": "9bc0e67727b8123f55fbfd4c17e1f1ba9634f4745e5cf7f38cd88d366c5669e9",
+    "size_bytes": 57344
+   },
+   {
+    "path": "data/indices/observations/spotbugs/<sha256>.sqlite",
+    "sha256": "f8f0cea773bc906941d21f1b6df7cab140034e41f8243e6a55b001f3c77cbf31",
+    "size_bytes": 57344
+   },
+   {
+    "path": "data/indices/observations/syft/<sha256>.sqlite",
+    "sha256": "e185e260f1570dc21542e28a9a811aba14a9db62347268de5842e8d8af2389c2",
+    "size_bytes": 57344
+   },
+   {
+    "path": "data/indices/observations/trivy/<sha256>.sqlite",
+    "sha256": "1078e8a557b95c495957196cc29f591e141ac7e52b20944ca4333fce0f566a1f",
+    "size_bytes": 57344
+   },
+   {
+    "path": "data/indices/observations/zizmor/<sha256>.sqlite",
+    "sha256": "56449ab531f95770ee36855e284feb5b5daec526a19d69f94cf1f26204ed2132",
+    "size_bytes": 57344
+   },
+   {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/binary_hardening/tasks/blint_scan/evidence.json",
+    "sha256": "9657c0314c5a3ea145c0657097ac3d51f1d8f80fc51d41a114a42c1d0e318440",
+    "size_bytes": 838
+   },
+   {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/configuration/tasks/checkov_scan/evidence.json",
+    "sha256": "d48ce59c7c2b80fd3a13a8ea0d370d46752e64feb624b320aca088cefaef95cc",
+    "size_bytes": 4136
+   },
+   {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/configuration/tasks/checkov_scan/scratch/attempt_01/execution.json",
+    "sha256": "5c78c83c0f68a9d225ac93167bbc03b8fb06856b14894f7df3fdc6d699bb7cea",
+    "size_bytes": 2138
+   },
+   {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/configuration/tasks/hadolint_scan/evidence.json",
+    "sha256": "7f47655692fd3b559fc33600ce4b133a529f63c7dc51fa4c956c0254e4dc425c",
+    "size_bytes": 839
+   },
+   {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/configuration/tasks/trivy_scan/evidence.json",
+    "sha256": "ca8e47b060998e6d7cd0bde83ea7d358b763c8383b2da6d4a8c38051de21a09b",
+    "size_bytes": 997
+   },
+   {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/configuration/tasks/zizmor_scan/evidence.json",
+    "sha256": "fe2914521b6fa1c133effe5309e482119eb5b88c36ea50a1f3e04dd03e102a7c",
+    "size_bytes": 833
+   },
+   {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/evidence_publication/tasks/publish_handoff/handoff.json",
+    "sha256": "60b45264cd6c0e1af5ca140f11d8f1d0f9db39e0f0611c95521450a70ac921f4",
+    "size_bytes": 21548
+   },
+   {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/secrets/tasks/gitleaks_scan/evidence.json",
+    "sha256": "6e72a53806f4bda766cb91f3043267db07fc51eb7e91ed2d7678a50af9c9d242",
+    "size_bytes": 2372
+   },
+   {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/secrets/tasks/gitleaks_scan/scratch/attempt_01/execution.json",
+    "sha256": "6b3ea5a2ff5a10b4f6e8f00abf8d295af8a5a73ac08e109ef396de9284098b26",
+    "size_bytes": 2115
+   },
+   {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/software_inventory/tasks/syft_scan/evidence.json",
+    "sha256": "b713690b86f8030967e8a6f4d7959b2a2b2748d5a9fe8007e34be38232a5c08b",
+    "size_bytes": 2397
+   },
+   {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/software_inventory/tasks/syft_scan/scratch/attempt_01/execution.json",
+    "sha256": "1d7b77faa3af46a4ebf2a3c343b8b28b1aca682299ec09d07ac56f2ce2cffd1a",
+    "size_bytes": 2142
+   },
+   {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/source_sast/tasks/cppcheck_scan/evidence.json",
+    "sha256": "65fbd4709aabd33e92e3915b4938423a0a4ff8d19263bcda193956833d90c87a",
+    "size_bytes": 8553
+   },
+   {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/source_sast/tasks/cppcheck_scan/scratch/attempt_01/execution.json",
+    "sha256": "fe6ff0296fb2c0001af4befdcb4648462e93fe4e4350f7336de1242a77d9b5f2",
+    "size_bytes": 2135
+   },
+   {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/source_sast/tasks/gosec_scan/evidence.json",
+    "sha256": "8971f3ace01fef3b8bc74307dcc73ab3cd9d7a25ab61740c24c34e8ba9a80210",
+    "size_bytes": 899
+   },
+   {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/source_sast/tasks/mobsfscan_scan/evidence.json",
+    "sha256": "728bf3061acb9d844bb168b35822af7d71a3b1dc7d7042a01cc6d3a161d0333f",
+    "size_bytes": 842
+   },
+   {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/source_sast/tasks/opengrep_scan/evidence.json",
+    "sha256": "0c78172d048c1c2e2067d2fc76f6a6ea08fbf60cc5af5def45be9256b35d7e95",
+    "size_bytes": 5997
+   },
+   {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/source_sast/tasks/opengrep_scan/scratch/attempt_01/execution.json",
+    "sha256": "2b66c15f4a54f19a61f8359399022d8cd24a26d0796ba317b59350ce28a234de",
+    "size_bytes": 2387
+   },
+   {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/source_sast/tasks/phpcs_scan/evidence.json",
+    "sha256": "b0fa06d0aa50d206e9974a42e50b2e9de23da5da453739c7ab619595b7ff4814",
+    "size_bytes": 889
+   },
+   {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/source_sast/tasks/phpstan_scan/evidence.json",
+    "sha256": "7d6974423457df94e1523b25cade3b25416885625b1cf5754aa3583c6579b993",
+    "size_bytes": 897
+   },
+   {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/source_sast/tasks/pmd_scan/evidence.json",
+    "sha256": "a48be9bfbd5883fb2e8251a206d8edde3a37c64344014a00cf96ef4673ed4294",
+    "size_bytes": 919
+   },
+   {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/source_sast/tasks/psalm_scan/evidence.json",
+    "sha256": "81f55320f78dbbe8108cf6e609b770a36b931097047a96007b82cd03c0cc733b",
+    "size_bytes": 902
+   },
+   {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/source_sast/tasks/semgrep_scan/evidence.json",
+    "sha256": "9e13da746f5c02062e0141910438a5c2622949cc82b4a49b05ac11ba7ed691fb",
+    "size_bytes": 6107
+   },
+   {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/source_sast/tasks/semgrep_scan/scratch/attempt_01/execution.json",
+    "sha256": "558da6883db65f8445ab6bf1b56f896c171bfe80ca9ab9bf2949799cf4044255",
+    "size_bytes": 2610
+   },
+   {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/source_sast/tasks/shellcheck_scan/evidence.json",
+    "sha256": "579a2dbe4f89dc82c16d3d8663f4032d42992630639ea5d0140a6f2165f1cc49",
+    "size_bytes": 843
+   },
+   {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/source_sast/tasks/spotbugs_scan/evidence.json",
+    "sha256": "a4e679b88eb42a05d073c27d52806131908db61b531155949783afa7ac75442d",
+    "size_bytes": 841
+   },
+   {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/vulnerability_matching/tasks/grype_scan/evidence.json",
+    "sha256": "4c7d2402e33a935a8eb9a0afd73532c62a4f6001036cdc1fdbcfe66d4aa3c41b",
+    "size_bytes": 1298
+   },
+   {
+    "path": "data/jobs/job_evidence_collection/attempts/<attempt>/steps/vulnerability_matching/tasks/osv_scanner_scan/evidence.json",
+    "sha256": "5eb79cd6c5d2daf5a047d2e6325fca5130baac7ceaf675570e5d62bc3da06c71",
+    "size_bytes": 860
+   },
+   {
+    "path": "data/task-checkpoints/job_evidence_collection/tool-checkov/509c9b3de2b3f5ea00abb22d/checkpoint.json",
+    "sha256": "191aeded4cd88aff91e19709402d3eee9fd3cc55257d7f5c9b2455ae120421c7",
+    "size_bytes": 3970
+   },
+   {
+    "path": "data/task-checkpoints/job_evidence_collection/tool-cppcheck/0cde154a0e585faaa6590298/checkpoint.json",
+    "sha256": "3748616d0e91157f07d8cb2449a7e1cb0204312073b404003921e77a55cbd6a2",
+    "size_bytes": 2032
+   },
+   {
+    "path": "data/task-checkpoints/job_evidence_collection/tool-gitleaks/bc5df1d9199f6e29ed0d5f2a/checkpoint.json",
+    "sha256": "0957f67dcae48241523851554ddbe239edb3d93df7199715da78afa64f74125c",
+    "size_bytes": 1910
+   },
+   {
+    "path": "data/task-checkpoints/job_evidence_collection/tool-opengrep/fcea9ca5cf71fdf2d72b95fb/checkpoint.json",
+    "sha256": "364048d67c94aabd2cc011a573248867a434c2af935871e918745d80786b4726",
+    "size_bytes": 2266
+   },
+   {
+    "path": "data/task-checkpoints/job_evidence_collection/tool-semgrep/0229759f2592b9e43eac1b11/checkpoint.json",
+    "sha256": "4a425e237de931c22b300575683b0b74f9649d2674bf544018774482b82e61cf",
+    "size_bytes": 2173
+   },
+   {
+    "path": "data/task-checkpoints/job_evidence_collection/tool-syft/f564408ec458618bff76edea/checkpoint.json",
+    "sha256": "7d46a31073bb0ef03cb89d186861d80bba58825330268d6deaca315b7898cbda",
+    "size_bytes": 1994
+   }
+  ]
+ }
+}

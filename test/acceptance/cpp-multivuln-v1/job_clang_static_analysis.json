@@ -1,0 +1,659 @@
+{
+ "artifacts": [
+  {
+   "count": 23,
+   "kind": "json",
+   "path": "data/clang-static/cpp-scope-ab6d5db76861721dc145e459/analyze/execution.json",
+   "sha256": "9c691c1e1811ddaa511d50d32b385460c8eabaae80482a20f55b89acf7ed1f62"
+  },
+  {
+   "count": 23,
+   "kind": "json",
+   "path": "data/clang-static/cpp-scope-ab6d5db76861721dc145e459/tidy/execution.json",
+   "sha256": "418c272c770ba9a034ac46f30fb2784227feb77b22ce97280f164f0335550c2e"
+  },
+  {
+   "count": 4,
+   "kind": "json",
+   "path": "data/clang-static/cpp-scope-ab6d5db76861721dc145e459/seeded-ledger.json",
+   "sha256": "e25f4990816a3d3ce850401fb3f7148f7a2649c1ccbceaf6ccd79b8634347ba3"
+  },
+  {
+   "count": 6,
+   "kind": "json",
+   "path": "data/jobs/job_clang_static_analysis/attempts/<attempt>/steps/acceptance/tasks/publish_handoff/clang-static-analysis-summary.json",
+   "sha256": "3ca79ce74c0589e18c2ffff6a8140e0fbc2a897d7b23c4d6d1e16ce5d052689f"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/clang-static/cpp-scope-ab6d5db76861721dc145e459/analyze/compile_commands.json",
+   "sha256": "8e580f8b3f3994ff5e1a80ff0559d9d310722458cefd95e8081ff776be68cac4"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/clang-static/cpp-scope-ab6d5db76861721dc145e459/tidy/compile_commands.json",
+   "sha256": "8e580f8b3f3994ff5e1a80ff0559d9d310722458cefd95e8081ff776be68cac4"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/cpp/projects/build-unit-b9c931fa551e02bd12b2/normalized-compile-commands.json",
+   "sha256": "351c51c963ae9bfe3b5e61be2144daaf61c5b0f2f08d9045756c5720f9cfe73d"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/indices/manifests/clang-static-<attempt>.json",
+   "sha256": "d8a0516f6880b428458f17839bb3e8eb63deefd9bebdf980a947ad98c4c5949c"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/indices/manifests/cpp-compiled-<attempt>.json",
+   "sha256": "a1304f4382d4f221eed293e5901102b0856806d78ef7dd640498256728f5daf9"
+  }
+ ],
+ "failed_units": [],
+ "findings": [],
+ "gaps": [
+  {
+   "count": 1,
+   "gap": "build-unit-b9c931fa551e02bd12b2: clang-static-analyzer failed on src/config.cpp: exit 1",
+   "unit": "acceptance.publish_handoff"
+  },
+  {
+   "count": 1,
+   "gap": "build-unit-b9c931fa551e02bd12b2: clang-static-analyzer failed on src/diag.cpp: exit 1",
+   "unit": "acceptance.publish_handoff"
+  },
+  {
+   "count": 1,
+   "gap": "build-unit-b9c931fa551e02bd12b2: clang-static-analyzer failed on src/frame.cpp: exit 1",
+   "unit": "acceptance.publish_handoff"
+  },
+  {
+   "count": 1,
+   "gap": "build-unit-b9c931fa551e02bd12b2: clang-static-analyzer failed on src/log.cpp: exit 1",
+   "unit": "acceptance.publish_handoff"
+  },
+  {
+   "count": 1,
+   "gap": "build-unit-b9c931fa551e02bd12b2: clang-static-analyzer failed on src/main.cpp: exit 1",
+   "unit": "acceptance.publish_handoff"
+  },
+  {
+   "count": 1,
+   "gap": "build-unit-b9c931fa551e02bd12b2: clang-static-analyzer failed on src/packet.cpp: exit 1",
+   "unit": "acceptance.publish_handoff"
+  },
+  {
+   "count": 1,
+   "gap": "build-unit-b9c931fa551e02bd12b2: clang-static-analyzer failed on src/session.cpp: exit 1",
+   "unit": "acceptance.publish_handoff"
+  },
+  {
+   "count": 1,
+   "gap": "build-unit-b9c931fa551e02bd12b2: seed_unresolved: 14 of 14 seed locations lie in no function body (file scope, macro or generated code)",
+   "unit": "acceptance.publish_handoff"
+  },
+  {
+   "count": 1,
+   "gap": "build-unit-b9c931fa551e02bd12b2: seeded neighborhood is empty: no seed location resolves to a function definition",
+   "unit": "acceptance.publish_handoff"
+  },
+  {
+   "count": 1,
+   "gap": "build-unit-b9c931fa551e02bd12b2: clang-static-analyzer failed on src/config.cpp: exit 1",
+   "unit": "analyze.scopes"
+  },
+  {
+   "count": 1,
+   "gap": "build-unit-b9c931fa551e02bd12b2: clang-static-analyzer failed on src/diag.cpp: exit 1",
+   "unit": "analyze.scopes"
+  },
+  {
+   "count": 1,
+   "gap": "build-unit-b9c931fa551e02bd12b2: clang-static-analyzer failed on src/frame.cpp: exit 1",
+   "unit": "analyze.scopes"
+  },
+  {
+   "count": 1,
+   "gap": "build-unit-b9c931fa551e02bd12b2: clang-static-analyzer failed on src/log.cpp: exit 1",
+   "unit": "analyze.scopes"
+  },
+  {
+   "count": 1,
+   "gap": "build-unit-b9c931fa551e02bd12b2: clang-static-analyzer failed on src/main.cpp: exit 1",
+   "unit": "analyze.scopes"
+  },
+  {
+   "count": 1,
+   "gap": "build-unit-b9c931fa551e02bd12b2: clang-static-analyzer failed on src/packet.cpp: exit 1",
+   "unit": "analyze.scopes"
+  },
+  {
+   "count": 1,
+   "gap": "build-unit-b9c931fa551e02bd12b2: clang-static-analyzer failed on src/session.cpp: exit 1",
+   "unit": "analyze.scopes"
+  },
+  {
+   "count": 1,
+   "gap": "build-unit-b9c931fa551e02bd12b2: seed_unresolved: 14 of 14 seed locations lie in no function body (file scope, macro or generated code)",
+   "unit": "analyze.scopes"
+  },
+  {
+   "count": 1,
+   "gap": "build-unit-b9c931fa551e02bd12b2: seeded neighborhood is empty: no seed location resolves to a function definition",
+   "unit": "analyze.scopes"
+  },
+  {
+   "count": 4,
+   "gap": "clang-static-analyzer failed on src/config.cpp: exit 1",
+   "unit": "analyze.scopes"
+  },
+  {
+   "count": 4,
+   "gap": "clang-static-analyzer failed on src/diag.cpp: exit 1",
+   "unit": "analyze.scopes"
+  },
+  {
+   "count": 4,
+   "gap": "clang-static-analyzer failed on src/frame.cpp: exit 1",
+   "unit": "analyze.scopes"
+  },
+  {
+   "count": 4,
+   "gap": "clang-static-analyzer failed on src/log.cpp: exit 1",
+   "unit": "analyze.scopes"
+  },
+  {
+   "count": 4,
+   "gap": "clang-static-analyzer failed on src/main.cpp: exit 1",
+   "unit": "analyze.scopes"
+  },
+  {
+   "count": 4,
+   "gap": "clang-static-analyzer failed on src/packet.cpp: exit 1",
+   "unit": "analyze.scopes"
+  },
+  {
+   "count": 4,
+   "gap": "clang-static-analyzer failed on src/session.cpp: exit 1",
+   "unit": "analyze.scopes"
+  },
+  {
+   "count": 4,
+   "gap": "seed_unresolved: 14 of 14 seed locations lie in no function body (file scope, macro or generated code)",
+   "unit": "analyze.scopes"
+  },
+  {
+   "count": 4,
+   "gap": "seeded neighborhood is empty: no seed location resolves to a function definition",
+   "unit": "analyze.scopes"
+  }
+ ],
+ "handoff": {
+  "completion_status": "COMPLETED_WITH_GAPS",
+  "schema_identity": "appsec-review/clang-static-analysis-handoff/1",
+  "status": "ACCEPTED",
+  "upstream_jobs": [
+   "job_ci_configuration_analysis",
+   "job_cpp_compiled_analysis",
+   "job_evidence_collection",
+   "job_language_build",
+   "job_project_build",
+   "job_review_intake",
+   "job_source_history_analysis",
+   "job_target_analysis_plan",
+   "job_target_catalog"
+  ]
+ },
+ "job_id": "job_clang_static_analysis",
+ "outputs": {
+  "acceptance.publish_handoff": {
+   "artifact": {
+    "path": "data/jobs/job_clang_static_analysis/attempts/<attempt>/steps/acceptance/tasks/publish_handoff/clang-static-analysis-summary.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "counts": {
+    "gap_count": 9,
+    "observations": 10,
+    "scopes": 1
+   },
+   "index_manifest": {
+    "path": "data/indices/manifests/clang-static-<attempt>.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "item_count": 10,
+   "schema": "appsec-review/clang-static-analysis-handoff/1",
+   "terminal_status": "COMPLETED_WITH_GAPS"
+  },
+  "analyze.scopes": {
+   "not_applicable_scopes": [],
+   "scope_count": 1,
+   "scopes": [
+    {
+     "accepted_compile_database": {
+      "path": "data/cpp/projects/build-unit-b9c931fa551e02bd12b2/normalized-compile-commands.json",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     "analyzed_units": [
+      "unit:src/config.cpp",
+      "unit:src/diag.cpp",
+      "unit:src/frame.cpp",
+      "unit:src/log.cpp",
+      "unit:src/main.cpp",
+      "unit:src/packet.cpp",
+      "unit:src/session.cpp"
+     ],
+     "case_id": "build-unit-b9c931fa551e02bd12b2",
+     "diagnostic_labels": {
+      "at_seed": 6,
+      "in_neighborhood": 1,
+      "in_seed_function": 1,
+      "outside_neighborhood": 2
+     },
+     "executions": {
+      "clang-static-analyzer": {
+       "argv_identity": "<sha256>",
+       "compile_database": {
+        "path": "data/clang-static/cpp-scope-ab6d5db76861721dc145e459/analyze/compile_commands.json",
+        "sha256": "<sha256>",
+        "size_bytes": "<size_bytes>"
+       },
+       "exit_code": 1,
+       "file_size_limit_bytes": 16777217,
+       "file_size_limit_reached": false,
+       "image_digest": "<image_digest>",
+       "image_id": "<image_id>",
+       "oom_killed": false,
+       "receipt": {
+        "path": "data/clang-static/cpp-scope-ab6d5db76861721dc145e459/analyze/execution.json",
+        "sha256": "<sha256>",
+        "size_bytes": "<size_bytes>"
+       },
+       "stderr_path": "data/clang-static/cpp-scope-ab6d5db76861721dc145e459/analyze/raw/stderr.bin",
+       "stderr_truncated": false,
+       "stdout_path": "data/clang-static/cpp-scope-ab6d5db76861721dc145e459/analyze/raw/stdout.bin",
+       "stdout_truncated": false,
+       "timed_out": false,
+       "tool_id": "tool-clang-static-analysis"
+      },
+      "clang-tidy": {
+       "argv_identity": "<sha256>",
+       "compile_database": {
+        "path": "data/clang-static/cpp-scope-ab6d5db76861721dc145e459/tidy/compile_commands.json",
+        "sha256": "<sha256>",
+        "size_bytes": "<size_bytes>"
+       },
+       "exit_code": 0,
+       "file_size_limit_bytes": 16777217,
+       "file_size_limit_reached": false,
+       "image_digest": "<image_digest>",
+       "image_id": "<image_id>",
+       "oom_killed": false,
+       "receipt": {
+        "path": "data/clang-static/cpp-scope-ab6d5db76861721dc145e459/tidy/execution.json",
+        "sha256": "<sha256>",
+        "size_bytes": "<size_bytes>"
+       },
+       "stderr_path": "data/clang-static/cpp-scope-ab6d5db76861721dc145e459/tidy/raw/stderr.bin",
+       "stderr_truncated": false,
+       "stdout_path": "data/clang-static/cpp-scope-ab6d5db76861721dc145e459/tidy/raw/stdout.bin",
+       "stdout_truncated": false,
+       "timed_out": false,
+       "tool_id": "tool-clang-static-analysis"
+      }
+     },
+     "index_identity": {
+      "fingerprint": "<sha256>",
+      "name": "observations",
+      "producer": {
+       "job": "job_clang_static_analysis",
+       "project_root": ".",
+       "scope_id": "cpp-scope-ab6d5db76861721dc145e459",
+       "seeded": {
+        "depth": 3,
+        "depth_histogram": {},
+        "ledger": {
+         "path": "data/clang-static/cpp-scope-ab6d5db76861721dc145e459/seeded-ledger.json",
+         "sha256": "<sha256>"
+        },
+        "mode": "seeded",
+        "neighborhood_function_count": 0,
+        "resolved_seed_count": 0,
+        "schema": "appsec-review/seeded-producer-record/1",
+        "seed_count": 14,
+        "seed_limit": 200,
+        "seeds": [
+         [
+          "include/relay/relay.hpp",
+          10,
+          10,
+          "unresolved"
+         ],
+         [
+          "include/relay/relay.hpp",
+          11,
+          11,
+          "unresolved"
+         ],
+         [
+          "include/relay/relay.hpp",
+          12,
+          12,
+          "unresolved"
+         ],
+         [
+          "include/relay/relay.hpp",
+          16,
+          16,
+          "unresolved"
+         ],
+         [
+          "include/relay/relay.hpp",
+          17,
+          17,
+          "unresolved"
+         ],
+         [
+          "include/relay/relay.hpp",
+          18,
+          18,
+          "unresolved"
+         ],
+         [
+          "include/relay/relay.hpp",
+          22,
+          22,
+          "unresolved"
+         ],
+         [
+          "include/relay/relay.hpp",
+          23,
+          23,
+          "unresolved"
+         ],
+         [
+          "include/relay/relay.hpp",
+          24,
+          24,
+          "unresolved"
+         ],
+         [
+          "src/diag.cpp",
+          9,
+          9,
+          "unresolved"
+         ],
+         [
+          "src/log.cpp",
+          8,
+          8,
+          "unresolved"
+         ],
+         [
+          "src/main.cpp",
+          58,
+          58,
+          "unresolved"
+         ],
+         [
+          "src/session.cpp",
+          36,
+          36,
+          "unresolved"
+         ],
+         [
+          "src/session.cpp",
+          40,
+          40,
+          "unresolved"
+         ]
+        ],
+        "skipped": false,
+        "status_counts": {
+         "unresolved": 14
+        }
+       },
+       "unit": "analyze.scopes"
+      },
+      "relative_path": "data/indices/observations/<sha256>-08023b6e2b58a1b5.sqlite",
+      "schema": "appsec-review/retrieval-index/2",
+      "sha256": "<sha256>",
+      "shard_id": "clang-static-cpp-scope-ab6d5db76861721dc145e459"
+     },
+     "ledger": {
+      "path": "data/clang-static/cpp-scope-ab6d5db76861721dc145e459/seeded-ledger.json",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     "not_applicable_inputs": {
+      "by_reason": {},
+      "count": 0,
+      "disposition": "SKIPPED_NA",
+      "items": [],
+      "schema": "appsec-review/tool-input-support/1",
+      "truncated": false
+     },
+     "observation_count": 10,
+     "project_id": "cpp:.",
+     "scope_id": "cpp-scope-ab6d5db76861721dc145e459",
+     "seeded": {
+      "depth": 3,
+      "depth_histogram": {},
+      "ledger": {
+       "path": "data/clang-static/cpp-scope-ab6d5db76861721dc145e459/seeded-ledger.json",
+       "sha256": "<sha256>"
+      },
+      "mode": "seeded",
+      "neighborhood_function_count": 0,
+      "resolved_seed_count": 0,
+      "schema": "appsec-review/seeded-producer-record/1",
+      "seed_count": 14,
+      "seed_limit": 200,
+      "seeds": [
+       [
+        "include/relay/relay.hpp",
+        10,
+        10,
+        "unresolved"
+       ],
+       [
+        "include/relay/relay.hpp",
+        11,
+        11,
+        "unresolved"
+       ],
+       [
+        "include/relay/relay.hpp",
+        12,
+        12,
+        "unresolved"
+       ],
+       [
+        "include/relay/relay.hpp",
+        16,
+        16,
+        "unresolved"
+       ],
+       [
+        "include/relay/relay.hpp",
+        17,
+        17,
+        "unresolved"
+       ],
+       [
+        "include/relay/relay.hpp",
+        18,
+        18,
+        "unresolved"
+       ],
+       [
+        "include/relay/relay.hpp",
+        22,
+        22,
+        "unresolved"
+       ],
+       [
+        "include/relay/relay.hpp",
+        23,
+        23,
+        "unresolved"
+       ],
+       [
+        "include/relay/relay.hpp",
+        24,
+        24,
+        "unresolved"
+       ],
+       [
+        "src/diag.cpp",
+        9,
+        9,
+        "unresolved"
+       ],
+       [
+        "src/log.cpp",
+        8,
+        8,
+        "unresolved"
+       ],
+       [
+        "src/main.cpp",
+        58,
+        58,
+        "unresolved"
+       ],
+       [
+        "src/session.cpp",
+        36,
+        36,
+        "unresolved"
+       ],
+       [
+        "src/session.cpp",
+        40,
+        40,
+        "unresolved"
+       ]
+      ],
+      "skipped": false,
+      "status_counts": {
+       "unresolved": 14
+      }
+     },
+     "terminal_status": "COMPLETED_WITH_GAPS"
+    }
+   ],
+   "terminal_status": "COMPLETED_WITH_GAPS"
+  },
+  "load.accepted_cpp": {
+   "scopes": [
+    {
+     "case_id": "build-unit-b9c931fa551e02bd12b2",
+     "case_snapshot": "<sha256>",
+     "compile_database": {
+      "path": "data/cpp/projects/build-unit-b9c931fa551e02bd12b2/normalized-compile-commands.json",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     "compile_unit_count": 7,
+     "file_count": 11,
+     "project_id": "cpp:.",
+     "root": ".",
+     "schema": "appsec-review/cpp-index-scope/1",
+     "scope_id": "cpp-scope-ab6d5db76861721dc145e459",
+     "supported_compile_unit_count": 7
+    }
+   ],
+   "unavailable": {},
+   "upstream": {
+    "handoff_sha256": "<sha256>",
+    "manifest": {
+     "path": "data/indices/manifests/cpp-compiled-<attempt>.json",
+     "sha256": "<sha256>"
+    }
+   }
+  }
+ },
+ "schema": "appsec-review/acceptance-job-output/1",
+ "skipped_units": [],
+ "status": "COMPLETED_WITH_GAPS",
+ "steps": {
+  "acceptance": "SUCCEEDED",
+  "analyze": "SUCCEEDED",
+  "load": "SUCCEEDED"
+ },
+ "units": {
+  "acceptance.publish_handoff": {
+   "disposition": "COMPLETED_WITH_GAPS",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "analyze.scopes": {
+   "disposition": "COMPLETED_WITH_GAPS",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "load.accepted_cpp": {
+   "disposition": null,
+   "producer": null,
+   "status": "SUCCEEDED"
+  }
+ },
+ "volatile": {
+  "artifacts": [
+   {
+    "path": "data/clang-static/cpp-scope-ab6d5db76861721dc145e459/analyze/compile_commands.json",
+    "sha256": "49b1f3d4a812cd07c9d167afc7879fd28362689539dbac6cca18f637370ec21a",
+    "size_bytes": 1353
+   },
+   {
+    "path": "data/clang-static/cpp-scope-ab6d5db76861721dc145e459/analyze/execution.json",
+    "sha256": "d58791e33dd4af8901eb0ee341c03b23a22baabe3dacf292e6f3f2811574b71b",
+    "size_bytes": 2006
+   },
+   {
+    "path": "data/clang-static/cpp-scope-ab6d5db76861721dc145e459/seeded-ledger.json",
+    "sha256": "de7a04c9c070bd0edab479441fa93a566cd879a099452e16eea23a8abd2a8ead",
+    "size_bytes": 6115
+   },
+   {
+    "path": "data/clang-static/cpp-scope-ab6d5db76861721dc145e459/tidy/compile_commands.json",
+    "sha256": "49b1f3d4a812cd07c9d167afc7879fd28362689539dbac6cca18f637370ec21a",
+    "size_bytes": 1353
+   },
+   {
+    "path": "data/clang-static/cpp-scope-ab6d5db76861721dc145e459/tidy/execution.json",
+    "sha256": "c7638ddba759d4a60f2136c6de575af2c3a29bfeb9f19688e4c8b388496a47d2",
+    "size_bytes": 1991
+   },
+   {
+    "path": "data/cpp/projects/build-unit-b9c931fa551e02bd12b2/normalized-compile-commands.json",
+    "sha256": "3dcb088a1c8c5ea244744d2f5d290336b4791f444f60e23b14ba5e307138083c",
+    "size_bytes": 4195
+   },
+   {
+    "path": "data/indices/manifests/clang-static-<attempt>.json",
+    "sha256": "f5405ac59cd267c7840a338f0f804f8a6a7a6d642756ea5a80db961e59d74062",
+    "size_bytes": 36367
+   },
+   {
+    "path": "data/indices/manifests/cpp-compiled-<attempt>.json",
+    "sha256": "125fd38bcc68b5d50746aeefeca3068a3c3b823130d95dbd01727fc2024c361d",
+    "size_bytes": 32277
+   },
+   {
+    "path": "data/jobs/job_clang_static_analysis/attempts/<attempt>/steps/acceptance/tasks/publish_handoff/clang-static-analysis-summary.json",
+    "sha256": "67d7366ffbdd0ec5f32bbbed14f3170de2daf453908a8c8f5489e3d71c0777a1",
+    "size_bytes": 9394
+   }
+  ]
+ }
+}

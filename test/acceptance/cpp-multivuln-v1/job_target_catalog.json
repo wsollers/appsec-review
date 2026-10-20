@@ -1,0 +1,860 @@
+{
+ "artifacts": [
+  {
+   "count": 12,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/artifacts/catalog/repository-partition.json",
+   "sha256": "cd00fb661d5ac96797340359e00bf356f49b85bc483fe390e23bc78cd47024ff"
+  },
+  {
+   "count": 2,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/artifacts/catalog/language-census.json",
+   "sha256": "80fd31b5b1ac97dcd28e39bb9b569501b78b6f9706110d1d700db47904141e19"
+  },
+  {
+   "count": 3,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/artifacts/catalog/build-targets.json",
+   "sha256": "d7a56bd5044215603883f431c9089d17319d31f2acbe443d478ba11e3c9dde67"
+  },
+  {
+   "count": 3,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/artifacts/catalog/compile-commands.json",
+   "sha256": "7e679ada3f9ffc1989011ae7987be14988355b3106511695aec7fa83eb2b37b4"
+  },
+  {
+   "count": 3,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/artifacts/catalog/components.json",
+   "sha256": "b6faea2be9028779766ff6c398b3bf50c3154c1d4c76f8bb0e2b15e045b311cf"
+  },
+  {
+   "count": 3,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/artifacts/catalog/dependencies.json",
+   "sha256": "2bdd457f4ab8c9ceabc636eb4f08f520a53fd8f7f38bb4d6bbe075061e3e4f95"
+  },
+  {
+   "count": 3,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/artifacts/catalog/projects.json",
+   "sha256": "a2e74f0fdd4006f00741ff3b73215dfcf0da168de0bba87f4d39350b5b7f6632"
+  },
+  {
+   "count": 5,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/artifacts/catalog/build-systems.json",
+   "sha256": "ba16ac97a9508139a007631d80ae12dac7d9014f0bba6ff9dff01a3724f57e72"
+  },
+  {
+   "count": 5,
+   "kind": "json",
+   "path": "data/jobs/job_target_catalog/attempts/<attempt>/artifacts/catalog/target-catalog.json",
+   "sha256": "071cc0b815be7377901d3b874dd5b25ef7fa962f899e74076ee795f1285487c2"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/indices/manifests/catalog-<attempt>.json",
+   "sha256": "8171904f2efe24019c502ceb4e9e82886ed71352820fbee789433d5b8f034d5f"
+  },
+  {
+   "coverage_statuses": {
+    "complete": 1
+   },
+   "entity_kinds": {
+    "component": 1
+   },
+   "kind": "sqlite",
+   "path": "data/indices/components/<sha256>.sqlite",
+   "rows": {
+    "coverage": 1,
+    "entities": 1,
+    "locations": 0,
+    "metadata": 8,
+    "relations": 0
+   }
+  },
+  {
+   "coverage_statuses": {
+    "complete": 1
+   },
+   "entity_kinds": {
+    "symbol": 3
+   },
+   "kind": "sqlite",
+   "path": "data/indices/analysis/<sha256>.sqlite",
+   "rows": {
+    "coverage": 1,
+    "entities": 3,
+    "locations": 3,
+    "metadata": 8,
+    "relations": 3
+   }
+  },
+  {
+   "coverage_statuses": {
+    "partial": 1,
+    "unavailable": 6
+   },
+   "entity_kinds": {},
+   "kind": "sqlite",
+   "path": "data/indices/documents/<sha256>.sqlite",
+   "rows": {
+    "coverage": 7,
+    "entities": 0,
+    "locations": 0,
+    "metadata": 8,
+    "relations": 0
+   }
+  },
+  {
+   "coverage_statuses": {
+    "partial": 1
+   },
+   "entity_kinds": {
+    "source_file": 10
+   },
+   "kind": "sqlite",
+   "path": "data/indices/source/<sha256>.sqlite",
+   "rows": {
+    "coverage": 1,
+    "entities": 10,
+    "locations": 10,
+    "metadata": 8,
+    "relations": 0
+   }
+  }
+ ],
+ "failed_units": [],
+ "findings": [],
+ "gaps": [
+  {
+   "count": 1,
+   "gap": {
+    "area": "target-documents",
+    "gap": "design: no accepted target document; dfd: no accepted target document; openapi: no accepted target document; postman: no accepted target document; threat_model: no accepted target document; unit_test: no accepted target document; source inventory .git: excluded_directory",
+    "status": "partial"
+   },
+   "unit": "artifact:data/indices/documents/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "target-documents:design",
+    "gap": "design: no accepted target document",
+    "status": "unavailable"
+   },
+   "unit": "artifact:data/indices/documents/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "target-documents:dfd",
+    "gap": "design: no accepted target document",
+    "status": "unavailable"
+   },
+   "unit": "artifact:data/indices/documents/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "target-documents:openapi",
+    "gap": "design: no accepted target document",
+    "status": "unavailable"
+   },
+   "unit": "artifact:data/indices/documents/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "target-documents:postman",
+    "gap": "design: no accepted target document",
+    "status": "unavailable"
+   },
+   "unit": "artifact:data/indices/documents/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "target-documents:threat_model",
+    "gap": "design: no accepted target document",
+    "status": "unavailable"
+   },
+   "unit": "artifact:data/indices/documents/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "target-documents:unit_test",
+    "gap": "design: no accepted target document",
+    "status": "unavailable"
+   },
+   "unit": "artifact:data/indices/documents/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "target-files",
+    "gap": ".git: excluded_directory",
+    "status": "partial"
+   },
+   "unit": "artifact:data/indices/source/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": "compile_commands.json not present",
+   "unit": "build_discovery.discover_compile_commands"
+  },
+  {
+   "count": 1,
+   "gap": "component:0001: no manifest for dependency extraction",
+   "unit": "component_discovery.catalog_dependencies"
+  },
+  {
+   "count": 1,
+   "gap": ".git: excluded_directory",
+   "unit": "publish_catalog.publish_handoff"
+  },
+  {
+   "count": 1,
+   "gap": "design: no accepted target document",
+   "unit": "publish_catalog.publish_handoff"
+  },
+  {
+   "count": 1,
+   "gap": "dfd: no accepted target document",
+   "unit": "publish_catalog.publish_handoff"
+  },
+  {
+   "count": 1,
+   "gap": "openapi: no accepted target document",
+   "unit": "publish_catalog.publish_handoff"
+  },
+  {
+   "count": 1,
+   "gap": "postman: no accepted target document",
+   "unit": "publish_catalog.publish_handoff"
+  },
+  {
+   "count": 1,
+   "gap": "source inventory .git: excluded_directory",
+   "unit": "publish_catalog.publish_handoff"
+  },
+  {
+   "count": 1,
+   "gap": "threat_model: no accepted target document",
+   "unit": "publish_catalog.publish_handoff"
+  },
+  {
+   "count": 1,
+   "gap": "unit_test: no accepted target document",
+   "unit": "publish_catalog.publish_handoff"
+  },
+  {
+   "count": 1,
+   "gap": ".git: excluded_directory",
+   "unit": "publish_catalog.validate_catalog"
+  },
+  {
+   "count": 1,
+   "gap": "design: no accepted target document",
+   "unit": "publish_catalog.validate_catalog"
+  },
+  {
+   "count": 1,
+   "gap": "dfd: no accepted target document",
+   "unit": "publish_catalog.validate_catalog"
+  },
+  {
+   "count": 1,
+   "gap": "openapi: no accepted target document",
+   "unit": "publish_catalog.validate_catalog"
+  },
+  {
+   "count": 1,
+   "gap": "postman: no accepted target document",
+   "unit": "publish_catalog.validate_catalog"
+  },
+  {
+   "count": 1,
+   "gap": "source inventory .git: excluded_directory",
+   "unit": "publish_catalog.validate_catalog"
+  },
+  {
+   "count": 1,
+   "gap": "threat_model: no accepted target document",
+   "unit": "publish_catalog.validate_catalog"
+  },
+  {
+   "count": 1,
+   "gap": "unit_test: no accepted target document",
+   "unit": "publish_catalog.validate_catalog"
+  },
+  {
+   "count": 1,
+   "gap": "no recognized project manifests",
+   "unit": "repository_discovery.discover_projects"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "path": ".git",
+    "reason": "excluded_directory"
+   },
+   "unit": "repository_discovery.partition_repository"
+  },
+  {
+   "count": 2,
+   "gap": ".git: excluded_directory",
+   "unit": "retrieval_indexes.build_path_index"
+  },
+  {
+   "count": 2,
+   "gap": "design: no accepted target document",
+   "unit": "retrieval_indexes.build_target_documents"
+  },
+  {
+   "count": 2,
+   "gap": "dfd: no accepted target document",
+   "unit": "retrieval_indexes.build_target_documents"
+  },
+  {
+   "count": 2,
+   "gap": "openapi: no accepted target document",
+   "unit": "retrieval_indexes.build_target_documents"
+  },
+  {
+   "count": 2,
+   "gap": "postman: no accepted target document",
+   "unit": "retrieval_indexes.build_target_documents"
+  },
+  {
+   "count": 2,
+   "gap": "source inventory .git: excluded_directory",
+   "unit": "retrieval_indexes.build_target_documents"
+  },
+  {
+   "count": 2,
+   "gap": "threat_model: no accepted target document",
+   "unit": "retrieval_indexes.build_target_documents"
+  },
+  {
+   "count": 2,
+   "gap": "unit_test: no accepted target document",
+   "unit": "retrieval_indexes.build_target_documents"
+  }
+ ],
+ "handoff": {
+  "completion_status": "SUCCEEDED",
+  "schema_identity": "appsec-review/target-catalog-job/1",
+  "status": "ACCEPTED",
+  "upstream_jobs": [
+   "job_review_intake"
+  ]
+ },
+ "job_id": "job_target_catalog",
+ "outputs": {
+  "build_discovery.catalog_build_targets": {
+   "artifact": {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/artifacts/catalog/build-targets.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "schema": "appsec-review/build-targets/2",
+   "targets": [
+    {
+     "build_system": "cmake",
+     "build_unit_id": "build-unit-b9c931fa551e02bd12b2",
+     "descriptor_facts": {},
+     "descriptor_package": {
+      "bounds": {
+       "actual_bytes": 529,
+       "actual_files": 2,
+       "max_file_bytes": 65536,
+       "max_files": 24,
+       "max_total_bytes": 262144
+      },
+      "build_unit": {
+       "build_system": "cmake",
+       "build_unit_id": "build-unit-b9c931fa551e02bd12b2",
+       "family": "native",
+       "markers": [
+        {
+         "path": "CMakeLists.txt",
+         "sha256": "<sha256>",
+         "size_bytes": "<size_bytes>"
+        }
+       ],
+       "provenance": "deterministic-marker",
+       "root": "."
+      },
+      "documents": [
+       {
+        "content": "cmake_minimum_required(VERSION 3.20)\nproject(relay LANGUAGES CXX)\n\nset(CMAKE_CXX_STANDARD 17)\nset(CMAKE_CXX_STANDARD_REQUIRED ON)\nset(CMAKE_CXX_EXTENSIONS OFF)\nset(CMAKE_EXPORT_COMPILE_COMMANDS ON)\n\nadd_executable(relay\n  src/main.cpp\n  src/packet.cpp\n  src/session.cpp\n  src/frame.cpp\n  src/log.cpp\n  src/diag.cpp\n  src/config.cpp\n)\ntarget_include_directories(relay PRIVATE include)\ntarget_compile_options(relay PRIVATE -Wall -Wextra)\n",
+        "path": "CMakeLists.txt",
+        "sha256": "<sha256>"
+       },
+       {
+        "content": "# relay\n\nA small packet relay utility.\n\nBuild: `cmake -S . -B build && cmake --build build`.\n",
+        "path": "README.md",
+        "sha256": "<sha256>"
+       }
+      ],
+      "schema": "appsec-review/build-descriptor-package/1"
+     },
+     "family": "native",
+     "markers": [
+      {
+       "path": "CMakeLists.txt",
+       "sha256": "<sha256>",
+       "size_bytes": "<size_bytes>"
+      }
+     ],
+     "project_type": "generic",
+     "provenance": "deterministic-marker",
+     "required_image_profile": "native",
+     "root": "."
+    }
+   ]
+  },
+  "build_discovery.discover_build_systems": {
+   "artifact": {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/artifacts/catalog/build-systems.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "build_units": [
+    {
+     "build_system": "cmake",
+     "build_unit_id": "build-unit-b9c931fa551e02bd12b2",
+     "family": "native",
+     "markers": [
+      {
+       "path": "CMakeLists.txt",
+       "sha256": "<sha256>",
+       "size_bytes": "<size_bytes>"
+      }
+     ],
+     "provenance": "deterministic-marker",
+     "root": "."
+    }
+   ],
+   "schema": "appsec-review/build-systems/2",
+   "source_only_scopes": [],
+   "systems": [
+    {
+     "kind": "CMakeLists.txt",
+     "path": "CMakeLists.txt",
+     "sha256": "<sha256>"
+    }
+   ]
+  },
+  "build_discovery.discover_compile_commands": {
+   "artifact": {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/artifacts/catalog/compile-commands.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "files": [],
+   "schema": "appsec-review/compile-commands/1"
+  },
+  "component_discovery.catalog_components": {
+   "artifact": {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/artifacts/catalog/components.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "components": [
+    {
+     "component_id": "component:0001",
+     "manifest": null,
+     "manifest_sha256": null,
+     "root": "."
+    }
+   ],
+   "schema": "appsec-review/component-catalog/1"
+  },
+  "component_discovery.catalog_dependencies": {
+   "artifact": {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/artifacts/catalog/dependencies.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "dependencies": [],
+   "schema": "appsec-review/dependency-catalog/1"
+  },
+  "publish_catalog.publish_handoff": {
+   "artifact": {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/artifacts/catalog/target-catalog.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "index_manifest": {
+    "path": "data/indices/manifests/catalog-<attempt>.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "schema": "appsec-review/target-catalog/1"
+  },
+  "publish_catalog.validate_catalog": {
+   "status": "VALID",
+   "validated": [
+    "retrieval_indexes.build_path_index",
+    "retrieval_indexes.build_symbol_index",
+    "retrieval_indexes.build_component_index",
+    "retrieval_indexes.build_target_documents"
+   ]
+  },
+  "repository_discovery.census_languages": {
+   "artifact": {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/artifacts/catalog/language-census.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "languages": [
+    {
+     "file_count": 8,
+     "language": "C++"
+    },
+    {
+     "file_count": 2,
+     "language": "Other"
+    }
+   ],
+   "schema": "appsec-review/language-census/1"
+  },
+  "repository_discovery.discover_projects": {
+   "artifact": {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/artifacts/catalog/projects.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "projects": [],
+   "schema": "appsec-review/project-catalog/1"
+  },
+  "repository_discovery.partition_repository": {
+   "artifact": {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/artifacts/catalog/repository-partition.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "configured_exclusions": [
+    {
+     "path": ".gitignore",
+     "pattern": ".gitignore",
+     "scope": "global"
+    }
+   ],
+   "files": [
+    {
+     "generated": false,
+     "language": null,
+     "path": "CMakeLists.txt",
+     "sha256": "<sha256>",
+     "size_bytes": "<size_bytes>"
+    },
+    {
+     "generated": false,
+     "language": null,
+     "path": "README.md",
+     "sha256": "<sha256>",
+     "size_bytes": "<size_bytes>"
+    },
+    {
+     "generated": false,
+     "language": "C++",
+     "path": "include/relay/relay.hpp",
+     "sha256": "<sha256>",
+     "size_bytes": "<size_bytes>"
+    },
+    {
+     "generated": false,
+     "language": "C++",
+     "path": "src/config.cpp",
+     "sha256": "<sha256>",
+     "size_bytes": "<size_bytes>"
+    },
+    {
+     "generated": false,
+     "language": "C++",
+     "path": "src/diag.cpp",
+     "sha256": "<sha256>",
+     "size_bytes": "<size_bytes>"
+    },
+    {
+     "generated": false,
+     "language": "C++",
+     "path": "src/frame.cpp",
+     "sha256": "<sha256>",
+     "size_bytes": "<size_bytes>"
+    },
+    {
+     "generated": false,
+     "language": "C++",
+     "path": "src/log.cpp",
+     "sha256": "<sha256>",
+     "size_bytes": "<size_bytes>"
+    },
+    {
+     "generated": false,
+     "language": "C++",
+     "path": "src/main.cpp",
+     "sha256": "<sha256>",
+     "size_bytes": "<size_bytes>"
+    },
+    {
+     "generated": false,
+     "language": "C++",
+     "path": "src/packet.cpp",
+     "sha256": "<sha256>",
+     "size_bytes": "<size_bytes>"
+    },
+    {
+     "generated": false,
+     "language": "C++",
+     "path": "src/session.cpp",
+     "sha256": "<sha256>",
+     "size_bytes": "<size_bytes>"
+    }
+   ]
+  },
+  "retrieval_indexes.build_component_index": {
+   "artifact": {
+    "path": "data/indices/components/<sha256>.sqlite",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "index_identity": {
+    "fingerprint": "<sha256>",
+    "name": "components",
+    "producer": {
+     "job": "job_target_catalog",
+     "unit": "retrieval_indexes.build_component_index"
+    },
+    "relative_path": "data/indices/components/<sha256>.sqlite",
+    "schema": "appsec-review/retrieval-index/2",
+    "sha256": "<sha256>"
+   },
+   "item_count": 1
+  },
+  "retrieval_indexes.build_path_index": {
+   "artifact": {
+    "path": "data/indices/source/<sha256>.sqlite",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "index_identity": {
+    "fingerprint": "<sha256>",
+    "name": "source",
+    "producer": {
+     "job": "job_target_catalog",
+     "unit": "retrieval_indexes.build_path_index"
+    },
+    "relative_path": "data/indices/source/<sha256>.sqlite",
+    "schema": "appsec-review/retrieval-index/2",
+    "sha256": "<sha256>",
+    "shard_id": "default"
+   },
+   "item_count": 10
+  },
+  "retrieval_indexes.build_symbol_index": {
+   "artifact": {
+    "path": "data/indices/analysis/<sha256>.sqlite",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "index_identity": {
+    "fingerprint": "<sha256>",
+    "name": "analysis",
+    "producer": {
+     "job": "job_target_catalog",
+     "unit": "retrieval_indexes.build_symbol_index"
+    },
+    "relative_path": "data/indices/analysis/<sha256>.sqlite",
+    "schema": "appsec-review/retrieval-index/2",
+    "sha256": "<sha256>"
+   },
+   "item_count": 3
+  },
+  "retrieval_indexes.build_target_documents": {
+   "artifact": {
+    "path": "data/indices/documents/<sha256>.sqlite",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "index_identity": {
+    "fingerprint": "<sha256>",
+    "name": "documents",
+    "producer": {
+     "job": "job_target_catalog",
+     "unit": "retrieval_indexes.build_target_documents"
+    },
+    "relative_path": "data/indices/documents/<sha256>.sqlite",
+    "schema": "appsec-review/retrieval-index/2",
+    "sha256": "<sha256>",
+    "shard_id": "default"
+   },
+   "item_count": 0,
+   "link_count": 0
+  }
+ },
+ "schema": "appsec-review/acceptance-job-output/1",
+ "skipped_units": [],
+ "status": "SUCCEEDED",
+ "steps": {
+  "build_discovery": "SUCCEEDED",
+  "component_discovery": "SUCCEEDED",
+  "publish_catalog": "SUCCEEDED",
+  "repository_discovery": "SUCCEEDED",
+  "retrieval_indexes": "SUCCEEDED"
+ },
+ "units": {
+  "build_discovery.catalog_build_targets": {
+   "disposition": null,
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "build_discovery.discover_build_systems": {
+   "disposition": null,
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "build_discovery.discover_compile_commands": {
+   "disposition": null,
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "component_discovery.catalog_components": {
+   "disposition": null,
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "component_discovery.catalog_dependencies": {
+   "disposition": null,
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "publish_catalog.publish_handoff": {
+   "disposition": null,
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "publish_catalog.validate_catalog": {
+   "disposition": null,
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "repository_discovery.census_languages": {
+   "disposition": null,
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "repository_discovery.discover_projects": {
+   "disposition": null,
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "repository_discovery.partition_repository": {
+   "disposition": null,
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "retrieval_indexes.build_component_index": {
+   "disposition": null,
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "retrieval_indexes.build_path_index": {
+   "disposition": null,
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "retrieval_indexes.build_symbol_index": {
+   "disposition": null,
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "retrieval_indexes.build_target_documents": {
+   "disposition": null,
+   "producer": null,
+   "status": "SUCCEEDED"
+  }
+ },
+ "volatile": {
+  "artifacts": [
+   {
+    "path": "data/indices/analysis/<sha256>.sqlite",
+    "sha256": "a13010c1253dc3958d5f57cd1b324a3d0bae728532c465e2fb36d9b564e2a11e",
+    "size_bytes": 57344
+   },
+   {
+    "path": "data/indices/components/<sha256>.sqlite",
+    "sha256": "864114b8520ab34b98cdfd91d47d8f9a029abb63bcde51521ef04b68580fdea7",
+    "size_bytes": 57344
+   },
+   {
+    "path": "data/indices/documents/<sha256>.sqlite",
+    "sha256": "c6604bc7a3b5b8b15550b41454112bf3ab038f9d4aba671bd2d3415af1fdc95b",
+    "size_bytes": 57344
+   },
+   {
+    "path": "data/indices/manifests/catalog-<attempt>.json",
+    "sha256": "8860a0dcbf9b19fd1386aee427ddc2432f61c84c8b15725107c68072bbaaf513",
+    "size_bytes": 2869
+   },
+   {
+    "path": "data/indices/source/<sha256>.sqlite",
+    "sha256": "0c4af0ed1df965a7b85a60fb34f9a5a75e47514e15deed316f7c7b17028db13b",
+    "size_bytes": 81920
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/artifacts/catalog/build-systems.json",
+    "sha256": "3b11f8de967bf6d7ccebf75ec76f0ac445c937955036a34e191f4359a23e4a33",
+    "size_bytes": 502
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/artifacts/catalog/build-targets.json",
+    "sha256": "33a4ac877cc6d5f1e2dff20f8a3e45cf5a14bd86cfca033322a1d10dda5ebfb9",
+    "size_bytes": 1688
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/artifacts/catalog/compile-commands.json",
+    "sha256": "bab0acaa828bf81d08a1166dfe10b966d94f9f06a9151a11464c45ab681a3cef",
+    "size_bytes": 102
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/artifacts/catalog/components.json",
+    "sha256": "7e9923022b8e2d7d059b5b3df8f0ebc167e7064076315bfad44df187b172d901",
+    "size_bytes": 156
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/artifacts/catalog/dependencies.json",
+    "sha256": "9996948de03b1121f747bf6e9915404fc37f32dddf491974b53be646a077c87d",
+    "size_bytes": 131
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/artifacts/catalog/language-census.json",
+    "sha256": "d10c197f645ef608d30d11a385fdd6237ea5a67e9dd34a9bc4cf8d2270d0f413",
+    "size_bytes": 129
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/artifacts/catalog/projects.json",
+    "sha256": "f0eea08da606d117e44745fa042469b76cc99e9c564ce1b5cc497a4ed8f8bb61",
+    "size_bytes": 102
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/artifacts/catalog/repository-partition.json",
+    "sha256": "05746bc585cc445a61d849caf4f2a652ac3a9dcec10192905868c837ff189c08",
+    "size_bytes": 3931
+   },
+   {
+    "path": "data/jobs/job_target_catalog/attempts/<attempt>/artifacts/catalog/target-catalog.json",
+    "sha256": "37b61f1b7d8e8fccc9cdd8eeea42128398a18bb1394c9ef291e7dfd126e52a74",
+    "size_bytes": 3529
+   }
+  ]
+ }
+}

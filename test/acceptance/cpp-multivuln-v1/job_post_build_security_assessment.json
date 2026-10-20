@@ -1,0 +1,5051 @@
+{
+ "artifacts": [
+  {
+   "count": 0,
+   "kind": "json",
+   "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/attempts/<attempt>/execution-capture/command-001/secret-scan/gitleaks.json",
+   "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+  },
+  {
+   "count": 0,
+   "kind": "json",
+   "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/attempts/<attempt>/execution-capture/command-002/secret-scan/gitleaks.json",
+   "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+  },
+  {
+   "count": 0,
+   "kind": "json",
+   "path": "data/cpp/projects/build-unit-b9c931fa551e02bd12b2/normalized-link-commands.json",
+   "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+  },
+  {
+   "count": 10,
+   "kind": "json",
+   "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/link-commands.json",
+   "sha256": "64b7cff42639e73f2f9f841c96c22b6c733e56b5d5f4454514f9ef748ec9124d"
+  },
+  {
+   "count": 10,
+   "kind": "json",
+   "path": "data/cpp/projects/build-unit-b9c931fa551e02bd12b2/artifact-catalog.json",
+   "sha256": "7c7e4d7f5c693993e24e00d4b0d724ca7c493dd95110f3b441ed9bde4715323d"
+  },
+  {
+   "count": 11,
+   "kind": "json",
+   "path": "data/jobs/job_post_build_security_assessment/attempts/<attempt>/steps/inference/tasks/native_units/p-44986a401d00/inference-results.json",
+   "sha256": "84b7d9c4ea5c8ef4b78caa7580e462f3d4329775d36f56cdb86a5be28a12cd8d"
+  },
+  {
+   "count": 15,
+   "kind": "json",
+   "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/attempts/<attempt>/execution-capture/command-001/record.json",
+   "sha256": "8e1840fda4d360f4a228343d83199acb82195eaa5f5ab87927fede7bc6d2740c"
+  },
+  {
+   "count": 15,
+   "kind": "json",
+   "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/attempts/<attempt>/execution-capture/command-002/record.json",
+   "sha256": "ce4185dc9db2274646387f85beda8b9079200bea8b98aeef9f8cc3dfc7cdc96c"
+  },
+  {
+   "count": 2,
+   "kind": "json",
+   "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/protected-commands/compile-database-<attempt>.json",
+   "sha256": "35fc876614a5de06b750e7810e5c9537f86cb672d32c3f5a08abec2218d4b51a"
+  },
+  {
+   "count": 3,
+   "kind": "json",
+   "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/workspace-manifest.json",
+   "sha256": "922a9959117281d60e92f69df50ea66f8591d7ab0be91bd42621f5b9a3dbc110"
+  },
+  {
+   "count": 4,
+   "kind": "json",
+   "path": "data/jobs/job_post_build_security_assessment/attempts/<attempt>/steps/inspection/tasks/native_units/p-44986a401d00/binary-inspections.json",
+   "sha256": "ec744babc4d3f3cc1290d6be3520113cc55cffd0bad91b7e682c90d9e59da1af"
+  },
+  {
+   "count": 5,
+   "kind": "json",
+   "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/protected-commands/1301ffb59230fe90fcd36e27.json",
+   "sha256": "6f9a6fddc4249da3693f4be622b4f978dfc3396252f44faa38f107fc3c3319b2"
+  },
+  {
+   "count": 5,
+   "kind": "json",
+   "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/protected-commands/5db43d739fde37470f071596.json",
+   "sha256": "713f16bc25f32c93ac13d2f7244a413e6426dc0ebbf37376b6d9cb64b8e28ccc"
+  },
+  {
+   "count": 6,
+   "kind": "json",
+   "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/attempts/<attempt>/execution-capture/command-001/secret-scan/findings.json",
+   "sha256": "3361a5a5c0663f3f73d558d25f67ee083eb1a4de2ba7c73208b7af5a59c53d4a"
+  },
+  {
+   "count": 6,
+   "kind": "json",
+   "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/attempts/<attempt>/execution-capture/command-002/secret-scan/findings.json",
+   "sha256": "3361a5a5c0663f3f73d558d25f67ee083eb1a4de2ba7c73208b7af5a59c53d4a"
+  },
+  {
+   "count": 6,
+   "kind": "json",
+   "path": "data/jobs/job_post_build_security_assessment/attempts/<attempt>/steps/deterministic/tasks/native_units/p-44986a401d00/deterministic-results.json",
+   "sha256": "b95f17397f886e9eae9cd3f322ceec76f5852cc1a5ccfdb27ae9b599ed58c8e2"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/workspace/build/compile_commands.json",
+   "sha256": "0fe1fb22c97e9fec04811414712c9de256c41f3c5b197b2d132d016011df0da4"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/cpp/projects/build-unit-b9c931fa551e02bd12b2/normalized-compile-commands.json",
+   "sha256": "351c51c963ae9bfe3b5e61be2144daaf61c5b0f2f08d9045756c5720f9cfe73d"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/indices/manifests/build-security-<attempt>.json",
+   "sha256": "54e4279a9dc24f2d0d7a251ccb9c6f7ca573e9ae1e83b993e6fe57fcb00912c0"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/indices/manifests/cpp-compiled-<attempt>.json",
+   "sha256": "a1304f4382d4f221eed293e5901102b0856806d78ef7dd640498256728f5daf9"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/jobs/job_post_build_security_assessment/attempts/<attempt>/steps/provenance/tasks/native_units/p-44986a401d00/build-command-provenance.json",
+   "sha256": "b693ab6af6d0bc85e26f576a8808b3768bad6eddeb8d05fb4d17e5c9450ab36d"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/jobs/job_post_build_security_assessment/attempts/<attempt>/steps/publication/tasks/publish_handoff/post-build-security-summary.json",
+   "sha256": "2eca35caa3d2d67cbc4cbe3ba5fca76f46c31f1691fe68ae813aa847a167c99e"
+  },
+  {
+   "count": 9,
+   "kind": "json",
+   "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/attempts/<attempt>/execution-capture/command-001/secret-scan/execution.json",
+   "sha256": "4dff0688e08c6905782741fd45f8bffabcc57cec0be92e47c00f28c4c3e81f76"
+  },
+  {
+   "count": 9,
+   "kind": "json",
+   "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/attempts/<attempt>/execution-capture/command-002/secret-scan/execution.json",
+   "sha256": "4dff0688e08c6905782741fd45f8bffabcc57cec0be92e47c00f28c4c3e81f76"
+  },
+  {
+   "coverage_statuses": {
+    "partial": 1
+   },
+   "entity_kinds": {
+    "build_action": 80,
+    "executable": 3,
+    "library": 3,
+    "object_file": 7,
+    "tool_observation": 77
+   },
+   "kind": "sqlite",
+   "path": "data/indices/build_security/<sha256>-53c1f3312447a081.sqlite",
+   "rows": {
+    "coverage": 1,
+    "entities": 170,
+    "locations": 0,
+    "metadata": 8,
+    "relations": 657
+   }
+  },
+  {
+   "kind": "file",
+   "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/attempts/<attempt>/execution-capture/command-001/events.jsonl"
+  },
+  {
+   "kind": "file",
+   "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/attempts/<attempt>/execution-capture/command-002/events.jsonl"
+  },
+  {
+   "kind": "file",
+   "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/logs/001.stderr"
+  },
+  {
+   "kind": "file",
+   "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/logs/001.stdout"
+  },
+  {
+   "kind": "file",
+   "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/logs/002.stderr"
+  },
+  {
+   "kind": "file",
+   "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/logs/002.stdout"
+  },
+  {
+   "kind": "file",
+   "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/workspace/build/CMakeFiles/relay.dir/src/config.cpp.o"
+  },
+  {
+   "kind": "file",
+   "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/workspace/build/CMakeFiles/relay.dir/src/diag.cpp.o"
+  },
+  {
+   "kind": "file",
+   "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/workspace/build/CMakeFiles/relay.dir/src/frame.cpp.o"
+  },
+  {
+   "kind": "file",
+   "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/workspace/build/CMakeFiles/relay.dir/src/log.cpp.o"
+  },
+  {
+   "kind": "file",
+   "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/workspace/build/CMakeFiles/relay.dir/src/main.cpp.o"
+  },
+  {
+   "kind": "file",
+   "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/workspace/build/CMakeFiles/relay.dir/src/packet.cpp.o"
+  },
+  {
+   "kind": "file",
+   "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/workspace/build/CMakeFiles/relay.dir/src/session.cpp.o"
+  },
+  {
+   "kind": "file",
+   "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/workspace/build/relay"
+  }
+ ],
+ "failed_units": [],
+ "findings": [],
+ "gaps": [
+  {
+   "count": 1,
+   "gap": {
+    "area": "post-build-security",
+    "gap": "per-action environment was not emitted; only sanitized empty facts are retained; per-action timing/exit status unavailable for <sha256>; per-action timing/exit status unavailable for <sha256>; per-action timing/exit status unavailable for <sha256>; per-action timing/exit status unavailable for <sha256>; per-action timing/exit status unavailable for <sha256>; per-action timing/exit status unavailable for <sha256>; per-action timing/exit status unavailable for <sha256>; per-action timing/exit status unavailable for <sha256>; per-action timing/exit status unavailable for <sha256>; per-action timing/exit status unavailable for <sha256>; per-action timing/exit status unavailable for <sha256>; per-action timing/exit status unavailable for <sha256>; per-action timing/exit status unavailable for <sha256>; per-action timing/exit status unavailable for <sha256>; per-action timing/exit status unavailable for <sha256>; per-action timing/exit status unavailable for <sha256>; per-action timing/exit status unavailable for <sha256>; per-action timing/exit status unavailable for <sha256>; per-action timing/exit status unavailable for <sha256>",
+    "status": "partial"
+   },
+   "unit": "artifact:data/indices/build_security/<sha256>-53c1f3312447a081.sqlite"
+  },
+  {
+   "count": 2,
+   "gap": "35 applicable deterministic checks remain unknown",
+   "unit": "deterministic.native_units"
+  },
+  {
+   "count": 2,
+   "gap": "no exact producing action resolved for CMakeDetermineCompilerABI_CXX.bin",
+   "unit": "deterministic.native_units"
+  },
+  {
+   "count": 2,
+   "gap": "no exact producing action resolved for a.out",
+   "unit": "deterministic.native_units"
+  },
+  {
+   "count": 2,
+   "gap": "per-action environment was not emitted; only sanitized empty facts are retained",
+   "unit": "deterministic.native_units"
+  },
+  {
+   "count": 160,
+   "gap": "per-action timing/exit status unavailable for <sha256>",
+   "unit": "deterministic.native_units"
+  },
+  {
+   "count": 3,
+   "gap": "35 applicable deterministic checks remain unknown",
+   "unit": "index.native_units"
+  },
+  {
+   "count": 3,
+   "gap": "no exact producing action resolved for CMakeDetermineCompilerABI_CXX.bin",
+   "unit": "index.native_units"
+  },
+  {
+   "count": 3,
+   "gap": "no exact producing action resolved for a.out",
+   "unit": "index.native_units"
+  },
+  {
+   "count": 3,
+   "gap": "per-action environment was not emitted; only sanitized empty facts are retained",
+   "unit": "index.native_units"
+  },
+  {
+   "count": 240,
+   "gap": "per-action timing/exit status unavailable for <sha256>",
+   "unit": "index.native_units"
+  },
+  {
+   "count": 3,
+   "gap": "structured build-security inference request exceeded its configured input budget",
+   "unit": "index.native_units"
+  },
+  {
+   "count": 2,
+   "gap": "structured build-security inference request exceeded its configured input budget",
+   "unit": "inference.native_units"
+  },
+  {
+   "count": 2,
+   "gap": "no exact producing action resolved for CMakeDetermineCompilerABI_CXX.bin",
+   "unit": "inspection.native_units"
+  },
+  {
+   "count": 2,
+   "gap": "no exact producing action resolved for a.out",
+   "unit": "inspection.native_units"
+  },
+  {
+   "count": 2,
+   "gap": "per-action environment was not emitted; only sanitized empty facts are retained",
+   "unit": "inspection.native_units"
+  },
+  {
+   "count": 160,
+   "gap": "per-action timing/exit status unavailable for <sha256>",
+   "unit": "inspection.native_units"
+  },
+  {
+   "count": 2,
+   "gap": "no exact producing action resolved for CMakeDetermineCompilerABI_CXX.bin",
+   "unit": "provenance.native_units"
+  },
+  {
+   "count": 2,
+   "gap": "no exact producing action resolved for a.out",
+   "unit": "provenance.native_units"
+  },
+  {
+   "count": 2,
+   "gap": "per-action environment was not emitted; only sanitized empty facts are retained",
+   "unit": "provenance.native_units"
+  },
+  {
+   "count": 160,
+   "gap": "per-action timing/exit status unavailable for <sha256>",
+   "unit": "provenance.native_units"
+  },
+  {
+   "count": 1,
+   "gap": "35 applicable deterministic checks remain unknown",
+   "unit": "publication.publish_handoff"
+  },
+  {
+   "count": 1,
+   "gap": "no exact producing action resolved for CMakeDetermineCompilerABI_CXX.bin",
+   "unit": "publication.publish_handoff"
+  },
+  {
+   "count": 1,
+   "gap": "no exact producing action resolved for a.out",
+   "unit": "publication.publish_handoff"
+  },
+  {
+   "count": 1,
+   "gap": "per-action environment was not emitted; only sanitized empty facts are retained",
+   "unit": "publication.publish_handoff"
+  },
+  {
+   "count": 80,
+   "gap": "per-action timing/exit status unavailable for <sha256>",
+   "unit": "publication.publish_handoff"
+  },
+  {
+   "count": 1,
+   "gap": "structured build-security inference request exceeded its configured input budget",
+   "unit": "publication.publish_handoff"
+  }
+ ],
+ "handoff": {
+  "completion_status": "COMPLETED_WITH_GAPS",
+  "schema_identity": "appsec-review/post-build-security-assessment/1",
+  "status": "ACCEPTED",
+  "upstream_jobs": [
+   "job_ci_configuration_analysis",
+   "job_cpp_compiled_analysis",
+   "job_evidence_collection",
+   "job_language_build",
+   "job_project_build",
+   "job_review_intake",
+   "job_source_history_analysis",
+   "job_target_analysis_plan",
+   "job_target_catalog"
+  ]
+ },
+ "job_id": "job_post_build_security_assessment",
+ "outputs": {
+  "deterministic.native_units": {
+   "project_count": 1,
+   "projects": {
+    "build-unit-b9c931fa551e02bd12b2": {
+     "artifact": {
+      "path": "data/jobs/job_post_build_security_assessment/attempts/<attempt>/steps/deterministic/tasks/native_units/p-44986a401d00/deterministic-results.json",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     "case_id": "build-unit-b9c931fa551e02bd12b2",
+     "checks": {
+      "<summary>": {
+       "count": 77,
+       "sha256": "5c8817dc6bcef57429ca5c74a964c434e33a9c8ef211a57c407e81f37e18ff79"
+      }
+     },
+     "counts": {
+      "fail": 7,
+      "not_applicable": 21,
+      "pass": 14,
+      "unknown": 35
+     },
+     "rule_version": "build-security-rules/1",
+     "schema": "appsec-review/build-security-deterministic-results/1",
+     "terminal_status": "COMPLETED_WITH_GAPS"
+    }
+   },
+   "terminal_status": "COMPLETED_WITH_GAPS"
+  },
+  "index.native_units": {
+   "project_count": 1,
+   "projects": {
+    "build-unit-b9c931fa551e02bd12b2": {
+     "artifact": {
+      "path": "data/indices/build_security/<sha256>-53c1f3312447a081.sqlite",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     "index_identity": {
+      "fingerprint": "<sha256>",
+      "name": "build_security",
+      "producer": {
+       "guidance_identity": "build-security-inference-guidance/1",
+       "job": "job_post_build_security_assessment",
+       "normalizer_version": "build-security-command-normalizer/1",
+       "parser_version": "build-security-binary-parser/1",
+       "rule_version": "build-security-rules/1",
+       "unit": "index.native_units"
+      },
+      "relative_path": "data/indices/build_security/<sha256>-53c1f3312447a081.sqlite",
+      "schema": "appsec-review/retrieval-index/2",
+      "sha256": "<sha256>",
+      "shard_id": "build-security-build-unit-b9c931fa551e02bd12b2"
+     },
+     "index_reused": false,
+     "source_artifacts": [
+      {
+       "path": "data/jobs/job_post_build_security_assessment/attempts/<attempt>/steps/provenance/tasks/native_units/p-44986a401d00/build-command-provenance.json",
+       "sha256": "<sha256>",
+       "size_bytes": "<size_bytes>"
+      },
+      {
+       "path": "data/jobs/job_post_build_security_assessment/attempts/<attempt>/steps/inspection/tasks/native_units/p-44986a401d00/binary-inspections.json",
+       "sha256": "<sha256>",
+       "size_bytes": "<size_bytes>"
+      },
+      {
+       "path": "data/jobs/job_post_build_security_assessment/attempts/<attempt>/steps/deterministic/tasks/native_units/p-44986a401d00/deterministic-results.json",
+       "sha256": "<sha256>",
+       "size_bytes": "<size_bytes>"
+      },
+      {
+       "path": "data/jobs/job_post_build_security_assessment/attempts/<attempt>/steps/inference/tasks/native_units/p-44986a401d00/inference-results.json",
+       "sha256": "<sha256>",
+       "size_bytes": "<size_bytes>"
+      }
+     ],
+     "terminal_status": "COMPLETED_WITH_GAPS"
+    }
+   },
+   "terminal_status": "COMPLETED_WITH_GAPS"
+  },
+  "inference.native_units": {
+   "project_count": 1,
+   "projects": {
+    "build-unit-b9c931fa551e02bd12b2": {
+     "artifact": {
+      "path": "data/jobs/job_post_build_security_assessment/attempts/<attempt>/steps/inference/tasks/native_units/p-44986a401d00/inference-results.json",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     "case_id": "build-unit-b9c931fa551e02bd12b2",
+     "confirmed_count": 0,
+     "model_calls": 0,
+     "model_identity": {
+      "guidance_sha256": "<sha256>",
+      "model": "claude-haiku-5-5",
+      "provider": "claude-cli",
+      "reasoning": "medium"
+     },
+     "observations": [],
+     "refuted_count": 0,
+     "rejections": [],
+     "request_sha256": "<sha256>",
+     "schema": "appsec-review/build-security-inference/1",
+     "terminal_status": "COMPLETED_WITH_GAPS",
+     "unvalidated_count": 0
+    }
+   },
+   "terminal_status": "COMPLETED_WITH_GAPS"
+  },
+  "inspection.native_units": {
+   "project_count": 1,
+   "projects": {
+    "build-unit-b9c931fa551e02bd12b2": {
+     "artifact": {
+      "path": "data/jobs/job_post_build_security_assessment/attempts/<attempt>/steps/inspection/tasks/native_units/p-44986a401d00/binary-inspections.json",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     "case_id": "build-unit-b9c931fa551e02bd12b2",
+     "records": [
+      {
+       "architecture": 62,
+       "archive_members": [],
+       "artifact_id": "<sha256>",
+       "bits": 64,
+       "build_id": "e564fb6320f85eb85ed89e190057f9be0def152c",
+       "catalog_kind": "executable",
+       "debug": {
+        "present": false,
+        "sections": []
+       },
+       "dependencies": [
+        "libc.so.6"
+       ],
+       "executed": false,
+       "exports": [],
+       "format": "ELF",
+       "hardening": {
+        "control_flow": null,
+        "fortify": null,
+        "now": true,
+        "nx_stack": true,
+        "pie": true,
+        "relro": true,
+        "stack_canary": null
+       },
+       "headers": {
+        "machine": 62,
+        "program_header_count": 13,
+        "section_count": 29,
+        "type": 3
+       },
+       "imports": [
+        "_ITM_deregisterTMCloneTable",
+        "_ITM_registerTMCloneTable",
+        "__cxa_finalize",
+        "__gmon_start__",
+        "__libc_start_main"
+       ],
+       "interpreter": "/lib64/ld-linux-x86-64.so.2",
+       "kind": "pie_executable",
+       "parser_identity": "build-security-binary-parser/1",
+       "path": "CMakeDetermineCompilerABI_CXX.bin",
+       "pinned_tool_observation": {
+        "metadata_sha256": "<sha256>",
+        "record_sha256": "<sha256>",
+        "symbol_count": 28,
+        "tool": "tool-native-cpp:1.0.0/nm+readelf"
+       },
+       "relocations": [
+        ".rela.dyn"
+       ],
+       "rpath": [],
+       "run_path": "data/cpp/projects/build-unit-b9c931fa551e02bd12b2/build/CMakeFiles/3.28.3/CMakeDetermineCompilerABI_CXX.bin",
+       "runpath": [],
+       "schema": "appsec-review/binary-inspection/1",
+       "sections": [
+        {
+         "flags": 0,
+         "name": "",
+         "offset": 0,
+         "size": 0,
+         "type": 0
+        },
+        {
+         "flags": 2,
+         "name": ".interp",
+         "offset": 792,
+         "size": 28,
+         "type": 1
+        },
+        {
+         "flags": 2,
+         "name": ".note.gnu.property",
+         "offset": 824,
+         "size": 48,
+         "type": 7
+        },
+        {
+         "flags": 2,
+         "name": ".note.gnu.build-id",
+         "offset": 872,
+         "size": 36,
+         "type": 7
+        },
+        {
+         "flags": 2,
+         "name": ".note.ABI-tag",
+         "offset": 908,
+         "size": 32,
+         "type": 7
+        },
+        {
+         "flags": 2,
+         "name": ".gnu.hash",
+         "offset": 944,
+         "size": 36,
+         "type": 1879048182
+        },
+        {
+         "flags": 2,
+         "name": ".dynsym",
+         "offset": 984,
+         "size": 144,
+         "type": 11
+        },
+        {
+         "flags": 2,
+         "name": ".dynstr",
+         "offset": 1128,
+         "size": 136,
+         "type": 3
+        },
+        {
+         "flags": 2,
+         "name": ".gnu.version",
+         "offset": 1264,
+         "size": 12,
+         "type": 1879048191
+        },
+        {
+         "flags": 2,
+         "name": ".gnu.version_r",
+         "offset": 1280,
+         "size": 48,
+         "type": 1879048190
+        },
+        {
+         "flags": 2,
+         "name": ".rela.dyn",
+         "offset": 1328,
+         "size": 192,
+         "type": 4
+        },
+        {
+         "flags": 6,
+         "name": ".init",
+         "offset": 4096,
+         "size": 27,
+         "type": 1
+        },
+        {
+         "flags": 6,
+         "name": ".plt",
+         "offset": 4128,
+         "size": 16,
+         "type": 1
+        },
+        {
+         "flags": 6,
+         "name": ".plt.got",
+         "offset": 4144,
+         "size": 16,
+         "type": 1
+        },
+        {
+         "flags": 6,
+         "name": ".text",
+         "offset": 4160,
+         "size": 356,
+         "type": 1
+        },
+        {
+         "flags": 6,
+         "name": ".fini",
+         "offset": 4516,
+         "size": 13,
+         "type": 1
+        },
+        {
+         "flags": 2,
+         "name": ".rodata",
+         "offset": 8192,
+         "size": 142,
+         "type": 1
+        },
+        {
+         "flags": 2,
+         "name": ".eh_frame_hdr",
+         "offset": 8336,
+         "size": 44,
+         "type": 1
+        },
+        {
+         "flags": 2,
+         "name": ".eh_frame",
+         "offset": 8384,
+         "size": 148,
+         "type": 1
+        },
+        {
+         "flags": 3,
+         "name": ".init_array",
+         "offset": 11760,
+         "size": 8,
+         "type": 14
+        },
+        {
+         "flags": 3,
+         "name": ".fini_array",
+         "offset": 11768,
+         "size": 8,
+         "type": 15
+        },
+        {
+         "flags": 3,
+         "name": ".dynamic",
+         "offset": 11776,
+         "size": 448,
+         "type": 6
+        },
+        {
+         "flags": 3,
+         "name": ".got",
+         "offset": 12224,
+         "size": 64,
+         "type": 1
+        },
+        {
+         "flags": 3,
+         "name": ".data",
+         "offset": 12288,
+         "size": 16,
+         "type": 1
+        },
+        {
+         "flags": 3,
+         "name": ".bss",
+         "offset": 12304,
+         "size": 8,
+         "type": 8
+        },
+        {
+         "flags": 48,
+         "name": ".comment",
+         "offset": 12304,
+         "size": 45,
+         "type": 1
+        },
+        {
+         "flags": 0,
+         "name": ".symtab",
+         "offset": 12352,
+         "size": 936,
+         "type": 2
+        },
+        {
+         "flags": 0,
+         "name": ".strtab",
+         "offset": 13288,
+         "size": 576,
+         "type": 3
+        },
+        {
+         "flags": 0,
+         "name": ".shstrtab",
+         "offset": 13864,
+         "size": 268,
+         "type": 3
+        }
+       ],
+       "sha256": "<sha256>",
+       "size_bytes": "<size_bytes>",
+       "symbols": {
+        "defined_names": [
+         "_DYNAMIC",
+         "_GLOBAL_OFFSET_TABLE_",
+         "_IO_stdin_used",
+         "_ZL16info_sizeof_dptr",
+         "_ZL26info_byte_order_big_endian",
+         "_ZL29info_byte_order_little_endian",
+         "_ZL8info_abi",
+         "__FRAME_END__",
+         "__GNU_EH_FRAME_HDR",
+         "__TMC_END__",
+         "__abi_tag",
+         "__bss_start",
+         "__data_start",
+         "__do_global_dtors_aux",
+         "__do_global_dtors_aux_fini_array_entry",
+         "__dso_handle",
+         "__frame_dummy_init_array_entry",
+         "_edata",
+         "_end",
+         "_fini",
+         "_init",
+         "_start",
+         "completed.0",
+         "data_start",
+         "deregister_tm_clones",
+         "frame_dummy",
+         "main",
+         "register_tm_clones"
+        ],
+        "names": [
+         "CMakeCXXCompilerABI.cpp",
+         "Scrt1.o",
+         "_DYNAMIC",
+         "_GLOBAL_OFFSET_TABLE_",
+         "_IO_stdin_used",
+         "_ITM_deregisterTMCloneTable",
+         "_ITM_registerTMCloneTable",
+         "_ZL16info_sizeof_dptr",
+         "_ZL26info_byte_order_big_endian",
+         "_ZL29info_byte_order_little_endian",
+         "_ZL8info_abi",
+         "__FRAME_END__",
+         "__GNU_EH_FRAME_HDR",
+         "__TMC_END__",
+         "__abi_tag",
+         "__bss_start",
+         "__cxa_finalize",
+         "__cxa_finalize@GLIBC_2.2.5",
+         "__data_start",
+         "__do_global_dtors_aux",
+         "__do_global_dtors_aux_fini_array_entry",
+         "__dso_handle",
+         "__frame_dummy_init_array_entry",
+         "__gmon_start__",
+         "__libc_start_main",
+         "__libc_start_main@GLIBC_2.34",
+         "_edata",
+         "_end",
+         "_fini",
+         "_init",
+         "_start",
+         "completed.0",
+         "crtstuff.c",
+         "data_start",
+         "deregister_tm_clones",
+         "frame_dummy",
+         "main",
+         "register_tm_clones"
+        ],
+        "present": true,
+        "stripped": false
+       }
+      },
+      {
+       "architecture": 62,
+       "archive_members": [],
+       "artifact_id": "<sha256>",
+       "bits": 64,
+       "build_id": "32b99493f7577afb3d188cacc03c1900c12a363c",
+       "catalog_kind": "executable",
+       "debug": {
+        "present": false,
+        "sections": []
+       },
+       "dependencies": [
+        "libc.so.6"
+       ],
+       "executed": false,
+       "exports": [],
+       "format": "ELF",
+       "hardening": {
+        "control_flow": null,
+        "fortify": null,
+        "now": true,
+        "nx_stack": true,
+        "pie": true,
+        "relro": true,
+        "stack_canary": null
+       },
+       "headers": {
+        "machine": 62,
+        "program_header_count": 13,
+        "section_count": 29,
+        "type": 3
+       },
+       "imports": [
+        "_ITM_deregisterTMCloneTable",
+        "_ITM_registerTMCloneTable",
+        "__cxa_finalize",
+        "__gmon_start__",
+        "__libc_start_main"
+       ],
+       "interpreter": "/lib64/ld-linux-x86-64.so.2",
+       "kind": "pie_executable",
+       "parser_identity": "build-security-binary-parser/1",
+       "path": "a.out",
+       "pinned_tool_observation": {
+        "metadata_sha256": "<sha256>",
+        "record_sha256": "<sha256>",
+        "symbol_count": 30,
+        "tool": "tool-native-cpp:1.0.0/nm+readelf"
+       },
+       "relocations": [
+        ".rela.dyn"
+       ],
+       "rpath": [],
+       "run_path": "data/cpp/projects/build-unit-b9c931fa551e02bd12b2/build/CMakeFiles/3.28.3/CompilerIdCXX/a.out",
+       "runpath": [],
+       "schema": "appsec-review/binary-inspection/1",
+       "sections": [
+        {
+         "flags": 0,
+         "name": "",
+         "offset": 0,
+         "size": 0,
+         "type": 0
+        },
+        {
+         "flags": 2,
+         "name": ".interp",
+         "offset": 792,
+         "size": 28,
+         "type": 1
+        },
+        {
+         "flags": 2,
+         "name": ".note.gnu.property",
+         "offset": 824,
+         "size": 48,
+         "type": 7
+        },
+        {
+         "flags": 2,
+         "name": ".note.gnu.build-id",
+         "offset": 872,
+         "size": 36,
+         "type": 7
+        },
+        {
+         "flags": 2,
+         "name": ".note.ABI-tag",
+         "offset": 908,
+         "size": 32,
+         "type": 7
+        },
+        {
+         "flags": 2,
+         "name": ".gnu.hash",
+         "offset": 944,
+         "size": 36,
+         "type": 1879048182
+        },
+        {
+         "flags": 2,
+         "name": ".dynsym",
+         "offset": 984,
+         "size": 144,
+         "type": 11
+        },
+        {
+         "flags": 2,
+         "name": ".dynstr",
+         "offset": 1128,
+         "size": 136,
+         "type": 3
+        },
+        {
+         "flags": 2,
+         "name": ".gnu.version",
+         "offset": 1264,
+         "size": 12,
+         "type": 1879048191
+        },
+        {
+         "flags": 2,
+         "name": ".gnu.version_r",
+         "offset": 1280,
+         "size": 48,
+         "type": 1879048190
+        },
+        {
+         "flags": 2,
+         "name": ".rela.dyn",
+         "offset": 1328,
+         "size": 312,
+         "type": 4
+        },
+        {
+         "flags": 6,
+         "name": ".init",
+         "offset": 4096,
+         "size": 27,
+         "type": 1
+        },
+        {
+         "flags": 6,
+         "name": ".plt",
+         "offset": 4128,
+         "size": 16,
+         "type": 1
+        },
+        {
+         "flags": 6,
+         "name": ".plt.got",
+         "offset": 4144,
+         "size": 16,
+         "type": 1
+        },
+        {
+         "flags": 6,
+         "name": ".text",
+         "offset": 4160,
+         "size": 402,
+         "type": 1
+        },
+        {
+         "flags": 6,
+         "name": ".fini",
+         "offset": 4564,
+         "size": 13,
+         "type": 1
+        },
+        {
+         "flags": 2,
+         "name": ".rodata",
+         "offset": 8192,
+         "size": 201,
+         "type": 1
+        },
+        {
+         "flags": 2,
+         "name": ".eh_frame_hdr",
+         "offset": 8396,
+         "size": 44,
+         "type": 1
+        },
+        {
+         "flags": 2,
+         "name": ".eh_frame",
+         "offset": 8440,
+         "size": 148,
+         "type": 1
+        },
+        {
+         "flags": 3,
+         "name": ".init_array",
+         "offset": 11760,
+         "size": 8,
+         "type": 14
+        },
+        {
+         "flags": 3,
+         "name": ".fini_array",
+         "offset": 11768,
+         "size": 8,
+         "type": 15
+        },
+        {
+         "flags": 3,
+         "name": ".dynamic",
+         "offset": 11776,
+         "size": 448,
+         "type": 6
+        },
+        {
+         "flags": 3,
+         "name": ".got",
+         "offset": 12224,
+         "size": 64,
+         "type": 1
+        },
+        {
+         "flags": 3,
+         "name": ".data",
+         "offset": 12288,
+         "size": 56,
+         "type": 1
+        },
+        {
+         "flags": 3,
+         "name": ".bss",
+         "offset": 12344,
+         "size": 8,
+         "type": 8
+        },
+        {
+         "flags": 48,
+         "name": ".comment",
+         "offset": 12344,
+         "size": 45,
+         "type": 1
+        },
+        {
+         "flags": 0,
+         "name": ".symtab",
+         "offset": 12392,
+         "size": 984,
+         "type": 2
+        },
+        {
+         "flags": 0,
+         "name": ".strtab",
+         "offset": 13376,
+         "size": 593,
+         "type": 3
+        },
+        {
+         "flags": 0,
+         "name": ".shstrtab",
+         "offset": 13969,
+         "size": 268,
+         "type": 3
+        }
+       ],
+       "sha256": "<sha256>",
+       "size_bytes": "<size_bytes>",
+       "symbols": {
+        "defined_names": [
+         "_DYNAMIC",
+         "_GLOBAL_OFFSET_TABLE_",
+         "_IO_stdin_used",
+         "_ZL12info_version",
+         "__FRAME_END__",
+         "__GNU_EH_FRAME_HDR",
+         "__TMC_END__",
+         "__abi_tag",
+         "__bss_start",
+         "__data_start",
+         "__do_global_dtors_aux",
+         "__do_global_dtors_aux_fini_array_entry",
+         "__dso_handle",
+         "__frame_dummy_init_array_entry",
+         "_edata",
+         "_end",
+         "_fini",
+         "_init",
+         "_start",
+         "completed.0",
+         "data_start",
+         "deregister_tm_clones",
+         "frame_dummy",
+         "info_arch",
+         "info_compiler",
+         "info_language_extensions_default",
+         "info_language_standard_default",
+         "info_platform",
+         "main",
+         "register_tm_clones"
+        ],
+        "names": [
+         "CMakeCXXCompilerId.cpp",
+         "Scrt1.o",
+         "_DYNAMIC",
+         "_GLOBAL_OFFSET_TABLE_",
+         "_IO_stdin_used",
+         "_ITM_deregisterTMCloneTable",
+         "_ITM_registerTMCloneTable",
+         "_ZL12info_version",
+         "__FRAME_END__",
+         "__GNU_EH_FRAME_HDR",
+         "__TMC_END__",
+         "__abi_tag",
+         "__bss_start",
+         "__cxa_finalize",
+         "__cxa_finalize@GLIBC_2.2.5",
+         "__data_start",
+         "__do_global_dtors_aux",
+         "__do_global_dtors_aux_fini_array_entry",
+         "__dso_handle",
+         "__frame_dummy_init_array_entry",
+         "__gmon_start__",
+         "__libc_start_main",
+         "__libc_start_main@GLIBC_2.34",
+         "_edata",
+         "_end",
+         "_fini",
+         "_init",
+         "_start",
+         "completed.0",
+         "crtstuff.c",
+         "data_start",
+         "deregister_tm_clones",
+         "frame_dummy",
+         "info_arch",
+         "info_compiler",
+         "info_language_extensions_default",
+         "info_language_standard_default",
+         "info_platform",
+         "main",
+         "register_tm_clones"
+        ],
+        "present": true,
+        "stripped": false
+       }
+      },
+      {
+       "architecture": 62,
+       "archive_members": [],
+       "artifact_id": "<sha256>",
+       "bits": 64,
+       "build_id": null,
+       "catalog_kind": "object",
+       "debug": {
+        "present": true,
+        "sections": [
+         ".debug_abbrev",
+         ".debug_aranges",
+         ".debug_info",
+         ".debug_line",
+         ".debug_line_str",
+         ".debug_loclists",
+         ".debug_rnglists",
+         ".debug_str"
+        ]
+       },
+       "dependencies": [],
+       "executed": false,
+       "exports": [],
+       "format": "ELF",
+       "hardening": {
+        "control_flow": null,
+        "fortify": null,
+        "now": null,
+        "nx_stack": null,
+        "pie": null,
+        "relro": false,
+        "stack_canary": null
+       },
+       "headers": {
+        "machine": 62,
+        "program_header_count": 0,
+        "section_count": 27,
+        "type": 1
+       },
+       "imports": [],
+       "interpreter": null,
+       "kind": "object",
+       "parser_identity": "build-security-binary-parser/1",
+       "path": "config.cpp.o",
+       "pinned_tool_observation": {
+        "metadata_sha256": "<sha256>",
+        "record_sha256": "<sha256>",
+        "symbol_count": 5,
+        "tool": "tool-native-cpp:1.0.0/nm+readelf"
+       },
+       "relocations": [
+        ".rela.text",
+        ".rela.debug_info",
+        ".rela.debug_loclists",
+        ".rela.debug_aranges",
+        ".rela.debug_line",
+        ".rela.eh_frame"
+       ],
+       "rpath": [],
+       "run_path": "data/cpp/projects/build-unit-b9c931fa551e02bd12b2/build/CMakeFiles/relay.dir/src/config.cpp.o",
+       "runpath": [],
+       "schema": "appsec-review/binary-inspection/1",
+       "sections": [
+        {
+         "flags": 0,
+         "name": "",
+         "offset": 0,
+         "size": 0,
+         "type": 0
+        },
+        {
+         "flags": 6,
+         "name": ".text",
+         "offset": 64,
+         "size": 148,
+         "type": 1
+        },
+        {
+         "flags": 64,
+         "name": ".rela.text",
+         "offset": 57272,
+         "size": 120,
+         "type": 4
+        },
+        {
+         "flags": 3,
+         "name": ".data",
+         "offset": 212,
+         "size": 0,
+         "type": 1
+        },
+        {
+         "flags": 3,
+         "name": ".bss",
+         "offset": 212,
+         "size": 0,
+         "type": 8
+        },
+        {
+         "flags": 2,
+         "name": ".rodata",
+         "offset": 224,
+         "size": 36,
+         "type": 1
+        },
+        {
+         "flags": 18,
+         "name": ".rodata.cst16",
+         "offset": 272,
+         "size": 32,
+         "type": 1
+        },
+        {
+         "flags": 0,
+         "name": ".debug_info",
+         "offset": 304,
+         "size": 23304,
+         "type": 1
+        },
+        {
+         "flags": 64,
+         "name": ".rela.debug_info",
+         "offset": 57392,
+         "size": 30000,
+         "type": 4
+        },
+        {
+         "flags": 0,
+         "name": ".debug_abbrev",
+         "offset": 23608,
+         "size": 2206,
+         "type": 1
+        },
+        {
+         "flags": 0,
+         "name": ".debug_loclists",
+         "offset": 25814,
+         "size": 364,
+         "type": 1
+        },
+        {
+         "flags": 64,
+         "name": ".rela.debug_loclists",
+         "offset": 87392,
+         "size": 216,
+         "type": 4
+        },
+        {
+         "flags": 0,
+         "name": ".debug_aranges",
+         "offset": 26178,
+         "size": 48,
+         "type": 1
+        },
+        {
+         "flags": 64,
+         "name": ".rela.debug_aranges",
+         "offset": 87608,
+         "size": 48,
+         "type": 4
+        },
+        {
+         "flags": 0,
+         "name": ".debug_rnglists",
+         "offset": 26226,
+         "size": 94,
+         "type": 1
+        },
+        {
+         "flags": 0,
+         "name": ".debug_line",
+         "offset": 26320,
+         "size": 700,
+         "type": 1
+        },
+        {
+         "flags": 64,
+         "name": ".rela.debug_line",
+         "offset": 87656,
+         "size": 1632,
+         "type": 4
+        },
+        {
+         "flags": 48,
+         "name": ".debug_str",
+         "offset": 27020,
+         "size": 28423,
+         "type": 1
+        },
+        {
+         "flags": 48,
+         "name": ".debug_line_str",
+         "offset": 55443,
+         "size": 1024,
+         "type": 1
+        },
+        {
+         "flags": 48,
+         "name": ".comment",
+         "offset": 56467,
+         "size": 46,
+         "type": 1
+        },
+        {
+         "flags": 0,
+         "name": ".note.GNU-stack",
+         "offset": 56513,
+         "size": 0,
+         "type": 1
+        },
+        {
+         "flags": 2,
+         "name": ".note.gnu.property",
+         "offset": 56520,
+         "size": 32,
+         "type": 7
+        },
+        {
+         "flags": 2,
+         "name": ".eh_frame",
+         "offset": 56552,
+         "size": 80,
+         "type": 1
+        },
+        {
+         "flags": 64,
+         "name": ".rela.eh_frame",
+         "offset": 89288,
+         "size": 48,
+         "type": 4
+        },
+        {
+         "flags": 0,
+         "name": ".symtab",
+         "offset": 56632,
+         "size": 432,
+         "type": 2
+        },
+        {
+         "flags": 0,
+         "name": ".strtab",
+         "offset": 57064,
+         "size": 207,
+         "type": 3
+        },
+        {
+         "flags": 0,
+         "name": ".shstrtab",
+         "offset": 89336,
+         "size": 262,
+         "type": 3
+        }
+       ],
+       "sha256": "<sha256>",
+       "size_bytes": "<size_bytes>",
+       "symbols": {
+        "defined_names": [
+         ".LC0",
+         ".LC1",
+         "_ZN5relay11service_urlB5cxx11Ev",
+         "_ZN5relay12_GLOBAL__N_1L13relay_api_keyE",
+         "_ZN5relay13service_tokenEv"
+        ],
+        "names": [
+         ".LC0",
+         ".LC1",
+         "_ZN5relay11service_urlB5cxx11Ev",
+         "_ZN5relay12_GLOBAL__N_1L13relay_api_keyE",
+         "_ZN5relay13service_tokenEv",
+         "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE9_M_createERmm",
+         "__stack_chk_fail",
+         "config.cpp"
+        ],
+        "present": true,
+        "stripped": false
+       }
+      },
+      {
+       "architecture": 62,
+       "archive_members": [],
+       "artifact_id": "<sha256>",
+       "bits": 64,
+       "build_id": null,
+       "catalog_kind": "object",
+       "debug": {
+        "present": true,
+        "sections": [
+         ".debug_abbrev",
+         ".debug_aranges",
+         ".debug_info",
+         ".debug_line",
+         ".debug_line_str",
+         ".debug_loclists",
+         ".debug_rnglists",
+         ".debug_str"
+        ]
+       },
+       "dependencies": [],
+       "executed": false,
+       "exports": [],
+       "format": "ELF",
+       "hardening": {
+        "control_flow": null,
+        "fortify": null,
+        "now": null,
+        "nx_stack": null,
+        "pie": null,
+        "relro": false,
+        "stack_canary": null
+       },
+       "headers": {
+        "machine": 62,
+        "program_header_count": 0,
+        "section_count": 33,
+        "type": 1
+       },
+       "imports": [],
+       "interpreter": null,
+       "kind": "object",
+       "parser_identity": "build-security-binary-parser/1",
+       "path": "diag.cpp.o",
+       "pinned_tool_observation": {
+        "metadata_sha256": "<sha256>",
+        "record_sha256": "<sha256>",
+        "symbol_count": 5,
+        "tool": "tool-native-cpp:1.0.0/nm+readelf"
+       },
+       "relocations": [
+        ".rela.text",
+        ".rela.text.unlikely",
+        ".rela.debug_info",
+        ".rela.debug_loclists",
+        ".rela.debug_aranges",
+        ".rela.debug_rnglists",
+        ".rela.debug_line",
+        ".rela.data.rel.local.DW.ref.__gxx_personality_v0",
+        ".rela.eh_frame"
+       ],
+       "rpath": [],
+       "run_path": "data/cpp/projects/build-unit-b9c931fa551e02bd12b2/build/CMakeFiles/relay.dir/src/diag.cpp.o",
+       "runpath": [],
+       "schema": "appsec-review/binary-inspection/1",
+       "sections": [
+        {
+         "flags": 0,
+         "name": "",
+         "offset": 0,
+         "size": 0,
+         "type": 0
+        },
+        {
+         "flags": 0,
+         "name": ".group",
+         "offset": 64,
+         "size": 12,
+         "type": 17
+        },
+        {
+         "flags": 6,
+         "name": ".text",
+         "offset": 80,
+         "size": 298,
+         "type": 1
+        },
+        {
+         "flags": 64,
+         "name": ".rela.text",
+         "offset": 59304,
+         "size": 312,
+         "type": 4
+        },
+        {
+         "flags": 3,
+         "name": ".data",
+         "offset": 378,
+         "size": 0,
+         "type": 1
+        },
+        {
+         "flags": 3,
+         "name": ".bss",
+         "offset": 378,
+         "size": 0,
+         "type": 8
+        },
+        {
+         "flags": 50,
+         "name": ".rodata.str1.1",
+         "offset": 378,
+         "size": 32,
+         "type": 1
+        },
+        {
+         "flags": 6,
+         "name": ".text.unlikely",
+         "offset": 410,
+         "size": 37,
+         "type": 1
+        },
+        {
+         "flags": 64,
+         "name": ".rela.text.unlikely",
+         "offset": 59616,
+         "size": 72,
+         "type": 4
+        },
+        {
+         "flags": 2,
+         "name": ".gcc_except_table",
+         "offset": 447,
+         "size": 29,
+         "type": 1
+        },
+        {
+         "flags": 0,
+         "name": ".debug_info",
+         "offset": 476,
+         "size": 24107,
+         "type": 1
+        },
+        {
+         "flags": 64,
+         "name": ".rela.debug_info",
+         "offset": 59688,
+         "size": 31872,
+         "type": 4
+        },
+        {
+         "flags": 0,
+         "name": ".debug_abbrev",
+         "offset": 24583,
+         "size": 2095,
+         "type": 1
+        },
+        {
+         "flags": 0,
+         "name": ".debug_loclists",
+         "offset": 26678,
+         "size": 1382,
+         "type": 1
+        },
+        {
+         "flags": 64,
+         "name": ".rela.debug_loclists",
+         "offset": 91560,
+         "size": 1632,
+         "type": 4
+        },
+        {
+         "flags": 0,
+         "name": ".debug_aranges",
+         "offset": 28060,
+         "size": 64,
+         "type": 1
+        },
+        {
+         "flags": 64,
+         "name": ".rela.debug_aranges",
+         "offset": 93192,
+         "size": 72,
+         "type": 4
+        },
+        {
+         "flags": 0,
+         "name": ".debug_rnglists",
+         "offset": 28124,
+         "size": 339,
+         "type": 1
+        },
+        {
+         "flags": 64,
+         "name": ".rela.debug_rnglists",
+         "offset": 93264,
+         "size": 504,
+         "type": 4
+        },
+        {
+         "flags": 0,
+         "name": ".debug_line",
+         "offset": 28463,
+         "size": 928,
+         "type": 1
+        },
+        {
+         "flags": 64,
+         "name": ".rela.debug_line",
+         "offset": 93768,
+         "size": 1608,
+         "type": 4
+        },
+        {
+         "flags": 48,
+         "name": ".debug_str",
+         "offset": 29391,
+         "size": 27583,
+         "type": 1
+        },
+        {
+         "flags": 48,
+         "name": ".debug_line_str",
+         "offset": 56974,
+         "size": 975,
+         "type": 1
+        },
+        {
+         "flags": 515,
+         "name": ".data.rel.local.DW.ref.__gxx_personality_v0",
+         "offset": 57952,
+         "size": 8,
+         "type": 1
+        },
+        {
+         "flags": 576,
+         "name": ".rela.data.rel.local.DW.ref.__gxx_personality_v0",
+         "offset": 95376,
+         "size": 24,
+         "type": 4
+        },
+        {
+         "flags": 48,
+         "name": ".comment",
+         "offset": 57960,
+         "size": 46,
+         "type": 1
+        },
+        {
+         "flags": 0,
+         "name": ".note.GNU-stack",
+         "offset": 58006,
+         "size": 0,
+         "type": 1
+        },
+        {
+         "flags": 2,
+         "name": ".note.gnu.property",
+         "offset": 58008,
+         "size": 32,
+         "type": 7
+        },
+        {
+         "flags": 2,
+         "name": ".eh_frame",
+         "offset": 58040,
+         "size": 128,
+         "type": 1
+        },
+        {
+         "flags": 64,
+         "name": ".rela.eh_frame",
+         "offset": 95400,
+         "size": 120,
+         "type": 4
+        },
+        {
+         "flags": 0,
+         "name": ".symtab",
+         "offset": 58168,
+         "size": 648,
+         "type": 2
+        },
+        {
+         "flags": 0,
+         "name": ".strtab",
+         "offset": 58816,
+         "size": 485,
+         "type": 3
+        },
+        {
+         "flags": 0,
+         "name": ".shstrtab",
+         "offset": 95520,
+         "size": 354,
+         "type": 3
+        }
+       ],
+       "sha256": "<sha256>",
+       "size_bytes": "<size_bytes>",
+       "symbols": {
+        "defined_names": [
+         ".LC0",
+         ".LC1",
+         "DW.ref.__gxx_personality_v0",
+         "_ZN5relay10probe_hostERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE",
+         "_ZN5relay10probe_hostERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE.cold"
+        ],
+        "names": [
+         ".LC0",
+         ".LC1",
+         "DW.ref.__gxx_personality_v0",
+         "_Unwind_Resume",
+         "_ZN5relay10probe_hostERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE",
+         "_ZN5relay10probe_hostERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE.cold",
+         "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE10_M_disposeEv",
+         "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE7reserveEm",
+         "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE9_M_appendEPKcm",
+         "_ZSt20__throw_length_errorPKc",
+         "_ZdlPvm",
+         "__gxx_personality_v0",
+         "__stack_chk_fail",
+         "diag.cpp",
+         "system"
+        ],
+        "present": true,
+        "stripped": false
+       }
+      },
+      {
+       "architecture": 62,
+       "archive_members": [],
+       "artifact_id": "<sha256>",
+       "bits": 64,
+       "build_id": null,
+       "catalog_kind": "object",
+       "debug": {
+        "present": true,
+        "sections": [
+         ".debug_abbrev",
+         ".debug_aranges",
+         ".debug_info",
+         ".debug_line",
+         ".debug_line_str",
+         ".debug_loclists",
+         ".debug_rnglists",
+         ".debug_str"
+        ]
+       },
+       "dependencies": [],
+       "executed": false,
+       "exports": [],
+       "format": "ELF",
+       "hardening": {
+        "control_flow": null,
+        "fortify": null,
+        "now": null,
+        "nx_stack": null,
+        "pie": null,
+        "relro": false,
+        "stack_canary": null
+       },
+       "headers": {
+        "machine": 62,
+        "program_header_count": 0,
+        "section_count": 24,
+        "type": 1
+       },
+       "imports": [],
+       "interpreter": null,
+       "kind": "object",
+       "parser_identity": "build-security-binary-parser/1",
+       "path": "frame.cpp.o",
+       "pinned_tool_observation": {
+        "metadata_sha256": "<sha256>",
+        "record_sha256": "<sha256>",
+        "symbol_count": 2,
+        "tool": "tool-native-cpp:1.0.0/nm+readelf"
+       },
+       "relocations": [
+        ".rela.text",
+        ".rela.debug_info",
+        ".rela.debug_aranges",
+        ".rela.debug_line",
+        ".rela.eh_frame"
+       ],
+       "rpath": [],
+       "run_path": "data/cpp/projects/build-unit-b9c931fa551e02bd12b2/build/CMakeFiles/relay.dir/src/frame.cpp.o",
+       "runpath": [],
+       "schema": "appsec-review/binary-inspection/1",
+       "sections": [
+        {
+         "flags": 0,
+         "name": "",
+         "offset": 0,
+         "size": 0,
+         "type": 0
+        },
+        {
+         "flags": 6,
+         "name": ".text",
+         "offset": 64,
+         "size": 217,
+         "type": 1
+        },
+        {
+         "flags": 64,
+         "name": ".rela.text",
+         "offset": 15816,
+         "size": 120,
+         "type": 4
+        },
+        {
+         "flags": 3,
+         "name": ".data",
+         "offset": 281,
+         "size": 0,
+         "type": 1
+        },
+        {
+         "flags": 3,
+         "name": ".bss",
+         "offset": 281,
+         "size": 0,
+         "type": 8
+        },
+        {
+         "flags": 0,
+         "name": ".debug_info",
+         "offset": 281,
+         "size": 8396,
+         "type": 1
+        },
+        {
+         "flags": 64,
+         "name": ".rela.debug_info",
+         "offset": 15936,
+         "size": 9696,
+         "type": 4
+        },
+        {
+         "flags": 0,
+         "name": ".debug_abbrev",
+         "offset": 8677,
+         "size": 1033,
+         "type": 1
+        },
+        {
+         "flags": 0,
+         "name": ".debug_loclists",
+         "offset": 9710,
+         "size": 346,
+         "type": 1
+        },
+        {
+         "flags": 0,
+         "name": ".debug_aranges",
+         "offset": 10056,
+         "size": 48,
+         "type": 1
+        },
+        {
+         "flags": 64,
+         "name": ".rela.debug_aranges",
+         "offset": 25632,
+         "size": 48,
+         "type": 4
+        },
+        {
+         "flags": 0,
+         "name": ".debug_rnglists",
+         "offset": 10104,
+         "size": 25,
+         "type": 1
+        },
+        {
+         "flags": 0,
+         "name": ".debug_line",
+         "offset": 10129,
+         "size": 568,
+         "type": 1
+        },
+        {
+         "flags": 64,
+         "name": ".rela.debug_line",
+         "offset": 25680,
+         "size": 1320,
+         "type": 4
+        },
+        {
+         "flags": 48,
+         "name": ".debug_str",
+         "offset": 10697,
+         "size": 3599,
+         "type": 1
+        },
+        {
+         "flags": 48,
+         "name": ".debug_line_str",
+         "offset": 14296,
+         "size": 794,
+         "type": 1
+        },
+        {
+         "flags": 48,
+         "name": ".comment",
+         "offset": 15090,
+         "size": 46,
+         "type": 1
+        },
+        {
+         "flags": 0,
+         "name": ".note.GNU-stack",
+         "offset": 15136,
+         "size": 0,
+         "type": 1
+        },
+        {
+         "flags": 2,
+         "name": ".note.gnu.property",
+         "offset": 15136,
+         "size": 32,
+         "type": 7
+        },
+        {
+         "flags": 2,
+         "name": ".eh_frame",
+         "offset": 15168,
+         "size": 128,
+         "type": 1
+        },
+        {
+         "flags": 64,
+         "name": ".rela.eh_frame",
+         "offset": 27000,
+         "size": 48,
+         "type": 4
+        },
+        {
+         "flags": 0,
+         "name": ".symtab",
+         "offset": 15296,
+         "size": 408,
+         "type": 2
+        },
+        {
+         "flags": 0,
+         "name": ".strtab",
+         "offset": 15704,
+         "size": 110,
+         "type": 3
+        },
+        {
+         "flags": 0,
+         "name": ".shstrtab",
+         "offset": 27048,
+         "size": 235,
+         "type": 3
+        }
+       ],
+       "sha256": "<sha256>",
+       "size_bytes": "<size_bytes>",
+       "symbols": {
+        "defined_names": [
+         "_ZN5relay10free_frameEPNS_5FrameE",
+         "_ZN5relay10make_frameEjjh"
+        ],
+        "names": [
+         "_ZN5relay10free_frameEPNS_5FrameE",
+         "_ZN5relay10make_frameEjjh",
+         "_ZdlPvm",
+         "_Znwm",
+         "__memset_chk",
+         "frame.cpp",
+         "free",
+         "malloc"
+        ],
+        "present": true,
+        "stripped": false
+       }
+      },
+      {
+       "architecture": 62,
+       "archive_members": [],
+       "artifact_id": "<sha256>",
+       "bits": 64,
+       "build_id": null,
+       "catalog_kind": "object",
+       "debug": {
+        "present": true,
+        "sections": [
+         ".debug_abbrev",
+         ".debug_aranges",
+         ".debug_info",
+         ".debug_line",
+         ".debug_line_str",
+         ".debug_loclists",
+         ".debug_str"
+        ]
+       },
+       "dependencies": [],
+       "executed": false,
+       "exports": [],
+       "format": "ELF",
+       "hardening": {
+        "control_flow": null,
+        "fortify": null,
+        "now": null,
+        "nx_stack": null,
+        "pie": null,
+        "relro": false,
+        "stack_canary": null
+       },
+       "headers": {
+        "machine": 62,
+        "program_header_count": 0,
+        "section_count": 23,
+        "type": 1
+       },
+       "imports": [],
+       "interpreter": null,
+       "kind": "object",
+       "parser_identity": "build-security-binary-parser/1",
+       "path": "log.cpp.o",
+       "pinned_tool_observation": {
+        "metadata_sha256": "<sha256>",
+        "record_sha256": "<sha256>",
+        "symbol_count": 1,
+        "tool": "tool-native-cpp:1.0.0/nm+readelf"
+       },
+       "relocations": [
+        ".rela.text",
+        ".rela.debug_info",
+        ".rela.debug_aranges",
+        ".rela.debug_line",
+        ".rela.eh_frame"
+       ],
+       "rpath": [],
+       "run_path": "data/cpp/projects/build-unit-b9c931fa551e02bd12b2/build/CMakeFiles/relay.dir/src/log.cpp.o",
+       "runpath": [],
+       "schema": "appsec-review/binary-inspection/1",
+       "sections": [
+        {
+         "flags": 0,
+         "name": "",
+         "offset": 0,
+         "size": 0,
+         "type": 0
+        },
+        {
+         "flags": 6,
+         "name": ".text",
+         "offset": 64,
+         "size": 51,
+         "type": 1
+        },
+        {
+         "flags": 64,
+         "name": ".rela.text",
+         "offset": 13664,
+         "size": 96,
+         "type": 4
+        },
+        {
+         "flags": 3,
+         "name": ".data",
+         "offset": 115,
+         "size": 0,
+         "type": 1
+        },
+        {
+         "flags": 3,
+         "name": ".bss",
+         "offset": 115,
+         "size": 0,
+         "type": 8
+        },
+        {
+         "flags": 0,
+         "name": ".debug_info",
+         "offset": 115,
+         "size": 7474,
+         "type": 1
+        },
+        {
+         "flags": 64,
+         "name": ".rela.debug_info",
+         "offset": 13760,
+         "size": 8184,
+         "type": 4
+        },
+        {
+         "flags": 0,
+         "name": ".debug_abbrev",
+         "offset": 7589,
+         "size": 958,
+         "type": 1
+        },
+        {
+         "flags": 0,
+         "name": ".debug_loclists",
+         "offset": 8547,
+         "size": 62,
+         "type": 1
+        },
+        {
+         "flags": 0,
+         "name": ".debug_aranges",
+         "offset": 8609,
+         "size": 48,
+         "type": 1
+        },
+        {
+         "flags": 64,
+         "name": ".rela.debug_aranges",
+         "offset": 21944,
+         "size": 48,
+         "type": 4
+        },
+        {
+         "flags": 0,
+         "name": ".debug_line",
+         "offset": 8657,
+         "size": 351,
+         "type": 1
+        },
+        {
+         "flags": 64,
+         "name": ".rela.debug_line",
+         "offset": 21992,
+         "size": 1248,
+         "type": 4
+        },
+        {
+         "flags": 48,
+         "name": ".debug_str",
+         "offset": 9008,
+         "size": 3386,
+         "type": 1
+        },
+        {
+         "flags": 48,
+         "name": ".debug_line_str",
+         "offset": 12394,
+         "size": 762,
+         "type": 1
+        },
+        {
+         "flags": 48,
+         "name": ".comment",
+         "offset": 13156,
+         "size": 46,
+         "type": 1
+        },
+        {
+         "flags": 0,
+         "name": ".note.GNU-stack",
+         "offset": 13202,
+         "size": 0,
+         "type": 1
+        },
+        {
+         "flags": 2,
+         "name": ".note.gnu.property",
+         "offset": 13208,
+         "size": 32,
+         "type": 7
+        },
+        {
+         "flags": 2,
+         "name": ".eh_frame",
+         "offset": 13240,
+         "size": 48,
+         "type": 1
+        },
+        {
+         "flags": 64,
+         "name": ".rela.eh_frame",
+         "offset": 23240,
+         "size": 24,
+         "type": 4
+        },
+        {
+         "flags": 0,
+         "name": ".symtab",
+         "offset": 13288,
+         "size": 312,
+         "type": 2
+        },
+        {
+         "flags": 0,
+         "name": ".strtab",
+         "offset": 13600,
+         "size": 63,
+         "type": 3
+        },
+        {
+         "flags": 0,
+         "name": ".shstrtab",
+         "offset": 23264,
+         "size": 219,
+         "type": 3
+        }
+       ],
+       "sha256": "<sha256>",
+       "size_bytes": "<size_bytes>",
+       "symbols": {
+        "defined_names": [
+         "_ZN5relay11log_messageEPKc"
+        ],
+        "names": [
+         "_ZN5relay11log_messageEPKc",
+         "__fprintf_chk",
+         "fputc",
+         "log.cpp",
+         "stderr"
+        ],
+        "present": true,
+        "stripped": false
+       }
+      },
+      {
+       "architecture": 62,
+       "archive_members": [],
+       "artifact_id": "<sha256>",
+       "bits": 64,
+       "build_id": null,
+       "catalog_kind": "object",
+       "debug": {
+        "present": true,
+        "sections": [
+         ".debug_abbrev",
+         ".debug_aranges",
+         ".debug_info",
+         ".debug_line",
+         ".debug_line_str",
+         ".debug_loclists",
+         ".debug_rnglists",
+         ".debug_str"
+        ]
+       },
+       "dependencies": [],
+       "executed": false,
+       "exports": [],
+       "format": "ELF",
+       "hardening": {
+        "control_flow": null,
+        "fortify": null,
+        "now": null,
+        "nx_stack": null,
+        "pie": null,
+        "relro": false,
+        "stack_canary": null
+       },
+       "headers": {
+        "machine": 62,
+        "program_header_count": 0,
+        "section_count": 49,
+        "type": 1
+       },
+       "imports": [],
+       "interpreter": null,
+       "kind": "object",
+       "parser_identity": "build-security-binary-parser/1",
+       "path": "main.cpp.o",
+       "pinned_tool_observation": {
+        "metadata_sha256": "<sha256>",
+        "record_sha256": "<sha256>",
+        "symbol_count": 23,
+        "tool": "tool-native-cpp:1.0.0/nm+readelf"
+       },
+       "relocations": [
+        ".rela.text._ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC2IS3_EEPKcRKS3_",
+        ".rela.text._ZSteqIcSt11char_traitsIcESaIcEEbRKNSt7__cxx1112basic_stringIT_T0_T1_EEPKS5_",
+        ".rela.text._ZNSt12_Vector_baseIhSaIhEED2Ev",
+        ".rela.text._ZNSt6vectorIhSaIhEE17_M_realloc_insertIJcEEEvN9__gnu_cxx17__normal_iteratorIPhS1_EEDpOT_",
+        ".rela.text.unlikely",
+        ".rela.text.startup",
+        ".rela.debug_info",
+        ".rela.debug_loclists",
+        ".rela.debug_aranges",
+        ".rela.debug_rnglists",
+        ".rela.debug_line",
+        ".rela.data.rel.local.DW.ref.__gxx_personality_v0",
+        ".rela.eh_frame"
+       ],
+       "rpath": [],
+       "run_path": "data/cpp/projects/build-unit-b9c931fa551e02bd12b2/build/CMakeFiles/relay.dir/src/main.cpp.o",
+       "runpath": [],
+       "schema": "appsec-review/binary-inspection/1",
+       "sections": [
+        {
+         "flags": 0,
+         "name": "",
+         "offset": 0,
+         "size": 0,
+         "type": 0
+        },
+        {
+         "flags": 0,
+         "name": ".group",
+         "offset": 64,
+         "size": 12,
+         "type": 17
+        },
+        {
+         "flags": 0,
+         "name": ".group",
+         "offset": 76,
+         "size": 12,
+         "type": 17
+        },
+        {
+         "flags": 0,
+         "name": ".group",
+         "offset": 88,
+         "size": 12,
+         "type": 17
+        },
+        {
+         "flags": 0,
+         "name": ".group",
+         "offset": 100,
+         "size": 12,
+         "type": 17
+        },
+        {
+         "flags": 0,
+         "name": ".group",
+         "offset": 112,
+         "size": 12,
+         "type": 17
+        },
+        {
+         "flags": 6,
+         "name": ".text",
+         "offset": 124,
+         "size": 0,
+         "type": 1
+        },
+        {
+         "flags": 3,
+         "name": ".data",
+         "offset": 124,
+         "size": 0,
+         "type": 1
+        },
+        {
+         "flags": 3,
+         "name": ".bss",
+         "offset": 124,
+         "size": 0,
+         "type": 8
+        },
+        {
+         "flags": 50,
+         "name": ".rodata._ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC2IS3_EEPKcRKS3_.str1.8",
+         "offset": 128,
+         "size": 50,
+         "type": 1
+        },
+        {
+         "flags": 518,
+         "name": ".text._ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC2IS3_EEPKcRKS3_",
+         "offset": 192,
+         "size": 227,
+         "type": 1
+        },
+        {
+         "flags": 576,
+         "name": ".rela.text._ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC2IS3_EEPKcRKS3_",
+         "offset": 112480,
+         "size": 144,
+         "type": 4
+        },
+        {
+         "flags": 518,
+         "name": ".text._ZSteqIcSt11char_traitsIcESaIcEEbRKNSt7__cxx1112basic_stringIT_T0_T1_EEPKS5_",
+         "offset": 432,
+         "size": 83,
+         "type": 1
+        },
+        {
+         "flags": 576,
+         "name": ".rela.text._ZSteqIcSt11char_traitsIcESaIcEEbRKNSt7__cxx1112basic_stringIT_T0_T1_EEPKS5_",
+         "offset": 112624,
+         "size": 48,
+         "type": 4
+        },
+        {
+         "flags": 518,
+         "name": ".text._ZNSt12_Vector_baseIhSaIhEED2Ev",
+         "offset": 528,
+         "size": 33,
+         "type": 1
+        },
+        {
+         "flags": 576,
+         "name": ".rela.text._ZNSt12_Vector_baseIhSaIhEED2Ev",
+         "offset": 112672,
+         "size": 24,
+         "type": 4
+        },
+        {
+         "flags": 50,
+         "name": ".rodata._ZNSt6vectorIhSaIhEE17_M_realloc_insertIJcEEEvN9__gnu_cxx17__normal_iteratorIPhS1_EEDpOT_.str1.1",
+         "offset": 561,
+         "size": 26,
+         "type": 1
+        },
+        {
+         "flags": 518,
+         "name": ".text._ZNSt6vectorIhSaIhEE17_M_realloc_insertIJcEEEvN9__gnu_cxx17__normal_iteratorIPhS1_EEDpOT_",
+         "offset": 592,
+         "size": 331,
+         "type": 1
+        },
+        {
+         "flags": 576,
+         "name": ".rela.text._ZNSt6vectorIhSaIhEE17_M_realloc_insertIJcEEEvN9__gnu_cxx17__normal_iteratorIPhS1_EEDpOT_",
+         "offset": 112696,
+         "size": 168,
+         "type": 4
+        },
+        {
+         "flags": 50,
+         "name": ".rodata.str1.8",
+         "offset": 928,
+         "size": 59,
+         "type": 1
+        },
+        {
+         "flags": 50,
+         "name": ".rodata.str1.1",
+         "offset": 987,
+         "size": 73,
+         "type": 1
+        },
+        {
+         "flags": 6,
+         "name": ".text.unlikely",
+         "offset": 1060,
+         "size": 141,
+         "type": 1
+        },
+        {
+         "flags": 64,
+         "name": ".rela.text.unlikely",
+         "offset": 112864,
+         "size": 240,
+         "type": 4
+        },
+        {
+         "flags": 6,
+         "name": ".text.startup",
+         "offset": 1216,
+         "size": 1055,
+         "type": 1
+        },
+        {
+         "flags": 64,
+         "name": ".rela.text.startup",
+         "offset": 113104,
+         "size": 1320,
+         "type": 4
+        },
+        {
+         "flags": 2,
+         "name": ".gcc_except_table",
+         "offset": 2272,
+         "size": 120,
+         "type": 1
+        },
+        {
+         "flags": 0,
+         "name": ".debug_info",
+         "offset": 2392,
+         "size": 46843,
+         "type": 1
+        },
+        {
+         "flags": 64,
+         "name": ".rela.debug_info",
+         "offset": 114424,
+         "size": 67416,
+         "type": 4
+        },
+        {
+         "flags": 0,
+         "name": ".debug_abbrev",
+         "offset": 49235,
+         "size": 3199,
+         "type": 1
+        },
+        {
+         "flags": 0,
+         "name": ".debug_loclists",
+         "offset": 52434,
+         "size": 6853,
+         "type": 1
+        },
+        {
+         "flags": 64,
+         "name": ".rela.debug_loclists",
+         "offset": 181840,
+         "size": 6672,
+         "type": 4
+        },
+        {
+         "flags": 0,
+         "name": ".debug_aranges",
+         "offset": 59287,
+         "size": 128,
+         "type": 1
+        },
+        {
+         "flags": 64,
+         "name": ".rela.debug_aranges",
+         "offset": 188512,
+         "size": 168,
+         "type": 4
+        },
+        {
+         "flags": 0,
+         "name": ".debug_rnglists",
+         "offset": 59415,
+         "size": 1237,
+         "type": 1
+        },
+        {
+         "flags": 64,
+         "name": ".rela.debug_rnglists",
+         "offset": 188680,
+         "size": 1704,
+         "type": 4
+        },
+        {
+         "flags": 0,
+         "name": ".debug_line",
+         "offset": 60652,
+         "size": 3480,
+         "type": 1
+        },
+        {
+         "flags": 64,
+         "name": ".rela.debug_line",
+         "offset": 190384,
+         "size": 2208,
+         "type": 4
+        },
+        {
+         "flags": 48,
+         "name": ".debug_str",
+         "offset": 64132,
+         "size": 43365,
+         "type": 1
+        },
+        {
+         "flags": 48,
+         "name": ".debug_line_str",
+         "offset": 107497,
+         "size": 1256,
+         "type": 1
+        },
+        {
+         "flags": 515,
+         "name": ".data.rel.local.DW.ref.__gxx_personality_v0",
+         "offset": 108760,
+         "size": 8,
+         "type": 1
+        },
+        {
+         "flags": 576,
+         "name": ".rela.data.rel.local.DW.ref.__gxx_personality_v0",
+         "offset": 192592,
+         "size": 24,
+         "type": 4
+        },
+        {
+         "flags": 48,
+         "name": ".comment",
+         "offset": 108768,
+         "size": 46,
+         "type": 1
+        },
+        {
+         "flags": 0,
+         "name": ".note.GNU-stack",
+         "offset": 108814,
+         "size": 0,
+         "type": 1
+        },
+        {
+         "flags": 2,
+         "name": ".note.gnu.property",
+         "offset": 108816,
+         "size": 32,
+         "type": 7
+        },
+        {
+         "flags": 2,
+         "name": ".eh_frame",
+         "offset": 108848,
+         "size": 392,
+         "type": 1
+        },
+        {
+         "flags": 64,
+         "name": ".rela.eh_frame",
+         "offset": 192616,
+         "size": 216,
+         "type": 4
+        },
+        {
+         "flags": 0,
+         "name": ".symtab",
+         "offset": 109240,
+         "size": 1824,
+         "type": 2
+        },
+        {
+         "flags": 0,
+         "name": ".strtab",
+         "offset": 111064,
+         "size": 1412,
+         "type": 3
+        },
+        {
+         "flags": 0,
+         "name": ".shstrtab",
+         "offset": 192832,
+         "size": 886,
+         "type": 3
+        }
+       ],
+       "sha256": "<sha256>",
+       "size_bytes": "<size_bytes>",
+       "symbols": {
+        "defined_names": [
+         ".LC0",
+         ".LC1",
+         ".LC10",
+         ".LC11",
+         ".LC2",
+         ".LC3",
+         ".LC4",
+         ".LC5",
+         ".LC6",
+         ".LC7",
+         ".LC8",
+         ".LC9",
+         "DW.ref.__gxx_personality_v0",
+         "_ZNSt12_Vector_baseIhSaIhEED1Ev",
+         "_ZNSt12_Vector_baseIhSaIhEED2Ev",
+         "_ZNSt12_Vector_baseIhSaIhEED5Ev",
+         "_ZNSt6vectorIhSaIhEE17_M_realloc_insertIJcEEEvN9__gnu_cxx17__normal_iteratorIPhS1_EEDpOT_",
+         "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1IS3_EEPKcRKS3_",
+         "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC2IS3_EEPKcRKS3_",
+         "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC5IS3_EEPKcRKS3_",
+         "_ZSteqIcSt11char_traitsIcESaIcEEbRKNSt7__cxx1112basic_stringIT_T0_T1_EEPKS5_",
+         "main",
+         "main.cold"
+        ],
+        "names": {
+         "<summary>": {
+          "count": 57,
+          "sha256": "46a582acaa9bff1a273a2295cd2ebb3a118d11bc8b4f64eb16fcc13807a2a5f6"
+         }
+        },
+        "present": true,
+        "stripped": false
+       }
+      },
+      {
+       "architecture": 62,
+       "archive_members": [],
+       "artifact_id": "<sha256>",
+       "bits": 64,
+       "build_id": null,
+       "catalog_kind": "object",
+       "debug": {
+        "present": true,
+        "sections": [
+         ".debug_abbrev",
+         ".debug_aranges",
+         ".debug_info",
+         ".debug_line",
+         ".debug_line_str",
+         ".debug_loclists",
+         ".debug_rnglists",
+         ".debug_str"
+        ]
+       },
+       "dependencies": [],
+       "executed": false,
+       "exports": [],
+       "format": "ELF",
+       "hardening": {
+        "control_flow": null,
+        "fortify": null,
+        "now": null,
+        "nx_stack": null,
+        "pie": null,
+        "relro": false,
+        "stack_canary": null
+       },
+       "headers": {
+        "machine": 62,
+        "program_header_count": 0,
+        "section_count": 24,
+        "type": 1
+       },
+       "imports": [],
+       "interpreter": null,
+       "kind": "object",
+       "parser_identity": "build-security-binary-parser/1",
+       "path": "packet.cpp.o",
+       "pinned_tool_observation": {
+        "metadata_sha256": "<sha256>",
+        "record_sha256": "<sha256>",
+        "symbol_count": 1,
+        "tool": "tool-native-cpp:1.0.0/nm+readelf"
+       },
+       "relocations": [
+        ".rela.text",
+        ".rela.debug_info",
+        ".rela.debug_aranges",
+        ".rela.debug_line",
+        ".rela.eh_frame"
+       ],
+       "rpath": [],
+       "run_path": "data/cpp/projects/build-unit-b9c931fa551e02bd12b2/build/CMakeFiles/relay.dir/src/packet.cpp.o",
+       "runpath": [],
+       "schema": "appsec-review/binary-inspection/1",
+       "sections": [
+        {
+         "flags": 0,
+         "name": "",
+         "offset": 0,
+         "size": 0,
+         "type": 0
+        },
+        {
+         "flags": 6,
+         "name": ".text",
+         "offset": 64,
+         "size": 75,
+         "type": 1
+        },
+        {
+         "flags": 64,
+         "name": ".rela.text",
+         "offset": 14680,
+         "size": 24,
+         "type": 4
+        },
+        {
+         "flags": 3,
+         "name": ".data",
+         "offset": 139,
+         "size": 0,
+         "type": 1
+        },
+        {
+         "flags": 3,
+         "name": ".bss",
+         "offset": 139,
+         "size": 0,
+         "type": 8
+        },
+        {
+         "flags": 0,
+         "name": ".debug_info",
+         "offset": 139,
+         "size": 8102,
+         "type": 1
+        },
+        {
+         "flags": 64,
+         "name": ".rela.debug_info",
+         "offset": 14704,
+         "size": 9072,
+         "type": 4
+        },
+        {
+         "flags": 0,
+         "name": ".debug_abbrev",
+         "offset": 8241,
+         "size": 964,
+         "type": 1
+        },
+        {
+         "flags": 0,
+         "name": ".debug_loclists",
+         "offset": 9205,
+         "size": 189,
+         "type": 1
+        },
+        {
+         "flags": 0,
+         "name": ".debug_aranges",
+         "offset": 9394,
+         "size": 48,
+         "type": 1
+        },
+        {
+         "flags": 64,
+         "name": ".rela.debug_aranges",
+         "offset": 23776,
+         "size": 48,
+         "type": 4
+        },
+        {
+         "flags": 0,
+         "name": ".debug_rnglists",
+         "offset": 9442,
+         "size": 19,
+         "type": 1
+        },
+        {
+         "flags": 0,
+         "name": ".debug_line",
+         "offset": 9461,
+         "size": 439,
+         "type": 1
+        },
+        {
+         "flags": 64,
+         "name": ".rela.debug_line",
+         "offset": 23824,
+         "size": 1296,
+         "type": 4
+        },
+        {
+         "flags": 48,
+         "name": ".debug_str",
+         "offset": 9900,
+         "size": 3489,
+         "type": 1
+        },
+        {
+         "flags": 48,
+         "name": ".debug_line_str",
+         "offset": 13389,
+         "size": 793,
+         "type": 1
+        },
+        {
+         "flags": 48,
+         "name": ".comment",
+         "offset": 14182,
+         "size": 46,
+         "type": 1
+        },
+        {
+         "flags": 0,
+         "name": ".note.GNU-stack",
+         "offset": 14228,
+         "size": 0,
+         "type": 1
+        },
+        {
+         "flags": 2,
+         "name": ".note.gnu.property",
+         "offset": 14232,
+         "size": 32,
+         "type": 7
+        },
+        {
+         "flags": 2,
+         "name": ".eh_frame",
+         "offset": 14264,
+         "size": 64,
+         "type": 1
+        },
+        {
+         "flags": 64,
+         "name": ".rela.eh_frame",
+         "offset": 25120,
+         "size": 24,
+         "type": 4
+        },
+        {
+         "flags": 0,
+         "name": ".symtab",
+         "offset": 14328,
+         "size": 288,
+         "type": 2
+        },
+        {
+         "flags": 0,
+         "name": ".strtab",
+         "offset": 14616,
+         "size": 60,
+         "type": 3
+        },
+        {
+         "flags": 0,
+         "name": ".shstrtab",
+         "offset": 25144,
+         "size": 235,
+         "type": 3
+        }
+       ],
+       "sha256": "<sha256>",
+       "size_bytes": "<size_bytes>",
+       "symbols": {
+        "defined_names": [
+         "_ZN5relay12parse_headerEPKhmRNS_6HeaderE"
+        ],
+        "names": [
+         "_ZN5relay12parse_headerEPKhmRNS_6HeaderE",
+         "memcpy",
+         "packet.cpp"
+        ],
+        "present": true,
+        "stripped": false
+       }
+      },
+      {
+       "architecture": 62,
+       "archive_members": [],
+       "artifact_id": "<sha256>",
+       "bits": 64,
+       "build_id": null,
+       "catalog_kind": "object",
+       "debug": {
+        "present": true,
+        "sections": [
+         ".debug_abbrev",
+         ".debug_aranges",
+         ".debug_info",
+         ".debug_line",
+         ".debug_line_str",
+         ".debug_loclists",
+         ".debug_rnglists",
+         ".debug_str"
+        ]
+       },
+       "dependencies": [],
+       "executed": false,
+       "exports": [],
+       "format": "ELF",
+       "hardening": {
+        "control_flow": null,
+        "fortify": null,
+        "now": null,
+        "nx_stack": null,
+        "pie": null,
+        "relro": false,
+        "stack_canary": null
+       },
+       "headers": {
+        "machine": 62,
+        "program_header_count": 0,
+        "section_count": 41,
+        "type": 1
+       },
+       "imports": [],
+       "interpreter": null,
+       "kind": "object",
+       "parser_identity": "build-security-binary-parser/1",
+       "path": "session.cpp.o",
+       "pinned_tool_observation": {
+        "metadata_sha256": "<sha256>",
+        "record_sha256": "<sha256>",
+        "symbol_count": 16,
+        "tool": "tool-native-cpp:1.0.0/nm+readelf"
+       },
+       "relocations": [
+        ".rela.text",
+        ".rela.text._ZNSt8_Rb_treeIiSt4pairIKiPN5relay7SessionEESt10_Select1stIS5_ESt4lessIiESaIS5_EE8_M_eraseEPSt13_Rb_tree_nodeIS5_E.isra.0",
+        ".rela.text._ZNSt3mapIiPN5relay7SessionESt4lessIiESaISt4pairIKiS2_EEED2Ev",
+        ".rela.text.unlikely",
+        ".rela.text.startup",
+        ".rela.init_array",
+        ".rela.debug_info",
+        ".rela.debug_loclists",
+        ".rela.debug_aranges",
+        ".rela.debug_rnglists",
+        ".rela.debug_line",
+        ".rela.data.rel.local.DW.ref.__gxx_personality_v0",
+        ".rela.eh_frame"
+       ],
+       "rpath": [],
+       "run_path": "data/cpp/projects/build-unit-b9c931fa551e02bd12b2/build/CMakeFiles/relay.dir/src/session.cpp.o",
+       "runpath": [],
+       "schema": "appsec-review/binary-inspection/1",
+       "sections": [
+        {
+         "flags": 0,
+         "name": "",
+         "offset": 0,
+         "size": 0,
+         "type": 0
+        },
+        {
+         "flags": 0,
+         "name": ".group",
+         "offset": 64,
+         "size": 20,
+         "type": 17
+        },
+        {
+         "flags": 0,
+         "name": ".group",
+         "offset": 84,
+         "size": 12,
+         "type": 17
+        },
+        {
+         "flags": 6,
+         "name": ".text",
+         "offset": 96,
+         "size": 1292,
+         "type": 1
+        },
+        {
+         "flags": 64,
+         "name": ".rela.text",
+         "offset": 142320,
+         "size": 648,
+         "type": 4
+        },
+        {
+         "flags": 3,
+         "name": ".data",
+         "offset": 1388,
+         "size": 0,
+         "type": 1
+        },
+        {
+         "flags": 3,
+         "name": ".bss",
+         "offset": 1408,
+         "size": 48,
+         "type": 8
+        },
+        {
+         "flags": 518,
+         "name": ".text._ZNSt8_Rb_treeIiSt4pairIKiPN5relay7SessionEESt10_Select1stIS5_ESt4lessIiESaIS5_EE8_M_eraseEPSt13_Rb_tree_nodeIS5_E.isra.0",
+         "offset": 1408,
+         "size": 457,
+         "type": 1
+        },
+        {
+         "flags": 576,
+         "name": ".rela.text._ZNSt8_Rb_treeIiSt4pairIKiPN5relay7SessionEESt10_Select1stIS5_ESt4lessIiESaIS5_EE8_M_eraseEPSt13_Rb_tree_nodeIS5_E.isra.0",
+         "offset": 142968,
+         "size": 216,
+         "type": 4
+        },
+        {
+         "flags": 518,
+         "name": ".text._ZNSt3mapIiPN5relay7SessionESt4lessIiESaISt4pairIKiS2_EEED2Ev",
+         "offset": 1872,
+         "size": 47,
+         "type": 1
+        },
+        {
+         "flags": 576,
+         "name": ".rela.text._ZNSt3mapIiPN5relay7SessionESt4lessIiESaISt4pairIKiS2_EEED2Ev",
+         "offset": 143184,
+         "size": 48,
+         "type": 4
+        },
+        {
+         "flags": 6,
+         "name": ".text.unlikely",
+         "offset": 1919,
+         "size": 52,
+         "type": 1
+        },
+        {
+         "flags": 64,
+         "name": ".rela.text.unlikely",
+         "offset": 143232,
+         "size": 72,
+         "type": 4
+        },
+        {
+         "flags": 2,
+         "name": ".gcc_except_table",
+         "offset": 1971,
+         "size": 23,
+         "type": 1
+        },
+        {
+         "flags": 6,
+         "name": ".text.startup",
+         "offset": 2000,
+         "size": 80,
+         "type": 1
+        },
+        {
+         "flags": 64,
+         "name": ".rela.text.startup",
+         "offset": 143304,
+         "size": 216,
+         "type": 4
+        },
+        {
+         "flags": 3,
+         "name": ".init_array",
+         "offset": 2080,
+         "size": 8,
+         "type": 14
+        },
+        {
+         "flags": 64,
+         "name": ".rela.init_array",
+         "offset": 143520,
+         "size": 24,
+         "type": 4
+        },
+        {
+         "flags": 0,
+         "name": ".debug_info",
+         "offset": 2088,
+         "size": 56024,
+         "type": 1
+        },
+        {
+         "flags": 64,
+         "name": ".rela.debug_info",
+         "offset": 143544,
+         "size": 82200,
+         "type": 4
+        },
+        {
+         "flags": 0,
+         "name": ".debug_abbrev",
+         "offset": 58112,
+         "size": 3565,
+         "type": 1
+        },
+        {
+         "flags": 0,
+         "name": ".debug_loclists",
+         "offset": 61677,
+         "size": 8485,
+         "type": 1
+        },
+        {
+         "flags": 64,
+         "name": ".rela.debug_loclists",
+         "offset": 225744,
+         "size": 10800,
+         "type": 4
+        },
+        {
+         "flags": 0,
+         "name": ".debug_aranges",
+         "offset": 70162,
+         "size": 112,
+         "type": 1
+        },
+        {
+         "flags": 64,
+         "name": ".rela.debug_aranges",
+         "offset": 236544,
+         "size": 144,
+         "type": 4
+        },
+        {
+         "flags": 0,
+         "name": ".debug_rnglists",
+         "offset": 70274,
+         "size": 1163,
+         "type": 1
+        },
+        {
+         "flags": 64,
+         "name": ".rela.debug_rnglists",
+         "offset": 236688,
+         "size": 1608,
+         "type": 4
+        },
+        {
+         "flags": 0,
+         "name": ".debug_line",
+         "offset": 71437,
+         "size": 3978,
+         "type": 1
+        },
+        {
+         "flags": 64,
+         "name": ".rela.debug_line",
+         "offset": 238296,
+         "size": 1944,
+         "type": 4
+        },
+        {
+         "flags": 48,
+         "name": ".debug_str",
+         "offset": 75415,
+         "size": 62729,
+         "type": 1
+        },
+        {
+         "flags": 48,
+         "name": ".debug_line_str",
+         "offset": 138144,
+         "size": 1124,
+         "type": 1
+        },
+        {
+         "flags": 515,
+         "name": ".data.rel.local.DW.ref.__gxx_personality_v0",
+         "offset": 139272,
+         "size": 8,
+         "type": 1
+        },
+        {
+         "flags": 576,
+         "name": ".rela.data.rel.local.DW.ref.__gxx_personality_v0",
+         "offset": 240240,
+         "size": 24,
+         "type": 4
+        },
+        {
+         "flags": 48,
+         "name": ".comment",
+         "offset": 139280,
+         "size": 46,
+         "type": 1
+        },
+        {
+         "flags": 0,
+         "name": ".note.GNU-stack",
+         "offset": 139326,
+         "size": 0,
+         "type": 1
+        },
+        {
+         "flags": 2,
+         "name": ".note.gnu.property",
+         "offset": 139328,
+         "size": 32,
+         "type": 7
+        },
+        {
+         "flags": 2,
+         "name": ".eh_frame",
+         "offset": 139360,
+         "size": 520,
+         "type": 1
+        },
+        {
+         "flags": 64,
+         "name": ".rela.eh_frame",
+         "offset": 240264,
+         "size": 360,
+         "type": 4
+        },
+        {
+         "flags": 0,
+         "name": ".symtab",
+         "offset": 139880,
+         "size": 1056,
+         "type": 2
+        },
+        {
+         "flags": 0,
+         "name": ".strtab",
+         "offset": 140936,
+         "size": 1384,
+         "type": 3
+        },
+        {
+         "flags": 0,
+         "name": ".shstrtab",
+         "offset": 240624,
+         "size": 581,
+         "type": 3
+        }
+       ],
+       "sha256": "<sha256>",
+       "size_bytes": "<size_bytes>",
+       "symbols": {
+        "defined_names": [
+         "DW.ref.__gxx_personality_v0",
+         "_GLOBAL__sub_I__ZN5relay12open_sessionEiRKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE",
+         "_ZN5relay11end_sessionEPNS_7SessionE",
+         "_ZN5relay12_GLOBAL__N_18sessionsE",
+         "_ZN5relay12find_sessionEi",
+         "_ZN5relay12open_sessionEiRKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE",
+         "_ZN5relay12open_sessionEiRKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE.cold",
+         "_ZN5relay13close_sessionEPNS_7SessionE",
+         "_ZN5relay13touch_sessionEi",
+         "_ZN5relay13touch_sessionEi.cold",
+         "_ZNSt3mapIiPN5relay7SessionESt4lessIiESaISt4pairIKiS2_EEED1Ev",
+         "_ZNSt3mapIiPN5relay7SessionESt4lessIiESaISt4pairIKiS2_EEED2Ev",
+         "_ZNSt3mapIiPN5relay7SessionESt4lessIiESaISt4pairIKiS2_EEED5Ev",
+         "_ZNSt8_Rb_treeIiSt4pairIKiPN5relay7SessionEESt10_Select1stIS5_ESt4lessIiESaIS5_EE22_M_emplace_hint_uniqueIJRKSt21piecewise_construct_tSt5tupleIJRS1_EESG_IJEEEEESt17_Rb_tree_iteratorIS5_ESt23_Rb_tree_const_iteratorIS5_EDpOT_.isra.0",
+         "_ZNSt8_Rb_treeIiSt4pairIKiPN5relay7SessionEESt10_Select1stIS5_ESt4lessIiESaIS5_EE24_M_get_insert_unique_posERS1_.isra.0",
+         "_ZNSt8_Rb_treeIiSt4pairIKiPN5relay7SessionEESt10_Select1stIS5_ESt4lessIiESaIS5_EE8_M_eraseEPSt13_Rb_tree_nodeIS5_E.isra.0"
+        ],
+        "names": [
+         "DW.ref.__gxx_personality_v0",
+         "_GLOBAL__sub_I__ZN5relay12open_sessionEiRKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE",
+         "_Unwind_Resume",
+         "_ZN5relay11end_sessionEPNS_7SessionE",
+         "_ZN5relay12_GLOBAL__N_18sessionsE",
+         "_ZN5relay12find_sessionEi",
+         "_ZN5relay12open_sessionEiRKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE",
+         "_ZN5relay12open_sessionEiRKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE.cold",
+         "_ZN5relay13close_sessionEPNS_7SessionE",
+         "_ZN5relay13touch_sessionEi",
+         "_ZN5relay13touch_sessionEi.cold",
+         "_ZNSt3mapIiPN5relay7SessionESt4lessIiESaISt4pairIKiS2_EEED1Ev",
+         "_ZNSt3mapIiPN5relay7SessionESt4lessIiESaISt4pairIKiS2_EEED2Ev",
+         "_ZNSt3mapIiPN5relay7SessionESt4lessIiESaISt4pairIKiS2_EEED5Ev",
+         "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE9_M_createERmm",
+         "_ZNSt8_Rb_treeIiSt4pairIKiPN5relay7SessionEESt10_Select1stIS5_ESt4lessIiESaIS5_EE22_M_emplace_hint_uniqueIJRKSt21piecewise_construct_tSt5tupleIJRS1_EESG_IJEEEEESt17_Rb_tree_iteratorIS5_ESt23_Rb_tree_const_iteratorIS5_EDpOT_.isra.0",
+         "_ZNSt8_Rb_treeIiSt4pairIKiPN5relay7SessionEESt10_Select1stIS5_ESt4lessIiESaIS5_EE24_M_get_insert_unique_posERS1_.isra.0",
+         "_ZNSt8_Rb_treeIiSt4pairIKiPN5relay7SessionEESt10_Select1stIS5_ESt4lessIiESaIS5_EE8_M_eraseEPSt13_Rb_tree_nodeIS5_E.isra.0",
+         "_ZSt18_Rb_tree_decrementPSt18_Rb_tree_node_base",
+         "_ZSt18_Rb_tree_incrementPSt18_Rb_tree_node_base",
+         "_ZSt29_Rb_tree_insert_and_rebalancebPSt18_Rb_tree_node_baseS0_RS_",
+         "_ZdlPvm",
+         "_Znwm",
+         "__cxa_atexit",
+         "__dso_handle",
+         "__gxx_personality_v0",
+         "__stack_chk_fail",
+         "memcpy",
+         "session.cpp"
+        ],
+        "present": true,
+        "stripped": false
+       }
+      },
+      {
+       "architecture": 62,
+       "archive_members": [],
+       "artifact_id": "<sha256>",
+       "bits": 64,
+       "build_id": "7f01bea51557e7b1a393ffe1ded7cbede3d193f3",
+       "catalog_kind": "executable",
+       "debug": {
+        "present": true,
+        "sections": [
+         ".debug_abbrev",
+         ".debug_aranges",
+         ".debug_info",
+         ".debug_line",
+         ".debug_line_str",
+         ".debug_loclists",
+         ".debug_rnglists",
+         ".debug_str"
+        ]
+       },
+       "dependencies": [
+        "libstdc++.so.6",
+        "libgcc_s.so.1",
+        "libc.so.6"
+       ],
+       "executed": false,
+       "exports": [
+        "_ZSt3cin",
+        "stderr"
+       ],
+       "format": "ELF",
+       "hardening": {
+        "control_flow": null,
+        "fortify": true,
+        "now": true,
+        "nx_stack": true,
+        "pie": true,
+        "relro": true,
+        "stack_canary": true
+       },
+       "headers": {
+        "machine": 62,
+        "program_header_count": 13,
+        "section_count": 40,
+        "type": 3
+       },
+       "imports": [
+        "_ITM_deregisterTMCloneTable",
+        "_ITM_registerTMCloneTable",
+        "_Unwind_Resume",
+        "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE10_M_disposeEv",
+        "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE7reserveEm",
+        "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE9_M_appendEPKcm",
+        "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE9_M_createERmm",
+        "_ZSt18_Rb_tree_decrementPSt18_Rb_tree_node_base",
+        "_ZSt18_Rb_tree_incrementPSt18_Rb_tree_node_base",
+        "_ZSt19__throw_logic_errorPKc",
+        "_ZSt20__throw_length_errorPKc",
+        "_ZSt21ios_base_library_initv",
+        "_ZSt29_Rb_tree_insert_and_rebalancebPSt18_Rb_tree_node_baseS0_RS_",
+        "_ZdlPvm",
+        "_Znwm",
+        "__cxa_atexit",
+        "__cxa_begin_catch",
+        "__cxa_end_catch",
+        "__cxa_finalize",
+        "__cxa_rethrow",
+        "__fprintf_chk",
+        "__gmon_start__",
+        "__gxx_personality_v0",
+        "__isoc23_strtol",
+        "__isoc23_strtoul",
+        "__libc_start_main",
+        "__memset_chk",
+        "__printf_chk",
+        "__stack_chk_fail",
+        "fputc",
+        "free",
+        "fwrite",
+        "malloc",
+        "memcmp",
+        "memcpy",
+        "memmove",
+        "strlen",
+        "system"
+       ],
+       "interpreter": "/lib64/ld-linux-x86-64.so.2",
+       "kind": "pie_executable",
+       "parser_identity": "build-security-binary-parser/1",
+       "path": "relay",
+       "pinned_tool_observation": {
+        "metadata_sha256": "<sha256>",
+        "record_sha256": "<sha256>",
+        "symbol_count": 57,
+        "tool": "tool-native-cpp:1.0.0/nm+readelf"
+       },
+       "relocations": [
+        ".rela.dyn",
+        ".rela.plt"
+       ],
+       "rpath": [],
+       "run_path": "data/cpp/projects/build-unit-b9c931fa551e02bd12b2/build/relay",
+       "runpath": [],
+       "schema": "appsec-review/binary-inspection/1",
+       "sections": [
+        {
+         "flags": 0,
+         "name": "",
+         "offset": 0,
+         "size": 0,
+         "type": 0
+        },
+        {
+         "flags": 2,
+         "name": ".interp",
+         "offset": 792,
+         "size": 28,
+         "type": 1
+        },
+        {
+         "flags": 2,
+         "name": ".note.gnu.property",
+         "offset": 824,
+         "size": 48,
+         "type": 7
+        },
+        {
+         "flags": 2,
+         "name": ".note.gnu.build-id",
+         "offset": 872,
+         "size": 36,
+         "type": 7
+        },
+        {
+         "flags": 2,
+         "name": ".note.ABI-tag",
+         "offset": 908,
+         "size": 32,
+         "type": 7
+        },
+        {
+         "flags": 2,
+         "name": ".gnu.hash",
+         "offset": 944,
+         "size": 48,
+         "type": 1879048182
+        },
+        {
+         "flags": 2,
+         "name": ".dynsym",
+         "offset": 992,
+         "size": 984,
+         "type": 11
+        },
+        {
+         "flags": 2,
+         "name": ".dynstr",
+         "offset": 1976,
+         "size": 1080,
+         "type": 3
+        },
+        {
+         "flags": 2,
+         "name": ".gnu.version",
+         "offset": 3056,
+         "size": 82,
+         "type": 1879048191
+        },
+        {
+         "flags": 2,
+         "name": ".gnu.version_r",
+         "offset": 3144,
+         "size": 240,
+         "type": 1879048190
+        },
+        {
+         "flags": 2,
+         "name": ".rela.dyn",
+         "offset": 3384,
+         "size": 288,
+         "type": 4
+        },
+        {
+         "flags": 66,
+         "name": ".rela.plt",
+         "offset": 3672,
+         "size": 744,
+         "type": 4
+        },
+        {
+         "flags": 6,
+         "name": ".init",
+         "offset": 8192,
+         "size": 27,
+         "type": 1
+        },
+        {
+         "flags": 6,
+         "name": ".plt",
+         "offset": 8224,
+         "size": 512,
+         "type": 1
+        },
+        {
+         "flags": 6,
+         "name": ".plt.got",
+         "offset": 8736,
+         "size": 16,
+         "type": 1
+        },
+        {
+         "flags": 6,
+         "name": ".plt.sec",
+         "offset": 8752,
+         "size": 496,
+         "type": 1
+        },
+        {
+         "flags": 6,
+         "name": ".text",
+         "offset": 9248,
+         "size": 4964,
+         "type": 1
+        },
+        {
+         "flags": 6,
+         "name": ".fini",
+         "offset": 14212,
+         "size": 13,
+         "type": 1
+        },
+        {
+         "flags": 2,
+         "name": ".rodata",
+         "offset": 16384,
+         "size": 336,
+         "type": 1
+        },
+        {
+         "flags": 2,
+         "name": ".eh_frame_hdr",
+         "offset": 16720,
+         "size": 252,
+         "type": 1
+        },
+        {
+         "flags": 2,
+         "name": ".eh_frame",
+         "offset": 16976,
+         "size": 1292,
+         "type": 1
+        },
+        {
+         "flags": 2,
+         "name": ".gcc_except_table",
+         "offset": 18268,
+         "size": 172,
+         "type": 1
+        },
+        {
+         "flags": 3,
+         "name": ".init_array",
+         "offset": 19616,
+         "size": 16,
+         "type": 14
+        },
+        {
+         "flags": 3,
+         "name": ".fini_array",
+         "offset": 19632,
+         "size": 8,
+         "type": 15
+        },
+        {
+         "flags": 3,
+         "name": ".dynamic",
+         "offset": 19640,
+         "size": 528,
+         "type": 6
+        },
+        {
+         "flags": 3,
+         "name": ".got",
+         "offset": 20168,
+         "size": 312,
+         "type": 1
+        },
+        {
+         "flags": 3,
+         "name": ".data",
+         "offset": 20480,
+         "size": 24,
+         "type": 1
+        },
+        {
+         "flags": 3,
+         "name": ".bss",
+         "offset": 20504,
+         "size": 368,
+         "type": 8
+        },
+        {
+         "flags": 48,
+         "name": ".comment",
+         "offset": 20504,
+         "size": 45,
+         "type": 1
+        },
+        {
+         "flags": 0,
+         "name": ".debug_aranges",
+         "offset": 20549,
+         "size": 496,
+         "type": 1
+        },
+        {
+         "flags": 0,
+         "name": ".debug_info",
+         "offset": 21045,
+         "size": 174250,
+         "type": 1
+        },
+        {
+         "flags": 0,
+         "name": ".debug_abbrev",
+         "offset": 195295,
+         "size": 14020,
+         "type": 1
+        },
+        {
+         "flags": 0,
+         "name": ".debug_line",
+         "offset": 209315,
+         "size": 10444,
+         "type": 1
+        },
+        {
+         "flags": 48,
+         "name": ".debug_str",
+         "offset": 219759,
+         "size": 76899,
+         "type": 1
+        },
+        {
+         "flags": 48,
+         "name": ".debug_line_str",
+         "offset": 296658,
+         "size": 1400,
+         "type": 1
+        },
+        {
+         "flags": 0,
+         "name": ".debug_loclists",
+         "offset": 298058,
+         "size": 17681,
+         "type": 1
+        },
+        {
+         "flags": 0,
+         "name": ".debug_rnglists",
+         "offset": 315739,
+         "size": 2877,
+         "type": 1
+        },
+        {
+         "flags": 0,
+         "name": ".symtab",
+         "offset": 318616,
+         "size": 2568,
+         "type": 2
+        },
+        {
+         "flags": 0,
+         "name": ".strtab",
+         "offset": 321184,
+         "size": 3508,
+         "type": 3
+        },
+        {
+         "flags": 0,
+         "name": ".shstrtab",
+         "offset": 324692,
+         "size": 412,
+         "type": 3
+        }
+       ],
+       "sha256": "<sha256>",
+       "size_bytes": "<size_bytes>",
+       "symbols": {
+        "defined_names": {
+         "<summary>": {
+          "count": 57,
+          "sha256": "a7ba69f010e5fd6f3d8e4d55542a41db9e0fa9161899789c576edda4b67ada6e"
+         }
+        },
+        "names": {
+         "<summary>": {
+          "count": 141,
+          "sha256": "210e0efcddf15e8dec3af8ad6507f10286daef476801524754d3df980897718b"
+         }
+        },
+        "present": true,
+        "stripped": false
+       }
+      }
+     ],
+     "schema": "appsec-review/binary-inspection-set/1",
+     "terminal_status": "COMPLETED_WITH_GAPS"
+    }
+   },
+   "terminal_status": "COMPLETED_WITH_GAPS"
+  },
+  "load.accepted_cpp_build": {
+   "cases": {
+    "build-unit-b9c931fa551e02bd12b2": {
+     "artifact_catalog": {
+      "path": "data/cpp/projects/build-unit-b9c931fa551e02bd12b2/artifact-catalog.json",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     "build_receipt": {
+      "artifacts": [
+       {
+        "artifact_origin": "build-output",
+        "build_unit_id": "build-unit-b9c931fa551e02bd12b2",
+        "kind": "object",
+        "mapping": "exact-workspace-path",
+        "mapping_confidence": 1.0,
+        "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/workspace/build/CMakeFiles/relay.dir/src/config.cpp.o",
+        "sha256": "<sha256>",
+        "size_bytes": "<size_bytes>",
+        "workspace_path": "build/CMakeFiles/relay.dir/src/config.cpp.o"
+       },
+       {
+        "artifact_origin": "build-output",
+        "build_unit_id": "build-unit-b9c931fa551e02bd12b2",
+        "kind": "object",
+        "mapping": "exact-workspace-path",
+        "mapping_confidence": 1.0,
+        "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/workspace/build/CMakeFiles/relay.dir/src/diag.cpp.o",
+        "sha256": "<sha256>",
+        "size_bytes": "<size_bytes>",
+        "workspace_path": "build/CMakeFiles/relay.dir/src/diag.cpp.o"
+       },
+       {
+        "artifact_origin": "build-output",
+        "build_unit_id": "build-unit-b9c931fa551e02bd12b2",
+        "kind": "object",
+        "mapping": "exact-workspace-path",
+        "mapping_confidence": 1.0,
+        "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/workspace/build/CMakeFiles/relay.dir/src/frame.cpp.o",
+        "sha256": "<sha256>",
+        "size_bytes": "<size_bytes>",
+        "workspace_path": "build/CMakeFiles/relay.dir/src/frame.cpp.o"
+       },
+       {
+        "artifact_origin": "build-output",
+        "build_unit_id": "build-unit-b9c931fa551e02bd12b2",
+        "kind": "object",
+        "mapping": "exact-workspace-path",
+        "mapping_confidence": 1.0,
+        "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/workspace/build/CMakeFiles/relay.dir/src/log.cpp.o",
+        "sha256": "<sha256>",
+        "size_bytes": "<size_bytes>",
+        "workspace_path": "build/CMakeFiles/relay.dir/src/log.cpp.o"
+       },
+       {
+        "artifact_origin": "build-output",
+        "build_unit_id": "build-unit-b9c931fa551e02bd12b2",
+        "kind": "object",
+        "mapping": "exact-workspace-path",
+        "mapping_confidence": 1.0,
+        "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/workspace/build/CMakeFiles/relay.dir/src/main.cpp.o",
+        "sha256": "<sha256>",
+        "size_bytes": "<size_bytes>",
+        "workspace_path": "build/CMakeFiles/relay.dir/src/main.cpp.o"
+       },
+       {
+        "artifact_origin": "build-output",
+        "build_unit_id": "build-unit-b9c931fa551e02bd12b2",
+        "kind": "object",
+        "mapping": "exact-workspace-path",
+        "mapping_confidence": 1.0,
+        "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/workspace/build/CMakeFiles/relay.dir/src/packet.cpp.o",
+        "sha256": "<sha256>",
+        "size_bytes": "<size_bytes>",
+        "workspace_path": "build/CMakeFiles/relay.dir/src/packet.cpp.o"
+       },
+       {
+        "artifact_origin": "build-output",
+        "build_unit_id": "build-unit-b9c931fa551e02bd12b2",
+        "kind": "object",
+        "mapping": "exact-workspace-path",
+        "mapping_confidence": 1.0,
+        "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/workspace/build/CMakeFiles/relay.dir/src/session.cpp.o",
+        "sha256": "<sha256>",
+        "size_bytes": "<size_bytes>",
+        "workspace_path": "build/CMakeFiles/relay.dir/src/session.cpp.o"
+       },
+       {
+        "artifact_origin": "build-output",
+        "build_unit_id": "build-unit-b9c931fa551e02bd12b2",
+        "kind": "compile-database",
+        "mapping": "exact-workspace-path",
+        "mapping_confidence": 1.0,
+        "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/workspace/build/compile_commands.json",
+        "sha256": "<sha256>",
+        "size_bytes": "<size_bytes>",
+        "workspace_path": "build/compile_commands.json"
+       },
+       {
+        "artifact_origin": "build-output",
+        "build_unit_id": "build-unit-b9c931fa551e02bd12b2",
+        "kind": "executable",
+        "loader_dependencies": [
+         "libstdc++.so.6",
+         "libgcc_s.so.1",
+         "libc.so.6"
+        ],
+        "loader_dependency_status": "resolved",
+        "loader_interpreter": "/lib64/ld-linux-x86-64.so.2",
+        "loader_linkage": "dynamic",
+        "loader_parser": "appsec-review/elf-loader-dependencies/2",
+        "loader_run_paths": [],
+        "loader_soname": null,
+        "mapping": "exact-workspace-path",
+        "mapping_confidence": 1.0,
+        "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/workspace/build/relay",
+        "sha256": "<sha256>",
+        "size_bytes": "<size_bytes>",
+        "workspace_path": "build/relay"
+       }
+      ],
+      "build_system": "cmake",
+      "build_unit_id": "build-unit-b9c931fa551e02bd12b2",
+      "capture_identity": "appsec-review/native-build-capture/4",
+      "capture_provenance": {
+       "capture_gap_count": 0,
+       "command_count": 2,
+       "complete": true,
+       "connect_events": 0,
+       "envp_events": 166,
+       "envp_redacted_names": [],
+       "event_records_lost": 0,
+       "event_records_observed": "<event_records_observed>",
+       "event_records_retained": "<event_records_retained>",
+       "failed_exec_events": 36,
+       "malformed_records": 0,
+       "observed_tool_kinds": [
+        "assembler",
+        "build-driver",
+        "compiler",
+        "linker",
+        "linker-driver"
+       ],
+       "process_exec_events": 166,
+       "redacted_exec_events": 0,
+       "redacted_tool_calls": 0,
+       "response_file_bytes": 0,
+       "response_file_records": 0,
+       "response_file_references": 0,
+       "schema": "appsec-review/native-capture-provenance/1",
+       "tool_call_records": 23,
+       "tool_call_records_lost": 0,
+       "tool_call_records_observed": 23,
+       "tool_call_records_retained": 23,
+       "truncated_tool_exec_events": 0,
+       "unreconciled_tool_calls": 0,
+       "untrusted_location_exec_events": 0
+      },
+      "checkpoint_reused": false,
+      "commands": [
+       {
+        "argv_sha256": "<sha256>",
+        "attempt_identity": "<attempt>",
+        "build_unit_id": "build-unit-b9c931fa551e02bd12b2",
+        "command_id": "<sha256>",
+        "duration_ms": "<duration>",
+        "environment_facts": {},
+        "execution_capture": {
+         "collector": {
+          "backend": "ptrace",
+          "event_kinds": [
+           "connect",
+           "directory_change",
+           "file_link",
+           "file_open",
+           "file_rename",
+           "file_unlink",
+           "process_exec",
+           "process_exit",
+           "process_fork"
+          ]
+         },
+         "complete": true,
+         "envp_captured": true,
+         "events": {
+          "capped": false,
+          "counts": {
+           "directory_change": "<count>",
+           "file_open": "<count>",
+           "file_rename": "<count>",
+           "file_unlink": "<count>",
+           "process_exec": "<count>",
+           "process_exit": 70,
+           "process_fork": "<count>"
+          },
+          "observed": "<count>",
+          "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/attempts/<attempt>/execution-capture/command-001/events.jsonl",
+          "retained": "<count>",
+          "sha256": "<sha256>"
+         },
+         "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/attempts/<attempt>/execution-capture/command-001/record.json",
+         "schema": "appsec-review/build-execution-record/1",
+         "scope": {
+          "attempt_id": "<attempt>",
+          "build_unit_id": "build-unit-b9c931fa551e02bd12b2",
+          "family": "native",
+          "job_id": "job_language_build",
+          "run_id": "<run-id>"
+         },
+         "secret_findings": {
+          "count": "<count>",
+          "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/attempts/<attempt>/execution-capture/command-001/secret-scan/findings.json",
+          "sha256": "<sha256>"
+         },
+         "secret_scan": {
+          "coverage_gap": false,
+          "execution": {
+           "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/attempts/<attempt>/execution-capture/command-001/secret-scan/execution.json",
+           "sha256": "<sha256>"
+          },
+          "exit_code": 0,
+          "report": {
+           "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/attempts/<attempt>/execution-capture/command-001/secret-scan/gitleaks.json",
+           "sha256": "<sha256>"
+          },
+          "scanner": "tool-gitleaks"
+         },
+         "sha256": "<sha256>",
+         "size_bytes": "<size_bytes>",
+         "tool_calls": {
+          "capped": false,
+          "observed": "<count>",
+          "retained": "<count>"
+         }
+        },
+        "exit_code": 0,
+        "image_id": "<image_id>",
+        "module": null,
+        "ordinal": 1,
+        "protected_argv": {
+         "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/protected-commands/5db43d739fde37470f071596.json",
+         "sha256": "<sha256>"
+        },
+        "role": "configure",
+        "started_at": "<timestamp>",
+        "stderr": {
+         "capture_limit_bytes": null,
+         "captured_bytes": 0,
+         "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/logs/001.stderr",
+         "preview_limit_bytes": 8388608,
+         "preview_truncated": false,
+         "sha256": "<sha256>",
+         "storage": "complete-file",
+         "total_bytes": 0,
+         "truncated": false
+        },
+        "stdout": {
+         "capture_limit_bytes": null,
+         "captured_bytes": 375,
+         "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/logs/001.stdout",
+         "preview_limit_bytes": 8388608,
+         "preview_truncated": false,
+         "sha256": "<sha256>",
+         "storage": "complete-file",
+         "total_bytes": 375,
+         "truncated": false
+        },
+        "timed_out": false,
+        "tool": "cmake",
+        "tool_kind": "build-driver",
+        "working_directory": "."
+       },
+       {
+        "argv_sha256": "<sha256>",
+        "attempt_identity": "<attempt>",
+        "build_unit_id": "build-unit-b9c931fa551e02bd12b2",
+        "command_id": "<sha256>",
+        "duration_ms": "<duration>",
+        "environment_facts": {},
+        "execution_capture": {
+         "collector": {
+          "backend": "ptrace",
+          "event_kinds": [
+           "connect",
+           "directory_change",
+           "file_link",
+           "file_open",
+           "file_rename",
+           "file_unlink",
+           "process_exec",
+           "process_exit",
+           "process_fork"
+          ]
+         },
+         "complete": true,
+         "envp_captured": true,
+         "events": {
+          "capped": false,
+          "counts": {
+           "directory_change": "<count>",
+           "file_open": "<count>",
+           "file_unlink": "<count>",
+           "process_exec": "<count>",
+           "process_exit": 83,
+           "process_fork": "<count>"
+          },
+          "observed": "<count>",
+          "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/attempts/<attempt>/execution-capture/command-002/events.jsonl",
+          "retained": "<count>",
+          "sha256": "<sha256>"
+         },
+         "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/attempts/<attempt>/execution-capture/command-002/record.json",
+         "schema": "appsec-review/build-execution-record/1",
+         "scope": {
+          "attempt_id": "<attempt>",
+          "build_unit_id": "build-unit-b9c931fa551e02bd12b2",
+          "family": "native",
+          "job_id": "job_language_build",
+          "run_id": "<run-id>"
+         },
+         "secret_findings": {
+          "count": "<count>",
+          "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/attempts/<attempt>/execution-capture/command-002/secret-scan/findings.json",
+          "sha256": "<sha256>"
+         },
+         "secret_scan": {
+          "coverage_gap": false,
+          "execution": {
+           "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/attempts/<attempt>/execution-capture/command-002/secret-scan/execution.json",
+           "sha256": "<sha256>"
+          },
+          "exit_code": 0,
+          "report": {
+           "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/attempts/<attempt>/execution-capture/command-002/secret-scan/gitleaks.json",
+           "sha256": "<sha256>"
+          },
+          "scanner": "tool-gitleaks"
+         },
+         "sha256": "<sha256>",
+         "size_bytes": "<size_bytes>",
+         "tool_calls": {
+          "capped": false,
+          "observed": "<count>",
+          "retained": "<count>"
+         }
+        },
+        "exit_code": 0,
+        "image_id": "<image_id>",
+        "module": null,
+        "ordinal": 2,
+        "protected_argv": {
+         "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/protected-commands/1301ffb59230fe90fcd36e27.json",
+         "sha256": "<sha256>"
+        },
+        "role": "build",
+        "started_at": "<timestamp>",
+        "stderr": {
+         "capture_limit_bytes": null,
+         "captured_bytes": 851,
+         "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/logs/002.stderr",
+         "preview_limit_bytes": 8388608,
+         "preview_truncated": false,
+         "sha256": "<sha256>",
+         "storage": "complete-file",
+         "total_bytes": 851,
+         "truncated": false
+        },
+        "stdout": {
+         "capture_limit_bytes": null,
+         "captured_bytes": 510,
+         "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/logs/002.stdout",
+         "preview_limit_bytes": 8388608,
+         "preview_truncated": false,
+         "sha256": "<sha256>",
+         "storage": "complete-file",
+         "total_bytes": 510,
+         "truncated": false
+        },
+        "timed_out": false,
+        "tool": "cmake",
+        "tool_kind": "build-driver",
+        "working_directory": "."
+       }
+      ],
+      "completed_at": "<timestamp>",
+      "dependency_identity": null,
+      "duration_ms": "<duration>",
+      "excluded_bookkeeping": {
+       "counts": {
+        "cmake-compiler-identification": 3
+       },
+       "examples": {
+        "cmake-compiler-identification": [
+         "build/CMakeFiles/3.28.3/CMakeDetermineCompilerABI_CXX.bin",
+         "build/CMakeFiles/3.28.3/CompilerIdCXX/CMakeCXXCompilerId.cpp",
+         "build/CMakeFiles/3.28.3/CompilerIdCXX/a.out"
+        ]
+       },
+       "schema": "appsec-review/build-bookkeeping-exclusions/1",
+       "total": 3
+      },
+      "executor_identity": "appsec-review/generic-language-build-executor/3",
+      "family": "native",
+      "fingerprint": "<sha256>",
+      "image": {
+       "base_image_id": "<image-digest>",
+       "cache_disposition": "HIT",
+       "cache_rejection_reason": null,
+       "customized": false,
+       "dependency_hashes": {
+        "CMakeLists.txt": "<sha256>"
+       },
+       "dockerfile_path": null,
+       "dockerfile_sha256": null,
+       "family": "native",
+       "image_id": "<image_id>",
+       "image_tag": "audit-buildenv-cpp:local",
+       "manifest_path": null,
+       "recipe_identity": "<sha256>",
+       "reused": true,
+       "saved_build_count": 1,
+       "schema": "appsec-review/project-build-image/1",
+       "terminal_status": "SUCCEEDED",
+       "user": "10001:10001"
+      },
+      "link_database": {
+       "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/link-commands.json",
+       "relationship_count": 10,
+       "sha256": "<sha256>"
+      },
+      "probe_identity": "<sha256>",
+      "processing_decisions": [
+       {
+        "action": "RUN",
+        "configuration_sha256": "<sha256>",
+        "decision_sha256": "<sha256>",
+        "disposition": "SUCCEEDED",
+        "feature": "build-execution-capture",
+        "inspected_facts": [
+         "artifact=executable",
+         "artifact=object",
+         "artifact=shared-library",
+         "artifact=static-library",
+         "build_system=cmake",
+         "capability=codeql-build",
+         "capability=material-build",
+         "family=native",
+         "inventory_complete=true",
+         "material=compiled-descriptor:cmake",
+         "material=declared-compiled-project:native"
+        ],
+        "language": "native",
+        "project_id": "build-unit-b9c931fa551e02bd12b2",
+        "reason_code": "PROCESSING_SUCCEEDED",
+        "resolved_policy": "required",
+        "schema": "appsec-review/applicability-decision/1",
+        "selected_capability": "execution-capture",
+        "sources": [
+         {
+          "path": "CMakeLists.txt",
+          "sha256": "<sha256>"
+         },
+         {
+          "path": "README.md",
+          "sha256": "<sha256>"
+         }
+        ]
+       },
+       {
+        "action": "RUN",
+        "configuration_sha256": "<sha256>",
+        "decision_sha256": "<sha256>",
+        "disposition": "SUCCEEDED",
+        "feature": "compiler-artifact-collection",
+        "inspected_facts": [
+         "artifact=executable",
+         "artifact=object",
+         "artifact=shared-library",
+         "artifact=static-library",
+         "build_system=cmake",
+         "capability=codeql-build",
+         "capability=material-build",
+         "family=native",
+         "inventory_complete=true",
+         "material=compiled-descriptor:cmake",
+         "material=declared-compiled-project:native"
+        ],
+        "language": "native",
+        "project_id": "build-unit-b9c931fa551e02bd12b2",
+        "reason_code": "PROCESSING_SUCCEEDED",
+        "resolved_policy": "required",
+        "schema": "appsec-review/applicability-decision/1",
+        "selected_capability": "executable,object,shared-library,static-library",
+        "sources": [
+         {
+          "path": "CMakeLists.txt",
+          "sha256": "<sha256>"
+         },
+         {
+          "path": "README.md",
+          "sha256": "<sha256>"
+         }
+        ]
+       }
+      ],
+      "project_topology": [],
+      "protected_compile_commands": {
+       "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/protected-commands/compile-database-<attempt>.json",
+       "sha256": "<sha256>"
+      },
+      "recipe": {
+       "build_commands": [
+        [
+         "cmake",
+         "--build",
+         "build",
+         "--parallel",
+         "2"
+        ]
+       ],
+       "build_dir": "build",
+       "build_unit_id": "build-unit-b9c931fa551e02bd12b2",
+       "configure_commands": [
+        [
+         "cmake",
+         "-S",
+         ".",
+         "-B",
+         "build",
+         "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
+         "-DCMAKE_BUILD_TYPE=RelWithDebInfo"
+        ]
+       ],
+       "dependency_files": [
+        "CMakeLists.txt"
+       ],
+       "environment": {},
+       "expected_outputs": [
+        "build"
+       ],
+       "image_profile": "native",
+       "network_required": false,
+       "reason": "Deterministic offline CMake recipe derived from the accepted CMake build marker.",
+       "schema": "appsec-review/build-recipe/1",
+       "source_dir": ".",
+       "system_packages": []
+      },
+      "recipe_identity": "<sha256>",
+      "root": ".",
+      "schema": "appsec-review/language-build-receipt/1",
+      "source_fingerprint": "<sha256>",
+      "started_at": "<timestamp>",
+      "terminal_status": "SUCCEEDED",
+      "tool_invocations": {
+       "<summary>": {
+        "count": 80,
+        "sha256": "74b8ee94d0b98095439e22cea92db71bbea8dec4a7edb2f7ed54dde6fb06ce3b"
+       }
+      },
+      "upstream_handoff_sha256": "<sha256>",
+      "workspace": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/workspace",
+      "workspace_manifest": {
+       "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/workspace-manifest.json",
+       "sha256": "<sha256>"
+      }
+     },
+     "compile_commands": [
+      {
+       "arguments": [
+        "clang++-18",
+        "-I/scratch/source/include",
+        "-DNDEBUG",
+        "-std=c++17",
+        "-Wall",
+        "-Wextra",
+        "/scratch/source/src/config.cpp"
+       ],
+       "command_sha256": "<sha256>",
+       "compile_unit_id": "<sha256>",
+       "directory": "/scratch/source",
+       "file": "/scratch/source/src/config.cpp",
+       "index": 6,
+       "output_path": "build/CMakeFiles/relay.dir/src/config.cpp.o",
+       "project_key": "build-unit-b9c931fa551e02bd12b2",
+       "source_sha256": "<sha256>",
+       "target_path": "src/config.cpp"
+      },
+      {
+       "arguments": [
+        "clang++-18",
+        "-I/scratch/source/include",
+        "-DNDEBUG",
+        "-std=c++17",
+        "-Wall",
+        "-Wextra",
+        "/scratch/source/src/diag.cpp"
+       ],
+       "command_sha256": "<sha256>",
+       "compile_unit_id": "<sha256>",
+       "directory": "/scratch/source",
+       "file": "/scratch/source/src/diag.cpp",
+       "index": 5,
+       "output_path": "build/CMakeFiles/relay.dir/src/diag.cpp.o",
+       "project_key": "build-unit-b9c931fa551e02bd12b2",
+       "source_sha256": "<sha256>",
+       "target_path": "src/diag.cpp"
+      },
+      {
+       "arguments": [
+        "clang++-18",
+        "-I/scratch/source/include",
+        "-DNDEBUG",
+        "-std=c++17",
+        "-Wall",
+        "-Wextra",
+        "/scratch/source/src/frame.cpp"
+       ],
+       "command_sha256": "<sha256>",
+       "compile_unit_id": "<sha256>",
+       "directory": "/scratch/source",
+       "file": "/scratch/source/src/frame.cpp",
+       "index": 3,
+       "output_path": "build/CMakeFiles/relay.dir/src/frame.cpp.o",
+       "project_key": "build-unit-b9c931fa551e02bd12b2",
+       "source_sha256": "<sha256>",
+       "target_path": "src/frame.cpp"
+      },
+      {
+       "arguments": [
+        "clang++-18",
+        "-I/scratch/source/include",
+        "-DNDEBUG",
+        "-std=c++17",
+        "-Wall",
+        "-Wextra",
+        "/scratch/source/src/log.cpp"
+       ],
+       "command_sha256": "<sha256>",
+       "compile_unit_id": "<sha256>",
+       "directory": "/scratch/source",
+       "file": "/scratch/source/src/log.cpp",
+       "index": 4,
+       "output_path": "build/CMakeFiles/relay.dir/src/log.cpp.o",
+       "project_key": "build-unit-b9c931fa551e02bd12b2",
+       "source_sha256": "<sha256>",
+       "target_path": "src/log.cpp"
+      },
+      {
+       "arguments": [
+        "clang++-18",
+        "-I/scratch/source/include",
+        "-DNDEBUG",
+        "-std=c++17",
+        "-Wall",
+        "-Wextra",
+        "/scratch/source/src/main.cpp"
+       ],
+       "command_sha256": "<sha256>",
+       "compile_unit_id": "<sha256>",
+       "directory": "/scratch/source",
+       "file": "/scratch/source/src/main.cpp",
+       "index": 0,
+       "output_path": "build/CMakeFiles/relay.dir/src/main.cpp.o",
+       "project_key": "build-unit-b9c931fa551e02bd12b2",
+       "source_sha256": "<sha256>",
+       "target_path": "src/main.cpp"
+      },
+      {
+       "arguments": [
+        "clang++-18",
+        "-I/scratch/source/include",
+        "-DNDEBUG",
+        "-std=c++17",
+        "-Wall",
+        "-Wextra",
+        "/scratch/source/src/packet.cpp"
+       ],
+       "command_sha256": "<sha256>",
+       "compile_unit_id": "<sha256>",
+       "directory": "/scratch/source",
+       "file": "/scratch/source/src/packet.cpp",
+       "index": 1,
+       "output_path": "build/CMakeFiles/relay.dir/src/packet.cpp.o",
+       "project_key": "build-unit-b9c931fa551e02bd12b2",
+       "source_sha256": "<sha256>",
+       "target_path": "src/packet.cpp"
+      },
+      {
+       "arguments": [
+        "clang++-18",
+        "-I/scratch/source/include",
+        "-DNDEBUG",
+        "-std=c++17",
+        "-Wall",
+        "-Wextra",
+        "/scratch/source/src/session.cpp"
+       ],
+       "command_sha256": "<sha256>",
+       "compile_unit_id": "<sha256>",
+       "directory": "/scratch/source",
+       "file": "/scratch/source/src/session.cpp",
+       "index": 2,
+       "output_path": "build/CMakeFiles/relay.dir/src/session.cpp.o",
+       "project_key": "build-unit-b9c931fa551e02bd12b2",
+       "source_sha256": "<sha256>",
+       "target_path": "src/session.cpp"
+      }
+     ],
+     "compile_database": {
+      "path": "data/cpp/projects/build-unit-b9c931fa551e02bd12b2/normalized-compile-commands.json",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     "counts": {
+      "compile_units": 7,
+      "executables": 3,
+      "libraries": 0,
+      "objects": 7
+     },
+     "image_id": "<image_id>",
+     "link_commands": [],
+     "link_database": {
+      "path": "data/cpp/projects/build-unit-b9c931fa551e02bd12b2/normalized-link-commands.json",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     "mapping": {
+      "build_system": "cmake",
+      "case_snapshot": "<sha256>",
+      "compile_database_origin": "build-system",
+      "display_name": "",
+      "family": "native",
+      "files": [
+       {
+        "scratch_path": "source/.gitignore",
+        "sha256": "<sha256>",
+        "target_path": ".gitignore"
+       },
+       {
+        "scratch_path": "source/CMakeLists.txt",
+        "sha256": "<sha256>",
+        "target_path": "CMakeLists.txt"
+       },
+       {
+        "scratch_path": "source/README.md",
+        "sha256": "<sha256>",
+        "target_path": "README.md"
+       },
+       {
+        "scratch_path": "source/include/relay/relay.hpp",
+        "sha256": "<sha256>",
+        "target_path": "include/relay/relay.hpp"
+       },
+       {
+        "scratch_path": "source/src/config.cpp",
+        "sha256": "<sha256>",
+        "target_path": "src/config.cpp"
+       },
+       {
+        "scratch_path": "source/src/diag.cpp",
+        "sha256": "<sha256>",
+        "target_path": "src/diag.cpp"
+       },
+       {
+        "scratch_path": "source/src/frame.cpp",
+        "sha256": "<sha256>",
+        "target_path": "src/frame.cpp"
+       },
+       {
+        "scratch_path": "source/src/log.cpp",
+        "sha256": "<sha256>",
+        "target_path": "src/log.cpp"
+       },
+       {
+        "scratch_path": "source/src/main.cpp",
+        "sha256": "<sha256>",
+        "target_path": "src/main.cpp"
+       },
+       {
+        "scratch_path": "source/src/packet.cpp",
+        "sha256": "<sha256>",
+        "target_path": "src/packet.cpp"
+       },
+       {
+        "scratch_path": "source/src/session.cpp",
+        "sha256": "<sha256>",
+        "target_path": "src/session.cpp"
+       }
+      ],
+      "language_build_fingerprint": "<sha256>",
+      "language_build_handoff_sha256": "<sha256>",
+      "native_components": [],
+      "project_id": "cpp:.",
+      "project_key": "build-unit-b9c931fa551e02bd12b2",
+      "root": ".",
+      "schema": "appsec-review/cpp-source-mapping/3"
+     },
+     "outputs": [
+      {
+       "kind": "executable",
+       "path": "build/CMakeFiles/3.28.3/CMakeDetermineCompilerABI_CXX.bin",
+       "sha256": "<sha256>",
+       "size_bytes": "<size_bytes>"
+      },
+      {
+       "kind": "executable",
+       "path": "build/CMakeFiles/3.28.3/CompilerIdCXX/a.out",
+       "sha256": "<sha256>",
+       "size_bytes": "<size_bytes>"
+      },
+      {
+       "kind": "object",
+       "path": "build/CMakeFiles/relay.dir/src/config.cpp.o",
+       "sha256": "<sha256>",
+       "size_bytes": "<size_bytes>"
+      },
+      {
+       "kind": "object",
+       "path": "build/CMakeFiles/relay.dir/src/diag.cpp.o",
+       "sha256": "<sha256>",
+       "size_bytes": "<size_bytes>"
+      },
+      {
+       "kind": "object",
+       "path": "build/CMakeFiles/relay.dir/src/frame.cpp.o",
+       "sha256": "<sha256>",
+       "size_bytes": "<size_bytes>"
+      },
+      {
+       "kind": "object",
+       "path": "build/CMakeFiles/relay.dir/src/log.cpp.o",
+       "sha256": "<sha256>",
+       "size_bytes": "<size_bytes>"
+      },
+      {
+       "kind": "object",
+       "path": "build/CMakeFiles/relay.dir/src/main.cpp.o",
+       "sha256": "<sha256>",
+       "size_bytes": "<size_bytes>"
+      },
+      {
+       "kind": "object",
+       "path": "build/CMakeFiles/relay.dir/src/packet.cpp.o",
+       "sha256": "<sha256>",
+       "size_bytes": "<size_bytes>"
+      },
+      {
+       "kind": "object",
+       "path": "build/CMakeFiles/relay.dir/src/session.cpp.o",
+       "sha256": "<sha256>",
+       "size_bytes": "<size_bytes>"
+      },
+      {
+       "kind": "executable",
+       "path": "build/relay",
+       "sha256": "<sha256>",
+       "size_bytes": "<size_bytes>"
+      }
+     ],
+     "project_key": "build-unit-b9c931fa551e02bd12b2",
+     "terminal_status": "SUCCEEDED"
+    }
+   },
+   "schema": "appsec-review/post-build-security-assessment/1",
+   "terminal_status": "SUCCEEDED",
+   "upstream_handoff_sha256": "<sha256>",
+   "upstream_manifest": {
+    "path": "data/indices/manifests/cpp-compiled-<attempt>.json",
+    "sha256": "<sha256>"
+   }
+  },
+  "provenance.native_units": {
+   "project_count": 1,
+   "projects": {
+    "build-unit-b9c931fa551e02bd12b2": {
+     "actions": {
+      "<summary>": {
+       "count": 80,
+       "sha256": "4225bd1f7bd43e745744828006e368dde885f3bf21a861998733d451326a3507"
+      }
+     },
+     "artifact": {
+      "path": "data/jobs/job_post_build_security_assessment/attempts/<attempt>/steps/provenance/tasks/native_units/p-44986a401d00/build-command-provenance.json",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     "artifacts": [
+      {
+       "artifact_id": "<sha256>",
+       "kind": "executable",
+       "path": "build/CMakeFiles/3.28.3/CMakeDetermineCompilerABI_CXX.bin",
+       "run_path": "data/cpp/projects/build-unit-b9c931fa551e02bd12b2/build/CMakeFiles/3.28.3/CMakeDetermineCompilerABI_CXX.bin",
+       "sha256": "<sha256>",
+       "size_bytes": "<size_bytes>"
+      },
+      {
+       "artifact_id": "<sha256>",
+       "kind": "executable",
+       "path": "build/CMakeFiles/3.28.3/CompilerIdCXX/a.out",
+       "run_path": "data/cpp/projects/build-unit-b9c931fa551e02bd12b2/build/CMakeFiles/3.28.3/CompilerIdCXX/a.out",
+       "sha256": "<sha256>",
+       "size_bytes": "<size_bytes>"
+      },
+      {
+       "artifact_id": "<sha256>",
+       "kind": "object",
+       "path": "build/CMakeFiles/relay.dir/src/config.cpp.o",
+       "run_path": "data/cpp/projects/build-unit-b9c931fa551e02bd12b2/build/CMakeFiles/relay.dir/src/config.cpp.o",
+       "sha256": "<sha256>",
+       "size_bytes": "<size_bytes>"
+      },
+      {
+       "artifact_id": "<sha256>",
+       "kind": "object",
+       "path": "build/CMakeFiles/relay.dir/src/diag.cpp.o",
+       "run_path": "data/cpp/projects/build-unit-b9c931fa551e02bd12b2/build/CMakeFiles/relay.dir/src/diag.cpp.o",
+       "sha256": "<sha256>",
+       "size_bytes": "<size_bytes>"
+      },
+      {
+       "artifact_id": "<sha256>",
+       "kind": "object",
+       "path": "build/CMakeFiles/relay.dir/src/frame.cpp.o",
+       "run_path": "data/cpp/projects/build-unit-b9c931fa551e02bd12b2/build/CMakeFiles/relay.dir/src/frame.cpp.o",
+       "sha256": "<sha256>",
+       "size_bytes": "<size_bytes>"
+      },
+      {
+       "artifact_id": "<sha256>",
+       "kind": "object",
+       "path": "build/CMakeFiles/relay.dir/src/log.cpp.o",
+       "run_path": "data/cpp/projects/build-unit-b9c931fa551e02bd12b2/build/CMakeFiles/relay.dir/src/log.cpp.o",
+       "sha256": "<sha256>",
+       "size_bytes": "<size_bytes>"
+      },
+      {
+       "artifact_id": "<sha256>",
+       "kind": "object",
+       "path": "build/CMakeFiles/relay.dir/src/main.cpp.o",
+       "run_path": "data/cpp/projects/build-unit-b9c931fa551e02bd12b2/build/CMakeFiles/relay.dir/src/main.cpp.o",
+       "sha256": "<sha256>",
+       "size_bytes": "<size_bytes>"
+      },
+      {
+       "artifact_id": "<sha256>",
+       "kind": "object",
+       "path": "build/CMakeFiles/relay.dir/src/packet.cpp.o",
+       "run_path": "data/cpp/projects/build-unit-b9c931fa551e02bd12b2/build/CMakeFiles/relay.dir/src/packet.cpp.o",
+       "sha256": "<sha256>",
+       "size_bytes": "<size_bytes>"
+      },
+      {
+       "artifact_id": "<sha256>",
+       "kind": "object",
+       "path": "build/CMakeFiles/relay.dir/src/session.cpp.o",
+       "run_path": "data/cpp/projects/build-unit-b9c931fa551e02bd12b2/build/CMakeFiles/relay.dir/src/session.cpp.o",
+       "sha256": "<sha256>",
+       "size_bytes": "<size_bytes>"
+      },
+      {
+       "artifact_id": "<sha256>",
+       "kind": "executable",
+       "path": "build/relay",
+       "run_path": "data/cpp/projects/build-unit-b9c931fa551e02bd12b2/build/relay",
+       "sha256": "<sha256>",
+       "size_bytes": "<size_bytes>"
+      }
+     ],
+     "case_id": "build-unit-b9c931fa551e02bd12b2",
+     "relationship_count": 8,
+     "relationships_exact": false,
+     "schema": "appsec-review/build-command-provenance/1",
+     "terminal_status": "COMPLETED_WITH_GAPS"
+    }
+   },
+   "terminal_status": "COMPLETED_WITH_GAPS"
+  },
+  "publication.publish_handoff": {
+   "artifact": {
+    "path": "data/jobs/job_post_build_security_assessment/attempts/<attempt>/steps/publication/tasks/publish_handoff/post-build-security-summary.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "index_manifest": {
+    "path": "data/indices/manifests/build-security-<attempt>.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "item_count": 1,
+   "schema": "appsec-review/post-build-security-assessment/1",
+   "terminal_status": "COMPLETED_WITH_GAPS"
+  }
+ },
+ "schema": "appsec-review/acceptance-job-output/1",
+ "skipped_units": [],
+ "status": "COMPLETED_WITH_GAPS",
+ "steps": {
+  "deterministic": "SUCCEEDED",
+  "index": "SUCCEEDED",
+  "inference": "SUCCEEDED",
+  "inspection": "SUCCEEDED",
+  "load": "SUCCEEDED",
+  "provenance": "SUCCEEDED",
+  "publication": "SUCCEEDED"
+ },
+ "units": {
+  "deterministic.native_units": {
+   "disposition": "COMPLETED_WITH_GAPS",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "index.native_units": {
+   "disposition": "COMPLETED_WITH_GAPS",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "inference.native_units": {
+   "disposition": "COMPLETED_WITH_GAPS",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "inspection.native_units": {
+   "disposition": "COMPLETED_WITH_GAPS",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "load.accepted_cpp_build": {
+   "disposition": "SUCCEEDED",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "provenance.native_units": {
+   "disposition": "COMPLETED_WITH_GAPS",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "publication.publish_handoff": {
+   "disposition": "COMPLETED_WITH_GAPS",
+   "producer": null,
+   "status": "SUCCEEDED"
+  }
+ },
+ "volatile": {
+  "artifacts": [
+   {
+    "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/attempts/<attempt>/execution-capture/command-001/events.jsonl",
+    "sha256": "d8dc3c582e808a230b9d307f2f6806dc4401c2327d8057d4c512473b28d106b8",
+    "size_bytes": 1044086
+   },
+   {
+    "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/attempts/<attempt>/execution-capture/command-001/record.json",
+    "sha256": "e57ca43c5e630e2b7db5dff21bfc3d0c45ae442eb9e207c271112c97ded33df0",
+    "size_bytes": 19604
+   },
+   {
+    "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/attempts/<attempt>/execution-capture/command-001/secret-scan/execution.json",
+    "sha256": "691568bf18c09e2138d64e039e150c5b919d201bde96f47e98506d3c79c23412",
+    "size_bytes": 540
+   },
+   {
+    "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/attempts/<attempt>/execution-capture/command-001/secret-scan/findings.json",
+    "sha256": "8f3e1f73c9e1fd94878bd90ba6428c435c91bffe4f1721fa8704adf5266a7b13",
+    "size_bytes": 256
+   },
+   {
+    "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/attempts/<attempt>/execution-capture/command-001/secret-scan/gitleaks.json",
+    "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+    "size_bytes": 3
+   },
+   {
+    "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/attempts/<attempt>/execution-capture/command-002/events.jsonl",
+    "sha256": "2132ee8c44396b9289e315ed4ee1b07e953080bc77272b9c629eb957b9a96d85",
+    "size_bytes": 3047916
+   },
+   {
+    "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/attempts/<attempt>/execution-capture/command-002/record.json",
+    "sha256": "d289f9759fb823d818e8ab9c5eb56de5cf661ca0caf73bb9ed4840d62476949d",
+    "size_bytes": 21998
+   },
+   {
+    "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/attempts/<attempt>/execution-capture/command-002/secret-scan/execution.json",
+    "sha256": "9d0df634dce8c0fa656feeb83671b9cd7f22618dc204a90b39ba56e0df9f82f8",
+    "size_bytes": 540
+   },
+   {
+    "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/attempts/<attempt>/execution-capture/command-002/secret-scan/findings.json",
+    "sha256": "8f3e1f73c9e1fd94878bd90ba6428c435c91bffe4f1721fa8704adf5266a7b13",
+    "size_bytes": 256
+   },
+   {
+    "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/attempts/<attempt>/execution-capture/command-002/secret-scan/gitleaks.json",
+    "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+    "size_bytes": 3
+   },
+   {
+    "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/link-commands.json",
+    "sha256": "548d1908a64e9dd39e4271e4988abaeebf8a00d50a54ff05328d28d5be9fef84",
+    "size_bytes": 4152
+   },
+   {
+    "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/logs/001.stderr",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "size_bytes": 0
+   },
+   {
+    "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/logs/001.stdout",
+    "sha256": "ce3b92f41c41bf894b06a377b63aafa44f4f1f48117c40c2ee671483d6922331",
+    "size_bytes": 375
+   },
+   {
+    "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/logs/002.stderr",
+    "sha256": "f8f59e08ed4583847cbf4aa3697c7c6fa1291e6253581bbdd4b8bbc58c21ab6c",
+    "size_bytes": 851
+   },
+   {
+    "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/logs/002.stdout",
+    "sha256": "3ca778306204e8a9cfb2b681fe1fe7c01eddfe86d3ed4d5b4df4c1ae3fd83c8c",
+    "size_bytes": 510
+   },
+   {
+    "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/protected-commands/1301ffb59230fe90fcd36e27.json",
+    "sha256": "0322a37d38169fbad75f078816f8f5e3dc542ff99a26859ade61d798a7bd2aa0",
+    "size_bytes": 177
+   },
+   {
+    "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/protected-commands/5db43d739fde37470f071596.json",
+    "sha256": "d04e12902d7593f70e2b32784b930a68701b537d3ec63a6ceea088c7ae143c03",
+    "size_bytes": 237
+   },
+   {
+    "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/protected-commands/compile-database-<attempt>.json",
+    "sha256": "20cd0d7eaf8b217ba878c069d8db3414895edca7f7d905d308b115d1fc31a31d",
+    "size_bytes": 102112
+   },
+   {
+    "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/workspace-manifest.json",
+    "sha256": "1b4348988570c1bbb3cb3a88244e9b1b3b0b75d6386bb15ad6dd596bea09abd5",
+    "size_bytes": 5390
+   },
+   {
+    "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/workspace/build/CMakeFiles/relay.dir/src/config.cpp.o",
+    "sha256": "61bb8c26ea1c39c609d71cb164318bae0ee5759f6d4ac7e3b5687b3cc80eb0d8",
+    "size_bytes": 91328
+   },
+   {
+    "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/workspace/build/CMakeFiles/relay.dir/src/diag.cpp.o",
+    "sha256": "dff405cb4d61676522d908787d4b6927c98e3c31bc0b0a540f49706b961c6272",
+    "size_bytes": 97992
+   },
+   {
+    "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/workspace/build/CMakeFiles/relay.dir/src/frame.cpp.o",
+    "sha256": "9cb4f13dc4355b2b5f32482757acf12162709472381654436975262ebead35b2",
+    "size_bytes": 28824
+   },
+   {
+    "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/workspace/build/CMakeFiles/relay.dir/src/log.cpp.o",
+    "sha256": "9b6a2578d0b9daeeecdcb0bf75026ff8f5a32e96648a21bed2ce95d72b9b2233",
+    "size_bytes": 24960
+   },
+   {
+    "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/workspace/build/CMakeFiles/relay.dir/src/main.cpp.o",
+    "sha256": "f83a26f49ebbc086d6156e8d6f8d958bbbb497eeb0064f4e1c798dc32221a6da",
+    "size_bytes": 196856
+   },
+   {
+    "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/workspace/build/CMakeFiles/relay.dir/src/packet.cpp.o",
+    "sha256": "c5db755293c6901c5c77d3bb90cbc46a3612a690c056421956211627830354eb",
+    "size_bytes": 26920
+   },
+   {
+    "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/workspace/build/CMakeFiles/relay.dir/src/session.cpp.o",
+    "sha256": "f623aabe1ca8e59f43b3a8f803fe7300ff47a83133e3cb66509299fd202f6b5d",
+    "size_bytes": 243832
+   },
+   {
+    "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/workspace/build/compile_commands.json",
+    "sha256": "4121ef813c74723bba3880633ab162000fa9fc0ecbb71468d77999fd6fd49b3a",
+    "size_bytes": 2088
+   },
+   {
+    "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/workspace/build/relay",
+    "sha256": "a94e496c7dd03082e97fbb2921c80ec835b9e6e66c06101f010b523c56e462ea",
+    "size_bytes": 327664
+   },
+   {
+    "path": "data/cpp/projects/build-unit-b9c931fa551e02bd12b2/artifact-catalog.json",
+    "sha256": "3121a6547705f298631a73634707945b81f656177c29aa04595a62fccafbd8b6",
+    "size_bytes": 1652
+   },
+   {
+    "path": "data/cpp/projects/build-unit-b9c931fa551e02bd12b2/normalized-compile-commands.json",
+    "sha256": "3dcb088a1c8c5ea244744d2f5d290336b4791f444f60e23b14ba5e307138083c",
+    "size_bytes": 4195
+   },
+   {
+    "path": "data/cpp/projects/build-unit-b9c931fa551e02bd12b2/normalized-link-commands.json",
+    "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+    "size_bytes": 3
+   },
+   {
+    "path": "data/indices/build_security/<sha256>-53c1f3312447a081.sqlite",
+    "sha256": "c94dd4aceb0f72a77c985ee23c567675afeab51169a6cc989be449423f4ee1f0",
+    "size_bytes": 1171456
+   },
+   {
+    "path": "data/indices/manifests/build-security-<attempt>.json",
+    "sha256": "289f986f8c5bb64baae597095852a845a578d0507f34e914bb8121475e74ee36",
+    "size_bytes": 42342
+   },
+   {
+    "path": "data/indices/manifests/cpp-compiled-<attempt>.json",
+    "sha256": "125fd38bcc68b5d50746aeefeca3068a3c3b823130d95dbd01727fc2024c361d",
+    "size_bytes": 32277
+   },
+   {
+    "path": "data/jobs/job_post_build_security_assessment/attempts/<attempt>/steps/deterministic/tasks/native_units/p-44986a401d00/deterministic-results.json",
+    "sha256": "36166dc6d03bad953db40e748a948246d697655baaaea16c7fddb20999325be7",
+    "size_bytes": 67495
+   },
+   {
+    "path": "data/jobs/job_post_build_security_assessment/attempts/<attempt>/steps/inference/tasks/native_units/p-44986a401d00/inference-results.json",
+    "sha256": "70639b610111072ad099ca312868fa3eb6784317faa15ec9f74b275c52fb1e94",
+    "size_bytes": 560
+   },
+   {
+    "path": "data/jobs/job_post_build_security_assessment/attempts/<attempt>/steps/inspection/tasks/native_units/p-44986a401d00/binary-inspections.json",
+    "sha256": "c3027948b040e6e4da67330c85aead0e933160d33d5b0f7c9a4e13de1e35ba93",
+    "size_bytes": 64465
+   },
+   {
+    "path": "data/jobs/job_post_build_security_assessment/attempts/<attempt>/steps/provenance/tasks/native_units/p-44986a401d00/build-command-provenance.json",
+    "sha256": "b1d1ee467a162bd3d18181a8046846654616bf1216183a3c3823c267c4dd9f0f",
+    "size_bytes": 184815
+   },
+   {
+    "path": "data/jobs/job_post_build_security_assessment/attempts/<attempt>/steps/publication/tasks/publish_handoff/post-build-security-summary.json",
+    "sha256": "fedb7e984cff61fedabbe0458ac0465ea335c30e09750536aa7f226ffdfa8049",
+    "size_bytes": 9628
+   }
+  ]
+ }
+}

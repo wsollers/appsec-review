@@ -1,0 +1,896 @@
+{
+ "artifacts": [
+  {
+   "count": 10,
+   "kind": "json",
+   "path": "data/jobs/job_tree_sitter_ast/attempts/<attempt>/steps/acceptance/tasks/publish_handoff/accepted-tree-sitter-ast.json",
+   "sha256": "4247697fb1b5b4936507b2f4217f04f6b93526e989ce351a0551579f3dd215f8"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/indices/manifests/tree-sitter-<attempt>.json",
+   "sha256": "e5726b558e87658b09f12ea1245b6c900beab651552d0334ddebfe3389ab62c6"
+  },
+  {
+   "kind": "file",
+   "path": "data/treesitter/shards/<sha256>.jsonl"
+  }
+ ],
+ "failed_units": [],
+ "findings": [],
+ "gaps": [
+  {
+   "count": 3,
+   "gap": ".git: excluded_directory",
+   "unit": "acceptance.publish_handoff"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "path": ".git",
+    "reason": "excluded_directory"
+   },
+   "unit": "load.accepted_inputs"
+  },
+  {
+   "count": 3,
+   "gap": ".git: excluded_directory",
+   "unit": "parse.dynamic_scopes"
+  }
+ ],
+ "handoff": {
+  "completion_status": "COMPLETED_WITH_GAPS",
+  "schema_identity": "appsec-review/tree-sitter-ast/1",
+  "status": "ACCEPTED",
+  "upstream_jobs": [
+   "job_ci_configuration_analysis",
+   "job_review_intake",
+   "job_source_history_analysis",
+   "job_target_analysis_plan",
+   "job_target_catalog"
+  ]
+ },
+ "job_id": "job_tree_sitter_ast",
+ "outputs": {
+  "acceptance.publish_handoff": {
+   "artifact": {
+    "path": "data/jobs/job_tree_sitter_ast/attempts/<attempt>/steps/acceptance/tasks/publish_handoff/accepted-tree-sitter-ast.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "dispositions": [
+    {
+     "artifact": {
+      "path": "data/treesitter/shards/<sha256>.jsonl",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     "counts": {
+      "bytes_parsed": 5400,
+      "diagnostic_count": 0,
+      "files_parsed": 8,
+      "gap_count": 1,
+      "nodes_parsed": 2044
+     },
+     "execution": {
+      "argv_identity": "<sha256>",
+      "completed_at": "<timestamp>",
+      "exit_code": 0,
+      "file_size_limit_bytes": null,
+      "file_size_limit_reached": false,
+      "image_digest": "<image_digest>",
+      "image_id": "<image_id>",
+      "image_tag": "appsec-review/tool-tree-sitter:1.0.0",
+      "limits": {
+       "cap_drop": [
+        "ALL"
+       ],
+       "cpus": "2",
+       "file_size_bytes": null,
+       "memory": "1g",
+       "memory_source": "catalog",
+       "network": "none",
+       "no_new_privileges": true,
+       "pids": "<pids>",
+       "root_filesystem": "read-only",
+       "stderr_bytes": 16777216,
+       "stdout_bytes": 16777216,
+       "timeout_seconds": "<duration>",
+       "tmpfs": [
+        "/tmp:rw,nosuid,nodev,noexec,size=128m"
+       ],
+       "user": "1000:1000"
+      },
+      "mounts": [
+       {
+        "read_only": true,
+        "runtime_source": "<target>",
+        "source": "<target>",
+        "target": "/target"
+       },
+       {
+        "read_only": false,
+        "runtime_source": "<run>/data/treesitter/work/<attempt>/14f250e9caf24f3bc347",
+        "source": "<run>/data/treesitter/work/<attempt>/14f250e9caf24f3bc347",
+        "target": "/scratch"
+       }
+      ],
+      "oom_killed": false,
+      "receipt_path": "data/treesitter/work/<attempt>/14f250e9caf24f3bc347/execution.json",
+      "schema": "appsec-review/container-execution/1",
+      "started_at": "<timestamp>",
+      "stderr_path": "data/treesitter/work/<attempt>/14f250e9caf24f3bc347/raw/stderr.bin",
+      "stderr_truncated": false,
+      "stdout_path": "data/treesitter/work/<attempt>/14f250e9caf24f3bc347/raw/stdout.bin",
+      "stdout_truncated": false,
+      "timed_out": false,
+      "tool_id": "tool-tree-sitter"
+     },
+     "fingerprint": "<sha256>",
+     "grammar": {
+      "artifact": "libtree_sitter_cpp.so",
+      "grammar": "cpp",
+      "language": "C++",
+      "license": "MIT",
+      "repository": "https://github.com/tree-sitter/tree-sitter-cpp",
+      "revision": "8b5b49eb196bec7040441bee33b2c9a4838d6967",
+      "sha256": "<sha256>"
+     },
+     "index_identity": {
+      "fingerprint": "<sha256>",
+      "name": "analysis",
+      "producer": {
+       "grammar": {
+        "artifact": "libtree_sitter_cpp.so",
+        "grammar": "cpp",
+        "language": "C++",
+        "license": "MIT",
+        "repository": "https://github.com/tree-sitter/tree-sitter-cpp",
+        "revision": "8b5b49eb196bec7040441bee33b2c9a4838d6967",
+        "sha256": "<sha256>"
+       },
+       "image_id": "<image_id>",
+       "job": "job_tree_sitter_ast",
+       "scope_id": "component-0001-build-unit-b9c931fa551e02bd12b2-C-071aee371178b2f67e2d"
+      },
+      "relative_path": "data/indices/analysis/<sha256>.sqlite",
+      "schema": "appsec-review/retrieval-index/2",
+      "sha256": "<sha256>",
+      "shard_id": "component-0001-build-unit-b9c931fa551e02bd12b2-C-071aee371178b2f67e2d"
+     },
+     "index_reused": false,
+     "language": "C++",
+     "project_id": "component:0001",
+     "schema": "appsec-review/tree-sitter-ast/1",
+     "scope_id": "component-0001-build-unit-b9c931fa551e02bd12b2-C-071aee371178b2f67e2d",
+     "terminal_status": "PARTIAL",
+     "translation_scope_id": "build-unit-b9c931fa551e02bd12b2",
+     "truncated": false
+    }
+   ],
+   "index_manifest": {
+    "path": "data/indices/manifests/tree-sitter-<attempt>.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "item_count": 2044,
+   "schema": "appsec-review/tree-sitter-ast/1",
+   "terminal_status": "PARTIAL"
+  },
+  "load.accepted_inputs": {
+   "accepted": {
+    "build_units": [
+     {
+      "build_system": "cmake",
+      "build_unit_id": "build-unit-b9c931fa551e02bd12b2",
+      "descriptor_facts": {},
+      "descriptor_package": {
+       "bounds": {
+        "actual_bytes": 529,
+        "actual_files": 2,
+        "max_file_bytes": 65536,
+        "max_files": 24,
+        "max_total_bytes": 262144
+       },
+       "build_unit": {
+        "build_system": "cmake",
+        "build_unit_id": "build-unit-b9c931fa551e02bd12b2",
+        "family": "native",
+        "markers": [
+         {
+          "path": "CMakeLists.txt",
+          "sha256": "<sha256>",
+          "size_bytes": "<size_bytes>"
+         }
+        ],
+        "provenance": "deterministic-marker",
+        "root": "."
+       },
+       "documents": [
+        {
+         "content": "cmake_minimum_required(VERSION 3.20)\nproject(relay LANGUAGES CXX)\n\nset(CMAKE_CXX_STANDARD 17)\nset(CMAKE_CXX_STANDARD_REQUIRED ON)\nset(CMAKE_CXX_EXTENSIONS OFF)\nset(CMAKE_EXPORT_COMPILE_COMMANDS ON)\n\nadd_executable(relay\n  src/main.cpp\n  src/packet.cpp\n  src/session.cpp\n  src/frame.cpp\n  src/log.cpp\n  src/diag.cpp\n  src/config.cpp\n)\ntarget_include_directories(relay PRIVATE include)\ntarget_compile_options(relay PRIVATE -Wall -Wextra)\n",
+         "path": "CMakeLists.txt",
+         "sha256": "<sha256>"
+        },
+        {
+         "content": "# relay\n\nA small packet relay utility.\n\nBuild: `cmake -S . -B build && cmake --build build`.\n",
+         "path": "README.md",
+         "sha256": "<sha256>"
+        }
+       ],
+       "schema": "appsec-review/build-descriptor-package/1"
+      },
+      "family": "native",
+      "markers": [
+       {
+        "path": "CMakeLists.txt",
+        "sha256": "<sha256>",
+        "size_bytes": "<size_bytes>"
+       }
+      ],
+      "project_type": "generic",
+      "provenance": "deterministic-marker",
+      "required_image_profile": "native",
+      "root": "."
+     }
+    ],
+    "catalog_handoff_sha256": "<sha256>",
+    "components": [
+     {
+      "component_id": "component:0001",
+      "manifest": null,
+      "manifest_sha256": null,
+      "root": "."
+     }
+    ],
+    "files": [
+     {
+      "generated": false,
+      "language": null,
+      "path": "CMakeLists.txt",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     {
+      "generated": false,
+      "language": null,
+      "path": "README.md",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     {
+      "generated": false,
+      "language": "C++",
+      "path": "include/relay/relay.hpp",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     {
+      "generated": false,
+      "language": "C++",
+      "path": "src/config.cpp",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     {
+      "generated": false,
+      "language": "C++",
+      "path": "src/diag.cpp",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     {
+      "generated": false,
+      "language": "C++",
+      "path": "src/frame.cpp",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     {
+      "generated": false,
+      "language": "C++",
+      "path": "src/log.cpp",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     {
+      "generated": false,
+      "language": "C++",
+      "path": "src/main.cpp",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     {
+      "generated": false,
+      "language": "C++",
+      "path": "src/packet.cpp",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     {
+      "generated": false,
+      "language": "C++",
+      "path": "src/session.cpp",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     }
+    ],
+    "intake_handoff_sha256": "<sha256>",
+    "source_fingerprint": "<sha256>"
+   },
+   "asset_lock": {
+    "architecture": "linux/amd64",
+    "base": "python:3.12-slim@<image-digest>",
+    "grammars": [
+     {
+      "artifact": "libtree_sitter_c_sharp.so",
+      "bytes": 5851232,
+      "grammar": "csharp",
+      "language": "C#",
+      "license": "MIT",
+      "repository": "https://github.com/tree-sitter/tree-sitter-c-sharp",
+      "revision": "af29416d729b7a6603101b513604392d8f675e3b",
+      "sha256": "<sha256>"
+     },
+     {
+      "artifact": "libtree_sitter_c.so",
+      "bytes": 623280,
+      "grammar": "c",
+      "language": "C",
+      "license": "MIT",
+      "repository": "https://github.com/tree-sitter/tree-sitter-c",
+      "revision": "b780e47fc780ddc8da13afa35a3f4ed5c157823d",
+      "sha256": "<sha256>"
+     },
+     {
+      "artifact": "libtree_sitter_cpp.so",
+      "bytes": 5587896,
+      "grammar": "cpp",
+      "language": "C++",
+      "license": "MIT",
+      "repository": "https://github.com/tree-sitter/tree-sitter-cpp",
+      "revision": "8b5b49eb196bec7040441bee33b2c9a4838d6967",
+      "sha256": "<sha256>"
+     },
+     {
+      "artifact": "libtree_sitter_go.so",
+      "bytes": 233712,
+      "grammar": "go",
+      "language": "Go",
+      "license": "MIT",
+      "repository": "https://github.com/tree-sitter/tree-sitter-go",
+      "revision": "2346a3ab1bb3857b48b29d779a1ef9799a248cd7",
+      "sha256": "<sha256>"
+     },
+     {
+      "artifact": "libtree_sitter_java.so",
+      "bytes": 433720,
+      "grammar": "java",
+      "language": "Java",
+      "license": "MIT",
+      "repository": "https://github.com/tree-sitter/tree-sitter-java",
+      "revision": "e10607b45ff745f5f876bfa3e94fbcc6b44bdc11",
+      "sha256": "<sha256>"
+     },
+     {
+      "artifact": "libtree_sitter_javascript.so",
+      "bytes": 431408,
+      "grammar": "javascript",
+      "language": "JavaScript",
+      "license": "MIT",
+      "repository": "https://github.com/tree-sitter/tree-sitter-javascript",
+      "revision": "58404d8cf191d69f2674a8fd507bd5776f46cb11",
+      "sha256": "<sha256>"
+     },
+     {
+      "artifact": "libtree_sitter_kotlin.so",
+      "bytes": 5764040,
+      "grammar": "kotlin",
+      "language": "Kotlin",
+      "license": "MIT",
+      "repository": "https://github.com/fwcd/tree-sitter-kotlin",
+      "revision": "c8ac3d2627240160b999a2c100de3babbdb8f419",
+      "sha256": "<sha256>"
+     },
+     {
+      "artifact": "libtree_sitter_php.so",
+      "bytes": 1091920,
+      "grammar": "php",
+      "language": "PHP",
+      "license": "MIT",
+      "repository": "https://github.com/tree-sitter/tree-sitter-php",
+      "revision": "38216983c07bf9e1b56e16acde53b25adaeab61c",
+      "sha256": "<sha256>"
+     },
+     {
+      "artifact": "libtree_sitter_powershell.so",
+      "bytes": 922720,
+      "grammar": "powershell",
+      "language": "PowerShell",
+      "license": "MIT",
+      "repository": "https://github.com/airbus-cert/tree-sitter-powershell",
+      "revision": "d398441825243b00e317e87e1829b9d6a3e54ce0",
+      "sha256": "<sha256>"
+     },
+     {
+      "artifact": "libtree_sitter_python.so",
+      "bytes": 480184,
+      "grammar": "python",
+      "language": "Python",
+      "license": "MIT",
+      "repository": "https://github.com/tree-sitter/tree-sitter-python",
+      "revision": "26855eabccb19c6abf499fbc5b8dc7cc9ab8bc64",
+      "sha256": "<sha256>"
+     },
+     {
+      "artifact": "libtree_sitter_ruby.so",
+      "bytes": 2120528,
+      "grammar": "ruby",
+      "language": "Ruby",
+      "license": "MIT",
+      "repository": "https://github.com/tree-sitter/tree-sitter-ruby",
+      "revision": "ad907a69da0c8a4f7a943a7fe012712208da6dee",
+      "sha256": "<sha256>"
+     },
+     {
+      "artifact": "libtree_sitter_rust.so",
+      "bytes": 1128216,
+      "grammar": "rust",
+      "language": "Rust",
+      "license": "MIT",
+      "repository": "https://github.com/tree-sitter/tree-sitter-rust",
+      "revision": "77a3747266f4d621d0757825e6b11edcbf991ca5",
+      "sha256": "<sha256>"
+     },
+     {
+      "artifact": "libtree_sitter_bash.so",
+      "bytes": 1335856,
+      "grammar": "bash",
+      "language": "Shell",
+      "license": "MIT",
+      "repository": "https://github.com/tree-sitter/tree-sitter-bash",
+      "revision": "a06c2e4415e9bc0346c6b86d401879ffb44058f7",
+      "sha256": "<sha256>"
+     },
+     {
+      "artifact": "libtree_sitter_tsx.so",
+      "bytes": 1472168,
+      "grammar": "tsx",
+      "language": "TSX",
+      "license": "MIT",
+      "repository": "https://github.com/tree-sitter/tree-sitter-typescript",
+      "revision": "75b3874edb2dc714fb1fd77a32013d0f8699989f",
+      "sha256": "<sha256>"
+     },
+     {
+      "artifact": "libtree_sitter_typescript.so",
+      "bytes": 1439376,
+      "grammar": "typescript",
+      "language": "TypeScript",
+      "license": "MIT",
+      "repository": "https://github.com/tree-sitter/tree-sitter-typescript",
+      "revision": "75b3874edb2dc714fb1fd77a32013d0f8699989f",
+      "sha256": "<sha256>"
+     }
+    ],
+    "image_id": "<image_id>",
+    "language_pack": {
+     "artifact": "tree_sitter_language_pack-1.12.5-cp310-abi3-manylinux_2_34_x86_64.whl",
+     "license": "MIT",
+     "project": "https://github.com/xberg-io/tree-sitter-language-pack",
+     "release": "https://github.com/xberg-io/tree-sitter-language-pack/releases/tag/v1.12.5",
+     "source_archive": "https://github.com/xberg-io/tree-sitter-language-pack/archive/refs/tags/v1.12.5.tar.gz",
+     "source_archive_sha256": "<sha256>",
+     "version": "1.12.5",
+     "wheel_bytes": 2299397,
+     "wheel_sha256": "<sha256>"
+    },
+    "license": "MIT",
+    "normalizer_schema": "appsec-review/tree-sitter-normalizer/1",
+    "project": "xberg-io/tree-sitter-language-pack with pinned upstream grammars",
+    "schema": "appsec-review/assets-lock/1",
+    "tool_version": "1.0.0",
+    "tree_sitter": {
+     "artifact": "tree_sitter-0.26.0-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl",
+     "license": "MIT",
+     "project": "https://github.com/tree-sitter/py-tree-sitter",
+     "version": "0.26.0",
+     "wheel_bytes": 667487,
+     "wheel_sha256": "<sha256>"
+    }
+   },
+   "grammar_locks": {
+    "C": {
+     "artifact": "libtree_sitter_c.so",
+     "grammar": "c",
+     "language": "C",
+     "license": "MIT",
+     "repository": "https://github.com/tree-sitter/tree-sitter-c",
+     "revision": "b780e47fc780ddc8da13afa35a3f4ed5c157823d",
+     "sha256": "<sha256>"
+    },
+    "C#": {
+     "artifact": "libtree_sitter_c_sharp.so",
+     "grammar": "csharp",
+     "language": "C#",
+     "license": "MIT",
+     "repository": "https://github.com/tree-sitter/tree-sitter-c-sharp",
+     "revision": "af29416d729b7a6603101b513604392d8f675e3b",
+     "sha256": "<sha256>"
+    },
+    "C++": {
+     "artifact": "libtree_sitter_cpp.so",
+     "grammar": "cpp",
+     "language": "C++",
+     "license": "MIT",
+     "repository": "https://github.com/tree-sitter/tree-sitter-cpp",
+     "revision": "8b5b49eb196bec7040441bee33b2c9a4838d6967",
+     "sha256": "<sha256>"
+    },
+    "C/C++": {
+     "artifact": "libtree_sitter_cpp.so",
+     "grammar": "cpp",
+     "language": "C++",
+     "license": "MIT",
+     "repository": "https://github.com/tree-sitter/tree-sitter-cpp",
+     "revision": "8b5b49eb196bec7040441bee33b2c9a4838d6967",
+     "sha256": "<sha256>"
+    },
+    "Go": {
+     "artifact": "libtree_sitter_go.so",
+     "grammar": "go",
+     "language": "Go",
+     "license": "MIT",
+     "repository": "https://github.com/tree-sitter/tree-sitter-go",
+     "revision": "2346a3ab1bb3857b48b29d779a1ef9799a248cd7",
+     "sha256": "<sha256>"
+    },
+    "Java": {
+     "artifact": "libtree_sitter_java.so",
+     "grammar": "java",
+     "language": "Java",
+     "license": "MIT",
+     "repository": "https://github.com/tree-sitter/tree-sitter-java",
+     "revision": "e10607b45ff745f5f876bfa3e94fbcc6b44bdc11",
+     "sha256": "<sha256>"
+    },
+    "JavaScript": {
+     "artifact": "libtree_sitter_javascript.so",
+     "grammar": "javascript",
+     "language": "JavaScript",
+     "license": "MIT",
+     "repository": "https://github.com/tree-sitter/tree-sitter-javascript",
+     "revision": "58404d8cf191d69f2674a8fd507bd5776f46cb11",
+     "sha256": "<sha256>"
+    },
+    "Kotlin": {
+     "artifact": "libtree_sitter_kotlin.so",
+     "grammar": "kotlin",
+     "language": "Kotlin",
+     "license": "MIT",
+     "repository": "https://github.com/fwcd/tree-sitter-kotlin",
+     "revision": "c8ac3d2627240160b999a2c100de3babbdb8f419",
+     "sha256": "<sha256>"
+    },
+    "PHP": {
+     "artifact": "libtree_sitter_php.so",
+     "grammar": "php",
+     "language": "PHP",
+     "license": "MIT",
+     "repository": "https://github.com/tree-sitter/tree-sitter-php",
+     "revision": "38216983c07bf9e1b56e16acde53b25adaeab61c",
+     "sha256": "<sha256>"
+    },
+    "PowerShell": {
+     "artifact": "libtree_sitter_powershell.so",
+     "grammar": "powershell",
+     "language": "PowerShell",
+     "license": "MIT",
+     "repository": "https://github.com/airbus-cert/tree-sitter-powershell",
+     "revision": "d398441825243b00e317e87e1829b9d6a3e54ce0",
+     "sha256": "<sha256>"
+    },
+    "Python": {
+     "artifact": "libtree_sitter_python.so",
+     "grammar": "python",
+     "language": "Python",
+     "license": "MIT",
+     "repository": "https://github.com/tree-sitter/tree-sitter-python",
+     "revision": "26855eabccb19c6abf499fbc5b8dc7cc9ab8bc64",
+     "sha256": "<sha256>"
+    },
+    "Ruby": {
+     "artifact": "libtree_sitter_ruby.so",
+     "grammar": "ruby",
+     "language": "Ruby",
+     "license": "MIT",
+     "repository": "https://github.com/tree-sitter/tree-sitter-ruby",
+     "revision": "ad907a69da0c8a4f7a943a7fe012712208da6dee",
+     "sha256": "<sha256>"
+    },
+    "Rust": {
+     "artifact": "libtree_sitter_rust.so",
+     "grammar": "rust",
+     "language": "Rust",
+     "license": "MIT",
+     "repository": "https://github.com/tree-sitter/tree-sitter-rust",
+     "revision": "77a3747266f4d621d0757825e6b11edcbf991ca5",
+     "sha256": "<sha256>"
+    },
+    "Shell": {
+     "artifact": "libtree_sitter_bash.so",
+     "grammar": "bash",
+     "language": "Shell",
+     "license": "MIT",
+     "repository": "https://github.com/tree-sitter/tree-sitter-bash",
+     "revision": "a06c2e4415e9bc0346c6b86d401879ffb44058f7",
+     "sha256": "<sha256>"
+    },
+    "TSX": {
+     "artifact": "libtree_sitter_tsx.so",
+     "grammar": "tsx",
+     "language": "TSX",
+     "license": "MIT",
+     "repository": "https://github.com/tree-sitter/tree-sitter-typescript",
+     "revision": "75b3874edb2dc714fb1fd77a32013d0f8699989f",
+     "sha256": "<sha256>"
+    },
+    "TypeScript": {
+     "artifact": "libtree_sitter_typescript.so",
+     "grammar": "typescript",
+     "language": "TypeScript",
+     "license": "MIT",
+     "repository": "https://github.com/tree-sitter/tree-sitter-typescript",
+     "revision": "75b3874edb2dc714fb1fd77a32013d0f8699989f",
+     "sha256": "<sha256>"
+    }
+   },
+   "image_id": "<image_id>"
+  },
+  "parse.dynamic_scopes": {
+   "dispositions": [
+    {
+     "artifact": {
+      "path": "data/treesitter/shards/<sha256>.jsonl",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     "counts": {
+      "bytes_parsed": 5400,
+      "diagnostic_count": 0,
+      "files_parsed": 8,
+      "gap_count": 1,
+      "nodes_parsed": 2044
+     },
+     "execution": {
+      "argv_identity": "<sha256>",
+      "completed_at": "<timestamp>",
+      "exit_code": 0,
+      "file_size_limit_bytes": null,
+      "file_size_limit_reached": false,
+      "image_digest": "<image_digest>",
+      "image_id": "<image_id>",
+      "image_tag": "appsec-review/tool-tree-sitter:1.0.0",
+      "limits": {
+       "cap_drop": [
+        "ALL"
+       ],
+       "cpus": "2",
+       "file_size_bytes": null,
+       "memory": "1g",
+       "memory_source": "catalog",
+       "network": "none",
+       "no_new_privileges": true,
+       "pids": "<pids>",
+       "root_filesystem": "read-only",
+       "stderr_bytes": 16777216,
+       "stdout_bytes": 16777216,
+       "timeout_seconds": "<duration>",
+       "tmpfs": [
+        "/tmp:rw,nosuid,nodev,noexec,size=128m"
+       ],
+       "user": "1000:1000"
+      },
+      "mounts": [
+       {
+        "read_only": true,
+        "runtime_source": "<target>",
+        "source": "<target>",
+        "target": "/target"
+       },
+       {
+        "read_only": false,
+        "runtime_source": "<run>/data/treesitter/work/<attempt>/14f250e9caf24f3bc347",
+        "source": "<run>/data/treesitter/work/<attempt>/14f250e9caf24f3bc347",
+        "target": "/scratch"
+       }
+      ],
+      "oom_killed": false,
+      "receipt_path": "data/treesitter/work/<attempt>/14f250e9caf24f3bc347/execution.json",
+      "schema": "appsec-review/container-execution/1",
+      "started_at": "<timestamp>",
+      "stderr_path": "data/treesitter/work/<attempt>/14f250e9caf24f3bc347/raw/stderr.bin",
+      "stderr_truncated": false,
+      "stdout_path": "data/treesitter/work/<attempt>/14f250e9caf24f3bc347/raw/stdout.bin",
+      "stdout_truncated": false,
+      "timed_out": false,
+      "tool_id": "tool-tree-sitter"
+     },
+     "fingerprint": "<sha256>",
+     "grammar": {
+      "artifact": "libtree_sitter_cpp.so",
+      "grammar": "cpp",
+      "language": "C++",
+      "license": "MIT",
+      "repository": "https://github.com/tree-sitter/tree-sitter-cpp",
+      "revision": "8b5b49eb196bec7040441bee33b2c9a4838d6967",
+      "sha256": "<sha256>"
+     },
+     "index_identity": {
+      "fingerprint": "<sha256>",
+      "name": "analysis",
+      "producer": {
+       "grammar": {
+        "artifact": "libtree_sitter_cpp.so",
+        "grammar": "cpp",
+        "language": "C++",
+        "license": "MIT",
+        "repository": "https://github.com/tree-sitter/tree-sitter-cpp",
+        "revision": "8b5b49eb196bec7040441bee33b2c9a4838d6967",
+        "sha256": "<sha256>"
+       },
+       "image_id": "<image_id>",
+       "job": "job_tree_sitter_ast",
+       "scope_id": "component-0001-build-unit-b9c931fa551e02bd12b2-C-071aee371178b2f67e2d"
+      },
+      "relative_path": "data/indices/analysis/<sha256>.sqlite",
+      "schema": "appsec-review/retrieval-index/2",
+      "sha256": "<sha256>",
+      "shard_id": "component-0001-build-unit-b9c931fa551e02bd12b2-C-071aee371178b2f67e2d"
+     },
+     "index_reused": false,
+     "language": "C++",
+     "project_id": "component:0001",
+     "schema": "appsec-review/tree-sitter-ast/1",
+     "scope_id": "component-0001-build-unit-b9c931fa551e02bd12b2-C-071aee371178b2f67e2d",
+     "terminal_status": "PARTIAL",
+     "translation_scope_id": "build-unit-b9c931fa551e02bd12b2",
+     "truncated": false
+    }
+   ],
+   "scope_count": 1,
+   "successful_scope_count": 1,
+   "terminal_status": "PARTIAL"
+  },
+  "plan.route_scopes": {
+   "runnable_scope_count": 1,
+   "scope_count": 1,
+   "scopes": [
+    {
+     "exclusions": [
+      {
+       "path": ".git",
+       "reason": "excluded_directory"
+      }
+     ],
+     "files": [
+      {
+       "generated": false,
+       "language": "C++",
+       "path": "include/relay/relay.hpp",
+       "sha256": "<sha256>",
+       "size_bytes": "<size_bytes>"
+      },
+      {
+       "generated": false,
+       "language": "C++",
+       "path": "src/config.cpp",
+       "sha256": "<sha256>",
+       "size_bytes": "<size_bytes>"
+      },
+      {
+       "generated": false,
+       "language": "C++",
+       "path": "src/diag.cpp",
+       "sha256": "<sha256>",
+       "size_bytes": "<size_bytes>"
+      },
+      {
+       "generated": false,
+       "language": "C++",
+       "path": "src/frame.cpp",
+       "sha256": "<sha256>",
+       "size_bytes": "<size_bytes>"
+      },
+      {
+       "generated": false,
+       "language": "C++",
+       "path": "src/log.cpp",
+       "sha256": "<sha256>",
+       "size_bytes": "<size_bytes>"
+      },
+      {
+       "generated": false,
+       "language": "C++",
+       "path": "src/main.cpp",
+       "sha256": "<sha256>",
+       "size_bytes": "<size_bytes>"
+      },
+      {
+       "generated": false,
+       "language": "C++",
+       "path": "src/packet.cpp",
+       "sha256": "<sha256>",
+       "size_bytes": "<size_bytes>"
+      },
+      {
+       "generated": false,
+       "language": "C++",
+       "path": "src/session.cpp",
+       "sha256": "<sha256>",
+       "size_bytes": "<size_bytes>"
+      }
+     ],
+     "language": "C++",
+     "project_id": "component:0001",
+     "project_root": ".",
+     "scope_id": "component-0001-build-unit-b9c931fa551e02bd12b2-C-071aee371178b2f67e2d",
+     "translation_root": ".",
+     "translation_scope_id": "build-unit-b9c931fa551e02bd12b2"
+    }
+   ],
+   "terminal_status": "SUCCEEDED"
+  }
+ },
+ "schema": "appsec-review/acceptance-job-output/1",
+ "skipped_units": [],
+ "status": "COMPLETED_WITH_GAPS",
+ "steps": {
+  "acceptance": "SUCCEEDED",
+  "load": "SUCCEEDED",
+  "parse": "SUCCEEDED",
+  "plan": "SUCCEEDED"
+ },
+ "units": {
+  "acceptance.publish_handoff": {
+   "disposition": "PARTIAL",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "load.accepted_inputs": {
+   "disposition": null,
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "parse.dynamic_scopes": {
+   "disposition": "PARTIAL",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "plan.route_scopes": {
+   "disposition": "SUCCEEDED",
+   "producer": null,
+   "status": "SUCCEEDED"
+  }
+ },
+ "volatile": {
+  "artifacts": [
+   {
+    "path": "data/indices/manifests/tree-sitter-<attempt>.json",
+    "sha256": "aa66749e338c4f163a11ff9a4f706a57091c1409126a64357789407e65c53073",
+    "size_bytes": 14166
+   },
+   {
+    "path": "data/jobs/job_tree_sitter_ast/attempts/<attempt>/steps/acceptance/tasks/publish_handoff/accepted-tree-sitter-ast.json",
+    "sha256": "ca90249b521d006898133ff7a1a9c40f2adbbb1c7c910cba12d5279287e3da5b",
+    "size_bytes": 10116
+   },
+   {
+    "path": "data/treesitter/shards/<sha256>.jsonl",
+    "sha256": "6144d6dbcaa885a6b687770447f5cdbec75f9e3445bcedeea5c53958b3571f03",
+    "size_bytes": 2203008
+   }
+  ]
+ }
+}

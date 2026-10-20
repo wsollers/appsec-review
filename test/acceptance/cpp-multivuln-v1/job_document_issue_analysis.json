@@ -1,0 +1,99 @@
+{
+ "artifacts": [
+  {
+   "count": 11,
+   "kind": "json",
+   "path": "data/document-issues/<sha256>/ledger.json",
+   "sha256": "af29eca9e5b0779c0421ffa4cb0c1217365770cde5128063a14ea7c87538e274"
+  }
+ ],
+ "failed_units": [],
+ "findings": [],
+ "gaps": [
+  {
+   "count": 1,
+   "gap": "document issue candidates are not adjudicated: finding publication is not implemented, so an empty ledger says nothing about target security",
+   "unit": "analysis.map_and_adjudicate"
+  }
+ ],
+ "handoff": {
+  "completion_status": "COMPLETED_WITH_GAPS",
+  "schema_identity": "appsec-review/document-issue-ledger/1",
+  "status": "ACCEPTED",
+  "upstream_jobs": [
+   "job_artifact_indexing",
+   "job_artifact_security_analysis",
+   "job_change_context_analysis",
+   "job_ci_configuration_analysis",
+   "job_clang_static_analysis",
+   "job_code_graph_index",
+   "job_codeql_analysis",
+   "job_cpp_compiled_analysis",
+   "job_cpp_symbol_index",
+   "job_dependency_intelligence",
+   "job_evidence_collection",
+   "job_language_build",
+   "job_owasp_control_assessment",
+   "job_post_build_security_assessment",
+   "job_profile_data",
+   "job_project_build",
+   "job_review_data_indexing",
+   "job_review_intake",
+   "job_review_package_assembly",
+   "job_review_prioritization",
+   "job_security_tagging",
+   "job_source_history_analysis",
+   "job_target_analysis_plan",
+   "job_target_catalog",
+   "job_test_coverage",
+   "job_tree_sitter_ast"
+  ]
+ },
+ "job_id": "job_document_issue_analysis",
+ "outputs": {
+  "analysis.map_and_adjudicate": {
+   "artifact": {
+    "path": "data/document-issues/<sha256>/ledger.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "artifacts": [
+    {
+     "path": "data/document-issues/<sha256>/ledger.json",
+     "sha256": "<sha256>",
+     "size_bytes": "<size_bytes>"
+    }
+   ],
+   "counts": {
+    "ambiguous": 0,
+    "candidates": 0,
+    "supported": 0,
+    "unmapped": 0
+   },
+   "schema": "appsec-review/document-issue-ledger/1",
+   "terminal_status": "COMPLETED_WITH_GAPS"
+  }
+ },
+ "schema": "appsec-review/acceptance-job-output/1",
+ "skipped_units": [],
+ "status": "COMPLETED_WITH_GAPS",
+ "steps": {
+  "analysis": "SUCCEEDED"
+ },
+ "units": {
+  "analysis.map_and_adjudicate": {
+   "disposition": "COMPLETED_WITH_GAPS",
+   "producer": null,
+   "status": "SUCCEEDED"
+  }
+ },
+ "volatile": {
+  "artifacts": [
+   {
+    "path": "data/document-issues/<sha256>/ledger.json",
+    "sha256": "d703bc6fddd51bf6666c20d490b2832468a3ab0928b008dd46e6aa3c28fd3c4a",
+    "size_bytes": 607
+   }
+  ]
+ }
+}

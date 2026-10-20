@@ -1,0 +1,1430 @@
+{
+ "artifacts": [
+  {
+   "count": 15,
+   "kind": "json",
+   "path": "data/indexing/fts/<attempt>/receipt.json",
+   "sha256": "9cf722a418d7075ac7c1b1b1701297d42902b1af250b277bf3c8e2f17f9e1e90"
+  },
+  {
+   "count": 16,
+   "kind": "json",
+   "path": "data/jobs/job_review_data_indexing/attempts/<attempt>/steps/load/tasks/accepted_inputs/accepted-inputs.json",
+   "sha256": "f1574f85c65dbd3f2c8629c8d3babbea39cca82ef09b465f7ac345de932e9042"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/indices/manifests/review-data-indexing-<attempt>.json",
+   "sha256": "484e31921edfc75efb0bba7e6356bf5d6cd28403144ffee5d93ca5c88dd1276d"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/jobs/job_review_data_indexing/attempts/<attempt>/steps/audit/tasks/inventory/inventory.json",
+   "sha256": "b92af780fe4ea0657ba84ef685ddbccf604c398dd76e60a0643147eeebc47ad7"
+  },
+  {
+   "count": 9,
+   "kind": "json",
+   "path": "data/jobs/job_review_data_indexing/attempts/<attempt>/steps/matrix/tasks/coverage/coverage-matrices.json",
+   "sha256": "daeb4405d39812d0179edbdd0cdcd0f04c5e7bb75897b8803e921fdd1a9266ae"
+  }
+ ],
+ "failed_units": [],
+ "findings": [],
+ "gaps": [
+  {
+   "count": 1,
+   "gap": "unreferenced_index_files: 15 index file(s) are outside the accepted set (superseded attempts, locks or unpublished shards); first: data/indices/links/links-finding-source/<sha256>.sqlite, data/indices/links/links-history-code/<sha256>.sqlite, data/indices/links/links-package-advisory/<sha256>.sqlite",
+   "unit": "audit.inventory"
+  },
+  {
+   "count": 2,
+   "gap": "2 build artifact representation(s) have no catalogued artifact identity",
+   "unit": "links.cross_domain"
+  },
+  {
+   "count": 1,
+   "gap": "links/package_advisory: scanner coverage: artifact-security: build/compile_commands.json: producing action mapping is ambiguous",
+   "unit": "links.cross_domain"
+  },
+  {
+   "count": 1,
+   "gap": "links/package_advisory: scanner coverage: grype: directory coverage only; no cataloged OCI/archive artifact; Grype coverage was configured disabled by tools.disable_grype",
+   "unit": "links.cross_domain"
+  },
+  {
+   "count": 1,
+   "gap": "links/package_advisory: scanner coverage: osv_scanner: not selected by accepted target analysis plan",
+   "unit": "links.cross_domain"
+  },
+  {
+   "count": 1,
+   "gap": "links/representation: 2 build artifact representation(s) have no catalogued artifact identity",
+   "unit": "links.cross_domain"
+  },
+  {
+   "count": 1,
+   "gap": "links/representation: missing_source_map: 1 compiled source file(s) are outside the accepted catalog",
+   "unit": "links.cross_domain"
+  },
+  {
+   "count": 1,
+   "gap": "links/representation: source-to-build-action mapping is unavailable outside C/C++ compile databases: captured file-access inventories are protected and not normalized",
+   "unit": "links.cross_domain"
+  },
+  {
+   "count": 2,
+   "gap": "missing_source_map: 1 compiled source file(s) are outside the accepted catalog",
+   "unit": "links.cross_domain"
+  },
+  {
+   "count": 2,
+   "gap": "scanner coverage: artifact-security: build/compile_commands.json: producing action mapping is ambiguous",
+   "unit": "links.cross_domain"
+  },
+  {
+   "count": 2,
+   "gap": "scanner coverage: grype: directory coverage only; no cataloged OCI/archive artifact; Grype coverage was configured disabled by tools.disable_grype",
+   "unit": "links.cross_domain"
+  },
+  {
+   "count": 2,
+   "gap": "scanner coverage: osv_scanner: not selected by accepted target analysis plan",
+   "unit": "links.cross_domain"
+  },
+  {
+   "count": 2,
+   "gap": "source-to-build-action mapping is unavailable outside C/C++ compile databases: captured file-access inventories are protected and not normalized",
+   "unit": "links.cross_domain"
+  },
+  {
+   "count": 1,
+   "gap": "matrix source review_decisions names unregistered producer job_inference_security_review",
+   "unit": "matrix.coverage"
+  },
+  {
+   "count": 2,
+   "gap": "artifacts/relations-2fbb7fdb7eb815a992d32f13: build/compile_commands.json: partial: build/compile_commands.json: producing action mapping is ambiguous",
+   "unit": "precompute.artifact_inventory"
+  },
+  {
+   "count": 2,
+   "gap": "links/links-representation: representation-links: partial: missing_source_map: 1 compiled source file(s) are outside the accepted catalog; 2 build artifact representation(s) have no catalogued artifact identity; source-to-build-action mapping is unavailable o",
+   "unit": "precompute.build_provenance"
+  },
+  {
+   "count": 2,
+   "gap": "ci-to-build mapping unavailable: CI records carry no build-unit, artifact or deployment identity",
+   "unit": "precompute.ci_trust"
+  },
+  {
+   "count": 1,
+   "gap": "no ci_trust fact was derivable: ci-to-build mapping unavailable: CI records carry no build-unit, artifact or deployment identity; observations/ci_azure_checkov: azure:checkov: unavailable: no azure CI definitions discovered; observations/ci_azure_schema: azure:schema: unavailable: no azure CI defini",
+   "unit": "precompute.ci_trust"
+  },
+  {
+   "count": 1,
+   "gap": "no ci_trust fact was derivable: ci-to-build mapping unavailable: CI records carry no build-unit, artifact or deployment identity; observations/ci_azure_checkov: azure:checkov: unavailable: no azure CI definitions discovered; observations/ci_azure_schema: azure:schema: unavailable: no azure CI definitions discovered; observations/ci_bitbucket_checkov: bitbucket:checkov: unavailable: no bitbucket CI",
+   "unit": "precompute.ci_trust"
+  },
+  {
+   "count": 2,
+   "gap": "observations/ci_azure_checkov: azure:checkov: unavailable: no azure CI definitions discovered",
+   "unit": "precompute.ci_trust"
+  },
+  {
+   "count": 2,
+   "gap": "observations/ci_azure_schema: azure:schema: unavailable: no azure CI definitions discovered",
+   "unit": "precompute.ci_trust"
+  },
+  {
+   "count": 2,
+   "gap": "observations/ci_bitbucket_checkov: bitbucket:checkov: unavailable: no bitbucket CI definitions discovered",
+   "unit": "precompute.ci_trust"
+  },
+  {
+   "count": 2,
+   "gap": "observations/ci_bitbucket_schema: bitbucket:schema: unavailable: no bitbucket CI definitions discovered",
+   "unit": "precompute.ci_trust"
+  },
+  {
+   "count": 2,
+   "gap": "observations/ci_circleci_checkov: circleci:checkov: unavailable: no circleci CI definitions discovered",
+   "unit": "precompute.ci_trust"
+  },
+  {
+   "count": 2,
+   "gap": "observations/ci_circleci_schema: circleci:schema: unavailable: no circleci CI definitions discovered",
+   "unit": "precompute.ci_trust"
+  },
+  {
+   "count": 2,
+   "gap": "observations/ci_github_actionlint: github:actionlint: unavailable: no github CI definitions discovered",
+   "unit": "precompute.ci_trust"
+  },
+  {
+   "count": 2,
+   "gap": "observations/ci_github_checkov: github:checkov: unavailable: no github CI definitions discovered",
+   "unit": "precompute.ci_trust"
+  },
+  {
+   "count": 2,
+   "gap": "observations/ci_github_schema: github:schema: unavailable: no github CI definitions discovered",
+   "unit": "precompute.ci_trust"
+  },
+  {
+   "count": 2,
+   "gap": "observations/ci_github_zizmor: github:zizmor: unavailable: no github CI definitions discovered",
+   "unit": "precompute.ci_trust"
+  },
+  {
+   "count": 2,
+   "gap": "observations/ci_gitlab_checkov: gitlab:checkov: unavailable: no gitlab CI definitions discovered",
+   "unit": "precompute.ci_trust"
+  },
+  {
+   "count": 2,
+   "gap": "observations/ci_gitlab_schema: gitlab:schema: unavailable: no gitlab CI definitions discovered",
+   "unit": "precompute.ci_trust"
+  },
+  {
+   "count": 2,
+   "gap": "observations/ci_jenkins_structural: jenkins:structural: unavailable: no jenkins CI definitions discovered",
+   "unit": "precompute.ci_trust"
+  },
+  {
+   "count": 2,
+   "gap": "observations/ci_other_discovery: other:discovery: unavailable: no other CI definitions discovered",
+   "unit": "precompute.ci_trust"
+  },
+  {
+   "count": 2,
+   "gap": "observations/ci_teamcity_structural: teamcity:structural: unavailable: no teamcity CI definitions discovered",
+   "unit": "precompute.ci_trust"
+  },
+  {
+   "count": 2,
+   "gap": "validator_gap: 3 evidence citation(s) are free-form and do not resolve to accepted retrieval identities",
+   "unit": "precompute.control_evidence"
+  },
+  {
+   "count": 2,
+   "gap": "inventory/dependency-intelligence: dependency-49ca151a2b39735549ccded0: partial: FileNotFoundError: configured Claude CLI is unavailable: claude",
+   "unit": "precompute.dependency_advisories"
+  },
+  {
+   "count": 2,
+   "gap": "inventory/dependency-intelligence: dependency-5bcb84257bcb4f4a9fd4eb42: partial: FileNotFoundError: configured Claude CLI is unavailable: claude",
+   "unit": "precompute.dependency_advisories"
+  },
+  {
+   "count": 2,
+   "gap": "inventory/dependency-intelligence: dependency-695f9cf0eb24a1ae96c6a4c7: partial: FileNotFoundError: configured Claude CLI is unavailable: claude",
+   "unit": "precompute.dependency_advisories"
+  },
+  {
+   "count": 2,
+   "gap": "inventory/dependency-intelligence: dependency-7495a7cde0abac949802257a: partial: FileNotFoundError: configured Claude CLI is unavailable: claude",
+   "unit": "precompute.dependency_advisories"
+  },
+  {
+   "count": 2,
+   "gap": "inventory/dependency-intelligence: dependency-7500b160cece310449e144fc: partial: FileNotFoundError: configured Claude CLI is unavailable: claude",
+   "unit": "precompute.dependency_advisories"
+  },
+  {
+   "count": 2,
+   "gap": "inventory/dependency-intelligence: dependency-98a18e3182e4630c85436d05: partial: FileNotFoundError: configured Claude CLI is unavailable: claude",
+   "unit": "precompute.dependency_advisories"
+  },
+  {
+   "count": 2,
+   "gap": "inventory/dependency-intelligence: dependency-f391a3ac63dfe5757c68ed5e: partial: FileNotFoundError: configured Claude CLI is unavailable: claude",
+   "unit": "precompute.dependency_advisories"
+  },
+  {
+   "count": 2,
+   "gap": "inventory/dependency-intelligence: dependency-intelligence: partial: {'dependency_id': 'dependency-f391a3ac63dfe5757c68ed5e', 'detail': 'FileNotFoundError: configured Claude CLI is unavailable: claude', 'kind': 'model_failure'}",
+   "unit": "precompute.dependency_advisories"
+  },
+  {
+   "count": 2,
+   "gap": "observations/artifact-security: produced-artifact-security: partial: build/compile_commands.json: producing action mapping is ambiguous",
+   "unit": "precompute.dependency_advisories"
+  },
+  {
+   "count": 2,
+   "gap": "observations/grype: tool-grype: partial: directory coverage only; no cataloged OCI/archive artifact; Grype coverage was configured disabled by tools.disable_grype",
+   "unit": "precompute.dependency_advisories"
+  },
+  {
+   "count": 2,
+   "gap": "observations/osv_scanner: tool-osv-scanner: partial: not selected by accepted target analysis plan",
+   "unit": "precompute.dependency_advisories"
+  },
+  {
+   "count": 2,
+   "gap": "documents/default: target-documents: partial: design: no accepted target document; dfd: no accepted target document; openapi: no accepted target document; postman: no accepted target document; threat_model: no accepted target document; unit_test:",
+   "unit": "precompute.document_context"
+  },
+  {
+   "count": 2,
+   "gap": "documents/default: target-documents:design: unavailable: design: no accepted target document",
+   "unit": "precompute.document_context"
+  },
+  {
+   "count": 2,
+   "gap": "documents/default: target-documents:dfd: unavailable: design: no accepted target document",
+   "unit": "precompute.document_context"
+  },
+  {
+   "count": 2,
+   "gap": "documents/default: target-documents:openapi: unavailable: design: no accepted target document",
+   "unit": "precompute.document_context"
+  },
+  {
+   "count": 2,
+   "gap": "documents/default: target-documents:postman: unavailable: design: no accepted target document",
+   "unit": "precompute.document_context"
+  },
+  {
+   "count": 2,
+   "gap": "documents/default: target-documents:threat_model: unavailable: design: no accepted target document",
+   "unit": "precompute.document_context"
+  },
+  {
+   "count": 2,
+   "gap": "documents/default: target-documents:unit_test: unavailable: design: no accepted target document",
+   "unit": "precompute.document_context"
+  },
+  {
+   "count": 1,
+   "gap": "no document_context fact was derivable: documents/default: target-documents: partial: design: no accepted target document; dfd: no accepted target document; openapi: no accepted target document; postman: no accepted target document; threat_model: no accepted target document; unit_test:; documents/de",
+   "unit": "precompute.document_context"
+  },
+  {
+   "count": 1,
+   "gap": "no document_context fact was derivable: documents/default: target-documents: partial: design: no accepted target document; dfd: no accepted target document; openapi: no accepted target document; postman: no accepted target document; threat_model: no accepted target document; unit_test:; documents/default: target-documents:design: unavailable: design: no accepted target document; documents/default:",
+   "unit": "precompute.document_context"
+  },
+  {
+   "count": 2,
+   "gap": "history/change-context: deployment-events: unavailable: deployment_disabled",
+   "unit": "precompute.history_context"
+  },
+  {
+   "count": 2,
+   "gap": "history/change-context: function-attribution: partial: function_mapping_unreliable",
+   "unit": "precompute.history_context"
+  },
+  {
+   "count": 2,
+   "gap": "history/change-context: off-hours-schedule: unavailable: time_zone_not_configured",
+   "unit": "precompute.history_context"
+  },
+  {
+   "count": 2,
+   "gap": "history/change-context: organization-membership: unavailable: organization_disabled",
+   "unit": "precompute.history_context"
+  },
+  {
+   "count": 2,
+   "gap": "history/change-context: review-records: unavailable: review_records_unavailable:github_enrichment_disabled",
+   "unit": "precompute.history_context"
+  },
+  {
+   "count": 2,
+   "gap": "history/git-history: deployment-timing: unavailable: deployment_timing_not_acquired",
+   "unit": "precompute.history_context"
+  },
+  {
+   "count": 2,
+   "gap": "history/git-history: github-enrichment: unavailable: github_enrichment_disabled",
+   "unit": "precompute.history_context"
+  },
+  {
+   "count": 2,
+   "gap": "history/git-history: pull-request-timing: unavailable: pr_timing_not_acquired",
+   "unit": "precompute.history_context"
+  },
+  {
+   "count": 2,
+   "gap": "CAPEC and ATT&CK relationships are not normalized by the pinned feed index; only weakness identities are joined",
+   "unit": "precompute.reference_intelligence"
+  },
+  {
+   "count": 2,
+   "gap": "producers that discard weakness identifiers (for example gosec and cppcheck normalizers) contribute no reference links",
+   "unit": "precompute.reference_intelligence"
+  },
+  {
+   "count": 2,
+   "gap": "observations/artifact-security: produced-artifact-security: partial: build/compile_commands.json: producing action mapping is ambiguous",
+   "unit": "precompute.scanner_correlation"
+  },
+  {
+   "count": 2,
+   "gap": "observations/blint: tool-blint: partial: not selected by accepted target analysis plan",
+   "unit": "precompute.scanner_correlation"
+  },
+  {
+   "count": 2,
+   "gap": "observations/ci_azure_checkov: azure:checkov: unavailable: no azure CI definitions discovered",
+   "unit": "precompute.scanner_correlation"
+  },
+  {
+   "count": 2,
+   "gap": "observations/ci_azure_schema: azure:schema: unavailable: no azure CI definitions discovered",
+   "unit": "precompute.scanner_correlation"
+  },
+  {
+   "count": 2,
+   "gap": "observations/ci_bitbucket_checkov: bitbucket:checkov: unavailable: no bitbucket CI definitions discovered",
+   "unit": "precompute.scanner_correlation"
+  },
+  {
+   "count": 2,
+   "gap": "observations/ci_bitbucket_schema: bitbucket:schema: unavailable: no bitbucket CI definitions discovered",
+   "unit": "precompute.scanner_correlation"
+  },
+  {
+   "count": 2,
+   "gap": "observations/ci_circleci_checkov: circleci:checkov: unavailable: no circleci CI definitions discovered",
+   "unit": "precompute.scanner_correlation"
+  },
+  {
+   "count": 2,
+   "gap": "observations/ci_circleci_schema: circleci:schema: unavailable: no circleci CI definitions discovered",
+   "unit": "precompute.scanner_correlation"
+  },
+  {
+   "count": 2,
+   "gap": "observations/ci_github_actionlint: github:actionlint: unavailable: no github CI definitions discovered",
+   "unit": "precompute.scanner_correlation"
+  },
+  {
+   "count": 2,
+   "gap": "observations/ci_github_checkov: github:checkov: unavailable: no github CI definitions discovered",
+   "unit": "precompute.scanner_correlation"
+  },
+  {
+   "count": 2,
+   "gap": "observations/ci_github_schema: github:schema: unavailable: no github CI definitions discovered",
+   "unit": "precompute.scanner_correlation"
+  },
+  {
+   "count": 2,
+   "gap": "observations/ci_github_zizmor: github:zizmor: unavailable: no github CI definitions discovered",
+   "unit": "precompute.scanner_correlation"
+  },
+  {
+   "count": 2,
+   "gap": "observations/ci_gitlab_checkov: gitlab:checkov: unavailable: no gitlab CI definitions discovered",
+   "unit": "precompute.scanner_correlation"
+  },
+  {
+   "count": 2,
+   "gap": "observations/ci_gitlab_schema: gitlab:schema: unavailable: no gitlab CI definitions discovered",
+   "unit": "precompute.scanner_correlation"
+  },
+  {
+   "count": 2,
+   "gap": "observations/ci_jenkins_structural: jenkins:structural: unavailable: no jenkins CI definitions discovered",
+   "unit": "precompute.scanner_correlation"
+  },
+  {
+   "count": 2,
+   "gap": "observations/ci_other_discovery: other:discovery: unavailable: no other CI definitions discovered",
+   "unit": "precompute.scanner_correlation"
+  },
+  {
+   "count": 2,
+   "gap": "observations/ci_teamcity_structural: teamcity:structural: unavailable: no teamcity CI definitions discovered",
+   "unit": "precompute.scanner_correlation"
+  },
+  {
+   "count": 1,
+   "gap": "observations/clang-static-cpp-scope-ab6d5db76861721dc145e459: clang-static:cpp:.: partial: seeded_neighborhood: facts cover functions within 3 call steps of 0 finding locations; absence outside it is not evidence; clang-static-analyzer failed on src/config.cpp: exit 1; clang-static-analyzer failed o",
+   "unit": "precompute.scanner_correlation"
+  },
+  {
+   "count": 1,
+   "gap": "observations/clang-static-cpp-scope-ab6d5db76861721dc145e459: clang-static:cpp:.: partial: seeded_neighborhood: facts cover functions within 3 call steps of 0 finding locations; absence outside it is not evidence; clang-static-analyzer failed on src/config.cpp: exit 1; clang-static-analyzer failed on src/diag.cpp: exit 1; clang-static-analyzer failed on src/frame.cpp: exit 1; clang-static-analyzer failed on src/log.cpp: exit 1; clang-static-analyzer failed on src/main.cpp: exit 1; clang-static-analyzer failed on src/packet.cpp: exit 1; clang-static-analyzer failed on src/session.cpp: exit 1; seed_unresolved: 14 of 14 seed locations lie in no function body (file scope, macro or generated code); seeded neighborhood is empty: no seed location resolves to a function definition",
+   "unit": "precompute.scanner_correlation"
+  },
+  {
+   "count": 2,
+   "gap": "observations/codeql-cpp-codeql-unit-612e7dd37a4af081280a679c-cert-cpp: codeql-cpp: partial: CodeQL query suite completed with zero observations; this is not a clean classification; CodeQL cert-cpp query suite completed with zero observations; this is not a clean classification",
+   "unit": "precompute.scanner_correlation"
+  },
+  {
+   "count": 2,
+   "gap": "observations/cpp-build-unit-b9c931fa551e02bd12b2-infer: infer: partial: Infer observation path did not resolve to accepted source: source/src/session.cpp",
+   "unit": "precompute.scanner_correlation"
+  },
+  {
+   "count": 2,
+   "gap": "observations/gosec: tool-gosec: partial: dependency/build context may be incomplete in offline mode; not selected by accepted target analysis plan",
+   "unit": "precompute.scanner_correlation"
+  },
+  {
+   "count": 2,
+   "gap": "observations/grype: tool-grype: partial: directory coverage only; no cataloged OCI/archive artifact; Grype coverage was configured disabled by tools.disable_grype",
+   "unit": "precompute.scanner_correlation"
+  },
+  {
+   "count": 2,
+   "gap": "observations/hadolint: tool-hadolint: partial: not selected by accepted target analysis plan",
+   "unit": "precompute.scanner_correlation"
+  },
+  {
+   "count": 2,
+   "gap": "observations/mobsfscan: tool-mobsfscan: partial: not selected by accepted target analysis plan",
+   "unit": "precompute.scanner_correlation"
+  },
+  {
+   "count": 2,
+   "gap": "observations/osv_scanner: tool-osv-scanner: partial: not selected by accepted target analysis plan",
+   "unit": "precompute.scanner_correlation"
+  },
+  {
+   "count": 2,
+   "gap": "observations/phpcs: tool-phpcs: partial: project-specific coding standard is not inferred; not selected by accepted target analysis plan",
+   "unit": "precompute.scanner_correlation"
+  },
+  {
+   "count": 2,
+   "gap": "observations/phpstan: tool-phpstan: partial: Composer dependencies are not installed by the scanner; not selected by accepted target analysis plan",
+   "unit": "precompute.scanner_correlation"
+  },
+  {
+   "count": 2,
+   "gap": "observations/pmd: tool-pmd: partial: security-focused ruleset only; general PMD code-quality rules are excluded; not selected by accepted target analysis plan",
+   "unit": "precompute.scanner_correlation"
+  },
+  {
+   "count": 2,
+   "gap": "observations/psalm: tool-psalm: partial: project config and installed dependency stubs may be required; not selected by accepted target analysis plan",
+   "unit": "precompute.scanner_correlation"
+  },
+  {
+   "count": 2,
+   "gap": "observations/shellcheck: tool-shellcheck: partial: not selected by accepted target analysis plan",
+   "unit": "precompute.scanner_correlation"
+  },
+  {
+   "count": 2,
+   "gap": "observations/spotbugs: tool-spotbugs: partial: not selected by accepted target analysis plan",
+   "unit": "precompute.scanner_correlation"
+  },
+  {
+   "count": 2,
+   "gap": "observations/trivy: tool-trivy: partial: Trivy misconfiguration checks are the set embedded in the pinned Trivy binary; the online checks bundle is never fetched (--skip-check-update); not selected by accepted target analysis plan",
+   "unit": "precompute.scanner_correlation"
+  },
+  {
+   "count": 2,
+   "gap": "observations/zizmor: tool-zizmor: partial: not selected by accepted target analysis plan",
+   "unit": "precompute.scanner_correlation"
+  },
+  {
+   "count": 2,
+   "gap": "scanner tool-blint: NOT_APPLICABLE",
+   "unit": "precompute.scanner_correlation"
+  },
+  {
+   "count": 2,
+   "gap": "scanner tool-gosec: NOT_APPLICABLE",
+   "unit": "precompute.scanner_correlation"
+  },
+  {
+   "count": 2,
+   "gap": "scanner tool-grype: NOT_APPLICABLE",
+   "unit": "precompute.scanner_correlation"
+  },
+  {
+   "count": 2,
+   "gap": "scanner tool-hadolint: NOT_APPLICABLE",
+   "unit": "precompute.scanner_correlation"
+  },
+  {
+   "count": 2,
+   "gap": "scanner tool-mobsfscan: NOT_APPLICABLE",
+   "unit": "precompute.scanner_correlation"
+  },
+  {
+   "count": 2,
+   "gap": "scanner tool-osv-scanner: NOT_APPLICABLE",
+   "unit": "precompute.scanner_correlation"
+  },
+  {
+   "count": 2,
+   "gap": "scanner tool-phpcs: NOT_APPLICABLE",
+   "unit": "precompute.scanner_correlation"
+  },
+  {
+   "count": 2,
+   "gap": "scanner tool-phpstan: NOT_APPLICABLE",
+   "unit": "precompute.scanner_correlation"
+  },
+  {
+   "count": 2,
+   "gap": "scanner tool-pmd: NOT_APPLICABLE",
+   "unit": "precompute.scanner_correlation"
+  },
+  {
+   "count": 2,
+   "gap": "scanner tool-psalm: NOT_APPLICABLE",
+   "unit": "precompute.scanner_correlation"
+  },
+  {
+   "count": 2,
+   "gap": "scanner tool-shellcheck: NOT_APPLICABLE",
+   "unit": "precompute.scanner_correlation"
+  },
+  {
+   "count": 2,
+   "gap": "scanner tool-spotbugs: NOT_APPLICABLE",
+   "unit": "precompute.scanner_correlation"
+  },
+  {
+   "count": 2,
+   "gap": "scanner tool-trivy: NOT_APPLICABLE",
+   "unit": "precompute.scanner_correlation"
+  },
+  {
+   "count": 2,
+   "gap": "scanner tool-zizmor: NOT_APPLICABLE",
+   "unit": "precompute.scanner_correlation"
+  },
+  {
+   "count": 2,
+   "gap": "unresolved overloads, template instantiations and indirect dispatch are not resolved by this first-stage product",
+   "unit": "precompute.symbol_links"
+  },
+  {
+   "count": 1,
+   "gap": "artifact_inventory: partial",
+   "unit": "publish.inventory_index"
+  },
+  {
+   "count": 1,
+   "gap": "build_provenance: partial",
+   "unit": "publish.inventory_index"
+  },
+  {
+   "count": 1,
+   "gap": "ci_trust: partial",
+   "unit": "publish.inventory_index"
+  },
+  {
+   "count": 1,
+   "gap": "control_evidence: partial",
+   "unit": "publish.inventory_index"
+  },
+  {
+   "count": 1,
+   "gap": "dependency_advisories: partial",
+   "unit": "publish.inventory_index"
+  },
+  {
+   "count": 1,
+   "gap": "document_context: partial",
+   "unit": "publish.inventory_index"
+  },
+  {
+   "count": 1,
+   "gap": "history_context: partial",
+   "unit": "publish.inventory_index"
+  },
+  {
+   "count": 1,
+   "gap": "input-source matrix discrepancies: matrix source review_decisions names unregistered producer job_inference_security_review",
+   "unit": "publish.inventory_index"
+  },
+  {
+   "count": 1,
+   "gap": "reference_intelligence: partial",
+   "unit": "publish.inventory_index"
+  },
+  {
+   "count": 1,
+   "gap": "scanner_correlation: partial",
+   "unit": "publish.inventory_index"
+  },
+  {
+   "count": 1,
+   "gap": "symbol_links: partial",
+   "unit": "publish.inventory_index"
+  }
+ ],
+ "handoff": {
+  "completion_status": "COMPLETED_WITH_GAPS",
+  "schema_identity": "appsec-review/review-data-indexing/1",
+  "status": "ACCEPTED",
+  "upstream_jobs": [
+   "job_artifact_indexing",
+   "job_artifact_security_analysis",
+   "job_change_context_analysis",
+   "job_ci_configuration_analysis",
+   "job_clang_static_analysis",
+   "job_code_graph_index",
+   "job_codeql_analysis",
+   "job_cpp_compiled_analysis",
+   "job_cpp_symbol_index",
+   "job_dependency_intelligence",
+   "job_evidence_collection",
+   "job_language_build",
+   "job_owasp_control_assessment",
+   "job_post_build_security_assessment",
+   "job_profile_data",
+   "job_project_build",
+   "job_review_intake",
+   "job_review_prioritization",
+   "job_security_tagging",
+   "job_source_history_analysis",
+   "job_target_analysis_plan",
+   "job_target_catalog",
+   "job_test_coverage",
+   "job_tree_sitter_ast"
+  ]
+ },
+ "job_id": "job_review_data_indexing",
+ "outputs": {
+  "audit.inventory": {
+   "artifact": {
+    "path": "data/jobs/job_review_data_indexing/attempts/<attempt>/steps/audit/tasks/inventory/inventory.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "audit_status": "PASSED",
+   "row_count": 323,
+   "terminal_status": "COMPLETED_WITH_GAPS",
+   "violation_count": 0
+  },
+  "fts.image_validation": {
+   "artifact": {
+    "path": "data/indexing/fts/<attempt>/receipt.json",
+    "sha256": "<sha256>"
+   },
+   "summary": {
+    "expected_image_id": "<image-digest>",
+    "image_id": "<image_id>",
+    "input_sha256": "<sha256>",
+    "mode": "optional",
+    "record_count": 112,
+    "secret_pattern_documents": 0,
+    "sqlite_version": "3.40.1",
+    "status": "verified",
+    "tool_id": "tool-sqlite-fts"
+   },
+   "terminal_status": "SUCCEEDED"
+  },
+  "links.cross_domain": {
+   "links": [
+    {
+     "counts": {
+      "entities": 0,
+      "exact_links": 35,
+      "relations": 35
+     },
+     "fingerprint": "<sha256>",
+     "index_identity": {
+      "fingerprint": "<sha256>",
+      "name": "links",
+      "producer": {
+       "job": "job_review_data_indexing",
+       "link_family": "representation",
+       "rule": "representation",
+       "rule_version": "representation-links/1",
+       "unit": "links.cross_domain"
+      },
+      "relative_path": "data/indices/links/links-representation/<sha256>.sqlite",
+      "schema": "appsec-review/retrieval-index/2",
+      "sha256": "<sha256>",
+      "shard_id": "links-representation"
+     },
+     "inputs_sha256": "<sha256>",
+     "reused": false,
+     "rule": "representation",
+     "rule_version": "representation-links/1",
+     "schema": "appsec-review/derived-shard/1",
+     "terminal_status": "PARTIAL"
+    },
+    {
+     "counts": {
+      "already_linked": 21,
+      "entities": 0,
+      "exact_links": 10,
+      "relations": 10
+     },
+     "fingerprint": "<sha256>",
+     "index_identity": {
+      "fingerprint": "<sha256>",
+      "name": "links",
+      "producer": {
+       "job": "job_review_data_indexing",
+       "link_family": "finding_source",
+       "rule": "finding_source",
+       "rule_version": "finding-source-links/1",
+       "unit": "links.cross_domain"
+      },
+      "relative_path": "data/indices/links/links-finding-source/<sha256>.sqlite",
+      "schema": "appsec-review/retrieval-index/2",
+      "sha256": "<sha256>",
+      "shard_id": "links-finding-source"
+     },
+     "inputs_sha256": "<sha256>",
+     "reused": false,
+     "rule": "finding_source",
+     "rule_version": "finding-source-links/1",
+     "schema": "appsec-review/derived-shard/1",
+     "terminal_status": "SUCCEEDED"
+    },
+    {
+     "counts": {
+      "entities": 0,
+      "relations": 0
+     },
+     "fingerprint": "<sha256>",
+     "index_identity": {
+      "fingerprint": "<sha256>",
+      "name": "links",
+      "producer": {
+       "job": "job_review_data_indexing",
+       "link_family": "package_advisory",
+       "rule": "package_advisory",
+       "rule_version": "package-advisory-links/1",
+       "unit": "links.cross_domain"
+      },
+      "relative_path": "data/indices/links/links-package-advisory/<sha256>.sqlite",
+      "schema": "appsec-review/retrieval-index/2",
+      "sha256": "<sha256>",
+      "shard_id": "links-package-advisory"
+     },
+     "inputs_sha256": "<sha256>",
+     "reused": false,
+     "rule": "package_advisory",
+     "rule_version": "package-advisory-links/1",
+     "schema": "appsec-review/derived-shard/1",
+     "terminal_status": "PARTIAL"
+    },
+    {
+     "counts": {
+      "ambiguous_links": 3,
+      "entities": 0,
+      "exact_links": 32,
+      "relations": 35
+     },
+     "fingerprint": "<sha256>",
+     "index_identity": {
+      "fingerprint": "<sha256>",
+      "name": "links",
+      "producer": {
+       "job": "job_review_data_indexing",
+       "link_family": "symbol_syntax",
+       "rule": "symbol_syntax",
+       "rule_version": "symbol-syntax-links/1",
+       "unit": "links.cross_domain"
+      },
+      "relative_path": "data/indices/links/links-symbol-syntax/<sha256>.sqlite",
+      "schema": "appsec-review/retrieval-index/2",
+      "sha256": "<sha256>",
+      "shard_id": "links-symbol-syntax"
+     },
+     "inputs_sha256": "<sha256>",
+     "reused": false,
+     "rule": "symbol_syntax",
+     "rule_version": "symbol-syntax-links/1",
+     "schema": "appsec-review/derived-shard/1",
+     "terminal_status": "SUCCEEDED"
+    },
+    {
+     "counts": {
+      "entities": 0,
+      "exact_links": 76,
+      "relations": 76
+     },
+     "fingerprint": "<sha256>",
+     "index_identity": {
+      "fingerprint": "<sha256>",
+      "name": "links",
+      "producer": {
+       "job": "job_review_data_indexing",
+       "link_family": "history_code",
+       "rule": "history_code",
+       "rule_version": "history-code-links/1",
+       "unit": "links.cross_domain"
+      },
+      "relative_path": "data/indices/links/links-history-code/<sha256>.sqlite",
+      "schema": "appsec-review/retrieval-index/2",
+      "sha256": "<sha256>",
+      "shard_id": "links-history-code"
+     },
+     "inputs_sha256": "<sha256>",
+     "reused": false,
+     "rule": "history_code",
+     "rule_version": "history-code-links/1",
+     "schema": "appsec-review/derived-shard/1",
+     "terminal_status": "SUCCEEDED"
+    }
+   ],
+   "terminal_status": "COMPLETED_WITH_GAPS"
+  },
+  "load.accepted_inputs": {
+   "artifact": {
+    "path": "data/jobs/job_review_data_indexing/attempts/<attempt>/steps/load/tasks/accepted_inputs/accepted-inputs.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "restored": 0,
+   "shard_count": 90,
+   "terminal_status": "SUCCEEDED"
+  },
+  "matrix.coverage": {
+   "artifact": {
+    "path": "data/jobs/job_review_data_indexing/attempts/<attempt>/steps/matrix/tasks/coverage/coverage-matrices.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "build_unit_count": 8,
+   "language_count": 3,
+   "terminal_status": "COMPLETED_WITH_GAPS"
+  },
+  "precompute.artifact_inventory": {
+   "counts": {
+    "entities": 1,
+    "facts": 1,
+    "relations": 0
+   },
+   "fact_count": 1,
+   "index_identity": {
+    "fingerprint": "<sha256>",
+    "name": "precomputed",
+    "producer": {
+     "job": "job_review_data_indexing",
+     "query_set": "artifact_inventory",
+     "rule": "artifact_inventory",
+     "rule_version": "artifact-inventory/1",
+     "unit": "precompute.artifact_inventory"
+    },
+    "relative_path": "data/indices/precomputed/qs-artifact_inventory/<sha256>.sqlite",
+    "schema": "appsec-review/retrieval-index/2",
+    "sha256": "<sha256>",
+    "shard_id": "qs-artifact_inventory"
+   },
+   "query_set": "artifact_inventory",
+   "reused": false,
+   "rule_version": "artifact-inventory/1",
+   "status": "partial",
+   "terminal_status": "COMPLETED_WITH_GAPS"
+  },
+  "precompute.build_provenance": {
+   "counts": {
+    "build_provenance:command_facts:build_actions": 2,
+    "build_provenance:command_facts:without_capture": 0,
+    "entities": 11,
+    "facts": 9,
+    "relations": 41
+   },
+   "fact_count": 11,
+   "index_identity": {
+    "fingerprint": "<sha256>",
+    "name": "precomputed",
+    "producer": {
+     "job": "job_review_data_indexing",
+     "query_set": "build_provenance",
+     "rule": "build_provenance",
+     "rule_version": "build-provenance/1",
+     "unit": "precompute.build_provenance"
+    },
+    "relative_path": "data/indices/precomputed/qs-build_provenance/<sha256>.sqlite",
+    "schema": "appsec-review/retrieval-index/2",
+    "sha256": "<sha256>",
+    "shard_id": "qs-build_provenance"
+   },
+   "query_set": "build_provenance",
+   "reused": false,
+   "rule_version": "build-provenance/1",
+   "status": "partial",
+   "terminal_status": "COMPLETED_WITH_GAPS"
+  },
+  "precompute.ci_trust": {
+   "counts": {
+    "entities": 0,
+    "facts": 0,
+    "relations": 0
+   },
+   "fact_count": 0,
+   "index_identity": {
+    "fingerprint": "<sha256>",
+    "name": "precomputed",
+    "producer": {
+     "job": "job_review_data_indexing",
+     "query_set": "ci_trust",
+     "rule": "ci_trust",
+     "rule_version": "ci-trust/1",
+     "unit": "precompute.ci_trust"
+    },
+    "relative_path": "data/indices/precomputed/qs-ci_trust/<sha256>.sqlite",
+    "schema": "appsec-review/retrieval-index/2",
+    "sha256": "<sha256>",
+    "shard_id": "qs-ci_trust"
+   },
+   "query_set": "ci_trust",
+   "reused": false,
+   "rule_version": "ci-trust/1",
+   "status": "partial",
+   "terminal_status": "COMPLETED_WITH_GAPS"
+  },
+  "precompute.control_evidence": {
+   "counts": {
+    "entities": 8,
+    "facts": 8,
+    "relations": 0
+   },
+   "fact_count": 8,
+   "index_identity": {
+    "fingerprint": "<sha256>",
+    "name": "precomputed",
+    "producer": {
+     "job": "job_review_data_indexing",
+     "query_set": "control_evidence",
+     "rule": "control_evidence",
+     "rule_version": "control-evidence/1",
+     "unit": "precompute.control_evidence"
+    },
+    "relative_path": "data/indices/precomputed/qs-control_evidence/<sha256>.sqlite",
+    "schema": "appsec-review/retrieval-index/2",
+    "sha256": "<sha256>",
+    "shard_id": "qs-control_evidence"
+   },
+   "query_set": "control_evidence",
+   "reused": false,
+   "rule_version": "control-evidence/1",
+   "status": "partial",
+   "terminal_status": "COMPLETED_WITH_GAPS"
+  },
+  "precompute.dependency_advisories": {
+   "counts": {
+    "entities": 1,
+    "facts": 1,
+    "relations": 1
+   },
+   "fact_count": 1,
+   "index_identity": {
+    "fingerprint": "<sha256>",
+    "name": "precomputed",
+    "producer": {
+     "job": "job_review_data_indexing",
+     "query_set": "dependency_advisories",
+     "rule": "dependency_advisories",
+     "rule_version": "dependency-advisories/3",
+     "unit": "precompute.dependency_advisories"
+    },
+    "relative_path": "data/indices/precomputed/qs-dependency_advisories/<sha256>.sqlite",
+    "schema": "appsec-review/retrieval-index/2",
+    "sha256": "<sha256>",
+    "shard_id": "qs-dependency_advisories"
+   },
+   "query_set": "dependency_advisories",
+   "reused": false,
+   "rule_version": "dependency-advisories/3",
+   "status": "partial",
+   "terminal_status": "COMPLETED_WITH_GAPS"
+  },
+  "precompute.document_context": {
+   "counts": {
+    "entities": 0,
+    "facts": 0,
+    "relations": 0
+   },
+   "fact_count": 0,
+   "index_identity": {
+    "fingerprint": "<sha256>",
+    "name": "precomputed",
+    "producer": {
+     "job": "job_review_data_indexing",
+     "query_set": "document_context",
+     "rule": "document_context",
+     "rule_version": "document-context/1",
+     "unit": "precompute.document_context"
+    },
+    "relative_path": "data/indices/precomputed/qs-document_context/<sha256>.sqlite",
+    "schema": "appsec-review/retrieval-index/2",
+    "sha256": "<sha256>",
+    "shard_id": "qs-document_context"
+   },
+   "query_set": "document_context",
+   "reused": false,
+   "rule_version": "document-context/1",
+   "status": "partial",
+   "terminal_status": "COMPLETED_WITH_GAPS"
+  },
+  "precompute.history_context": {
+   "counts": {
+    "entities": 14,
+    "facts": 10,
+    "history_context:metric_vectors:history_files": 10,
+    "history_context:metric_vectors:history_symbols": 17,
+    "history_context:metric_vectors:metric_vectors": 4,
+    "relations": 63
+   },
+   "fact_count": 14,
+   "index_identity": {
+    "fingerprint": "<sha256>",
+    "name": "precomputed",
+    "producer": {
+     "job": "job_review_data_indexing",
+     "query_set": "history_context",
+     "rule": "history_context",
+     "rule_version": "history-context/1",
+     "unit": "precompute.history_context"
+    },
+    "relative_path": "data/indices/precomputed/qs-history_context/<sha256>.sqlite",
+    "schema": "appsec-review/retrieval-index/2",
+    "sha256": "<sha256>",
+    "shard_id": "qs-history_context"
+   },
+   "query_set": "history_context",
+   "reused": false,
+   "rule_version": "history-context/1",
+   "status": "partial",
+   "terminal_status": "COMPLETED_WITH_GAPS"
+  },
+  "precompute.reference_intelligence": {
+   "counts": {
+    "entities": 5,
+    "facts": 5,
+    "relations": 13
+   },
+   "fact_count": 5,
+   "index_identity": {
+    "fingerprint": "<sha256>",
+    "name": "precomputed",
+    "producer": {
+     "job": "job_review_data_indexing",
+     "query_set": "reference_intelligence",
+     "rule": "reference_intelligence",
+     "rule_version": "reference-intelligence/2",
+     "unit": "precompute.reference_intelligence"
+    },
+    "relative_path": "data/indices/precomputed/qs-reference_intelligence/<sha256>.sqlite",
+    "schema": "appsec-review/retrieval-index/2",
+    "sha256": "<sha256>",
+    "shard_id": "qs-reference_intelligence"
+   },
+   "query_set": "reference_intelligence",
+   "reused": false,
+   "rule_version": "reference-intelligence/2",
+   "status": "partial",
+   "terminal_status": "COMPLETED_WITH_GAPS"
+  },
+  "precompute.scanner_correlation": {
+   "counts": {
+    "entities": 37,
+    "facts": 37,
+    "high_critical": 2,
+    "high_critical_duplicates": 1,
+    "high_critical_suppressed": 0,
+    "lead_facts": 31,
+    "lead_language:c++": 16,
+    "lead_language:c/c++": 13,
+    "lead_language:cpp": 2,
+    "other_other": 34,
+    "relations": 0,
+    "source_sast_observations": 31,
+    "unknown_severity": 12
+   },
+   "fact_count": 37,
+   "index_identity": {
+    "fingerprint": "<sha256>",
+    "name": "precomputed",
+    "producer": {
+     "job": "job_review_data_indexing",
+     "query_set": "scanner_correlation",
+     "rule": "scanner_correlation",
+     "rule_version": "scanner-correlation/1",
+     "unit": "precompute.scanner_correlation"
+    },
+    "relative_path": "data/indices/precomputed/qs-scanner_correlation/<sha256>.sqlite",
+    "schema": "appsec-review/retrieval-index/2",
+    "sha256": "<sha256>",
+    "shard_id": "qs-scanner_correlation"
+   },
+   "query_set": "scanner_correlation",
+   "reused": false,
+   "rule_version": "scanner-correlation/1",
+   "status": "partial",
+   "terminal_status": "COMPLETED_WITH_GAPS"
+  },
+  "precompute.symbol_links": {
+   "counts": {
+    "entities": 35,
+    "facts": 35,
+    "relations": 35
+   },
+   "fact_count": 35,
+   "index_identity": {
+    "fingerprint": "<sha256>",
+    "name": "precomputed",
+    "producer": {
+     "job": "job_review_data_indexing",
+     "query_set": "symbol_links",
+     "rule": "symbol_links",
+     "rule_version": "symbol-links/1",
+     "unit": "precompute.symbol_links"
+    },
+    "relative_path": "data/indices/precomputed/qs-symbol_links/<sha256>.sqlite",
+    "schema": "appsec-review/retrieval-index/2",
+    "sha256": "<sha256>",
+    "shard_id": "qs-symbol_links"
+   },
+   "query_set": "symbol_links",
+   "reused": false,
+   "rule_version": "symbol-links/1",
+   "status": "partial",
+   "terminal_status": "COMPLETED_WITH_GAPS"
+  },
+  "publish.inventory_index": {
+   "index_identity": {
+    "fingerprint": "<sha256>",
+    "name": "inventory",
+    "producer": {
+     "job": "job_review_data_indexing",
+     "rule": "dataset_inventory",
+     "rule_version": "appsec-review/dataset-inventory-index/1",
+     "unit": "publish.inventory_index"
+    },
+    "relative_path": "data/indices/inventory/dataset-inventory/<sha256>.sqlite",
+    "schema": "appsec-review/retrieval-index/2",
+    "sha256": "<sha256>",
+    "shard_id": "dataset-inventory"
+   },
+   "index_manifest": {
+    "path": "data/indices/manifests/review-data-indexing-<attempt>.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "item_count": 330,
+   "schema": "appsec-review/review-data-indexing/1",
+   "summary": {
+    "audit_status": "PASSED",
+    "fts_image_validation": {
+     "expected_image_id": "<image-digest>",
+     "image_id": "<image_id>",
+     "input_sha256": "<sha256>",
+     "mode": "optional",
+     "record_count": 112,
+     "secret_pattern_documents": 0,
+     "sqlite_version": "3.40.1",
+     "status": "verified",
+     "tool_id": "tool-sqlite-fts"
+    },
+    "links": {
+     "finding_source": {
+      "reused": false,
+      "terminal_status": "SUCCEEDED"
+     },
+     "history_code": {
+      "reused": false,
+      "terminal_status": "SUCCEEDED"
+     },
+     "package_advisory": {
+      "reused": false,
+      "terminal_status": "PARTIAL"
+     },
+     "representation": {
+      "reused": false,
+      "terminal_status": "PARTIAL"
+     },
+     "symbol_syntax": {
+      "reused": false,
+      "terminal_status": "SUCCEEDED"
+     }
+    },
+    "products": {
+     "artifact_inventory": {
+      "fact_count": 1,
+      "reused": false,
+      "status": "partial"
+     },
+     "build_provenance": {
+      "fact_count": 11,
+      "reused": false,
+      "status": "partial"
+     },
+     "ci_trust": {
+      "fact_count": 0,
+      "reused": false,
+      "status": "partial"
+     },
+     "control_evidence": {
+      "fact_count": 8,
+      "reused": false,
+      "status": "partial"
+     },
+     "dependency_advisories": {
+      "fact_count": 1,
+      "reused": false,
+      "status": "partial"
+     },
+     "document_context": {
+      "fact_count": 0,
+      "reused": false,
+      "status": "partial"
+     },
+     "history_context": {
+      "fact_count": 14,
+      "reused": false,
+      "status": "partial"
+     },
+     "reference_intelligence": {
+      "fact_count": 5,
+      "reused": false,
+      "status": "partial"
+     },
+     "scanner_correlation": {
+      "fact_count": 37,
+      "reused": false,
+      "status": "partial"
+     },
+     "symbol_links": {
+      "fact_count": 35,
+      "reused": false,
+      "status": "partial"
+     }
+    },
+    "restored_shards": 0,
+    "rows": 330,
+    "schema": "appsec-review/review-data-indexing/1"
+   },
+   "terminal_status": "COMPLETED_WITH_GAPS"
+  }
+ },
+ "schema": "appsec-review/acceptance-job-output/1",
+ "skipped_units": [],
+ "status": "COMPLETED_WITH_GAPS",
+ "steps": {
+  "audit": "SUCCEEDED",
+  "fts": "SUCCEEDED",
+  "links": "SUCCEEDED",
+  "load": "SUCCEEDED",
+  "matrix": "SUCCEEDED",
+  "precompute": "SUCCEEDED",
+  "publish": "SUCCEEDED"
+ },
+ "units": {
+  "audit.inventory": {
+   "disposition": "COMPLETED_WITH_GAPS",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "fts.image_validation": {
+   "disposition": "SUCCEEDED",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "links.cross_domain": {
+   "disposition": "COMPLETED_WITH_GAPS",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "load.accepted_inputs": {
+   "disposition": "SUCCEEDED",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "matrix.coverage": {
+   "disposition": "COMPLETED_WITH_GAPS",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "precompute.artifact_inventory": {
+   "disposition": "COMPLETED_WITH_GAPS",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "precompute.build_provenance": {
+   "disposition": "COMPLETED_WITH_GAPS",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "precompute.ci_trust": {
+   "disposition": "COMPLETED_WITH_GAPS",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "precompute.control_evidence": {
+   "disposition": "COMPLETED_WITH_GAPS",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "precompute.dependency_advisories": {
+   "disposition": "COMPLETED_WITH_GAPS",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "precompute.document_context": {
+   "disposition": "COMPLETED_WITH_GAPS",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "precompute.history_context": {
+   "disposition": "COMPLETED_WITH_GAPS",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "precompute.reference_intelligence": {
+   "disposition": "COMPLETED_WITH_GAPS",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "precompute.scanner_correlation": {
+   "disposition": "COMPLETED_WITH_GAPS",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "precompute.symbol_links": {
+   "disposition": "COMPLETED_WITH_GAPS",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "publish.inventory_index": {
+   "disposition": "COMPLETED_WITH_GAPS",
+   "producer": null,
+   "status": "SUCCEEDED"
+  }
+ },
+ "volatile": {
+  "artifacts": [
+   {
+    "path": "data/indexing/fts/<attempt>/receipt.json",
+    "sha256": "686316dfc547dfe0894adb1c8548e50ee9f757508ded1d9efafcc89f0af579bd",
+    "size_bytes": 3503
+   },
+   {
+    "path": "data/indices/manifests/review-data-indexing-<attempt>.json",
+    "sha256": "e8dd0d78bfc6f65fff6a8e364c09ec308b80cd9c587d75bec2edf829fdc15af3",
+    "size_bytes": 97322
+   },
+   {
+    "path": "data/jobs/job_review_data_indexing/attempts/<attempt>/steps/audit/tasks/inventory/inventory.json",
+    "sha256": "fa558190fbc71c8edc6657162babd6e1e83150b002d9564570f66ee40c60182a",
+    "size_bytes": 583960
+   },
+   {
+    "path": "data/jobs/job_review_data_indexing/attempts/<attempt>/steps/load/tasks/accepted_inputs/accepted-inputs.json",
+    "sha256": "978b675202ae994e6f26c449f1c467c291e627dc99eceeb701e6840e07d4a9e7",
+    "size_bytes": 116643
+   },
+   {
+    "path": "data/jobs/job_review_data_indexing/attempts/<attempt>/steps/matrix/tasks/coverage/coverage-matrices.json",
+    "sha256": "8b81f01ef65913c3fd2624f9438daf31dff91c1f41e6e5881d6e16070feb6612",
+    "size_bytes": 57047
+   }
+  ]
+ }
+}

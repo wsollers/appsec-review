@@ -1,0 +1,1269 @@
+{
+ "artifacts": [
+  {
+   "count": 0,
+   "kind": "json",
+   "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/attempts/<attempt>/execution-capture/command-001/secret-scan/gitleaks.json",
+   "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+  },
+  {
+   "count": 0,
+   "kind": "json",
+   "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/attempts/<attempt>/execution-capture/command-002/secret-scan/gitleaks.json",
+   "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+  },
+  {
+   "count": 10,
+   "kind": "json",
+   "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/link-commands.json",
+   "sha256": "64b7cff42639e73f2f9f841c96c22b6c733e56b5d5f4454514f9ef748ec9124d"
+  },
+  {
+   "count": 15,
+   "kind": "json",
+   "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/attempts/<attempt>/execution-capture/command-001/record.json",
+   "sha256": "8e1840fda4d360f4a228343d83199acb82195eaa5f5ab87927fede7bc6d2740c"
+  },
+  {
+   "count": 15,
+   "kind": "json",
+   "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/attempts/<attempt>/execution-capture/command-002/record.json",
+   "sha256": "ce4185dc9db2274646387f85beda8b9079200bea8b98aeef9f8cc3dfc7cdc96c"
+  },
+  {
+   "count": 2,
+   "kind": "json",
+   "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/protected-commands/compile-database-<attempt>.json",
+   "sha256": "35fc876614a5de06b750e7810e5c9537f86cb672d32c3f5a08abec2218d4b51a"
+  },
+  {
+   "count": 3,
+   "kind": "json",
+   "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/workspace-manifest.json",
+   "sha256": "922a9959117281d60e92f69df50ea66f8591d7ab0be91bd42621f5b9a3dbc110"
+  },
+  {
+   "count": 5,
+   "kind": "json",
+   "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/protected-commands/1301ffb59230fe90fcd36e27.json",
+   "sha256": "6f9a6fddc4249da3693f4be622b4f978dfc3396252f44faa38f107fc3c3319b2"
+  },
+  {
+   "count": 5,
+   "kind": "json",
+   "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/protected-commands/5db43d739fde37470f071596.json",
+   "sha256": "713f16bc25f32c93ac13d2f7244a413e6426dc0ebbf37376b6d9cb64b8e28ccc"
+  },
+  {
+   "count": 6,
+   "kind": "json",
+   "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/attempts/<attempt>/execution-capture/command-001/secret-scan/findings.json",
+   "sha256": "3361a5a5c0663f3f73d558d25f67ee083eb1a4de2ba7c73208b7af5a59c53d4a"
+  },
+  {
+   "count": 6,
+   "kind": "json",
+   "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/attempts/<attempt>/execution-capture/command-002/secret-scan/findings.json",
+   "sha256": "3361a5a5c0663f3f73d558d25f67ee083eb1a4de2ba7c73208b7af5a59c53d4a"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/workspace/build/compile_commands.json",
+   "sha256": "0fe1fb22c97e9fec04811414712c9de256c41f3c5b197b2d132d016011df0da4"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/indices/manifests/artifact-indexing-<attempt>.json",
+   "sha256": "f656ac78346c0fb3d52d7fb67adb67731b7504eeb6e2c9fc1ffd927bc5b7fd0c"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/indices/manifests/language-build-<attempt>.json",
+   "sha256": "92343d07355066c9492248606edd30f4592f2b8ce5c454014423ca3970e72905"
+  },
+  {
+   "count": 8,
+   "kind": "json",
+   "path": "data/jobs/job_artifact_indexing/attempts/<attempt>/artifacts/artifact-indexing/accepted-index.json",
+   "sha256": "fecdec18c07e979dae4ab33802889102d70b402b4f8fdeb26b1f6cfa4afcdf6b"
+  },
+  {
+   "count": 9,
+   "kind": "json",
+   "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/attempts/<attempt>/execution-capture/command-001/secret-scan/execution.json",
+   "sha256": "4dff0688e08c6905782741fd45f8bffabcc57cec0be92e47c00f28c4c3e81f76"
+  },
+  {
+   "count": 9,
+   "kind": "json",
+   "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/attempts/<attempt>/execution-capture/command-002/secret-scan/execution.json",
+   "sha256": "4dff0688e08c6905782741fd45f8bffabcc57cec0be92e47c00f28c4c3e81f76"
+  },
+  {
+   "kind": "file",
+   "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/attempts/<attempt>/execution-capture/command-001/events.jsonl"
+  },
+  {
+   "kind": "file",
+   "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/attempts/<attempt>/execution-capture/command-002/events.jsonl"
+  },
+  {
+   "kind": "file",
+   "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/logs/001.stderr"
+  },
+  {
+   "kind": "file",
+   "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/logs/001.stdout"
+  },
+  {
+   "kind": "file",
+   "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/logs/002.stderr"
+  },
+  {
+   "kind": "file",
+   "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/logs/002.stdout"
+  },
+  {
+   "kind": "file",
+   "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/workspace/build/CMakeFiles/relay.dir/src/config.cpp.o"
+  },
+  {
+   "kind": "file",
+   "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/workspace/build/CMakeFiles/relay.dir/src/diag.cpp.o"
+  },
+  {
+   "kind": "file",
+   "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/workspace/build/CMakeFiles/relay.dir/src/frame.cpp.o"
+  },
+  {
+   "kind": "file",
+   "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/workspace/build/CMakeFiles/relay.dir/src/log.cpp.o"
+  },
+  {
+   "kind": "file",
+   "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/workspace/build/CMakeFiles/relay.dir/src/main.cpp.o"
+  },
+  {
+   "kind": "file",
+   "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/workspace/build/CMakeFiles/relay.dir/src/packet.cpp.o"
+  },
+  {
+   "kind": "file",
+   "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/workspace/build/CMakeFiles/relay.dir/src/session.cpp.o"
+  },
+  {
+   "kind": "file",
+   "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/workspace/build/relay"
+  }
+ ],
+ "failed_units": [],
+ "findings": [],
+ "gaps": [
+  {
+   "count": 1,
+   "gap": "build/compile_commands.json: producing action mapping is ambiguous",
+   "unit": "acceptance.publish_handoff"
+  },
+  {
+   "count": 2,
+   "gap": "build/compile_commands.json: producing action mapping is ambiguous",
+   "unit": "index.relationships"
+  }
+ ],
+ "handoff": {
+  "completion_status": "COMPLETED_WITH_GAPS",
+  "schema_identity": "appsec-review/artifact-indexing/1",
+  "status": "ACCEPTED",
+  "upstream_jobs": [
+   "job_ci_configuration_analysis",
+   "job_language_build",
+   "job_project_build",
+   "job_review_intake",
+   "job_source_history_analysis",
+   "job_target_analysis_plan",
+   "job_target_catalog"
+  ]
+ },
+ "job_id": "job_artifact_indexing",
+ "outputs": {
+  "acceptance.publish_handoff": {
+   "artifact": {
+    "path": "data/jobs/job_artifact_indexing/attempts/<attempt>/artifacts/artifact-indexing/accepted-index.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "index_manifest": {
+    "path": "data/indices/manifests/artifact-indexing-<attempt>.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "item_count": 12,
+   "schema": "appsec-review/artifact-indexing/1",
+   "terminal_status": "COMPLETED_WITH_GAPS"
+  },
+  "index.catalogs": {
+   "indexes": [
+    {
+     "fingerprint": "<sha256>",
+     "name": "artifacts",
+     "producer": {
+      "family": "build_artifact",
+      "job": "job_artifact_indexing",
+      "unit": "index.catalogs"
+     },
+     "relative_path": "data/indices/artifacts/<sha256>.sqlite",
+     "schema": "appsec-review/retrieval-index/2",
+     "sha256": "<sha256>",
+     "shard_id": "catalog-build-unit-b9c931fa551e02bd12b2-build_artifact"
+    },
+    {
+     "fingerprint": "<sha256>",
+     "name": "artifacts",
+     "producer": {
+      "family": "executable",
+      "job": "job_artifact_indexing",
+      "unit": "index.catalogs"
+     },
+     "relative_path": "data/indices/artifacts/<sha256>.sqlite",
+     "schema": "appsec-review/retrieval-index/2",
+     "sha256": "<sha256>",
+     "shard_id": "catalog-build-unit-b9c931fa551e02bd12b2-executable"
+    },
+    {
+     "fingerprint": "<sha256>",
+     "name": "artifacts",
+     "producer": {
+      "family": "object_file",
+      "job": "job_artifact_indexing",
+      "unit": "index.catalogs"
+     },
+     "relative_path": "data/indices/artifacts/<sha256>.sqlite",
+     "schema": "appsec-review/retrieval-index/2",
+     "sha256": "<sha256>",
+     "shard_id": "catalog-build-unit-b9c931fa551e02bd12b2-object_file"
+    }
+   ],
+   "reused_count": 0,
+   "shard_count": 3,
+   "terminal_status": "SUCCEEDED"
+  },
+  "index.members": {
+   "indexes": [],
+   "reused_count": 0,
+   "shard_count": 0,
+   "terminal_status": "NOT_APPLICABLE"
+  },
+  "index.relationships": {
+   "indexes": [
+    {
+     "fingerprint": "<sha256>",
+     "name": "artifacts",
+     "producer": {
+      "family": "relationships",
+      "job": "job_artifact_indexing",
+      "unit": "index.relationships"
+     },
+     "relative_path": "data/indices/artifacts/<sha256>.sqlite",
+     "schema": "appsec-review/retrieval-index/2",
+     "sha256": "<sha256>",
+     "shard_id": "relations-4da9fd5e4a62888367ae3661"
+    },
+    {
+     "fingerprint": "<sha256>",
+     "name": "artifacts",
+     "producer": {
+      "family": "relationships",
+      "job": "job_artifact_indexing",
+      "unit": "index.relationships"
+     },
+     "relative_path": "data/indices/artifacts/<sha256>.sqlite",
+     "schema": "appsec-review/retrieval-index/2",
+     "sha256": "<sha256>",
+     "shard_id": "relations-cc8efe043783c2121a67b62b"
+    },
+    {
+     "fingerprint": "<sha256>",
+     "name": "artifacts",
+     "producer": {
+      "family": "relationships",
+      "job": "job_artifact_indexing",
+      "unit": "index.relationships"
+     },
+     "relative_path": "data/indices/artifacts/<sha256>.sqlite",
+     "schema": "appsec-review/retrieval-index/2",
+     "sha256": "<sha256>",
+     "shard_id": "relations-0d6baebe6eb59b1f95b55690"
+    },
+    {
+     "fingerprint": "<sha256>",
+     "name": "artifacts",
+     "producer": {
+      "family": "relationships",
+      "job": "job_artifact_indexing",
+      "unit": "index.relationships"
+     },
+     "relative_path": "data/indices/artifacts/<sha256>.sqlite",
+     "schema": "appsec-review/retrieval-index/2",
+     "sha256": "<sha256>",
+     "shard_id": "relations-540516d133f5239cf7a84bde"
+    },
+    {
+     "fingerprint": "<sha256>",
+     "name": "artifacts",
+     "producer": {
+      "family": "relationships",
+      "job": "job_artifact_indexing",
+      "unit": "index.relationships"
+     },
+     "relative_path": "data/indices/artifacts/<sha256>.sqlite",
+     "schema": "appsec-review/retrieval-index/2",
+     "sha256": "<sha256>",
+     "shard_id": "relations-250293a4aa9b283ebfcb39ea"
+    },
+    {
+     "fingerprint": "<sha256>",
+     "name": "artifacts",
+     "producer": {
+      "family": "relationships",
+      "job": "job_artifact_indexing",
+      "unit": "index.relationships"
+     },
+     "relative_path": "data/indices/artifacts/<sha256>.sqlite",
+     "schema": "appsec-review/retrieval-index/2",
+     "sha256": "<sha256>",
+     "shard_id": "relations-0ed6a789ab75e16e96b3f820"
+    },
+    {
+     "fingerprint": "<sha256>",
+     "name": "artifacts",
+     "producer": {
+      "family": "relationships",
+      "job": "job_artifact_indexing",
+      "unit": "index.relationships"
+     },
+     "relative_path": "data/indices/artifacts/<sha256>.sqlite",
+     "schema": "appsec-review/retrieval-index/2",
+     "sha256": "<sha256>",
+     "shard_id": "relations-23cf99276b6733ddb948c015"
+    },
+    {
+     "fingerprint": "<sha256>",
+     "name": "artifacts",
+     "producer": {
+      "family": "relationships",
+      "job": "job_artifact_indexing",
+      "unit": "index.relationships"
+     },
+     "relative_path": "data/indices/artifacts/<sha256>.sqlite",
+     "schema": "appsec-review/retrieval-index/2",
+     "sha256": "<sha256>",
+     "shard_id": "relations-2fbb7fdb7eb815a992d32f13"
+    },
+    {
+     "fingerprint": "<sha256>",
+     "name": "artifacts",
+     "producer": {
+      "family": "relationships",
+      "job": "job_artifact_indexing",
+      "unit": "index.relationships"
+     },
+     "relative_path": "data/indices/artifacts/<sha256>.sqlite",
+     "schema": "appsec-review/retrieval-index/2",
+     "sha256": "<sha256>",
+     "shard_id": "relations-11dda57a925152cf05e7bfc8"
+    }
+   ],
+   "reused_count": 0,
+   "shard_count": 9,
+   "terminal_status": "COMPLETED_WITH_GAPS"
+  },
+  "load.accepted_builds": {
+   "language_build_handoff_sha256": "<sha256>",
+   "producer_gaps": [],
+   "receipt_count": 1,
+   "receipts": [
+    {
+     "artifacts": [
+      {
+       "artifact_origin": "build-output",
+       "build_unit_id": "build-unit-b9c931fa551e02bd12b2",
+       "kind": "object",
+       "mapping": "exact-workspace-path",
+       "mapping_confidence": 1.0,
+       "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/workspace/build/CMakeFiles/relay.dir/src/config.cpp.o",
+       "sha256": "<sha256>",
+       "size_bytes": "<size_bytes>",
+       "workspace_path": "build/CMakeFiles/relay.dir/src/config.cpp.o"
+      },
+      {
+       "artifact_origin": "build-output",
+       "build_unit_id": "build-unit-b9c931fa551e02bd12b2",
+       "kind": "object",
+       "mapping": "exact-workspace-path",
+       "mapping_confidence": 1.0,
+       "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/workspace/build/CMakeFiles/relay.dir/src/diag.cpp.o",
+       "sha256": "<sha256>",
+       "size_bytes": "<size_bytes>",
+       "workspace_path": "build/CMakeFiles/relay.dir/src/diag.cpp.o"
+      },
+      {
+       "artifact_origin": "build-output",
+       "build_unit_id": "build-unit-b9c931fa551e02bd12b2",
+       "kind": "object",
+       "mapping": "exact-workspace-path",
+       "mapping_confidence": 1.0,
+       "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/workspace/build/CMakeFiles/relay.dir/src/frame.cpp.o",
+       "sha256": "<sha256>",
+       "size_bytes": "<size_bytes>",
+       "workspace_path": "build/CMakeFiles/relay.dir/src/frame.cpp.o"
+      },
+      {
+       "artifact_origin": "build-output",
+       "build_unit_id": "build-unit-b9c931fa551e02bd12b2",
+       "kind": "object",
+       "mapping": "exact-workspace-path",
+       "mapping_confidence": 1.0,
+       "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/workspace/build/CMakeFiles/relay.dir/src/log.cpp.o",
+       "sha256": "<sha256>",
+       "size_bytes": "<size_bytes>",
+       "workspace_path": "build/CMakeFiles/relay.dir/src/log.cpp.o"
+      },
+      {
+       "artifact_origin": "build-output",
+       "build_unit_id": "build-unit-b9c931fa551e02bd12b2",
+       "kind": "object",
+       "mapping": "exact-workspace-path",
+       "mapping_confidence": 1.0,
+       "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/workspace/build/CMakeFiles/relay.dir/src/main.cpp.o",
+       "sha256": "<sha256>",
+       "size_bytes": "<size_bytes>",
+       "workspace_path": "build/CMakeFiles/relay.dir/src/main.cpp.o"
+      },
+      {
+       "artifact_origin": "build-output",
+       "build_unit_id": "build-unit-b9c931fa551e02bd12b2",
+       "kind": "object",
+       "mapping": "exact-workspace-path",
+       "mapping_confidence": 1.0,
+       "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/workspace/build/CMakeFiles/relay.dir/src/packet.cpp.o",
+       "sha256": "<sha256>",
+       "size_bytes": "<size_bytes>",
+       "workspace_path": "build/CMakeFiles/relay.dir/src/packet.cpp.o"
+      },
+      {
+       "artifact_origin": "build-output",
+       "build_unit_id": "build-unit-b9c931fa551e02bd12b2",
+       "kind": "object",
+       "mapping": "exact-workspace-path",
+       "mapping_confidence": 1.0,
+       "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/workspace/build/CMakeFiles/relay.dir/src/session.cpp.o",
+       "sha256": "<sha256>",
+       "size_bytes": "<size_bytes>",
+       "workspace_path": "build/CMakeFiles/relay.dir/src/session.cpp.o"
+      },
+      {
+       "artifact_origin": "build-output",
+       "build_unit_id": "build-unit-b9c931fa551e02bd12b2",
+       "kind": "compile-database",
+       "mapping": "exact-workspace-path",
+       "mapping_confidence": 1.0,
+       "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/workspace/build/compile_commands.json",
+       "sha256": "<sha256>",
+       "size_bytes": "<size_bytes>",
+       "workspace_path": "build/compile_commands.json"
+      },
+      {
+       "artifact_origin": "build-output",
+       "build_unit_id": "build-unit-b9c931fa551e02bd12b2",
+       "kind": "executable",
+       "loader_dependencies": [
+        "libstdc++.so.6",
+        "libgcc_s.so.1",
+        "libc.so.6"
+       ],
+       "loader_dependency_status": "resolved",
+       "loader_interpreter": "/lib64/ld-linux-x86-64.so.2",
+       "loader_linkage": "dynamic",
+       "loader_parser": "appsec-review/elf-loader-dependencies/2",
+       "loader_run_paths": [],
+       "loader_soname": null,
+       "mapping": "exact-workspace-path",
+       "mapping_confidence": 1.0,
+       "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/workspace/build/relay",
+       "sha256": "<sha256>",
+       "size_bytes": "<size_bytes>",
+       "workspace_path": "build/relay"
+      }
+     ],
+     "build_system": "cmake",
+     "build_unit_id": "build-unit-b9c931fa551e02bd12b2",
+     "capture_identity": "appsec-review/native-build-capture/4",
+     "capture_provenance": {
+      "capture_gap_count": 0,
+      "command_count": 2,
+      "complete": true,
+      "connect_events": 0,
+      "envp_events": 166,
+      "envp_redacted_names": [],
+      "event_records_lost": 0,
+      "event_records_observed": "<event_records_observed>",
+      "event_records_retained": "<event_records_retained>",
+      "failed_exec_events": 36,
+      "malformed_records": 0,
+      "observed_tool_kinds": [
+       "assembler",
+       "build-driver",
+       "compiler",
+       "linker",
+       "linker-driver"
+      ],
+      "process_exec_events": 166,
+      "redacted_exec_events": 0,
+      "redacted_tool_calls": 0,
+      "response_file_bytes": 0,
+      "response_file_records": 0,
+      "response_file_references": 0,
+      "schema": "appsec-review/native-capture-provenance/1",
+      "tool_call_records": 23,
+      "tool_call_records_lost": 0,
+      "tool_call_records_observed": 23,
+      "tool_call_records_retained": 23,
+      "truncated_tool_exec_events": 0,
+      "unreconciled_tool_calls": 0,
+      "untrusted_location_exec_events": 0
+     },
+     "checkpoint_reused": false,
+     "commands": [
+      {
+       "argv_sha256": "<sha256>",
+       "attempt_identity": "<attempt>",
+       "build_unit_id": "build-unit-b9c931fa551e02bd12b2",
+       "command_id": "<sha256>",
+       "duration_ms": "<duration>",
+       "environment_facts": {},
+       "execution_capture": {
+        "collector": {
+         "backend": "ptrace",
+         "event_kinds": [
+          "connect",
+          "directory_change",
+          "file_link",
+          "file_open",
+          "file_rename",
+          "file_unlink",
+          "process_exec",
+          "process_exit",
+          "process_fork"
+         ]
+        },
+        "complete": true,
+        "envp_captured": true,
+        "events": {
+         "capped": false,
+         "counts": {
+          "directory_change": "<count>",
+          "file_open": "<count>",
+          "file_rename": "<count>",
+          "file_unlink": "<count>",
+          "process_exec": "<count>",
+          "process_exit": 70,
+          "process_fork": "<count>"
+         },
+         "observed": "<count>",
+         "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/attempts/<attempt>/execution-capture/command-001/events.jsonl",
+         "retained": "<count>",
+         "sha256": "<sha256>"
+        },
+        "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/attempts/<attempt>/execution-capture/command-001/record.json",
+        "schema": "appsec-review/build-execution-record/1",
+        "scope": {
+         "attempt_id": "<attempt>",
+         "build_unit_id": "build-unit-b9c931fa551e02bd12b2",
+         "family": "native",
+         "job_id": "job_language_build",
+         "run_id": "<run-id>"
+        },
+        "secret_findings": {
+         "count": "<count>",
+         "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/attempts/<attempt>/execution-capture/command-001/secret-scan/findings.json",
+         "sha256": "<sha256>"
+        },
+        "secret_scan": {
+         "coverage_gap": false,
+         "execution": {
+          "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/attempts/<attempt>/execution-capture/command-001/secret-scan/execution.json",
+          "sha256": "<sha256>"
+         },
+         "exit_code": 0,
+         "report": {
+          "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/attempts/<attempt>/execution-capture/command-001/secret-scan/gitleaks.json",
+          "sha256": "<sha256>"
+         },
+         "scanner": "tool-gitleaks"
+        },
+        "sha256": "<sha256>",
+        "size_bytes": "<size_bytes>",
+        "tool_calls": {
+         "capped": false,
+         "observed": "<count>",
+         "retained": "<count>"
+        }
+       },
+       "exit_code": 0,
+       "image_id": "<image_id>",
+       "module": null,
+       "ordinal": 1,
+       "protected_argv": {
+        "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/protected-commands/5db43d739fde37470f071596.json",
+        "sha256": "<sha256>"
+       },
+       "role": "configure",
+       "started_at": "<timestamp>",
+       "stderr": {
+        "capture_limit_bytes": null,
+        "captured_bytes": 0,
+        "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/logs/001.stderr",
+        "preview_limit_bytes": 8388608,
+        "preview_truncated": false,
+        "sha256": "<sha256>",
+        "storage": "complete-file",
+        "total_bytes": 0,
+        "truncated": false
+       },
+       "stdout": {
+        "capture_limit_bytes": null,
+        "captured_bytes": 375,
+        "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/logs/001.stdout",
+        "preview_limit_bytes": 8388608,
+        "preview_truncated": false,
+        "sha256": "<sha256>",
+        "storage": "complete-file",
+        "total_bytes": 375,
+        "truncated": false
+       },
+       "timed_out": false,
+       "tool": "cmake",
+       "tool_kind": "build-driver",
+       "working_directory": "."
+      },
+      {
+       "argv_sha256": "<sha256>",
+       "attempt_identity": "<attempt>",
+       "build_unit_id": "build-unit-b9c931fa551e02bd12b2",
+       "command_id": "<sha256>",
+       "duration_ms": "<duration>",
+       "environment_facts": {},
+       "execution_capture": {
+        "collector": {
+         "backend": "ptrace",
+         "event_kinds": [
+          "connect",
+          "directory_change",
+          "file_link",
+          "file_open",
+          "file_rename",
+          "file_unlink",
+          "process_exec",
+          "process_exit",
+          "process_fork"
+         ]
+        },
+        "complete": true,
+        "envp_captured": true,
+        "events": {
+         "capped": false,
+         "counts": {
+          "directory_change": "<count>",
+          "file_open": "<count>",
+          "file_unlink": "<count>",
+          "process_exec": "<count>",
+          "process_exit": 83,
+          "process_fork": "<count>"
+         },
+         "observed": "<count>",
+         "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/attempts/<attempt>/execution-capture/command-002/events.jsonl",
+         "retained": "<count>",
+         "sha256": "<sha256>"
+        },
+        "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/attempts/<attempt>/execution-capture/command-002/record.json",
+        "schema": "appsec-review/build-execution-record/1",
+        "scope": {
+         "attempt_id": "<attempt>",
+         "build_unit_id": "build-unit-b9c931fa551e02bd12b2",
+         "family": "native",
+         "job_id": "job_language_build",
+         "run_id": "<run-id>"
+        },
+        "secret_findings": {
+         "count": "<count>",
+         "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/attempts/<attempt>/execution-capture/command-002/secret-scan/findings.json",
+         "sha256": "<sha256>"
+        },
+        "secret_scan": {
+         "coverage_gap": false,
+         "execution": {
+          "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/attempts/<attempt>/execution-capture/command-002/secret-scan/execution.json",
+          "sha256": "<sha256>"
+         },
+         "exit_code": 0,
+         "report": {
+          "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/attempts/<attempt>/execution-capture/command-002/secret-scan/gitleaks.json",
+          "sha256": "<sha256>"
+         },
+         "scanner": "tool-gitleaks"
+        },
+        "sha256": "<sha256>",
+        "size_bytes": "<size_bytes>",
+        "tool_calls": {
+         "capped": false,
+         "observed": "<count>",
+         "retained": "<count>"
+        }
+       },
+       "exit_code": 0,
+       "image_id": "<image_id>",
+       "module": null,
+       "ordinal": 2,
+       "protected_argv": {
+        "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/protected-commands/1301ffb59230fe90fcd36e27.json",
+        "sha256": "<sha256>"
+       },
+       "role": "build",
+       "started_at": "<timestamp>",
+       "stderr": {
+        "capture_limit_bytes": null,
+        "captured_bytes": 851,
+        "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/logs/002.stderr",
+        "preview_limit_bytes": 8388608,
+        "preview_truncated": false,
+        "sha256": "<sha256>",
+        "storage": "complete-file",
+        "total_bytes": 851,
+        "truncated": false
+       },
+       "stdout": {
+        "capture_limit_bytes": null,
+        "captured_bytes": 510,
+        "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/logs/002.stdout",
+        "preview_limit_bytes": 8388608,
+        "preview_truncated": false,
+        "sha256": "<sha256>",
+        "storage": "complete-file",
+        "total_bytes": 510,
+        "truncated": false
+       },
+       "timed_out": false,
+       "tool": "cmake",
+       "tool_kind": "build-driver",
+       "working_directory": "."
+      }
+     ],
+     "completed_at": "<timestamp>",
+     "dependency_identity": null,
+     "duration_ms": "<duration>",
+     "excluded_bookkeeping": {
+      "counts": {
+       "cmake-compiler-identification": 3
+      },
+      "examples": {
+       "cmake-compiler-identification": [
+        "build/CMakeFiles/3.28.3/CMakeDetermineCompilerABI_CXX.bin",
+        "build/CMakeFiles/3.28.3/CompilerIdCXX/CMakeCXXCompilerId.cpp",
+        "build/CMakeFiles/3.28.3/CompilerIdCXX/a.out"
+       ]
+      },
+      "schema": "appsec-review/build-bookkeeping-exclusions/1",
+      "total": 3
+     },
+     "executor_identity": "appsec-review/generic-language-build-executor/3",
+     "family": "native",
+     "fingerprint": "<sha256>",
+     "image": {
+      "base_image_id": "<image-digest>",
+      "cache_disposition": "HIT",
+      "cache_rejection_reason": null,
+      "customized": false,
+      "dependency_hashes": {
+       "CMakeLists.txt": "<sha256>"
+      },
+      "dockerfile_path": null,
+      "dockerfile_sha256": null,
+      "family": "native",
+      "image_id": "<image_id>",
+      "image_tag": "audit-buildenv-cpp:local",
+      "manifest_path": null,
+      "recipe_identity": "<sha256>",
+      "reused": true,
+      "saved_build_count": 1,
+      "schema": "appsec-review/project-build-image/1",
+      "terminal_status": "SUCCEEDED",
+      "user": "10001:10001"
+     },
+     "link_database": {
+      "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/link-commands.json",
+      "relationship_count": 10,
+      "sha256": "<sha256>"
+     },
+     "probe_identity": "<sha256>",
+     "processing_decisions": [
+      {
+       "action": "RUN",
+       "configuration_sha256": "<sha256>",
+       "decision_sha256": "<sha256>",
+       "disposition": "SUCCEEDED",
+       "feature": "build-execution-capture",
+       "inspected_facts": [
+        "artifact=executable",
+        "artifact=object",
+        "artifact=shared-library",
+        "artifact=static-library",
+        "build_system=cmake",
+        "capability=codeql-build",
+        "capability=material-build",
+        "family=native",
+        "inventory_complete=true",
+        "material=compiled-descriptor:cmake",
+        "material=declared-compiled-project:native"
+       ],
+       "language": "native",
+       "project_id": "build-unit-b9c931fa551e02bd12b2",
+       "reason_code": "PROCESSING_SUCCEEDED",
+       "resolved_policy": "required",
+       "schema": "appsec-review/applicability-decision/1",
+       "selected_capability": "execution-capture",
+       "sources": [
+        {
+         "path": "CMakeLists.txt",
+         "sha256": "<sha256>"
+        },
+        {
+         "path": "README.md",
+         "sha256": "<sha256>"
+        }
+       ]
+      },
+      {
+       "action": "RUN",
+       "configuration_sha256": "<sha256>",
+       "decision_sha256": "<sha256>",
+       "disposition": "SUCCEEDED",
+       "feature": "compiler-artifact-collection",
+       "inspected_facts": [
+        "artifact=executable",
+        "artifact=object",
+        "artifact=shared-library",
+        "artifact=static-library",
+        "build_system=cmake",
+        "capability=codeql-build",
+        "capability=material-build",
+        "family=native",
+        "inventory_complete=true",
+        "material=compiled-descriptor:cmake",
+        "material=declared-compiled-project:native"
+       ],
+       "language": "native",
+       "project_id": "build-unit-b9c931fa551e02bd12b2",
+       "reason_code": "PROCESSING_SUCCEEDED",
+       "resolved_policy": "required",
+       "schema": "appsec-review/applicability-decision/1",
+       "selected_capability": "executable,object,shared-library,static-library",
+       "sources": [
+        {
+         "path": "CMakeLists.txt",
+         "sha256": "<sha256>"
+        },
+        {
+         "path": "README.md",
+         "sha256": "<sha256>"
+        }
+       ]
+      }
+     ],
+     "project_topology": [],
+     "protected_compile_commands": {
+      "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/protected-commands/compile-database-<attempt>.json",
+      "sha256": "<sha256>"
+     },
+     "recipe": {
+      "build_commands": [
+       [
+        "cmake",
+        "--build",
+        "build",
+        "--parallel",
+        "2"
+       ]
+      ],
+      "build_dir": "build",
+      "build_unit_id": "build-unit-b9c931fa551e02bd12b2",
+      "configure_commands": [
+       [
+        "cmake",
+        "-S",
+        ".",
+        "-B",
+        "build",
+        "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
+        "-DCMAKE_BUILD_TYPE=RelWithDebInfo"
+       ]
+      ],
+      "dependency_files": [
+       "CMakeLists.txt"
+      ],
+      "environment": {},
+      "expected_outputs": [
+       "build"
+      ],
+      "image_profile": "native",
+      "network_required": false,
+      "reason": "Deterministic offline CMake recipe derived from the accepted CMake build marker.",
+      "schema": "appsec-review/build-recipe/1",
+      "source_dir": ".",
+      "system_packages": []
+     },
+     "recipe_identity": "<sha256>",
+     "root": ".",
+     "schema": "appsec-review/language-build-receipt/1",
+     "source_fingerprint": "<sha256>",
+     "started_at": "<timestamp>",
+     "terminal_status": "SUCCEEDED",
+     "tool_invocations": {
+      "<summary>": {
+       "count": 80,
+       "sha256": "74b8ee94d0b98095439e22cea92db71bbea8dec4a7edb2f7ed54dde6fb06ce3b"
+      }
+     },
+     "upstream_handoff_sha256": "<sha256>",
+     "validated_artifacts": [
+      {
+       "artifact_origin": "build-output",
+       "build_unit_id": "build-unit-b9c931fa551e02bd12b2",
+       "canonical_identity": "asr:object_file:<sha256>",
+       "kind": "object",
+       "mapping": "exact-workspace-path",
+       "mapping_confidence": 1.0,
+       "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/workspace/build/CMakeFiles/relay.dir/src/config.cpp.o",
+       "sha256": "<sha256>",
+       "size_bytes": "<size_bytes>",
+       "workspace_path": "build/CMakeFiles/relay.dir/src/config.cpp.o"
+      },
+      {
+       "artifact_origin": "build-output",
+       "build_unit_id": "build-unit-b9c931fa551e02bd12b2",
+       "canonical_identity": "asr:object_file:<sha256>",
+       "kind": "object",
+       "mapping": "exact-workspace-path",
+       "mapping_confidence": 1.0,
+       "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/workspace/build/CMakeFiles/relay.dir/src/diag.cpp.o",
+       "sha256": "<sha256>",
+       "size_bytes": "<size_bytes>",
+       "workspace_path": "build/CMakeFiles/relay.dir/src/diag.cpp.o"
+      },
+      {
+       "artifact_origin": "build-output",
+       "build_unit_id": "build-unit-b9c931fa551e02bd12b2",
+       "canonical_identity": "asr:object_file:<sha256>",
+       "kind": "object",
+       "mapping": "exact-workspace-path",
+       "mapping_confidence": 1.0,
+       "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/workspace/build/CMakeFiles/relay.dir/src/frame.cpp.o",
+       "sha256": "<sha256>",
+       "size_bytes": "<size_bytes>",
+       "workspace_path": "build/CMakeFiles/relay.dir/src/frame.cpp.o"
+      },
+      {
+       "artifact_origin": "build-output",
+       "build_unit_id": "build-unit-b9c931fa551e02bd12b2",
+       "canonical_identity": "asr:object_file:<sha256>",
+       "kind": "object",
+       "mapping": "exact-workspace-path",
+       "mapping_confidence": 1.0,
+       "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/workspace/build/CMakeFiles/relay.dir/src/log.cpp.o",
+       "sha256": "<sha256>",
+       "size_bytes": "<size_bytes>",
+       "workspace_path": "build/CMakeFiles/relay.dir/src/log.cpp.o"
+      },
+      {
+       "artifact_origin": "build-output",
+       "build_unit_id": "build-unit-b9c931fa551e02bd12b2",
+       "canonical_identity": "asr:object_file:<sha256>",
+       "kind": "object",
+       "mapping": "exact-workspace-path",
+       "mapping_confidence": 1.0,
+       "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/workspace/build/CMakeFiles/relay.dir/src/main.cpp.o",
+       "sha256": "<sha256>",
+       "size_bytes": "<size_bytes>",
+       "workspace_path": "build/CMakeFiles/relay.dir/src/main.cpp.o"
+      },
+      {
+       "artifact_origin": "build-output",
+       "build_unit_id": "build-unit-b9c931fa551e02bd12b2",
+       "canonical_identity": "asr:object_file:<sha256>",
+       "kind": "object",
+       "mapping": "exact-workspace-path",
+       "mapping_confidence": 1.0,
+       "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/workspace/build/CMakeFiles/relay.dir/src/packet.cpp.o",
+       "sha256": "<sha256>",
+       "size_bytes": "<size_bytes>",
+       "workspace_path": "build/CMakeFiles/relay.dir/src/packet.cpp.o"
+      },
+      {
+       "artifact_origin": "build-output",
+       "build_unit_id": "build-unit-b9c931fa551e02bd12b2",
+       "canonical_identity": "asr:object_file:<sha256>",
+       "kind": "object",
+       "mapping": "exact-workspace-path",
+       "mapping_confidence": 1.0,
+       "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/workspace/build/CMakeFiles/relay.dir/src/session.cpp.o",
+       "sha256": "<sha256>",
+       "size_bytes": "<size_bytes>",
+       "workspace_path": "build/CMakeFiles/relay.dir/src/session.cpp.o"
+      },
+      {
+       "artifact_origin": "build-output",
+       "build_unit_id": "build-unit-b9c931fa551e02bd12b2",
+       "canonical_identity": "asr:build_artifact:<sha256>",
+       "kind": "compile-database",
+       "mapping": "exact-workspace-path",
+       "mapping_confidence": 1.0,
+       "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/workspace/build/compile_commands.json",
+       "sha256": "<sha256>",
+       "size_bytes": "<size_bytes>",
+       "workspace_path": "build/compile_commands.json"
+      },
+      {
+       "artifact_origin": "build-output",
+       "build_unit_id": "build-unit-b9c931fa551e02bd12b2",
+       "canonical_identity": "asr:executable:<sha256>",
+       "kind": "executable",
+       "loader_dependencies": [
+        "libstdc++.so.6",
+        "libgcc_s.so.1",
+        "libc.so.6"
+       ],
+       "loader_dependency_status": "resolved",
+       "loader_interpreter": "/lib64/ld-linux-x86-64.so.2",
+       "loader_linkage": "dynamic",
+       "loader_parser": "appsec-review/elf-loader-dependencies/2",
+       "loader_run_paths": [],
+       "loader_soname": null,
+       "mapping": "exact-workspace-path",
+       "mapping_confidence": 1.0,
+       "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/workspace/build/relay",
+       "sha256": "<sha256>",
+       "size_bytes": "<size_bytes>",
+       "workspace_path": "build/relay"
+      }
+     ],
+     "workspace": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/workspace",
+     "workspace_manifest": {
+      "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/workspace-manifest.json",
+      "sha256": "<sha256>"
+     }
+    }
+   ],
+   "terminal_status": "SUCCEEDED",
+   "upstream_manifest": {
+    "path": "data/indices/manifests/language-build-<attempt>.json",
+    "sha256": "<sha256>"
+   }
+  }
+ },
+ "schema": "appsec-review/acceptance-job-output/1",
+ "skipped_units": [],
+ "status": "COMPLETED_WITH_GAPS",
+ "steps": {
+  "acceptance": "SUCCEEDED",
+  "index": "SUCCEEDED",
+  "load": "SUCCEEDED"
+ },
+ "units": {
+  "acceptance.publish_handoff": {
+   "disposition": "COMPLETED_WITH_GAPS",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "index.catalogs": {
+   "disposition": "SUCCEEDED",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "index.members": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "index.relationships": {
+   "disposition": "COMPLETED_WITH_GAPS",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "load.accepted_builds": {
+   "disposition": "SUCCEEDED",
+   "producer": null,
+   "status": "SUCCEEDED"
+  }
+ },
+ "volatile": {
+  "artifacts": [
+   {
+    "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/attempts/<attempt>/execution-capture/command-001/events.jsonl",
+    "sha256": "d8dc3c582e808a230b9d307f2f6806dc4401c2327d8057d4c512473b28d106b8",
+    "size_bytes": 1044086
+   },
+   {
+    "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/attempts/<attempt>/execution-capture/command-001/record.json",
+    "sha256": "e57ca43c5e630e2b7db5dff21bfc3d0c45ae442eb9e207c271112c97ded33df0",
+    "size_bytes": 19604
+   },
+   {
+    "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/attempts/<attempt>/execution-capture/command-001/secret-scan/execution.json",
+    "sha256": "691568bf18c09e2138d64e039e150c5b919d201bde96f47e98506d3c79c23412",
+    "size_bytes": 540
+   },
+   {
+    "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/attempts/<attempt>/execution-capture/command-001/secret-scan/findings.json",
+    "sha256": "8f3e1f73c9e1fd94878bd90ba6428c435c91bffe4f1721fa8704adf5266a7b13",
+    "size_bytes": 256
+   },
+   {
+    "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/attempts/<attempt>/execution-capture/command-001/secret-scan/gitleaks.json",
+    "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+    "size_bytes": 3
+   },
+   {
+    "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/attempts/<attempt>/execution-capture/command-002/events.jsonl",
+    "sha256": "2132ee8c44396b9289e315ed4ee1b07e953080bc77272b9c629eb957b9a96d85",
+    "size_bytes": 3047916
+   },
+   {
+    "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/attempts/<attempt>/execution-capture/command-002/record.json",
+    "sha256": "d289f9759fb823d818e8ab9c5eb56de5cf661ca0caf73bb9ed4840d62476949d",
+    "size_bytes": 21998
+   },
+   {
+    "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/attempts/<attempt>/execution-capture/command-002/secret-scan/execution.json",
+    "sha256": "9d0df634dce8c0fa656feeb83671b9cd7f22618dc204a90b39ba56e0df9f82f8",
+    "size_bytes": 540
+   },
+   {
+    "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/attempts/<attempt>/execution-capture/command-002/secret-scan/findings.json",
+    "sha256": "8f3e1f73c9e1fd94878bd90ba6428c435c91bffe4f1721fa8704adf5266a7b13",
+    "size_bytes": 256
+   },
+   {
+    "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/attempts/<attempt>/execution-capture/command-002/secret-scan/gitleaks.json",
+    "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+    "size_bytes": 3
+   },
+   {
+    "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/link-commands.json",
+    "sha256": "548d1908a64e9dd39e4271e4988abaeebf8a00d50a54ff05328d28d5be9fef84",
+    "size_bytes": 4152
+   },
+   {
+    "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/logs/001.stderr",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "size_bytes": 0
+   },
+   {
+    "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/logs/001.stdout",
+    "sha256": "ce3b92f41c41bf894b06a377b63aafa44f4f1f48117c40c2ee671483d6922331",
+    "size_bytes": 375
+   },
+   {
+    "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/logs/002.stderr",
+    "sha256": "f8f59e08ed4583847cbf4aa3697c7c6fa1291e6253581bbdd4b8bbc58c21ab6c",
+    "size_bytes": 851
+   },
+   {
+    "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/logs/002.stdout",
+    "sha256": "3ca778306204e8a9cfb2b681fe1fe7c01eddfe86d3ed4d5b4df4c1ae3fd83c8c",
+    "size_bytes": 510
+   },
+   {
+    "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/protected-commands/1301ffb59230fe90fcd36e27.json",
+    "sha256": "0322a37d38169fbad75f078816f8f5e3dc542ff99a26859ade61d798a7bd2aa0",
+    "size_bytes": 177
+   },
+   {
+    "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/protected-commands/5db43d739fde37470f071596.json",
+    "sha256": "d04e12902d7593f70e2b32784b930a68701b537d3ec63a6ceea088c7ae143c03",
+    "size_bytes": 237
+   },
+   {
+    "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/protected-commands/compile-database-<attempt>.json",
+    "sha256": "20cd0d7eaf8b217ba878c069d8db3414895edca7f7d905d308b115d1fc31a31d",
+    "size_bytes": 102112
+   },
+   {
+    "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/workspace-manifest.json",
+    "sha256": "1b4348988570c1bbb3cb3a88244e9b1b3b0b75d6386bb15ad6dd596bea09abd5",
+    "size_bytes": 5390
+   },
+   {
+    "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/workspace/build/CMakeFiles/relay.dir/src/config.cpp.o",
+    "sha256": "61bb8c26ea1c39c609d71cb164318bae0ee5759f6d4ac7e3b5687b3cc80eb0d8",
+    "size_bytes": 91328
+   },
+   {
+    "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/workspace/build/CMakeFiles/relay.dir/src/diag.cpp.o",
+    "sha256": "dff405cb4d61676522d908787d4b6927c98e3c31bc0b0a540f49706b961c6272",
+    "size_bytes": 97992
+   },
+   {
+    "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/workspace/build/CMakeFiles/relay.dir/src/frame.cpp.o",
+    "sha256": "9cb4f13dc4355b2b5f32482757acf12162709472381654436975262ebead35b2",
+    "size_bytes": 28824
+   },
+   {
+    "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/workspace/build/CMakeFiles/relay.dir/src/log.cpp.o",
+    "sha256": "9b6a2578d0b9daeeecdcb0bf75026ff8f5a32e96648a21bed2ce95d72b9b2233",
+    "size_bytes": 24960
+   },
+   {
+    "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/workspace/build/CMakeFiles/relay.dir/src/main.cpp.o",
+    "sha256": "f83a26f49ebbc086d6156e8d6f8d958bbbb497eeb0064f4e1c798dc32221a6da",
+    "size_bytes": 196856
+   },
+   {
+    "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/workspace/build/CMakeFiles/relay.dir/src/packet.cpp.o",
+    "sha256": "c5db755293c6901c5c77d3bb90cbc46a3612a690c056421956211627830354eb",
+    "size_bytes": 26920
+   },
+   {
+    "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/workspace/build/CMakeFiles/relay.dir/src/session.cpp.o",
+    "sha256": "f623aabe1ca8e59f43b3a8f803fe7300ff47a83133e3cb66509299fd202f6b5d",
+    "size_bytes": 243832
+   },
+   {
+    "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/workspace/build/compile_commands.json",
+    "sha256": "4121ef813c74723bba3880633ab162000fa9fc0ecbb71468d77999fd6fd49b3a",
+    "size_bytes": 2088
+   },
+   {
+    "path": "data/build/native/units/build-unit-b9c931fa551e02bd12b2/workspace/build/relay",
+    "sha256": "a94e496c7dd03082e97fbb2921c80ec835b9e6e66c06101f010b523c56e462ea",
+    "size_bytes": 327664
+   },
+   {
+    "path": "data/indices/manifests/artifact-indexing-<attempt>.json",
+    "sha256": "970de4d6c9047e23a9fce250ba395760c3f25ffa879c1125f5ca6f1828a4b7fd",
+    "size_bytes": 19168
+   },
+   {
+    "path": "data/indices/manifests/language-build-<attempt>.json",
+    "sha256": "12e050124723e80aae4c18607d7a84f85d691d834c1475cf46b859853965044e",
+    "size_bytes": 13224
+   },
+   {
+    "path": "data/jobs/job_artifact_indexing/attempts/<attempt>/artifacts/artifact-indexing/accepted-index.json",
+    "sha256": "2f52745a5c316090622ca531b654627eda4f68acd5ddb6e34d89bcb58d3b8689",
+    "size_bytes": 562
+   }
+  ]
+ }
+}

@@ -1,0 +1,2719 @@
+{
+ "artifacts": [
+  {
+   "count": 4,
+   "kind": "json",
+   "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/13e3f11b1491/canonical-findings.json",
+   "sha256": "d24d4c8100ea0e94e3ef64b4c936e12cec10b46c95f8217a4a4c1602648acaed"
+  },
+  {
+   "count": 4,
+   "kind": "json",
+   "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/4153dcb2a454/hierarchy.json",
+   "sha256": "eba9c3e022511c7be28c409ec63a83ab314be7c9465a135c81255ddd5f339556"
+  },
+  {
+   "count": 4,
+   "kind": "json",
+   "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/9114de6e8ea0/ci-definitions.json",
+   "sha256": "5e9904705da8ebfd7350a392788ec339ded07a6a86a48ee93ded756e7aedc604"
+  },
+  {
+   "count": 4,
+   "kind": "json",
+   "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/f36b42f15116/provider-classification.json",
+   "sha256": "71591d3063827f49b3f556e8ab3b95903b3670507a2b95876dece16313502bc4"
+  },
+  {
+   "count": 6,
+   "kind": "json",
+   "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/30a0d67abbd9/coverage.json",
+   "sha256": "53e04c4764446d8a9e8c81188b6d7755a627f7f6fbf7fcdb826b303e2323c06a"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/indices/manifests/ci-<attempt>.json",
+   "sha256": "6d65582cf5f9ca14b885198b02888384f24afbbf6c9bfb6411d335897313c74e"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/07b0257b53df/raw-observations.json",
+   "sha256": "ffd0409a4e2a80b6bdeb55ea22643539e89ba14473b1c7a6bd3e2ade58618351"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/10796e4ea64f/raw-observations.json",
+   "sha256": "ea5d961d84f873556b5261a4d90b3b844d827e3229b52b278b2fb9bd5582a5a1"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/152580cebaca/raw-observations.json",
+   "sha256": "b59b1161df83af2b3012d743ed50c553c1820567799f789c8a515cd634958de1"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/263bb5ea9555/raw-observations.json",
+   "sha256": "82dd97e8c2f50464f8484b3b6fc026c26d7723ff2b56fe9260cb31d34631f48e"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/2ddeeb4ec966/raw-observations.json",
+   "sha256": "ffdf5e8c20560a221526d62194c605b1a23d9f37ac70d177695b090e0ade5f82"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/5e0cb2437852/raw-observations.json",
+   "sha256": "1ae813d68bb5258248c0e5702b53a0da303a5a307c593b9614a00a312a92da7a"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/78448de1d5e2/raw-observations.json",
+   "sha256": "1434a3f28878474dcdba79cba3b78be7ba2f1817bebe0fad9b338762ab08beec"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/7ee9656c8148/raw-observations.json",
+   "sha256": "1b12ef0c99c4ab3ad00b3606b46750f8df04597aa772c90cf4a2658885002bf3"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/9ea3733336d7/raw-observations.json",
+   "sha256": "70a0a8f6bad47529d50a97f28157847ba2f0096d9a6738a616a03b27137cdeff"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/a329783d5f34/raw-observations.json",
+   "sha256": "b8df4c9781993d375e48ef480031aa965a9d3df6a2f8987248de23d7f8ec1836"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/a71bef0afdbf/raw-observations.json",
+   "sha256": "3d51adac3c7db9a17e40eaa17565609a13d2d73346b1a57af7fdc84f620c181e"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/b5b7b349f312/raw-observations.json",
+   "sha256": "59cbf8961b3c1feeb2994aa134362e0b41251a5802a4ef4f14842e5ba05f6cbc"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/c4cfc4f67c95/raw-observations.json",
+   "sha256": "2f31608c125a057a728f00b9ba1b3d94f0489d28745871c218560ef4def83bcb"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/d16f1a2d2998/raw-observations.json",
+   "sha256": "0727d41299d6611a1da7fbcd79880f0ea0f3e834a84f6fe1697277736ceaa0eb"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/ea3bd3448301/raw-observations.json",
+   "sha256": "5d4d069ad7c20ddd66060f904b12e6c1cbe2fc47c6130b51170ca8eaac0dd791"
+  },
+  {
+   "count": 8,
+   "kind": "json",
+   "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/013bfed3a50e/normalized-observations.json",
+   "sha256": "0cbd32e2ad2fb8c7d6cf217121df792ede976a10ada15465d4daad206a728a09"
+  },
+  {
+   "count": 8,
+   "kind": "json",
+   "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/055d84ae1761/normalized-observations.json",
+   "sha256": "76b7f36c915256cada8f76d92df7aa3a5da4226917aeefa6097224ce6df34a28"
+  },
+  {
+   "count": 8,
+   "kind": "json",
+   "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/0fb5ae38555b/normalized-observations.json",
+   "sha256": "f7bf40219d82af88de951adbc50143c01af728ab66334851083d519ff24a49fa"
+  },
+  {
+   "count": 8,
+   "kind": "json",
+   "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/2301a6303e3c/normalized-observations.json",
+   "sha256": "1f474f05036f32398bbff31c779da2aa039e46c2e6d90bbd769c5d9791eb8ba0"
+  },
+  {
+   "count": 8,
+   "kind": "json",
+   "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/44e99112d788/normalized-observations.json",
+   "sha256": "d85c0d90ef09488bee99a9b7ccd75d6fa4cec2875aa30e658573f6ce57f6fffa"
+  },
+  {
+   "count": 8,
+   "kind": "json",
+   "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/597e65533e8f/normalized-observations.json",
+   "sha256": "3a8d67aa3a21d9c9239c2cc2c27dfa08cb6d643180c75ae9e3caa7f77e595d29"
+  },
+  {
+   "count": 8,
+   "kind": "json",
+   "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/5af2a5214a36/normalized-observations.json",
+   "sha256": "a7b0670350aaa6333c691f34287eb6a5b562329d2365ca9b6d9a27be9335b70b"
+  },
+  {
+   "count": 8,
+   "kind": "json",
+   "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/689c13b521cb/normalized-observations.json",
+   "sha256": "827a44d88288072db8293ee6c8b64e4ad443992da8057ff95f76a4c1a3e815f0"
+  },
+  {
+   "count": 8,
+   "kind": "json",
+   "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/ac1d6b1dd573/handoff.json",
+   "sha256": "0a72ae4d4910639eb3f18bbe317008f874bd5c110ccf773230a5e8a45b5473ac"
+  },
+  {
+   "count": 8,
+   "kind": "json",
+   "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/ac5baae72df4/normalized-observations.json",
+   "sha256": "881ca2bf04cb9c2e5138aade7532a1cf610a4c662f26e4d442f869d755d4a48a"
+  },
+  {
+   "count": 8,
+   "kind": "json",
+   "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/ad8b2ee6b514/normalized-observations.json",
+   "sha256": "e0626af5b3acd5505df4a3141eb5fa5b741b5ead56d4d73ba142484cd82e2a33"
+  },
+  {
+   "count": 8,
+   "kind": "json",
+   "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/c77c4dd1fe77/normalized-observations.json",
+   "sha256": "1c75291b64fe6a455b68d55d3d6f0ec85f27de7b95170130a1a2f5bed15d0dd0"
+  },
+  {
+   "count": 8,
+   "kind": "json",
+   "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/dc556b2ba32d/normalized-observations.json",
+   "sha256": "bc9aadd9f6b968b32c6bc6525b8d3180bca02b51a60c278590f99782fedb821c"
+  },
+  {
+   "count": 8,
+   "kind": "json",
+   "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/e25bffa9fc6d/normalized-observations.json",
+   "sha256": "86a7ade7ea1d369556d34e0f14ff376b080d659b203a102d8ade02530a37e8ea"
+  },
+  {
+   "count": 8,
+   "kind": "json",
+   "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/e77dc6124a8d/normalized-observations.json",
+   "sha256": "d79116a877649705f6a0304b34b366507f2260f5a811b5d322590413d6dfa5a2"
+  },
+  {
+   "count": 8,
+   "kind": "json",
+   "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/f9be9dfbd764/normalized-observations.json",
+   "sha256": "05a2f0dee0bc6aa6836b367a349e6fc1824894425227116fff81d53bb7e50eb9"
+  },
+  {
+   "coverage_statuses": {
+    "complete": 1
+   },
+   "entity_kinds": {},
+   "kind": "sqlite",
+   "path": "data/indices/evidence/ci_findings/<sha256>.sqlite",
+   "rows": {
+    "coverage": 1,
+    "entities": 0,
+    "locations": 0,
+    "metadata": 8,
+    "relations": 0
+   }
+  },
+  {
+   "coverage_statuses": {
+    "unavailable": 1
+   },
+   "entity_kinds": {},
+   "kind": "sqlite",
+   "path": "data/indices/observations/ci_azure_checkov/<sha256>.sqlite",
+   "rows": {
+    "coverage": 1,
+    "entities": 0,
+    "locations": 0,
+    "metadata": 8,
+    "relations": 0
+   }
+  },
+  {
+   "coverage_statuses": {
+    "unavailable": 1
+   },
+   "entity_kinds": {},
+   "kind": "sqlite",
+   "path": "data/indices/observations/ci_azure_schema/<sha256>.sqlite",
+   "rows": {
+    "coverage": 1,
+    "entities": 0,
+    "locations": 0,
+    "metadata": 8,
+    "relations": 0
+   }
+  },
+  {
+   "coverage_statuses": {
+    "unavailable": 1
+   },
+   "entity_kinds": {},
+   "kind": "sqlite",
+   "path": "data/indices/observations/ci_bitbucket_checkov/<sha256>.sqlite",
+   "rows": {
+    "coverage": 1,
+    "entities": 0,
+    "locations": 0,
+    "metadata": 8,
+    "relations": 0
+   }
+  },
+  {
+   "coverage_statuses": {
+    "unavailable": 1
+   },
+   "entity_kinds": {},
+   "kind": "sqlite",
+   "path": "data/indices/observations/ci_bitbucket_schema/<sha256>.sqlite",
+   "rows": {
+    "coverage": 1,
+    "entities": 0,
+    "locations": 0,
+    "metadata": 8,
+    "relations": 0
+   }
+  },
+  {
+   "coverage_statuses": {
+    "unavailable": 1
+   },
+   "entity_kinds": {},
+   "kind": "sqlite",
+   "path": "data/indices/observations/ci_circleci_checkov/<sha256>.sqlite",
+   "rows": {
+    "coverage": 1,
+    "entities": 0,
+    "locations": 0,
+    "metadata": 8,
+    "relations": 0
+   }
+  },
+  {
+   "coverage_statuses": {
+    "unavailable": 1
+   },
+   "entity_kinds": {},
+   "kind": "sqlite",
+   "path": "data/indices/observations/ci_circleci_schema/<sha256>.sqlite",
+   "rows": {
+    "coverage": 1,
+    "entities": 0,
+    "locations": 0,
+    "metadata": 8,
+    "relations": 0
+   }
+  },
+  {
+   "coverage_statuses": {
+    "unavailable": 1
+   },
+   "entity_kinds": {},
+   "kind": "sqlite",
+   "path": "data/indices/observations/ci_github_actionlint/<sha256>.sqlite",
+   "rows": {
+    "coverage": 1,
+    "entities": 0,
+    "locations": 0,
+    "metadata": 8,
+    "relations": 0
+   }
+  },
+  {
+   "coverage_statuses": {
+    "unavailable": 1
+   },
+   "entity_kinds": {},
+   "kind": "sqlite",
+   "path": "data/indices/observations/ci_github_checkov/<sha256>.sqlite",
+   "rows": {
+    "coverage": 1,
+    "entities": 0,
+    "locations": 0,
+    "metadata": 8,
+    "relations": 0
+   }
+  },
+  {
+   "coverage_statuses": {
+    "unavailable": 1
+   },
+   "entity_kinds": {},
+   "kind": "sqlite",
+   "path": "data/indices/observations/ci_github_schema/<sha256>.sqlite",
+   "rows": {
+    "coverage": 1,
+    "entities": 0,
+    "locations": 0,
+    "metadata": 8,
+    "relations": 0
+   }
+  },
+  {
+   "coverage_statuses": {
+    "unavailable": 1
+   },
+   "entity_kinds": {},
+   "kind": "sqlite",
+   "path": "data/indices/observations/ci_github_zizmor/<sha256>.sqlite",
+   "rows": {
+    "coverage": 1,
+    "entities": 0,
+    "locations": 0,
+    "metadata": 8,
+    "relations": 0
+   }
+  },
+  {
+   "coverage_statuses": {
+    "unavailable": 1
+   },
+   "entity_kinds": {},
+   "kind": "sqlite",
+   "path": "data/indices/observations/ci_gitlab_checkov/<sha256>.sqlite",
+   "rows": {
+    "coverage": 1,
+    "entities": 0,
+    "locations": 0,
+    "metadata": 8,
+    "relations": 0
+   }
+  },
+  {
+   "coverage_statuses": {
+    "unavailable": 1
+   },
+   "entity_kinds": {},
+   "kind": "sqlite",
+   "path": "data/indices/observations/ci_gitlab_schema/<sha256>.sqlite",
+   "rows": {
+    "coverage": 1,
+    "entities": 0,
+    "locations": 0,
+    "metadata": 8,
+    "relations": 0
+   }
+  },
+  {
+   "coverage_statuses": {
+    "unavailable": 1
+   },
+   "entity_kinds": {},
+   "kind": "sqlite",
+   "path": "data/indices/observations/ci_jenkins_structural/<sha256>.sqlite",
+   "rows": {
+    "coverage": 1,
+    "entities": 0,
+    "locations": 0,
+    "metadata": 8,
+    "relations": 0
+   }
+  },
+  {
+   "coverage_statuses": {
+    "unavailable": 1
+   },
+   "entity_kinds": {},
+   "kind": "sqlite",
+   "path": "data/indices/observations/ci_other_discovery/<sha256>.sqlite",
+   "rows": {
+    "coverage": 1,
+    "entities": 0,
+    "locations": 0,
+    "metadata": 8,
+    "relations": 0
+   }
+  },
+  {
+   "coverage_statuses": {
+    "unavailable": 1
+   },
+   "entity_kinds": {},
+   "kind": "sqlite",
+   "path": "data/indices/observations/ci_teamcity_structural/<sha256>.sqlite",
+   "rows": {
+    "coverage": 1,
+    "entities": 0,
+    "locations": 0,
+    "metadata": 8,
+    "relations": 0
+   }
+  }
+ ],
+ "failed_units": [],
+ "findings": [],
+ "gaps": [
+  {
+   "count": 1,
+   "gap": {
+    "area": "azure:checkov",
+    "gap": "no azure CI definitions discovered",
+    "status": "unavailable"
+   },
+   "unit": "artifact:data/indices/observations/ci_azure_checkov/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "azure:schema",
+    "gap": "no azure CI definitions discovered",
+    "status": "unavailable"
+   },
+   "unit": "artifact:data/indices/observations/ci_azure_schema/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "bitbucket:checkov",
+    "gap": "no bitbucket CI definitions discovered",
+    "status": "unavailable"
+   },
+   "unit": "artifact:data/indices/observations/ci_bitbucket_checkov/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "bitbucket:schema",
+    "gap": "no bitbucket CI definitions discovered",
+    "status": "unavailable"
+   },
+   "unit": "artifact:data/indices/observations/ci_bitbucket_schema/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "circleci:checkov",
+    "gap": "no circleci CI definitions discovered",
+    "status": "unavailable"
+   },
+   "unit": "artifact:data/indices/observations/ci_circleci_checkov/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "circleci:schema",
+    "gap": "no circleci CI definitions discovered",
+    "status": "unavailable"
+   },
+   "unit": "artifact:data/indices/observations/ci_circleci_schema/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "github:actionlint",
+    "gap": "no github CI definitions discovered",
+    "status": "unavailable"
+   },
+   "unit": "artifact:data/indices/observations/ci_github_actionlint/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "github:checkov",
+    "gap": "no github CI definitions discovered",
+    "status": "unavailable"
+   },
+   "unit": "artifact:data/indices/observations/ci_github_checkov/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "github:schema",
+    "gap": "no github CI definitions discovered",
+    "status": "unavailable"
+   },
+   "unit": "artifact:data/indices/observations/ci_github_schema/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "github:zizmor",
+    "gap": "no github CI definitions discovered",
+    "status": "unavailable"
+   },
+   "unit": "artifact:data/indices/observations/ci_github_zizmor/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "gitlab:checkov",
+    "gap": "no gitlab CI definitions discovered",
+    "status": "unavailable"
+   },
+   "unit": "artifact:data/indices/observations/ci_gitlab_checkov/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "gitlab:schema",
+    "gap": "no gitlab CI definitions discovered",
+    "status": "unavailable"
+   },
+   "unit": "artifact:data/indices/observations/ci_gitlab_schema/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "jenkins:structural",
+    "gap": "no jenkins CI definitions discovered",
+    "status": "unavailable"
+   },
+   "unit": "artifact:data/indices/observations/ci_jenkins_structural/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "other:discovery",
+    "gap": "no other CI definitions discovered",
+    "status": "unavailable"
+   },
+   "unit": "artifact:data/indices/observations/ci_other_discovery/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "area": "teamcity:structural",
+    "gap": "no teamcity CI definitions discovered",
+    "status": "unavailable"
+   },
+   "unit": "artifact:data/indices/observations/ci_teamcity_structural/<sha256>.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": "no azure CI definitions discovered",
+   "unit": "ci_analysis.azure_checkov_scan"
+  },
+  {
+   "count": 1,
+   "gap": "no azure CI definitions discovered",
+   "unit": "ci_analysis.azure_schema_scan"
+  },
+  {
+   "count": 1,
+   "gap": "no bitbucket CI definitions discovered",
+   "unit": "ci_analysis.bitbucket_checkov_scan"
+  },
+  {
+   "count": 1,
+   "gap": "no bitbucket CI definitions discovered",
+   "unit": "ci_analysis.bitbucket_schema_scan"
+  },
+  {
+   "count": 1,
+   "gap": "no circleci CI definitions discovered",
+   "unit": "ci_analysis.circleci_checkov_scan"
+  },
+  {
+   "count": 1,
+   "gap": "no circleci CI definitions discovered",
+   "unit": "ci_analysis.circleci_schema_scan"
+  },
+  {
+   "count": 1,
+   "gap": "no github CI definitions discovered",
+   "unit": "ci_analysis.github_actionlint_scan"
+  },
+  {
+   "count": 1,
+   "gap": "no github CI definitions discovered",
+   "unit": "ci_analysis.github_checkov_scan"
+  },
+  {
+   "count": 1,
+   "gap": "no github CI definitions discovered",
+   "unit": "ci_analysis.github_schema_scan"
+  },
+  {
+   "count": 1,
+   "gap": "no github CI definitions discovered",
+   "unit": "ci_analysis.github_zizmor_scan"
+  },
+  {
+   "count": 1,
+   "gap": "no gitlab CI definitions discovered",
+   "unit": "ci_analysis.gitlab_checkov_scan"
+  },
+  {
+   "count": 1,
+   "gap": "no gitlab CI definitions discovered",
+   "unit": "ci_analysis.gitlab_schema_scan"
+  },
+  {
+   "count": 1,
+   "gap": "no jenkins CI definitions discovered",
+   "unit": "ci_analysis.jenkins_structural_scan"
+  },
+  {
+   "count": 1,
+   "gap": "no other CI definitions discovered",
+   "unit": "ci_analysis.other_discovery_scan"
+  },
+  {
+   "count": 1,
+   "gap": "no teamcity CI definitions discovered",
+   "unit": "ci_analysis.teamcity_structural_scan"
+  },
+  {
+   "count": 3,
+   "gap": "no azure CI definitions discovered",
+   "unit": "ci_coverage.join_coverage"
+  },
+  {
+   "count": 3,
+   "gap": "no bitbucket CI definitions discovered",
+   "unit": "ci_coverage.join_coverage"
+  },
+  {
+   "count": 3,
+   "gap": "no circleci CI definitions discovered",
+   "unit": "ci_coverage.join_coverage"
+  },
+  {
+   "count": 5,
+   "gap": "no github CI definitions discovered",
+   "unit": "ci_coverage.join_coverage"
+  },
+  {
+   "count": 3,
+   "gap": "no gitlab CI definitions discovered",
+   "unit": "ci_coverage.join_coverage"
+  },
+  {
+   "count": 2,
+   "gap": "no jenkins CI definitions discovered",
+   "unit": "ci_coverage.join_coverage"
+  },
+  {
+   "count": 2,
+   "gap": "no other CI definitions discovered",
+   "unit": "ci_coverage.join_coverage"
+  },
+  {
+   "count": 2,
+   "gap": "no teamcity CI definitions discovered",
+   "unit": "ci_coverage.join_coverage"
+  },
+  {
+   "count": 1,
+   "gap": "no azure CI definitions discovered",
+   "unit": "ci_coverage.publish_handoff"
+  },
+  {
+   "count": 1,
+   "gap": "no bitbucket CI definitions discovered",
+   "unit": "ci_coverage.publish_handoff"
+  },
+  {
+   "count": 1,
+   "gap": "no circleci CI definitions discovered",
+   "unit": "ci_coverage.publish_handoff"
+  },
+  {
+   "count": 1,
+   "gap": "no github CI definitions discovered",
+   "unit": "ci_coverage.publish_handoff"
+  },
+  {
+   "count": 1,
+   "gap": "no gitlab CI definitions discovered",
+   "unit": "ci_coverage.publish_handoff"
+  },
+  {
+   "count": 1,
+   "gap": "no jenkins CI definitions discovered",
+   "unit": "ci_coverage.publish_handoff"
+  },
+  {
+   "count": 1,
+   "gap": "no other CI definitions discovered",
+   "unit": "ci_coverage.publish_handoff"
+  },
+  {
+   "count": 1,
+   "gap": "no teamcity CI definitions discovered",
+   "unit": "ci_coverage.publish_handoff"
+  },
+  {
+   "count": 1,
+   "gap": "no azure CI definitions discovered",
+   "unit": "ci_normalization.azure_checkov_normalize"
+  },
+  {
+   "count": 1,
+   "gap": "no azure CI definitions discovered",
+   "unit": "ci_normalization.azure_schema_normalize"
+  },
+  {
+   "count": 1,
+   "gap": "no bitbucket CI definitions discovered",
+   "unit": "ci_normalization.bitbucket_checkov_normalize"
+  },
+  {
+   "count": 1,
+   "gap": "no bitbucket CI definitions discovered",
+   "unit": "ci_normalization.bitbucket_schema_normalize"
+  },
+  {
+   "count": 1,
+   "gap": "no circleci CI definitions discovered",
+   "unit": "ci_normalization.circleci_checkov_normalize"
+  },
+  {
+   "count": 1,
+   "gap": "no circleci CI definitions discovered",
+   "unit": "ci_normalization.circleci_schema_normalize"
+  },
+  {
+   "count": 1,
+   "gap": "no github CI definitions discovered",
+   "unit": "ci_normalization.github_actionlint_normalize"
+  },
+  {
+   "count": 1,
+   "gap": "no github CI definitions discovered",
+   "unit": "ci_normalization.github_checkov_normalize"
+  },
+  {
+   "count": 1,
+   "gap": "no github CI definitions discovered",
+   "unit": "ci_normalization.github_schema_normalize"
+  },
+  {
+   "count": 1,
+   "gap": "no github CI definitions discovered",
+   "unit": "ci_normalization.github_zizmor_normalize"
+  },
+  {
+   "count": 1,
+   "gap": "no gitlab CI definitions discovered",
+   "unit": "ci_normalization.gitlab_checkov_normalize"
+  },
+  {
+   "count": 1,
+   "gap": "no gitlab CI definitions discovered",
+   "unit": "ci_normalization.gitlab_schema_normalize"
+  },
+  {
+   "count": 1,
+   "gap": "no jenkins CI definitions discovered",
+   "unit": "ci_normalization.jenkins_structural_normalize"
+  },
+  {
+   "count": 1,
+   "gap": "no other CI definitions discovered",
+   "unit": "ci_normalization.other_discovery_normalize"
+  },
+  {
+   "count": 1,
+   "gap": "no teamcity CI definitions discovered",
+   "unit": "ci_normalization.teamcity_structural_normalize"
+  },
+  {
+   "count": 2,
+   "gap": "no azure CI definitions discovered",
+   "unit": "ci_observation_publication.azure_checkov_index"
+  },
+  {
+   "count": 2,
+   "gap": "no azure CI definitions discovered",
+   "unit": "ci_observation_publication.azure_schema_index"
+  },
+  {
+   "count": 2,
+   "gap": "no bitbucket CI definitions discovered",
+   "unit": "ci_observation_publication.bitbucket_checkov_index"
+  },
+  {
+   "count": 2,
+   "gap": "no bitbucket CI definitions discovered",
+   "unit": "ci_observation_publication.bitbucket_schema_index"
+  },
+  {
+   "count": 2,
+   "gap": "no circleci CI definitions discovered",
+   "unit": "ci_observation_publication.circleci_checkov_index"
+  },
+  {
+   "count": 2,
+   "gap": "no circleci CI definitions discovered",
+   "unit": "ci_observation_publication.circleci_schema_index"
+  },
+  {
+   "count": 2,
+   "gap": "no github CI definitions discovered",
+   "unit": "ci_observation_publication.github_actionlint_index"
+  },
+  {
+   "count": 2,
+   "gap": "no github CI definitions discovered",
+   "unit": "ci_observation_publication.github_checkov_index"
+  },
+  {
+   "count": 2,
+   "gap": "no github CI definitions discovered",
+   "unit": "ci_observation_publication.github_schema_index"
+  },
+  {
+   "count": 2,
+   "gap": "no github CI definitions discovered",
+   "unit": "ci_observation_publication.github_zizmor_index"
+  },
+  {
+   "count": 2,
+   "gap": "no gitlab CI definitions discovered",
+   "unit": "ci_observation_publication.gitlab_checkov_index"
+  },
+  {
+   "count": 2,
+   "gap": "no gitlab CI definitions discovered",
+   "unit": "ci_observation_publication.gitlab_schema_index"
+  },
+  {
+   "count": 2,
+   "gap": "no jenkins CI definitions discovered",
+   "unit": "ci_observation_publication.jenkins_structural_index"
+  },
+  {
+   "count": 2,
+   "gap": "no other CI definitions discovered",
+   "unit": "ci_observation_publication.other_discovery_index"
+  },
+  {
+   "count": 2,
+   "gap": "no teamcity CI definitions discovered",
+   "unit": "ci_observation_publication.teamcity_structural_index"
+  }
+ ],
+ "handoff": {
+  "completion_status": "COMPLETED_WITH_GAPS",
+  "schema_identity": "appsec-review/ci-configuration-analysis-job/1",
+  "status": "ACCEPTED",
+  "upstream_jobs": [
+   "job_review_intake",
+   "job_target_catalog"
+  ]
+ },
+ "job_id": "job_ci_configuration_analysis",
+ "outputs": {
+  "ci_analysis.azure_checkov_scan": {
+   "executions": [],
+   "provider": "azure",
+   "raw_artifact": {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/5e0cb2437852/raw-observations.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "record_count": 0,
+   "terminal_status": "NOT_APPLICABLE",
+   "tool_id": "tool-checkov"
+  },
+  "ci_analysis.azure_schema_scan": {
+   "executions": [],
+   "provider": "azure",
+   "raw_artifact": {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/9ea3733336d7/raw-observations.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "record_count": 0,
+   "terminal_status": "NOT_APPLICABLE",
+   "tool_id": "ci-schema"
+  },
+  "ci_analysis.bitbucket_checkov_scan": {
+   "executions": [],
+   "provider": "bitbucket",
+   "raw_artifact": {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/d16f1a2d2998/raw-observations.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "record_count": 0,
+   "terminal_status": "NOT_APPLICABLE",
+   "tool_id": "tool-checkov"
+  },
+  "ci_analysis.bitbucket_schema_scan": {
+   "executions": [],
+   "provider": "bitbucket",
+   "raw_artifact": {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/10796e4ea64f/raw-observations.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "record_count": 0,
+   "terminal_status": "NOT_APPLICABLE",
+   "tool_id": "ci-schema"
+  },
+  "ci_analysis.circleci_checkov_scan": {
+   "executions": [],
+   "provider": "circleci",
+   "raw_artifact": {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/152580cebaca/raw-observations.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "record_count": 0,
+   "terminal_status": "NOT_APPLICABLE",
+   "tool_id": "tool-checkov"
+  },
+  "ci_analysis.circleci_schema_scan": {
+   "executions": [],
+   "provider": "circleci",
+   "raw_artifact": {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/a329783d5f34/raw-observations.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "record_count": 0,
+   "terminal_status": "NOT_APPLICABLE",
+   "tool_id": "ci-schema"
+  },
+  "ci_analysis.github_actionlint_scan": {
+   "executions": [],
+   "provider": "github",
+   "raw_artifact": {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/07b0257b53df/raw-observations.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "record_count": 0,
+   "terminal_status": "NOT_APPLICABLE",
+   "tool_id": "tool-actionlint"
+  },
+  "ci_analysis.github_checkov_scan": {
+   "executions": [],
+   "provider": "github",
+   "raw_artifact": {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/7ee9656c8148/raw-observations.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "record_count": 0,
+   "terminal_status": "NOT_APPLICABLE",
+   "tool_id": "tool-checkov"
+  },
+  "ci_analysis.github_schema_scan": {
+   "executions": [],
+   "provider": "github",
+   "raw_artifact": {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/b5b7b349f312/raw-observations.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "record_count": 0,
+   "terminal_status": "NOT_APPLICABLE",
+   "tool_id": "ci-schema"
+  },
+  "ci_analysis.github_zizmor_scan": {
+   "executions": [],
+   "provider": "github",
+   "raw_artifact": {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/c4cfc4f67c95/raw-observations.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "record_count": 0,
+   "terminal_status": "NOT_APPLICABLE",
+   "tool_id": "tool-zizmor"
+  },
+  "ci_analysis.gitlab_checkov_scan": {
+   "executions": [],
+   "provider": "gitlab",
+   "raw_artifact": {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/ea3bd3448301/raw-observations.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "record_count": 0,
+   "terminal_status": "NOT_APPLICABLE",
+   "tool_id": "tool-checkov"
+  },
+  "ci_analysis.gitlab_schema_scan": {
+   "executions": [],
+   "provider": "gitlab",
+   "raw_artifact": {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/263bb5ea9555/raw-observations.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "record_count": 0,
+   "terminal_status": "NOT_APPLICABLE",
+   "tool_id": "ci-schema"
+  },
+  "ci_analysis.jenkins_structural_scan": {
+   "executions": [],
+   "provider": "jenkins",
+   "raw_artifact": {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/78448de1d5e2/raw-observations.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "record_count": 0,
+   "terminal_status": "NOT_APPLICABLE",
+   "tool_id": "ci-jenkins-structural"
+  },
+  "ci_analysis.other_discovery_scan": {
+   "executions": [],
+   "provider": "other",
+   "raw_artifact": {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/2ddeeb4ec966/raw-observations.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "record_count": 0,
+   "terminal_status": "NOT_APPLICABLE",
+   "tool_id": "supported_discovery_without_linter"
+  },
+  "ci_analysis.teamcity_structural_scan": {
+   "executions": [],
+   "provider": "teamcity",
+   "raw_artifact": {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/a71bef0afdbf/raw-observations.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "record_count": 0,
+   "terminal_status": "NOT_APPLICABLE",
+   "tool_id": "ci-teamcity-structural"
+  },
+  "ci_correlation.correlate_findings": {
+   "artifact": {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/13e3f11b1491/canonical-findings.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "finding_count": 0,
+   "findings#count": 0,
+   "index_artifact": {
+    "path": "data/indices/evidence/ci_findings/<sha256>.sqlite",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "index_identity": {
+    "fingerprint": "<sha256>",
+    "name": "evidence",
+    "producer": {
+     "job": "job_ci_configuration_analysis",
+     "producer": "ci-exact-correlator"
+    },
+    "relative_path": "data/indices/evidence/ci_findings/<sha256>.sqlite",
+    "schema": "appsec-review/retrieval-index/2",
+    "sha256": "<sha256>",
+    "shard_id": "ci_findings"
+   }
+  },
+  "ci_coverage.join_coverage": {
+   "artifact": {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/30a0d67abbd9/coverage.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "coverage_status": "partial",
+   "definitions_by_provider": {
+    "azure": 0,
+    "bitbucket": 0,
+    "circleci": 0,
+    "github": 0,
+    "gitlab": 0,
+    "jenkins": 0,
+    "other": 0,
+    "teamcity": 0
+   },
+   "not_applicable_inputs": {
+    "by_reason": {},
+    "count": 0,
+    "disposition": "SKIPPED_NA",
+    "items": [],
+    "schema": "appsec-review/tool-input-support/1",
+    "truncated": false
+   },
+   "schema": "appsec-review/ci-coverage/1",
+   "tools": [
+    {
+     "not_applicable_input_count": 0,
+     "provider": "github",
+     "record_count": 0,
+     "terminal_status": "NOT_APPLICABLE",
+     "tool_id": "tool-zizmor"
+    },
+    {
+     "not_applicable_input_count": 0,
+     "provider": "github",
+     "record_count": 0,
+     "terminal_status": "NOT_APPLICABLE",
+     "tool_id": "tool-checkov"
+    },
+    {
+     "not_applicable_input_count": 0,
+     "provider": "github",
+     "record_count": 0,
+     "terminal_status": "NOT_APPLICABLE",
+     "tool_id": "tool-actionlint"
+    },
+    {
+     "not_applicable_input_count": 0,
+     "provider": "github",
+     "record_count": 0,
+     "terminal_status": "NOT_APPLICABLE",
+     "tool_id": "ci-schema"
+    },
+    {
+     "not_applicable_input_count": 0,
+     "provider": "azure",
+     "record_count": 0,
+     "terminal_status": "NOT_APPLICABLE",
+     "tool_id": "tool-checkov"
+    },
+    {
+     "not_applicable_input_count": 0,
+     "provider": "azure",
+     "record_count": 0,
+     "terminal_status": "NOT_APPLICABLE",
+     "tool_id": "ci-schema"
+    },
+    {
+     "not_applicable_input_count": 0,
+     "provider": "gitlab",
+     "record_count": 0,
+     "terminal_status": "NOT_APPLICABLE",
+     "tool_id": "tool-checkov"
+    },
+    {
+     "not_applicable_input_count": 0,
+     "provider": "gitlab",
+     "record_count": 0,
+     "terminal_status": "NOT_APPLICABLE",
+     "tool_id": "ci-schema"
+    },
+    {
+     "not_applicable_input_count": 0,
+     "provider": "circleci",
+     "record_count": 0,
+     "terminal_status": "NOT_APPLICABLE",
+     "tool_id": "tool-checkov"
+    },
+    {
+     "not_applicable_input_count": 0,
+     "provider": "circleci",
+     "record_count": 0,
+     "terminal_status": "NOT_APPLICABLE",
+     "tool_id": "ci-schema"
+    },
+    {
+     "not_applicable_input_count": 0,
+     "provider": "bitbucket",
+     "record_count": 0,
+     "terminal_status": "NOT_APPLICABLE",
+     "tool_id": "tool-checkov"
+    },
+    {
+     "not_applicable_input_count": 0,
+     "provider": "bitbucket",
+     "record_count": 0,
+     "terminal_status": "NOT_APPLICABLE",
+     "tool_id": "ci-schema"
+    },
+    {
+     "not_applicable_input_count": 0,
+     "provider": "jenkins",
+     "record_count": 0,
+     "terminal_status": "NOT_APPLICABLE",
+     "tool_id": "ci-jenkins-structural"
+    },
+    {
+     "not_applicable_input_count": 0,
+     "provider": "teamcity",
+     "record_count": 0,
+     "terminal_status": "NOT_APPLICABLE",
+     "tool_id": "ci-teamcity-structural"
+    },
+    {
+     "not_applicable_input_count": 0,
+     "provider": "other",
+     "record_count": 0,
+     "terminal_status": "NOT_APPLICABLE",
+     "tool_id": "supported_discovery_without_linter"
+    }
+   ]
+  },
+  "ci_coverage.publish_handoff": {
+   "artifact": {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/ac1d6b1dd573/handoff.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "canonical_findings": {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/13e3f11b1491/canonical-findings.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "coverage": {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/30a0d67abbd9/coverage.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "finding_count": 0,
+   "index_manifest": {
+    "path": "data/indices/manifests/ci-<attempt>.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "schema": "appsec-review/ci-configuration-analysis-handoff/1",
+   "security_findings#count": 0,
+   "target_fingerprint": "<sha256>",
+   "terminal_status": "PARTIAL"
+  },
+  "ci_discovery.classify_providers": {
+   "artifact": {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/f36b42f15116/provider-classification.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "by_provider": {
+    "azure": [],
+    "bitbucket": [],
+    "circleci": [],
+    "github": [],
+    "gitlab": [],
+    "jenkins": [],
+    "other": [],
+    "teamcity": []
+   },
+   "definitions": [],
+   "schema": "appsec-review/ci-provider-classification/1"
+  },
+  "ci_discovery.discover_definitions": {
+   "artifact": {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/9114de6e8ea0/ci-definitions.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "catalog_handoff_sha256": "<sha256>",
+   "definitions": [],
+   "schema": "appsec-review/ci-definition-catalog/1"
+  },
+  "ci_enrichment.build_hierarchy": {
+   "artifact": {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/4153dcb2a454/hierarchy.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "node_count": 0
+  },
+  "ci_normalization.azure_checkov_normalize": {
+   "duplicate_observation_count": 0,
+   "executions": [],
+   "normalized_artifact": {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/ac5baae72df4/normalized-observations.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "provider": "azure",
+   "raw_artifact": {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/5e0cb2437852/raw-observations.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "raw_record_count": 0,
+   "record_count": 0,
+   "terminal_status": "NOT_APPLICABLE",
+   "tool_id": "tool-checkov"
+  },
+  "ci_normalization.azure_schema_normalize": {
+   "duplicate_observation_count": 0,
+   "executions": [],
+   "normalized_artifact": {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/055d84ae1761/normalized-observations.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "provider": "azure",
+   "raw_artifact": {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/9ea3733336d7/raw-observations.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "raw_record_count": 0,
+   "record_count": 0,
+   "terminal_status": "NOT_APPLICABLE",
+   "tool_id": "ci-schema"
+  },
+  "ci_normalization.bitbucket_checkov_normalize": {
+   "duplicate_observation_count": 0,
+   "executions": [],
+   "normalized_artifact": {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/689c13b521cb/normalized-observations.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "provider": "bitbucket",
+   "raw_artifact": {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/d16f1a2d2998/raw-observations.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "raw_record_count": 0,
+   "record_count": 0,
+   "terminal_status": "NOT_APPLICABLE",
+   "tool_id": "tool-checkov"
+  },
+  "ci_normalization.bitbucket_schema_normalize": {
+   "duplicate_observation_count": 0,
+   "executions": [],
+   "normalized_artifact": {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/ad8b2ee6b514/normalized-observations.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "provider": "bitbucket",
+   "raw_artifact": {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/10796e4ea64f/raw-observations.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "raw_record_count": 0,
+   "record_count": 0,
+   "terminal_status": "NOT_APPLICABLE",
+   "tool_id": "ci-schema"
+  },
+  "ci_normalization.circleci_checkov_normalize": {
+   "duplicate_observation_count": 0,
+   "executions": [],
+   "normalized_artifact": {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/c77c4dd1fe77/normalized-observations.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "provider": "circleci",
+   "raw_artifact": {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/152580cebaca/raw-observations.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "raw_record_count": 0,
+   "record_count": 0,
+   "terminal_status": "NOT_APPLICABLE",
+   "tool_id": "tool-checkov"
+  },
+  "ci_normalization.circleci_schema_normalize": {
+   "duplicate_observation_count": 0,
+   "executions": [],
+   "normalized_artifact": {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/2301a6303e3c/normalized-observations.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "provider": "circleci",
+   "raw_artifact": {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/a329783d5f34/raw-observations.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "raw_record_count": 0,
+   "record_count": 0,
+   "terminal_status": "NOT_APPLICABLE",
+   "tool_id": "ci-schema"
+  },
+  "ci_normalization.github_actionlint_normalize": {
+   "duplicate_observation_count": 0,
+   "executions": [],
+   "normalized_artifact": {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/0fb5ae38555b/normalized-observations.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "provider": "github",
+   "raw_artifact": {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/07b0257b53df/raw-observations.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "raw_record_count": 0,
+   "record_count": 0,
+   "terminal_status": "NOT_APPLICABLE",
+   "tool_id": "tool-actionlint"
+  },
+  "ci_normalization.github_checkov_normalize": {
+   "duplicate_observation_count": 0,
+   "executions": [],
+   "normalized_artifact": {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/597e65533e8f/normalized-observations.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "provider": "github",
+   "raw_artifact": {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/7ee9656c8148/raw-observations.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "raw_record_count": 0,
+   "record_count": 0,
+   "terminal_status": "NOT_APPLICABLE",
+   "tool_id": "tool-checkov"
+  },
+  "ci_normalization.github_schema_normalize": {
+   "duplicate_observation_count": 0,
+   "executions": [],
+   "normalized_artifact": {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/e77dc6124a8d/normalized-observations.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "provider": "github",
+   "raw_artifact": {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/b5b7b349f312/raw-observations.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "raw_record_count": 0,
+   "record_count": 0,
+   "terminal_status": "NOT_APPLICABLE",
+   "tool_id": "ci-schema"
+  },
+  "ci_normalization.github_zizmor_normalize": {
+   "duplicate_observation_count": 0,
+   "executions": [],
+   "normalized_artifact": {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/f9be9dfbd764/normalized-observations.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "provider": "github",
+   "raw_artifact": {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/c4cfc4f67c95/raw-observations.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "raw_record_count": 0,
+   "record_count": 0,
+   "terminal_status": "NOT_APPLICABLE",
+   "tool_id": "tool-zizmor"
+  },
+  "ci_normalization.gitlab_checkov_normalize": {
+   "duplicate_observation_count": 0,
+   "executions": [],
+   "normalized_artifact": {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/44e99112d788/normalized-observations.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "provider": "gitlab",
+   "raw_artifact": {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/ea3bd3448301/raw-observations.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "raw_record_count": 0,
+   "record_count": 0,
+   "terminal_status": "NOT_APPLICABLE",
+   "tool_id": "tool-checkov"
+  },
+  "ci_normalization.gitlab_schema_normalize": {
+   "duplicate_observation_count": 0,
+   "executions": [],
+   "normalized_artifact": {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/5af2a5214a36/normalized-observations.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "provider": "gitlab",
+   "raw_artifact": {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/263bb5ea9555/raw-observations.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "raw_record_count": 0,
+   "record_count": 0,
+   "terminal_status": "NOT_APPLICABLE",
+   "tool_id": "ci-schema"
+  },
+  "ci_normalization.jenkins_structural_normalize": {
+   "duplicate_observation_count": 0,
+   "executions": [],
+   "normalized_artifact": {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/e25bffa9fc6d/normalized-observations.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "provider": "jenkins",
+   "raw_artifact": {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/78448de1d5e2/raw-observations.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "raw_record_count": 0,
+   "record_count": 0,
+   "terminal_status": "NOT_APPLICABLE",
+   "tool_id": "ci-jenkins-structural"
+  },
+  "ci_normalization.other_discovery_normalize": {
+   "duplicate_observation_count": 0,
+   "executions": [],
+   "normalized_artifact": {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/dc556b2ba32d/normalized-observations.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "provider": "other",
+   "raw_artifact": {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/2ddeeb4ec966/raw-observations.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "raw_record_count": 0,
+   "record_count": 0,
+   "terminal_status": "NOT_APPLICABLE",
+   "tool_id": "supported_discovery_without_linter"
+  },
+  "ci_normalization.teamcity_structural_normalize": {
+   "duplicate_observation_count": 0,
+   "executions": [],
+   "normalized_artifact": {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/013bfed3a50e/normalized-observations.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "provider": "teamcity",
+   "raw_artifact": {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/a71bef0afdbf/raw-observations.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "raw_record_count": 0,
+   "record_count": 0,
+   "terminal_status": "NOT_APPLICABLE",
+   "tool_id": "ci-teamcity-structural"
+  },
+  "ci_observation_publication.azure_checkov_index": {
+   "artifact": {
+    "path": "data/indices/observations/ci_azure_checkov/<sha256>.sqlite",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "index_identity": {
+    "fingerprint": "<sha256>",
+    "name": "observations",
+    "producer": {
+     "job": "job_ci_configuration_analysis",
+     "provider": "azure",
+     "tool_id": "tool-checkov"
+    },
+    "relative_path": "data/indices/observations/ci_azure_checkov/<sha256>.sqlite",
+    "schema": "appsec-review/retrieval-index/2",
+    "sha256": "<sha256>",
+    "shard_id": "ci_azure_checkov"
+   },
+   "normalized_artifact": {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/ac5baae72df4/normalized-observations.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "not_applicable_inputs": {
+    "by_reason": {},
+    "count": 0,
+    "disposition": "SKIPPED_NA",
+    "items": [],
+    "schema": "appsec-review/tool-input-support/1",
+    "truncated": false
+   },
+   "provider": "azure",
+   "record_count": 0,
+   "records": [],
+   "terminal_status": "NOT_APPLICABLE",
+   "tool_id": "tool-checkov"
+  },
+  "ci_observation_publication.azure_schema_index": {
+   "artifact": {
+    "path": "data/indices/observations/ci_azure_schema/<sha256>.sqlite",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "index_identity": {
+    "fingerprint": "<sha256>",
+    "name": "observations",
+    "producer": {
+     "job": "job_ci_configuration_analysis",
+     "provider": "azure",
+     "tool_id": "ci-schema"
+    },
+    "relative_path": "data/indices/observations/ci_azure_schema/<sha256>.sqlite",
+    "schema": "appsec-review/retrieval-index/2",
+    "sha256": "<sha256>",
+    "shard_id": "ci_azure_schema"
+   },
+   "normalized_artifact": {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/055d84ae1761/normalized-observations.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "not_applicable_inputs": {
+    "by_reason": {},
+    "count": 0,
+    "disposition": "SKIPPED_NA",
+    "items": [],
+    "schema": "appsec-review/tool-input-support/1",
+    "truncated": false
+   },
+   "provider": "azure",
+   "record_count": 0,
+   "records": [],
+   "terminal_status": "NOT_APPLICABLE",
+   "tool_id": "ci-schema"
+  },
+  "ci_observation_publication.bitbucket_checkov_index": {
+   "artifact": {
+    "path": "data/indices/observations/ci_bitbucket_checkov/<sha256>.sqlite",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "index_identity": {
+    "fingerprint": "<sha256>",
+    "name": "observations",
+    "producer": {
+     "job": "job_ci_configuration_analysis",
+     "provider": "bitbucket",
+     "tool_id": "tool-checkov"
+    },
+    "relative_path": "data/indices/observations/ci_bitbucket_checkov/<sha256>.sqlite",
+    "schema": "appsec-review/retrieval-index/2",
+    "sha256": "<sha256>",
+    "shard_id": "ci_bitbucket_checkov"
+   },
+   "normalized_artifact": {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/689c13b521cb/normalized-observations.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "not_applicable_inputs": {
+    "by_reason": {},
+    "count": 0,
+    "disposition": "SKIPPED_NA",
+    "items": [],
+    "schema": "appsec-review/tool-input-support/1",
+    "truncated": false
+   },
+   "provider": "bitbucket",
+   "record_count": 0,
+   "records": [],
+   "terminal_status": "NOT_APPLICABLE",
+   "tool_id": "tool-checkov"
+  },
+  "ci_observation_publication.bitbucket_schema_index": {
+   "artifact": {
+    "path": "data/indices/observations/ci_bitbucket_schema/<sha256>.sqlite",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "index_identity": {
+    "fingerprint": "<sha256>",
+    "name": "observations",
+    "producer": {
+     "job": "job_ci_configuration_analysis",
+     "provider": "bitbucket",
+     "tool_id": "ci-schema"
+    },
+    "relative_path": "data/indices/observations/ci_bitbucket_schema/<sha256>.sqlite",
+    "schema": "appsec-review/retrieval-index/2",
+    "sha256": "<sha256>",
+    "shard_id": "ci_bitbucket_schema"
+   },
+   "normalized_artifact": {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/ad8b2ee6b514/normalized-observations.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "not_applicable_inputs": {
+    "by_reason": {},
+    "count": 0,
+    "disposition": "SKIPPED_NA",
+    "items": [],
+    "schema": "appsec-review/tool-input-support/1",
+    "truncated": false
+   },
+   "provider": "bitbucket",
+   "record_count": 0,
+   "records": [],
+   "terminal_status": "NOT_APPLICABLE",
+   "tool_id": "ci-schema"
+  },
+  "ci_observation_publication.circleci_checkov_index": {
+   "artifact": {
+    "path": "data/indices/observations/ci_circleci_checkov/<sha256>.sqlite",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "index_identity": {
+    "fingerprint": "<sha256>",
+    "name": "observations",
+    "producer": {
+     "job": "job_ci_configuration_analysis",
+     "provider": "circleci",
+     "tool_id": "tool-checkov"
+    },
+    "relative_path": "data/indices/observations/ci_circleci_checkov/<sha256>.sqlite",
+    "schema": "appsec-review/retrieval-index/2",
+    "sha256": "<sha256>",
+    "shard_id": "ci_circleci_checkov"
+   },
+   "normalized_artifact": {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/c77c4dd1fe77/normalized-observations.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "not_applicable_inputs": {
+    "by_reason": {},
+    "count": 0,
+    "disposition": "SKIPPED_NA",
+    "items": [],
+    "schema": "appsec-review/tool-input-support/1",
+    "truncated": false
+   },
+   "provider": "circleci",
+   "record_count": 0,
+   "records": [],
+   "terminal_status": "NOT_APPLICABLE",
+   "tool_id": "tool-checkov"
+  },
+  "ci_observation_publication.circleci_schema_index": {
+   "artifact": {
+    "path": "data/indices/observations/ci_circleci_schema/<sha256>.sqlite",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "index_identity": {
+    "fingerprint": "<sha256>",
+    "name": "observations",
+    "producer": {
+     "job": "job_ci_configuration_analysis",
+     "provider": "circleci",
+     "tool_id": "ci-schema"
+    },
+    "relative_path": "data/indices/observations/ci_circleci_schema/<sha256>.sqlite",
+    "schema": "appsec-review/retrieval-index/2",
+    "sha256": "<sha256>",
+    "shard_id": "ci_circleci_schema"
+   },
+   "normalized_artifact": {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/2301a6303e3c/normalized-observations.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "not_applicable_inputs": {
+    "by_reason": {},
+    "count": 0,
+    "disposition": "SKIPPED_NA",
+    "items": [],
+    "schema": "appsec-review/tool-input-support/1",
+    "truncated": false
+   },
+   "provider": "circleci",
+   "record_count": 0,
+   "records": [],
+   "terminal_status": "NOT_APPLICABLE",
+   "tool_id": "ci-schema"
+  },
+  "ci_observation_publication.github_actionlint_index": {
+   "artifact": {
+    "path": "data/indices/observations/ci_github_actionlint/<sha256>.sqlite",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "index_identity": {
+    "fingerprint": "<sha256>",
+    "name": "observations",
+    "producer": {
+     "job": "job_ci_configuration_analysis",
+     "provider": "github",
+     "tool_id": "tool-actionlint"
+    },
+    "relative_path": "data/indices/observations/ci_github_actionlint/<sha256>.sqlite",
+    "schema": "appsec-review/retrieval-index/2",
+    "sha256": "<sha256>",
+    "shard_id": "ci_github_actionlint"
+   },
+   "normalized_artifact": {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/0fb5ae38555b/normalized-observations.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "not_applicable_inputs": {
+    "by_reason": {},
+    "count": 0,
+    "disposition": "SKIPPED_NA",
+    "items": [],
+    "schema": "appsec-review/tool-input-support/1",
+    "truncated": false
+   },
+   "provider": "github",
+   "record_count": 0,
+   "records": [],
+   "terminal_status": "NOT_APPLICABLE",
+   "tool_id": "tool-actionlint"
+  },
+  "ci_observation_publication.github_checkov_index": {
+   "artifact": {
+    "path": "data/indices/observations/ci_github_checkov/<sha256>.sqlite",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "index_identity": {
+    "fingerprint": "<sha256>",
+    "name": "observations",
+    "producer": {
+     "job": "job_ci_configuration_analysis",
+     "provider": "github",
+     "tool_id": "tool-checkov"
+    },
+    "relative_path": "data/indices/observations/ci_github_checkov/<sha256>.sqlite",
+    "schema": "appsec-review/retrieval-index/2",
+    "sha256": "<sha256>",
+    "shard_id": "ci_github_checkov"
+   },
+   "normalized_artifact": {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/597e65533e8f/normalized-observations.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "not_applicable_inputs": {
+    "by_reason": {},
+    "count": 0,
+    "disposition": "SKIPPED_NA",
+    "items": [],
+    "schema": "appsec-review/tool-input-support/1",
+    "truncated": false
+   },
+   "provider": "github",
+   "record_count": 0,
+   "records": [],
+   "terminal_status": "NOT_APPLICABLE",
+   "tool_id": "tool-checkov"
+  },
+  "ci_observation_publication.github_schema_index": {
+   "artifact": {
+    "path": "data/indices/observations/ci_github_schema/<sha256>.sqlite",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "index_identity": {
+    "fingerprint": "<sha256>",
+    "name": "observations",
+    "producer": {
+     "job": "job_ci_configuration_analysis",
+     "provider": "github",
+     "tool_id": "ci-schema"
+    },
+    "relative_path": "data/indices/observations/ci_github_schema/<sha256>.sqlite",
+    "schema": "appsec-review/retrieval-index/2",
+    "sha256": "<sha256>",
+    "shard_id": "ci_github_schema"
+   },
+   "normalized_artifact": {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/e77dc6124a8d/normalized-observations.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "not_applicable_inputs": {
+    "by_reason": {},
+    "count": 0,
+    "disposition": "SKIPPED_NA",
+    "items": [],
+    "schema": "appsec-review/tool-input-support/1",
+    "truncated": false
+   },
+   "provider": "github",
+   "record_count": 0,
+   "records": [],
+   "terminal_status": "NOT_APPLICABLE",
+   "tool_id": "ci-schema"
+  },
+  "ci_observation_publication.github_zizmor_index": {
+   "artifact": {
+    "path": "data/indices/observations/ci_github_zizmor/<sha256>.sqlite",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "index_identity": {
+    "fingerprint": "<sha256>",
+    "name": "observations",
+    "producer": {
+     "job": "job_ci_configuration_analysis",
+     "provider": "github",
+     "tool_id": "tool-zizmor"
+    },
+    "relative_path": "data/indices/observations/ci_github_zizmor/<sha256>.sqlite",
+    "schema": "appsec-review/retrieval-index/2",
+    "sha256": "<sha256>",
+    "shard_id": "ci_github_zizmor"
+   },
+   "normalized_artifact": {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/f9be9dfbd764/normalized-observations.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "not_applicable_inputs": {
+    "by_reason": {},
+    "count": 0,
+    "disposition": "SKIPPED_NA",
+    "items": [],
+    "schema": "appsec-review/tool-input-support/1",
+    "truncated": false
+   },
+   "provider": "github",
+   "record_count": 0,
+   "records": [],
+   "terminal_status": "NOT_APPLICABLE",
+   "tool_id": "tool-zizmor"
+  },
+  "ci_observation_publication.gitlab_checkov_index": {
+   "artifact": {
+    "path": "data/indices/observations/ci_gitlab_checkov/<sha256>.sqlite",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "index_identity": {
+    "fingerprint": "<sha256>",
+    "name": "observations",
+    "producer": {
+     "job": "job_ci_configuration_analysis",
+     "provider": "gitlab",
+     "tool_id": "tool-checkov"
+    },
+    "relative_path": "data/indices/observations/ci_gitlab_checkov/<sha256>.sqlite",
+    "schema": "appsec-review/retrieval-index/2",
+    "sha256": "<sha256>",
+    "shard_id": "ci_gitlab_checkov"
+   },
+   "normalized_artifact": {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/44e99112d788/normalized-observations.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "not_applicable_inputs": {
+    "by_reason": {},
+    "count": 0,
+    "disposition": "SKIPPED_NA",
+    "items": [],
+    "schema": "appsec-review/tool-input-support/1",
+    "truncated": false
+   },
+   "provider": "gitlab",
+   "record_count": 0,
+   "records": [],
+   "terminal_status": "NOT_APPLICABLE",
+   "tool_id": "tool-checkov"
+  },
+  "ci_observation_publication.gitlab_schema_index": {
+   "artifact": {
+    "path": "data/indices/observations/ci_gitlab_schema/<sha256>.sqlite",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "index_identity": {
+    "fingerprint": "<sha256>",
+    "name": "observations",
+    "producer": {
+     "job": "job_ci_configuration_analysis",
+     "provider": "gitlab",
+     "tool_id": "ci-schema"
+    },
+    "relative_path": "data/indices/observations/ci_gitlab_schema/<sha256>.sqlite",
+    "schema": "appsec-review/retrieval-index/2",
+    "sha256": "<sha256>",
+    "shard_id": "ci_gitlab_schema"
+   },
+   "normalized_artifact": {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/5af2a5214a36/normalized-observations.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "not_applicable_inputs": {
+    "by_reason": {},
+    "count": 0,
+    "disposition": "SKIPPED_NA",
+    "items": [],
+    "schema": "appsec-review/tool-input-support/1",
+    "truncated": false
+   },
+   "provider": "gitlab",
+   "record_count": 0,
+   "records": [],
+   "terminal_status": "NOT_APPLICABLE",
+   "tool_id": "ci-schema"
+  },
+  "ci_observation_publication.jenkins_structural_index": {
+   "artifact": {
+    "path": "data/indices/observations/ci_jenkins_structural/<sha256>.sqlite",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "index_identity": {
+    "fingerprint": "<sha256>",
+    "name": "observations",
+    "producer": {
+     "job": "job_ci_configuration_analysis",
+     "provider": "jenkins",
+     "tool_id": "ci-jenkins-structural"
+    },
+    "relative_path": "data/indices/observations/ci_jenkins_structural/<sha256>.sqlite",
+    "schema": "appsec-review/retrieval-index/2",
+    "sha256": "<sha256>",
+    "shard_id": "ci_jenkins_structural"
+   },
+   "normalized_artifact": {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/e25bffa9fc6d/normalized-observations.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "not_applicable_inputs": {
+    "by_reason": {},
+    "count": 0,
+    "disposition": "SKIPPED_NA",
+    "items": [],
+    "schema": "appsec-review/tool-input-support/1",
+    "truncated": false
+   },
+   "provider": "jenkins",
+   "record_count": 0,
+   "records": [],
+   "terminal_status": "NOT_APPLICABLE",
+   "tool_id": "ci-jenkins-structural"
+  },
+  "ci_observation_publication.other_discovery_index": {
+   "artifact": {
+    "path": "data/indices/observations/ci_other_discovery/<sha256>.sqlite",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "index_identity": {
+    "fingerprint": "<sha256>",
+    "name": "observations",
+    "producer": {
+     "job": "job_ci_configuration_analysis",
+     "provider": "other",
+     "tool_id": "supported_discovery_without_linter"
+    },
+    "relative_path": "data/indices/observations/ci_other_discovery/<sha256>.sqlite",
+    "schema": "appsec-review/retrieval-index/2",
+    "sha256": "<sha256>",
+    "shard_id": "ci_other_discovery"
+   },
+   "normalized_artifact": {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/dc556b2ba32d/normalized-observations.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "not_applicable_inputs": {
+    "by_reason": {},
+    "count": 0,
+    "disposition": "SKIPPED_NA",
+    "items": [],
+    "schema": "appsec-review/tool-input-support/1",
+    "truncated": false
+   },
+   "provider": "other",
+   "record_count": 0,
+   "records": [],
+   "terminal_status": "NOT_APPLICABLE",
+   "tool_id": "supported_discovery_without_linter"
+  },
+  "ci_observation_publication.teamcity_structural_index": {
+   "artifact": {
+    "path": "data/indices/observations/ci_teamcity_structural/<sha256>.sqlite",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "index_identity": {
+    "fingerprint": "<sha256>",
+    "name": "observations",
+    "producer": {
+     "job": "job_ci_configuration_analysis",
+     "provider": "teamcity",
+     "tool_id": "ci-teamcity-structural"
+    },
+    "relative_path": "data/indices/observations/ci_teamcity_structural/<sha256>.sqlite",
+    "schema": "appsec-review/retrieval-index/2",
+    "sha256": "<sha256>",
+    "shard_id": "ci_teamcity_structural"
+   },
+   "normalized_artifact": {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/013bfed3a50e/normalized-observations.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "not_applicable_inputs": {
+    "by_reason": {},
+    "count": 0,
+    "disposition": "SKIPPED_NA",
+    "items": [],
+    "schema": "appsec-review/tool-input-support/1",
+    "truncated": false
+   },
+   "provider": "teamcity",
+   "record_count": 0,
+   "records": [],
+   "terminal_status": "NOT_APPLICABLE",
+   "tool_id": "ci-teamcity-structural"
+  }
+ },
+ "schema": "appsec-review/acceptance-job-output/1",
+ "skipped_units": [],
+ "status": "COMPLETED_WITH_GAPS",
+ "steps": {
+  "ci_analysis": "SUCCEEDED",
+  "ci_correlation": "SUCCEEDED",
+  "ci_coverage": "SUCCEEDED",
+  "ci_discovery": "SUCCEEDED",
+  "ci_enrichment": "SUCCEEDED",
+  "ci_normalization": "SUCCEEDED",
+  "ci_observation_publication": "SUCCEEDED"
+ },
+ "units": {
+  "ci_analysis.azure_checkov_scan": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": "tool-checkov",
+   "status": "SUCCEEDED"
+  },
+  "ci_analysis.azure_schema_scan": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": "ci-schema",
+   "status": "SUCCEEDED"
+  },
+  "ci_analysis.bitbucket_checkov_scan": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": "tool-checkov",
+   "status": "SUCCEEDED"
+  },
+  "ci_analysis.bitbucket_schema_scan": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": "ci-schema",
+   "status": "SUCCEEDED"
+  },
+  "ci_analysis.circleci_checkov_scan": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": "tool-checkov",
+   "status": "SUCCEEDED"
+  },
+  "ci_analysis.circleci_schema_scan": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": "ci-schema",
+   "status": "SUCCEEDED"
+  },
+  "ci_analysis.github_actionlint_scan": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": "tool-actionlint",
+   "status": "SUCCEEDED"
+  },
+  "ci_analysis.github_checkov_scan": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": "tool-checkov",
+   "status": "SUCCEEDED"
+  },
+  "ci_analysis.github_schema_scan": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": "ci-schema",
+   "status": "SUCCEEDED"
+  },
+  "ci_analysis.github_zizmor_scan": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": "tool-zizmor",
+   "status": "SUCCEEDED"
+  },
+  "ci_analysis.gitlab_checkov_scan": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": "tool-checkov",
+   "status": "SUCCEEDED"
+  },
+  "ci_analysis.gitlab_schema_scan": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": "ci-schema",
+   "status": "SUCCEEDED"
+  },
+  "ci_analysis.jenkins_structural_scan": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": "ci-jenkins-structural",
+   "status": "SUCCEEDED"
+  },
+  "ci_analysis.other_discovery_scan": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": "supported_discovery_without_linter",
+   "status": "SUCCEEDED"
+  },
+  "ci_analysis.teamcity_structural_scan": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": "ci-teamcity-structural",
+   "status": "SUCCEEDED"
+  },
+  "ci_correlation.correlate_findings": {
+   "disposition": null,
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "ci_coverage.join_coverage": {
+   "disposition": null,
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "ci_coverage.publish_handoff": {
+   "disposition": "PARTIAL",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "ci_discovery.classify_providers": {
+   "disposition": null,
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "ci_discovery.discover_definitions": {
+   "disposition": null,
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "ci_enrichment.build_hierarchy": {
+   "disposition": null,
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "ci_normalization.azure_checkov_normalize": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": "tool-checkov",
+   "status": "SUCCEEDED"
+  },
+  "ci_normalization.azure_schema_normalize": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": "ci-schema",
+   "status": "SUCCEEDED"
+  },
+  "ci_normalization.bitbucket_checkov_normalize": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": "tool-checkov",
+   "status": "SUCCEEDED"
+  },
+  "ci_normalization.bitbucket_schema_normalize": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": "ci-schema",
+   "status": "SUCCEEDED"
+  },
+  "ci_normalization.circleci_checkov_normalize": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": "tool-checkov",
+   "status": "SUCCEEDED"
+  },
+  "ci_normalization.circleci_schema_normalize": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": "ci-schema",
+   "status": "SUCCEEDED"
+  },
+  "ci_normalization.github_actionlint_normalize": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": "tool-actionlint",
+   "status": "SUCCEEDED"
+  },
+  "ci_normalization.github_checkov_normalize": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": "tool-checkov",
+   "status": "SUCCEEDED"
+  },
+  "ci_normalization.github_schema_normalize": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": "ci-schema",
+   "status": "SUCCEEDED"
+  },
+  "ci_normalization.github_zizmor_normalize": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": "tool-zizmor",
+   "status": "SUCCEEDED"
+  },
+  "ci_normalization.gitlab_checkov_normalize": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": "tool-checkov",
+   "status": "SUCCEEDED"
+  },
+  "ci_normalization.gitlab_schema_normalize": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": "ci-schema",
+   "status": "SUCCEEDED"
+  },
+  "ci_normalization.jenkins_structural_normalize": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": "ci-jenkins-structural",
+   "status": "SUCCEEDED"
+  },
+  "ci_normalization.other_discovery_normalize": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": "supported_discovery_without_linter",
+   "status": "SUCCEEDED"
+  },
+  "ci_normalization.teamcity_structural_normalize": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": "ci-teamcity-structural",
+   "status": "SUCCEEDED"
+  },
+  "ci_observation_publication.azure_checkov_index": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": "tool-checkov",
+   "status": "SUCCEEDED"
+  },
+  "ci_observation_publication.azure_schema_index": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": "ci-schema",
+   "status": "SUCCEEDED"
+  },
+  "ci_observation_publication.bitbucket_checkov_index": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": "tool-checkov",
+   "status": "SUCCEEDED"
+  },
+  "ci_observation_publication.bitbucket_schema_index": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": "ci-schema",
+   "status": "SUCCEEDED"
+  },
+  "ci_observation_publication.circleci_checkov_index": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": "tool-checkov",
+   "status": "SUCCEEDED"
+  },
+  "ci_observation_publication.circleci_schema_index": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": "ci-schema",
+   "status": "SUCCEEDED"
+  },
+  "ci_observation_publication.github_actionlint_index": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": "tool-actionlint",
+   "status": "SUCCEEDED"
+  },
+  "ci_observation_publication.github_checkov_index": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": "tool-checkov",
+   "status": "SUCCEEDED"
+  },
+  "ci_observation_publication.github_schema_index": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": "ci-schema",
+   "status": "SUCCEEDED"
+  },
+  "ci_observation_publication.github_zizmor_index": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": "tool-zizmor",
+   "status": "SUCCEEDED"
+  },
+  "ci_observation_publication.gitlab_checkov_index": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": "tool-checkov",
+   "status": "SUCCEEDED"
+  },
+  "ci_observation_publication.gitlab_schema_index": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": "ci-schema",
+   "status": "SUCCEEDED"
+  },
+  "ci_observation_publication.jenkins_structural_index": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": "ci-jenkins-structural",
+   "status": "SUCCEEDED"
+  },
+  "ci_observation_publication.other_discovery_index": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": "supported_discovery_without_linter",
+   "status": "SUCCEEDED"
+  },
+  "ci_observation_publication.teamcity_structural_index": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": "ci-teamcity-structural",
+   "status": "SUCCEEDED"
+  }
+ },
+ "volatile": {
+  "artifacts": [
+   {
+    "path": "data/indices/evidence/ci_findings/<sha256>.sqlite",
+    "sha256": "66c6e920d3f42a3b55492f81fdc73aa8ae1f685d4121abb7bb8264d8bbe7b70f",
+    "size_bytes": 57344
+   },
+   {
+    "path": "data/indices/manifests/ci-<attempt>.json",
+    "sha256": "ef70da7990e051d4b60cc980e9e42ede2084560e75a2987c026f3d4c6360f521",
+    "size_bytes": 11525
+   },
+   {
+    "path": "data/indices/observations/ci_azure_checkov/<sha256>.sqlite",
+    "sha256": "a1d490c6cf4f2bccecdafb78b552072628e2c526e6f66d0ad728717ef361c0e9",
+    "size_bytes": 57344
+   },
+   {
+    "path": "data/indices/observations/ci_azure_schema/<sha256>.sqlite",
+    "sha256": "fd85ba168fa965189cc06be898e65b90b553d047b560acfbfbcf3002962da3eb",
+    "size_bytes": 57344
+   },
+   {
+    "path": "data/indices/observations/ci_bitbucket_checkov/<sha256>.sqlite",
+    "sha256": "36aa56a210fcc128e2140490d64ecb69fdb9356152185cb93a54b580983faedd",
+    "size_bytes": 57344
+   },
+   {
+    "path": "data/indices/observations/ci_bitbucket_schema/<sha256>.sqlite",
+    "sha256": "b76fd82d0de375a53847c1122c74bd425a2e957190d11bb8cb1a34035806911b",
+    "size_bytes": 57344
+   },
+   {
+    "path": "data/indices/observations/ci_circleci_checkov/<sha256>.sqlite",
+    "sha256": "0855183f4a65cfa87bcd307da20fc645d102df2097c5ef0bce324c2caa2539a5",
+    "size_bytes": 57344
+   },
+   {
+    "path": "data/indices/observations/ci_circleci_schema/<sha256>.sqlite",
+    "sha256": "a5c0d70a7b8383c010e9b3589a21bac1d569878d6fa94f5766f1123de7eb6ef5",
+    "size_bytes": 57344
+   },
+   {
+    "path": "data/indices/observations/ci_github_actionlint/<sha256>.sqlite",
+    "sha256": "2bc76b3cc500fa63b2e00f4a438fc9a94ec632698f98e5ab033df903d31e7cc9",
+    "size_bytes": 57344
+   },
+   {
+    "path": "data/indices/observations/ci_github_checkov/<sha256>.sqlite",
+    "sha256": "91539b47e89c5106afceebfa5c565f905fc3b897655ad094bbf81f5e06315611",
+    "size_bytes": 57344
+   },
+   {
+    "path": "data/indices/observations/ci_github_schema/<sha256>.sqlite",
+    "sha256": "0cdab60b43c694605428d951b4682cd792b1448b89123b96616c3bc405f900bd",
+    "size_bytes": 57344
+   },
+   {
+    "path": "data/indices/observations/ci_github_zizmor/<sha256>.sqlite",
+    "sha256": "8b5a569d342b8b27c88b8c9dad466782d1c96d50d0f2264aebf5b3c3be7114c0",
+    "size_bytes": 57344
+   },
+   {
+    "path": "data/indices/observations/ci_gitlab_checkov/<sha256>.sqlite",
+    "sha256": "7623e4aa3c49595e45456bc3207653d597fcc5734dead60ee285ee2579334885",
+    "size_bytes": 57344
+   },
+   {
+    "path": "data/indices/observations/ci_gitlab_schema/<sha256>.sqlite",
+    "sha256": "59a9f7a68c690aee5f5494818e7e5ebe94f91d86269e198406d78b6bfa5f9e06",
+    "size_bytes": 57344
+   },
+   {
+    "path": "data/indices/observations/ci_jenkins_structural/<sha256>.sqlite",
+    "sha256": "f73dd73b2cd2acc2bf8faee856155166d6d7c94c29262bf735b531f0e3816d35",
+    "size_bytes": 57344
+   },
+   {
+    "path": "data/indices/observations/ci_other_discovery/<sha256>.sqlite",
+    "sha256": "0f5c3e5ed760db2a823a329e7019095bf06fbbcefc023c3d9a41be92a3efe4ae",
+    "size_bytes": 57344
+   },
+   {
+    "path": "data/indices/observations/ci_teamcity_structural/<sha256>.sqlite",
+    "sha256": "b35d0e0315683db1ca93a1614e10b94df6eebad9a36fdee65363395f51ec632b",
+    "size_bytes": 57344
+   },
+   {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/013bfed3a50e/normalized-observations.json",
+    "sha256": "3ca7b4aa81e541a801c7d34e81b8abcf8e6be61490ab2d82bd737276bc97a736",
+    "size_bytes": 479
+   },
+   {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/055d84ae1761/normalized-observations.json",
+    "sha256": "5e0ce538bb8051957db45d822b1bd31e683b3972759b5fc567bb3dd6012e39eb",
+    "size_bytes": 460
+   },
+   {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/07b0257b53df/raw-observations.json",
+    "sha256": "c7dc61b93e5f81f86be74c67129bbd5d9317d1cb77058d5637caee1f8b1f9868",
+    "size_bytes": 209
+   },
+   {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/0fb5ae38555b/normalized-observations.json",
+    "sha256": "bde855c45ece98d238b58539db9630bdf5f4ea33ceb12954444e25e09e98d247",
+    "size_bytes": 468
+   },
+   {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/10796e4ea64f/raw-observations.json",
+    "sha256": "56b291939608f2677c15c7f57c26044a5957f86a0f7170ad58741a67fa536dc8",
+    "size_bytes": 209
+   },
+   {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/13e3f11b1491/canonical-findings.json",
+    "sha256": "85beabac3c789baadde142af3abd68129c31f13d0b3d2d1a7c20fec3435adabb",
+    "size_bytes": 112
+   },
+   {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/152580cebaca/raw-observations.json",
+    "sha256": "9d677834ff49cf96226905a3a70e978b4df107554eecef35725b931745c936e6",
+    "size_bytes": 210
+   },
+   {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/2301a6303e3c/normalized-observations.json",
+    "sha256": "3d26fa60157e94e9c899dfd4386efd548f675eced24a0b53e0541ee8c757c574",
+    "size_bytes": 466
+   },
+   {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/263bb5ea9555/raw-observations.json",
+    "sha256": "91ce3cb7b75433513635fca6f782a67a4e8587e53e6fd990bd3ef39ffdf48e25",
+    "size_bytes": 203
+   },
+   {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/2ddeeb4ec966/raw-observations.json",
+    "sha256": "9e90d793413b1e6019598fca59c979f26c8ded9ab5a7385f410aba4e4c927799",
+    "size_bytes": 226
+   },
+   {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/30a0d67abbd9/coverage.json",
+    "sha256": "98051490fbf63c3a5329de89a2184db30d854253d3249ef5e4a544ebf38240bf",
+    "size_bytes": 3376
+   },
+   {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/4153dcb2a454/hierarchy.json",
+    "sha256": "4ceaaa8f10be05865317535773b465608bb1a97addca9acc1196922ee517f78a",
+    "size_bytes": 109
+   },
+   {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/44e99112d788/normalized-observations.json",
+    "sha256": "3cf0f2cb6c8375ed966b696f48b29370e735cbcb3e2f9161fa76e910cb70e4f7",
+    "size_bytes": 465
+   },
+   {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/597e65533e8f/normalized-observations.json",
+    "sha256": "618b44dc55ac1877bad1e879c6d815693aaa7f5d2a85d94396eb2db2faa728a3",
+    "size_bytes": 465
+   },
+   {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/5af2a5214a36/normalized-observations.json",
+    "sha256": "8da54d0e38cd399ed8668ba44ee313fe729cb091620ab33c7110da996a133142",
+    "size_bytes": 462
+   },
+   {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/5e0cb2437852/raw-observations.json",
+    "sha256": "18a5e999e94689c91272367e40cebf556b7bfd1b6693e07c78c732c8b78fdbcc",
+    "size_bytes": 204
+   },
+   {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/689c13b521cb/normalized-observations.json",
+    "sha256": "18d04c53a875439e41514577efeb528980d0781b8c8a8f312841fd014a563148",
+    "size_bytes": 471
+   },
+   {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/78448de1d5e2/raw-observations.json",
+    "sha256": "5b5ee0c33f46a6c3ec8094cf981ae7684c0c72b19426ebf0ef8b41b7c6483bbf",
+    "size_bytes": 217
+   },
+   {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/7ee9656c8148/raw-observations.json",
+    "sha256": "7441fbbf9c6449ff99dbc3d1a62c176dc0fc3ae57f6febfb0a234c0a2e28400c",
+    "size_bytes": 206
+   },
+   {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/9114de6e8ea0/ci-definitions.json",
+    "sha256": "367b86327c806b3950bb6d009faaca0db09f57b07ad7fd2b5a4c626463fa2455",
+    "size_bytes": 170
+   },
+   {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/9ea3733336d7/raw-observations.json",
+    "sha256": "dee282c85900400002338e63572b68610dc4fd60b438f6d847b2828612a636fb",
+    "size_bytes": 201
+   },
+   {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/a329783d5f34/raw-observations.json",
+    "sha256": "ed96ff09b36b8bbe2268b3ea9def5e2f7f32bcab4ba66c2db8a87ab57b534d78",
+    "size_bytes": 207
+   },
+   {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/a71bef0afdbf/raw-observations.json",
+    "sha256": "d29318a08295ad4c24c6c652cf5084537d687a57f25e6bc12e4ce8abb53e0e0c",
+    "size_bytes": 220
+   },
+   {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/ac1d6b1dd573/handoff.json",
+    "sha256": "7af1d132505db9f7748d7a3c867d6391d3fa7f3a550c3ffc4692edb30afc7d78",
+    "size_bytes": 1133
+   },
+   {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/ac5baae72df4/normalized-observations.json",
+    "sha256": "df7c9ee4dbee2e6d17e1ab28abf6c1e0c6326125bbd6cd590956a1c42793b96b",
+    "size_bytes": 463
+   },
+   {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/ad8b2ee6b514/normalized-observations.json",
+    "sha256": "0178429c3424a3a8637d8c814c8f45eb622af89ba472adc0f6b6719c185a1f8a",
+    "size_bytes": 468
+   },
+   {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/b5b7b349f312/raw-observations.json",
+    "sha256": "466546f55bd76f7896601fd30cb9fafb23714ad851d94dfa2382ab62706fa3f2",
+    "size_bytes": 203
+   },
+   {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/c4cfc4f67c95/raw-observations.json",
+    "sha256": "23e3523e9504a826640b954343f1594fec8ff55cf63462a85de121adfa655a0e",
+    "size_bytes": 205
+   },
+   {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/c77c4dd1fe77/normalized-observations.json",
+    "sha256": "8ea36a749d250710cb42b8cc2a17fee45f39a7cb95e1128575147b62eec6f241",
+    "size_bytes": 469
+   },
+   {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/d16f1a2d2998/raw-observations.json",
+    "sha256": "b4049dee8b1d7cc4e3d24b56ab780e2bc0ee30839b78089fea72fe3f7670672d",
+    "size_bytes": 212
+   },
+   {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/dc556b2ba32d/normalized-observations.json",
+    "sha256": "4fc5e917b18b2449c2eeebe0a54aebe84bf6eaaf7ba4e59053c321db65d00858",
+    "size_bytes": 485
+   },
+   {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/e25bffa9fc6d/normalized-observations.json",
+    "sha256": "8cd3fc7d5502dcff78b8b6e312f9de57effa918c3906cfa4b4507d49ae4e6f8b",
+    "size_bytes": 476
+   },
+   {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/e77dc6124a8d/normalized-observations.json",
+    "sha256": "53c216dfd2f299e909cacbc51189310787f0f4e686cbd5ec3e8e776c14d07152",
+    "size_bytes": 462
+   },
+   {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/ea3bd3448301/raw-observations.json",
+    "sha256": "cc24a632b7493ad82a4ff54d6d6bf37cb1d187e2bdfd504e5adb32256de780fb",
+    "size_bytes": 206
+   },
+   {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/f36b42f15116/provider-classification.json",
+    "sha256": "bf450cd52d0f6ecf4ba99d51de0a00978610f09169322620cd0be173f113996a",
+    "size_bytes": 201
+   },
+   {
+    "path": "data/jobs/job_ci_configuration_analysis/attempts/<attempt>/artifacts/ci/f9be9dfbd764/normalized-observations.json",
+    "sha256": "da0149ba6628cdc2af09c116f197486dce70306719f93b184d46a5ffb6336db6",
+    "size_bytes": 464
+   }
+  ]
+ }
+}

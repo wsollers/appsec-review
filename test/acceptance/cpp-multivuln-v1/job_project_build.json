@@ -1,0 +1,1910 @@
+{
+ "artifacts": [
+  {
+   "count": 10,
+   "kind": "json",
+   "path": "data/jobs/job_project_build/attempts/<attempt>/artifacts/project-build/accepted-project-build-dispatch.json",
+   "sha256": "f96971be7b49cb8fe254420df4c5f865584f84f843a6cf8c141d7588ef74a92d"
+  },
+  {
+   "kind": "file",
+   "path": "data/jobs/job_project_build/attempts/<attempt>/steps/image/tasks/native/build-unit-b9c931fa551e02bd12b2/image-build.stderr"
+  },
+  {
+   "kind": "file",
+   "path": "data/jobs/job_project_build/attempts/<attempt>/steps/image/tasks/native/build-unit-b9c931fa551e02bd12b2/image-build.stdout"
+  }
+ ],
+ "failed_units": [],
+ "findings": [],
+ "gaps": [],
+ "handoff": {
+  "completion_status": "SUCCEEDED",
+  "schema_identity": "appsec-review/project-build-dispatch/2",
+  "status": "ACCEPTED",
+  "upstream_jobs": [
+   "job_ci_configuration_analysis",
+   "job_review_intake",
+   "job_source_history_analysis",
+   "job_target_analysis_plan",
+   "job_target_catalog"
+  ]
+ },
+ "job_id": "job_project_build",
+ "outputs": {
+  "acceptance.publish_handoff": {
+   "artifact": {
+    "path": "data/jobs/job_project_build/attempts/<attempt>/artifacts/project-build/accepted-project-build-dispatch.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "build_dispatch_count": 1,
+   "dispositions": [
+    {
+     "action": "RUN",
+     "configuration_sha256": "<sha256>",
+     "decision_sha256": "<sha256>",
+     "disposition": "SUCCEEDED",
+     "feature": "build-execution-capture",
+     "inspected_facts": [
+      "artifact=executable",
+      "artifact=object",
+      "artifact=shared-library",
+      "artifact=static-library",
+      "build_system=cmake",
+      "capability=codeql-build",
+      "capability=material-build",
+      "family=native",
+      "inventory_complete=true",
+      "material=compiled-descriptor:cmake",
+      "material=declared-compiled-project:native"
+     ],
+     "language": "native",
+     "project_id": "build-unit-b9c931fa551e02bd12b2",
+     "reason_code": "PROCESSING_SUCCEEDED",
+     "resolved_policy": "required",
+     "schema": "appsec-review/applicability-decision/1",
+     "selected_capability": "execution-capture",
+     "sources": [
+      {
+       "path": "CMakeLists.txt",
+       "sha256": "<sha256>"
+      },
+      {
+       "path": "README.md",
+       "sha256": "<sha256>"
+      }
+     ]
+    }
+   ],
+   "probe_count": 1,
+   "probe_reused_count": 1,
+   "processing_decisions": [
+    {
+     "action": "RUN",
+     "configuration_sha256": "<sha256>",
+     "decision_sha256": "<sha256>",
+     "disposition": "SUCCEEDED",
+     "feature": "build-execution-capture",
+     "inspected_facts": [
+      "artifact=executable",
+      "artifact=object",
+      "artifact=shared-library",
+      "artifact=static-library",
+      "build_system=cmake",
+      "capability=codeql-build",
+      "capability=material-build",
+      "family=native",
+      "inventory_complete=true",
+      "material=compiled-descriptor:cmake",
+      "material=declared-compiled-project:native"
+     ],
+     "language": "native",
+     "project_id": "build-unit-b9c931fa551e02bd12b2",
+     "reason_code": "PROCESSING_SUCCEEDED",
+     "resolved_policy": "required",
+     "schema": "appsec-review/applicability-decision/1",
+     "selected_capability": "execution-capture",
+     "sources": [
+      {
+       "path": "CMakeLists.txt",
+       "sha256": "<sha256>"
+      },
+      {
+       "path": "README.md",
+       "sha256": "<sha256>"
+      }
+     ]
+    }
+   ],
+   "static_dispatch_count": 1,
+   "terminal_status": "SUCCEEDED"
+  },
+  "build_dispatch.dotnet": {
+   "dispatch_count": 0,
+   "dispatches": [],
+   "family": "dotnet",
+   "terminal_status": "NOT_APPLICABLE"
+  },
+  "build_dispatch.go": {
+   "dispatch_count": 0,
+   "dispatches": [],
+   "family": "go",
+   "terminal_status": "NOT_APPLICABLE"
+  },
+  "build_dispatch.java": {
+   "dispatch_count": 0,
+   "dispatches": [],
+   "family": "java",
+   "terminal_status": "NOT_APPLICABLE"
+  },
+  "build_dispatch.native": {
+   "dispatch_count": 1,
+   "dispatches": [
+    {
+     "build_capture_decision": {
+      "action": "RUN",
+      "configuration_sha256": "<sha256>",
+      "decision_sha256": "<sha256>",
+      "disposition": null,
+      "feature": "build-execution-capture",
+      "inspected_facts": [
+       "artifact=executable",
+       "artifact=object",
+       "artifact=shared-library",
+       "artifact=static-library",
+       "build_system=cmake",
+       "capability=codeql-build",
+       "capability=material-build",
+       "family=native",
+       "inventory_complete=true",
+       "material=compiled-descriptor:cmake",
+       "material=declared-compiled-project:native"
+      ],
+      "language": "native",
+      "project_id": "build-unit-b9c931fa551e02bd12b2",
+      "reason_code": "POLICY_REQUIRED",
+      "resolved_policy": "required",
+      "schema": "appsec-review/applicability-decision/1",
+      "selected_capability": "execution-capture",
+      "sources": [
+       {
+        "path": "CMakeLists.txt",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "README.md",
+        "sha256": "<sha256>"
+       }
+      ]
+     },
+     "build_dependencies": [],
+     "build_system": "cmake",
+     "build_unit_id": "build-unit-b9c931fa551e02bd12b2",
+     "capabilities": [
+      "build",
+      "ast",
+      "ir",
+      "infer",
+      "codeql",
+      "joern",
+      "binary"
+     ],
+     "descriptor_facts": {},
+     "descriptor_package": {
+      "bounds": {
+       "actual_bytes": 529,
+       "actual_files": 2,
+       "max_file_bytes": 65536,
+       "max_files": 24,
+       "max_total_bytes": 262144
+      },
+      "build_unit": {
+       "build_system": "cmake",
+       "build_unit_id": "build-unit-b9c931fa551e02bd12b2",
+       "family": "native",
+       "markers": [
+        {
+         "path": "CMakeLists.txt",
+         "sha256": "<sha256>",
+         "size_bytes": "<size_bytes>"
+        }
+       ],
+       "provenance": "deterministic-marker",
+       "root": "."
+      },
+      "documents": [
+       {
+        "content": "cmake_minimum_required(VERSION 3.20)\nproject(relay LANGUAGES CXX)\n\nset(CMAKE_CXX_STANDARD 17)\nset(CMAKE_CXX_STANDARD_REQUIRED ON)\nset(CMAKE_CXX_EXTENSIONS OFF)\nset(CMAKE_EXPORT_COMPILE_COMMANDS ON)\n\nadd_executable(relay\n  src/main.cpp\n  src/packet.cpp\n  src/session.cpp\n  src/frame.cpp\n  src/log.cpp\n  src/diag.cpp\n  src/config.cpp\n)\ntarget_include_directories(relay PRIVATE include)\ntarget_compile_options(relay PRIVATE -Wall -Wextra)\n",
+        "path": "CMakeLists.txt",
+        "sha256": "<sha256>"
+       },
+       {
+        "content": "# relay\n\nA small packet relay utility.\n\nBuild: `cmake -S . -B build && cmake --build build`.\n",
+        "path": "README.md",
+        "sha256": "<sha256>"
+       }
+      ],
+      "schema": "appsec-review/build-descriptor-package/1"
+     },
+     "family": "native",
+     "image": {
+      "base_image_id": "<image-digest>",
+      "cache_disposition": "HIT",
+      "cache_rejection_reason": null,
+      "customized": false,
+      "dependency_hashes": {
+       "CMakeLists.txt": "<sha256>"
+      },
+      "dockerfile_path": null,
+      "dockerfile_sha256": null,
+      "family": "native",
+      "image_id": "<image_id>",
+      "image_tag": "audit-buildenv-cpp:local",
+      "manifest_path": null,
+      "recipe_identity": "<sha256>",
+      "reused": true,
+      "saved_build_count": 1,
+      "schema": "appsec-review/project-build-image/1",
+      "terminal_status": "SUCCEEDED",
+      "user": "10001:10001"
+     },
+     "markers": [
+      {
+       "path": "CMakeLists.txt",
+       "sha256": "<sha256>",
+       "size_bytes": "<size_bytes>"
+      }
+     ],
+     "native_components": [],
+     "probe_disposition": "REUSED",
+     "probe_identity": "<sha256>",
+     "processing_facts": {
+      "artifact_types": [
+       "executable",
+       "object",
+       "shared-library",
+       "static-library"
+      ],
+      "build_system": "cmake",
+      "capabilities": [
+       "codeql-build",
+       "material-build"
+      ],
+      "family": "native",
+      "inventory_complete": true,
+      "language": "native",
+      "material_build_facts": [
+       "compiled-descriptor:cmake",
+       "declared-compiled-project:native"
+      ],
+      "project_id": "build-unit-b9c931fa551e02bd12b2",
+      "root": ".",
+      "schema": "appsec-review/project-processing-facts/1",
+      "sources": [
+       {
+        "path": "CMakeLists.txt",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "README.md",
+        "sha256": "<sha256>"
+       }
+      ],
+      "syntax_only_facts": []
+     },
+     "recipe": {
+      "build_commands": [
+       [
+        "cmake",
+        "--build",
+        "build",
+        "--parallel",
+        "2"
+       ]
+      ],
+      "build_dir": "build",
+      "build_unit_id": "build-unit-b9c931fa551e02bd12b2",
+      "configure_commands": [
+       [
+        "cmake",
+        "-S",
+        ".",
+        "-B",
+        "build",
+        "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
+        "-DCMAKE_BUILD_TYPE=RelWithDebInfo"
+       ]
+      ],
+      "dependency_files": [
+       "CMakeLists.txt"
+      ],
+      "environment": {},
+      "expected_outputs": [
+       "build"
+      ],
+      "image_profile": "native",
+      "network_required": false,
+      "reason": "Deterministic offline CMake recipe derived from the accepted CMake build marker.",
+      "schema": "appsec-review/build-recipe/1",
+      "source_dir": ".",
+      "system_packages": []
+     },
+     "recipe_identity": "<sha256>",
+     "recipe_provenance": "deterministic-cmake-marker",
+     "required_image_profile": "native",
+     "root": ".",
+     "source_fingerprint": "<sha256>",
+     "workflow": "lang_jobflow_build"
+    }
+   ],
+   "family": "native",
+   "terminal_status": "SUCCEEDED"
+  },
+  "build_dispatch.node": {
+   "dispatch_count": 0,
+   "dispatches": [],
+   "family": "node",
+   "terminal_status": "NOT_APPLICABLE"
+  },
+  "build_dispatch.php": {
+   "dispatch_count": 0,
+   "dispatches": [],
+   "family": "php",
+   "terminal_status": "NOT_APPLICABLE"
+  },
+  "build_dispatch.python": {
+   "dispatch_count": 0,
+   "dispatches": [],
+   "family": "python",
+   "terminal_status": "NOT_APPLICABLE"
+  },
+  "build_dispatch.rust": {
+   "dispatch_count": 0,
+   "dispatches": [],
+   "family": "rust",
+   "terminal_status": "NOT_APPLICABLE"
+  },
+  "build_dispatch.wasm": {
+   "dispatch_count": 0,
+   "dispatches": [],
+   "family": "wasm",
+   "terminal_status": "NOT_APPLICABLE"
+  },
+  "image.dotnet": {
+   "entries": [],
+   "family": "dotnet",
+   "image_count": 0,
+   "terminal_status": "NOT_APPLICABLE"
+  },
+  "image.go": {
+   "entries": [],
+   "family": "go",
+   "image_count": 0,
+   "terminal_status": "NOT_APPLICABLE"
+  },
+  "image.java": {
+   "entries": [],
+   "family": "java",
+   "image_count": 0,
+   "terminal_status": "NOT_APPLICABLE"
+  },
+  "image.native": {
+   "entries": [
+    {
+     "action": {
+      "action": "configure-and-build",
+      "build_capture_decision": {
+       "action": "RUN",
+       "configuration_sha256": "<sha256>",
+       "decision_sha256": "<sha256>",
+       "disposition": null,
+       "feature": "build-execution-capture",
+       "inspected_facts": [
+        "artifact=executable",
+        "artifact=object",
+        "artifact=shared-library",
+        "artifact=static-library",
+        "build_system=cmake",
+        "capability=codeql-build",
+        "capability=material-build",
+        "family=native",
+        "inventory_complete=true",
+        "material=compiled-descriptor:cmake",
+        "material=declared-compiled-project:native"
+       ],
+       "language": "native",
+       "project_id": "build-unit-b9c931fa551e02bd12b2",
+       "reason_code": "POLICY_REQUIRED",
+       "resolved_policy": "required",
+       "schema": "appsec-review/applicability-decision/1",
+       "selected_capability": "execution-capture",
+       "sources": [
+        {
+         "path": "CMakeLists.txt",
+         "sha256": "<sha256>"
+        },
+        {
+         "path": "README.md",
+         "sha256": "<sha256>"
+        }
+       ]
+      },
+      "build_dependencies": [],
+      "build_system": "cmake",
+      "build_unit_id": "build-unit-b9c931fa551e02bd12b2",
+      "descriptor_facts": {},
+      "descriptor_package": {
+       "bounds": {
+        "actual_bytes": 529,
+        "actual_files": 2,
+        "max_file_bytes": 65536,
+        "max_files": 24,
+        "max_total_bytes": 262144
+       },
+       "build_unit": {
+        "build_system": "cmake",
+        "build_unit_id": "build-unit-b9c931fa551e02bd12b2",
+        "family": "native",
+        "markers": [
+         {
+          "path": "CMakeLists.txt",
+          "sha256": "<sha256>",
+          "size_bytes": "<size_bytes>"
+         }
+        ],
+        "provenance": "deterministic-marker",
+        "root": "."
+       },
+       "documents": [
+        {
+         "content": "cmake_minimum_required(VERSION 3.20)\nproject(relay LANGUAGES CXX)\n\nset(CMAKE_CXX_STANDARD 17)\nset(CMAKE_CXX_STANDARD_REQUIRED ON)\nset(CMAKE_CXX_EXTENSIONS OFF)\nset(CMAKE_EXPORT_COMPILE_COMMANDS ON)\n\nadd_executable(relay\n  src/main.cpp\n  src/packet.cpp\n  src/session.cpp\n  src/frame.cpp\n  src/log.cpp\n  src/diag.cpp\n  src/config.cpp\n)\ntarget_include_directories(relay PRIVATE include)\ntarget_compile_options(relay PRIVATE -Wall -Wextra)\n",
+         "path": "CMakeLists.txt",
+         "sha256": "<sha256>"
+        },
+        {
+         "content": "# relay\n\nA small packet relay utility.\n\nBuild: `cmake -S . -B build && cmake --build build`.\n",
+         "path": "README.md",
+         "sha256": "<sha256>"
+        }
+       ],
+       "schema": "appsec-review/build-descriptor-package/1"
+      },
+      "executable": false,
+      "family": "native",
+      "markers": [
+       {
+        "path": "CMakeLists.txt",
+        "sha256": "<sha256>",
+        "size_bytes": "<size_bytes>"
+       }
+      ],
+      "native_components": [],
+      "package_hints": [],
+      "processing_facts": {
+       "artifact_types": [
+        "executable",
+        "object",
+        "shared-library",
+        "static-library"
+       ],
+       "build_system": "cmake",
+       "capabilities": [
+        "codeql-build",
+        "material-build"
+       ],
+       "family": "native",
+       "inventory_complete": true,
+       "language": "native",
+       "material_build_facts": [
+        "compiled-descriptor:cmake",
+        "declared-compiled-project:native"
+       ],
+       "project_id": "build-unit-b9c931fa551e02bd12b2",
+       "root": ".",
+       "schema": "appsec-review/project-processing-facts/1",
+       "sources": [
+        {
+         "path": "CMakeLists.txt",
+         "sha256": "<sha256>"
+        },
+        {
+         "path": "README.md",
+         "sha256": "<sha256>"
+        }
+       ],
+       "syntax_only_facts": []
+      },
+      "project_type": "generic",
+      "recipe": {
+       "build_commands": [
+        [
+         "cmake",
+         "--build",
+         "build",
+         "--parallel",
+         "2"
+        ]
+       ],
+       "build_dir": "build",
+       "build_unit_id": "build-unit-b9c931fa551e02bd12b2",
+       "configure_commands": [
+        [
+         "cmake",
+         "-S",
+         ".",
+         "-B",
+         "build",
+         "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
+         "-DCMAKE_BUILD_TYPE=RelWithDebInfo"
+        ]
+       ],
+       "dependency_files": [
+        "CMakeLists.txt"
+       ],
+       "environment": {},
+       "expected_outputs": [
+        "build"
+       ],
+       "image_profile": "native",
+       "network_required": false,
+       "reason": "Deterministic offline CMake recipe derived from the accepted CMake build marker.",
+       "schema": "appsec-review/build-recipe/1",
+       "source_dir": ".",
+       "system_packages": []
+      },
+      "recipe_provenance": "deterministic-cmake-marker",
+      "required_image_profile": "native",
+      "requires_inference": false,
+      "root": "."
+     },
+     "attempt_identity": "<attempt>:build-unit-b9c931fa551e02bd12b2:image",
+     "base_recipe_identity": "<sha256>",
+     "command_identity": "<sha256>",
+     "duration_ms": "<duration>",
+     "image": {
+      "base_image_id": "<image-digest>",
+      "cache_disposition": "HIT",
+      "cache_rejection_reason": null,
+      "customized": false,
+      "dependency_hashes": {
+       "CMakeLists.txt": "<sha256>"
+      },
+      "dockerfile_path": null,
+      "dockerfile_sha256": null,
+      "family": "native",
+      "image_id": "<image_id>",
+      "image_tag": "audit-buildenv-cpp:local",
+      "manifest_path": null,
+      "recipe_identity": "<sha256>",
+      "reused": true,
+      "saved_build_count": 1,
+      "schema": "appsec-review/project-build-image/1",
+      "terminal_status": "SUCCEEDED",
+      "user": "10001:10001"
+     },
+     "streams": {
+      "stderr": {
+       "byte_count": 0,
+       "capture_limit": 8388608,
+       "path": "data/jobs/job_project_build/attempts/<attempt>/steps/image/tasks/native/build-unit-b9c931fa551e02bd12b2/image-build.stderr",
+       "retained_byte_count": 0,
+       "sha256": "<sha256>",
+       "truncated": false
+      },
+      "stdout": {
+       "byte_count": 0,
+       "capture_limit": 8388608,
+       "path": "data/jobs/job_project_build/attempts/<attempt>/steps/image/tasks/native/build-unit-b9c931fa551e02bd12b2/image-build.stdout",
+       "retained_byte_count": 0,
+       "sha256": "<sha256>",
+       "truncated": false
+      }
+     },
+     "terminal_status": "SUCCEEDED"
+    }
+   ],
+   "family": "native",
+   "image_count": 1,
+   "terminal_status": "SUCCEEDED"
+  },
+  "image.node": {
+   "entries": [],
+   "family": "node",
+   "image_count": 0,
+   "terminal_status": "NOT_APPLICABLE"
+  },
+  "image.php": {
+   "entries": [],
+   "family": "php",
+   "image_count": 0,
+   "terminal_status": "NOT_APPLICABLE"
+  },
+  "image.python": {
+   "entries": [],
+   "family": "python",
+   "image_count": 0,
+   "terminal_status": "NOT_APPLICABLE"
+  },
+  "image.rust": {
+   "entries": [],
+   "family": "rust",
+   "image_count": 0,
+   "terminal_status": "NOT_APPLICABLE"
+  },
+  "image.wasm": {
+   "entries": [],
+   "family": "wasm",
+   "image_count": 0,
+   "terminal_status": "NOT_APPLICABLE"
+  },
+  "plan.load_recipes": {
+   "action_count": 1,
+   "actions": [
+    {
+     "action": "configure-and-build",
+     "build_capture_decision": {
+      "action": "RUN",
+      "configuration_sha256": "<sha256>",
+      "decision_sha256": "<sha256>",
+      "disposition": null,
+      "feature": "build-execution-capture",
+      "inspected_facts": [
+       "artifact=executable",
+       "artifact=object",
+       "artifact=shared-library",
+       "artifact=static-library",
+       "build_system=cmake",
+       "capability=codeql-build",
+       "capability=material-build",
+       "family=native",
+       "inventory_complete=true",
+       "material=compiled-descriptor:cmake",
+       "material=declared-compiled-project:native"
+      ],
+      "language": "native",
+      "project_id": "build-unit-b9c931fa551e02bd12b2",
+      "reason_code": "POLICY_REQUIRED",
+      "resolved_policy": "required",
+      "schema": "appsec-review/applicability-decision/1",
+      "selected_capability": "execution-capture",
+      "sources": [
+       {
+        "path": "CMakeLists.txt",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "README.md",
+        "sha256": "<sha256>"
+       }
+      ]
+     },
+     "build_dependencies": [],
+     "build_system": "cmake",
+     "build_unit_id": "build-unit-b9c931fa551e02bd12b2",
+     "descriptor_facts": {},
+     "descriptor_package": {
+      "bounds": {
+       "actual_bytes": 529,
+       "actual_files": 2,
+       "max_file_bytes": 65536,
+       "max_files": 24,
+       "max_total_bytes": 262144
+      },
+      "build_unit": {
+       "build_system": "cmake",
+       "build_unit_id": "build-unit-b9c931fa551e02bd12b2",
+       "family": "native",
+       "markers": [
+        {
+         "path": "CMakeLists.txt",
+         "sha256": "<sha256>",
+         "size_bytes": "<size_bytes>"
+        }
+       ],
+       "provenance": "deterministic-marker",
+       "root": "."
+      },
+      "documents": [
+       {
+        "content": "cmake_minimum_required(VERSION 3.20)\nproject(relay LANGUAGES CXX)\n\nset(CMAKE_CXX_STANDARD 17)\nset(CMAKE_CXX_STANDARD_REQUIRED ON)\nset(CMAKE_CXX_EXTENSIONS OFF)\nset(CMAKE_EXPORT_COMPILE_COMMANDS ON)\n\nadd_executable(relay\n  src/main.cpp\n  src/packet.cpp\n  src/session.cpp\n  src/frame.cpp\n  src/log.cpp\n  src/diag.cpp\n  src/config.cpp\n)\ntarget_include_directories(relay PRIVATE include)\ntarget_compile_options(relay PRIVATE -Wall -Wextra)\n",
+        "path": "CMakeLists.txt",
+        "sha256": "<sha256>"
+       },
+       {
+        "content": "# relay\n\nA small packet relay utility.\n\nBuild: `cmake -S . -B build && cmake --build build`.\n",
+        "path": "README.md",
+        "sha256": "<sha256>"
+       }
+      ],
+      "schema": "appsec-review/build-descriptor-package/1"
+     },
+     "executable": false,
+     "family": "native",
+     "markers": [
+      {
+       "path": "CMakeLists.txt",
+       "sha256": "<sha256>",
+       "size_bytes": "<size_bytes>"
+      }
+     ],
+     "native_components": [],
+     "package_hints": [],
+     "processing_facts": {
+      "artifact_types": [
+       "executable",
+       "object",
+       "shared-library",
+       "static-library"
+      ],
+      "build_system": "cmake",
+      "capabilities": [
+       "codeql-build",
+       "material-build"
+      ],
+      "family": "native",
+      "inventory_complete": true,
+      "language": "native",
+      "material_build_facts": [
+       "compiled-descriptor:cmake",
+       "declared-compiled-project:native"
+      ],
+      "project_id": "build-unit-b9c931fa551e02bd12b2",
+      "root": ".",
+      "schema": "appsec-review/project-processing-facts/1",
+      "sources": [
+       {
+        "path": "CMakeLists.txt",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "README.md",
+        "sha256": "<sha256>"
+       }
+      ],
+      "syntax_only_facts": []
+     },
+     "project_type": "generic",
+     "recipe": {
+      "build_commands": [
+       [
+        "cmake",
+        "--build",
+        "build",
+        "--parallel",
+        "2"
+       ]
+      ],
+      "build_dir": "build",
+      "build_unit_id": "build-unit-b9c931fa551e02bd12b2",
+      "configure_commands": [
+       [
+        "cmake",
+        "-S",
+        ".",
+        "-B",
+        "build",
+        "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
+        "-DCMAKE_BUILD_TYPE=RelWithDebInfo"
+       ]
+      ],
+      "dependency_files": [
+       "CMakeLists.txt"
+      ],
+      "environment": {},
+      "expected_outputs": [
+       "build"
+      ],
+      "image_profile": "native",
+      "network_required": false,
+      "reason": "Deterministic offline CMake recipe derived from the accepted CMake build marker.",
+      "schema": "appsec-review/build-recipe/1",
+      "source_dir": ".",
+      "system_packages": []
+     },
+     "recipe_provenance": "deterministic-cmake-marker",
+     "required_image_profile": "native",
+     "requires_inference": false,
+     "root": "."
+    }
+   ],
+   "processing_decisions": [
+    {
+     "action": "RUN",
+     "configuration_sha256": "<sha256>",
+     "decision_sha256": "<sha256>",
+     "disposition": null,
+     "feature": "build-execution-capture",
+     "inspected_facts": [
+      "artifact=executable",
+      "artifact=object",
+      "artifact=shared-library",
+      "artifact=static-library",
+      "build_system=cmake",
+      "capability=codeql-build",
+      "capability=material-build",
+      "family=native",
+      "inventory_complete=true",
+      "material=compiled-descriptor:cmake",
+      "material=declared-compiled-project:native"
+     ],
+     "language": "native",
+     "project_id": "build-unit-b9c931fa551e02bd12b2",
+     "reason_code": "POLICY_REQUIRED",
+     "resolved_policy": "required",
+     "schema": "appsec-review/applicability-decision/1",
+     "selected_capability": "execution-capture",
+     "sources": [
+      {
+       "path": "CMakeLists.txt",
+       "sha256": "<sha256>"
+      },
+      {
+       "path": "README.md",
+       "sha256": "<sha256>"
+      }
+     ]
+    }
+   ],
+   "scanner_selections": [
+    {
+     "expected_index_family": "observations",
+     "provenance": "deterministic",
+     "reason": "deterministic catalog applicability",
+     "scanner_id": "tool-checkov",
+     "scope": [
+      {
+       "path": "CMakeLists.txt",
+       "sha256": "<sha256>"
+      },
+      {
+       "path": "README.md",
+       "sha256": "<sha256>"
+      },
+      {
+       "path": "include/relay/relay.hpp",
+       "sha256": "<sha256>"
+      },
+      {
+       "path": "src/config.cpp",
+       "sha256": "<sha256>"
+      },
+      {
+       "path": "src/diag.cpp",
+       "sha256": "<sha256>"
+      },
+      {
+       "path": "src/frame.cpp",
+       "sha256": "<sha256>"
+      },
+      {
+       "path": "src/log.cpp",
+       "sha256": "<sha256>"
+      },
+      {
+       "path": "src/main.cpp",
+       "sha256": "<sha256>"
+      },
+      {
+       "path": "src/packet.cpp",
+       "sha256": "<sha256>"
+      },
+      {
+       "path": "src/session.cpp",
+       "sha256": "<sha256>"
+      }
+     ]
+    },
+    {
+     "expected_index_family": "observations",
+     "provenance": "deterministic",
+     "reason": "deterministic catalog applicability",
+     "scanner_id": "tool-cppcheck",
+     "scope": [
+      {
+       "path": "include/relay/relay.hpp",
+       "sha256": "<sha256>"
+      },
+      {
+       "path": "src/config.cpp",
+       "sha256": "<sha256>"
+      },
+      {
+       "path": "src/diag.cpp",
+       "sha256": "<sha256>"
+      },
+      {
+       "path": "src/frame.cpp",
+       "sha256": "<sha256>"
+      },
+      {
+       "path": "src/log.cpp",
+       "sha256": "<sha256>"
+      },
+      {
+       "path": "src/main.cpp",
+       "sha256": "<sha256>"
+      },
+      {
+       "path": "src/packet.cpp",
+       "sha256": "<sha256>"
+      },
+      {
+       "path": "src/session.cpp",
+       "sha256": "<sha256>"
+      }
+     ]
+    },
+    {
+     "expected_index_family": "observations",
+     "provenance": "deterministic",
+     "reason": "mandatory baseline coverage",
+     "scanner_id": "tool-gitleaks",
+     "scope": [
+      {
+       "path": "CMakeLists.txt",
+       "sha256": "<sha256>"
+      },
+      {
+       "path": "README.md",
+       "sha256": "<sha256>"
+      },
+      {
+       "path": "include/relay/relay.hpp",
+       "sha256": "<sha256>"
+      },
+      {
+       "path": "src/config.cpp",
+       "sha256": "<sha256>"
+      },
+      {
+       "path": "src/diag.cpp",
+       "sha256": "<sha256>"
+      },
+      {
+       "path": "src/frame.cpp",
+       "sha256": "<sha256>"
+      },
+      {
+       "path": "src/log.cpp",
+       "sha256": "<sha256>"
+      },
+      {
+       "path": "src/main.cpp",
+       "sha256": "<sha256>"
+      },
+      {
+       "path": "src/packet.cpp",
+       "sha256": "<sha256>"
+      },
+      {
+       "path": "src/session.cpp",
+       "sha256": "<sha256>"
+      }
+     ]
+    },
+    {
+     "expected_index_family": "observations",
+     "provenance": "deterministic",
+     "reason": "deterministic catalog applicability",
+     "scanner_id": "tool-grype",
+     "scope": [
+      {
+       "path": "CMakeLists.txt",
+       "sha256": "<sha256>"
+      },
+      {
+       "path": "README.md",
+       "sha256": "<sha256>"
+      },
+      {
+       "path": "include/relay/relay.hpp",
+       "sha256": "<sha256>"
+      },
+      {
+       "path": "src/config.cpp",
+       "sha256": "<sha256>"
+      },
+      {
+       "path": "src/diag.cpp",
+       "sha256": "<sha256>"
+      },
+      {
+       "path": "src/frame.cpp",
+       "sha256": "<sha256>"
+      },
+      {
+       "path": "src/log.cpp",
+       "sha256": "<sha256>"
+      },
+      {
+       "path": "src/main.cpp",
+       "sha256": "<sha256>"
+      },
+      {
+       "path": "src/packet.cpp",
+       "sha256": "<sha256>"
+      },
+      {
+       "path": "src/session.cpp",
+       "sha256": "<sha256>"
+      }
+     ]
+    },
+    {
+     "expected_index_family": "observations",
+     "provenance": "deterministic",
+     "reason": "deterministic catalog applicability",
+     "scanner_id": "tool-opengrep",
+     "scope": [
+      {
+       "path": "include/relay/relay.hpp",
+       "sha256": "<sha256>"
+      },
+      {
+       "path": "src/config.cpp",
+       "sha256": "<sha256>"
+      },
+      {
+       "path": "src/diag.cpp",
+       "sha256": "<sha256>"
+      },
+      {
+       "path": "src/frame.cpp",
+       "sha256": "<sha256>"
+      },
+      {
+       "path": "src/log.cpp",
+       "sha256": "<sha256>"
+      },
+      {
+       "path": "src/main.cpp",
+       "sha256": "<sha256>"
+      },
+      {
+       "path": "src/packet.cpp",
+       "sha256": "<sha256>"
+      },
+      {
+       "path": "src/session.cpp",
+       "sha256": "<sha256>"
+      }
+     ]
+    },
+    {
+     "expected_index_family": "observations",
+     "provenance": "deterministic",
+     "reason": "mandatory baseline coverage",
+     "scanner_id": "tool-semgrep",
+     "scope": [
+      {
+       "path": "include/relay/relay.hpp",
+       "sha256": "<sha256>"
+      },
+      {
+       "path": "src/config.cpp",
+       "sha256": "<sha256>"
+      },
+      {
+       "path": "src/diag.cpp",
+       "sha256": "<sha256>"
+      },
+      {
+       "path": "src/frame.cpp",
+       "sha256": "<sha256>"
+      },
+      {
+       "path": "src/log.cpp",
+       "sha256": "<sha256>"
+      },
+      {
+       "path": "src/main.cpp",
+       "sha256": "<sha256>"
+      },
+      {
+       "path": "src/packet.cpp",
+       "sha256": "<sha256>"
+      },
+      {
+       "path": "src/session.cpp",
+       "sha256": "<sha256>"
+      }
+     ]
+    },
+    {
+     "expected_index_family": "observations",
+     "provenance": "deterministic",
+     "reason": "mandatory baseline coverage",
+     "scanner_id": "tool-syft",
+     "scope": [
+      {
+       "path": "CMakeLists.txt",
+       "sha256": "<sha256>"
+      },
+      {
+       "path": "README.md",
+       "sha256": "<sha256>"
+      },
+      {
+       "path": "include/relay/relay.hpp",
+       "sha256": "<sha256>"
+      },
+      {
+       "path": "src/config.cpp",
+       "sha256": "<sha256>"
+      },
+      {
+       "path": "src/diag.cpp",
+       "sha256": "<sha256>"
+      },
+      {
+       "path": "src/frame.cpp",
+       "sha256": "<sha256>"
+      },
+      {
+       "path": "src/log.cpp",
+       "sha256": "<sha256>"
+      },
+      {
+       "path": "src/main.cpp",
+       "sha256": "<sha256>"
+      },
+      {
+       "path": "src/packet.cpp",
+       "sha256": "<sha256>"
+      },
+      {
+       "path": "src/session.cpp",
+       "sha256": "<sha256>"
+      }
+     ]
+    }
+   ],
+   "terminal_status": "SUCCEEDED"
+  },
+  "probe.dotnet": {
+   "family": "dotnet",
+   "probe_count": 0,
+   "receipts": [],
+   "reused_count": 0,
+   "terminal_status": "NOT_APPLICABLE"
+  },
+  "probe.go": {
+   "family": "go",
+   "probe_count": 0,
+   "receipts": [],
+   "reused_count": 0,
+   "terminal_status": "NOT_APPLICABLE"
+  },
+  "probe.java": {
+   "family": "java",
+   "probe_count": 0,
+   "receipts": [],
+   "reused_count": 0,
+   "terminal_status": "NOT_APPLICABLE"
+  },
+  "probe.native": {
+   "family": "native",
+   "probe_count": 1,
+   "receipts": [
+    {
+     "accepted_image": {
+      "base_image_id": "<image-digest>",
+      "cache_disposition": "HIT",
+      "cache_rejection_reason": null,
+      "customized": false,
+      "dependency_hashes": {
+       "CMakeLists.txt": "<sha256>"
+      },
+      "dockerfile_path": null,
+      "dockerfile_sha256": null,
+      "family": "native",
+      "image_id": "<image_id>",
+      "image_tag": "audit-buildenv-cpp:local",
+      "manifest_path": null,
+      "recipe_identity": "<sha256>",
+      "reused": true,
+      "saved_build_count": 1,
+      "schema": "appsec-review/project-build-image/1",
+      "terminal_status": "SUCCEEDED",
+      "user": "10001:10001"
+     },
+     "accepted_recipe": {
+      "build_commands": [
+       [
+        "cmake",
+        "--build",
+        "build",
+        "--parallel",
+        "2"
+       ]
+      ],
+      "build_dir": "build",
+      "build_unit_id": "build-unit-b9c931fa551e02bd12b2",
+      "configure_commands": [
+       [
+        "cmake",
+        "-S",
+        ".",
+        "-B",
+        "build",
+        "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
+        "-DCMAKE_BUILD_TYPE=RelWithDebInfo"
+       ]
+      ],
+      "dependency_files": [
+       "CMakeLists.txt"
+      ],
+      "environment": {},
+      "expected_outputs": [
+       "build"
+      ],
+      "image_profile": "native",
+      "network_required": false,
+      "reason": "Deterministic offline CMake recipe derived from the accepted CMake build marker.",
+      "schema": "appsec-review/build-recipe/1",
+      "source_dir": ".",
+      "system_packages": []
+     },
+     "artifacts": [],
+     "attempt_number": 0,
+     "attempts": [
+      {
+       "attempt_number": 1,
+       "image_id": "<image_id>",
+       "kind": "default",
+       "recipe_identity": "<sha256>",
+       "terminal_status": "SUCCEEDED"
+      }
+     ],
+     "base_recipe_identity": "<sha256>",
+     "build_system": "cmake",
+     "build_unit_id": "build-unit-b9c931fa551e02bd12b2",
+     "checkpoint_reused": true,
+     "commands": [],
+     "executor_identity": "appsec-review/build-container-executor/3",
+     "family": "native",
+     "image_id": "<image_id>",
+     "probe_disposition": "REUSED",
+     "recipe_identity": "<sha256>",
+     "recipe_provenance": "deterministic-cmake-marker",
+     "repair_attempt_count": 0,
+     "root": ".",
+     "schema": "appsec-review/project-build-dispatch/2",
+     "terminal_status": "SUCCEEDED"
+    }
+   ],
+   "reused_count": 1,
+   "terminal_status": "SUCCEEDED"
+  },
+  "probe.node": {
+   "family": "node",
+   "probe_count": 0,
+   "receipts": [],
+   "reused_count": 0,
+   "terminal_status": "NOT_APPLICABLE"
+  },
+  "probe.php": {
+   "family": "php",
+   "probe_count": 0,
+   "receipts": [],
+   "reused_count": 0,
+   "terminal_status": "NOT_APPLICABLE"
+  },
+  "probe.python": {
+   "family": "python",
+   "probe_count": 0,
+   "receipts": [],
+   "reused_count": 0,
+   "terminal_status": "NOT_APPLICABLE"
+  },
+  "probe.rust": {
+   "family": "rust",
+   "probe_count": 0,
+   "receipts": [],
+   "reused_count": 0,
+   "terminal_status": "NOT_APPLICABLE"
+  },
+  "probe.wasm": {
+   "family": "wasm",
+   "probe_count": 0,
+   "receipts": [],
+   "reused_count": 0,
+   "terminal_status": "NOT_APPLICABLE"
+  },
+  "static_dispatch.dotnet": {
+   "dispatch_count": 0,
+   "dispatches": [],
+   "lane": "dotnet",
+   "terminal_status": "NOT_APPLICABLE"
+  },
+  "static_dispatch.global": {
+   "dispatch_count": 0,
+   "dispatches": [],
+   "lane": "global",
+   "terminal_status": "NOT_APPLICABLE"
+  },
+  "static_dispatch.go": {
+   "dispatch_count": 0,
+   "dispatches": [],
+   "lane": "go",
+   "terminal_status": "NOT_APPLICABLE"
+  },
+  "static_dispatch.java": {
+   "dispatch_count": 0,
+   "dispatches": [],
+   "lane": "java",
+   "terminal_status": "NOT_APPLICABLE"
+  },
+  "static_dispatch.native": {
+   "dispatch_count": 1,
+   "dispatches": [
+    {
+     "build_unit_id": "build-unit-b9c931fa551e02bd12b2",
+     "family": "native",
+     "root": ".",
+     "tools": [
+      {
+       "reason": "deterministic catalog applicability",
+       "scope": [
+        {
+         "path": "CMakeLists.txt",
+         "sha256": "<sha256>"
+        },
+        {
+         "path": "README.md",
+         "sha256": "<sha256>"
+        },
+        {
+         "path": "include/relay/relay.hpp",
+         "sha256": "<sha256>"
+        },
+        {
+         "path": "src/config.cpp",
+         "sha256": "<sha256>"
+        },
+        {
+         "path": "src/diag.cpp",
+         "sha256": "<sha256>"
+        },
+        {
+         "path": "src/frame.cpp",
+         "sha256": "<sha256>"
+        },
+        {
+         "path": "src/log.cpp",
+         "sha256": "<sha256>"
+        },
+        {
+         "path": "src/main.cpp",
+         "sha256": "<sha256>"
+        },
+        {
+         "path": "src/packet.cpp",
+         "sha256": "<sha256>"
+        },
+        {
+         "path": "src/session.cpp",
+         "sha256": "<sha256>"
+        }
+       ],
+       "tool_id": "tool-checkov"
+      },
+      {
+       "reason": "deterministic catalog applicability",
+       "scope": [
+        {
+         "path": "include/relay/relay.hpp",
+         "sha256": "<sha256>"
+        },
+        {
+         "path": "src/config.cpp",
+         "sha256": "<sha256>"
+        },
+        {
+         "path": "src/diag.cpp",
+         "sha256": "<sha256>"
+        },
+        {
+         "path": "src/frame.cpp",
+         "sha256": "<sha256>"
+        },
+        {
+         "path": "src/log.cpp",
+         "sha256": "<sha256>"
+        },
+        {
+         "path": "src/main.cpp",
+         "sha256": "<sha256>"
+        },
+        {
+         "path": "src/packet.cpp",
+         "sha256": "<sha256>"
+        },
+        {
+         "path": "src/session.cpp",
+         "sha256": "<sha256>"
+        }
+       ],
+       "tool_id": "tool-cppcheck"
+      },
+      {
+       "reason": "mandatory baseline coverage",
+       "scope": [
+        {
+         "path": "CMakeLists.txt",
+         "sha256": "<sha256>"
+        },
+        {
+         "path": "README.md",
+         "sha256": "<sha256>"
+        },
+        {
+         "path": "include/relay/relay.hpp",
+         "sha256": "<sha256>"
+        },
+        {
+         "path": "src/config.cpp",
+         "sha256": "<sha256>"
+        },
+        {
+         "path": "src/diag.cpp",
+         "sha256": "<sha256>"
+        },
+        {
+         "path": "src/frame.cpp",
+         "sha256": "<sha256>"
+        },
+        {
+         "path": "src/log.cpp",
+         "sha256": "<sha256>"
+        },
+        {
+         "path": "src/main.cpp",
+         "sha256": "<sha256>"
+        },
+        {
+         "path": "src/packet.cpp",
+         "sha256": "<sha256>"
+        },
+        {
+         "path": "src/session.cpp",
+         "sha256": "<sha256>"
+        }
+       ],
+       "tool_id": "tool-gitleaks"
+      },
+      {
+       "reason": "deterministic catalog applicability",
+       "scope": [
+        {
+         "path": "CMakeLists.txt",
+         "sha256": "<sha256>"
+        },
+        {
+         "path": "README.md",
+         "sha256": "<sha256>"
+        },
+        {
+         "path": "include/relay/relay.hpp",
+         "sha256": "<sha256>"
+        },
+        {
+         "path": "src/config.cpp",
+         "sha256": "<sha256>"
+        },
+        {
+         "path": "src/diag.cpp",
+         "sha256": "<sha256>"
+        },
+        {
+         "path": "src/frame.cpp",
+         "sha256": "<sha256>"
+        },
+        {
+         "path": "src/log.cpp",
+         "sha256": "<sha256>"
+        },
+        {
+         "path": "src/main.cpp",
+         "sha256": "<sha256>"
+        },
+        {
+         "path": "src/packet.cpp",
+         "sha256": "<sha256>"
+        },
+        {
+         "path": "src/session.cpp",
+         "sha256": "<sha256>"
+        }
+       ],
+       "tool_id": "tool-grype"
+      },
+      {
+       "reason": "deterministic catalog applicability",
+       "scope": [
+        {
+         "path": "include/relay/relay.hpp",
+         "sha256": "<sha256>"
+        },
+        {
+         "path": "src/config.cpp",
+         "sha256": "<sha256>"
+        },
+        {
+         "path": "src/diag.cpp",
+         "sha256": "<sha256>"
+        },
+        {
+         "path": "src/frame.cpp",
+         "sha256": "<sha256>"
+        },
+        {
+         "path": "src/log.cpp",
+         "sha256": "<sha256>"
+        },
+        {
+         "path": "src/main.cpp",
+         "sha256": "<sha256>"
+        },
+        {
+         "path": "src/packet.cpp",
+         "sha256": "<sha256>"
+        },
+        {
+         "path": "src/session.cpp",
+         "sha256": "<sha256>"
+        }
+       ],
+       "tool_id": "tool-opengrep"
+      },
+      {
+       "reason": "mandatory baseline coverage",
+       "scope": [
+        {
+         "path": "include/relay/relay.hpp",
+         "sha256": "<sha256>"
+        },
+        {
+         "path": "src/config.cpp",
+         "sha256": "<sha256>"
+        },
+        {
+         "path": "src/diag.cpp",
+         "sha256": "<sha256>"
+        },
+        {
+         "path": "src/frame.cpp",
+         "sha256": "<sha256>"
+        },
+        {
+         "path": "src/log.cpp",
+         "sha256": "<sha256>"
+        },
+        {
+         "path": "src/main.cpp",
+         "sha256": "<sha256>"
+        },
+        {
+         "path": "src/packet.cpp",
+         "sha256": "<sha256>"
+        },
+        {
+         "path": "src/session.cpp",
+         "sha256": "<sha256>"
+        }
+       ],
+       "tool_id": "tool-semgrep"
+      },
+      {
+       "reason": "mandatory baseline coverage",
+       "scope": [
+        {
+         "path": "CMakeLists.txt",
+         "sha256": "<sha256>"
+        },
+        {
+         "path": "README.md",
+         "sha256": "<sha256>"
+        },
+        {
+         "path": "include/relay/relay.hpp",
+         "sha256": "<sha256>"
+        },
+        {
+         "path": "src/config.cpp",
+         "sha256": "<sha256>"
+        },
+        {
+         "path": "src/diag.cpp",
+         "sha256": "<sha256>"
+        },
+        {
+         "path": "src/frame.cpp",
+         "sha256": "<sha256>"
+        },
+        {
+         "path": "src/log.cpp",
+         "sha256": "<sha256>"
+        },
+        {
+         "path": "src/main.cpp",
+         "sha256": "<sha256>"
+        },
+        {
+         "path": "src/packet.cpp",
+         "sha256": "<sha256>"
+        },
+        {
+         "path": "src/session.cpp",
+         "sha256": "<sha256>"
+        }
+       ],
+       "tool_id": "tool-syft"
+      }
+     ],
+     "workflow": "lang_jobflow_static"
+    }
+   ],
+   "lane": "native",
+   "terminal_status": "SUCCEEDED"
+  },
+  "static_dispatch.node": {
+   "dispatch_count": 0,
+   "dispatches": [],
+   "lane": "node",
+   "terminal_status": "NOT_APPLICABLE"
+  },
+  "static_dispatch.php": {
+   "dispatch_count": 0,
+   "dispatches": [],
+   "lane": "php",
+   "terminal_status": "NOT_APPLICABLE"
+  },
+  "static_dispatch.python": {
+   "dispatch_count": 0,
+   "dispatches": [],
+   "lane": "python",
+   "terminal_status": "NOT_APPLICABLE"
+  },
+  "static_dispatch.rust": {
+   "dispatch_count": 0,
+   "dispatches": [],
+   "lane": "rust",
+   "terminal_status": "NOT_APPLICABLE"
+  },
+  "static_dispatch.wasm": {
+   "dispatch_count": 0,
+   "dispatches": [],
+   "lane": "wasm",
+   "terminal_status": "NOT_APPLICABLE"
+  }
+ },
+ "schema": "appsec-review/acceptance-job-output/1",
+ "skipped_units": [],
+ "status": "SUCCEEDED",
+ "steps": {
+  "acceptance": "SUCCEEDED",
+  "build_dispatch": "SUCCEEDED",
+  "image": "SUCCEEDED",
+  "plan": "SUCCEEDED",
+  "probe": "SUCCEEDED",
+  "static_dispatch": "SUCCEEDED"
+ },
+ "units": {
+  "acceptance.publish_handoff": {
+   "disposition": "SUCCEEDED",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "build_dispatch.dotnet": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "build_dispatch.go": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "build_dispatch.java": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "build_dispatch.native": {
+   "disposition": "SUCCEEDED",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "build_dispatch.node": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "build_dispatch.php": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "build_dispatch.python": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "build_dispatch.rust": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "build_dispatch.wasm": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "image.dotnet": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "image.go": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "image.java": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "image.native": {
+   "disposition": "SUCCEEDED",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "image.node": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "image.php": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "image.python": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "image.rust": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "image.wasm": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "plan.load_recipes": {
+   "disposition": "SUCCEEDED",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "probe.dotnet": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "probe.go": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "probe.java": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "probe.native": {
+   "disposition": "SUCCEEDED",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "probe.node": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "probe.php": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "probe.python": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "probe.rust": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "probe.wasm": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "static_dispatch.dotnet": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "static_dispatch.global": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "static_dispatch.go": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "static_dispatch.java": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "static_dispatch.native": {
+   "disposition": "SUCCEEDED",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "static_dispatch.node": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "static_dispatch.php": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "static_dispatch.python": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "static_dispatch.rust": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "static_dispatch.wasm": {
+   "disposition": "NOT_APPLICABLE",
+   "producer": null,
+   "status": "SUCCEEDED"
+  }
+ },
+ "volatile": {
+  "artifacts": [
+   {
+    "path": "data/jobs/job_project_build/attempts/<attempt>/artifacts/project-build/accepted-project-build-dispatch.json",
+    "sha256": "3eda04dc2c2d1300ddf47cc96e7968f1663ea432c88524b2327f6f3630e6834a",
+    "size_bytes": 25687
+   },
+   {
+    "path": "data/jobs/job_project_build/attempts/<attempt>/steps/image/tasks/native/build-unit-b9c931fa551e02bd12b2/image-build.stderr",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "size_bytes": 0
+   },
+   {
+    "path": "data/jobs/job_project_build/attempts/<attempt>/steps/image/tasks/native/build-unit-b9c931fa551e02bd12b2/image-build.stdout",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "size_bytes": 0
+   }
+  ]
+ }
+}

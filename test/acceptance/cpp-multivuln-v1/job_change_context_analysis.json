@@ -1,0 +1,564 @@
+{
+ "artifacts": [
+  {
+   "count": 13,
+   "kind": "json",
+   "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/steps/publish/tasks/publish_handoff/artifacts/change-context.json",
+   "sha256": "fb14f66a6a03e20712b46853315a6378fcd70bde353111390f5b258990ec5525"
+  },
+  {
+   "count": 14,
+   "kind": "json",
+   "path": "data/jobs/job_source_history_analysis/attempts/<attempt>/steps/analyze/tasks/rank/artifacts/signals.json",
+   "sha256": "e206b654c6645fe4515796ba7992625492bb292e5f23a721cf0f2f6bc80cbbc4"
+  },
+  {
+   "count": 4,
+   "kind": "json",
+   "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/steps/analyze/tasks/unit_signals/artifacts/units.json",
+   "sha256": "bb68bd669cdc005d476b97741832445abdd186a0fb816def84a3b9f1bec0a962"
+  },
+  {
+   "count": 5,
+   "kind": "json",
+   "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/steps/analyze/tasks/change_signals/artifacts/change-records.json",
+   "sha256": "c024378a5ba557286fb8a2936057e2b3c90677e45f2964049a0128c95054c183"
+  },
+  {
+   "count": 5,
+   "kind": "json",
+   "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/steps/attribute/tasks/fix_on_fix/artifacts/fix-on-fix.json",
+   "sha256": "a1136e3523104e6690bad89175612c66219dd99776c6e7488de6eb4c9bd5ca15"
+  },
+  {
+   "count": 5,
+   "kind": "json",
+   "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/steps/attribute/tasks/line_attribution/artifacts/attribution.json",
+   "sha256": "f5514d59f364e1c3c900a982fa65ceda77960aaac9acaf9019c3d6e32e1435cd"
+  },
+  {
+   "count": 5,
+   "kind": "json",
+   "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/steps/load/tasks/external_sources/artifacts/external-sources.json",
+   "sha256": "fb363108f88b77baaccdf03dfff8045265a24cb1aaa70ece73f73fdf3ea6af30"
+  },
+  {
+   "count": 6,
+   "kind": "json",
+   "path": "data/jobs/job_source_history_analysis/attempts/<attempt>/steps/analyze/tasks/classify_changes/artifacts/classification.json",
+   "sha256": "a6d9b319b76f7da4819d118ad8b98c1298f758f0446c7d119a0d39e6d23e3656"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/indices/manifests/change-context-<attempt>.json",
+   "sha256": "afc0155d5a43a8f8500fa30395f698c4e749dd491050068ad49f2a6f0353fa4b"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/steps/load/tasks/accepted_history/artifacts/lifetime.json",
+   "sha256": "1aa14273196151fca12797dfe65e5feb9f1357899e91f01eae3ff64aed92cafc"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/jobs/job_source_history_analysis/attempts/<attempt>/steps/acquire/tasks/normalize_changes/artifacts/changes.json",
+   "sha256": "8cf55255ea20f59453c5212c5f51e090a577576311866a57f0ed49d8fc4ed674"
+  },
+  {
+   "count": 9,
+   "kind": "json",
+   "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/steps/analyze/tasks/rank/artifacts/signals.json",
+   "sha256": "31968f7fd6d998f207b5d0badf1d644201029d45a1f31fd100bb5bed10dee5ea"
+  }
+ ],
+ "failed_units": [],
+ "findings": [],
+ "gaps": [
+  {
+   "count": 1,
+   "gap": "function_mapping_unreliable",
+   "unit": "attribute.line_attribution"
+  },
+  {
+   "count": 2,
+   "gap": "deployment_disabled",
+   "unit": "load.external_sources"
+  },
+  {
+   "count": 2,
+   "gap": "organization_disabled",
+   "unit": "load.external_sources"
+  },
+  {
+   "count": 2,
+   "gap": "review_records_unavailable:github_enrichment_disabled",
+   "unit": "load.external_sources"
+  },
+  {
+   "count": 2,
+   "gap": "time_zone_not_configured",
+   "unit": "load.external_sources"
+  },
+  {
+   "count": 2,
+   "gap": "deployment_disabled",
+   "unit": "publish.index_change_context"
+  },
+  {
+   "count": 2,
+   "gap": "function_mapping_unreliable",
+   "unit": "publish.index_change_context"
+  },
+  {
+   "count": 2,
+   "gap": "organization_disabled",
+   "unit": "publish.index_change_context"
+  },
+  {
+   "count": 2,
+   "gap": "review_records_unavailable:github_enrichment_disabled",
+   "unit": "publish.index_change_context"
+  },
+  {
+   "count": 2,
+   "gap": "time_zone_not_configured",
+   "unit": "publish.index_change_context"
+  },
+  {
+   "count": 1,
+   "gap": "deployment_disabled",
+   "unit": "publish.publish_handoff"
+  },
+  {
+   "count": 1,
+   "gap": "function_mapping_unreliable",
+   "unit": "publish.publish_handoff"
+  },
+  {
+   "count": 1,
+   "gap": "organization_disabled",
+   "unit": "publish.publish_handoff"
+  },
+  {
+   "count": 1,
+   "gap": "review_records_unavailable:github_enrichment_disabled",
+   "unit": "publish.publish_handoff"
+  },
+  {
+   "count": 1,
+   "gap": "time_zone_not_configured",
+   "unit": "publish.publish_handoff"
+  }
+ ],
+ "handoff": {
+  "completion_status": "COMPLETED_WITH_GAPS",
+  "schema_identity": "appsec-review/change-context-analysis/1",
+  "status": "ACCEPTED",
+  "upstream_jobs": [
+   "job_ci_configuration_analysis",
+   "job_review_intake",
+   "job_source_history_analysis",
+   "job_target_analysis_plan",
+   "job_target_catalog",
+   "job_tree_sitter_ast"
+  ]
+ },
+ "job_id": "job_change_context_analysis",
+ "outputs": {
+  "analyze.change_signals": {
+   "artifact": {
+    "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/steps/analyze/tasks/change_signals/artifacts/change-records.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "change_count": 1,
+   "flag_counts": {
+    "off_hours": 0,
+    "pre_deployment": 0,
+    "sprawling": 0,
+    "unapproved_mainline": 0,
+    "untested_production": 1
+   },
+   "terminal_status": "SUCCEEDED"
+  },
+  "analyze.rank": {
+   "artifact": {
+    "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/steps/analyze/tasks/rank/artifacts/signals.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "ranked": {
+    "components": 1,
+    "files": 10,
+    "functions": 17
+   },
+   "terminal_status": "SUCCEEDED"
+  },
+  "analyze.unit_signals": {
+   "artifact": {
+    "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/steps/analyze/tasks/unit_signals/artifacts/units.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "component_count": 1,
+   "file_count": 10,
+   "function_count": 17,
+   "terminal_status": "SUCCEEDED"
+  },
+  "attribute.fix_on_fix": {
+   "artifact": {
+    "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/steps/attribute/tasks/fix_on_fix/artifacts/fix-on-fix.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "event_count": 0,
+   "status": "available",
+   "terminal_status": "SUCCEEDED"
+  },
+  "attribute.line_attribution": {
+   "artifact": {
+    "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/steps/attribute/tasks/line_attribution/artifacts/attribution.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "attributed_file_count": 10,
+   "candidate_count": 10,
+   "function_count": 17,
+   "terminal_status": "PARTIAL"
+  },
+  "load.accepted_history": {
+   "available": true,
+   "catalog_handoff_sha256": "<sha256>",
+   "changes": {
+    "path": "data/jobs/job_source_history_analysis/attempts/<attempt>/steps/acquire/tasks/normalize_changes/artifacts/changes.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "classification": {
+    "path": "data/jobs/job_source_history_analysis/attempts/<attempt>/steps/analyze/tasks/classify_changes/artifacts/classification.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "classification_gaps": [],
+   "components": [
+    {
+     "component_id": "component:0001",
+     "root": "."
+    }
+   ],
+   "eligible": {
+    "CMakeLists.txt": {
+     "blob_id": "21a68a9f286c03bc14e03a53a0b20c745927d097",
+     "exact": true,
+     "language": null,
+     "line_count": 17,
+     "sha256": "<sha256>",
+     "size_bytes": "<size_bytes>",
+     "span_lines": 19
+    },
+    "README.md": {
+     "blob_id": "3120e7c5298b365f2978bf261abbe783f2128f1b",
+     "exact": true,
+     "language": null,
+     "line_count": 3,
+     "sha256": "<sha256>",
+     "size_bytes": "<size_bytes>",
+     "span_lines": 5
+    },
+    "include/relay/relay.hpp": {
+     "blob_id": "d0e7e7a228ddd979e443e527f9b84facc8d1076a",
+     "exact": true,
+     "language": "C++",
+     "line_count": 33,
+     "sha256": "<sha256>",
+     "size_bytes": "<size_bytes>",
+     "span_lines": 45
+    },
+    "src/config.cpp": {
+     "blob_id": "7a196d4a1d19e9cfc35e63b3332693ca93c7f6ee",
+     "exact": true,
+     "language": "C++",
+     "line_count": 8,
+     "sha256": "<sha256>",
+     "size_bytes": "<size_bytes>",
+     "span_lines": 13
+    },
+    "src/diag.cpp": {
+     "blob_id": "f53d4867605470b79a70160b57c0ac37195cf342",
+     "exact": true,
+     "language": "C++",
+     "line_count": 8,
+     "sha256": "<sha256>",
+     "size_bytes": "<size_bytes>",
+     "span_lines": 12
+    },
+    "src/frame.cpp": {
+     "blob_id": "9d3215ee3f21eaec97ca2455608a64231e7462e0",
+     "exact": true,
+     "language": "C++",
+     "line_count": 23,
+     "sha256": "<sha256>",
+     "size_bytes": "<size_bytes>",
+     "span_lines": 28
+    },
+    "src/log.cpp": {
+     "blob_id": "7689925faefce20b8da899e4ddb39d14b85c5358",
+     "exact": true,
+     "language": "C++",
+     "line_count": 8,
+     "sha256": "<sha256>",
+     "size_bytes": "<size_bytes>",
+     "span_lines": 12
+    },
+    "src/main.cpp": {
+     "blob_id": "8d80d6e165dc797d5519e5fe6513abd6f36dba2a",
+     "exact": true,
+     "language": "C++",
+     "line_count": 67,
+     "sha256": "<sha256>",
+     "size_bytes": "<size_bytes>",
+     "span_lines": 75
+    },
+    "src/packet.cpp": {
+     "blob_id": "ebc54c43425addd0fb9ed3e4c473200359ae384d",
+     "exact": true,
+     "language": "C++",
+     "line_count": 16,
+     "sha256": "<sha256>",
+     "size_bytes": "<size_bytes>",
+     "span_lines": 20
+    },
+    "src/session.cpp": {
+     "blob_id": "c215b64319f1094dd5c59ac6f4e7f5a309583399",
+     "exact": true,
+     "language": "C++",
+     "line_count": 34,
+     "sha256": "<sha256>",
+     "size_bytes": "<size_bytes>",
+     "span_lines": 43
+    }
+   },
+   "git": {
+    "decision": "SUCCEEDED",
+    "git_dir": ".git",
+    "head_commit": "9acaa34035af45f531197a9d9a56032ebbed1908",
+    "mainline_ref": "refs/heads/main",
+    "object_format": "sha1",
+    "observations": [],
+    "reason": "resolved",
+    "shallow": [],
+    "snapshot_commit": "9acaa34035af45f531197a9d9a56032ebbed1908"
+   },
+   "github": null,
+   "github_gaps": [],
+   "github_reason": "github_enrichment_disabled",
+   "github_status": "SKIPPED_POLICY",
+   "history_gaps": [],
+   "history_handoff_sha256": "<sha256>",
+   "history_identity": "<sha256>",
+   "history_signals": {
+    "path": "data/jobs/job_source_history_analysis/attempts/<attempt>/steps/analyze/tasks/rank/artifacts/signals.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "lifetime": {
+    "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/steps/load/tasks/accepted_history/artifacts/lifetime.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "snapshot_commit": "9acaa34035af45f531197a9d9a56032ebbed1908",
+   "terminal_status": "SUCCEEDED"
+  },
+  "load.external_sources": {
+   "artifact": {
+    "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/steps/load/tasks/external_sources/artifacts/external-sources.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "raw_exports": {},
+   "sources": {
+    "deployment": {
+     "environments": [
+      "production"
+     ],
+     "event_count": 0,
+     "status": "unavailable"
+    },
+    "organization": {
+     "member_count": 0,
+     "status": "unavailable"
+    },
+    "review": {
+     "record_count": 0,
+     "source": "github_enrichment",
+     "status": "unavailable"
+    },
+    "schedule": {
+     "status": "unavailable",
+     "time_zone": null
+    },
+    "test_association": {
+     "status": "complete"
+    }
+   },
+   "terminal_status": "PARTIAL"
+  },
+  "publish.index_change_context": {
+   "index_identity": {
+    "fingerprint": "<sha256>",
+    "name": "history",
+    "producer": {
+     "job": "job_change_context_analysis",
+     "vcs": "git"
+    },
+    "relative_path": "data/indices/history/change-context/<sha256>.sqlite",
+    "schema": "appsec-review/retrieval-index/2",
+    "sha256": "<sha256>",
+    "shard_id": "change-context"
+   },
+   "manifest": {
+    "path": "data/indices/manifests/change-context-<attempt>.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "terminal_status": "PARTIAL"
+  },
+  "publish.publish_handoff": {
+   "artifact": {
+    "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/steps/publish/tasks/publish_handoff/artifacts/change-context.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "index_manifest": {
+    "path": "data/indices/manifests/change-context-<attempt>.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "item_count": 28,
+   "schema": "appsec-review/change-context-analysis/1",
+   "terminal_status": "PARTIAL"
+  }
+ },
+ "schema": "appsec-review/acceptance-job-output/1",
+ "skipped_units": [],
+ "status": "COMPLETED_WITH_GAPS",
+ "steps": {
+  "analyze": "SUCCEEDED",
+  "attribute": "SUCCEEDED",
+  "load": "SUCCEEDED",
+  "publish": "SUCCEEDED"
+ },
+ "units": {
+  "analyze.change_signals": {
+   "disposition": "SUCCEEDED",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "analyze.rank": {
+   "disposition": "SUCCEEDED",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "analyze.unit_signals": {
+   "disposition": "SUCCEEDED",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "attribute.fix_on_fix": {
+   "disposition": "SUCCEEDED",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "attribute.line_attribution": {
+   "disposition": "PARTIAL",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "load.accepted_history": {
+   "disposition": "SUCCEEDED",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "load.external_sources": {
+   "disposition": "PARTIAL",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "publish.index_change_context": {
+   "disposition": "PARTIAL",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "publish.publish_handoff": {
+   "disposition": "PARTIAL",
+   "producer": null,
+   "status": "SUCCEEDED"
+  }
+ },
+ "volatile": {
+  "artifacts": [
+   {
+    "path": "data/indices/manifests/change-context-<attempt>.json",
+    "sha256": "e317862b60e783dd9c379194bc8317a830c287cca79e19c25ae46b035be0752a",
+    "size_bytes": 14776
+   },
+   {
+    "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/steps/analyze/tasks/change_signals/artifacts/change-records.json",
+    "sha256": "e0080af41dae4e45b4eda084a760f591468a17c0c4114bacb5dcf8018b395d16",
+    "size_bytes": 1771
+   },
+   {
+    "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/steps/analyze/tasks/rank/artifacts/signals.json",
+    "sha256": "257712b1f8f6f6eecd1a740bd8ac25a3de7042f0548255889154853b44dbc3de",
+    "size_bytes": 88648
+   },
+   {
+    "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/steps/analyze/tasks/unit_signals/artifacts/units.json",
+    "sha256": "f445ebdeaf039af5d03be6bb5f1fbf2e956f7ea435d508abb9e9bba1b4018130",
+    "size_bytes": 75272
+   },
+   {
+    "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/steps/attribute/tasks/fix_on_fix/artifacts/fix-on-fix.json",
+    "sha256": "0d22b57615369a0cd0901435debd2f78e960c38b965c533eacbfd8770c9c3087",
+    "size_bytes": 130
+   },
+   {
+    "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/steps/attribute/tasks/line_attribution/artifacts/attribution.json",
+    "sha256": "005224096b01cf4fd31ec55b76148bb9a127f19ad0383e37bc2e953bcc12bf21",
+    "size_bytes": 15957
+   },
+   {
+    "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/steps/load/tasks/accepted_history/artifacts/lifetime.json",
+    "sha256": "58715bf621ed438a79426d2fbbec036f1b627aed56d897326fda68898aa0ade6",
+    "size_bytes": 621
+   },
+   {
+    "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/steps/load/tasks/external_sources/artifacts/external-sources.json",
+    "sha256": "dfc46ab5f844547e5fc63d4baeced338f46313e9a6b16c09c2ff1f6400c5d1ff",
+    "size_bytes": 608
+   },
+   {
+    "path": "data/jobs/job_change_context_analysis/attempts/<attempt>/steps/publish/tasks/publish_handoff/artifacts/change-context.json",
+    "sha256": "f13b4173624bf35f7148554152893ce62f211ad9e4b8c93ff8c3b92b2b87b437",
+    "size_bytes": 8917
+   },
+   {
+    "path": "data/jobs/job_source_history_analysis/attempts/<attempt>/steps/acquire/tasks/normalize_changes/artifacts/changes.json",
+    "sha256": "b423df0da2fecc7dce5829d65331144e4ae01ec0725176b57b5cbd48362387f6",
+    "size_bytes": 1764
+   },
+   {
+    "path": "data/jobs/job_source_history_analysis/attempts/<attempt>/steps/analyze/tasks/classify_changes/artifacts/classification.json",
+    "sha256": "25becb4f390fddd4393e1b65d04848cb4eaecde0b1fc451866eb0d5cbb56a53c",
+    "size_bytes": 431
+   },
+   {
+    "path": "data/jobs/job_source_history_analysis/attempts/<attempt>/steps/analyze/tasks/rank/artifacts/signals.json",
+    "sha256": "8285a1eb092a87d19017b79bf58c281add2d57219a0d2a32ea00b6026228264d",
+    "size_bytes": 44769
+   }
+  ]
+ }
+}

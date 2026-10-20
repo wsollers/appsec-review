@@ -1,0 +1,898 @@
+{
+ "artifacts": [
+  {
+   "count": 0,
+   "kind": "json",
+   "path": "data/jobs/job_source_history_analysis/attempts/<attempt>/steps/analyze/tasks/co_change/artifacts/co-change.json",
+   "sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+  },
+  {
+   "count": 14,
+   "kind": "json",
+   "path": "data/jobs/job_source_history_analysis/attempts/<attempt>/steps/analyze/tasks/rank/artifacts/hotspots.json",
+   "sha256": "e97c03ff0860e6ec2944b674cff66301e3277f5201c8494643ec39cc3838fca0"
+  },
+  {
+   "count": 14,
+   "kind": "json",
+   "path": "data/jobs/job_source_history_analysis/attempts/<attempt>/steps/analyze/tasks/rank/artifacts/signals.json",
+   "sha256": "e206b654c6645fe4515796ba7992625492bb292e5f23a721cf0f2f6bc80cbbc4"
+  },
+  {
+   "count": 15,
+   "kind": "json",
+   "path": "data/jobs/job_source_history_analysis/attempts/<attempt>/steps/publish/tasks/publish_handoff/artifacts/source-history.json",
+   "sha256": "baa42df0b7d613767a070410ba11418b22675a47564b230e133f783214e7cf3d"
+  },
+  {
+   "count": 2,
+   "kind": "json",
+   "path": "data/jobs/job_source_history_analysis/attempts/<attempt>/steps/analyze/tasks/compute_signals/artifacts/raw-signals.json",
+   "sha256": "00276bc010b601031eac5acdead21f91d227ec7604edfd99d9168486d978d217"
+  },
+  {
+   "count": 23,
+   "kind": "json",
+   "path": "data/jobs/job_source_history_analysis/attempts/<attempt>/steps/acquire/tasks/git_history/scratch/executions/log/execution.json",
+   "sha256": "4b6dc1045e4b1d4d994571a276137aa8c30f290cfe827b21752e1e255c447098"
+  },
+  {
+   "count": 23,
+   "kind": "json",
+   "path": "data/jobs/job_source_history_analysis/attempts/<attempt>/steps/acquire/tasks/git_history/scratch/executions/messages/execution.json",
+   "sha256": "5491a18e149087ed26583102efbe525a28bed371d43299d4437c69addf814a4d"
+  },
+  {
+   "count": 3,
+   "kind": "json",
+   "path": "data/jobs/job_source_history_analysis/attempts/<attempt>/steps/analyze/tasks/symbol_signals/artifacts/symbol-signals.json",
+   "sha256": "0767671d2416ca588053e0b3ebe8a336c9383cf245467847e437b45ec046b71d"
+  },
+  {
+   "count": 4,
+   "kind": "json",
+   "path": "data/jobs/job_source_history_analysis/attempts/<attempt>/steps/analyze/tasks/fix_on_fix/artifacts/fix-on-fix.json",
+   "sha256": "a7226f1b1620807f516c02f153ee89ddcc15140bf81bd3b9bf0b413f6711038e"
+  },
+  {
+   "count": 4,
+   "kind": "json",
+   "path": "data/jobs/job_source_history_analysis/attempts/<attempt>/steps/analyze/tasks/line_history/artifacts/line-history.json",
+   "sha256": "0f407ee3f21642822554b82c13bf7a595bc9006cb1f49c5201752c493e2ee059"
+  },
+  {
+   "count": 5,
+   "kind": "json",
+   "path": "data/jobs/job_source_history_analysis/attempts/<attempt>/steps/analyze/tasks/symbol_spans/artifacts/symbols.json",
+   "sha256": "ac743a255fdef90753e51558badd40a7c421b95e48f15fde49eef59af0999136"
+  },
+  {
+   "count": 6,
+   "kind": "json",
+   "path": "data/jobs/job_source_history_analysis/attempts/<attempt>/steps/analyze/tasks/classify_changes/artifacts/classification.json",
+   "sha256": "a6d9b319b76f7da4819d118ad8b98c1298f758f0446c7d119a0d39e6d23e3656"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/indices/manifests/source-history-<attempt>.json",
+   "sha256": "3c7864a56c7680139c0907bacf2a54d8e282dc597516d388acbacc99f81d985e"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/jobs/job_source_history_analysis/attempts/<attempt>/steps/acquire/tasks/normalize_changes/artifacts/changes.json",
+   "sha256": "8cf55255ea20f59453c5212c5f51e090a577576311866a57f0ed49d8fc4ed674"
+  },
+  {
+   "count": 9,
+   "kind": "json",
+   "path": "data/jobs/job_source_history_analysis/attempts/<attempt>/steps/resolve_sources/tasks/bind_snapshot/artifacts/binding.json",
+   "sha256": "ab3af2195f20e4014b042b954df1549a69f8a4b9a899733873c0f3398bac169c"
+  },
+  {
+   "kind": "file",
+   "path": "data/jobs/job_source_history_analysis/attempts/<attempt>/steps/acquire/tasks/git_history/protected/log.bin"
+  },
+  {
+   "kind": "file",
+   "path": "data/jobs/job_source_history_analysis/attempts/<attempt>/steps/acquire/tasks/git_history/protected/messages.bin"
+  }
+ ],
+ "failed_units": [],
+ "findings": [],
+ "gaps": [],
+ "handoff": {
+  "completion_status": "SUCCEEDED",
+  "schema_identity": "appsec-review/source-history-analysis/2",
+  "status": "ACCEPTED",
+  "upstream_jobs": [
+   "job_review_intake",
+   "job_target_catalog"
+  ]
+ },
+ "job_id": "job_source_history_analysis",
+ "outputs": {
+  "acquire.git_history": {
+   "argv_version": "appsec-review/git-argv/2",
+   "executions": [
+    {
+     "argv_identity": "<sha256>",
+     "completed_at": "<timestamp>",
+     "exit_code": 0,
+     "file_size_limit_bytes": 268435457,
+     "file_size_limit_reached": false,
+     "image_digest": "<image_digest>",
+     "image_id": "<image_id>",
+     "image_tag": "appsec-review/tool-git:2.43.0",
+     "limits": {
+      "cap_drop": [
+       "ALL"
+      ],
+      "cpus": "2",
+      "file_size_bytes": 268435457,
+      "memory": "1g",
+      "memory_source": "catalog",
+      "network": "none",
+      "no_new_privileges": true,
+      "pids": "<pids>",
+      "root_filesystem": "read-only",
+      "stderr_bytes": 16777216,
+      "stdout_bytes": 16777216,
+      "timeout_seconds": "<duration>",
+      "tmpfs": [
+       "/tmp:rw,nosuid,nodev,noexec,size=128m"
+      ],
+      "user": "1000:1000"
+     },
+     "mounts": [
+      {
+       "read_only": true,
+       "runtime_source": "<target>",
+       "source": "<target>",
+       "target": "/target"
+      },
+      {
+       "read_only": false,
+       "runtime_source": "<run>/data/jobs/job_source_history_analysis/attempts/<attempt>/steps/acquire/tasks/git_history/scratch/executions/log",
+       "source": "<run>/data/jobs/job_source_history_analysis/attempts/<attempt>/steps/acquire/tasks/git_history/scratch/executions/log",
+       "target": "/scratch"
+      },
+      {
+       "read_only": true,
+       "runtime_source": "<run>/data/jobs/job_source_history_analysis/attempts/<attempt>/steps/acquire/tasks/git_history/scratch/gitdir",
+       "source": "<run>/data/jobs/job_source_history_analysis/attempts/<attempt>/steps/acquire/tasks/git_history/scratch/gitdir",
+       "target": "/gitdir"
+      }
+     ],
+     "oom_killed": false,
+     "output_limit_reached": false,
+     "receipt_path": "data/jobs/job_source_history_analysis/attempts/<attempt>/steps/acquire/tasks/git_history/scratch/executions/log/execution.json",
+     "schema": "appsec-review/container-execution/1",
+     "started_at": "<timestamp>",
+     "stderr_path": "data/jobs/job_source_history_analysis/attempts/<attempt>/steps/acquire/tasks/git_history/scratch/executions/log/raw/stderr.bin",
+     "stderr_truncated": false,
+     "stdout_path": "data/jobs/job_source_history_analysis/attempts/<attempt>/steps/acquire/tasks/git_history/scratch/executions/log/raw/stdout.bin",
+     "stdout_truncated": false,
+     "timed_out": false,
+     "tool_id": "tool-git"
+    },
+    {
+     "argv_identity": "<sha256>",
+     "completed_at": "<timestamp>",
+     "exit_code": 0,
+     "file_size_limit_bytes": 268435457,
+     "file_size_limit_reached": false,
+     "image_digest": "<image_digest>",
+     "image_id": "<image_id>",
+     "image_tag": "appsec-review/tool-git:2.43.0",
+     "limits": {
+      "cap_drop": [
+       "ALL"
+      ],
+      "cpus": "2",
+      "file_size_bytes": 268435457,
+      "memory": "1g",
+      "memory_source": "catalog",
+      "network": "none",
+      "no_new_privileges": true,
+      "pids": "<pids>",
+      "root_filesystem": "read-only",
+      "stderr_bytes": 16777216,
+      "stdout_bytes": 16777216,
+      "timeout_seconds": "<duration>",
+      "tmpfs": [
+       "/tmp:rw,nosuid,nodev,noexec,size=128m"
+      ],
+      "user": "1000:1000"
+     },
+     "mounts": [
+      {
+       "read_only": true,
+       "runtime_source": "<target>",
+       "source": "<target>",
+       "target": "/target"
+      },
+      {
+       "read_only": false,
+       "runtime_source": "<run>/data/jobs/job_source_history_analysis/attempts/<attempt>/steps/acquire/tasks/git_history/scratch/executions/messages",
+       "source": "<run>/data/jobs/job_source_history_analysis/attempts/<attempt>/steps/acquire/tasks/git_history/scratch/executions/messages",
+       "target": "/scratch"
+      },
+      {
+       "read_only": true,
+       "runtime_source": "<run>/data/jobs/job_source_history_analysis/attempts/<attempt>/steps/acquire/tasks/git_history/scratch/gitdir",
+       "source": "<run>/data/jobs/job_source_history_analysis/attempts/<attempt>/steps/acquire/tasks/git_history/scratch/gitdir",
+       "target": "/gitdir"
+      }
+     ],
+     "oom_killed": false,
+     "output_limit_reached": false,
+     "receipt_path": "data/jobs/job_source_history_analysis/attempts/<attempt>/steps/acquire/tasks/git_history/scratch/executions/messages/execution.json",
+     "schema": "appsec-review/container-execution/1",
+     "started_at": "<timestamp>",
+     "stderr_path": "data/jobs/job_source_history_analysis/attempts/<attempt>/steps/acquire/tasks/git_history/scratch/executions/messages/raw/stderr.bin",
+     "stderr_truncated": false,
+     "stdout_path": "data/jobs/job_source_history_analysis/attempts/<attempt>/steps/acquire/tasks/git_history/scratch/executions/messages/raw/stdout.bin",
+     "stdout_truncated": false,
+     "timed_out": false,
+     "tool_id": "tool-git"
+    }
+   ],
+   "image_id": "<image_id>",
+   "parser": "appsec-review/git-history-stream-parser/2",
+   "raw_log": {
+    "execution": {
+     "argv_identity": "<sha256>",
+     "exit_code": 0,
+     "file_size_limit_bytes": 268435457,
+     "image_id": "<image_id>",
+     "receipt": {
+      "path": "data/jobs/job_source_history_analysis/attempts/<attempt>/steps/acquire/tasks/git_history/scratch/executions/log/execution.json",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     "status": "COMPLETED"
+    },
+    "path": "data/jobs/job_source_history_analysis/attempts/<attempt>/steps/acquire/tasks/git_history/protected/log.bin",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>",
+    "source": {
+     "history_identity": "<sha256>",
+     "object_format": "sha1",
+     "snapshot_commit": "9acaa34035af45f531197a9d9a56032ebbed1908"
+    }
+   },
+   "raw_messages": {
+    "execution": {
+     "argv_identity": "<sha256>",
+     "exit_code": 0,
+     "file_size_limit_bytes": 268435457,
+     "image_id": "<image_id>",
+     "receipt": {
+      "path": "data/jobs/job_source_history_analysis/attempts/<attempt>/steps/acquire/tasks/git_history/scratch/executions/messages/execution.json",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     "status": "COMPLETED"
+    },
+    "path": "data/jobs/job_source_history_analysis/attempts/<attempt>/steps/acquire/tasks/git_history/protected/messages.bin",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>",
+    "source": {
+     "history_identity": "<sha256>",
+     "object_format": "sha1",
+     "snapshot_commit": "9acaa34035af45f531197a9d9a56032ebbed1908"
+    }
+   },
+   "resource_limits": {
+    "max_changed_paths": 1000000,
+    "max_message_bytes": 65536,
+    "max_output_bytes": 268435456,
+    "max_record_bytes": 1048576
+   },
+   "terminal_status": "SUCCEEDED"
+  },
+  "acquire.github_enrichment": {
+   "facts_count": 0,
+   "reason": "github_enrichment_disabled",
+   "terminal_status": "SKIPPED_POLICY"
+  },
+  "acquire.normalize_changes": {
+   "anchor_time": 1792359806,
+   "artifact": {
+    "path": "data/jobs/job_source_history_analysis/attempts/<attempt>/steps/acquire/tasks/normalize_changes/artifacts/changes.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "author_count": 1,
+   "change_count": 1,
+   "observations": [],
+   "terminal_status": "SUCCEEDED",
+   "walked_change_count": 1,
+   "window_start": 1776548606
+  },
+  "analyze.blame_age": {
+   "blamed_file_count": 8,
+   "candidate_count": 8,
+   "terminal_status": "SUCCEEDED",
+   "young_line_share": {
+    "include/relay/relay.hpp": 1.0,
+    "src/config.cpp": 1.0,
+    "src/diag.cpp": 1.0,
+    "src/frame.cpp": 1.0,
+    "src/log.cpp": 1.0,
+    "src/main.cpp": 1.0,
+    "src/packet.cpp": 1.0,
+    "src/session.cpp": 1.0
+   }
+  },
+  "analyze.classify_changes": {
+   "artifact": {
+    "path": "data/jobs/job_source_history_analysis/attempts/<attempt>/steps/analyze/tasks/classify_changes/artifacts/classification.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "counts": {
+    "fix": 0,
+    "formatting": 0,
+    "message_incomplete": 0,
+    "revert": 0,
+    "security_fix": 0
+   },
+   "terminal_status": "SUCCEEDED"
+  },
+  "analyze.co_change": {
+   "artifact": {
+    "path": "data/jobs/job_source_history_analysis/attempts/<attempt>/steps/analyze/tasks/co_change/artifacts/co-change.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "file_count": 0,
+   "terminal_status": "SUCCEEDED"
+  },
+  "analyze.compute_signals": {
+   "artifact": {
+    "path": "data/jobs/job_source_history_analysis/attempts/<attempt>/steps/analyze/tasks/compute_signals/artifacts/raw-signals.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "component_count": 1,
+   "file_count": 10,
+   "rank_exclusions": {
+    "excluded:documentation": 2
+   },
+   "terminal_status": "SUCCEEDED"
+  },
+  "analyze.fix_on_fix": {
+   "artifact": {
+    "path": "data/jobs/job_source_history_analysis/attempts/<attempt>/steps/analyze/tasks/fix_on_fix/artifacts/fix-on-fix.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "event_count": 0,
+   "terminal_status": "SUCCEEDED"
+  },
+  "analyze.line_history": {
+   "artifact": {
+    "path": "data/jobs/job_source_history_analysis/attempts/<attempt>/steps/analyze/tasks/line_history/artifacts/line-history.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "file_count": 8,
+   "terminal_status": "SUCCEEDED"
+  },
+  "analyze.rank": {
+   "artifact": {
+    "path": "data/jobs/job_source_history_analysis/attempts/<attempt>/steps/analyze/tasks/rank/artifacts/signals.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "hotspot_entry_count": 18,
+   "hotspots": {
+    "path": "data/jobs/job_source_history_analysis/attempts/<attempt>/steps/analyze/tasks/rank/artifacts/hotspots.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "ranked_component_count": 1,
+   "ranked_file_count": 8,
+   "ranked_symbol_count": 17,
+   "terminal_status": "SUCCEEDED"
+  },
+  "analyze.symbol_signals": {
+   "artifact": {
+    "path": "data/jobs/job_source_history_analysis/attempts/<attempt>/steps/analyze/tasks/symbol_signals/artifacts/symbol-signals.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "symbol_count": 17,
+   "terminal_status": "SUCCEEDED"
+  },
+  "analyze.symbol_spans": {
+   "artifact": {
+    "path": "data/jobs/job_source_history_analysis/attempts/<attempt>/steps/analyze/tasks/symbol_spans/artifacts/symbols.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "file_count": 8,
+   "terminal_status": "SUCCEEDED"
+  },
+  "publish.index_history": {
+   "index_identity": {
+    "fingerprint": "<sha256>",
+    "name": "history",
+    "producer": {
+     "job": "job_source_history_analysis",
+     "vcs": "git"
+    },
+    "relative_path": "data/indices/history/git-history/<sha256>.sqlite",
+    "schema": "appsec-review/retrieval-index/2",
+    "sha256": "<sha256>",
+    "shard_id": "git-history"
+   },
+   "manifest": {
+    "path": "data/indices/manifests/source-history-<attempt>.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "terminal_status": "SUCCEEDED"
+  },
+  "publish.publish_handoff": {
+   "artifact": {
+    "path": "data/jobs/job_source_history_analysis/attempts/<attempt>/steps/publish/tasks/publish_handoff/artifacts/source-history.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "index_manifest": {
+    "path": "data/indices/manifests/source-history-<attempt>.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "item_count": 10,
+   "schema": "appsec-review/source-history-analysis/2",
+   "terminal_status": "SUCCEEDED"
+  },
+  "resolve_sources.bind_snapshot": {
+   "artifact": {
+    "path": "data/jobs/job_source_history_analysis/attempts/<attempt>/steps/resolve_sources/tasks/bind_snapshot/artifacts/binding.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "binding": "exact",
+   "counts": {
+    "divergent_count": 0,
+    "matched_count": 10,
+    "submodule_count": 0,
+    "untracked_count": 0
+   },
+   "eligible": {
+    "CMakeLists.txt": {
+     "blob_id": "21a68a9f286c03bc14e03a53a0b20c745927d097",
+     "exact": true,
+     "language": null,
+     "line_count": 17,
+     "sha256": "<sha256>",
+     "size_bytes": "<size_bytes>",
+     "span_lines": 19
+    },
+    "README.md": {
+     "blob_id": "3120e7c5298b365f2978bf261abbe783f2128f1b",
+     "exact": true,
+     "language": null,
+     "line_count": 3,
+     "sha256": "<sha256>",
+     "size_bytes": "<size_bytes>",
+     "span_lines": 5
+    },
+    "include/relay/relay.hpp": {
+     "blob_id": "d0e7e7a228ddd979e443e527f9b84facc8d1076a",
+     "exact": true,
+     "language": "C++",
+     "line_count": 33,
+     "sha256": "<sha256>",
+     "size_bytes": "<size_bytes>",
+     "span_lines": 45
+    },
+    "src/config.cpp": {
+     "blob_id": "7a196d4a1d19e9cfc35e63b3332693ca93c7f6ee",
+     "exact": true,
+     "language": "C++",
+     "line_count": 8,
+     "sha256": "<sha256>",
+     "size_bytes": "<size_bytes>",
+     "span_lines": 13
+    },
+    "src/diag.cpp": {
+     "blob_id": "f53d4867605470b79a70160b57c0ac37195cf342",
+     "exact": true,
+     "language": "C++",
+     "line_count": 8,
+     "sha256": "<sha256>",
+     "size_bytes": "<size_bytes>",
+     "span_lines": 12
+    },
+    "src/frame.cpp": {
+     "blob_id": "9d3215ee3f21eaec97ca2455608a64231e7462e0",
+     "exact": true,
+     "language": "C++",
+     "line_count": 23,
+     "sha256": "<sha256>",
+     "size_bytes": "<size_bytes>",
+     "span_lines": 28
+    },
+    "src/log.cpp": {
+     "blob_id": "7689925faefce20b8da899e4ddb39d14b85c5358",
+     "exact": true,
+     "language": "C++",
+     "line_count": 8,
+     "sha256": "<sha256>",
+     "size_bytes": "<size_bytes>",
+     "span_lines": 12
+    },
+    "src/main.cpp": {
+     "blob_id": "8d80d6e165dc797d5519e5fe6513abd6f36dba2a",
+     "exact": true,
+     "language": "C++",
+     "line_count": 67,
+     "sha256": "<sha256>",
+     "size_bytes": "<size_bytes>",
+     "span_lines": 75
+    },
+    "src/packet.cpp": {
+     "blob_id": "ebc54c43425addd0fb9ed3e4c473200359ae384d",
+     "exact": true,
+     "language": "C++",
+     "line_count": 16,
+     "sha256": "<sha256>",
+     "size_bytes": "<size_bytes>",
+     "span_lines": 20
+    },
+    "src/session.cpp": {
+     "blob_id": "c215b64319f1094dd5c59ac6f4e7f5a309583399",
+     "exact": true,
+     "language": "C++",
+     "line_count": 34,
+     "sha256": "<sha256>",
+     "size_bytes": "<size_bytes>",
+     "span_lines": 43
+    }
+   },
+   "executions": [
+    {
+     "argv_identity": "<sha256>",
+     "completed_at": "<timestamp>",
+     "exit_code": 0,
+     "file_size_limit_bytes": 268435457,
+     "file_size_limit_reached": false,
+     "image_digest": "<image_digest>",
+     "image_id": "<image_id>",
+     "image_tag": "appsec-review/tool-git:2.43.0",
+     "limits": {
+      "cap_drop": [
+       "ALL"
+      ],
+      "cpus": "2",
+      "file_size_bytes": 268435457,
+      "memory": "1g",
+      "memory_source": "catalog",
+      "network": "none",
+      "no_new_privileges": true,
+      "pids": "<pids>",
+      "root_filesystem": "read-only",
+      "stderr_bytes": 16777216,
+      "stdout_bytes": 16777216,
+      "timeout_seconds": "<duration>",
+      "tmpfs": [
+       "/tmp:rw,nosuid,nodev,noexec,size=128m"
+      ],
+      "user": "1000:1000"
+     },
+     "mounts": [
+      {
+       "read_only": true,
+       "runtime_source": "<target>",
+       "source": "<target>",
+       "target": "/target"
+      },
+      {
+       "read_only": false,
+       "runtime_source": "<run>/data/jobs/job_source_history_analysis/attempts/<attempt>/steps/resolve_sources/tasks/bind_snapshot/scratch/executions/tree",
+       "source": "<run>/data/jobs/job_source_history_analysis/attempts/<attempt>/steps/resolve_sources/tasks/bind_snapshot/scratch/executions/tree",
+       "target": "/scratch"
+      },
+      {
+       "read_only": true,
+       "runtime_source": "<run>/data/jobs/job_source_history_analysis/attempts/<attempt>/steps/resolve_sources/tasks/bind_snapshot/scratch/gitdir",
+       "source": "<run>/data/jobs/job_source_history_analysis/attempts/<attempt>/steps/resolve_sources/tasks/bind_snapshot/scratch/gitdir",
+       "target": "/gitdir"
+      }
+     ],
+     "oom_killed": false,
+     "output_limit_reached": false,
+     "receipt_path": "data/jobs/job_source_history_analysis/attempts/<attempt>/steps/resolve_sources/tasks/bind_snapshot/scratch/executions/tree/execution.json",
+     "schema": "appsec-review/container-execution/1",
+     "started_at": "<timestamp>",
+     "stderr_path": "data/jobs/job_source_history_analysis/attempts/<attempt>/steps/resolve_sources/tasks/bind_snapshot/scratch/executions/tree/raw/stderr.bin",
+     "stderr_truncated": false,
+     "stdout_path": "data/jobs/job_source_history_analysis/attempts/<attempt>/steps/resolve_sources/tasks/bind_snapshot/scratch/executions/tree/raw/stdout.bin",
+     "stdout_truncated": false,
+     "timed_out": false,
+     "tool_id": "tool-git"
+    }
+   ],
+   "terminal_status": "SUCCEEDED"
+  },
+  "resolve_sources.resolve_history_source": {
+   "configured_exclusions": [],
+   "git": {
+    "decision": "SUCCEEDED",
+    "git_dir": ".git",
+    "head_commit": "9acaa34035af45f531197a9d9a56032ebbed1908",
+    "mainline_ref": "refs/heads/main",
+    "object_format": "sha1",
+    "observations": [],
+    "reason": "resolved",
+    "shallow": [],
+    "snapshot_commit": "9acaa34035af45f531197a9d9a56032ebbed1908"
+   },
+   "github": {
+    "decision": "SKIPPED_POLICY",
+    "reason": "github_enrichment_disabled"
+   },
+   "identity": "<sha256>",
+   "inputs": {
+    "catalog_handoff_sha256": "<sha256>",
+    "components": [
+     {
+      "component_id": "component:0001",
+      "root": "."
+     }
+    ],
+    "files": [
+     {
+      "language": null,
+      "path": "CMakeLists.txt",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     {
+      "language": null,
+      "path": "README.md",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     {
+      "language": "C++",
+      "path": "include/relay/relay.hpp",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     {
+      "language": "C++",
+      "path": "src/config.cpp",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     {
+      "language": "C++",
+      "path": "src/diag.cpp",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     {
+      "language": "C++",
+      "path": "src/frame.cpp",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     {
+      "language": "C++",
+      "path": "src/log.cpp",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     {
+      "language": "C++",
+      "path": "src/main.cpp",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     {
+      "language": "C++",
+      "path": "src/packet.cpp",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     {
+      "language": "C++",
+      "path": "src/session.cpp",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     }
+    ],
+    "source_fingerprint": "<sha256>"
+   },
+   "terminal_status": "SUCCEEDED"
+  }
+ },
+ "schema": "appsec-review/acceptance-job-output/1",
+ "skipped_units": [],
+ "status": "SUCCEEDED",
+ "steps": {
+  "acquire": "SUCCEEDED",
+  "analyze": "SUCCEEDED",
+  "publish": "SUCCEEDED",
+  "resolve_sources": "SUCCEEDED"
+ },
+ "units": {
+  "acquire.git_history": {
+   "disposition": "SUCCEEDED",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "acquire.github_enrichment": {
+   "disposition": "SKIPPED_POLICY",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "acquire.normalize_changes": {
+   "disposition": "SUCCEEDED",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "analyze.blame_age": {
+   "disposition": "SUCCEEDED",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "analyze.classify_changes": {
+   "disposition": "SUCCEEDED",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "analyze.co_change": {
+   "disposition": "SUCCEEDED",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "analyze.compute_signals": {
+   "disposition": "SUCCEEDED",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "analyze.fix_on_fix": {
+   "disposition": "SUCCEEDED",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "analyze.line_history": {
+   "disposition": "SUCCEEDED",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "analyze.rank": {
+   "disposition": "SUCCEEDED",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "analyze.symbol_signals": {
+   "disposition": "SUCCEEDED",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "analyze.symbol_spans": {
+   "disposition": "SUCCEEDED",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "publish.index_history": {
+   "disposition": "SUCCEEDED",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "publish.publish_handoff": {
+   "disposition": "SUCCEEDED",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "resolve_sources.bind_snapshot": {
+   "disposition": "SUCCEEDED",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "resolve_sources.resolve_history_source": {
+   "disposition": "SUCCEEDED",
+   "producer": null,
+   "status": "SUCCEEDED"
+  }
+ },
+ "volatile": {
+  "artifacts": [
+   {
+    "path": "data/indices/manifests/source-history-<attempt>.json",
+    "sha256": "3e724a781cb83856598625acaccecbc4c74245e60e837931c58e73dd48ba28c2",
+    "size_bytes": 3442
+   },
+   {
+    "path": "data/jobs/job_source_history_analysis/attempts/<attempt>/steps/acquire/tasks/git_history/protected/log.bin",
+    "sha256": "782b5fa7184241c5e2a9ab6c3f3c5001cedf00b76577573a7d55108bb6824ea6",
+    "size_bytes": 296
+   },
+   {
+    "path": "data/jobs/job_source_history_analysis/attempts/<attempt>/steps/acquire/tasks/git_history/protected/messages.bin",
+    "sha256": "b367d005ed88c7598dd93417a8ab6d3e6dfc8d75b5054002c250972ede7a8b4b",
+    "size_bytes": 64
+   },
+   {
+    "path": "data/jobs/job_source_history_analysis/attempts/<attempt>/steps/acquire/tasks/git_history/scratch/executions/log/execution.json",
+    "sha256": "1c06045d988617ddcacbeaca44fff98beb4f0f834030d85a966ed4ee675512eb",
+    "size_bytes": 2516
+   },
+   {
+    "path": "data/jobs/job_source_history_analysis/attempts/<attempt>/steps/acquire/tasks/git_history/scratch/executions/messages/execution.json",
+    "sha256": "4a9e79dc2f697849d5f02b53a12aab7ecad288e44c20c780fac80ff10fb8f679",
+    "size_bytes": 2541
+   },
+   {
+    "path": "data/jobs/job_source_history_analysis/attempts/<attempt>/steps/acquire/tasks/normalize_changes/artifacts/changes.json",
+    "sha256": "b423df0da2fecc7dce5829d65331144e4ae01ec0725176b57b5cbd48362387f6",
+    "size_bytes": 1764
+   },
+   {
+    "path": "data/jobs/job_source_history_analysis/attempts/<attempt>/steps/analyze/tasks/classify_changes/artifacts/classification.json",
+    "sha256": "25becb4f390fddd4393e1b65d04848cb4eaecde0b1fc451866eb0d5cbb56a53c",
+    "size_bytes": 431
+   },
+   {
+    "path": "data/jobs/job_source_history_analysis/attempts/<attempt>/steps/analyze/tasks/co_change/artifacts/co-change.json",
+    "sha256": "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356",
+    "size_bytes": 3
+   },
+   {
+    "path": "data/jobs/job_source_history_analysis/attempts/<attempt>/steps/analyze/tasks/compute_signals/artifacts/raw-signals.json",
+    "sha256": "5fba55c35b0a8554dc0c16a94674300f5e5ebc87649c23613fa0bedb916d6549",
+    "size_bytes": 10971
+   },
+   {
+    "path": "data/jobs/job_source_history_analysis/attempts/<attempt>/steps/analyze/tasks/fix_on_fix/artifacts/fix-on-fix.json",
+    "sha256": "dbf8e303d8ce3bd91e4ee35e9551b2d53d96897f1a655c2ea00bfe423b94988a",
+    "size_bytes": 122
+   },
+   {
+    "path": "data/jobs/job_source_history_analysis/attempts/<attempt>/steps/analyze/tasks/line_history/artifacts/line-history.json",
+    "sha256": "3046cbe22147d1c7e941a58f68bdb2360532842f19a6324d5efc8cdea6267b04",
+    "size_bytes": 1223
+   },
+   {
+    "path": "data/jobs/job_source_history_analysis/attempts/<attempt>/steps/analyze/tasks/rank/artifacts/hotspots.json",
+    "sha256": "a0ee80ee6e86c7b92c239cc14d8acc64472740f10316424dadd52c92769c7ae0",
+    "size_bytes": 66627
+   },
+   {
+    "path": "data/jobs/job_source_history_analysis/attempts/<attempt>/steps/analyze/tasks/rank/artifacts/signals.json",
+    "sha256": "8285a1eb092a87d19017b79bf58c281add2d57219a0d2a32ea00b6026228264d",
+    "size_bytes": 44769
+   },
+   {
+    "path": "data/jobs/job_source_history_analysis/attempts/<attempt>/steps/analyze/tasks/symbol_signals/artifacts/symbol-signals.json",
+    "sha256": "572719ed616774abf22e82042d441714bede3784175fd8e09fc1e85d71e2f683",
+    "size_bytes": 14871
+   },
+   {
+    "path": "data/jobs/job_source_history_analysis/attempts/<attempt>/steps/analyze/tasks/symbol_spans/artifacts/symbols.json",
+    "sha256": "6e5e2ad90ea974f94dd12b6a6a34841134ee9b83d6a582389869bedbbc8aabf2",
+    "size_bytes": 7801
+   },
+   {
+    "path": "data/jobs/job_source_history_analysis/attempts/<attempt>/steps/publish/tasks/publish_handoff/artifacts/source-history.json",
+    "sha256": "4e65414d4ae5c0503160b7c5bbbc6528b7193422c01389eee6e45872b5d7bb1b",
+    "size_bytes": 5878
+   },
+   {
+    "path": "data/jobs/job_source_history_analysis/attempts/<attempt>/steps/resolve_sources/tasks/bind_snapshot/artifacts/binding.json",
+    "sha256": "d7595eef8ef717f0a650e899654d0c552e7d56c2c033591f14eb0242b981ab22",
+    "size_bytes": 258
+   }
+  ]
+ }
+}

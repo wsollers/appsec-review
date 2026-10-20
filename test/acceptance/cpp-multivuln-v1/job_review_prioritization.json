@@ -1,0 +1,308 @@
+{
+ "artifacts": [
+  {
+   "count": 10,
+   "kind": "json",
+   "path": "data/jobs/job_review_prioritization/attempts/<attempt>/steps/load/tasks/accepted_inputs/artifacts/catalog-files.json",
+   "sha256": "fbbf92611ef580b9089d8578c6227c92eeeae5834fc42c9b18d6b80473746061"
+  },
+  {
+   "count": 10,
+   "kind": "json",
+   "path": "data/jobs/job_tree_sitter_ast/attempts/<attempt>/steps/acceptance/tasks/publish_handoff/accepted-tree-sitter-ast.json",
+   "sha256": "4247697fb1b5b4936507b2f4217f04f6b93526e989ce351a0551579f3dd215f8"
+  },
+  {
+   "count": 13,
+   "kind": "json",
+   "path": "data/jobs/job_review_prioritization/attempts/<attempt>/steps/publish/tasks/publish_handoff/artifacts/review-prioritization.json",
+   "sha256": "62c03c1a63d472ff8b4ebadfede6786cc38eb650168f530536a2ea690261801e"
+  },
+  {
+   "count": 4,
+   "kind": "json",
+   "path": "data/jobs/job_review_prioritization/attempts/<attempt>/steps/extract/tasks/syntax_metrics/artifacts/syntax-facts.json",
+   "sha256": "f564fbd32c27c5672a2b1562b685c1bee32a74184d160526ca06d8bd6bfe7e93"
+  },
+  {
+   "count": 5,
+   "kind": "json",
+   "path": "data/jobs/job_review_prioritization/attempts/<attempt>/steps/extract/tasks/semantic_evidence/artifacts/semantic-evidence.json",
+   "sha256": "52a8fd673e13b3bfcb3cfa800efbc320df9f82d2000a56833a7ad65126aa28db"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/indices/manifests/review-prioritization-<attempt>.json",
+   "sha256": "8f51651ad0aa5a9ac03daea9cfb843aff7ba19262d898465530739de175f59b7"
+  },
+  {
+   "count": 8,
+   "kind": "json",
+   "path": "data/jobs/job_review_prioritization/attempts/<attempt>/steps/extract/tasks/dependency_graph/artifacts/dependency-graph.json",
+   "sha256": "64dbce3b0edb8f9ac50418c6ae434bed30a6bb807658a72567eb53486696a00f"
+  },
+  {
+   "count": 9,
+   "kind": "json",
+   "path": "data/jobs/job_review_prioritization/attempts/<attempt>/steps/prioritize/tasks/score/artifacts/priority.json",
+   "sha256": "f9af83040a12d17a78ffd5d34066a7d8facc799d3850c8902675f7f53895bd01"
+  }
+ ],
+ "failed_units": [],
+ "findings": [],
+ "gaps": [
+  {
+   "count": 1,
+   "gap": "semgrep: SEI CERT rule pack: C and C++ are analyzed without preprocessing; macro-expanded code is not seen",
+   "unit": "extract.semantic_evidence"
+  },
+  {
+   "count": 1,
+   "gap": "semgrep: SEI CERT rule pack: findings evidence only the implemented subset of each mapped CERT rule; CERT rules with REQUIRES_* or UNSUPPORTED_* status produce no findings (rules/sei-cert/COVERAGE.md), so an absence of findings is not CERT conformance",
+   "unit": "extract.semantic_evidence"
+  },
+  {
+   "count": 2,
+   "gap": "semgrep: SEI CERT rule pack: C and C++ are analyzed without preprocessing; macro-expanded code is not seen",
+   "unit": "publish.index_priority"
+  },
+  {
+   "count": 2,
+   "gap": "semgrep: SEI CERT rule pack: findings evidence only the implemented subset of each mapped CERT rule; CERT rules with REQUIRES_* or UNSUPPORTED_* status produce no findings (rules/sei-cert/COVERAGE.md), so an absence of findings is not CERT conformance",
+   "unit": "publish.index_priority"
+  },
+  {
+   "count": 1,
+   "gap": "semgrep: SEI CERT rule pack: C and C++ are analyzed without preprocessing; macro-expanded code is not seen",
+   "unit": "publish.publish_handoff"
+  },
+  {
+   "count": 1,
+   "gap": "semgrep: SEI CERT rule pack: findings evidence only the implemented subset of each mapped CERT rule; CERT rules with REQUIRES_* or UNSUPPORTED_* status produce no findings (rules/sei-cert/COVERAGE.md), so an absence of findings is not CERT conformance",
+   "unit": "publish.publish_handoff"
+  }
+ ],
+ "handoff": {
+  "completion_status": "COMPLETED_WITH_GAPS",
+  "schema_identity": "appsec-review/review-prioritization/1",
+  "status": "ACCEPTED",
+  "upstream_jobs": [
+   "job_artifact_indexing",
+   "job_artifact_security_analysis",
+   "job_change_context_analysis",
+   "job_ci_configuration_analysis",
+   "job_clang_static_analysis",
+   "job_codeql_analysis",
+   "job_cpp_compiled_analysis",
+   "job_cpp_symbol_index",
+   "job_evidence_collection",
+   "job_language_build",
+   "job_owasp_control_assessment",
+   "job_post_build_security_assessment",
+   "job_project_build",
+   "job_review_intake",
+   "job_source_history_analysis",
+   "job_target_analysis_plan",
+   "job_target_catalog",
+   "job_tree_sitter_ast"
+  ]
+ },
+ "job_id": "job_review_prioritization",
+ "outputs": {
+  "extract.dependency_graph": {
+   "artifact": {
+    "path": "data/jobs/job_review_prioritization/attempts/<attempt>/steps/extract/tasks/dependency_graph/artifacts/dependency-graph.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "edge_count": 7,
+   "terminal_status": "SUCCEEDED"
+  },
+  "extract.semantic_evidence": {
+   "artifact": {
+    "path": "data/jobs/job_review_prioritization/attempts/<attempt>/steps/extract/tasks/semantic_evidence/artifacts/semantic-evidence.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "codeql_status": "SUCCEEDED",
+   "path_count": 2,
+   "semgrep_status": "PARTIAL",
+   "signal_count": 0,
+   "terminal_status": "PARTIAL"
+  },
+  "extract.syntax_metrics": {
+   "artifact": {
+    "path": "data/jobs/job_review_prioritization/attempts/<attempt>/steps/extract/tasks/syntax_metrics/artifacts/syntax-facts.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "file_count": 8,
+   "function_count": 17,
+   "terminal_status": "SUCCEEDED"
+  },
+  "load.accepted_inputs": {
+   "files_artifact": {
+    "path": "data/jobs/job_review_prioritization/attempts/<attempt>/steps/load/tasks/accepted_inputs/artifacts/catalog-files.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "inputs": {
+    "catalog_handoff_sha256": "<sha256>",
+    "components": [
+     "component:0001"
+    ],
+    "source_fingerprint": "<sha256>",
+    "tree_sitter_artifact": {
+     "path": "data/jobs/job_tree_sitter_ast/attempts/<attempt>/steps/acceptance/tasks/publish_handoff/accepted-tree-sitter-ast.json",
+     "sha256": "<sha256>",
+     "size_bytes": "<size_bytes>"
+    },
+    "tree_sitter_handoff_sha256": "<sha256>"
+   },
+   "optional": {
+    "codeql": true,
+    "history": true,
+    "semgrep": true
+   },
+   "terminal_status": "SUCCEEDED"
+  },
+  "prioritize.score": {
+   "artifact": {
+    "path": "data/jobs/job_review_prioritization/attempts/<attempt>/steps/prioritize/tasks/score/artifacts/priority.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "file_count": 8,
+   "function_count": 17,
+   "history_status": "EXACT",
+   "selected_files": 2,
+   "selected_functions": 2,
+   "terminal_status": "SUCCEEDED"
+  },
+  "publish.index_priority": {
+   "index_identity": {
+    "fingerprint": "<sha256>",
+    "name": "priority",
+    "producer": {
+     "job": "job_review_prioritization"
+    },
+    "relative_path": "data/indices/priority/review-prioritization/<sha256>.sqlite",
+    "schema": "appsec-review/retrieval-index/2",
+    "sha256": "<sha256>",
+    "shard_id": "review-prioritization"
+   },
+   "manifest": {
+    "path": "data/indices/manifests/review-prioritization-<attempt>.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "terminal_status": "PARTIAL"
+  },
+  "publish.publish_handoff": {
+   "artifact": {
+    "path": "data/jobs/job_review_prioritization/attempts/<attempt>/steps/publish/tasks/publish_handoff/artifacts/review-prioritization.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "index_manifest": {
+    "path": "data/indices/manifests/review-prioritization-<attempt>.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "item_count": 25,
+   "schema": "appsec-review/review-prioritization/1",
+   "terminal_status": "PARTIAL"
+  }
+ },
+ "schema": "appsec-review/acceptance-job-output/1",
+ "skipped_units": [],
+ "status": "COMPLETED_WITH_GAPS",
+ "steps": {
+  "extract": "SUCCEEDED",
+  "load": "SUCCEEDED",
+  "prioritize": "SUCCEEDED",
+  "publish": "SUCCEEDED"
+ },
+ "units": {
+  "extract.dependency_graph": {
+   "disposition": "SUCCEEDED",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "extract.semantic_evidence": {
+   "disposition": "PARTIAL",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "extract.syntax_metrics": {
+   "disposition": "SUCCEEDED",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "load.accepted_inputs": {
+   "disposition": "SUCCEEDED",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "prioritize.score": {
+   "disposition": "SUCCEEDED",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "publish.index_priority": {
+   "disposition": "PARTIAL",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "publish.publish_handoff": {
+   "disposition": "PARTIAL",
+   "producer": null,
+   "status": "SUCCEEDED"
+  }
+ },
+ "volatile": {
+  "artifacts": [
+   {
+    "path": "data/indices/manifests/review-prioritization-<attempt>.json",
+    "sha256": "d63271ec790879bfe32218f6c08b51aa0c36e2e092a1f681850ffeaaa71deff9",
+    "size_bytes": 58994
+   },
+   {
+    "path": "data/jobs/job_review_prioritization/attempts/<attempt>/steps/extract/tasks/dependency_graph/artifacts/dependency-graph.json",
+    "sha256": "33b1e2833515e18657b97a995b186756ea5f0e0a3e040f3ee51efef4f366d97c",
+    "size_bytes": 8043
+   },
+   {
+    "path": "data/jobs/job_review_prioritization/attempts/<attempt>/steps/extract/tasks/semantic_evidence/artifacts/semantic-evidence.json",
+    "sha256": "e018695b9abcc721d5af0274d2e9bf8a8488ceb50febbe816dad2fbf04f9e2d1",
+    "size_bytes": 5167
+   },
+   {
+    "path": "data/jobs/job_review_prioritization/attempts/<attempt>/steps/extract/tasks/syntax_metrics/artifacts/syntax-facts.json",
+    "sha256": "a5449a8d2eef977cdee964cc3e45834b1acf583e215cec9993055dcfa1d5c982",
+    "size_bytes": 22512
+   },
+   {
+    "path": "data/jobs/job_review_prioritization/attempts/<attempt>/steps/load/tasks/accepted_inputs/artifacts/catalog-files.json",
+    "sha256": "5a4c4e54b2b0f78ac16866a09c0b31734f0d465ff8a7cfe5d944c490bf7686b7",
+    "size_bytes": 1787
+   },
+   {
+    "path": "data/jobs/job_review_prioritization/attempts/<attempt>/steps/prioritize/tasks/score/artifacts/priority.json",
+    "sha256": "75839b8f2174921ae2756864081a1680bb6db0a0592f94ff528165fd3b3a1561",
+    "size_bytes": 37069
+   },
+   {
+    "path": "data/jobs/job_review_prioritization/attempts/<attempt>/steps/publish/tasks/publish_handoff/artifacts/review-prioritization.json",
+    "sha256": "fe122992965d0a06881ceb36ecf72b3351a958293475bc4be1dfb54f0193727b",
+    "size_bytes": 5035
+   },
+   {
+    "path": "data/jobs/job_tree_sitter_ast/attempts/<attempt>/steps/acceptance/tasks/publish_handoff/accepted-tree-sitter-ast.json",
+    "sha256": "ca90249b521d006898133ff7a1a9c40f2adbbb1c7c910cba12d5279287e3da5b",
+    "size_bytes": 10116
+   }
+  ]
+ }
+}

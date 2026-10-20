@@ -1,0 +1,1668 @@
+{
+ "artifacts": [
+  {
+   "count": 10,
+   "kind": "json",
+   "path": "data/jobs/job_code_graph_index/attempts/<attempt>/steps/load/tasks/accepted_inputs/code-graph-inputs.json",
+   "sha256": "f56b74982c58cbccaa53c226f39211a09938e8528cee5c28fbeade836d8750b4"
+  },
+  {
+   "count": 19,
+   "kind": "json",
+   "path": "data/jobs/job_codeql_analysis/attempts/<attempt>/handoff.json",
+   "sha256": "71b5fdd639e0bd8c6a17032a8073a58558ab692b40d8e0ac82e03b4460fcc8e3"
+  },
+  {
+   "count": 3,
+   "kind": "json",
+   "path": "data/code-graph/scopes/codeql-unit-612e7dd37a4af081280a679c/checkpoint.json",
+   "sha256": "159e568ce89764aab89a9adb3621d17527585e1f9339e602eb92e40b7db6b1b1"
+  },
+  {
+   "count": 4,
+   "kind": "json",
+   "path": "data/clang-static/cpp-scope-ab6d5db76861721dc145e459/seeded-ledger.json",
+   "sha256": "e25f4990816a3d3ce850401fb3f7148f7a2649c1ccbceaf6ccd79b8634347ba3"
+  },
+  {
+   "count": 4,
+   "kind": "json",
+   "path": "data/cpp/projects/build-unit-b9c931fa551e02bd12b2/seeded-ast-ledger.json",
+   "sha256": "b241038393d2cfb5e3f6d8dd2e980debbbc750f8f661a7eb8c3127cedb7da9b3"
+  },
+  {
+   "count": 4,
+   "kind": "json",
+   "path": "data/cpp/projects/build-unit-b9c931fa551e02bd12b2/seeded-ir-ledger.json",
+   "sha256": "46fd9a8ee2cb59a31dabde357a001f4512efe54d7db2ad63c3df9e8c0613b32a"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/code-graph/scopes/codeql-unit-612e7dd37a4af081280a679c/work/crosschecked.json",
+   "sha256": "a220fac0a212e585298e3a9b47f48cfab020b70795fae48b267ac3fbb3713cda"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/code-graph/scopes/codeql-unit-612e7dd37a4af081280a679c/work/normalized.json",
+   "sha256": "86efc406630c7e595204e4d4e5d5d87c9d1491e406c6d017787e5cd606ff8589"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/indices/manifests/code-graph-<attempt>.json",
+   "sha256": "8d0bf48059417868546301a39e2ada8add1490d79eca187b53e98350a9868586"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/jobs/job_code_graph_index/attempts/<attempt>/inputs/retrieval-manifest.json",
+   "sha256": "8e62ea2280ef6a2c751e234f7148c9dd9998a0b623d33c8fce0c8d66e68057e8"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/jobs/job_code_graph_index/attempts/<attempt>/steps/acceptance/tasks/publish_handoff/code-graph-summary.json",
+   "sha256": "16008915aeb7a790c8255135df3d8497b6aad945e05a841554c8eb2de99239a1"
+  },
+  {
+   "count": 9,
+   "kind": "json",
+   "path": "data/codeql/scopes/codeql-unit-612e7dd37a4af081280a679c/exports/export-manifest.json",
+   "sha256": "95a7346c7b6af9eb84b5732ad937bc86673b2c943be7f833aee33f2c8f01da81"
+  }
+ ],
+ "failed_units": [],
+ "findings": [],
+ "gaps": [
+  {
+   "count": 1,
+   "gap": "graph:codeql-unit-612e7dd37a4af081280a679c:call_site: partial: secondary_only: 41 call sites are reported only by a secondary producer (missing CodeQL coverage, not a CodeQL negative); seeded_neighborhood: facts cover functions within 3 call steps of 5 finding locations; absence outside it is not evidence",
+   "unit": "acceptance.publish_handoff"
+  },
+  {
+   "count": 1,
+   "gap": "graph:codeql-unit-612e7dd37a4af081280a679c:dataflow_path: partial: sarif_correlation_broken: observation asr:tool_observation:<sha256> code_flow 0.0: sink_unmatched; seeded_neighborhood: facts cover functions within 3 call steps of 5 finding locations; absence outside it is not evidence",
+   "unit": "acceptance.publish_handoff"
+  },
+  {
+   "count": 1,
+   "gap": "graph:codeql-unit-612e7dd37a4af081280a679c:entry_point: partial: source_model_coverage: codeql/cpp-all as bundled with CodeQL 2.27.0; frameworks without models yield no entry points; seeded_neighborhood: facts cover functions within 3 call steps of 5 finding locations; absence outside it is not evidence",
+   "unit": "acceptance.publish_handoff"
+  },
+  {
+   "count": 1,
+   "gap": "graph:codeql-unit-612e7dd37a4af081280a679c:flow_summary: partial: seeded_neighborhood: facts cover functions within 3 call steps of 5 finding locations; absence outside it is not evidence",
+   "unit": "acceptance.publish_handoff"
+  },
+  {
+   "count": 1,
+   "gap": "graph:codeql-unit-612e7dd37a4af081280a679c:guard_fact: partial: truncated_guards: sink asr:sink_site:<sha256>: 3 guards omitted; guard_state_collision: one condition of sink asr:sink_site:<sha256> has several states; the least protective one is published; guard_state_collision: one condition of sink asr:sink_site:<sha256> has several states; the least protective one is published; guard_state_collision: one condition of sink asr:sink_site:<sha256> has several states; the least protective one is published; guard_state_collision: one condition of sink asr:sink_site:<sha256> has several states; the least protective one is published; incomplete_facts: 16 guard_fact facts are partial; seeded_neighborhood: facts cover functions within 3 call steps of 5 finding locations; absence outside it is not evidence",
+   "unit": "acceptance.publish_handoff"
+  },
+  {
+   "count": 1,
+   "gap": "graph:codeql-unit-612e7dd37a4af081280a679c:range_fact: partial: seeded_neighborhood: facts cover functions within 3 call steps of 5 finding locations; absence outside it is not evidence",
+   "unit": "acceptance.publish_handoff"
+  },
+  {
+   "count": 1,
+   "gap": "graph:codeql-unit-612e7dd37a4af081280a679c:sink_site: partial: analyzer_checks_unmapped: 8 diagnostic(s) of 6 check(s) name no sink class in graph-analyzer-sinks/1; they remain only in the diagnostics rows; seeded_neighborhood: facts cover functions within 3 call steps of 5 finding locations; absence outside it is not evidence",
+   "unit": "acceptance.publish_handoff"
+  },
+  {
+   "count": 4,
+   "gap": "analyzer_checks_unmapped: 8 diagnostic(s) of 6 check(s) name no sink class in graph-analyzer-sinks/1; they remain only in the diagnostics rows",
+   "unit": "correlate.scopes"
+  },
+  {
+   "count": 1,
+   "gap": "clang-static: clang-static-analyzer failed on src/config.cpp: exit 1",
+   "unit": "correlate.scopes"
+  },
+  {
+   "count": 1,
+   "gap": "clang-static: clang-static-analyzer failed on src/diag.cpp: exit 1",
+   "unit": "correlate.scopes"
+  },
+  {
+   "count": 1,
+   "gap": "clang-static: clang-static-analyzer failed on src/frame.cpp: exit 1",
+   "unit": "correlate.scopes"
+  },
+  {
+   "count": 2,
+   "gap": "graph:codeql-unit-612e7dd37a4af081280a679c:call_site: partial: secondary_only: 41 call sites are reported only by a secondary producer (missing CodeQL coverage, not a CodeQL negative); seeded_neighborhood: facts cover functions within 3 call steps of 5 finding locations; absence outside it is not evidence",
+   "unit": "correlate.scopes"
+  },
+  {
+   "count": 2,
+   "gap": "graph:codeql-unit-612e7dd37a4af081280a679c:dataflow_path: partial: sarif_correlation_broken: observation asr:tool_observation:<sha256> code_flow 0.0: sink_unmatched; seeded_neighborhood: facts cover functions within 3 call steps of 5 finding locations; absence outside it is not evidence",
+   "unit": "correlate.scopes"
+  },
+  {
+   "count": 2,
+   "gap": "graph:codeql-unit-612e7dd37a4af081280a679c:entry_point: partial: source_model_coverage: codeql/cpp-all as bundled with CodeQL 2.27.0; frameworks without models yield no entry points; seeded_neighborhood: facts cover functions within 3 call steps of 5 finding locations; absence outside it is not evidence",
+   "unit": "correlate.scopes"
+  },
+  {
+   "count": 2,
+   "gap": "graph:codeql-unit-612e7dd37a4af081280a679c:flow_summary: partial: seeded_neighborhood: facts cover functions within 3 call steps of 5 finding locations; absence outside it is not evidence",
+   "unit": "correlate.scopes"
+  },
+  {
+   "count": 2,
+   "gap": "graph:codeql-unit-612e7dd37a4af081280a679c:guard_fact: partial: truncated_guards: sink asr:sink_site:<sha256>: 3 guards omitted; guard_state_collision: one condition of sink asr:sink_site:<sha256> has several states; the least protective one is published; guard_state_collision: one condition of sink asr:sink_site:<sha256> has several states; the least protective one is published; guard_state_collision: one condition of sink asr:sink_site:<sha256> has several states; the least protective one is published; guard_state_collision: one condition of sink asr:sink_site:<sha256> has several states; the least protective one is published; incomplete_facts: 16 guard_fact facts are partial; seeded_neighborhood: facts cover functions within 3 call steps of 5 finding locations; absence outside it is not evidence",
+   "unit": "correlate.scopes"
+  },
+  {
+   "count": 2,
+   "gap": "graph:codeql-unit-612e7dd37a4af081280a679c:range_fact: partial: seeded_neighborhood: facts cover functions within 3 call steps of 5 finding locations; absence outside it is not evidence",
+   "unit": "correlate.scopes"
+  },
+  {
+   "count": 2,
+   "gap": "graph:codeql-unit-612e7dd37a4af081280a679c:sink_site: partial: analyzer_checks_unmapped: 8 diagnostic(s) of 6 check(s) name no sink class in graph-analyzer-sinks/1; they remain only in the diagnostics rows; seeded_neighborhood: facts cover functions within 3 call steps of 5 finding locations; absence outside it is not evidence",
+   "unit": "correlate.scopes"
+  },
+  {
+   "count": 10,
+   "gap": "guard_state_collision: one condition of sink asr:sink_site:<sha256> has several states; the least protective one is published",
+   "unit": "correlate.scopes"
+  },
+  {
+   "count": 2,
+   "gap": "incomplete_facts: 16 guard_fact facts are partial",
+   "unit": "correlate.scopes"
+  },
+  {
+   "count": 1,
+   "gap": "llvm-ir: src/config.cpp: 1 function(s) carry no debug subprogram and were not parsed (compile with -g)",
+   "unit": "correlate.scopes"
+  },
+  {
+   "count": 1,
+   "gap": "llvm-ir: src/main.cpp: 1 function(s) carry no debug subprogram and were not parsed (compile with -g)",
+   "unit": "correlate.scopes"
+  },
+  {
+   "count": 1,
+   "gap": "llvm-ir: src/session.cpp: 1 function(s) carry no debug subprogram and were not parsed (compile with -g)",
+   "unit": "correlate.scopes"
+  },
+  {
+   "count": 1,
+   "gap": "producer_not_run: no accepted joern-cpg output covers this database (Joern is opt-in); CPG facts are absent",
+   "unit": "correlate.scopes"
+  },
+  {
+   "count": 4,
+   "gap": "sarif_correlation_broken: observation asr:tool_observation:<sha256> code_flow 0.0: sink_unmatched",
+   "unit": "correlate.scopes"
+  },
+  {
+   "count": 4,
+   "gap": "secondary_only: 41 call sites are reported only by a secondary producer (missing CodeQL coverage, not a CodeQL negative)",
+   "unit": "correlate.scopes"
+  },
+  {
+   "count": 2,
+   "gap": "seed_unresolved: 9 of 14 seed locations lie in no function body (file scope, macro or generated code)",
+   "unit": "correlate.scopes"
+  },
+  {
+   "count": 16,
+   "gap": "seeded_neighborhood: facts cover functions within 3 call steps of 5 finding locations; absence outside it is not evidence",
+   "unit": "correlate.scopes"
+  },
+  {
+   "count": 1,
+   "gap": "source_cfg_no_block_lines: source CFG blocks are not mapped to source lines",
+   "unit": "correlate.scopes"
+  },
+  {
+   "count": 4,
+   "gap": "source_model_coverage: codeql/cpp-all as bundled with CodeQL 2.27.0; frameworks without models yield no entry points",
+   "unit": "correlate.scopes"
+  },
+  {
+   "count": 4,
+   "gap": "truncated_guards: sink asr:sink_site:<sha256>: 3 guards omitted",
+   "unit": "correlate.scopes"
+  },
+  {
+   "count": 2,
+   "gap": "codeql-unit-612e7dd37a4af081280a679c: analyzer_checks_unmapped: 8 diagnostic(s) of 6 check(s) name no sink class in graph-analyzer-sinks/1; they remain only in the diagnostics rows",
+   "unit": "crosscheck.scopes"
+  },
+  {
+   "count": 2,
+   "gap": "codeql-unit-612e7dd37a4af081280a679c: secondary_only: 41 call sites are reported only by a secondary producer (missing CodeQL coverage, not a CodeQL negative)",
+   "unit": "crosscheck.scopes"
+  },
+  {
+   "count": 1,
+   "gap": "CodeQL cert-cpp query suite completed with zero observations; this is not a clean classification",
+   "unit": "load.accepted_inputs"
+  },
+  {
+   "count": 1,
+   "gap": "CodeQL query suite completed with zero observations; this is not a clean classification",
+   "unit": "load.accepted_inputs"
+  },
+  {
+   "count": 2,
+   "gap": "clang-static-analyzer failed on src/config.cpp: exit 1",
+   "unit": "load.accepted_inputs"
+  },
+  {
+   "count": 2,
+   "gap": "clang-static-analyzer failed on src/diag.cpp: exit 1",
+   "unit": "load.accepted_inputs"
+  },
+  {
+   "count": 2,
+   "gap": "clang-static-analyzer failed on src/frame.cpp: exit 1",
+   "unit": "load.accepted_inputs"
+  },
+  {
+   "count": 2,
+   "gap": "clang-static-analyzer failed on src/log.cpp: exit 1",
+   "unit": "load.accepted_inputs"
+  },
+  {
+   "count": 2,
+   "gap": "clang-static-analyzer failed on src/main.cpp: exit 1",
+   "unit": "load.accepted_inputs"
+  },
+  {
+   "count": 2,
+   "gap": "clang-static-analyzer failed on src/packet.cpp: exit 1",
+   "unit": "load.accepted_inputs"
+  },
+  {
+   "count": 2,
+   "gap": "clang-static-analyzer failed on src/session.cpp: exit 1",
+   "unit": "load.accepted_inputs"
+  },
+  {
+   "count": 4,
+   "gap": "depth_reached: the walk stopped at depth 3; 1 further function(s) lie beyond it, their absence is not evidence",
+   "unit": "load.accepted_inputs"
+  },
+  {
+   "count": 4,
+   "gap": "frontier: 19 neighborhood function(s) were not observed by this producer; their callers and callees are absent from it, not nonexistent",
+   "unit": "load.accepted_inputs"
+  },
+  {
+   "count": 4,
+   "gap": "frontier: callers of external-linkage neighborhood functions are visible only from the 7 replayed translation unit(s); callers in other translation units are absent, not nonexistent",
+   "unit": "load.accepted_inputs"
+  },
+  {
+   "count": 2,
+   "gap": "seed_unresolved: 14 of 14 seed locations lie in no function body (file scope, macro or generated code)",
+   "unit": "load.accepted_inputs"
+  },
+  {
+   "count": 5,
+   "gap": "seed_unresolved: 9 of 14 seed locations lie in no function body (file scope, macro or generated code)",
+   "unit": "load.accepted_inputs"
+  },
+  {
+   "count": 2,
+   "gap": "seeded neighborhood is empty: no seed location resolves to a function definition",
+   "unit": "load.accepted_inputs"
+  },
+  {
+   "count": 1,
+   "gap": "semgrep: SEI CERT rule pack: C and C++ are analyzed without preprocessing; macro-expanded code is not seen",
+   "unit": "load.accepted_inputs"
+  },
+  {
+   "count": 1,
+   "gap": "semgrep: SEI CERT rule pack: findings evidence only the implemented subset of each mapped CERT rule; CERT rules with REQUIRES_* or UNSUPPORTED_* status produce no findings (rules/sei-cert/COVERAGE.md), so an absence of findings is not CERT conformance",
+   "unit": "load.accepted_inputs"
+  },
+  {
+   "count": 2,
+   "gap": "source_cfg_no_block_lines: Clang's CFG dump carries no source positions; blocks are not mapped to lines",
+   "unit": "load.accepted_inputs"
+  },
+  {
+   "count": 2,
+   "gap": "src/config.cpp: 1 function(s) carry no debug subprogram and were not parsed (compile with -g)",
+   "unit": "load.accepted_inputs"
+  },
+  {
+   "count": 2,
+   "gap": "src/main.cpp: 1 function(s) carry no debug subprogram and were not parsed (compile with -g)",
+   "unit": "load.accepted_inputs"
+  },
+  {
+   "count": 2,
+   "gap": "src/session.cpp: 1 function(s) carry no debug subprogram and were not parsed (compile with -g)",
+   "unit": "load.accepted_inputs"
+  },
+  {
+   "count": 2,
+   "gap": "codeql-unit-612e7dd37a4af081280a679c: guard_fact: partial",
+   "unit": "normalize.scopes"
+  }
+ ],
+ "handoff": {
+  "completion_status": "COMPLETED_WITH_GAPS",
+  "schema_identity": "appsec-review/code-graph-index/1",
+  "status": "ACCEPTED",
+  "upstream_jobs": [
+   "job_artifact_indexing",
+   "job_artifact_security_analysis",
+   "job_change_context_analysis",
+   "job_ci_configuration_analysis",
+   "job_clang_static_analysis",
+   "job_codeql_analysis",
+   "job_cpp_compiled_analysis",
+   "job_cpp_symbol_index",
+   "job_evidence_collection",
+   "job_language_build",
+   "job_owasp_control_assessment",
+   "job_post_build_security_assessment",
+   "job_project_build",
+   "job_review_intake",
+   "job_review_prioritization",
+   "job_source_history_analysis",
+   "job_target_analysis_plan",
+   "job_target_catalog",
+   "job_tree_sitter_ast"
+  ]
+ },
+ "job_id": "job_code_graph_index",
+ "outputs": {
+  "acceptance.publish_handoff": {
+   "artifact": {
+    "path": "data/jobs/job_code_graph_index/attempts/<attempt>/steps/acceptance/tasks/publish_handoff/code-graph-summary.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "counts": {
+    "databases": 1,
+    "facts": 179,
+    "reused_scopes": 0,
+    "scopes": 1,
+    "shards": 9
+   },
+   "families": {
+    "call_site": {
+     "complete": 0,
+     "partial": 1,
+     "unavailable": 0
+    },
+    "dataflow_path": {
+     "complete": 0,
+     "partial": 1,
+     "unavailable": 0
+    },
+    "entry_point": {
+     "complete": 0,
+     "partial": 1,
+     "unavailable": 0
+    },
+    "flow_summary": {
+     "complete": 0,
+     "partial": 1,
+     "unavailable": 0
+    },
+    "guard_fact": {
+     "complete": 0,
+     "partial": 1,
+     "unavailable": 0
+    },
+    "range_fact": {
+     "complete": 0,
+     "partial": 1,
+     "unavailable": 0
+    },
+    "sink_site": {
+     "complete": 0,
+     "partial": 1,
+     "unavailable": 0
+    }
+   },
+   "index_manifest": {
+    "path": "data/indices/manifests/code-graph-<attempt>.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "item_count": 179,
+   "schema": "appsec-review/code-graph-index/1",
+   "terminal_status": "COMPLETED_WITH_GAPS"
+  },
+  "correlate.scopes": {
+   "reused_count": 0,
+   "scope_count": 1,
+   "scopes": [
+    {
+     "build_unit_id": "build-unit-b9c931fa551e02bd12b2",
+     "checkpoint": {
+      "path": "data/code-graph/scopes/codeql-unit-612e7dd37a4af081280a679c/checkpoint.json",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     "checkpoint_reused": false,
+     "counts": {
+      "code_flows": 2,
+      "correlation_states": {
+       "bridged": 0,
+       "broken": 1,
+       "partial": 1
+      },
+      "facts": 179
+     },
+     "coverage": [
+      {
+       "area": "graph:codeql-unit-612e7dd37a4af081280a679c:call_site",
+       "counts": {
+        "secondary_only": 41
+       },
+       "facts": 103,
+       "family": "call_site",
+       "status": "partial"
+      },
+      {
+       "area": "graph:codeql-unit-612e7dd37a4af081280a679c:sink_site",
+       "counts": {
+        "analyzer_corroborated": 1,
+        "analyzer_only": 1
+       },
+       "facts": 11,
+       "family": "sink_site",
+       "status": "partial"
+      },
+      {
+       "area": "graph:codeql-unit-612e7dd37a4af081280a679c:entry_point",
+       "counts": {},
+       "facts": 1,
+       "family": "entry_point",
+       "status": "partial"
+      },
+      {
+       "area": "graph:codeql-unit-612e7dd37a4af081280a679c:flow_summary",
+       "counts": {},
+       "facts": 3,
+       "family": "flow_summary",
+       "status": "partial"
+      },
+      {
+       "area": "graph:codeql-unit-612e7dd37a4af081280a679c:dataflow_path",
+       "counts": {
+        "sarif_correlation_broken": 1
+       },
+       "facts": 5,
+       "family": "dataflow_path",
+       "status": "partial"
+      },
+      {
+       "area": "graph:codeql-unit-612e7dd37a4af081280a679c:guard_fact",
+       "counts": {},
+       "facts": 46,
+       "family": "guard_fact",
+       "status": "partial"
+      },
+      {
+       "area": "graph:codeql-unit-612e7dd37a4af081280a679c:range_fact",
+       "counts": {},
+       "facts": 10,
+       "family": "range_fact",
+       "status": "partial"
+      }
+     ],
+     "database": {
+      "coverage": "partial",
+      "identity": "asr:codeql_database:<sha256>",
+      "mode": "seeded"
+     },
+     "export_status": "SUCCEEDED",
+     "language": "cpp",
+     "scope_id": "codeql-unit-612e7dd37a4af081280a679c",
+     "shards": [
+      {
+       "fingerprint": "<sha256>",
+       "name": "graph",
+       "producer": {
+        "build_unit_id": "build-unit-b9c931fa551e02bd12b2",
+        "catalog_sha256": "<sha256>",
+        "family": "call_site",
+        "job": "job_code_graph_index",
+        "language": "cpp",
+        "rule": "graph-normalize/1",
+        "scope_id": "codeql-unit-612e7dd37a4af081280a679c",
+        "unit": "correlate.scopes"
+       },
+       "relative_path": "data/indices/graph/graph-codeql-unit-612e7dd37a4af081280a679c-call_site/<sha256>.sqlite",
+       "schema": "appsec-review/retrieval-index/2",
+       "sha256": "<sha256>",
+       "shard_id": "graph-codeql-unit-612e7dd37a4af081280a679c-call_site"
+      },
+      {
+       "fingerprint": "<sha256>",
+       "name": "graph",
+       "producer": {
+        "build_unit_id": "build-unit-b9c931fa551e02bd12b2",
+        "catalog_sha256": "<sha256>",
+        "family": "sink_site",
+        "job": "job_code_graph_index",
+        "language": "cpp",
+        "rule": "graph-normalize/1",
+        "scope_id": "codeql-unit-612e7dd37a4af081280a679c",
+        "unit": "correlate.scopes"
+       },
+       "relative_path": "data/indices/graph/graph-codeql-unit-612e7dd37a4af081280a679c-sink_site/<sha256>.sqlite",
+       "schema": "appsec-review/retrieval-index/2",
+       "sha256": "<sha256>",
+       "shard_id": "graph-codeql-unit-612e7dd37a4af081280a679c-sink_site"
+      },
+      {
+       "fingerprint": "<sha256>",
+       "name": "graph",
+       "producer": {
+        "build_unit_id": "build-unit-b9c931fa551e02bd12b2",
+        "catalog_sha256": "<sha256>",
+        "family": "entry_point",
+        "job": "job_code_graph_index",
+        "language": "cpp",
+        "rule": "graph-normalize/1",
+        "scope_id": "codeql-unit-612e7dd37a4af081280a679c",
+        "unit": "correlate.scopes"
+       },
+       "relative_path": "data/indices/graph/graph-codeql-unit-612e7dd37a4af081280a679c-entry_point/<sha256>.sqlite",
+       "schema": "appsec-review/retrieval-index/2",
+       "sha256": "<sha256>",
+       "shard_id": "graph-codeql-unit-612e7dd37a4af081280a679c-entry_point"
+      },
+      {
+       "fingerprint": "<sha256>",
+       "name": "graph",
+       "producer": {
+        "build_unit_id": "build-unit-b9c931fa551e02bd12b2",
+        "catalog_sha256": "<sha256>",
+        "family": "flow_summary",
+        "job": "job_code_graph_index",
+        "language": "cpp",
+        "rule": "graph-normalize/1",
+        "scope_id": "codeql-unit-612e7dd37a4af081280a679c",
+        "unit": "correlate.scopes"
+       },
+       "relative_path": "data/indices/graph/graph-codeql-unit-612e7dd37a4af081280a679c-flow_summary/<sha256>.sqlite",
+       "schema": "appsec-review/retrieval-index/2",
+       "sha256": "<sha256>",
+       "shard_id": "graph-codeql-unit-612e7dd37a4af081280a679c-flow_summary"
+      },
+      {
+       "fingerprint": "<sha256>",
+       "name": "graph",
+       "producer": {
+        "build_unit_id": "build-unit-b9c931fa551e02bd12b2",
+        "catalog_sha256": "<sha256>",
+        "family": "dataflow_path",
+        "job": "job_code_graph_index",
+        "language": "cpp",
+        "rule": "graph-normalize/1",
+        "scope_id": "codeql-unit-612e7dd37a4af081280a679c",
+        "unit": "correlate.scopes"
+       },
+       "relative_path": "data/indices/graph/graph-codeql-unit-612e7dd37a4af081280a679c-dataflow_path/<sha256>.sqlite",
+       "schema": "appsec-review/retrieval-index/2",
+       "sha256": "<sha256>",
+       "shard_id": "graph-codeql-unit-612e7dd37a4af081280a679c-dataflow_path"
+      },
+      {
+       "fingerprint": "<sha256>",
+       "name": "graph",
+       "producer": {
+        "build_unit_id": "build-unit-b9c931fa551e02bd12b2",
+        "catalog_sha256": "<sha256>",
+        "family": "guard_fact",
+        "job": "job_code_graph_index",
+        "language": "cpp",
+        "rule": "graph-normalize/1",
+        "scope_id": "codeql-unit-612e7dd37a4af081280a679c",
+        "unit": "correlate.scopes"
+       },
+       "relative_path": "data/indices/graph/graph-codeql-unit-612e7dd37a4af081280a679c-guard_fact/<sha256>.sqlite",
+       "schema": "appsec-review/retrieval-index/2",
+       "sha256": "<sha256>",
+       "shard_id": "graph-codeql-unit-612e7dd37a4af081280a679c-guard_fact"
+      },
+      {
+       "fingerprint": "<sha256>",
+       "name": "graph",
+       "producer": {
+        "build_unit_id": "build-unit-b9c931fa551e02bd12b2",
+        "catalog_sha256": "<sha256>",
+        "family": "range_fact",
+        "job": "job_code_graph_index",
+        "language": "cpp",
+        "rule": "graph-normalize/1",
+        "scope_id": "codeql-unit-612e7dd37a4af081280a679c",
+        "unit": "correlate.scopes"
+       },
+       "relative_path": "data/indices/graph/graph-codeql-unit-612e7dd37a4af081280a679c-range_fact/<sha256>.sqlite",
+       "schema": "appsec-review/retrieval-index/2",
+       "sha256": "<sha256>",
+       "shard_id": "graph-codeql-unit-612e7dd37a4af081280a679c-range_fact"
+      },
+      {
+       "fingerprint": "<sha256>",
+       "name": "graph",
+       "producer": {
+        "build_unit_id": "build-unit-b9c931fa551e02bd12b2",
+        "catalog_sha256": "<sha256>",
+        "job": "job_code_graph_index",
+        "kind": "codeql_database",
+        "language": "cpp",
+        "rule": "graph-normalize/1",
+        "scope_id": "codeql-unit-612e7dd37a4af081280a679c",
+        "unit": "correlate.scopes"
+       },
+       "relative_path": "data/indices/graph/graph-codeql-unit-612e7dd37a4af081280a679c-database/<sha256>.sqlite",
+       "schema": "appsec-review/retrieval-index/2",
+       "sha256": "<sha256>",
+       "shard_id": "graph-codeql-unit-612e7dd37a4af081280a679c-database"
+      },
+      {
+       "fingerprint": "<sha256>",
+       "name": "graph",
+       "producer": {
+        "build_unit_id": "build-unit-b9c931fa551e02bd12b2",
+        "catalog_sha256": "<sha256>",
+        "job": "job_code_graph_index",
+        "kind": "producer_neighborhood",
+        "language": "cpp",
+        "rule": "graph-normalize/1",
+        "scope_id": "codeql-unit-612e7dd37a4af081280a679c",
+        "unit": "correlate.scopes"
+       },
+       "relative_path": "data/indices/graph/graph-codeql-unit-612e7dd37a4af081280a679c-producers/<sha256>.sqlite",
+       "schema": "appsec-review/retrieval-index/2",
+       "sha256": "<sha256>",
+       "shard_id": "graph-codeql-unit-612e7dd37a4af081280a679c-producers"
+      }
+     ],
+     "terminal_status": "COMPLETED_WITH_GAPS"
+    }
+   ],
+   "terminal_status": "COMPLETED_WITH_GAPS"
+  },
+  "crosscheck.scopes": {
+   "scope_count": 1,
+   "scopes": [
+    {
+     "producers": {
+      "clang-ast": [
+       {
+        "index": "analysis",
+        "sha256": "<sha256>",
+        "shard_id": "cpp-build-unit-b9c931fa551e02bd12b2-ast"
+       }
+      ],
+      "clangd": [
+       {
+        "index": "analysis",
+        "sha256": "<sha256>",
+        "shard_id": "clangd-cpp-scope-ab6d5db76861721dc145e459"
+       }
+      ],
+      "llvm-ir": [
+       {
+        "index": "analysis",
+        "sha256": "<sha256>",
+        "shard_id": "cpp-build-unit-b9c931fa551e02bd12b2-ir"
+       }
+      ]
+     },
+     "scope_id": "codeql-unit-612e7dd37a4af081280a679c",
+     "secondary_only": 41,
+     "stage": {
+      "path": "data/code-graph/scopes/codeql-unit-612e7dd37a4af081280a679c/work/crosschecked.json",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     "states": {
+      "agree": 14,
+      "disagree": 0,
+      "not_covered": 121,
+      "partial": 2
+     },
+     "symbol_links": 12
+    }
+   ],
+   "terminal_status": "COMPLETED_WITH_GAPS"
+  },
+  "load.accepted_inputs": {
+   "accepted_manifest": {
+    "path": "data/jobs/job_code_graph_index/attempts/<attempt>/inputs/retrieval-manifest.json",
+    "sha256": "<sha256>"
+   },
+   "artifact": {
+    "path": "data/jobs/job_code_graph_index/attempts/<attempt>/steps/load/tasks/accepted_inputs/code-graph-inputs.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "catalog": {
+    "revision": 1,
+    "sha256": "<sha256>",
+    "version": "appsec-review/graph-catalog/1"
+   },
+   "codeql_handoff": {
+    "path": "data/jobs/job_codeql_analysis/attempts/<attempt>/handoff.json",
+    "sha256": "<sha256>"
+   },
+   "columns_sha256": "<sha256>",
+   "implementation": "<sha256>",
+   "restored_secondary": [],
+   "reused_count": 0,
+   "schema": "appsec-review/code-graph-index/1",
+   "scope_count": 1,
+   "scopes": [
+    {
+     "build_unit_id": "build-unit-b9c931fa551e02bd12b2",
+     "database_identity": "<sha256>",
+     "export_gaps": [
+      "seed_unresolved: 9 of 14 seed locations lie in no function body (file scope, macro or generated code)"
+     ],
+     "export_manifest": {
+      "path": "data/codeql/scopes/codeql-unit-612e7dd37a4af081280a679c/exports/export-manifest.json",
+      "sha256": "<sha256>"
+     },
+     "export_pack": {
+      "columns_sha256": "<sha256>",
+      "file_count": 12,
+      "query_id": "graph-export-cpp",
+      "query_pack": "appsec-review/graph-export-cpp",
+      "query_pack_version": "1.0.0",
+      "tree_sha256": "<sha256>"
+     },
+     "export_status": "SUCCEEDED",
+     "files": [
+      {
+       "path": "include/relay/relay.hpp",
+       "sha256": "<sha256>"
+      },
+      {
+       "path": "src/config.cpp",
+       "sha256": "<sha256>"
+      },
+      {
+       "path": "src/diag.cpp",
+       "sha256": "<sha256>"
+      },
+      {
+       "path": "src/frame.cpp",
+       "sha256": "<sha256>"
+      },
+      {
+       "path": "src/log.cpp",
+       "sha256": "<sha256>"
+      },
+      {
+       "path": "src/main.cpp",
+       "sha256": "<sha256>"
+      },
+      {
+       "path": "src/packet.cpp",
+       "sha256": "<sha256>"
+      },
+      {
+       "path": "src/session.cpp",
+       "sha256": "<sha256>"
+      }
+     ],
+     "identity": "<sha256>",
+     "inputs": {
+      "analyzers": {
+       "clang-static": [
+        {
+         "fingerprint": "<sha256>",
+         "name": "observations",
+         "producer": {
+          "job": "job_clang_static_analysis",
+          "project_root": ".",
+          "scope_id": "cpp-scope-ab6d5db76861721dc145e459",
+          "seeded": {
+           "depth": 3,
+           "depth_histogram": {},
+           "ledger": {
+            "path": "data/clang-static/cpp-scope-ab6d5db76861721dc145e459/seeded-ledger.json",
+            "sha256": "<sha256>"
+           },
+           "mode": "seeded",
+           "neighborhood_function_count": 0,
+           "resolved_seed_count": 0,
+           "schema": "appsec-review/seeded-producer-record/1",
+           "seed_count": 14,
+           "seed_limit": 200,
+           "seeds": [
+            [
+             "include/relay/relay.hpp",
+             10,
+             10,
+             "unresolved"
+            ],
+            [
+             "include/relay/relay.hpp",
+             11,
+             11,
+             "unresolved"
+            ],
+            [
+             "include/relay/relay.hpp",
+             12,
+             12,
+             "unresolved"
+            ],
+            [
+             "include/relay/relay.hpp",
+             16,
+             16,
+             "unresolved"
+            ],
+            [
+             "include/relay/relay.hpp",
+             17,
+             17,
+             "unresolved"
+            ],
+            [
+             "include/relay/relay.hpp",
+             18,
+             18,
+             "unresolved"
+            ],
+            [
+             "include/relay/relay.hpp",
+             22,
+             22,
+             "unresolved"
+            ],
+            [
+             "include/relay/relay.hpp",
+             23,
+             23,
+             "unresolved"
+            ],
+            [
+             "include/relay/relay.hpp",
+             24,
+             24,
+             "unresolved"
+            ],
+            [
+             "src/diag.cpp",
+             9,
+             9,
+             "unresolved"
+            ],
+            [
+             "src/log.cpp",
+             8,
+             8,
+             "unresolved"
+            ],
+            [
+             "src/main.cpp",
+             58,
+             58,
+             "unresolved"
+            ],
+            [
+             "src/session.cpp",
+             36,
+             36,
+             "unresolved"
+            ],
+            [
+             "src/session.cpp",
+             40,
+             40,
+             "unresolved"
+            ]
+           ],
+           "skipped": false,
+           "status_counts": {
+            "unresolved": 14
+           }
+          },
+          "unit": "analyze.scopes"
+         },
+         "relative_path": "data/indices/observations/<sha256>-08023b6e2b58a1b5.sqlite",
+         "schema": "appsec-review/retrieval-index/2",
+         "sha256": "<sha256>",
+         "shard_id": "clang-static-cpp-scope-ab6d5db76861721dc145e459"
+        }
+       ],
+       "joern-cpg": []
+      },
+      "observations": [
+       {
+        "fingerprint": "<sha256>",
+        "name": "observations",
+        "producer": {
+         "job": "job_codeql_analysis",
+         "language": "cpp",
+         "query_profile": "cert-cpp",
+         "unit": "normalize.scopes"
+        },
+        "relative_path": "data/indices/observations/<sha256>-5e95679de4fdb3a8.sqlite",
+        "schema": "appsec-review/retrieval-index/2",
+        "sha256": "<sha256>",
+        "shard_id": "codeql-cpp-codeql-unit-612e7dd37a4af081280a679c-cert-cpp"
+       },
+       {
+        "fingerprint": "<sha256>",
+        "name": "observations",
+        "producer": {
+         "job": "job_codeql_analysis",
+         "language": "cpp",
+         "query_profile": "default",
+         "unit": "normalize.scopes"
+        },
+        "relative_path": "data/indices/observations/<sha256>-7f7610519040c736.sqlite",
+        "schema": "appsec-review/retrieval-index/2",
+        "sha256": "<sha256>",
+        "shard_id": "codeql-cpp-codeql-unit-612e7dd37a4af081280a679c-default"
+       }
+      ],
+      "priority": [
+       {
+        "fingerprint": "<sha256>",
+        "name": "priority",
+        "producer": {
+         "job": "job_review_prioritization"
+        },
+        "relative_path": "data/indices/priority/review-prioritization/<sha256>.sqlite",
+        "schema": "appsec-review/retrieval-index/2",
+        "sha256": "<sha256>",
+        "shard_id": "review-prioritization"
+       }
+      ],
+      "secondary": {
+       "clang-ast": [
+        {
+         "fingerprint": "<sha256>",
+         "name": "analysis",
+         "producer": {
+          "branch": "ast",
+          "job": "job_cpp_compiled_analysis",
+          "seeded": {
+           "depth": 3,
+           "depth_histogram": {
+            "0": 4,
+            "1": 2,
+            "2": 2,
+            "3": 1
+           },
+           "ledger": {
+            "path": "data/cpp/projects/build-unit-b9c931fa551e02bd12b2/seeded-ast-ledger.json",
+            "sha256": "<sha256>"
+           },
+           "mode": "seeded",
+           "neighborhood_function_count": 9,
+           "resolved_seed_count": 5,
+           "schema": "appsec-review/seeded-producer-record/1",
+           "seed_count": 14,
+           "seed_limit": 200,
+           "seeds": [
+            [
+             "include/relay/relay.hpp",
+             10,
+             10,
+             "unresolved"
+            ],
+            [
+             "include/relay/relay.hpp",
+             11,
+             11,
+             "unresolved"
+            ],
+            [
+             "include/relay/relay.hpp",
+             12,
+             12,
+             "unresolved"
+            ],
+            [
+             "include/relay/relay.hpp",
+             16,
+             16,
+             "unresolved"
+            ],
+            [
+             "include/relay/relay.hpp",
+             17,
+             17,
+             "unresolved"
+            ],
+            [
+             "include/relay/relay.hpp",
+             18,
+             18,
+             "unresolved"
+            ],
+            [
+             "include/relay/relay.hpp",
+             22,
+             22,
+             "unresolved"
+            ],
+            [
+             "include/relay/relay.hpp",
+             23,
+             23,
+             "unresolved"
+            ],
+            [
+             "include/relay/relay.hpp",
+             24,
+             24,
+             "unresolved"
+            ],
+            [
+             "src/diag.cpp",
+             9,
+             9,
+             "resolved"
+            ],
+            [
+             "src/log.cpp",
+             8,
+             8,
+             "resolved"
+            ],
+            [
+             "src/main.cpp",
+             58,
+             58,
+             "resolved"
+            ],
+            [
+             "src/session.cpp",
+             36,
+             36,
+             "resolved"
+            ],
+            [
+             "src/session.cpp",
+             40,
+             40,
+             "resolved"
+            ]
+           ],
+           "skipped": false,
+           "status_counts": {
+            "resolved": 5,
+            "unresolved": 9
+           }
+          },
+          "unit": "ast.projects"
+         },
+         "relative_path": "data/indices/analysis/<sha256>-be779372377e5269.sqlite",
+         "schema": "appsec-review/retrieval-index/2",
+         "sha256": "<sha256>",
+         "shard_id": "cpp-build-unit-b9c931fa551e02bd12b2-ast"
+        }
+       ],
+       "clangd": [
+        {
+         "fingerprint": "<sha256>",
+         "name": "analysis",
+         "producer": {
+          "job": "job_cpp_symbol_index",
+          "scope_id": "cpp-scope-ab6d5db76861721dc145e459",
+          "unit": "index.scopes"
+         },
+         "relative_path": "data/indices/analysis/<sha256>-9526b77cbf64ad30.sqlite",
+         "schema": "appsec-review/retrieval-index/2",
+         "sha256": "<sha256>",
+         "shard_id": "clangd-cpp-scope-ab6d5db76861721dc145e459"
+        }
+       ],
+       "llvm-ir": [
+        {
+         "fingerprint": "<sha256>",
+         "name": "analysis",
+         "producer": {
+          "branch": "ir",
+          "job": "job_cpp_compiled_analysis",
+          "seeded": {
+           "depth": 3,
+           "depth_histogram": {
+            "0": 4,
+            "1": 18,
+            "2": 2,
+            "3": 4
+           },
+           "ledger": {
+            "path": "data/cpp/projects/build-unit-b9c931fa551e02bd12b2/seeded-ir-ledger.json",
+            "sha256": "<sha256>"
+           },
+           "mode": "seeded",
+           "neighborhood_function_count": 28,
+           "resolved_seed_count": 5,
+           "schema": "appsec-review/seeded-producer-record/1",
+           "seed_count": 14,
+           "seed_limit": 200,
+           "seeds": [
+            [
+             "include/relay/relay.hpp",
+             10,
+             10,
+             "unresolved"
+            ],
+            [
+             "include/relay/relay.hpp",
+             11,
+             11,
+             "unresolved"
+            ],
+            [
+             "include/relay/relay.hpp",
+             12,
+             12,
+             "unresolved"
+            ],
+            [
+             "include/relay/relay.hpp",
+             16,
+             16,
+             "unresolved"
+            ],
+            [
+             "include/relay/relay.hpp",
+             17,
+             17,
+             "unresolved"
+            ],
+            [
+             "include/relay/relay.hpp",
+             18,
+             18,
+             "unresolved"
+            ],
+            [
+             "include/relay/relay.hpp",
+             22,
+             22,
+             "unresolved"
+            ],
+            [
+             "include/relay/relay.hpp",
+             23,
+             23,
+             "unresolved"
+            ],
+            [
+             "include/relay/relay.hpp",
+             24,
+             24,
+             "unresolved"
+            ],
+            [
+             "src/diag.cpp",
+             9,
+             9,
+             "resolved"
+            ],
+            [
+             "src/log.cpp",
+             8,
+             8,
+             "resolved"
+            ],
+            [
+             "src/main.cpp",
+             58,
+             58,
+             "resolved"
+            ],
+            [
+             "src/session.cpp",
+             36,
+             36,
+             "resolved"
+            ],
+            [
+             "src/session.cpp",
+             40,
+             40,
+             "resolved"
+            ]
+           ],
+           "skipped": false,
+           "status_counts": {
+            "resolved": 5,
+            "unresolved": 9
+           }
+          },
+          "unit": "ir.projects"
+         },
+         "relative_path": "data/indices/analysis/<sha256>-865083052ff54669.sqlite",
+         "schema": "appsec-review/retrieval-index/2",
+         "sha256": "<sha256>",
+         "shard_id": "cpp-build-unit-b9c931fa551e02bd12b2-ir"
+        }
+       ],
+       "svf": []
+      }
+     },
+     "language": "cpp",
+     "reason": null,
+     "reused": null,
+     "root": ".",
+     "scope_id": "codeql-unit-612e7dd37a4af081280a679c",
+     "seeded": {
+      "depth": 3,
+      "depth_histogram": {
+       "0": 4,
+       "1": 6,
+       "2": 5,
+       "3": 1
+      },
+      "mode": "seeded",
+      "neighborhood_function_count": 16,
+      "resolved_seed_count": 5,
+      "seed_count": 14,
+      "seed_limit": 200,
+      "seeds": [
+       {
+        "end_line": 10,
+        "functions": [],
+        "path": "include/relay/relay.hpp",
+        "sources": [
+         {
+          "observation_id": "asr:tool_observation:<sha256>",
+          "rule": "unusedStructMember",
+          "scanner": "tool-cppcheck",
+          "severity": "info"
+         }
+        ],
+        "start_line": 10,
+        "status": "unresolved"
+       },
+       {
+        "end_line": 11,
+        "functions": [],
+        "path": "include/relay/relay.hpp",
+        "sources": [
+         {
+          "observation_id": "asr:tool_observation:<sha256>",
+          "rule": "unusedStructMember",
+          "scanner": "tool-cppcheck",
+          "severity": "info"
+         }
+        ],
+        "start_line": 11,
+        "status": "unresolved"
+       },
+       {
+        "end_line": 12,
+        "functions": [],
+        "path": "include/relay/relay.hpp",
+        "sources": [
+         {
+          "observation_id": "asr:tool_observation:<sha256>",
+          "rule": "unusedStructMember",
+          "scanner": "tool-cppcheck",
+          "severity": "info"
+         }
+        ],
+        "start_line": 12,
+        "status": "unresolved"
+       },
+       {
+        "end_line": 16,
+        "functions": [],
+        "path": "include/relay/relay.hpp",
+        "sources": [
+         {
+          "observation_id": "asr:tool_observation:<sha256>",
+          "rule": "uninitMemberVarNoCtor",
+          "scanner": "tool-cppcheck",
+          "severity": "medium"
+         },
+         {
+          "observation_id": "asr:tool_observation:<sha256>",
+          "rule": "unusedStructMember",
+          "scanner": "tool-cppcheck",
+          "severity": "info"
+         }
+        ],
+        "start_line": 16,
+        "status": "unresolved"
+       },
+       {
+        "end_line": 17,
+        "functions": [],
+        "path": "include/relay/relay.hpp",
+        "sources": [
+         {
+          "observation_id": "asr:tool_observation:<sha256>",
+          "rule": "unusedStructMember",
+          "scanner": "tool-cppcheck",
+          "severity": "info"
+         }
+        ],
+        "start_line": 17,
+        "status": "unresolved"
+       },
+       {
+        "end_line": 18,
+        "functions": [],
+        "path": "include/relay/relay.hpp",
+        "sources": [
+         {
+          "observation_id": "asr:tool_observation:<sha256>",
+          "rule": "uninitMemberVarNoCtor",
+          "scanner": "tool-cppcheck",
+          "severity": "medium"
+         },
+         {
+          "observation_id": "asr:tool_observation:<sha256>",
+          "rule": "unusedStructMember",
+          "scanner": "tool-cppcheck",
+          "severity": "info"
+         }
+        ],
+        "start_line": 18,
+        "status": "unresolved"
+       },
+       {
+        "end_line": 22,
+        "functions": [],
+        "path": "include/relay/relay.hpp",
+        "sources": [
+         {
+          "observation_id": "asr:tool_observation:<sha256>",
+          "rule": "unusedStructMember",
+          "scanner": "tool-cppcheck",
+          "severity": "info"
+         }
+        ],
+        "start_line": 22,
+        "status": "unresolved"
+       },
+       {
+        "end_line": 23,
+        "functions": [],
+        "path": "include/relay/relay.hpp",
+        "sources": [
+         {
+          "observation_id": "asr:tool_observation:<sha256>",
+          "rule": "unusedStructMember",
+          "scanner": "tool-cppcheck",
+          "severity": "info"
+         }
+        ],
+        "start_line": 23,
+        "status": "unresolved"
+       },
+       {
+        "end_line": 24,
+        "functions": [],
+        "path": "include/relay/relay.hpp",
+        "sources": [
+         {
+          "observation_id": "asr:tool_observation:<sha256>",
+          "rule": "unusedStructMember",
+          "scanner": "tool-cppcheck",
+          "severity": "info"
+         }
+        ],
+        "start_line": 24,
+        "status": "unresolved"
+       },
+       {
+        "end_line": 9,
+        "functions": [
+         "relay::probe_host"
+        ],
+        "path": "src/diag.cpp",
+        "sources": [
+         {
+          "observation_id": "asr:tool_observation:<sha256>",
+          "rule": "appsec-review.sei-cert.cpp.env33-c.command-processor-call",
+          "scanner": "tool-semgrep",
+          "severity": "high"
+         },
+         {
+          "observation_id": "asr:tool_observation:<sha256>",
+          "rule": "appsec-review.sei-cert.cpp.env33-c.command-processor-call",
+          "scanner": "tool-opengrep",
+          "severity": "high"
+         }
+        ],
+        "start_line": 9,
+        "status": "resolved"
+       },
+       {
+        "end_line": 8,
+        "functions": [
+         "relay::log_message"
+        ],
+        "path": "src/log.cpp",
+        "sources": [
+         {
+          "observation_id": "asr:tool_observation:<sha256>",
+          "rule": "appsec-review.sei-cert.cpp.fio30-c.nonliteral-format-without-arguments",
+          "scanner": "tool-semgrep",
+          "severity": "medium"
+         },
+         {
+          "observation_id": "asr:tool_observation:<sha256>",
+          "rule": "appsec-review.sei-cert.cpp.fio30-c.nonliteral-format-without-arguments",
+          "scanner": "tool-opengrep",
+          "severity": "medium"
+         }
+        ],
+        "start_line": 8,
+        "status": "resolved"
+       },
+       {
+        "end_line": 58,
+        "functions": [
+         "main"
+        ],
+        "path": "src/main.cpp",
+        "sources": [
+         {
+          "observation_id": "asr:tool_observation:<sha256>",
+          "rule": "appsec-review.sei-cert.cpp.err34-c.unchecked-conversion-function",
+          "scanner": "tool-semgrep",
+          "severity": "medium"
+         },
+         {
+          "observation_id": "asr:tool_observation:<sha256>",
+          "rule": "appsec-review.sei-cert.cpp.err34-c.unchecked-conversion-function",
+          "scanner": "tool-opengrep",
+          "severity": "medium"
+         }
+        ],
+        "start_line": 58,
+        "status": "resolved"
+       },
+       {
+        "end_line": 36,
+        "functions": [
+         "relay::touch_session"
+        ],
+        "path": "src/session.cpp",
+        "sources": [
+         {
+          "observation_id": "asr:tool_observation:<sha256>",
+          "rule": "constVariablePointer",
+          "scanner": "tool-cppcheck",
+          "severity": "info"
+         }
+        ],
+        "start_line": 36,
+        "status": "resolved"
+       },
+       {
+        "end_line": 40,
+        "functions": [
+         "relay::touch_session"
+        ],
+        "path": "src/session.cpp",
+        "sources": [
+         {
+          "observation_id": "asr:tool_observation:<sha256>",
+          "rule": "nullPointer",
+          "scanner": "tool-cppcheck",
+          "severity": "medium"
+         }
+        ],
+        "start_line": 40,
+        "status": "resolved"
+       }
+      ]
+     },
+     "source_languages": [
+      "C++",
+      "C/C++"
+     ]
+    }
+   ],
+   "settings": {
+    "export_timeout_seconds": "<duration>",
+    "max_call_depth": 3,
+    "max_export_bytes": 268435456,
+    "max_facts_per_family_per_scope": 200000,
+    "max_guards_per_sink": 16,
+    "max_neighbors_per_function": 200,
+    "max_path_steps": 40,
+    "max_paths_per_sink": 8
+   },
+   "terminal_status": "SUCCEEDED",
+   "tool_version": "2.27.0"
+  },
+  "normalize.scopes": {
+   "scope_count": 1,
+   "scopes": [
+    {
+     "facts": 137,
+     "relations": 153,
+     "scope_id": "codeql-unit-612e7dd37a4af081280a679c",
+     "stage": {
+      "path": "data/code-graph/scopes/codeql-unit-612e7dd37a4af081280a679c/work/normalized.json",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     "symbols": 17
+    }
+   ],
+   "terminal_status": "COMPLETED_WITH_GAPS"
+  }
+ },
+ "schema": "appsec-review/acceptance-job-output/1",
+ "skipped_units": [],
+ "status": "COMPLETED_WITH_GAPS",
+ "steps": {
+  "acceptance": "SUCCEEDED",
+  "correlate": "SUCCEEDED",
+  "crosscheck": "SUCCEEDED",
+  "load": "SUCCEEDED",
+  "normalize": "SUCCEEDED"
+ },
+ "units": {
+  "acceptance.publish_handoff": {
+   "disposition": "COMPLETED_WITH_GAPS",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "correlate.scopes": {
+   "disposition": "COMPLETED_WITH_GAPS",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "crosscheck.scopes": {
+   "disposition": "COMPLETED_WITH_GAPS",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "load.accepted_inputs": {
+   "disposition": "SUCCEEDED",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "normalize.scopes": {
+   "disposition": "COMPLETED_WITH_GAPS",
+   "producer": null,
+   "status": "SUCCEEDED"
+  }
+ },
+ "volatile": {
+  "artifacts": [
+   {
+    "path": "data/clang-static/cpp-scope-ab6d5db76861721dc145e459/seeded-ledger.json",
+    "sha256": "de7a04c9c070bd0edab479441fa93a566cd879a099452e16eea23a8abd2a8ead",
+    "size_bytes": 6115
+   },
+   {
+    "path": "data/code-graph/scopes/codeql-unit-612e7dd37a4af081280a679c/checkpoint.json",
+    "sha256": "823ea575ed25d7294410285f682c979306e6a174ced763bd980b67ace8018403",
+    "size_bytes": 18928
+   },
+   {
+    "path": "data/code-graph/scopes/codeql-unit-612e7dd37a4af081280a679c/work/crosschecked.json",
+    "sha256": "b3daa74c48a48096973a41dca3147147b04460e0e34f38a498cae89f24e0f0c1",
+    "size_bytes": 599027
+   },
+   {
+    "path": "data/code-graph/scopes/codeql-unit-612e7dd37a4af081280a679c/work/normalized.json",
+    "sha256": "b80b4731ad40fc5a8a81ddf799c444c5619f1684b82e0e0ce37d3bb90110eff4",
+    "size_bytes": 433690
+   },
+   {
+    "path": "data/codeql/scopes/codeql-unit-612e7dd37a4af081280a679c/exports/export-manifest.json",
+    "sha256": "0237103181db5ad1dd7499d1da146258c70c61a9f7ae8db07e2eda8722361d61",
+    "size_bytes": 4784
+   },
+   {
+    "path": "data/cpp/projects/build-unit-b9c931fa551e02bd12b2/seeded-ast-ledger.json",
+    "sha256": "444588199c039f19178256171eea91bb814e8f0685b33c40a166867e2fdc78e0",
+    "size_bytes": 5965
+   },
+   {
+    "path": "data/cpp/projects/build-unit-b9c931fa551e02bd12b2/seeded-ir-ledger.json",
+    "sha256": "52329a1635889eff059c668de36241f9cf4d5790fcdc8e38a2bbe056b6c1260a",
+    "size_bytes": 5966
+   },
+   {
+    "path": "data/indices/manifests/code-graph-<attempt>.json",
+    "sha256": "014c170604767406ce6bab2a8bf82ebc2c3fa3d8c4adb1cc293b1e68d868c322",
+    "size_bytes": 70083
+   },
+   {
+    "path": "data/jobs/job_code_graph_index/attempts/<attempt>/inputs/retrieval-manifest.json",
+    "sha256": "50f508539c2aad59ac71ac31ffc82283ff828d0ec28dd204415f3ad0bbb0e1aa",
+    "size_bytes": 61122
+   },
+   {
+    "path": "data/jobs/job_code_graph_index/attempts/<attempt>/steps/acceptance/tasks/publish_handoff/code-graph-summary.json",
+    "sha256": "2531d349f8bd50fd0a6dceb33bd903506aa5529b7a64a5313b81f731d0343f7c",
+    "size_bytes": 11272
+   },
+   {
+    "path": "data/jobs/job_code_graph_index/attempts/<attempt>/steps/load/tasks/accepted_inputs/code-graph-inputs.json",
+    "sha256": "9f5459ce81b18743ecace86fea716d322d4d2aead5d8bb0d898067c349e71176",
+    "size_bytes": 1248
+   },
+   {
+    "path": "data/jobs/job_codeql_analysis/attempts/<attempt>/handoff.json",
+    "sha256": "8a0692b10751d08769a11e2ef9ffdc0277e7a9d7de13bcdab274800cfba1b19b",
+    "size_bytes": 14633
+   }
+  ]
+ }
+}

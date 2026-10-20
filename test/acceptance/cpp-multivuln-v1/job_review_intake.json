@@ -1,0 +1,254 @@
+{
+ "artifacts": [
+  {
+   "count": 4,
+   "kind": "json",
+   "path": "data/jobs/job_review_intake/attempts/<attempt>/steps/model_preflight/tasks/verify_models/model-preflight.json",
+   "sha256": "87213c37a7ec2994393832d04446d25e697b666684934d7b454f762bd87732bd"
+  },
+  {
+   "count": 6,
+   "kind": "json",
+   "path": "data/jobs/job_review_intake/attempts/<attempt>/steps/publish_intake/tasks/publish_handoff/review-intake.json",
+   "sha256": "1541b969424eb963780b3676299bc8840594de6bd233c19c7721a5d614f50aa6"
+  },
+  {
+   "kind": "file",
+   "path": "data/configuration/appsec-review.toml"
+  }
+ ],
+ "failed_units": [],
+ "findings": [],
+ "gaps": [
+  {
+   "count": 1,
+   "gap": {
+    "path": ".git",
+    "reason": "excluded_directory"
+   },
+   "unit": "prepare_target.fingerprint_target"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "path": ".git",
+    "reason": "excluded_directory"
+   },
+   "unit": "prepare_target.validate_target"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "path": ".git",
+    "reason": "excluded_directory"
+   },
+   "unit": "publish_intake.publish_handoff"
+  }
+ ],
+ "handoff": {
+  "completion_status": "SUCCEEDED",
+  "schema_identity": "appsec-review/review-intake-job/1",
+  "status": "ACCEPTED",
+  "upstream_jobs": []
+ },
+ "job_id": "job_review_intake",
+ "outputs": {
+  "model_preflight.resolve_models": {
+   "model_count": 1,
+   "required": [
+    {
+     "enabled": true,
+     "job_id": "job_dependency_intelligence",
+     "model": "claude-haiku-5-5",
+     "provider": "claude-cli",
+     "setting": "settings.model"
+    },
+    {
+     "enabled": true,
+     "job_id": "job_inference_security_review",
+     "model": "claude-haiku-5-5",
+     "provider": "claude-cli",
+     "setting": "settings.models.default"
+    },
+    {
+     "enabled": false,
+     "job_id": "job_owasp_control_assessment",
+     "model": "claude-haiku-5-5",
+     "provider": "claude-cli",
+     "setting": "settings.model"
+    },
+    {
+     "enabled": false,
+     "job_id": "job_post_build_security_assessment",
+     "model": "claude-haiku-5-5",
+     "provider": "claude-cli",
+     "setting": "settings.model"
+    },
+    {
+     "enabled": true,
+     "job_id": "job_project_build",
+     "model": "claude-haiku-5-5",
+     "provider": "claude-cli",
+     "setting": "settings.model"
+    },
+    {
+     "enabled": true,
+     "job_id": "job_target_analysis_plan",
+     "model": "claude-haiku-5-5",
+     "provider": "claude-cli",
+     "setting": "settings.model"
+    }
+   ]
+  },
+  "model_preflight.verify_models": {
+   "artifact": {
+    "path": "data/jobs/job_review_intake/attempts/<attempt>/steps/model_preflight/tasks/verify_models/model-preflight.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "providers": [
+    "claude-cli"
+   ],
+   "schema": "appsec-review/model-preflight/1",
+   "verified": [
+    "claude-cli/claude-haiku-5-5"
+   ]
+  },
+  "prepare_target.fingerprint_target": {
+   "algorithm": "sha256-bounded-tree-v1",
+   "coverage": {
+    "configured_exclusions": [
+     {
+      "path": ".gitignore",
+      "pattern": ".gitignore",
+      "scope": "global"
+     }
+    ],
+    "file_count": 10,
+    "total_bytes": 5929
+   },
+   "sha256": "<sha256>"
+  },
+  "prepare_target.resolve_target": {
+   "kind": "directory",
+   "path": "<target>"
+  },
+  "prepare_target.validate_target": {
+   "configured_exclusions": [
+    {
+     "path": ".gitignore",
+     "pattern": ".gitignore",
+     "scope": "global"
+    }
+   ],
+   "file_count": 10,
+   "total_bytes": 5929
+  },
+  "publish_intake.publish_handoff": {
+   "artifact": {
+    "path": "data/jobs/job_review_intake/attempts/<attempt>/steps/publish_intake/tasks/publish_handoff/review-intake.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "schema": "appsec-review/review-intake/1"
+  },
+  "resolve_configuration.fetch_config": {
+   "path": "<repo>/appsec-review.toml",
+   "sha256": "<sha256>"
+  },
+  "resolve_configuration.freeze_config": {
+   "layers": [
+    {
+     "path": "<repo>/appsec-review.toml",
+     "sha256": "<sha256>"
+    }
+   ],
+   "path": "data/configuration/appsec-review.toml",
+   "sha256": "<sha256>"
+  },
+  "resolve_configuration.resolve_layers": {
+   "layers": [
+    {
+     "path": "<repo>/appsec-review.toml",
+     "sha256": "<sha256>"
+    }
+   ],
+   "strategy": "single-explicit-or-repository-default"
+  }
+ },
+ "schema": "appsec-review/acceptance-job-output/1",
+ "skipped_units": [],
+ "status": "SUCCEEDED",
+ "steps": {
+  "model_preflight": "SUCCEEDED",
+  "prepare_target": "SUCCEEDED",
+  "publish_intake": "SUCCEEDED",
+  "resolve_configuration": "SUCCEEDED"
+ },
+ "units": {
+  "model_preflight.resolve_models": {
+   "disposition": null,
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "model_preflight.verify_models": {
+   "disposition": null,
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "prepare_target.fingerprint_target": {
+   "disposition": null,
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "prepare_target.resolve_target": {
+   "disposition": null,
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "prepare_target.validate_target": {
+   "disposition": null,
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "publish_intake.publish_handoff": {
+   "disposition": null,
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "resolve_configuration.fetch_config": {
+   "disposition": null,
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "resolve_configuration.freeze_config": {
+   "disposition": null,
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "resolve_configuration.resolve_layers": {
+   "disposition": null,
+   "producer": null,
+   "status": "SUCCEEDED"
+  }
+ },
+ "volatile": {
+  "artifacts": [
+   {
+    "path": "data/configuration/appsec-review.toml",
+    "sha256": "fcbe7e5bd99c89df56f67242d5de5da427b327e5f995f62f6141821391771669",
+    "size_bytes": 96638
+   },
+   {
+    "path": "data/jobs/job_review_intake/attempts/<attempt>/steps/model_preflight/tasks/verify_models/model-preflight.json",
+    "sha256": "57c87b1edf62f71602ba47a0d67cf15a85d52dc4239d783f5382ae179973724a",
+    "size_bytes": 1092
+   },
+   {
+    "path": "data/jobs/job_review_intake/attempts/<attempt>/steps/publish_intake/tasks/publish_handoff/review-intake.json",
+    "sha256": "359473a33072b646ac13cb01ee072fd927632071ae6a79dfd398620b787a01d5",
+    "size_bytes": 1138
+   }
+  ]
+ }
+}

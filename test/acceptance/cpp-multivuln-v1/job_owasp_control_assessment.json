@@ -1,0 +1,1726 @@
+{
+ "artifacts": [
+  {
+   "count": 2,
+   "kind": "json",
+   "path": "data/jobs/job_owasp_control_assessment/attempts/<attempt>/artifacts/owasp-workbench/applicability.json",
+   "sha256": "cef8126788c0c6f567521fc0f30002453663d1ee0967c98172651f7581d8d0f5"
+  },
+  {
+   "count": 2,
+   "kind": "json",
+   "path": "data/jobs/job_owasp_control_assessment/attempts/<attempt>/artifacts/owasp-workbench/component-classifications.json",
+   "sha256": "e002d1919f7382706c3d350f083bfe79c9879cf652ca680f81f03ed426995fe6"
+  },
+  {
+   "count": 2,
+   "kind": "json",
+   "path": "data/jobs/job_owasp_control_assessment/attempts/<attempt>/artifacts/owasp-workbench/finding-packages.json",
+   "sha256": "709e09d7076b83429a7d0d8d04d6229505ae356df14b38f4ff3f58c97723639a"
+  },
+  {
+   "count": 2,
+   "kind": "json",
+   "path": "data/jobs/job_owasp_control_assessment/attempts/<attempt>/artifacts/owasp-workbench/verified-results.json",
+   "sha256": "c8d9f9b74bf96915db2b7876b9c84572c38afbaa5aab7db6546956edc995db85"
+  },
+  {
+   "count": 4,
+   "kind": "json",
+   "path": "data/jobs/job_owasp_control_assessment/attempts/<attempt>/artifacts/owasp-workbench/control-results.json",
+   "sha256": "84e82f5eb8a4e323f82bb196b02c5e49411bbd23680b7c64cd011c2e2a6a277b"
+  },
+  {
+   "count": 4,
+   "kind": "json",
+   "path": "data/jobs/job_owasp_control_assessment/attempts/<attempt>/artifacts/owasp-workbench/standards-manifest.json",
+   "sha256": "788ff1105e36ad4b5a2a079955a8051c26ff5fcb9075d539c1f37135c5649e45"
+  },
+  {
+   "count": 4,
+   "kind": "json",
+   "path": "data/jobs/job_owasp_control_assessment/attempts/<attempt>/artifacts/owasp-workbench/validation-work.json",
+   "sha256": "6037e81a4a087af3ce3dc72f7014d721b48a90446795223fbc8b4129249ba414"
+  },
+  {
+   "count": 5,
+   "kind": "json",
+   "path": "data/jobs/job_owasp_control_assessment/attempts/<attempt>/artifacts/owasp-workbench/selection.json",
+   "sha256": "da955b948e033c03fc8a8397f2b1f632367a8b21b6fc3c6046286c4b0de0ea7e"
+  },
+  {
+   "count": 6,
+   "kind": "json",
+   "path": "data/indexes/owasp/manifests/<sha256>.json",
+   "sha256": "187f553c10247dfc0269cade71e250c8c41f382ff194f070b50daf0715ee0912"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/jobs/job_owasp_control_assessment/attempts/<attempt>/artifacts/owasp-workbench/owasp-workbench-result.json",
+   "sha256": "5df8bfda37adf0305b9d9d59ab1b2def30b868f24cd25f7955e44d79a52fff6f"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/jobs/job_owasp_control_assessment/attempts/<attempt>/inputs/retrieval-manifest.json",
+   "sha256": "d76d1c4d2669276eb863f733902cc664eacd8f4cee50bd345e0016dea8fe43d3"
+  }
+ ],
+ "failed_units": [],
+ "findings": [],
+ "gaps": [
+  {
+   "count": 5,
+   "gap": "no admissible resolving evidence was supplied",
+   "unit": "join.deterministic_join"
+  },
+  {
+   "count": 2,
+   "gap": "ASVS uses a pinned abridged fixture; live upstream refresh is unverified",
+   "unit": "standards_selection.ingest_catalogs"
+  },
+  {
+   "count": 2,
+   "gap": "MASTG uses a pinned abridged fixture; live upstream refresh is unverified",
+   "unit": "standards_selection.ingest_catalogs"
+  },
+  {
+   "count": 2,
+   "gap": "MASVS uses a pinned abridged fixture; live upstream refresh is unverified",
+   "unit": "standards_selection.ingest_catalogs"
+  },
+  {
+   "count": 2,
+   "gap": "OWASP_API_TOP_10 uses a pinned abridged fixture; live upstream refresh is unverified",
+   "unit": "standards_selection.ingest_catalogs"
+  },
+  {
+   "count": 2,
+   "gap": "OWASP_TOP_10 uses a pinned abridged fixture; live upstream refresh is unverified",
+   "unit": "standards_selection.ingest_catalogs"
+  },
+  {
+   "count": 1,
+   "gap": "no admissible resolving evidence was supplied",
+   "unit": "validation.cell_01"
+  },
+  {
+   "count": 1,
+   "gap": "no admissible resolving evidence was supplied",
+   "unit": "validation.cell_02"
+  },
+  {
+   "count": 1,
+   "gap": "no admissible resolving evidence was supplied",
+   "unit": "validation.cell_03"
+  },
+  {
+   "count": 2,
+   "gap": "no admissible resolving evidence was supplied",
+   "unit": "validation.cell_04"
+  },
+  {
+   "count": 5,
+   "gap": "no admissible resolving evidence was supplied",
+   "unit": "verification.independent_review"
+  }
+ ],
+ "handoff": {
+  "completion_status": "COMPLETED_WITH_GAPS",
+  "schema_identity": "appsec-review/owasp-workbench-result/1",
+  "status": "ACCEPTED",
+  "upstream_jobs": [
+   "job_artifact_indexing",
+   "job_artifact_security_analysis",
+   "job_change_context_analysis",
+   "job_ci_configuration_analysis",
+   "job_clang_static_analysis",
+   "job_codeql_analysis",
+   "job_cpp_compiled_analysis",
+   "job_cpp_symbol_index",
+   "job_evidence_collection",
+   "job_language_build",
+   "job_post_build_security_assessment",
+   "job_project_build",
+   "job_review_intake",
+   "job_source_history_analysis",
+   "job_target_analysis_plan",
+   "job_target_catalog",
+   "job_tree_sitter_ast"
+  ]
+ },
+ "job_id": "job_owasp_control_assessment",
+ "outputs": {
+  "applicability.build_matrix": {
+   "artifact": {
+    "path": "data/jobs/job_owasp_control_assessment/attempts/<attempt>/artifacts/owasp-workbench/applicability.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "outcome_counts": {
+    "applicable": 5,
+    "not_applicable": 3
+   },
+   "rows": [
+    {
+     "applicability_fingerprint": "<sha256>",
+     "component_id": "component:0001",
+     "confidence": "high",
+     "control_id": "MASVS-CRYPTO-1",
+     "control_identity": "MASVS:2.1.0:MASVS-CRYPTO-1",
+     "domain": "cryptography_data_protection",
+     "evidence": [
+      {
+       "artifact_sha256": "<sha256>",
+       "lines": [
+        1,
+        1
+       ],
+       "source_identity": "accepted-plan:component:0001"
+      }
+     ],
+     "evidence_mode": "static_source",
+     "outcome": "not_applicable",
+     "profile": "L2",
+     "project_id": "accepted-project",
+     "reason": "positive classification evidence identifies roles outside the MASVS routing boundary: application_api_server",
+     "required_tools": [
+      "mobile_source_index"
+     ],
+     "row_id": "<sha256>",
+     "rule_version": "applicability-rules/1",
+     "schema": "appsec-review/control-applicability/1",
+     "standard": "MASVS",
+     "target_id": "accepted-target",
+     "version": "2.1.0"
+    },
+    {
+     "applicability_fingerprint": "<sha256>",
+     "component_id": "component:0001",
+     "confidence": "high",
+     "control_id": "MASVS-NETWORK-1",
+     "control_identity": "MASVS:2.1.0:MASVS-NETWORK-1",
+     "domain": "mobile_platform",
+     "evidence": [
+      {
+       "artifact_sha256": "<sha256>",
+       "lines": [
+        1,
+        1
+       ],
+       "source_identity": "accepted-plan:component:0001"
+      }
+     ],
+     "evidence_mode": "dynamic_runtime",
+     "outcome": "not_applicable",
+     "profile": "L2",
+     "project_id": "accepted-project",
+     "reason": "positive classification evidence identifies roles outside the MASVS routing boundary: application_api_server",
+     "required_tools": [
+      "mobile_runtime_test"
+     ],
+     "row_id": "<sha256>",
+     "rule_version": "applicability-rules/1",
+     "schema": "appsec-review/control-applicability/1",
+     "standard": "MASVS",
+     "target_id": "accepted-target",
+     "version": "2.1.0"
+    },
+    {
+     "applicability_fingerprint": "<sha256>",
+     "component_id": "component:0001",
+     "confidence": "high",
+     "control_id": "MASVS-STORAGE-1",
+     "control_identity": "MASVS:2.1.0:MASVS-STORAGE-1",
+     "domain": "mobile_platform",
+     "evidence": [
+      {
+       "artifact_sha256": "<sha256>",
+       "lines": [
+        1,
+        1
+       ],
+       "source_identity": "accepted-plan:component:0001"
+      }
+     ],
+     "evidence_mode": "artifact_configuration",
+     "outcome": "not_applicable",
+     "profile": "L2",
+     "project_id": "accepted-project",
+     "reason": "positive classification evidence identifies roles outside the MASVS routing boundary: application_api_server",
+     "required_tools": [
+      "mobile_source_index"
+     ],
+     "row_id": "<sha256>",
+     "rule_version": "applicability-rules/1",
+     "schema": "appsec-review/control-applicability/1",
+     "standard": "MASVS",
+     "target_id": "accepted-target",
+     "version": "2.1.0"
+    },
+    {
+     "applicability_fingerprint": "<sha256>",
+     "component_id": "component:0001",
+     "confidence": "high",
+     "control_id": "V14.2.4",
+     "control_identity": "ASVS:5.0.0:V14.2.4",
+     "domain": "cryptography_data_protection",
+     "evidence": [
+      {
+       "artifact_sha256": "<sha256>",
+       "lines": [
+        1,
+        1
+       ],
+       "source_identity": "accepted-plan:component:0001"
+      }
+     ],
+     "evidence_mode": "artifact_configuration",
+     "outcome": "applicable",
+     "profile": "L2",
+     "project_id": "accepted-project",
+     "reason": "component roles and selected control routing rules intersect",
+     "required_tools": [
+      "evidence_retrieval"
+     ],
+     "row_id": "<sha256>",
+     "rule_version": "applicability-rules/1",
+     "schema": "appsec-review/control-applicability/1",
+     "standard": "ASVS",
+     "target_id": "accepted-target",
+     "version": "5.0.0"
+    },
+    {
+     "applicability_fingerprint": "<sha256>",
+     "component_id": "component:0001",
+     "confidence": "high",
+     "control_id": "V15.1.2",
+     "control_identity": "ASVS:5.0.0:V15.1.2",
+     "domain": "build_supply_chain",
+     "evidence": [
+      {
+       "artifact_sha256": "<sha256>",
+       "lines": [
+        1,
+        1
+       ],
+       "source_identity": "accepted-plan:component:0001"
+      }
+     ],
+     "evidence_mode": "artifact_configuration",
+     "outcome": "applicable",
+     "profile": "L2",
+     "project_id": "accepted-project",
+     "reason": "component roles and selected control routing rules intersect",
+     "required_tools": [
+      "dependency_index"
+     ],
+     "row_id": "<sha256>",
+     "rule_version": "applicability-rules/1",
+     "schema": "appsec-review/control-applicability/1",
+     "standard": "ASVS",
+     "target_id": "accepted-target",
+     "version": "5.0.0"
+    },
+    {
+     "applicability_fingerprint": "<sha256>",
+     "component_id": "component:0001",
+     "confidence": "high",
+     "control_id": "V15.2.1",
+     "control_identity": "ASVS:5.0.0:V15.2.1",
+     "domain": "build_supply_chain",
+     "evidence": [
+      {
+       "artifact_sha256": "<sha256>",
+       "lines": [
+        1,
+        1
+       ],
+       "source_identity": "accepted-plan:component:0001"
+      }
+     ],
+     "evidence_mode": "artifact_configuration",
+     "outcome": "applicable",
+     "profile": "L2",
+     "project_id": "accepted-project",
+     "reason": "component roles and selected control routing rules intersect",
+     "required_tools": [
+      "dependency_index"
+     ],
+     "row_id": "<sha256>",
+     "rule_version": "applicability-rules/1",
+     "schema": "appsec-review/control-applicability/1",
+     "standard": "ASVS",
+     "target_id": "accepted-target",
+     "version": "5.0.0"
+    },
+    {
+     "applicability_fingerprint": "<sha256>",
+     "component_id": "component:0001",
+     "confidence": "high",
+     "control_id": "V6.2.1",
+     "control_identity": "ASVS:5.0.0:V6.2.1",
+     "domain": "authentication_session",
+     "evidence": [
+      {
+       "artifact_sha256": "<sha256>",
+       "lines": [
+        1,
+        1
+       ],
+       "source_identity": "accepted-plan:component:0001"
+      }
+     ],
+     "evidence_mode": "static_source",
+     "outcome": "applicable",
+     "profile": "L2",
+     "project_id": "accepted-project",
+     "reason": "component roles and selected control routing rules intersect",
+     "required_tools": [
+      "source_retrieval"
+     ],
+     "row_id": "<sha256>",
+     "rule_version": "applicability-rules/1",
+     "schema": "appsec-review/control-applicability/1",
+     "standard": "ASVS",
+     "target_id": "accepted-target",
+     "version": "5.0.0"
+    },
+    {
+     "applicability_fingerprint": "<sha256>",
+     "component_id": "component:0001",
+     "confidence": "high",
+     "control_id": "V8.2.1",
+     "control_identity": "ASVS:5.0.0:V8.2.1",
+     "domain": "authorization_access_control",
+     "evidence": [
+      {
+       "artifact_sha256": "<sha256>",
+       "lines": [
+        1,
+        1
+       ],
+       "source_identity": "accepted-plan:component:0001"
+      }
+     ],
+     "evidence_mode": "static_source",
+     "outcome": "applicable",
+     "profile": "L2",
+     "project_id": "accepted-project",
+     "reason": "component roles and selected control routing rules intersect",
+     "required_tools": [
+      "source_retrieval",
+      "route_index"
+     ],
+     "row_id": "<sha256>",
+     "rule_version": "applicability-rules/1",
+     "schema": "appsec-review/control-applicability/1",
+     "standard": "ASVS",
+     "target_id": "accepted-target",
+     "version": "5.0.0"
+    }
+   ]
+  },
+  "batching.build_packages": {
+   "artifact": {
+    "path": "data/jobs/job_owasp_control_assessment/attempts/<attempt>/artifacts/owasp-workbench/finding-packages.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "package_count": 5,
+   "packages": {
+    "batch-1931392c25bc245470b8": [
+     {
+      "allowed_retrieval_tools": [
+       "evidence_retrieval",
+       "find",
+       "read_excerpt",
+       "resolve_evidence"
+      ],
+      "batch_id": "batch-1931392c25bc245470b8",
+      "component": {
+       "component_id": "component:0001",
+       "evidence": [
+        {
+         "artifact_sha256": "<sha256>",
+         "lines": [
+          1,
+          1
+         ],
+         "source_identity": "accepted-plan:component:0001"
+        }
+       ],
+       "project_id": "accepted-project",
+       "roles": [
+        "application_api_server"
+       ],
+       "target_id": "accepted-target"
+      },
+      "control": {
+       "id": "V14.2.4",
+       "identity": "ASVS:5.0.0:V14.2.4",
+       "text": "Fixture control: verify sensitive data receives the protection controls defined for its protection level.",
+       "title": "Sensitive data protection controls"
+      },
+      "evidence_references": [],
+      "guidance": {
+       "bundle_sha256": "<sha256>",
+       "path": "data/guidance/<sha256>/bundle.json"
+      },
+      "package_id": "package-<id>",
+      "profile": "L2",
+      "prohibited_claims": [
+       "compliance certification",
+       "uncited vulnerability",
+       "severity without independent validation",
+       "runtime state from static evidence"
+      ],
+      "proof_obligations": [
+       {
+        "evidence_mode": "artifact_configuration",
+        "obligation_id": "<sha256>:primary",
+        "required_tools": [
+         "evidence_retrieval"
+        ]
+       }
+      ],
+      "retrieval_manifest": {
+       "path": "data/jobs/job_owasp_control_assessment/attempts/<attempt>/inputs/retrieval-manifest.json",
+       "sha256": "<sha256>"
+      },
+      "row_id": "<sha256>",
+      "schema": "appsec-review/finding-package/1",
+      "standard": "ASVS",
+      "version": "5.0.0"
+     }
+    ],
+    "batch-3537347d309313354eb1": [
+     {
+      "allowed_retrieval_tools": [
+       "find",
+       "read_excerpt",
+       "resolve_evidence",
+       "route_index",
+       "source_retrieval"
+      ],
+      "batch_id": "batch-3537347d309313354eb1",
+      "component": {
+       "component_id": "component:0001",
+       "evidence": [
+        {
+         "artifact_sha256": "<sha256>",
+         "lines": [
+          1,
+          1
+         ],
+         "source_identity": "accepted-plan:component:0001"
+        }
+       ],
+       "project_id": "accepted-project",
+       "roles": [
+        "application_api_server"
+       ],
+       "target_id": "accepted-target"
+      },
+      "control": {
+       "id": "V8.2.1",
+       "identity": "ASVS:5.0.0:V8.2.1",
+       "text": "Fixture control: verify function-level access is restricted to explicitly permitted consumers at a trusted boundary.",
+       "title": "Function-level authorization"
+      },
+      "evidence_references": [],
+      "guidance": {
+       "bundle_sha256": "<sha256>",
+       "path": "data/guidance/<sha256>/bundle.json"
+      },
+      "package_id": "package-<id>",
+      "profile": "L2",
+      "prohibited_claims": [
+       "compliance certification",
+       "uncited vulnerability",
+       "severity without independent validation",
+       "runtime state from static evidence"
+      ],
+      "proof_obligations": [
+       {
+        "evidence_mode": "static_source",
+        "obligation_id": "<sha256>:primary",
+        "required_tools": [
+         "source_retrieval",
+         "route_index"
+        ]
+       }
+      ],
+      "retrieval_manifest": {
+       "path": "data/jobs/job_owasp_control_assessment/attempts/<attempt>/inputs/retrieval-manifest.json",
+       "sha256": "<sha256>"
+      },
+      "row_id": "<sha256>",
+      "schema": "appsec-review/finding-package/1",
+      "standard": "ASVS",
+      "version": "5.0.0"
+     }
+    ],
+    "batch-4d848e81d33ff22b561a": [
+     {
+      "allowed_retrieval_tools": [
+       "find",
+       "read_excerpt",
+       "resolve_evidence",
+       "source_retrieval"
+      ],
+      "batch_id": "batch-4d848e81d33ff22b561a",
+      "component": {
+       "component_id": "component:0001",
+       "evidence": [
+        {
+         "artifact_sha256": "<sha256>",
+         "lines": [
+          1,
+          1
+         ],
+         "source_identity": "accepted-plan:component:0001"
+        }
+       ],
+       "project_id": "accepted-project",
+       "roles": [
+        "application_api_server"
+       ],
+       "target_id": "accepted-target"
+      },
+      "control": {
+       "id": "V6.2.1",
+       "identity": "ASVS:5.0.0:V6.2.1",
+       "text": "Fixture control: verify the minimum length enforced for user-set passwords using admissible evidence.",
+       "title": "Minimum password length"
+      },
+      "evidence_references": [],
+      "guidance": {
+       "bundle_sha256": "<sha256>",
+       "path": "data/guidance/<sha256>/bundle.json"
+      },
+      "package_id": "package-<id>",
+      "profile": "L2",
+      "prohibited_claims": [
+       "compliance certification",
+       "uncited vulnerability",
+       "severity without independent validation",
+       "runtime state from static evidence"
+      ],
+      "proof_obligations": [
+       {
+        "evidence_mode": "static_source",
+        "obligation_id": "<sha256>:primary",
+        "required_tools": [
+         "source_retrieval"
+        ]
+       }
+      ],
+      "retrieval_manifest": {
+       "path": "data/jobs/job_owasp_control_assessment/attempts/<attempt>/inputs/retrieval-manifest.json",
+       "sha256": "<sha256>"
+      },
+      "row_id": "<sha256>",
+      "schema": "appsec-review/finding-package/1",
+      "standard": "ASVS",
+      "version": "5.0.0"
+     }
+    ],
+    "batch-798357309f46b6e03727": [
+     {
+      "allowed_retrieval_tools": [
+       "dependency_index",
+       "find",
+       "read_excerpt",
+       "resolve_evidence"
+      ],
+      "batch_id": "batch-798357309f46b6e03727",
+      "component": {
+       "component_id": "component:0001",
+       "evidence": [
+        {
+         "artifact_sha256": "<sha256>",
+         "lines": [
+          1,
+          1
+         ],
+         "source_identity": "accepted-plan:component:0001"
+        }
+       ],
+       "project_id": "accepted-project",
+       "roles": [
+        "application_api_server"
+       ],
+       "target_id": "accepted-target"
+      },
+      "control": {
+       "id": "V15.2.1",
+       "identity": "ASVS:5.0.0:V15.2.1",
+       "text": "Fixture control: verify components are within documented update and remediation time frames.",
+       "title": "Dependency remediation time frames"
+      },
+      "evidence_references": [],
+      "guidance": {
+       "bundle_sha256": "<sha256>",
+       "path": "data/guidance/<sha256>/bundle.json"
+      },
+      "package_id": "package-<id>",
+      "profile": "L2",
+      "prohibited_claims": [
+       "compliance certification",
+       "uncited vulnerability",
+       "severity without independent validation",
+       "runtime state from static evidence"
+      ],
+      "proof_obligations": [
+       {
+        "evidence_mode": "artifact_configuration",
+        "obligation_id": "<sha256>:primary",
+        "required_tools": [
+         "dependency_index"
+        ]
+       }
+      ],
+      "retrieval_manifest": {
+       "path": "data/jobs/job_owasp_control_assessment/attempts/<attempt>/inputs/retrieval-manifest.json",
+       "sha256": "<sha256>"
+      },
+      "row_id": "<sha256>",
+      "schema": "appsec-review/finding-package/1",
+      "standard": "ASVS",
+      "version": "5.0.0"
+     },
+     {
+      "allowed_retrieval_tools": [
+       "dependency_index",
+       "find",
+       "read_excerpt",
+       "resolve_evidence"
+      ],
+      "batch_id": "batch-798357309f46b6e03727",
+      "component": {
+       "component_id": "component:0001",
+       "evidence": [
+        {
+         "artifact_sha256": "<sha256>",
+         "lines": [
+          1,
+          1
+         ],
+         "source_identity": "accepted-plan:component:0001"
+        }
+       ],
+       "project_id": "accepted-project",
+       "roles": [
+        "application_api_server"
+       ],
+       "target_id": "accepted-target"
+      },
+      "control": {
+       "id": "V15.1.2",
+       "identity": "ASVS:5.0.0:V15.1.2",
+       "text": "Fixture control: verify an inventory such as an SBOM covers all third-party libraries and that components come from trusted, maintained repositories.",
+       "title": "Third-party component inventory"
+      },
+      "evidence_references": [],
+      "guidance": {
+       "bundle_sha256": "<sha256>",
+       "path": "data/guidance/<sha256>/bundle.json"
+      },
+      "package_id": "package-<id>",
+      "profile": "L2",
+      "prohibited_claims": [
+       "compliance certification",
+       "uncited vulnerability",
+       "severity without independent validation",
+       "runtime state from static evidence"
+      ],
+      "proof_obligations": [
+       {
+        "evidence_mode": "artifact_configuration",
+        "obligation_id": "<sha256>:primary",
+        "required_tools": [
+         "dependency_index"
+        ]
+       }
+      ],
+      "retrieval_manifest": {
+       "path": "data/jobs/job_owasp_control_assessment/attempts/<attempt>/inputs/retrieval-manifest.json",
+       "sha256": "<sha256>"
+      },
+      "row_id": "<sha256>",
+      "schema": "appsec-review/finding-package/1",
+      "standard": "ASVS",
+      "version": "5.0.0"
+     }
+    ]
+   }
+  },
+  "batching.partition_work": {
+   "artifact": {
+    "path": "data/jobs/job_owasp_control_assessment/attempts/<attempt>/artifacts/owasp-workbench/validation-work.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "batch_count": 4,
+   "work": {
+    "accounting": {
+     "dispatched_rows": 5,
+     "non_dispatch_rows": 3,
+     "selected_rows": 8
+    },
+    "batches": [
+     {
+      "assignment": {
+       "persona": "cryptography_data_protection",
+       "role": "control_assessor"
+      },
+      "batch_id": "batch-1931392c25bc245470b8",
+      "component_ids": [
+       "component:0001"
+      ],
+      "domain": "cryptography_data_protection",
+      "evidence_mode": "artifact_configuration",
+      "fingerprint": "<sha256>",
+      "limits": {
+       "max_batch_size": 12,
+       "max_components": 5
+      },
+      "profile": "L2",
+      "required_tools": [
+       "evidence_retrieval"
+      ],
+      "row_ids": [
+       "<sha256>"
+      ],
+      "schema": "appsec-review/control-validation-batch/1",
+      "standard": "ASVS",
+      "version": "5.0.0"
+     },
+     {
+      "assignment": {
+       "persona": "authorization_access_control",
+       "role": "control_assessor"
+      },
+      "batch_id": "batch-3537347d309313354eb1",
+      "component_ids": [
+       "component:0001"
+      ],
+      "domain": "authorization_access_control",
+      "evidence_mode": "static_source",
+      "fingerprint": "<sha256>",
+      "limits": {
+       "max_batch_size": 12,
+       "max_components": 5
+      },
+      "profile": "L2",
+      "required_tools": [
+       "route_index",
+       "source_retrieval"
+      ],
+      "row_ids": [
+       "<sha256>"
+      ],
+      "schema": "appsec-review/control-validation-batch/1",
+      "standard": "ASVS",
+      "version": "5.0.0"
+     },
+     {
+      "assignment": {
+       "persona": "authentication_session",
+       "role": "control_assessor"
+      },
+      "batch_id": "batch-4d848e81d33ff22b561a",
+      "component_ids": [
+       "component:0001"
+      ],
+      "domain": "authentication_session",
+      "evidence_mode": "static_source",
+      "fingerprint": "<sha256>",
+      "limits": {
+       "max_batch_size": 12,
+       "max_components": 5
+      },
+      "profile": "L2",
+      "required_tools": [
+       "source_retrieval"
+      ],
+      "row_ids": [
+       "<sha256>"
+      ],
+      "schema": "appsec-review/control-validation-batch/1",
+      "standard": "ASVS",
+      "version": "5.0.0"
+     },
+     {
+      "assignment": {
+       "persona": "build_supply_chain",
+       "role": "control_assessor"
+      },
+      "batch_id": "batch-798357309f46b6e03727",
+      "component_ids": [
+       "component:0001"
+      ],
+      "domain": "build_supply_chain",
+      "evidence_mode": "artifact_configuration",
+      "fingerprint": "<sha256>",
+      "limits": {
+       "max_batch_size": 12,
+       "max_components": 5
+      },
+      "profile": "L2",
+      "required_tools": [
+       "dependency_index"
+      ],
+      "row_ids": [
+       "<sha256>",
+       "<sha256>"
+      ],
+      "schema": "appsec-review/control-validation-batch/1",
+      "standard": "ASVS",
+      "version": "5.0.0"
+     }
+    ],
+    "non_dispatch_dispositions": [
+     {
+      "outcome": "not_applicable",
+      "reason": "positive classification evidence identifies roles outside the MASVS routing boundary: application_api_server",
+      "row_id": "<sha256>"
+     },
+     {
+      "outcome": "not_applicable",
+      "reason": "positive classification evidence identifies roles outside the MASVS routing boundary: application_api_server",
+      "row_id": "<sha256>"
+     },
+     {
+      "outcome": "not_applicable",
+      "reason": "positive classification evidence identifies roles outside the MASVS routing boundary: application_api_server",
+      "row_id": "<sha256>"
+     }
+    ],
+    "schema": "appsec-review/validation-work/1"
+   }
+  },
+  "characterization.classify_components": {
+   "artifact": {
+    "path": "data/jobs/job_owasp_control_assessment/attempts/<attempt>/artifacts/owasp-workbench/component-classifications.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "classifications": [
+    {
+     "ambiguity": [],
+     "classification_fingerprint": "<sha256>",
+     "component_id": "component:0001",
+     "confidence": "high",
+     "evidence": [
+      {
+       "artifact_sha256": "<sha256>",
+       "lines": [
+        1,
+        1
+       ],
+       "source_identity": "accepted-plan:component:0001"
+      }
+     ],
+     "inference": {
+      "proposal_sha256": null,
+      "status": "not_needed"
+     },
+     "input_fingerprint": "<sha256>",
+     "negative_evidence_limits": [
+      "absence from accepted bounded indexes is not evidence that a role is absent"
+     ],
+     "project_id": "accepted-project",
+     "reasons": [
+      "accepted component metadata identifies an application/API/server"
+     ],
+     "roles": [
+      "application_api_server"
+     ],
+     "schema": "appsec-review/component-classification/1",
+     "target_id": "accepted-target"
+    }
+   ],
+   "gap_count": 0
+  },
+  "characterization.load_inputs": {
+   "component_count": 1,
+   "components": [
+    {
+     "component_id": "component:0001",
+     "evidence": [
+      {
+       "artifact_sha256": "<sha256>",
+       "lines": [
+        1,
+        1
+       ],
+       "source_identity": "accepted-plan:component:0001"
+      }
+     ],
+     "frameworks": [],
+     "languages": [],
+     "paths": [
+      "CMakeLists.txt",
+      "README.md",
+      "include/relay/relay.hpp",
+      "src/config.cpp",
+      "src/diag.cpp",
+      "src/frame.cpp",
+      "src/log.cpp",
+      "src/main.cpp",
+      "src/packet.cpp",
+      "src/session.cpp"
+     ],
+     "project_id": "accepted-project",
+     "tags": [
+      "application"
+     ],
+     "target_id": "accepted-target"
+    }
+   ],
+   "evidence": [],
+   "evidence_count": 0,
+   "input_mode": "accepted_indexes",
+   "retrieval_manifest": {
+    "path": "data/jobs/job_owasp_control_assessment/attempts/<attempt>/inputs/retrieval-manifest.json",
+    "sha256": "<sha256>"
+   }
+  },
+  "join.deterministic_join": {
+   "artifact": {
+    "path": "data/jobs/job_owasp_control_assessment/attempts/<attempt>/artifacts/owasp-workbench/control-results.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "joined": {
+    "accounting": {
+     "exactly_once": true,
+     "joined": 8,
+     "selected": 8
+    },
+    "result_set_id": "<sha256>",
+    "results": [
+     {
+      "applicability": "applicable",
+      "component_id": "component:0001",
+      "control_identity": "ASVS:5.0.0:V14.2.4",
+      "control_status": "cannot_verify",
+      "disagreements": [],
+      "evidence_used": [],
+      "observations": [],
+      "row_id": "<sha256>",
+      "verification_status": "verified_with_gaps"
+     },
+     {
+      "applicability": "applicable",
+      "component_id": "component:0001",
+      "control_identity": "ASVS:5.0.0:V15.1.2",
+      "control_status": "cannot_verify",
+      "disagreements": [],
+      "evidence_used": [],
+      "observations": [],
+      "row_id": "<sha256>",
+      "verification_status": "verified_with_gaps"
+     },
+     {
+      "applicability": "applicable",
+      "component_id": "component:0001",
+      "control_identity": "ASVS:5.0.0:V15.2.1",
+      "control_status": "cannot_verify",
+      "disagreements": [],
+      "evidence_used": [],
+      "observations": [],
+      "row_id": "<sha256>",
+      "verification_status": "verified_with_gaps"
+     },
+     {
+      "applicability": "applicable",
+      "component_id": "component:0001",
+      "control_identity": "ASVS:5.0.0:V6.2.1",
+      "control_status": "cannot_verify",
+      "disagreements": [],
+      "evidence_used": [],
+      "observations": [],
+      "row_id": "<sha256>",
+      "verification_status": "verified_with_gaps"
+     },
+     {
+      "applicability": "applicable",
+      "component_id": "component:0001",
+      "control_identity": "ASVS:5.0.0:V8.2.1",
+      "control_status": "cannot_verify",
+      "disagreements": [],
+      "evidence_used": [],
+      "observations": [],
+      "row_id": "<sha256>",
+      "verification_status": "verified_with_gaps"
+     },
+     {
+      "applicability": "not_applicable",
+      "component_id": "component:0001",
+      "control_identity": "MASVS:2.1.0:MASVS-CRYPTO-1",
+      "control_status": "not_assessed",
+      "disagreements": [],
+      "evidence_used": [
+       {
+        "artifact_sha256": "<sha256>",
+        "lines": [
+         1,
+         1
+        ],
+        "source_identity": "accepted-plan:component:0001"
+       }
+      ],
+      "observations": [],
+      "row_id": "<sha256>",
+      "verification_status": "not_required"
+     },
+     {
+      "applicability": "not_applicable",
+      "component_id": "component:0001",
+      "control_identity": "MASVS:2.1.0:MASVS-NETWORK-1",
+      "control_status": "not_assessed",
+      "disagreements": [],
+      "evidence_used": [
+       {
+        "artifact_sha256": "<sha256>",
+        "lines": [
+         1,
+         1
+        ],
+        "source_identity": "accepted-plan:component:0001"
+       }
+      ],
+      "observations": [],
+      "row_id": "<sha256>",
+      "verification_status": "not_required"
+     },
+     {
+      "applicability": "not_applicable",
+      "component_id": "component:0001",
+      "control_identity": "MASVS:2.1.0:MASVS-STORAGE-1",
+      "control_status": "not_assessed",
+      "disagreements": [],
+      "evidence_used": [
+       {
+        "artifact_sha256": "<sha256>",
+        "lines": [
+         1,
+         1
+        ],
+        "source_identity": "accepted-plan:component:0001"
+       }
+      ],
+      "observations": [],
+      "row_id": "<sha256>",
+      "verification_status": "not_required"
+     }
+    ],
+    "schema": "appsec-review/control-result-set/1"
+   },
+   "result_count": 8,
+   "terminal_status": "COMPLETED_WITH_GAPS"
+  },
+  "publication.publish_handoff": {
+   "accounting": {
+    "exactly_once": true,
+    "joined": 8,
+    "selected": 8
+   },
+   "artifact": {
+    "path": "data/jobs/job_owasp_control_assessment/attempts/<attempt>/artifacts/owasp-workbench/owasp-workbench-result.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "gap_count": 1,
+   "index_manifest": {
+    "fingerprint": "<sha256>",
+    "path": "data/indexes/owasp/manifests/<sha256>.json",
+    "sha256": "<sha256>",
+    "shard_count": 12
+   },
+   "terminal_status": "COMPLETED_WITH_GAPS"
+  },
+  "publication.publish_indexes": {
+   "fingerprints": {
+    "components": {
+     "component:0001": {
+      "applicability": "<sha256>",
+      "classification": "<sha256>",
+      "validation_work": "<sha256>"
+     }
+    },
+    "global": "<sha256>",
+    "global_inputs": {
+     "configuration_sha256": "<sha256>",
+     "guidance_bundle_sha256": "<sha256>",
+     "model_identity": {
+      "enabled": false,
+      "max_input_tokens": 24000,
+      "max_output_tokens": 6000,
+      "model": "claude-haiku-5-5",
+      "provider": "claude-cli",
+      "reasoning": "medium",
+      "retries": 1,
+      "timeout_seconds": "<duration>"
+     },
+     "parser_versions": {
+      "applicability_rules": "1",
+      "batching_rules": "1",
+      "component_rules": "1",
+      "result_validator": "1"
+     },
+     "retrieval_manifest": {
+      "path": "data/jobs/job_owasp_control_assessment/attempts/<attempt>/inputs/retrieval-manifest.json",
+      "sha256": "<sha256>"
+     },
+     "selection": "<sha256>",
+     "standards": "<sha256>"
+    },
+    "schema": "appsec-review/workbench-fingerprints/1"
+   },
+   "manifest": {
+    "fingerprint": "<sha256>",
+    "path": "data/indexes/owasp/manifests/<sha256>.json",
+    "sha256": "<sha256>",
+    "shard_count": 12
+   },
+   "shard_count": 12
+  },
+  "standards_selection.ingest_catalogs": {
+   "artifact": {
+    "path": "data/jobs/job_owasp_control_assessment/attempts/<attempt>/artifacts/owasp-workbench/standards-manifest.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "manifest": {
+    "fingerprint": "<sha256>",
+    "schema": "appsec-review/owasp-standards-manifest/1",
+    "sources": [
+     {
+      "authority": "control",
+      "catalog_sha256": "<sha256>",
+      "family": "ASVS",
+      "fixture": true,
+      "record_count": 6,
+      "snapshot_id": "ASVS:5.0.0:sha256-841724424177d187",
+      "upstream": {
+       "commit": "5cf9b032440be53ce345ab3c130fda46ba1ce7a2",
+       "license": "CC-BY-SA-4.0",
+       "ref": "v5.0.0_release",
+       "repository": "https://github.com/OWASP/ASVS"
+      },
+      "version": "5.0.0"
+     },
+     {
+      "authority": "supporting_test",
+      "catalog_sha256": "<sha256>",
+      "family": "MASTG",
+      "fixture": true,
+      "record_count": 2,
+      "snapshot_id": "MASTG:2.0.0:sha256-664e962d762cbdaa",
+      "upstream": {
+       "commit": "990472dbcffe126f5556045d60270c4ffdfdde72",
+       "license": "CC-BY-SA-4.0",
+       "ref": "v2.0.0",
+       "repository": "https://github.com/OWASP/owasp-mastg"
+      },
+      "version": "2.0.0"
+     },
+     {
+      "authority": "control",
+      "catalog_sha256": "<sha256>",
+      "family": "MASVS",
+      "fixture": true,
+      "record_count": 3,
+      "snapshot_id": "MASVS:2.1.0:sha256-845f6e57f5f61094",
+      "upstream": {
+       "commit": "8e133d09f4140518ed04cc254b18be9ff4990ffc",
+       "license": "CC-BY-SA-4.0",
+       "ref": "v2.1.0",
+       "repository": "https://github.com/OWASP/owasp-masvs"
+      },
+      "version": "2.1.0"
+     },
+     {
+      "authority": "routing_context",
+      "catalog_sha256": "<sha256>",
+      "family": "OWASP_API_TOP_10",
+      "fixture": true,
+      "record_count": 2,
+      "snapshot_id": "OWASP_API_TOP_10:2023:sha256-58291b235d523827",
+      "upstream": {
+       "commit": "e85ddfa5a936d4656840ac250c039c7057e66b0d",
+       "license": "CC-BY-SA-4.0",
+       "ref": "2023",
+       "repository": "https://github.com/OWASP/API-Security"
+      },
+      "version": "2023"
+     },
+     {
+      "authority": "routing_context",
+      "catalog_sha256": "<sha256>",
+      "family": "OWASP_TOP_10",
+      "fixture": true,
+      "record_count": 2,
+      "snapshot_id": "OWASP_TOP_10:2025:sha256-10760a8e21296f94",
+      "upstream": {
+       "commit": "66ebc4798d2ca72973967a20264bdeb70dcf0a13",
+       "license": "CC-BY-SA-4.0",
+       "ref": "2025",
+       "repository": "https://github.com/OWASP/Top10"
+      },
+      "version": "2025"
+     }
+    ]
+   },
+   "terminal_status": "COMPLETED_WITH_GAPS"
+  },
+  "standards_selection.select_profiles": {
+   "artifact": {
+    "path": "data/jobs/job_owasp_control_assessment/attempts/<attempt>/artifacts/owasp-workbench/selection.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "selection": {
+    "control_count": 8,
+    "policy": {
+     "asvs_level": 2,
+     "masvs_profile": "L2"
+    },
+    "schema": "appsec-review/owasp-selection/1",
+    "selection_fingerprint": "<sha256>",
+    "selections": [
+     {
+      "authority": "control",
+      "catalog_sha256": "<sha256>",
+      "family": "ASVS",
+      "profile": "L2",
+      "snapshot_id": "ASVS:5.0.0:sha256-841724424177d187",
+      "version": "5.0.0"
+     },
+     {
+      "authority": "supporting_test",
+      "catalog_sha256": "<sha256>",
+      "family": "MASTG",
+      "profile": "supporting",
+      "snapshot_id": "MASTG:2.0.0:sha256-664e962d762cbdaa",
+      "version": "2.0.0"
+     },
+     {
+      "authority": "control",
+      "catalog_sha256": "<sha256>",
+      "family": "MASVS",
+      "profile": "L2",
+      "snapshot_id": "MASVS:2.1.0:sha256-845f6e57f5f61094",
+      "version": "2.1.0"
+     },
+     {
+      "authority": "routing_context",
+      "catalog_sha256": "<sha256>",
+      "family": "OWASP_API_TOP_10",
+      "profile": "context",
+      "snapshot_id": "OWASP_API_TOP_10:2023:sha256-58291b235d523827",
+      "version": "2023"
+     },
+     {
+      "authority": "routing_context",
+      "catalog_sha256": "<sha256>",
+      "family": "OWASP_TOP_10",
+      "profile": "context",
+      "snapshot_id": "OWASP_TOP_10:2025:sha256-10760a8e21296f94",
+      "version": "2025"
+     }
+    ]
+   }
+  },
+  "validation.cell_01": {
+   "assigned_batch_count": 1,
+   "batch_results": [
+    {
+     "batch_id": "batch-1931392c25bc245470b8",
+     "fingerprint": "<sha256>",
+     "metrics": {
+      "cost_usd": null,
+      "duration_ms": "<duration>",
+      "input_tokens": 0,
+      "model_calls": 0,
+      "output_tokens": 0,
+      "retries": 0,
+      "retrieval_calls": 0
+     },
+     "results": [
+      {
+       "disagreements": [],
+       "evidence_used": [],
+       "metrics": {
+        "input_tokens": 0,
+        "output_tokens": 0
+       },
+       "observations": [],
+       "package_id": "package-<id>",
+       "row_id": "<sha256>",
+       "status": "cannot_verify"
+      }
+     ],
+     "schema": "appsec-review/validator-batch-result/1",
+     "terminal_state": "succeeded"
+    }
+   ],
+   "cell": "cell_01",
+   "failed_batch_count": 0,
+   "terminal_status": "SUCCEEDED"
+  },
+  "validation.cell_02": {
+   "assigned_batch_count": 1,
+   "batch_results": [
+    {
+     "batch_id": "batch-3537347d309313354eb1",
+     "fingerprint": "<sha256>",
+     "metrics": {
+      "cost_usd": null,
+      "duration_ms": "<duration>",
+      "input_tokens": 0,
+      "model_calls": 0,
+      "output_tokens": 0,
+      "retries": 0,
+      "retrieval_calls": 0
+     },
+     "results": [
+      {
+       "disagreements": [],
+       "evidence_used": [],
+       "metrics": {
+        "input_tokens": 0,
+        "output_tokens": 0
+       },
+       "observations": [],
+       "package_id": "package-<id>",
+       "row_id": "<sha256>",
+       "status": "cannot_verify"
+      }
+     ],
+     "schema": "appsec-review/validator-batch-result/1",
+     "terminal_state": "succeeded"
+    }
+   ],
+   "cell": "cell_02",
+   "failed_batch_count": 0,
+   "terminal_status": "SUCCEEDED"
+  },
+  "validation.cell_03": {
+   "assigned_batch_count": 1,
+   "batch_results": [
+    {
+     "batch_id": "batch-4d848e81d33ff22b561a",
+     "fingerprint": "<sha256>",
+     "metrics": {
+      "cost_usd": null,
+      "duration_ms": "<duration>",
+      "input_tokens": 0,
+      "model_calls": 0,
+      "output_tokens": 0,
+      "retries": 0,
+      "retrieval_calls": 0
+     },
+     "results": [
+      {
+       "disagreements": [],
+       "evidence_used": [],
+       "metrics": {
+        "input_tokens": 0,
+        "output_tokens": 0
+       },
+       "observations": [],
+       "package_id": "package-<id>",
+       "row_id": "<sha256>",
+       "status": "cannot_verify"
+      }
+     ],
+     "schema": "appsec-review/validator-batch-result/1",
+     "terminal_state": "succeeded"
+    }
+   ],
+   "cell": "cell_03",
+   "failed_batch_count": 0,
+   "terminal_status": "SUCCEEDED"
+  },
+  "validation.cell_04": {
+   "assigned_batch_count": 1,
+   "batch_results": [
+    {
+     "batch_id": "batch-798357309f46b6e03727",
+     "fingerprint": "<sha256>",
+     "metrics": {
+      "cost_usd": null,
+      "duration_ms": "<duration>",
+      "input_tokens": 0,
+      "model_calls": 0,
+      "output_tokens": 0,
+      "retries": 0,
+      "retrieval_calls": 0
+     },
+     "results": [
+      {
+       "disagreements": [],
+       "evidence_used": [],
+       "metrics": {
+        "input_tokens": 0,
+        "output_tokens": 0
+       },
+       "observations": [],
+       "package_id": "package-<id>",
+       "row_id": "<sha256>",
+       "status": "cannot_verify"
+      },
+      {
+       "disagreements": [],
+       "evidence_used": [],
+       "metrics": {
+        "input_tokens": 0,
+        "output_tokens": 0
+       },
+       "observations": [],
+       "package_id": "package-<id>",
+       "row_id": "<sha256>",
+       "status": "cannot_verify"
+      }
+     ],
+     "schema": "appsec-review/validator-batch-result/1",
+     "terminal_state": "succeeded"
+    }
+   ],
+   "cell": "cell_04",
+   "failed_batch_count": 0,
+   "terminal_status": "SUCCEEDED"
+  },
+  "verification.independent_review": {
+   "artifact": {
+    "path": "data/jobs/job_owasp_control_assessment/attempts/<attempt>/artifacts/owasp-workbench/verified-results.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "gap_count": 5,
+   "terminal_status": "COMPLETED_WITH_GAPS",
+   "verified_results": [
+    {
+     "disagreements": [],
+     "evidence_used": [],
+     "metrics": {
+      "input_tokens": 0,
+      "output_tokens": 0
+     },
+     "observations": [],
+     "package_id": "package-<id>",
+     "row_id": "<sha256>",
+     "status": "cannot_verify",
+     "verification_status": "verified_with_gaps"
+    },
+    {
+     "disagreements": [],
+     "evidence_used": [],
+     "metrics": {
+      "input_tokens": 0,
+      "output_tokens": 0
+     },
+     "observations": [],
+     "package_id": "package-<id>",
+     "row_id": "<sha256>",
+     "status": "cannot_verify",
+     "verification_status": "verified_with_gaps"
+    },
+    {
+     "disagreements": [],
+     "evidence_used": [],
+     "metrics": {
+      "input_tokens": 0,
+      "output_tokens": 0
+     },
+     "observations": [],
+     "package_id": "package-<id>",
+     "row_id": "<sha256>",
+     "status": "cannot_verify",
+     "verification_status": "verified_with_gaps"
+    },
+    {
+     "disagreements": [],
+     "evidence_used": [],
+     "metrics": {
+      "input_tokens": 0,
+      "output_tokens": 0
+     },
+     "observations": [],
+     "package_id": "package-<id>",
+     "row_id": "<sha256>",
+     "status": "cannot_verify",
+     "verification_status": "verified_with_gaps"
+    },
+    {
+     "disagreements": [],
+     "evidence_used": [],
+     "metrics": {
+      "input_tokens": 0,
+      "output_tokens": 0
+     },
+     "observations": [],
+     "package_id": "package-<id>",
+     "row_id": "<sha256>",
+     "status": "cannot_verify",
+     "verification_status": "verified_with_gaps"
+    }
+   ]
+  }
+ },
+ "schema": "appsec-review/acceptance-job-output/1",
+ "skipped_units": [],
+ "status": "COMPLETED_WITH_GAPS",
+ "steps": {
+  "applicability": "SUCCEEDED",
+  "batching": "SUCCEEDED",
+  "characterization": "SUCCEEDED",
+  "join": "SUCCEEDED",
+  "publication": "SUCCEEDED",
+  "standards_selection": "SUCCEEDED",
+  "validation": "SUCCEEDED",
+  "verification": "SUCCEEDED"
+ },
+ "units": {
+  "applicability.build_matrix": {
+   "disposition": null,
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "batching.build_packages": {
+   "disposition": null,
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "batching.partition_work": {
+   "disposition": null,
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "characterization.classify_components": {
+   "disposition": null,
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "characterization.load_inputs": {
+   "disposition": null,
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "join.deterministic_join": {
+   "disposition": "COMPLETED_WITH_GAPS",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "publication.publish_handoff": {
+   "disposition": "COMPLETED_WITH_GAPS",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "publication.publish_indexes": {
+   "disposition": null,
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "standards_selection.ingest_catalogs": {
+   "disposition": "COMPLETED_WITH_GAPS",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "standards_selection.select_profiles": {
+   "disposition": null,
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "validation.cell_01": {
+   "disposition": "SUCCEEDED",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "validation.cell_02": {
+   "disposition": "SUCCEEDED",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "validation.cell_03": {
+   "disposition": "SUCCEEDED",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "validation.cell_04": {
+   "disposition": "SUCCEEDED",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "verification.independent_review": {
+   "disposition": "COMPLETED_WITH_GAPS",
+   "producer": null,
+   "status": "SUCCEEDED"
+  }
+ },
+ "volatile": {
+  "artifacts": [
+   {
+    "path": "data/indexes/owasp/manifests/<sha256>.json",
+    "sha256": "1a2109a8583b758e4aa77cdbdbb0babfa38566704c5619d58ca98c9bc325ca50",
+    "size_bytes": 6421
+   },
+   {
+    "path": "data/jobs/job_owasp_control_assessment/attempts/<attempt>/artifacts/owasp-workbench/applicability.json",
+    "sha256": "e4dd039eea7db0e89c972b0a4cbe779b72a5d61c7022de904f1cebd7b6264f29",
+    "size_bytes": 7215
+   },
+   {
+    "path": "data/jobs/job_owasp_control_assessment/attempts/<attempt>/artifacts/owasp-workbench/component-classifications.json",
+    "sha256": "4f1822c0d6fa2dcd8c209edb4a4d735e3097a0187f6155f4ea9a7acc9707b0f2",
+    "size_bytes": 892
+   },
+   {
+    "path": "data/jobs/job_owasp_control_assessment/attempts/<attempt>/artifacts/owasp-workbench/control-results.json",
+    "sha256": "19c29e85344067c8d0d2d9912517c7aa2ebb36a1d1a5ab96a87efb63c9ec8ea6",
+    "size_bytes": 3467
+   },
+   {
+    "path": "data/jobs/job_owasp_control_assessment/attempts/<attempt>/artifacts/owasp-workbench/finding-packages.json",
+    "sha256": "314bc4addd2a4efc943e73b2af8b7692f713403715851483bd002362f5bd245d",
+    "size_bytes": 8413
+   },
+   {
+    "path": "data/jobs/job_owasp_control_assessment/attempts/<attempt>/artifacts/owasp-workbench/owasp-workbench-result.json",
+    "sha256": "cb9a515bd057a7a2a61d686a13e0d87dcd12075146610f69e983d1aa907ffdfd",
+    "size_bytes": 2125
+   },
+   {
+    "path": "data/jobs/job_owasp_control_assessment/attempts/<attempt>/artifacts/owasp-workbench/selection.json",
+    "sha256": "f98a4f89d344c77e862cf4a509a631f70d4cabab2eecf3cc31d5334153d47481",
+    "size_bytes": 1338
+   },
+   {
+    "path": "data/jobs/job_owasp_control_assessment/attempts/<attempt>/artifacts/owasp-workbench/standards-manifest.json",
+    "sha256": "3beecc2ee59bb931849c68b5861babe97e3637b3b1b2d63e9aec4b28c4555e5b",
+    "size_bytes": 2519
+   },
+   {
+    "path": "data/jobs/job_owasp_control_assessment/attempts/<attempt>/artifacts/owasp-workbench/validation-work.json",
+    "sha256": "1243f3687866384cb0b9323b1d7cd3bc5e4f6a84e88724d009d807a75d7012a6",
+    "size_bytes": 3234
+   },
+   {
+    "path": "data/jobs/job_owasp_control_assessment/attempts/<attempt>/artifacts/owasp-workbench/verified-results.json",
+    "sha256": "231f3b384c8e9b978fc5eb0844cd6c9ad833050865e52813f7cf8ab966888bb2",
+    "size_bytes": 1836
+   },
+   {
+    "path": "data/jobs/job_owasp_control_assessment/attempts/<attempt>/inputs/retrieval-manifest.json",
+    "sha256": "c7213fe42f9037c2619466201d20f95f04ee3be0d0e27d1a42dcfcfdf44dd5f7",
+    "size_bytes": 60164
+   }
+  ]
+ }
+}

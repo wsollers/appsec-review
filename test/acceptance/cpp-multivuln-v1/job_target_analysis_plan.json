@@ -1,0 +1,3014 @@
+{
+ "artifacts": [
+  {
+   "count": 14,
+   "kind": "json",
+   "path": "data/jobs/job_source_history_analysis/attempts/<attempt>/steps/analyze/tasks/rank/artifacts/hotspots.json",
+   "sha256": "e97c03ff0860e6ec2944b674cff66301e3277f5201c8494643ec39cc3838fca0"
+  },
+  {
+   "count": 14,
+   "kind": "json",
+   "path": "data/jobs/job_source_history_analysis/attempts/<attempt>/steps/analyze/tasks/rank/artifacts/signals.json",
+   "sha256": "e206b654c6645fe4515796ba7992625492bb292e5f23a721cf0f2f6bc80cbbc4"
+  },
+  {
+   "count": 14,
+   "kind": "json",
+   "path": "data/jobs/job_target_analysis_plan/attempts/<attempt>/artifacts/analysis-plan/catalog-summary.json",
+   "sha256": "a368255b47bf0c5ebd7ee2ffa19ece2df023005dc3e5cb81d97f522db9e63fa2"
+  },
+  {
+   "count": 16,
+   "kind": "json",
+   "path": "data/jobs/job_target_analysis_plan/attempts/<attempt>/artifacts/analysis-plan/accepted-analysis-plan.json",
+   "sha256": "ea2f7dd5145848f9651ed5c073389e3d1f74093368b3a5333bbe9eb80469e2ad"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/indices/manifests/analysis-plan-<attempt>.json",
+   "sha256": "2b86d384dd78ff19ac84b21fb0f17841e7c7d8253958932b336baddad123fba7"
+  },
+  {
+   "count": 7,
+   "kind": "json",
+   "path": "data/indices/manifests/source-history-<attempt>.json",
+   "sha256": "3c7864a56c7680139c0907bacf2a54d8e282dc597516d388acbacc99f81d985e"
+  },
+  {
+   "coverage_statuses": {
+    "partial": 1
+   },
+   "entity_kinds": {
+    "build_action": 1,
+    "component": 1,
+    "evidence_artifact": 7
+   },
+   "kind": "sqlite",
+   "path": "data/indices/analysis/<sha256>-target-analysis-plan.sqlite",
+   "rows": {
+    "coverage": 1,
+    "entities": 9,
+    "locations": 0,
+    "metadata": 8,
+    "relations": 72
+   }
+  }
+ ],
+ "failed_units": [],
+ "findings": [],
+ "gaps": [
+  {
+   "count": 1,
+   "gap": {
+    "area": "analysis-plan",
+    "gap": ".git: excluded_directory; no recognized project manifests; compile_commands.json not present; build topology: no accepted compile database; compiled-unit coverage is unavailable; build topology: build targets and link outputs are not inferred without accepted build artifacts",
+    "status": "partial"
+   },
+   "unit": "artifact:data/indices/analysis/<sha256>-target-analysis-plan.sqlite"
+  },
+  {
+   "count": 1,
+   "gap": "compile_commands.json not present",
+   "unit": "catalog_summary.load_accepted_catalog"
+  },
+  {
+   "count": 1,
+   "gap": "no recognized project manifests",
+   "unit": "catalog_summary.load_accepted_catalog"
+  },
+  {
+   "count": 1,
+   "gap": {
+    "path": ".git",
+    "reason": "excluded_directory"
+   },
+   "unit": "catalog_summary.load_accepted_catalog"
+  },
+  {
+   "count": 2,
+   "gap": ".git: excluded_directory",
+   "unit": "plan_acceptance.index_plan"
+  },
+  {
+   "count": 2,
+   "gap": "build topology: build targets and link outputs are not inferred without accepted build artifacts",
+   "unit": "plan_acceptance.index_plan"
+  },
+  {
+   "count": 2,
+   "gap": "build topology: no accepted compile database; compiled-unit coverage is unavailable",
+   "unit": "plan_acceptance.index_plan"
+  },
+  {
+   "count": 2,
+   "gap": "compile_commands.json not present",
+   "unit": "plan_acceptance.index_plan"
+  },
+  {
+   "count": 2,
+   "gap": "no recognized project manifests",
+   "unit": "plan_acceptance.index_plan"
+  },
+  {
+   "count": 2,
+   "gap": ".git: excluded_directory",
+   "unit": "plan_acceptance.publish_handoff"
+  },
+  {
+   "count": 2,
+   "gap": "build topology: build targets and link outputs are not inferred without accepted build artifacts",
+   "unit": "plan_acceptance.publish_handoff"
+  },
+  {
+   "count": 2,
+   "gap": "build topology: no accepted compile database; compiled-unit coverage is unavailable",
+   "unit": "plan_acceptance.publish_handoff"
+  },
+  {
+   "count": 2,
+   "gap": "compile_commands.json not present",
+   "unit": "plan_acceptance.publish_handoff"
+  },
+  {
+   "count": 2,
+   "gap": "no recognized project manifests",
+   "unit": "plan_acceptance.publish_handoff"
+  },
+  {
+   "count": 1,
+   "gap": ".git: excluded_directory",
+   "unit": "plan_acceptance.validate_plan"
+  },
+  {
+   "count": 1,
+   "gap": "build topology: build targets and link outputs are not inferred without accepted build artifacts",
+   "unit": "plan_acceptance.validate_plan"
+  },
+  {
+   "count": 1,
+   "gap": "build topology: no accepted compile database; compiled-unit coverage is unavailable",
+   "unit": "plan_acceptance.validate_plan"
+  },
+  {
+   "count": 1,
+   "gap": "compile_commands.json not present",
+   "unit": "plan_acceptance.validate_plan"
+  },
+  {
+   "count": 1,
+   "gap": "no recognized project manifests",
+   "unit": "plan_acceptance.validate_plan"
+  }
+ ],
+ "handoff": {
+  "completion_status": "SUCCEEDED",
+  "schema_identity": "appsec-review/target-analysis-plan/1",
+  "status": "ACCEPTED",
+  "upstream_jobs": [
+   "job_ci_configuration_analysis",
+   "job_review_intake",
+   "job_source_history_analysis",
+   "job_target_catalog"
+  ]
+ },
+ "job_id": "job_target_analysis_plan",
+ "outputs": {
+  "analysis_decisions.apply_deterministic_rules": {
+   "ambiguities": [
+    "buildable units require inference-derived build recipes"
+   ],
+   "plan": {
+    "build_topology": {
+     "build_actions": [
+      {
+       "action": "configure-and-build",
+       "build_system": "cmake",
+       "build_unit_id": "build-unit-b9c931fa551e02bd12b2",
+       "descriptor_facts": {},
+       "descriptor_package": {
+        "bounds": {
+         "actual_bytes": 529,
+         "actual_files": 2,
+         "max_file_bytes": 65536,
+         "max_files": 24,
+         "max_total_bytes": 262144
+        },
+        "build_unit": {
+         "build_system": "cmake",
+         "build_unit_id": "build-unit-b9c931fa551e02bd12b2",
+         "family": "native",
+         "markers": [
+          {
+           "path": "CMakeLists.txt",
+           "sha256": "<sha256>",
+           "size_bytes": "<size_bytes>"
+          }
+         ],
+         "provenance": "deterministic-marker",
+         "root": "."
+        },
+        "documents": [
+         {
+          "content": "cmake_minimum_required(VERSION 3.20)\nproject(relay LANGUAGES CXX)\n\nset(CMAKE_CXX_STANDARD 17)\nset(CMAKE_CXX_STANDARD_REQUIRED ON)\nset(CMAKE_CXX_EXTENSIONS OFF)\nset(CMAKE_EXPORT_COMPILE_COMMANDS ON)\n\nadd_executable(relay\n  src/main.cpp\n  src/packet.cpp\n  src/session.cpp\n  src/frame.cpp\n  src/log.cpp\n  src/diag.cpp\n  src/config.cpp\n)\ntarget_include_directories(relay PRIVATE include)\ntarget_compile_options(relay PRIVATE -Wall -Wextra)\n",
+          "path": "CMakeLists.txt",
+          "sha256": "<sha256>"
+         },
+         {
+          "content": "# relay\n\nA small packet relay utility.\n\nBuild: `cmake -S . -B build && cmake --build build`.\n",
+          "path": "README.md",
+          "sha256": "<sha256>"
+         }
+        ],
+        "schema": "appsec-review/build-descriptor-package/1"
+       },
+       "executable": false,
+       "family": "native",
+       "markers": [
+        {
+         "path": "CMakeLists.txt",
+         "sha256": "<sha256>",
+         "size_bytes": "<size_bytes>"
+        }
+       ],
+       "native_components": [],
+       "project_type": "generic",
+       "recipe": null,
+       "required_image_profile": "native",
+       "requires_inference": true,
+       "root": "."
+      }
+     ],
+     "build_systems": [
+      {
+       "build_system": "cmake",
+       "build_unit_id": "build-unit-b9c931fa551e02bd12b2",
+       "confidence": "high",
+       "manifest": {
+        "path": "CMakeLists.txt",
+        "sha256": "<sha256>",
+        "size_bytes": "<size_bytes>"
+       },
+       "provenance": "deterministic-marker",
+       "root": "."
+      }
+     ],
+     "compile_databases": [],
+     "compile_units": [],
+     "generated_sources": [],
+     "link_outputs": [],
+     "projects": [],
+     "relationships": [
+      {
+       "build_root": ".",
+       "component_id": "component:0001",
+       "kind": "component_build_root"
+      }
+     ],
+     "source_only_scopes": [],
+     "targets": []
+    },
+    "catalog_handoff_sha256": "<sha256>",
+    "components": [
+     {
+      "component_id": "component:0001",
+      "confidence": "high",
+      "contradictions": [],
+      "coverage_gaps": [],
+      "manifest": null,
+      "provenance": "deterministic",
+      "reasons": [
+       "accepted catalog component and exact path ownership"
+      ],
+      "root": ".",
+      "scanner_ids": [
+       "tool-checkov",
+       "tool-cppcheck",
+       "tool-gitleaks",
+       "tool-grype",
+       "tool-opengrep",
+       "tool-semgrep",
+       "tool-syft"
+      ],
+      "scope": [
+       {
+        "path": "CMakeLists.txt",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "README.md",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "include/relay/relay.hpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/config.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/diag.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/frame.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/log.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/main.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/packet.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/session.cpp",
+        "sha256": "<sha256>"
+       }
+      ]
+     }
+    ],
+    "confidence": "medium",
+    "contradictions": [],
+    "coverage_gaps": [
+     ".git: excluded_directory",
+     "no recognized project manifests",
+     "compile_commands.json not present",
+     "build topology: no accepted compile database; compiled-unit coverage is unavailable",
+     "build topology: build targets and link outputs are not inferred without accepted build artifacts"
+    ],
+    "expected_artifact_families": [
+     "observations",
+     "software-inventory",
+     "configuration",
+     "build"
+    ],
+    "history_priority": {
+     "components": [
+      {
+       "change_count": 1,
+       "churn_lines": 248,
+       "component_id": "component:0001",
+       "rank": 1,
+       "score": 44.3279
+      }
+     ],
+     "files": [
+      {
+       "change_count": 1,
+       "churn_lines": 13,
+       "path": "src/config.cpp",
+       "rank": 1,
+       "score": 44.3279,
+       "sha256": "<sha256>"
+      },
+      {
+       "change_count": 1,
+       "churn_lines": 12,
+       "path": "src/diag.cpp",
+       "rank": 2,
+       "score": 32.9035,
+       "sha256": "<sha256>"
+      },
+      {
+       "change_count": 1,
+       "churn_lines": 12,
+       "path": "src/log.cpp",
+       "rank": 3,
+       "score": 32.9035,
+       "sha256": "<sha256>"
+      },
+      {
+       "change_count": 1,
+       "churn_lines": 43,
+       "path": "src/session.cpp",
+       "rank": 4,
+       "score": 30.3982,
+       "sha256": "<sha256>"
+      },
+      {
+       "change_count": 1,
+       "churn_lines": 75,
+       "path": "src/main.cpp",
+       "rank": 5,
+       "score": 25.0,
+       "sha256": "<sha256>"
+      },
+      {
+       "change_count": 1,
+       "churn_lines": 28,
+       "path": "src/frame.cpp",
+       "rank": 6,
+       "score": 22.6069,
+       "sha256": "<sha256>"
+      },
+      {
+       "change_count": 1,
+       "churn_lines": 20,
+       "path": "src/packet.cpp",
+       "rank": 7,
+       "score": 21.5526,
+       "sha256": "<sha256>"
+      },
+      {
+       "change_count": 1,
+       "churn_lines": 45,
+       "path": "include/relay/relay.hpp",
+       "rank": 8,
+       "score": 17.8425,
+       "sha256": "<sha256>"
+      }
+     ],
+     "handoff_sha256": "<sha256>",
+     "history_identity": "<sha256>",
+     "ranking": "appsec-review/security-instability-index/1",
+     "reason": null,
+     "status": "AVAILABLE"
+    },
+    "model": {
+     "proposal_sha256": null,
+     "status": "NOT_NEEDED"
+    },
+    "prerequisites": [
+     "accepted target catalog",
+     "verified immutable retrieval index set"
+    ],
+    "provenance": "deterministic",
+    "scanner_non_selections": [
+     {
+      "mandatory": false,
+      "reason": "no accepted catalog input satisfies deterministic applicability",
+      "scanner_id": "tool-blint"
+     },
+     {
+      "mandatory": false,
+      "reason": "no accepted catalog input satisfies deterministic applicability",
+      "scanner_id": "tool-gosec"
+     },
+     {
+      "mandatory": false,
+      "reason": "no accepted catalog input satisfies deterministic applicability",
+      "scanner_id": "tool-hadolint"
+     },
+     {
+      "mandatory": false,
+      "reason": "no accepted catalog input satisfies deterministic applicability",
+      "scanner_id": "tool-mobsfscan"
+     },
+     {
+      "mandatory": false,
+      "reason": "no accepted catalog input satisfies deterministic applicability",
+      "scanner_id": "tool-osv-scanner"
+     },
+     {
+      "mandatory": false,
+      "reason": "no accepted catalog input satisfies deterministic applicability",
+      "scanner_id": "tool-phpcs"
+     },
+     {
+      "mandatory": false,
+      "reason": "no accepted catalog input satisfies deterministic applicability",
+      "scanner_id": "tool-phpstan"
+     },
+     {
+      "mandatory": false,
+      "reason": "no accepted catalog input satisfies deterministic applicability",
+      "scanner_id": "tool-pmd"
+     },
+     {
+      "mandatory": false,
+      "reason": "no accepted catalog input satisfies deterministic applicability",
+      "scanner_id": "tool-psalm"
+     },
+     {
+      "mandatory": false,
+      "reason": "no accepted catalog input satisfies deterministic applicability",
+      "scanner_id": "tool-shellcheck"
+     },
+     {
+      "mandatory": false,
+      "reason": "no accepted catalog input satisfies deterministic applicability",
+      "scanner_id": "tool-spotbugs"
+     },
+     {
+      "mandatory": false,
+      "reason": "no accepted catalog input satisfies deterministic applicability",
+      "scanner_id": "tool-trivy"
+     },
+     {
+      "mandatory": false,
+      "reason": "no accepted catalog input satisfies deterministic applicability",
+      "scanner_id": "tool-zizmor"
+     }
+    ],
+    "scanner_selections": [
+     {
+      "expected_index_family": "observations",
+      "provenance": "deterministic",
+      "reason": "deterministic catalog applicability",
+      "scanner_id": "tool-checkov",
+      "scope": [
+       {
+        "path": "CMakeLists.txt",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "README.md",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "include/relay/relay.hpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/config.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/diag.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/frame.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/log.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/main.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/packet.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/session.cpp",
+        "sha256": "<sha256>"
+       }
+      ]
+     },
+     {
+      "expected_index_family": "observations",
+      "provenance": "deterministic",
+      "reason": "deterministic catalog applicability",
+      "scanner_id": "tool-cppcheck",
+      "scope": [
+       {
+        "path": "include/relay/relay.hpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/config.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/diag.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/frame.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/log.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/main.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/packet.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/session.cpp",
+        "sha256": "<sha256>"
+       }
+      ]
+     },
+     {
+      "expected_index_family": "observations",
+      "provenance": "deterministic",
+      "reason": "mandatory baseline coverage",
+      "scanner_id": "tool-gitleaks",
+      "scope": [
+       {
+        "path": "CMakeLists.txt",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "README.md",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "include/relay/relay.hpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/config.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/diag.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/frame.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/log.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/main.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/packet.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/session.cpp",
+        "sha256": "<sha256>"
+       }
+      ]
+     },
+     {
+      "expected_index_family": "observations",
+      "provenance": "deterministic",
+      "reason": "deterministic catalog applicability",
+      "scanner_id": "tool-grype",
+      "scope": [
+       {
+        "path": "CMakeLists.txt",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "README.md",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "include/relay/relay.hpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/config.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/diag.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/frame.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/log.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/main.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/packet.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/session.cpp",
+        "sha256": "<sha256>"
+       }
+      ]
+     },
+     {
+      "expected_index_family": "observations",
+      "provenance": "deterministic",
+      "reason": "deterministic catalog applicability",
+      "scanner_id": "tool-opengrep",
+      "scope": [
+       {
+        "path": "include/relay/relay.hpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/config.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/diag.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/frame.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/log.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/main.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/packet.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/session.cpp",
+        "sha256": "<sha256>"
+       }
+      ]
+     },
+     {
+      "expected_index_family": "observations",
+      "provenance": "deterministic",
+      "reason": "mandatory baseline coverage",
+      "scanner_id": "tool-semgrep",
+      "scope": [
+       {
+        "path": "include/relay/relay.hpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/config.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/diag.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/frame.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/log.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/main.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/packet.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/session.cpp",
+        "sha256": "<sha256>"
+       }
+      ]
+     },
+     {
+      "expected_index_family": "observations",
+      "provenance": "deterministic",
+      "reason": "mandatory baseline coverage",
+      "scanner_id": "tool-syft",
+      "scope": [
+       {
+        "path": "CMakeLists.txt",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "README.md",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "include/relay/relay.hpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/config.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/diag.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/frame.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/log.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/main.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/packet.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/session.cpp",
+        "sha256": "<sha256>"
+       }
+      ]
+     }
+    ],
+    "schema": "appsec-review/target-analysis-plan/1",
+    "source_fingerprint": "<sha256>",
+    "summary_sha256": "<sha256>"
+   }
+  },
+  "analysis_decisions.resolve_ambiguity": {
+   "model_calls": 1,
+   "plan": {
+    "build_topology": {
+     "build_actions": [
+      {
+       "action": "configure-and-build",
+       "build_system": "cmake",
+       "build_unit_id": "build-unit-b9c931fa551e02bd12b2",
+       "descriptor_facts": {},
+       "descriptor_package": {
+        "bounds": {
+         "actual_bytes": 529,
+         "actual_files": 2,
+         "max_file_bytes": 65536,
+         "max_files": 24,
+         "max_total_bytes": 262144
+        },
+        "build_unit": {
+         "build_system": "cmake",
+         "build_unit_id": "build-unit-b9c931fa551e02bd12b2",
+         "family": "native",
+         "markers": [
+          {
+           "path": "CMakeLists.txt",
+           "sha256": "<sha256>",
+           "size_bytes": "<size_bytes>"
+          }
+         ],
+         "provenance": "deterministic-marker",
+         "root": "."
+        },
+        "documents": [
+         {
+          "content": "cmake_minimum_required(VERSION 3.20)\nproject(relay LANGUAGES CXX)\n\nset(CMAKE_CXX_STANDARD 17)\nset(CMAKE_CXX_STANDARD_REQUIRED ON)\nset(CMAKE_CXX_EXTENSIONS OFF)\nset(CMAKE_EXPORT_COMPILE_COMMANDS ON)\n\nadd_executable(relay\n  src/main.cpp\n  src/packet.cpp\n  src/session.cpp\n  src/frame.cpp\n  src/log.cpp\n  src/diag.cpp\n  src/config.cpp\n)\ntarget_include_directories(relay PRIVATE include)\ntarget_compile_options(relay PRIVATE -Wall -Wextra)\n",
+          "path": "CMakeLists.txt",
+          "sha256": "<sha256>"
+         },
+         {
+          "content": "# relay\n\nA small packet relay utility.\n\nBuild: `cmake -S . -B build && cmake --build build`.\n",
+          "path": "README.md",
+          "sha256": "<sha256>"
+         }
+        ],
+        "schema": "appsec-review/build-descriptor-package/1"
+       },
+       "executable": false,
+       "family": "native",
+       "markers": [
+        {
+         "path": "CMakeLists.txt",
+         "sha256": "<sha256>",
+         "size_bytes": "<size_bytes>"
+        }
+       ],
+       "native_components": [],
+       "project_type": "generic",
+       "recipe": {
+        "build_commands": [
+         [
+          "cmake",
+          "--build",
+          "build"
+         ]
+        ],
+        "build_dir": "build",
+        "build_unit_id": "build-unit-b9c931fa551e02bd12b2",
+        "configure_commands": [
+         [
+          "cmake",
+          "-S",
+          ".",
+          "-B",
+          "build"
+         ]
+        ],
+        "dependency_files": [
+         "CMakeLists.txt"
+        ],
+        "environment": {},
+        "expected_outputs": [
+         "build/relay"
+        ],
+        "image_profile": "native",
+        "network_required": false,
+        "reason": "Single CMake project with one C++ executable target and no declared external dependencies. Configure and build out of source into build/, with the executable expected at the default CMake binary location.",
+        "schema": "appsec-review/build-recipe/1",
+        "source_dir": ".",
+        "system_packages": []
+       },
+       "required_image_profile": "native",
+       "requires_inference": false,
+       "root": "."
+      }
+     ],
+     "build_systems": [
+      {
+       "build_system": "cmake",
+       "build_unit_id": "build-unit-b9c931fa551e02bd12b2",
+       "confidence": "high",
+       "manifest": {
+        "path": "CMakeLists.txt",
+        "sha256": "<sha256>",
+        "size_bytes": "<size_bytes>"
+       },
+       "provenance": "deterministic-marker",
+       "root": "."
+      }
+     ],
+     "compile_databases": [],
+     "compile_units": [],
+     "generated_sources": [],
+     "link_outputs": [],
+     "projects": [],
+     "relationships": [
+      {
+       "build_root": ".",
+       "component_id": "component:0001",
+       "kind": "component_build_root"
+      }
+     ],
+     "source_only_scopes": [],
+     "targets": []
+    },
+    "catalog_handoff_sha256": "<sha256>",
+    "components": [
+     {
+      "component_id": "component:0001",
+      "confidence": "high",
+      "contradictions": [],
+      "coverage_gaps": [],
+      "manifest": null,
+      "provenance": "deterministic",
+      "reasons": [
+       "accepted catalog component and exact path ownership"
+      ],
+      "root": ".",
+      "scanner_ids": [
+       "tool-checkov",
+       "tool-cppcheck",
+       "tool-gitleaks",
+       "tool-grype",
+       "tool-opengrep",
+       "tool-semgrep",
+       "tool-syft"
+      ],
+      "scope": [
+       {
+        "path": "CMakeLists.txt",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "README.md",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "include/relay/relay.hpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/config.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/diag.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/frame.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/log.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/main.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/packet.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/session.cpp",
+        "sha256": "<sha256>"
+       }
+      ]
+     }
+    ],
+    "confidence": "medium",
+    "contradictions": [],
+    "coverage_gaps": [
+     ".git: excluded_directory",
+     "no recognized project manifests",
+     "compile_commands.json not present",
+     "build topology: no accepted compile database; compiled-unit coverage is unavailable",
+     "build topology: build targets and link outputs are not inferred without accepted build artifacts"
+    ],
+    "expected_artifact_families": [
+     "observations",
+     "software-inventory",
+     "configuration",
+     "build"
+    ],
+    "history_priority": {
+     "components": [
+      {
+       "change_count": 1,
+       "churn_lines": 248,
+       "component_id": "component:0001",
+       "rank": 1,
+       "score": 44.3279
+      }
+     ],
+     "files": [
+      {
+       "change_count": 1,
+       "churn_lines": 13,
+       "path": "src/config.cpp",
+       "rank": 1,
+       "score": 44.3279,
+       "sha256": "<sha256>"
+      },
+      {
+       "change_count": 1,
+       "churn_lines": 12,
+       "path": "src/diag.cpp",
+       "rank": 2,
+       "score": 32.9035,
+       "sha256": "<sha256>"
+      },
+      {
+       "change_count": 1,
+       "churn_lines": 12,
+       "path": "src/log.cpp",
+       "rank": 3,
+       "score": 32.9035,
+       "sha256": "<sha256>"
+      },
+      {
+       "change_count": 1,
+       "churn_lines": 43,
+       "path": "src/session.cpp",
+       "rank": 4,
+       "score": 30.3982,
+       "sha256": "<sha256>"
+      },
+      {
+       "change_count": 1,
+       "churn_lines": 75,
+       "path": "src/main.cpp",
+       "rank": 5,
+       "score": 25.0,
+       "sha256": "<sha256>"
+      },
+      {
+       "change_count": 1,
+       "churn_lines": 28,
+       "path": "src/frame.cpp",
+       "rank": 6,
+       "score": 22.6069,
+       "sha256": "<sha256>"
+      },
+      {
+       "change_count": 1,
+       "churn_lines": 20,
+       "path": "src/packet.cpp",
+       "rank": 7,
+       "score": 21.5526,
+       "sha256": "<sha256>"
+      },
+      {
+       "change_count": 1,
+       "churn_lines": 45,
+       "path": "include/relay/relay.hpp",
+       "rank": 8,
+       "score": 17.8425,
+       "sha256": "<sha256>"
+      }
+     ],
+     "handoff_sha256": "<sha256>",
+     "history_identity": "<sha256>",
+     "ranking": "appsec-review/security-instability-index/1",
+     "reason": null,
+     "status": "AVAILABLE"
+    },
+    "model": {
+     "groups": [
+      {
+       "status": "ACCEPTED"
+      }
+     ],
+     "proposal_sha256": "<sha256>",
+     "status": "ACCEPTED"
+    },
+    "prerequisites": [
+     "accepted target catalog",
+     "verified immutable retrieval index set"
+    ],
+    "provenance": "model-assisted",
+    "scanner_non_selections": [
+     {
+      "mandatory": false,
+      "reason": "no accepted catalog input satisfies deterministic applicability",
+      "scanner_id": "tool-blint"
+     },
+     {
+      "mandatory": false,
+      "reason": "no accepted catalog input satisfies deterministic applicability",
+      "scanner_id": "tool-gosec"
+     },
+     {
+      "mandatory": false,
+      "reason": "no accepted catalog input satisfies deterministic applicability",
+      "scanner_id": "tool-hadolint"
+     },
+     {
+      "mandatory": false,
+      "reason": "no accepted catalog input satisfies deterministic applicability",
+      "scanner_id": "tool-mobsfscan"
+     },
+     {
+      "mandatory": false,
+      "reason": "no accepted catalog input satisfies deterministic applicability",
+      "scanner_id": "tool-osv-scanner"
+     },
+     {
+      "mandatory": false,
+      "reason": "no accepted catalog input satisfies deterministic applicability",
+      "scanner_id": "tool-phpcs"
+     },
+     {
+      "mandatory": false,
+      "reason": "no accepted catalog input satisfies deterministic applicability",
+      "scanner_id": "tool-phpstan"
+     },
+     {
+      "mandatory": false,
+      "reason": "no accepted catalog input satisfies deterministic applicability",
+      "scanner_id": "tool-pmd"
+     },
+     {
+      "mandatory": false,
+      "reason": "no accepted catalog input satisfies deterministic applicability",
+      "scanner_id": "tool-psalm"
+     },
+     {
+      "mandatory": false,
+      "reason": "no accepted catalog input satisfies deterministic applicability",
+      "scanner_id": "tool-shellcheck"
+     },
+     {
+      "mandatory": false,
+      "reason": "no accepted catalog input satisfies deterministic applicability",
+      "scanner_id": "tool-spotbugs"
+     },
+     {
+      "mandatory": false,
+      "reason": "no accepted catalog input satisfies deterministic applicability",
+      "scanner_id": "tool-trivy"
+     },
+     {
+      "mandatory": false,
+      "reason": "no accepted catalog input satisfies deterministic applicability",
+      "scanner_id": "tool-zizmor"
+     }
+    ],
+    "scanner_selections": [
+     {
+      "expected_index_family": "observations",
+      "provenance": "deterministic",
+      "reason": "deterministic catalog applicability",
+      "scanner_id": "tool-checkov",
+      "scope": [
+       {
+        "path": "CMakeLists.txt",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "README.md",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "include/relay/relay.hpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/config.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/diag.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/frame.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/log.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/main.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/packet.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/session.cpp",
+        "sha256": "<sha256>"
+       }
+      ]
+     },
+     {
+      "expected_index_family": "observations",
+      "provenance": "deterministic",
+      "reason": "deterministic catalog applicability",
+      "scanner_id": "tool-cppcheck",
+      "scope": [
+       {
+        "path": "include/relay/relay.hpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/config.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/diag.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/frame.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/log.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/main.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/packet.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/session.cpp",
+        "sha256": "<sha256>"
+       }
+      ]
+     },
+     {
+      "expected_index_family": "observations",
+      "provenance": "deterministic",
+      "reason": "mandatory baseline coverage",
+      "scanner_id": "tool-gitleaks",
+      "scope": [
+       {
+        "path": "CMakeLists.txt",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "README.md",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "include/relay/relay.hpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/config.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/diag.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/frame.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/log.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/main.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/packet.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/session.cpp",
+        "sha256": "<sha256>"
+       }
+      ]
+     },
+     {
+      "expected_index_family": "observations",
+      "provenance": "deterministic",
+      "reason": "deterministic catalog applicability",
+      "scanner_id": "tool-grype",
+      "scope": [
+       {
+        "path": "CMakeLists.txt",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "README.md",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "include/relay/relay.hpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/config.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/diag.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/frame.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/log.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/main.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/packet.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/session.cpp",
+        "sha256": "<sha256>"
+       }
+      ]
+     },
+     {
+      "expected_index_family": "observations",
+      "provenance": "deterministic",
+      "reason": "deterministic catalog applicability",
+      "scanner_id": "tool-opengrep",
+      "scope": [
+       {
+        "path": "include/relay/relay.hpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/config.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/diag.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/frame.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/log.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/main.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/packet.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/session.cpp",
+        "sha256": "<sha256>"
+       }
+      ]
+     },
+     {
+      "expected_index_family": "observations",
+      "provenance": "deterministic",
+      "reason": "mandatory baseline coverage",
+      "scanner_id": "tool-semgrep",
+      "scope": [
+       {
+        "path": "include/relay/relay.hpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/config.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/diag.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/frame.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/log.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/main.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/packet.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/session.cpp",
+        "sha256": "<sha256>"
+       }
+      ]
+     },
+     {
+      "expected_index_family": "observations",
+      "provenance": "deterministic",
+      "reason": "mandatory baseline coverage",
+      "scanner_id": "tool-syft",
+      "scope": [
+       {
+        "path": "CMakeLists.txt",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "README.md",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "include/relay/relay.hpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/config.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/diag.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/frame.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/log.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/main.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/packet.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/session.cpp",
+        "sha256": "<sha256>"
+       }
+      ]
+     }
+    ],
+    "schema": "appsec-review/target-analysis-plan/1",
+    "source_fingerprint": "<sha256>",
+    "summary_sha256": "<sha256>"
+   },
+   "terminal_status": "SUCCEEDED",
+   "validation_rejections": 0
+  },
+  "catalog_summary.load_accepted_catalog": {
+   "catalog": {
+    "accepted_artifacts": [],
+    "build_files": [
+     {
+      "generated": false,
+      "language": null,
+      "path": "CMakeLists.txt",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     }
+    ],
+    "build_units": [
+     {
+      "build_system": "cmake",
+      "build_unit_id": "build-unit-b9c931fa551e02bd12b2",
+      "descriptor_facts": {},
+      "descriptor_package": {
+       "bounds": {
+        "actual_bytes": 529,
+        "actual_files": 2,
+        "max_file_bytes": 65536,
+        "max_files": 24,
+        "max_total_bytes": 262144
+       },
+       "build_unit": {
+        "build_system": "cmake",
+        "build_unit_id": "build-unit-b9c931fa551e02bd12b2",
+        "family": "native",
+        "markers": [
+         {
+          "path": "CMakeLists.txt",
+          "sha256": "<sha256>",
+          "size_bytes": "<size_bytes>"
+         }
+        ],
+        "provenance": "deterministic-marker",
+        "root": "."
+       },
+       "documents": [
+        {
+         "content": "cmake_minimum_required(VERSION 3.20)\nproject(relay LANGUAGES CXX)\n\nset(CMAKE_CXX_STANDARD 17)\nset(CMAKE_CXX_STANDARD_REQUIRED ON)\nset(CMAKE_CXX_EXTENSIONS OFF)\nset(CMAKE_EXPORT_COMPILE_COMMANDS ON)\n\nadd_executable(relay\n  src/main.cpp\n  src/packet.cpp\n  src/session.cpp\n  src/frame.cpp\n  src/log.cpp\n  src/diag.cpp\n  src/config.cpp\n)\ntarget_include_directories(relay PRIVATE include)\ntarget_compile_options(relay PRIVATE -Wall -Wextra)\n",
+         "path": "CMakeLists.txt",
+         "sha256": "<sha256>"
+        },
+        {
+         "content": "# relay\n\nA small packet relay utility.\n\nBuild: `cmake -S . -B build && cmake --build build`.\n",
+         "path": "README.md",
+         "sha256": "<sha256>"
+        }
+       ],
+       "schema": "appsec-review/build-descriptor-package/1"
+      },
+      "family": "native",
+      "markers": [
+       {
+        "path": "CMakeLists.txt",
+        "sha256": "<sha256>",
+        "size_bytes": "<size_bytes>"
+       }
+      ],
+      "project_type": "generic",
+      "provenance": "deterministic-marker",
+      "required_image_profile": "native",
+      "root": "."
+     }
+    ],
+    "catalog_handoff_sha256": "<sha256>",
+    "compile_databases": [],
+    "components": [
+     {
+      "component_id": "component:0001",
+      "manifest": null,
+      "manifest_sha256": null,
+      "root": "."
+     }
+    ],
+    "files": [
+     {
+      "generated": false,
+      "language": null,
+      "path": "CMakeLists.txt",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     {
+      "generated": false,
+      "language": null,
+      "path": "README.md",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     {
+      "generated": false,
+      "language": "C++",
+      "path": "include/relay/relay.hpp",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     {
+      "generated": false,
+      "language": "C++",
+      "path": "src/config.cpp",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     {
+      "generated": false,
+      "language": "C++",
+      "path": "src/diag.cpp",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     {
+      "generated": false,
+      "language": "C++",
+      "path": "src/frame.cpp",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     {
+      "generated": false,
+      "language": "C++",
+      "path": "src/log.cpp",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     {
+      "generated": false,
+      "language": "C++",
+      "path": "src/main.cpp",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     {
+      "generated": false,
+      "language": "C++",
+      "path": "src/packet.cpp",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     {
+      "generated": false,
+      "language": "C++",
+      "path": "src/session.cpp",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     }
+    ],
+    "projects": [],
+    "source_fingerprint": "<sha256>",
+    "source_only_scopes": []
+   },
+   "catalog_handoff_sha256": "<sha256>",
+   "history": {
+    "authority": "history signals and hotspot scores prioritize review; they are never vulnerability evidence",
+    "binding": "exact",
+    "decision": "SUCCEEDED",
+    "handoff_sha256": "<sha256>",
+    "history_identity": "<sha256>",
+    "hotspots": {
+     "artifact": {
+      "path": "data/jobs/job_source_history_analysis/attempts/<attempt>/steps/analyze/tasks/rank/artifacts/hotspots.json",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     "entries": [
+      {
+       "path": "src/config.cpp",
+       "rank": 1,
+       "scope": "file",
+       "score": 44.3279,
+       "symbol_id": null,
+       "tier": 1
+      },
+      {
+       "path": "src/diag.cpp",
+       "rank": 2,
+       "scope": "file",
+       "score": 32.9035,
+       "symbol_id": null,
+       "tier": 2
+      },
+      {
+       "path": "src/log.cpp",
+       "rank": 3,
+       "scope": "file",
+       "score": 32.9035,
+       "symbol_id": null,
+       "tier": 3
+      },
+      {
+       "path": "src/session.cpp",
+       "rank": 4,
+       "scope": "file",
+       "score": 30.3982,
+       "symbol_id": null,
+       "tier": 3
+      },
+      {
+       "path": "src/main.cpp",
+       "rank": 5,
+       "scope": "file",
+       "score": 25.0,
+       "symbol_id": null,
+       "tier": 3
+      },
+      {
+       "path": "src/frame.cpp",
+       "rank": 6,
+       "scope": "file",
+       "score": 22.6069,
+       "symbol_id": null,
+       "tier": 3
+      },
+      {
+       "path": "src/packet.cpp",
+       "rank": 7,
+       "scope": "file",
+       "score": 21.5526,
+       "symbol_id": null,
+       "tier": 3
+      },
+      {
+       "path": "include/relay/relay.hpp",
+       "rank": 8,
+       "scope": "file",
+       "score": 17.8425,
+       "symbol_id": null,
+       "tier": 3
+      },
+      {
+       "path": "src/main.cpp",
+       "rank": 1,
+       "scope": "symbol",
+       "score": 35.0,
+       "symbol_id": "src/main.cpp::<anonymous:11>.usage",
+       "tier": 1
+      },
+      {
+       "path": "src/main.cpp",
+       "rank": 2,
+       "scope": "symbol",
+       "score": 31.3194,
+       "symbol_id": "src/main.cpp::<anonymous:11>.run_session",
+       "tier": 2
+      },
+      {
+       "path": "src/main.cpp",
+       "rank": 3,
+       "scope": "symbol",
+       "score": 31.0883,
+       "symbol_id": "src/main.cpp::main",
+       "tier": 2
+      },
+      {
+       "path": "src/config.cpp",
+       "rank": 4,
+       "scope": "symbol",
+       "score": 28.9853,
+       "symbol_id": "src/config.cpp::relay.service_token",
+       "tier": 2
+      },
+      {
+       "path": "src/config.cpp",
+       "rank": 5,
+       "scope": "symbol",
+       "score": 28.9853,
+       "symbol_id": "src/config.cpp::relay.service_url",
+       "tier": 3
+      },
+      {
+       "path": "src/session.cpp",
+       "rank": 6,
+       "scope": "symbol",
+       "score": 26.4802,
+       "symbol_id": "src/session.cpp::relay.find_session",
+       "tier": 3
+      },
+      {
+       "path": "src/session.cpp",
+       "rank": 7,
+       "scope": "symbol",
+       "score": 26.4802,
+       "symbol_id": "src/session.cpp::relay.touch_session",
+       "tier": 3
+      },
+      {
+       "path": "src/session.cpp",
+       "rank": 8,
+       "scope": "symbol",
+       "score": 25.9228,
+       "symbol_id": "src/session.cpp::relay.close_session",
+       "tier": 3
+      },
+      {
+       "path": "src/session.cpp",
+       "rank": 9,
+       "scope": "symbol",
+       "score": 25.9228,
+       "symbol_id": "src/session.cpp::relay.end_session",
+       "tier": 3
+      },
+      {
+       "path": "src/main.cpp",
+       "rank": 10,
+       "scope": "symbol",
+       "score": 25.6785,
+       "symbol_id": "src/main.cpp::<anonymous:11>.run_frame",
+       "tier": 3
+      }
+     ],
+     "hotspot_count": 10,
+     "schema": "appsec-review/history-hotspots/1"
+    },
+    "index_manifest": {
+     "path": "data/indices/manifests/source-history-<attempt>.json",
+     "sha256": "<sha256>",
+     "size_bytes": "<size_bytes>"
+    },
+    "observations": [],
+    "ranking": {
+     "complexity_metric": "cyclomatic",
+     "components": [
+      {
+       "change_count": 1,
+       "churn_lines": 248,
+       "component_id": "component:0001",
+       "rank": 1,
+       "score": 44.3279
+      }
+     ],
+     "files": [
+      {
+       "change_count": 1,
+       "churn_lines": 13,
+       "component_id": "component:0001",
+       "path": "src/config.cpp",
+       "rank": 1,
+       "score": 44.3279,
+       "sha256": "<sha256>",
+       "tier": 1
+      },
+      {
+       "change_count": 1,
+       "churn_lines": 12,
+       "component_id": "component:0001",
+       "path": "src/diag.cpp",
+       "rank": 2,
+       "score": 32.9035,
+       "sha256": "<sha256>",
+       "tier": 2
+      },
+      {
+       "change_count": 1,
+       "churn_lines": 12,
+       "component_id": "component:0001",
+       "path": "src/log.cpp",
+       "rank": 3,
+       "score": 32.9035,
+       "sha256": "<sha256>",
+       "tier": 3
+      },
+      {
+       "change_count": 1,
+       "churn_lines": 43,
+       "component_id": "component:0001",
+       "path": "src/session.cpp",
+       "rank": 4,
+       "score": 30.3982,
+       "sha256": "<sha256>",
+       "tier": 3
+      },
+      {
+       "change_count": 1,
+       "churn_lines": 75,
+       "component_id": "component:0001",
+       "path": "src/main.cpp",
+       "rank": 5,
+       "score": 25.0,
+       "sha256": "<sha256>",
+       "tier": 3
+      },
+      {
+       "change_count": 1,
+       "churn_lines": 28,
+       "component_id": "component:0001",
+       "path": "src/frame.cpp",
+       "rank": 6,
+       "score": 22.6069,
+       "sha256": "<sha256>",
+       "tier": 3
+      },
+      {
+       "change_count": 1,
+       "churn_lines": 20,
+       "component_id": "component:0001",
+       "path": "src/packet.cpp",
+       "rank": 7,
+       "score": 21.5526,
+       "sha256": "<sha256>",
+       "tier": 3
+      },
+      {
+       "change_count": 1,
+       "churn_lines": 45,
+       "component_id": "component:0001",
+       "path": "include/relay/relay.hpp",
+       "rank": 8,
+       "score": 17.8425,
+       "sha256": "<sha256>",
+       "tier": 3
+      }
+     ],
+     "identity": "appsec-review/security-instability-index/1",
+     "signals": {
+      "path": "data/jobs/job_source_history_analysis/attempts/<attempt>/steps/analyze/tasks/rank/artifacts/signals.json",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     },
+     "weights": {
+      "author_entropy": 0.15,
+      "complexity": 0.25,
+      "relative_churn": 0.35,
+      "revision_frequency": 0.25
+     }
+    },
+    "rules": "appsec-review/history-change-rules/2",
+    "schema": "appsec-review/source-history-analysis/2",
+    "sources": {
+     "git": {
+      "decision": "SUCCEEDED",
+      "head_commit": "9acaa34035af45f531197a9d9a56032ebbed1908",
+      "mainline_ref": "refs/heads/main",
+      "object_format": "sha1",
+      "reason": "resolved",
+      "snapshot_commit": "9acaa34035af45f531197a9d9a56032ebbed1908"
+     },
+     "github": {
+      "decision": "SKIPPED_POLICY",
+      "reason": "github_enrichment_disabled"
+     }
+    },
+    "target_snapshot": "<sha256>",
+    "unavailable_signals": {
+     "deployment_timing": "deployment_timing_not_acquired",
+     "pull_request_timing": "pr_timing_not_acquired"
+    },
+    "window": {
+     "anchor_time": 1792359806,
+     "change_count": 1,
+     "identity": "appsec-review/history-window/calendar-months-utc/1",
+     "months": 6,
+     "revision_semantics": "change_count counts distinct first-parent commits on the mainline; a merged pull request counts once as its merge commit, and individual commits on merged branches are not counted",
+     "start_time": 1776548606
+    }
+   }
+  },
+  "catalog_summary.summarize_components": {
+   "artifact": {
+    "path": "data/jobs/job_target_analysis_plan/attempts/<attempt>/artifacts/analysis-plan/catalog-summary.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "schema": "appsec-review/target-analysis-summary/1",
+   "summary": {
+    "accepted_artifacts": [],
+    "bounds": {
+     "actual_bytes": 4212,
+     "items_emitted": 10,
+     "max_bytes": 524288,
+     "max_items": 2000,
+     "sample_per_prefix": 20,
+     "truncated": false
+    },
+    "build_units": [
+     {
+      "build_system": "cmake",
+      "build_unit_id": "build-unit-b9c931fa551e02bd12b2",
+      "descriptor_facts": {},
+      "descriptor_package": {
+       "bounds": {
+        "actual_bytes": 529,
+        "actual_files": 2,
+        "max_file_bytes": 65536,
+        "max_files": 24,
+        "max_total_bytes": 262144
+       },
+       "build_unit": {
+        "build_system": "cmake",
+        "build_unit_id": "build-unit-b9c931fa551e02bd12b2",
+        "family": "native",
+        "markers": [
+         {
+          "path": "CMakeLists.txt",
+          "sha256": "<sha256>",
+          "size_bytes": "<size_bytes>"
+         }
+        ],
+        "provenance": "deterministic-marker",
+        "root": "."
+       },
+       "documents": [
+        {
+         "content": "cmake_minimum_required(VERSION 3.20)\nproject(relay LANGUAGES CXX)\n\nset(CMAKE_CXX_STANDARD 17)\nset(CMAKE_CXX_STANDARD_REQUIRED ON)\nset(CMAKE_CXX_EXTENSIONS OFF)\nset(CMAKE_EXPORT_COMPILE_COMMANDS ON)\n\nadd_executable(relay\n  src/main.cpp\n  src/packet.cpp\n  src/session.cpp\n  src/frame.cpp\n  src/log.cpp\n  src/diag.cpp\n  src/config.cpp\n)\ntarget_include_directories(relay PRIVATE include)\ntarget_compile_options(relay PRIVATE -Wall -Wextra)\n",
+         "path": "CMakeLists.txt",
+         "sha256": "<sha256>"
+        },
+        {
+         "content": "# relay\n\nA small packet relay utility.\n\nBuild: `cmake -S . -B build && cmake --build build`.\n",
+         "path": "README.md",
+         "sha256": "<sha256>"
+        }
+       ],
+       "schema": "appsec-review/build-descriptor-package/1"
+      },
+      "family": "native",
+      "markers": [
+       {
+        "path": "CMakeLists.txt",
+        "sha256": "<sha256>",
+        "size_bytes": "<size_bytes>"
+       }
+      ],
+      "project_type": "generic",
+      "provenance": "deterministic-marker",
+      "required_image_profile": "native",
+      "root": "."
+     }
+    ],
+    "catalog_gaps": [
+     {
+      "path": ".git",
+      "reason": "excluded_directory"
+     },
+     "no recognized project manifests",
+     "compile_commands.json not present"
+    ],
+    "catalog_handoff_sha256": "<sha256>",
+    "compile_databases": [],
+    "components": [
+     {
+      "cataloged_file_count": 10,
+      "component_id": "component:0001",
+      "manifest": null,
+      "root": "."
+     }
+    ],
+    "file_count": 10,
+    "language_counts": [
+     {
+      "file_count": 8,
+      "language": "C++"
+     },
+     {
+      "file_count": 2,
+      "language": "Other"
+     }
+    ],
+    "prefixes": [
+     {
+      "file_count": 1,
+      "prefix": "CMakeLists.txt",
+      "sample": [
+       {
+        "language": null,
+        "path": "CMakeLists.txt",
+        "sha256": "<sha256>",
+        "size_bytes": "<size_bytes>"
+       }
+      ]
+     },
+     {
+      "file_count": 1,
+      "prefix": "README.md",
+      "sample": [
+       {
+        "language": null,
+        "path": "README.md",
+        "sha256": "<sha256>",
+        "size_bytes": "<size_bytes>"
+       }
+      ]
+     },
+     {
+      "file_count": 1,
+      "prefix": "include",
+      "sample": [
+       {
+        "language": "C++",
+        "path": "include/relay/relay.hpp",
+        "sha256": "<sha256>",
+        "size_bytes": "<size_bytes>"
+       }
+      ]
+     },
+     {
+      "file_count": 7,
+      "prefix": "src",
+      "sample": [
+       {
+        "language": "C++",
+        "path": "src/config.cpp",
+        "sha256": "<sha256>",
+        "size_bytes": "<size_bytes>"
+       },
+       {
+        "language": "C++",
+        "path": "src/diag.cpp",
+        "sha256": "<sha256>",
+        "size_bytes": "<size_bytes>"
+       },
+       {
+        "language": "C++",
+        "path": "src/frame.cpp",
+        "sha256": "<sha256>",
+        "size_bytes": "<size_bytes>"
+       },
+       {
+        "language": "C++",
+        "path": "src/log.cpp",
+        "sha256": "<sha256>",
+        "size_bytes": "<size_bytes>"
+       },
+       {
+        "language": "C++",
+        "path": "src/main.cpp",
+        "sha256": "<sha256>",
+        "size_bytes": "<size_bytes>"
+       },
+       {
+        "language": "C++",
+        "path": "src/packet.cpp",
+        "sha256": "<sha256>",
+        "size_bytes": "<size_bytes>"
+       },
+       {
+        "language": "C++",
+        "path": "src/session.cpp",
+        "sha256": "<sha256>",
+        "size_bytes": "<size_bytes>"
+       }
+      ]
+     }
+    ],
+    "recognized_build_files": [
+     {
+      "generated": false,
+      "language": null,
+      "path": "CMakeLists.txt",
+      "sha256": "<sha256>",
+      "size_bytes": "<size_bytes>"
+     }
+    ],
+    "schema": "appsec-review/target-analysis-summary/1",
+    "source_fingerprint": "<sha256>",
+    "summary_sha256": "<sha256>"
+   }
+  },
+  "plan_acceptance.index_plan": {
+   "artifact": {
+    "path": "data/indices/analysis/<sha256>-target-analysis-plan.sqlite",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "index_identity": {
+    "fingerprint": "<sha256>",
+    "name": "analysis",
+    "producer": {
+     "job": "job_target_analysis_plan",
+     "unit": "plan_acceptance.index_plan"
+    },
+    "relative_path": "data/indices/analysis/<sha256>-target-analysis-plan.sqlite",
+    "schema": "appsec-review/retrieval-index/2",
+    "sha256": "<sha256>",
+    "shard_id": "target-analysis-plan"
+   },
+   "index_manifest": {
+    "path": "data/indices/manifests/analysis-plan-<attempt>.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "index_reused": false,
+   "item_count": 9
+  },
+  "plan_acceptance.publish_handoff": {
+   "artifact": {
+    "path": "data/jobs/job_target_analysis_plan/attempts/<attempt>/artifacts/analysis-plan/accepted-analysis-plan.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "dispositions": {
+    "model_calls": 1,
+    "selected_scanners": 7,
+    "skipped_scanners": 13
+   },
+   "index_identity": {
+    "fingerprint": "<sha256>",
+    "name": "analysis",
+    "producer": {
+     "job": "job_target_analysis_plan",
+     "unit": "plan_acceptance.index_plan"
+    },
+    "relative_path": "data/indices/analysis/<sha256>-target-analysis-plan.sqlite",
+    "schema": "appsec-review/retrieval-index/2",
+    "sha256": "<sha256>",
+    "shard_id": "target-analysis-plan"
+   },
+   "index_manifest": {
+    "path": "data/indices/manifests/analysis-plan-<attempt>.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "item_count": 9,
+   "schema": "appsec-review/target-analysis-plan/1",
+   "terminal_status": "SUCCEEDED"
+  },
+  "plan_acceptance.validate_plan": {
+   "artifact": {
+    "path": "data/jobs/job_target_analysis_plan/attempts/<attempt>/artifacts/analysis-plan/accepted-analysis-plan.json",
+    "sha256": "<sha256>",
+    "size_bytes": "<size_bytes>"
+   },
+   "plan": {
+    "build_topology": {
+     "build_actions": [
+      {
+       "action": "configure-and-build",
+       "build_system": "cmake",
+       "build_unit_id": "build-unit-b9c931fa551e02bd12b2",
+       "descriptor_facts": {},
+       "descriptor_package": {
+        "bounds": {
+         "actual_bytes": 529,
+         "actual_files": 2,
+         "max_file_bytes": 65536,
+         "max_files": 24,
+         "max_total_bytes": 262144
+        },
+        "build_unit": {
+         "build_system": "cmake",
+         "build_unit_id": "build-unit-b9c931fa551e02bd12b2",
+         "family": "native",
+         "markers": [
+          {
+           "path": "CMakeLists.txt",
+           "sha256": "<sha256>",
+           "size_bytes": "<size_bytes>"
+          }
+         ],
+         "provenance": "deterministic-marker",
+         "root": "."
+        },
+        "documents": [
+         {
+          "content": "cmake_minimum_required(VERSION 3.20)\nproject(relay LANGUAGES CXX)\n\nset(CMAKE_CXX_STANDARD 17)\nset(CMAKE_CXX_STANDARD_REQUIRED ON)\nset(CMAKE_CXX_EXTENSIONS OFF)\nset(CMAKE_EXPORT_COMPILE_COMMANDS ON)\n\nadd_executable(relay\n  src/main.cpp\n  src/packet.cpp\n  src/session.cpp\n  src/frame.cpp\n  src/log.cpp\n  src/diag.cpp\n  src/config.cpp\n)\ntarget_include_directories(relay PRIVATE include)\ntarget_compile_options(relay PRIVATE -Wall -Wextra)\n",
+          "path": "CMakeLists.txt",
+          "sha256": "<sha256>"
+         },
+         {
+          "content": "# relay\n\nA small packet relay utility.\n\nBuild: `cmake -S . -B build && cmake --build build`.\n",
+          "path": "README.md",
+          "sha256": "<sha256>"
+         }
+        ],
+        "schema": "appsec-review/build-descriptor-package/1"
+       },
+       "executable": false,
+       "family": "native",
+       "markers": [
+        {
+         "path": "CMakeLists.txt",
+         "sha256": "<sha256>",
+         "size_bytes": "<size_bytes>"
+        }
+       ],
+       "native_components": [],
+       "project_type": "generic",
+       "recipe": {
+        "build_commands": [
+         [
+          "cmake",
+          "--build",
+          "build"
+         ]
+        ],
+        "build_dir": "build",
+        "build_unit_id": "build-unit-b9c931fa551e02bd12b2",
+        "configure_commands": [
+         [
+          "cmake",
+          "-S",
+          ".",
+          "-B",
+          "build"
+         ]
+        ],
+        "dependency_files": [
+         "CMakeLists.txt"
+        ],
+        "environment": {},
+        "expected_outputs": [
+         "build/relay"
+        ],
+        "image_profile": "native",
+        "network_required": false,
+        "reason": "Single CMake project with one C++ executable target and no declared external dependencies. Configure and build out of source into build/, with the executable expected at the default CMake binary location.",
+        "schema": "appsec-review/build-recipe/1",
+        "source_dir": ".",
+        "system_packages": []
+       },
+       "required_image_profile": "native",
+       "requires_inference": false,
+       "root": "."
+      }
+     ],
+     "build_systems": [
+      {
+       "build_system": "cmake",
+       "build_unit_id": "build-unit-b9c931fa551e02bd12b2",
+       "confidence": "high",
+       "manifest": {
+        "path": "CMakeLists.txt",
+        "sha256": "<sha256>",
+        "size_bytes": "<size_bytes>"
+       },
+       "provenance": "deterministic-marker",
+       "root": "."
+      }
+     ],
+     "compile_databases": [],
+     "compile_units": [],
+     "generated_sources": [],
+     "link_outputs": [],
+     "projects": [],
+     "relationships": [
+      {
+       "build_root": ".",
+       "component_id": "component:0001",
+       "kind": "component_build_root"
+      }
+     ],
+     "source_only_scopes": [],
+     "targets": []
+    },
+    "catalog_handoff_sha256": "<sha256>",
+    "components": [
+     {
+      "component_id": "component:0001",
+      "confidence": "high",
+      "contradictions": [],
+      "coverage_gaps": [],
+      "manifest": null,
+      "provenance": "deterministic",
+      "reasons": [
+       "accepted catalog component and exact path ownership"
+      ],
+      "root": ".",
+      "scanner_ids": [
+       "tool-checkov",
+       "tool-cppcheck",
+       "tool-gitleaks",
+       "tool-grype",
+       "tool-opengrep",
+       "tool-semgrep",
+       "tool-syft"
+      ],
+      "scope": [
+       {
+        "path": "CMakeLists.txt",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "README.md",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "include/relay/relay.hpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/config.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/diag.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/frame.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/log.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/main.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/packet.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/session.cpp",
+        "sha256": "<sha256>"
+       }
+      ]
+     }
+    ],
+    "confidence": "medium",
+    "contradictions": [],
+    "coverage_gaps": [
+     ".git: excluded_directory",
+     "no recognized project manifests",
+     "compile_commands.json not present",
+     "build topology: no accepted compile database; compiled-unit coverage is unavailable",
+     "build topology: build targets and link outputs are not inferred without accepted build artifacts"
+    ],
+    "expected_artifact_families": [
+     "observations",
+     "software-inventory",
+     "configuration",
+     "build"
+    ],
+    "history_priority": {
+     "components": [
+      {
+       "change_count": 1,
+       "churn_lines": 248,
+       "component_id": "component:0001",
+       "rank": 1,
+       "score": 44.3279
+      }
+     ],
+     "files": [
+      {
+       "change_count": 1,
+       "churn_lines": 13,
+       "path": "src/config.cpp",
+       "rank": 1,
+       "score": 44.3279,
+       "sha256": "<sha256>"
+      },
+      {
+       "change_count": 1,
+       "churn_lines": 12,
+       "path": "src/diag.cpp",
+       "rank": 2,
+       "score": 32.9035,
+       "sha256": "<sha256>"
+      },
+      {
+       "change_count": 1,
+       "churn_lines": 12,
+       "path": "src/log.cpp",
+       "rank": 3,
+       "score": 32.9035,
+       "sha256": "<sha256>"
+      },
+      {
+       "change_count": 1,
+       "churn_lines": 43,
+       "path": "src/session.cpp",
+       "rank": 4,
+       "score": 30.3982,
+       "sha256": "<sha256>"
+      },
+      {
+       "change_count": 1,
+       "churn_lines": 75,
+       "path": "src/main.cpp",
+       "rank": 5,
+       "score": 25.0,
+       "sha256": "<sha256>"
+      },
+      {
+       "change_count": 1,
+       "churn_lines": 28,
+       "path": "src/frame.cpp",
+       "rank": 6,
+       "score": 22.6069,
+       "sha256": "<sha256>"
+      },
+      {
+       "change_count": 1,
+       "churn_lines": 20,
+       "path": "src/packet.cpp",
+       "rank": 7,
+       "score": 21.5526,
+       "sha256": "<sha256>"
+      },
+      {
+       "change_count": 1,
+       "churn_lines": 45,
+       "path": "include/relay/relay.hpp",
+       "rank": 8,
+       "score": 17.8425,
+       "sha256": "<sha256>"
+      }
+     ],
+     "handoff_sha256": "<sha256>",
+     "history_identity": "<sha256>",
+     "ranking": "appsec-review/security-instability-index/1",
+     "reason": null,
+     "status": "AVAILABLE"
+    },
+    "model": {
+     "groups": [
+      {
+       "status": "ACCEPTED"
+      }
+     ],
+     "proposal_sha256": "<sha256>",
+     "status": "ACCEPTED"
+    },
+    "prerequisites": [
+     "accepted target catalog",
+     "verified immutable retrieval index set"
+    ],
+    "provenance": "model-assisted",
+    "scanner_non_selections": [
+     {
+      "mandatory": false,
+      "reason": "no accepted catalog input satisfies deterministic applicability",
+      "scanner_id": "tool-blint"
+     },
+     {
+      "mandatory": false,
+      "reason": "no accepted catalog input satisfies deterministic applicability",
+      "scanner_id": "tool-gosec"
+     },
+     {
+      "mandatory": false,
+      "reason": "no accepted catalog input satisfies deterministic applicability",
+      "scanner_id": "tool-hadolint"
+     },
+     {
+      "mandatory": false,
+      "reason": "no accepted catalog input satisfies deterministic applicability",
+      "scanner_id": "tool-mobsfscan"
+     },
+     {
+      "mandatory": false,
+      "reason": "no accepted catalog input satisfies deterministic applicability",
+      "scanner_id": "tool-osv-scanner"
+     },
+     {
+      "mandatory": false,
+      "reason": "no accepted catalog input satisfies deterministic applicability",
+      "scanner_id": "tool-phpcs"
+     },
+     {
+      "mandatory": false,
+      "reason": "no accepted catalog input satisfies deterministic applicability",
+      "scanner_id": "tool-phpstan"
+     },
+     {
+      "mandatory": false,
+      "reason": "no accepted catalog input satisfies deterministic applicability",
+      "scanner_id": "tool-pmd"
+     },
+     {
+      "mandatory": false,
+      "reason": "no accepted catalog input satisfies deterministic applicability",
+      "scanner_id": "tool-psalm"
+     },
+     {
+      "mandatory": false,
+      "reason": "no accepted catalog input satisfies deterministic applicability",
+      "scanner_id": "tool-shellcheck"
+     },
+     {
+      "mandatory": false,
+      "reason": "no accepted catalog input satisfies deterministic applicability",
+      "scanner_id": "tool-spotbugs"
+     },
+     {
+      "mandatory": false,
+      "reason": "no accepted catalog input satisfies deterministic applicability",
+      "scanner_id": "tool-trivy"
+     },
+     {
+      "mandatory": false,
+      "reason": "no accepted catalog input satisfies deterministic applicability",
+      "scanner_id": "tool-zizmor"
+     }
+    ],
+    "scanner_selections": [
+     {
+      "expected_index_family": "observations",
+      "provenance": "deterministic",
+      "reason": "deterministic catalog applicability",
+      "scanner_id": "tool-checkov",
+      "scope": [
+       {
+        "path": "CMakeLists.txt",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "README.md",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "include/relay/relay.hpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/config.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/diag.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/frame.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/log.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/main.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/packet.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/session.cpp",
+        "sha256": "<sha256>"
+       }
+      ]
+     },
+     {
+      "expected_index_family": "observations",
+      "provenance": "deterministic",
+      "reason": "deterministic catalog applicability",
+      "scanner_id": "tool-cppcheck",
+      "scope": [
+       {
+        "path": "include/relay/relay.hpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/config.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/diag.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/frame.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/log.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/main.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/packet.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/session.cpp",
+        "sha256": "<sha256>"
+       }
+      ]
+     },
+     {
+      "expected_index_family": "observations",
+      "provenance": "deterministic",
+      "reason": "mandatory baseline coverage",
+      "scanner_id": "tool-gitleaks",
+      "scope": [
+       {
+        "path": "CMakeLists.txt",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "README.md",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "include/relay/relay.hpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/config.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/diag.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/frame.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/log.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/main.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/packet.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/session.cpp",
+        "sha256": "<sha256>"
+       }
+      ]
+     },
+     {
+      "expected_index_family": "observations",
+      "provenance": "deterministic",
+      "reason": "deterministic catalog applicability",
+      "scanner_id": "tool-grype",
+      "scope": [
+       {
+        "path": "CMakeLists.txt",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "README.md",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "include/relay/relay.hpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/config.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/diag.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/frame.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/log.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/main.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/packet.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/session.cpp",
+        "sha256": "<sha256>"
+       }
+      ]
+     },
+     {
+      "expected_index_family": "observations",
+      "provenance": "deterministic",
+      "reason": "deterministic catalog applicability",
+      "scanner_id": "tool-opengrep",
+      "scope": [
+       {
+        "path": "include/relay/relay.hpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/config.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/diag.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/frame.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/log.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/main.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/packet.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/session.cpp",
+        "sha256": "<sha256>"
+       }
+      ]
+     },
+     {
+      "expected_index_family": "observations",
+      "provenance": "deterministic",
+      "reason": "mandatory baseline coverage",
+      "scanner_id": "tool-semgrep",
+      "scope": [
+       {
+        "path": "include/relay/relay.hpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/config.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/diag.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/frame.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/log.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/main.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/packet.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/session.cpp",
+        "sha256": "<sha256>"
+       }
+      ]
+     },
+     {
+      "expected_index_family": "observations",
+      "provenance": "deterministic",
+      "reason": "mandatory baseline coverage",
+      "scanner_id": "tool-syft",
+      "scope": [
+       {
+        "path": "CMakeLists.txt",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "README.md",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "include/relay/relay.hpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/config.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/diag.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/frame.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/log.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/main.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/packet.cpp",
+        "sha256": "<sha256>"
+       },
+       {
+        "path": "src/session.cpp",
+        "sha256": "<sha256>"
+       }
+      ]
+     }
+    ],
+    "schema": "appsec-review/target-analysis-plan/1",
+    "source_fingerprint": "<sha256>",
+    "summary_sha256": "<sha256>"
+   },
+   "status": "VALID",
+   "terminal_status": "SUCCEEDED"
+  }
+ },
+ "schema": "appsec-review/acceptance-job-output/1",
+ "skipped_units": [],
+ "status": "SUCCEEDED",
+ "steps": {
+  "analysis_decisions": "SUCCEEDED",
+  "catalog_summary": "SUCCEEDED",
+  "plan_acceptance": "SUCCEEDED"
+ },
+ "units": {
+  "analysis_decisions.apply_deterministic_rules": {
+   "disposition": null,
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "analysis_decisions.resolve_ambiguity": {
+   "disposition": "SUCCEEDED",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "catalog_summary.load_accepted_catalog": {
+   "disposition": null,
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "catalog_summary.summarize_components": {
+   "disposition": null,
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "plan_acceptance.index_plan": {
+   "disposition": null,
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "plan_acceptance.publish_handoff": {
+   "disposition": "SUCCEEDED",
+   "producer": null,
+   "status": "SUCCEEDED"
+  },
+  "plan_acceptance.validate_plan": {
+   "disposition": "SUCCEEDED",
+   "producer": null,
+   "status": "SUCCEEDED"
+  }
+ },
+ "volatile": {
+  "artifacts": [
+   {
+    "path": "data/indices/analysis/<sha256>-target-analysis-plan.sqlite",
+    "sha256": "b752818443a97c2b10398b8f9389f3ce2c124cd796f608bd3d7f3e25fdb3c799",
+    "size_bytes": 151552
+   },
+   {
+    "path": "data/indices/manifests/analysis-plan-<attempt>.json",
+    "sha256": "4320dcf12de25f46f83d402c1b303a1865c78a5ed03f3c2241d75fc92f6e0243",
+    "size_bytes": 4209
+   },
+   {
+    "path": "data/indices/manifests/source-history-<attempt>.json",
+    "sha256": "3e724a781cb83856598625acaccecbc4c74245e60e837931c58e73dd48ba28c2",
+    "size_bytes": 3442
+   },
+   {
+    "path": "data/jobs/job_source_history_analysis/attempts/<attempt>/steps/analyze/tasks/rank/artifacts/hotspots.json",
+    "sha256": "a0ee80ee6e86c7b92c239cc14d8acc64472740f10316424dadd52c92769c7ae0",
+    "size_bytes": 66627
+   },
+   {
+    "path": "data/jobs/job_source_history_analysis/attempts/<attempt>/steps/analyze/tasks/rank/artifacts/signals.json",
+    "sha256": "8285a1eb092a87d19017b79bf58c281add2d57219a0d2a32ea00b6026228264d",
+    "size_bytes": 44769
+   },
+   {
+    "path": "data/jobs/job_target_analysis_plan/attempts/<attempt>/artifacts/analysis-plan/accepted-analysis-plan.json",
+    "sha256": "560d9c86463f380e718310117f63adc431fd8c0e75d968e4e34b0b4e13044df0",
+    "size_bytes": 16163
+   },
+   {
+    "path": "data/jobs/job_target_analysis_plan/attempts/<attempt>/artifacts/analysis-plan/catalog-summary.json",
+    "sha256": "d84b09399f24407e2643dd0409119e52655980dfa00a11bc6e4687604efe516e",
+    "size_bytes": 4212
+   }
+  ]
+ }
+}
