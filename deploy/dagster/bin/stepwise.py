@@ -41,7 +41,7 @@ import review_run
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "src"))
 
-from appsec_review.acceptance.answer_key import collect_findings, evaluate, load_answer_key  # noqa: E402
+from appsec_review.acceptance.answer_key import evaluate, load_answer_key, observations_from_run  # noqa: E402
 from appsec_review.acceptance.audit import audit_job_writes, summarize  # noqa: E402
 from appsec_review.acceptance.content import content_differences  # noqa: E402
 from appsec_review.acceptance.diff import CLASSES, classify_environment, diff_job_outputs, failing  # noqa: E402
@@ -483,10 +483,8 @@ def command_system(args) -> int:
         print(f"   model-contract: no {relative(contract_file)}; model-backed jobs are compared with the baseline")
     compared = command_compare(argparse.Namespace(tag=tag, app_run=app_run_id, show=args.show, skip_jobs=skipped))
 
-    masks = masks_for(app_run_id, provenance["target"])
-    outputs = [normalize_job_output(run_root, job_id, masks) for job_id in job_ids]
     _corpus, defects = load_answer_key(key_root / "expectations.toml")
-    matrix = evaluate(defects, collect_findings(outputs))
+    matrix = evaluate(defects, observations_from_run(run_root))
     for defect in defects:
         state = "found " if defect.id in matrix.found else "MISSED"
         seen = ",".join(matrix.producers_seen.get(defect.id, ())) or "-"

@@ -1,7 +1,7 @@
 """Evaluate a run's findings against a corpus answer key.
 
 The key (``test/acceptance/<tag>/expectations.toml``) lists the defects seeded in a blind corpus.
-Each is *found* when some finding of the run names its file and covers its line, *missed*
+Each is *found* when some finding of the run names its file and its reported lines include the defect line, *missed*
 otherwise. A finding that matches no defect is *spurious*; it is reported and never fails the run
 (docs/processes/acceptance-and-regression-testing.md, Decision 2). A missed defect is the failure.
 ``producers`` in the key are a hypothesis: which producers reported each found defect is reported
@@ -12,11 +12,14 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
+import glob
+import json
 from pathlib import Path
+import sqlite3
 import tomllib
 from typing import Any
 
-LINE_TOLERANCE = 2
+LINE_TOLERANCE = 0
 _FINDING_KINDS = {"tool_observation"}
 
 
@@ -108,6 +111,43 @@ def evaluate(defects: Iterable[Defect], findings: Iterable[Mapping[str, Any]], *
             report.missed.append(defect.id)
     report.spurious = len(tool_findings) - len(matched)
     return report
+
+
+def observations_from_run(run_root: Path) -> list[dict[str, Any]]:
+    """Every tool observation the run published, with its source location.
+
+    The observation shards under ``data/indices/observations`` are what every consumer of tool results
+    reads (graph, tagging, review packages), so they, not a job's summary of them, say what the
+    pipeline reported. Each result has the shape ``evaluate`` takes.
+    """
+
+    findings = []
+    for name in sorted(glob.glob(str(Path(run_root) / "data" / "indices" / "observations" / "**" / "*.sqlite"),
+                                 recursive=True)):
+        try:
+            database = sqlite3.connect(f"file:{name}?mode=ro&immutable=1", uri=True)
+            rows = database.execute(
+                "SELECT e.name, e.text, e.payload_json, l.path, l.start_line, l.end_line "
+                "FROM entities e JOIN locations l ON l.entity_id = e.identity WHERE e.kind = 'tool_observation'"
+            ).fetchall()
+        except sqlite3.Error:
+            continue
+        finally:
+            try:
+                database.close()
+            except (NameError, sqlite3.Error):
+                pass
+        for rule, text, payload_json, path, start_line, end_line in rows:
+            try:
+                payload = json.loads(payload_json or "{}")
+            except ValueError:
+                payload = {}
+            scanner = str(payload.get("scanner") or payload.get("tool") or "")
+            findings.append({"job_id": "observations", "source": "observations",
+                             "unit": f"{scanner} {payload.get('native_rule_id') or rule}".strip(),
+                             "record": {"kind": "tool_observation", "name": str(rule), "path": path,
+                                        "start_line": start_line, "end_line": end_line, "text": str(text)}})
+    return findings
 
 
 def collect_findings(outputs: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:

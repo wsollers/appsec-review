@@ -4,7 +4,8 @@ import hashlib
 import json
 from pathlib import Path
 
-from appsec_review.acceptance.answer_key import Defect, collect_findings, evaluate, load_answer_key
+from appsec_review.acceptance.answer_key import (
+    Defect, collect_findings, evaluate, load_answer_key, observations_from_run)
 from appsec_review.acceptance.system import (
     LEDGER_JOB, PACKAGE_JOB, final_artifact_problems, run_problems)
 from tests.acceptance.test_environment_integrity import JOB, RUN, _run
@@ -55,7 +56,7 @@ def test_found_missed_and_spurious_are_reported_and_only_a_miss_fails() -> None:
     defects = [Defect("overflow", "CWE-121", "src/packet.cpp", 16, "", ("codeql", "cppcheck")),
                Defect("uaf", "CWE-416", "src/session.cpp", 32, "", ("clang-static-analyzer",))]
     findings = [
-        _finding("job_codeql_analysis", "<target>/src/packet.cpp", 17, unit="codeql:cpp"),  # within tolerance
+        _finding("job_codeql_analysis", "<target>/src/packet.cpp", 16, unit="codeql:cpp"),  # exact line
         _finding("job_evidence_collection", "src/packet.cpp", 10, end=20, unit="cppcheck_scan"),  # covers the line
         _finding("job_evidence_collection", "src/other.cpp", 3),  # spurious
         _finding("job_evidence_collection", None, None, kind="evidence_artifact"),  # not a finding
@@ -66,7 +67,7 @@ def test_found_missed_and_spurious_are_reported_and_only_a_miss_fails() -> None:
     assert report.failed
     assert report.producers_seen["overflow"] == ["codeql", "cppcheck"] and report.producers_unseen["overflow"] == []
 
-    fixed = evaluate(defects, findings + [_finding("job_clang_static_analysis", "src/session.cpp", 31,
+    fixed = evaluate(defects, findings + [_finding("job_clang_static_analysis", "src/session.cpp", 32,
                                                    unit="clang-static-analyzer")])
     assert not fixed.failed and fixed.missed == []
 
@@ -75,7 +76,8 @@ def test_a_finding_on_another_line_or_file_does_not_find_the_defect() -> None:
     defect = Defect("overflow", "CWE-121", "src/packet.cpp", 16, "", ())
     assert evaluate([defect], [_finding("j", "src/packet.cpp", 40)]).missed == ["overflow"]
     assert evaluate([defect], [_finding("j", "src/session.cpp", 16)]).missed == ["overflow"]
-    assert evaluate([defect], [_finding("j", "src/packet.cpp", 19)]).missed == ["overflow"]
+    assert evaluate([defect], [_finding("j", "src/packet.cpp", 17)]).missed == ["overflow"]  # a neighbour is not a hit
+    assert evaluate([defect], [_finding("j", "src/packet.cpp", 17)], tolerance=1).missed == []
 
 
 def test_findings_of_job_outputs_are_tagged_with_their_job() -> None:
@@ -146,3 +148,27 @@ def test_missing_empty_or_changed_final_artifacts_are_reported(tmp_path: Path) -
     empty = tmp_path / "empty" / "runs" / RUN
     empty.mkdir(parents=True)
     assert {item.job_id for item in final_artifact_problems(empty, tmp_path)} == {PACKAGE_JOB, LEDGER_JOB}
+
+
+def test_observations_are_read_from_the_published_shards(tmp_path: Path) -> None:
+    import sqlite3
+
+    shard = tmp_path / "data" / "indices" / "observations" / "clang" / "shard.sqlite"
+    shard.parent.mkdir(parents=True)
+    database = sqlite3.connect(shard)
+    database.execute("CREATE TABLE entities (identity TEXT, kind TEXT, native_id TEXT, name TEXT, text TEXT, payload_json TEXT)")
+    database.execute("CREATE TABLE locations (location_id TEXT, entity_id TEXT, path TEXT, start_line INT, end_line INT)")
+    database.execute("INSERT INTO entities VALUES ('o1','tool_observation','n','cplusplus.NewDelete','Use of memory after it is freed',"
+                     "'{\"scanner\": \"clang-static-analysis\", \"native_rule_id\": \"cplusplus.NewDelete\"}')")
+    database.execute("INSERT INTO entities VALUES ('f1','source_file','n','src/session.cpp','','{}')")
+    database.execute("INSERT INTO locations VALUES ('l1','o1','src/session.cpp',32,32)")
+    database.execute("INSERT INTO locations VALUES ('l2','f1','src/session.cpp',1,50)")
+    database.commit()
+    database.close()
+
+    findings = observations_from_run(tmp_path)
+    assert [(item["record"]["name"], item["record"]["path"], item["record"]["start_line"]) for item in findings] == [
+        ("cplusplus.NewDelete", "src/session.cpp", 32)]
+    report = evaluate([Defect("uaf", "CWE-416", "src/session.cpp", 32, "", ("clang-static-analysis",))], findings)
+    assert report.missed == [] and report.producers_seen["uaf"] == ["clang-static-analysis"]
+    assert observations_from_run(tmp_path / "empty") == []
