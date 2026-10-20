@@ -9,6 +9,9 @@
     },
     "review-signals.yml": {
       "sha256": "6b37393d02c8b9defb9c60e996bd43a83f8bc1e70d481d00040afa7b467872c0"
+    },
+    "banned-functions.yml": {
+      "sha256": "48e78a08290f595cd9fd82b2c7c1ba13e979c4299fee710a8cc556dc08824e2d"
     }
   }
 }

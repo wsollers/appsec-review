@@ -31,7 +31,8 @@ CODEQL_LANGUAGES = {"C": "cpp", "C++": "cpp", "C/C++": "cpp", "Java": "java", "C
 def _semgrep_pack(repository_root: Path) -> Mapping[str, Any]:
     try:
         lock = json.loads((repository_root / "rules" / "semgrep" / "rules.lock.json").read_text(encoding="utf-8"))
-        return {"bundle": lock.get("bundle"), "sha256": lock["files"]["review-signals.yml"]["sha256"]}
+        return {"bundle": lock.get("bundle"), "sha256": lock["files"]["review-signals.yml"]["sha256"],
+                "banned_sha256": lock["files"].get("banned-functions.yml", {}).get("sha256")}
     except (OSError, KeyError, ValueError):
         return {"verified": False}
 
@@ -68,7 +69,10 @@ def semgrep_signals(run_root: Path, repository_root: Path) -> dict[str, Any]:
             gaps.append(f"semgrep review signal without category or location: {rule[:128]}")
             continue
         signals.append({
-            "rule_id": rule, "rules": f"semgrep-review-signals@{pack.get('sha256', 'unverified')}",
+            "rule_id": rule, "rules": (
+                f"semgrep-banned-functions@{pack.get('banned_sha256') or 'unverified'}"
+                if ".cpp-banned-function-" in rule else
+                f"semgrep-review-signals@{pack.get('sha256', 'unverified')}"),
             "producer": "semgrep", "basis": OBSERVED, "category": parts[0],
             "surface": parts[1] if len(parts) > 2 else parts[0], "path": location["path"],
             "file_sha256": location.get("source_sha256"), "start_line": int(location.get("start_line") or 1),

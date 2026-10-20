@@ -67,7 +67,7 @@ image = "appsec-review/tool-semgrep:1.178.0"
 library = "semgrep@1.178.0"
 verify = "validate"
 state = "enabled"
-description = "Repository-authored Semgrep rules (security.yml, review-signals.yml), locked by rules.lock.json."
+description = "Repository-authored Semgrep rules (security.yml, review-signals.yml, and banned-functions.yml generated from [banned_functions]), locked by rules.lock.json."
 
 [[packs]]
 id = "gitleaks-generic-secrets"

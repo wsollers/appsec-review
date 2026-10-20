@@ -237,13 +237,27 @@ def _sei_cert_pack(repository: Path) -> PackIdentity | None:
         return None
 
 
+def _banned_function_drift(repository: Path) -> str | None:
+    """Why the generated banned-function rules no longer match [banned_functions] (None when they do)."""
+
+    from appsec_review.rulepacks.banned_functions import check
+
+    try:
+        problems = check(repository)
+    except (OSError, ValueError, KeyError):
+        return "banned-function rules cannot be checked against the configured [banned_functions] table"
+    return problems[0] if problems else None
+
+
 def _semgrep_rule_files(*, repository_root: Path, tool_id: str) -> list[Path]:
     """The rule files mounted for a Semgrep-family tool (mirrors _prerequisites and the argv)."""
     files: list[Path] = []
     if tool_id == "tool-semgrep":
-        files += [repository_root / "rules" / "semgrep" / name for name in ("security.yml", "review-signals.yml")]
+        files += [repository_root / "rules" / "semgrep" / name
+                  for name in ("security.yml", "review-signals.yml", "banned-functions.yml")]
     elif tool_id == "tool-opengrep":
-        files.append(repository_root / "rules" / "semgrep" / "review-signals.yml")
+        files += [repository_root / "rules" / "semgrep" / name
+                  for name in ("review-signals.yml", "banned-functions.yml")]
     pack = _sei_cert_pack(repository_root)
     if pack is not None:
         files += sorted(path for path in pack.rules_root.rglob("*") if path.suffix in {".yml", ".yaml"})
@@ -267,6 +281,7 @@ def _rule_pack_identity(unit: UnitContext, adapter: ToolAdapter) -> dict[str, An
         try:
             lock = json.loads((repository / "rules" / "semgrep" / "rules.lock.json").read_text(encoding="utf-8"))
             packs["semgrep-review-signals"] = {"sha256": lock["files"]["review-signals.yml"]["sha256"]}
+            packs["semgrep-banned-functions"] = {"sha256": lock["files"]["banned-functions.yml"]["sha256"]}
         except (OSError, KeyError, json.JSONDecodeError):
             packs["semgrep-review-signals"] = {"verified": False}
     if adapter.tool_id == "tool-semgrep":
@@ -274,6 +289,7 @@ def _rule_pack_identity(unit: UnitContext, adapter: ToolAdapter) -> dict[str, An
             lock = json.loads((repository / "rules" / "semgrep" / "rules.lock.json").read_text(encoding="utf-8"))
             packs["semgrep-security-baseline"] = {"sha256": lock["files"]["security.yml"]["sha256"]}
             packs["semgrep-review-signals"] = {"sha256": lock["files"]["review-signals.yml"]["sha256"]}
+            packs["semgrep-banned-functions"] = {"sha256": lock["files"]["banned-functions.yml"]["sha256"]}
         except (OSError, KeyError, json.JSONDecodeError):
             packs["semgrep-security-baseline"] = {"verified": False}
     return {"rule_packs": packs} if packs else {}
@@ -287,7 +303,8 @@ def _prerequisites(unit: UnitContext, adapter: ToolAdapter, selection: Applicabi
     repository = unit.job.repository_root
     if adapter.tool_id in ("tool-semgrep", "tool-opengrep"):
         rules = repository / "rules" / "semgrep"
-        names = ("security.yml", "review-signals.yml") if adapter.tool_id == "tool-semgrep" else ("review-signals.yml",)
+        names = (("security.yml", "review-signals.yml", "banned-functions.yml") if adapter.tool_id == "tool-semgrep"
+                 else ("review-signals.yml", "banned-functions.yml"))
         try:
             lock = json.loads((rules / "rules.lock.json").read_text(encoding="utf-8"))
             verified = lock.get("schema") == "appsec-review/rule-bundle-lock/1" and all(
@@ -296,6 +313,9 @@ def _prerequisites(unit: UnitContext, adapter: ToolAdapter, selection: Applicabi
             verified = False
         if not verified:
             return selection, (), {}, "hash-pinned Semgrep rule bundle is unavailable"
+        stale = _banned_function_drift(repository)
+        if stale:
+            return selection, (), {}, stale
         mounts.append(Mount(rules, "/rules", True))
     if adapter.tool_id == "tool-gitleaks":
         rules = repository / "rules" / "gitleaks"

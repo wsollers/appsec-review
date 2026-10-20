@@ -2432,3 +2432,106 @@ workers = 1
 workers = 1
 [jobs.job_inference_security_review.steps.publication.tasks.publish_claim_ledger]
 [jobs.job_inference_security_review.steps.publication.tasks.publish_handoff]
+
+# ---------------------------------------------------------------------------------------------------------
+# Banned and unsafe C/C++ functions. A call to a listed name in C or C++ source is reported by Semgrep and
+# Opengrep as a review lead: `high` at ERROR (reported as high severity), `warning` at WARNING. A match is
+# a lead, never a finding: a name can be called safely, and an unsafe call need not be on any list.
+#
+# The names are Microsoft's Security Development Lifecycle `banned.h` (167 names, 150 default and 17 at its
+# pedantic level 3). The tiers are ours: unbounded or unsafe contracts are `high`; bounded-but-error-prone
+# "n" functions, strtok, Microsoft's level-3 group and the MAX_PATH path APIs are `warning`. Move a name
+# between tiers, delete one that is too noisy for your code (strlen is the usual one) or append your own
+# (for example POSIX: mktemp, tmpnam, getwd). memcpy is NOT on Microsoft's list; an unbounded copy length
+# is covered by the cpp-copy-length-not-bounded rule in rules/semgrep/review-signals.yml.
+#
+# rules/semgrep/banned-functions.yml is generated from this table, never edited by hand. After editing:
+#   python -m appsec_review.rulepacks.banned_functions --write
+# A test fails if the file drifts and the evidence job refuses to run a file that does not match.
+[banned_functions]
+source = "https://github.com/microsoft/ChakraCore/blob/master/lib/Common/Banned.h"
+reference = "https://msdn.microsoft.com/en-us/library/bb288454.aspx"
+retrieved = "2026-10-20"
+licence = "MIT (Microsoft banned.h, SDL 5.0 list; function names only)"
+
+high = [
+  # strcpy family: no destination size
+  "strcpy", "strcpyA", "strcpyW", "wcscpy", "_tcscpy", "_mbscpy", "StrCpy", "StrCpyA", "StrCpyW",
+  "lstrcpy", "lstrcpyA", "lstrcpyW", "_tccpy", "_mbccpy", "_ftcscpy",
+  # strcat family: no destination size
+  "strcat", "strcatA", "strcatW", "wcscat", "_tcscat", "_mbscat", "StrCat", "StrCatA", "StrCatW",
+  "lstrcat", "lstrcatA", "lstrcatW", "StrCatBuff", "StrCatBuffA", "StrCatBuffW", "StrCatChainW",
+  "_tccat", "_mbccat", "_ftcscat",
+  # vsprintf family: no destination size
+  "wvsprintf", "wvsprintfA", "wvsprintfW", "vsprintf", "_vstprintf", "vswprintf",
+  # IsBad*Ptr: unreliable pointer probes
+  "IsBadWritePtr", "IsBadHugeWritePtr", "IsBadReadPtr", "IsBadHugeReadPtr", "IsBadCodePtr",
+  "IsBadStringPtr",
+  # gets family: unbounded read
+  "gets", "_getts", "_gettws",
+  # CopyMemory family: no destination size
+  "RtlCopyMemory", "CopyMemory",
+  # sprintf family, unbounded
+  "sprintfW", "sprintfA", "wsprintf", "wsprintfW", "wsprintfA", "sprintf", "swprintf", "_stprintf",
+  # makepath family: unbounded path assembly
+  "makepath", "_tmakepath", "_makepath", "_wmakepath",
+  # splitpath family: unbounded path split
+  "_splitpath", "_tsplitpath", "_wsplitpath",
+  # scanf family: unbounded %s
+  "scanf", "wscanf", "_tscanf", "sscanf", "swscanf", "_stscanf", "snscanf", "snwscanf", "_sntscanf",
+  # itoa family: no buffer size
+  "_itoa", "_itow", "_i64toa", "_i64tow", "_ui64toa", "_ui64tot", "_ui64tow", "_ultoa", "_ultot",
+  "_ultow",
+]
+
+warning = [
+  # strncpy family: bounded, but no guaranteed termination
+  "strncpy", "wcsncpy", "_tcsncpy", "_mbsncpy", "_mbsnbcpy", "StrCpyN", "StrCpyNA", "StrCpyNW",
+  "StrNCpy", "strcpynA", "StrNCpyA", "StrNCpyW", "lstrcpyn", "lstrcpynA", "lstrcpynW",
+  # strncat family: bounded, but easy to get the count wrong
+  "strncat", "wcsncat", "_tcsncat", "_mbsncat", "_mbsnbcat", "StrCatN", "StrCatNA", "StrCatNW",
+  "StrNCat", "StrNCatA", "StrNCatW", "lstrncat", "lstrcatnA", "lstrcatnW", "lstrcatn",
+  # sprintf family, n-variants: bounded, no guaranteed termination
+  "wnsprintf", "wnsprintfA", "wnsprintfW", "_snwprintf", "_snprintf", "_sntprintf",
+  # vsnprintf family: bounded, but no guaranteed termination
+  "_vsnprintf", "_vsnwprintf", "_vsntprintf", "wvnsprintf", "wvnsprintfA", "wvnsprintfW",
+  # strtok family: modifies its input, not reentrant
+  "strtok", "_tcstok", "wcstok", "_mbstok",
+  # CharToOem family (Microsoft level 3)
+  "CharToOem", "CharToOemA", "CharToOemW", "OemToChar", "OemToCharA", "OemToCharW", "CharToOemBuffA",
+  "CharToOemBuffW",
+  # alloca family (Microsoft level 3): stack exhaustion
+  "alloca", "_alloca",
+  # strlen family (Microsoft level 3): unterminated input
+  "strlen", "wcslen", "_mbslen", "_mbstrlen", "StrLen", "lstrlen",
+  # ChangeWindowMessageFilter (Microsoft level 3)
+  "ChangeWindowMessageFilter",
+  # Path API: assumes MAX_PATH (Microsoft banned.h)
+  "PathAddBackslash", "PathAddBackslashA", "PathAddBackslashW",
+  # Path API: assumes MAX_PATH (Microsoft banned.h)
+  "PathAddExtension", "PathAddExtensionA", "PathAddExtensionW",
+  # Path API: assumes MAX_PATH (Microsoft banned.h)
+  "PathAppend", "PathAppendA", "PathAppendW",
+  # Path API: assumes MAX_PATH (Microsoft banned.h)
+  "PathCanonicalize", "PathCanonicalizeA", "PathCanonicalizeW",
+  # Path API: assumes MAX_PATH (Microsoft banned.h)
+  "PathCombine", "PathCombineA", "PathCombineW",
+  # Path API: assumes MAX_PATH (Microsoft banned.h)
+  "PathRenameExtension", "PathRenameExtensionA", "PathRenameExtensionW",
+]
+
+# Not banned: ordinary memory, string, comparison and format calls where size, bounds, termination,
+# null-check and format-string mistakes happen. Reported at INFO as leads for review, never as findings.
+review = [
+  # allocation and release
+  "malloc", "calloc", "realloc", "reallocarray", "free", "aligned_alloc", "posix_memalign", "strdup", "strndup",
+  # raw memory copy and comparison
+  "memcpy", "memmove", "memset", "memcmp", "memchr", "bcopy", "bzero", "wmemcpy", "wmemmove",
+  # string comparison and search
+  "strcmp", "strncmp", "strcasecmp", "strncasecmp", "strcoll", "strchr", "strrchr", "strstr", "strcspn", "strspn",
+  # formatted output and input
+  "printf", "fprintf", "dprintf", "snprintf", "vprintf", "vfprintf", "syslog", "vsyslog",
+  "fscanf", "vscanf",
+  # conversion, environment and process
+  "atoi", "atol", "atoll", "atof", "getenv", "system", "popen", "realpath", "rand", "tmpnam", "mktemp",
+]
