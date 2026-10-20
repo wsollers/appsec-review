@@ -96,3 +96,29 @@ def test_wrong_ids_changed_bytes_and_broken_upstream_links_are_reported(tmp_path
     paths = {item.path for item in attempt_integrity(JOB, run_root, RUN, attempt, "dagster")}
     assert {"dagster:status.run_id", "dagster:upstream.job_review_intake",
             "dagster:handoff.artifacts[0].sha256", "dagster:result.outputs.catalog.files.artifact.sha256"} <= paths
+
+
+def _with_target_reference(attempt: Path, digest: str) -> None:
+    result = json.loads((attempt / "result.json").read_text(encoding="utf-8"))
+    result["outputs"]["catalog.source"] = {"file": {"path": "src/main.cpp", "sha256": digest}}
+    (attempt / "result.json").write_text(json.dumps(result), encoding="utf-8")
+
+
+def test_target_relative_references_resolve_in_the_target_checkout(tmp_path: Path) -> None:
+    run_root, attempt = _run(tmp_path)
+    source = tmp_path / "target" / "src" / "main.cpp"
+    source.parent.mkdir(parents=True)
+    source.write_text("int main() {}\n", encoding="utf-8")
+    _with_target_reference(attempt, hashlib.sha256(source.read_bytes()).hexdigest())
+    target = tmp_path / "target"
+
+    assert attempt_integrity(JOB, run_root, RUN, attempt, "local", target) == []
+    # Without a checkout to resolve against, the reference is not checked.
+    assert attempt_integrity(JOB, run_root, RUN, attempt, "local") == []
+
+    source.write_text("int main() { return 1; }\n", encoding="utf-8")
+    changed = {item.path for item in attempt_integrity(JOB, run_root, RUN, attempt, "local", target)}
+    assert "local:result.outputs.catalog.source.file.sha256" in changed
+    source.unlink()
+    missing = {item.path for item in attempt_integrity(JOB, run_root, RUN, attempt, "local", target)}
+    assert "local:result.outputs.catalog.source.file.path" in missing

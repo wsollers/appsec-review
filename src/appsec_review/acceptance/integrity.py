@@ -6,8 +6,9 @@ side is that every such value is present and correct where it is used:
 
 - the claim, status and handoff name this run, job and attempt, and agree with each other;
 - the job's latest pointer names this handoff and its actual hash;
-- every artifact the handoff lists, and every path-and-hash reference in the result, resolves
-  inside the run to bytes with the recorded hash (and size, where recorded);
+- every artifact the handoff lists, and every path-and-hash reference in the result, resolves to
+  bytes with the recorded hash (and size, where recorded): run-owned references inside the run,
+  target-relative ones inside the target checkout;
 - every upstream handoff hash the attempt bound is the one that job accepted in this run, so the
   chain of hashes is consistent from job to job.
 """
@@ -51,8 +52,12 @@ def _references(value: Any, where: str) -> Iterator[tuple[str, Mapping[str, Any]
 
 
 def attempt_integrity(job_id: str, run_root: Path, run_id: str, attempt: Path | None,
-                      side: str) -> list[Difference]:
-    """Integrity problems of ``attempt`` within ``run_root``, labelled with the driver ``side``."""
+                      side: str, target_root: Path | None = None) -> list[Difference]:
+    """Integrity problems of ``attempt`` within ``run_root``, labelled with the driver ``side``.
+
+    A path-and-hash reference under ``data/`` names a run-owned artifact; any other relative one
+    names a target file, checked against ``target_root`` when it is given.
+    """
 
     problems: list[Difference] = []
 
@@ -108,13 +113,17 @@ def attempt_integrity(job_id: str, run_root: Path, run_id: str, attempt: Path | 
                 problem(f"upstream.{upstream}", digest, (pointer or {}).get("handoff_sha256", "<absent>"))
     references = list(_references(handoff.get("artifacts", []), "handoff.artifacts"))
     references += list(_references(_read(attempt / "result.json") or {}, "result"))
+    target_base = Path(target_root).resolve() if target_root is not None else None
     for where, reference in references:
         relative = str(reference["path"])
         if relative.startswith("/") or relative.startswith("<"):
             continue
-        target = (run_root / relative).resolve()
-        if run_root not in target.parents or not target.is_file():
-            problem(f"{where}.path", "a file inside the run", relative)
+        base, label = (run_root, "the run") if relative.split("/", 1)[0] == "data" else (target_base, "the target")
+        if base is None:
+            continue
+        target = (base / relative).resolve()
+        if base not in target.parents or not target.is_file():
+            problem(f"{where}.path", f"a file inside {label}", relative)
             continue
         if _sha256(target) != reference["sha256"]:
             problem(f"{where}.sha256", reference["sha256"], _sha256(target))

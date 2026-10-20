@@ -713,8 +713,10 @@ def command_parity(args) -> int:
         # consistent with the run they belong to.
         parked_attempt = (walk / "dagster" / "run" / dagster_attempt.relative_to(run_root)
                           if dagster_attempt is not None else None)
-        integrity = (attempt_integrity(job_id, walk / "dagster" / "run", app_run_id, parked_attempt, "dagster") +
-                     attempt_integrity(job_id, run_root, app_run_id, local_attempt, "local"))
+        target_checkout = host_path(state.target)
+        integrity = (attempt_integrity(job_id, walk / "dagster" / "run", app_run_id, parked_attempt, "dagster",
+                                       target_checkout) +
+                     attempt_integrity(job_id, run_root, app_run_id, local_attempt, "local", target_checkout))
         local_added, local_changed = _shared_delta(local_before, _shared_scan())
         _save_files(local_changed, walk / "local" / "changed")
     finally:
