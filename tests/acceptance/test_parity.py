@@ -233,3 +233,19 @@ def test_the_local_command_is_plain_or_runs_under_a_rootless_opt_app_namespace()
     assert "mount --bind \"$1\" /opt/app" in inside[4]
     assert inside[6] == str(root) and inside[7] == "/opt/app/.venv/bin/python"
     assert inside[inside.index("--target") + 1] == "/opt/app/targets/t" and inside[-1] == "--upstream-from-run"
+
+
+def test_recorded_calls_that_never_reached_a_model_are_reported(tmp_path) -> None:
+    import json
+
+    recordings = tmp_path / "job_dependency_intelligence"
+    recordings.mkdir()
+    (recordings / "a.0000.json").write_text(json.dumps({"result": {"proposal": {}}}), encoding="utf-8")
+    assert stepwise.unavailable_model_calls(tmp_path) == []
+
+    (recordings / "b.0000.json").write_text(json.dumps({"error": {
+        "type": "FileNotFoundError", "message": "configured Claude CLI is unavailable: claude"}}), encoding="utf-8")
+    (recordings / "c.0000.json").write_text(json.dumps({"error": {
+        "type": "ModelOutputError", "message": "expected exactly one proposal, found 0"}}), encoding="utf-8")
+    assert stepwise.unavailable_model_calls(tmp_path) == [
+        "job_dependency_intelligence: configured Claude CLI is unavailable: claude"]

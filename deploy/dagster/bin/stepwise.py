@@ -682,6 +682,27 @@ def local_command(job_id: str, app_run_id: str, target: str, *, container_paths:
     return command
 
 
+def unavailable_model_calls(recordings: Path) -> list[str]:
+    """Recorded model calls that failed because the backend or its CLI could not be reached.
+
+    A run whose model calls never reached a model compares equal on both sides and tells nothing, so
+    parity must not accept it.
+    """
+
+    found = []
+    for path in sorted(Path(recordings).rglob("*.json")):
+        if "misses" in path.parts:
+            continue
+        try:
+            error = json.loads(path.read_text(encoding="utf-8")).get("error")
+        except (OSError, ValueError):
+            continue
+        if isinstance(error, dict) and (error.get("type") == "FileNotFoundError"
+                                        or "unavailable" in str(error.get("message", "")).lower()):
+            found.append(f"{path.parent.name}: {str(error.get('message', ''))[:120]}")
+    return found
+
+
 def _run_local(job_id: str, app_run_id: str, target: Path, replay: Path, log: Path, *,
                container_paths: bool = False) -> int:
     spelled = str(target)
@@ -759,6 +780,10 @@ def command_parity(args) -> int:
         shutil.copytree(run_root / "data" / "inference-recordings", recordings)
     else:
         recordings.mkdir()
+    unreachable = unavailable_model_calls(recordings)
+    if unreachable:
+        raise StateError(f"the model backend was unavailable for {len(unreachable)} call(s) of the Dagster run "
+                         f"(first: {unreachable[0]}); fix the stack (the Claude CLI overlay, credentials) and rerun")
 
     # 3. Put the starting state back: park Dagster's tree, additions and changed shared files.
     added, changed = _shared_delta(shared_before, _shared_scan())
