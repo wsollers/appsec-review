@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -66,6 +67,8 @@ def test_a_request_the_recorder_never_made_fails_closed(tmp_path, monkeypatch) -
     with _scope(root, root / "runs" / "r1"), pytest.raises(ModelReplayMiss) as missed:
         recorded(lambda *args, **kwargs: None)(_request(root, "other"), timeout_seconds=5)
     assert missed.value.request["summary"]["target"] == "<target>/src/main.cpp"
+    kept = tmp_path / "empty" / "job_target_analysis_plan" / "misses" / f"{missed.value.key}.0000.json"
+    assert json.loads(kept.read_text(encoding="utf-8"))["request"] == missed.value.request
 
 
 def test_the_environment_switch_is_validated_and_scoped(tmp_path, monkeypatch) -> None:

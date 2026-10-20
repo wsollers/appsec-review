@@ -119,6 +119,18 @@ def _record(scope: _Scope, key: str, masked: Mapping[str, Any], result: ModelRes
     raise RuntimeError(f"model recording sequence space exhausted for {key}")
 
 
+def _keep_miss(root: Path, job_id: str, key: str, sequence: int, masked: Mapping[str, Any]) -> None:
+    """Keep the masked request a replay could not answer, so it can be diffed against the recordings."""
+
+    path = root / job_id / "misses" / f"{key}.{sequence:04d}.json"
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps({"schema": SCHEMA, "job_id": job_id, "key": key, "sequence": sequence,
+                                    "request": masked}, indent=1, sort_keys=True) + "\n", encoding="utf-8")
+    except OSError:
+        pass  # the miss is still raised; the copy is a diagnostic
+
+
 def _replay(scope: _Scope, key: str, masked: Mapping[str, Any]) -> ModelResult:
     root = os.environ.get(REPLAY_ENVIRONMENT)
     if not root:
@@ -128,6 +140,7 @@ def _replay(scope: _Scope, key: str, masked: Mapping[str, Any]) -> ModelResult:
         _replayed[(scope.job_id, key)] += 1
     path = Path(root) / scope.job_id / f"{key}.{sequence:04d}.json"
     if not path.is_file():
+        _keep_miss(Path(root), scope.job_id, key, sequence, masked)
         raise ModelReplayMiss(scope.job_id, key, sequence, masked)
     document = json.loads(path.read_text(encoding="utf-8"))
     if document.get("schema") != SCHEMA or document.get("key") != key:
