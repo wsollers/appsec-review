@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict
+import re
 import hashlib
 import json
 from pathlib import Path
@@ -36,6 +37,7 @@ TOOL_ID = "tool-clang-static-analysis"
 OUTPUT_SCHEMA = "appsec-review/clang-static-output/1"
 ADAPTER = "clang-static-adapter/4"
 ENGINES = ("clang-tidy", "clang-static-analyzer")
+_CHECKER_NAME = re.compile(r"[A-Za-z][A-Za-z0-9_-]*(?:\.[A-Za-z0-9_-]+)*")
 
 
 def _validated_settings(settings: Mapping[str, Any]) -> dict[str, Any]:
@@ -45,6 +47,12 @@ def _validated_settings(settings: Mapping[str, Any]) -> dict[str, Any]:
         raise ValueError("clang_tidy_checks must be a non-empty string list")
     if not isinstance(checkers, (list, tuple)) or not checkers or not all(isinstance(v, str) and v for v in checkers):
         raise ValueError("clang_analyzer_checkers must be a non-empty string list")
+    patterns = [value for value in checkers if not _CHECKER_NAME.fullmatch(value)]
+    if patterns:
+        # ``clang --analyze`` rejects a pattern with "no analyzer checkers or packages are associated with",
+        # which fails every translation unit; clang-tidy checks, not these, accept wildcards.
+        raise ValueError("clang_analyzer_checkers entries must be Static Analyzer checker or package names, "
+                         f"not patterns: {', '.join(patterns)}")
     values = {
         "workers": int(settings["workers"]),
         "max_output_bytes": int(settings["max_output_bytes"]),

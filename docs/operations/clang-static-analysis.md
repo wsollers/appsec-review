@@ -11,7 +11,7 @@ load.accepted_cpp -> analyze.scopes -> acceptance.publish_handoff
 - `max_output_bytes`: maximum result document and execution file-size boundary;
 - `max_diagnostics_per_scope`: maximum normalized diagnostics per engine and scope;
 - `clang_tidy_checks`: exact Clang-Tidy check globs; and
-- `clang_analyzer_checkers`: exact Static Analyzer checker families.
+- `clang_analyzer_checkers`: exact Static Analyzer checker or package names (`core`, `alpha.security`). Patterns such as `alpha.security.*` are rejected: clang fails every unit on one.
 
 The container catalog entry is `tool-clang-static-analysis`, built from
 `containers/tools/clang-static-analysis`. Build and validate it through the catalog driver, then run

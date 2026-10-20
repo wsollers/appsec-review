@@ -1314,7 +1314,7 @@ workers = 4
 max_output_bytes = 16777216
 max_diagnostics_per_scope = 10000
 clang_tidy_checks = ["clang-analyzer-*", "bugprone-*", "cert-*", "concurrency-*", "performance-*", "portability-*"]
-clang_analyzer_checkers = ["core", "cplusplus", "deadcode", "security", "unix", "alpha.security.*"]
+clang_analyzer_checkers = ["core", "cplusplus", "deadcode", "security", "unix", "alpha.security"]
 
 # Seeded mode analyzes only the translation units that contain a finding location (see
 # jobs.job_cpp_compiled_analysis.settings.seeded_bounds for the shared meaning).

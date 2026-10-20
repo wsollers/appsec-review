@@ -1211,7 +1211,7 @@ parallel; K3 needs K1; K5 is optional; K6 integrates.
 coverage gaps directly into an `observations` shard instead of running as an
 `job_evidence_collection` adapter or emitting SARIF. Analyzer traces remain bounded data on each
 observation. Findings enter the existing source-SAST review lane according to normal severity and
-admissibility rules; every Clang Static Analyzer diagnostic (including `alpha.security.*`) is
+admissibility rules; every Clang Static Analyzer diagnostic (including `alpha.security`) is
 labelled `warning` by the adapter and so normalizes to medium reported severity, while clang-tidy
 `error` diagnostics normalize to high; alpha checkers therefore receive no special lane-A
 admission.
@@ -1284,7 +1284,7 @@ unless K3 or a later rule needs CodeQL-side CFG detail beyond guards.
 
 ### 12.4 Decisions for this phase (user, 2026-10-12; K4 implementation reconciled 2026-10-14)
 
-1. **Static Analyzer `alpha.security.*` checkers:** enabled. Like every other Static Analyzer
+1. **Static Analyzer `alpha.security` checkers:** enabled. Like every other Static Analyzer
    diagnostic they are labelled `warning` and normalize to `medium` reported severity, so they
    appear on lane B hunt menus instead of being admitted to lane A.
 2. **Where K4 runs:** in the separate `tool-clang-static-analysis` image. Changing analyzer checkers then

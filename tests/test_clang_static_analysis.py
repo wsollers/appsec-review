@@ -23,7 +23,7 @@ SETTINGS = {
     "max_output_bytes": 65536,
     "max_diagnostics_per_scope": 20,
     "clang_tidy_checks": ["bugprone-*", "cert-*"],
-    "clang_analyzer_checkers": ["core", "unix", "security", "alpha.security.*"],
+    "clang_analyzer_checkers": ["core", "unix", "security", "alpha.security"],
 }
 
 
@@ -218,3 +218,14 @@ def test_handoff_schema_and_summary_artifact_are_immutable(monkeypatch, tmp_path
     summary = context.job.run_root / result["artifact"]["path"]
     assert file_sha256(summary) == result["artifact"]["sha256"]
     assert json.loads(summary.read_text(encoding="utf-8"))["schema"] == CLANG_STATIC_HANDOFF_SCHEMA
+
+
+def test_analyzer_checkers_must_be_names_not_patterns() -> None:
+    import pytest
+
+    from appsec_review.jobs.job_clang_static_analysis.job import _validated_settings
+
+    good = _validated_settings({**SETTINGS, "clang_analyzer_checkers": ["core", "alpha.security", "unix.Malloc"]})
+    assert good["clang_analyzer_checkers"] == ("core", "alpha.security", "unix.Malloc")
+    with pytest.raises(ValueError, match=r"not patterns: alpha\.security\.\*"):
+        _validated_settings({**SETTINGS, "clang_analyzer_checkers": ["core", "alpha.security.*"]})
