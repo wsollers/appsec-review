@@ -842,7 +842,7 @@ def test_database_tree_manifest_detects_changes(tmp_path: Path) -> None:
     assert before["tree_sha256"] != after["tree_sha256"]
 
 
-def test_codeql_execution_leaves_nothing_world_writable_even_when_the_runner_opens_it(tmp_path: Path) -> None:
+def test_codeql_execution_leaves_nothing_in_the_scope_world_writable_even_when_the_runner_opens_it(tmp_path: Path) -> None:
     scratch = tmp_path / "scratch"
     scratch.mkdir()
     sibling = scratch / "export" / "staged"
@@ -870,6 +870,5 @@ def test_codeql_execution_leaves_nothing_world_writable_even_when_the_runner_ope
 
     opened = [str(path.relative_to(scratch)) for path in [scratch, *scratch.rglob("*")]
               if not path.is_symlink() and path.stat().st_mode & 0o002]
-    # A sibling export tree may still be in use by a concurrent action, so a database action leaves it.
-    assert sorted(opened) == ["export", "export/staged"]
+    assert opened == []
     assert (scratch / "database" / "db-cpp" / "data.bin").is_file()

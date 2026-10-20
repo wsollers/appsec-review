@@ -5,9 +5,11 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 import hashlib
 import json
+import os
 from pathlib import Path, PurePosixPath
 import re
 import shutil
+import stat
 import time
 from typing import Any, Protocol
 from uuid import uuid4
@@ -345,9 +347,11 @@ class CodeQLExecutor:
                 # Killing the docker client leaves the container running and holding the volume.
                 self.runner(("docker", "rm", "--force", container_name), 60)
         finally:
-            # The tree was opened to the container's user above, and the runner opens what it
-            # creates; neither stays world-writable once the container is gone, error or not.
-            _close_write_window(access_root, skip=None if action in {"export", "compile"} else scratch / "export")
+            # The tree was opened to the container's user above, and the runner opens everything
+            # under its /scratch mount when it finishes; none of it stays world-writable once the
+            # container is gone, error or not. A concurrent action of the scope re-opens its own tree
+            # when it starts and runs as the tree's owner, so closing the whole scope is safe.
+            _close_write_window(scratch)
             if volume_created:
                 removed = self.runner(("docker", "volume", "rm", volume_name), 60)
                 if removed[3] or removed[0] != 0:
@@ -387,27 +391,21 @@ class CodeQLExecutor:
         return result
 
 
-def _close_write_window(root: Path, *, skip: Path | None = None) -> None:
-    """Remove the world-write bit from ``root`` and everything under it.
+def _close_write_window(root: Path) -> None:
+    """Remove the world-write bit from ``root`` and everything under it, tolerating concurrent cleanup."""
 
-    ``skip`` is a sibling tree another action of the same scope may still be using.
-    """
-
-    try:
-        paths = [root, *root.rglob("*")]
-    except OSError:
-        return
-    for path in paths:
-        if skip is not None and (path == skip or skip in path.parents):
-            continue
+    def clear(path: str) -> None:
         try:
-            if path.is_symlink():
-                continue
-            mode = path.stat().st_mode
-            if mode & 0o002:
-                path.chmod(mode & ~0o002)
+            info = os.lstat(path)
+            if not stat.S_ISLNK(info.st_mode) and info.st_mode & 0o002:
+                os.chmod(path, info.st_mode & ~0o002)
         except OSError:
-            continue  # gone, or not ours to change; the permission audit reports what remains
+            pass  # gone, or not ours to change; the permission audit reports what remains
+
+    clear(str(root))
+    for current, directories, files in os.walk(root, onerror=lambda _error: None):
+        for name in (*directories, *files):
+            clear(os.path.join(current, name))
 
 
 def tree_manifest(root: Path, *, file_limit: int, bytes_limit: int) -> Mapping[str, Any]:
