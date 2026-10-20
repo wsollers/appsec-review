@@ -62,6 +62,49 @@ def _fields(left: Any, right: Any, prefix: str = "") -> list[tuple[str, str, str
     return [] if left == right else [(prefix or ".", canonical(left), canonical(right))]
 
 
+def _executed_commands(text: str, masks: Masks) -> list[str]:
+    """The successful ``process_exec`` events of an execution capture, order- and pid-free.
+
+    Tool provenance rests on these. The file-level events around them (opens, unlinks, renames)
+    include the tracer's own and randomly named temporary files, and their number varies from run
+    to run, so only their kind is shared between two runs of one build.
+    """
+
+    commands = []
+    for line in text.splitlines():
+        if not line.strip():
+            continue
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            commands.append(masks.text(line))
+            continue
+        if event.get("kind") != "process_exec":
+            continue
+        for volatile in ("pid", "tid", "ordinal", "timestamp_ns"):
+            event.pop(volatile, None)
+        for variable in event.get("envp") or ():
+            if isinstance(variable, dict) and variable.get("name") == "HOSTNAME":
+                variable["value"] = "<hostname>"
+        commands.append(canonical(normalize_value(event, masks)))
+    return sorted(commands)
+
+
+def _compare_executed_commands(job_id: str, masked: str, left: str, left_masks: Masks, right: str,
+                               right_masks: Masks) -> list[Difference]:
+    a, b = _executed_commands(left, left_masks), _executed_commands(right, right_masks)
+    if a == b:
+        return []
+    only_left = sorted(set(a) - set(b))[:ROW_EXAMPLES]
+    only_right = sorted(set(b) - set(a))[:ROW_EXAMPLES]
+    differences = [Difference(job_id, "content", f"{masked}#process_exec", row, "<absent>") for row in only_left]
+    differences += [Difference(job_id, "content", f"{masked}#process_exec", "<absent>", row) for row in only_right]
+    if not differences:
+        differences.append(Difference(job_id, "content", f"{masked}#process_exec", f"{len(a)} executions",
+                                      f"{len(b)} executions"))
+    return differences
+
+
 def _compare(job_id: str, masked: str, left: Path, left_masks: Masks, right: Path,
              right_masks: Masks) -> list[Difference]:
     if left.suffix == ".sqlite":
@@ -93,6 +136,8 @@ def _compare(job_id: str, masked: str, left: Path, left_masks: Masks, right: Pat
         if raw_left == raw_right:
             return []
         return [Difference(job_id, "content", masked, "<bytes>", "<different bytes>")]
+    if left.name == "events.jsonl" and left.parent.parent.name == "execution-capture":
+        return _compare_executed_commands(job_id, masked, text_left, left_masks, text_right, right_masks)
     if left.suffix == ".json":
         try:
             fields = _fields(normalize_value(json.loads(text_left), left_masks),

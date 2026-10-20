@@ -34,8 +34,13 @@ _PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"sha256:[0-9a-f]{64}"), "<image-digest>"),
     (re.compile(r"\b[0-9a-f]{64}\b"), "<sha256>"),
     (re.compile(r"\battempt_\d{4}\b"), "<attempt>"),
+    (re.compile(r"(?<=execution-capture:command-\d{3}:event-)\d+"), "<n>"),
+    (re.compile(r"\btrace\.\d+\b"), "trace.<n>"),
     (re.compile(r"\.appsec-review-build-scratch\.[A-Za-z0-9]+"), ".appsec-review-build-scratch.<random>"),
     (re.compile(r"\.tmp-[A-Za-z0-9_]{6,}"), ".tmp-<random>"),
+    (re.compile(r"(?<=build-scratch\.<random>/)cc[A-Za-z0-9]{6}(?=\.)"), "cc<random>"),
+    (re.compile(r"\bTryCompile-[A-Za-z0-9]{6}\b"), "TryCompile-<random>"),
+    (re.compile(r"\bcmTC_[0-9a-f]{5,}\b"), "cmTC_<random>"),
     (re.compile(r"\btarget(?=[A-Za-z0-9]*[A-Z0-9])[A-Za-z0-9]{6}\b"), "target<random>"),
     (re.compile(r"\btmp[a-z0-9_]{8}\b"), "tmp<random>"),
     (re.compile(r"(?<![\w.])/tmp/[^\s\"'/]+"), "/tmp/<random>"),
@@ -43,7 +48,16 @@ _PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
 _TIME_KEYS = {"timestamp", "started", "completed", "created", "modified", "mtime", "ctime"}
 _VOLATILE_KEYS = {"pid", "pids", "container", "container_id", "container_name", "hostname",
                   "image_id", "image_digest", "repo_digest", "repo_digests", "digest",
-                  "dagster_run_id", "dagster_node", "size_bytes"}
+                  "dagster_run_id", "dagster_node", "size_bytes",
+                  # Syscall-trace bookkeeping: how many events a traced build produced, how they were
+                  # numbered and how large the raw traces were vary from run to run.
+                  "event_ordinals", "event_records_observed", "event_records_retained", "capture_events",
+                  "observed_bytes", "retained_bytes", "retained_lines"}
+# Inside these mappings every number measures the syscall trace (event counts, byte and line sizes).
+_TRACE_PARENTS = {"raw_traces", "execution_capture"}
+_TRACE_KEEP = ("exit", "status", "code", "signal")
+# Lists whose order is the order concurrent build processes happened to start in.
+_UNORDERED_KEYS = {"rows", "tool_invocations"}
 _FTS = re.compile(r"^(search_fts|sqlite_)")
 
 
@@ -93,19 +107,33 @@ def _key_mask(key: str) -> str | None:
     return None
 
 
-def normalize_value(value: Any, masks: Masks, *, summarize: bool = False) -> Any:
-    """Mask volatile values; with ``summarize``, reduce long lists to a count and a digest."""
+def normalize_value(value: Any, masks: Masks, *, summarize: bool = False, trace: bool = False) -> Any:
+    """Mask volatile values; with ``summarize``, reduce long lists to a count and a digest.
+
+    ``trace`` is set inside a build's execution-capture measurements, where every number counts or
+    sizes syscall events and so varies from run to run, while the commands that ran do not.
+    """
 
     if isinstance(value, Mapping):
         result = {}
         for key, child in value.items():
             name = masks.text(str(key))
             replacement = _key_mask(str(key))
-            result[name] = (replacement if replacement is not None and child is not None
-                            else normalize_value(child, masks, summarize=summarize))
+            inside = trace or str(key) in _TRACE_PARENTS or (
+                str(key) == "events" and isinstance(child, Mapping) and "observed" in child)
+            if replacement is not None and child is not None:
+                result[name] = replacement
+            elif (inside and isinstance(child, (int, float)) and not isinstance(child, bool)
+                  and not any(word in str(key).lower() for word in _TRACE_KEEP)):
+                result[name] = "<count>"
+            else:
+                normalized = normalize_value(child, masks, summarize=summarize, trace=inside)
+                if str(key) in _UNORDERED_KEYS and isinstance(normalized, list):
+                    normalized = sorted(normalized, key=canonical)
+                result[name] = normalized
         return result
     if isinstance(value, (list, tuple)):
-        items = [normalize_value(child, masks, summarize=summarize) for child in value]
+        items = [normalize_value(child, masks, summarize=summarize, trace=trace) for child in value]
         if summarize and len(items) > LIST_SUMMARY_THRESHOLD:
             return {"<summary>": {"count": len(items), "sha256": digest(sorted(canonical(item) for item in items))}}
         return items

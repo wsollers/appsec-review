@@ -1,0 +1,83 @@
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+from appsec_review.acceptance.content import content_differences
+from appsec_review.acceptance.normalize import Masks, normalize_value
+
+RUN = "2026-10-19-0001"
+MASKS = Masks.for_run(RUN, runs_roots=["/opt/app/runs"], repository_roots=["/opt/app"], target_roots=[])
+
+
+def test_trace_measurements_are_masked_but_exit_codes_and_commands_are_kept() -> None:
+    record = {
+        "execution_capture": {"exit_code": 2, "events": {"counts": {"file_open": 8054}, "observed": 8346},
+                              "commands": ["cmake", "--build"]},
+        "raw_traces": {"observed_bytes": 534900, "records": [{"source": "trace.13", "bytes": 82820}]},
+        "capture_provenance": {"event_records_observed": 10815, "event_records_retained": 10815},
+        "files": 12,
+    }
+    other = json.loads(json.dumps(record))
+    other["execution_capture"]["events"] = {"counts": {"file_open": 8059}, "observed": 8351}
+    other["raw_traces"] = {"observed_bytes": 534952, "records": [{"source": "trace.14", "bytes": 82846}]}
+    other["capture_provenance"] = {"event_records_observed": 10820, "event_records_retained": 10820}
+
+    assert normalize_value(record, MASKS) == normalize_value(other, MASKS)
+    assert normalize_value(record, MASKS)["execution_capture"]["exit_code"] == 2
+    other["execution_capture"]["exit_code"] = 0
+    other["files"] = 13
+    assert normalize_value(record, MASKS) != normalize_value(other, MASKS)
+
+
+def test_event_numbers_in_receipts_and_random_build_temp_names_are_masked() -> None:
+    left = {"origin": "execution-capture:command-002:event-7894",
+            "argv": ["c++", "-fresolution=/workspace/.appsec-review-build-scratch.vM3KGf/ccKSzJPO.res",
+                     "/workspace/build/CMakeFiles/CMakeScratch/TryCompile-e3FJsm/x", "cmTC_24658.dir"]}
+    right = {"origin": "execution-capture:command-002:event-7899",
+             "argv": ["c++", "-fresolution=/workspace/.appsec-review-build-scratch.wXIkXM/ccl0zImT.res",
+                      "/workspace/build/CMakeFiles/CMakeScratch/TryCompile-Nga9AC/x", "cmTC_6e6e6.dir"]}
+    assert normalize_value(left, MASKS) == normalize_value(right, MASKS)
+    right["origin"] = "execution-capture:command-001:event-7899"
+    assert normalize_value(left, MASKS) != normalize_value(right, MASKS)
+
+
+def test_concurrent_build_lists_compare_without_order_but_not_without_members() -> None:
+    first, second = {"tool": "c++"}, {"tool": "as"}
+    assert (normalize_value({"rows": [first, second]}, MASKS) == normalize_value({"rows": [second, first]}, MASKS))
+    assert (normalize_value({"rows": [first, second]}, MASKS) != normalize_value({"rows": [first]}, MASKS))
+    assert normalize_value({"steps": [first, second]}, MASKS) != normalize_value({"steps": [second, first]}, MASKS)
+
+
+def _event(kind: str, **fields) -> dict:
+    return {"kind": kind, "pid": 1, "tid": 1, "ordinal": 1, "timestamp_ns": 1, **fields}
+
+
+def _capture(tmp_path: Path, name: str, events: list[dict]) -> tuple[Path, dict]:
+    run_root = tmp_path / name
+    relative = "data/build/units/u/execution-capture/command-001/events.jsonl"
+    path = run_root / relative
+    path.parent.mkdir(parents=True)
+    path.write_text("\n".join(json.dumps(event) for event in events) + "\n", encoding="utf-8")
+    return run_root, {"artifacts": [{"path": relative}]}
+
+
+def _compare(left, right):
+    return content_differences("job_language_build", left[0], left[1], MASKS, right[0], right[1], MASKS)
+
+
+def test_execution_capture_compares_executed_commands_not_file_level_events(tmp_path: Path) -> None:
+    exec_ = {"argv": ["c++", "-c", "a.cpp"], "executable": "/usr/bin/c++",
+             "envp": [{"name": "HOSTNAME", "value": "3e1528843aab"}]}
+    left = _capture(tmp_path, "left", [
+        _event("process_exec", **exec_), _event("file_open", path="/capture"), _event("process_exit")])
+    other_exec = {**exec_, "envp": [{"name": "HOSTNAME", "value": "1781caece12e"}]}
+    right = _capture(tmp_path, "right", [
+        _event("file_open", path="/capture"), _event("file_open", path="/capture"),
+        _event("process_exec", **other_exec), _event("file_unlink", path="/tmp/x")])
+    assert _compare(left, right) == []
+
+    different = _capture(tmp_path, "different", [_event("process_exec", **{**exec_, "argv": ["c++", "-c", "b.cpp"]})])
+    missing = _capture(tmp_path, "missing", [])
+    assert [item.path.endswith("#process_exec") for item in _compare(left, different)] == [True, True]
+    assert len(_compare(left, missing)) == 1
