@@ -172,3 +172,26 @@ def test_observations_are_read_from_the_published_shards(tmp_path: Path) -> None
     report = evaluate([Defect("uaf", "CWE-416", "src/session.cpp", 32, "", ("clang-static-analysis",))], findings)
     assert report.missed == [] and report.producers_seen["uaf"] == ["clang-static-analysis"]
     assert observations_from_run(tmp_path / "empty") == []
+
+
+def test_a_defect_spanning_lines_is_found_by_a_finding_on_any_of_them(tmp_path: Path) -> None:
+    key = tmp_path / "expectations.toml"
+    key.write_text(
+        '[corpus]\nname = "x"\n[[defect]]\nid = "wrap"\npath = "src/frame.cpp"\nline = 9\nend_line = 10\n'
+        '[[defect]]\nid = "backwards"\npath = "src/a.cpp"\nline = 5\nend_line = 4\n', encoding="utf-8")
+    try:
+        load_answer_key(key)
+    except ValueError as error:
+        assert "end_line precedes line" in str(error)
+    else:
+        raise AssertionError("an end_line before line must be rejected")
+
+    key.write_text('[corpus]\nname = "x"\n[[defect]]\nid = "wrap"\npath = "src/frame.cpp"\nline = 9\nend_line = 10\n',
+                   encoding="utf-8")
+    _corpus, defects = load_answer_key(key)
+    assert (defects[0].line, defects[0].end_line) == (9, 10)
+    for line in (9, 10):
+        assert evaluate(defects, [_finding("j", "src/frame.cpp", line)]).missed == []
+    assert evaluate(defects, [_finding("j", "src/frame.cpp", 8)]).missed == ["wrap"]
+    assert evaluate(defects, [_finding("j", "src/frame.cpp", 11)]).missed == ["wrap"]
+    assert evaluate(defects, [_finding("j", "src/frame.cpp", 8, end=9)]).missed == []  # a range reaching the defect

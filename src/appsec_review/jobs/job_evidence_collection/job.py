@@ -15,6 +15,7 @@ from appsec_review.container_runtime import ContainerExecutor, ExecutionRequest,
 from appsec_review.jobs.job_evidence_collection.adapters import (
     Applicability,
     ScanCatalog,
+    GITLEAKS_RULES_MOUNT,
     SEI_CERT_MOUNT,
     ToolAdapter,
     adapter_registry,
@@ -241,6 +242,8 @@ def _semgrep_rule_files(*, repository_root: Path, tool_id: str) -> list[Path]:
     files: list[Path] = []
     if tool_id == "tool-semgrep":
         files += [repository_root / "rules" / "semgrep" / name for name in ("security.yml", "review-signals.yml")]
+    elif tool_id == "tool-opengrep":
+        files.append(repository_root / "rules" / "semgrep" / "review-signals.yml")
     pack = _sei_cert_pack(repository_root)
     if pack is not None:
         files += sorted(path for path in pack.rules_root.rglob("*") if path.suffix in {".yml", ".yaml"})
@@ -254,6 +257,18 @@ def _rule_pack_identity(unit: UnitContext, adapter: ToolAdapter) -> dict[str, An
     if adapter.tool_id in SEI_CERT_TOOLS:
         verified = _sei_cert_pack(repository)
         packs["appsec-review/sei-cert"] = verified.as_record() if verified else {"verified": False}
+    if adapter.tool_id == "tool-gitleaks":
+        try:
+            lock = json.loads((repository / "rules" / "gitleaks" / "rules.lock.json").read_text(encoding="utf-8"))
+            packs["gitleaks-generic-secrets"] = {"sha256": lock["files"]["generic-secrets.toml"]["sha256"]}
+        except (OSError, KeyError, json.JSONDecodeError):
+            packs["gitleaks-generic-secrets"] = {"verified": False}
+    if adapter.tool_id == "tool-opengrep":
+        try:
+            lock = json.loads((repository / "rules" / "semgrep" / "rules.lock.json").read_text(encoding="utf-8"))
+            packs["semgrep-review-signals"] = {"sha256": lock["files"]["review-signals.yml"]["sha256"]}
+        except (OSError, KeyError, json.JSONDecodeError):
+            packs["semgrep-review-signals"] = {"verified": False}
     if adapter.tool_id == "tool-semgrep":
         try:
             lock = json.loads((repository / "rules" / "semgrep" / "rules.lock.json").read_text(encoding="utf-8"))
@@ -270,18 +285,29 @@ def _prerequisites(unit: UnitContext, adapter: ToolAdapter, selection: Applicabi
     mounts: list[Mount] = []
     environment: dict[str, str] = {}
     repository = unit.job.repository_root
-    if adapter.tool_id == "tool-semgrep":
+    if adapter.tool_id in ("tool-semgrep", "tool-opengrep"):
         rules = repository / "rules" / "semgrep"
+        names = ("security.yml", "review-signals.yml") if adapter.tool_id == "tool-semgrep" else ("review-signals.yml",)
         try:
             lock = json.loads((rules / "rules.lock.json").read_text(encoding="utf-8"))
             verified = lock.get("schema") == "appsec-review/rule-bundle-lock/1" and all(
-                file_sha256(rules / name) == lock["files"][name]["sha256"]
-                for name in ("security.yml", "review-signals.yml"))
+                file_sha256(rules / name) == lock["files"][name]["sha256"] for name in names)
         except (OSError, KeyError, ValueError, json.JSONDecodeError):
             verified = False
         if not verified:
             return selection, (), {}, "hash-pinned Semgrep rule bundle is unavailable"
         mounts.append(Mount(rules, "/rules", True))
+    if adapter.tool_id == "tool-gitleaks":
+        rules = repository / "rules" / "gitleaks"
+        try:
+            lock = json.loads((rules / "rules.lock.json").read_text(encoding="utf-8"))
+            verified = lock.get("schema") == "appsec-review/rule-bundle-lock/1" and \
+                file_sha256(rules / "generic-secrets.toml") == lock["files"]["generic-secrets.toml"]["sha256"]
+        except (OSError, KeyError, ValueError, json.JSONDecodeError):
+            verified = False
+        if not verified:
+            return selection, (), {}, "hash-pinned gitleaks rule bundle is unavailable"
+        mounts.append(Mount(rules, GITLEAKS_RULES_MOUNT, True))
     if adapter.tool_id in SEI_CERT_TOOLS:
         verified_pack = _sei_cert_pack(repository)
         if verified_pack is None:

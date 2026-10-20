@@ -70,6 +70,17 @@ state = "enabled"
 description = "Repository-authored Semgrep rules (security.yml, review-signals.yml), locked by rules.lock.json."
 
 [[packs]]
+id = "gitleaks-generic-secrets"
+path = "rules/gitleaks"
+engine = "gitleaks"
+language = "multi"
+image = "appsec-review/tool-gitleaks:8.30.1"
+library = "gitleaks@8.30.1"
+verify = "validate"
+state = "enabled"
+description = "Repository-authored gitleaks rule (generic-secrets.toml) layered on the built-in rules, locked by rules.lock.json."
+
+[[packs]]
 id = "pmd-java-security"
 path = "rules/pmd"
 engine = "pmd"

@@ -16,7 +16,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 REGISTRY = ROOT / "rules" / "registry.toml"
-ENGINES = {"codeql", "semgrep", "pmd"}
+ENGINES = {"codeql", "semgrep", "pmd", "gitleaks"}
 VERIFY_MODES = {"check-only", "validate"}
 
 

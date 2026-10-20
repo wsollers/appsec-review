@@ -1,0 +1,11 @@
+{
+  "schema": "appsec-review/rule-bundle-lock/1",
+  "bundle": "gitleaks-generic-secrets",
+  "license": "MIT",
+  "provenance": "repository-authored for appsec-review",
+  "files": {
+    "generic-secrets.toml": {
+      "sha256": "38d37ad13b89983aa12283a6f1322b087884b6b274c26f8b7dba505538156793"
+    }
+  }
+}

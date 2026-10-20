@@ -1314,7 +1314,8 @@ workers = 4
 max_output_bytes = 16777216
 max_diagnostics_per_scope = 10000
 clang_tidy_checks = ["clang-analyzer-*", "bugprone-*", "cert-*", "concurrency-*", "performance-*", "portability-*"]
-clang_analyzer_checkers = ["core", "cplusplus", "deadcode", "security", "unix", "alpha.security"]
+clang_analyzer_checkers = ["core", "cplusplus", "deadcode", "security", "unix", "alpha.security",
+                           "alpha.unix.cstring.OutOfBounds"]
 
 # Seeded mode analyzes only the translation units that contain a finding location (see
 # jobs.job_cpp_compiled_analysis.settings.seeded_bounds for the shared meaning).
@@ -1386,7 +1387,7 @@ version = "2.27.0"
 commit = "b47b3e59262c95aff4eeb84ac72d09e25a9c37e9"
 cli_sha256 = "5c905275695b4efcaa02ea380f6e60b01310fa3dff0fa8c442bf0638bb46055a"
 license_sha256 = "d0d6cfdc857c1e0153bbd2b6f0d4ab42dfc38acec9b97b2f7f55c1f51ffe9fbf"
-asset_lock_sha256 = "79c1fd29207bd91f56321959a8bb5d92b3b7fdb579a79327a25827df555ae8fc"
+asset_lock_sha256 = "18197ed2c6f7c12374fb5a80b0f114a1eefd4d4600cbefe4c33ced7038d8fee6"
 runtime_user = "10001:10001"
 retention = "run-owned"
 concurrency = 2
@@ -1436,6 +1437,11 @@ query_pack_sha256 = "9d2e02cd1c0bac83663f0699eb390c06fc4b30fc817c076b53d76552a02
 query_lock_sha256 = "7b14e41b5c986e17294b058e3ce604fc1ac70c51de2871452bb762819bf35343"
 source_languages = ["C", "C++", "C/C++"]
 prerequisites = []
+
+[[jobs.job_codeql_analysis.settings.languages.cpp.additional_queries]]
+query_id = "security-extended"
+query_suite = "codeql-suites/cpp-security-extended.qls"
+query_suite_sha256 = "88d113a2ca16c1567e551b15a9572e2b0610bb43c9c04e80090dc1f5333685e9"
 
 [[jobs.job_codeql_analysis.settings.languages.cpp.custom_queries]]
 query_id = "cert-cpp"

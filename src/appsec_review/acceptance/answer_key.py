@@ -1,7 +1,8 @@
 """Evaluate a run's findings against a corpus answer key.
 
 The key (``test/acceptance/<tag>/expectations.toml``) lists the defects seeded in a blind corpus.
-Each is *found* when some finding of the run names its file and its reported lines include the defect line, *missed*
+Each is *found* when some finding of the run names its file and its reported lines overlap the defect's lines
+(``line``, through ``end_line`` when the defect spans several), *missed*
 otherwise. A finding that matches no defect is *spurious*; it is reported and never fails the run
 (docs/processes/acceptance-and-regression-testing.md, Decision 2). A missed defect is the failure.
 ``producers`` in the key are a hypothesis: which producers reported each found defect is reported
@@ -31,6 +32,7 @@ class Defect:
     line: int
     summary: str
     producers: tuple[str, ...]
+    end_line: int | None = None
 
 
 @dataclass
@@ -53,8 +55,12 @@ class AnswerKeyReport:
 def load_answer_key(path: Path) -> tuple[dict[str, Any], list[Defect]]:
     document = tomllib.loads(Path(path).read_text(encoding="utf-8"))
     defects = [Defect(item["id"], item.get("cwe", ""), item["path"], int(item["line"]), item.get("summary", ""),
-                      tuple(item.get("producers", ())))
+                      tuple(item.get("producers", ())),
+                      int(item["end_line"]) if "end_line" in item else None)
                for item in document.get("defect", ())]
+    for defect in defects:
+        if defect.end_line is not None and defect.end_line < defect.line:
+            raise ValueError(f"{defect.id}: end_line precedes line")
     if not defects:
         raise ValueError(f"{path} lists no defects")
     if len({defect.id for defect in defects}) != len(defects):
@@ -75,7 +81,8 @@ def _covers(record: Mapping[str, Any], defect: Defect, tolerance: int) -> bool:
     if not isinstance(path, str) or not isinstance(start, int) or _relative(path) != defect.path:
         return False
     end = record.get("end_line") if isinstance(record.get("end_line"), int) else start
-    return start - tolerance <= defect.line <= end + tolerance
+    # The reported lines [start, end] must overlap the defect's lines [line, end_line].
+    return start - tolerance <= (defect.end_line or defect.line) and defect.line <= end + tolerance
 
 
 def _producer(finding: Mapping[str, Any]) -> str:

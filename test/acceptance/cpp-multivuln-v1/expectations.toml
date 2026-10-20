@@ -38,6 +38,7 @@ id = "integer-overflow-frame-size"
 cwe = "CWE-190"
 path = "src/frame.cpp"
 line = 9
+end_line = 10
 summary = "width * height * 4 wraps in 32 bits, undersizing the pixel buffer the loop then fills"
 producers = ["codeql"]
 

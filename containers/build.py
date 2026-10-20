@@ -405,7 +405,7 @@ def load_registry() -> dict[str, Any]:
         if pack["id"] in seen:
             raise SystemExit(f"rule pack id is declared twice: {pack['id']}")
         seen.add(pack["id"])
-        if pack["engine"] not in ("codeql", "semgrep", "pmd"):
+        if pack["engine"] not in ("codeql", "semgrep", "pmd", "gitleaks"):
             raise SystemExit(f"{pack['id']}: unknown engine {pack['engine']}")
         if pack["verify"] not in ("check-only", "validate"):
             raise SystemExit(f"{pack['id']}: unknown verify mode {pack['verify']}")
@@ -576,6 +576,11 @@ def _engine_validate(pack: dict[str, Any], log_path: Path) -> tuple[bool, str]:
         # rule still fails the command.
         inner = ("mkdir -p /tmp/empty && exec semgrep scan --disable-version-check "
                  "--metrics off --config /pack --json --output /dev/null /tmp/empty")
+    elif pack["engine"] == "gitleaks":
+        # A scan of an empty tree loads and compiles every rule of the config offline; a malformed
+        # rule fails the command.
+        inner = ("mkdir -p /tmp/empty && exec /opt/tool/bin/gitleaks dir /tmp/empty "
+                 "--config /pack/generic-secrets.toml --no-banner --exit-code 0")
     else:
         suite = pack.get("suite")
         if not isinstance(suite, str) or not suite:

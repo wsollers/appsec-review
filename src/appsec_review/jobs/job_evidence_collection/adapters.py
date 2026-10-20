@@ -33,6 +33,8 @@ BINARY_EXTENSIONS = NATIVE_BINARIES
 SEI_CERT_EXTENSIONS = SEI_CERT_SOURCE
 SEI_CERT_RULE_PREFIX = "appsec-review.sei-cert."
 SEI_CERT_MOUNT = "/rules-sei-cert"
+GITLEAKS_RULES_MOUNT = "/rules-gitleaks"
+GITLEAKS_RULES_FILE = GITLEAKS_RULES_MOUNT + "/generic-secrets.toml"
 SEI_CERT_METADATA = ("pack", "cert", "cert_also", "cert_standard", "cert_url", "coverage", "confidence",
                      "precision", "cwe")
 SEI_CERT_LIMITATIONS = (
@@ -707,7 +709,8 @@ def _registry() -> dict[str, ToolAdapter]:
                               missing="target catalog contains no lockfile or manifest osv-scanner extracts offline")
     adapters = [
         ToolAdapter("tool-gitleaks", "secrets", frozenset({0, 1}), "/scratch/output.json", _gitleaks,
-                    lambda exe, sel: (exe, "dir", "/target", "--no-banner", "--redact", "--report-format", "json",
+                    lambda exe, sel: (exe, "dir", "/target", "--config", GITLEAKS_RULES_FILE, "--no-banner", "--redact",
+                                      "--report-format", "json",
                                       "--report-path", "/scratch/output.json", "--exit-code", "1"), _list_parser,
                     ("worktree only; git history is excluded",)),
         ToolAdapter("tool-semgrep", "source_sast", frozenset({0}), "/scratch/output.json", _all_source,
@@ -716,9 +719,9 @@ def _registry() -> dict[str, ToolAdapter]:
                           "--output", "/scratch/output.json"), _semgrep_parser,
                     SEI_CERT_LIMITATIONS),
         ToolAdapter("tool-opengrep", "source_sast", frozenset({0}), "/scratch/output.json", _sei_cert_source,
-                    _args("scan", "--disable-version-check", "--config", SEI_CERT_MOUNT, "--json",
-                          "--output", "/scratch/output.json"), _semgrep_parser,
-                    ("runs the SEI CERT rule pack only; the Semgrep security baseline is Semgrep-specific",
+                    _args("scan", "--disable-version-check", "--config", SEI_CERT_MOUNT, "--config", "/rules/review-signals.yml",
+                          "--json", "--output", "/scratch/output.json"), _semgrep_parser,
+                    ("runs the SEI CERT rule pack and the review-signal rules; the Semgrep security baseline is Semgrep-specific",
                      *SEI_CERT_LIMITATIONS)),
         ToolAdapter("tool-gosec", "source_sast", frozenset({0, 1}), "/scratch/output.json", lang("tool-gosec", "Go"),
                     _gosec_args, _gosec_parser,

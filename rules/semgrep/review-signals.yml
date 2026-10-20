@@ -113,3 +113,48 @@ rules:
       - pattern: xmlReadMemory(..., XML_PARSE_NOENT)
       - pattern: xmlReadFile(..., XML_PARSE_NOENT)
       - pattern: xmlCtxtReadMemory(..., XML_PARSE_NOENT)
+  - id: appsec-review.review-signal.sink.cpp-copy-length-not-bounded
+    languages: [c, cpp]
+    message: >-
+      A memory copy takes a length that is neither a constant nor bounded by sizeof of the destination;
+      a length taken from input can overrun the destination.
+    severity: INFO
+    patterns:
+      - pattern-either:
+          - pattern: memcpy($DST, $SRC, $LEN)
+          - pattern: std::memcpy($DST, $SRC, $LEN)
+          - pattern: memmove($DST, $SRC, $LEN)
+          - pattern: std::memmove($DST, $SRC, $LEN)
+      - metavariable-regex:
+          metavariable: $LEN
+          regex: '^(?!\s*\d+[uUlL]*\s*$)(?!.*sizeof)(?!.*\bstd::min\b)(?!.*\bMIN\b).*$'
+  - id: appsec-review.review-signal.sink.cpp-narrow-size-product
+    languages: [c, cpp]
+    message: >-
+      A product of three factors is stored in a variable of 32 bits or fewer; when it sizes an allocation or
+      a copy it can wrap.
+    severity: INFO
+    patterns:
+      - pattern: $T $SZ = $A * $B * $C;
+      - metavariable-regex:
+          metavariable: $T
+          regex: '^(const\s+)?(std::)?(uint32_t|uint16_t|unsigned|unsigned int|int|int32_t)$'
+  - id: appsec-review.review-signal.sink.cpp-allocation-size-from-narrow-product
+    languages: [c, cpp]
+    message: >-
+      An allocation is sized by a local of 32 bits or fewer that was assigned a product; a write sized in a
+      wider type can exceed the allocation.
+    severity: INFO
+    patterns:
+      - pattern-either:
+          - pattern: malloc($SZ)
+          - pattern: std::malloc($SZ)
+      - pattern-inside: |
+          $R $F(...) {
+            ...
+            $T $SZ = $A * $B;
+            ...
+          }
+      - metavariable-regex:
+          metavariable: $T
+          regex: '^(const\s+)?(std::)?(uint32_t|uint16_t|unsigned|unsigned int|int|int32_t)$'
