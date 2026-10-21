@@ -1144,6 +1144,13 @@ workers = 1
 
 ## Benign proof-of-trigger lane
 
+> **Implemented subset.** The owner decided that a proof of concept is a unit-test *function* with no `main` that the
+> pipeline compiles and never executes. That is `job_poc_generation` (the designer half of this lane with deterministic
+> validators and a compile check, and **no executor, attempt or result stage**), specified in
+> [`review-judge-and-poc.md`](review-judge-and-poc.md) and operated in
+> [`../operations/poc-generation.md`](../operations/poc-generation.md). The sections below describe the wider design (an
+> isolated executor, attempts and results); none of that is built.
+
 Only adjudicated findings that satisfy a configured High/Critical eligibility predicate enter this
 lane. A PoC means a non-malicious, bounded demonstration that the claimed condition can be
 triggered. It is not exploit development and may not perform persistence, privilege escalation,

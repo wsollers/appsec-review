@@ -28,7 +28,8 @@
     "attack_chain_analyst": {"responsibility": "Propose attack chains composed only of existing adjudicated claims.", "path": "pipeline/prompt-fragments/roles/attack_chain_analyst.md", "lens": "generative", "output_schema": "attack-chain", "outputs": ["attack_chain", "component_of_chain", "requests_evidence"], "prohibited": ["accept_claim", "assign_severity", "execute_code", "propose_claim", "read_target_guidance", "request_unlisted_tool", "set_claim_state", "widen_scope"], "tools": ["find", "read_excerpt", "resolve_evidence", "trace"]},
     "finding_adjudicator": {"responsibility": "Apply the deterministic adjudication table to recorded evidence relations.", "path": "pipeline/prompt-fragments/roles/finding_adjudicator.md", "lens": "skeptical", "output_schema": "adjudication", "outputs": ["supported", "confirmed", "contradicted", "not_reachable", "not_exploitable_in_observed_configuration", "insufficient_evidence", "duplicate", "out_of_scope", "coverage_gap"], "prohibited": ["assign_severity", "execute_code", "override_score", "propose_claim", "read_target_guidance", "refute_claim", "request_unlisted_tool", "widen_scope"], "tools": []},
     "completeness_reviewer": {"responsibility": "Identify review-coverage gaps across units, strategies, and personas.", "path": "pipeline/prompt-fragments/roles/completeness_reviewer.md", "lens": "generative", "output_schema": "completeness-result", "outputs": ["coverage_gap", "requests_evidence"], "prohibited": ["accept_claim", "assign_severity", "execute_code", "propose_claim", "read_target_guidance", "refute_claim", "request_unlisted_tool", "set_claim_state", "widen_scope"], "tools": ["coverage", "find", "query_dataset_inventory"]},
-    "native_dependency_resolver": {"responsibility": "Resolve one bounded native dependency candidate to plausible public repository context."}
+    "native_dependency_resolver": {"responsibility": "Resolve one bounded native dependency candidate to plausible public repository context."},
+    "poc_writer": {"responsibility": "Write one benign, bounded unit-test function with a negative control that demonstrates an agreed finding; never run by the pipeline."}
   },
   "personas": {
     "devops_engineer": {"viewpoint": "Reproducible automation, immutable containers, dependencies, CI behavior, and diagnosable operational failures."},
@@ -80,7 +81,8 @@
     "build-image-repair": {"path": "pipeline/skills/build-image-repair/SKILL.md", "jobs": ["job_project_build"]},
     "post-build-security-assessment": {"path": "pipeline/skills/post-build-security-assessment/SKILL.md", "jobs": ["job_post_build_security_assessment"]},
     "target-analysis-planning": {"path": "pipeline/skills/target-analysis-planning/SKILL.md", "jobs": ["job_target_analysis_plan"]},
-    "native-dependency-resolution": {"path": "pipeline/skills/native-dependency-resolution/SKILL.md", "jobs": ["job_dependency_intelligence"]}
+    "native-dependency-resolution": {"path": "pipeline/skills/native-dependency-resolution/SKILL.md", "jobs": ["job_dependency_intelligence"]},
+    "poc-writer": {"path": "pipeline/skills/poc-writer/SKILL.md", "jobs": ["job_poc_generation"]}
   },
   "assignment": {
     "domain_persona": {"authentication_session": "authentication_session", "authorization_access_control": "authorization_access_control", "cryptography_data_protection": "cryptography_data_protection", "api_web": "api_web", "mobile_platform": "mobile_platform", "build_supply_chain": "build_supply_chain", "deployment_operations": "deployment_operations"}

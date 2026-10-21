@@ -134,7 +134,16 @@ def render_markdown(report: Mapping[str, Any], *, evidence_ids: int, gap_ids: in
     lines += [f"- {code(item)}" for item in report["attack_chains"]["items"]] + [""]
     lines += ["## Proof-of-trigger outcomes", "",
               f"Status {code(report['poc_outcomes']['status'])}: {plain(report['poc_outcomes']['reason'])}"]
-    lines += [f"- {code(item['finding_package_id'])}: {code(item['status'])}" for item in report["poc_outcomes"]["items"]]
+    for item in report["poc_outcomes"]["items"]:
+        lines.append(f"- {code(item['finding_package_id'])}: {code(item['status'])}")
+        if "claim_id" in item:                                        # outcomes of job_poc_generation
+            lines.append(f"  - claim {code(item['claim_id'])}: {plain(item['description'])}")
+            if item.get("functions"):
+                lines.append(f"  - test function {code(item['functions']['test_function'])}, negative control "
+                             f"{code(item['functions']['negative_control'])}")
+            if item.get("files"):
+                lines.append("  - files: " + ", ".join(code(item["files"][key]["path"]) for key in (
+                    "source", "compile", "readme", "provenance")))
     lines += [""]
     lines += _section("Verification backlog (unconfirmed)", report["verification_backlog"], settings,
                       "The verification backlog is empty.", unconfirmed=True)
