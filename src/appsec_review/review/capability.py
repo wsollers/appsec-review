@@ -72,6 +72,40 @@ _SQL_LIKE = re.compile(r"(?i)(;|--|/\*|\*/|\bunion\s+(all\s+)?select\b|\b(drop|a
 _PARAMETER_EXEMPT_FROM_TEXT_CHECK = frozenset({"cursor"})   # HMAC-verified by the core
 
 
+# Spellings models use for the same request. They change the shape only: the normalized request still passes
+# every check below (granted tool, schema, forbidden and path-like values, entity scope, budgets).
+_REQUEST_NOTES = frozenset({"purpose", "rationale", "reason", "question", "comment", "note"})
+_PARAMETER_ALIASES = ("arguments", "args")
+
+
+def normalize_request(request: Any) -> Any:
+    """Turn the common spellings of a retrieval request into exactly ``{tool, parameters}``.
+
+    Accepted: ``arguments`` or ``args`` for ``parameters``; parameters written beside ``tool``; and free-text
+    note keys (``purpose``, ``rationale`` ...) dropped when the tool does not declare them. Anything else is
+    returned unchanged, so an extra key next to ``parameters`` stays a malformed request.
+    """
+
+    if not isinstance(request, Mapping) or not isinstance(request.get("tool"), str):
+        return request
+    body = {key: value for key, value in request.items() if key not in _REQUEST_NOTES}
+    if "parameters" not in body:
+        alias = next((name for name in _PARAMETER_ALIASES if name in body), None)
+        if alias is not None:
+            if not set(body) <= {"tool", alias}:
+                return body
+            body = {"tool": body["tool"], "parameters": body[alias]}
+        else:
+            body = {"tool": body["tool"], "parameters": {key: value for key, value in body.items() if key != "tool"}}
+    parameters = body.get("parameters")
+    schema = TOOL_SCHEMAS.get(body["tool"])
+    if isinstance(parameters, Mapping) and isinstance(schema, Mapping):
+        declared = schema.get("properties", {})
+        body = {**body, "parameters": {key: value for key, value in parameters.items()
+                                       if key in declared or key not in _REQUEST_NOTES}}
+    return body
+
+
 @dataclass(frozen=True, slots=True)
 class Authorized:
     tool: str
@@ -218,9 +252,12 @@ class CellCapability:
             assert code in _DENIAL_CODES
             return AuthorityDenied(code, reason[:256], filter_sha)
 
+        request = normalize_request(request)
         if not isinstance(request, Mapping) or set(request) - {"tool", "parameters"} or \
                 not isinstance(request.get("tool"), str):
-            return deny("malformed_request", "a request is exactly {tool, parameters}")
+            return deny("malformed_request",
+                        'a request is exactly {"tool": <name>, "parameters": {...}} with the parameter names in '
+                        "turn_protocol.tool_catalog")
         tool = request["tool"]
         parameters = request.get("parameters", {})
         if not isinstance(parameters, Mapping) or any(not isinstance(key, str) for key in parameters):

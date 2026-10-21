@@ -226,6 +226,27 @@ def reuse_or_run(spec: CellSpec, *, infer: Infer, core: Any, capability: CellCap
                     validate_final=validate_final, **retry)
 
 
+def _tool_catalog(capability: CellCapability) -> list[dict[str, Any]]:
+    """The granted tools with their exact parameter schemas, so a worker never has to guess a parameter name."""
+
+    from appsec_review.mcp.schema import TOOLS
+
+    by_name = {tool["name"]: tool for tool in TOOLS}
+    return [{"name": name, "description": by_name[name].get("description", ""),
+             "parameters": by_name[name]["inputSchema"]} for name in sorted(capability.tools) if name in by_name]
+
+
+def _request_example(capability: CellCapability) -> dict[str, Any]:
+    """One well-formed request for the first granted tool, with placeholders for its required parameters."""
+
+    catalog = _tool_catalog(capability)
+    if not catalog:
+        return {"tool": "<a tool from tool_catalog>", "parameters": {}}
+    first = catalog[0]
+    required = first["parameters"].get("required", [])
+    return {"tool": first["name"], "parameters": {name: f"<{name}>" for name in required}}
+
+
 def _bind(spec: CellSpec, capability: CellCapability, core: Any) -> str:
     """The application must have issued this exact capability for this exact cell."""
     capability.verify()
@@ -250,7 +271,11 @@ def _run_attempt(spec: CellSpec, cell_id: str, number: int, *, infer: Infer, cor
         "output_schema": spec.output_schema, "package_identities": sorted(citable_package),
         "capability": capability.public_view(),
         "turn_protocol": {"schema": TURN_SCHEMA, "actions": ["retrieve", "final"],
-                          "max_requests_per_turn": MAX_REQUESTS_PER_TURN},
+                          "max_requests_per_turn": MAX_REQUESTS_PER_TURN,
+                          "retrieve_shape": {"action": "retrieve", "requests": [_request_example(capability)]},
+                          "request_rule": "each request is exactly {tool, parameters}; use only the parameter names "
+                                          "listed for that tool in tool_catalog",
+                          "tool_catalog": _tool_catalog(capability)},
     }
     for turn_number in range(1, capability.max_turns + 1):
         final_required = turn_number == capability.max_turns or attempt.queries >= capability.max_queries

@@ -32,6 +32,39 @@ def test_catalog_is_the_published_tool_schema_minus_the_owasp_store() -> None:
     assert IN_PROCESS_TOOLS == {tool["name"] for tool in catalog["tools"]} - {"query_owasp_workbench"}
 
 
+@pytest.mark.parametrize("request_value", [
+    {"tool": "read_excerpt", "arguments": {"identity": IN_SCOPE}},
+    {"tool": "read_excerpt", "args": {"identity": IN_SCOPE}},
+    {"tool": "read_excerpt", "identity": IN_SCOPE},
+    {"tool": "read_excerpt", "parameters": {"identity": IN_SCOPE, "purpose": "read the span"}},
+    {"tool": "read_excerpt", "arguments": {"identity": IN_SCOPE}, "purpose": "read the span"},
+])
+def test_common_spellings_of_a_request_are_accepted_and_still_fully_checked(request_value) -> None:
+    decision = _capability().authorize(request_value)
+    assert isinstance(decision, Authorized) and decision.parameters == {"identity": IN_SCOPE}
+
+
+def test_a_normalized_request_gets_no_extra_authority() -> None:
+    capability = _capability()
+    assert capability.authorize({"tool": "read_excerpt", "arguments": {"identity": OTHER}}).code == "entity_out_of_scope"
+    assert capability.authorize({"tool": "search", "args": {"query": "x", "sql": "select 1"}}).code == "forbidden_parameter"
+    assert capability.authorize({"tool": "coverage", "args": {}}).code == "tool_not_granted"
+    # An alias next to a second key, and a key next to explicit parameters, stay malformed.
+    assert capability.authorize({"tool": "search", "arguments": {"query": "x"}, "extra": 1}).code == "malformed_request"
+    assert capability.authorize({"tool": "search", "parameters": {"query": "x"}, "extra": 1}).code == "malformed_request"
+
+
+def test_a_cell_is_told_the_exact_tool_catalog_and_request_shape() -> None:
+    from appsec_review.review.cells import _request_example, _tool_catalog
+
+    capability = _capability()
+    catalog = _tool_catalog(capability)
+    assert [tool["name"] for tool in catalog] == sorted(capability.tools)
+    assert all(tool["parameters"].get("type") == "object" for tool in catalog)
+    example = _request_example(capability)
+    assert example["tool"] == catalog[0]["name"] and set(example) == {"tool", "parameters"}
+
+
 def test_authorized_request_is_normalized_to_granted_indexes_and_page_size() -> None:
     decision = _capability().authorize({"tool": "search", "parameters": {"query": "memcpy length"}})
     assert isinstance(decision, Authorized)
