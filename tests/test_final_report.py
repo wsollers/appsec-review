@@ -410,6 +410,31 @@ def test_gate_rejects_a_handoff_whose_partition_disagrees_with_its_packages(pris
         copy_.run_gate()
 
 
+def test_gate_recounts_ship_block_totals_including_decision_pending(pristine: Chain) -> None:
+    """A forged (re-hashed) handoff that reports a finding as decision_pending fails the gate's recount."""
+    copy_ = pristine
+    reference = gate_document(copy_)["inputs"]["review_handoff"]
+    path = copy_.run_root / reference["path"]
+    document = json.loads(path.read_text(encoding="utf-8"))
+    summary = document["ship_block"]
+    status = next(key for key, count in summary["by_status"].items() if count and key != "decision_pending")
+    lane = next(key for key, row in summary["by_lane"].items() if row[status])
+    for counts in (summary["by_status"], summary["by_lane"][lane]):
+        counts[status] -= 1
+        counts["decision_pending"] += 1
+    path.write_text(json.dumps(document, sort_keys=True, separators=(",", ":")) + "\n", encoding="utf-8")
+    handoff_path = copy_.run_root / reference["path"].split("/steps/")[0] / "handoff.json"
+    handoff = json.loads(handoff_path.read_text(encoding="utf-8"))
+    handoff["outputs"]["publication.publish_handoff"]["artifact"]["sha256"] = file_sha256(path)
+    handoff_path.write_text(json.dumps(handoff, sort_keys=True), encoding="utf-8")
+    pointer_path = copy_.run_root / "data" / "jobs" / JOB / "latest.json"
+    pointer = json.loads(pointer_path.read_text(encoding="utf-8"))
+    pointer["handoff_sha256"] = file_sha256(handoff_path)
+    pointer_path.write_text(json.dumps(pointer), encoding="utf-8")
+    with pytest.raises(IntegrityError, match="ship-block counts"):
+        copy_.run_gate()
+
+
 def test_report_fails_on_any_artifact_the_gate_bound_changing(pristine: Chain) -> None:
     for tamper in (_tamper_finding, _tamper_ledger, _tamper_review_handoff):
         pristine.restore()
@@ -534,6 +559,60 @@ def test_unrated_unscored_and_empty_reviews_are_named_gaps(verified: dict[str, A
     assert by_id["technical_severity_unrated"]["count"] == 1 and by_id["findings_without_scores"]["count"] == 1
     assert by_id["review_empty"]["kind"] == "gap" and "not evidence" in by_id["review_empty"]["statement"]
     assert result["status"] == "PUBLISHABLE_WITH_LIMITATIONS"
+
+
+def _pending(package: dict[str, Any], **changes: Any) -> None:
+    package["ship_block"] = {
+        **package["ship_block"], "status": "decision_pending", "technical_severity": None,
+        "reasons": ["technical_severity_unrated", "missing_factor_attacker_control", "missing_factor_taint_path"],
+        "technical_severity_floor": "medium", "technical_severity_ceiling": "high",
+        "missing_factors": ["attacker_control", "taint_path"], **changes}
+
+
+def _report_of(value: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
+    from appsec_review.jobs.engineering_contracts import FINAL_PUBLICATION_GATE_SCHEMA
+    from appsec_review.jobs.job_final_report_publication.report import build_report
+
+    classification = gate_classify.classify(value)
+    gate = gate_classify.gate_document(FINAL_PUBLICATION_GATE_SCHEMA, value, classification)
+    validator("final-publication-gate").validate(gate)
+    report = build_report(gate, gate_handoff=gate["inputs"]["job_handoff"], gate_document=gate["inputs"]["review_handoff"])
+    validator("final-report").validate(report)
+    return classification, gate, report
+
+
+def test_decision_pending_is_a_named_gap_projected_verbatim_and_never_hidden(verified: dict[str, Any]) -> None:
+    value = _clean(verified)
+    _pending(value["packages"][0])
+    undecided = value["packages"][0]["finding_package_id"]
+    value["ship_block"] = {**value["ship_block"], "by_status": {**value["ship_block"]["by_status"],
+                                                                  "decision_pending": 1}}
+    classification, gate, report = _report_of(value)
+    limitation = next(item for item in classification["limitations"] if item["limitation_id"] == "decision_pending")
+    assert limitation["kind"] == "gap" and limitation["count"] == 1
+    assert "not a release decision" in limitation["statement"]
+    assert classification["status"] == "PUBLISHABLE_WITH_LIMITATIONS"
+    # The status is carried verbatim into the gate document and the report, in whichever bucket the package is.
+    placed = {item["finding_package_id"]: item for item in classification["packages"]}
+    assert placed[undecided]["ship_block"]["status"] == "decision_pending"
+    assert placed[undecided]["bucket"] in {"publishable", "verification_backlog"}
+    assert report["summary"]["ship_block"]["by_status"]["decision_pending"] == 1
+    listed = {item["finding_package_id"]: item for item in report["findings"] + report["verification_backlog"]}
+    assert listed[undecided]["ship_block"]["status"] == "decision_pending"
+    assert listed[undecided]["ship_block"]["missing_factors"] == ["attacker_control", "taint_path"]
+    text = render_markdown(report, evidence_ids=8, gap_ids=16)
+    assert ("**decision pending: severity not yet rated; what is missing: `attacker_control`, `taint_path`; the "
+            "missing factors leave the severity between `medium` and `high`**") in text
+    assert "neither ship-blocking nor cleared" in text and "does not block" not in text
+    assert text.count("decision pending: severity not yet rated") == 1
+
+
+def test_decision_pending_without_bounds_names_the_unrated_severity_itself(verified: dict[str, Any]) -> None:
+    value = _clean(verified)
+    _pending(value["packages"][0], technical_severity_floor=None, technical_severity_ceiling=None, missing_factors=[])
+    _classification, _gate, report = _report_of(value)
+    text = render_markdown(report, evidence_ids=8, gap_ids=16)
+    assert "what is missing: the technical severity rating itself**" in text
 
 
 def test_package_counts_reject_a_package_in_no_bucket() -> None:

@@ -79,7 +79,8 @@ pipeline stage that does not exist yet and never change either.
 | `gaps_recorded` | gap | The claim ledger holds any gap, with counts by class. |
 | `coverage_incomplete` | gap | Any lane B coverage cell is not `reviewed` (`gap`, `not_launched`). |
 | `pending_distinct_verification` | gap | A finding is `ship_blocking_pending_distinct_verification`; the handoff's verifier warning is repeated. |
-| `technical_severity_unrated` | gap | A package has no `application_risk_matrix/2` rating (`technical_severity_unrated`). |
+| `technical_severity_unrated` | gap | A package has no `application_risk_matrix/3` rating (`technical_severity_unrated`). |
+| `decision_pending` | gap | A package has ship-block status `decision_pending`: its severity is unrated because scoring factors are missing. The gate verifies and projects the status verbatim and recounts it in the handoff totals. |
 | `findings_without_scores` | gap | A package has no score package. |
 | `withheld_packages` | gap | The `withheld` bucket is not empty. |
 | `possible_duplicates` | gap | The handoff nominates possible-duplicate claim pairs, which are not merged. |
@@ -110,7 +111,15 @@ changed or missing binding fails the job.
   evidence relation ids, gap ids and every score package's four dimensions (technical severity,
   exploitability confidence, environmental and business impact, remediation priority), reported
   separately and never combined. A dimension the provider did not produce is `null`, which is a
-  gap and not a low value;
+  gap and not a low value. Each score also carries its `severity_assessment` (`complete`, `bounded`
+  or `unrated`, with the severity floor and ceiling), and each ship-block record carries
+  `technical_severity_floor`, `technical_severity_ceiling` and `missing_factors`;
+- findings whose ship-block status is `decision_pending` (no technical severity yet because factors
+  are missing) are never hidden. A confirmed one is listed under findings and a supported one under
+  the verification backlog, each with the line "decision pending: severity not yet rated; what is
+  missing: ..." and, when bounded, the severity range the missing factors leave open. The summary
+  counts them, and the `decision_pending` limitation records that they are neither ship-blocking nor
+  cleared;
 - `attack_chains`: `none_available` with the reason, because no chain package exists yet;
 - `poc_outcomes`: `none_available` with the reason unless the run holds an accepted
   `job_poc_generation` handoff built from this gate (see below);

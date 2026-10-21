@@ -29,7 +29,7 @@ from appsec_review.review.scoring import (
     registry_from_settings,
 )
 from appsec_review.review.scoring.factors import EvidenceSource, FactorSet, factor_input
-from appsec_review.review.scoring.interface import ScoreProviderResult, ScoreRequest
+from appsec_review.review.scoring.interface import ScoreProviderResult, ScoreRequest, SeverityAssessment
 from appsec_review.review import ship_block
 from appsec_review.review.ship_block import ShipBlockInputs, ShipBlockSettings
 from appsec_review.storage import atomic_bytes, atomic_json, canonical_json, file_sha256
@@ -167,8 +167,8 @@ LIMITATIONS: Mapping[str, tuple[str, ...]] = {
     "application_risk_matrix/1": (
         "application_risk_matrix/1 rates impact from a configured CWE table only; it is not a CVSS score and "
         "does not assess environment or business impact", _REFERENCE_LIMITATION),
-    "application_risk_matrix/2": (
-        "application_risk_matrix/2 rates configured score-factors/1 evidence factors with a configured model; "
+    "application_risk_matrix/3": (
+        "application_risk_matrix/3 rates configured score-factors/1 evidence factors with a configured model; "
         "it is not a CVSS score", "environmental_business_impact reflects accepted security tags (exposure, "
         "privilege, data sensitivity), not deployment or business data",
         "impact_class is a cwe_impact_overrides entry or is derived (cwe-impact-derivation/1) from the run's "
@@ -199,7 +199,10 @@ def score_package_json(result: ScoreProviderResult) -> dict[str, Any]:
                           "references": sorted(by_kind["adjudication"] + by_kind["reference_input"]
                                                + by_kind["configuration"])})
     limitations = LIMITATIONS.get(result.implementation_version, ())
-    return {"schema": result.schema, "score_id": result.score_id, "claim_id": result.claim_id,
+    assessment = result.severity_assessment or SeverityAssessment(
+        "complete" if result.technical_severity is not None and result.technical_severity.rating else "unrated",
+        None, None)
+    return {"schema": result.schema, "severity_assessment": assessment.record(), "score_id": result.score_id, "claim_id": result.claim_id,
             "adjudication_id": result.adjudication_id,
             "provider": {"id": result.provider_id, "interface": result.interface_version,
                          "implementation": result.implementation_version},
@@ -298,6 +301,10 @@ def score_claims(adjudications: Sequence[Mapping[str, Any]], projection: Project
     factor_registry = default_factor_registry(overrides, cwe_catalog)
     writer = LedgerWriter(ledger_path, stream)
     scores: list[dict[str, Any]] = []
+    # An enabled provider that cannot run is a named gap, once per run, and is published below.
+    for missing_provider in registry.unavailable:
+        writer.record_gap(make_gap(GapClass.SCORE_GAP, f"provider:{missing_provider.provider}",
+                                   missing_provider.reason))
     for record in adjudications:
         state = ClaimState(record["state"])
         if state not in (ClaimState.CONFIRMED, ClaimState.SUPPORTED):
@@ -331,11 +338,13 @@ def score_claims(adjudications: Sequence[Mapping[str, Any]], projection: Project
             scores.append({"score_id": package["score_id"], "claim_id": claim.claim_id, "sha256": file_sha256(path),
                            "file": path.name, "provider": outcome.implementation_version,
                            "band": package["native"].get("rating"), "missing_factors": package["missing_factors"],
-                           "technical_severity": severity["rating"] if severity else None})
+                           "technical_severity": severity["rating"] if severity else None,
+                           "severity_assessment": package["severity_assessment"]})
     receipt = writer.seal()
     implementations = sorted(registry.get(item).implementation_version for item in registry.ids())
     catalog = cwe_catalog if cwe_catalog is not None else UNAVAILABLE_CATALOG
-    return {"schema": "appsec-review/inference-review-scores/2", "providers": implementations,
+    return {"schema": "appsec-review/inference-review-scores/3", "providers": implementations,
+            "unavailable_providers": [item.record() for item in registry.unavailable],
             "impact_class": {"rule": DERIVATION_RULE, "catalog": catalog.identity()},
             "scores": sorted(scores, key=lambda item: item["score_id"]),
             "ledger_shard": {"events": receipt.event_count, "sha256": file_sha256(ledger_path)}}
@@ -407,9 +416,12 @@ def _ship_block_inputs(state: ClaimState, claim_scores: Sequence[Mapping[str, An
     deciding = sorted((item for item in claim_scores if item["provider"] == ship_block.SEVERITY_PROVIDER),
                       key=lambda item: item["score_id"])
     severity = deciding[0] if deciding else None
+    assessment = (severity or {}).get("severity_assessment") or {}
     inputs = ShipBlockInputs(
         claim_state=state, technical_severity=severity.get("technical_severity") if severity else None,
         severity_score_id=severity["score_id"] if severity else None, lead_families=tuple(lead_families),
+        severity_missing_factors=tuple(sorted(assessment.get("unresolved_factors", ()))),
+        severity_floor=assessment.get("severity_floor"), severity_ceiling=assessment.get("severity_ceiling"),
         kev_listed=references.get("kev_listed"), verifier_model_distinct=bool(model_distinct))
     displayed = {
         "reference_cvss": [dict(item) for item in references.get("reference_cvss", ())][:8],

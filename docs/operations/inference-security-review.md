@@ -114,20 +114,55 @@ identical canonical outputs.
 ## Tuning scoring
 
 Scoring is deterministic and runs only on `confirmed` and `supported` claims. The default provider
-is `application_risk_matrix/2`. It rates `score-factors/1` factors, each derived from adjudicated,
+is `application_risk_matrix/3`. It rates `score-factors/1` factors, each derived from adjudicated,
 re-resolved evidence: `verification`, `taint_path`, `attacker_control`, `guard_absent`,
 `exposure`, `privilege`, `data_sensitivity`, `impact_class` (from the pinned MITRE catalog; see
 "CWE impact classes" below) and `threat` (KEV only). The design section "Evidence-derived scoring
 factors" lists every factor's scale and source. A factor with no
 evidence is listed in the score package's `missing_factors`, with its reason in
-`missing_factor_reasons`. It adds no points and is never read as a low value.
+`missing_factor_reasons`. It is unknown, never zero and never a low value.
+
+### Missing factors: the interval
+
+`application_risk_matrix/3` does not guess what a missing factor would have scored. It computes an
+exploitability **interval**. The floor gives every missing factor its minimum points, the ceiling
+gives it its maximum, and both ends are mapped through the same `bands`. Technical severity is then
+looked up for the floor and for the ceiling:
+
+| Floor and ceiling | `severity_assessment.assessment` | `technical_severity` |
+|---|---|---|
+| Same band, nothing missing among the scored factors | `complete` | that band |
+| Same band, some factors missing but none could change it | `bounded` | that band |
+| Different bands | `unrated` | `null`, with `severity_floor`, `severity_ceiling` and `unresolved_factors` |
+| `impact_class` missing | `unrated` | `null`, no bounds |
+
+Removing evidence therefore never lowers a rating. It can only move a finding from `complete` to
+`bounded` to `unrated`.
+
+**What to do about an unrated finding.** An unrated `confirmed` or `supported` finding is published
+with ship-block status `decision_pending`, never `not_ship_blocking` (see "Ship-block status"). Read
+the score package's `severity_assessment.unresolved_factors` and the reason each has in
+`missing_factor_reasons`, then supply the missing evidence: export graph facts for the language so
+`taint_path`, `attacker_control` and `guard_absent` reach higher values, supply accepted security
+tags so `exposure` is known, or add a `cwe_impact_overrides` entry when `impact_class` is missing.
+Rerun the review and the finding is rated. Do not lower `bands` or the points tables to make
+findings rate: that hides the missing evidence instead of supplying it. If a factor is never
+obtainable for your targets, set its table so every value gives the same points. It then adds no
+width to the interval, which is a deliberate, reviewable statement that the factor does not
+discriminate.
+
+**Providers that are enabled but not implemented.** `cvss_v4`, `cvss_v31_compat` and
+`ssvc_decision` can be listed in `scoring.enabled_providers`, but this build has no
+implementation for them. They are not skipped silently: the scoring stage records one `score_gap`
+per run for each (subject `provider:<name>`), the scores document lists them under
+`unavailable_providers`, and they produce no score. Nothing in the ship-block policy reads them.
 
 The model lives under
 `[jobs.job_inference_security_review.settings.scoring.providers.application_risk_matrix]`:
 
 ```toml
 [...providers.application_risk_matrix]
-implementation = "application_risk_matrix/2"     # or "application_risk_matrix/1" (no model tables)
+implementation = "application_risk_matrix/3"     # or "application_risk_matrix/1" (no model tables)
 
 [...providers.application_risk_matrix.exploitability.points]
 verification = { supported = 20, confirmed = 40 }
@@ -378,20 +413,29 @@ computed in `review/ship_block.py` when the handoff is published. The first matc
 | `ship_blocking` | The claim is `confirmed`, it qualifies, and distinct verification held. |
 | `ship_blocking_pending_distinct_verification` | The claim is `confirmed` and qualifies, but its verifier ran on a red cell's model. |
 | `needs_verification` | The claim is `supported` (not independently confirmed) and would otherwise qualify. |
-| `not_ship_blocking` | Anything else. |
+| `decision_pending` | The claim is `confirmed` or `supported`, does not qualify, and a material input is missing: its technical severity is unrated, or the score package lists material missing factors. Not a release decision. |
+| `not_ship_blocking` | Anything else: a rated claim below the blocking thresholds, or a state that cannot block. |
 
-A claim qualifies when `application_risk_matrix/2` rates its technical severity in
+Precedence is the table order. The three qualifying statuses come first because they name the next
+action (block, get a distinct verifier, get independent confirmation), and a KEV-listed dependency
+qualifies even when its severity is unrated. `decision_pending` is returned only when the claim does
+not qualify and the missing input could still change that. It is never published as "does not
+block". Its reasons are `technical_severity_unrated` and one `missing_factor_<name>` per factor
+that keeps the severity unrated; resolve them as described under "Tuning scoring".
+
+A claim qualifies when `application_risk_matrix/3` rates its technical severity in
 `blocking_technical_severities`, or when it is a dependency finding with a KEV-listed reference
 input. A dependency finding is a claim proposed from a lane A lead of a `dependency_lead_families`
 family. CVSS and SSVC outputs, and the NVD reference CVSS vectors, are recorded under
 `ship_block.displayed_context` with `decides = false` and never change the status. A claim without
-an `application_risk_matrix/2` rating (for example a missing `impact_class`) records the reason
-`technical_severity_unrated`. It is not ship-blocking unless the KEV dependency path applies.
-Treat that reason as a gap to resolve, not as a low-risk verdict.
+an `application_risk_matrix/3` rating (for example a missing `impact_class`, or missing factors that
+leave the severity interval open) records the reason `technical_severity_unrated` and is
+`decision_pending` unless the KEV dependency path applies. Treat that as a gap to resolve, not as a
+low-risk verdict.
 
 ```toml
 [jobs.job_inference_security_review.settings.ship_block]
-blocking_technical_severities = ["high", "critical"]   # bands of application_risk_matrix/2
+blocking_technical_severities = ["high", "critical"]   # bands of application_risk_matrix/3
 kev_dependency_blocks = true
 dependency_lead_families = ["dependency_advisory", "artifact_scanner"]
 ```

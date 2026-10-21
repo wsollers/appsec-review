@@ -248,6 +248,7 @@
               "status": {
                 "enum": [
                   "needs_verification",
+                  "decision_pending",
                   "not_ship_blocking"
                 ]
               }
@@ -266,6 +267,7 @@
                 "enum": [
                   "ship_blocking",
                   "ship_blocking_pending_distinct_verification",
+                  "decision_pending",
                   "not_ship_blocking"
                 ]
               }
@@ -310,7 +312,8 @@
             "dependency_finding",
             "kev_dependency_qualifies",
             "distinct_verification_required",
-            "verifier_model_distinct"
+            "verifier_model_distinct",
+            "decision_input_missing"
           ],
           "properties": {
             "claim_confirmed": {
@@ -333,6 +336,9 @@
             },
             "verifier_model_distinct": {
               "type": "boolean"
+            },
+            "decision_input_missing": {
+              "type": "boolean"
             }
           }
         },
@@ -341,7 +347,7 @@
           "items": {
             "$ref": "common.schema.json#/$defs/token"
           },
-          "maxItems": 8,
+          "maxItems": 16,
           "uniqueItems": true
         },
         "inputs": {
@@ -367,11 +373,14 @@
               "required": [
                 "provider",
                 "rating",
-                "score_id"
+                "score_id",
+                "severity_floor",
+                "severity_ceiling",
+                "missing_factors"
               ],
               "properties": {
                 "provider": {
-                  "const": "application_risk_matrix/2"
+                  "const": "application_risk_matrix/3"
                 },
                 "rating": {
                   "enum": [
@@ -391,6 +400,32 @@
                       "type": "null"
                     }
                   ]
+                },
+                "severity_floor": {
+                  "enum": [
+                    "low",
+                    "medium",
+                    "high",
+                    "critical",
+                    null
+                  ]
+                },
+                "severity_ceiling": {
+                  "enum": [
+                    "low",
+                    "medium",
+                    "high",
+                    "critical",
+                    null
+                  ]
+                },
+                "missing_factors": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "common.schema.json#/$defs/token"
+                  },
+                  "maxItems": 32,
+                  "uniqueItems": true
                 }
               }
             },
@@ -541,6 +576,32 @@
                 "properties": {
                   "claim_state": {
                     "const": "supported"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "decision_pending"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "conditions": {
+                "properties": {
+                  "decision_input_missing": {
+                    "const": true
+                  },
+                  "technical_severity_qualifies": {
+                    "const": false
+                  },
+                  "kev_dependency_qualifies": {
+                    "const": false
                   }
                 }
               }
