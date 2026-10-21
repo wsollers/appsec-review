@@ -182,8 +182,9 @@ class PocChain:
         self.built["workspace"] = (workspace, manifest)
         unit = poc_support.relay_unit(workspace, manifest, **(unit_kwargs or {}))
         self.built.update(executor=executor, unit=unit)
+        edges.setdefault("view_factory", stub_view)
         return build_poc_job(infer=infer or writer, executor_factory=lambda _unit, _profile: executor,
-                             builds_factory=lambda _root: poc_support.builds(unit), view_factory=stub_view,
+                             builds_factory=lambda _root: poc_support.builds(unit),
                              sink_resolver=sink_of, repository_root=ROOT, **edges)
 
     def run_poc(self, writer, executor=None, *, env: Mapping[str, str] | None = None, **kwargs):

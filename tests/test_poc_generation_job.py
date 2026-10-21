@@ -516,3 +516,14 @@ def test_a_report_in_the_previous_shape_still_validates_and_renders(mixed) -> No
     text = render_markdown(report, evidence_ids=8, gap_ids=16)
     assert "`finding-" + "1" * 64 + "`: `compile_verified`" in text and "claim " not in text.split(
         "Proof-of-trigger outcomes")[1].split("## ")[0]
+
+
+def test_the_default_package_view_is_built_from_the_accepted_review_and_unresolved_labels_are_named(chain) -> None:
+    """Without the stub view the job builds the real labelled view; the fixture package has no entry point or call
+    path, so none of the basis labels resolve and the candidate is insufficient_evidence, not a guess."""
+    a = chain.findings[0]["claim_id"]
+    chain.prepare([chain.candidate(0)])
+    chain.run_poc(Writer({}), view_factory=None)
+    row = chain.rows()[a]
+    assert row["status"] == "insufficient_evidence" and "label" in row["reason"] and row["files"] is None
+    assert chain.built["executor"].calls == []
