@@ -69,6 +69,7 @@ Operations, one page per job or service:
 - [`operations/security-tagging.md`](operations/security-tagging.md) — security tagging.
 - [`operations/document-issue-analysis.md`](operations/document-issue-analysis.md) — source-mapped document candidate ledger.
 - [`operations/retrieval-mcp.md`](operations/retrieval-mcp.md) — local retrieval MCP gateway.
+- [`operations/final-report.md`](operations/final-report.md) — `job_final_publication_gate` and `job_final_report_publication`: re-verification of the accepted review handoff, publishable / verification backlog / withheld accounting, named limitations, `final-report.json` and the deterministic Markdown (PDF is a later step). The standalone PDF/HTML renderer is in [`operations/report-rendering.md`](operations/report-rendering.md).
 - [`architecture/retrieval-surfaces.md`](architecture/retrieval-surfaces.md) — retrieval tools vs the MCP adapter vs review-cell retrieval vs runtime skills.
 - [`operations/swift-execution-policy.md`](operations/swift-execution-policy.md) — the global
   `tools.enable_swift` gate (`src/appsec_review/swift_policy.py`) and its durable coverage gap.

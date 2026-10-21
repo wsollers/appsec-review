@@ -2,6 +2,7 @@
 
 Repository authority remains in [`../../AGENTS.md`](../../AGENTS.md). This page is navigation only.
 
+- [`../operations/report-rendering.md`](../operations/report-rendering.md) — the LaTeX/PDF and single-page HTML report renderer, its box legend, scripts and image.
 - [`jobs-and-runtime.md`](jobs-and-runtime.md) — semantic jobs, resumability, Dagster, and current analysis lanes.
 - [`build-environments-and-execution-capture.md`](build-environments-and-execution-capture.md) —
   shared and project-derived build images, conditional capture control design, the pinned

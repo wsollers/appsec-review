@@ -1,0 +1,21 @@
+{
+  "schema": "appsec-review/assets-lock/1",
+  "image_id": "tool-report-latex",
+  "tool_version": "1.0.0",
+  "project": "https://tug.org/texlive/",
+  "license": "LPPL-1.3c AND OFL-1.1 AND GPL-2.0-or-later AND mixed Ubuntu distribution packages",
+  "architecture": "linux/amd64",
+  "generated_from": "ubuntu-24.04-exact-111-deb-closure-2026-10-21",
+  "artifacts": [{
+    "name": "report-latex-debs.tar",
+    "url": "https://archive.ubuntu.com/ubuntu/",
+    "path": "downloads/report-latex-debs.tar",
+    "sha256": "0ef1e437dffc650dfb0e5257f0055a261117987ddcb2b1f47d9f3ddb49e3dd56",
+    "bytes": 154777600,
+    "version": "ubuntu-24.04-2026-10-21",
+    "license": "various; package copyright files are retained in the image",
+    "license_source": "https://packages.ubuntu.com/noble/",
+    "provenance": "deterministic tar of 111 exact-version .deb files produced by containers/report/latex/acquire_assets.sh, which resolves texlive-xetex and texlive-fonts-recommended 2023.20240207-1, fonts-inter 4.0+ds-1, fonts-jetbrains-mono 2.304+ds-4 and poppler-utils 24.02.0-1ubuntu9.10 inside the Dockerfile pinned ubuntu base from noble, noble-updates, and noble-security; every package version and SHA-256 is recorded in packages.manifest; cache is host-local and ignored",
+    "signature_verification": {"status": "verified", "reason": "APT Release metadata signatures were verified during bounded acquisition; bundle SHA-256 and byte size are enforced"}
+  }]
+}

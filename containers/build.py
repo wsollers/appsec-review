@@ -774,6 +774,8 @@ def functional_smoke(ids: list[str], catalog: dict[str, Any], policy: dict[str, 
                                    "--executor=all-TUs", "--format=yaml",
                                    "/workspace/compile_commands.json"],
                                   {0}, None, "Name:            clang_cl_entry"),
+        "tool-report-latex": ("report-latex", ["/opt/tool/bin/render-pdf", "/workspace", "/template"],
+                              {0}, "report.txt", "appsec-report smoke value"),
         "tool-pmd": ("pmd", ["/opt/pmd/bin/pmd", "check", "--no-cache", "--no-progress",
                        "--format", "json", "--report-file", "/scratch/result.json", "--rulesets",
                        "/rules/java-security.xml", "--dir", "/workspace/Vulnerable.java"],
@@ -788,11 +790,14 @@ def functional_smoke(ids: list[str], catalog: dict[str, Any], policy: dict[str, 
         fixture_name, command, exit_codes, result_file, expected = cases[image_id]
         output_dir = run_dir / image_id
         output_dir.mkdir()
+        output_dir.chmod(0o777)
         source = (fixtures / fixture_name).resolve()
         argv = runtime_args(policy) + [
             "--mount", f"type=bind,src={source},dst=/workspace,readonly",
             "--mount", f"type=bind,src={output_dir.resolve()},dst=/scratch",
         ]
+        if image_id == "tool-report-latex":
+            argv += ["--mount", f"type=bind,src={(CONTAINERS / 'report' / 'latex' / 'template').resolve()},dst=/template,readonly"]
         if image_id == "tool-pmd":
             argv += ["--mount", f"type=bind,src={(ROOT / 'rules' / 'pmd').resolve()},dst=/rules,readonly"]
         argv += [catalog["by_id"][image_id]["tag"], *command]

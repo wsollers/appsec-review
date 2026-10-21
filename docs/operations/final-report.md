@@ -138,8 +138,10 @@ needs a schema change.
 
 ### PDF
 
-LaTeX/PDF rendering is a later step. `containers/report/latex` is not enabled and this slice does not
-touch it. The JSON records `renderers.pdf.state = "not_rendered"` and the Markdown says so.
+A standalone PDF and single-page HTML renderer now exists (`python -m appsec_review.reporting`,
+`scripts/render-report.sh`, the `tool-report-latex` image; see
+[`report-rendering.md`](report-rendering.md)). It reads a finished run and is a tool: this publication
+job does not call it, and it does not touch it. The recorded reason text below is unchanged. The JSON records `renderers.pdf.state = "not_rendered"` and the Markdown says so.
 
 ## Configuration
 
