@@ -115,8 +115,13 @@ def _resolve(core: RetrievalCore, entity_id: str, predicate: Predicate = Predica
 # Classification (R3 table)
 
 @pytest.mark.parametrize("kind", sorted(DIRECT_KINDS))
-def test_direct_kinds_are_direct_for_every_predicate(kind: EntityKind) -> None:
-    assert {classify(kind, predicate) for predicate in Predicate} == {Admissibility.DIRECT}
+def test_every_structured_content_kind_is_direct_for_the_construct_and_never_for_impact(kind: EntityKind) -> None:
+    """Deliberately changed from "every DIRECT kind is direct for every predicate": relevance is per
+    (kind, predicate) under ``predicate-admission/1`` (the full table is in test_predicate_admission.py)."""
+    assert classify(kind, Predicate.AFFECTED_CONSTRUCT) is Admissibility.DIRECT
+    assert classify(kind, Predicate.SECURITY_IMPACT) is not Admissibility.DIRECT
+    assert {classify(kind, predicate) for predicate in Predicate} <= {
+        Admissibility.DIRECT, Admissibility.ANALYST_ASSESSED, Admissibility.INDIRECT}
 
 
 @pytest.mark.parametrize("kind", sorted(set(EntityKind) - DIRECT_KINDS - MAPPED_KINDS))
@@ -131,6 +136,8 @@ def test_r3_indirect_kinds_are_exactly_listed() -> None:
         "tag_assignment", "review_unit", "advisory", "dependency_package", "precomputed_fact"}
     assert not (INDIRECT_KINDS & DIRECT_KINDS) and not (MAPPED_KINDS & DIRECT_KINDS)
     assert {EntityKind.BUILD_ACTION, EntityKind.WASM_MODULE, EntityKind.EVIDENCE_ARTIFACT} <= DIRECT_KINDS
+    assert Admissibility.ANALYST_ASSESSED not in {classify(kind, predicate, tuple(Predicate))
+                                                  for kind in INDIRECT_KINDS | MAPPED_KINDS for predicate in Predicate}
 
 
 def test_tool_observation_is_direct_only_for_its_mapped_predicate() -> None:

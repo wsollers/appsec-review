@@ -1,0 +1,313 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://appsec-review.local/schemas/poc-generation/poc-generation.schema.json",
+  "title": "Published summary of job_poc_generation (appsec-review/poc-generation/1)",
+  "description": "One row per attempted candidate with its status, bounded description, file references and hashes. The files themselves stay under data/poc/<claim-id>/ and are never indexed, linked or executed.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "run_id",
+    "upstream",
+    "execution_policy",
+    "settings_sha256",
+    "counts",
+    "candidates",
+    "omitted_claims",
+    "gaps"
+  ],
+  "properties": {
+    "schema": {
+      "const": "appsec-review/poc-generation/1"
+    },
+    "run_id": {
+      "$ref": "common.schema.json#/$defs/short_text"
+    },
+    "upstream": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "gate_handoff",
+        "gate_document",
+        "review_job_handoff",
+        "review_handoff",
+        "manifest",
+        "language_build_handoff_sha256"
+      ],
+      "properties": {
+        "gate_handoff": {
+          "$ref": "common.schema.json#/$defs/artifact_ref"
+        },
+        "gate_document": {
+          "$ref": "common.schema.json#/$defs/artifact_ref"
+        },
+        "review_job_handoff": {
+          "$ref": "common.schema.json#/$defs/artifact_ref"
+        },
+        "review_handoff": {
+          "$ref": "common.schema.json#/$defs/artifact_ref"
+        },
+        "manifest": {
+          "$ref": "common.schema.json#/$defs/artifact_ref"
+        },
+        "language_build_handoff_sha256": {
+          "oneOf": [
+            {
+              "$ref": "common.schema.json#/$defs/sha256"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "execution_policy": {
+      "const": "nothing is linked into an executable and nothing is run"
+    },
+    "settings_sha256": {
+      "$ref": "common.schema.json#/$defs/sha256"
+    },
+    "counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "candidates",
+        "omitted",
+        "by_status"
+      ],
+      "properties": {
+        "candidates": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "omitted": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "by_status": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "compile_verified",
+            "compile_failed",
+            "artifact_generated",
+            "policy_denied",
+            "insufficient_evidence",
+            "not_applicable",
+            "unsafe_to_attempt"
+          ],
+          "properties": {
+            "compile_verified": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "compile_failed": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "artifact_generated": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "policy_denied": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "insufficient_evidence": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "not_applicable": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "unsafe_to_attempt": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        }
+      }
+    },
+    "candidates": {
+      "type": "array",
+      "maxItems": 1000,
+      "items": {
+        "$ref": "#/$defs/candidate"
+      }
+    },
+    "omitted_claims": {
+      "type": "array",
+      "maxItems": 10000,
+      "items": {
+        "$ref": "common.schema.json#/$defs/claim_id"
+      }
+    },
+    "gaps": {
+      "type": "array",
+      "maxItems": 2000,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 300
+      }
+    }
+  },
+  "$defs": {
+    "ref_or_null": {
+      "oneOf": [
+        {
+          "$ref": "common.schema.json#/$defs/artifact_ref"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "claim_id",
+        "package_id",
+        "state",
+        "judge_verdict",
+        "finding_package",
+        "poc_basis_sha256",
+        "status",
+        "reason",
+        "description",
+        "functions",
+        "files",
+        "brief",
+        "writer_receipt",
+        "gaps"
+      ],
+      "properties": {
+        "claim_id": {
+          "$ref": "common.schema.json#/$defs/claim_id"
+        },
+        "package_id": {
+          "$ref": "common.schema.json#/$defs/package_id"
+        },
+        "state": {
+          "$ref": "common.schema.json#/$defs/claim_state"
+        },
+        "judge_verdict": {
+          "$ref": "common.schema.json#/$defs/judge_verdict"
+        },
+        "finding_package": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "finding_package_id",
+            "sha256"
+          ],
+          "properties": {
+            "finding_package_id": {
+              "$ref": "common.schema.json#/$defs/finding_package_id"
+            },
+            "sha256": {
+              "$ref": "common.schema.json#/$defs/sha256"
+            }
+          }
+        },
+        "poc_basis_sha256": {
+          "$ref": "common.schema.json#/$defs/sha256"
+        },
+        "status": {
+          "$ref": "common.schema.json#/$defs/status"
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300
+        },
+        "functions": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "test_function",
+                "negative_control",
+                "expected_observation"
+              ],
+              "properties": {
+                "test_function": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 80
+                },
+                "negative_control": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 80
+                },
+                "expected_observation": {
+                  "type": "string",
+                  "maxLength": 240
+                }
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "files": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "source",
+                "compile",
+                "readme",
+                "provenance"
+              ],
+              "properties": {
+                "source": {
+                  "$ref": "common.schema.json#/$defs/artifact_ref"
+                },
+                "compile": {
+                  "$ref": "common.schema.json#/$defs/artifact_ref"
+                },
+                "readme": {
+                  "$ref": "common.schema.json#/$defs/artifact_ref"
+                },
+                "provenance": {
+                  "$ref": "common.schema.json#/$defs/artifact_ref"
+                }
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "brief": {
+          "$ref": "#/$defs/ref_or_null"
+        },
+        "writer_receipt": {
+          "$ref": "#/$defs/ref_or_null"
+        },
+        "gaps": {
+          "type": "array",
+          "maxItems": 10,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300
+          }
+        }
+      }
+    }
+  }
+}

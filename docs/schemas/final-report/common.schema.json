@@ -93,6 +93,7 @@
         "ship_blocking",
         "ship_blocking_pending_distinct_verification",
         "needs_verification",
+        "decision_pending",
         "not_ship_blocking"
       ]
     },
@@ -103,6 +104,7 @@
         "ship_blocking",
         "ship_blocking_pending_distinct_verification",
         "needs_verification",
+        "decision_pending",
         "not_ship_blocking"
       ],
       "properties": {
@@ -115,6 +117,10 @@
           "minimum": 0
         },
         "needs_verification": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "decision_pending": {
           "type": "integer",
           "minimum": 0
         },
@@ -219,7 +225,8 @@
         "exploitability_confidence",
         "environmental_business_impact",
         "remediation_priority",
-        "missing_factors"
+        "missing_factors",
+        "severity_assessment"
       ],
       "properties": {
         "score_id": {
@@ -304,6 +311,52 @@
           },
           "maxItems": 32,
           "uniqueItems": true
+        },
+        "severity_assessment": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "assessment",
+            "severity_floor",
+            "severity_ceiling",
+            "unresolved_factors"
+          ],
+          "properties": {
+            "assessment": {
+              "enum": [
+                "complete",
+                "bounded",
+                "unrated"
+              ]
+            },
+            "severity_floor": {
+              "enum": [
+                "low",
+                "medium",
+                "high",
+                "critical",
+                null
+              ]
+            },
+            "severity_ceiling": {
+              "enum": [
+                "low",
+                "medium",
+                "high",
+                "critical",
+                null
+              ]
+            },
+            "unresolved_factors": {
+              "type": "array",
+              "items": {
+                "$ref": "common.schema.json#/$defs/token"
+              },
+              "maxItems": 32,
+              "uniqueItems": true
+            }
+          },
+          "description": "How firmly the provider's technical severity is known; unrated means missing factors could change it."
         }
       },
       "description": "One independent score package. The four dimensions are separate and are never combined or averaged."
@@ -323,8 +376,10 @@
         "title",
         "ship_block",
         "independence",
+        "judge_verdict",
         "verification_review_id",
         "direct_evidence",
+        "analyst_assessed_evidence",
         "missing_predicates",
         "gap_ids",
         "scores",
@@ -378,7 +433,10 @@
             "technical_severity",
             "technical_severity_score_id",
             "distinct_verification_required",
-            "verifier_model_distinct"
+            "verifier_model_distinct",
+            "technical_severity_floor",
+            "technical_severity_ceiling",
+            "missing_factors"
           ],
           "properties": {
             "policy": {
@@ -395,7 +453,7 @@
               "items": {
                 "$ref": "common.schema.json#/$defs/token"
               },
-              "maxItems": 8,
+              "maxItems": 16,
               "uniqueItems": true
             },
             "technical_severity": {
@@ -423,6 +481,32 @@
             },
             "verifier_model_distinct": {
               "type": "boolean"
+            },
+            "technical_severity_floor": {
+              "enum": [
+                "low",
+                "medium",
+                "high",
+                "critical",
+                null
+              ]
+            },
+            "technical_severity_ceiling": {
+              "enum": [
+                "low",
+                "medium",
+                "high",
+                "critical",
+                null
+              ]
+            },
+            "missing_factors": {
+              "type": "array",
+              "items": {
+                "$ref": "common.schema.json#/$defs/token"
+              },
+              "maxItems": 32,
+              "uniqueItems": true
             }
           },
           "description": "The accepted ship-block-policy/1 decision, copied verbatim; the gate and the report never reinterpret it."
@@ -433,7 +517,8 @@
           "required": [
             "independent",
             "provider_distinct",
-            "verifier_model_distinct"
+            "verifier_model_distinct",
+            "judge_model_distinct"
           ],
           "properties": {
             "independent": {
@@ -444,6 +529,12 @@
             },
             "verifier_model_distinct": {
               "type": "boolean"
+            },
+            "judge_model_distinct": {
+              "type": [
+                "boolean",
+                "null"
+              ]
             }
           }
         },
@@ -458,6 +549,14 @@
           ]
         },
         "direct_evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "common.schema.json#/$defs/relation_id"
+          },
+          "maxItems": 256,
+          "uniqueItems": true
+        },
+        "analyst_assessed_evidence": {
           "type": "array",
           "items": {
             "$ref": "common.schema.json#/$defs/relation_id"
@@ -537,6 +636,45 @@
           },
           "maxItems": 2,
           "uniqueItems": true
+        },
+        "judge_verdict": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "verdict",
+                "disagrees_with_state",
+                "verdict_ids"
+              ],
+              "description": "The accepted judge verdict on the claim, copied read-only. It is a proposal and never changes the state.",
+              "properties": {
+                "verdict": {
+                  "enum": [
+                    "red_correct",
+                    "blue_correct",
+                    "partly",
+                    "neither",
+                    "unresolved"
+                  ]
+                },
+                "disagrees_with_state": {
+                  "type": "boolean"
+                },
+                "verdict_ids": {
+                  "type": "array",
+                  "maxItems": 8,
+                  "items": {
+                    "type": "string",
+                    "pattern": "^judge-[0-9a-f]{64}$"
+                  }
+                }
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       }
     },

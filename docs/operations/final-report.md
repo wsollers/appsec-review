@@ -79,7 +79,8 @@ pipeline stage that does not exist yet and never change either.
 | `gaps_recorded` | gap | The claim ledger holds any gap, with counts by class. |
 | `coverage_incomplete` | gap | Any lane B coverage cell is not `reviewed` (`gap`, `not_launched`). |
 | `pending_distinct_verification` | gap | A finding is `ship_blocking_pending_distinct_verification`; the handoff's verifier warning is repeated. |
-| `technical_severity_unrated` | gap | A package has no `application_risk_matrix/2` rating (`technical_severity_unrated`). |
+| `technical_severity_unrated` | gap | A package has no `application_risk_matrix/3` rating (`technical_severity_unrated`). |
+| `decision_pending` | gap | A package has ship-block status `decision_pending`: its severity is unrated because scoring factors are missing. The gate verifies and projects the status verbatim and recounts it in the handoff totals. |
 | `findings_without_scores` | gap | A package has no score package. |
 | `withheld_packages` | gap | The `withheld` bucket is not empty. |
 | `possible_duplicates` | gap | The handoff nominates possible-duplicate claim pairs, which are not merged. |
@@ -110,9 +111,18 @@ changed or missing binding fails the job.
   evidence relation ids, gap ids and every score package's four dimensions (technical severity,
   exploitability confidence, environmental and business impact, remediation priority), reported
   separately and never combined. A dimension the provider did not produce is `null`, which is a
-  gap and not a low value;
-- `attack_chains` and `poc_outcomes`: `none_available` with the reason, because no chain package or
-  PoC result exists yet;
+  gap and not a low value. Each score also carries its `severity_assessment` (`complete`, `bounded`
+  or `unrated`, with the severity floor and ceiling), and each ship-block record carries
+  `technical_severity_floor`, `technical_severity_ceiling` and `missing_factors`;
+- findings whose ship-block status is `decision_pending` (no technical severity yet because factors
+  are missing) are never hidden. A confirmed one is listed under findings and a supported one under
+  the verification backlog, each with the line "decision pending: severity not yet rated; what is
+  missing: ..." and, when bounded, the severity range the missing factors leave open. The summary
+  counts them, and the `decision_pending` limitation records that they are neither ship-blocking nor
+  cleared;
+- `attack_chains`: `none_available` with the reason, because no chain package exists yet;
+- `poc_outcomes`: `none_available` with the reason unless the run holds an accepted
+  `job_poc_generation` handoff built from this gate (see below);
 - `verification_backlog`: the supported packages, labelled `not_independently_confirmed`;
 - `withheld`: withheld packages with their reasons;
 - `limitations`, `gap_ids`, `status` (including `review_complete`, true only for a `COMPLETE`
@@ -129,11 +139,32 @@ and the `report.render` output's `artifact` is `final-report.md`; both are hash-
 job handoff and are run-owned (`data/jobs/job_final_report_publication/attempts/<attempt>/steps/...`).
 The job is `COMPLETED_WITH_GAPS` whenever a `gap` limitation exists.
 
+### Proof-of-concept outcomes
+
+`job_poc_generation` ([`poc-generation.md`](poc-generation.md)) is an optional job between the gate and the report,
+shipped disabled and run by hand. `load.accepted_gate` looks for the run's accepted PoC handoff:
+
+- **none**: `poc_outcomes` is exactly what it was before the job existed (`none_available`, the "no proof-of-trigger
+  status manifest" reason, no items), and the report is unchanged;
+- **built from this gate handoff**: the summary is validated against `poc-generation/1`, every file it names is re-hashed,
+  and `poc_outcomes` becomes `available` (or `none_available` with the reason when the job had nothing to attempt). Each
+  item carries `finding_package_id`, `status` (`compile_verified`, `compile_failed`, `artifact_generated`,
+  `policy_denied`, `insufficient_evidence`, `not_applicable` or `unsafe_to_attempt`), `result_id` (always `null`: nothing was
+  executed), the `claim_id`, a description of at most 300 characters, the two function names and the four file references
+  (`source`, `compile`, `readme`, `provenance`), plus the PoC handoff reference in `poc_outcomes.poc_handoff` and
+  `provenance.poc_handoff`. The Markdown lists the same fields; the function source and the full reproducer stay in
+  `data/poc/<claim-id>/`;
+- **built from another gate handoff** (the gate ran again after the PoC job): the block says the PoC handoff is stale and
+  shows nothing from it. Run `job_poc_generation` again.
+
+A PoC status never changes a claim state, a ship-block status or a score, and `compile_failed` does not contradict a
+finding.
+
 ### What the report never contains
 
 It holds identifiers, hashes, accepted titles and summaries, and score dimensions. It carries no
 claim statement, worker narrative, rationale, prompt, retrieval query, transcript, exploit code or PoC
-payload, and no secret or target source. The finding projection is a closed schema, so a new field
+source (only its description, status and file references), and no secret or target source. The finding projection is a closed schema, so a new field
 needs a schema change.
 
 ### PDF

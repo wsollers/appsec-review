@@ -9,11 +9,14 @@ from appsec_review.review.obligations import (
 )
 
 
-def test_every_claim_requires_the_five_base_predicates() -> None:
+def test_the_default_family_requires_the_four_base_predicates() -> None:
+    """Changed with obligation-rules/2: ``security_impact`` is derived, never cited (no entity kind is
+    direct for it), and the required set is per claim family (see test_predicate_admission.py)."""
     assert required_predicates([]) == frozenset(ALWAYS_REQUIRED)
     assert required_predicates([Precondition.ATTACKER_CONTROLS_REQUEST_FIELD]) == frozenset(ALWAYS_REQUIRED)
     assert Predicate.CONFIGURATION_ENABLES not in ALWAYS_REQUIRED
-    assert set(ALWAYS_REQUIRED) | {Predicate.CONFIGURATION_ENABLES} == set(Predicate)
+    assert set(ALWAYS_REQUIRED) | {Predicate.CONFIGURATION_ENABLES, Predicate.SECURITY_IMPACT} == set(Predicate)
+    assert obligations.DERIVED_PREDICATES == {Predicate.SECURITY_IMPACT}
 
 
 @pytest.mark.parametrize("precondition", sorted(CONFIGURATION_SCOPED))

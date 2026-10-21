@@ -30,7 +30,7 @@ from appsec_review.indexing.store import open_shard
 from appsec_review.jobs.job_security_tagging.crosswalk import load_crosswalk
 from appsec_review.jobs.job_security_tagging.taxonomy import load_vocabulary
 from appsec_review.retrieval.core import RetrievalCore, resolve_context_manifest
-from appsec_review.review import obligations, ship_block
+from appsec_review.review import obligations, ship_block, tool_rules
 from appsec_review.review.budget import JobBudget
 from appsec_review.review.claims import normalize_cwe
 from appsec_review.review.identity import sha256_hex
@@ -67,20 +67,10 @@ TOPOLOGY = {"scope": ("accept_manifest", "assemble_scope"), "triage": ("lead_sev
 LEDGER_UNITS = ("lead_review.teams", "hunt_review.teams", "adjudicate.apply_policy", "scoring.score_claims",
                 "completeness.audit")
 TAXONOMY = Path("data") / "reference" / "taxonomy"
-RULE_PREDICATES_VERSION = "tool-rule-predicates/1"
-# The predicates a producing rule's versioned mapping names for its own tool observation (design R3).
-# A tool observation is direct evidence only for these; every other predicate treats it as indirect.
-TOOL_RULE_PREDICATES: Mapping[str, tuple[Predicate, ...]] = {
-    "source_sast": (Predicate.AFFECTED_CONSTRUCT,),
-    "codeql": (Predicate.AFFECTED_CONSTRUCT, Predicate.SOURCE_TO_SINK_REACHABILITY),
-    "artifact_scanner": (Predicate.AFFECTED_CONSTRUCT,),
-    "dependency_advisory": (Predicate.AFFECTED_CONSTRUCT,),
-    "ci_rule": (Predicate.AFFECTED_CONSTRUCT, Predicate.CONFIGURATION_ENABLES),
-    "post_build_hardening": (Predicate.AFFECTED_CONSTRUCT, Predicate.CONFIGURATION_ENABLES),
-    "owasp_control": (Predicate.MISSING_OR_INEFFECTIVE_GUARD,),
-    "secret": (Predicate.AFFECTED_CONSTRUCT,),
-    "config_scanner": (Predicate.AFFECTED_CONSTRUCT,),
-}
+# A tool observation is direct evidence only for the predicates its producing rule names (design R3):
+# the lookup is keyed by lead family, producer, native rule identity and result kind, with the
+# narrowest default (review/tool_rules.py, ``tool-rule-predicates/2``).
+RULE_PREDICATES_VERSION = tool_rules.VERSION
 # Ground truth and target-owned agent guidance are never readable: a manifest naming an evaluator
 # root fails startup, and target guidance files are removed from every capability's entity scope.
 EVALUATOR_ROOTS = ("appsec-multi-vuln-guide",)
@@ -199,6 +189,7 @@ def available_sources(query_sets: Iterable[str], graph_families: Iterable[str]) 
 # reuse basis so a change to graph admissibility invalidates reuse of the cells it affects.
 EVIDENCE_RULES = {"rule_predicates": RULE_PREDICATES_VERSION,
                   "admissibility": obligations.ADMISSIBILITY_RULES_VERSION,
+                  "predicate_admission": obligations.PREDICATE_ADMISSION_VERSION,
                   "graph_fact_predicates": FACT_PREDICATES_RULE,
                   "graph_fact_admissibility": GRAPH_FACT_ADMISSIBILITY_RULE,
                   "obligation_policy_sha256": obligations.POLICY_SHA256}
@@ -378,8 +369,7 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
                 "packages": sorted(records, key=lambda item: (item["rank"], item["package_id"])),
                 "accepted_cwe_ids": sorted(item for item in cwe_ids if item),
                 "cwe_reference": reference.record(),
-                "rule_predicates": {lead["observation_id"]: [item.value for item in
-                                                             TOOL_RULE_PREDICATES.get(lead["lead_family"], ())]
+                "rule_predicates": {lead["observation_id"]: [item.value for item in tool_rules.lead_predicates(lead)]
                                     for lead in sorted(leads, key=lambda item: item["observation_id"])},
                 "units": [{"unit_key": row["unit_key"], "position": row["position"], "hunted": row["hunted"]}
                           for row in assembly.manifest["units"]],
@@ -584,6 +574,9 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
         triage_out = unit.output("triage.lead_severity")
         triage_doc = _read(unit.job.run_root, triage_out["artifact"])
         triage_summary = handoff_summary(triage_doc, triage_out["artifact"]) if triage_doc.get("enabled") else None
+        briefs = [entry for document in lane_documents(unit) if document.get("poc_basis")
+                  for entry in _read(unit.job.run_root, document["poc_basis"])["briefs"]]
+        candidates = stages.poc_candidates(findings, briefs, settings.poc_candidates)
         handoff = stages.build_handoff(
             run_id=unit.job.run_id, manifest_sha256=accepted["manifest_sha256"],
             configuration_sha256=semantic_settings_sha256(settings), projection=projection, accounting=accounting,
@@ -592,7 +585,7 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
             coverage={"path": matrix_ref["path"], "sha256": matrix_ref["sha256"], "rows": len(matrix["rows"])},
             possible=merged_doc["possible_duplicates"], schemas=schemas,
             ship_block_policy_sha256=ship_block.policy_sha256(settings.ship_block, require_distinct),
-            verification=verification, lead_severity_triage=triage_summary)
+            verification=verification, lead_severity_triage=triage_summary, poc_candidate_list=candidates)
         artifact = _write(unit, "inference-review-handoff.json", handoff)
         gaps = [f"status {handoff['status']}"] if handoff["status"] != "COMPLETE" else []
         if accounting.review_incomplete:

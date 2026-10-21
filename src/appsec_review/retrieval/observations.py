@@ -18,6 +18,10 @@ OBSERVATION_CLASSES = (
     "source_sast", "secret", "dependency", "configuration", "inventory", "binary", "diagnostic", "other",
 )
 
+# ``record_kind`` of a job_artifact_security_analysis observation (schema artifact-security-record/2): one
+# ``finding`` per scanner finding, one ``scan_summary`` per artifact scan (the account that a scan ran).
+RECORD_KIND_FINDING, RECORD_KIND_SUMMARY = "finding", "scan_summary"
+
 _LABELS = {
     "CRITICAL": "critical", "BLOCKER": "critical", "VERY_HIGH": "critical", "SEVERE": "critical",
     "HIGH": "high", "ERROR": "high", "MAJOR": "high",
@@ -29,10 +33,22 @@ _LABELS = {
 _SCANNER_LABELS = {
     "tool-spotbugs": {"1": "high", "2": "medium", "3": "low"},
 }
+# Category -> observation class. Parsers emit the true category of their scanner and never the retired generic
+# ``static_analysis``, which classified as ``other`` and silently dropped those scanners from lead correlation:
+#   gitleaks   secret_detection -> secret
+#   shellcheck shell_lint       -> source_sast     (static analysis of shell source; inline ``shellcheck disable``)
+#   psalm      source_sast      -> source_sast     (PHP type and taint analysis: the category phpstan and phpcs use)
+#   hadolint   config_lint      -> configuration   (Dockerfile lint)
+#   zizmor     ci_security      -> configuration   (GitHub Actions workflow audit)
+# Artifact-security records (job_artifact_security_analysis, record schema artifact-security-record/2): a finding
+# carries its scanner category (``binary_hardening``, ``vulnerability_matching``, ``bytecode_analysis``), a scan-run
+# summary carries ``software_inventory`` (inventory scans) or ``tool_diagnostic`` (every other scan).
 _CLASS_BY_CATEGORY = {
-    "source_sast": "source_sast", "secret": "secret", "secret_detection": "secret", "secrets": "secret",
+    "source_sast": "source_sast", "shell_lint": "source_sast",
+    "secret": "secret", "secret_detection": "secret", "secrets": "secret",
     "vulnerability_matching": "dependency", "dependency": "dependency", "configuration": "configuration",
-    "iac": "configuration", "workflow": "configuration", "software_inventory": "inventory",
+    "iac": "configuration", "workflow": "configuration", "config_lint": "configuration",
+    "ci_security": "configuration", "software_inventory": "inventory",
     "binary": "binary", "binary_hardening": "binary", "tool_diagnostic": "diagnostic",
 }
 

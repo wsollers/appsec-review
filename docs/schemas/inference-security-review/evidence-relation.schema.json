@@ -80,6 +80,12 @@
           "type": "null"
         }
       ]
+    },
+    "provenance": {
+      "enum": [
+        "adjudication_judge"
+      ],
+      "description": "Present only on a relation derived from a judge's citations. R5 and scoring never count it."
     }
   }
 }

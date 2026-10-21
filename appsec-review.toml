@@ -2349,6 +2349,31 @@ workers = 4
 model_profile = "default"
 require_distinct_from_roles = ["hypothesis_hunter", "red_team_analyst", "blue_team_refuter"]
 
+# The adjudication judge (docs/architecture/review-judge-and-poc.md section 3). After the red, blue and blind
+# verifier cells of a team, a judge sees the labelled package and the two sides as A and B in a deterministic
+# shuffled order, and records which side is correct. It never sets a claim state: R5 and R6 are unchanged, and
+# confirmation still needs the blind verifier. `when` is "all" (every claim red affirmed) or "disagreement"
+# (red affirmed and blue contradicts, qualifies, leaves a predicate unresolved, or the blue cells disagree).
+# `require_distinct_from_roles` records judge_model_distinct and is never required. Set enabled = false to
+# switch the judge off; changing anything here changes the judge cells' fingerprints and the configuration hash.
+[jobs.job_inference_security_review.settings.roles.adjudication_judge]
+enabled = true
+when = "all"
+judges_per_claim = 1
+workers = 4
+model_profile = "default"
+require_distinct_from_roles = ["hypothesis_hunter", "red_team_analyst", "blue_team_refuter"]
+max_why_chars = 600                  # each side's reason, as shown to the judge
+max_cited_rows_per_side = 12         # distinct rows each side may cite to the judge
+max_cited_row_chars = 400            # resolved content shown per cited row
+
+# Review-judge-and-poc.md section 4: the handoff lists a claim in poc_candidates when it is supported or confirmed,
+# the judge said red_correct (partly only when accept_partly), it carries a resolved poc_basis, and its
+# application_risk_matrix/2 technical severity is one of risk_ratings.
+[jobs.job_inference_security_review.settings.poc_candidates]
+accept_partly = false
+risk_ratings = ["medium", "high", "critical"]
+
 # Decision 2: a ship-blocking candidate is published as ship_blocking only when its verifier's model
 # profile (provider + model) differs from every red cell's on the claim; otherwise it is published as
 # ship_blocking_pending_distinct_verification. Confirmation (R5/R6) never depends on it. With every
@@ -2413,7 +2438,7 @@ rules = [
   { scanner = "shellcheck", rule = "SC2155", severity = "info", basis = "rule_semantics", reason = "Declare and assign separately to keep the exit status: a style point." },
 ]
 
-# Decision 1: ship-block-policy/1. A confirmed finding blocks when application_risk_matrix/2 rates its
+# Decision 1: ship-block-policy/1. A confirmed finding blocks when application_risk_matrix/3 rates its
 # technical severity in blocking_technical_severities, or when it is a dependency finding (proposed
 # from a lane A lead of a dependency_lead_families family) with a KEV-listed reference input. CVSS and
 # SSVC outputs are displayed context only and never decide.
@@ -2435,11 +2460,12 @@ override_policy = "review_lead_only/1"
 implementation = "first-reference-compatible/1"
 metric_groups = ["base", "threat", "environmental", "supplemental"]
 
-# application_risk_matrix/2 rates score-factors/1 evidence factors. Points are summed per dimension
-# (a missing factor adds nothing) and must not decrease along a factor's scale. Replacing a table
+# application_risk_matrix/3 rates score-factors/1 evidence factors. Points are summed per dimension
+# (a missing factor is unknown: its minimum and maximum points bound the rating, and a rating that the
+# missing factors could change is withheld as unrated) and must not decrease along a factor's scale. Replacing a table
 # replaces it whole. See docs/operations/inference-security-review.md "Tuning scoring".
 [jobs.job_inference_security_review.settings.scoring.providers.application_risk_matrix]
-implementation = "application_risk_matrix/2"
+implementation = "application_risk_matrix/3"
 
 [jobs.job_inference_security_review.settings.scoring.providers.application_risk_matrix.exploitability.points]
 verification = { supported = 20, confirmed = 40 }
@@ -2574,6 +2600,164 @@ workers = 1
 [jobs.job_final_publication_gate.steps.acceptance]
 workers = 1
 [jobs.job_final_publication_gate.steps.acceptance.tasks.publish_handoff]
+
+# Proof-of-concept generation (docs/operations/poc-generation.md): for each finding the judge agreed is
+# correct (the review handoff's poc_candidates), a model writes a unit-test FUNCTION with no main that
+# demonstrates the issue, deterministic validators check it on the clang AST in the build image, and the
+# project's own compile command is replayed on it (syntax, object, sanitizer object, undefined symbols).
+# Nothing is linked into an executable and nothing is run by the pipeline. The job reads no target tree:
+# it uses the accepted native build workspace, compile database and image of job_language_build.
+#
+# SHIPPED DISABLED. enabled only decides membership in the automatic graph: when true the job sits after
+# job_final_publication_gate and job_final_report_publication follows it; when false the report follows the
+# gate exactly as before. It is invoked manually on a finished run with
+# `appsec-review run job_poc_generation --run-id <id> --upstream-from-run`, which is allowed while disabled.
+#
+# max_candidates bounds the candidates attempted (confirmed claims first). accepted_judge_verdicts are the
+# judge verdicts a candidate may carry. bounds, policy and build are the closed lists and numbers the
+# validators and the compile check enforce; the allowlist wins over the denylist, and a call that is on
+# neither is refused. Model, reasoning and budgets for the poc_writer role live in settings.models.
+[jobs.job_poc_generation]
+name = "poc_generation"
+workers = 1
+
+[jobs.job_poc_generation.settings]
+enabled = false
+workers = 1
+max_candidates = 16
+accepted_judge_verdicts = ["red_correct"]
+
+[jobs.job_poc_generation.settings.models.default]
+provider = "claude-cli"
+model = "claude-haiku-5-5"
+reasoning = "high"
+max_input_tokens = 32000
+max_output_tokens = 8000
+max_queries = 8
+max_turns = 6
+timeout_seconds = 600
+
+[jobs.job_poc_generation.settings.roles.poc_writer]
+model_profile = "default"
+
+[jobs.job_poc_generation.settings.retry]
+max_attempts = 2
+retry_on_timeout = true
+retry_on_provider_error = true
+retry_on_invalid_output = true
+
+[jobs.job_poc_generation.settings.bounds]
+max_function_lines = 80
+max_file_bytes = 16384
+max_includes = 12
+max_list_items = 8
+max_text_chars = 600
+max_string_literal_bytes = 256
+max_loop_iterations = 4096
+max_array_elements = 65536
+max_violations = 50
+
+[jobs.job_poc_generation.settings.policy]
+# Headers a PoC may include besides the project's own (found on the sink translation unit's include path).
+allowed_std_headers = ["array", "cstddef", "cstdint", "cstring", "limits", "string", "string_view", "utility",
+                       "vector", "stddef.h", "stdint.h", "stdbool.h", "string.h", "limits.h"]
+project_header_suffixes = [".h", ".hh", ".hpp", ".hxx"]
+# sink_and_path: a PoC may call the sink function and the functions on the brief's call path.
+# any_project_function: any function declared in the project tree.
+project_calls = "sink_and_path"
+# The closed allowlist. An entry ending in :: allows everything below that scope.
+call_allowlist = ["memcpy", "memmove", "memset", "memcmp", "memchr", "strlen", "strnlen", "strcmp", "strncmp",
+                  "strchr", "std::min", "std::max", "std::move", "std::size", "std::fill", "std::fill_n",
+                  "std::copy", "std::copy_n", "std::equal", "std::begin", "std::end", "std::addressof",
+                  "std::swap", "std::array::", "std::basic_string::", "std::basic_string_view::", "std::vector::",
+                  "std::numeric_limits::"]
+type_allowlist = ["std::uint8_t", "std::uint16_t", "std::uint32_t", "std::uint64_t", "std::int8_t", "std::int16_t",
+                  "std::int32_t", "std::int64_t", "std::size_t", "std::ptrdiff_t", "std::byte", "std::nullptr_t",
+                  "uint8_t", "uint16_t", "uint32_t", "uint64_t", "int8_t", "int16_t", "int32_t", "int64_t",
+                  "size_t", "ptrdiff_t", "std::string", "std::string_view", "std::basic_string",
+                  "std::basic_string_view", "std::char_traits", "std::allocator", "std::vector", "std::array"]
+
+# Names the validators report by category when a call is refused; the allowlist above still decides.
+[jobs.job_poc_generation.settings.policy.call_denylist]
+process = ["fork", "vfork", "clone", "execl", "execle", "execlp", "execv", "execve", "execvp", "execvpe",
+           "fexecve", "posix_spawn", "posix_spawnp", "wait", "waitpid", "waitid", "kill", "killpg", "prctl",
+           "ptrace", "setuid", "setgid", "seteuid", "setreuid", "setresuid", "chroot", "pthread_create",
+           "thrd_create", "std::thread::", "std::jthread::", "std::async", "sleep", "usleep", "nanosleep"]
+shell = ["system", "popen", "pclose", "WinExec", "ShellExecute", "ShellExecuteA", "ShellExecuteW",
+         "CreateProcess", "CreateProcessA", "CreateProcessW"]
+network = ["socket", "socketpair", "connect", "bind", "listen", "accept", "accept4", "send", "sendto", "sendmsg",
+           "recv", "recvfrom", "recvmsg", "shutdown", "getaddrinfo", "freeaddrinfo", "gethostbyname",
+           "gethostbyaddr", "getnameinfo", "inet_addr", "inet_aton", "inet_pton", "inet_ntop", "setsockopt",
+           "getsockopt", "poll", "select", "epoll_create", "epoll_wait", "curl_easy_init", "curl_easy_perform",
+           "SSL_connect", "SSL_new"]
+dynamic_loading = ["dlopen", "dlsym", "dlmopen", "dlclose", "LoadLibrary", "LoadLibraryA", "LoadLibraryW",
+                   "GetProcAddress"]
+file_system = ["open", "openat", "creat", "fopen", "freopen", "fdopen", "tmpfile", "tmpnam", "mkstemp", "mktemp",
+               "read", "write", "pread", "pwrite", "close", "fread", "fwrite", "fgets", "fputs", "fprintf",
+               "fscanf", "remove", "unlink", "unlinkat", "rename", "renameat", "mkdir", "rmdir", "chmod", "chown",
+               "truncate", "ftruncate", "symlink", "link", "readlink", "realpath", "opendir", "readdir", "stat",
+               "lstat", "fstat", "access", "chdir", "fchdir", "getcwd", "mmap", "munmap", "mprotect",
+               "std::ifstream", "std::ofstream", "std::fstream", "std::filesystem::", "std::basic_ifstream::",
+               "std::basic_ofstream::", "std::basic_fstream::"]
+environment = ["getenv", "secure_getenv", "setenv", "putenv", "unsetenv", "clearenv", "environ"]
+control = ["abort", "exit", "_exit", "_Exit", "quick_exit", "atexit", "at_quick_exit", "raise", "signal",
+           "sigaction", "longjmp", "setjmp", "_longjmp", "siglongjmp", "sigsetjmp", "std::terminate", "alloca",
+           "malloc", "calloc", "realloc", "free", "posix_memalign", "aligned_alloc"]
+
+[jobs.job_poc_generation.settings.build]
+command_timeout_seconds = 300
+output_bytes = 8388608
+workspace_file_limit = 20000
+workspace_bytes_limit = 1073741824
+debug_flags = ["-g", "-O0"]
+sanitizer_flags = ["-fsanitize=address,undefined", "-fno-omit-frame-pointer"]
+# Libraries whose exported symbols may satisfy the object's undefined symbols (read with nm -D in the
+# build image), and prefixes of runtime symbols that the compiler adds (sanitizer runtimes, the GOT).
+runtime_libraries = ["/lib/x86_64-linux-gnu/libc.so.6", "/lib/x86_64-linux-gnu/libm.so.6",
+                     "/lib/x86_64-linux-gnu/libstdc++.so.6", "/lib/x86_64-linux-gnu/libgcc_s.so.1"]
+runtime_symbol_prefixes = ["__asan_", "__ubsan_", "__sanitizer_", "_GLOBAL_OFFSET_TABLE_"]
+object_limit = 512
+scratch_directory = ".appsec-poc"
+
+[jobs.job_poc_generation.settings.build.ast_compilers]
+c = "clang"
+cxx = "clang++"
+
+[jobs.job_poc_generation.settings.brief]
+view_bytes = 49152
+view_source_lines = 160
+view_type_declarations = 6
+declaration_lines = 30
+max_brief_bytes = 131072
+max_source_files = 64
+
+[jobs.job_poc_generation.steps.load]
+workers = 1
+[jobs.job_poc_generation.steps.load.tasks.verify_inputs]
+
+[jobs.job_poc_generation.steps.plan]
+workers = 1
+[jobs.job_poc_generation.steps.plan.tasks.briefs]
+
+[jobs.job_poc_generation.steps.write]
+workers = 1
+[jobs.job_poc_generation.steps.write.tasks.poc_writer]
+
+[jobs.job_poc_generation.steps.validate]
+workers = 1
+[jobs.job_poc_generation.steps.validate.tasks.policy]
+
+[jobs.job_poc_generation.steps.compile]
+workers = 1
+[jobs.job_poc_generation.steps.compile.tasks.build_check]
+
+[jobs.job_poc_generation.steps.package]
+workers = 1
+[jobs.job_poc_generation.steps.package.tasks.files]
+
+[jobs.job_poc_generation.steps.publish]
+workers = 1
+[jobs.job_poc_generation.steps.publish.tasks.publish_handoff]
 
 # Final report publication (docs/operations/final-report.md): the terminal job. It reads only the
 # accepted gate handoff and the artifacts the gate binds, and writes final-report.json and a

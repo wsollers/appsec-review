@@ -6,8 +6,9 @@ from appsec_review.runtime.datasets import artifact_only
 
 
 _A = "data/jobs/job_final_report_publication/attempts/*"
-# The report reads only the accepted final publication gate handoff and the artifacts it binds.
-CONSUMES = ("job_final_publication_gate",)
+# The report reads the accepted final publication gate handoff and the artifacts it binds, and the accepted
+# proof-of-concept handoff when job_poc_generation ran (an inactive job is dropped from the consumed set).
+CONSUMES = ("job_final_publication_gate", "job_poc_generation")
 DATASETS = (
     artifact_only(
         "final_report_publications", "acceptance", "inference_review", "appsec-review/final-report/1",

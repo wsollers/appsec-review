@@ -114,20 +114,55 @@ identical canonical outputs.
 ## Tuning scoring
 
 Scoring is deterministic and runs only on `confirmed` and `supported` claims. The default provider
-is `application_risk_matrix/2`. It rates `score-factors/1` factors, each derived from adjudicated,
+is `application_risk_matrix/3`. It rates `score-factors/1` factors, each derived from adjudicated,
 re-resolved evidence: `verification`, `taint_path`, `attacker_control`, `guard_absent`,
 `exposure`, `privilege`, `data_sensitivity`, `impact_class` (from the pinned MITRE catalog; see
 "CWE impact classes" below) and `threat` (KEV only). The design section "Evidence-derived scoring
 factors" lists every factor's scale and source. A factor with no
 evidence is listed in the score package's `missing_factors`, with its reason in
-`missing_factor_reasons`. It adds no points and is never read as a low value.
+`missing_factor_reasons`. It is unknown, never zero and never a low value.
+
+### Missing factors: the interval
+
+`application_risk_matrix/3` does not guess what a missing factor would have scored. It computes an
+exploitability **interval**. The floor gives every missing factor its minimum points, the ceiling
+gives it its maximum, and both ends are mapped through the same `bands`. Technical severity is then
+looked up for the floor and for the ceiling:
+
+| Floor and ceiling | `severity_assessment.assessment` | `technical_severity` |
+|---|---|---|
+| Same band, nothing missing among the scored factors | `complete` | that band |
+| Same band, some factors missing but none could change it | `bounded` | that band |
+| Different bands | `unrated` | `null`, with `severity_floor`, `severity_ceiling` and `unresolved_factors` |
+| `impact_class` missing | `unrated` | `null`, no bounds |
+
+Removing evidence therefore never lowers a rating. It can only move a finding from `complete` to
+`bounded` to `unrated`.
+
+**What to do about an unrated finding.** An unrated `confirmed` or `supported` finding is published
+with ship-block status `decision_pending`, never `not_ship_blocking` (see "Ship-block status"). Read
+the score package's `severity_assessment.unresolved_factors` and the reason each has in
+`missing_factor_reasons`, then supply the missing evidence: export graph facts for the language so
+`taint_path`, `attacker_control` and `guard_absent` reach higher values, supply accepted security
+tags so `exposure` is known, or add a `cwe_impact_overrides` entry when `impact_class` is missing.
+Rerun the review and the finding is rated. Do not lower `bands` or the points tables to make
+findings rate: that hides the missing evidence instead of supplying it. If a factor is never
+obtainable for your targets, set its table so every value gives the same points. It then adds no
+width to the interval, which is a deliberate, reviewable statement that the factor does not
+discriminate.
+
+**Providers that are enabled but not implemented.** `cvss_v4`, `cvss_v31_compat` and
+`ssvc_decision` can be listed in `scoring.enabled_providers`, but this build has no
+implementation for them. They are not skipped silently: the scoring stage records one `score_gap`
+per run for each (subject `provider:<name>`), the scores document lists them under
+`unavailable_providers`, and they produce no score. Nothing in the ship-block policy reads them.
 
 The model lives under
 `[jobs.job_inference_security_review.settings.scoring.providers.application_risk_matrix]`:
 
 ```toml
 [...providers.application_risk_matrix]
-implementation = "application_risk_matrix/2"     # or "application_risk_matrix/1" (no model tables)
+implementation = "application_risk_matrix/3"     # or "application_risk_matrix/1" (no model tables)
 
 [...providers.application_risk_matrix.exploitability.points]
 verification = { supported = 20, confirmed = 40 }
@@ -279,6 +314,13 @@ When the run has accepted `graph` shards (`job_code_graph_index`; today C/C++ on
   cell receives and may cite graph rows of its package's `graph_scopes` and nothing from another
   scope. `depth` is capped by `[jobs.job_code_graph_index.settings.graph].max_call_depth` as frozen
   into the run.
+- **Evidence admission.** A citation counts toward an obligation only when `predicate-admission/1`
+  makes its `(entity kind, predicate)` cell `direct`. Source text cited for anything but the
+  construct itself is `analyst_assessed`: recorded in the ledger, listed on the finding package as
+  `analyst_assessed_evidence` and in the report, never counted. A tool observation counts only for
+  the predicates `tool-rule-predicates/2` gives its producer, rule and result kind (a CodeQL point
+  result is `affected_construct` only). Both versions, and `obligation-rules/2` (required predicates
+  by claim family), are in the package reuse basis, so changing any of them reruns the affected cells.
 - **Evidence and scoring.** A cited graph fact counts as direct evidence only for its mapped
   predicate and only when the re-resolved fact is `direct_eligible`. A dominating guard or a bounded
   range only qualifies `missing_or_ineffective_guard` unless the exported facts show it bounds the
@@ -310,6 +352,64 @@ The model-facing layer ([`review-protocol-v2.md`](../architecture/review-protoco
   `[jobs.job_inference_security_review.settings.packages]` bound what a cell sees. A view that omitted rows names
   them in a material gap and in `omitted`; the whole stored package, including every gap, stays hash-pinned.
 
+## The adjudication judge
+
+After a team's red, blue and blind-verifier cells finish, an `adjudication_judge` cell may judge each claim
+([`review-judge-and-poc.md`](../architecture/review-judge-and-poc.md)). The judge sees the labelled package, the claim
+and two sides, A and B, in an order fixed by `sha256(manifest || claim || "judge-order")` and unrelated to role. It
+answers `A`, `B`, `both`, `neither` or `unresolved` with citations; the application de-shuffles the answer to
+`red_correct`, `blue_correct`, `partly`, `neither` or `unresolved` and records it. **It never sets a claim state:** R5
+and R6 are unchanged, confirmation still needs the blind verifier, and the judge's relations (provenance
+`adjudication_judge`) are published but not counted by R5 or scoring.
+
+```toml
+[jobs.job_inference_security_review.settings.roles.adjudication_judge]
+enabled = true                      # false removes the judge cells and the verdicts
+when = "all"                        # "all": every claim red affirmed; "disagreement": only where blue differs
+judges_per_claim = 1                # 1..5; each judge sees the sides in its own deterministic order
+workers = 4
+model_profile = "default"           # a different profile gives a different judge model
+require_distinct_from_roles = ["hypothesis_hunter", "red_team_analyst", "blue_team_refuter"]
+max_why_chars = 600                 # a side's reason as shown to the judge
+max_cited_rows_per_side = 12
+max_cited_row_chars = 400
+```
+
+- **Cost.** `when = "all"` adds one judge cell (up to `max_turns` turns) per admitted claim that red affirmed, per
+  `judges_per_claim`. `when = "disagreement"` runs a judge only where a blue cell contradicts, qualifies, leaves a
+  predicate unresolved or gave no answer, or the two blue cells disagree. The PoC candidate gate needs a verdict, so
+  claims that are not judged are never PoC candidates.
+- **Model.** `judge_model_distinct` records whether the judge's model profile differs from the roles in
+  `require_distinct_from_roles` on the claim. It is recorded in the verdict, the finding package
+  (`independence.judge_model_distinct`) and the handoff accounting (`accounting.judge_verdicts`), and is never required.
+  The checked-in configuration uses the `default` profile for every role.
+- **What changes.** Adding or changing this block changes the configuration hash and the judge cells' fingerprints
+  only; red, blue and verifier cells are reused.
+- **Where it shows.** The ledger has one `judge_verdict` event per judge cell; a finding package carries
+  `judge_verdict` (`disagrees_with_state` is set when the judge sided against a `confirmed` or `supported` finding);
+  the gate and the report show it read-only; the handoff's `accounting.judge_verdicts` counts verdicts by outcome. A
+  judge cell that failed is an ordinary cell gap, and a verdict whose request could have carried a red or blue
+  identifier is dropped with an `authority_error` gap.
+- **Role-blind request.** The judge's request never holds a role, task, persona, actor, cell or (when the judge runs on
+  another model) model name of the red or blue side. `judge-request-check-<attempt>.json` beside the cell receipt
+  records the check (hashes only).
+
+### PoC candidates
+
+The handoff's `poc_candidates` lists every claim that is `supported` or `confirmed`, whose judge said `red_correct`,
+that carries a `poc_basis` with a resolved entry point and call path, and whose `application_risk_matrix/2` technical
+severity is configured:
+
+```toml
+[jobs.job_inference_security_review.settings.poc_candidates]
+accept_partly = false                        # true also accepts a judge verdict of "partly"
+risk_ratings = ["medium", "high", "critical"]
+```
+
+An entry holds the claim and package ids, state, judge verdict, the `poc_basis` (hash and bounded copy), the finding
+package reference and the evidence relation ids. A later job reads the list; this one never builds or runs a proof of
+concept.
+
 ## Ship-block status
 
 Every finding package records a `ship_block` decision under `ship-block-policy/1` (decision 1),
@@ -320,20 +420,29 @@ computed in `review/ship_block.py` when the handoff is published. The first matc
 | `ship_blocking` | The claim is `confirmed`, it qualifies, and distinct verification held. |
 | `ship_blocking_pending_distinct_verification` | The claim is `confirmed` and qualifies, but its verifier ran on a red cell's model. |
 | `needs_verification` | The claim is `supported` (not independently confirmed) and would otherwise qualify. |
-| `not_ship_blocking` | Anything else. |
+| `decision_pending` | The claim is `confirmed` or `supported`, does not qualify, and a material input is missing: its technical severity is unrated, or the score package lists material missing factors. Not a release decision. |
+| `not_ship_blocking` | Anything else: a rated claim below the blocking thresholds, or a state that cannot block. |
 
-A claim qualifies when `application_risk_matrix/2` rates its technical severity in
+Precedence is the table order. The three qualifying statuses come first because they name the next
+action (block, get a distinct verifier, get independent confirmation), and a KEV-listed dependency
+qualifies even when its severity is unrated. `decision_pending` is returned only when the claim does
+not qualify and the missing input could still change that. It is never published as "does not
+block". Its reasons are `technical_severity_unrated` and one `missing_factor_<name>` per factor
+that keeps the severity unrated; resolve them as described under "Tuning scoring".
+
+A claim qualifies when `application_risk_matrix/3` rates its technical severity in
 `blocking_technical_severities`, or when it is a dependency finding with a KEV-listed reference
 input. A dependency finding is a claim proposed from a lane A lead of a `dependency_lead_families`
 family. CVSS and SSVC outputs, and the NVD reference CVSS vectors, are recorded under
 `ship_block.displayed_context` with `decides = false` and never change the status. A claim without
-an `application_risk_matrix/2` rating (for example a missing `impact_class`) records the reason
-`technical_severity_unrated`. It is not ship-blocking unless the KEV dependency path applies.
-Treat that reason as a gap to resolve, not as a low-risk verdict.
+an `application_risk_matrix/3` rating (for example a missing `impact_class`, or missing factors that
+leave the severity interval open) records the reason `technical_severity_unrated` and is
+`decision_pending` unless the KEV dependency path applies. Treat that as a gap to resolve, not as a
+low-risk verdict.
 
 ```toml
 [jobs.job_inference_security_review.settings.ship_block]
-blocking_technical_severities = ["high", "critical"]   # bands of application_risk_matrix/2
+blocking_technical_severities = ["high", "critical"]   # bands of application_risk_matrix/3
 kev_dependency_blocks = true
 dependency_lead_families = ["dependency_advisory", "artifact_scanner"]
 ```
@@ -370,3 +479,7 @@ read this handoff ([`final-report.md`](final-report.md)); the two remediation jo
   tampered manifest or shard, a broken ledger chain, a non-deterministic merge, or the application
   granting a forbidden capability.
 - Re-executing a lane unit reuses every succeeded cell whose fingerprint still matches.
+- A judge that fails, times out or returns an invalid answer is an ordinary cell gap with one terminal record; the
+  claim is still adjudicated by R5 and published without a `judge_verdict`, and is never a PoC candidate. A missing
+  verdict is not a `neither` and not agreement with either side. `accounting.judge_verdicts` in the handoff counts
+  the verdicts that were recorded, and the cell counts under `lanes[].cells_by_status` include every judge cell.

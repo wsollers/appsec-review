@@ -339,7 +339,7 @@ def test_scoring_model_and_rank_weights_default_to_the_documented_values(tmp_pat
 
     settings = _settings(load_config(ROOT / "appsec-review.toml"))
     matrix = settings.scoring.providers["application_risk_matrix"]
-    assert matrix.implementation == "application_risk_matrix/2"
+    assert matrix.implementation == "application_risk_matrix/3"
     assert matrix.model.document() == DEFAULT_RISK_MODEL.document()
     assert settings.ranking == RankWeights()
     assert PackageSettings.from_review_settings(settings).rank_weights == RankWeights()
@@ -355,7 +355,7 @@ def test_scoring_model_and_rank_weights_default_to_the_documented_values(tmp_pat
 
     raw = json.loads(load_config(ROOT / "appsec-review.toml").resolved_json)["jobs"][JOB]["settings"]
     raw.pop("ranking")
-    raw["scoring"]["providers"]["application_risk_matrix"] = {"implementation": "application_risk_matrix/2"}
+    raw["scoring"]["providers"]["application_risk_matrix"] = {"implementation": "application_risk_matrix/3"}
     parsed = parse_inference_review_settings(raw)
     assert parsed.ranking == RankWeights()
     assert parsed.scoring.providers["application_risk_matrix"].model.document() == DEFAULT_RISK_MODEL.document()
@@ -380,11 +380,11 @@ def test_scoring_and_ranking_tuning_changes_the_semantic_fingerprint(tmp_path: P
     ("advisory_kev = 250", "advisory_kev = 2500", "ranking.advisory_kev must be an integer between 0 and 1000"),
     ("lps = 1000", "lps = 1000\nbogus = 1", "ranking has unknown settings: bogus"),
     ("lps = 1000", "lps = 0.5", "ranking.lps must be an integer"),
-    ('implementation = "application_risk_matrix/2"', 'implementation = "application_risk_matrix/7"',
+    ('implementation = "application_risk_matrix/3"', 'implementation = "application_risk_matrix/7"',
      "implementation must be one of"),
-    ('implementation = "application_risk_matrix/2"', 'implementation = "application_risk_matrix/1"',
+    ('implementation = "application_risk_matrix/3"', 'implementation = "application_risk_matrix/1"',
      "application_risk_matrix/1 takes no"),
-    ('implementation = "application_risk_matrix/2"', 'implementation = "application_risk_matrix/2"\nweights = 1',
+    ('implementation = "application_risk_matrix/3"', 'implementation = "application_risk_matrix/3"\nweights = 1',
      "providers.application_risk_matrix has unknown settings: weights"),
     ("verification = { supported = 20, confirmed = 40 }", "verification = { supported = 50, confirmed = 40 }",
      "exploitability.points.verification must not decrease"),
@@ -477,3 +477,77 @@ def test_a_distinct_verifier_profile_clears_the_warning_and_changes_the_fingerpr
 def test_ship_block_and_verification_settings_are_validated(tmp_path: Path, old: str, new: str, message: str) -> None:
     with pytest.raises(ValueError, match=message):
         _variant(tmp_path, (old, new))
+
+
+# ---------------------------------------------------------------- the judge and PoC candidates
+
+
+def test_the_judge_is_enabled_by_default_for_every_affirmed_claim_and_the_poc_gate_is_typed(tmp_path: Path) -> None:
+    from appsec_review.config import JudgeSettings, PocCandidateSettings
+
+    settings = _settings(load_config(ROOT / "appsec-review.toml"))
+    judge = settings.roles[Role.ADJUDICATION_JUDGE]
+    assert isinstance(judge, JudgeSettings) and settings.judge is judge
+    assert (judge.when, judge.judges_per_claim, judge.enabled, judge.model_profile) == ("all", 1, True, "default")
+    assert (judge.max_why_chars, judge.max_cited_rows_per_side, judge.max_cited_row_chars) == (600, 12, 400)
+    assert judge.require_distinct_from_roles == (Role.HYPOTHESIS_HUNTER, Role.RED_TEAM_ANALYST,
+                                                 Role.BLUE_TEAM_REFUTER)
+    assert settings.profile_for(Role.ADJUDICATION_JUDGE) is settings.models["default"]
+    assert settings.poc_candidates == PocCandidateSettings(accept_partly=False,
+                                                           risk_ratings=("medium", "high", "critical"))
+    assert settings.as_document()["roles"]["adjudication_judge"]["when"] == "all"
+
+
+def test_judge_and_poc_candidate_settings_are_validated_and_semantic(tmp_path: Path) -> None:
+    base = _settings(_variant(tmp_path / "base"))
+    judge = f"{SECTION}.roles.adjudication_judge]"
+    disagreement = _settings(_variant(tmp_path / "a", (f'{judge}\nenabled = true\nwhen = "all"',
+                                                       f'{judge}\nenabled = true\nwhen = "disagreement"')))
+    assert disagreement.judge.when == "disagreement"
+    assert semantic_settings_sha256(disagreement) != semantic_settings_sha256(base)
+    off = _settings(_variant(tmp_path / "b", (f'{judge}\nenabled = true', f'{judge}\nenabled = false')))
+    assert off.judge is None and off.roles[Role.ADJUDICATION_JUDGE].enabled is False
+    assert semantic_settings_sha256(off) != semantic_settings_sha256(base)
+    partly = _settings(_variant(tmp_path / "c", ("accept_partly = false", "accept_partly = true")))
+    assert partly.poc_candidates.accept_partly is True
+    assert semantic_settings_sha256(partly) != semantic_settings_sha256(base)
+    ratings = _settings(_variant(tmp_path / "d", ('risk_ratings = ["medium", "high", "critical"]',
+                                                  'risk_ratings = ["high"]')))
+    assert ratings.poc_candidates.risk_ratings == ("high",)
+    # A model profile of its own changes the judge's profile and nothing else about the other roles.
+    extra = f'\n{SECTION}.models.judge]\nprovider = "claude-cli"\nmodel = "claude-judge"\nreasoning = "high"\n' \
+            'max_input_tokens = 32000\nmax_output_tokens = 8000\nmax_queries = 40\nmax_turns = 12\n' \
+            'timeout_seconds = 600\n'
+    distinct = _settings(_variant(tmp_path / "e", (f'{judge}\nenabled = true\nwhen = "all"\njudges_per_claim = 1\n'
+                                                   'workers = 4\nmodel_profile = "default"',
+                                                   f'{judge}\nenabled = true\nwhen = "all"\njudges_per_claim = 1\n'
+                                                   'workers = 4\nmodel_profile = "judge"'), suffix=extra))
+    assert distinct.profile_for(Role.ADJUDICATION_JUDGE).model == "claude-judge"
+    assert distinct.profile_for(Role.INDEPENDENT_VERIFIER).model == base.profile_for(Role.INDEPENDENT_VERIFIER).model
+
+
+@pytest.mark.parametrize("old, new, message", [
+    ('when = "all"', 'when = "sometimes"', "when must be one of"),
+    ("judges_per_claim = 1", "judges_per_claim = 0", "judges_per_claim"),
+    ("judges_per_claim = 1", "judges_per_claim = 6", "judges_per_claim"),
+    ("max_why_chars = 600", "max_why_chars = 0", "max_why_chars"),
+    ("max_cited_rows_per_side = 12", "max_cited_rows_per_side = 33", "max_cited_rows_per_side"),
+    ("enabled = true\nwhen", "enabled = 1\nwhen", "enabled must be a Boolean"),
+    ("accept_partly = false", "accept_partly = 1", "accept_partly must be a Boolean"),
+    ('risk_ratings = ["medium", "high", "critical"]', 'risk_ratings = ["severe"]', "risk_ratings has unknown values"),
+    ('risk_ratings = ["medium", "high", "critical"]', 'risk_ratings = ["high", "high"]', "distinct strings"),
+])
+def test_judge_and_poc_candidate_settings_reject_invalid_values(tmp_path: Path, old: str, new: str,
+                                                                  message: str) -> None:
+    with pytest.raises(ValueError, match=message):
+        _variant(tmp_path, (old, new))
+
+
+def test_only_the_judge_may_carry_judge_keys_and_it_cannot_name_itself(tmp_path: Path) -> None:
+    verifier = f"{SECTION}.roles.independent_verifier]"
+    with pytest.raises(ValueError, match="unknown settings"):
+        _variant(tmp_path / "a", (f'{verifier}\nworkers = 4', f'{verifier}\nwhen = "all"\nworkers = 4'))
+    with pytest.raises(ValueError, match="must not name the role itself"):
+        _variant(tmp_path / "b", ('require_distinct_from_roles = ["hypothesis_hunter", "red_team_analyst", '
+                                  '"blue_team_refuter"]\nmax_why_chars',
+                                  'require_distinct_from_roles = ["adjudication_judge"]\nmax_why_chars'))
