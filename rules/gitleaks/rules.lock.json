@@ -5,7 +5,7 @@
   "provenance": "repository-authored for appsec-review",
   "files": {
     "generic-secrets.toml": {
-      "sha256": "38d37ad13b89983aa12283a6f1322b087884b6b274c26f8b7dba505538156793"
+      "sha256": "7863036cb17fe184f6cc430d4c390d70207a0d8966541c14349961738aee197c"
     }
   }
 }

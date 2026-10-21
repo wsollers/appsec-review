@@ -70,7 +70,7 @@ def test_the_registry_covers_both_bundles() -> None:
     ('const char key[] = "short";', False),
     ('int api_key_length = 32;', False),
 ])
-def test_the_generic_secret_rule_matches_named_high_entropy_literals_only(line: str, hit: bool) -> None:
+def test_the_widened_generic_api_key_pattern_matches_named_secret_literals_only(line: str, hit: bool) -> None:
     regex = re.search(r"regex = '''(.+)'''", (GITLEAKS / "generic-secrets.toml").read_text(encoding="utf-8")).group(1)
     assert bool(re.search(regex, line)) is hit
 
@@ -128,4 +128,33 @@ def test_gitleaks_with_the_bundle_finds_the_array_declared_key_that_the_defaults
         return [item["RuleID"] for item in (json.loads(output) or [])]
 
     assert findings(None) == []
-    assert findings(Path("/rules-gitleaks/generic-secrets.toml")) == ["appsec-review-named-secret-literal"]
+    assert findings(Path("/rules-gitleaks/generic-secrets.toml")) == ["generic-api-key"]
+
+
+# Everything the built-in rule reports must still be reported with the widened pattern; the widening may only add.
+_UPSTREAM_BATTERY = [
+    'api_key = "Zk3pQ9xLm2Vb7TnR4sWd8Yh"', 'API_KEY = "Zk3pQ9xLm2Vb7TnR4sWd8Yh"', 'Token: "Zk3pQ9xLm2Vb7TnR4sWd8Yh"',
+    'AUTH_SECRET = "Zk3pQ9xLm2Vb7TnR4sWd8Yh"', "x.apiKey = 'Zk3pQ9xLm2Vb7TnR4sWd8Yh'", 'password => "Zk3pQ9xLm2Vb7TnR4sWd8Yh"',
+    "creds := `Zk3pQ9xLm2Vb7TnR4sWd8Yh`", 'secret_key=Zk3pQ9xLm2Vb7TnR4sWd8Yh', 'client_secret: Zk3pQ9xLm2Vb7TnR4sWd8Yh',
+    'name = "hello world, plain text"', 'monkey = "abcdefghijklmnop"', 'keyboard = 1234567890123',
+]
+
+
+@pytest.mark.skipif(not _docker_ready(GITLEAKS_IMAGE), reason="gitleaks image is not built")
+def test_the_widened_pattern_reports_everything_the_built_in_rule_reports(tmp_path) -> None:
+    target = tmp_path / "target"
+    target.mkdir()
+    (target / "battery.cpp").write_text("\n".join(_UPSTREAM_BATTERY) + "\n", encoding="utf-8")
+
+    def lines(config: Path | None) -> set[int]:
+        command = ["docker", "run", "--rm", "--network", "none", "--read-only", "--user", "1000:1000",
+                   "--cap-drop", "ALL", "--tmpfs", "/tmp:rw,size=64m", "-e", "HOME=/tmp", "-v", f"{target}:/target:ro",
+                   "-v", f"{GITLEAKS}:/rules-gitleaks:ro", "--entrypoint", "sh", GITLEAKS_IMAGE, "-c",
+                   "gitleaks dir /target %s --no-banner --redact --report-format json --report-path /tmp/r.json "
+                   "--exit-code 0 >/dev/null 2>&1; cat /tmp/r.json" % (f"--config {config}" if config else "")]
+        output = subprocess.run(command, capture_output=True, text=True, timeout=120, check=False).stdout
+        return {item["StartLine"] for item in (json.loads(output) or []) if item["RuleID"] == "generic-api-key"}
+
+    built_in = lines(None)
+    assert built_in, "the battery no longer exercises the built-in rule"
+    assert built_in <= lines(Path("/rules-gitleaks/generic-secrets.toml"))

@@ -324,7 +324,7 @@ def _record(item: Mapping[str, Any], *, rule: Iterable[str], message: Iterable[s
         "severity": first(severity_keys, "UNKNOWN"), "category": item.get("category", category),
         "path": first(path_keys, location.get("path") or location.get("file")),
         "start_line": first(line_keys, start.get("line") or location.get("line") or 1),
-        "end_line": item.get("end_line") or item.get("endLine") or 1,
+        "end_line": item.get("end_line") or item.get("endLine") or item.get("EndLine") or 1,
         "component": item.get("component"), "package": item.get("package") or item.get("name"),
         "advisory": item.get("advisory") or item.get("vulnerability") or item.get("id"),
         "language": item.get("language"),
@@ -337,8 +337,11 @@ def _list_parser(payload: bytes) -> list[dict[str, Any]]:
     items = value if isinstance(value, list) else value.get(
         "results", value.get("findings", value.get("comments", []))
     )
+    # Gitleaks reports File/StartLine/EndLine in capitalised keys; read them as well as the lowercase spellings.
     return [_record(item, rule=("rule_id", "RuleID", "check_id", "id", "code"),
-                    message=("message", "Description", "description", "text")) for item in items]
+                    message=("message", "Description", "description", "text"),
+                    path_keys=("path", "file", "filename", "File"),
+                    line_keys=("line", "start_line", "lineNumber", "StartLine")) for item in items]
 
 
 def _mobsfscan_parser(payload: bytes) -> list[dict[str, Any]]:
