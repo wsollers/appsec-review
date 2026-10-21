@@ -172,11 +172,11 @@ codeql_analysis + owasp_control_assessment + review_prioritization + code_graph_
   -> security_tagging
 test_coverage + profile_data + dependency_intelligence + security_tagging
   -> review_data_indexing -> review_package_assembly -> document_issue_analysis
+  -> inference_security_review -> final_publication_gate -> final_report_publication
 ```
 
 `wave1_review` contains every registered job except the standalone
-`third_party_data_sync` and `inference_security_review` jobs, and
-`document_issue_analysis` is its single terminal job.
+`third_party_data_sync` job, and `final_report_publication` is its single terminal job.
 
 This is the Dagster-only composed topology. The direct CLI has a smaller linear graph documented in
 [`docs/operations/wave1-review.md`](../../docs/operations/wave1-review.md).
@@ -443,7 +443,8 @@ Two jobs route by job before these step-name heuristics (`_JOB_STEP_POOLS` and
 `_JOB_DEFAULT_POOLS` in `orchestration/dagster/adapter.py`): every non-lifecycle unit of
 `job_code_graph_index` runs in `index`, and `job_inference_security_review` runs `lead_review`
 and `hunt_review` in `inference_teams` (limit 2), `scoring` in `inference_score` (limit 4),
-`publication` in `lifecycle` and everything else in `application`.
+`publication` in `lifecycle` and everything else in `application`. `job_final_publication_gate` and
+`job_final_report_publication` have no routing of their own and use the default `application` pool.
 
 The checked-in configuration limits every pool except `application`, which has no configured
 limit and is bounded only by `max_concurrent`.

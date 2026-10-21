@@ -85,9 +85,15 @@ Downstream contracts are exact:
 
 No remediation or report job may reinterpret a claim state or a `ship-block-policy/1` status. It
 projects the accepted state and provenance from this job. The four job names are fixed (decision
-8): each is a `planned:` producer in `indexing/input_matrix.py` (`INPUT_SOURCES` and
+8): each is a producer in `indexing/input_matrix.py` (`INPUT_SOURCES` and
 `PLANNED_CONSUMERS`), and the handoff's `planned_consumers` lists them with the handoff fields each
-reads (`jobs/job_inference_security_review/datasets.py::PLANNED_CONSUMERS`). None is implemented.
+reads (`jobs/job_inference_security_review/datasets.py::PLANNED_CONSUMERS`; its `status` is the
+decision-8 reservation of the name, not a build status). `job_final_publication_gate` and
+`job_final_report_publication` are implemented ([operations](../operations/final-report.md)); the
+two remediation jobs are still `planned:` producers and are not built. Until they exist the gate
+records them as the named limitations `remediation_planning_not_run` and
+`remediation_validation_not_run`, and it records the absent attack-chain and PoC status manifests as
+unavailable inputs.
 
 ## Dagster graph
 
@@ -2224,9 +2230,13 @@ will be enforced in code.
    `job_remediation_validation`, `job_final_publication_gate` and `job_final_report_publication`,
    as in [Placement and consumers](#placement-and-consumers). They are registered as planned
    producers so later work does not rename them.
-   Implementation: four `planned:` rows in `indexing/input_matrix.py::INPUT_SOURCES` (with matching
-   rows in the [input-source matrix](indexing-and-query-reuse.md)), the consumer graph in
-   `input_matrix.PLANNED_CONSUMERS`, and the review handoff's `planned_consumers`. No job is built.
+   Implementation: four rows in `indexing/input_matrix.py::INPUT_SOURCES` (with matching rows in the
+   [input-source matrix](indexing-and-query-reuse.md)), the consumer graph in
+   `input_matrix.PLANNED_CONSUMERS`, and the review handoff's `planned_consumers`. The publication
+   gate and the final report are built (`jobs/job_final_publication_gate`,
+   `jobs/job_final_report_publication`; see [final-report](../operations/final-report.md)) and their
+   rows name the real jobs; the two remediation rows are still `planned:` and no remediation job is
+   built.
 9. **`security_predicate` vocabulary — decided and implemented.** `security_predicate` is the
    closed, versioned `security-predicates/1` vocabulary (`review/models.py::SecurityPredicate`),
    rolled up from the taxonomy's weakness classes, with `other` plus an `evidence_gap` for an

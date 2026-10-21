@@ -468,7 +468,8 @@ model_connectivity -> image_pin_verification -> review_intake -> target_catalog 
   -> cpg_analysis (deprecated; only when enabled) -> evidence_collection -> dependency_intelligence
   -> change_context_analysis -> codeql_analysis -> review_prioritization
   -> code_graph_index -> review_data_indexing -> review_package_assembly
-  -> document_issue_analysis
+  -> document_issue_analysis -> inference_security_review -> final_publication_gate
+  -> final_report_publication
 ```
 
 Start a review from the repository root with the virtual environment active:
@@ -520,13 +521,16 @@ python -m appsec_review start --target targets/appsec-multi-vuln
 
 The direct graph leaves out CI configuration analysis, post-build security assessment, OWASP
 control assessment, and security tagging. Use Dagster's `wave1_review` job, which runs every
-enabled registered review job except the standalone `third_party_data_sync` and
-`inference_security_review` jobs, when you need those branches. The direct graph is linear, so its
+enabled registered review job except the standalone `third_party_data_sync` job, when you need
+those branches. The direct graph is linear, so its
 order is an execution order rather than a claim that every adjacent job consumes its predecessor.
 `third_party_data_sync` remains a separate scheduled metadata job.
 `sanitizer_build` rebuilds the accepted native units with AddressSanitizer and UBSan in its own
 workspace and never runs a produced binary; see
 [`docs/operations/sanitizer-build.md`](docs/operations/sanitizer-build.md).
+`final_publication_gate` and `final_report_publication` call no model: they re-verify the accepted
+inference review and write `final-report.json` and a deterministic `final-report.md`; see
+[`docs/operations/final-report.md`](docs/operations/final-report.md).
 See [`docs/operations/wave1-review.md`](docs/operations/wave1-review.md).
 
 ## Prepare an end-to-end run
