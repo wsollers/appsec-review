@@ -59,7 +59,7 @@ def registry_providers() -> tuple[tuple[str, ...], dict[str, tuple[Any, ...]], d
     job_ids = tuple(job_id for job_id in builtin_registry().job_ids()
                     if job_id not in {"job_review_package_assembly", "job_document_issue_analysis",
                                       "job_inference_security_review", "job_final_publication_gate",
-                                      "job_final_report_publication"})
+                                      "job_poc_generation", "job_final_report_publication"})
     declarations: dict[str, tuple[Any, ...]] = {}
     consumes: dict[str, tuple[str, ...]] = {}
     for job_id in job_ids:
@@ -255,7 +255,7 @@ def build_job(*, providers: Providers = registry_providers,
         job_steps = {job_id: steps for job_id, steps in _resolved_steps(run_root).items()
                      if job_id not in {"job_review_package_assembly", "job_document_issue_analysis",
                                        "job_inference_security_review", "job_final_publication_gate",
-                                       "job_final_report_publication"}}
+                                       "job_poc_generation", "job_final_report_publication"}}
         feeds = feed_pins(unit.job.repository_root, _resolved_document(run_root),
                           int(settings_of(unit)["feed_max_age_days"]),
                           max_age_overrides={str(key): int(value) for key, value in dict(

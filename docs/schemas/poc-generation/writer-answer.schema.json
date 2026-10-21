@@ -1,0 +1,168 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://appsec-review.local/schemas/poc-generation/writer-answer.schema.json",
+  "title": "poc_writer compact answer (the result of a final turn)",
+  "description": "Either two functions with their fixtures, or a decline. Names, includes and source are bounded here and judged by the deterministic validators: a name such as main is a validator verdict (policy_denied), never a schema error the writer could repair around.",
+  "type": "object",
+  "if": {
+    "required": [
+      "decline"
+    ]
+  },
+  "then": {
+    "$ref": "#/$defs/decline"
+  },
+  "else": {
+    "$ref": "#/$defs/functions"
+  },
+  "$defs": {
+    "functions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "test_function",
+        "negative_control",
+        "setup",
+        "expected_observation",
+        "breakpoints"
+      ],
+      "properties": {
+        "claim": {
+          "type": "string",
+          "maxLength": 80
+        },
+        "test_function": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "name",
+            "includes",
+            "source"
+          ],
+          "properties": {
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80
+            },
+            "includes": {
+              "type": "array",
+              "maxItems": 24,
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 160
+              }
+            },
+            "source": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 12000
+            }
+          }
+        },
+        "negative_control": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "name",
+            "source"
+          ],
+          "properties": {
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80
+            },
+            "source": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 12000
+            }
+          }
+        },
+        "setup": {
+          "type": "array",
+          "maxItems": 16,
+          "items": {
+            "type": "string",
+            "maxLength": 1200
+          }
+        },
+        "expected_observation": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1200
+        },
+        "breakpoints": {
+          "type": "array",
+          "maxItems": 16,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "function",
+              "line",
+              "why"
+            ],
+            "properties": {
+              "function": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "line": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 10000000
+              },
+              "why": {
+                "type": "string",
+                "maxLength": 1200
+              }
+            }
+          }
+        },
+        "notes": {
+          "type": "string",
+          "maxLength": 1200
+        }
+      }
+    },
+    "decline": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "decline"
+      ],
+      "properties": {
+        "claim": {
+          "type": "string",
+          "maxLength": 80
+        },
+        "decline": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status",
+            "why"
+          ],
+          "properties": {
+            "status": {
+              "enum": [
+                "insufficient_evidence",
+                "not_applicable",
+                "unsafe_to_attempt"
+              ]
+            },
+            "why": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1200
+            }
+          }
+        }
+      }
+    }
+  }
+}

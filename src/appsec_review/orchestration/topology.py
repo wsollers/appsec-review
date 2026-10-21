@@ -185,9 +185,15 @@ def wave1_dependencies(registered: Set[str]) -> dict[str, tuple[str, ...]] | Non
     if "job_final_publication_gate" in registered and "job_inference_security_review" in registered:
         # The gate only projects the accepted review handoff and the artifacts it binds.
         wave_dependencies["job_final_publication_gate"] = ("job_inference_security_review",)
+    if "job_poc_generation" in registered and "job_final_publication_gate" in registered:
+        # Optional (disabled by default): proof-of-concept functions for the claims the judge agreed with.
+        # It reads the accepted gate and review and the accepted native build, and the report shows its outcome.
+        wave_dependencies["job_poc_generation"] = ("job_final_publication_gate",)
     if "job_final_report_publication" in registered and "job_final_publication_gate" in registered:
-        # The report reads only the accepted gate handoff and is the one terminal job of the graph.
-        wave_dependencies["job_final_report_publication"] = ("job_final_publication_gate",)
+        # The report reads the accepted gate handoff (and the PoC handoff when the PoC job ran) and is the one
+        # terminal job of the graph. A disabled PoC job is transparent: the report follows the gate.
+        wave_dependencies["job_final_report_publication"] = (
+            ("job_poc_generation",) if "job_poc_generation" in wave_dependencies else ("job_final_publication_gate",))
     return wave_dependencies
 
 
@@ -285,12 +291,17 @@ def launch_upstream_handoffs(runs_dir: Path, tags: Mapping[str, str], *,
     return tagged_upstream_handoffs(RunStore(Path(runs_dir)).resolve(run_id), raw)
 
 
-def describe_wave1(config: Any, registry: Any) -> dict[str, Any]:
-    """Describe ``wave1_review`` as the packaged code location builds it."""
+def describe_wave1(config: Any, registry: Any, include: Iterable[str] = ()) -> dict[str, Any]:
+    """Describe ``wave1_review`` as the packaged code location builds it.
+
+    ``include`` names registered jobs to treat as enabled, so a manually invoked job that is disabled in the
+    graph (``job_poc_generation``) can be given the upstream handoffs it would have in the graph.
+    """
 
     from appsec_review.runtime import job_is_enabled
 
     registered = {job_id for job_id in registry.job_ids() if job_is_enabled(config, job_id)}
+    registered |= {job_id for job_id in include if job_id in set(registry.job_ids())}
     dependencies = wave1_dependencies(registered)
     if dependencies is None:
         raise ValueError("wave1_review is not defined by this configuration")

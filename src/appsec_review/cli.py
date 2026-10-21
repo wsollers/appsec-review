@@ -33,7 +33,11 @@ GRAPH_JOB_IDS = ("job_model_connectivity", "job_image_pin_verification", "job_re
 # Consumers of the accepted index that run after the resumable graph.
 POST_INDEX_JOB_IDS = ("job_review_package_assembly", "job_document_issue_analysis",
                       "job_inference_security_review", "job_final_publication_gate",
-                      "job_final_report_publication")
+                      "job_poc_generation", "job_final_report_publication")
+# Jobs that are outside the automatic graph while ``settings.enabled`` is false and that an operator may still
+# dispatch directly on a finished run (`run <job> --run-id <id> --upstream-from-run`). Every other disabled job
+# is refused: disabling it means "do not run it".
+MANUAL_JOB_IDS = frozenset({"job_poc_generation"})
 
 
 def parser() -> argparse.ArgumentParser:
@@ -212,7 +216,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(json.dumps(summary, sort_keys=True))
         return 0
 
-    if not job_is_enabled(config, args.job_id):
+    if not job_is_enabled(config, args.job_id) and args.job_id not in MANUAL_JOB_IDS:
         raise ValueError(f"job is disabled by configuration: {args.job_id}")
     from appsec_review.orchestration.topology import accepted_upstream_handoffs, describe_wave1
     from appsec_review.runtime.launch import configured_target, launch, launch_inputs
@@ -224,7 +228,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.upstream_from_run:
         if not args.run_id:
             parser().error("--upstream-from-run requires --run-id")
-        entry = next((item for item in describe_wave1(config, registry)["jobs"]
+        entry = next((item for item in describe_wave1(config, registry, include=MANUAL_JOB_IDS & {args.job_id})["jobs"]
                       if item["job_id"] == args.job_id), None)
         if entry is None:
             raise ValueError(f"job is not in wave1_review: {args.job_id}")

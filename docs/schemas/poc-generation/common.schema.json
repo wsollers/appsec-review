@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://appsec-review.local/schemas/poc-generation/common.schema.json",
+  "title": "Shared definitions for job_poc_generation",
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "claim_id": {
+      "type": "string",
+      "pattern": "^claim-[0-9a-f]{64}$"
+    },
+    "finding_package_id": {
+      "type": "string",
+      "pattern": "^finding-[0-9a-f]{64}$"
+    },
+    "package_id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*-[0-9a-f]{64}$"
+    },
+    "evidence_ref": {
+      "type": "string",
+      "pattern": "^(asr:[a-z][a-z0-9_]*:[0-9a-f]{64}|evrel-[0-9a-f]{64})$"
+    },
+    "label": {
+      "type": "string",
+      "pattern": "^[A-Z][0-9]{1,3}$"
+    },
+    "short_text": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 240
+    },
+    "text": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2000
+    },
+    "run_path": {
+      "type": "string",
+      "pattern": "^(?!.*(^|/)[.][.]?(/|$))[A-Za-z0-9_.-]+(/[A-Za-z0-9_.-]+)*$",
+      "maxLength": 512
+    },
+    "artifact_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256"
+      ],
+      "properties": {
+        "path": {
+          "$ref": "#/$defs/run_path"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "status": {
+      "enum": [
+        "compile_verified",
+        "compile_failed",
+        "artifact_generated",
+        "policy_denied",
+        "insufficient_evidence",
+        "not_applicable",
+        "unsafe_to_attempt"
+      ]
+    },
+    "judge_verdict": {
+      "enum": [
+        "red_correct",
+        "blue_correct",
+        "partly",
+        "neither",
+        "unresolved"
+      ]
+    },
+    "claim_state": {
+      "enum": [
+        "supported",
+        "confirmed"
+      ]
+    }
+  }
+}

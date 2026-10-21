@@ -680,8 +680,9 @@ def test_inventory_audit_matrices_links_and_fts_validation(accepted) -> None:
         cursor = page["pagination"]["next_cursor"]
         if cursor is None:
             break
-    # job_cpg_analysis and job_svf_alias_analysis are disabled by default, so their input sources are absent.
-    assert len(sources) == len(input_matrix.INPUT_SOURCES) - 2
+    # job_cpg_analysis, job_svf_alias_analysis and job_poc_generation are disabled by default, so their input
+    # sources are absent.
+    assert len(sources) == len(input_matrix.INPUT_SOURCES) - 3
     assert all(item["payload"]["source"] != "joern_cpg" for item in sources)
     language = core.query_dataset_inventory(cell_type="language", limit=100)["results"]
     native = next(item["payload"] for item in language if item["payload"]["language"] == "c/c++")
