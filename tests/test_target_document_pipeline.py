@@ -130,7 +130,9 @@ def test_cli_start_graph_includes_document_collection_task(tmp_path: Path, monke
     assert cli.main(["--config", str(config_path), "start", "--target", str(target)]) == 0
     assert "retrieval_indexes.build_target_documents" in {
         unit.unit_id for unit in captured["catalog"].units}
-    assert captured["job_ids"][-2:] == ["job_review_package_assembly", "job_document_issue_analysis"]
+    assert captured["job_ids"][-5:] == [
+        "job_review_package_assembly", "job_document_issue_analysis", "job_inference_security_review",
+        "job_final_publication_gate", "job_final_report_publication"]
 
 
 def test_review_data_indexing_carries_document_shard_and_audits_its_dataset(tmp_path: Path) -> None:

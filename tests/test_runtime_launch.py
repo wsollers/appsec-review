@@ -105,7 +105,7 @@ def test_every_registered_job_outside_the_target_set_is_named() -> None:
     # A newly registered job must be placed deliberately: it either reads the target or it does not.
     assert set(builtin_registry().job_ids()) - TARGET_JOBS == {
         "job_model_connectivity", "job_image_pin_verification", "job_third_party_data_sync",
-        "job_inference_security_review"}
+        "job_inference_security_review", "job_final_publication_gate", "job_final_report_publication"}
 
 
 def test_accepted_upstream_handoffs_requires_and_verifies_each_pointer(tmp_path: Path) -> None:
