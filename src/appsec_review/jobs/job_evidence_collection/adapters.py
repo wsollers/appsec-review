@@ -311,7 +311,7 @@ def _json(payload: bytes) -> Any:
 
 def _record(item: Mapping[str, Any], *, rule: Iterable[str], message: Iterable[str],
             severity_keys: Iterable[str] = ("severity", "level"), path_keys: Iterable[str] = ("path", "file", "filename"),
-            line_keys: Iterable[str] = ("line", "start_line", "lineNumber"), category: str = "static_analysis") -> dict[str, Any]:
+            line_keys: Iterable[str] = ("line", "start_line", "lineNumber"), category: str) -> dict[str, Any]:
     def first(keys: Iterable[str], default: Any = None) -> Any:
         for key in keys:
             if key in item and item[key] is not None:
@@ -332,16 +332,41 @@ def _record(item: Mapping[str, Any], *, rule: Iterable[str], message: Iterable[s
     }
 
 
-def _list_parser(payload: bytes) -> list[dict[str, Any]]:
+# True scanner categories (``retrieval.observations`` maps each to its observation class). The generic
+# ``static_analysis`` category classified as ``other`` and is retired: every parser names its own.
+CATEGORY_SECRET, CATEGORY_SHELL_LINT, CATEGORY_SOURCE_SAST = "secret_detection", "shell_lint", "source_sast"
+CATEGORY_CONFIG_LINT, CATEGORY_CI_SECURITY = "config_lint", "ci_security"
+
+
+def _list_records(payload: bytes, category: str) -> list[dict[str, Any]]:
     value = _json(payload)
     items = value if isinstance(value, list) else value.get(
         "results", value.get("findings", value.get("comments", []))
     )
     # Gitleaks reports File/StartLine/EndLine in capitalised keys; read them as well as the lowercase spellings.
-    return [_record(item, rule=("rule_id", "RuleID", "check_id", "id", "code"),
-                    message=("message", "Description", "description", "text"),
-                    path_keys=("path", "file", "filename", "File"),
-                    line_keys=("line", "start_line", "lineNumber", "StartLine")) for item in items]
+    # The category is the scanner's class, never a field of the scanner output.
+    return [{**_record(item, rule=("rule_id", "RuleID", "check_id", "id", "code"),
+                       message=("message", "Description", "description", "text"),
+                       path_keys=("path", "file", "filename", "File"),
+                       line_keys=("line", "start_line", "lineNumber", "StartLine"), category=category),
+             "category": category} for item in items]
+
+
+def _gitleaks_parser(payload: bytes) -> list[dict[str, Any]]:
+    return _list_records(payload, CATEGORY_SECRET)
+
+
+def _psalm_parser(payload: bytes) -> list[dict[str, Any]]:
+    """Psalm type and taint findings of PHP source: the category phpstan and phpcs also use."""
+    return _list_records(payload, CATEGORY_SOURCE_SAST)
+
+
+def _hadolint_parser(payload: bytes) -> list[dict[str, Any]]:
+    return _list_records(payload, CATEGORY_CONFIG_LINT)
+
+
+def _zizmor_parser(payload: bytes) -> list[dict[str, Any]]:
+    return _list_records(payload, CATEGORY_CI_SECURITY)
 
 
 def _mobsfscan_parser(payload: bytes) -> list[dict[str, Any]]:
@@ -478,14 +503,15 @@ def _shellcheck_parser(payload: bytes) -> list[dict[str, Any]]:
                             "not_applicable_reason": "tool-shellcheck reported SC1071: "
                             "ShellCheck only supports sh/bash/dash/ksh scripts"})
             continue
-        records.append(_record(item, rule=("rule_id", "RuleID", "check_id", "id", "code"),
-                               message=("message", "Description", "description", "text")))
+        records.append({**_record(item, rule=("rule_id", "RuleID", "check_id", "id", "code"),
+                                  message=("message", "Description", "description", "text"),
+                                  category=CATEGORY_SHELL_LINT), "category": CATEGORY_SHELL_LINT})
     return records
 
 
 def _gosec_parser(payload: bytes) -> list[dict[str, Any]]:
     return [_record(item, rule=("rule_id",), message=("details",), path_keys=("file",),
-                    line_keys=("line",), category="source_sast") for item in _json(payload).get("Issues", [])]
+                    line_keys=("line",), category=CATEGORY_SOURCE_SAST) for item in _json(payload).get("Issues", [])]
 
 
 def _checkov_parser(payload: bytes) -> list[dict[str, Any]]:
@@ -714,7 +740,7 @@ def _registry() -> dict[str, ToolAdapter]:
         ToolAdapter("tool-gitleaks", "secrets", frozenset({0, 1}), "/scratch/output.json", _gitleaks,
                     lambda exe, sel: (exe, "dir", "/target", "--config", GITLEAKS_RULES_FILE, "--no-banner", "--redact",
                                       "--report-format", "json",
-                                      "--report-path", "/scratch/output.json", "--exit-code", "1"), _list_parser,
+                                      "--report-path", "/scratch/output.json", "--exit-code", "1"), _gitleaks_parser,
                     ("worktree only; git history is excluded",)),
         ToolAdapter("tool-semgrep", "source_sast", frozenset({0}), "/scratch/output.json", _all_source,
                     _args("scan", "--disable-version-check", "--metrics", "off", "--config", "/rules/security.yml",
@@ -748,7 +774,7 @@ def _registry() -> dict[str, ToolAdapter]:
                     _args("analyse", "--no-progress", "--error-format=json", "--memory-limit=768M"), _phpstan_parser,
                     ("Composer dependencies are not installed by the scanner",)),
         ToolAdapter("tool-psalm", "source_sast", frozenset({0, 1, 2}), None, lang("tool-psalm", "PHP"),
-                    _args("--output-format=json", "--no-progress", "--no-cache"), _list_parser,
+                    _args("--output-format=json", "--no-progress", "--no-cache"), _psalm_parser,
                     ("project config and installed dependency stubs may be required",)),
         ToolAdapter("tool-spotbugs", "source_sast", frozenset({0}), "/scratch/output.xml", _spotbugs,
                     _args("-textui", "-xml:withMessages", "-output", "/scratch/output.xml"), _spotbugs_parser),
@@ -762,7 +788,7 @@ def _registry() -> dict[str, ToolAdapter]:
                     lambda exe, sel: (exe, "sbom:/inputs/syft.json", "--output", "json", "--file", "/scratch/output.json",
                                       "--only-fixed=false"), _grype_parser),
         ToolAdapter("tool-hadolint", "configuration", frozenset({0, 1}), None, dockerfiles,
-                    _args("--format", "json"), _list_parser),
+                    _args("--format", "json"), _hadolint_parser),
         ToolAdapter("tool-checkov", "configuration", frozenset({0, 1}), None, _checkov,
                     _checkov_args, _checkov_parser),
         ToolAdapter("tool-trivy", "configuration", frozenset({0}), "/scratch/output.json",
@@ -775,7 +801,7 @@ def _registry() -> dict[str, ToolAdapter]:
                                       "--exit-code", "0", "/scratch/inputs"), _trivy_parser,
                     (TRIVY_EMBEDDED_CHECKS,), stderr_gaps=_trivy_stderr_gaps),
         ToolAdapter("tool-zizmor", "configuration", frozenset({0, 1}), None, workflows,
-                    _args("--offline", "--no-exit-codes", "--format", "json"), _list_parser),
+                    _args("--offline", "--no-exit-codes", "--format", "json"), _zizmor_parser),
         ToolAdapter("tool-blint", "binary_hardening", frozenset({0}), BLINT_REPORT, _blint,
                     _blint_args, _blint_parser, collector=_collect_blint),
     ]

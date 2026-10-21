@@ -30,7 +30,8 @@ from appsec_review.indexing.sast import (
 )
 from appsec_review.retrieval.model import EntityKind, LogicalIdentity
 from appsec_review.retrieval.observations import (
-    SEVERITY_ORDER, SEVERITY_RULE, classify, normalize_reported_severity, rule_of, scanner_of,
+    RECORD_KIND_FINDING, RECORD_KIND_SUMMARY, SEVERITY_ORDER, SEVERITY_RULE, classify, normalize_reported_severity,
+    rule_of, scanner_of,
 )
 from appsec_review.review import advisories as advisory_reference
 from appsec_review.review.models import IntegrityError
@@ -38,6 +39,7 @@ from appsec_review.review.scope import AcceptedScope, ScopeGap, sorted_gaps
 from appsec_review.review.secret_redaction import redact_message
 
 SECRET_CWE = "CWE-798"       # rule-level mapping of the ``secret`` family: use of hard-coded credentials
+ARTIFACT_FINDING, ARTIFACT_SUMMARY = RECORD_KIND_FINDING, RECORD_KIND_SUMMARY
 
 FAMILIES = ("source_sast", "codeql", "artifact_scanner", "dependency_advisory", "ci_rule",
             "post_build_hardening", "owasp_control", "secret", "config_scanner")
@@ -45,9 +47,15 @@ FAMILY_RULES = {family: f"appsec-review/lead-family/{family}/1" for family in FA
 # Families whose versioned rule consults the pinned NVD CVSS when the scanner reports none.
 FAMILY_RULES.update({family: f"appsec-review/lead-family/{family}/2"
                      for family in ("artifact_scanner", "dependency_advisory")})
-# source_sast/2: the family also takes the evidence-collection tools whose records carry the generic
-# ``static_analysis`` category (shellcheck, psalm) and Infer (job_cpp_compiled_analysis); severity unchanged.
-FAMILY_RULES["source_sast"] = "appsec-review/lead-family/source_sast/2"
+# source_sast/2: the family also takes shellcheck, psalm and Infer (job_cpp_compiled_analysis).
+# source_sast/3: shellcheck and psalm follow from their true categories (``shell_lint``, ``source_sast``) instead of
+# a scanner-id decision, so they also join the accepted ``scanner_correlation/2`` lead facts (suppression and
+# duplicate state); severity unchanged.
+FAMILY_RULES["source_sast"] = "appsec-review/lead-family/source_sast/3"
+# artifact_scanner/3: one lead per artifact FINDING (a blint check result, a SpotBugs bug instance, an OSV
+# vulnerability), at its own native severity; scan-run summaries and inventory rows are deliberate non-leads.
+# (/2 admitted one lead per artifact scan, nested findings collapsed to ``unknown``.)
+FAMILY_RULES["artifact_scanner"] = "appsec-review/lead-family/artifact_scanner/3"
 ADVISORY_FAMILIES = frozenset({"artifact_scanner", "dependency_advisory"})
 # Producer whose accepted shard must exist for the family to have coverage.
 FAMILY_PRODUCERS = {
@@ -79,28 +87,35 @@ _CODEQL, _ARTIFACT, _CI ="job_codeql_analysis", "job_artifact_security_analysis"
 # rows. A producer or scanner absent from this table is a named coverage gap at assembly, and
 # ``tests/review/test_lead_coverage.py`` fails when a producer in the code is absent from it.
 OBSERVATION_PRODUCERS: tuple[ProducerDecision, ...] = (
-    ProducerDecision(_EV, "tool-gitleaks", "secret", "secret scanner; the scanner reports no severity"),
+    # Not listed here, because the parser's true category already decides the family through CLASS_FAMILY:
+    # tool-gitleaks (``secret_detection`` -> secret), tool-shellcheck (``shell_lint``) and tool-psalm
+    # (``source_sast``) -> source_sast, tool-hadolint (``config_lint``) -> config_scanner.
+    # ``tests/review/test_lead_coverage.py`` proves every adapter tool is decided by one or the other.
     *(ProducerDecision(_EV, tool, "source_sast", "source SAST") for tool in (
         "tool-semgrep", "tool-opengrep", "tool-gosec", "tool-mobsfscan", "tool-cppcheck", "tool-pmd",
-        "tool-phpstan", "tool-phpcs", "tool-spotbugs",
-        "tool-shellcheck", "tool-psalm")),     # the last two record the generic ``static_analysis`` category
+        "tool-phpstan", "tool-phpcs", "tool-spotbugs")),
     ProducerDecision(_EV, "tool-osv-scanner", "dependency_advisory", "dependency advisory"),
     ProducerDecision(_EV, "tool-grype", "dependency_advisory", "dependency advisory"),
     *(ProducerDecision(_EV, tool, "config_scanner", "Dockerfile and IaC misconfiguration") for tool in (
-        "tool-hadolint", "tool-checkov", "tool-trivy")),
+        "tool-checkov", "tool-trivy")),
     ProducerDecision(_EV, "tool-zizmor", None,
                      "GitHub Actions findings are reviewed from job_ci_configuration_analysis, which runs zizmor on "
                      "the same workflow files (ci_rule); mapping both would duplicate every lead"),
     ProducerDecision(_EV, "tool-syft", None, "SBOM inventory: package rows are context for dependency review, "
                                              "not findings"),
     ProducerDecision(_EV, "tool-blint", None,
-                     "binary hardening of catalog binaries has no source line and nests per-check severities inside "
-                     "one record; built-artifact hardening is reviewed as artifact_scanner and post_build_hardening "
-                     "(follow-up: normalize the nested severities, then admit)"),
+                     "binary hardening of catalog binaries has no source line; built-artifact hardening is reviewed "
+                     "from job_artifact_security_analysis (artifact_scanner, one lead per check result) and "
+                     "post_build_hardening. Each row already is one check result at its own severity; admitting "
+                     "catalog binaries as leads is a separate scoping decision"),
     ProducerDecision(_CLANG, "*", "source_sast", "Clang Static Analyzer and clang-tidy findings"),
     ProducerDecision(_CPP, "infer", "source_sast", "Infer findings (null dereference, leaks, buffer overrun)"),
     ProducerDecision(_CODEQL, "*", "codeql", "CodeQL results"),
-    ProducerDecision(_ARTIFACT, "*", "artifact_scanner", "artifact scanner records (blint, syft, builtin)"),
+    ProducerDecision(_ARTIFACT, "*", "artifact_scanner",
+                     "per-finding artifact records (``record_kind: finding``: a blint check result, a SpotBugs bug "
+                     "instance, an OSV or Grype match); scan-run summaries (``record_kind: scan_summary``, class "
+                     "diagnostic or inventory) are non-leads by class and a record of neither kind is an "
+                     "unmapped_observations gap"),
     ProducerDecision(_CI, "*", "ci_rule", "CI configuration rules"),
     # Producers of ``tool_observation`` rows outside the ``observations`` index.
     ProducerDecision(_POST_BUILD, "deterministic-build-security-rules", "post_build_hardening",
@@ -117,9 +132,10 @@ OBSERVATION_PRODUCERS: tuple[ProducerDecision, ...] = (
 # classes that are never findings.
 CLASS_FAMILY = {"source_sast": "source_sast", "secret": "secret", "configuration": "config_scanner"}
 NOT_A_LEAD_CLASSES: Mapping[str, str] = {
-    "diagnostic": "tool diagnostics describe a scanner run, not the target; they surface as coverage gaps",
-    "inventory": "software inventory rows are context, not findings",
-    "binary": "binary-hardening rows: see the tool-blint decision",
+    "diagnostic": "tool diagnostics and artifact scan-run summaries describe a scanner run, not the target; they "
+                  "surface as coverage gaps",
+    "inventory": "software inventory rows (syft packages, artifact inventory scans) are context, not findings",
+    "binary": "binary-hardening rows outside the artifact job: see the tool-blint decision",
 }
 
 
@@ -322,10 +338,14 @@ def observation_family(row: Mapping[str, Any], shard: Mapping[str, Any]) -> str 
     if PRODUCERS["ci_configuration"](shard):
         return "ci_rule"
     observation_class = classify(payload)
-    if observation_class == "dependency" or payload.get("capability") == "grype":
-        return "dependency_advisory"
     if PRODUCERS["artifact_scanner"](shard):
-        return "artifact_scanner"
+        # job_artifact_security_analysis: only a per-finding record is a lead; a scan-run summary (class
+        # diagnostic or inventory) never is, and a record of neither kind is an unmapped_observations gap.
+        if payload.get("record_kind") != ARTIFACT_FINDING:
+            return None
+        return "dependency_advisory" if observation_class == "dependency" else "artifact_scanner"
+    if observation_class == "dependency":
+        return "dependency_advisory"
     if observation_class in NOT_A_LEAD_CLASSES:
         return None
     decision = producer_decision(_job_of(shard), scanner_of(payload))
@@ -336,8 +356,13 @@ def observation_family(row: Mapping[str, Any], shard: Mapping[str, Any]) -> str 
 
 def non_lead_key(row: Mapping[str, Any], shard: Mapping[str, Any]) -> str | None:
     """Accounting key of an observation that is deliberately not a lead; ``None`` when no decision covers it."""
+    from appsec_review.review.scope import PRODUCERS
     payload = row["payload"]
     observation_class = classify(payload)
+    if PRODUCERS["artifact_scanner"](shard) and payload.get("record_kind") != ARTIFACT_FINDING:
+        # Only a typed scan-run summary is a decided non-lead; any other artifact record is unmapped.
+        return (f"class:{observation_class}" if payload.get("record_kind") == ARTIFACT_SUMMARY
+                and observation_class in NOT_A_LEAD_CLASSES else None)
     if observation_class in NOT_A_LEAD_CLASSES:
         return f"class:{observation_class}"
     scanner = scanner_of(payload)

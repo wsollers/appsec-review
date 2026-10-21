@@ -19,7 +19,11 @@ from appsec_review.retrieval.observations import (
 from appsec_review.indexing.products_base import AcceptedShards, Fact, Product
 
 
-RULE_VERSION = "appsec-review/scanner-correlation/1"
+# scanner-correlation/2: membership follows the observation CLASS, so shellcheck (``shell_lint``) and psalm
+# (``source_sast``) joined once their parsers emitted true categories (/1 saw their generic ``static_analysis``
+# category as class ``other``); a scanner whose inline suppression directive the syntax facts do not track now
+# reports suppression state ``unknown`` instead of an unfounded ``not_suppressed``.
+RULE_VERSION = "appsec-review/scanner-correlation/2"
 SUPPRESSION_RULE = "appsec-review/inline-suppression-match/1"
 DUPLICATE_RULE = "appsec-review/same-location-lead-correlation/1"
 MENU_KINDS = ("high_critical", "unknown")
@@ -30,6 +34,9 @@ _SUPPRESSION_TOOLS = {
     "psalm": {"tool-psalm"}, "phpstan": {"tool-phpstan"}, "sonar": set(),
     "clang-tidy": {"tool-clang-tidy", "tool-clang-static-analysis"},
 }
+# Scanners whose suppression directives the accepted syntax facts record; any other scanner's suppression state
+# is unknown (for example shellcheck's ``# shellcheck disable=`` is not a tracked directive).
+SUPPRESSION_TRACKED_SCANNERS = frozenset().union(*_SUPPRESSION_TOOLS.values())
 
 
 class LeadAuditError(ValueError):
@@ -52,7 +59,7 @@ def _suppressed_lines(suppression: Mapping[str, Any]) -> tuple[int, int] | None:
 
 def _match_suppressions(lead: Mapping[str, Any], by_path: Mapping[str, list[Mapping[str, Any]]]) -> tuple[str, list[str]]:
     path = lead["location"].get("source_path")
-    if path is None:
+    if path is None or lead["scanner"] not in SUPPRESSION_TRACKED_SCANNERS:
         return "unknown", []
     matched = []
     possible = False

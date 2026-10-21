@@ -23,6 +23,7 @@ from appsec_review.tool_inputs import (
 )
 from appsec_review.applicability import ReasonCode
 
+from .findings import FINDING_NORMALIZER, RECORD_SCHEMA, scan_records
 from .formats import ArchiveLimits, builtin_observation, classify
 from .scanners import ADAPTERS, ContainerScannerRunner
 from appsec_review.config.evidence_collection import memory_limit
@@ -33,6 +34,10 @@ SCHEMA = "appsec-review/artifact-security-analysis/1"
 OBSERVATION_SCHEMA = "appsec-review/artifact-security-observation/1"
 PARSER_IDENTITY = "appsec-review/artifact-security-parsers/2"
 NORMALIZER_IDENTITY = "appsec-review/artifact-security-normalizer/1"
+# The observations shard is a function of the scan results (parser and normalizer identities, which also key the
+# scan checkpoints) and of the splitting of a scan into one summary and per-finding records (``findings.py``).
+# Changing only the splitting re-indexes without re-running a scanner.
+INDEX_NORMALIZER_IDENTITY = f"{NORMALIZER_IDENTITY}+{FINDING_NORMALIZER}"
 CAPABILITIES = ("inventory", "native", "jvm", "packages", "wasm", "spotbugs", "blint", "syft", "grype", "osv")
 TOPOLOGY = {
     "load": ("accepted_artifacts",),
@@ -386,7 +391,7 @@ def build_job(*, scanner_runner: ScannerRunner | None = None) -> Job:
         producer = [{"sha256": item["fingerprint"]} for item in observations]
         fingerprint = index_fingerprint(name="observations", target_snapshot=unit.job.source_fingerprint,
             producer_artifacts=producer, tool_identity={"job": "job_artifact_security_analysis"},
-            parser_identity=PARSER_IDENTITY, normalizer_identity=NORMALIZER_IDENTITY,
+            parser_identity=PARSER_IDENTITY, normalizer_identity=INDEX_NORMALIZER_IDENTITY,
             mapping_identity="exact-run-artifact/1", upstream_manifests=[loaded["artifact_index"]["sha256"]])
         path = unit.job.run_root / "data" / "indices" / "observations" / f"artifact-security-{fingerprint}.sqlite"
         gaps = [*loaded["producer_gaps"], *[gap for capability in CAPABILITIES
@@ -403,19 +408,20 @@ def build_job(*, scanner_runner: ScannerRunner | None = None) -> Job:
                     builder.add_entity(EntityRecord(artifact_id, artifact["sha256"],
                         PurePosixPath(str(artifact.get("workspace_path") or artifact["path"])).name,
                         f"produced artifact {row['classification']['format']}", artifact))
-                observation_id = LogicalIdentity.derive(EntityKind.TOOL_OBSERVATION, unit.job.source_fingerprint,
-                    {"fingerprint": row["fingerprint"]})
-                builder.add_entity(EntityRecord(observation_id, row["fingerprint"], row["capability"],
-                    f"{row['capability']} observation for {row['classification']['format']}",
-                    {key: row[key] for key in ("artifact", "classification", "capability", "scanner_identity",
-                                                "tool_identity", "observation", "gaps", "raw_artifacts",
-                                                "attempt_identity", "exit_code", "timed_out", "duration_ms")} |
-                    {"evidence_identities": [{"relative_path": raw["path"], "sha256": raw["sha256"],
-                        "byte_count": raw["byte_count"], "captured_bytes": raw["captured_bytes"],
-                        "truncated": raw["truncated"]} for raw in row["raw_artifacts"]],
-                     "execution_receipt_identity": row.get("execution_receipt")}))
-                builder.add_relation(RelationRecord(RelationKind.OBSERVED_AT, observation_id.value,
-                                                     artifact_id.value, True, 1.0))
+                summary, findings = scan_records(row)
+                evidence = {"evidence_identities": [{"relative_path": raw["path"], "sha256": raw["sha256"],
+                    "byte_count": raw["byte_count"], "captured_bytes": raw["captured_bytes"],
+                    "truncated": raw["truncated"]} for raw in row["raw_artifacts"]],
+                    "execution_receipt_identity": row.get("execution_receipt")}
+                # One summary per scan (accounts that it ran) and one observation per finding; each is observed
+                # at the artifact. A finding has no source location: it is about the produced artifact.
+                for record in (summary, *findings):
+                    observation_id = LogicalIdentity.derive(EntityKind.TOOL_OBSERVATION, unit.job.source_fingerprint,
+                                                            record.identity_key)
+                    builder.add_entity(EntityRecord(observation_id, record.native_id, record.name, record.text,
+                                                    {**record.payload, **evidence}))
+                    builder.add_relation(RelationRecord(RelationKind.OBSERVED_AT, observation_id.value,
+                                                         artifact_id.value, True, 1.0))
             builder.add_coverage("produced-artifact-security", "partial" if gaps else "complete",
                                  gaps[0] if gaps else None)
             sha = builder.build()
@@ -431,8 +437,10 @@ def build_job(*, scanner_runner: ScannerRunner | None = None) -> Job:
                 upstream_manifests=[loaded["artifact_index"]])
         manifest = _identity(unit.job.run_root, manifest_path)
         load_verified_manifest(unit.job.run_root, manifest_path, manifest["sha256"])
+        finding_count = sum(len(scan_records(row)[1]) for row in observations)
         return {"index_identity": asdict(identity), "index_manifest": manifest,
-                "observation_count": len(observations), "gaps": gaps,
+                "observation_count": len(observations), "finding_count": finding_count,
+                "record_schema": RECORD_SCHEMA, "gaps": gaps,
                 "terminal_status": "COMPLETED_WITH_GAPS" if gaps else "SUCCEEDED"}
 
     def publish(unit: UnitContext) -> Mapping[str, Any]:
@@ -443,13 +451,15 @@ def build_job(*, scanner_runner: ScannerRunner | None = None) -> Job:
         document = {"schema": SCHEMA, "source_fingerprint": unit.job.source_fingerprint,
             "language_build_handoff_sha256": loaded["language_build_handoff_sha256"],
             "artifact_index": loaded["artifact_index"], "artifact_count": loaded["artifact_count"],
-            "observation_count": indexed["observation_count"], "capabilities": capabilities,
+            "observation_count": indexed["observation_count"], "finding_count": indexed["finding_count"],
+            "record_schema": indexed["record_schema"], "capabilities": capabilities,
             "producer_gaps": loaded["producer_gaps"], "gaps": indexed["gaps"],
             "index_manifest": indexed["index_manifest"]}
         path = unit.job.attempt_root / "artifacts" / "artifact-security" / "accepted-analysis.json"
         atomic_json(path, document)
         return {"artifact": _identity(unit.job.run_root, path), "index_manifest": indexed["index_manifest"],
                 "artifact_count": loaded["artifact_count"], "observation_count": indexed["observation_count"],
+                "finding_count": indexed["finding_count"],
                 "gaps": indexed["gaps"], "terminal_status": "COMPLETED_WITH_GAPS" if indexed["gaps"] else "SUCCEEDED"}
 
     analyze_units = tuple(Unit(f"analyze.{capability}", analyze(capability), ("load.accepted_artifacts",))
@@ -459,7 +469,8 @@ def build_job(*, scanner_runner: ScannerRunner | None = None) -> Job:
              Unit("index.observations", index, index_dependencies),
              Unit("acceptance.publish_handoff", publish, ("index.observations",)))
     implementation = hashlib.sha256(Path(__file__).read_bytes() + Path(__file__).with_name("formats.py").read_bytes() +
-                                    Path(__file__).with_name("scanners.py").read_bytes()).hexdigest()
+                                    Path(__file__).with_name("scanners.py").read_bytes() +
+                                    Path(__file__).with_name("findings.py").read_bytes()).hexdigest()
     return Job("job_artifact_security_analysis", "artifact_security_analysis", UnitExecutor(units).execute,
                input_validators=(_validate_config,), schema_identity=SCHEMA,
                implementation_identity=implementation, validation_identity=implementation, units=units,
