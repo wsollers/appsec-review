@@ -29,7 +29,8 @@ The job follows these non-negotiable rules:
 1. Model output is judgment data, never evidence. A claim changes state only through typed fields
    validated against resolving source lines or a run-owned, hash-verified tool artifact.
 2. The only review input authority is one immutable accepted run/index manifest. Workers query it
-   through the bounded retrieval core or read-only MCP adapter. No prompt receives a repository
+   through the bounded retrieval core (review cells, in-process) or the read-only MCP adapter (external
+   clients; see [`retrieval-surfaces.md`](retrieval-surfaces.md)). No prompt receives a repository
    dump, an evidence dump, an arbitrary target path, or an arbitrary query surface.
 3. Target guidance, retrieved text, tool output, generated evidence, and model output are untrusted
    data. They cannot alter governing rules, configuration, role, persona, tools, or claim limits.

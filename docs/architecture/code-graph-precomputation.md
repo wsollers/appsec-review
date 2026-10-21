@@ -1317,8 +1317,9 @@ code around its findings. Phase 3 therefore runs the export **from the findings 
 2. **D7 Where it lives:** it is part of the precomputed index build, not a live call. The seeded
    result is published into the existing `graph` index (same families, same shards) plus one
    database card per scope.
-3. **D8 Model access:** models "infer away" from the precomputed neighborhood through MCP with
-   bounded context. A project may have several databases, so a model first lists the cards
+3. **D8 Model access:** models "infer away" from the precomputed neighborhood through the retrieval
+   tools with bounded context (a review cell calls them in-process; the MCP transport serves external
+   clients; see [`retrieval-surfaces.md`](retrieval-surfaces.md)). A project may have several databases, so a model first lists the cards
    (`list_codeql_databases`) to learn which database holds what, then expands one
    (`query_codeql_neighborhood`). No MCP call runs CodeQL.
 4. **D9 Honesty:** a seeded scope's coverage is always `partial`. Missing facts outside the
