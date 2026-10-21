@@ -210,3 +210,111 @@ PoC box; the full reproducer stays in the run directory for the developer.
    function. Deferred; the first version emits a plain function.
 5. Whether a successful compile should additionally be checked by a model reviewer (does the function exercise
    the same path as `poc_basis.path`). The AST check covers the call to the sink function; a reviewer is deferred.
+
+## 7. Decisions taken at implementation (judge)
+
+Sections 3 and 4 are implemented. Where they left a choice open, the implementation took these. None of them changes
+R4, R5, R6 or evidence admissibility. Section 5 (`job_poc_generation`) is not part of this change.
+
+**What the judge's relations are.**
+
+1. **Recorded, published, not counted.** The judge's citations become evidence relations with
+   `provenance = "adjudication_judge"` (an optional field of `evidence-relation/1`). R5 skips any relation that has a
+   provenance, in `adjudication._predicate_statuses`, and scoring reads only the relations R5 counted. A judge siding
+   with blue on a direct row therefore records a `contradicts` that is visible in the ledger and the finding package but
+   cannot move the claim to `contradicted`, and a judge siding with red cannot satisfy a predicate red left open. This is
+   the reading of "R5 and R6 do not change" that makes "R5 outcomes are the same with and without a judge" true by
+   construction (`tests/review/test_judge.py` runs the same lane with the judge off, with each verdict, and compares every
+   adjudication record). Counting them instead is a one-line change in that function, and would make the judge a source
+   of evidence rather than a routing signal; that is a policy decision this implementation did not take.
+2. **Kinds.** A predicate the judge decided for red records `supports` for each citation that re-resolves as a direct,
+   complete row and `qualifies` for any other; a predicate decided for blue records `contradicts` or `qualifies` the
+   same way. `both`, `neither`, `unresolved` and (at claim level) `partly` record no relation. A citation that does not
+   re-resolve is an `evidence_gap`, as for every role.
+
+**Selection and scheduling.**
+
+3. **Red affirmed** means at least one red proposal of the claim cites a supporting reference. `when = "all"` judges
+   exactly those claims. Under `when = "disagreement"` a blue cell that produced no usable answer counts as
+   disagreement (no output is not an opinion), as does a blue `unresolved`, `qualifies` or `contradicts`, and two blue
+   cells that differ from each other (including blue `supports` against blue `contradicts`).
+4. **Position in the team.** Judge cells run after the red cells and after the blue and verifier cells have finished,
+   in their own pool (`roles.adjudication_judge.workers` wide). They read the blue results only, never the verifier's,
+   so the verifier's outcome does not affect whether or what a judge sees. A claim that is not selected is recorded in
+   the lane document under `judging` with its reason (`red_not_affirmed`, `no_disagreement`); a selected claim lists its
+   judge cells and their results.
+5. **`judges_per_claim` above 1.** Each judge gets its own shuffle: judge 0 uses exactly the documented tag
+   `"judge-order"`, judge *k* appends `/k`. Judge cells differ by a `strategy` of `judge-<k+1>`, so their fingerprints
+   differ.
+6. **Config.** `roles.adjudication_judge` carries `enabled` (default `true`; `false` removes the cells and verdicts),
+   `when`, `judges_per_claim` (1 to 5), `max_why_chars` (600), `max_cited_rows_per_side` (12) and
+   `max_cited_row_chars` (400) beside `workers`, `model_profile` and `require_distinct_from_roles`. A settings file with no
+   judge block runs no judge; the checked-in file enables it. `settings.poc_candidates` holds `accept_partly` (false) and
+   `risk_ratings`. Both are semantic: changing either changes the configuration hash, and the judge settings change the
+   judge cells' fingerprints only.
+
+**What the judge is shown.**
+
+7. **Neutral guidance.** The judge runs with the `generalist` persona (never the red cell's routed persona), the
+   routed stack profile, and the task `adjudicate_claim`. Its role text names no other role, and
+   `tests/test_guidance_examples.py` asserts that. The role is registered with the verifier's tools (including
+   `query_code_graph`) and added to the MCP adapter's role table.
+8. **Sides.** A side's stance is the overall stance of its cells; per predicate the strongest stance wins (red:
+   `supports` over `qualifies`; blue: `contradicts` over `qualifies` over `supports`). Red's reason is its proposals'
+   statements, blue's is its cells' rationales joined with ` | `. A side with no usable answer has stance `unresolved`
+   and the plain reason that no answer was produced.
+9. **Cited rows.** A cited identity that has a package label keeps it. Any other gets the next `J` label (a new
+   `with_extra(prefix="J")` of the existing package view) and appears once under `cited_rows` as kind, fact summary or
+   name, location and up to three excerpt lines, cut to `max_cited_row_chars`. The `J` identities are added to the judge
+   capability's entity scope and its readable evidence set, so the judge can re-check them with the ordinary tools; that
+   is the only way its scope exceeds the package's.
+10. **Bounds and omissions.** A side keeps at most `max_cited_rows_per_side` distinct cited identities in predicate
+    order; the rest are counted under that side's `omitted.cited_rows`. A reason over `max_why_chars` is cut with an
+    ellipsis and `omitted.why_characters` counts what was cut.
+11. **Blindness is checked twice.** Identifying terms (role names, and for the cells behind either side their task,
+    strategy and persona names with an underscore, cell and actor identities, and a model name the judge does not run on)
+    are removed from the sides' reasons and counted under `omitted.removed_identifying_terms`. Then the exact request
+    bytes of the cell are searched for the same list, and the result is written beside the receipt as
+    `judge-request-check-<attempt>.json` (hashes and the leaked identifier). A request that holds one, or a reused cell
+    whose check is missing, makes the verdict unusable: the cell stays succeeded, no verdict or relation is recorded, and
+    an `authority_error` gap names the identifier. This is the R6 treatment of the verifier, applied to the judge.
+    Generic words such as `variant` are not identifiers. The judge's own model name necessarily appears in its request;
+    the test therefore gives the judge a model of its own.
+
+**Answer, ledger and publication.**
+
+12. **De-shuffle.** `expand_judge` is a wrapper over the shared position layer, like the other roles. Per predicate, a
+    side named with no resolvable citation becomes `unresolved` with feedback; an overall `A`, `B` or `both` needs at
+    least one resolvable citation among the predicates, else the whole verdict is `unresolved`. `neither` and
+    `unresolved` need none. The expanded `judge-result/1` names no letter; the map is `side_map` in the judge cell's
+    terminal record (required for the judge role, forbidden for every other role, by schema).
+13. **Ledger.** The new event `judge_verdict` has subject `judge-<sha256 over claim and cell>` and the closed fields of
+    section 3.4 plus `citations` (the union of the per-predicate identities) and `round`. It sorts with the claim's other
+    events and is merged, projected (`Projection.judge_verdicts`, emitted in the projection document only when non-empty,
+    so a review without a judge projects as before) and re-verified from bytes like any event.
+14. **`judge_model_distinct`** compares the judge's (provider, model) with the cells of the claim whose role is in
+    `require_distinct_from_roles` (red and both blue cells with the checked-in list); it is true when that set is empty.
+    It is recorded in the verdict, the finding package and `accounting.judge_verdicts`, and never required.
+15. **Finding package and handoff.** `finding-package/2` and `inference-review-handoff/2` gained fields without a version
+    bump (this repository has no deployed consumers of the old shapes): `judge_verdict` (`verdict` is the judges'
+    unanimous outcome, else `unresolved`; `disagrees_with_state` is set for `blue_correct` and `neither`, so a confirmed
+    finding with a judge on blue's side shows both), `independence.judge_model_distinct` (null with no judge),
+    `accounting.judge_verdicts` (counts by outcome and by model distinctness) and `poc_candidates`.
+16. **Gate and report.** The gate copies `judge_verdict` into its package projection read-only, re-checks it against the
+    ledger's verdicts, and checks each `poc_candidates` entry against its finding package; the report prints the verdict
+    and any disagreement beside the state. Nothing in either reads the verdict to classify or withhold a package.
+17. **PoC candidates.** The "risk matrix rating" is the `application_risk_matrix/2` technical severity that
+    `ship-block-policy/1` already reads, so `risk_ratings` uses its vocabulary (`low`, `medium`, `high`, `critical`).
+    `poc_basis` comes from the lanes' `poc-basis.json`; of several resolved briefs for one claim the one from the lowest
+    cell id is copied. A brief is "resolved" when its `entry` and `path` are non-empty after label resolution (an
+    unresolvable label is already dropped at expansion). An entry carries the claim and package ids, state, verdict, the
+    brief with its hash, the finding package reference and the claim's counted `direct_evidence` relation ids.
+    `PLANNED_CONSUMERS` is not edited here; `job_poc_generation` registers itself.
+
+**Also changed.** `schemas/inference-security-review/common.schema.json`'s `entity_kind` enum now lists the three SVF
+kinds it lacked, so the enum test passes. The judge role adds one cell per selected claim to a team (3 red, 2 blue, 1
+verifier and 1 judge for a single claim) and the existing counts in the team tests were updated.
+
+**Not verified.** No live model has answered the judge prompt: the compact answer, the guidance examples and the shuffle
+are exercised only with scripted `Infer` doubles. Dagster was not run (it is not installed in the venv); the units
+are unchanged and the chain test drives the same job functions through the application runner.

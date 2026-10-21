@@ -354,7 +354,8 @@ Roles express responsibility and authority ceilings:
 
 `hypothesis_hunter`, `red_team_analyst`, `blue_team_refuter`, `independent_verifier`,
 `independent_scorer`, `poc_designer`, `poc_verifier`, `attack_chain_analyst`,
-`finding_adjudicator`, and `completeness_reviewer`.
+`finding_adjudicator`, and `completeness_reviewer`, plus `adjudication_judge`, which decides which of two shuffled
+sides is correct and sets no state ([judge and PoC design](review-judge-and-poc.md); R4, R5 and R6 are unchanged).
 
 Technology stacks are never roles. Folding them into roles would multiply authority rules by
 technology (red C++ role, blue C++ role, and so on). Personas and stack profiles are knowledge only.
