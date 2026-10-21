@@ -34,6 +34,9 @@ def _text_from_envelope(value: Any) -> str:
     raise ModelOutputError("model envelope does not contain textual output")
 
 
+_WORKER_TURN_SCHEMA = "appsec-review/worker-turn/1"
+
+
 def parse_model_payload(raw: str, schema: str) -> Mapping[str, Any]:
     """Accept a CLI envelope or prose/fence wrapper, but exactly one schema-bearing JSON object."""
     if not isinstance(raw, str) or not raw.strip() or len(raw.encode("utf-8")) > 2 * 1024 * 1024:
@@ -48,7 +51,9 @@ def parse_model_payload(raw: str, schema: str) -> Mapping[str, Any]:
     try:
         text = _text_from_envelope(envelope).strip()
     except ModelOutputError:
-        text = str(envelope).strip()
+        # Not a CLI envelope with text (a bare JSON object, for example): scan the original text, because
+        # the repr of a parsed object is not JSON.
+        text = raw.strip()
     fenced = re.fullmatch(r"```(?:json)?\s*(.*?)\s*```", text, re.I | re.S)
     if fenced:
         text = fenced.group(1).strip()
@@ -69,6 +74,11 @@ def parse_model_payload(raw: str, schema: str) -> Mapping[str, Any]:
             # The expected schema is already fixed by the authenticated request.  Accept
             # only this exact, unambiguous omission; conflicting or extra fields remain
             # invalid and the ordinary proposal validators still authorize every value.
+            candidates.append({"schema": schema, **value})
+        elif (schema == _WORKER_TURN_SCHEMA and isinstance(value, Mapping) and "schema" not in value and
+              value.get("action") in {"retrieve", "final"}):
+            # Same rule for a review cell's turn: the authenticated request fixes the schema, the model often
+            # leaves the field out of an otherwise valid turn, and the turn validators still check every other field.
             candidates.append({"schema": schema, **value})
     unique = {json.dumps(value, sort_keys=True, separators=(",", ":")): value for value in candidates}
     if len(unique) != 1:

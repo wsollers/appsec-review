@@ -29,6 +29,21 @@ def test_model_parser_rejects_missing_malformed_or_ambiguous_output(raw: str) ->
         parse_model_payload(raw, SCHEMA)
 
 
+def test_a_worker_turn_without_its_schema_field_is_accepted_and_one_with_another_schema_is_not() -> None:
+    turn = "appsec-review/worker-turn/1"
+    retrieve = {"action": "retrieve", "requests": [{"tool": "query_observations", "parameters": {"entity_id": "e"}}]}
+    assert parse_model_payload("```json\n" + json.dumps(retrieve) + "\n```", turn) == {"schema": turn, **retrieve}
+    assert parse_model_payload(json.dumps({"action": "final", "result": {}}), turn)["schema"] == turn
+    # Only a recognised action may stand in for the schema, and a different declared schema stays rejected.
+    with pytest.raises(ModelOutputError):
+        parse_model_payload(json.dumps({"action": "explore", "requests": []}), turn)
+    with pytest.raises(ModelOutputError):
+        parse_model_payload(json.dumps({"schema": "appsec-review/other/1", "action": "retrieve"}), turn)
+    # A different expected schema is never filled in this way.
+    with pytest.raises(ModelOutputError):
+        parse_model_payload(json.dumps(retrieve), "appsec-review/red-discovery-result/1")
+
+
 def test_cli_transport_disables_tools_for_inference_and_preflight(monkeypatch) -> None:
     calls = []
 
