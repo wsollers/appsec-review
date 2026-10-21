@@ -55,7 +55,7 @@ Retrieval and review facts after C9 (pre-plan state in parentheses):
   `jobs.job_code_graph_index.settings.graph` (`graph/settings.py`).
 - `precomputed_fact` stays in `review/evidence.py::REFERENCE_KINDS`. Graph kinds are direct only for
   the predicates `graph-fact-predicates/1` maps, when the re-resolved fact is `direct_eligible`
-  (`evidence-admissibility/2`; before: only `DIRECT_KINDS` constructs and mapped CodeQL
+  (`evidence-admissibility/3`; before: only `DIRECT_KINDS` constructs and mapped CodeQL
   `tool_observation`s could satisfy an obligation).
 - `guidance/routing.py::STRATEGY_SOURCES` unlocks `sink_up` only from `source_sink_facts` and
   `entry_down` from `entry_point_catalog`; the job derives both per unit from the package's accepted
@@ -310,7 +310,7 @@ protected raw export.
   "schema": "appsec-review/graph-fact/1",
   "family": "dataflow_path",
   "producer": {"name": "codeql-export", "tool_version": "2.27.0", "export_pack_sha256": "…",
-               "catalog_version": "appsec-review/graph-catalog/1", "rule_version": "graph-normalize/1"},
+               "catalog_version": "appsec-review/graph-catalog/1", "rule_version": "graph-normalize/2"},
   "scope": {"scope_id": "…", "language": "c/c++", "build_unit_id": "…", "component_id": "…"},
   "exact": true,
   "coverage_status": "complete",
@@ -435,15 +435,42 @@ the scope's coverage row.
   operand when it is the sink operand or an alias CodeQL's local flow connects to it, and the
   dominance state; plus one `none` fact per sink with no controlling guard.
 - **Result.** `{sink: {sink_site}, guard_state, polarity, condition: {display, location},
-  constrains_sink_operand: true | false | unknown, comparison: {operator, bound_display} | null}`.
+  constrains_sink_operand: true | false | unknown, comparison: {operator, bound_display,
+  operands: [{role: lhs | rhs, kind, value, text, location}]} | null, destination: {object_bytes:
+  int | null}}`.
+- **Compared operands.** CodeQL's `toString()` elides operands (`... < ...`), so a comparison
+  guard also exports its two operands, each as a source location, a `kind` from the closed
+  syntactic set `variable | field | constant | sizeof | call | other` and, for an integer
+  compile-time constant, its decimal `value` (`null` otherwise). The operand `text` is never
+  exported by CodeQL: the normalizer slices it from the accepted source bytes at the operand
+  location (exact and hash-bound), bounded to 200 characters. `text` is `null` with a named gap
+  (`operand_text_unavailable`) when the location does not resolve exactly or a macro operand is
+  reported at the whole expansion site, and a cut text carries `operand_text_truncated`. A guard
+  that is not a comparison has `comparison = null`.
+- **Destination object size.** `destination.object_bytes` is the byte size of the destination
+  object (argument 0) of a catalog memory-write API sink (`memcpy`, `memmove`, `memset`, `strcpy`,
+  `strcat`, `strncpy`, `strncat`) when its unconverted type is a fixed-size array or it is the
+  address of a variable or field of a complete type; `null` for a pointer, an offset, an
+  incomplete type and every other sink. It is an object-size fact, not a safety claim.
+- **Facts, not judgments.** These fields are facts a reviewer reasons from. The export does not
+  classify how a guard relates to the sink operand or to the destination and publishes no
+  adequacy judgment. The application derives one narrow conclusion from them, deterministically:
+  `graph/bounds.py::guard_bounds_destination` (`guard-bounds-destination/1`) says whether the
+  recorded comparison bounds the destination, and `evidence-admissibility/3` lets a `dominating`
+  guard contradict `missing_or_ineffective_guard` only when it does (section 6 rule 4). A guard it
+  cannot show to bound the destination, such as `size < 4u + out.length` over `out.name` (16
+  bytes), only qualifies; whether such a guard is adequate stays a question for the red and blue
+  review teams, who read the operands and the object size.
 - **Soundness gaps.** Guards on operands CodeQL cannot connect to the sink operand are
   `constrains_sink_operand = unknown`; conditions inside macros map to the expansion site with
   `exact=false`; `post_dominating_only` guards (checks after the sink) are listed separately and
   are never `direct_eligible` for a *present* guard claim.
 - **R4 predicates.** Direct for `missing_or_ineffective_guard`: a `none` or `non_dominating` fact
-  supports it; a `dominating` fact with `constrains_sink_operand = true` contradicts it. The
-  validator records the relation the citing role chose; R5 decides. Indirect for other
-  predicates (may qualify `attacker_input_control`).
+  supports it. A `dominating` fact qualifies it by default and contradicts it only when
+  `guard_bounds_destination` holds (section 6 rule 4); `constrains_sink_operand = true` alone is not
+  enough. The validator records the relation the citing role chose, downgraded to `qualifies` with a
+  reason when the facts do not show a bound; R5 decides. Indirect for other predicates (may qualify
+  `attacker_input_control`).
 
 ### 4.7 `range_fact` (range facts at sinks)
 
@@ -456,9 +483,13 @@ the scope's coverage row.
 - **Soundness gaps.** `unknown` is stated, never omitted; the analysis is intraprocedural and
   widening-based, published as `precision: may_over_approximate`; floating-point and pointer
   operands are `not_applicable`.
-- **R4 predicates.** Direct for `missing_or_ineffective_guard` (a bounded interval that fits the
-  destination contradicts; an unbounded interval or a sign-changing conversion supports); indirect
-  (qualify) for `attacker_input_control`.
+- **R4 predicates.** Direct for `missing_or_ineffective_guard`: a bounded interval contradicts it
+  only when `range_bounds_destination` holds, that is, its upper bound is a known integer no larger
+  than the destination object size and the conversion chain has no sign change. The range fact does
+  not record the destination, so the size is taken from the `guard_fact`s of the same sink (they must
+  agree on one `destination.object_bytes`, otherwise the range does not bound). Any other interval
+  (for example a `uint16_t` 0..65535 into a 16-byte object) only qualifies; an unbounded interval or
+  a sign-changing conversion supports. Indirect (qualify) for `attacker_input_control`.
 
 ### 4.8 SARIF ↔ graph correlation
 
@@ -574,7 +605,7 @@ Phase 3 adds two tools beside `query_code_graph` for seeded scopes: `list_codeql
 ## 6. R3 admissibility: precise update
 
 The R3 table in [`inference-security-review.md`](inference-security-review.md) gains one row and
-`review/evidence.py` gains one classification branch, versioned `evidence-admissibility/2`:
+`review/evidence.py` gains one classification branch, versioned `evidence-admissibility/2`, revised to `/3` by rule 4 below:
 
 | Admissibility | Cited entity kinds |
 |---|---|
@@ -607,13 +638,37 @@ Rules:
    `dataflow_path` (through `sarif_path`) rather than the observation alone when one exists; this
    is guidance, not a validator rule, because a `broken` correlation must not make a real alert
    inadmissible.
-4. Contradiction is symmetric data: a `guard_fact` cited with `CONTRADICTS` on
-   `missing_or_ineffective_guard` by blue, and a `guard_fact` cited with `SUPPORTS` by red, are both
-   direct; R5 row 3 yields `insufficient_evidence` with `unresolved_contradiction`, which is the
-   intended outcome until a human or a later rule ranks guard semantics.
+4. **A dominating guard or a bounded range qualifies by default** (`evidence-admissibility/3`).
+   A `guard_fact` or `range_fact` cited with `CONTRADICTS` on `missing_or_ineffective_guard` is
+   recorded as `contradicts` only when `graph/bounds.py` shows from the exported facts that it
+   bounds the destination, and the citing role is blue, verifier or judge. Otherwise the relation is
+   recorded as `qualifies` (admissibility unchanged, still direct for the predicate) with the reason
+   `guard_not_shown_to_bound_destination:<why>` or `contradiction_role_not_permitted:<role>`; the
+   reason is a field of the relation and appears in the ledger. The scoring factor `guard_absent`
+   uses the same helper, so a cited fact shown to bound the destination is not support that the
+   guard is absent. `supports` and `qualifies` citations are recorded as cited. A guard bounds the
+   destination iff all of these hold:
+   1. `guard_state = dominating` and `comparison` has a known operator and both operands;
+   2. `constrains_sink_operand = true` (`unknown` and `false` never bound);
+   3. `destination.object_bytes` is not `null`;
+   4. one operand is a compile-time integer `K` (kind `constant`, or `sizeof` with an integer `value`)
+      and the other is `n`, the sink's size operand; normalizing to `n REL K` (flip `REL` when `n` is
+      the right operand, negate it when `polarity = false_branch`; `true_branch` keeps it) gives an
+      upper bound (`<`, `<=`, `==`) with `K <= object_bytes` (`<=`, `==`) or `K <= object_bytes + 1`
+      (`<`).
+
+   Anything missing or outside the vocabulary (operator, polarity, operand kind or value, capacity)
+   does not bound. A range fact bounds iff its upper bound is a known integer within the
+   destination size above and it has no sign change. Examples into `char name[16]`: `if (n > 16)
+   return;` bounds; `if (n > 64) return;` does not; `if (n >= sizeof(name)) return;` bounds
+   (`n < 16`); `if (size < 4u + out.length) return -1;` does not (the sink operand is not
+   identified and the other operand is not a constant). Where a bounding guard exists, a blue
+   contradiction stands as before, and R5 row 3 yields `insufficient_evidence` with
+   `unresolved_contradiction` when red also supports the predicate, which is the intended outcome
+   until a human or a later rule ranks guard semantics.
 5. Absence of a graph fact is never a relation. A blue cell arguing `not_reachable` must cite a
-   `dominating` guard or a bounded `range_fact` (direct contradictions of
-   `missing_or_ineffective_guard`), or nothing: R5 row 4 (`not_reachable`) can therefore only be
+   `dominating` guard or a bounded `range_fact` that rule 4 shows bounds the destination (direct
+   contradictions of `missing_or_ineffective_guard`), or nothing: R5 row 4 (`not_reachable`) can therefore only be
    reached through a direct contradiction on `source_to_sink_reachability`, which no graph family
    provides, so `not_reachable` remains reserved for future dynamic or deployment evidence. This is
    deliberate: static absence is a gap.
@@ -658,7 +713,7 @@ internal ids and are never served).
 |---|---|---|---|
 | CodeQL database | unchanged (`_database_identity`) | source, build recipe, extractor, runtime change | export pack or catalog change |
 | Raw export (`export-checkpoint.json`) | database identity + tree sha, export pack sha and version, `export_queries` settings (row bounds, timeouts), runner version | export pack, catalog query text, bounds change | SARIF suite change |
-| `graph` shard per `(scope, family)` | export artifact hashes, catalog sha, `graph-normalize/1`, `graph-cross-check/1`, `graph-sarif-correlation/1`, `graph-fact-admissibility/1`, the exact upstream shard identities read (clangd, IR, AST, observations, priority), bounded settings | any of those | SARIF suite or prioritization heuristics that do not change the shards read |
+| `graph` shard per `(scope, family)` | export artifact hashes, catalog sha, `graph-normalize/2`, `graph-cross-check/1`, `graph-sarif-correlation/1`, `graph-fact-admissibility/1`, the exact upstream shard identities read (clangd, IR, AST, observations, priority), bounded settings | any of those | SARIF suite or prioritization heuristics that do not change the shards read |
 | `code_graph` matrix lane, follow-ups | accepted `graph` shard identities | graph shards change | — |
 | `hotspot_context`, `review_package` (stage 3, later) | their declared inputs including `graph` shard identities | graph shards change | — |
 
@@ -1317,8 +1372,9 @@ code around its findings. Phase 3 therefore runs the export **from the findings 
 2. **D7 Where it lives:** it is part of the precomputed index build, not a live call. The seeded
    result is published into the existing `graph` index (same families, same shards) plus one
    database card per scope.
-3. **D8 Model access:** models "infer away" from the precomputed neighborhood through MCP with
-   bounded context. A project may have several databases, so a model first lists the cards
+3. **D8 Model access:** models "infer away" from the precomputed neighborhood through the retrieval
+   tools with bounded context (a review cell calls them in-process; the MCP transport serves external
+   clients; see [`retrieval-surfaces.md`](retrieval-surfaces.md)). A project may have several databases, so a model first lists the cards
    (`list_codeql_databases`) to learn which database holds what, then expands one
    (`query_codeql_neighborhood`). No MCP call runs CodeQL.
 4. **D9 Honesty:** a seeded scope's coverage is always `partial`. Missing facts outside the

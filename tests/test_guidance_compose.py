@@ -111,6 +111,13 @@ def test_persona_sections_are_selected_by_role_lens(repo: Path, taxonomy) -> Non
                         capability={"granted_tools": []})
     assert verifier["sections"][2]["lens"] == "skeptical"
     assert "Coverage" not in [item["heading"] for item in verifier["sections"][2]["sections"]]
+    judge = _compose(repo, taxonomy, role="adjudication_judge", task="adjudicate_claim", persona="generalist",
+                     capability={"granted_tools": ["find", "read_excerpt"]})
+    assert judge["sections"][1]["id"] == "adjudication_judge" and judge["sections"][4]["id"] == "adjudicate_claim"
+    assert judge["sections"][2]["lens"] == "skeptical"
+    with pytest.raises(GuidanceError, match="not assigned to role"):
+        _compose(repo, taxonomy, role="adjudication_judge", task="blind_verifier",
+                 capability={"granted_tools": ["find"]})
 
 
 def test_pin_bundle_stores_once_and_rejects_tampering(repo: Path, taxonomy, tmp_path: Path) -> None:
@@ -269,7 +276,7 @@ def test_every_task_prompt_parses_and_fits_its_roles() -> None:
     tasks = registry["tasks"]["inference-security-review"]
     assert {"variant", "sink_up", "entry_down", "control_gap", "persona_sweep", "blue_control",
             "blue_reachability", "blind_verifier", "lead_red_stack", "lead_red_preconditions",
-            "lead_red_failure_modes"} == set(tasks)
+            "lead_red_failure_modes", "adjudicate_claim"} == set(tasks)
     for task_id, record in tasks.items():
         task = parse_task((ROOT / record["path"]).read_text(), tools=TOOLS, expected_id=task_id)
         for role in task.roles:

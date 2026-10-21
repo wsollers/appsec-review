@@ -10,7 +10,7 @@ distinctness, remediation intake, the planned downstream job names, the closed
 `security-predicates/1` vocabulary, the `red-discovery-result/1` contract and the catalog-derived
 CWE impact class are implemented ([decisions](#decisions-and-open-questions) 1, 2, 4, 6, 8, 9, 10
 and 11), as are evidence-driven scoring (`score-factors/1`, `application_risk_matrix/3`) and
-code-graph evidence (`evidence-admissibility/2`, `query_code_graph`, package graph context). The
+code-graph evidence (`evidence-admissibility/3`, `query_code_graph`, package graph context). The
 remaining parts of slices 2-4 (CVSS v4 and SSVC providers, which the scoring registry skips while
 unimplemented, PoC, chains, rounds and variant hunts) remain design only, and no live-model
 acceptance has run.
@@ -29,7 +29,8 @@ The job follows these non-negotiable rules:
 1. Model output is judgment data, never evidence. A claim changes state only through typed fields
    validated against resolving source lines or a run-owned, hash-verified tool artifact.
 2. The only review input authority is one immutable accepted run/index manifest. Workers query it
-   through the bounded retrieval core or read-only MCP adapter. No prompt receives a repository
+   through the bounded retrieval core (review cells, in-process) or the read-only MCP adapter (external
+   clients; see [`retrieval-surfaces.md`](retrieval-surfaces.md)). No prompt receives a repository
    dump, an evidence dump, an arbitrary target path, or an arbitrary query surface.
 3. Target guidance, retrieved text, tool output, generated evidence, and model output are untrusted
    data. They cannot alter governing rules, configuration, role, persona, tools, or claim limits.
@@ -354,7 +355,8 @@ Roles express responsibility and authority ceilings:
 
 `hypothesis_hunter`, `red_team_analyst`, `blue_team_refuter`, `independent_verifier`,
 `independent_scorer`, `poc_designer`, `poc_verifier`, `attack_chain_analyst`,
-`finding_adjudicator`, and `completeness_reviewer`.
+`finding_adjudicator`, and `completeness_reviewer`, plus `adjudication_judge`, which decides which of two shuffled
+sides is correct and sets no state ([judge and PoC design](review-judge-and-poc.md); R4, R5 and R6 are unchanged).
 
 Technology stacks are never roles. Folding them into roles would multiply authority rules by
 technology (red C++ role, blue C++ role, and so on). Personas and stack profiles are knowledge only.
@@ -519,10 +521,15 @@ Lane B (hunt): ranked review units ─► hunt packages ─► team: 3 red ─�
     otherwise the advisory's severity label;
   - CI rules;
   - post-build hardening;
-  - OWASP control failures.
+  - OWASP control failures;
+  - secret-scanner findings (`secret`; reported severity `unknown`, so admitted by default);
+  - Dockerfile and IaC misconfiguration (`config_scanner`).
 
   Each family has a versioned normalization rule (`lead-family/dependency_advisory/2` and
-  `lead-family/artifact_scanner/2` add the NVD band). Unknown severity is never treated as low.
+  `lead-family/artifact_scanner/2` add the NVD band; `lead-family/source_sast/2` adds the shellcheck, psalm and Infer
+  producers). Every observation producer has an explicit lead-or-not decision
+  ([`../reviews/lead-coverage-audit.md`](../reviews/lead-coverage-audit.md)); a credential literal is never shown to a
+  model (`secret-redaction/1`). Unknown severity is never treated as low.
   Lane A also admits every dependency or artifact-scanner lead whose advisory is listed in the
   run-pinned CISA KEV catalog, whatever its reported severity (`lanes.lead_admission_kev`, default
   `true`). Each lead package records its `admission_reasons` (`reported_severity`, `kev_listed`).
@@ -1167,6 +1174,13 @@ workers = 1
 ```
 
 ## Benign proof-of-trigger lane
+
+> **Implemented subset.** The owner decided that a proof of concept is a unit-test *function* with no `main` that the
+> pipeline compiles and never executes. That is `job_poc_generation` (the designer half of this lane with deterministic
+> validators and a compile check, and **no executor, attempt or result stage**), specified in
+> [`review-judge-and-poc.md`](review-judge-and-poc.md) and operated in
+> [`../operations/poc-generation.md`](../operations/poc-generation.md). The sections below describe the wider design (an
+> isolated executor, attempts and results); none of that is built.
 
 Only adjudicated findings that satisfy a configured High/Critical eligibility predicate enter this
 lane. A PoC means a non-malicious, bounded demonstration that the claimed condition can be
@@ -1830,7 +1844,7 @@ recorded as an `evidence_gap`, not as a relation.
 |---|---|
 | direct, when the entity is the construct named by the predicate | `source_span`, `ast_node`, `ir_entity`, `symbol`; build kinds (`build_action` through `wasm_module`); `evidence_artifact` |
 | direct only for the predicate the producing rule's versioned mapping names | `tool_observation` (SAST, CodeQL path, post-build, CI) |
-| direct only for the predicate the graph-fact family's versioned mapping (`graph-fact-predicates/1`) names, and only when the **re-resolved** fact's `admissibility.direct_eligible` is `true` (every cited location exact, fact coverage complete, no cross-check disagreement, classified source/sink) | `call_site` and `sink_site` (`affected_construct`); `entry_point` (`attacker_input_control` for attacker-reachable source classes); `dataflow_path` (`source_to_sink_reachability`, and `attacker_input_control` when its source class is attacker-reachable); `guard_fact` and `range_fact` (`missing_or_ineffective_guard`, support or contradict) |
+| direct only for the predicate the graph-fact family's versioned mapping (`graph-fact-predicates/1`) names, and only when the **re-resolved** fact's `admissibility.direct_eligible` is `true` (every cited location exact, fact coverage complete, no cross-check disagreement, classified source/sink) | `call_site` and `sink_site` (`affected_construct`); `entry_point` (`attacker_input_control` for attacker-reachable source classes); `dataflow_path` (`source_to_sink_reachability`, and `attacker_input_control` when its source class is attacker-reachable); `guard_fact` and `range_fact` (`missing_or_ineffective_guard`: support, qualify, or contradict only when the facts show the destination is bounded, see below) |
 | indirect: may guide search, never satisfies an obligation | `hotspot`, `priority_item`, `history_signal`, `change`, `change_context_signal`, `review_signal`, `tag_assignment`, `review_unit`, `flow_summary`, any graph kind whose `direct_eligible` is `false`, reported scanner severity, model prose |
 | indirect for **every** predicate: reference context (`review/evidence.py::REFERENCE_KINDS`) | `advisory`, `dependency_package` (a scanner-reported match), `precomputed_fact` (including `dependency_advisories` and `reference_intelligence` facts), and every OSV, NVD, CISA KEV, FIRST EPSS, and MITRE record they carry |
 
@@ -1840,11 +1854,19 @@ SBOM, lockfile, or artifact inventory (`package`, `archive_member`), which is di
 and EPSS can order work and inform workers. NVD CVSS and KEV also enter scoring as labelled
 reference inputs; EPSS never does. None of them satisfies an obligation alone.
 
-Graph-fact admissibility (`evidence-admissibility/2`) is decided from the fact the
+Graph-fact admissibility (`evidence-admissibility/3`) is decided from the fact the
 validator re-resolves through `find`, never from the model's copy: a citation whose resolved
 payload has `direct_eligible = false` is indirect whatever the model claims. Static absence of a
-graph fact is never a relation, so `not_reachable` stays unreachable through graph evidence; a
-`dominating` guard or a bounded range contradicts `missing_or_ineffective_guard` instead. The
+graph fact is never a relation, so `not_reachable` stays unreachable through graph evidence. A
+`dominating` guard or a bounded range only **qualifies** `missing_or_ineffective_guard` by default: it
+is recorded as `contradicts` only when the application shows from the exported facts
+(`graph/bounds.py`, a pure function shared with the `guard_absent` factor) that it bounds the
+destination, and the citing role is blue, verifier or judge; red's counterevidence is always
+`qualifies`. Otherwise the relation carries the reason `guard_not_shown_to_bound_destination:<why>`
+into the ledger, finding package and report. For `if (size < 4u + out.length) return -1;` ahead of a
+`memcpy` into `char name[16]` the guard compares the input size with the length field, never the
+16-byte destination, so it cannot refute the overflow. `evidence-admissibility/3` changes evidence
+relations, so cells and adjudications recorded under `/2` are not reused. The
 mapping, the eligibility rule and the tool that returns these kinds are specified in
 [`code-graph-precomputation.md`](code-graph-precomputation.md) sections 5 and 6.
 
@@ -2176,7 +2198,7 @@ both lanes, and one score dimension. It does not execute PoCs, run variant hunts
   `source_to_sink_reachability`, besides `affected_construct`, per `TOOL_RULE_PREDICATES` in the
   job module; `owasp_control` observations are direct for `missing_or_ineffective_guard`, and
   `ci_rule`/`post_build_hardening` for `configuration_enables`), from source constructs the model cites, and, for C/C++ scopes with an
-  accepted graph export, from direct-eligible graph facts (`evidence-admissibility/2`,
+  accepted graph export, from direct-eligible graph facts (`evidence-admissibility/3`,
   [`code-graph-precomputation.md`](code-graph-precomputation.md)): `dataflow_path`, `entry_point`,
   `sink_site`, `call_site`, `guard_fact` and `range_fact`. `sink_up` and `entry_down` launch per
   unit from its accepted graph families. Remaining gaps: export packs exist only for C/C++, so every

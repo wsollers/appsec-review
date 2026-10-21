@@ -66,6 +66,15 @@ def _pending_lines(block: Mapping[str, Any]) -> list[str]:
             "This is neither a ship-blocking decision nor a release decision."]
 
 
+def _judge(verdict: Mapping[str, Any] | None, independence: Mapping[str, Any]) -> str:
+    """The accepted judge verdict, shown beside the state; a disagreement with the state is never hidden."""
+    if verdict is None:
+        return "no judge verdict (the judge did not run for this claim)"
+    note = "; the judge disagrees with this finding's state" if verdict["disagrees_with_state"] else ""
+    distinct = {True: "yes", False: "no", None: "unknown"}[independence.get("judge_model_distinct")]
+    return f"{code(verdict['verdict'])}{note}; judge model distinct {distinct}"
+
+
 def _finding(index: int, item: Mapping[str, Any], settings: Mapping[str, int], *, unconfirmed: bool = False) -> list[str]:
     block, independence = item["ship_block"], item["independence"]
     heading = "unconfirmed " if unconfirmed else ""
@@ -79,6 +88,7 @@ def _finding(index: int, item: Mapping[str, Any], settings: Mapping[str, int], *
              f"- independence: independent verifier {'yes' if independence['independent'] else 'no'}, provider distinct "
              f"{'yes' if independence['provider_distinct'] else 'no'}, verifier model distinct "
              f"{'yes' if independence['verifier_model_distinct'] else 'no'}",
+             f"- judge: {_judge(item['judge_verdict'], independence)}",
              f"- direct evidence relations ({len(item['direct_evidence'])}): "
              f"{_ids(item['direct_evidence'], settings['evidence'])}"]
     if item["missing_predicates"]:
@@ -145,7 +155,16 @@ def render_markdown(report: Mapping[str, Any], *, evidence_ids: int, gap_ids: in
     lines += [f"- {code(item)}" for item in report["attack_chains"]["items"]] + [""]
     lines += ["## Proof-of-trigger outcomes", "",
               f"Status {code(report['poc_outcomes']['status'])}: {plain(report['poc_outcomes']['reason'])}"]
-    lines += [f"- {code(item['finding_package_id'])}: {code(item['status'])}" for item in report["poc_outcomes"]["items"]]
+    for item in report["poc_outcomes"]["items"]:
+        lines.append(f"- {code(item['finding_package_id'])}: {code(item['status'])}")
+        if "claim_id" in item:                                        # outcomes of job_poc_generation
+            lines.append(f"  - claim {code(item['claim_id'])}: {plain(item['description'])}")
+            if item.get("functions"):
+                lines.append(f"  - test function {code(item['functions']['test_function'])}, negative control "
+                             f"{code(item['functions']['negative_control'])}")
+            if item.get("files"):
+                lines.append("  - files: " + ", ".join(code(item["files"][key]["path"]) for key in (
+                    "source", "compile", "readme", "provenance")))
     lines += [""]
     lines += _section("Verification backlog (unconfirmed)", report["verification_backlog"], settings,
                       "The verification backlog is empty.", unconfirmed=True)
@@ -172,4 +191,6 @@ def render_markdown(report: Mapping[str, Any], *, evidence_ids: int, gap_ids: in
               f"- ledger head {code(provenance['ledger_head_sha256'])}",
               f"- configuration {code(provenance['configuration_sha256'])}",
               f"- ship-block policy {code(provenance['ship_block_policy_sha256'])}", ""]
+    if "configuration_profile" in provenance:
+        lines.insert(-1, f"- runtime profile {code(provenance['configuration_profile']['name'])}")
     return "\n".join(lines).rstrip("\n") + "\n"

@@ -254,3 +254,9 @@ def test_the_compact_schemas_are_closed() -> None:
     assert SCHEMAS.errors("verifier-compact", {"disposition": "maybe", "per_predicate": {}})
     assert SCHEMAS.errors("blue-compact", {"stance": "contradicts", "extra": 1})
     assert not SCHEMAS.errors("blue-compact", {"schema": "appsec-review/blue-compact/1", "stance": "unresolved"})
+
+
+def test_a_claim_may_use_any_local_id_without_colliding_with_named_gaps() -> None:
+    result = assert_admitted(red({"claims": [claim(id="g1", missing=["X1"]), claim(id="g2", missing=["X1"])]}))
+    ids = [item["local_id"] for item in result["proposals"]] + [item["local_id"] for item in result["gaps"]]
+    assert len(ids) == len(set(ids)) and {"g1", "g2"} <= set(ids)

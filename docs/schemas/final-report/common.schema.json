@@ -376,6 +376,7 @@
         "title",
         "ship_block",
         "independence",
+        "judge_verdict",
         "verification_review_id",
         "direct_evidence",
         "missing_predicates",
@@ -515,7 +516,8 @@
           "required": [
             "independent",
             "provider_distinct",
-            "verifier_model_distinct"
+            "verifier_model_distinct",
+            "judge_model_distinct"
           ],
           "properties": {
             "independent": {
@@ -526,6 +528,12 @@
             },
             "verifier_model_distinct": {
               "type": "boolean"
+            },
+            "judge_model_distinct": {
+              "type": [
+                "boolean",
+                "null"
+              ]
             }
           }
         },
@@ -619,6 +627,45 @@
           },
           "maxItems": 2,
           "uniqueItems": true
+        },
+        "judge_verdict": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "verdict",
+                "disagrees_with_state",
+                "verdict_ids"
+              ],
+              "description": "The accepted judge verdict on the claim, copied read-only. It is a proposal and never changes the state.",
+              "properties": {
+                "verdict": {
+                  "enum": [
+                    "red_correct",
+                    "blue_correct",
+                    "partly",
+                    "neither",
+                    "unresolved"
+                  ]
+                },
+                "disagrees_with_state": {
+                  "type": "boolean"
+                },
+                "verdict_ids": {
+                  "type": "array",
+                  "maxItems": 8,
+                  "items": {
+                    "type": "string",
+                    "pattern": "^judge-[0-9a-f]{64}$"
+                  }
+                }
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       }
     },

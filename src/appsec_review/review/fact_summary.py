@@ -1,9 +1,10 @@
 """One-line, model-facing summaries of accepted graph facts (``fact-summary/1``).
 
 A summary states what the fact records and nothing more. In particular a ``guard_fact`` summary reports only the
-guard state, polarity, condition text, operator and operand texts; it never says that a guard is adequate,
-effective or sufficient, and never summarises whether it bounds the destination of a write. Whether a guard bounds the destination of a
-particular write is a question for the reviewer and for the evidence rules, not for the summary.
+guard state, polarity, condition text, operator, the compared operand texts and, as a plain fact, the destination
+object size when the export knows it; it never says that a guard is adequate, effective or sufficient, and never
+summarises whether it bounds the destination of a write. Whether a guard bounds the destination of a particular write
+is decided by the application's evidence rules (``graph.bounds``, ``evidence-admissibility/3``), not by the summary.
 
 The same function summarizes a fact at package assembly (``review.packages``) and a row returned by a
 retrieval tool (``review.cells``), so a package label and a retrieved row describe one fact identically.
@@ -29,6 +30,21 @@ def _display(value: Any) -> str | None:
 
 def _bound(value: Any) -> str:
     return "?" if value is None else str(value)
+
+
+def _operand(item: Any) -> str:
+    if not isinstance(item, Mapping):
+        return "?"
+    shown = item.get("text") if item.get("text") is not None else item.get("value")
+    return _text(shown, _text(item.get("kind"), "?"))
+
+
+def _operands(comparison: Mapping[str, Any]) -> str:
+    """The compared operand texts by role; the older single ``bound_display`` when operands were not recorded."""
+    found = {item.get("role"): item for item in comparison.get("operands", ()) if isinstance(item, Mapping)}         if isinstance(comparison.get("operands"), list) else {}
+    if found:
+        return f", lhs {_operand(found.get('lhs'))}, rhs {_operand(found.get('rhs'))}"
+    return f", operand {_text(comparison.get('bound_display'))}"
 
 
 def summarize_fact(kind: str, payload: Mapping[str, Any] | None, *, line: int | None = None) -> str:
@@ -57,7 +73,11 @@ def summarize_fact(kind: str, payload: Mapping[str, Any] | None, *, line: int | 
         text = (f"{_text(result.get('guard_state'), 'unknown')} guard, polarity {_text(result.get('polarity'), 'unknown')}: "
                 f"{condition or 'no controlling condition recorded'}")
         if comparison:
-            text += f" (operator {_text(comparison.get('operator'))}, operand {_text(comparison.get('bound_display'))})"
+            text += f" (operator {_text(comparison.get('operator'))}{_operands(comparison)})"
+        destination = result.get("destination") if isinstance(result.get("destination"), Mapping) else {}
+        size = destination.get("object_bytes")
+        if isinstance(size, int) and not isinstance(size, bool) and size > 0:
+            text += f"; destination object {size} bytes"
     elif kind == "call_site":
         caller = _display(result.get("caller")) or "?"
         callee_block = result.get("callee") if isinstance(result.get("callee"), Mapping) else {}

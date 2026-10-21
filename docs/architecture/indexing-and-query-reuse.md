@@ -108,6 +108,7 @@ a silent allowlist. `query_precomputed` is abbreviated `QP`; existing generic `f
 | clangd symbol graph; `job_cpp_symbol_index` | Definitions, references and direct calls | Current `analysis`; cross-check input for `call_site` facts and `SAME_AS` symbol links | `symbol_links`; cross-check of the `graph` index | `core`, `QP`; no skill |
 | SVF points-to over linked `-O0` bitcode; `job_svf_alias_analysis` (opt-in) | Bounded points-to sets of dereferenced, compared and passed pointers; indirect-call target sets; per-module closed-world state | Current `analysis` (`points_to_set`, `indirect_call_targets`); cross-check input for indirect `call_site` and pointer `guard_fact` facts ([`svf-alias-producer.md`](svf-alias-producer.md)) | cross-check of the `graph` index | `core`, `query_code_graph`; no skill |
 | ASan/UBSan-instrumented native rebuild; `job_sanitizer_build` | Hash-bound catalog of instrumented outputs with the sanitizer runtime evidence read from each ELF, for a later execution stage | Artifact only: protected workspaces and a sanitized handoff summary; nothing is indexed as text ([`../operations/sanitizer-build.md`](../operations/sanitizer-build.md)) | none | `coverage`; no skill |
+| Compile-checked proof-of-concept unit-test functions with compile records and provenance; `job_poc_generation` (optional, shipped disabled) | Developer-facing reproducers for findings the judge agreed with, shown in the final report | Artifact only: `data/poc/<claim-id>/` files hash-bound by the handoff; nothing is indexed as text, linked or executed ([`../operations/poc-generation.md`](../operations/poc-generation.md)) | none | `coverage`; no skill |
 | Joern CPG; `job_cpg_analysis` | Retained CPG artifact | Binary artifact only; not a graph producer in the code-graph plan | none | `coverage` reports unavailable; no skill |
 | CodeQL database and SARIF paths; `job_codeql_analysis`, `job_code_graph_index` | Analyzer leads, ordered flows, and the primary code-graph export (calls, sinks, entry points, summaries, paths, guards, ranges) | Current `observations`, priority flow steps; DB protected; export artifacts `artifact_only`; accepted per-scope/per-family `graph` shards via `job_code_graph_index` | `scanner_correlation`; `graph` index families | `query_codeql`, `query_code_graph`, `QP`; no skill |
 | Post-build flags, hardening and deterministic/model assessments; `job_post_build_security_assessment` | Artifact security posture | Current `build_security`; keep model judgment distinct from measured facts | `build_provenance`, `review_package` | `query_build_security`; existing `post-build-security-assessment` skill is operator-only |
@@ -141,13 +142,15 @@ a silent allowlist. `query_precomputed` is abbreviated `QP`; existing generic `f
 | Final publication gate decisions; `job_final_publication_gate` (decision 8) | Classify every finding package as publishable, verification backlog or withheld from exact accounting, ship-block status and gaps, and name the limitations | Artifact only: re-verifies the accepted review handoff and the artifacts it binds, then publishes a hash-bound gate document; it never reinterprets claim state or ship-block status | None | `coverage`; no skill |
 | Final report publications; `job_final_report_publication` (decision 8) | Publishable findings, verification backlog and limitations | Artifact only: `final-report.json` (`final-report/1`) and a deterministic `final-report.md` from the accepted gate; indexing sanitized findings for retrieval and PDF rendering are later steps | None | `coverage`; no skill |
 
-An MCP endpoint is justified only when `core`, an existing domain query, and `QP` cannot give a
+In this document "MCP endpoint" means a typed retrieval tool (see [`retrieval-surfaces.md`](retrieval-surfaces.md)). A
+retrieval tool is justified only when `core`, an existing domain query, and `QP` cannot give a
 bounded typed answer. `query_observations` (implemented) is the endpoint for scanner severity,
 suppression, rule, provider and location filters; it keeps tool findings distinct from confirmed
 findings. Other named planned endpoints above are conditional on their producers.
 Skills are operator procedures, not a way to provide target facts to review workers. New sources
 do not require new skills by default; add one only for a repeated operator workflow with its own
-validation steps. Worker access remains through accepted MCP indices and packages.
+validation steps. Worker access remains through accepted indices and packages, read with the retrieval
+tools (in-process for a review cell, over MCP for an external client).
 
 An implementation task must enumerate actual artifacts and handoffs for every enabled job. Each
 dataset gets `producer`, `scope`, `schema`, `hash`, `snapshot`, sensitivity, disposition

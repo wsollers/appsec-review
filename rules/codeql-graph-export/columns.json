@@ -674,7 +674,7 @@
           "query_file": "Guards.ql",
           "result_set": "guards",
           "family": "guard_fact",
-          "description": "one row per (sink, guard condition, state); one none row per sink without a controlling guard",
+          "description": "one row per (sink, guard condition, state); one none row per sink without a controlling guard; each comparison row carries its two operands (location, kind, constant value) and the sink destination object size",
           "columns": [
             {
               "name": "sink_path",
@@ -765,6 +765,81 @@
               "name": "bound_display",
               "type": "string",
               "meaning": "toString() of the compared bound; \"\" when not a comparison"
+            },
+            {
+              "name": "lhs_path",
+              "type": "string",
+              "meaning": "left operand of the comparison: path relative to the database source root; \"\" when outside it or when the condition is not a comparison"
+            },
+            {
+              "name": "lhs_start_line",
+              "type": "int",
+              "meaning": "left operand of the comparison: 1-based start line; 0 when outside the source root or not a comparison"
+            },
+            {
+              "name": "lhs_start_column",
+              "type": "int",
+              "meaning": "left operand of the comparison: 1-based start column; 0 when outside the source root or not a comparison"
+            },
+            {
+              "name": "lhs_end_line",
+              "type": "int",
+              "meaning": "left operand of the comparison: 1-based end line; 0 when outside the source root or not a comparison"
+            },
+            {
+              "name": "lhs_end_column",
+              "type": "int",
+              "meaning": "left operand of the comparison: 1-based inclusive end column; 0 when outside the source root or not a comparison"
+            },
+            {
+              "name": "lhs_kind",
+              "type": "string",
+              "meaning": "kind of the left operand of the comparison: variable | field | constant | sizeof | call | other (sizeof first, then compile-time constant, then field access, variable access, call); other when not a comparison. The operand text is not exported: the normalizer slices it from the accepted source bytes at the location"
+            },
+            {
+              "name": "lhs_value",
+              "type": "string",
+              "meaning": "decimal value of the left operand of the comparison when it is an integer compile-time constant, else \"\""
+            },
+            {
+              "name": "rhs_path",
+              "type": "string",
+              "meaning": "right operand of the comparison: path relative to the database source root; \"\" when outside it or when the condition is not a comparison"
+            },
+            {
+              "name": "rhs_start_line",
+              "type": "int",
+              "meaning": "right operand of the comparison: 1-based start line; 0 when outside the source root or not a comparison"
+            },
+            {
+              "name": "rhs_start_column",
+              "type": "int",
+              "meaning": "right operand of the comparison: 1-based start column; 0 when outside the source root or not a comparison"
+            },
+            {
+              "name": "rhs_end_line",
+              "type": "int",
+              "meaning": "right operand of the comparison: 1-based end line; 0 when outside the source root or not a comparison"
+            },
+            {
+              "name": "rhs_end_column",
+              "type": "int",
+              "meaning": "right operand of the comparison: 1-based inclusive end column; 0 when outside the source root or not a comparison"
+            },
+            {
+              "name": "rhs_kind",
+              "type": "string",
+              "meaning": "kind of the right operand of the comparison: variable | field | constant | sizeof | call | other (sizeof first, then compile-time constant, then field access, variable access, call); other when not a comparison. The operand text is not exported: the normalizer slices it from the accepted source bytes at the location"
+            },
+            {
+              "name": "rhs_value",
+              "type": "string",
+              "meaning": "decimal value of the right operand of the comparison when it is an integer compile-time constant, else \"\""
+            },
+            {
+              "name": "destination_object_bytes",
+              "type": "int",
+              "meaning": "byte size of the destination object (argument 0) of a catalog memory-write API sink (memcpy, memmove, memset, strcpy, strcat, strncpy, strncat) when its unconverted type is a fixed-size array or it is the address of a variable or field of a complete type; -1 when unknown (a pointer, an offset or an incomplete type) and for every other sink. An object-size fact, not a safety claim: nothing here says how a guard relates to it"
             }
           ]
         },

@@ -217,6 +217,38 @@ module GraphExport {
     name = "rand" and arg = -1
   }
 
+  /** Catalog memory-write APIs whose argument 0 is the destination object. */
+  predicate destinationApi(string name) {
+    name = ["memcpy", "memmove", "memset", "strcpy", "strcat", "strncpy", "strncat"]
+  }
+
+  /**
+   * `dest` is argument 0 of `call`, a catalog memory-write API (`destinationApi`); the sink
+   * classification itself stays in ../catalog.json.
+   */
+  predicate memoryWriteDestination(Call call, Expr dest) {
+    exists(string api | call.getTarget().hasGlobalOrStdName(api) and destinationApi(api)) and
+    dest = call.getArgument(0)
+  }
+
+  /**
+   * The byte size of the fixed-size object `dest` addresses (an object-size fact, not a safety claim): its unconverted type is an array, or
+   * it is the address (`&x`) of a variable or field of a complete type. A pointer, `buf + n`,
+   * `&buf[i]` and a flexible or incomplete array have no known object size here. Always positive.
+   */
+  int destinationObjectBytes(Expr dest) {
+    exists(Type t | t = dest.getUnconverted().getType().getUnspecifiedType() |
+      t instanceof ArrayType and result = t.getSize()
+    ) and
+    result > 0
+    or
+    exists(VariableAccess object |
+      object = dest.getUnconverted().(AddressOfExpr).getOperand() and
+      result = object.getType().getSize()
+    ) and
+    result > 0
+  }
+
   /**
    * Catalog API sources: `arg` -1 is the return value, n >= 0 the buffer written through
    * argument n. Kept equal to the `api` source rules of ../catalog.json.

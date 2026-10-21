@@ -11,7 +11,11 @@ fair-share allocation, and the attempt's :class:`JobBudget`. A team runs:
    and observed taint hops, evidence requests, named gaps, lead accounting and chain seeds, then the
    lane B triage gate or the lane A cap;
 3. for every admitted claim, ``blue_control`` and ``blue_reachability`` refuters and one blind
-   ``independent_verifier`` whose request carries only the claim's identity fields.
+   ``independent_verifier`` whose request carries only the claim's identity fields;
+4. for the claims ``roles.adjudication_judge.when`` selects, ``judges_per_claim`` ``adjudication_judge`` cells that see
+   the package and the red and blue positions as sides A and B in a deterministic shuffled order
+   (docs/architecture/review-judge-and-poc.md). A judge records a ``judge_verdict`` and relations with provenance
+   ``adjudication_judge``; it sets no state, and R5 and R6 do not read it.
 
 Every cell runs through ``review.cells.reuse_or_run``; every cited relation is re-resolved through
 ``review.evidence.resolve_relation``; every failure is a typed gap with exactly one terminal cell
@@ -37,14 +41,19 @@ from appsec_review.review.budget import JobBudget
 from appsec_review.review.capability import EXPAND_TOOL, IN_PROCESS_TOOLS, CellCapability
 from appsec_review.review.cells import CellBudgetExceeded, CellOutcome, CellSpec, cell_fingerprint, reuse_or_run
 from appsec_review.review.claims import normalize_claim
-from appsec_review.review.compact import Expander, expand_blue, expand_red, expand_verifier
+from appsec_review.review.compact import Expander, expand_blue, expand_judge, expand_red, expand_verifier
+from appsec_review.review.fact_summary import summarize_fact
 from appsec_review.review.evidence import resolve_relation, satisfies
 from appsec_review.review.identity import make_id, sha256_hex
 from appsec_review.review.independence import ActorRecord, model_distinct, provider_distinct, verify_independence
+from appsec_review.review.judge import (
+    JUDGE_PERSONA, JUDGE_TASK, PROVENANCE, blue_side, present, red_affirms, red_side, selected,
+    side_assignment,
+)
 from appsec_review.review.ledger import EvidenceRequestOutcome, LedgerWriter, gap_json
 from appsec_review.review.models import (
-    BlueTask, CellRecord, CellStatus, Claim, EvidenceRelation, Gap, GapClass, IntegrityError, Lane, Predicate,
-    RelationKind, Role, make_gap,
+    BlueTask, CellRecord, CellStatus, Claim, EvidenceRelation, Gap, GapClass, HuntStrategy, IntegrityError,
+    JudgePredicateVerdict, JudgeVerdict, JudgeVerdictValue, Lane, Predicate, RelationKind, Role, make_gap,
 )
 from appsec_review.review.obligations import required_predicates
 from appsec_review.review.package_view import PackageView, ViewLimits, build_view
@@ -60,12 +69,14 @@ VALIDATOR_VERSION = "inference-review-results/3"
 CHAIN_SEEDS_SCHEMA = "appsec-review/red-chain-seeds/1"
 POC_BASIS_SCHEMA = "appsec-review/red-poc-basis/1"
 RESULT_SCHEMAS = {Role.RED_TEAM_ANALYST: red_discovery.SCHEMA_NAME, Role.HYPOTHESIS_HUNTER: red_discovery.SCHEMA_NAME,
-                  Role.BLUE_TEAM_REFUTER: "blue-result", Role.INDEPENDENT_VERIFIER: "verifier-result"}
+                  Role.BLUE_TEAM_REFUTER: "blue-result", Role.INDEPENDENT_VERIFIER: "verifier-result",
+                  Role.ADJUDICATION_JUDGE: "judge-result"}
 # The schema a model is told to answer in is the compact one (review-protocol/2); the application expands it
 # into RESULT_SCHEMAS[role] (``review.compact``) before any validator runs.
 OUTPUT_SCHEMAS = {red_discovery.SCHEMA_NAME: "appsec-review/red-compact/1",
                   "blue-result": "appsec-review/blue-compact/1",
-                  "verifier-result": "appsec-review/verifier-compact/1"}
+                  "verifier-result": "appsec-review/verifier-compact/1",
+                  "judge-result": "appsec-review/judge-result-compact/1"}
 LEAD_LENSES = ("lead_red_stack", "lead_red_preconditions", "lead_red_failure_modes")
 VERIFIER_TASK = "blind_verifier"
 # Relation kinds each role may author (the registry ``outputs`` of each role; red evidence travels
@@ -75,7 +86,12 @@ ROLE_RELATION_KINDS = {
     Role.HYPOTHESIS_HUNTER: frozenset({RelationKind.SUPPORTS, RelationKind.QUALIFIES}),
     Role.BLUE_TEAM_REFUTER: frozenset({RelationKind.CONTRADICTS, RelationKind.QUALIFIES}),
     Role.INDEPENDENT_VERIFIER: frozenset({RelationKind.SUPPORTS, RelationKind.CONTRADICTS, RelationKind.QUALIFIES}),
+    # A judge's relations are derived from its verdict (supports / contradicts, qualifies when not direct); they carry
+    # provenance and are never counted by R5.
+    Role.ADJUDICATION_JUDGE: frozenset({RelationKind.SUPPORTS, RelationKind.CONTRADICTS, RelationKind.QUALIFIES}),
 }
+GRAPH_FACT_KINDS = frozenset({"sink_site", "range_fact", "guard_fact", "call_site", "entry_point", "dataflow_path",
+                              "flow_summary", "symbol"})
 MIN_MARKER_CHARACTERS = 16
 MAX_RESULT_BYTES = 64 * 1024
 
@@ -208,6 +224,32 @@ class ReviewContext:
             self._locations[identity] = location
         return location
 
+    def describe(self, identity: str, limit: int) -> str:
+        """Bounded resolved content of one accepted identity, for a row re-presented to a judge (``J`` label)."""
+        try:
+            results = self.core.find(identity=identity, limit=1)["results"]
+        except (ValueError, LookupError):
+            results = []
+        if not results:
+            return "not resolvable in the accepted index"[:limit]
+        row = results[0]
+        kind, location = str(row.get("kind")), row.get("location") if isinstance(row.get("location"), Mapping) else {}
+        payload = row.get("payload")
+        parts = [kind]
+        if kind in GRAPH_FACT_KINDS and isinstance(payload, Mapping):
+            parts.append(summarize_fact(kind, payload, line=location.get("start_line")))
+        elif row.get("name"):
+            parts.append(str(row["name"]))
+        if location:
+            parts.append(f"{location.get('path')}:{location.get('start_line')}-{location.get('end_line')}")
+            try:
+                excerpt = self.core.read_excerpt(identity=identity, context_lines=0)["results"]
+            except (ValueError, LookupError, OSError):
+                excerpt = []
+            if excerpt:
+                parts.append("| " + " / ".join(str(excerpt[0]["excerpt"]).splitlines()[:3]))
+        return " ".join(" ".join(parts).split())[:limit]
+
     def shard_sha256(self, label: str) -> str | None:
         """The accepted manifest's hash of shard ``<index>/<shard_id>``."""
         for item in self.core.manifest["indexes"]:
@@ -242,6 +284,8 @@ class TeamResult:
     lead_entries: list[tuple[str, str, str]] = field(default_factory=list)   # (cell, lead, outcome)
     chain_seeds: list[dict[str, Any]] = field(default_factory=list)
     poc_basis: list[dict[str, Any]] = field(default_factory=list)
+    judge_verdicts: list[JudgeVerdict] = field(default_factory=list)
+    judging: dict[str, Any] = field(default_factory=dict)         # claim id -> judge cells / why none was selected
     launched: bool = False
     counts: dict[str, int] = field(default_factory=lambda: {"cells_run": 0, "cells_reused": 0,
                                                             "cells_not_launched": 0})
@@ -251,7 +295,7 @@ class TeamResult:
 class _Cell:
     spec: CellSpec
     capability: CellCapability
-    kind: str                            # red | blue | verifier
+    kind: str                            # red | blue | verifier | judge
     strategy: str | None = None
     invocation: RedInvocation | None = None   # red cells: what the result must echo and account for
     outcome: CellOutcome | None = None
@@ -309,7 +353,8 @@ def _routed(view: PackageView, routing: Mapping[str, Any], persona: str) -> dict
 
 def _cell(ctx: ReviewContext, work: PackageWork, routing: Mapping[str, Any], *, role: Role, persona: str,
           task: str, kind: str, task_input: Mapping[str, Any], claim: Claim | None = None,
-          strategy: str | None = None, view: PackageView | None = None) -> _Cell:
+          strategy: str | None = None, view: PackageView | None = None,
+          side_map: Mapping[str, str] | None = None, extra_entities: Sequence[str] = ()) -> _Cell:
     invocation = None
     expand: Expander
     schema_errors = ctx.schemas.errors
@@ -320,6 +365,9 @@ def _cell(ctx: ReviewContext, work: PackageWork, routing: Mapping[str, Any], *, 
     elif role is Role.BLUE_TEAM_REFUTER:
         expand = lambda compact, labels: expand_blue(  # noqa: E731
             compact, labels, claim_id=claim.claim_id, task=task, schema_errors=schema_errors)
+    elif role is Role.ADJUDICATION_JUDGE:
+        expand = lambda compact, labels: expand_judge(  # noqa: E731
+            compact, labels, claim_id=claim.claim_id, side_map=dict(side_map or {}), schema_errors=schema_errors)
     else:
         expand = lambda compact, labels: expand_verifier(  # noqa: E731
             compact, labels, claim_id=claim.claim_id, schema_errors=schema_errors)
@@ -328,7 +376,8 @@ def _cell(ctx: ReviewContext, work: PackageWork, routing: Mapping[str, Any], *, 
     capability = CellCapability.issue(
         run_id=ctx.run_id, manifest_sha256=ctx.core.manifest_sha256, package_id=work.package_id,
         package_sha256=work.sha256, role=role, round=0, tools=tools,
-        indexes=tuple(name for name in ctx.index_names if name in INDEX_NAMES), entities=work.entities,
+        indexes=tuple(name for name in ctx.index_names if name in INDEX_NAMES),
+        entities=(*work.entities, *extra_entities),
         graph_scopes=tuple((work.document.get("retrieval") or {}).get("graph_scopes", ())),
         max_queries=max(1, profile.max_queries), max_turns=profile.max_turns,
         page_size=min(100, ctx.max_page_size), max_depth=min(8, ctx.max_depth), max_result_bytes=MAX_RESULT_BYTES)
@@ -339,7 +388,7 @@ def _cell(ctx: ReviewContext, work: PackageWork, routing: Mapping[str, Any], *, 
         manifest_sha256=ctx.core.manifest_sha256, lane=work.lane, package_id=work.package_id,
         package_sha256=work.sha256, claim_id=claim.claim_id if claim else None, role=role, persona=persona,
         stack_profile=stack, strategy=strategy, task=task, task_input=dict(task_input), round=0,
-        round_delta_sha256=None, evidence_set=tuple(sorted(set(work.entities))),
+        round_delta_sha256=None, evidence_set=tuple(sorted({*work.entities, *extra_entities})),
         guidance_bundle_sha256=guidance["bundle"]["sha256"], guidance_text=guidance["text"],
         provider=profile.provider, model=profile.model, reasoning=profile.reasoning,
         max_input_tokens=profile.max_input_tokens, max_output_tokens=profile.max_output_tokens,
@@ -454,7 +503,8 @@ def _relations(ctx: ReviewContext, cell: _Cell, claim_id: str, items: Iterable[M
         resolved = resolve_relation(ctx.core, claim_id=claim_id, predicate=predicate, kind=kind, entity_id=entity,
                                     producing_cell_id=cell.cell_id,
                                     retrieval_receipt_sha256=receipt if entity in seen else None,
-                                    rule_predicates=ctx.rule_predicates.get(entity, ()))
+                                    rule_predicates=ctx.rule_predicates.get(entity, ()),
+                                    role=cell.spec.role.value)
         (relations if isinstance(resolved, EvidenceRelation) else gaps).append(resolved)
     return relations, gaps
 
@@ -729,8 +779,193 @@ def _team_body(ctx: ReviewContext, work: PackageWork, routing: Mapping[str, Any]
                 ctx, Role.INDEPENDENT_VERIFIER, claim_id=claim_id), capture=True))
         for future in futures:
             future.result()
+    judges = _plan_judges(ctx, work, routing, reviews, result)
+    _run_judges(ctx, judges)
     for group, control, reach, verifier in reviews:
         _review(ctx, group, (control, reach), verifier, result)
+    for plan in judges:
+        _judged(ctx, plan, result)
+
+
+@dataclass
+class _JudgePlan:
+    """One planned judge cell: the claim it judges, the side-to-role map and the cells behind the two sides."""
+
+    group: Mapping[str, Any]
+    cell: _Cell
+    assignment: dict[str, str]
+    blues: tuple[_Cell, _Cell]
+    markers: tuple[str, ...]
+    index: int
+
+
+def _blindness_markers(ctx: ReviewContext, actors: Sequence[_Cell], judge: ModelProfileSettings) -> tuple[str, ...]:
+    """Identifiers of the red and blue side that must not reach a judge: their role names, and for the cells behind
+    the two sides their task, strategy and persona names, cell and actor identities, and a model name the judge does
+    not itself run on. (Only identifiers: a generic word such as ``variant`` is not an identity.)"""
+    found = {role.value for role in (*RED_ROLES, Role.BLUE_TEAM_REFUTER)}
+    for cell in actors:
+        found |= {cell.cell_id, _actor(cell).actor_id}
+        for name in (cell.spec.task, cell.spec.strategy, cell.spec.persona):
+            if name and "_" in name and name != JUDGE_PERSONA:
+                found.add(name)
+        if cell.spec.model != judge.model:
+            found.add(cell.spec.model)
+    return tuple(sorted(item for item in found if item))
+
+
+def _plan_judges(ctx: ReviewContext, work: PackageWork, routing: Mapping[str, Any],
+                 reviews: Sequence[tuple[dict[str, Any], _Cell, _Cell, _Cell]], result: TeamResult
+                 ) -> list[_JudgePlan]:
+    """Judge cells for the admitted claims ``roles.adjudication_judge.when`` selects; the rest are accounted."""
+    settings = ctx.settings.judge
+    if settings is None:
+        return []
+    plans: list[_JudgePlan] = []
+    profile = ctx.profile(Role.ADJUDICATION_JUDGE)
+    for group, control, reach, _verifier in reviews:
+        claim: Claim = group["claim"]
+        red = red_side((proposal, red_result) for _cell_, proposal, red_result, _seen_ in group["items"])
+        blue, dispositions = blue_side(
+            cell.outcome.result if cell.record is not None and cell.record.status is CellStatus.SUCCEEDED else None
+            for cell in (control, reach))
+        if not selected(settings.when, red_affirmed=red_affirms(red), blue_dispositions=dispositions):
+            result.judging[claim.claim_id] = {
+                "selected": False,
+                "reason": "red_not_affirmed" if not red_affirms(red) else "no_disagreement"}
+            continue
+        claim_view, added = ctx.package_view(work).with_extra(claim.affected_entities)
+        actors = (*group["cells"], control, reach)
+        markers = _blindness_markers(ctx, actors, profile)
+        entries = []
+        for index in range(settings.judges_per_claim):
+            assignment = side_assignment(ctx.core.manifest_sha256, claim.claim_id, index)
+            shown = present({"red": red, "blue": blue}, assignment, claim_view, max_why=settings.max_why_chars,
+                            max_rows=settings.max_cited_rows_per_side, markers=markers,
+                            describe=lambda ref: ctx.describe(ref, settings.max_cited_row_chars))
+            task_input = {"task": JUDGE_TASK,
+                          "claim": _claim_view(claim, statement=True, labels=added, names=ctx.entity_name),
+                          "package": _routed(shown.view, routing, JUDGE_PERSONA),
+                          "sides": shown.sides, "cited_rows": shown.cited_rows}
+            cell = _cell(ctx, work, routing, role=Role.ADJUDICATION_JUDGE, persona=JUDGE_PERSONA, task=JUDGE_TASK,
+                         kind="judge", claim=claim, strategy=f"judge-{index + 1}", view=shown.view,
+                         task_input=task_input, side_map=assignment, extra_entities=shown.rows)
+            plans.append(_JudgePlan(group, cell, assignment, (control, reach), markers, index))
+            entries.append(cell.cell_id)
+        result.judging[claim.claim_id] = {"selected": True, "cells": entries}
+    return plans
+
+
+def _run_judges(ctx: ReviewContext, plans: Sequence[_JudgePlan]) -> None:
+    if not plans:
+        return
+    settings = ctx.settings.judge
+    workers = max(1, min(settings.workers if settings else 1, len(plans)))
+    with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="judge") as pool:
+        futures = [pool.submit(_run, ctx, plan.cell, _validator(ctx, Role.ADJUDICATION_JUDGE,
+                                                                claim_id=plan.group["claim"].claim_id),
+                               capture=True) for plan in plans]
+        for future in futures:
+            future.result()
+    for plan in plans:
+        # The side-to-role map is part of the terminal record and of nothing the model sees.
+        plan.cell.record = replace(plan.cell.record, side_map=tuple(sorted(plan.assignment.items())))
+
+
+def _judge_request_blind(plan: _JudgePlan) -> tuple[bool, str]:
+    """Whether the stored judge request holds none of the red or blue identifiers, and why not (fails closed).
+
+    A fresh run checks the exact request bytes and records the result beside the receipt (hashes and the offending
+    identifier). A reused cell sent no request; its recorded check is used when the markers are unchanged, and
+    otherwise the check fails closed.
+    """
+    cell = plan.cell
+    digest = sha256_hex(list(plan.markers))
+    sidecar = Path(cell.outcome.receipt_paths[-1]).with_name(f"judge-request-check-{cell.record.attempts}.json") \
+        if cell.outcome.receipt_paths else None
+    if cell.requests:
+        joined = b"\n".join(cell.requests)
+        leaked = sorted(marker for marker in plan.markers if marker.encode("utf-8") in joined)
+        if sidecar is not None:
+            atomic_json(sidecar, {"schema": "appsec-review/judge-request-check/1", "cell_id": cell.cell_id,
+                                  "attempt": cell.record.attempts, "markers_sha256": digest,
+                                  "request_sha256s": [sha256_hex(item.decode("utf-8")) for item in cell.requests],
+                                  "contains_forbidden_marker": bool(leaked), "leaked": leaked[:8]})
+        return not leaked, (f"judge_request_contains_identifier:{leaked[0]}" if leaked else "")
+    try:
+        check = json.loads(sidecar.read_text(encoding="utf-8")) if sidecar is not None else None
+    except (OSError, ValueError):
+        check = None
+    if not check or check.get("markers_sha256") != digest:
+        return False, "judge_request_unverified"
+    if check.get("contains_forbidden_marker"):
+        return False, f"judge_request_contains_identifier:{(check.get('leaked') or ['?'])[0]}"
+    return True, ""
+
+
+def _judge_relations(ctx: ReviewContext, cell: _Cell, claim_id: str, per_predicate: Mapping[str, Any],
+                     seen: set[str]) -> tuple[list[EvidenceRelation], list[Gap]]:
+    """Evidence relations from a judge\'s citations, with provenance ``adjudication_judge``.
+
+    Siding with red on a predicate records ``supports`` for each direct citation, siding with blue ``contradicts``;
+    a citation that is not a direct, complete row records ``qualifies``. ``both``, ``neither`` and ``unresolved``
+    record none. Admissibility is the ordinary re-resolution; a judge cannot make a row direct.
+    """
+    relations: list[EvidenceRelation] = []
+    gaps: list[Gap] = []
+    receipt = cell.record.receipt_sha256 if cell.record else None
+    for name, entry in sorted(per_predicate.items()):        # receipts store keys sorted; so does a fresh run
+        verdict = entry["verdict"]
+        if verdict not in (JudgeVerdictValue.RED_CORRECT.value, JudgeVerdictValue.BLUE_CORRECT.value):
+            continue
+        decided = RelationKind.SUPPORTS if verdict == JudgeVerdictValue.RED_CORRECT.value else RelationKind.CONTRADICTS
+        for ref in entry["cites"]:
+            resolved: EvidenceRelation | Gap | None = None
+            for kind in (decided, RelationKind.QUALIFIES):
+                resolved = resolve_relation(
+                    ctx.core, claim_id=claim_id, predicate=Predicate(name), kind=kind, entity_id=ref,
+                    producing_cell_id=cell.cell_id, retrieval_receipt_sha256=receipt if ref in seen else None,
+                    rule_predicates=ctx.rule_predicates.get(ref, ()))
+                if not isinstance(resolved, EvidenceRelation) or satisfies(resolved):
+                    break                      # a gap, or a direct complete row, stands as decided
+            if isinstance(resolved, EvidenceRelation):
+                relations.append(replace(resolved, provenance=PROVENANCE))
+            elif resolved is not None:
+                gaps.append(resolved)
+    return relations, gaps
+
+
+def _judged(ctx: ReviewContext, plan: _JudgePlan, result: TeamResult) -> None:
+    """Record one judge cell: its terminal record, and (when it answered and stayed blind) verdict and relations."""
+    cell, claim = plan.cell, plan.group["claim"]
+    _record(result, cell)
+    entry: dict[str, Any] = {"cell_id": cell.cell_id, "status": cell.record.status.value, "verdict": None,
+                             "judge_model_distinct": None}
+    result.judging.setdefault(claim.claim_id, {}).setdefault("results", []).append(entry)
+    if cell.record.status is not CellStatus.SUCCEEDED or cell.outcome.result is None:
+        return
+    blind, why = _judge_request_blind(plan)
+    if not blind:
+        # Fail closed: a verdict whose request could carry a side\'s identity is dropped, never trusted.
+        result.gaps.append(make_gap(GapClass.AUTHORITY_ERROR, claim.claim_id, why))
+        return
+    document = cell.outcome.result
+    settings = ctx.settings.judge
+    named = {role.value for role in (settings.require_distinct_from_roles if settings else ())}
+    compared = [_actor(other) for other in (*plan.group["cells"], *plan.blues) if other.spec.role.value in named]
+    distinct = model_distinct(_actor(cell), compared)
+    verdict = JudgeVerdict(
+        verdict_id=make_id("judge_verdict", 1, {"claim_id": claim.claim_id, "cell_id": cell.cell_id}),
+        claim_id=claim.claim_id, verdict=JudgeVerdictValue(document["verdict"]),
+        per_predicate=tuple(JudgePredicateVerdict(Predicate(name), JudgeVerdictValue(item["verdict"]),
+                                                  tuple(sorted(item["cites"])))
+                            for name, item in sorted(document["per_predicate"].items())),
+        reason=str(document["reason"]), cell_id=cell.cell_id, judge_model_distinct=distinct)
+    found, failed = _judge_relations(ctx, cell, claim.claim_id, document["per_predicate"], _seen(cell))
+    result.judge_verdicts.append(verdict)
+    result.relations.extend(found)
+    result.gaps.extend(failed)
+    entry.update(verdict=verdict.verdict.value, judge_model_distinct=distinct, verdict_id=verdict.verdict_id)
 
 
 def _normalize(ctx: ReviewContext, work: PackageWork, reds: list[_Cell], result: TeamResult) -> list[dict[str, Any]]:
@@ -982,6 +1217,8 @@ def _seal(ctx: ReviewContext | None, lane: Lane, teams: Sequence[TeamResult], al
         for relation in sorted({item.relation_id: item for item in team.relations}.values(),
                                key=lambda item: item.relation_id):
             writer.add_relation(relation)
+        for verdict in sorted(team.judge_verdicts, key=lambda item: item.verdict_id):
+            writer.judge_verdict(verdict)
         for request in sorted({item["request_id"]: item for item in team.requests}.values(),
                               key=lambda item: item["request_id"]):
             writer.open_request(request["request_id"], request["claim_id"], Predicate(request["predicate"]),
@@ -1010,6 +1247,7 @@ def _seal(ctx: ReviewContext | None, lane: Lane, teams: Sequence[TeamResult], al
                       for team in teams for claim in team.claims},
         "independence": _merge_lists(team.independence for team in teams),
         "verifier_gaps": _merge_lists(team.verifier_gaps for team in teams),
+        "judging": {claim_id: value for team in teams for claim_id, value in sorted(team.judging.items())},
         "routing": {team.package_id: team.routing for team in teams},
         "triage": {team.package_id: team.triage for team in teams},
         "lead_accounting": {team.package_id: _lead_summary(team) for team in teams},

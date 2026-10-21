@@ -11,17 +11,18 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
+from appsec_review.config.inference_review import PocCandidateSettings
 from appsec_review.review import adjudication as r5
 from appsec_review.review import advisories as advisory_reference
 from appsec_review.review.accounting import Accounting, PoolOutcome, exact_accounting
 from appsec_review.review.adjudication import Adjudication, adjudicate
 from appsec_review.review.claims import possible_duplicates
-from appsec_review.review.identity import make_id
+from appsec_review.review.identity import make_id, sha256_hex
 from appsec_review.review.ledger import (
     EVENT_SCHEMA, LedgerWriter, MergedLedger, Projection, gap_from_json, merge_shards, project,
 )
 from appsec_review.review.models import (
-    ClaimState, Gap, GapClass, IntegrityError, Lane, make_gap,
+    ClaimState, Gap, GapClass, IntegrityError, JudgeVerdict, JudgeVerdictValue, Lane, make_gap,
 )
 from appsec_review.review.scoring import (
     DERIVATION_RULE, UNAVAILABLE_CATALOG, ImpactCatalog, consumed_factors, default_factor_registry, default_registry,
@@ -430,6 +431,25 @@ def _ship_block_inputs(state: ClaimState, claim_scores: Sequence[Mapping[str, An
     return inputs, displayed
 
 
+def finding_judge(verdicts: Sequence[JudgeVerdict]) -> dict[str, Any] | None:
+    """The ``judge_verdict`` of a finding package, from the claim\'s judge verdicts in the ledger.
+
+    ``verdict`` is the judges\' unanimous outcome and ``unresolved`` when they differ. ``disagrees_with_state`` is set
+    when the judge sided against the published finding (blue correct, or neither side correct); the package then
+    shows that disagreement beside its state. The verdict never changes the state.
+    """
+    if not verdicts:
+        return None
+    ordered = sorted(verdicts, key=lambda item: item.verdict_id)
+    outcomes = {item.verdict for item in ordered}
+    overall = next(iter(outcomes)) if len(outcomes) == 1 else JudgeVerdictValue.UNRESOLVED
+    return {"verdict": overall.value,
+            "disagrees_with_state": overall in (JudgeVerdictValue.BLUE_CORRECT, JudgeVerdictValue.NEITHER),
+            "judges": [{"verdict_id": item.verdict_id, "verdict": item.verdict.value, "cell_id": item.cell_id,
+                        "judge_model_distinct": item.judge_model_distinct, "reason": item.reason[:2000]}
+                       for item in ordered[:8]]}
+
+
 def finding_packages(projection: Projection, adjudications: Sequence[Mapping[str, Any]],
                      merged: Mapping[str, Any], scores: Sequence[Mapping[str, Any]], *, manifest_sha256: str,
                      out_dir: Path, schemas: SchemaSet, references: Mapping[str, Mapping[str, Any]] | None = None,
@@ -468,6 +488,8 @@ def finding_packages(projection: Projection, adjudications: Sequence[Mapping[str
                                                (references or {}).get(claim.claim_id) or {},
                                                (lead_families or {}).get(claim.claim_id, ()), model_distinct)
         decision = ship_block.decide(inputs, ship_block_settings, require_distinct_model=require_distinct_model)
+        judged = projection.judge_verdicts.get(claim.claim_id, ())
+        judge = finding_judge(judged)
         body = {
             "schema": FINDING_SCHEMA, "claim_id": claim.claim_id, "lane": claim.lane.value, "state": state.value,
             "label": "confirmed" if state is ClaimState.CONFIRMED else "not_independently_confirmed",
@@ -479,7 +501,9 @@ def finding_packages(projection: Projection, adjudications: Sequence[Mapping[str
             "remediation_inputs": {"safe_regression_artifact": None},
             "independence": {"independent": bool(independent),
                              "provider_distinct": any(item["provider_distinct"] for item in verifiers),
-                             "verifier_model_distinct": model_distinct},
+                             "verifier_model_distinct": model_distinct,
+                             "judge_model_distinct": all(item.judge_model_distinct for item in judged) if judged else None},
+            "judge_verdict": judge,
             "ship_block": decision.record(inputs, adjudication_id=record["adjudication_id"],
                                           verification_review_id=review_id, displayed_context=displayed),
             "gaps": sorted(set(claim_gaps.get(claim.claim_id, ())) | set(record["gap_ids"]))[:256],
@@ -492,8 +516,45 @@ def finding_packages(projection: Projection, adjudications: Sequence[Mapping[str
         written.append({"finding_package_id": package["finding_package_id"], "sha256": file_sha256(path),
                         "claim_id": claim.claim_id, "state": state.value, "lane": claim.lane.value,
                         "ship_block_status": decision.status.value, "missing_predicates": missing,
-                        "gaps": package["gaps"], "file": path.name})
+                        "gaps": package["gaps"], "file": path.name,
+                        # Inputs of poc_candidates; not part of the handoff\'s finding_packages list.
+                        "judge_verdict": judge["verdict"] if judge else None,
+                        "technical_severity": inputs.technical_severity, "direct_evidence": list(supporting[:256])})
     return sorted(written, key=lambda item: item["finding_package_id"])
+
+
+def poc_candidates(findings: Sequence[Mapping[str, Any]], briefs: Iterable[Mapping[str, Any]],
+                   settings: PocCandidateSettings) -> list[dict[str, Any]]:
+    """Claims a later job may build a proof-of-concept function for (review-judge-and-poc.md section 4).
+
+    A claim is listed when **all** of these hold: its R5 state is ``supported`` or ``confirmed`` (it has a finding
+    package); the judge said ``red_correct`` (``partly`` too when ``settings.accept_partly``); one of its red cells
+    gave a ``poc_basis`` whose ``entry`` and ``path`` resolved (non-empty after label resolution); and its risk-matrix
+    technical severity is one of ``settings.risk_ratings``. Nothing else about the claim is copied.
+    """
+    accepted = {JudgeVerdictValue.RED_CORRECT.value} | (
+        {JudgeVerdictValue.PARTLY.value} if settings.accept_partly else set())
+    by_claim: dict[str, list[Mapping[str, Any]]] = defaultdict(list)
+    for brief in briefs:
+        basis = brief.get("poc_basis") or {}
+        if basis.get("entry") and basis.get("path"):
+            by_claim[str(brief["claim_id"])].append(brief)
+    found = []
+    for finding in sorted(findings, key=lambda item: item["claim_id"]):
+        claim_id = finding["claim_id"]
+        if (finding["state"] not in (ClaimState.CONFIRMED.value, ClaimState.SUPPORTED.value)
+                or finding.get("judge_verdict") not in accepted
+                or finding.get("technical_severity") not in settings.risk_ratings
+                or claim_id not in by_claim):
+            continue
+        brief = min(by_claim[claim_id], key=lambda item: (str(item["cell_id"]), str(item["package_id"])))
+        found.append({"claim_id": claim_id, "package_id": brief["package_id"], "state": finding["state"],
+                      "judge_verdict": finding["judge_verdict"],
+                      "poc_basis": {"sha256": sha256_hex(brief["poc_basis"]), "brief": dict(brief["poc_basis"])},
+                      "finding_package": {"finding_package_id": finding["finding_package_id"],
+                                          "sha256": finding["sha256"]},
+                      "evidence_refs": list(finding["direct_evidence"])})
+    return found
 
 
 def remediation_partition(findings: Sequence[Mapping[str, Any]]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
@@ -520,7 +581,8 @@ def build_handoff(*, run_id: str, manifest_sha256: str, configuration_sha256: st
                   accounting: Accounting, shards: Sequence[Mapping[str, Any]], findings: Sequence[Mapping[str, Any]],
                   scores: Sequence[Mapping[str, Any]], package_manifest_sha256: str,
                   coverage: Mapping[str, Any], possible: Sequence[Sequence[str]], schemas: SchemaSet,
-                  ship_block_policy_sha256: str, verification: Mapping[str, Any]) -> dict[str, Any]:
+                  ship_block_policy_sha256: str, verification: Mapping[str, Any],
+                  poc_candidate_list: Sequence[Mapping[str, Any]] = ()) -> dict[str, Any]:
     if not accounting.exact:
         reasons = ", ".join(sorted({gap.reason for gap in accounting.violations}))
         raise IntegrityError(f"publication_error: claim accounting is not exact ({reasons})")
@@ -542,6 +604,7 @@ def build_handoff(*, run_id: str, manifest_sha256: str, configuration_sha256: st
         "gap_ids": [gap.gap_id for gap in projection.gaps],
         "package_manifest_sha256": package_manifest_sha256, "coverage_matrix": dict(coverage),
         "possible_duplicates": [list(pair) for pair in possible],
+        "poc_candidates": [dict(item) for item in poc_candidate_list],
     }
     errors = schemas.errors("handoff", handoff)
     if errors:
@@ -588,5 +651,5 @@ def verify_receipts(projection: Projection, receipts_root: Path) -> int:
 
 
 __all__ = ["apply_policy", "audit", "build_handoff", "claim_lead_families", "claim_references", "coverage_matrix",
-           "completeness_gaps", "finding_packages", "merge_claims", "merge_verified", "remediation_partition",
+           "completeness_gaps", "finding_judge", "finding_packages", "merge_claims", "poc_candidates", "merge_verified", "remediation_partition",
            "score_claims", "scorer_actor", "shard_records", "verify_receipts", "write_ledger"]

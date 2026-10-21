@@ -20,7 +20,8 @@ LOGICAL_ID = re.compile(r"^asr:[a-z][a-z0-9_]*:[0-9a-f]{64}$")
 RETRIEVAL_PREFIX = "Q"
 PACKAGE_LETTERS = {"lead": "L", "source": "S", "sink": "K", "range": "R", "guard": "G", "call_site": "F",
                    "path": "P", "entry": "E", "memory": "M", "corroboration": "C", "build": "B", "tag": "T",
-                   "gap": "X", "other": "O", "affected": "A"}
+                   "gap": "X", "other": "O", "affected": "A",
+                   "judge": "J"}                 # a row one of two sides cited, re-presented to a judge
 
 
 class LabelTable:

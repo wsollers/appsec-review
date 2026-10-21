@@ -26,7 +26,8 @@ It needs no builder, Dockerfile or build context, and it runs only
 runner. The checked pins are:
 
 - every `enabled` image in `containers/catalog.toml`: its tag must resolve to its `image_id` when the
-  entry has one, and must at least be present when it has none;
+  entry has one, and must at least be present when it has none. An entry marked `manual = true` is built
+  and run by hand (today `tool-report-latex`), no pipeline job depends on it, and the check skips it;
 - every enabled job's `tag`/`image_id` pair, which today means each
   `[jobs.job_project_build.settings.profiles.<family>]` build profile;
 - every enabled job's `source_image_tag`/`source_image_id` pair, which today means CodeQL's

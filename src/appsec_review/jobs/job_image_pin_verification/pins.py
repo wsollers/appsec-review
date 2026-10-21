@@ -4,7 +4,8 @@ One collection of pins serves both the pre-intake gate (``job_image_pin_verifica
 operator's ``appsec-review update-image-pins`` command:
 
 * every enabled image in ``containers/catalog.toml`` (its ``image_id`` when pinned; an unpinned
-  enabled image must still be present);
+  enabled image must still be present), except an entry marked ``manual = true`` (built and run by hand,
+  not by a pipeline job);
 * every enabled job's ``tag``/``image_id`` pair (the ``job_project_build`` profiles) and
   ``source_image_tag``/``source_image_id`` pair (CodeQL's source image).
 
@@ -56,6 +57,8 @@ def configured_pins(catalog_images: Sequence[Mapping[str, Any]],
     for item in catalog_images:
         if item.get("state") != "enabled" or not isinstance(item.get("tag"), str):
             continue
+        if item.get("manual") is True:
+            continue  # built and run by hand; no pipeline job depends on it
         image_id = item.get("image_id")
         pins.append({"source": f"{CATALOG_PREFIX}{item['id']}.image_id", "tag": item["tag"],
                      "image_id": image_id if isinstance(image_id, str) else None})

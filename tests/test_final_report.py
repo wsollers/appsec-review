@@ -229,6 +229,7 @@ def test_report_json_is_schema_valid_and_contains_the_required_sections(chain: C
     assert report["provenance"]["gate_document"]["sha256"] == file_sha256(
         chain.unit_file(GATE, *GATE_DOC))
     assert report["provenance"]["ledger_head_sha256"] == review_handoff(chain)["ledger_head_sha256"]
+    assert report["provenance"]["configuration_profile"] == {"name": "dev", "sha256": None}
 
 
 def test_report_artifacts_are_hash_pinned_by_the_accepted_handoff(chain: Chain) -> None:
@@ -720,7 +721,7 @@ def test_registry_topology_and_terminal_job() -> None:
     from appsec_review.config import load_config as load
 
     config, registry = load(ROOT / "appsec-review.toml"), builtin_registry()
-    assert {GATE, REPORT} <= set(registry.job_ids()) and len(registry.job_ids()) == 36
+    assert {GATE, REPORT} <= set(registry.job_ids()) and len(registry.job_ids()) == 37
     assert not {"job_remediation_planning", "job_remediation_validation"} & set(registry.job_ids())
     jobs = {item["job_id"]: item for item in describe_wave1(config, registry)["jobs"]}
     assert jobs[GATE]["dependencies"] == [JOB] and jobs[REPORT]["dependencies"] == [GATE]
@@ -742,7 +743,8 @@ def test_disabled_gate_makes_the_report_transparent_and_the_review_terminal() ->
 def test_cli_graph_places_the_new_jobs_after_the_review() -> None:
     from appsec_review import cli
 
-    assert cli.POST_INDEX_JOB_IDS[-3:] == (JOB, GATE, REPORT)
+    # job_poc_generation sits between the gate and the report; it is disabled by default and so absent from the graph
+    assert cli.POST_INDEX_JOB_IDS[-4:] == (JOB, GATE, "job_poc_generation", REPORT)
 
 
 def test_review_data_indexing_does_not_audit_its_own_consumers() -> None:
@@ -779,7 +781,8 @@ def test_datasets_and_handoff_contracts_are_declared() -> None:
     assert contracts.FINAL_PUBLICATION_GATE_SCHEMA == "appsec-review/final-publication-gate/1"
     assert contracts.FINAL_REPORT_SCHEMA == "appsec-review/final-report/1"
     registry = builtin_registry()
-    assert registry.build(GATE).consumes == (JOB,) and registry.build(REPORT).consumes == (GATE,)
+    assert registry.build(GATE).consumes == (JOB,) and registry.build(REPORT).consumes == (
+        GATE, "job_poc_generation")
     assert registry.build(GATE).schema_identity == contracts.FINAL_PUBLICATION_GATE_HANDOFF_SCHEMA
     assert registry.build(REPORT).schema_identity == contracts.FINAL_REPORT_HANDOFF_SCHEMA
     # The implementation identity covers the package sources, so a code change re-executes the job.

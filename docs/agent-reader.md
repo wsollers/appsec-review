@@ -6,7 +6,9 @@ Relevant bounded procedures and design references:
 
 - [`architecture/README.md`](architecture/README.md) — full architecture navigation.
 - [`operations/wave1-review.md`](operations/wave1-review.md) — direct CLI scope, resume behavior, and the Dagster entrypoint.
+- [`operations/operator-scripts.md`](operations/operator-scripts.md) — `scripts/` for the Dagster stack, starting, watching and ending reviews, cleaning `test/tmp` and running named test suites, with the active-run guard.
 - [`operations/image-pin-verification.md`](operations/image-pin-verification.md) — mandatory pre-intake verification that local images match their pins, its failure report, and the host rebuild/re-pin/reload procedure.
+- [`operations/model-profiles.md`](operations/model-profiles.md) — the `dev` (default) and `prod` runtime profiles: selection with `APPSEC_REVIEW_PROFILE` or `--profile`, the exact prod models and limits, the distinct verifier model, and how fingerprints and the model contract treat a profile.
 - [`operations/inference-security-review.md`](operations/inference-security-review.md) — model selection and upgrade, local capacity overlay, and outcomes for the inference security review; design in [`architecture/inference-security-review.md`](architecture/inference-security-review.md).
 - [`operations/review-data-indexing.md`](operations/review-data-indexing.md) — dataset inventory and publication audit, lead menus, stage-1 products, and offline FTS validation; design in [`architecture/indexing-and-query-reuse.md`](architecture/indexing-and-query-reuse.md).
 - [`architecture/code-graph-precomputation.md`](architecture/code-graph-precomputation.md) — code-graph strategy, `graph` index, `query_code_graph`, R3 admissibility update, job topology, rollout, the chunked implementation and test plan (implemented through C9, offline-verified), and the partially implemented Clang phase (K4 static analysis is complete; K1-K3 and optional K5 remain planned).
@@ -17,6 +19,8 @@ Relevant bounded procedures and design references:
 - [`architecture/svf-alias-producer.md`](architecture/svf-alias-producer.md) — SVF points-to cross-check producer (opt-in): image, job, cross-check rules, memory-object accessor index, finding-lead memory and caller context, tunables and verification tiers.
 - [`operations/svf-alias-analysis.md`](operations/svf-alias-analysis.md) — `job_svf_alias_analysis` settings, image pin, coverage rows, resume and verification commands.
 - [`operations/sanitizer-build.md`](operations/sanitizer-build.md) — `job_sanitizer_build`: ASan/UBSan rebuild of accepted native units, sanitizer settings, the no-execution invariant, ELF runtime evidence, named gaps, and how a later execution stage would consume the handoff.
+- [`operations/test-targets.md`](operations/test-targets.md) — where to get the repositories the reviews and acceptance tests run against (`appsec-multi-vuln`, the pinned commit, the evaluator guide kept outside the repository).
+- [`operations/poc-generation.md`](operations/poc-generation.md) — `job_poc_generation`: the `poc_writer` model turn, the AST validators, the compile check, statuses, outputs under `data/poc/<claim-id>/`, manual invocation and what the job never does.
 - [`operations/final-report.md`](operations/final-report.md) — `job_final_publication_gate` and `job_final_report_publication`: re-verification of the accepted review handoff, publishable / verification backlog / withheld accounting, named limitations, `final-report.json` and the deterministic Markdown (PDF is a later step).
 - [`architecture/graph-alias-slice-layout-modes.md`](architecture/graph-alias-slice-layout-modes.md) — proposed alias, slice, type-layout and buffer-bound `query_code_graph` modes and sink CFG context (design only, not implemented).
 - [`reviews/detector-coverage-checklist.md`](reviews/detector-coverage-checklist.md) — detector coverage checklist (use after free, double free, null dereference, overflows, uninitialized reads, integer overflow, format string, TOCTOU, command injection, taint, bounds checks) against the registered rule packs and configured scanners, with proposed remediations.
@@ -68,6 +72,7 @@ Operations, one page per job or service:
 - [`operations/security-tagging.md`](operations/security-tagging.md) — security tagging.
 - [`operations/document-issue-analysis.md`](operations/document-issue-analysis.md) — source-mapped document candidate ledger.
 - [`operations/retrieval-mcp.md`](operations/retrieval-mcp.md) — local retrieval MCP gateway.
+- [`architecture/retrieval-surfaces.md`](architecture/retrieval-surfaces.md) — retrieval tools vs the MCP adapter vs review-cell retrieval vs runtime skills.
 - [`operations/swift-execution-policy.md`](operations/swift-execution-policy.md) — the global
   `tools.enable_swift` gate (`src/appsec_review/swift_policy.py`) and its durable coverage gap.
 - [`operations/metrics.md`](operations/metrics.md) — derived run metrics.

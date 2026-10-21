@@ -1,7 +1,7 @@
 # Review package and finding-lead contract
 
 Status: implementation contract. Inference review packages are schema version 6
-(`appsec-review/review-package/6`, assembly rule `assemble-review-packages/6`); the catalog-derived
+(`appsec-review/review-package/6`, assembly rule `assemble-review-packages/7`); the catalog-derived
 document packages below stay at version 3. Accepted-manifest scope assembly, lane A
 finding-lead packages for every lead family, lane B review-unit ranking and hunt packages,
 membership audits and the package manifest are implemented in `src/appsec_review/review/`
@@ -91,7 +91,7 @@ applying shard covers it in any state but `unavailable`.
   citable by that cell. Rows of every other scope are withheld. There is no kind-wide grant.
 
 Graph context is a search aid. An embedded identity is evidence only when a cell cites it and
-`resolve_relation` re-resolves it under `evidence-admissibility/2`.
+`resolve_relation` re-resolves it under `evidence-admissibility/3`.
 
 ### Memory and caller context (version 5)
 
@@ -190,7 +190,7 @@ bounds the destination of a write. Every row is also a `context` entry (new role
 summaries of its embedded sink and entry-point facts. The neighborhood enters the package fingerprint with
 `package-neighborhood/1`, `fact-summary/1`, `package-build-summary/1` and the graph caps.
 
-**The model-facing view (`package-view/1`, `review/package_view.py`).** A cell is shown a view built at cell time
+**The model-facing view (`package-view/2`, `review/package_view.py`).** A cell is shown a view built at cell time
 from the stored package, never stored as an identity and never part of a reuse basis (the basis stays the hash of the
 stored package). Labels are assigned in a fixed order so one package always yields the same labels: `L` lead, `S`
 source, `K` sink, `R` range, `G` guard, `F` call site (chain hops first, then callers, then callees), `P` flow, `E`
@@ -208,7 +208,9 @@ verifier cells. The view:
   `expand`; inline plus file always equals the stored gap count;
 - has a byte budget (`max_view_bytes`) and drops the least valuable rows first, counted in `omitted` and named by a
   material gap;
-- omits `retrieval.entity_ids` and every raw identity that is not a labelled row.
+- omits `retrieval.entity_ids` and every raw identity that is not a labelled row;
+- redacts the literal on the line(s) of every `secret` lead (`secret-redaction/1`; see gate 2). `package-view/2`
+  differs from `/1` only by this redaction.
 
 The three view bounds live next to the package bounds:
 
@@ -231,20 +233,43 @@ The three view bounds live next to the package bounds:
    units, languages and reference-intelligence freshness. An absent producer shard is a
    `missing` gap and a stale feed a `stale` gap, with ids from `make_id("gap", 1, ...)`. Then
    normalize every accepted lead of every family with its versioned rule
-   `appsec-review/lead-family/<family>/<n>` (`/2` for `artifact_scanner` and
-   `dependency_advisory`, `/1` otherwise):
+   `appsec-review/lead-family/<family>/<n>` (`/2` for `artifact_scanner`, `dependency_advisory`
+   and `source_sast`, `/1` otherwise):
 
    | Family | Accepted records | Reported severity |
    |---|---|---|
-   | `source_sast` | `tool_observation` classified `source_sast` | `normalize_reported_severity`; suppression, duplicate and flows from accepted `scanner_correlation` lead facts |
+   | `source_sast` | `tool_observation` classified `source_sast`, plus the producers the decision table below maps to it (shellcheck and psalm, whose records carry the generic `static_analysis` category, and Infer) | `normalize_reported_severity`; suppression, duplicate and flows from accepted `scanner_correlation` lead facts (unknown for the tools correlation does not index) |
    | `codeql` | CodeQL observations | the same rule; `security_severity` bands first |
    | `artifact_scanner` | `job_artifact_security_analysis` observations | scanner CVSS band, else the pinned NVD CVSS band (basis `nvd-cvss-band`), else native label |
    | `dependency_advisory` | dependency-class observations (OSV, Grype) | the advisory's own CVSS band, else the pinned NVD CVSS band (v4.0, v3.1, v3.0, then v2; basis `nvd-cvss-band`), else its severity label |
    | `ci_rule` | `job_ci_configuration_analysis` observations | native label |
    | `post_build_hardening` | deterministic `build_security` checks with status `FAIL` | native label if published, else `unknown` |
    | `owasp_control` | `control_evidence` facts with status `not_satisfied` | native label if published, else `unknown` |
+   | `secret` | secret-scanner observations (`tool-gitleaks`; any observation of class `secret`) | `unknown` (basis `no-native-severity`): the scanner reports none, and an unmapped label stays `unknown`, never low. Rule CWE `CWE-798`. |
+   | `config_scanner` | Dockerfile and IaC misconfiguration observations (hadolint, checkov, trivy) | `normalize_reported_severity` (checkov reports none: `unknown`) |
 
    A family whose accepted producer shard is absent is a `missing` gap, never an empty list.
+   `secret` needs the `secret_scanner` producer (the `tool-gitleaks` observation shard) and `config_scanner` the
+   `config_scanner` producer; neither counts as source-SAST coverage.
+
+   **Producer decisions (`OBSERVATION_PRODUCERS`).** Every producer of `tool_observation` rows has one explicit
+   decision in `review/lead_families.py`: a lead family, or a reason it is deliberately not a lead (SBOM inventory,
+   scanner diagnostics, binary hardening of catalog binaries, GitHub Actions findings the CI job already reviews,
+   model-proposed post-build observations, derived graph rows). An observation whose scanner is neither mapped nor
+   listed is counted per shard and scanner in an `unmapped_observations` `partial` gap, never dropped silently;
+   deliberate non-leads are counted in the manifest's `non_lead_observations` (`class:<class>` or
+   `scanner:<id>`). `tests/review/test_lead_coverage.py` fails when an evidence-collection tool or a job that
+   derives `tool_observation` entities has no decision. The audit is in
+   [`../reviews/lead-coverage-audit.md`](../reviews/lead-coverage-audit.md).
+
+   **Secret values never reach a model (`secret-redaction/1`, `review/secret_redaction.py`).** Secret scanners run
+   with `--redact` and the intake keeps no match, secret or entropy field: a `secret` lead carries only scanner,
+   rule id, location, `location_exact` and the stable observation id, and its scanner message is passed through
+   `redact_message`. The one remaining path is the source text of the model-facing view: for a `secret` lead the
+   flagged line(s) are shown with every quoted literal, unquoted value after `=` or `:`, and long mixed token
+   replaced by `<redacted:n chars>`, indentation, names and call structure kept (a multi-line span is replaced line
+   by line), so the model can reason about where the credential is used but never sees it. Residual: the typed
+   retrieval tools (`read_excerpt`, locators) read the file themselves and are not redacted by this rule.
    Without an accepted `scanner_correlation` shard, duplicate state is recomputed with
    `build_scanner_correlation`, suppression is `unknown`, and a `partial` gap is recorded. When
    the shard is present, its lead facts must cover exactly the accepted source-SAST

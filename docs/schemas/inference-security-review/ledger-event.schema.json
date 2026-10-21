@@ -375,6 +375,38 @@
     {
       "if": {
         "properties": {
+          "kind": {
+            "const": "judge_verdict"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "subject_id": {
+            "$ref": "common.schema.json#/$defs/judge_verdict_id"
+          },
+          "body": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "verdict",
+              "round"
+            ],
+            "properties": {
+              "verdict": {
+                "$ref": "common.schema.json#/$defs/judge_verdict_record"
+              },
+              "round": {
+                "$ref": "common.schema.json#/$defs/round"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
           "sequence": {
             "const": 0
           }

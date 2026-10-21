@@ -21,6 +21,7 @@ the architecture index is [`docs/architecture/README.md`](docs/architecture/READ
 - [Build the tool container images](#build-the-tool-container-images)
 - [Sync third-party metadata](#sync-third-party-metadata)
 - [Run a review](#run-a-review)
+- [Model profiles: dev and prod](#model-profiles-dev-and-prod)
 - [Prepare an end-to-end run](#prepare-an-end-to-end-run)
 - [Run the Dagster deployment](#run-the-dagster-deployment)
 - [Run the tests](#run-the-tests)
@@ -531,7 +532,38 @@ workspace and never runs a produced binary; see
 `final_publication_gate` and `final_report_publication` call no model: they re-verify the accepted
 inference review and write `final-report.json` and a deterministic `final-report.md`; see
 [`docs/operations/final-report.md`](docs/operations/final-report.md).
+`poc_generation` is an optional job between them, shipped disabled and run by hand on a finished run
+(`appsec-review run job_poc_generation --run-id <id> --upstream-from-run`): a model writes a unit-test function with no
+`main` for each finding the judge agreed with, deterministic validators and a compile check in the build image verify it,
+and nothing is linked or run; see [`docs/operations/poc-generation.md`](docs/operations/poc-generation.md).
 See [`docs/operations/wave1-review.md`](docs/operations/wave1-review.md).
+
+## Model profiles: dev and prod
+
+**Selection:** set `APPSEC_REVIEW_PROFILE=prod`, or use `--profile prod` on the stack and review
+scripts (`-Profile prod` in PowerShell). The default is `dev`. Any other value is an error. The
+stack's profile is fixed when its containers are created, so switching needs a stack restart.
+
+| Profile | Models | Limits |
+| --- | --- | --- |
+| `dev` (default) | Haiku 5.5, the checked-in `appsec-review.toml` | today's small limits, for testing |
+| `prod` | Sonnet 5.5, with an Opus 5.5 independent verifier (`profiles/prod.toml`) | larger token limits and budgets for real reviews |
+
+```bash
+scripts/stack-restart.sh --profile prod
+scripts/review-start.sh --profile prod --target appsec-multi-vuln
+APPSEC_REVIEW_PROFILE=prod appsec-review start --target targets/appsec-multi-vuln
+```
+
+```powershell
+scripts/stack-restart.ps1 -Profile prod
+scripts/review-start.ps1 -Profile prod -Target appsec-multi-vuln
+$env:APPSEC_REVIEW_PROFILE = "prod"; appsec-review start --target targets/appsec-multi-vuln
+```
+
+The exact prod values, the allowlist, the effect on fingerprints and the model contract, and what to
+do when a work account names a model differently are in
+[`docs/operations/model-profiles.md`](docs/operations/model-profiles.md).
 
 ## Prepare an end-to-end run
 
@@ -731,4 +763,6 @@ After a batch of merged pull requests, reconcile the docs with the code delta re
 | `test/tmp/` | Disposable pytest temporary and cache state (local). |
 
 An MCP stdio server for retrieval is installed as `appsec-review-mcp`; see
-[`docs/operations/retrieval-mcp.md`](docs/operations/retrieval-mcp.md).
+[`docs/operations/retrieval-mcp.md`](docs/operations/retrieval-mcp.md). It serves external clients;
+review cells reach the same tools in-process (see
+[`docs/architecture/retrieval-surfaces.md`](docs/architecture/retrieval-surfaces.md)).

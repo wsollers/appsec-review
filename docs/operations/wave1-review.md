@@ -33,7 +33,10 @@ document issue analysis after package assembly. Use Dagster's
 `wave1_review`, which includes every registered job whose job-level `settings.enabled` is not false,
 except the standalone `third_party_data_sync` job, when its additional branches are required.
 `final_report_publication` is its single terminal job; the gate and the report are described in
-[`final-report.md`](final-report.md). Dagster's current dependency graph is assembled from the registered,
+[`final-report.md`](final-report.md). `poc_generation` is an optional job between the gate and the report; it is
+shipped disabled, so it is absent from both graphs unless `jobs.job_poc_generation.settings.enabled = true`, and it is
+normally run by hand on a finished run ([`poc-generation.md`](poc-generation.md)). Enabled, it adds the dependency
+`gate -> poc_generation -> report` to `wave1_review` and to the direct graph. Dagster's current dependency graph is assembled from the registered,
 configured jobs and is summarized in [`../../deploy/dagster/README.md`](../../deploy/dagster/README.md).
 
 The direct sequence includes the engineering-signal producers and the code-graph normalizer. It is
@@ -82,6 +85,9 @@ appsec-review logs --run-id 2026-10-08-0001 --follow
 The writer repairs a torn final JSONL record before appending the next record. A missing log prints
 no records. If a resume reports that its claim lock is held, another application process owns that
 run; wait for it to finish or investigate that process rather than deleting run state.
+
+Guarded scripts for starting and stopping the stack, launching, watching and ending a review, and
+cleaning test state are described in [`operator-scripts.md`](operator-scripts.md).
 
 For Dagster, start the documented stack in `deploy/dagster/README.md`, set
 `APPSEC_REVIEW_TARGET` when the target is not the default acceptance target, and launch

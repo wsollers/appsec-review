@@ -49,6 +49,7 @@ a wrong one fatal.
 |---|---|
 | **Lead** | A scanner observation (or a hunt unit) admitted for review. A lead is not a finding. |
 | **Claim** | A bounded security hypothesis tied to affected entities and a closed `security_predicate`. Proposed by red. |
+| **Judge** | A fifth role, `adjudication_judge`, that sees the package and the red and blue positions as sides A and B in a shuffled order and records which side is correct. It answers with the shared compact shape (stance, citations by label) plus a verdict, sets no state, and does not replace the blind verifier. See [the judge and PoC design](review-judge-and-poc.md). |
 | **Affirmation** | A stance of `supports` on a claim, with citations that the application can resolve. |
 | **Counter-claim** | A blue statement that contradicts or qualifies a claim, with its own citations. |
 | **Refutation** | An accepted contradiction: the application records a `contradicts` relation that survives evidence resolution, and R5 moves the claim to `contradicted`, `not_reachable` or `not_exploitable_in_observed_configuration`. |
@@ -310,17 +311,28 @@ concept**; it is the brief that job will read.
   run-owned `poc-basis.json` beside the claim ledger. No relation, claim state, score or adjudication reads it.
 - Blue and the verifier have no `poc_basis`: their schemas are closed, so an answer that carries one is rejected.
 
+### 6.7 Judge
+
+A fifth role, `adjudication_judge`, answers with the same shared compact layer (`review/compact.py`:
+`resolve_position`, `citations_of`) but a different result: `verdict` (`A`, `B`, `both`, `neither`, `unresolved`), a
+`per_predicate` map of verdicts with `cites`, and a `reason`
+(`appsec-review/judge-result-compact/1`). Its request is built from the labelled package view and two sides shown as A
+and B in a deterministic shuffled order, with the rows either side cited re-presented under judge-scoped `J` labels.
+The application de-shuffles the verdict and records a `judge_verdict` ledger event; the judge sets no state and R5/R6
+do not read it. The whole design is in [the judge and PoC design](review-judge-and-poc.md), sections 3 and 4, and its
+implementation decisions in section 7 there.
+
 ## 7. From stance to state
 
 The model never sets a state. For each cited label the application records an evidence relation to a
-predicate (`supports`, `contradicts`, `qualifies`), re-resolves it under `evidence-admissibility/2`,
+predicate (`supports`, `contradicts`, `qualifies`), re-resolves it under `evidence-admissibility/3`,
 and R5 evaluates the claim.
 
 | What a cell says | What the application records | Effect |
 |---|---|---|
 | Red `support[p]: [labels]` | `supports` relation per label, per predicate | Counts as direct support only if the row is direct and resolves. |
 | Red `counter[p]: [labels]` | `qualifies` | Never contradicts. Contradiction belongs to blue and the verifier. |
-| Blue `contradicts p` with cites | `contradicts` relation per label | A direct contradiction defeats the predicate (R5 rows 3 and 4). |
+| Blue `contradicts p` with cites | `contradicts` relation per label; for a `guard_fact` or `range_fact` on `missing_or_ineffective_guard`, `qualifies` with a reason unless the facts show the destination is bounded (below) | A direct contradiction defeats the predicate (R5 rows 3 and 4). |
 | Blue `supports` or `qualifies` | `supports` or `qualifies` | Adds weight; cannot confirm. |
 | Verifier `disposition` | recorded as `proposed_disposition` | A proposal; R5 decides. |
 | Any `unresolved` or empty cite list | no relation | The predicate stays open (R5 row 6 or 7). |
@@ -328,15 +340,25 @@ and R5 evaluates the claim.
 Worked outcome for the `packet.cpp:16` claim: `affected_construct` has direct support from the sink
 fact. `attacker_input_control` cites source text. `missing_or_ineffective_guard` is contested: the
 dominating guard G2 compares the input size with the length field, not with the capacity of
-`out.name`. Under the R3 mapping a dominating guard contradicts this predicate. That would wrongly
-refute a real overflow.
+`out.name`. Had a dominating guard always contradicted this predicate, that would have wrongly
+refuted a real overflow.
 
-**Open question 1 (needs a decision).** The `guard_fact` does not say what its condition bounds. Either
-(a) extend the graph export so a guard fact records the compared operands, letting the application
-treat a guard that does not reference the sink's destination as `qualifies`; or (b) treat a
-dominating guard as `qualifies`, never `contradicts`, unless a blue or verifier cell cites both the
-guard and the source text that shows it bounds the destination, and the application can confirm the
-destination appears in the guard's condition. This spec recommends (a) with (b) as the interim rule.
+**Decision (resolves former open question 1).** The graph export now records the compared operands
+and the destination object size (option (a)), and the application decides, not a model: a dominating
+guard or a bounded range **qualifies** `missing_or_ineffective_guard` unless
+`graph/bounds.py` shows from the exported facts that it bounds the destination. It does when the
+guard is dominating, `constrains_sink_operand` is `true`, `destination.object_bytes` is known, and the
+comparison, normalized to `n REL K` for the sink's size operand `n` (flipped for operand order,
+negated on `false_branch`), is an upper bound by a compile-time integer `K` within the destination
+(`K <= object_bytes`, or `K <= object_bytes + 1` for `<`). A range fact bounds when its upper bound is
+known and within the destination size taken from the sink's guard facts. Only then, and only for blue,
+verifier or judge, is the citation recorded as `contradicts`; red's counterevidence is always
+`qualifies`, and every other citation is `qualifies` with the reason
+`guard_not_shown_to_bound_destination:<why>` (`evidence-admissibility/3`, R3). Worked outcome for
+`packet.cpp`: G2 (line 13, `size < 4u + out.length`, sink operand `unknown`, other operand not a
+constant, 16-byte destination) and G1 (line 8, `size < 4`, sink operand `false`) are not shown to
+bound `out.name`, so a blue contradiction citing either is recorded as `qualifies` and the claim is not
+refuted. A guard such as `if (n > 16) return;` before the same `memcpy` would bound it and contradict.
 
 ## 8. Failures and gaps
 
@@ -384,7 +406,7 @@ model.
 
 ## 12. Open questions (unchanged by the implementation)
 
-1. Guard facts and the meaning of a dominating guard (section 7).
+1. ~~Guard facts and the meaning of a dominating guard~~ decided in section 7 (`evidence-admissibility/3`).
 2. Whether `--json-schema` is enforced and accepts the compact schemas (section 9).
 3. Which hunt-lane units a role may expand beyond its package scope, if any.
 4. Whether `expand` should return source text for a label's lines or only identities and summaries.

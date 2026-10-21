@@ -21,6 +21,7 @@
     "attack_chains",
     "remediation_inputs",
     "independence",
+    "judge_verdict",
     "ship_block",
     "gaps",
     "provenance"
@@ -149,7 +150,8 @@
       "required": [
         "independent",
         "provider_distinct",
-        "verifier_model_distinct"
+        "verifier_model_distinct",
+        "judge_model_distinct"
       ],
       "properties": {
         "independent": {
@@ -161,6 +163,13 @@
         "verifier_model_distinct": {
           "type": "boolean",
           "description": "Decision 2: the verifier's model profile (provider and model) differs from every red cell's on the claim. Never gates confirmation; ship-block-policy/1 requires it for ship_blocking."
+        },
+        "judge_model_distinct": {
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "description": "The judge's model profile differs from the configured roles' on the claim; null when no judge ran. Recorded, never required."
         }
       }
     },
@@ -185,6 +194,16 @@
           "$ref": "common.schema.json#/$defs/sha256"
         }
       }
+    },
+    "judge_verdict": {
+      "oneOf": [
+        {
+          "$ref": "common.schema.json#/$defs/finding_judge_verdict"
+        },
+        {
+          "type": "null"
+        }
+      ]
     }
   },
   "allOf": [

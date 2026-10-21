@@ -84,9 +84,9 @@ def test_absent_families_and_stale_feeds_are_named_gaps(fixture, assembly) -> No
     manifest = assembly.manifest
     available = manifest["audit"]["families_available"]
     assert {family for family in FAMILIES if not available[family]} == {
-        "artifact_scanner", "post_build_hardening", "owasp_control"}
+        "artifact_scanner", "post_build_hardening", "owasp_control", "secret", "config_scanner"}
     missing = {gap["producer"] for gap in manifest["gaps"] if gap["state"] == "missing"}
-    assert {"artifact_scanner", "post_build_hardening", "owasp_control"} <= missing
+    assert {"artifact_scanner", "post_build_hardening", "owasp_control", "secret", "config_scanner"} <= missing
     dependency = _finding(assembly, fixture, "dep_high")
     assert any(gap["state"] == "stale" for gap in dependency["coverage_gaps"])
     hunts = [item.document() for item in assembly.packages if item.kind == "hunt"]

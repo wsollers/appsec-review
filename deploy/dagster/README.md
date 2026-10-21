@@ -38,6 +38,10 @@ containers.
 
 ## Build, start, verify, and stop
 
+The operator scripts in `scripts/` wrap the commands below (stack start, stop, restart, rebuild,
+status and logs; review start, watch, status and stop) with an active-run guard; see
+[`docs/operations/operator-scripts.md`](../../docs/operations/operator-scripts.md).
+
 Run these commands from a native checkout on each host: `~/projects/appsec-review` in WSL or a
 Windows drive checkout in PowerShell. Do not run the WSL deployment from `/mnt/c` or `/mnt/f`.
 Each checkout has its own ignored `.env`, `runs/`, `data/`, target files, Claude login, Compose
@@ -65,6 +69,11 @@ container login; neither is copied into the image or repository.
 For a bounded acceptance target already beneath the read-only `targets/` mount, set
 `APPSEC_REVIEW_TARGET` to its container path for the lifecycle and launch commands; otherwise the
 deployment defaults to `/opt/app/targets/appsec-multi-vuln`.
+
+The runtime profile is `APPSEC_REVIEW_PROFILE` (`dev` by default; `prod` opts into the more capable
+models and larger token limits from `profiles/prod.toml`, which the image copies next to
+`appsec-review.toml`). It is fixed when the containers are created, so switch with
+`scripts/stack-restart --profile prod`. See [model profiles](../../docs/operations/model-profiles.md).
 
 ```bash
 python deploy/dagster/bin/bootstrap.py
@@ -444,7 +453,9 @@ Two jobs route by job before these step-name heuristics (`_JOB_STEP_POOLS` and
 `job_code_graph_index` runs in `index`, and `job_inference_security_review` runs `lead_review`
 and `hunt_review` in `inference_teams` (limit 2), `scoring` in `inference_score` (limit 4),
 `publication` in `lifecycle` and everything else in `application`. `job_final_publication_gate` and
-`job_final_report_publication` have no routing of their own and use the default `application` pool.
+`job_final_report_publication` have no routing of their own and use the default `application` pool. The optional
+`job_poc_generation` (shipped disabled) has none either; by the step-name heuristics its `compile` step runs in
+`cpp_build` and every other step in `application`.
 
 The checked-in configuration limits every pool except `application`, which has no configured
 limit and is bounded only by `max_concurrent`.
@@ -452,7 +463,7 @@ limit and is bounded only by `max_concurrent`.
 ## Environment variables
 
 `deploy/dagster/.env` (from bootstrap; see `.env.example`) supplies Compose interpolation:
-`DAGSTER_POSTGRES_PASSWORD`, `APPSEC_UID`/`APPSEC_GID`, `APPSEC_REVIEW_TARGET`, the three
+`DAGSTER_POSTGRES_PASSWORD`, `APPSEC_UID`/`APPSEC_GID`, `APPSEC_REVIEW_TARGET`, optionally `APPSEC_REVIEW_PROFILE` (`dev`|`prod`, default `dev`), the three
 `APPSEC_CLAUDE_*` bind paths for Linux/WSL, and optionally `ANTHROPIC_API_KEY`. Compose passes
 `ANTHROPIC_API_KEY` (empty by default) only to the code location; it is used only by models
 configured with `provider = "anthropic-api"`, and the `claude-cli` transport removes it from the

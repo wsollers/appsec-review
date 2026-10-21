@@ -25,6 +25,7 @@ from enum import StrEnum
 from types import MappingProxyType
 from typing import Any, Iterable, Mapping, Protocol, runtime_checkable
 
+from appsec_review.graph.bounds import fact_bounds_destination, sink_destination_bytes
 from appsec_review.graph.contract import ATTACKER_REACHABLE_SOURCES, Family, SourceClass
 from appsec_review.review.scoring import cwe_impact
 from appsec_review.review.models import ClaimState, EvidenceRelation, Predicate, RelationKind
@@ -413,14 +414,43 @@ class AttackerControlExtractor:
                      "no counted direct support on attacker_input_control and no classified cited source")
 
 
+def _effective_guard(data: FactorInput, relation: EvidenceRelation) -> bool:
+    """Whether the cited, re-resolved guard or range fact is shown to bound its destination.
+
+    Uses the same pure helper as the evidence mapping (``graph.bounds``, ``evidence-admissibility/3``). A dominating
+    guard that is not shown to bound the destination is not an effective guard, so citing it is still support that
+    the guard is missing or ineffective. A range fact needs the destination size, which it takes from a guard fact
+    of the same sink among the resolved entities; without one the range is not shown to bound.
+    """
+    entity = data.entities.get(relation.entity_id)
+    if entity is None or relation.entity_kind not in (Family.GUARD_FACT.value, Family.RANGE_FACT.value):
+        return False
+    result = entity.payload.get("result") if isinstance(entity.payload.get("result"), Mapping) else {}
+    sink = result.get("sink") if isinstance(result.get("sink"), Mapping) else {}
+    destination = None
+    if relation.entity_kind == Family.RANGE_FACT.value:
+        destination = sink_destination_bytes(
+            [other.payload["result"] for other in data.entities.values()
+             if other.kind == Family.GUARD_FACT.value and isinstance(other.payload.get("result"), Mapping)
+             and isinstance(other.payload["result"].get("sink"), Mapping)
+             and other.payload["result"]["sink"].get("sink_site") == sink.get("sink_site")])
+    return fact_bounds_destination(relation.entity_kind, result, destination).bounds
+
+
 class GuardAbsentExtractor:
-    """Direct support on ``missing_or_ineffective_guard``; the basis is the strongest cited kind."""
+    """Direct support on ``missing_or_ineffective_guard``; the basis is the strongest cited kind.
+
+    A supporting citation of a guard or range fact that the exported facts show bounds the destination is an
+    effective guard and does not count as support that the guard is absent.
+    """
 
     factor = FactorId.GUARD_ABSENT
 
     def extract(self, data: FactorInput) -> FactorValue | MissingFactor:
         candidates = []
         for relation in data.supporting_for(Predicate.MISSING_OR_INEFFECTIVE_GUARD):
+            if _effective_guard(data, relation):
+                continue
             if relation.entity_kind in (Family.GUARD_FACT.value, Family.RANGE_FACT.value):
                 basis = "graph_fact"
             elif relation.entity_kind == "tool_observation":

@@ -9,14 +9,16 @@ calls no model and reads nothing the gate does not bind. PDF rendering is a late
 from __future__ import annotations
 
 import hashlib
+import json
 from pathlib import Path
 from typing import Any, Mapping
 
+from appsec_review.applicability import resolved_configuration_identity
 from appsec_review.indexing.store import accepted_handoff
 from appsec_review.jobs.bound_artifacts import artifact_ref, read_bound, read_bound_json, resolve_bound
 from appsec_review.jobs.engineering_contracts import (
     FINAL_PUBLICATION_GATE_HANDOFF_SCHEMA, FINAL_PUBLICATION_GATE_SCHEMA, FINAL_REPORT_HANDOFF_SCHEMA,
-    FINAL_REPORT_SCHEMA,
+    FINAL_REPORT_SCHEMA, POC_GENERATION_HANDOFF_SCHEMA, POC_GENERATION_SCHEMA,
 )
 from appsec_review.jobs.job_final_publication_gate import JOB_ID as GATE_JOB
 from appsec_review.jobs.job_inference_security_review.schemas import SchemaSet
@@ -30,11 +32,21 @@ from .report import build_report
 from .settings import FinalReportSettings
 
 JOB_ID = "job_final_report_publication"
+POC_JOB = "job_poc_generation"
 SCHEMA_ROOT = Path("docs") / "schemas" / "final-report"
+POC_SCHEMA_ROOT = Path("docs") / "schemas" / "poc-generation"
 TOPOLOGY = {"load": ("accepted_gate",), "report": ("assemble", "render"), "acceptance": ("publish_handoff",)}
 IMPLEMENTATION = "appsec-review/final-report-publication/1"
 REPORT_JSON = "final-report.json"
 REPORT_MARKDOWN = "final-report.md"
+
+
+def _configuration_profile(run_root: Path) -> Mapping[str, Any]:
+    """The runtime profile (name and layer hash) the run was configured with, from its verified resolved configuration."""
+    resolved_configuration_identity(run_root)
+    record = json.loads((run_root / "data" / "configuration" / "resolved.json").read_text(encoding="utf-8"))
+    profile = record.get("configuration_profile") or {"name": "dev", "sha256": None}
+    return {"name": profile["name"], "sha256": profile.get("sha256")}
 
 
 def _settings(unit: UnitContext) -> FinalReportSettings:
@@ -56,11 +68,45 @@ def _check(schemas: SchemaSet, name: str, document: Any) -> None:
         raise IntegrityError(f"{name} does not satisfy its schema: {'; '.join(errors[:3])}")
 
 
+def load_poc(run_root: Path, schemas: SchemaSet, gate_handoff: Mapping[str, str]) -> dict[str, Any] | None:
+    """The run's accepted PoC summary, re-proved from bytes, or ``None`` when the PoC job has not run.
+
+    A PoC handoff built from a different gate handoff is *stale*: it is reported as such and its outcomes are
+    not shown. Every file the summary names is re-hashed, so a changed reproducer is an integrity failure.
+    """
+    try:
+        accepted = accepted_handoff(run_root, POC_JOB)
+    except ValueError as exc:
+        raise IntegrityError(f"accepted {POC_JOB} handoff cannot be verified: {exc}") from exc
+    if accepted is None:
+        return None
+    published = (accepted.handoff.get("outputs") or {}).get("publish.publish_handoff")
+    if (accepted.handoff.get("job_id") != POC_JOB or not isinstance(published, Mapping)
+            or published.get("schema") != POC_GENERATION_HANDOFF_SCHEMA):
+        raise IntegrityError("accepted PoC handoff does not publish a supported summary")
+    document = read_bound_json(run_root, published["artifact"])
+    _check(schemas, "poc-generation", document)
+    if document["schema"] != POC_GENERATION_SCHEMA or published.get("item_count") != len(document["candidates"]):
+        raise IntegrityError("PoC summary disagrees with its accepted handoff")
+    stale = document["upstream"]["gate_handoff"] != dict(gate_handoff)
+    if not stale:
+        for row in document["candidates"]:
+            for reference in (row["files"] or {}).values():
+                resolve_bound(run_root, reference)
+    return {"handoff": {"path": accepted.path, "sha256": accepted.sha256}, "document": document, "stale": stale}
+
+
 def build_job(*, repository_root: Path | None = None) -> Job:
     """``repository_root`` is injectable for acceptance tests whose configuration lives elsewhere."""
 
+    def _root(unit: UnitContext) -> Path:
+        return Path(repository_root or unit.job.repository_root).resolve()
+
     def _schemas(unit: UnitContext) -> SchemaSet:
-        return SchemaSet(Path(repository_root or unit.job.repository_root).resolve() / SCHEMA_ROOT)
+        return SchemaSet(_root(unit) / SCHEMA_ROOT)
+
+    def _poc(unit: UnitContext, gate_handoff: Mapping[str, str]) -> dict[str, Any] | None:
+        return load_poc(unit.job.run_root, SchemaSet(_root(unit) / POC_SCHEMA_ROOT), gate_handoff)
 
     def load(unit: UnitContext) -> Mapping[str, Any]:
         run_root = unit.job.run_root
@@ -88,16 +134,23 @@ def build_job(*, repository_root: Path | None = None) -> Job:
         for key in ("job_handoff", "review_handoff", "claim_ledger", "projection", "coverage_matrix"):
             if gate["inputs"][key] not in gate["bindings"]:
                 raise IntegrityError(f"gate input is not among its bindings: {key}")
-        return {"gate_handoff": {"path": accepted.path, "sha256": accepted.sha256},
+        gate_handoff = {"path": accepted.path, "sha256": accepted.sha256}
+        poc = _poc(unit, gate_handoff)
+        return {"gate_handoff": gate_handoff,
                 "gate_document": {"path": reference["path"], "sha256": reference["sha256"]},
                 "gate_status": gate["status"], "review_status": gate["review"]["status"],
                 "package_counts": counts, "binding_count": len(gate["bindings"]),
+                "poc": None if poc is None else {"handoff": poc["handoff"], "stale": poc["stale"]},
                 "gaps": [], "terminal_status": "SUCCEEDED"}
 
     def assemble(unit: UnitContext) -> Mapping[str, Any]:
         loaded = unit.output("load.accepted_gate")
         gate = read_bound_json(unit.job.run_root, loaded["gate_document"])
-        report = build_report(gate, gate_handoff=loaded["gate_handoff"], gate_document=loaded["gate_document"])
+        poc = _poc(unit, loaded["gate_handoff"])
+        if (None if poc is None else {"handoff": poc["handoff"], "stale": poc["stale"]}) != loaded["poc"]:
+            raise IntegrityError("the PoC handoff changed between load and assemble")
+        report = build_report(gate, gate_handoff=loaded["gate_handoff"], gate_document=loaded["gate_document"],
+                              configuration_profile=_configuration_profile(unit.job.run_root), poc=poc)
         _check(_schemas(unit), "final-report", report)
         path = unit.unit_root / REPORT_JSON
         atomic_json(path, report)
@@ -140,7 +193,8 @@ def build_job(*, repository_root: Path | None = None) -> Job:
                 "artifact": assembled["artifact"], "markdown": rendered["artifact"],
                 "gate_handoff": loaded["gate_handoff"], "status": report["status"],
                 "package_counts": counts, "item_count": counts["publishable"] + counts["verification_backlog"],
-                "pdf": report["renderers"]["pdf"], "gaps": gaps,
+                "pdf": report["renderers"]["pdf"], "poc_handoff": report["provenance"].get("poc_handoff"),
+                "gaps": gaps,
                 "terminal_status": "SUCCEEDED" if not gaps else "COMPLETED_WITH_GAPS"}
 
     units = (
