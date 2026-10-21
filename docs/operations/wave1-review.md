@@ -83,6 +83,9 @@ The writer repairs a torn final JSONL record before appending the next record. A
 no records. If a resume reports that its claim lock is held, another application process owns that
 run; wait for it to finish or investigate that process rather than deleting run state.
 
+Guarded scripts for starting and stopping the stack, launching, watching and ending a review, and
+cleaning test state are described in [`operator-scripts.md`](operator-scripts.md).
+
 For Dagster, start the documented stack in `deploy/dagster/README.md`, set
 `APPSEC_REVIEW_TARGET` when the target is not the default acceptance target, and launch
 `wave1_review`. Dagster exposes each application's intake, catalog, analysis, producer,

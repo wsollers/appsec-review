@@ -6,6 +6,7 @@ Relevant bounded procedures and design references:
 
 - [`architecture/README.md`](architecture/README.md) — full architecture navigation.
 - [`operations/wave1-review.md`](operations/wave1-review.md) — direct CLI scope, resume behavior, and the Dagster entrypoint.
+- [`operations/operator-scripts.md`](operations/operator-scripts.md) — `scripts/` for the Dagster stack, starting, watching and ending reviews, cleaning `test/tmp` and running named test suites, with the active-run guard.
 - [`operations/image-pin-verification.md`](operations/image-pin-verification.md) — mandatory pre-intake verification that local images match their pins, its failure report, and the host rebuild/re-pin/reload procedure.
 - [`operations/inference-security-review.md`](operations/inference-security-review.md) — model selection and upgrade, local capacity overlay, and outcomes for the inference security review; design in [`architecture/inference-security-review.md`](architecture/inference-security-review.md).
 - [`operations/review-data-indexing.md`](operations/review-data-indexing.md) — dataset inventory and publication audit, lead menus, stage-1 products, and offline FTS validation; design in [`architecture/indexing-and-query-reuse.md`](architecture/indexing-and-query-reuse.md).

@@ -38,6 +38,10 @@ containers.
 
 ## Build, start, verify, and stop
 
+The operator scripts in `scripts/` wrap the commands below (stack start, stop, restart, rebuild,
+status and logs; review start, watch, status and stop) with an active-run guard; see
+[`docs/operations/operator-scripts.md`](../../docs/operations/operator-scripts.md).
+
 Run these commands from a native checkout on each host: `~/projects/appsec-review` in WSL or a
 Windows drive checkout in PowerShell. Do not run the WSL deployment from `/mnt/c` or `/mnt/f`.
 Each checkout has its own ignored `.env`, `runs/`, `data/`, target files, Claude login, Compose
