@@ -1,6 +1,6 @@
 """CWE impact class from the run-pinned MITRE catalog (``cwe-impact-derivation/1``, decision 11).
 
-The ``application_risk_matrix/2`` ``impact_class`` factor is derived from the weakness's catalog
+The ``application_risk_matrix/3`` ``impact_class`` factor is derived from the weakness's catalog
 Common_Consequences (scopes and technical impacts) captured by ``mitre_sync`` and read from the
 run's pinned ``index/mitre.sqlite`` (:mod:`appsec_review.review.references`). Precedence:
 

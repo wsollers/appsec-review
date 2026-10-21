@@ -1,4 +1,4 @@
-"""score-factors/1 extraction, application_risk_matrix/2, and the scoring stage wiring (decision B1)."""
+"""score-factors/1 extraction, application_risk_matrix/3, and the scoring stage wiring (decision B1)."""
 from __future__ import annotations
 
 from dataclasses import replace
@@ -21,7 +21,7 @@ from appsec_review.review.models import (
 )
 from appsec_review.review.obligations import ALWAYS_REQUIRED
 from appsec_review.review.scoring import (
-    ApplicationRiskMatrixV2Provider, ProviderRegistry, ScoreRequest, ScoringProvider, build_provider,
+    ApplicationRiskMatrixV3Provider, ProviderRegistry, ScoreRequest, ScoringProvider, build_provider,
     consumed_factors, default_factor_registry, default_registry, registry_from_settings,
 )
 from appsec_review.review.scoring.evidence_source import TAGS_PRODUCER_UNAVAILABLE, AcceptedEvidenceSource
@@ -390,8 +390,8 @@ def request(factors: FactorSet | None, *, state=ClaimState.CONFIRMED, cwe="CWE-1
                         policy_sha256="3" * 64, scorer_actor_id="actor-x", factors=factors, **kwargs)
 
 
-def provider(model: RiskModel = DEFAULT_RISK_MODEL) -> ApplicationRiskMatrixV2Provider:
-    return ApplicationRiskMatrixV2Provider(TABLE, model)
+def provider(model: RiskModel = DEFAULT_RISK_MODEL) -> ApplicationRiskMatrixV3Provider:
+    return ApplicationRiskMatrixV3Provider(TABLE, model)
 
 
 def factors_for(value: FactorInput, scorer=None) -> FactorSet:
@@ -414,11 +414,21 @@ def test_provider_conforms_and_declares_its_factors() -> None:
 def test_confirmed_minimum_evidence_matches_matrix_1_and_supported_needs_more() -> None:
     minimal = [rel(p) for p in ALWAYS_REQUIRED]
     confirmed = provider().score(request(factors_for(data(minimal))))
-    assert confirmed.exploitability_confidence.rating == "high" and confirmed.exploitability_confidence.value == 75
+    # Exposure is unknown (0 to 10 points), but 75 to 85 is `high` either way, so the rating stands
+    # as `bounded` and no single point value is claimed.
+    assert confirmed.exploitability_confidence.rating == "high" and confirmed.exploitability_confidence.value is None
+    assert (confirmed.native["exploitability"]["points_floor"], confirmed.native["exploitability"]["points_ceiling"]) \
+        == (75, 85)
     assert confirmed.technical_severity.rating == "high" and confirmed.native["cell"] == ["high", "high"]
+    assert confirmed.severity_assessment.assessment == "bounded"
     supported = provider().score(request(factors_for(data([rel(Predicate.AFFECTED_CONSTRUCT)],
                                                           state=ClaimState.SUPPORTED)), state=ClaimState.SUPPORTED))
-    assert supported.exploitability_confidence.rating == "low"
+    # Deliberately changed: a supported claim with no path, control or guard evidence used to rate `low` by
+    # counting the missing factors as zero. Its missing factors could take it from medium to high, so it is unrated.
+    assert supported.exploitability_confidence.rating is None and supported.technical_severity.rating is None
+    assert supported.severity_assessment.assessment == "unrated"
+    assert (supported.severity_assessment.severity_floor, supported.severity_assessment.severity_ceiling) \
+        == ("medium", "high")
     assert supported.native["exploitability"]["contributions"] == {"verification": 20}
     assert {"taint_path", "attacker_control", "guard_absent"} <= set(supported.missing_factors)
     assert dict(supported.missing_factor_reasons)["taint_path"].startswith("no counted direct support")
@@ -431,8 +441,10 @@ def test_dimensions_stay_separate_and_environmental_needs_its_factors() -> None:
     tags = (tag("surface:entry:http-public", 1), tag("data:credential", 2))
     scored = provider().score(request(factors_for(data(strong_relations(), tags=tags))))
     assert scored.environmental_business_impact.scale == "environmental_exposure/1"
-    assert scored.environmental_business_impact.rating == "high" and scored.environmental_business_impact.value == 60
-    assert scored.technical_severity.scale == "application_risk_matrix/2"
+    # privilege is unknown (0 to 25), so 60 to 85 points are all `high`: rated, but with no single point value.
+    assert scored.environmental_business_impact.rating == "high" and scored.environmental_business_impact.value is None
+    assert (scored.native["environmental"]["points_floor"], scored.native["environmental"]["points_ceiling"]) == (60, 85)
+    assert scored.technical_severity.scale == "application_risk_matrix/3"
     assert scored.exploitability_confidence.scale == "exploitability_evidence/1"
 
 
@@ -444,12 +456,15 @@ def test_unmapped_cwe_leaves_technical_severity_null() -> None:
 
 
 def test_kev_raises_exploitability_one_band_only() -> None:
-    weak = [rel(Predicate.AFFECTED_CONSTRUCT)]
-    plain = provider().score(request(factors_for(data(weak, state=ClaimState.SUPPORTED, kev=False)),
+    # Every scored factor is known (55 points, `medium`), so KEV has one band to raise.
+    weak = [rel(Predicate.SOURCE_TO_SINK_REACHABILITY, native="t"), rel(Predicate.ATTACKER_INPUT_CONTROL, native="c"),
+            rel(Predicate.MISSING_OR_INEFFECTIVE_GUARD, native="g")]
+    local = (tag("surface:entry:cli", 1),)
+    plain = provider().score(request(factors_for(data(weak, state=ClaimState.SUPPORTED, kev=False, tags=local)),
                                      state=ClaimState.SUPPORTED, kev_listed=False))
-    raised = provider().score(request(factors_for(data(weak, state=ClaimState.SUPPORTED, kev=True)),
+    raised = provider().score(request(factors_for(data(weak, state=ClaimState.SUPPORTED, kev=True, tags=local)),
                                       state=ClaimState.SUPPORTED, kev_listed=True))
-    assert (plain.exploitability_confidence.rating, raised.exploitability_confidence.rating) == ("low", "medium")
+    assert (plain.exploitability_confidence.rating, raised.exploitability_confidence.rating) == ("medium", "high")
     assert raised.native["exploitability"]["kev_adjusted"] is True
     assert any("CISA KEV" in item for item in raised.assumptions)
     top = provider().score(request(factors_for(data(strong_relations(), kev=True)), kev_listed=True))
@@ -471,7 +486,7 @@ def test_provider_rejects_inconsistent_or_absent_factors() -> None:
 def test_provider_is_deterministic_and_fingerprints_factors_and_config() -> None:
     factors = factors_for(data(strong_relations()))
     first = provider().score(request(factors))
-    again = ApplicationRiskMatrixV2Provider(dict(reversed(list(TABLE.items()))), DEFAULT_RISK_MODEL).score(
+    again = ApplicationRiskMatrixV3Provider(dict(reversed(list(TABLE.items()))), DEFAULT_RISK_MODEL).score(
         request(factors_for(data(list(reversed(strong_relations()))))))
     assert first == again
     weaker = provider().score(request(factors_for(data(strong_relations()[:2]))))
@@ -531,15 +546,23 @@ def test_band_edges_are_inclusive_thresholds() -> None:
                                                                 "graph_fact": 36}},
                            {"medium": 40, "high": 75})
 
-    def rating(state, guard=None):
+    def interval(state, guard=None):
         relations = [rel(Predicate.MISSING_OR_INEFFECTIVE_GUARD, guard)] if guard else []
         values = default_factor_registry(TABLE).extract(data(relations, state=state), model.factors)
-        return model.rate(values)[:2]
+        return model.interval(values)
 
-    assert rating(ClaimState.SUPPORTED) == ("low", 39)
-    assert rating(ClaimState.CONFIRMED) == ("medium", 40)
-    assert rating(ClaimState.CONFIRMED, "source_span") == ("high", 75)
-    assert rating(ClaimState.SUPPORTED, "source_span") == ("medium", 74)
+    assert [model.classify(points) for points in (39, 40, 74, 75)] == ["low", "medium", "medium", "high"]
+    # Deliberately changed: the guard factor was missing and used to add nothing (39 -> low, 40 -> medium).
+    # It is now unknown (35 to 36 points), so the interval is [74, 75] or [75, 76] around the 75 edge.
+    straddling = interval(ClaimState.SUPPORTED)
+    assert (straddling.floor, straddling.ceiling, straddling.rating) == (74, 75, None)
+    assert straddling.unresolved == ("guard_absent",)
+    above = interval(ClaimState.CONFIRMED)
+    assert (above.floor, above.ceiling, above.rating) == (75, 76, "high")
+    exact = interval(ClaimState.CONFIRMED, "source_span")
+    assert (exact.known_points, exact.rating, exact.complete) == (75, "high", True)
+    exact = interval(ClaimState.SUPPORTED, "source_span")
+    assert (exact.known_points, exact.rating, exact.complete) == (74, "medium", True)
 
 
 def _evidence_variants():
@@ -579,27 +602,36 @@ def test_monotonicity_stronger_evidence_never_lowers_exploitability() -> None:
              "guard": [None, "source_span", "guard_fact"],
              "exposure": [None, "surface:entry:cli", "surface:entry:rpc", "surface:entry:http-public"]}
     cache = {}
+    bands = ["low", "medium", "high", "critical"]
 
-    def points(variant, state):
+    def interval(variant, state):
+        """(points floor, points ceiling, severity floor rank, severity ceiling rank); a missing factor widens it."""
         key = (tuple(sorted(variant.items(), key=lambda pair: pair[0])), state)
         if key not in cache:
             result = scorer.score(request(factors_for(_input_for(variant, state), scorer), state=state))
-            cache[key] = (result.exploitability_confidence.value,
-                          RATINGS.index(result.exploitability_confidence.rating),
-                          ["low", "medium", "high", "critical"].index(result.technical_severity.rating))
+            native, assessment = result.native["exploitability"], result.severity_assessment
+            cache[key] = (native["points_floor"], native["points_ceiling"],
+                          bands.index(assessment.severity_floor), bands.index(assessment.severity_ceiling))
         return cache[key]
 
     for variant in _evidence_variants():
         for state in (ClaimState.SUPPORTED, ClaimState.CONFIRMED):
-            base = points(variant, state)
+            base = interval(variant, state)
             if state is ClaimState.SUPPORTED:
-                stronger = points(variant, ClaimState.CONFIRMED)
+                stronger = interval(variant, ClaimState.CONFIRMED)
                 assert all(b <= s for b, s in zip(base, stronger))
             for name, values in order.items():
                 position = values.index(variant[name])
                 if position + 1 < len(values):
-                    stronger = points({**variant, name: values[position + 1]}, state)
-                    assert all(b <= s for b, s in zip(base, stronger)), (variant, name)
+                    stronger = interval({**variant, name: values[position + 1]}, state)
+                    if position == 0:
+                        # Supplying a factor that was unknown narrows the interval: the floor can only
+                        # rise and the ceiling only fall; the new interval lies inside the old one.
+                        assert stronger[0] >= base[0] and stronger[1] <= base[1], (variant, name)
+                        assert stronger[2] >= base[2] and stronger[3] <= base[3], (variant, name)
+                    else:
+                        # Replacing a known value with a stronger one raises both ends.
+                        assert all(b <= s for b, s in zip(base, stronger)), (variant, name)
 
 
 # ------------------------------------------------------------------------------------------------ stage wiring
@@ -626,12 +658,15 @@ def run_stage(tmp_path: Path, relations, *, name="run", references=None, overrid
 
 def test_stage_scores_with_factors_and_writes_a_valid_package(tmp_path: Path) -> None:
     document, packages = run_stage(tmp_path, strong_relations())
-    assert document["providers"] == ["application_risk_matrix/2"] and len(packages) == 1
+    assert document["providers"] == ["application_risk_matrix/3"] and len(packages) == 1
     package = json.loads(next(iter(packages.values())))
     SCHEMAS.validate("score-package", package)
-    assert package["schema"] == "appsec-review/score-package/2"
-    assert package["provider"]["implementation"] == "application_risk_matrix/2"
-    assert package["scorer"] == stages.scorer_actor("application_risk_matrix/2")
+    assert package["schema"] == "appsec-review/score-package/3"
+    # Exposure tags were not supplied, so the otherwise-complete evidence is bounded, not complete.
+    assert package["severity_assessment"] == {"assessment": "bounded", "severity_floor": "high",
+                                              "severity_ceiling": "high", "unresolved_factors": []}
+    assert package["provider"]["implementation"] == "application_risk_matrix/3"
+    assert package["scorer"] == stages.scorer_actor("application_risk_matrix/3")
     factors = {item["factor"]: item["value"] for item in package["factors"]}
     assert factors["taint_path"] == "graph_dataflow_path" and factors["guard_absent"] == "graph_fact"
     assert factors["verification"] == "confirmed" and factors["impact_class"] == "high"
@@ -670,6 +705,12 @@ def test_stage_selects_providers_from_settings(tmp_path: Path) -> None:
     document, packages = run_stage(tmp_path, strong_relations(), scoring=settings)
     package = json.loads(next(iter(packages.values())))
     assert document["providers"] == ["application_risk_matrix/1"]
+    # cvss_v4 is enabled but not implemented: it is a named, visible gap, not a silent skip.
+    assert [item["provider"] for item in document["unavailable_providers"]] == ["cvss_v4"]
+    assert "enabled but has no implementation" in document["unavailable_providers"][0]["reason"]
+    ledger = (tmp_path / "run" / "ledger.jsonl").read_text(encoding="utf-8")
+    assert "score_gap" in ledger and "provider:cvss_v4" in ledger
+    assert package["severity_assessment"]["assessment"] == "complete"
     assert package["factors"] == [] and package["factor_citations"] == []
     assert package["scorer"] == stages.SCORER_ACTOR
     SCHEMAS.validate("score-package", package)
@@ -706,5 +747,164 @@ def test_scoring_never_promotes_or_changes_claim_state(tmp_path: Path) -> None:
     assert "state_transition" not in ledger and "transition" not in ledger
 
 
-def test_default_registry_is_matrix_2(tmp_path: Path) -> None:
-    assert default_registry(TABLE).get("application_risk_matrix").implementation_version == "application_risk_matrix/2"
+def test_default_registry_is_matrix_3(tmp_path: Path) -> None:
+    assert default_registry(TABLE).get("application_risk_matrix").implementation_version == "application_risk_matrix/3"
+    with pytest.raises(ValueError, match="unknown scoring provider implementation"):
+        build_provider("application_risk_matrix/2", TABLE)      # /2 scored a missing factor as zero; removed
+
+
+# ------------------------------------------------------------------------------------------------ intervals
+
+
+def full_factors(state=ClaimState.CONFIRMED, cwe="CWE-120") -> FactorSet:
+    """Every point factor present: 40/20 + 25 + 10 + 20 + 10 exploitability points."""
+    return factors_for(data(strong_relations(), state=state, cwe=cwe, tags=(tag("surface:entry:http-public", 1),)))
+
+
+def drop(factors: FactorSet, *names: FactorId) -> FactorSet:
+    """The same evidence minus some factors, which become missing with a reason."""
+    gone = tuple(MissingFactor(item.factor, "dropped") for item in factors.values if item.factor in names)
+    return FactorSet(tuple(item for item in factors.values if item.factor not in names), factors.missing + gone)
+
+
+def score_of(factors: FactorSet, *, state=ClaimState.CONFIRMED, cwe="CWE-120"):
+    return provider().score(request(factors, state=state, cwe=cwe))
+
+
+POINT_FACTORS = (FactorId.VERIFICATION, FactorId.TAINT_PATH, FactorId.ATTACKER_CONTROL, FactorId.GUARD_ABSENT,
+                 FactorId.EXPOSURE)
+
+
+def test_interval_all_factors_known_is_complete() -> None:
+    result = score_of(full_factors())
+    assert result.severity_assessment.assessment == "complete" and result.technical_severity.rating == "high"
+    assert result.exploitability_confidence.value == 105 and result.native["exploitability"]["unresolved"] == []
+    assert result.native["exploitability"]["points_floor"] == result.native["exploitability"]["points_ceiling"] == 105
+
+
+def test_interval_one_missing_factor_that_cannot_change_the_class_is_bounded() -> None:
+    result = score_of(drop(full_factors(), FactorId.EXPOSURE))        # 95 to 105 points: `high` either way
+    assert result.severity_assessment.assessment == "bounded" and result.technical_severity.rating == "high"
+    assert result.exploitability_confidence.rating == "high" and result.exploitability_confidence.value is None
+    assert result.severity_assessment.unresolved_factors == ()
+    assert "exposure" in result.missing_factors and dict(result.missing_factor_reasons)["exposure"] == "dropped"
+
+
+def test_interval_one_missing_factor_that_can_change_the_class_is_unrated() -> None:
+    supported = full_factors(ClaimState.SUPPORTED)                    # 20 + 25 + 10 + 20 + 10 = 85
+    result = score_of(drop(supported, FactorId.TAINT_PATH, FactorId.EXPOSURE), state=ClaimState.SUPPORTED)
+    # known 50 + taint 10 to 25 + exposure 0 to 10: 60 to 85 points, `medium` to `high`.
+    assert result.technical_severity.rating is None and result.exploitability_confidence.rating is None
+    assessment = result.severity_assessment
+    assert (assessment.assessment, assessment.severity_floor, assessment.severity_ceiling) == ("unrated", "medium", "high")
+    assert assessment.unresolved_factors == ("exposure", "taint_path")
+    assert {"taint_path", "exposure", "technical_severity"} <= set(result.missing_factors)
+    assert "could be medium to high" in dict(result.missing_factor_reasons)["technical_severity"]
+    assert result.native["band"] is None and result.native["cell"] is None
+
+
+def test_interval_with_many_missing_factors_is_unrated_but_bounded_by_impact() -> None:
+    result = score_of(drop(full_factors(), *POINT_FACTORS[1:]))       # only verification known
+    assert result.technical_severity.rating is None
+    assert (result.severity_assessment.severity_floor, result.severity_assessment.severity_ceiling) == ("medium", "high")
+    assert set(result.severity_assessment.unresolved_factors) == {"taint_path", "attacker_control", "guard_absent",
+                                                                  "exposure"}
+
+
+def test_interval_missing_factors_cannot_matter_when_impact_fixes_the_band() -> None:
+    """A low-impact weakness is `low` at every exploitability, so nothing missing can change it."""
+    result = score_of(drop(full_factors(cwe="CWE-209"), *POINT_FACTORS[1:]), cwe="CWE-209")
+    assert result.exploitability_confidence.rating is None                # exploitability itself is unknown
+    assert result.technical_severity.rating == "low" and result.severity_assessment.assessment == "bounded"
+
+
+def test_interval_missing_impact_class_is_unrated_without_bounds() -> None:
+    result = score_of(full_factors(cwe="CWE-787"), cwe="CWE-787")
+    assessment = result.severity_assessment
+    assert result.technical_severity.rating is None and assessment.assessment == "unrated"
+    assert assessment.severity_floor is None and assessment.severity_ceiling is None
+    assert assessment.unresolved_factors == ("impact_class",)
+
+
+@pytest.mark.parametrize("state", [ClaimState.CONFIRMED, ClaimState.SUPPORTED])
+@pytest.mark.parametrize("cwe", ["CWE-120", "CWE-78", "CWE-200", "CWE-209"])
+def test_dropping_a_factor_never_lowers_a_rating(state, cwe) -> None:
+    """Over every subset of dropped factors: the rating is the full one or withheld, the interval only
+    widens, and the assessment only moves complete -> bounded -> unrated."""
+    full = full_factors(state, cwe)
+    baseline = score_of(full, state=state, cwe=cwe)
+    bands = ["low", "medium", "high", "critical"]
+    ranks = {"complete": 0, "bounded": 1, "unrated": 2}
+    results = {}
+    for size in range(len(POINT_FACTORS) + 1):
+        for dropped in itertools.combinations(POINT_FACTORS, size):
+            result = score_of(drop(full, *dropped), state=state, cwe=cwe)
+            results[frozenset(dropped)] = result
+            assert result.technical_severity.rating in (None, baseline.technical_severity.rating)
+            if result.exploitability_confidence.rating is not None:
+                assert result.exploitability_confidence.rating == baseline.exploitability_confidence.rating
+            native = result.native["exploitability"]
+            base = baseline.native["exploitability"]
+            assert native["points_floor"] <= base["points_floor"] <= base["points_ceiling"] <= native["points_ceiling"]
+            assessment = result.severity_assessment
+            assert bands.index(assessment.severity_floor) <= bands.index(baseline.technical_severity.rating) \
+                <= bands.index(assessment.severity_ceiling)
+    for smaller, first in results.items():
+        for larger, second in results.items():
+            if smaller < larger:
+                assert ranks[first.severity_assessment.assessment] <= ranks[second.severity_assessment.assessment]
+                assert second.native["exploitability"]["points_floor"] <= first.native["exploitability"]["points_floor"]
+                assert second.native["exploitability"]["points_ceiling"] >= first.native["exploitability"]["points_ceiling"]
+
+
+def test_kev_raise_applies_to_both_ends_of_the_interval() -> None:
+    kev = factors_for(data(strong_relations(), state=ClaimState.SUPPORTED, kev=True,
+                           tags=(tag("surface:entry:http-public", 1),)))
+    result = score_of(drop(kev, FactorId.TAINT_PATH, FactorId.EXPOSURE), state=ClaimState.SUPPORTED)
+    # 60 to 85 points is `medium` to `high`; KEV raises the floor to `high`, and `high` cannot rise.
+    assert result.native["exploitability"]["kev_adjusted"] is True
+    assert result.technical_severity.rating == "high" and result.severity_assessment.assessment == "bounded"
+
+
+def test_score_package_records_the_assessment_and_validates(tmp_path: Path) -> None:
+    result = score_of(drop(full_factors(ClaimState.SUPPORTED), FactorId.TAINT_PATH, FactorId.EXPOSURE),
+                      state=ClaimState.SUPPORTED)
+    package = stages.score_package_json(result)       # schema validity is covered by the stage test below
+    assert package["technical_severity"]["rating"] is None
+    assert package["severity_assessment"] == {"assessment": "unrated", "severity_floor": "medium",
+                                              "severity_ceiling": "high",
+                                              "unresolved_factors": ["exposure", "taint_path"]}
+    legacy = build_provider("application_risk_matrix/1", TABLE).score(request(None))
+    assert stages.score_package_json(legacy)["severity_assessment"]["assessment"] == "complete"
+
+
+def test_an_enabled_but_unimplemented_provider_is_visible_not_skipped() -> None:
+    from types import SimpleNamespace
+
+    settings = SimpleNamespace(enabled_providers=("cvss_v4", "application_risk_matrix", "ssvc_decision"),
+                               cwe_impact_overrides=TABLE,
+                               providers={"cvss_v4": SimpleNamespace(implementation="first-reference-compatible/1")})
+    registry = registry_from_settings(settings)
+    assert registry.ids() == ("application_risk_matrix",)
+    assert [(item.provider, item.implementation) for item in registry.unavailable] == [
+        ("cvss_v4", "first-reference-compatible/1"), ("ssvc_decision", None)]
+    assert all("enabled but has no implementation" in item.reason for item in registry.unavailable)
+    assert registry_from_settings(SimpleNamespace(enabled_providers=("application_risk_matrix",),
+                                                  cwe_impact_overrides=TABLE, providers={})).unavailable == ()
+
+
+def test_stage_publishes_unavailable_providers_and_an_unrated_package(tmp_path: Path) -> None:
+    from types import SimpleNamespace
+
+    settings = SimpleNamespace(enabled_providers=("cvss_v4", "application_risk_matrix"), cwe_impact_overrides=TABLE,
+                               providers={})
+    relations = [rel(Predicate.AFFECTED_CONSTRUCT)]
+    record, projection = adjudicated(relations, independent=False)
+    out = tmp_path / "scores"
+    out.mkdir()
+    document = stages.score_claims([record], projection, TABLE, out, tmp_path / "ledger.jsonl", "scoring", SCHEMAS,
+                                   scoring=settings)
+    assert document["unavailable_providers"][0]["provider"] == "cvss_v4"
+    (entry,) = document["scores"]
+    assert entry["technical_severity"] is None and entry["severity_assessment"]["assessment"] == "unrated"
+    assert entry["severity_assessment"]["unresolved_factors"]

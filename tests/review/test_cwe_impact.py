@@ -8,7 +8,7 @@ import pytest
 
 from appsec_review.review.references import CweConsequence, CweEntry, CweReference, load_cwe_reference
 from appsec_review.review.scoring import (
-    LEGACY_CWE_IMPACT_CLASSES, ApplicationRiskMatrixV2Provider, build_provider, default_factor_registry,
+    LEGACY_CWE_IMPACT_CLASSES, ApplicationRiskMatrixV3Provider, build_provider, default_factor_registry,
     default_registry,
 )
 from appsec_review.review.scoring.cwe_impact import (
@@ -189,7 +189,7 @@ def test_a_stale_catalog_still_derives_and_records_the_stale_gap() -> None:
     value = impact("CWE-120", source=catalog("stale"))
     assert value.value == "critical"
     assert value.detail["catalog_status"] == ("stale",) and value.detail["catalog_gap"] == ("mitre_stale_feed: fixture",)
-    scorer = ApplicationRiskMatrixV2Provider({}, DEFAULT_RISK_MODEL, catalog("stale"))
+    scorer = ApplicationRiskMatrixV3Provider({}, DEFAULT_RISK_MODEL, catalog("stale"))
     factors = default_factor_registry({}, catalog("stale")).extract(data(strong_relations()), scorer.consumed_factors)
     result = scorer.score(request(factors))
     assert result.technical_severity.rating == "critical"
@@ -210,7 +210,7 @@ def test_catalog_states_are_validated() -> None:
 
 def _score(overrides=None, source=None):
     source = source if source is not None else catalog()
-    scorer = ApplicationRiskMatrixV2Provider(overrides or {}, DEFAULT_RISK_MODEL, source)
+    scorer = ApplicationRiskMatrixV3Provider(overrides or {}, DEFAULT_RISK_MODEL, source)
     factors = default_factor_registry(overrides or {}, source).extract(data(strong_relations()),
                                                                       scorer.consumed_factors)
     return scorer.score(request(factors))
@@ -227,12 +227,12 @@ def test_fingerprint_binds_the_rule_the_catalog_snapshot_and_the_overrides() -> 
     assert len(configs) == 5
     assert len({item.score_id for item in (base, other_snapshot, stale, override, reason)}) == 5
     assert len({item.input_fingerprint for item in (base, other_snapshot, stale, override, reason)}) == 5
-    scorer = ApplicationRiskMatrixV2Provider({}, DEFAULT_RISK_MODEL, catalog())
+    scorer = ApplicationRiskMatrixV3Provider({}, DEFAULT_RISK_MODEL, catalog())
     assert scorer.impact_catalog.snapshot_id == SNAPSHOT
 
 
 def test_provider_rejects_an_impact_factor_from_another_catalog() -> None:
-    scorer = ApplicationRiskMatrixV2Provider({}, DEFAULT_RISK_MODEL, catalog())
+    scorer = ApplicationRiskMatrixV3Provider({}, DEFAULT_RISK_MODEL, catalog())
     foreign = default_factor_registry({}, catalog(snapshot="sha256-" + "d" * 24)).extract(
         data(strong_relations()), scorer.consumed_factors)
     errors = scorer.validate_inputs(request(foreign)).errors
