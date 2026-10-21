@@ -276,7 +276,9 @@ When the run has accepted `graph` shards (`job_code_graph_index`; today C/C++ on
   scope. `depth` is capped by `[jobs.job_code_graph_index.settings.graph].max_call_depth` as frozen
   into the run.
 - **Evidence and scoring.** A cited graph fact counts as direct evidence only for its mapped
-  predicate and only when the re-resolved fact is `direct_eligible`. Scoring then reads
+  predicate and only when the re-resolved fact is `direct_eligible`. A dominating guard or a bounded
+  range only qualifies `missing_or_ineffective_guard` unless the exported facts show it bounds the
+  destination (`evidence-admissibility/3`; the relation then records the reason). Scoring then reads
   `taint_path = graph_dataflow_path`, `attacker_control` from the cited source class, and
   `guard_absent = graph_fact`.
 - **Gaps.** Every non-complete graph `(scope, family)` row is a `code_graph` producer gap in the

@@ -211,6 +211,7 @@ class EvidenceRelation:
     complete: bool
     producing_cell_id: str
     retrieval_receipt_sha256: str | None
+    reason: str | None = None        # why the application recorded a weaker kind than the cell asked for
 
 
 @dataclass(frozen=True, slots=True)

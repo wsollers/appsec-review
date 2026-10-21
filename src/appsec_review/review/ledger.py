@@ -93,7 +93,7 @@ def relation_json(relation: EvidenceRelation) -> dict[str, Any]:
             "admissibility": relation.admissibility.value, "shard_id": relation.shard_id,
             "content_sha256": relation.content_sha256, "locator": relation.locator,
             "complete": relation.complete, "producing_cell_id": relation.producing_cell_id,
-            "retrieval_receipt_sha256": relation.retrieval_receipt_sha256}
+            "retrieval_receipt_sha256": relation.retrieval_receipt_sha256, "reason": relation.reason}
 
 
 def relation_from_json(value: Mapping[str, Any]) -> EvidenceRelation:
@@ -102,7 +102,8 @@ def relation_from_json(value: Mapping[str, Any]) -> EvidenceRelation:
         kind=RelationKind(value["kind"]), entity_id=value["entity_id"], entity_kind=value["entity_kind"],
         admissibility=Admissibility(value["admissibility"]), shard_id=value["shard_id"],
         content_sha256=value["content_sha256"], locator=value["locator"], complete=value["complete"],
-        producing_cell_id=value["producing_cell_id"], retrieval_receipt_sha256=value["retrieval_receipt_sha256"])
+        producing_cell_id=value["producing_cell_id"], retrieval_receipt_sha256=value["retrieval_receipt_sha256"],
+        reason=value.get("reason"))
 
 
 def gap_json(gap: Gap) -> dict[str, Any]:

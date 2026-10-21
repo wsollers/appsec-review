@@ -172,6 +172,59 @@ def test_guard_absent_basis(kind, expected) -> None:
                    FactorId.GUARD_ABSENT).get(FactorId.GUARD_ABSENT) is None
 
 
+def _guard_entities(relation, **result) -> dict:
+    return {relation.entity_id: ResolvedEntity(relation.entity_id, relation.entity_kind,
+                                               graph_payload(relation.entity_kind, **result))}
+
+
+SINK = "asr:sink_site:" + "1" * 64
+
+
+def _comparison(operator, lhs, rhs):
+    return {"operator": operator, "bound_display": "x", "operands": [lhs, rhs]}
+
+
+def _operand(role, kind, value=None, text="x"):
+    return {"role": role, "kind": kind, "value": value, "text": text, "location": None}
+
+
+def _guard(operator, rhs, *, polarity="false_branch", constrains=True, capacity=16, state="dominating"):
+    return dict(sink={"sink_site": SINK}, guard_state=state, polarity=polarity, constrains_sink_operand=constrains,
+                comparison=_comparison(operator, _operand("lhs", "variable", None, "n"), rhs),
+                destination={"object_bytes": capacity})
+
+
+@pytest.mark.parametrize("guard, counts", [
+    (_guard(">", _operand("rhs", "constant", 16)), False),            # if (n > 16) return;   bounds: effective guard
+    (_guard(">", _operand("rhs", "constant", 64)), True),             # does not bound the 16-byte destination
+    (_guard("<", _operand("rhs", "other", None, "4u + out.length"), constrains="unknown"), True),   # packet.cpp:13
+    (_guard("<", _operand("rhs", "constant", 4), constrains=False), True),                          # packet.cpp:8
+    (_guard(">", _operand("rhs", "constant", 16), capacity=None), True),
+    (_guard(">", _operand("rhs", "constant", 16), state="non_dominating"), True),
+])
+def test_guard_absent_ignores_support_that_cites_an_effective_guard(guard, counts) -> None:
+    relation = rel(Predicate.MISSING_OR_INEFFECTIVE_GUARD, "guard_fact")
+    value = extract(data([relation], entities=_guard_entities(relation, **guard)),
+                    FactorId.GUARD_ABSENT).get(FactorId.GUARD_ABSENT)
+    assert (value is not None and value.value == "graph_fact") is counts
+
+
+def test_guard_absent_range_bounds_use_the_destination_of_a_guard_fact_of_the_same_sink() -> None:
+    range_relation = rel(Predicate.MISSING_OR_INEFFECTIVE_GUARD, "range_fact", native="r")
+    guard_relation = rel(Predicate.MISSING_OR_INEFFECTIVE_GUARD, "guard_fact", native="g")
+    interval = {"lower": 0, "upper": 16}
+    ranged = _guard_entities(range_relation, sink={"sink_site": SINK}, interval=interval, sign_change=False)
+    # Without a guard fact of the sink the destination size is unknown: the range is not shown to bound.
+    alone = extract(data([range_relation], entities=ranged), FactorId.GUARD_ABSENT).get(FactorId.GUARD_ABSENT)
+    assert alone is not None and alone.value == "graph_fact"
+    both = {**ranged, **_guard_entities(guard_relation, **_guard(">", _operand("rhs", "constant", 64)))}
+    assert extract(data([range_relation], entities=both), FactorId.GUARD_ABSENT).get(FactorId.GUARD_ABSENT) is None
+    wide = _guard_entities(range_relation, sink={"sink_site": SINK}, interval={"lower": 0, "upper": 65535},
+                           sign_change=False)
+    wide.update(_guard_entities(guard_relation, **_guard(">", _operand("rhs", "constant", 64))))
+    assert extract(data([range_relation], entities=wide), FactorId.GUARD_ABSENT).get(FactorId.GUARD_ABSENT)
+
+
 def test_contradicting_relations_never_set_a_factor() -> None:
     against = rel(Predicate.MISSING_OR_INEFFECTIVE_GUARD, "guard_fact", relation=RelationKind.CONTRADICTS)
     assert extract(data([against]), FactorId.GUARD_ABSENT).get(FactorId.GUARD_ABSENT) is None

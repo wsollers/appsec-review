@@ -69,6 +69,17 @@
           "type": "null"
         }
       ]
+    },
+    "reason": {
+      "description": "Why the application recorded a weaker relation kind than the cell asked for (evidence-admissibility/3), else null.",
+      "oneOf": [
+        {
+          "$ref": "common.schema.json#/$defs/short_text"
+        },
+        {
+          "type": "null"
+        }
+      ]
     }
   }
 }

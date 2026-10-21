@@ -454,7 +454,8 @@ def _relations(ctx: ReviewContext, cell: _Cell, claim_id: str, items: Iterable[M
         resolved = resolve_relation(ctx.core, claim_id=claim_id, predicate=predicate, kind=kind, entity_id=entity,
                                     producing_cell_id=cell.cell_id,
                                     retrieval_receipt_sha256=receipt if entity in seen else None,
-                                    rule_predicates=ctx.rule_predicates.get(entity, ()))
+                                    rule_predicates=ctx.rule_predicates.get(entity, ()),
+                                    role=cell.spec.role.value)
         (relations if isinstance(resolved, EvidenceRelation) else gaps).append(resolved)
     return relations, gaps
 

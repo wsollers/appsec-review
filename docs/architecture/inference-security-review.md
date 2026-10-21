@@ -10,7 +10,7 @@ distinctness, remediation intake, the planned downstream job names, the closed
 `security-predicates/1` vocabulary, the `red-discovery-result/1` contract and the catalog-derived
 CWE impact class are implemented ([decisions](#decisions-and-open-questions) 1, 2, 4, 6, 8, 9, 10
 and 11), as are evidence-driven scoring (`score-factors/1`, `application_risk_matrix/2`) and
-code-graph evidence (`evidence-admissibility/2`, `query_code_graph`, package graph context). The
+code-graph evidence (`evidence-admissibility/3`, `query_code_graph`, package graph context). The
 remaining parts of slices 2-4 (CVSS v4 and SSVC providers, which the scoring registry skips while
 unimplemented, PoC, chains, rounds and variant hunts) remain design only, and no live-model
 acceptance has run.
@@ -1795,7 +1795,7 @@ recorded as an `evidence_gap`, not as a relation.
 |---|---|
 | direct, when the entity is the construct named by the predicate | `source_span`, `ast_node`, `ir_entity`, `symbol`; build kinds (`build_action` through `wasm_module`); `evidence_artifact` |
 | direct only for the predicate the producing rule's versioned mapping names | `tool_observation` (SAST, CodeQL path, post-build, CI) |
-| direct only for the predicate the graph-fact family's versioned mapping (`graph-fact-predicates/1`) names, and only when the **re-resolved** fact's `admissibility.direct_eligible` is `true` (every cited location exact, fact coverage complete, no cross-check disagreement, classified source/sink) | `call_site` and `sink_site` (`affected_construct`); `entry_point` (`attacker_input_control` for attacker-reachable source classes); `dataflow_path` (`source_to_sink_reachability`, and `attacker_input_control` when its source class is attacker-reachable); `guard_fact` and `range_fact` (`missing_or_ineffective_guard`, support or contradict) |
+| direct only for the predicate the graph-fact family's versioned mapping (`graph-fact-predicates/1`) names, and only when the **re-resolved** fact's `admissibility.direct_eligible` is `true` (every cited location exact, fact coverage complete, no cross-check disagreement, classified source/sink) | `call_site` and `sink_site` (`affected_construct`); `entry_point` (`attacker_input_control` for attacker-reachable source classes); `dataflow_path` (`source_to_sink_reachability`, and `attacker_input_control` when its source class is attacker-reachable); `guard_fact` and `range_fact` (`missing_or_ineffective_guard`: support, qualify, or contradict only when the facts show the destination is bounded, see below) |
 | indirect: may guide search, never satisfies an obligation | `hotspot`, `priority_item`, `history_signal`, `change`, `change_context_signal`, `review_signal`, `tag_assignment`, `review_unit`, `flow_summary`, any graph kind whose `direct_eligible` is `false`, reported scanner severity, model prose |
 | indirect for **every** predicate: reference context (`review/evidence.py::REFERENCE_KINDS`) | `advisory`, `dependency_package` (a scanner-reported match), `precomputed_fact` (including `dependency_advisories` and `reference_intelligence` facts), and every OSV, NVD, CISA KEV, FIRST EPSS, and MITRE record they carry |
 
@@ -1805,11 +1805,19 @@ SBOM, lockfile, or artifact inventory (`package`, `archive_member`), which is di
 and EPSS can order work and inform workers. NVD CVSS and KEV also enter scoring as labelled
 reference inputs; EPSS never does. None of them satisfies an obligation alone.
 
-Graph-fact admissibility (`evidence-admissibility/2`) is decided from the fact the
+Graph-fact admissibility (`evidence-admissibility/3`) is decided from the fact the
 validator re-resolves through `find`, never from the model's copy: a citation whose resolved
 payload has `direct_eligible = false` is indirect whatever the model claims. Static absence of a
-graph fact is never a relation, so `not_reachable` stays unreachable through graph evidence; a
-`dominating` guard or a bounded range contradicts `missing_or_ineffective_guard` instead. The
+graph fact is never a relation, so `not_reachable` stays unreachable through graph evidence. A
+`dominating` guard or a bounded range only **qualifies** `missing_or_ineffective_guard` by default: it
+is recorded as `contradicts` only when the application shows from the exported facts
+(`graph/bounds.py`, a pure function shared with the `guard_absent` factor) that it bounds the
+destination, and the citing role is blue, verifier or judge; red's counterevidence is always
+`qualifies`. Otherwise the relation carries the reason `guard_not_shown_to_bound_destination:<why>`
+into the ledger, finding package and report. For `if (size < 4u + out.length) return -1;` ahead of a
+`memcpy` into `char name[16]` the guard compares the input size with the length field, never the
+16-byte destination, so it cannot refute the overflow. `evidence-admissibility/3` changes evidence
+relations, so cells and adjudications recorded under `/2` are not reused. The
 mapping, the eligibility rule and the tool that returns these kinds are specified in
 [`code-graph-precomputation.md`](code-graph-precomputation.md) sections 5 and 6.
 
@@ -2138,7 +2146,7 @@ both lanes, and one score dimension. It does not execute PoCs, run variant hunts
   `source_to_sink_reachability`, besides `affected_construct`, per `TOOL_RULE_PREDICATES` in the
   job module; `owasp_control` observations are direct for `missing_or_ineffective_guard`, and
   `ci_rule`/`post_build_hardening` for `configuration_enables`), from source constructs the model cites, and, for C/C++ scopes with an
-  accepted graph export, from direct-eligible graph facts (`evidence-admissibility/2`,
+  accepted graph export, from direct-eligible graph facts (`evidence-admissibility/3`,
   [`code-graph-precomputation.md`](code-graph-precomputation.md)): `dataflow_path`, `entry_point`,
   `sink_site`, `call_site`, `guard_fact` and `range_fact`. `sink_up` and `entry_down` launch per
   unit from its accepted graph families. Remaining gaps: export packs exist only for C/C++, so every
