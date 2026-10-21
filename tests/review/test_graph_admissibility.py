@@ -452,10 +452,11 @@ def test_triage_orders_graph_cited_hypotheses_above_prose(graph_run) -> None:
     assert decisions == {graph["claim"].claim_id: ("admitted", 3), prose["claim"].claim_id: ("over_cap", 0)}
 
 
-def test_registry_grants_query_code_graph_to_exactly_the_four_review_roles() -> None:
+def test_registry_grants_query_code_graph_to_exactly_the_review_roles() -> None:
     registry = load_registry(ROOT)
     granted = {name for name, value in registry["roles"].items() if "query_code_graph" in value.get("tools", ())}
-    assert granted == {"hypothesis_hunter", "red_team_analyst", "blue_team_refuter", "independent_verifier"}
+    assert granted == {"hypothesis_hunter", "red_team_analyst", "blue_team_refuter", "independent_verifier",
+                       "adjudication_judge"}
     for role in ("independent_scorer", "finding_adjudicator"):
         assert "query_code_graph" not in registry["roles"][role].get("tools", ())
 

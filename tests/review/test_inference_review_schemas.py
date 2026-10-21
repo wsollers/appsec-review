@@ -21,7 +21,7 @@ from tests.review.test_ledger import cell_id, entity, write_sample
 ROOT = Path(__file__).resolve().parents[2] / "docs" / "schemas" / "inference-security-review"
 NAMES = ("common", "ledger-event", "claim", "evidence-relation", "cell-record", "gap", "worker-turn",
          "red-discovery-result", "blue-result", "verifier-result", "adjudication", "score-package", "finding-package", "handoff",
-         "red-compact", "blue-compact", "verifier-compact")
+         "red-compact", "blue-compact", "verifier-compact", "judge-result-compact", "judge-result")
 SCHEMAS = {name: json.loads((ROOT / f"{name}.schema.json").read_text()) for name in NAMES}
 REGISTRY = Registry().with_resources(
     (schema["$id"], Resource.from_contents(schema)) for schema in SCHEMAS.values())
@@ -237,7 +237,11 @@ def _finding() -> dict:
         "verification_review_id": ident("review"), "scores": [ident("score"), ident("score", "matrix")],
         "poc": {"status": "verification_succeeded", "result_id": "pocresult-" + SHA},
         "attack_chains": ["chain-" + SHA], "remediation_inputs": {"safe_regression_artifact": "regression-" + SHA},
-        "independence": {"independent": True, "provider_distinct": False, "verifier_model_distinct": True},
+        "independence": {"independent": True, "provider_distinct": False, "verifier_model_distinct": True,
+                         "judge_model_distinct": True},
+        "judge_verdict": {"verdict": "red_correct", "disagrees_with_state": False, "judges": [{
+            "verdict_id": ident("judge_verdict"), "verdict": "red_correct", "cell_id": cell_id("judge"),
+            "judge_model_distinct": True, "reason": "the cited rows show the copy is unbounded"}]},
         "ship_block": _ship_block(),
         "gaps": [ident("gap")], "provenance": {"run_manifest_sha256": SHA, "ledger_head_sha256": SHA},
     }
@@ -294,6 +298,13 @@ def test_finding_ship_block_record_is_closed_and_never_lets_cvss_decide() -> Non
     assert not valid("finding-package", {**_finding(), "ship_block": {**_ship_block(), "inputs": inputs}})
     independence = {"independent": True, "provider_distinct": False}
     assert not valid("finding-package", {**_finding(), "independence": independence})
+    assert not valid("finding-package", {key: value for key, value in _finding().items() if key != "judge_verdict"})
+    assert valid("finding-package", {**_finding(), "judge_verdict": None,
+                                     "independence": {**_finding()["independence"], "judge_model_distinct": None}})
+    judged = _finding()["judge_verdict"]
+    assert not valid("finding-package", {**_finding(), "judge_verdict": {**judged, "verdict": "A"}})
+    assert not valid("finding-package", {**_finding(), "judge_verdict": {**judged, "judges": []}})
+    assert not valid("finding-package", {**_finding(), "judge_verdict": {**judged, "state": "confirmed"}})
     assert not valid("finding-package", {**_finding(), "missing_predicates": ["security_impact"]})   # confirmed
     assert not valid("finding-package", {**_finding(), "schema": "appsec-review/finding-package/1"})
 
@@ -416,7 +427,7 @@ def _handoff_review_fields(intake=(), backlog=()) -> dict:
                              "red": {role: {"provider": "claude-cli", "model": "claude-haiku-5-5"}
                                      for role in ("hypothesis_hunter", "red_team_analyst")},
                              "distinct": False, "warning": "same model"},
-            "planned_consumers": [dict(item) for item in PLANNED_CONSUMERS]}
+            "planned_consumers": [dict(item) for item in PLANNED_CONSUMERS], "poc_candidates": []}
 
 
 def test_handoff_partitions_remediation_intake_from_the_verification_backlog(tmp_path: Path) -> None:
@@ -479,3 +490,127 @@ def test_handoff_accepts_exact_accounting_only(tmp_path: Path) -> None:
     assert not valid("handoff", {**handoff, "status": "CLEAN"})
     assert accounting.to_json()["duplicate_proposals"] == 0
     assert all("duplicate_proposals" in lane for lane in accounting.to_json()["lanes"])
+
+
+# ------------------------------------------------------------------------------------------------ the judge
+
+
+def test_judge_enums_and_the_role_match_the_python_contract() -> None:
+    assert DEFS["judge_outcome"]["enum"] == [member.value for member in models.JudgeVerdictValue]
+    assert "adjudication_judge" in DEFS["role"]["enum"] and "judge_verdict" in DEFS["event_kind"]["enum"]
+    assert DEFS["judge_side"]["enum"] == ["A", "B", "both", "neither", "unresolved"]
+    assert SCHEMAS["judge-result-compact"]["properties"]["schema"]["const"] == "appsec-review/judge-result-compact/1"
+    assert SCHEMAS["judge-result"]["properties"]["schema"]["const"] == "appsec-review/judge-result/1"
+
+
+def _judge_compact() -> dict:
+    return {"claim": "c1", "verdict": "B", "per_predicate": {
+        "affected_construct": {"verdict": "B", "cites": ["K1", "S1"]},
+        "missing_or_ineffective_guard": {"verdict": "B", "cites": ["G2", "S2", "R1"], "why": "the guard compares sizes"}},
+        "reason": "Nothing bounds the length by the 16-byte destination."}
+
+
+def test_the_compact_judge_answer_is_closed_and_the_expanded_one_names_no_side() -> None:
+    validator("judge-result-compact").validate(_judge_compact())
+    assert SchemaSet(ROOT).errors("judge-result-compact", _judge_compact()) == []
+    for verdict in ("A", "B", "both", "neither", "unresolved"):
+        assert valid("judge-result-compact", {**_judge_compact(), "verdict": verdict})
+    for bad in ({**_judge_compact(), "verdict": "red_correct"}, {**_judge_compact(), "verdict": "red_team_analyst"},
+                {key: value for key, value in _judge_compact().items() if key == "reason"},
+                {key: value for key, value in _judge_compact().items() if key != "reason"},
+                {**_judge_compact(), "state": "confirmed"}, {**_judge_compact(), "reason": ""},
+                {**_judge_compact(), "per_predicate": {"affected_construct": {"verdict": "B"}}},
+                {**_judge_compact(), "per_predicate": {"made_up": {"verdict": "B", "cites": ["K1"]}}},
+                {**_judge_compact(), "per_predicate": {"affected_construct": {"verdict": "C", "cites": []}}}):
+        assert not valid("judge-result-compact", bad), bad
+    expanded = {"schema": "appsec-review/judge-result/1", "claim_id": ident("claim"), "verdict": "red_correct",
+                "per_predicate": {"affected_construct": {"verdict": "red_correct", "cites": [entity("span")]}},
+                "citations": {"affected_construct": [entity("span")]}, "reason": "bounded"}
+    validator("judge-result").validate(expanded)
+    assert SchemaSet(ROOT).errors("judge-result", expanded) == []
+    for bad in ({**expanded, "verdict": "A"}, {**expanded, "side_map": {"A": "red"}}, {**expanded, "state": "confirmed"},
+                {**expanded, "per_predicate": {"affected_construct": {"verdict": "B", "cites": []}}},
+                {**expanded, "per_predicate": {"affected_construct": {"verdict": "red_correct", "cites": ["K1"]}}}):
+        assert not valid("judge-result", bad), bad
+
+
+def test_judge_verdict_events_and_judge_cell_records_validate(tmp_path: Path) -> None:
+    from appsec_review.review.ledger import LedgerWriter
+
+    verdict = models.JudgeVerdict(
+        ident("judge_verdict"), ident("claim"), models.JudgeVerdictValue.PARTLY,
+        (models.JudgePredicateVerdict(models.Predicate.AFFECTED_CONSTRUCT, models.JudgeVerdictValue.RED_CORRECT,
+                                      (entity("span"),)),), "each side is right about a predicate", cell_id("judge"), True)
+    writer = LedgerWriter(tmp_path / "judge.jsonl", "lead_review.teams")
+    event = writer.judge_verdict(verdict)
+    validator("ledger-event").validate(event)
+    assert SchemaSet(ROOT).errors("ledger-event", event) == []
+    assert event["kind"] == "judge_verdict" and set(event["body"]["verdict"]) == {
+        "verdict_id", "claim_id", "verdict", "per_predicate", "citations", "reason", "cell_id", "judge_model_distinct"}
+    for mutate in (lambda body: body["verdict"].update(extra=1), lambda body: body["verdict"].update(verdict="A"),
+                   lambda body: body["verdict"].update(judge_model_distinct="yes"),
+                   lambda body: body["verdict"]["per_predicate"][0].update(cites=["K1"]),
+                   lambda body: body.pop("round")):
+        tampered = copy.deepcopy(event)
+        mutate(tampered["body"])
+        assert not valid("ledger-event", tampered)
+    assert not valid("ledger-event", {**event, "subject_id": ident("claim")})
+    record = {"schema": "appsec-review/cell-record/1", "cell_id": cell_id("judge"), "lane": "lead",
+              "package_id": "package-a", "role": "adjudication_judge", "persona": "generalist",
+              "stack_profile": "cpp_rpc_service", "task": "adjudicate_claim", "claim_id": ident("claim"),
+              "status": "succeeded", "attempts": 1, "gap_ids": [], "receipt_sha256": SHA}
+    assert not valid("cell-record", record)                              # a judge cell records its side map
+    with_map = {**record, "side_map": {"A": "blue", "B": "red"}}
+    validator("cell-record").validate(with_map)
+    assert SchemaSet(ROOT).errors("cell-record", with_map) == []
+    assert not valid("cell-record", {**with_map, "side_map": {"A": "red", "B": "judge"}})
+    assert not valid("cell-record", {**with_map, "side_map": {"A": "red"}})
+    assert not valid("cell-record", {**with_map, "role": "red_team_analyst"})      # and nobody else does
+
+
+def test_a_relation_derived_from_a_judge_carries_provenance_only_when_so_derived() -> None:
+    relation = {"schema": "appsec-review/evidence-relation/1", "relation_id": ident("evidence_relation"),
+                "claim_id": ident("claim"), "predicate": "affected_construct", "kind": "supports",
+                "entity_id": entity("span"), "entity_kind": "source_span", "admissibility": "direct",
+                "shard_id": "source/default", "content_sha256": SHA, "locator": "a.c:1-2#b0-9@" + SHA, "complete": True,
+                "producing_cell_id": cell_id("judge"), "retrieval_receipt_sha256": None}
+    assert valid("evidence-relation", relation)
+    assert valid("evidence-relation", {**relation, "provenance": "adjudication_judge"})
+    assert not valid("evidence-relation", {**relation, "provenance": "independent_verifier"})
+
+
+def test_the_handoff_lists_poc_candidates_and_counts_judge_verdicts(tmp_path: Path) -> None:
+    paths, _ = write_sample(tmp_path)
+    projection = project(merge_shards(paths).events)
+    expected = {cell_id("lead-1"): models.Lane.LEAD, cell_id("lead-2"): models.Lane.LEAD,
+                cell_id("hunt-1"): models.Lane.HUNT}
+    accounting = exact_accounting(projection, expected, {"package-a": models.Lane.LEAD, "package-h": models.Lane.HUNT},
+                                  incomplete_gap_ratio=0.25)
+    assert accounting.to_json()["judge_verdicts"] == {
+        "by_outcome": {"red_correct": 0, "blue_correct": 0, "partly": 0, "neither": 0, "unresolved": 0},
+        "model_distinct": 0, "not_model_distinct": 0}
+    handoff = {
+        "schema": "appsec-review/inference-review-handoff/2", "run_id": "run-1", "accepted_manifest_sha256": SHA,
+        "status": "DEGRADED", "configuration_sha256": SHA, "ledger_head_sha256": projection.head,
+        "projection_sha256": projection.sha256(), "accounting": accounting.to_json(), "shards": [],
+        "finding_packages": [], "score_packages": [], "gap_ids": [gap.gap_id for gap in projection.gaps],
+        **_handoff_review_fields()}
+    validator("handoff").validate(handoff)
+    brief = {"entry": [entity("trace")], "path": [entity("sink")], "trigger": [], "input_format": "4-byte header",
+             "preconditions": [], "expected_observation": "a stack-buffer-overflow write", "unknowns": []}
+    candidate = {"claim_id": ident("claim"), "package_id": "package-a", "state": "confirmed",
+                 "judge_verdict": "red_correct", "poc_basis": {"sha256": SHA, "brief": brief},
+                 "finding_package": {"finding_package_id": ident("finding_package"), "sha256": SHA},
+                 "evidence_refs": [ident("evidence_relation")]}
+    with_candidate = {**handoff, "poc_candidates": [candidate]}
+    validator("handoff").validate(with_candidate)
+    assert SchemaSet(ROOT).errors("handoff", with_candidate) == []
+    assert not valid("handoff", {key: value for key, value in handoff.items() if key != "poc_candidates"})
+    for bad in ({**candidate, "judge_verdict": "blue_correct"}, {**candidate, "state": "contradicted"},
+                {**candidate, "extra": True}, {key: value for key, value in candidate.items() if key != "poc_basis"},
+                {**candidate, "poc_basis": {"sha256": SHA, "brief": {**brief, "code": "int main(){}"}}}):
+        assert not valid("handoff", {**handoff, "poc_candidates": [bad]}), bad
+    for accounting_bad in ({key: value for key, value in handoff["accounting"].items() if key != "judge_verdicts"},
+                           {**handoff["accounting"], "judge_verdicts": {"by_outcome": {}, "model_distinct": 0,
+                                                                         "not_model_distinct": 0}}):
+        assert not valid("handoff", {**handoff, "accounting": accounting_bad})

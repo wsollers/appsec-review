@@ -14,7 +14,7 @@ from appsec_review.review.capability import AuthorityDenied, Authorized, CellCap
 ROOT = Path(__file__).resolve().parents[1]
 SCHEMAS = SchemaSet(ROOT / "docs" / "schemas" / "inference-security-review")
 ROLES = {"red_team_analyst": "red-compact", "hypothesis_hunter": "red-compact", "blue_team_refuter": "blue-compact",
-         "independent_verifier": "verifier-compact"}
+         "independent_verifier": "verifier-compact", "adjudication_judge": "judge-result-compact"}
 SINK = "asr:sink_site:" + "1" * 64
 GUARD = "asr:guard_fact:" + "2" * 64
 
@@ -66,7 +66,7 @@ def test_final_examples_validate_against_the_roles_compact_schema_and_non_exampl
 
 
 def _decide(role: str, request: dict):
-    return capability(role).authorize(request, labels={"G2": GUARD, "K1": SINK}, locator_paths={"src/packet.cpp"})
+    return capability(role).authorize(request, labels={"G2": GUARD, "K1": SINK, "J1": GUARD}, locator_paths={"src/packet.cpp"})
 
 
 @pytest.mark.parametrize("role", sorted(ROLES))
@@ -78,3 +78,16 @@ def test_retrieve_examples_are_accepted_by_the_capability_and_path_requests_are_
         assert isinstance(decision, Authorized), (role, request, decision)
     path_requests = [request for item in bad if item["action"] == "retrieve" for request in item["requests"]]
     assert all(_decide(role, request).code == "forbidden_parameter" for request in path_requests)
+
+
+def test_the_judge_guidance_shows_every_verdict_and_names_neither_side() -> None:
+    good, bad = blocks("adjudication_judge")
+    verdicts = {item["result"]["verdict"] for item in good if item["action"] == "final"}
+    assert verdicts == {"A", "B", "both", "neither", "unresolved"}
+    text = (ROOT / "pipeline" / "prompt-fragments" / "roles" / "adjudication_judge.md").read_text(encoding="utf-8")
+    assert not re.search(r"\b(?:red|blue)\b|red_team|blue_team|hypothesis_hunter", text, re.IGNORECASE)
+    # The non-examples: a side with no resolvable citation, a role named as the verdict, and a path lookup.
+    finals = [item["result"] for item in bad if item["action"] == "final"]
+    assert any(item["verdict"] not in {"A", "B", "both", "neither", "unresolved"} for item in finals)
+    assert any(entry["cites"] and not re.fullmatch(r"[A-Z][0-9]+", entry["cites"][0])
+               for item in finals for entry in item["per_predicate"].values())

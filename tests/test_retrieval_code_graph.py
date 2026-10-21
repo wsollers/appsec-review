@@ -498,5 +498,5 @@ def test_cell_capability_grants_graph_index_scope_and_denies_path_like_subjects(
 
 def test_mcp_review_roles_include_the_graph_tool() -> None:
     for role in ("hypothesis_hunter", "red_team_analyst", "blue_team_refuter", "independent_verifier",
-                 "red", "blue", "verifier"):
+                 "adjudication_judge", "red", "blue", "verifier"):
         assert "query_code_graph" in _ROLE_TOOLS[role]
