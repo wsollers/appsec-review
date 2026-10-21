@@ -31,7 +31,8 @@ GRAPH_JOB_IDS = ("job_model_connectivity", "job_image_pin_verification", "job_re
                  "job_codeql_analysis",
                  "job_review_prioritization", "job_code_graph_index", "job_review_data_indexing")
 # Consumers of the accepted index that run after the resumable graph.
-POST_INDEX_JOB_IDS = ("job_review_package_assembly", "job_document_issue_analysis")
+POST_INDEX_JOB_IDS = ("job_review_package_assembly", "job_document_issue_analysis",
+                      "job_inference_security_review")
 
 
 def parser() -> argparse.ArgumentParser:
