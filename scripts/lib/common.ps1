@@ -5,7 +5,49 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-$script:OpsRoot = [System.IO.Path]::GetFullPath((Join-Path (Join-Path $PSScriptRoot '..') '..'))
+# A checkout is a directory holding appsec-review.toml and deploy/dagster/bin/ops.py.
+function Test-RepoRoot {
+    param([string]$Path)
+    if (-not $Path) { return $false }
+    return ((Test-Path -LiteralPath (Join-Path $Path 'appsec-review.toml')) -and
+            (Test-Path -LiteralPath (Join-Path (Join-Path (Join-Path (Join-Path $Path 'deploy') 'dagster') 'bin') 'ops.py')))
+}
+
+# Walk up from $Start (like git does) to the nearest checkout; $null when there is none.
+function Find-RepoRoot {
+    param([string]$Start)
+    $directory = $Start
+    while ($directory) {
+        if (Test-RepoRoot $directory) { return $directory }
+        $parent = Split-Path -Parent $directory
+        if (-not $parent -or $parent -eq $directory) { break }
+        $directory = $parent
+    }
+    return $null
+}
+
+# The checkout the scripts act on, in this order: $env:APPSEC_REPO_ROOT; the checkout that contains the
+# directory the script was started in (so starting in a checkout, including one on a WSL path such as
+# \\wsl.localhost\Ubuntu-24.04\home\you\appsec-review, acts on that checkout wherever it lives); then the
+# checkout this script file belongs to.
+function Resolve-OpsRoot {
+    if ($env:APPSEC_REPO_ROOT) {
+        $configured = [System.IO.Path]::GetFullPath($env:APPSEC_REPO_ROOT)
+        if (-not (Test-RepoRoot $configured)) {
+            throw "APPSEC_REPO_ROOT is not an appsec-review checkout (no appsec-review.toml and deploy/dagster/bin/ops.py): $configured"
+        }
+        return @($configured, 'APPSEC_REPO_ROOT')
+    }
+    $here = $null
+    try { $here = (Get-Location -PSProvider FileSystem -ErrorAction Stop).ProviderPath } catch { $here = $null }
+    $found = Find-RepoRoot $here
+    if ($found) { return @($found, 'current directory') }
+    return @([System.IO.Path]::GetFullPath((Join-Path (Join-Path $PSScriptRoot '..') '..')), 'script location')
+}
+
+$script:OpsRootChoice = Resolve-OpsRoot
+$script:OpsRoot = $script:OpsRootChoice[0]
+$script:OpsRootSource = $script:OpsRootChoice[1]
 
 function ConvertTo-OpsFlag {
     param([Parameter(Mandatory)][string]$Name)
@@ -89,7 +131,12 @@ function Invoke-Ops {
     )
     $useWsl = $Bound.ContainsKey('Wsl') -and $Bound['Wsl']
     $distro = if ($Bound.ContainsKey('Distro') -and $Bound['Distro']) { [string]$Bound['Distro'] } else { 'Ubuntu-24.04' }
+    # A checkout on a WSL path names its own distribution; use it unless -Distro was given.
+    if (-not ($Bound.ContainsKey('Distro') -and $Bound['Distro']) -and $script:OpsRoot -match '^\\\\wsl(\.localhost|\$)\\(?<distro>[^\\]+)\\') {
+        $distro = $Matches['distro']
+    }
     $helpRequested = $Bound.ContainsKey('Help') -and $Bound['Help']
+    Write-Host "[$Name] repository: $($script:OpsRoot) (from $($script:OpsRootSource))"
     if ($useWsl) {
         $script = ConvertTo-WslPath -Distro $distro -Path (Join-Path (Join-Path $script:OpsRoot 'scripts') "$Name.sh")
         $arguments = if ($helpRequested) { @('--help') } else { ConvertTo-OpsArguments -Bound $Bound -Positional $Positional -Distro $distro }
