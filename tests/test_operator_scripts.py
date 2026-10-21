@@ -76,6 +76,42 @@ def test_shellcheck_is_clean() -> None:
     assert result.returncode == 0, result.stdout
 
 
+def test_powershell_root_comes_from_the_start_directory_then_the_script_location() -> None:
+    text = (SCRIPTS / "lib" / "common.ps1").read_text(encoding="utf-8")
+    # The checkout is found from $env:APPSEC_REPO_ROOT, then the current directory's parents, then the script file.
+    assert text.index("APPSEC_REPO_ROOT") < text.index("Find-RepoRoot $here") < text.index("script location")
+    assert "Get-Location -PSProvider FileSystem" in text and "Split-Path -Parent" in text
+    assert "appsec-review.toml" in text and "ops.py" in text
+    # With -Wsl the distribution comes from a \\wsl.localhost\<distro>\ checkout unless -Distro was given.
+    assert "(?<distro>" in text and "repository: $($script:OpsRoot)" in text
+
+
+@pytest.mark.skipif(shutil.which("pwsh") is None, reason="pwsh is not installed")
+def test_powershell_finds_the_checkout_from_a_subdirectory_and_honours_the_override(tmp_path: Path) -> None:
+    checkout = tmp_path / "elsewhere" / "appsec-review"
+    (checkout / "deploy" / "dagster" / "bin").mkdir(parents=True)
+    (checkout / "appsec-review.toml").write_text("", encoding="utf-8")
+    (checkout / "deploy" / "dagster" / "bin" / "ops.py").write_text("", encoding="utf-8")
+    nested = checkout / "src" / "deep"
+    nested.mkdir(parents=True)
+    lib = SCRIPTS / "lib" / "common.ps1"
+
+    def probe(start: Path, environment: dict[str, str] | None = None) -> subprocess.CompletedProcess:
+        command = f". '{lib}'; '{{0}}|{{1}}' -f $script:OpsRoot, $script:OpsRootSource"
+        env = {**os.environ, "APPSEC_REPO_ROOT": "", **(environment or {})}
+        return subprocess.run(["pwsh", "-NoProfile", "-Command", command], cwd=start, env=env, text=True,
+                              capture_output=True, check=False)
+
+    found = probe(nested)
+    assert found.stdout.strip() == f"{checkout}|current directory", found.stderr
+    outside = probe(tmp_path)  # no checkout above this directory: the script's own checkout is used
+    assert outside.stdout.strip().endswith("|script location"), outside.stderr
+    chosen = probe(tmp_path, {"APPSEC_REPO_ROOT": str(checkout)})
+    assert chosen.stdout.strip() == f"{checkout}|APPSEC_REPO_ROOT", chosen.stderr
+    bad = probe(tmp_path, {"APPSEC_REPO_ROOT": str(tmp_path)})
+    assert bad.returncode != 0 and "not an appsec-review checkout" in bad.stderr
+
+
 @pytest.mark.skipif(shutil.which("pwsh") is None, reason="pwsh is not installed")
 @pytest.mark.parametrize("path", sorted(SCRIPTS.rglob("*.ps1")), ids=lambda path: path.name)
 def test_powershell_scripts_parse(path: Path) -> None:

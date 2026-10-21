@@ -39,6 +39,25 @@ Dagster job described in [`wave1-review.md`](wave1-review.md) and
 .\scripts\review-stop-id.ps1 -Wsl 2026-10-21-0007 -DryRun
 ```
 
+- **PowerShell picks the checkout from where you start it.** The twins do not assume a location such as
+  `F:\repos\appsec-review`. They look for the checkout in this order and print the choice on the first
+  line (`[stack-status] repository: <path> (from current directory)`):
+  1. `$env:APPSEC_REPO_ROOT`, if set (it must be a checkout: it needs `appsec-review.toml` and
+     `deploy/dagster/bin/ops.py`, otherwise the script stops);
+  2. the checkout that contains the current directory, found by walking up the parents like git does, so
+     starting in any subdirectory of a checkout, or in one on a WSL path such as
+     `\\wsl.localhost\Ubuntu-24.04\home\you\appsec-review`, acts on that checkout;
+  3. the checkout the script file itself lives in, when the current directory is outside every checkout.
+  With `-Wsl` the chosen checkout is translated to its WSL path and its own bash twin runs, and the
+  distribution is taken from a `\\wsl.localhost\<distro>\` path unless `-Distro` is given. The stack's
+  ownership rule (see Safety rules) is unchanged: start in the checkout that owns the stack.
+
+```powershell
+cd \\wsl.localhost\Ubuntu-24.04\home\you\appsec-review      # the checkout that owns the WSL stack
+.\scripts\stack-status.ps1 -Wsl                               # repository: ... (from current directory)
+$env:APPSEC_REPO_ROOT = 'D:\work\appsec-review'               # or name the checkout explicitly
+```
+
 ## Safety rules
 
 These enforce [`multi-session-coordination`](../../.claude/skills/multi-session-coordination/SKILL.md):
