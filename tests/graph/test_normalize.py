@@ -371,8 +371,88 @@ def test_guards_publish_one_none_fact_per_unguarded_sink_with_the_contract_ident
                     if fact.payload["result"]["guard_state"] == "dominating" and _at(fact) == (33, 7)]
     assert dominating.payload["result"]["polarity"] == "true_branch"
     assert dominating.payload["result"]["constrains_sink_operand"] is True
-    assert dominating.payload["result"]["comparison"] == {"operator": "<", "bound_display": "64"}
+    comparison = dominating.payload["result"]["comparison"]
+    assert {key: comparison[key] for key in ("operator", "bound_display")} == {"operator": "<", "bound_display": "64"}
     assert dominating.payload["admissibility"]["direct_eligible"] is True
+
+
+def _operands(fact: c.GraphFact) -> dict[str, dict[str, Any]]:
+    return {item["role"]: item for item in fact.payload["result"]["comparison"]["operands"]}
+
+
+def _guard_at(result, line: int, column: int, state: str = "dominating") -> c.GraphFact:
+    [fact] = [item for item in _family(result, "guard_fact")
+              if item.payload["result"]["guard_state"] == state and _at(item) == (line, column)]
+    return fact
+
+
+def test_guard_operands_carry_kind_value_and_text_sliced_from_the_accepted_bytes(synthetic) -> None:
+    dominating = _guard_at(synthetic, 33, 7)
+    operands = _operands(dominating)
+    assert [(role, item["kind"], item["value"], item["text"]) for role, item in operands.items()] == [
+        ("lhs", "variable", None, "len"), ("rhs", "constant", 64, "64")]
+    for item in operands.values():
+        location = item["location"]
+        assert SOURCE_BYTES[location["start_byte"]:location["end_byte"]].decode() == item["text"]
+        assert location["path"] == TARGET_PATH
+    assert dominating.payload["result"]["destination"] == {"object_bytes": None}
+    assert "capacity_relation" not in dominating.payload["result"]
+    none = [fact for fact in _family(synthetic, "guard_fact") if fact.payload["result"]["guard_state"] == "none"]
+    assert all(fact.payload["result"]["comparison"] is None for fact in none)
+
+
+def test_a_macro_operand_reported_at_the_expansion_site_has_no_text_and_a_named_gap(synthetic) -> None:
+    macro = _guard_at(synthetic, 36, 7)
+    operands = _operands(macro)
+    assert operands["lhs"]["text"] == "len" and operands["rhs"]["text"] is None
+    assert (operands["rhs"]["kind"], operands["rhs"]["value"]) == ("constant", 64)
+    assert any(gap.startswith("operand_text_unavailable: rhs") for gap in macro.payload["gaps"])
+
+
+def test_destination_object_bytes_is_a_plain_fact_and_unknown_is_null() -> None:
+    exports = _exports()
+    rows = _rows(exports["guards"])
+    for row in rows:
+        if row["condition_start_line"] == 33 and row["guard_state"] == "dominating":
+            row["destination_object_bytes"] = 16
+    _set_rows(exports["guards"], rows)
+    result = _normalize(exports)
+    assert _guard_at(result, 33, 7).payload["result"]["destination"] == {"object_bytes": 16}
+    assert _guard_at(result, 36, 7).payload["result"]["destination"] == {"object_bytes": None}
+
+
+def test_operand_text_is_bounded_and_the_truncation_is_named(monkeypatch) -> None:
+    monkeypatch.setattr("appsec_review.graph.normalize.GUARD_OPERAND_TEXT_LIMIT", 2)
+    fact = _guard_at(_normalize(), 33, 7)
+    assert _operands(fact)["lhs"]["text"] == "le"
+    assert any(gap.startswith("operand_text_truncated: lhs") for gap in fact.payload["gaps"])
+
+
+@pytest.mark.parametrize("column,value", [("lhs_kind", "register"), ("rhs_kind", ""), ("rhs_value", "0x40"),
+                                          ("destination_object_bytes", -7)])
+def test_an_unknown_operand_vocabulary_or_size_is_not_published_and_named(column: str, value: Any) -> None:
+    exports = _exports()
+    rows = _rows(exports["guards"])
+    for row in rows:
+        if row["condition_start_line"] == 33 and row["guard_state"] == "dominating":
+            row[column] = value
+    _set_rows(exports["guards"], rows)
+    result = _normalize(exports)
+    assert not [fact for fact in _family(result, "guard_fact") if _at(fact) == (33, 7)
+                and fact.payload["result"]["guard_state"] == "dominating"]
+    assert any(gap.startswith("unknown_guard_vocabulary") for gap in result.coverage_for("guard_fact").gaps)
+
+
+def test_the_contract_rejects_an_unknown_kind_and_any_extra_key_on_an_operand(synthetic) -> None:
+    result = copy.deepcopy(dict(_guard_at(synthetic, 33, 7).payload["result"]))
+    c.validate_guard_result(result)
+    result["comparison"]["operands"][0]["kind"] = "register"
+    with pytest.raises(c.GraphContractError, match="closed vocabulary"):
+        c.validate_guard_result(result)
+    result["comparison"]["operands"][0]["kind"] = "variable"
+    result["comparison"]["operands"][0]["relation"] = "references_capacity"
+    with pytest.raises(c.GraphContractError, match="operand keys"):
+        c.validate_guard_result(result)
 
 
 def test_post_dominating_only_guard_never_becomes_dominating() -> None:

@@ -22,6 +22,7 @@
     "attack_chains",
     "remediation_inputs",
     "independence",
+    "judge_verdict",
     "ship_block",
     "gaps",
     "provenance"
@@ -154,7 +155,8 @@
       "required": [
         "independent",
         "provider_distinct",
-        "verifier_model_distinct"
+        "verifier_model_distinct",
+        "judge_model_distinct"
       ],
       "properties": {
         "independent": {
@@ -166,6 +168,13 @@
         "verifier_model_distinct": {
           "type": "boolean",
           "description": "Decision 2: the verifier's model profile (provider and model) differs from every red cell's on the claim. Never gates confirmation; ship-block-policy/1 requires it for ship_blocking."
+        },
+        "judge_model_distinct": {
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "description": "The judge's model profile differs from the configured roles' on the claim; null when no judge ran. Recorded, never required."
         }
       }
     },
@@ -190,6 +199,16 @@
           "$ref": "common.schema.json#/$defs/sha256"
         }
       }
+    },
+    "judge_verdict": {
+      "oneOf": [
+        {
+          "$ref": "common.schema.json#/$defs/finding_judge_verdict"
+        },
+        {
+          "type": "null"
+        }
+      ]
     }
   },
   "allOf": [
@@ -234,6 +253,7 @@
               "status": {
                 "enum": [
                   "needs_verification",
+                  "decision_pending",
                   "not_ship_blocking"
                 ]
               }
@@ -252,6 +272,7 @@
                 "enum": [
                   "ship_blocking",
                   "ship_blocking_pending_distinct_verification",
+                  "decision_pending",
                   "not_ship_blocking"
                 ]
               }
@@ -296,7 +317,8 @@
             "dependency_finding",
             "kev_dependency_qualifies",
             "distinct_verification_required",
-            "verifier_model_distinct"
+            "verifier_model_distinct",
+            "decision_input_missing"
           ],
           "properties": {
             "claim_confirmed": {
@@ -319,6 +341,9 @@
             },
             "verifier_model_distinct": {
               "type": "boolean"
+            },
+            "decision_input_missing": {
+              "type": "boolean"
             }
           }
         },
@@ -327,7 +352,7 @@
           "items": {
             "$ref": "common.schema.json#/$defs/token"
           },
-          "maxItems": 8,
+          "maxItems": 16,
           "uniqueItems": true
         },
         "inputs": {
@@ -353,11 +378,14 @@
               "required": [
                 "provider",
                 "rating",
-                "score_id"
+                "score_id",
+                "severity_floor",
+                "severity_ceiling",
+                "missing_factors"
               ],
               "properties": {
                 "provider": {
-                  "const": "application_risk_matrix/2"
+                  "const": "application_risk_matrix/3"
                 },
                 "rating": {
                   "enum": [
@@ -377,6 +405,32 @@
                       "type": "null"
                     }
                   ]
+                },
+                "severity_floor": {
+                  "enum": [
+                    "low",
+                    "medium",
+                    "high",
+                    "critical",
+                    null
+                  ]
+                },
+                "severity_ceiling": {
+                  "enum": [
+                    "low",
+                    "medium",
+                    "high",
+                    "critical",
+                    null
+                  ]
+                },
+                "missing_factors": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "common.schema.json#/$defs/token"
+                  },
+                  "maxItems": 32,
+                  "uniqueItems": true
                 }
               }
             },
@@ -527,6 +581,32 @@
                 "properties": {
                   "claim_state": {
                     "const": "supported"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "decision_pending"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "conditions": {
+                "properties": {
+                  "decision_input_missing": {
+                    "const": true
+                  },
+                  "technical_severity_qualifies": {
+                    "const": false
+                  },
+                  "kev_dependency_qualifies": {
+                    "const": false
                   }
                 }
               }

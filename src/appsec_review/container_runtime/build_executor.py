@@ -166,11 +166,15 @@ class BuildContainerExecutor:
     )
 
     def __init__(self, profile: BuildProfile, *, timeout_seconds: int, output_bytes: int,
-                 runner: Runner | None = None) -> None:
+                 runner: Runner | None = None, network: str = "bridge") -> None:
+        if network not in {"bridge", "none"}:
+            raise ValueError("build container network must be bridge or none")
         self.profile = profile
         self.timeout_seconds = timeout_seconds
         self.output_bytes = output_bytes
         self.runner = runner or _run
+        # Dependency downloads need egress; a job that only compiles already-fetched source asks for none.
+        self.network = network
 
     def resolve(self) -> None:
         code, stdout, _stderr, timed_out = self.runner(
@@ -229,7 +233,7 @@ class BuildContainerExecutor:
         bind_source = self._bind_source(root)
         runtime_user = application_runtime_user(self.profile.user)
         command = [
-            "docker", "run", "--rm", "--name", _container_name(), "--network", "bridge", "--read-only",
+            "docker", "run", "--rm", "--name", _container_name(), "--network", self.network, "--read-only",
             "--user", runtime_user, "--cap-drop", "ALL",
             "--security-opt", "no-new-privileges", "--cpus", "2", "--memory", "4g",
             "--pids-limit", "1024", "--tmpfs",

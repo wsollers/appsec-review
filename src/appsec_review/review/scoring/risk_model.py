@@ -1,10 +1,12 @@
-"""Declarative model behind ``application_risk_matrix/2``.
+"""Declarative model behind ``application_risk_matrix/3``.
 
 Two point dimensions and one lookup matrix, all configurable under
 ``jobs.job_inference_security_review.settings.scoring.providers.application_risk_matrix``:
 
-- ``exploitability``: points per factor value, summed over the present factors; the total maps to
-  ``low``/``medium``/``high`` at the ``bands`` thresholds. A missing factor contributes nothing.
+- ``exploitability``: points per factor value, summed over the factors. A missing factor is
+  unknown, not zero: the sum is an INTERVAL whose floor gives each missing factor its minimum
+  points and whose ceiling gives it its maximum. Both ends map to ``low``/``medium``/``high`` at
+  the ``bands`` thresholds, and the dimension has a rating only when both ends fall in one class.
 - ``environmental``: the same for exposure, privilege and data sensitivity. It is produced only
   when at least one of its factors is present; otherwise the dimension stays ``null``.
 - ``technical_severity``: impact class x exploitability rating -> severity band.
@@ -36,6 +38,33 @@ DIMENSION_FACTORS: Mapping[str, frozenset[FactorId]] = MappingProxyType({
 def _frozen(value: Mapping[Any, Any]) -> Mapping[Any, Any]:
     return MappingProxyType({key: _frozen(item) if isinstance(item, Mapping) else item
                              for key, item in sorted(value.items(), key=lambda pair: str(pair[0]))})
+
+
+@dataclass(frozen=True, slots=True)
+class PointInterval:
+    """``[floor, ceiling]`` points of one dimension, with the rating class at each end."""
+
+    known_points: int                          # points of the present factors alone
+    floor: int
+    ceiling: int
+    floor_rating: str
+    ceiling_rating: str
+    contributions: Mapping[str, int]           # present factors -> points
+    unknown: Mapping[str, tuple[int, int]]     # missing factor -> (minimum, maximum) points
+
+    @property
+    def complete(self) -> bool:
+        return not self.unknown
+
+    @property
+    def rating(self) -> str | None:
+        """The class when floor and ceiling agree; ``None`` (unrated) when missing factors could change it."""
+        return self.floor_rating if self.floor_rating == self.ceiling_rating else None
+
+    @property
+    def unresolved(self) -> tuple[str, ...]:
+        """Missing factors whose points range is non-empty, that is, those that widen the interval."""
+        return tuple(sorted(name for name, (low, high) in self.unknown.items() if low != high))
 
 
 @dataclass(frozen=True, slots=True)
@@ -91,16 +120,28 @@ class DimensionModel:
     def factors(self) -> frozenset[FactorId]:
         return frozenset(FactorId(item) for item in self.points)
 
-    def rate(self, factors: FactorSet) -> tuple[str, int, dict[str, int]]:
-        """Return ``(rating, total points, per-factor contributions)``; missing factors add nothing."""
-        contributions: dict[str, int] = {}
+    def classify(self, total: int) -> str:
+        return "high" if total >= self.bands["high"] else "medium" if total >= self.bands["medium"] else "low"
+
+    def interval(self, factors: FactorSet) -> "PointInterval":
+        """Points as an interval. A missing factor is unknown: its minimum goes into the floor and its
+        maximum into the ceiling (tables never decrease along a scale, so those are the first and last
+        values). Removing a factor can only lower the floor and raise the ceiling."""
+        known: dict[str, int] = {}
+        unknown: dict[str, tuple[int, int]] = {}
         for factor in sorted(self.factors, key=lambda item: item.value):
             present = factors.get(factor)
+            table = self.points[factor.value]
             if present is not None:
-                contributions[factor.value] = self.points[factor.value][present.value]
-        total = sum(contributions.values())
-        rating = "high" if total >= self.bands["high"] else "medium" if total >= self.bands["medium"] else "low"
-        return rating, total, contributions
+                known[factor.value] = table[present.value]
+            else:
+                scale = SCALES[factor]
+                unknown[factor.value] = (table[scale[0]], table[scale[-1]])
+        known_total = sum(known.values())
+        floor = known_total + sum(low for low, _ in unknown.values())
+        ceiling = known_total + sum(high for _, high in unknown.values())
+        return PointInterval(known_total, floor, ceiling, self.classify(floor), self.classify(ceiling),
+                             known, unknown)
 
     def present(self, factors: FactorSet) -> bool:
         return any(factors.get(factor) is not None for factor in self.factors)
@@ -186,4 +227,4 @@ DEFAULT_MODEL_DOCUMENT: Mapping[str, Any] = _frozen({
 DEFAULT_RISK_MODEL = RiskModel.from_document(DEFAULT_MODEL_DOCUMENT)
 
 __all__ = ["BANDS", "DEFAULT_MODEL_DOCUMENT", "DEFAULT_RISK_MODEL", "DIMENSION_FACTORS", "DimensionModel",
-           "RATINGS", "RiskModel"]
+           "PointInterval", "RATINGS", "RiskModel"]

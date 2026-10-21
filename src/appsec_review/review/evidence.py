@@ -5,7 +5,12 @@ cited logical identity has been re-resolved against the accepted manifest. Anyth
 resolved becomes an ``evidence_gap``; truncated or incomplete resolution is recorded with
 ``complete=False`` and can never satisfy an obligation.
 
-``evidence-admissibility/2`` adds the graph-fact branch (docs/architecture/code-graph-precomputation.md
+``evidence-admissibility/3`` changes one mapping of the graph-fact branch added in ``/2``: a ``dominating`` guard or
+a bounded range recorded as ``contradicts`` on ``missing_or_ineffective_guard`` stands only when
+:mod:`appsec_review.graph.bounds` shows from the exported facts that it bounds the destination and the citing role is
+blue, verifier or judge; otherwise the relation is recorded as ``qualifies`` and carries the reason.
+
+``evidence-admissibility/2`` added the graph-fact branch (docs/architecture/code-graph-precomputation.md
 section 6): a cited ``call_site``, ``sink_site``, ``entry_point``, ``dataflow_path``, ``guard_fact`` or
 ``range_fact`` is ``DIRECT_FOR_MAPPED_PREDICATE`` only for the predicates ``graph-fact-predicates/1``
 maps for its family (after the family's source-class condition), and only when the payload of the
@@ -22,6 +27,7 @@ from appsec_review.graph.contract import (
     ADMISSIBILITY_RULE as GRAPH_FACT_ADMISSIBILITY_RULE, FAMILY_KINDS, GRAPH_FACT_SCHEMA, Family,
     ineligibility_reasons, mapped_predicates,
 )
+from appsec_review.graph.bounds import fact_bounds_destination, sink_destination_bytes
 from appsec_review.retrieval.core import RetrievalCore
 from appsec_review.retrieval.model import EntityKind, LogicalIdentity
 from appsec_review.review.identity import make_id, sha256_hex
@@ -72,6 +78,13 @@ _EVIDENCE_BEARING = frozenset({EntityKind.TOOL_OBSERVATION, EntityKind.EVIDENCE_
 if admission.ADMITTED_KINDS != DIRECT_KINDS:     # the table must cover exactly the kinds classify() sends to it
     raise ImportError("predicate-admission table and DIRECT_KINDS differ")
 
+# R3 (evidence-admissibility/3): roles that may contradict ``missing_or_ineffective_guard`` with a graph fact.
+# Red's counterevidence is always ``qualifies``.
+GUARD_CONTRADICTION_ROLES: frozenset[str] = frozenset({"blue_team_refuter", "independent_verifier", "judge"})
+_GUARD_KINDS = frozenset({EntityKind.GUARD_FACT, EntityKind.RANGE_FACT})
+NOT_BOUNDING_REASON = "guard_not_shown_to_bound_destination"
+MAX_RELATION_REASON = 200
+
 
 def graph_fact_predicates(entity_kind: EntityKind | str, fact_payload: Mapping[str, Any] | None
                           ) -> frozenset[Predicate]:
@@ -101,7 +114,7 @@ def graph_fact_predicates(entity_kind: EntityKind | str, fact_payload: Mapping[s
 def classify(entity_kind: EntityKind | str, predicate: Predicate,
              tool_rule_mapping: Collection[Predicate] = (),
              fact_payload: Mapping[str, Any] | None = None) -> Admissibility:
-    """Classify a cited entity for ``predicate`` per the R3 table (``evidence-admissibility/2``).
+    """Classify a cited entity for ``predicate`` per the R3 table (``evidence-admissibility/3``).
 
     ``tool_rule_mapping`` is the set of predicates the producing rule's versioned mapping names for
     a ``tool_observation``; it is ignored for every other kind. ``fact_payload`` is the payload of a
@@ -121,6 +134,45 @@ def classify(entity_kind: EntityKind | str, predicate: Predicate,
         return (Admissibility.DIRECT_FOR_MAPPED_PREDICATE if predicate in graph_fact_predicates(kind, fact_payload)
                 else Admissibility.INDIRECT)
     return Admissibility.INDIRECT
+
+
+def _sink_destination(core: RetrievalCore, sink: Any) -> int | None:
+    """The destination size the accepted guard facts of ``sink`` agree on, else ``None`` (fail closed)."""
+    if not isinstance(sink, str) or not sink:
+        return None
+    try:
+        limit = min(100, core.limits.max_results)
+        related = core.trace(identity=sink, relations=("GUARDS",), depth=1, limit=limit)
+        results = []
+        for row in related["results"]:
+            if row.get("target_id") != sink or row.get("source_id") is None:
+                continue
+            found = core.find(identity=row["source_id"], limit=1)["results"]
+            payload = found[0].get("payload") if found and found[0].get("kind") == EntityKind.GUARD_FACT.value else None
+            if isinstance(payload, Mapping) and isinstance(payload.get("result"), Mapping):
+                results.append(payload["result"])
+    except Exception:  # noqa: BLE001 - an unreadable lookup means "not shown", never a contradiction
+        return None
+    return sink_destination_bytes(results)
+
+
+def guard_relation_kind(core: RetrievalCore, entity_kind: EntityKind, payload: Mapping[str, Any] | None,
+                        role: str | None) -> tuple[RelationKind, str | None]:
+    """The kind recorded for a direct ``contradicts`` citation of a guard or range fact (``evidence-admissibility/3``).
+
+    ``contradicts`` stands only when the exported facts show the fact bounds its destination and ``role`` may
+    contradict; otherwise ``qualifies`` with the reason. The decision never reads model text.
+    """
+    result = payload.get("result") if isinstance(payload, Mapping) else None
+    sink = result.get("sink", {}).get("sink_site") if isinstance(result, Mapping) and isinstance(
+        result.get("sink"), Mapping) else None
+    destination = _sink_destination(core, sink) if entity_kind is EntityKind.RANGE_FACT else None
+    bound = fact_bounds_destination(entity_kind.value, result if isinstance(result, Mapping) else None, destination)
+    if not bound.bounds:
+        return RelationKind.QUALIFIES, f"{NOT_BOUNDING_REASON}:{bound.reason}"[:MAX_RELATION_REASON]
+    if role not in GUARD_CONTRADICTION_ROLES:
+        return RelationKind.QUALIFIES, f"contradiction_role_not_permitted:{role}"[:MAX_RELATION_REASON]
+    return RelationKind.CONTRADICTS, None
 
 
 def satisfies(relation: EvidenceRelation) -> bool:
@@ -145,8 +197,12 @@ def _locator(entity: Mapping[str, Any]) -> str:
 
 def resolve_relation(core: RetrievalCore, *, claim_id: str, predicate: Predicate, kind: RelationKind,
                      entity_id: str, producing_cell_id: str, retrieval_receipt_sha256: str | None,
-                     rule_predicates: Iterable[Predicate] = (), round: int = 0) -> EvidenceRelation | Gap:
-    """Re-resolve one citation against the accepted manifest and return a relation or gap."""
+                     rule_predicates: Iterable[Predicate] = (), round: int = 0,
+                     role: str | None = None) -> EvidenceRelation | Gap:
+    """Re-resolve one citation against the accepted manifest and return a relation or gap.
+
+    ``role`` is the citing cell's role value; it only matters for a ``contradicts`` citation of a guard or range fact.
+    """
     predicate = Predicate(predicate)
     kind = RelationKind(kind)
     if kind not in EVIDENCE_RELATION_KINDS:
@@ -187,6 +243,10 @@ def resolve_relation(core: RetrievalCore, *, claim_id: str, predicate: Predicate
     payload = entity.get("payload") if parsed.kind in GRAPH_KINDS else None
     admissibility = classify(parsed.kind, predicate, tuple(rule_predicates),
                              payload if isinstance(payload, Mapping) else None)
+    reason: str | None = None
+    if (kind is RelationKind.CONTRADICTS and predicate is Predicate.MISSING_OR_INEFFECTIVE_GUARD
+            and parsed.kind in _GUARD_KINDS and admissibility is Admissibility.DIRECT_FOR_MAPPED_PREDICATE):
+        kind, reason = guard_relation_kind(core, parsed.kind, payload if isinstance(payload, Mapping) else None, role)
     body = {
         "claim_id": claim_id, "predicate": predicate.value, "kind": kind.value, "entity_id": parsed.value,
         "entity_kind": parsed.kind.value, "admissibility": admissibility.value, "shard_id": shard_id,
@@ -195,9 +255,11 @@ def resolve_relation(core: RetrievalCore, *, claim_id: str, predicate: Predicate
         "manifest_sha256": core.manifest_sha256, "admissibility_rules": ADMISSIBILITY_RULES_VERSION,
         "predicate_admission": admission.VERSION,
     }
+    if reason is not None:
+        body["reason"] = reason
     return EvidenceRelation(
         relation_id=make_id("evidence_relation", 1, body), claim_id=claim_id, predicate=predicate, kind=kind,
         entity_id=parsed.value, entity_kind=parsed.kind.value, admissibility=admissibility,
         shard_id=shard_id, content_sha256=content_sha256, locator=locator, complete=complete,
-        producing_cell_id=producing_cell_id, retrieval_receipt_sha256=retrieval_receipt_sha256,
+        producing_cell_id=producing_cell_id, retrieval_receipt_sha256=retrieval_receipt_sha256, reason=reason,
     )

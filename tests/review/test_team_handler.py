@@ -325,7 +325,7 @@ def test_rerunning_a_team_reuses_every_succeeded_cell(prepared) -> None:
     recording = Recording(prepared.infer)
     again = run_team(prepared.context(recording, attempt="b"), prepared.work("lead", "sast_critical"), launch=True)
     assert not recording.requests
-    assert again.counts["cells_reused"] == len(first.cells) == 6
+    assert again.counts["cells_reused"] == len(first.cells) == 7          # 3 red, 2 blue, verifier, judge
     assert again.cells == first.cells and again.relations == first.relations
     assert again.independence == first.independence
 

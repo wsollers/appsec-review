@@ -203,6 +203,7 @@ produces its final artifacts; per-job parity shows each job behaves the same thr
 | Model contract | a model-backed job sent a request the accepted run did not, or a request never got a complete response (below) |
 | Baselines | the normalized output of a job differs from `test/acceptance/<tag>/<job>.json` (`stepwise.py compare`) |
 | Answer key | a defect in `test/acceptance/<tag>/expectations.toml` has no finding on its file and line. Spurious findings are reported and never fail |
+| Funnel | never: the per-defect funnel (below) is printed and written to the report, and does not change the verdict |
 
 The live test is `tests/live/test_wave1_system_live.py`, skipped unless `APPSEC_REVIEW_SYSTEM_ACCEPTANCE=<tag>`
 is set. It needs the Dagster stack running, the Docker daemon, the Claude CLI overlay and the real model.
@@ -229,6 +230,79 @@ Two things the checks do not do, found by running them:
   compared with its baseline, but those differences are reported as attributable to the model and do not
   fail the run; every other job is compared strictly. Baselines are re-normalized with the current masks
   on both sides before comparing, so adding a mask does not require re-accepting a corpus.
+
+## Funnel: where each seeded defect stopped
+
+The answer key says whether the deterministic producers *observed* a seeded defect. It cannot say why a
+defect that was observed never became a finding. `appsec_review.acceptance.funnel` follows every defect of
+the key through the model-backed review and reports, from run artifacts only, the last stage it reached and
+the specific reason it stopped. It is read-only on the run directory and deterministic.
+
+`stepwise.py system` prints one line per defect and four aggregate lines after the answer-key lines, and
+writes the same data under a new `funnel` key of `runs/metadata/stepwise/system/<run>-<tag>.json`. The same
+report is available for any finished run:
+
+```text
+python -m appsec_review.acceptance.funnel --run <run dir or run id> [--expectations <toml>] [--json]
+```
+
+**Asserted versus reported.** `available` and `observed` are the deterministic stages the answer key already
+asserts for deterministic producers (a miss there stays a failure, unchanged). Every later stage depends on a
+model and is **reported, never asserted**: the funnel cannot change `SYSTEM OK` / `SYSTEM FAILED`, and a
+failure to build it is printed and recorded, not raised. A funnel that stops at `reviewed` is a statement about
+the model run, not a regression.
+
+| Stage | Reached when |
+| --- | --- |
+| `available` | the file is in the run's accepted source catalog (`data/indices/source`) |
+| `observed` | a tool observation lies on the defect's lines; the producers are listed |
+| `selected` | an inference package (lead or hunt) whose lead menu has an entry on the lines is in a lane queue |
+| `reviewed` | a red cell (`red_team_analyst`, `hypothesis_hunter`) of that package has a terminal record other than `not_launched`; the status counts and dominant gap class are recorded |
+| `retrieved` | those cells' receipts record executed retrievals that returned rows (count and tools recorded; denied lookups are not rows) |
+| `proposed` | a claim whose affected entity lies on the lines exists (ledger `claim_proposed`, or the published projection) |
+| `challenged` | a blue cell recorded a disposition on the claim |
+| `judged` | a `judge_verdict` ledger event (or judge cell result) exists for the claim |
+| `verified` | the independent verifier recorded a disposition |
+| `adjudicated` | the claim left the `proposed` state |
+| `published` | the claim is in the final report's findings, verification backlog or withheld bucket; its ship-block status is reported |
+
+A stage the run has no mechanism for at all is `not_applicable_in_this_run` (for example blue cells or a judge
+in a run of the older protocol) and does not stop the chain. The judge is advisory: when a judge exists in the
+run but did not rule on this claim, `judged` is `not_reached` and the chain continues. When several claims land
+on one defect, the claim that got furthest (then the strongest state, then the smallest id) represents it, and
+all claim ids and states are listed.
+
+`stopped_because` is a machine-readable code, optionally with a `:detail` suffix, and a sentence:
+
+| Code | Meaning |
+| --- | --- |
+| `file_not_in_catalog`, `no_tool_observation_at_location` | stopped at `available` / `observed` |
+| `inference_review_absent` | the run has no inference review to follow |
+| `no_lead_at_location` | no package lead lies on the lines, so nothing could be reviewed |
+| `package_not_selected_cap` | a review package covers the lines but the inference job assembled none for it |
+| `package_not_selected_lead_cap`, `package_not_selected_hunt_cap` | an inference package covers the lines but never entered that lane's queue |
+| `red_not_launched` | the admitted package's red cells were never launched |
+| `red_cells_<status>:<gap class>` | no red cell succeeded; the dominant terminal status and gap class (`red_cells_invalid:schema_error`, `red_cells_timed_out:budget_gap`) |
+| `retrieval_all_denied:<code>`, `retrieval_empty`, `retrieval_not_attempted` | stopped at `retrieved`: every lookup denied (dominant denial code), lookups returned nothing, or none was made |
+| `red_no_claim` | red cells succeeded and retrieved but proposed no claim on the lines |
+| `blue_not_run`, `blue_cells_not_succeeded`, `verifier_not_run`, `verifier_cells_not_succeeded` | the stage exists in the run but not for this claim |
+| `claim_not_adjudicated` | the claim is still `proposed` |
+| `claim_contradicted_by_blue`, `claim_contradicted_by_verifier`, `judge_sided_with_blue`, `verifier_insufficient_evidence`, `claim_contradicted`, `claim_insufficient_evidence`, `claim_not_reachable`, `claim_not_exploitable`, `claim_duplicate`, `claim_out_of_scope`, `claim_coverage_gap` | the claim ended in that state, with the verdict that explains it taken first from the judge, then blue, then the verifier |
+| `final_report_absent`, `not_in_final_report` | the claim is `supported` or `confirmed` but did not reach the report |
+| `published_confirmed`, `claim_supported_not_confirmed`, `published_withheld` | published as a finding, in the unconfirmed verification backlog, or withheld |
+
+How to read it: take the defect's `stopped_because` first; it names the stage to look at. `red_cells_*` and
+`retrieval_*` point at the cells (the aggregate shows first-attempt parse rate, retrieval denials by code,
+cells by terminal status, calls per cell and claims by state, all from the run's recordings, cell receipts
+and ledger). `no_lead_at_location` points at lead generation, not the model. A defect that reaches
+`published` with a judge verdict of `blue_correct` is published with a note, never hidden.
+
+What the funnel cannot see: it links a claim to a defect only through the claim's resolvable affected
+entities; a claim on an entity with no indexed location is counted in the aggregate but linked to no defect.
+Hunt units are matched through the lead menu entries of their package, not through unit scope. `judge_verdict`
+event fields follow `docs/architecture/review-judge-and-poc.md`; until a run records them, `judged` is
+`not_reached` or `not_applicable_in_this_run`. The funnel is not evidence about the target: a defect that
+stops early says the review did not look, never that the code is clean.
 
 Operating notes: recreate the stack with `docker compose -f compose.yaml -f compose.claude.yaml up -d`, never
 `compose.yaml` alone. A local run that consumes a hash recorded inside the container (the retrieval

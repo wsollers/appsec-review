@@ -74,6 +74,9 @@
           "type": "null"
         }
       ]
+    },
+    "side_map": {
+      "$ref": "common.schema.json#/$defs/side_map"
     }
   },
   "allOf": [
@@ -113,6 +116,27 @@
           "gap_ids": {
             "minItems": 1
           }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "role": {
+            "const": "adjudication_judge"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "side_map"
+        ]
+      },
+      "else": {
+        "not": {
+          "required": [
+            "side_map"
+          ]
         }
       }
     }

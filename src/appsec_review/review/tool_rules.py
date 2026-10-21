@@ -21,6 +21,8 @@ predicate. (Each family below ends with a catch-all row that names its own narro
 | ``ci_rule`` | any | any | any | ``affected_construct``, ``configuration_enables`` |
 | ``post_build_hardening`` | any | any | any | ``affected_construct``, ``configuration_enables`` |
 | ``owasp_control`` | any | any | any | ``missing_or_ineffective_guard`` |
+| ``secret`` | any | any | any | ``affected_construct`` |
+| ``config_scanner`` | any | any | any | ``affected_construct`` |
 | anything else | | | | none |
 
 A ``codeql`` lead whose scanner identity is not ``codeql`` matches no codeql row and gets none.
@@ -61,6 +63,8 @@ RULES: tuple[RuleRow, ...] = (
     RuleRow("ci_rule", ANY, ANY, ANY, (_P.AFFECTED_CONSTRUCT, _P.CONFIGURATION_ENABLES)),
     RuleRow("post_build_hardening", ANY, ANY, ANY, (_P.AFFECTED_CONSTRUCT, _P.CONFIGURATION_ENABLES)),
     RuleRow("owasp_control", ANY, ANY, ANY, (_P.MISSING_OR_INEFFECTIVE_GUARD,)),
+    RuleRow("secret", ANY, ANY, ANY, (_P.AFFECTED_CONSTRUCT,)),
+    RuleRow("config_scanner", ANY, ANY, ANY, (_P.AFFECTED_CONSTRUCT,)),
 )
 
 

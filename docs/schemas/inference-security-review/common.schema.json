@@ -102,7 +102,8 @@
         "poc_verifier",
         "attack_chain_analyst",
         "finding_adjudicator",
-        "completeness_reviewer"
+        "completeness_reviewer",
+        "adjudication_judge"
       ]
     },
     "blue_task": {
@@ -235,7 +236,8 @@
         "duplicate_marked",
         "state_transition",
         "gap_recorded",
-        "cell_terminal"
+        "cell_terminal",
+        "judge_verdict"
       ]
     },
     "evidence_request_outcome": {
@@ -711,6 +713,7 @@
         "ship_blocking",
         "ship_blocking_pending_distinct_verification",
         "needs_verification",
+        "decision_pending",
         "not_ship_blocking"
       ],
       "description": "ship-block-policy/1 status of a finding package."
@@ -722,6 +725,7 @@
         "ship_blocking",
         "ship_blocking_pending_distinct_verification",
         "needs_verification",
+        "decision_pending",
         "not_ship_blocking"
       ],
       "properties": {
@@ -734,6 +738,10 @@
           "minimum": 0
         },
         "needs_verification": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "decision_pending": {
           "type": "integer",
           "minimum": 0
         },
@@ -853,6 +861,343 @@
       "type": "string",
       "minLength": 1,
       "maxLength": 240
+    },
+    "judge_verdict_id": {
+      "type": "string",
+      "pattern": "^judge-[0-9a-f]{64}$"
+    },
+    "judge_side": {
+      "enum": [
+        "A",
+        "B",
+        "both",
+        "neither",
+        "unresolved"
+      ],
+      "description": "A judge's choice in the order the request showed the sides; the application de-shuffles it."
+    },
+    "judge_outcome": {
+      "enum": [
+        "red_correct",
+        "blue_correct",
+        "partly",
+        "neither",
+        "unresolved"
+      ],
+      "description": "A judge's de-shuffled verdict. It is a proposal and a routing signal and never sets a claim state."
+    },
+    "compact_judge_position": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "verdict",
+        "cites"
+      ],
+      "properties": {
+        "verdict": {
+          "$ref": "#/$defs/judge_side"
+        },
+        "cites": {
+          "$ref": "#/$defs/labels"
+        },
+        "why": {
+          "$ref": "#/$defs/compact_why"
+        }
+      }
+    },
+    "compact_judge_per_predicate": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "affected_construct": {
+          "$ref": "#/$defs/compact_judge_position"
+        },
+        "attacker_input_control": {
+          "$ref": "#/$defs/compact_judge_position"
+        },
+        "source_to_sink_reachability": {
+          "$ref": "#/$defs/compact_judge_position"
+        },
+        "missing_or_ineffective_guard": {
+          "$ref": "#/$defs/compact_judge_position"
+        },
+        "configuration_enables": {
+          "$ref": "#/$defs/compact_judge_position"
+        },
+        "security_impact": {
+          "$ref": "#/$defs/compact_judge_position"
+        }
+      }
+    },
+    "judge_predicate_verdicts": {
+      "type": "array",
+      "maxItems": 6,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "predicate",
+          "verdict",
+          "cites"
+        ],
+        "properties": {
+          "predicate": {
+            "$ref": "#/$defs/predicate"
+          },
+          "verdict": {
+            "$ref": "#/$defs/judge_outcome"
+          },
+          "cites": {
+            "type": "array",
+            "maxItems": 64,
+            "uniqueItems": true,
+            "items": {
+              "$ref": "#/$defs/entity_id"
+            }
+          }
+        }
+      }
+    },
+    "judge_verdict_record": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "verdict_id",
+        "claim_id",
+        "verdict",
+        "per_predicate",
+        "citations",
+        "reason",
+        "cell_id",
+        "judge_model_distinct"
+      ],
+      "properties": {
+        "verdict_id": {
+          "$ref": "#/$defs/judge_verdict_id"
+        },
+        "claim_id": {
+          "$ref": "#/$defs/claim_id"
+        },
+        "verdict": {
+          "$ref": "#/$defs/judge_outcome"
+        },
+        "per_predicate": {
+          "$ref": "#/$defs/judge_predicate_verdicts"
+        },
+        "citations": {
+          "type": "array",
+          "maxItems": 384,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/entity_id"
+          }
+        },
+        "reason": {
+          "$ref": "#/$defs/text"
+        },
+        "cell_id": {
+          "$ref": "#/$defs/cell_id"
+        },
+        "judge_model_distinct": {
+          "type": "boolean"
+        }
+      }
+    },
+    "side_map": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "A",
+        "B"
+      ],
+      "description": "Judge cells only: the role behind each side of the judge's request. Never in the request itself.",
+      "properties": {
+        "A": {
+          "enum": [
+            "red",
+            "blue"
+          ]
+        },
+        "B": {
+          "enum": [
+            "red",
+            "blue"
+          ]
+        }
+      }
+    },
+    "judge_accounting": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "by_outcome",
+        "model_distinct",
+        "not_model_distinct"
+      ],
+      "description": "Judge verdicts in the ledger by de-shuffled outcome, and how many were produced by a model profile distinct from the configured roles (judge_model_distinct).",
+      "properties": {
+        "by_outcome": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "red_correct",
+            "blue_correct",
+            "partly",
+            "neither",
+            "unresolved"
+          ],
+          "properties": {
+            "red_correct": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "blue_correct": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "partly": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "neither": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "unresolved": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        "model_distinct": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "not_model_distinct": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "finding_judge_verdict": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "verdict",
+        "disagrees_with_state",
+        "judges"
+      ],
+      "description": "The judge verdicts on the claim. verdict is the unanimous outcome of the judges, else unresolved; disagrees_with_state is true when the judge sided against the published finding.",
+      "properties": {
+        "verdict": {
+          "$ref": "#/$defs/judge_outcome"
+        },
+        "disagrees_with_state": {
+          "type": "boolean"
+        },
+        "judges": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 8,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "verdict_id",
+              "verdict",
+              "cell_id",
+              "judge_model_distinct",
+              "reason"
+            ],
+            "properties": {
+              "verdict_id": {
+                "$ref": "#/$defs/judge_verdict_id"
+              },
+              "verdict": {
+                "$ref": "#/$defs/judge_outcome"
+              },
+              "cell_id": {
+                "$ref": "#/$defs/cell_id"
+              },
+              "judge_model_distinct": {
+                "type": "boolean"
+              },
+              "reason": {
+                "$ref": "#/$defs/text"
+              }
+            }
+          }
+        }
+      }
+    },
+    "poc_candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "claim_id",
+        "package_id",
+        "state",
+        "judge_verdict",
+        "poc_basis",
+        "finding_package",
+        "evidence_refs"
+      ],
+      "description": "A claim a later job may build a proof-of-concept function for (review-judge-and-poc.md section 4).",
+      "properties": {
+        "claim_id": {
+          "$ref": "#/$defs/claim_id"
+        },
+        "package_id": {
+          "$ref": "#/$defs/package_id"
+        },
+        "state": {
+          "enum": [
+            "confirmed",
+            "supported"
+          ]
+        },
+        "judge_verdict": {
+          "enum": [
+            "red_correct",
+            "partly"
+          ]
+        },
+        "poc_basis": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "sha256",
+            "brief"
+          ],
+          "properties": {
+            "sha256": {
+              "$ref": "#/$defs/sha256"
+            },
+            "brief": {
+              "$ref": "red-discovery-result.schema.json#/$defs/poc_basis"
+            }
+          }
+        },
+        "finding_package": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "finding_package_id",
+            "sha256"
+          ],
+          "properties": {
+            "finding_package_id": {
+              "$ref": "#/$defs/finding_package_id"
+            },
+            "sha256": {
+              "$ref": "#/$defs/sha256"
+            }
+          }
+        },
+        "evidence_refs": {
+          "$ref": "#/$defs/relation_ids"
+        }
+      }
     }
   }
 }

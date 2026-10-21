@@ -19,7 +19,9 @@ QUERY_CODE_GRAPH = "query_code_graph"
 GRAPH_FACT_SCHEMA = "appsec-review/graph-fact/1"
 EXPORT_SCHEMA = "appsec-review/codeql-graph-export/1"
 CATALOG_SCHEMA = "appsec-review/graph-catalog/1"
-NORMALIZE_RULE = "graph-normalize/1"
+# /2: a guard_fact result records the compared operands and the destination object size as facts
+# (export columns lhs_*, rhs_*, destination_object_bytes); no guard-to-sink relation is judged.
+NORMALIZE_RULE = "graph-normalize/2"
 CROSS_CHECK_RULE = "graph-cross-check/1"
 ADMISSIBILITY_RULE = "graph-fact-admissibility/1"
 FACT_PREDICATES_RULE = "graph-fact-predicates/1"
@@ -97,6 +99,21 @@ class GuardPolarity(StrEnum):
     TRUE_BRANCH = "true_branch"
     FALSE_BRANCH = "false_branch"
     UNKNOWN = "unknown"
+
+
+class GuardOperandKind(StrEnum):
+    """The closed kind of a compared operand (export columns ``lhs_kind`` and ``rhs_kind``)."""
+
+    VARIABLE = "variable"
+    FIELD = "field"
+    CONSTANT = "constant"
+    SIZEOF = "sizeof"
+    CALL = "call"
+    OTHER = "other"
+
+
+GUARD_OPERAND_ROLES = ("lhs", "rhs")
+GUARD_OPERAND_TEXT_LIMIT = 200
 
 
 class CrossCheckState(StrEnum):
@@ -263,6 +280,42 @@ def admissibility(payload: Mapping[str, Any]) -> dict[str, Any]:
     return {"rule": ADMISSIBILITY_RULE, "direct_eligible": not reasons, "ineligibility_reasons": list(reasons)}
 
 
+def validate_guard_result(result: Mapping[str, Any]) -> None:
+    """Check the CodeQL-export ``guard_fact`` result: compared operands and the destination object size.
+
+    ``comparison`` is ``None`` for a guard that is not a comparison, else it names the operator, the
+    bound display and exactly the ``lhs`` and ``rhs`` operands; every kind
+    comes from its closed vocabulary, so an unknown value is rejected, never passed through.
+    """
+    comparison = result.get("comparison")
+    if comparison is not None:
+        _require(isinstance(comparison, Mapping) and set(comparison) == {"operator", "bound_display", "operands"},
+                 "guard comparison must name operator, bound_display and operands")
+        operands = comparison["operands"]
+        _require(isinstance(operands, list) and [item.get("role") if isinstance(item, Mapping) else None
+                                                 for item in operands] == list(GUARD_OPERAND_ROLES),
+                 "guard comparison operands must be exactly lhs then rhs")
+        for item in operands:
+            _require(set(item) == {"role", "kind", "value", "text", "location"}, "guard operand keys are invalid")
+            _require(item["kind"] in {kind.value for kind in GuardOperandKind}, "guard operand kind is not in the "
+                                                                              "closed vocabulary")
+            value = item["value"]
+            _require(value is None or (isinstance(value, int) and not isinstance(value, bool)),
+                     "guard operand value must be an integer or null")
+            text = item["text"]
+            _require(text is None or (isinstance(text, str) and len(text) <= GUARD_OPERAND_TEXT_LIMIT),
+                     f"guard operand text must be null or at most {GUARD_OPERAND_TEXT_LIMIT} characters")
+            _require(item["location"] is None or isinstance(item["location"], Mapping),
+                     "guard operand location must be a source location or null")
+    destination = result.get("destination")
+    _require(isinstance(destination, Mapping) and set(destination) == {"object_bytes"},
+             "guard destination must name object_bytes")
+    object_bytes = destination["object_bytes"]
+    _require(object_bytes is None or (isinstance(object_bytes, int) and not isinstance(object_bytes, bool)
+                             and object_bytes > 0),
+             "guard destination object_bytes must be a positive integer or null")
+
+
 def validate_payload(payload: Mapping[str, Any]) -> None:
     """Check the closed graph-fact/1 shape and that the published admissibility is the computed one."""
     _require(set(payload) == PAYLOAD_KEYS, f"graph fact payload keys must be exactly {sorted(PAYLOAD_KEYS)}")
@@ -285,6 +338,8 @@ def validate_payload(payload: Mapping[str, Any]) -> None:
              and cross_check["rule"] == CROSS_CHECK_RULE, "graph fact cross_check is invalid")
     CrossCheckState(cross_check["state"])
     _require(isinstance(payload["result"], Mapping), "graph fact result must be an object")
+    if payload["family"] == Family.GUARD_FACT.value and producer["name"] == Producer.CODEQL_EXPORT.value:
+        validate_guard_result(payload["result"])
     _require(isinstance(payload["upstream"], list) and all(
         isinstance(item, Mapping) and set(item) == {"index", "shard_id", "sha256"} and _SHA256.fullmatch(
             str(item["sha256"])) for item in payload["upstream"]), "graph fact upstream entries are invalid")

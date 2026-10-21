@@ -44,6 +44,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from appsec_review.acceptance.answer_key import evaluate, load_answer_key, observations_from_run  # noqa: E402
 from appsec_review.acceptance.audit import audit_job_writes, summarize  # noqa: E402
 from appsec_review.acceptance.content import content_differences  # noqa: E402
+from appsec_review.acceptance import funnel as funnel_report  # noqa: E402
 from appsec_review.acceptance.diff import CLASSES, classify_environment, diff_job_outputs, failing  # noqa: E402
 from appsec_review.acceptance.integrity import attempt_integrity  # noqa: E402
 from appsec_review.acceptance import model_contract  # noqa: E402
@@ -420,12 +421,13 @@ def command_model_contract(args) -> int:
     calls = [call for directory in args.sources for call in model_contract.load_calls(Path(directory))]
     if not calls:
         raise StateError("no recorded model calls under the given directories")
-    document = model_contract.baseline_document(calls, masks, run_id=provenance["application_run_id"])
+    profile = model_contract.run_profile(ROOT / "runs" / provenance["application_run_id"])
+    document = model_contract.baseline_document(calls, masks, run_id=provenance["application_run_id"], profile=profile)
     destination = key_root / "model-contract.json"
     destination.write_text(json.dumps(document, indent=1, sort_keys=True) + "\n", encoding="utf-8")
     for job, entry in document["jobs"].items():
         print(f"   {job}: {len(entry['requests'])} request(s), {len(entry['responses'])} valid response(s)")
-    print(f"model contract -> {relative(destination)}")
+    print(f"model contract (profile {profile}) -> {relative(destination)}")
     return 0
 
 
@@ -471,8 +473,11 @@ def command_system(args) -> int:
     skipped: set[str] = set()
     if contract_file.is_file():
         run_masks = Masks.for_run(app_run_id)
+        run_profile = model_contract.run_profile(run_root)
+        print(f"   model-contract profile: run={run_profile}")
         contract = model_contract.check(json.loads(contract_file.read_text(encoding="utf-8")),
-                                        model_contract.load_calls(run_root / model_contract.RECORDINGS), run_masks, ROOT)
+                                        model_contract.load_calls(run_root / model_contract.RECORDINGS), run_masks, ROOT,
+                                        profile=run_profile)
         skipped = model_contract.tainted_jobs(contract.response_changed, topology["jobs"])
         for line in [*contract.input_problems, *contract.response_problems]:
             print(f"   model-contract {line}")
@@ -490,6 +495,15 @@ def command_system(args) -> int:
         seen = ",".join(matrix.producers_seen.get(defect.id, ())) or "-"
         print(f"   answer-key {state} {defect.id} {defect.path}:{defect.line} producers_seen={seen}")
     print(f"answer key found={len(matrix.found)} missed={len(matrix.missed)} spurious={matrix.spurious}")
+    # The model-dependent funnel is reported, never asserted: it cannot change the verdict.
+    try:
+        funnel = funnel_report.evaluate_funnel(run_root, defects)
+        for line in funnel_report.render_lines(funnel):
+            print(line)
+        funnel_section = funnel.as_dict()
+    except Exception as error:  # noqa: BLE001 - a report that cannot be built must not fail the run
+        print(f"   funnel unavailable: {type(error).__name__}: {error}")
+        funnel_section = {"error": f"{type(error).__name__}: {error}"}
 
     verdict = ("SYSTEM OK" if not failing(problems) and compared == 0 and not matrix.failed and not contract.failed
                else "SYSTEM FAILED")
@@ -499,7 +513,7 @@ def command_system(args) -> int:
         "verdict": verdict, "application_run_id": app_run_id, "corpus_tag": tag,
         "repository_commit": git("rev-parse", "HEAD", cwd=ROOT), "integrity": [item.as_dict() for item in problems],
         "baseline_compare_exit": compared, "model_contract": contract.as_dict(),
-        "answer_key": matrix.as_dict()}, indent=1) + "\n", encoding="utf-8")
+        "answer_key": matrix.as_dict(), "funnel": funnel_section}, indent=1) + "\n", encoding="utf-8")
     print(f"== {verdict}; report {report.relative_to(ROOT)}")
     return 0 if verdict == "SYSTEM OK" else 1
 

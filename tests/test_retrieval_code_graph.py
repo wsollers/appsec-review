@@ -158,7 +158,8 @@ def build_graph_run(tmp_path: Path, *, omit: Iterable[str] = (),
         return _fact(c.Family.GUARD_FACT, native, f"guard-{state}", {
             "sink": {"sink_site": ids["sink_memcpy"]}, "guard_state": state, "polarity": "true_branch",
             "condition": {"display": "n < 8", "location": {"path": "src/net.c", "start_line": 3}},
-            "constrains_sink_operand": True, "comparison": None}, at(3, start, start + 3))
+            "constrains_sink_operand": True, "comparison": None,
+            "destination": {"object_bytes": None}}, at(3, start, start + 3))
 
     guards = {"none": guard("none", 70), "dominating": guard("dominating", 72)}
     for key, record in guards.items():
@@ -498,5 +499,5 @@ def test_cell_capability_grants_graph_index_scope_and_denies_path_like_subjects(
 
 def test_mcp_review_roles_include_the_graph_tool() -> None:
     for role in ("hypothesis_hunter", "red_team_analyst", "blue_team_refuter", "independent_verifier",
-                 "red", "blue", "verifier"):
+                 "adjudication_judge", "red", "blue", "verifier"):
         assert "query_code_graph" in _ROLE_TOOLS[role]

@@ -18,7 +18,8 @@ from typing import Any, Iterable, Mapping, Sequence
 from appsec_review.review.identity import make_id, sha256_hex
 from appsec_review.review.models import (
     Admissibility, CellRecord, CellStatus, Claim, ClaimState, EvidenceRelation, Gap, GapClass,
-    IntegrityError, Lane, Predicate, RelationKind, Role, SecurityPredicate,
+    IntegrityError, JudgePredicateVerdict, JudgeVerdict, JudgeVerdictValue, Lane, Predicate, RelationKind, Role,
+    SecurityPredicate,
 )
 from appsec_review.storage.atomic import atomic_bytes, canonical_json
 
@@ -41,6 +42,7 @@ class EventKind(StrEnum):
     STATE_TRANSITION = "state_transition"
     GAP_RECORDED = "gap_recorded"
     CELL_TERMINAL = "cell_terminal"
+    JUDGE_VERDICT = "judge_verdict"
 
 
 class EvidenceRequestOutcome(StrEnum):
@@ -87,13 +89,16 @@ def claim_from_json(value: Mapping[str, Any]) -> Claim:
 
 
 def relation_json(relation: EvidenceRelation) -> dict[str, Any]:
-    return {"schema": RELATION_SCHEMA, "relation_id": relation.relation_id, "claim_id": relation.claim_id,
-            "predicate": relation.predicate.value, "kind": relation.kind.value,
-            "entity_id": relation.entity_id, "entity_kind": relation.entity_kind,
-            "admissibility": relation.admissibility.value, "shard_id": relation.shard_id,
-            "content_sha256": relation.content_sha256, "locator": relation.locator,
-            "complete": relation.complete, "producing_cell_id": relation.producing_cell_id,
-            "retrieval_receipt_sha256": relation.retrieval_receipt_sha256}
+    document = {"schema": RELATION_SCHEMA, "relation_id": relation.relation_id, "claim_id": relation.claim_id,
+                "predicate": relation.predicate.value, "kind": relation.kind.value,
+                "entity_id": relation.entity_id, "entity_kind": relation.entity_kind,
+                "admissibility": relation.admissibility.value, "shard_id": relation.shard_id,
+                "content_sha256": relation.content_sha256, "locator": relation.locator,
+                "complete": relation.complete, "producing_cell_id": relation.producing_cell_id,
+                "retrieval_receipt_sha256": relation.retrieval_receipt_sha256, "reason": relation.reason}
+    if relation.provenance is not None:          # present only on relations derived from a judge's citations
+        document["provenance"] = relation.provenance
+    return document
 
 
 def relation_from_json(value: Mapping[str, Any]) -> EvidenceRelation:
@@ -102,7 +107,9 @@ def relation_from_json(value: Mapping[str, Any]) -> EvidenceRelation:
         kind=RelationKind(value["kind"]), entity_id=value["entity_id"], entity_kind=value["entity_kind"],
         admissibility=Admissibility(value["admissibility"]), shard_id=value["shard_id"],
         content_sha256=value["content_sha256"], locator=value["locator"], complete=value["complete"],
-        producing_cell_id=value["producing_cell_id"], retrieval_receipt_sha256=value["retrieval_receipt_sha256"])
+        producing_cell_id=value["producing_cell_id"], retrieval_receipt_sha256=value["retrieval_receipt_sha256"],
+        reason=value.get("reason"),
+        provenance=value.get("provenance"))
 
 
 def gap_json(gap: Gap) -> dict[str, Any]:
@@ -119,19 +126,41 @@ def gap_from_json(value: Mapping[str, Any]) -> Gap:
 
 
 def cell_json(cell: CellRecord) -> dict[str, Any]:
-    return {"schema": CELL_SCHEMA, "cell_id": cell.cell_id, "lane": cell.lane.value,
-            "package_id": cell.package_id, "role": cell.role.value, "persona": cell.persona,
-            "stack_profile": cell.stack_profile, "task": cell.task, "claim_id": cell.claim_id,
-            "status": cell.status.value, "attempts": cell.attempts, "gap_ids": list(cell.gap_ids),
-            "receipt_sha256": cell.receipt_sha256}
+    document = {"schema": CELL_SCHEMA, "cell_id": cell.cell_id, "lane": cell.lane.value,
+                "package_id": cell.package_id, "role": cell.role.value, "persona": cell.persona,
+                "stack_profile": cell.stack_profile, "task": cell.task, "claim_id": cell.claim_id,
+                "status": cell.status.value, "attempts": cell.attempts, "gap_ids": list(cell.gap_ids),
+                "receipt_sha256": cell.receipt_sha256}
+    if cell.side_map is not None:                # judge cells only
+        document["side_map"] = dict(cell.side_map)
+    return document
 
 
 def cell_from_json(value: Mapping[str, Any]) -> CellRecord:
+    side_map = value.get("side_map")
     return CellRecord(cell_id=value["cell_id"], lane=Lane(value["lane"]), package_id=value["package_id"],
                       role=Role(value["role"]), persona=value["persona"], stack_profile=value["stack_profile"],
                       task=value["task"], claim_id=value["claim_id"], status=CellStatus(value["status"]),
                       attempts=value["attempts"], gap_ids=tuple(value["gap_ids"]),
-                      receipt_sha256=value["receipt_sha256"])
+                      receipt_sha256=value["receipt_sha256"],
+                      side_map=tuple(sorted(side_map.items())) if side_map is not None else None)
+
+
+def judge_verdict_json(verdict: JudgeVerdict) -> dict[str, Any]:
+    return {"verdict_id": verdict.verdict_id, "claim_id": verdict.claim_id, "verdict": verdict.verdict.value,
+            "per_predicate": [{"predicate": item.predicate.value, "verdict": item.verdict.value,
+                               "cites": list(item.cites)} for item in verdict.per_predicate],
+            "citations": sorted({ref for item in verdict.per_predicate for ref in item.cites}),
+            "reason": verdict.reason, "cell_id": verdict.cell_id,
+            "judge_model_distinct": verdict.judge_model_distinct}
+
+
+def judge_verdict_from_json(value: Mapping[str, Any]) -> JudgeVerdict:
+    return JudgeVerdict(
+        verdict_id=value["verdict_id"], claim_id=value["claim_id"], verdict=JudgeVerdictValue(value["verdict"]),
+        per_predicate=tuple(JudgePredicateVerdict(Predicate(item["predicate"]), JudgeVerdictValue(item["verdict"]),
+                                                  tuple(item["cites"])) for item in value["per_predicate"]),
+        reason=value["reason"], cell_id=value["cell_id"], judge_model_distinct=bool(value["judge_model_distinct"]))
 
 
 # Events.
@@ -236,6 +265,11 @@ class LedgerWriter:
     def cell_terminal(self, cell: CellRecord) -> dict[str, Any]:
         return self.append(EventKind.CELL_TERMINAL, cell.cell_id, {"cell": cell_json(cell)})
 
+    def judge_verdict(self, verdict: JudgeVerdict, *, round: int = 0) -> dict[str, Any]:
+        """Record a judge's verdict. It is a proposal and a routing signal; no claim state follows from it."""
+        return self.append(EventKind.JUDGE_VERDICT, verdict.verdict_id,
+                           {"verdict": judge_verdict_json(verdict), "round": round})
+
     def seal(self) -> ShardReceipt:
         """Write the shard once. Re-sealing identical bytes is idempotent; differing bytes are not."""
         if self._sealed is not None:
@@ -317,6 +351,8 @@ def _claim_key(event: Mapping[str, Any]) -> str:
     if kind is EventKind.GAP_RECORDED:
         subject = body["gap"]["subject_id"]
         return subject if subject.startswith("claim-") else ""
+    if kind is EventKind.JUDGE_VERDICT:
+        return body["verdict"]["claim_id"]
     return body["cell"]["claim_id"] or ""
 
 
@@ -413,8 +449,17 @@ class Projection:
     gaps: tuple[Gap, ...]
     cells: Mapping[str, tuple[CellRecord, ...]]
     evidence_requests: Mapping[str, EvidenceRequestView] = field(default_factory=dict)
+    # claim id -> its judge verdicts, ordered by verdict id (review-judge-and-poc.md section 3.4).
+    judge_verdicts: Mapping[str, tuple[JudgeVerdict, ...]] = field(default_factory=dict)
 
     def to_json(self) -> dict[str, Any]:
+        document = self._base_json()
+        if self.judge_verdicts:               # a review without a judge projects exactly as before
+            document["judge_verdicts"] = {claim_id: [judge_verdict_json(item) for item in items]
+                                          for claim_id, items in sorted(self.judge_verdicts.items())}
+        return document
+
+    def _base_json(self) -> dict[str, Any]:
         return {
             "schema": "appsec-review/claim-projection/1", "ledger_head_sha256": self.head,
             "claims": [{**claim_json(view.claim), "state_history": [
@@ -491,6 +536,7 @@ def project(events: Iterable[Mapping[str, Any]]) -> Projection:
         cells: dict[str, list[CellRecord]] = defaultdict(list)
         opened: dict[str, list[Mapping[str, Any]]] = defaultdict(list)
         closed: dict[str, list[Mapping[str, Any]]] = defaultdict(list)
+        verdicts: dict[str, JudgeVerdict] = {}
         for event in ordered:
             kind, subject, body = EventKind(event["kind"]), event["subject_id"], event["body"]
             if kind is EventKind.CLAIM_PROPOSED:
@@ -525,6 +571,11 @@ def project(events: Iterable[Mapping[str, Any]]) -> Projection:
                 cells[subject].append(cell)
             elif kind is EventKind.EVIDENCE_REQUEST_OPENED:
                 opened[subject].append(body)
+            elif kind is EventKind.JUDGE_VERDICT:
+                verdict = judge_verdict_from_json(body["verdict"])
+                if verdict.verdict_id != subject or verdicts.get(subject, verdict) != verdict:
+                    raise IntegrityError(f"judge verdict identity collision: {subject}")
+                verdicts[subject] = verdict
             else:
                 EvidenceRequestOutcome(body["outcome"])
                 closed[subject].append(body)
@@ -544,6 +595,11 @@ def project(events: Iterable[Mapping[str, Any]]) -> Projection:
         if relation.claim_id not in claims:
             raise IntegrityError(f"evidence relation for unknown claim: {relation.relation_id}")
         by_claim[relation.claim_id].append(relation)
+    judged: dict[str, list[JudgeVerdict]] = defaultdict(list)
+    for verdict in verdicts.values():
+        if verdict.claim_id not in claims:
+            raise IntegrityError(f"judge verdict for unknown claim: {verdict.verdict_id}")
+        judged[verdict.claim_id].append(verdict)
     requests: dict[str, EvidenceRequestView] = {}
     for request_id in sorted(set(opened) | set(closed)):
         first = (opened.get(request_id) or closed[request_id])[0]
@@ -565,6 +621,8 @@ def project(events: Iterable[Mapping[str, Any]]) -> Projection:
         cells={cell_id: tuple(sorted(items, key=lambda item: sha256_hex(cell_json(item))))
                for cell_id, items in sorted(cells.items())},
         evidence_requests=requests,
+        judge_verdicts={claim_id: tuple(sorted(items, key=lambda item: item.verdict_id))
+                        for claim_id, items in sorted(judged.items())},
     )
 
 

@@ -22,6 +22,7 @@ from appsec_review.review.identity import make_id
 from appsec_review.review.models import (
     Admissibility, ClaimState, EvidenceRelation, Lane, Predicate, RelationKind,
 )
+from appsec_review.review.packages import OBLIGATIONS
 from tests.review.test_evidence import _accepted_fixture, _ident
 from tests.review.test_graph_admissibility import RECEIPT, RUN_ID, accepted_graph_run
 
@@ -199,6 +200,8 @@ def lead(family: str, scanner: str, rule: str, flows=()) -> dict:
     (lead("ci_rule", "zizmor", "pull-request-target"), (P.AFFECTED_CONSTRUCT, P.CONFIGURATION_ENABLES)),
     (lead("post_build_hardening", "build-rules", "no-relro"), (P.AFFECTED_CONSTRUCT, P.CONFIGURATION_ENABLES)),
     (lead("owasp_control", "owasp-workbench", "ASVS-1"), (P.MISSING_OR_INEFFECTIVE_GUARD,)),
+    (lead("secret", "gitleaks", "generic-api-key"), (P.AFFECTED_CONSTRUCT,)),
+    (lead("config_scanner", "checkov", "CKV_AWS_1"), (P.AFFECTED_CONSTRUCT,)),
     (lead("unheard_of_family", "x", "y", ["flow-1"]), ()),
     ({}, ()),
 ])
@@ -225,6 +228,12 @@ def test_rule_table_is_ordered_first_match_wins_and_hash_pinned() -> None:
     assert tool_rules.predicates_for("codeql", "codeql", "cpp/other", "point", rows) == (P.AFFECTED_CONSTRUCT,)
     assert len(tool_rules.TABLE_SHA256) == 64
     assert tool_rules.table_record(rows) != tool_rules.table_record()
+
+
+def test_new_lead_families_have_explicit_package_obligations() -> None:
+    expected = (P.AFFECTED_CONSTRUCT, P.CONFIGURATION_ENABLES, P.SECURITY_IMPACT)
+    assert OBLIGATIONS["secret"] == expected
+    assert OBLIGATIONS["config_scanner"] == expected
 
 
 # ------------------------------------------------------------------------------------------------

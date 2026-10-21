@@ -26,6 +26,7 @@ _ROLE_TOOLS = {
     "red_team_analyst": _REVIEW_TOOLS,
     "blue_team_refuter": _REVIEW_TOOLS,
     "independent_verifier": _REVIEW_TOOLS,
+    "adjudication_judge": _REVIEW_TOOLS,
     "red": _REVIEW_TOOLS,
     "blue": _REVIEW_TOOLS,
     "verifier": _REVIEW_TOOLS,

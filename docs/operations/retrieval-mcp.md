@@ -1,7 +1,9 @@
 # Operating the local retrieval MCP gateway
 
 The gateway serves one already accepted review run. It does not build indexes and cannot change a
-run.
+run. It is for external clients; the review cells (red, blue, verifier, hunter) do not use it and have
+no tools, because the application runs their retrieval requests in-process (see
+[`../architecture/retrieval-surfaces.md`](../architecture/retrieval-surfaces.md)).
 
 Start it over stdio:
 

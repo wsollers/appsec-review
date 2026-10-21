@@ -48,7 +48,13 @@ from tests.fixtures import reference_feeds as feeds
 RUN_ID = "2026-10-12-0001"
 SNAPSHOT = "target-sha256:" + "7" * 64
 SHARDS = ("source", "components", "build", "semgrep", "opengrep", "codeql", "osv", "ci", "priority", "history",
-          "tags", "scanner_correlation", "dependency_advisories", "reference_intelligence")
+          "tags", "scanner_correlation", "dependency_advisories", "reference_intelligence", "gitleaks")
+# The seeded credential of the opt-in ``secrets`` fixture: no artifact the intake produces may contain it.
+FIXTURE_SECRET = "sk_live_9f8e7d6c5b4a39281706f5e4d3c2b1a0"
+SECRET_FILE = "native/src/config.cpp"
+SECRET_SOURCE = ("#include <string>\n"
+                 f'static const char *kApiKey = "{FIXTURE_SECRET}";\n'
+                 "int send_key() { return post(kApiKey); }\n")
 FEEDS = ("osv", "nvd", "kev", "epss", "mitre")
 FEED_OVERRIDES = {"kev": 7, "epss": 3}
 V31 = {"version": "3.1", "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H", "baseScore": 7.5,
@@ -166,7 +172,8 @@ def build_accepted_index_set(base: Path, *, run_id: str = RUN_ID, omit: Iterable
                              omit_feeds: Iterable[str] = (), stale_feeds: Iterable[str] = ("osv",),
                              kev_cves: Iterable[str] = KEV_CVES, nvd_records: Iterable[dict] = NVD_RECORDS,
                              mitre_weaknesses: dict[str, tuple] | None = None,
-                             advisory_extra: dict[str, dict[str, Any]] | None = None) -> FixtureRun:
+                             advisory_extra: dict[str, dict[str, Any]] | None = None,
+                             secrets: bool = False, secret_extra: dict[str, Any] | None = None) -> FixtureRun:
     omit = frozenset(omit)
     unknown = omit - set(SHARDS)
     if unknown:
@@ -175,11 +182,14 @@ def build_accepted_index_set(base: Path, *, run_id: str = RUN_ID, omit: Iterable
     runs_dir = Path(base) / "runs"
     run_root = runs_dir / run_id
     target = Path(base) / "target"
-    for path, (_language, text) in FILES.items():
+    files = dict(FILES)
+    if secrets:
+        files[SECRET_FILE] = ("C++", SECRET_SOURCE)
+    for path, (_language, text) in files.items():
         (target / path).parent.mkdir(parents=True, exist_ok=True)
         (target / path).write_text(text, encoding="utf-8")
     shuffle = random.Random(seed).shuffle if seed is not None else (lambda values: None)
-    ids: dict[str, str] = {path: _identity(EntityKind.SOURCE_FILE, path) for path in FILES}
+    ids: dict[str, str] = {path: _identity(EntityKind.SOURCE_FILE, path) for path in files}
     identities: list[IndexIdentity] = []
     published: list[str] = []
 
@@ -215,7 +225,7 @@ def build_accepted_index_set(base: Path, *, run_id: str = RUN_ID, omit: Iterable
     catalog = {"job": "job_target_catalog"}
     shard("source", "source", "default", catalog, [
         EntityRecord(LogicalIdentity.parse(ids[path]), path, path, path, {"language": language, "path": path},
-                     location(path, 1)) for path, (language, _text) in FILES.items()])
+                     location(path, 1)) for path, (language, _text) in files.items()])
     ids["component:svc"] = LogicalIdentity.derive(EntityKind.COMPONENT, SNAPSHOT, {"component_id": "component:0001"}).value
     ids["component:native"] = LogicalIdentity.derive(EntityKind.COMPONENT, SNAPSHOT,
                                                      {"component_id": "component:0002"}).value
@@ -259,6 +269,20 @@ def build_accepted_index_set(base: Path, *, run_id: str = RUN_ID, omit: Iterable
     shard("semgrep", "observations", "semgrep", {**evidence, "producer": "tool-semgrep"}, semgrep,
           [observed("sast_high", "svc/api/handler.py"), observed("sast_critical", "native/src/parse.c"),
            observed("sast_suppressed", "native/src/io.c")])
+    if secrets:
+        # The row shape of a real gitleaks observation (--redact; the sanitizing index blanks the rule id).
+        ids["secret_key"] = _identity(EntityKind.TOOL_OBSERVATION, "secret_key")
+        leaked = {"match": f'kApiKey = "{FIXTURE_SECRET}"', "secret": FIXTURE_SECRET, **(secret_extra or {})}
+        shard("gitleaks", "observations", "gitleaks", {**evidence, "producer": "tool-gitleaks"}, [
+            EntityRecord(LogicalIdentity.parse(ids["secret_key"]), "evidence-32aeaf3169218fa428defc78",
+                         "generic-api-key", "generic-api-key Detected a Generic API Key static_analysis",
+                         {"advisory": None, "category": "static_analysis", "component": None,
+                          "evidence_id": "evidence-32aeaf3169218fa428defc78", "language": None,
+                          "message": "Detected a Generic API Key, potentially exposing access to various services "
+                                     "and sensitive operations.",
+                          "native_rule_id": "<redacted>", "native_severity": "UNKNOWN", "package": None,
+                          "severity": "UNKNOWN", "tool_id": "tool-gitleaks", **leaked},
+                         location(SECRET_FILE, 2))], [observed("secret_key", SECRET_FILE)])
     shard("opengrep", "observations", "opengrep", {**evidence, "producer": "tool-opengrep"},
           [observation("sast_duplicate", "tool-opengrep", "c.strcpy-og", "HIGH", "native/src/parse.c", 3,
                        rule_mapping={"cwe": ["CWE-120"]}, language="C")],

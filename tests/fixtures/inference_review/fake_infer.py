@@ -16,6 +16,10 @@ definition-of-done states arise from the fixture accepted index set:
   configuration break in the build action -> ``not_exploitable_in_observed_configuration``.
 * lane A ``dep_high``: claim C4 whose verifier provider always fails -> ``insufficient_evidence``
   plus a cell ``worker_gap``.
+* the adjudication judge (``role == "adjudication_judge"``) is blind to who produced a side: it picks the side
+  whose overall stance is ``supports`` (the side that affirms the claim) and cites what that side cited. The scenario
+  key ``judge`` changes that: ``"blue"`` picks the other side, ``"both"``, ``"neither"`` and ``"unresolved"`` answer
+  so, and ``"uncited"`` names a side with no citation (recorded as unresolved).
 * lane B native unit: the memory-safety sweep re-proposes C1 (a duplicate proposal) and H1 with
   partial support; the injection sweep proposes H2 (no support, over the cap) and H3 (closed
   vocabulary violation, rejected by the gate).
@@ -55,6 +59,7 @@ NARRATIVES = {
     "blue": "blue rationale {claim} {task}: no effective guard or reachability break was found here",
     "blue-guard": "C3 blue configuration rationale: the build configuration compiles the debug path out",
     "verifier": "verifier rationale: re-retrieved the affected construct and the build action itself",
+    "judge": "judge reason: the cited rows of the chosen side show its position and the other side cites none that do",
 }
 
 
@@ -132,6 +137,9 @@ class ScriptedInfer:
         if request.role == "independent_verifier":
             self._capture(request)
             return self._verifier(request, payload)
+        if request.role == "adjudication_judge":
+            self._capture(request)
+            return self._judge(payload)
         raise AssertionError(f"unexpected role {request.role}")
 
     def _gate(self) -> None:
@@ -206,6 +214,31 @@ class ScriptedInfer:
             answer = {"stance": "contradicts", "predicate": "configuration_enables",
                       "cites": [self.ids["unit:native-main"]], "why": NARRATIVES["blue-guard"]}
         return self._final(answer)
+
+    def _judge(self, payload: Mapping[str, Any]) -> ModelResult:
+        """A compact judge answer from the sides alone (it never learns which side is which role)."""
+        sides, mode = payload["sides"], self.scenario.get("judge", "red")
+        affirming = next((letter for letter in ("A", "B") if sides[letter]["stance"] == "supports"), "A")
+        other = "B" if affirming == "A" else "A"
+        reason = NARRATIVES["judge"]
+        if mode in ("neither", "unresolved"):
+            return self._final({"verdict": mode, "per_predicate": {}, "reason": reason})
+        if mode == "uncited":
+            return self._final({"verdict": affirming, "reason": reason, "per_predicate": {
+                "affected_construct": {"verdict": affirming, "cites": []}}})
+        letter = other if mode == "blue" else affirming
+        per_predicate = {name: {"verdict": letter, "cites": list(entry["cites"])}
+                         for name, entry in sides[letter]["per_predicate"].items() if entry["cites"]}
+        if mode == "both" and per_predicate:
+            first = sorted(per_predicate)[0]
+            per_predicate[first] = {"verdict": affirming, "cites": per_predicate[first]["cites"]}
+            others = {name: {"verdict": other, "cites": list(entry["cites"])}
+                      for name, entry in sides[other]["per_predicate"].items() if entry["cites"]}
+            per_predicate.update({name: value for name, value in others.items() if name != first})
+            return self._final({"verdict": "both", "per_predicate": per_predicate, "reason": reason})
+        if not per_predicate:
+            return self._final({"verdict": "unresolved", "per_predicate": {}, "reason": reason})
+        return self._final({"verdict": letter, "per_predicate": per_predicate, "reason": reason})
 
     def _verifier(self, request: ReviewModelRequest, payload: Mapping[str, Any]) -> ModelResult:
         claim = payload["claim"]

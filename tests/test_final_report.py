@@ -229,6 +229,7 @@ def test_report_json_is_schema_valid_and_contains_the_required_sections(chain: C
     assert report["provenance"]["gate_document"]["sha256"] == file_sha256(
         chain.unit_file(GATE, *GATE_DOC))
     assert report["provenance"]["ledger_head_sha256"] == review_handoff(chain)["ledger_head_sha256"]
+    assert report["provenance"]["configuration_profile"] == {"name": "dev", "sha256": None}
 
 
 def test_report_artifacts_are_hash_pinned_by_the_accepted_handoff(chain: Chain) -> None:
@@ -409,6 +410,31 @@ def test_gate_rejects_a_handoff_whose_partition_disagrees_with_its_packages(pris
         copy_.run_gate()
 
 
+def test_gate_recounts_ship_block_totals_including_decision_pending(pristine: Chain) -> None:
+    """A forged (re-hashed) handoff that reports a finding as decision_pending fails the gate's recount."""
+    copy_ = pristine
+    reference = gate_document(copy_)["inputs"]["review_handoff"]
+    path = copy_.run_root / reference["path"]
+    document = json.loads(path.read_text(encoding="utf-8"))
+    summary = document["ship_block"]
+    status = next(key for key, count in summary["by_status"].items() if count and key != "decision_pending")
+    lane = next(key for key, row in summary["by_lane"].items() if row[status])
+    for counts in (summary["by_status"], summary["by_lane"][lane]):
+        counts[status] -= 1
+        counts["decision_pending"] += 1
+    path.write_text(json.dumps(document, sort_keys=True, separators=(",", ":")) + "\n", encoding="utf-8")
+    handoff_path = copy_.run_root / reference["path"].split("/steps/")[0] / "handoff.json"
+    handoff = json.loads(handoff_path.read_text(encoding="utf-8"))
+    handoff["outputs"]["publication.publish_handoff"]["artifact"]["sha256"] = file_sha256(path)
+    handoff_path.write_text(json.dumps(handoff, sort_keys=True), encoding="utf-8")
+    pointer_path = copy_.run_root / "data" / "jobs" / JOB / "latest.json"
+    pointer = json.loads(pointer_path.read_text(encoding="utf-8"))
+    pointer["handoff_sha256"] = file_sha256(handoff_path)
+    pointer_path.write_text(json.dumps(pointer), encoding="utf-8")
+    with pytest.raises(IntegrityError, match="ship-block counts"):
+        copy_.run_gate()
+
+
 def test_report_fails_on_any_artifact_the_gate_bound_changing(pristine: Chain) -> None:
     for tamper in (_tamper_finding, _tamper_ledger, _tamper_review_handoff):
         pristine.restore()
@@ -536,6 +562,60 @@ def test_unrated_unscored_and_empty_reviews_are_named_gaps(verified: dict[str, A
     assert result["status"] == "PUBLISHABLE_WITH_LIMITATIONS"
 
 
+def _pending(package: dict[str, Any], **changes: Any) -> None:
+    package["ship_block"] = {
+        **package["ship_block"], "status": "decision_pending", "technical_severity": None,
+        "reasons": ["technical_severity_unrated", "missing_factor_attacker_control", "missing_factor_taint_path"],
+        "technical_severity_floor": "medium", "technical_severity_ceiling": "high",
+        "missing_factors": ["attacker_control", "taint_path"], **changes}
+
+
+def _report_of(value: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
+    from appsec_review.jobs.engineering_contracts import FINAL_PUBLICATION_GATE_SCHEMA
+    from appsec_review.jobs.job_final_report_publication.report import build_report
+
+    classification = gate_classify.classify(value)
+    gate = gate_classify.gate_document(FINAL_PUBLICATION_GATE_SCHEMA, value, classification)
+    validator("final-publication-gate").validate(gate)
+    report = build_report(gate, gate_handoff=gate["inputs"]["job_handoff"], gate_document=gate["inputs"]["review_handoff"])
+    validator("final-report").validate(report)
+    return classification, gate, report
+
+
+def test_decision_pending_is_a_named_gap_projected_verbatim_and_never_hidden(verified: dict[str, Any]) -> None:
+    value = _clean(verified)
+    _pending(value["packages"][0])
+    undecided = value["packages"][0]["finding_package_id"]
+    value["ship_block"] = {**value["ship_block"], "by_status": {**value["ship_block"]["by_status"],
+                                                                  "decision_pending": 1}}
+    classification, gate, report = _report_of(value)
+    limitation = next(item for item in classification["limitations"] if item["limitation_id"] == "decision_pending")
+    assert limitation["kind"] == "gap" and limitation["count"] == 1
+    assert "not a release decision" in limitation["statement"]
+    assert classification["status"] == "PUBLISHABLE_WITH_LIMITATIONS"
+    # The status is carried verbatim into the gate document and the report, in whichever bucket the package is.
+    placed = {item["finding_package_id"]: item for item in classification["packages"]}
+    assert placed[undecided]["ship_block"]["status"] == "decision_pending"
+    assert placed[undecided]["bucket"] in {"publishable", "verification_backlog"}
+    assert report["summary"]["ship_block"]["by_status"]["decision_pending"] == 1
+    listed = {item["finding_package_id"]: item for item in report["findings"] + report["verification_backlog"]}
+    assert listed[undecided]["ship_block"]["status"] == "decision_pending"
+    assert listed[undecided]["ship_block"]["missing_factors"] == ["attacker_control", "taint_path"]
+    text = render_markdown(report, evidence_ids=8, gap_ids=16)
+    assert ("**decision pending: severity not yet rated; what is missing: `attacker_control`, `taint_path`; the "
+            "missing factors leave the severity between `medium` and `high`**") in text
+    assert "neither ship-blocking nor cleared" in text and "does not block" not in text
+    assert text.count("decision pending: severity not yet rated") == 1
+
+
+def test_decision_pending_without_bounds_names_the_unrated_severity_itself(verified: dict[str, Any]) -> None:
+    value = _clean(verified)
+    _pending(value["packages"][0], technical_severity_floor=None, technical_severity_ceiling=None, missing_factors=[])
+    _classification, _gate, report = _report_of(value)
+    text = render_markdown(report, evidence_ids=8, gap_ids=16)
+    assert "what is missing: the technical severity rating itself**" in text
+
+
 def test_package_counts_reject_a_package_in_no_bucket() -> None:
     with pytest.raises(IntegrityError, match="no bucket"):
         gate_classify.package_counts([{"bucket": "publishable"}, {"bucket": "mystery"}])
@@ -642,7 +722,7 @@ def test_registry_topology_and_terminal_job() -> None:
     from appsec_review.config import load_config as load
 
     config, registry = load(ROOT / "appsec-review.toml"), builtin_registry()
-    assert {GATE, REPORT} <= set(registry.job_ids()) and len(registry.job_ids()) == 36
+    assert {GATE, REPORT} <= set(registry.job_ids()) and len(registry.job_ids()) == 37
     assert not {"job_remediation_planning", "job_remediation_validation"} & set(registry.job_ids())
     jobs = {item["job_id"]: item for item in describe_wave1(config, registry)["jobs"]}
     assert jobs[GATE]["dependencies"] == [JOB] and jobs[REPORT]["dependencies"] == [GATE]
@@ -664,7 +744,8 @@ def test_disabled_gate_makes_the_report_transparent_and_the_review_terminal() ->
 def test_cli_graph_places_the_new_jobs_after_the_review() -> None:
     from appsec_review import cli
 
-    assert cli.POST_INDEX_JOB_IDS[-3:] == (JOB, GATE, REPORT)
+    # job_poc_generation sits between the gate and the report; it is disabled by default and so absent from the graph
+    assert cli.POST_INDEX_JOB_IDS[-4:] == (JOB, GATE, "job_poc_generation", REPORT)
 
 
 def test_review_data_indexing_does_not_audit_its_own_consumers() -> None:
@@ -701,7 +782,8 @@ def test_datasets_and_handoff_contracts_are_declared() -> None:
     assert contracts.FINAL_PUBLICATION_GATE_SCHEMA == "appsec-review/final-publication-gate/1"
     assert contracts.FINAL_REPORT_SCHEMA == "appsec-review/final-report/1"
     registry = builtin_registry()
-    assert registry.build(GATE).consumes == (JOB,) and registry.build(REPORT).consumes == (GATE,)
+    assert registry.build(GATE).consumes == (JOB,) and registry.build(REPORT).consumes == (
+        GATE, "job_poc_generation")
     assert registry.build(GATE).schema_identity == contracts.FINAL_PUBLICATION_GATE_HANDOFF_SCHEMA
     assert registry.build(REPORT).schema_identity == contracts.FINAL_REPORT_HANDOFF_SCHEMA
     # The implementation identity covers the package sources, so a code change re-executes the job.

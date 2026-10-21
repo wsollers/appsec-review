@@ -1,12 +1,14 @@
-"""``application_risk_matrix/2``: evidence-driven, configurable application risk scoring.
+"""``application_risk_matrix/3``: evidence-driven, configurable application risk scoring.
 
 The provider consumes ``score-factors/1`` values (see :mod:`.factors`) and rates them with the
 declarative :class:`~.risk_model.RiskModel` from TOML:
 
 - ``exploitability_confidence`` (scale ``exploitability_evidence/1``): summed factor points against
-  the exploitability bands. A KEV-listed lead advisory raises an already scored claim one band
+  the exploitability bands. A missing factor is unknown, not zero: the points are an interval (floor
+  gives each missing factor its minimum, ceiling its maximum) and the dimension is rated only when
+  both ends fall in one band; otherwise its rating is ``null``. A KEV-listed lead advisory raises an already scored claim one band
   (``low`` -> ``medium`` -> ``high``), recorded as an assumption; it never makes a claim scoreable.
-- ``technical_severity`` (scale ``application_risk_matrix/2``): impact class x exploitability rating.
+- ``technical_severity`` (scale ``application_risk_matrix/3``): impact class x exploitability rating.
   ``impact_class`` is an override or is derived from the run's pinned MITRE CWE catalog under
   ``cwe-impact-derivation/1`` (:mod:`.cwe_impact`); when it is missing (no CWE, no catalog, no
   mapped consequence) technical severity is ``null``.
@@ -29,20 +31,20 @@ from appsec_review.review.models import ClaimState
 from appsec_review.review.scoring.cwe_impact import ImpactCatalog
 from appsec_review.review.scoring.factors import FACTORS_VERSION, FactorId, ImpactClassExtractor
 from appsec_review.review.scoring.interface import (
-    INTERFACE_VERSION, SCOREABLE_STATES, DimensionScore, ScoreProviderResult, ScoreRequest, ValidationResult,
-    input_fingerprint, score_identity,
+    INTERFACE_VERSION, SCOREABLE_STATES, DimensionScore, ScoreProviderResult, ScoreRequest, SeverityAssessment,
+    ValidationResult, input_fingerprint, score_identity,
 )
 from appsec_review.review.scoring.risk_model import BANDS, DEFAULT_RISK_MODEL, RATINGS, RiskModel
 
 PROVIDER_ID = "application_risk_matrix"
-IMPLEMENTATION_VERSION = "application_risk_matrix/2"
+IMPLEMENTATION_VERSION = "application_risk_matrix/3"
 EXPLOITABILITY_SCALE = "exploitability_evidence/1"
 ENVIRONMENTAL_SCALE = "environmental_exposure/1"
 EXCLUDED_INPUTS = ("epss",)
 NO_PRIORITY_POLICY = "no remediation priority policy implementation is registered"
 
 
-class ApplicationRiskMatrixV2Provider:
+class ApplicationRiskMatrixV3Provider:
     provider_id = PROVIDER_ID
     interface_version = INTERFACE_VERSION
     implementation_version = IMPLEMENTATION_VERSION
@@ -50,7 +52,7 @@ class ApplicationRiskMatrixV2Provider:
     def __init__(self, cwe_impact_overrides: Mapping[str, Any] | None = None,
                  model: RiskModel = DEFAULT_RISK_MODEL, catalog: ImpactCatalog | None = None) -> None:
         if not isinstance(model, RiskModel):
-            raise TypeError("application_risk_matrix/2 needs a RiskModel")
+            raise TypeError("application_risk_matrix/3 needs a RiskModel")
         self._impact = ImpactClassExtractor(cwe_impact_overrides, catalog)
         self.model = model
         self.consumed_factors: frozenset[FactorId] = model.consumed_factors
@@ -111,14 +113,19 @@ class ApplicationRiskMatrixV2Provider:
             raise ValueError("; ".join(validation.errors))
         factors = request.factors
         assert factors is not None
-        assumptions = ["a missing factor contributes no points; it is a named gap, not evidence of low risk"]
-        rating, points, contributions = self.model.exploitability.rate(factors)
+        assumptions = ["a missing factor is unknown, not zero: its minimum and maximum points bound the rating, "
+                       "and when they disagree the rating is withheld (unrated) rather than lowered"]
+        interval = self.model.exploitability.interval(factors)
+        floor_rating, ceiling_rating = interval.floor_rating, interval.ceiling_rating
         threat = factors.get(FactorId.THREAT)
-        kev_raised = threat is not None and threat.value == "kev_listed" and rating != RATINGS[-1]
+        kev_raised = threat is not None and threat.value == "kev_listed" and floor_rating != RATINGS[-1]
         if kev_raised:
-            rating = RATINGS[RATINGS.index(rating) + 1]
+            floor_rating = RATINGS[RATINGS.index(floor_rating) + 1]
+            ceiling_rating = ceiling_rating if ceiling_rating == RATINGS[-1] else RATINGS[
+                RATINGS.index(ceiling_rating) + 1]
             assumptions.append("CISA KEV lists the lead advisory as exploited in the wild; exploitability "
                                "confidence raised one band for this already-supported claim")
+        rating = floor_rating if floor_rating == ceiling_rating else None
         if request.reference_cvss:
             assumptions.append("NVD CVSS vectors recorded as reference inputs; they describe the advisory, not "
                                "this target, and do not set any band")
@@ -126,14 +133,32 @@ class ApplicationRiskMatrixV2Provider:
         if impact is not None and "stale" in impact.detail.get("catalog_status", ()):
             assumptions.append(f"impact_class was read from a stale pinned MITRE CWE catalog "
                                f"({self._impact.catalog.snapshot_id}); the stale gap is recorded on the factor")
-        band = self.model.technical_severity[impact.value][rating] if impact is not None else None
+        matrix = self.model.technical_severity
+        severity_floor = matrix[impact.value][floor_rating] if impact is not None else None
+        severity_ceiling = matrix[impact.value][ceiling_rating] if impact is not None else None
+        band = severity_floor if severity_floor == severity_ceiling else None
+        if impact is None:
+            assessment = SeverityAssessment("unrated", None, None, tuple(sorted({"impact_class", *interval.unresolved})))
+        elif band is None:
+            assessment = SeverityAssessment("unrated", severity_floor, severity_ceiling, interval.unresolved)
+        else:
+            assessment = SeverityAssessment("complete" if interval.complete else "bounded", severity_floor,
+                                            severity_ceiling)
         environmental: dict[str, Any] | None = None
+        env_score: DimensionScore | None = None
         if self.model.environmental.present(factors):
-            env_rating, env_points, env_contributions = self.model.environmental.rate(factors)
-            environmental = {"rating": env_rating, "points": env_points, "contributions": env_contributions}
+            env = self.model.environmental.interval(factors)
+            environmental = {"rating": env.rating, "points": env.known_points if env.complete else None,
+                             "points_floor": env.floor, "points_ceiling": env.ceiling,
+                             "rating_floor": env.floor_rating, "rating_ceiling": env.ceiling_rating,
+                             "contributions": dict(env.contributions), "unresolved": list(env.unresolved)}
+            env_score = DimensionScore(ENVIRONMENTAL_SCALE, env.rating, environmental["points"])
         reasons: dict[str, str] = {item.factor.value: item.reason for item in factors.missing}
         if band is None:
-            reasons.setdefault("technical_severity", "impact_class is missing")
+            reasons.setdefault("technical_severity", (
+                "impact_class is missing" if impact is None else
+                f"technical severity could be {severity_floor} to {severity_ceiling} depending on the missing "
+                f"factors: {', '.join(interval.unresolved)}"))
         if environmental is None:
             reasons["environmental_business_impact"] = ("no exposure, privilege or data sensitivity factor is "
                                                         "present")
@@ -141,9 +166,13 @@ class ApplicationRiskMatrixV2Provider:
         native: dict[str, Any] = {
             "matrix": IMPLEMENTATION_VERSION, "factors": FACTORS_VERSION,
             "axes": {"impact_class": impact.value if impact is not None else None, "exploitability": rating},
-            "cell": [impact.value, rating] if impact is not None else None,
+            "cell": [impact.value, rating] if impact is not None and rating is not None else None,
             "band": band,
-            "exploitability": {"rating": rating, "points": points, "contributions": contributions,
+            "severity_interval": assessment.record(),
+            "exploitability": {"rating": rating, "points": interval.known_points if interval.complete else None,
+                               "points_floor": interval.floor, "points_ceiling": interval.ceiling,
+                               "rating_floor": floor_rating, "rating_ceiling": ceiling_rating,
+                               "contributions": dict(interval.contributions), "unresolved": list(interval.unresolved),
                                "kev_adjusted": kev_raised},
             "environmental": environmental,
         }
@@ -159,11 +188,11 @@ class ApplicationRiskMatrixV2Provider:
             provider_config_sha256=self.provider_config_sha256, policy_sha256=request.policy_sha256,
             input_fingerprint=fingerprint, native=MappingProxyType(native), native_sha256=native_sha256,
             technical_severity=DimensionScore(IMPLEMENTATION_VERSION, band),
-            exploitability_confidence=DimensionScore(EXPLOITABILITY_SCALE, rating, points),
-            environmental_business_impact=(DimensionScore(ENVIRONMENTAL_SCALE, environmental["rating"],
-                                                          environmental["points"])
-                                           if environmental is not None else None),
+            exploitability_confidence=DimensionScore(EXPLOITABILITY_SCALE, rating,
+                                                     interval.known_points if interval.complete else None),
+            environmental_business_impact=env_score,
             remediation_priority=None,
+            severity_assessment=assessment,
             evidence_relations=tuple(sorted(set(request.evidence_relation_ids))),
             missing_factors=tuple(sorted(reasons)),
             assumptions=tuple(assumptions),
@@ -174,4 +203,4 @@ class ApplicationRiskMatrixV2Provider:
         )
 
 
-__all__ = ["ApplicationRiskMatrixV2Provider", "ENVIRONMENTAL_SCALE", "EXPLOITABILITY_SCALE", "IMPLEMENTATION_VERSION"]
+__all__ = ["ApplicationRiskMatrixV3Provider", "ENVIRONMENTAL_SCALE", "EXPLOITABILITY_SCALE", "IMPLEMENTATION_VERSION"]

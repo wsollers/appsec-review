@@ -19,7 +19,7 @@ from appsec_review.review.models import ClaimState, Gap, GapClass, make_gap
 from appsec_review.review.scoring.factors import FactorId, FactorSet
 
 INTERFACE_VERSION = "appsec-review/scoring-provider/1"
-SCORE_PACKAGE_SCHEMA = "appsec-review/score-package/2"
+SCORE_PACKAGE_SCHEMA = "appsec-review/score-package/3"
 EVIDENCE_CONFIDENCE_SCALE = "evidence_confidence/1"
 SCOREABLE_STATES = frozenset({ClaimState.CONFIRMED, ClaimState.SUPPORTED})
 
@@ -39,7 +39,7 @@ class ScoreRequest:
     # Labelled reference inputs from pinned feeds (NVD CVSS vectors, CISA KEV, FIRST EPSS). They describe
     # the advisory a lead came from, not the target; providers record them and may use them only as
     # documented (application_risk_matrix: KEV raises exploitability confidence one band). EPSS is
-    # never a scoring input: the scoring stage does not pass it, and application_risk_matrix/2
+    # never a scoring input: the scoring stage does not pass it, and application_risk_matrix/3
     # excludes it from its fingerprint and package.
     reference_cvss: tuple[Mapping[str, Any], ...] = ()
     kev_listed: bool | None = None
@@ -88,6 +88,34 @@ class DimensionScore:
     value: float | None = None
 
 
+ASSESSMENTS = ("complete", "bounded", "unrated")
+
+
+@dataclass(frozen=True, slots=True)
+class SeverityAssessment:
+    """How firmly a provider's technical severity is known (``score-package/3``).
+
+    ``complete``: every factor the provider scores was present. ``bounded``: some were missing, but
+    every value they could take gives the same severity, so the rating stands. ``unrated``: missing
+    factors could change the severity, so there is no rating; ``severity_floor`` and
+    ``severity_ceiling`` bound it (``None`` when the provider cannot bound it, e.g. no impact class)
+    and ``unresolved_factors`` names what would have to be supplied.
+    """
+
+    assessment: str
+    severity_floor: str | None
+    severity_ceiling: str | None
+    unresolved_factors: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if self.assessment not in ASSESSMENTS:
+            raise ValueError(f"unknown severity assessment: {self.assessment}")
+
+    def record(self) -> dict[str, Any]:
+        return {"assessment": self.assessment, "severity_floor": self.severity_floor,
+                "severity_ceiling": self.severity_ceiling, "unresolved_factors": list(self.unresolved_factors)}
+
+
 @dataclass(frozen=True, slots=True)
 class ScoreProviderResult:
     score_id: str
@@ -116,6 +144,21 @@ class ScoreProviderResult:
     # factor is missing; ``None`` for providers that consume no factors.
     factors: FactorSet | None = None
     missing_factor_reasons: tuple[tuple[str, str], ...] = field(default_factory=tuple)
+    # ``None`` for providers that do not bound their rating; the package then derives it from
+    # ``technical_severity`` (complete when rated, unrated with no bounds otherwise).
+    severity_assessment: SeverityAssessment | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class UnavailableProvider:
+    """A provider enabled in configuration whose implementation does not exist in this build."""
+
+    provider: str
+    implementation: str | None
+    reason: str
+
+    def record(self) -> dict[str, Any]:
+        return {"provider": self.provider, "implementation": self.implementation, "reason": self.reason}
 
 
 @runtime_checkable
@@ -133,7 +176,7 @@ class ScoringProvider(Protocol):
 def input_fingerprint(provider: ScoringProvider, provider_config_sha256: str, request: ScoreRequest,
                       exclude: Collection[str] = ()) -> str:
     """Fingerprint of everything a score depends on; ``exclude`` names request fields the provider
-    provably ignores (``application_risk_matrix/2`` excludes ``epss``)."""
+    provably ignores (``application_risk_matrix/3`` excludes ``epss``)."""
     return sha256_hex({"provider": provider.provider_id, "interface": provider.interface_version,
                        "implementation": provider.implementation_version,
                        "provider_config_sha256": provider_config_sha256, "request": request.canonical(exclude)})
@@ -156,10 +199,13 @@ def score_identity(*, provider_id: str, implementation_version: str, provider_co
 class ProviderRegistry:
     """Closed registry of scoring providers keyed by ``provider_id``; no dynamic import."""
 
-    def __init__(self, providers: tuple[ScoringProvider, ...] = ()) -> None:
+    def __init__(self, providers: tuple[ScoringProvider, ...] = (),
+                 unavailable: tuple["UnavailableProvider", ...] = ()) -> None:
         self._providers: dict[str, ScoringProvider] = {}
         for provider in providers:
             self.register(provider)
+        # Providers the configuration enables but this build cannot run; never silently dropped.
+        self.unavailable = tuple(sorted(unavailable, key=lambda item: item.provider))
 
     def register(self, provider: ScoringProvider) -> None:
         if not isinstance(provider, ScoringProvider):

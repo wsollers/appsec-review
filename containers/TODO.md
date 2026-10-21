@@ -27,7 +27,10 @@
   a missing format or merge feature.
 - Document conversion: resolve a complete hashed `.deb` closure for pandoc/poppler and add PDF/DOCX
   functional fixtures.
-- Report rendering: resolve a minimal hashed TeX closure and add deterministic render verification.
+- Report rendering: `tool-report-latex` is enabled (hash-locked 111-package closure, deterministic PDF,
+  functional smoke). Remaining: call it from a publication job (none does yet; `renderers.pdf.state`
+  stays `not_rendered`), then drop `manual = true` from its catalog entry and pin its `image_id` (the pin gate
+  skips it until then), and add a pdftoppm visual check.
 - Dagster: orchestration is an application deployment concern; do not restore its archived image.
 - Image-ID pins are host-local (owner decision, 2026-10-15). Results are never compared across
   hosts, slight container drift between hosts is acceptable, and a changed pin means rerunning, not

@@ -24,8 +24,11 @@ from appsec_review.review.models import Claim, Predicate, SecurityPredicate
 RULES_VERSION = "obligation-rules/2"
 PRECONDITIONS_VERSION = "preconditions/1"
 # R3 classification rules (review/evidence.py). /2 adds the graph-fact branch: graph kinds are
-# direct only for their mapped predicates and only when the re-resolved fact is direct-eligible.
-ADMISSIBILITY_RULES_VERSION = "evidence-admissibility/2"
+# direct only for their mapped predicates and only when the re-resolved fact is direct-eligible. /3: a dominating
+# guard or bounded range contradicts missing_or_ineffective_guard only when the exported facts show it bounds the
+# destination (graph/bounds.py); otherwise it qualifies. This changes evidence relations, so cell and adjudication
+# reuse bases (which hash this version) no longer match /2 runs.
+ADMISSIBILITY_RULES_VERSION = "evidence-admissibility/3"
 # Pinned next to the admissibility version: which kind of cited content may bear on which predicate.
 PREDICATE_ADMISSION_VERSION = admission.VERSION
 

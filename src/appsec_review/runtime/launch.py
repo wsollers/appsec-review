@@ -18,7 +18,9 @@ from typing import Any
 from appsec_review.runtime.job import Job
 
 # Jobs that read the target checkout. Every other job receives no target root and the "none"
-# source fingerprint, so its identity does not depend on the target.
+# source fingerprint, so its identity does not depend on the target. The inference review, the gate, the PoC
+# job and the report are deliberately absent: they read accepted run state only (the PoC job copies the
+# run's hash-verified native build workspace, not the target).
 TARGET_JOBS = frozenset({
     "job_review_intake", "job_target_catalog", "job_target_analysis_plan",
     "job_project_build", "job_language_build", "job_artifact_indexing", "job_test_coverage",

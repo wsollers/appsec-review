@@ -68,7 +68,7 @@ from appsec_review.storage.atomic import canonical_json
 
 
 PACKAGE_SCHEMA = "appsec-review/review-package/6"
-ASSEMBLY_RULE = "appsec-review/assemble-review-packages/6"
+ASSEMBLY_RULE = "appsec-review/assemble-review-packages/7"
 GRAPH_CONTEXT_RULE = "appsec-review/package-graph-context/2"
 CALLER_ROLE = "caller"
 CALLER_PRODUCER = "code_graph_callers"
@@ -81,7 +81,7 @@ _GRAPH_KINDS = tuple(sorted(kind.value for kind in FAMILY_KINDS.values()))
 MAX_WEAKNESSES = 8
 MAX_CORROBORATION = 16
 MANIFEST_SCHEMA = "appsec-review/review-package-manifest/1"
-OBLIGATION_RULE = "appsec-review/package-obligations/1"
+OBLIGATION_RULE = "appsec-review/package-obligations/2"
 SUPPRESSION_STATES = ("suppressed", "possibly_suppressed", "not_suppressed", "unknown")
 _P = Predicate
 # Deterministic obligation table keyed by lead family; every predicate starts open.
@@ -96,6 +96,8 @@ OBLIGATIONS: Mapping[str, tuple[Predicate, ...]] = {
     "post_build_hardening": (_P.AFFECTED_CONSTRUCT, _P.CONFIGURATION_ENABLES, _P.SECURITY_IMPACT),
     "ci_rule": (_P.AFFECTED_CONSTRUCT, _P.ATTACKER_INPUT_CONTROL, _P.CONFIGURATION_ENABLES, _P.SECURITY_IMPACT),
     "owasp_control": (_P.AFFECTED_CONSTRUCT, _P.MISSING_OR_INEFFECTIVE_GUARD, _P.SECURITY_IMPACT),
+    "secret": (_P.AFFECTED_CONSTRUCT, _P.CONFIGURATION_ENABLES, _P.SECURITY_IMPACT),
+    "config_scanner": (_P.AFFECTED_CONSTRUCT, _P.CONFIGURATION_ENABLES, _P.SECURITY_IMPACT),
     "hunt": tuple(Predicate),
 }
 

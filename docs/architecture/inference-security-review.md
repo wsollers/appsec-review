@@ -9,8 +9,8 @@ section differ for slice 1, the readiness decisions govern. `ship-block-policy/1
 distinctness, remediation intake, the planned downstream job names, the closed
 `security-predicates/1` vocabulary, the `red-discovery-result/1` contract and the catalog-derived
 CWE impact class are implemented ([decisions](#decisions-and-open-questions) 1, 2, 4, 6, 8, 9, 10
-and 11), as are evidence-driven scoring (`score-factors/1`, `application_risk_matrix/2`) and
-code-graph evidence (`evidence-admissibility/2`, `query_code_graph`, package graph context). The
+and 11), as are evidence-driven scoring (`score-factors/1`, `application_risk_matrix/3`) and
+code-graph evidence (`evidence-admissibility/3`, `query_code_graph`, package graph context). The
 remaining parts of slices 2-4 (CVSS v4 and SSVC providers, which the scoring registry skips while
 unimplemented, PoC, chains, rounds and variant hunts) remain design only, and no live-model
 acceptance has run.
@@ -29,7 +29,8 @@ The job follows these non-negotiable rules:
 1. Model output is judgment data, never evidence. A claim changes state only through typed fields
    validated against resolving source lines or a run-owned, hash-verified tool artifact.
 2. The only review input authority is one immutable accepted run/index manifest. Workers query it
-   through the bounded retrieval core or read-only MCP adapter. No prompt receives a repository
+   through the bounded retrieval core (review cells, in-process) or the read-only MCP adapter (external
+   clients; see [`retrieval-surfaces.md`](retrieval-surfaces.md)). No prompt receives a repository
    dump, an evidence dump, an arbitrary target path, or an arbitrary query surface.
 3. Target guidance, retrieved text, tool output, generated evidence, and model output are untrusted
    data. They cannot alter governing rules, configuration, role, persona, tools, or claim limits.
@@ -354,7 +355,8 @@ Roles express responsibility and authority ceilings:
 
 `hypothesis_hunter`, `red_team_analyst`, `blue_team_refuter`, `independent_verifier`,
 `independent_scorer`, `poc_designer`, `poc_verifier`, `attack_chain_analyst`,
-`finding_adjudicator`, and `completeness_reviewer`.
+`finding_adjudicator`, and `completeness_reviewer`, plus `adjudication_judge`, which decides which of two shuffled
+sides is correct and sets no state ([judge and PoC design](review-judge-and-poc.md); R4, R5 and R6 are unchanged).
 
 Technology stacks are never roles. Folding them into roles would multiply authority rules by
 technology (red C++ role, blue C++ role, and so on). Personas and stack profiles are knowledge only.
@@ -519,10 +521,15 @@ Lane B (hunt): ranked review units ─► hunt packages ─► team: 3 red ─�
     otherwise the advisory's severity label;
   - CI rules;
   - post-build hardening;
-  - OWASP control failures.
+  - OWASP control failures;
+  - secret-scanner findings (`secret`; reported severity `unknown`, so admitted by default);
+  - Dockerfile and IaC misconfiguration (`config_scanner`).
 
   Each family has a versioned normalization rule (`lead-family/dependency_advisory/2` and
-  `lead-family/artifact_scanner/2` add the NVD band). Unknown severity is never treated as low.
+  `lead-family/artifact_scanner/2` add the NVD band; `lead-family/source_sast/2` adds the shellcheck, psalm and Infer
+  producers). Every observation producer has an explicit lead-or-not decision
+  ([`../reviews/lead-coverage-audit.md`](../reviews/lead-coverage-audit.md)); a credential literal is never shown to a
+  model (`secret-redaction/1`). Unknown severity is never treated as low.
   Lane A also admits every dependency or artifact-scanner lead whose advisory is listed in the
   run-pinned CISA KEV catalog, whatever its reported severity (`lanes.lead_admission_kev`, default
   `true`). Each lead package records its `admission_reasons` (`reported_severity`, `kev_listed`).
@@ -889,19 +896,31 @@ declares `consumed_factors`, and `scoring.score_claims` asks the registry for ex
 factor or provider needs no change to the stage. A provider that consumes no factors (such as
 `application_risk_matrix/1`) receives a request that canonicalizes exactly as before.
 
-`application_risk_matrix/2` is the default provider (`providers.application_risk_matrix.implementation`).
+`application_risk_matrix/3` is the default provider (`providers.application_risk_matrix.implementation`).
 It rates the factors with a declarative model held in TOML and validated in
 `config/inference_review.py`. The model keeps the four dimensions separate:
 
 - **`exploitability_confidence`** (scale `exploitability_evidence/1`, `low`/`medium`/`high`). The
   provider sums the configured points of the present `verification`, `taint_path`,
   `attacker_control`, `guard_absent` and `exposure` values (`privilege` may also be configured)
-  and maps the total at the `bands.medium` and `bands.high` thresholds. A missing factor adds
-  nothing. KEV keeps its one-band rule: a KEV-listed lead raises an already scored claim one
-  band, recorded as an assumption and as `kev_adjusted`.
-- **`technical_severity`** (scale `application_risk_matrix/2`). It looks up `impact_class` against
-  the exploitability rating in the configured matrix. It is `null` when `impact_class` is missing
-  (no CWE, no usable catalog, or no mapped consequence, and no override).
+  and maps the total at the `bands.medium` and `bands.high` thresholds. **A missing factor is
+  unknown, not zero.** The total is an interval: the floor gives each missing factor its minimum
+  points on its scale, the ceiling gives it its maximum, and both ends are mapped through the same
+  thresholds. The dimension is rated only when both ends fall in one class; otherwise its rating
+  is `null` (unrated). KEV keeps its one-band rule, applied to both ends: a KEV-listed lead raises
+  an already scored claim one band, recorded as an assumption and as `kev_adjusted`.
+- **`technical_severity`** (scale `application_risk_matrix/3`). It looks up `impact_class` against
+  the exploitability rating in the configured matrix, once for the floor and once for the ceiling.
+  If both ends give the same band, that band is the rating; the package records
+  `severity_assessment.assessment` as `complete` (no scored factor was missing) or `bounded`
+  (some were missing, but none of their values could change the band, for example a low-impact
+  weakness whose every exploitability gives `low`). If the ends differ, `technical_severity` is
+  `null`, the assessment is `unrated`, and the package records `severity_floor`,
+  `severity_ceiling` and `unresolved_factors` (the missing factors that widen the interval, each
+  with its reason in `missing_factor_reasons`). It is also `unrated` when `impact_class` is
+  missing (no CWE, no usable catalog, or no mapped consequence, and no override), with no bounds.
+  An unrated claim that is otherwise qualifying is published as `decision_pending` (decision 1),
+  never as `not_ship_blocking`.
 - **`environmental_business_impact`** (scale `environmental_exposure/1`). It uses points for
   `exposure`, `privilege` and `data_sensitivity` and is produced only when at least one of them
   is present.
@@ -909,14 +928,30 @@ It rates the factors with a declarative model held in TOML and validated in
 
 Validation rejects a model that is not monotone. Points must be non-negative integers that never
 decrease along a factor's scale, and the severity matrix must never decrease along either axis.
-Stronger evidence therefore never lowers a rating. `impact_class` and `threat` may not carry
-points, and `epss` is not a factor. The defaults rate a confirmed claim with the minimum direct
-evidence (verification 40, taint 10, control 10, guard 15 = 75) as `high`, as
-`application_risk_matrix/1` did. A supported claim reaches `medium` only with real path, control
-or guard evidence.
+Stronger evidence therefore never lowers a rating, and removing evidence never lowers one
+either: a removed factor can only lower the floor and raise the ceiling, so the interval widens,
+the assessment moves from `complete` to `bounded` to `unrated`, and the rating is withheld rather
+than reduced. `impact_class` and `threat` may not carry points, and `epss` is not a factor.
+The defaults rate a confirmed claim with every scored factor at its minimum (verification 40,
+taint 10, control 10, guard 15 = 75, exposure 0) as `high`, as `application_risk_matrix/1` did.
+A supported claim reaches `medium` only with real path, control or guard evidence. Because the
+shipped model is calibrated for full evidence, a claim missing attacker control or taint evidence
+is usually `unrated`; the operator fix is to supply the evidence (graph facts, accepted tags),
+not to lower thresholds (see "Tuning scoring" in the operations guide).
+
+`application_risk_matrix/3` replaces `application_risk_matrix/2`, which scored a missing factor
+as zero points and so let missing evidence silently lower a rating. `/2` is no longer selectable;
+`/1` stays for comparison.
+
+A provider that configuration enables but this build does not implement (`cvss_v4`,
+`ssvc_decision`) is not skipped silently. `registry_from_settings` records it in
+`ProviderRegistry.unavailable`; the scoring stage records one `score_gap` per run for it
+(subject `provider:<name>`, reason "enabled but has no implementation in this build") and lists
+it in the scores document under `unavailable_providers`. It produces no score, and nothing
+decides from it.
 
 EPSS never affects a score (decision 6). The stage does not pass it, and
-`application_risk_matrix/2` excludes it from its input fingerprint and writes
+`application_risk_matrix/3` excludes it from its input fingerprint and writes
 `reference_inputs.epss = null`. Varying EPSS leaves every score package byte-identical. The model,
 the impact derivation rule id, the override table and the pinned catalog's identity (status,
 snapshot id, manifest hash, CWE version, gap) enter `provider_config_sha256`, and the factor set
@@ -970,9 +1005,12 @@ the hand-maintained CWE table shipped before decision 11, frozen in code with th
 version (`LEGACY_CWE_IMPACT_CLASSES`) so that its ratings and score ids are reproduced, and the
 claim state. It does not satisfy B1 and is not the default.
 
-Score packages are `appsec-review/score-package/2`. They add `factors` (factor, scale, value,
-detail), `missing_factor_reasons`, and populated `factor_citations` (relation ids, entity ids, tag
-assignment ids and reference/configuration ids per factor).
+Score packages are `appsec-review/score-package/3`. They add `factors` (factor, scale, value,
+detail), `missing_factor_reasons`, populated `factor_citations` (relation ids, entity ids, tag
+assignment ids and reference/configuration ids per factor), and `severity_assessment`
+(`assessment` of `complete`, `bounded` or `unrated`, `severity_floor`, `severity_ceiling` and
+`unresolved_factors`). Providers that do not bound their rating (`application_risk_matrix/1`)
+report `complete` when rated and `unrated` with no bounds otherwise.
 
 ## Central TOML
 
@@ -1092,7 +1130,7 @@ metric_groups = ["base", "threat", "environmental", "supplemental"]
 # Model tables (exploitability, environmental, technical_severity) are described under
 # "Evidence-derived scoring factors"; appsec-review.toml holds the full defaults.
 [jobs.job_inference_security_review.settings.scoring.providers.application_risk_matrix]
-implementation = "application_risk_matrix/2"
+implementation = "application_risk_matrix/3"
 
 # Every lane B rank weight; see "Lane B: open discovery".
 [jobs.job_inference_security_review.settings.ranking]
@@ -1138,6 +1176,13 @@ workers = 1
 ```
 
 ## Benign proof-of-trigger lane
+
+> **Implemented subset.** The owner decided that a proof of concept is a unit-test *function* with no `main` that the
+> pipeline compiles and never executes. That is `job_poc_generation` (the designer half of this lane with deterministic
+> validators and a compile check, and **no executor, attempt or result stage**), specified in
+> [`review-judge-and-poc.md`](review-judge-and-poc.md) and operated in
+> [`../operations/poc-generation.md`](../operations/poc-generation.md). The sections below describe the wider design (an
+> isolated executor, attempts and results); none of that is built.
 
 Only adjudicated findings that satisfy a configured High/Critical eligibility predicate enter this
 lane. A PoC means a non-malicious, bounded demonstration that the claimed condition can be
@@ -1371,7 +1416,7 @@ that content is safe to publish.
 Normative schemas live under `docs/schemas/inference-security-review/` as each stage is defined.
 Closed versioned schemas exist for the red discovery result, blue and verifier results, worker
 turns, cell records, claims, evidence relations, adjudication, gaps, ledger events, score packages
-(`score-package/2`), finding packages (`finding-package/2`) and the handoff
+(`score-package/3`), finding packages (`finding-package/2`) and the handoff
 (`inference-review-handoff/2`); the PoC, attack-chain and completeness schemas remain to be defined.
 They use closed objects, bounded strings/arrays, enums for state, and reusable definitions for
 artifact/evidence references.
@@ -1402,8 +1447,10 @@ The following documents are concise shape examples; hashes are shortened only fo
 
 ```json
 {
-  "schema": "appsec-review/score-package/2",
+  "schema": "appsec-review/score-package/3",
   "score_id": "score-0fe2...",
+  "severity_assessment": {"assessment": "complete", "severity_floor": null, "severity_ceiling": null,
+                          "unresolved_factors": []},
   "claim_id": "claim-9a31...",
   "provider": {"id": "cvss_v4", "interface": "1", "implementation": "first-compatible/1"},
   "native": {
@@ -1482,8 +1529,10 @@ The following documents are concise shape examples; hashes are shortened only fo
   "independence": {"independent": true, "provider_distinct": false, "verifier_model_distinct": true},
   "ship_block": {"policy": "ship-block-policy/1", "status": "ship_blocking",
                  "reasons": ["technical_severity_critical"],
-                 "inputs": {"technical_severity": {"provider": "application_risk_matrix/2", "rating": "critical",
-                                                   "score_id": "score-application-matrix-31..."},
+                 "inputs": {"technical_severity": {"provider": "application_risk_matrix/3", "rating": "critical",
+                                                   "score_id": "score-application-matrix-31...",
+                                                   "severity_floor": "critical", "severity_ceiling": "critical",
+                                                   "missing_factors": []},
                             "lead_families": ["source_sast"], "kev_listed": null,
                             "verifier_model_distinct": true},
                  "displayed_context": {"decides": false, "reference_cvss": [], "non_deciding_scores": []}},
@@ -1542,7 +1591,7 @@ This tree is the original proposal. The implemented layout differs: the job pack
 `advisories`, `budget`, `capability`, `cells`, `claims`, `evidence`, `identity`, `independence`,
 `lead_families`, `ledger`, `models`, `obligations`, `packages`, `ranking`, `red_discovery`,
 `references`, `scope`, `ship_block`, `teams`, `units` and the `scoring/` package
-(`application_matrix_v2`, `cwe_impact`, `evidence_source`, `factors`, `interface`, `risk_model`);
+(`application_matrix_v3`, `cwe_impact`, `evidence_source`, `factors`, `interface`, `risk_model`);
 `review/rounds.py`, `review/poc/`, `review/attack_chains.py` and the CVSS/SSVC providers do not
 exist. Guidance composition lives in `src/appsec_review/guidance/`.
 
@@ -1839,7 +1888,7 @@ weaker one.
 |---|---|
 | per cell of the table above | `source_span`, `ast_node`, `ir_entity`, `symbol`; build kinds (`build_action` through `wasm_module`); `evidence_artifact` |
 | direct only for the predicate the producing rule's versioned mapping names | `tool_observation` (SAST, CodeQL path, post-build, CI), mapped by producer, native rule identity and result kind (`tool-rule-predicates/2`, see below) |
-| direct only for the predicate the graph-fact family's versioned mapping (`graph-fact-predicates/1`) names, and only when the **re-resolved** fact's `admissibility.direct_eligible` is `true` (every cited location exact, fact coverage complete, no cross-check disagreement, classified source/sink) | `call_site` and `sink_site` (`affected_construct`); `entry_point` (`attacker_input_control` for attacker-reachable source classes); `dataflow_path` (`source_to_sink_reachability`, and `attacker_input_control` when its source class is attacker-reachable); `guard_fact` and `range_fact` (`missing_or_ineffective_guard`, support or contradict) |
+| direct only for the predicate the graph-fact family's versioned mapping (`graph-fact-predicates/1`) names, and only when the **re-resolved** fact's `admissibility.direct_eligible` is `true` (every cited location exact, fact coverage complete, no cross-check disagreement, classified source/sink) | `call_site` and `sink_site` (`affected_construct`); `entry_point` (`attacker_input_control` for attacker-reachable source classes); `dataflow_path` (`source_to_sink_reachability`, and `attacker_input_control` when its source class is attacker-reachable); `guard_fact` and `range_fact` (`missing_or_ineffective_guard`: support, qualify, or contradict only when the facts show the destination is bounded, see below) |
 | indirect: may guide search, never satisfies an obligation | `hotspot`, `priority_item`, `history_signal`, `change`, `change_context_signal`, `review_signal`, `tag_assignment`, `review_unit`, `flow_summary`, any graph kind whose `direct_eligible` is `false`, reported scanner severity, model prose |
 | indirect for **every** predicate: reference context (`review/evidence.py::REFERENCE_KINDS`) | `advisory`, `dependency_package` (a scanner-reported match), `precomputed_fact` (including `dependency_advisories` and `reference_intelligence` facts), and every OSV, NVD, CISA KEV, FIRST EPSS, and MITRE record they carry |
 
@@ -1874,11 +1923,19 @@ SBOM, lockfile, or artifact inventory (`package`, `archive_member`), which is di
 and EPSS can order work and inform workers. NVD CVSS and KEV also enter scoring as labelled
 reference inputs; EPSS never does. None of them satisfies an obligation alone.
 
-Graph-fact admissibility (`evidence-admissibility/2`) is decided from the fact the
+Graph-fact admissibility (`evidence-admissibility/3`) is decided from the fact the
 validator re-resolves through `find`, never from the model's copy: a citation whose resolved
 payload has `direct_eligible = false` is indirect whatever the model claims. Static absence of a
-graph fact is never a relation, so `not_reachable` stays unreachable through graph evidence; a
-`dominating` guard or a bounded range contradicts `missing_or_ineffective_guard` instead. The
+graph fact is never a relation, so `not_reachable` stays unreachable through graph evidence. A
+`dominating` guard or a bounded range only **qualifies** `missing_or_ineffective_guard` by default: it
+is recorded as `contradicts` only when the application shows from the exported facts
+(`graph/bounds.py`, a pure function shared with the `guard_absent` factor) that it bounds the
+destination, and the citing role is blue, verifier or judge; red's counterevidence is always
+`qualifies`. Otherwise the relation carries the reason `guard_not_shown_to_bound_destination:<why>`
+into the ledger, finding package and report. For `if (size < 4u + out.length) return -1;` ahead of a
+`memcpy` into `char name[16]` the guard compares the input size with the length field, never the
+16-byte destination, so it cannot refute the overflow. `evidence-admissibility/3` changes evidence
+relations, so cells and adjudications recorded under `/2` are not reused. The
 mapping, the eligibility rule and the tool that returns these kinds are specified in
 [`code-graph-precomputation.md`](code-graph-precomputation.md) sections 5 and 6.
 
@@ -2050,7 +2107,7 @@ resolve to the same model.
   fields that the conflict validator reads. Add the task prompts under
   `pipeline/guidance/tasks/inference-security-review/`, and expand `governing-rules.md` only for
   rules shared with OWASP workers.
-- **Scoring.** The default scorer is `application_risk_matrix/2`, which is fully deterministic.
+- **Scoring.** The default scorer is `application_risk_matrix/3`, which is fully deterministic.
   It rates the `score-factors/1` evidence factors (see
   [Evidence-derived scoring factors](#evidence-derived-scoring-factors-score-factors1)) with a
   configured, monotone model:
@@ -2059,7 +2116,10 @@ resolve to the same model.
     [CWE impact class](#cwe-impact-class-cwe-impact-derivation1)). When neither applies, technical
     severity is `null` and `impact_class` is listed in `missing_factors` with its reason.
   - `exploitability_confidence` sums the points of the verification, taint path, attacker control,
-    guard and exposure factors. When the claim's lead advisory is CISA KEV-listed, a claim that is
+    guard and exposure factors as an interval in which a missing factor is unknown, not zero (see
+    above): it is rated only when the floor and the ceiling fall in one band, and technical
+    severity inherits that, so removing evidence widens the interval and never lowers a rating.
+    When the claim's lead advisory is CISA KEV-listed, a claim that is
     already `supported` or `confirmed` is raised one band, recorded as an assumption and as
     `kev_adjusted` in the native result. KEV never makes an unsupported claim scoreable.
   - `environmental_business_impact` is produced only from accepted exposure, privilege and
@@ -2222,7 +2282,7 @@ both lanes, and one score dimension. It does not execute PoCs, run variant hunts
   `source_to_sink_reachability`, besides `affected_construct`, and only for a path result, per
   `review/tool_rules.py`; `owasp_control` observations are direct for `missing_or_ineffective_guard`, and
   `ci_rule`/`post_build_hardening` for `configuration_enables`), from source constructs the model cites (analyst-assessed for everything but the construct itself, `predicate-admission/1`), and, for C/C++ scopes with an
-  accepted graph export, from direct-eligible graph facts (`evidence-admissibility/2`,
+  accepted graph export, from direct-eligible graph facts (`evidence-admissibility/3`,
   [`code-graph-precomputation.md`](code-graph-precomputation.md)): `dataflow_path`, `entry_point`,
   `sink_site`, `call_site`, `guard_fact` and `range_fact`. `sink_up` and `entry_down` launch per
   unit from its accepted graph families. Remaining gaps: export packs exist only for C/C++, so every
@@ -2273,12 +2333,23 @@ Decisions were recorded by the user on 2026-10-12. "Implementation" names where 
 will be enforced in code.
 
 1. **Ship-blocking policy — decided and implemented.** One versioned policy, `ship-block-policy/1`. A finding is
-   ship-blocking when it is `confirmed` and either `application_risk_matrix/2` rates its technical
+   ship-blocking when it is `confirmed` and either `application_risk_matrix/3` rates its technical
    severity `high` or `critical`, or it is a confirmed dependency finding listed in KEV. CVSS and
    SSVC outputs are displayed alongside but never decide. A `supported` finding never blocks; when
    it would otherwise qualify, it is flagged `needs_verification`. When a ship-blocking finding was
    verified by the same model as its red cells (see 2), it is published as
-   `ship_blocking_pending_distinct_verification` instead of `ship_blocking`.
+   `ship_blocking_pending_distinct_verification` instead of `ship_blocking`. A `confirmed` or
+   `supported` finding that does not qualify, and whose decision cannot be made because a material
+   input is missing (technical severity is unrated, or the score package lists material missing
+   factors), is published as `decision_pending`. `not_ship_blocking` is reserved for findings that
+   were rated and fall below the thresholds, so unknown is never published as "does not block".
+   Precedence (first match wins): `ship_blocking`; `ship_blocking_pending_distinct_verification`;
+   `needs_verification`; `decision_pending`; `not_ship_blocking`. The three qualifying statuses
+   come first because they already name the next action, and a KEV-listed dependency qualifies
+   even with an unrated severity; `decision_pending` applies only when the finding does not
+   qualify and the missing input could still change that. The reasons record
+   `technical_severity_unrated` and one `missing_factor_<name>` per material factor.
+   Adding the status changed `policy_sha256`.
    Implementation: `review/ship_block.py::decide` is a pure, first-match policy applied to every
    finding package in `publication.publish_handoff`. A dependency finding is a claim proposed from
    a lane A lead whose family is in `settings.ship_block.dependency_lead_families` (default
@@ -2349,7 +2420,7 @@ will be enforced in code.
     `analyst_hypothesis` never becomes a relation. Normalization also records evidence requests,
     named gaps, exact lead accounting (fed to the handoff accounting) and chain seeds, which are
     stored as a run-owned artifact and never as claims.
-11. **CWE impact class — decided and implemented.** The `application_risk_matrix/2` impact class is derived from the
+11. **CWE impact class — decided and implemented.** The `application_risk_matrix/3` impact class is derived from the
     pinned MITRE CWE catalog's common consequences (confidentiality, integrity and availability
     scopes), with an explicit override table for exceptions. It replaces the hand-maintained table.
     Implementation: `cwe-impact-derivation/1` in `review/scoring/cwe_impact.py`, consequences in

@@ -1,0 +1,155 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://appsec-review.local/schemas/poc-generation/poc-candidate.schema.json",
+  "title": "One entry of poc_candidates in the accepted inference-review handoff",
+  "description": "The shape job_poc_generation reads (review-judge-and-poc.md section 4). The array is produced by the judge work of job_inference_security_review; this schema documents what the consumer accepts and is not the producer's schema. poc_basis.sha256 is the SHA-256 of the canonical JSON of poc_basis.value.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "claim_id",
+    "package_id",
+    "state",
+    "judge_verdict",
+    "poc_basis",
+    "finding_package",
+    "evidence_refs"
+  ],
+  "properties": {
+    "claim_id": {
+      "$ref": "common.schema.json#/$defs/claim_id"
+    },
+    "package_id": {
+      "$ref": "common.schema.json#/$defs/package_id"
+    },
+    "state": {
+      "$ref": "common.schema.json#/$defs/claim_state"
+    },
+    "judge_verdict": {
+      "$ref": "common.schema.json#/$defs/judge_verdict"
+    },
+    "poc_basis": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sha256",
+        "value"
+      ],
+      "properties": {
+        "sha256": {
+          "$ref": "common.schema.json#/$defs/sha256"
+        },
+        "value": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "entry",
+            "path",
+            "trigger",
+            "input_format",
+            "preconditions",
+            "expected_observation",
+            "unknowns"
+          ],
+          "properties": {
+            "entry": {
+              "type": "array",
+              "maxItems": 8,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "common.schema.json#/$defs/label"
+              }
+            },
+            "path": {
+              "type": "array",
+              "maxItems": 16,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "common.schema.json#/$defs/label"
+              }
+            },
+            "trigger": {
+              "type": "array",
+              "maxItems": 8,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "field",
+                  "where",
+                  "constraint",
+                  "why"
+                ],
+                "properties": {
+                  "field": {
+                    "type": "string",
+                    "maxLength": 240
+                  },
+                  "where": {
+                    "type": "string",
+                    "maxLength": 240
+                  },
+                  "constraint": {
+                    "type": "string",
+                    "maxLength": 240
+                  },
+                  "why": {
+                    "type": "string",
+                    "maxLength": 240
+                  }
+                }
+              }
+            },
+            "input_format": {
+              "type": "string",
+              "maxLength": 240
+            },
+            "preconditions": {
+              "type": "array",
+              "maxItems": 8,
+              "items": {
+                "type": "string",
+                "maxLength": 240
+              }
+            },
+            "expected_observation": {
+              "type": "string",
+              "maxLength": 240
+            },
+            "unknowns": {
+              "type": "array",
+              "maxItems": 8,
+              "items": {
+                "type": "string",
+                "maxLength": 240
+              }
+            }
+          }
+        }
+      }
+    },
+    "finding_package": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "finding_package_id",
+        "sha256"
+      ],
+      "properties": {
+        "finding_package_id": {
+          "$ref": "common.schema.json#/$defs/finding_package_id"
+        },
+        "sha256": {
+          "$ref": "common.schema.json#/$defs/sha256"
+        }
+      }
+    },
+    "evidence_refs": {
+      "type": "array",
+      "maxItems": 256,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "common.schema.json#/$defs/evidence_ref"
+      }
+    }
+  }
+}

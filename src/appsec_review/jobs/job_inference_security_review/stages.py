@@ -11,24 +11,26 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
+from appsec_review.config.inference_review import PocCandidateSettings
 from appsec_review.review import adjudication as r5
 from appsec_review.review import advisories as advisory_reference
 from appsec_review.review.accounting import Accounting, PoolOutcome, exact_accounting
 from appsec_review.review.adjudication import Adjudication, adjudicate
 from appsec_review.review.claims import possible_duplicates
-from appsec_review.review.identity import make_id
+from appsec_review.review.identity import make_id, sha256_hex
 from appsec_review.review.ledger import (
     EVENT_SCHEMA, LedgerWriter, MergedLedger, Projection, gap_from_json, merge_shards, project,
 )
 from appsec_review.review.models import (
-    Admissibility, ClaimState, Gap, GapClass, IntegrityError, Lane, RelationKind, make_gap,
+    Admissibility, ClaimState, Gap, GapClass, IntegrityError, JudgeVerdict, JudgeVerdictValue, Lane,
+    RelationKind, make_gap,
 )
 from appsec_review.review.scoring import (
     DERIVATION_RULE, UNAVAILABLE_CATALOG, ImpactCatalog, consumed_factors, default_factor_registry, default_registry,
     registry_from_settings,
 )
 from appsec_review.review.scoring.factors import EvidenceSource, FactorSet, factor_input
-from appsec_review.review.scoring.interface import ScoreProviderResult, ScoreRequest
+from appsec_review.review.scoring.interface import ScoreProviderResult, ScoreRequest, SeverityAssessment
 from appsec_review.review import ship_block
 from appsec_review.review.ship_block import ShipBlockInputs, ShipBlockSettings
 from appsec_review.storage import atomic_bytes, atomic_json, canonical_json, file_sha256
@@ -166,8 +168,8 @@ LIMITATIONS: Mapping[str, tuple[str, ...]] = {
     "application_risk_matrix/1": (
         "application_risk_matrix/1 rates impact from a configured CWE table only; it is not a CVSS score and "
         "does not assess environment or business impact", _REFERENCE_LIMITATION),
-    "application_risk_matrix/2": (
-        "application_risk_matrix/2 rates configured score-factors/1 evidence factors with a configured model; "
+    "application_risk_matrix/3": (
+        "application_risk_matrix/3 rates configured score-factors/1 evidence factors with a configured model; "
         "it is not a CVSS score", "environmental_business_impact reflects accepted security tags (exposure, "
         "privilege, data sensitivity), not deployment or business data",
         "impact_class is a cwe_impact_overrides entry or is derived (cwe-impact-derivation/1) from the run's "
@@ -198,7 +200,10 @@ def score_package_json(result: ScoreProviderResult) -> dict[str, Any]:
                           "references": sorted(by_kind["adjudication"] + by_kind["reference_input"]
                                                + by_kind["configuration"])})
     limitations = LIMITATIONS.get(result.implementation_version, ())
-    return {"schema": result.schema, "score_id": result.score_id, "claim_id": result.claim_id,
+    assessment = result.severity_assessment or SeverityAssessment(
+        "complete" if result.technical_severity is not None and result.technical_severity.rating else "unrated",
+        None, None)
+    return {"schema": result.schema, "severity_assessment": assessment.record(), "score_id": result.score_id, "claim_id": result.claim_id,
             "adjudication_id": result.adjudication_id,
             "provider": {"id": result.provider_id, "interface": result.interface_version,
                          "implementation": result.implementation_version},
@@ -297,6 +302,10 @@ def score_claims(adjudications: Sequence[Mapping[str, Any]], projection: Project
     factor_registry = default_factor_registry(overrides, cwe_catalog)
     writer = LedgerWriter(ledger_path, stream)
     scores: list[dict[str, Any]] = []
+    # An enabled provider that cannot run is a named gap, once per run, and is published below.
+    for missing_provider in registry.unavailable:
+        writer.record_gap(make_gap(GapClass.SCORE_GAP, f"provider:{missing_provider.provider}",
+                                   missing_provider.reason))
     for record in adjudications:
         state = ClaimState(record["state"])
         if state not in (ClaimState.CONFIRMED, ClaimState.SUPPORTED):
@@ -330,11 +339,13 @@ def score_claims(adjudications: Sequence[Mapping[str, Any]], projection: Project
             scores.append({"score_id": package["score_id"], "claim_id": claim.claim_id, "sha256": file_sha256(path),
                            "file": path.name, "provider": outcome.implementation_version,
                            "band": package["native"].get("rating"), "missing_factors": package["missing_factors"],
-                           "technical_severity": severity["rating"] if severity else None})
+                           "technical_severity": severity["rating"] if severity else None,
+                           "severity_assessment": package["severity_assessment"]})
     receipt = writer.seal()
     implementations = sorted(registry.get(item).implementation_version for item in registry.ids())
     catalog = cwe_catalog if cwe_catalog is not None else UNAVAILABLE_CATALOG
-    return {"schema": "appsec-review/inference-review-scores/2", "providers": implementations,
+    return {"schema": "appsec-review/inference-review-scores/3", "providers": implementations,
+            "unavailable_providers": [item.record() for item in registry.unavailable],
             "impact_class": {"rule": DERIVATION_RULE, "catalog": catalog.identity()},
             "scores": sorted(scores, key=lambda item: item["score_id"]),
             "ledger_shard": {"events": receipt.event_count, "sha256": file_sha256(ledger_path)}}
@@ -406,9 +417,12 @@ def _ship_block_inputs(state: ClaimState, claim_scores: Sequence[Mapping[str, An
     deciding = sorted((item for item in claim_scores if item["provider"] == ship_block.SEVERITY_PROVIDER),
                       key=lambda item: item["score_id"])
     severity = deciding[0] if deciding else None
+    assessment = (severity or {}).get("severity_assessment") or {}
     inputs = ShipBlockInputs(
         claim_state=state, technical_severity=severity.get("technical_severity") if severity else None,
         severity_score_id=severity["score_id"] if severity else None, lead_families=tuple(lead_families),
+        severity_missing_factors=tuple(sorted(assessment.get("unresolved_factors", ()))),
+        severity_floor=assessment.get("severity_floor"), severity_ceiling=assessment.get("severity_ceiling"),
         kev_listed=references.get("kev_listed"), verifier_model_distinct=bool(model_distinct))
     displayed = {
         "reference_cvss": [dict(item) for item in references.get("reference_cvss", ())][:8],
@@ -416,6 +430,25 @@ def _ship_block_inputs(state: ClaimState, claim_scores: Sequence[Mapping[str, An
                                       if item["provider"] != ship_block.SEVERITY_PROVIDER)[:16],
     }
     return inputs, displayed
+
+
+def finding_judge(verdicts: Sequence[JudgeVerdict]) -> dict[str, Any] | None:
+    """The ``judge_verdict`` of a finding package, from the claim\'s judge verdicts in the ledger.
+
+    ``verdict`` is the judges\' unanimous outcome and ``unresolved`` when they differ. ``disagrees_with_state`` is set
+    when the judge sided against the published finding (blue correct, or neither side correct); the package then
+    shows that disagreement beside its state. The verdict never changes the state.
+    """
+    if not verdicts:
+        return None
+    ordered = sorted(verdicts, key=lambda item: item.verdict_id)
+    outcomes = {item.verdict for item in ordered}
+    overall = next(iter(outcomes)) if len(outcomes) == 1 else JudgeVerdictValue.UNRESOLVED
+    return {"verdict": overall.value,
+            "disagrees_with_state": overall in (JudgeVerdictValue.BLUE_CORRECT, JudgeVerdictValue.NEITHER),
+            "judges": [{"verdict_id": item.verdict_id, "verdict": item.verdict.value, "cell_id": item.cell_id,
+                        "judge_model_distinct": item.judge_model_distinct, "reason": item.reason[:2000]}
+                       for item in ordered[:8]]}
 
 
 def finding_packages(projection: Projection, adjudications: Sequence[Mapping[str, Any]],
@@ -459,6 +492,8 @@ def finding_packages(projection: Projection, adjudications: Sequence[Mapping[str
                                                (references or {}).get(claim.claim_id) or {},
                                                (lead_families or {}).get(claim.claim_id, ()), model_distinct)
         decision = ship_block.decide(inputs, ship_block_settings, require_distinct_model=require_distinct_model)
+        judged = projection.judge_verdicts.get(claim.claim_id, ())
+        judge = finding_judge(judged)
         body = {
             "schema": FINDING_SCHEMA, "claim_id": claim.claim_id, "lane": claim.lane.value, "state": state.value,
             "label": "confirmed" if state is ClaimState.CONFIRMED else "not_independently_confirmed",
@@ -471,7 +506,9 @@ def finding_packages(projection: Projection, adjudications: Sequence[Mapping[str
             "remediation_inputs": {"safe_regression_artifact": None},
             "independence": {"independent": bool(independent),
                              "provider_distinct": any(item["provider_distinct"] for item in verifiers),
-                             "verifier_model_distinct": model_distinct},
+                             "verifier_model_distinct": model_distinct,
+                             "judge_model_distinct": all(item.judge_model_distinct for item in judged) if judged else None},
+            "judge_verdict": judge,
             "ship_block": decision.record(inputs, adjudication_id=record["adjudication_id"],
                                           verification_review_id=review_id, displayed_context=displayed),
             "gaps": sorted(set(claim_gaps.get(claim.claim_id, ())) | set(record["gap_ids"]))[:256],
@@ -484,8 +521,45 @@ def finding_packages(projection: Projection, adjudications: Sequence[Mapping[str
         written.append({"finding_package_id": package["finding_package_id"], "sha256": file_sha256(path),
                         "claim_id": claim.claim_id, "state": state.value, "lane": claim.lane.value,
                         "ship_block_status": decision.status.value, "missing_predicates": missing,
-                        "gaps": package["gaps"], "file": path.name})
+                        "gaps": package["gaps"], "file": path.name,
+                        # Inputs of poc_candidates; not part of the handoff\'s finding_packages list.
+                        "judge_verdict": judge["verdict"] if judge else None,
+                        "technical_severity": inputs.technical_severity, "direct_evidence": list(supporting[:256])})
     return sorted(written, key=lambda item: item["finding_package_id"])
+
+
+def poc_candidates(findings: Sequence[Mapping[str, Any]], briefs: Iterable[Mapping[str, Any]],
+                   settings: PocCandidateSettings) -> list[dict[str, Any]]:
+    """Claims a later job may build a proof-of-concept function for (review-judge-and-poc.md section 4).
+
+    A claim is listed when **all** of these hold: its R5 state is ``supported`` or ``confirmed`` (it has a finding
+    package); the judge said ``red_correct`` (``partly`` too when ``settings.accept_partly``); one of its red cells
+    gave a ``poc_basis`` whose ``entry`` and ``path`` resolved (non-empty after label resolution); and its risk-matrix
+    technical severity is one of ``settings.risk_ratings``. Nothing else about the claim is copied.
+    """
+    accepted = {JudgeVerdictValue.RED_CORRECT.value} | (
+        {JudgeVerdictValue.PARTLY.value} if settings.accept_partly else set())
+    by_claim: dict[str, list[Mapping[str, Any]]] = defaultdict(list)
+    for brief in briefs:
+        basis = brief.get("poc_basis") or {}
+        if basis.get("entry") and basis.get("path"):
+            by_claim[str(brief["claim_id"])].append(brief)
+    found = []
+    for finding in sorted(findings, key=lambda item: item["claim_id"]):
+        claim_id = finding["claim_id"]
+        if (finding["state"] not in (ClaimState.CONFIRMED.value, ClaimState.SUPPORTED.value)
+                or finding.get("judge_verdict") not in accepted
+                or finding.get("technical_severity") not in settings.risk_ratings
+                or claim_id not in by_claim):
+            continue
+        brief = min(by_claim[claim_id], key=lambda item: (str(item["cell_id"]), str(item["package_id"])))
+        found.append({"claim_id": claim_id, "package_id": brief["package_id"], "state": finding["state"],
+                      "judge_verdict": finding["judge_verdict"],
+                      "poc_basis": {"sha256": sha256_hex(brief["poc_basis"]), "brief": dict(brief["poc_basis"])},
+                      "finding_package": {"finding_package_id": finding["finding_package_id"],
+                                          "sha256": finding["sha256"]},
+                      "evidence_refs": list(finding["direct_evidence"])})
+    return found
 
 
 def remediation_partition(findings: Sequence[Mapping[str, Any]]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
@@ -512,7 +586,8 @@ def build_handoff(*, run_id: str, manifest_sha256: str, configuration_sha256: st
                   accounting: Accounting, shards: Sequence[Mapping[str, Any]], findings: Sequence[Mapping[str, Any]],
                   scores: Sequence[Mapping[str, Any]], package_manifest_sha256: str,
                   coverage: Mapping[str, Any], possible: Sequence[Sequence[str]], schemas: SchemaSet,
-                  ship_block_policy_sha256: str, verification: Mapping[str, Any]) -> dict[str, Any]:
+                  ship_block_policy_sha256: str, verification: Mapping[str, Any],
+                  poc_candidate_list: Sequence[Mapping[str, Any]] = ()) -> dict[str, Any]:
     if not accounting.exact:
         reasons = ", ".join(sorted({gap.reason for gap in accounting.violations}))
         raise IntegrityError(f"publication_error: claim accounting is not exact ({reasons})")
@@ -534,6 +609,7 @@ def build_handoff(*, run_id: str, manifest_sha256: str, configuration_sha256: st
         "gap_ids": [gap.gap_id for gap in projection.gaps],
         "package_manifest_sha256": package_manifest_sha256, "coverage_matrix": dict(coverage),
         "possible_duplicates": [list(pair) for pair in possible],
+        "poc_candidates": [dict(item) for item in poc_candidate_list],
     }
     errors = schemas.errors("handoff", handoff)
     if errors:
@@ -580,5 +656,5 @@ def verify_receipts(projection: Projection, receipts_root: Path) -> int:
 
 
 __all__ = ["apply_policy", "audit", "build_handoff", "claim_lead_families", "claim_references", "coverage_matrix",
-           "completeness_gaps", "finding_packages", "merge_claims", "merge_verified", "remediation_partition",
+           "completeness_gaps", "finding_judge", "finding_packages", "merge_claims", "poc_candidates", "merge_verified", "remediation_partition",
            "score_claims", "scorer_actor", "shard_records", "verify_receipts", "write_ledger"]

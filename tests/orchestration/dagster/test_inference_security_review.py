@@ -246,7 +246,7 @@ def test_slice1_acceptance_both_lanes_parallel_and_capacity_invariant(tmp_path: 
 
 
 STATUSES = ("ship_blocking", "ship_blocking_pending_distinct_verification", "needs_verification",
-            "not_ship_blocking")
+            "decision_pending", "not_ship_blocking")
 
 
 def _findings(attempt: Path, handoff: dict) -> dict[str, dict]:
@@ -261,9 +261,11 @@ def _assert_ship_block_and_remediation_intake(attempt: Path, handoff: dict) -> N
     summary = handoff["ship_block"]
     assert summary["policy"] == "ship-block-policy/1"
     # The scripted run confirms one critical lane A claim; with the verifier on the red cells' model it
-    # is pending distinct verification, never ship_blocking. Supported claims rate medium here.
+    # is pending distinct verification, never ship_blocking. The two supported claims lack path, guard and
+    # exposure evidence, so their severity is unrated (medium-to-critical interval): decision_pending, not the
+    # not_ship_blocking the old zero-points scoring gave them.
     assert summary["by_status"] == {"ship_blocking": 0, "ship_blocking_pending_distinct_verification": 1,
-                                    "needs_verification": 0, "not_ship_blocking": 2}
+                                    "needs_verification": 0, "decision_pending": 2, "not_ship_blocking": 0}
     assert summary["by_lane"]["lead"]["ship_blocking_pending_distinct_verification"] == 1
     assert sum(summary["by_lane"]["hunt"].values()) + sum(summary["by_lane"]["lead"].values()) == len(findings)
     for package in findings.values():
@@ -316,7 +318,8 @@ def test_a_distinct_verifier_profile_moves_the_pending_finding_to_ship_blocking(
     _validator("handoff").validate(handoff)
     assert handoff["verification"]["distinct"] is True and handoff["verification"]["warning"] is None
     assert handoff["ship_block"]["by_status"] == {"ship_blocking": 1, "ship_blocking_pending_distinct_verification": 0,
-                                                  "needs_verification": 0, "not_ship_blocking": 2}
+                                                  "needs_verification": 0, "decision_pending": 2,
+                                                  "not_ship_blocking": 0}
     findings = _findings(attempt, handoff)
     [blocking] = [item for item in findings.values() if item["ship_block"]["status"] == "ship_blocking"]
     assert blocking["state"] == "confirmed" and blocking["independence"]["verifier_model_distinct"] is True

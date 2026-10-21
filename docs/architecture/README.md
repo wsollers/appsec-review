@@ -2,6 +2,7 @@
 
 Repository authority remains in [`../../AGENTS.md`](../../AGENTS.md). This page is navigation only.
 
+- [`../operations/report-rendering.md`](../operations/report-rendering.md) — the LaTeX/PDF and single-page HTML report renderer, its box legend, scripts and image.
 - [`jobs-and-runtime.md`](jobs-and-runtime.md) — semantic jobs, resumability, Dagster, and current analysis lanes.
 - [`build-environments-and-execution-capture.md`](build-environments-and-execution-capture.md) —
   shared and project-derived build images, conditional capture control design, the pinned
@@ -18,6 +19,8 @@ Repository authority remains in [`../../AGENTS.md`](../../AGENTS.md). This page 
 - [`../operations/wasm-build.md`](../operations/wasm-build.md) — WebAssembly output-family execution across accepted source-language recipes.
 - [`../operations/metrics.md`](../operations/metrics.md) — receipt-resolved review scope, build, artifact, and CodeQL timing metrics.
 - [`python-and-retrieval.md`](python-and-retrieval.md) — immutable accepted retrieval indexes and bounded MCP access.
+- [`retrieval-surfaces.md`](retrieval-surfaces.md) — retrieval tools, the MCP adapter, review-cell retrieval and
+  runtime skills: which consumer reaches the data how.
 - [`tree-sitter-ast.md`](tree-sitter-ast.md) — locked concrete-syntax-tree production and partitioned AST shards.
 - [`owasp-control-workbench.md`](owasp-control-workbench.md) — OWASP applicability, validation, and coverage design.
 - [`security-tag-taxonomy.md`](security-tag-taxonomy.md) — faceted, basis-qualified security
@@ -70,6 +73,7 @@ Repository authority remains in [`../../AGENTS.md`](../../AGENTS.md). This page 
   answers, and how stances become ledger states.
 - [`review-judge-and-poc.md`](review-judge-and-poc.md) — the judge role (A/B shuffled sides), PoC candidates, and
   `job_poc_generation`: a never-executed, compile-checked unit-test function for developers.
+- [`../operations/poc-generation.md`](../operations/poc-generation.md) — `job_poc_generation`: compile-checked proof-of-concept unit-test functions (no `main`, never run) for findings the judge agreed with; shipped disabled and run by hand.
 - [`indexing-and-query-reuse.md`](indexing-and-query-reuse.md) — review-data indexing and reusable
   query design.
 - [`code-graph-precomputation.md`](code-graph-precomputation.md) — the authoritative code-graph
@@ -91,6 +95,7 @@ Repository authority remains in [`../../AGENTS.md`](../../AGENTS.md). This page 
 
 Operations pages not listed above:
 
+- [`../operations/model-profiles.md`](../operations/model-profiles.md) — the `dev` and `prod` runtime profiles: selection, the closed-allowlist `profiles/prod.toml` layer, and the effect on fingerprints and the model contract.
 - [`../operations/inference-security-review.md`](../operations/inference-security-review.md) — inference review model selection and upgrade, capacity overlay, and outcomes.
 - [`../operations/wave1-review.md`](../operations/wave1-review.md) — direct CLI and `wave1_review` scope.
 - [`../operations/third-party-data-sync.md`](../operations/third-party-data-sync.md) — feed synchronization.
