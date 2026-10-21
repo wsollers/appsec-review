@@ -77,9 +77,9 @@ become `max_model_turns = 60000`, `max_input_tokens = 600000000`, `max_output_to
 model (Opus 5.5) differs from every red cell's (Sonnet 5.5). That is what
 `verification.require_distinct_model_for_ship_blocking` checks: under `prod` a ship-blocking
 candidate can be published as `ship_blocking`, where under `dev` (every role on `default`) it stays
-`ship_blocking_pending_distinct_verification`. If `appsec-review.toml` defines an
-`adjudication_judge` role, `prod.toml` should bind it to `strong` too; the file carries a comment
-marking the place.
+`ship_blocking_pending_distinct_verification`. `profiles/prod.toml` binds
+`roles.adjudication_judge.model_profile` to `strong` as well, so the judge's model also differs from
+every red cell's.
 
 ## Visibility and safety
 
