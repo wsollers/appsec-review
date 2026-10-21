@@ -114,22 +114,25 @@ INPUT_SOURCES: tuple[tuple[str, tuple[str, ...], str, tuple[str, ...], tuple[str
     ("dynamic_traces", ("planned:future_dynamic_producer",), "planned", ("review_package",), ()),
     ("protected_runtime_material", ("runtime",), "protected", (), ("query_datasets", "coverage")),
     ("review_decisions", ("job_inference_security_review",), "extend", ("review_package",), ("coverage",)),
-    # Decision 8: the review handoff's downstream consumers, fixed by name before they are built. Each
-    # reads the inference review handoff (``PLANNED_CONSUMERS`` in its datasets module) and will
-    # produce the named source; none is an input to a review today.
+    # Decision 8: the review handoff's downstream consumers, fixed by name. Each reads the inference
+    # review handoff (``PLANNED_CONSUMERS`` in its datasets module) and produces the named source. The
+    # remediation jobs are not built; the publication gate and the final report are, and no review
+    # reads either as an input.
     ("remediation_plans", ("planned:job_remediation_planning",), "planned", (), ()),
     ("remediation_validations", ("planned:job_remediation_validation",), "planned", (), ()),
-    ("publication_gate_decisions", ("planned:job_final_publication_gate",), "planned", (), ()),
-    ("final_report_publications", ("planned:job_final_report_publication",), "planned", (), ()),
+    ("publication_gate_decisions", ("job_final_publication_gate",), "artifact_only", (), ("coverage",)),
+    ("final_report_publications", ("job_final_report_publication",), "artifact_only", (), ("coverage",)),
 )
 
-# Decision 8: the planned downstream jobs and the producers whose handoffs each consumes, in graph
-# order. ``planned:`` names resolve through :func:`resolve_producer` once the job is registered.
+# Decision 8: the downstream jobs and the producers whose handoffs each consumes, in graph order.
+# ``planned:`` names resolve through :func:`resolve_producer` once the job is registered. The gate
+# currently consumes only the review handoff; it will also consume the remediation validation handoff
+# once that job exists, and the remediation jobs are the only ones still planned.
 PLANNED_CONSUMERS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("planned:job_remediation_planning", ("job_inference_security_review",)),
     ("planned:job_remediation_validation", ("job_inference_security_review", "planned:job_remediation_planning")),
-    ("planned:job_final_publication_gate", ("job_inference_security_review", "planned:job_remediation_validation")),
-    ("planned:job_final_report_publication", ("planned:job_final_publication_gate",)),
+    ("job_final_publication_gate", ("job_inference_security_review",)),
+    ("job_final_report_publication", ("job_final_publication_gate",)),
 )
 
 

@@ -1,0 +1,287 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://appsec-review.local/schemas/final-report/final-report.schema.json",
+  "title": "Final security review report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "run_id",
+    "provenance",
+    "status",
+    "summary",
+    "findings",
+    "attack_chains",
+    "poc_outcomes",
+    "verification_backlog",
+    "withheld",
+    "limitations",
+    "gap_ids",
+    "renderers",
+    "notices"
+  ],
+  "properties": {
+    "schema": {
+      "const": "appsec-review/final-report/1"
+    },
+    "run_id": {
+      "$ref": "common.schema.json#/$defs/short_text"
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "gate_handoff",
+        "gate_document",
+        "review_handoff",
+        "accepted_manifest_sha256",
+        "configuration_sha256",
+        "ledger_head_sha256",
+        "ship_block_policy_sha256"
+      ],
+      "properties": {
+        "gate_handoff": {
+          "$ref": "common.schema.json#/$defs/artifact_ref"
+        },
+        "gate_document": {
+          "$ref": "common.schema.json#/$defs/artifact_ref"
+        },
+        "review_handoff": {
+          "$ref": "common.schema.json#/$defs/artifact_ref"
+        },
+        "accepted_manifest_sha256": {
+          "$ref": "common.schema.json#/$defs/sha256"
+        },
+        "configuration_sha256": {
+          "$ref": "common.schema.json#/$defs/sha256"
+        },
+        "ledger_head_sha256": {
+          "$ref": "common.schema.json#/$defs/sha256"
+        },
+        "ship_block_policy_sha256": {
+          "$ref": "common.schema.json#/$defs/sha256"
+        }
+      }
+    },
+    "status": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "review",
+        "review_incomplete",
+        "publication",
+        "review_complete"
+      ],
+      "properties": {
+        "review": {
+          "$ref": "common.schema.json#/$defs/review_status"
+        },
+        "review_incomplete": {
+          "type": "boolean"
+        },
+        "publication": {
+          "$ref": "common.schema.json#/$defs/publication_status"
+        },
+        "review_complete": {
+          "type": "boolean"
+        }
+      },
+      "description": "review_complete is true only for a COMPLETE review that is not review_incomplete and has no limitation of kind gap."
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "accounting",
+        "package_counts",
+        "ship_block",
+        "coverage"
+      ],
+      "properties": {
+        "accounting": {
+          "$ref": "common.schema.json#/$defs/accounting_summary"
+        },
+        "package_counts": {
+          "$ref": "common.schema.json#/$defs/package_counts"
+        },
+        "ship_block": {
+          "$ref": "common.schema.json#/$defs/ship_block_summary"
+        },
+        "coverage": {
+          "$ref": "common.schema.json#/$defs/coverage_summary"
+        }
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "$ref": "common.schema.json#/$defs/finding_projection"
+      },
+      "maxItems": 10000,
+      "uniqueItems": true
+    },
+    "attack_chains": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "reason",
+        "items"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "none_available",
+            "available"
+          ]
+        },
+        "reason": {
+          "$ref": "common.schema.json#/$defs/text"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "common.schema.json#/$defs/record_id"
+          },
+          "maxItems": 1000,
+          "uniqueItems": true
+        }
+      }
+    },
+    "poc_outcomes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "reason",
+        "items"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "none_available",
+            "available"
+          ]
+        },
+        "reason": {
+          "$ref": "common.schema.json#/$defs/text"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "finding_package_id",
+              "status",
+              "result_id"
+            ],
+            "properties": {
+              "finding_package_id": {
+                "$ref": "common.schema.json#/$defs/finding_package_id"
+              },
+              "status": {
+                "$ref": "common.schema.json#/$defs/token"
+              },
+              "result_id": {
+                "oneOf": [
+                  {
+                    "$ref": "common.schema.json#/$defs/record_id"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
+          },
+          "maxItems": 10000,
+          "uniqueItems": true
+        }
+      }
+    },
+    "verification_backlog": {
+      "type": "array",
+      "items": {
+        "$ref": "common.schema.json#/$defs/finding_projection"
+      },
+      "maxItems": 10000,
+      "uniqueItems": true
+    },
+    "withheld": {
+      "type": "array",
+      "items": {
+        "$ref": "common.schema.json#/$defs/finding_projection"
+      },
+      "maxItems": 10000,
+      "uniqueItems": true
+    },
+    "limitations": {
+      "type": "array",
+      "items": {
+        "$ref": "common.schema.json#/$defs/limitation"
+      },
+      "maxItems": 64,
+      "uniqueItems": true
+    },
+    "gap_ids": {
+      "type": "array",
+      "items": {
+        "$ref": "common.schema.json#/$defs/gap_id"
+      },
+      "maxItems": 100000,
+      "uniqueItems": true
+    },
+    "renderers": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "markdown",
+        "pdf"
+      ],
+      "properties": {
+        "markdown": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "file",
+            "renderer"
+          ],
+          "properties": {
+            "file": {
+              "const": "final-report.md"
+            },
+            "renderer": {
+              "$ref": "common.schema.json#/$defs/token"
+            }
+          }
+        },
+        "pdf": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "state",
+            "reason"
+          ],
+          "properties": {
+            "state": {
+              "const": "not_rendered"
+            },
+            "reason": {
+              "$ref": "common.schema.json#/$defs/text"
+            }
+          }
+        }
+      }
+    },
+    "notices": {
+      "type": "array",
+      "items": {
+        "$ref": "common.schema.json#/$defs/text"
+      },
+      "maxItems": 16,
+      "uniqueItems": true,
+      "minItems": 1
+    }
+  }
+}

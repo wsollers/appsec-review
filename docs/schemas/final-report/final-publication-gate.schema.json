@@ -1,0 +1,228 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://appsec-review.local/schemas/final-report/final-publication-gate.schema.json",
+  "title": "Final publication gate document",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "run_id",
+    "review",
+    "inputs",
+    "unavailable_inputs",
+    "accounting",
+    "ship_block",
+    "verification",
+    "coverage",
+    "packages",
+    "package_counts",
+    "buckets",
+    "limitations",
+    "gap_ids",
+    "status",
+    "bindings"
+  ],
+  "properties": {
+    "schema": {
+      "const": "appsec-review/final-publication-gate/1"
+    },
+    "run_id": {
+      "$ref": "common.schema.json#/$defs/short_text"
+    },
+    "review": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "review_incomplete",
+        "accepted_manifest_sha256",
+        "configuration_sha256",
+        "ledger_head_sha256",
+        "projection_sha256",
+        "ship_block_policy_sha256",
+        "package_manifest_sha256"
+      ],
+      "properties": {
+        "status": {
+          "$ref": "common.schema.json#/$defs/review_status"
+        },
+        "review_incomplete": {
+          "type": "boolean"
+        },
+        "accepted_manifest_sha256": {
+          "$ref": "common.schema.json#/$defs/sha256"
+        },
+        "configuration_sha256": {
+          "$ref": "common.schema.json#/$defs/sha256"
+        },
+        "ledger_head_sha256": {
+          "$ref": "common.schema.json#/$defs/sha256"
+        },
+        "projection_sha256": {
+          "$ref": "common.schema.json#/$defs/sha256"
+        },
+        "ship_block_policy_sha256": {
+          "$ref": "common.schema.json#/$defs/sha256"
+        },
+        "package_manifest_sha256": {
+          "$ref": "common.schema.json#/$defs/sha256"
+        }
+      }
+    },
+    "inputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "job_handoff",
+        "review_handoff",
+        "claim_ledger",
+        "projection",
+        "coverage_matrix"
+      ],
+      "properties": {
+        "job_handoff": {
+          "$ref": "common.schema.json#/$defs/artifact_ref"
+        },
+        "review_handoff": {
+          "$ref": "common.schema.json#/$defs/artifact_ref"
+        },
+        "claim_ledger": {
+          "$ref": "common.schema.json#/$defs/artifact_ref"
+        },
+        "projection": {
+          "$ref": "common.schema.json#/$defs/artifact_ref"
+        },
+        "coverage_matrix": {
+          "$ref": "common.schema.json#/$defs/artifact_ref"
+        }
+      }
+    },
+    "unavailable_inputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "attack_chain_manifest",
+        "poc_status_manifest"
+      ],
+      "properties": {
+        "attack_chain_manifest": {
+          "$ref": "common.schema.json#/$defs/unavailable"
+        },
+        "poc_status_manifest": {
+          "$ref": "common.schema.json#/$defs/unavailable"
+        }
+      }
+    },
+    "accounting": {
+      "$ref": "common.schema.json#/$defs/accounting_summary"
+    },
+    "ship_block": {
+      "$ref": "common.schema.json#/$defs/ship_block_summary"
+    },
+    "verification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "require_distinct_model_for_ship_blocking",
+        "distinct",
+        "warning"
+      ],
+      "properties": {
+        "require_distinct_model_for_ship_blocking": {
+          "type": "boolean"
+        },
+        "distinct": {
+          "type": "boolean"
+        },
+        "warning": {
+          "oneOf": [
+            {
+              "type": "string",
+              "maxLength": 1000
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "coverage": {
+      "$ref": "common.schema.json#/$defs/coverage_summary"
+    },
+    "packages": {
+      "type": "array",
+      "items": {
+        "$ref": "common.schema.json#/$defs/finding_projection"
+      },
+      "maxItems": 10000,
+      "uniqueItems": true
+    },
+    "package_counts": {
+      "$ref": "common.schema.json#/$defs/package_counts"
+    },
+    "buckets": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "publishable",
+        "verification_backlog",
+        "withheld"
+      ],
+      "properties": {
+        "publishable": {
+          "type": "array",
+          "items": {
+            "$ref": "common.schema.json#/$defs/finding_package_id"
+          },
+          "maxItems": 10000,
+          "uniqueItems": true
+        },
+        "verification_backlog": {
+          "type": "array",
+          "items": {
+            "$ref": "common.schema.json#/$defs/finding_package_id"
+          },
+          "maxItems": 10000,
+          "uniqueItems": true
+        },
+        "withheld": {
+          "type": "array",
+          "items": {
+            "$ref": "common.schema.json#/$defs/finding_package_id"
+          },
+          "maxItems": 10000,
+          "uniqueItems": true
+        }
+      }
+    },
+    "limitations": {
+      "type": "array",
+      "items": {
+        "$ref": "common.schema.json#/$defs/limitation"
+      },
+      "maxItems": 64,
+      "uniqueItems": true
+    },
+    "gap_ids": {
+      "type": "array",
+      "items": {
+        "$ref": "common.schema.json#/$defs/gap_id"
+      },
+      "maxItems": 100000,
+      "uniqueItems": true
+    },
+    "status": {
+      "$ref": "common.schema.json#/$defs/publication_status"
+    },
+    "bindings": {
+      "type": "array",
+      "items": {
+        "$ref": "common.schema.json#/$defs/artifact_ref"
+      },
+      "maxItems": 30000,
+      "uniqueItems": true,
+      "minItems": 1
+    }
+  }
+}
