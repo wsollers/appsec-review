@@ -680,7 +680,9 @@ Every ordinary failure becomes a typed, recorded gap, and the job publishes with
 - an entire lane failing.
 
 A model *requesting* a forbidden tool, path, or capability is expected adversarial input. It
-produces a cell `authority_error` gap and a security event, not a job failure.
+produces a security event and feedback to the model (review protocol v2: the denial code, a reason and the corrected
+request shape, costing one query), not a job failure. It becomes a cell `authority_error` gap only when the same
+denial repeats in a cell and ends it.
 
 Only framework-integrity failures block publication:
 - a tampered or swapped manifest or shard;
@@ -1038,6 +1040,9 @@ max_depth = 4
 max_memory_context_entries = 24  # lane A C/C++ SVF context per lead (review-package-contract.md, v5)
 max_callers = 16                 # caller call-site fan-out per lead
 caller_depth = 2                 # caller levels walked from the lead's enclosing function (1-4)
+max_view_bytes = 49152           # byte budget of the model-facing package view (review-protocol-v2.md section 4)
+max_view_source_lines = 160      # longest function excerpt in a view
+max_view_type_declarations = 6   # type declarations embedded in a view
 
 [jobs.job_inference_security_review.settings.budgets]
 budget_team_packages = 200       # split between lanes by lead_budget_share
@@ -1768,6 +1773,15 @@ planning. Workers therefore cannot call MCP, and slice 1 does not expose MCP to 
   is later exposed to workers (see the [review package contract](review-package-contract.md)).
 - A `final` result may cite only identities returned in this cell's own retrieval transcript or
   supplied in its package. Any other citation is a `schema_error`.
+- **Review protocol v2** ([`review-protocol-v2.md`](review-protocol-v2.md)) changes the model-facing layer of this
+  loop. The request carries `protocol: review-protocol/2`; the cell sees a labelled package view and answers in a
+  compact stance-plus-labels form that the application expands into the result documents above. A denied request is
+  feedback, not a gap: the next turn returns its code, a one-line reason and the corrected shape, it counts one query,
+  and a second identical denial ends the cell `invalid` with one `authority_error` gap naming the request and code.
+  `expand` (application-only, granted to every cell, not an MCP tool) returns the labelled rows that bear on a label or
+  one page of a package file. `find`, `query_observations` and `query_codeql` accept `locator: {path, line}`, resolved
+  inside the package scope (`entity_out_of_scope` otherwise); a flat `path` stays forbidden. `query_code_graph` repairs
+  a mode and subject kind mismatch only when one identity is the unambiguous stand-in, and says so in its response.
 
 ### R3 Evidence relations and "direct" evidence
 

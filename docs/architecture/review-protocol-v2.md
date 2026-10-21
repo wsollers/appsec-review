@@ -1,6 +1,6 @@
 # Review protocol v2: the model-facing layer
 
-Status: design; implementation follows this document. Observed behavior comes from the first live
+Status: implemented (see section 13 for the decisions taken where this document left a choice open). Observed behavior comes from the first live
 runs of `job_inference_security_review` on `cpp-multivuln-v1` (Dagster application runs
 `2026-10-21-0005` and `2026-10-21-0007`).
 
@@ -124,7 +124,18 @@ Embedding is keyed by **location and function scope**, not only by a correlated 
 - every `dataflow_path`, `flow_summary` and `entry_point` that touches those sinks (the existing
   correlated-path embedding stays, and extends to a path found by sink rather than by observation);
 - the build action's compiler, flags and hardening summary (from the build command facts);
-- the tag assignments and corroborating observations at the same location.
+- the tag assignments and corroborating observations at the same location;
+- **what is needed to reason about reaching the sink from an input**: the `entry_point` facts of the function and of
+  the flows that touch its sinks, and a precomputed upward **call chain** from the lead's function to the nearest
+  function holding an entry point (existing `call_site` edges, at most `max_call_depth` levels), whose hops are
+  labelled `F1..` in order. When no entry point is reachable within the bound the package carries a material gap, and
+  a cell sees it as an `X` label: reachability is unknown, never excluded;
+- **the declarations of the types used at the sink**, as a stated rule: the field names, types and array sizes of
+  every user type that the lead function's signature and body name, read from the accepted index (or the lead's file)
+  and hash-verified. A type the application cannot locate is a material gap.
+
+Red and blue receive the same package and the same tools. A guard row repeats what a `guard_fact` states (state,
+polarity, condition text, operator and operand texts) and never summarises whether it bounds a destination.
 
 Bounds come from the existing graph settings (`max_call_depth`, `max_neighbors_per_function`,
 `max_paths_per_sink`, `max_guards_per_sink`) and a per-package byte budget. Anything omitted is
@@ -199,7 +210,7 @@ defaults, then validates the expanded document with the existing validators.
 {"action": "final", "result": {
   "claims": [{
     "id": "c1", "leads": ["L1"], "cwe": "CWE-787",
-    "predicate": "affected_construct",
+    "security_predicate": "memory_corruption",
     "statement": "memcpy in parse_header copies out.length bytes, up to 65535, into the 16-byte out.name.",
     "support": {
       "affected_construct": ["K1", "S1"],
@@ -217,7 +228,11 @@ defaults, then validates the expanded document with the existing validators.
   weigh against it. Red counterevidence is recorded as `qualifies`, as today.
 - Every lead in the package appears in some claim's `leads`, in `no_claim`, or in `blocked` with a
   reason. An omitted lead is a gap.
-- A hunt-lane answer uses the same shape, with `units` in place of `leads`.
+- A hunt-lane answer uses the same shape; its `leads` name the leads of the unit menu.
+- `security_predicate` is the closed security consequence of the claim (`security-predicates/1`); the obligation
+  predicates appear only as keys of `support`, `counter` and the blue and verifier answers. (The first draft of
+  this section named the field `predicate`; see section 13.)
+- A claim may carry an optional `poc_basis`, section 6.6.
 
 ### 6.3 Blue
 
@@ -253,12 +268,47 @@ evidence rules (section 7), not by the stance word.
 `disposition` is a proposal from the existing closed set. The verifier works blind, from the package
 and its own retrieval, as R6 requires; its output never references red or blue.
 
-### 6.5 Label resolution
+### 6.5 Label resolution (shared, role-neutral)
+
+Parsing, label resolution, the `unresolved` rule and the stance-to-relation step are one role-neutral layer
+(`review/compact.py`: `resolve_position`, `relations_of`, `citations_of`); the red, blue and verifier answers only
+arrange its positions into their result document. Which role may see which other role's output is decided where each
+request is built, never in that layer.
 
 - A label resolves through the package and the cell's own retrieval receipts. A label from another
   cell, or one that does not exist, is dropped with feedback, and the claim loses that support.
 - A stance without a resolvable citation is recorded as `unresolved`.
 - A raw ref is accepted wherever a label is, if the cell received it.
+
+### 6.6 The proof-of-concept brief (`poc_basis`)
+
+Red's job is to develop the information from which a proof of concept can be generated; a separate later job builds the
+proof of concept. A red claim may therefore carry one optional, bounded object. It is **not code and not a proof of
+concept**; it is the brief that job will read.
+
+```json
+"poc_basis": {
+  "entry": ["E1"], "path": ["F1", "F2"],
+  "trigger": [{"field": "header.length", "where": "bytes 2..3", "constraint": "greater than 16",
+               "why": "G2 compares the size with the length field, not with the 16-byte capacity"}],
+  "input_format": "4-byte header, then name bytes",
+  "preconditions": ["attacker_controls_file_content"],
+  "expected_observation": "a stack-buffer-overflow write in memcpy under a sanitizer",
+  "unknowns": ["X1"]
+}
+```
+
+- Every free-text field is at most 240 characters; `entry` has at most 8 labels, `path` 16, `trigger` 8 rows,
+  `preconditions` 8 and `unknowns` 8.
+- `entry` labels must resolve to `entry_point` identities and `path` labels to `call_site` identities, in order;
+  `unknowns` are `X` labels, kept as the gap text. A label that does not resolve is dropped with feedback.
+- A `poc_basis` without a resolvable entry point adds a named gap to the expanded result: how input reaches the lead is
+  unknown.
+- Expansion fills the closed fields that exist: `attacker_entry.entity_id` from the first entry point, and every
+  `preconditions` text that is a member of the closed `preconditions/1` vocabulary is added to the claim's
+  preconditions. The bounded object itself is stored as `proposal.poc_basis` and copied by the application to a
+  run-owned `poc-basis.json` beside the claim ledger. No relation, claim state, score or adjudication reads it.
+- Blue and the verifier have no `poc_basis`: their schemas are closed, so an answer that carries one is rejected.
 
 ## 7. From stance to state
 
@@ -332,9 +382,50 @@ model.
   gate and the report can be invoked again on that run with the new protocol, without repeating any
   upstream job.
 
-## 12. Open questions
+## 12. Open questions (unchanged by the implementation)
 
 1. Guard facts and the meaning of a dominating guard (section 7).
 2. Whether `--json-schema` is enforced and accepts the compact schemas (section 9).
 3. Which hunt-lane units a role may expand beyond its package scope, if any.
 4. Whether `expand` should return source text for a label's lines or only identities and summaries.
+
+## 13. Decisions taken at implementation
+
+Where this document left a choice open, the implementation took these. None of them changes R3, R4, R5 or R6.
+
+1. **Compact claim field.** The red claim names its closed consequence `security_predicate`, not `predicate`.
+2. **Package v6.** `appsec-review/review-package/6` stores the `neighborhood`; the labelled view is built at cell time
+   and is not stored. The reuse basis stays the hash of the stored package. Non-material gaps stay in the stored
+   package; the view writes them to a hash-referenced `gaps.jsonl` listed under `files`.
+3. **Extra labels.** `M` (SVF memory context), `O` (other context), and `A` (a claim's affected entities in blue and
+   verifier cells) join the letters of section 4.2. A row returned by a tool keeps its package label when it has one,
+   otherwise it gets the next `Q` label.
+4. **Source labels.** An `S` label's identity is the function symbol when the graph names one, otherwise the lead
+   observation; a type declaration label is the declaration entity when it is in the package scope, otherwise the
+   function span's identity.
+5. **`expand`.** Granted to every review cell by the application; it is not in the MCP catalog or any role allowlist.
+   It runs a fixed plan of typed requests per identity kind through the cell capability, counts as one query, and
+   returns each row with its label. `IN_PROCESS_TOOLS` therefore differs from the published catalog by exactly
+   `expand`, and `tests/review/test_capability.py` states that.
+6. **Locator.** `locator: {path, line}` is a parameter of `find`, `query_observations` and `query_codeql`; the path must
+   be a path the package view names. A flat `path` stays a forbidden parameter.
+7. **Denial policy.** A denied request costs one query, is returned with a corrected shape, and is a security event but
+   not a gap. The second identical denial in a cell ends it `invalid` with one `authority_error` gap.
+8. **Forgiving `query_code_graph`.** A `depth` or class filter the mode ignores is dropped; a call site, sink, entry
+   point, guard, range, path or located observation is replaced by the one identity a mode needs when that identity is
+   unique. The response names the change.
+9. **Omitted lead.** A lead that no claim, `no_claim` or `blocked` entry accounts for is expanded as `blocked` with a
+   `missing` named gap. The previous behaviour (an `invalid` cell) is gone.
+10. **No chain seeds, taint paths or evidence requests in the compact answer.** The expanded result holds empty lists
+    for them, and `chain-seeds.json` is empty. The chain of calls from an entry point is now package data and a
+    `poc_basis` field instead.
+11. **Blue `supports`.** It is expanded faithfully (disposition and a `supports` proposed relation). The existing
+    relation-authority table (`ROLE_RELATION_KINDS`) still lets blue author only `contradicts` and `qualifies`, so a
+    blue `supports` relation is recorded as a `schema_error` gap and is not a ledger relation. Changing blue's
+    authority is a policy decision this implementation did not take.
+12. **Leads in the view.** The view lists leads under `leads` for both lanes (a lane A package has one); there is no
+    separate `lead` object, which would repeat the row.
+13. **`claim` in blue and verifier answers** is advisory: the cell is bound to one claim, and the application fills
+    `claim_id`.
+14. **Format enforcement.** `--json-schema` was not tried (no live model available to this change); tolerant parsing is
+    unchanged.
