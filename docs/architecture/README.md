@@ -65,6 +65,9 @@ Repository authority remains in [`../../AGENTS.md`](../../AGENTS.md). This page 
   package inputs, membership gates, retrieval scopes, and implementation dependencies.
 - [`red-discovery-output.md`](red-discovery-output.md) — red-pool proposal, taint-path, chain-seed,
   evidence, and lead-accounting contract.
+- [`review-protocol-v2.md`](review-protocol-v2.md) — the model-facing layer of the review: labelled
+  package v2 with embedded neighborhood facts, retrieval and `expand`, compact red, blue and verifier
+  answers, and how stances become ledger states.
 - [`indexing-and-query-reuse.md`](indexing-and-query-reuse.md) — review-data indexing and reusable
   query design.
 - [`code-graph-precomputation.md`](code-graph-precomputation.md) — the authoritative code-graph
