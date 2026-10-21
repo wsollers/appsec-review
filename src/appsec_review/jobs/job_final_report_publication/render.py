@@ -53,6 +53,15 @@ def _dimension(value: Mapping[str, Any] | None) -> str:
     return f"{rating} on scale {code(value['scale'])}{number}"
 
 
+def _judge(verdict: Mapping[str, Any] | None, independence: Mapping[str, Any]) -> str:
+    """The accepted judge verdict, shown beside the state; a disagreement with the state is never hidden."""
+    if verdict is None:
+        return "no judge verdict (the judge did not run for this claim)"
+    note = "; the judge disagrees with this finding's state" if verdict["disagrees_with_state"] else ""
+    distinct = {True: "yes", False: "no", None: "unknown"}[independence.get("judge_model_distinct")]
+    return f"{code(verdict['verdict'])}{note}; judge model distinct {distinct}"
+
+
 def _finding(index: int, item: Mapping[str, Any], settings: Mapping[str, int], *, unconfirmed: bool = False) -> list[str]:
     block, independence = item["ship_block"], item["independence"]
     heading = "unconfirmed " if unconfirmed else ""
@@ -65,6 +74,7 @@ def _finding(index: int, item: Mapping[str, Any], settings: Mapping[str, int], *
              f"- independence: independent verifier {'yes' if independence['independent'] else 'no'}, provider distinct "
              f"{'yes' if independence['provider_distinct'] else 'no'}, verifier model distinct "
              f"{'yes' if independence['verifier_model_distinct'] else 'no'}",
+             f"- judge: {_judge(item['judge_verdict'], independence)}",
              f"- direct evidence relations ({len(item['direct_evidence'])}): "
              f"{_ids(item['direct_evidence'], settings['evidence'])}"]
     if item["missing_predicates"]:

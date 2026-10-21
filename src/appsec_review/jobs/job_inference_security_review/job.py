@@ -526,6 +526,9 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
         hunt_packages = _read(unit.job.run_root, unit.output("packages.assemble_hunt_packages")["artifact"])
         matrix_ref = completeness_doc["coverage_matrix"]
         matrix = _read(unit.job.run_root, matrix_ref)
+        briefs = [entry for document in lane_documents(unit) if document.get("poc_basis")
+                  for entry in _read(unit.job.run_root, document["poc_basis"])["briefs"]]
+        candidates = stages.poc_candidates(findings, briefs, settings.poc_candidates)
         handoff = stages.build_handoff(
             run_id=unit.job.run_id, manifest_sha256=accepted["manifest_sha256"],
             configuration_sha256=semantic_settings_sha256(settings), projection=projection, accounting=accounting,
@@ -534,7 +537,7 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
             coverage={"path": matrix_ref["path"], "sha256": matrix_ref["sha256"], "rows": len(matrix["rows"])},
             possible=merged_doc["possible_duplicates"], schemas=schemas,
             ship_block_policy_sha256=ship_block.policy_sha256(settings.ship_block, require_distinct),
-            verification=verification)
+            verification=verification, poc_candidate_list=candidates)
         artifact = _write(unit, "inference-review-handoff.json", handoff)
         gaps = [f"status {handoff['status']}"] if handoff["status"] != "COMPLETE" else []
         if accounting.review_incomplete:

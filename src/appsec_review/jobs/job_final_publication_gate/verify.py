@@ -93,6 +93,10 @@ def project_finding(reference: Mapping[str, str], package: Mapping[str, Any],
             "distinct_verification_required": block["conditions"]["distinct_verification_required"],
             "verifier_model_distinct": block["conditions"]["verifier_model_distinct"]},
         "independence": dict(package["independence"]),
+        "judge_verdict": None if package["judge_verdict"] is None else {
+            "verdict": package["judge_verdict"]["verdict"],
+            "disagrees_with_state": package["judge_verdict"]["disagrees_with_state"],
+            "verdict_ids": [item["verdict_id"] for item in package["judge_verdict"]["judges"]]},
         "verification_review_id": package["verification_review_id"],
         "direct_evidence": list(package["direct_evidence"]),
         "missing_predicates": list(package["missing_predicates"]),
@@ -217,8 +221,24 @@ def load_accepted_review(run_root: Path, schemas: SchemaSet, *, max_packages: in
         _require(package["ship_block"]["policy_sha256"] == review["ship_block"]["policy_sha256"],
                  "finding package ship-block policy hash does not match the handoff")
         _require(set(package["scores"]) <= set(scores), "finding package names a score package the handoff lacks")
+        judged = package["judge_verdict"]
+        recorded = {item.verdict_id: item for item in ledger.judge_verdicts.get(package["claim_id"], ())}
+        _require(judged is None and not recorded or judged is not None and
+                 {item["verdict_id"] for item in judged["judges"]} == set(recorded)
+                 and all(recorded[item["verdict_id"]].verdict.value == item["verdict"] for item in judged["judges"]),
+                 f"finding package judge verdict disagrees with the claim ledger: {package['finding_package_id']}")
         findings.append((reference, package))
 
+    listed = {item["finding_package_id"]: item["sha256"] for item in review["finding_packages"]}
+    for candidate in review["poc_candidates"]:
+        reference = candidate["finding_package"]
+        package = next((value for _ref, value in findings if value["finding_package_id"] == reference["finding_package_id"]),
+                       None)
+        _require(package is not None and listed.get(reference["finding_package_id"]) == reference["sha256"]
+                 and package["claim_id"] == candidate["claim_id"] and package["state"] == candidate["state"]
+                 and package["judge_verdict"] is not None
+                 and package["judge_verdict"]["verdict"] == candidate["judge_verdict"],
+                 f"proof-of-concept candidate disagrees with its finding package: {candidate['claim_id']}")
     intake = {item["finding_package_id"]: item for item in review["remediation_intake"]}
     backlog = {item["finding_package_id"]: item for item in review["verification_backlog"]}
     by_id = {package["finding_package_id"]: package for _reference, package in findings}
