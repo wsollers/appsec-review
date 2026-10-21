@@ -1,0 +1,14 @@
+% Main document skeleton for the appsec-review report. The renderer replaces the two markers below
+% with escaped, generated content (appsec_review.reporting.latex); everything else is layout.
+\documentclass{appsec-report}
+%%PREAMBLE%%
+\begin{document}
+\reportcover
+\begingroup
+  \hypersetup{linkcolor=brand}
+  \small\renewcommand{\contentsname}{Contents}
+  {\scriptsize\bfseries\color{muted}CONTENTS}\par\vspace{-4pt}
+  \makeatletter\@starttoc{toc}\makeatother
+\endgroup
+%%BODY%%
+\end{document}
