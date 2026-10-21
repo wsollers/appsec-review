@@ -56,6 +56,7 @@ def builtin_registry() -> JobRegistry:
     from appsec_review.jobs.job_cpp_compiled_analysis import build_job as build_cpp_compiled
     from appsec_review.jobs.job_clang_static_analysis import build_job as build_clang_static_analysis
     from appsec_review.jobs.job_svf_alias_analysis import build_job as build_svf_alias_analysis
+    from appsec_review.jobs.job_sanitizer_build import build_job as build_sanitizer_build
     from appsec_review.jobs.job_cpp_symbol_index import build_job as build_cpp_symbol_index
     from appsec_review.jobs.job_cpg_analysis import build_job as build_cpg_analysis
     from appsec_review.jobs.job_codeql_analysis.job import build_job as build_codeql_analysis
@@ -95,6 +96,7 @@ def builtin_registry() -> JobRegistry:
     registry.register("job_cpp_compiled_analysis", build_cpp_compiled)
     registry.register("job_clang_static_analysis", build_clang_static_analysis)
     registry.register("job_svf_alias_analysis", build_svf_alias_analysis)
+    registry.register("job_sanitizer_build", build_sanitizer_build)
     registry.register("job_cpp_symbol_index", build_cpp_symbol_index)
     registry.register("job_cpg_analysis", build_cpg_analysis)
     registry.register("job_codeql_analysis", build_codeql_analysis)

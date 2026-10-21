@@ -60,6 +60,8 @@ INPUT_SOURCES: tuple[tuple[str, tuple[str, ...], str, tuple[str, ...], tuple[str
     ("clangd_symbols", ("job_cpp_symbol_index",), "current", ("symbol_links",), ("core", "query_precomputed")),
     # SVF points-to sets and indirect-call targets are a C/C++ cross-check input of the graph index.
     ("svf_points_to", ("job_svf_alias_analysis",), "current", (), ("core", "query_code_graph")),
+    # Instrumented native builds are protected, artifact-only evidence for a later execution stage.
+    ("sanitizer_builds", ("job_sanitizer_build",), "artifact_only", (), ("coverage",)),
     # Not a graph producer; see code-graph-precomputation.md.
     ("joern_cpg", ("job_cpg_analysis",), "artifact_only", (), ("coverage",)),
     # CodeQL is the primary graph producer: its export is normalized into the graph index by

@@ -464,7 +464,7 @@ model_connectivity -> image_pin_verification -> review_intake -> target_catalog 
   -> tree_sitter_ast -> project_build -> language_build
   -> artifact_indexing -> test_coverage -> profile_data -> artifact_security_analysis
   -> cpp_compiled_analysis -> clang_static_analysis
-  -> svf_alias_analysis (opt-in; only when enabled) -> cpp_symbol_index
+  -> svf_alias_analysis (opt-in; only when enabled) -> sanitizer_build -> cpp_symbol_index
   -> cpg_analysis (deprecated; only when enabled) -> evidence_collection -> dependency_intelligence
   -> change_context_analysis -> codeql_analysis -> review_prioritization
   -> code_graph_index -> review_data_indexing -> review_package_assembly
@@ -524,6 +524,9 @@ enabled registered review job except the standalone `third_party_data_sync` and
 `inference_security_review` jobs, when you need those branches. The direct graph is linear, so its
 order is an execution order rather than a claim that every adjacent job consumes its predecessor.
 `third_party_data_sync` remains a separate scheduled metadata job.
+`sanitizer_build` rebuilds the accepted native units with AddressSanitizer and UBSan in its own
+workspace and never runs a produced binary; see
+[`docs/operations/sanitizer-build.md`](docs/operations/sanitizer-build.md).
 See [`docs/operations/wave1-review.md`](docs/operations/wave1-review.md).
 
 ## Prepare an end-to-end run

@@ -25,7 +25,7 @@ TARGET_JOBS = frozenset({
     "job_profile_data",
     "job_artifact_security_analysis", "job_evidence_collection", "job_dependency_intelligence",
     "job_cpp_compiled_analysis",
-    "job_clang_static_analysis", "job_svf_alias_analysis",
+    "job_clang_static_analysis", "job_svf_alias_analysis", "job_sanitizer_build",
     "job_cpp_symbol_index", "job_cpg_analysis", "job_codeql_analysis", "job_code_graph_index",
     "job_post_build_security_assessment", "job_owasp_control_assessment",
     "job_ci_configuration_analysis", "job_tree_sitter_ast", "job_source_history_analysis",
