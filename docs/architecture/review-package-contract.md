@@ -18,8 +18,9 @@ Version 5 adds lead-level memory and caller context for C/C++ leads (see
 This contract specializes [inference security review](inference-security-review.md). Its
 machine-checkable shape is [review-packages.schema.json](../schemas/review-packages.schema.json).
 The earlier broad `review-input-package.schema.json` draft was removed when this implemented schema
-became authoritative. Both package kinds here are pre-adjudication inputs: scanner severity is
-*reported* severity for ordering, never an adjudicated finding severity.
+became authoritative. Both package kinds here are pre-adjudication inputs: the effective lead
+severity (reported when known, otherwise the audited triage assessment) controls ordering and
+admission, never the adjudicated finding severity.
 
 The same versioned schema also accepts the separate catalog-derived package producer
 `job_review_package_assembly`. Its `document_hunt` variant contains one accepted
@@ -37,11 +38,11 @@ exact route registration is not proof of control enforcement.
 |---|---|
 | `run_id`, `manifest_sha256`, `target_snapshot` | `resolve_accepted_manifest` and `load_verified_manifest` in `retrieval/core.py` and `retrieval/index.py`; verify each shard and the source snapshot before assembly. |
 | `scope`, `source_ids`, `artifact_ids` | Catalog component, source, build-unit and artifact entities; `find`, `query_artifacts`. No synthetic trust boundary: use `null` until an accepted producer provides it. |
-| `lead_menu` | `review/lead_families.py`: one versioned rule per lead family (see gate 3). Source-SAST and CodeQL reuse `normalize_reported_severity` and the accepted `scanner_correlation` lead facts of `indexing/sast.py` for suppression, duplicate and flow identities. Each lead keeps its accepted identity, scanner, rule, bounded `message`, `rule_cwe`, native severity, reported severity, `severity_rule` and `severity_basis`. |
+| `lead_menu` | `review/lead_families.py`: one versioned rule per lead family (see gate 3). Source-SAST and CodeQL reuse `normalize_reported_severity` and the accepted `scanner_correlation` lead facts of `indexing/sast.py` for suppression, duplicate and flow identities. Each lead keeps its accepted identity, scanner, rule, bounded `message`, `rule_cwe`, native severity, reported severity, `severity_rule` and `severity_basis`. `severity_record` preserves the original values, any audited assessment and reason, the effective value, and any unresolved triage gap. |
 | `lead_menu[].advisory_context` (lane A only) | `review/advisories.py` over the accepted `dependency_advisories` facts that cite the lead's observation: up to three advisories, each with the OSV summary, fixed versions and aliases; CVE ids; NVD records (status, dates, bounded description, CWEs, up to six CVSS metrics with family, version, vector, base score and severity); KEV entries (listed, date added, due date, ransomware use, name); EPSS entries (score, percentile, score date); per-join status; the snapshot id and staleness of each feed; and the fact's gaps. `null` when no accepted fact cites the lead. Reference context only (R3: indirect for every predicate). |
 | `lead_menu[].advisory_summary` | The compact form on every lead (the only advisory form on hunt menus): CVE ids, KEV flag (`null` when unknown), highest EPSS percentile and max CVSS base score; `null` without an advisory fact. |
 | `lead_menu[].weaknesses` | One block per CWE in `rule_cwe` (origin `rule`) and in the joined NVD records (origin `nvd`), at most eight: CWE id, name and abstraction from the run-pinned MITRE catalog (`source: mitre_catalog`), else from accepted `reference_intelligence` facts, else `unresolved`. |
-| `lead_menu[].admission_reasons` (lane A only) | `reported_severity` when the reported severity is admitted, `kev_listed` when the advisory is KEV-listed and `lead_admission_kev` is on. |
+| `lead_menu[].admission_reasons` (lane A only) | `reported_severity` when the scanner-reported value is admitted, `assessed_severity` when an audited triage assessment is admitted, and `kev_listed` when the advisory is KEV-listed and `lead_admission_kev` is on. |
 | `lane`, `lead_family`, `rank` | `finding_lead` packages are lane `lead` with a non-null family and `rank: null`. `hunt` packages are lane `hunt` with `lead_family: null` and carry the unit's `review-unit-rank/2` rank and basis. |
 | `persona`, `stack_profile` | Always `null` at assembly. Routing fills them later; assembly never guesses them. |
 | `evidence`, `context` | Accepted observation, priority, CodeQL, source, build and precomputed shard identities; `find`, `trace`, `resolve_evidence`, `query_codeql`, `query_hotspots`, `query_precomputed`. A cited relation is a nomination until it resolves to a source line or hash-verified run artifact. |
@@ -276,11 +277,12 @@ The three view bounds live next to the package bounds:
    observations and agree with the severity rule, and its audit counts per severity must match;
    a contradiction is an integrity failure. The assembler enumerates accepted shards
    exhaustively and never pages through a bounded MCP route such as `query_observations`.
-3. **Lane A.** Admit every lead whose reported severity is in `admit_severities` (default
+3. **Lane A.** Admit every lead whose effective severity is in `admit_severities` (default
    `critical`, `high`, `unknown`) from every family, plus every lead whose advisory is KEV-listed
    when `admit_kev` (`lanes.lead_admission_kev`, default `true`) is set, and create exactly one
    `finding_lead` package per admitted lead, including suppressed, duplicate, unresolved-location and
-   unknown-severity records. Preserve the original identity and native severity.
+   unknown-severity records. Preserve the original identity, native and reported severity, and the
+   assessment reason or unresolved triage gap separately.
    Duplicate and suppression state is context, not a reason to remove the package.
 4. **Lane B.** Partition review units by accepted component, then accepted trust boundary if
    known (none is accepted yet, so it is `null`), build unit and stable range of sorted source

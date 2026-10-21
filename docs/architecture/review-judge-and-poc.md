@@ -303,7 +303,7 @@ R4, R5, R6 or evidence admissibility. Section 5 (`job_poc_generation`) is not pa
 16. **Gate and report.** The gate copies `judge_verdict` into its package projection read-only, re-checks it against the
     ledger's verdicts, and checks each `poc_candidates` entry against its finding package; the report prints the verdict
     and any disagreement beside the state. Nothing in either reads the verdict to classify or withhold a package.
-17. **PoC candidates.** The "risk matrix rating" is the `application_risk_matrix/2` technical severity that
+17. **PoC candidates.** The "risk matrix rating" is the `application_risk_matrix/3` technical severity that
     `ship-block-policy/1` already reads, so `risk_ratings` uses its vocabulary (`low`, `medium`, `high`, `critical`).
     `poc_basis` comes from the lanes' `poc-basis.json`; of several resolved briefs for one claim the one from the lowest
     cell id is copied. A brief is "resolved" when its `entry` and `path` are non-empty after label resolution (an

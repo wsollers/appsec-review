@@ -397,7 +397,7 @@ max_cited_row_chars = 400
 ### PoC candidates
 
 The handoff's `poc_candidates` lists every claim that is `supported` or `confirmed`, whose judge said `red_correct`,
-that carries a `poc_basis` with a resolved entry point and call path, and whose `application_risk_matrix/2` technical
+that carries a `poc_basis` with a resolved entry point and call path, and whose `application_risk_matrix/3` technical
 severity is configured:
 
 ```toml

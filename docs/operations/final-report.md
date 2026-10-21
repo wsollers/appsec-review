@@ -36,7 +36,7 @@ accepted-handoff pointer and re-verifies, from bytes, everything it binds. Any d
 - the lead and hunt package manifests verify (including every package's bytes) and the hunt
   manifest's content hash matches the handoff;
 - every finding package and score package re-hashes, validates against `finding-package/2` and
-  `score-package/2`, belongs to a claim in the ledger in the same state, and carries the handoff's
+  `score-package/3`, belongs to a claim in the ledger in the same state, and carries the handoff's
   manifest, ledger head and ship-block policy hashes;
 - `remediation_intake` and `verification_backlog` partition the finding packages exactly (confirmed
   versus supported, same hashes, claims, lanes and ship-block statuses) and the handoff's ship-block

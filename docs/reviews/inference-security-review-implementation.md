@@ -204,8 +204,8 @@ This follow-up implements decisions 1, 2, 4 and 8 of the design. Decision 3 (PoC
 executor host) is still open, and no PoC execution path was built.
 
 - **Decision 1.** `review/ship_block.py` implements `ship-block-policy/1` as a pure, first-match
-  policy with four statuses: `ship_blocking`, `ship_blocking_pending_distinct_verification`,
-  `needs_verification` and `not_ship_blocking`. `application_risk_matrix/2` technical severity and
+  policy now has five statuses: `ship_blocking`, `ship_blocking_pending_distinct_verification`,
+  `needs_verification`, `decision_pending` and `not_ship_blocking`. `application_risk_matrix/3` technical severity and
   the KEV dependency path decide. CVSS, SSVC and NVD reference vectors are recorded as displayed
   context and never decide. Thresholds are in the typed `settings.ship_block` table.
 - **Decision 2.** `review/independence.py::model_distinct` is recorded per claim as
@@ -213,8 +213,8 @@ executor host) is still open, and no PoC execution path was built.
   confirmation are unchanged. `settings.verification.require_distinct_model_for_ship_blocking`
   (default true) makes the policy publish a same-model finding as pending. The handoff's
   `verification` record carries a warning when the verifier and red profiles resolve to the same
-  model. Every checked-in profile still uses `claude-haiku-5-5`, so real runs publish ship-blocking
-  findings as pending until an operator configures a distinct verifier profile.
+  model. The development profile uses `claude-haiku-5-5`; the production overlay binds the verifier
+  and judge to the strong Sonnet profile.
 - **Decision 4.** The handoff publishes `remediation_intake` (confirmed packages only) and
   `verification_backlog` (supported packages labelled `unconfirmed`, with missing predicates and
   gap ids).
@@ -230,8 +230,8 @@ counts with the default configuration (one pending finding). A new acceptance ru
 distinct verifier profile and shows that finding move to `ship_blocking`.
 
 **Open items:**
-- A confirmed claim without an `application_risk_matrix/2` rating records
-  `technical_severity_unrated` and is not ship-blocking unless the KEV dependency path applies.
-  The publication gate should treat that reason as a gap.
+- A confirmed claim without an `application_risk_matrix/3` rating records
+  `technical_severity_unrated` and becomes `decision_pending` unless the KEV dependency path applies.
+  The publication gate treats both the unrated severity and pending decision as named gaps.
 - The acceptance fixture produces no confirmed KEV dependency claim. The KEV path is covered by
   unit tests only.

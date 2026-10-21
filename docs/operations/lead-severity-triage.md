@@ -30,7 +30,8 @@ or ship-block policy. Each lead-menu record keeps both sides:
 
 The run-owned `lead-triage.json` artifact records every deterministic decision, bounded model batch,
 request hash, attempt, result, unresolved gap, pinned guidance identity, model profile, and catalog
-identity. The inference-review handoff carries its hash and summary counts.
+identity. Each final finding carries the severity records of the finding-lead packages that proposed
+its claim, and the inference-review handoff carries the triage artifact hash and summary counts.
 
 ## Configuration and recovery
 
