@@ -296,7 +296,7 @@ The model-facing layer ([`review-protocol-v2.md`](../architecture/review-protoco
   `repeated_denial:<code>:<tool> <request>`.
 - **Label feedback.** The cell receipt records `feedback` (labels dropped, stances recorded as unresolved, leads the
   answer did not account for), `compact_result` (what the model wrote), `result` (the expanded document the
-  validators saw) and `label_table.retrieved` (the `Q` labels). Old receipts are not reused: the executor version
+  validators saw), `repair_errors` (why the last attempt was rejected) and `label_table.retrieved` (the `Q` labels). Old receipts are not reused: the executor version
   and validator versions changed.
 - **Briefs.** Each lane writes `poc-basis.json` beside `chain-seeds.json` (now empty: the compact answer carries no
   chain seeds) and names it in the lane document under `poc_basis`.

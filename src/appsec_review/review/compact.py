@@ -266,16 +266,21 @@ def expand_red(compact: Mapping[str, Any], labels: LabelTable, *, invocation: Re
             return None
         return ref
 
+    claim_ids = {claim["id"] for claim in compact["claims"]}
+
     def new_gap(kind: str, scope: str, reason: str) -> str:
-        local = f"g{len(gaps) + 1}"
+        number = 1
+        while f"g{number}" in claim_ids or any(item["local_id"] == f"g{number}" for item in gaps):
+            number += 1                                   # a gap id never collides with a claim or another gap
+        local = f"g{number}"
         gaps.append({"local_id": local, "kind": kind, "scope": text(scope, "package", 1000),
                      "reason": text(reason, DEFAULT_TEXT, 1000)})
         return local
 
     for index, claim in enumerate(compact["claims"], start=1):
         local = claim["id"]
-        if local in used_ids or local.startswith("g") and local[1:].isdigit():
-            expansion.errors.append(f"claim id {local} is repeated or reserved")
+        if local in used_ids:
+            expansion.errors.append(f"claim id {local} is repeated")
             continue
         used_ids.add(local)
         owner = f"claim {local}"

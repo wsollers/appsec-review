@@ -723,6 +723,7 @@ def _write_receipt(cell_root: Path, spec: CellSpec, cell_id: str, capability: Ce
         "seen_identities": sorted(attempt.seen),
         "label_table": {"retrieved": dict(attempt.labels.retrieved)},
         "compact_result": attempt.compact, "feedback": attempt.feedback,
+        "repair_errors": list(attempt.repair_errors),
         "result": attempt.result,
         "result_sha256": sha256_hex(attempt.result) if attempt.result is not None else None,
     })
@@ -733,7 +734,7 @@ _RECEIPT_KEYS = frozenset({"schema", "cell_id", "attempt", "attempt_id", "execut
                            "validator_version", "capability_sha256", "guidance_bundle_sha256",
                            "provider", "model", "status", "gap_class", "reason", "turns", "counts",
                            "gaps", "security_events", "seen_identities", "label_table", "compact_result",
-                           "feedback", "result", "result_sha256"})
+                           "feedback", "repair_errors", "result", "result_sha256"})
 
 
 def _load_receipt(path: Path, cell_id: str, number: int) -> Mapping[str, Any]:
