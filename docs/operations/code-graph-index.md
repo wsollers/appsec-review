@@ -75,7 +75,7 @@ A scope's checkpoint (`data/code-graph/scopes/<scope>/checkpoint.json`) binds:
 - the export-manifest hash and the export pack
 - the planned file hashes
 - the catalog SHA-256 and the `columns.json` SHA-256
-- the rule versions: `graph-normalize/1`, `graph-cross-check/1`, `graph-sarif-correlation/1` and
+- the rule versions: `graph-normalize/2`, `graph-cross-check/1`, `graph-sarif-correlation/1` and
   `graph-fact-admissibility/1`
 - the `GraphSettings` bounds and the CodeQL version
 - the identities of every secondary, observation and prioritization shard read

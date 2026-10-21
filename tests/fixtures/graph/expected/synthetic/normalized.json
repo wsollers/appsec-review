@@ -116,7 +116,7 @@
      "catalog_version": "appsec-review/graph-catalog/1",
      "export_pack_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
      "name": "codeql-export",
-     "rule_version": "graph-normalize/1",
+     "rule_version": "graph-normalize/2",
      "tool_version": "2.27.0"
     },
     "result": {
@@ -196,7 +196,7 @@
      "catalog_version": "appsec-review/graph-catalog/1",
      "export_pack_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
      "name": "codeql-export",
-     "rule_version": "graph-normalize/1",
+     "rule_version": "graph-normalize/2",
      "tool_version": "2.27.0"
     },
     "result": {
@@ -276,7 +276,7 @@
      "catalog_version": "appsec-review/graph-catalog/1",
      "export_pack_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
      "name": "codeql-export",
-     "rule_version": "graph-normalize/1",
+     "rule_version": "graph-normalize/2",
      "tool_version": "2.27.0"
     },
     "result": {
@@ -356,7 +356,7 @@
      "catalog_version": "appsec-review/graph-catalog/1",
      "export_pack_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
      "name": "codeql-export",
-     "rule_version": "graph-normalize/1",
+     "rule_version": "graph-normalize/2",
      "tool_version": "2.27.0"
     },
     "result": {
@@ -436,7 +436,7 @@
      "catalog_version": "appsec-review/graph-catalog/1",
      "export_pack_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
      "name": "codeql-export",
-     "rule_version": "graph-normalize/1",
+     "rule_version": "graph-normalize/2",
      "tool_version": "2.27.0"
     },
     "result": {
@@ -516,7 +516,7 @@
      "catalog_version": "appsec-review/graph-catalog/1",
      "export_pack_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
      "name": "codeql-export",
-     "rule_version": "graph-normalize/1",
+     "rule_version": "graph-normalize/2",
      "tool_version": "2.27.0"
     },
     "result": {
@@ -596,7 +596,7 @@
      "catalog_version": "appsec-review/graph-catalog/1",
      "export_pack_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
      "name": "codeql-export",
-     "rule_version": "graph-normalize/1",
+     "rule_version": "graph-normalize/2",
      "tool_version": "2.27.0"
     },
     "result": {
@@ -676,7 +676,7 @@
      "catalog_version": "appsec-review/graph-catalog/1",
      "export_pack_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
      "name": "codeql-export",
-     "rule_version": "graph-normalize/1",
+     "rule_version": "graph-normalize/2",
      "tool_version": "2.27.0"
     },
     "result": {
@@ -756,7 +756,7 @@
      "catalog_version": "appsec-review/graph-catalog/1",
      "export_pack_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
      "name": "codeql-export",
-     "rule_version": "graph-normalize/1",
+     "rule_version": "graph-normalize/2",
      "tool_version": "2.27.0"
     },
     "result": {
@@ -836,7 +836,7 @@
      "catalog_version": "appsec-review/graph-catalog/1",
      "export_pack_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
      "name": "codeql-export",
-     "rule_version": "graph-normalize/1",
+     "rule_version": "graph-normalize/2",
      "tool_version": "2.27.0"
     },
     "result": {
@@ -916,7 +916,7 @@
      "catalog_version": "appsec-review/graph-catalog/1",
      "export_pack_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
      "name": "codeql-export",
-     "rule_version": "graph-normalize/1",
+     "rule_version": "graph-normalize/2",
      "tool_version": "2.27.0"
     },
     "result": {
@@ -996,7 +996,7 @@
      "catalog_version": "appsec-review/graph-catalog/1",
      "export_pack_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
      "name": "codeql-export",
-     "rule_version": "graph-normalize/1",
+     "rule_version": "graph-normalize/2",
      "tool_version": "2.27.0"
     },
     "result": {
@@ -1078,7 +1078,7 @@
      "catalog_version": "appsec-review/graph-catalog/1",
      "export_pack_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
      "name": "codeql-export",
-     "rule_version": "graph-normalize/1",
+     "rule_version": "graph-normalize/2",
      "tool_version": "2.27.0"
     },
     "result": {
@@ -1158,7 +1158,7 @@
      "catalog_version": "appsec-review/graph-catalog/1",
      "export_pack_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
      "name": "codeql-export",
-     "rule_version": "graph-normalize/1",
+     "rule_version": "graph-normalize/2",
      "tool_version": "2.27.0"
     },
     "result": {
@@ -1238,7 +1238,7 @@
      "catalog_version": "appsec-review/graph-catalog/1",
      "export_pack_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
      "name": "codeql-export",
-     "rule_version": "graph-normalize/1",
+     "rule_version": "graph-normalize/2",
      "tool_version": "2.27.0"
     },
     "result": {
@@ -1318,7 +1318,7 @@
      "catalog_version": "appsec-review/graph-catalog/1",
      "export_pack_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
      "name": "codeql-export",
-     "rule_version": "graph-normalize/1",
+     "rule_version": "graph-normalize/2",
      "tool_version": "2.27.0"
     },
     "result": {
@@ -1398,7 +1398,7 @@
      "catalog_version": "appsec-review/graph-catalog/1",
      "export_pack_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
      "name": "codeql-export",
-     "rule_version": "graph-normalize/1",
+     "rule_version": "graph-normalize/2",
      "tool_version": "2.27.0"
     },
     "result": {
@@ -1478,7 +1478,7 @@
      "catalog_version": "appsec-review/graph-catalog/1",
      "export_pack_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
      "name": "codeql-export",
-     "rule_version": "graph-normalize/1",
+     "rule_version": "graph-normalize/2",
      "tool_version": "2.27.0"
     },
     "result": {
@@ -1723,7 +1723,7 @@
      "catalog_version": "appsec-review/graph-catalog/1",
      "export_pack_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
      "name": "codeql-export",
-     "rule_version": "graph-normalize/1",
+     "rule_version": "graph-normalize/2",
      "tool_version": "2.27.0"
     },
     "result": {
@@ -1946,7 +1946,7 @@
      "catalog_version": "appsec-review/graph-catalog/1",
      "export_pack_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
      "name": "codeql-export",
-     "rule_version": "graph-normalize/1",
+     "rule_version": "graph-normalize/2",
      "tool_version": "2.27.0"
     },
     "result": {
@@ -2191,7 +2191,7 @@
      "catalog_version": "appsec-review/graph-catalog/1",
      "export_pack_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
      "name": "codeql-export",
-     "rule_version": "graph-normalize/1",
+     "rule_version": "graph-normalize/2",
      "tool_version": "2.27.0"
     },
     "result": {
@@ -2436,7 +2436,7 @@
      "catalog_version": "appsec-review/graph-catalog/1",
      "export_pack_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
      "name": "codeql-export",
-     "rule_version": "graph-normalize/1",
+     "rule_version": "graph-normalize/2",
      "tool_version": "2.27.0"
     },
     "result": {
@@ -2680,7 +2680,7 @@
      "catalog_version": "appsec-review/graph-catalog/1",
      "export_pack_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
      "name": "codeql-export",
-     "rule_version": "graph-normalize/1",
+     "rule_version": "graph-normalize/2",
      "tool_version": "2.27.0"
     },
     "result": {
@@ -2765,7 +2765,7 @@
      "catalog_version": "appsec-review/graph-catalog/1",
      "export_pack_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
      "name": "codeql-export",
-     "rule_version": "graph-normalize/1",
+     "rule_version": "graph-normalize/2",
      "tool_version": "2.27.0"
     },
     "result": {
@@ -2805,7 +2805,7 @@
    }
   },
   {
-   "identity": "asr:flow_summary:0b2faff374eefd7c2d7d8aae410353b90df435dc31782e6d630485906d5d4a80",
+   "identity": "asr:flow_summary:885353cac5e3719ef8f406a1be37e6db4b14bec8d45f781e82350bd5d2481ffc",
    "location": {
     "ambiguous": false,
     "confidence": 1.0,
@@ -2849,7 +2849,7 @@
      "catalog_version": "appsec-review/graph-catalog/1",
      "export_pack_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
      "name": "codeql-export",
-     "rule_version": "graph-normalize/1",
+     "rule_version": "graph-normalize/2",
      "tool_version": "2.27.0"
     },
     "result": {
@@ -2931,7 +2931,7 @@
    }
   },
   {
-   "identity": "asr:flow_summary:24eec466745d78ffc12c05ae851cc3fec17fb030c3e72a1961bed8c58c33a739",
+   "identity": "asr:flow_summary:ab7dbd2b3c73f1ce21cadae69b6b83c609c138a8917bf596a12916675303663b",
    "location": {
     "ambiguous": false,
     "confidence": 1.0,
@@ -2975,7 +2975,7 @@
      "catalog_version": "appsec-review/graph-catalog/1",
      "export_pack_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
      "name": "codeql-export",
-     "rule_version": "graph-normalize/1",
+     "rule_version": "graph-normalize/2",
      "tool_version": "2.27.0"
     },
     "result": {
@@ -3043,7 +3043,7 @@
    }
   },
   {
-   "identity": "asr:flow_summary:3ab4306a5f0b8d88354954408331c4c9602162d7810702cf42a4c3f42fab18f7",
+   "identity": "asr:flow_summary:b536391d1606cb8e111dac9e069dd0d43e64c09256714fcce543d42f290f83b4",
    "location": {
     "ambiguous": false,
     "confidence": 1.0,
@@ -3087,7 +3087,7 @@
      "catalog_version": "appsec-review/graph-catalog/1",
      "export_pack_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
      "name": "codeql-export",
-     "rule_version": "graph-normalize/1",
+     "rule_version": "graph-normalize/2",
      "tool_version": "2.27.0"
     },
     "result": {
@@ -3155,7 +3155,7 @@
    }
   },
   {
-   "identity": "asr:flow_summary:c479342382c711c05180ab0fe17514eca167a4f007d0ff28b027749fe910b862",
+   "identity": "asr:flow_summary:fcf135f73107a161a82bece4692d6acbae97f4cdd095a53a50d02988f9d1e194",
    "location": {
     "ambiguous": false,
     "confidence": 1.0,
@@ -3199,7 +3199,7 @@
      "catalog_version": "appsec-review/graph-catalog/1",
      "export_pack_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
      "name": "codeql-export",
-     "rule_version": "graph-normalize/1",
+     "rule_version": "graph-normalize/2",
      "tool_version": "2.27.0"
     },
     "result": {
@@ -3299,13 +3299,16 @@
      "catalog_version": "appsec-review/graph-catalog/1",
      "export_pack_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
      "name": "codeql-export",
-     "rule_version": "graph-normalize/1",
+     "rule_version": "graph-normalize/2",
      "tool_version": "2.27.0"
     },
     "result": {
      "comparison": null,
      "condition": null,
      "constrains_sink_operand": false,
+     "destination": {
+      "object_bytes": null
+     },
      "guard_state": "none",
      "polarity": "unknown",
      "sink": {
@@ -3380,12 +3383,58 @@
      "catalog_version": "appsec-review/graph-catalog/1",
      "export_pack_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
      "name": "codeql-export",
-     "rule_version": "graph-normalize/1",
+     "rule_version": "graph-normalize/2",
      "tool_version": "2.27.0"
     },
     "result": {
      "comparison": {
       "bound_display": "64",
+      "operands": [
+       {
+        "kind": "variable",
+        "location": {
+         "ambiguous": false,
+         "confidence": 1.0,
+         "end_byte": 777,
+         "end_column": 10,
+         "end_line": 33,
+         "file_sha256": "f10f9f53c70a9de98f07a44a6fd78f7554c0f804751f18a1fc0711d4e9003357",
+         "mapping_method": "codeql-location-exact",
+         "path": "src/synthetic.cpp",
+         "producer_location": {},
+         "schema": "appsec-review/source-location/1",
+         "start_byte": 774,
+         "start_column": 7,
+         "start_line": 33,
+         "target_snapshot": "target-sha256:3333333333333333333333333333333333333333333333333333333333333333"
+        },
+        "role": "lhs",
+        "text": "len",
+        "value": null
+       },
+       {
+        "kind": "constant",
+        "location": {
+         "ambiguous": false,
+         "confidence": 1.0,
+         "end_byte": 782,
+         "end_column": 15,
+         "end_line": 33,
+         "file_sha256": "f10f9f53c70a9de98f07a44a6fd78f7554c0f804751f18a1fc0711d4e9003357",
+         "mapping_method": "codeql-location-exact",
+         "path": "src/synthetic.cpp",
+         "producer_location": {},
+         "schema": "appsec-review/source-location/1",
+         "start_byte": 780,
+         "start_column": 13,
+         "start_line": 33,
+         "target_snapshot": "target-sha256:3333333333333333333333333333333333333333333333333333333333333333"
+        },
+        "role": "rhs",
+        "text": "64",
+        "value": 64
+       }
+      ],
       "operator": "<"
      },
      "condition": {
@@ -3409,6 +3458,9 @@
       }
      },
      "constrains_sink_operand": true,
+     "destination": {
+      "object_bytes": null
+     },
      "guard_state": "dominating",
      "polarity": "true_branch",
      "sink": {
@@ -3483,12 +3535,58 @@
      "catalog_version": "appsec-review/graph-catalog/1",
      "export_pack_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
      "name": "codeql-export",
-     "rule_version": "graph-normalize/1",
+     "rule_version": "graph-normalize/2",
      "tool_version": "2.27.0"
     },
     "result": {
      "comparison": {
       "bound_display": "0",
+      "operands": [
+       {
+        "kind": "variable",
+        "location": {
+         "ambiguous": false,
+         "confidence": 1.0,
+         "end_byte": 934,
+         "end_column": 10,
+         "end_line": 42,
+         "file_sha256": "f10f9f53c70a9de98f07a44a6fd78f7554c0f804751f18a1fc0711d4e9003357",
+         "mapping_method": "codeql-location-exact",
+         "path": "src/synthetic.cpp",
+         "producer_location": {},
+         "schema": "appsec-review/source-location/1",
+         "start_byte": 931,
+         "start_column": 7,
+         "start_line": 42,
+         "target_snapshot": "target-sha256:3333333333333333333333333333333333333333333333333333333333333333"
+        },
+        "role": "lhs",
+        "text": "len",
+        "value": null
+       },
+       {
+        "kind": "constant",
+        "location": {
+         "ambiguous": false,
+         "confidence": 1.0,
+         "end_byte": 938,
+         "end_column": 14,
+         "end_line": 42,
+         "file_sha256": "f10f9f53c70a9de98f07a44a6fd78f7554c0f804751f18a1fc0711d4e9003357",
+         "mapping_method": "codeql-location-exact",
+         "path": "src/synthetic.cpp",
+         "producer_location": {},
+         "schema": "appsec-review/source-location/1",
+         "start_byte": 937,
+         "start_column": 13,
+         "start_line": 42,
+         "target_snapshot": "target-sha256:3333333333333333333333333333333333333333333333333333333333333333"
+        },
+        "role": "rhs",
+        "text": "0",
+        "value": 0
+       }
+      ],
       "operator": ">"
      },
      "condition": {
@@ -3512,6 +3610,9 @@
       }
      },
      "constrains_sink_operand": true,
+     "destination": {
+      "object_bytes": null
+     },
      "guard_state": "non_dominating",
      "polarity": "unknown",
      "sink": {
@@ -3586,12 +3687,58 @@
      "catalog_version": "appsec-review/graph-catalog/1",
      "export_pack_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
      "name": "codeql-export",
-     "rule_version": "graph-normalize/1",
+     "rule_version": "graph-normalize/2",
      "tool_version": "2.27.0"
     },
     "result": {
      "comparison": {
       "bound_display": "64",
+      "operands": [
+       {
+        "kind": "variable",
+        "location": {
+         "ambiguous": false,
+         "confidence": 1.0,
+         "end_byte": 777,
+         "end_column": 10,
+         "end_line": 33,
+         "file_sha256": "f10f9f53c70a9de98f07a44a6fd78f7554c0f804751f18a1fc0711d4e9003357",
+         "mapping_method": "codeql-location-exact",
+         "path": "src/synthetic.cpp",
+         "producer_location": {},
+         "schema": "appsec-review/source-location/1",
+         "start_byte": 774,
+         "start_column": 7,
+         "start_line": 33,
+         "target_snapshot": "target-sha256:3333333333333333333333333333333333333333333333333333333333333333"
+        },
+        "role": "lhs",
+        "text": "len",
+        "value": null
+       },
+       {
+        "kind": "constant",
+        "location": {
+         "ambiguous": false,
+         "confidence": 1.0,
+         "end_byte": 782,
+         "end_column": 15,
+         "end_line": 33,
+         "file_sha256": "f10f9f53c70a9de98f07a44a6fd78f7554c0f804751f18a1fc0711d4e9003357",
+         "mapping_method": "codeql-location-exact",
+         "path": "src/synthetic.cpp",
+         "producer_location": {},
+         "schema": "appsec-review/source-location/1",
+         "start_byte": 780,
+         "start_column": 13,
+         "start_line": 33,
+         "target_snapshot": "target-sha256:3333333333333333333333333333333333333333333333333333333333333333"
+        },
+        "role": "rhs",
+        "text": "64",
+        "value": 64
+       }
+      ],
       "operator": "<"
      },
      "condition": {
@@ -3615,6 +3762,9 @@
       }
      },
      "constrains_sink_operand": true,
+     "destination": {
+      "object_bytes": null
+     },
      "guard_state": "non_dominating",
      "polarity": "unknown",
      "sink": {
@@ -3689,12 +3839,58 @@
      "catalog_version": "appsec-review/graph-catalog/1",
      "export_pack_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
      "name": "codeql-export",
-     "rule_version": "graph-normalize/1",
+     "rule_version": "graph-normalize/2",
      "tool_version": "2.27.0"
     },
     "result": {
      "comparison": {
       "bound_display": "0",
+      "operands": [
+       {
+        "kind": "variable",
+        "location": {
+         "ambiguous": false,
+         "confidence": 1.0,
+         "end_byte": 934,
+         "end_column": 10,
+         "end_line": 42,
+         "file_sha256": "f10f9f53c70a9de98f07a44a6fd78f7554c0f804751f18a1fc0711d4e9003357",
+         "mapping_method": "codeql-location-exact",
+         "path": "src/synthetic.cpp",
+         "producer_location": {},
+         "schema": "appsec-review/source-location/1",
+         "start_byte": 931,
+         "start_column": 7,
+         "start_line": 42,
+         "target_snapshot": "target-sha256:3333333333333333333333333333333333333333333333333333333333333333"
+        },
+        "role": "lhs",
+        "text": "len",
+        "value": null
+       },
+       {
+        "kind": "constant",
+        "location": {
+         "ambiguous": false,
+         "confidence": 1.0,
+         "end_byte": 938,
+         "end_column": 14,
+         "end_line": 42,
+         "file_sha256": "f10f9f53c70a9de98f07a44a6fd78f7554c0f804751f18a1fc0711d4e9003357",
+         "mapping_method": "codeql-location-exact",
+         "path": "src/synthetic.cpp",
+         "producer_location": {},
+         "schema": "appsec-review/source-location/1",
+         "start_byte": 937,
+         "start_column": 13,
+         "start_line": 42,
+         "target_snapshot": "target-sha256:3333333333333333333333333333333333333333333333333333333333333333"
+        },
+        "role": "rhs",
+        "text": "0",
+        "value": 0
+       }
+      ],
       "operator": ">"
      },
      "condition": {
@@ -3718,6 +3914,9 @@
       }
      },
      "constrains_sink_operand": false,
+     "destination": {
+      "object_bytes": null
+     },
      "guard_state": "dominating",
      "polarity": "true_branch",
      "sink": {
@@ -3792,13 +3991,16 @@
      "catalog_version": "appsec-review/graph-catalog/1",
      "export_pack_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
      "name": "codeql-export",
-     "rule_version": "graph-normalize/1",
+     "rule_version": "graph-normalize/2",
      "tool_version": "2.27.0"
     },
     "result": {
      "comparison": null,
      "condition": null,
      "constrains_sink_operand": false,
+     "destination": {
+      "object_bytes": null
+     },
      "guard_state": "none",
      "polarity": "unknown",
      "sink": {
@@ -3873,13 +4075,16 @@
      "catalog_version": "appsec-review/graph-catalog/1",
      "export_pack_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
      "name": "codeql-export",
-     "rule_version": "graph-normalize/1",
+     "rule_version": "graph-normalize/2",
      "tool_version": "2.27.0"
     },
     "result": {
      "comparison": null,
      "condition": null,
      "constrains_sink_operand": false,
+     "destination": {
+      "object_bytes": null
+     },
      "guard_state": "none",
      "polarity": "unknown",
      "sink": {
@@ -3952,18 +4157,65 @@
     "exact": false,
     "family": "guard_fact",
     "gaps": [
-     "macro_expansion_site: condition location is not exact"
+     "macro_expansion_site: condition location is not exact",
+     "operand_text_unavailable: rhs operand is reported at the macro expansion site"
     ],
     "producer": {
      "catalog_version": "appsec-review/graph-catalog/1",
      "export_pack_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
      "name": "codeql-export",
-     "rule_version": "graph-normalize/1",
+     "rule_version": "graph-normalize/2",
      "tool_version": "2.27.0"
     },
     "result": {
      "comparison": {
       "bound_display": "64",
+      "operands": [
+       {
+        "kind": "variable",
+        "location": {
+         "ambiguous": false,
+         "confidence": 1.0,
+         "end_byte": 836,
+         "end_column": 20,
+         "end_line": 36,
+         "file_sha256": "f10f9f53c70a9de98f07a44a6fd78f7554c0f804751f18a1fc0711d4e9003357",
+         "mapping_method": "codeql-location-exact",
+         "path": "src/synthetic.cpp",
+         "producer_location": {},
+         "schema": "appsec-review/source-location/1",
+         "start_byte": 833,
+         "start_column": 17,
+         "start_line": 36,
+         "target_snapshot": "target-sha256:3333333333333333333333333333333333333333333333333333333333333333"
+        },
+        "role": "lhs",
+        "text": "len",
+        "value": null
+       },
+       {
+        "kind": "constant",
+        "location": {
+         "ambiguous": false,
+         "confidence": 1.0,
+         "end_byte": 837,
+         "end_column": 21,
+         "end_line": 36,
+         "file_sha256": "f10f9f53c70a9de98f07a44a6fd78f7554c0f804751f18a1fc0711d4e9003357",
+         "mapping_method": "codeql-location-exact",
+         "path": "src/synthetic.cpp",
+         "producer_location": {},
+         "schema": "appsec-review/source-location/1",
+         "start_byte": 823,
+         "start_column": 7,
+         "start_line": 36,
+         "target_snapshot": "target-sha256:3333333333333333333333333333333333333333333333333333333333333333"
+        },
+        "role": "rhs",
+        "text": null,
+        "value": 64
+       }
+      ],
       "operator": "<"
      },
      "condition": {
@@ -3987,6 +4239,9 @@
       }
      },
      "constrains_sink_operand": true,
+     "destination": {
+      "object_bytes": null
+     },
      "guard_state": "dominating",
      "polarity": "true_branch",
      "sink": {
@@ -4061,13 +4316,16 @@
      "catalog_version": "appsec-review/graph-catalog/1",
      "export_pack_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
      "name": "codeql-export",
-     "rule_version": "graph-normalize/1",
+     "rule_version": "graph-normalize/2",
      "tool_version": "2.27.0"
     },
     "result": {
      "comparison": null,
      "condition": null,
      "constrains_sink_operand": false,
+     "destination": {
+      "object_bytes": null
+     },
      "guard_state": "none",
      "polarity": "unknown",
      "sink": {
@@ -4140,18 +4398,65 @@
     "exact": false,
     "family": "guard_fact",
     "gaps": [
-     "macro_expansion_site: condition location is not exact"
+     "macro_expansion_site: condition location is not exact",
+     "operand_text_unavailable: rhs operand is reported at the macro expansion site"
     ],
     "producer": {
      "catalog_version": "appsec-review/graph-catalog/1",
      "export_pack_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
      "name": "codeql-export",
-     "rule_version": "graph-normalize/1",
+     "rule_version": "graph-normalize/2",
      "tool_version": "2.27.0"
     },
     "result": {
      "comparison": {
       "bound_display": "64",
+      "operands": [
+       {
+        "kind": "variable",
+        "location": {
+         "ambiguous": false,
+         "confidence": 1.0,
+         "end_byte": 836,
+         "end_column": 20,
+         "end_line": 36,
+         "file_sha256": "f10f9f53c70a9de98f07a44a6fd78f7554c0f804751f18a1fc0711d4e9003357",
+         "mapping_method": "codeql-location-exact",
+         "path": "src/synthetic.cpp",
+         "producer_location": {},
+         "schema": "appsec-review/source-location/1",
+         "start_byte": 833,
+         "start_column": 17,
+         "start_line": 36,
+         "target_snapshot": "target-sha256:3333333333333333333333333333333333333333333333333333333333333333"
+        },
+        "role": "lhs",
+        "text": "len",
+        "value": null
+       },
+       {
+        "kind": "constant",
+        "location": {
+         "ambiguous": false,
+         "confidence": 1.0,
+         "end_byte": 837,
+         "end_column": 21,
+         "end_line": 36,
+         "file_sha256": "f10f9f53c70a9de98f07a44a6fd78f7554c0f804751f18a1fc0711d4e9003357",
+         "mapping_method": "codeql-location-exact",
+         "path": "src/synthetic.cpp",
+         "producer_location": {},
+         "schema": "appsec-review/source-location/1",
+         "start_byte": 823,
+         "start_column": 7,
+         "start_line": 36,
+         "target_snapshot": "target-sha256:3333333333333333333333333333333333333333333333333333333333333333"
+        },
+        "role": "rhs",
+        "text": null,
+        "value": 64
+       }
+      ],
       "operator": "<"
      },
      "condition": {
@@ -4175,6 +4480,9 @@
       }
      },
      "constrains_sink_operand": true,
+     "destination": {
+      "object_bytes": null
+     },
      "guard_state": "non_dominating",
      "polarity": "unknown",
      "sink": {
@@ -4249,7 +4557,7 @@
      "catalog_version": "appsec-review/graph-catalog/1",
      "export_pack_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
      "name": "codeql-export",
-     "rule_version": "graph-normalize/1",
+     "rule_version": "graph-normalize/2",
      "tool_version": "2.27.0"
     },
     "result": {
@@ -4372,7 +4680,7 @@
      "catalog_version": "appsec-review/graph-catalog/1",
      "export_pack_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
      "name": "codeql-export",
-     "rule_version": "graph-normalize/1",
+     "rule_version": "graph-normalize/2",
      "tool_version": "2.27.0"
     },
     "result": {
@@ -4465,7 +4773,7 @@
      "catalog_version": "appsec-review/graph-catalog/1",
      "export_pack_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
      "name": "codeql-export",
-     "rule_version": "graph-normalize/1",
+     "rule_version": "graph-normalize/2",
      "tool_version": "2.27.0"
     },
     "result": {
@@ -4561,7 +4869,7 @@
      "catalog_version": "appsec-review/graph-catalog/1",
      "export_pack_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
      "name": "codeql-export",
-     "rule_version": "graph-normalize/1",
+     "rule_version": "graph-normalize/2",
      "tool_version": "2.27.0"
     },
     "result": {
@@ -4661,7 +4969,7 @@
      "catalog_version": "appsec-review/graph-catalog/1",
      "export_pack_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
      "name": "codeql-export",
-     "rule_version": "graph-normalize/1",
+     "rule_version": "graph-normalize/2",
      "tool_version": "2.27.0"
     },
     "result": {
@@ -4754,7 +5062,7 @@
      "catalog_version": "appsec-review/graph-catalog/1",
      "export_pack_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
      "name": "codeql-export",
-     "rule_version": "graph-normalize/1",
+     "rule_version": "graph-normalize/2",
      "tool_version": "2.27.0"
     },
     "result": {
@@ -4877,7 +5185,7 @@
      "catalog_version": "appsec-review/graph-catalog/1",
      "export_pack_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
      "name": "codeql-export",
-     "rule_version": "graph-normalize/1",
+     "rule_version": "graph-normalize/2",
      "tool_version": "2.27.0"
     },
     "result": {
@@ -4970,7 +5278,7 @@
      "catalog_version": "appsec-review/graph-catalog/1",
      "export_pack_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
      "name": "codeql-export",
-     "rule_version": "graph-normalize/1",
+     "rule_version": "graph-normalize/2",
      "tool_version": "2.27.0"
     },
     "result": {
@@ -5074,7 +5382,7 @@
      "catalog_version": "appsec-review/graph-catalog/1",
      "export_pack_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
      "name": "codeql-export",
-     "rule_version": "graph-normalize/1",
+     "rule_version": "graph-normalize/2",
      "tool_version": "2.27.0"
     },
     "result": {
@@ -5178,7 +5486,7 @@
      "catalog_version": "appsec-review/graph-catalog/1",
      "export_pack_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
      "name": "codeql-export",
-     "rule_version": "graph-normalize/1",
+     "rule_version": "graph-normalize/2",
      "tool_version": "2.27.0"
     },
     "result": {
@@ -5282,7 +5590,7 @@
      "catalog_version": "appsec-review/graph-catalog/1",
      "export_pack_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
      "name": "codeql-export",
-     "rule_version": "graph-normalize/1",
+     "rule_version": "graph-normalize/2",
      "tool_version": "2.27.0"
     },
     "result": {
@@ -5386,7 +5694,7 @@
      "catalog_version": "appsec-review/graph-catalog/1",
      "export_pack_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
      "name": "codeql-export",
-     "rule_version": "graph-normalize/1",
+     "rule_version": "graph-normalize/2",
      "tool_version": "2.27.0"
     },
     "result": {
@@ -5494,7 +5802,7 @@
      "catalog_version": "appsec-review/graph-catalog/1",
      "export_pack_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
      "name": "codeql-export",
-     "rule_version": "graph-normalize/1",
+     "rule_version": "graph-normalize/2",
      "tool_version": "2.27.0"
     },
     "result": {
@@ -5598,7 +5906,7 @@
      "catalog_version": "appsec-review/graph-catalog/1",
      "export_pack_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
      "name": "codeql-export",
-     "rule_version": "graph-normalize/1",
+     "rule_version": "graph-normalize/2",
      "tool_version": "2.27.0"
     },
     "result": {
@@ -5664,7 +5972,7 @@
    "exact": true,
    "kind": "CONTAINS",
    "payload": {
-    "rule": "graph-normalize/1"
+    "rule": "graph-normalize/2"
    },
    "relation_id": "rel:020e1169c5d6152d209c793afc03af0fb1d728fecd18b27e03d7cafdf32b21e2",
    "source_id": "asr:symbol:dee676bc898a51c6ad4e64b823e73a64335708b32fe483c24cb5d692fbf5b85a",
@@ -5676,7 +5984,7 @@
    "exact": true,
    "kind": "CONTAINS",
    "payload": {
-    "rule": "graph-normalize/1"
+    "rule": "graph-normalize/2"
    },
    "relation_id": "rel:1352de5dce727d258fcc045cd770e6494905dfbc9d5e61f447dde5e66e5e02ff",
    "source_id": "asr:symbol:a0f73aee7988d2924015871c4708aa98c6e78d7fcc9deba3e1718a0551377897",
@@ -5688,7 +5996,7 @@
    "exact": true,
    "kind": "GUARDS",
    "payload": {
-    "rule": "graph-normalize/1"
+    "rule": "graph-normalize/2"
    },
    "relation_id": "rel:13fab8c248b1fad00bb294c5dae7261c10645a25d255cd2a0dbf50ee1b1b0f70",
    "source_id": "asr:guard_fact:909ab10501c12c46eb761dc031bdec84044cb886f0e97dd18019f72f534efd96",
@@ -5700,7 +6008,19 @@
    "exact": true,
    "kind": "DERIVED_FROM",
    "payload": {
-    "rule": "graph-normalize/1"
+    "rule": "graph-normalize/2"
+   },
+   "relation_id": "rel:163786860def40b60d4720b93d759ad84225e92c390aa955b7289bda7c2b4ccf",
+   "source_id": "asr:flow_summary:ab7dbd2b3c73f1ce21cadae69b6b83c609c138a8917bf596a12916675303663b",
+   "target_id": "asr:symbol:cb818ab23b3785076fd541656fa1591d140b2de9066b2a0be12e1341cd7796ef"
+  },
+  {
+   "ambiguity": null,
+   "confidence": 1.0,
+   "exact": true,
+   "kind": "DERIVED_FROM",
+   "payload": {
+    "rule": "graph-normalize/2"
    },
    "relation_id": "rel:19c1aacd3caef379a9b19fc891be268e0cfe5a0a338faf5e0edf76f93eb68b5a",
    "source_id": "asr:range_fact:8f5039f2e71caaa3f07d4cc32e3d18d8282a28cc0db6b64398c61c74fd4fbeed",
@@ -5712,7 +6032,7 @@
    "exact": true,
    "kind": "CONTAINS",
    "payload": {
-    "rule": "graph-normalize/1"
+    "rule": "graph-normalize/2"
    },
    "relation_id": "rel:1ecc17db3ff3cef53bee7afef970783099a940f4649c41e007df1815751f831a",
    "source_id": "asr:symbol:dee676bc898a51c6ad4e64b823e73a64335708b32fe483c24cb5d692fbf5b85a",
@@ -5724,7 +6044,7 @@
    "exact": true,
    "kind": "CONTAINS",
    "payload": {
-    "rule": "graph-normalize/1"
+    "rule": "graph-normalize/2"
    },
    "relation_id": "rel:20fa4bfc0dfb3653167ed6ca974518a030946ec8a1d580901da02698e760d4b5",
    "source_id": "asr:symbol:e571637f02f571ed6d3ed7d049eb1f6ed02d968984941ff9eccc4fc18cd60393",
@@ -5736,7 +6056,7 @@
    "exact": true,
    "kind": "CONTAINS",
    "payload": {
-    "rule": "graph-normalize/1"
+    "rule": "graph-normalize/2"
    },
    "relation_id": "rel:2642d6cff2fc575c91532a7f8f89b93ceca3424d5ca181e42649de7d2cc594f1",
    "source_id": "asr:symbol:464fb5453f3d316fea50c0c132d28de96419cc4bc7348ec32f5cd2bbc0f09e39",
@@ -5748,7 +6068,7 @@
    "exact": true,
    "kind": "CONTAINS",
    "payload": {
-    "rule": "graph-normalize/1"
+    "rule": "graph-normalize/2"
    },
    "relation_id": "rel:27d5a643e690c6efc617896b3e8ab1c0107bb55474ef8ecd48217a0f94d23880",
    "source_id": "asr:symbol:dee676bc898a51c6ad4e64b823e73a64335708b32fe483c24cb5d692fbf5b85a",
@@ -5758,9 +6078,21 @@
    "ambiguity": null,
    "confidence": 1.0,
    "exact": true,
+   "kind": "DERIVED_FROM",
+   "payload": {
+    "rule": "graph-normalize/2"
+   },
+   "relation_id": "rel:2c538bac3bcfe96ade64bfb201e9d6f662447523c2d23220e53b9be1010223a6",
+   "source_id": "asr:flow_summary:b536391d1606cb8e111dac9e069dd0d43e64c09256714fcce543d42f290f83b4",
+   "target_id": "asr:symbol:e571637f02f571ed6d3ed7d049eb1f6ed02d968984941ff9eccc4fc18cd60393"
+  },
+  {
+   "ambiguity": null,
+   "confidence": 1.0,
+   "exact": true,
    "kind": "CONTAINS",
    "payload": {
-    "rule": "graph-normalize/1"
+    "rule": "graph-normalize/2"
    },
    "relation_id": "rel:3f02388352bf44cd5f591ca540c0e3f00b956837febd6c67ceb5fe17dd1cb935",
    "source_id": "asr:symbol:cb818ab23b3785076fd541656fa1591d140b2de9066b2a0be12e1341cd7796ef",
@@ -5772,7 +6104,7 @@
    "exact": true,
    "kind": "CALLS",
    "payload": {
-    "rule": "graph-normalize/1"
+    "rule": "graph-normalize/2"
    },
    "relation_id": "rel:4d475831b3cb888c6160fc92cef7242aa9d5706581f26e3327b6f3bc74c480e3",
    "source_id": "asr:call_site:8bcfa52521f652ee447c726ea66ceebb39c8690e67d79ba9470004ae1684b3ac",
@@ -5784,7 +6116,7 @@
    "exact": true,
    "kind": "CONTAINS",
    "payload": {
-    "rule": "graph-normalize/1"
+    "rule": "graph-normalize/2"
    },
    "relation_id": "rel:58edced2280020bd52850a4100a904c5ce2fc38edac661114b3783d3a9a7cbf3",
    "source_id": "asr:symbol:cb818ab23b3785076fd541656fa1591d140b2de9066b2a0be12e1341cd7796ef",
@@ -5796,7 +6128,7 @@
    "exact": true,
    "kind": "GUARDS",
    "payload": {
-    "rule": "graph-normalize/1"
+    "rule": "graph-normalize/2"
    },
    "relation_id": "rel:5c96d4d5ccfc70a97595d9930fc60535e3d000dd0ae7957c918833a364f495b5",
    "source_id": "asr:guard_fact:a38e58f8784e983b66000fe6a96ff5b87b4bca962c4ffc9c70cb5a86d54640d7",
@@ -5808,19 +6140,7 @@
    "exact": true,
    "kind": "DERIVED_FROM",
    "payload": {
-    "rule": "graph-normalize/1"
-   },
-   "relation_id": "rel:6216bd2e63c235cdcfe7ccfe310ee34a4f6e09c0cfe31eea7805848034aa01e3",
-   "source_id": "asr:flow_summary:0b2faff374eefd7c2d7d8aae410353b90df435dc31782e6d630485906d5d4a80",
-   "target_id": "asr:symbol:a0f73aee7988d2924015871c4708aa98c6e78d7fcc9deba3e1718a0551377897"
-  },
-  {
-   "ambiguity": null,
-   "confidence": 1.0,
-   "exact": true,
-   "kind": "DERIVED_FROM",
-   "payload": {
-    "rule": "graph-normalize/1"
+    "rule": "graph-normalize/2"
    },
    "relation_id": "rel:626893f7c8ed33bc18f6020ecd6cfa489f0fd7e7d34802b0e706469f828f139f",
    "source_id": "asr:range_fact:af9dda012e075aa6028cef8f19e2e140b1c2c170a0d6442181d714e7f007b83b",
@@ -5832,7 +6152,7 @@
    "exact": true,
    "kind": "GUARDS",
    "payload": {
-    "rule": "graph-normalize/1"
+    "rule": "graph-normalize/2"
    },
    "relation_id": "rel:65a7f382bd5f4401721509c79a613c41d72a9730f42b4e329b602b48459f8754",
    "source_id": "asr:guard_fact:d33ca8fb4da36c1d8cceace37c2e705fd548a1b72d6cfb9c7daa3c6948a1444a",
@@ -5844,7 +6164,7 @@
    "exact": true,
    "kind": "CALLS",
    "payload": {
-    "rule": "graph-normalize/1"
+    "rule": "graph-normalize/2"
    },
    "relation_id": "rel:6b96e05c701f760127fca4102110384a378f3f5eed0ba85d3b32bad132410565",
    "source_id": "asr:call_site:62b2921bfd1f81bf0224c799c730bee7d549f85a0fa1c6ab7069a901104e68e9",
@@ -5860,7 +6180,7 @@
     "path_ids": [
      "asr:dataflow_path:392cb52eb7bd82b2f2701ae634eefa97870a5bc87c3d4e43123c24ebc9396ebc"
     ],
-    "rule": "graph-normalize/1"
+    "rule": "graph-normalize/2"
    },
    "relation_id": "rel:72e16a6205239c064d7438f61f157734e150b7a7f099dd504e6ff52209191015",
    "source_id": "asr:entry_point:cb698658e9337ca4e2d7f05fa8e1f8695c3db05eb0be2dd3f4ee63771a73b35f",
@@ -5872,7 +6192,7 @@
    "exact": true,
    "kind": "CONTAINS",
    "payload": {
-    "rule": "graph-normalize/1"
+    "rule": "graph-normalize/2"
    },
    "relation_id": "rel:768a98b49d7a375bfa5ab1c092aa7bccada5168e92ac892347dbf7ae2f6eb9b0",
    "source_id": "asr:symbol:a0f73aee7988d2924015871c4708aa98c6e78d7fcc9deba3e1718a0551377897",
@@ -5884,7 +6204,7 @@
    "exact": true,
    "kind": "CALLS",
    "payload": {
-    "rule": "graph-normalize/1"
+    "rule": "graph-normalize/2"
    },
    "relation_id": "rel:7bfabc13b552c63f312027ba31f6cb661ccfd59d086e2bde2ed4e9fdc90366d2",
    "source_id": "asr:call_site:42a86f859c64f0891da9650e956e8694d4e3d89ff8427fa57a105b0892067890",
@@ -5900,7 +6220,7 @@
     "path_ids": [
      "asr:dataflow_path:6d3507474cefb63da545a09a2eb6f4c7c25a86f6506808c5a5d6596f23724c0a"
     ],
-    "rule": "graph-normalize/1"
+    "rule": "graph-normalize/2"
    },
    "relation_id": "rel:7d686a6f60ed872b40c11e599f7e40fc07d00bfe3d13849d87c405e4bf693b54",
    "source_id": "asr:entry_point:cb698658e9337ca4e2d7f05fa8e1f8695c3db05eb0be2dd3f4ee63771a73b35f",
@@ -5912,7 +6232,7 @@
    "exact": true,
    "kind": "DERIVED_FROM",
    "payload": {
-    "rule": "graph-normalize/1"
+    "rule": "graph-normalize/2"
    },
    "relation_id": "rel:806984106277adef2d1df2ef1f58a97947874026c4d6d4b941ef15a5ee4b0c70",
    "source_id": "asr:range_fact:0ba2cbe18588a0ad9e7110a87f0a9987d6d0c874d0333aec99616ff34c670a9d",
@@ -5924,7 +6244,7 @@
    "exact": true,
    "kind": "CONTAINS",
    "payload": {
-    "rule": "graph-normalize/1"
+    "rule": "graph-normalize/2"
    },
    "relation_id": "rel:83c09ce9885424901618690fde1f02780cecdd30466f11b350946ec0e010ab85",
    "source_id": "asr:symbol:464fb5453f3d316fea50c0c132d28de96419cc4bc7348ec32f5cd2bbc0f09e39",
@@ -5936,7 +6256,7 @@
    "exact": true,
    "kind": "CONTAINS",
    "payload": {
-    "rule": "graph-normalize/1"
+    "rule": "graph-normalize/2"
    },
    "relation_id": "rel:8ac4f864dd7df629c1c15bf3d61b008169b9bb67a231d397f390bb7ef43d3103",
    "source_id": "asr:symbol:f9e486d5a98fede24f11f4e00030e698b54994b3fdfbf11cd9dd537f38f06c44",
@@ -5948,7 +6268,7 @@
    "exact": true,
    "kind": "DERIVED_FROM",
    "payload": {
-    "rule": "graph-normalize/1"
+    "rule": "graph-normalize/2"
    },
    "relation_id": "rel:8de82e7e15114f3c4f982af42bb5538f63ddfe1c2bd302d18013d6177abdf403",
    "source_id": "asr:range_fact:94c660b224428be3875fe64b5c1b6fbbb7beab7c1c09fccb2c42e9884d08f9ad",
@@ -5960,7 +6280,7 @@
    "exact": true,
    "kind": "GUARDS",
    "payload": {
-    "rule": "graph-normalize/1"
+    "rule": "graph-normalize/2"
    },
    "relation_id": "rel:93964245c7cc920bda51c21bd45f5109dc326d1af8e131534b7967669e38c982",
    "source_id": "asr:guard_fact:553a6c6b6bc31101d84950ec8e015dc6b2eb9faba795b37b669d886bdbf1b2b3",
@@ -5972,7 +6292,7 @@
    "exact": true,
    "kind": "CONTAINS",
    "payload": {
-    "rule": "graph-normalize/1"
+    "rule": "graph-normalize/2"
    },
    "relation_id": "rel:93d9d5029f70487b77b984d21e5ba58349866349081971e8fcdcaa0ff08a0c28",
    "source_id": "asr:symbol:dee676bc898a51c6ad4e64b823e73a64335708b32fe483c24cb5d692fbf5b85a",
@@ -5984,7 +6304,7 @@
    "exact": true,
    "kind": "CALLS",
    "payload": {
-    "rule": "graph-normalize/1"
+    "rule": "graph-normalize/2"
    },
    "relation_id": "rel:954f6f9019c59cc516c3f3137bfdd198f46fe30010eb5bdead1f8c3969bb5ae2",
    "source_id": "asr:call_site:f4a07b7aa00cc60df2e6c762293f4eb7d8ee0b6157dec974c8624ce20d5e0d52",
@@ -5996,7 +6316,7 @@
    "exact": true,
    "kind": "CONTAINS",
    "payload": {
-    "rule": "graph-normalize/1"
+    "rule": "graph-normalize/2"
    },
    "relation_id": "rel:9610feaaa3590d668fbc6fc2c99336b533d05588220a9cc0df99bc2bc0f99834",
    "source_id": "asr:symbol:dee676bc898a51c6ad4e64b823e73a64335708b32fe483c24cb5d692fbf5b85a",
@@ -6008,7 +6328,7 @@
    "exact": true,
    "kind": "CONTAINS",
    "payload": {
-    "rule": "graph-normalize/1"
+    "rule": "graph-normalize/2"
    },
    "relation_id": "rel:96e004d59210281d2d9ae84ad7b815c183c9af010a0fad4937a9f8ef4ea3304f",
    "source_id": "asr:symbol:5b08f02e26bae3737ce9d8bf36aa362fb9170ee94d7f0a39d5973a36716e0482",
@@ -6020,11 +6340,23 @@
    "exact": true,
    "kind": "CALLS",
    "payload": {
-    "rule": "graph-normalize/1"
+    "rule": "graph-normalize/2"
    },
    "relation_id": "rel:99b5d401f0d75d17549d74cf113cc10500ebace2289c659c62d268e523579ba7",
    "source_id": "asr:call_site:3529de50c786c7fecee3de3db6614406af325321bf111f7e34fe2c7f2550436d",
    "target_id": "asr:symbol:6974a3a62f41e258e465a323471d0f5272209c8da0e6cd1e349efcd02e74ae42"
+  },
+  {
+   "ambiguity": null,
+   "confidence": 1.0,
+   "exact": true,
+   "kind": "DERIVED_FROM",
+   "payload": {
+    "rule": "graph-normalize/2"
+   },
+   "relation_id": "rel:9b0287bd5c9e562eb44509b9c7a34c4ed82d098ddbcac676f1defd71ec5d0487",
+   "source_id": "asr:flow_summary:fcf135f73107a161a82bece4692d6acbae97f4cdd095a53a50d02988f9d1e194",
+   "target_id": "asr:symbol:464fb5453f3d316fea50c0c132d28de96419cc4bc7348ec32f5cd2bbc0f09e39"
   },
   {
    "ambiguity": null,
@@ -6036,7 +6368,7 @@
     "path_ids": [
      "asr:dataflow_path:5f4ec229873e558b2720d339ce877e74c501e7833472e5e3a8b20e869cf8115a"
     ],
-    "rule": "graph-normalize/1"
+    "rule": "graph-normalize/2"
    },
    "relation_id": "rel:9f7b9ef9b2d4b0b9f96d2d3a8431ace9e323af829e12f7c9d88ae1a26ad5fff1",
    "source_id": "asr:entry_point:cb698658e9337ca4e2d7f05fa8e1f8695c3db05eb0be2dd3f4ee63771a73b35f",
@@ -6048,7 +6380,7 @@
    "exact": true,
    "kind": "GUARDS",
    "payload": {
-    "rule": "graph-normalize/1"
+    "rule": "graph-normalize/2"
    },
    "relation_id": "rel:a2242cf1f2c7e4427044f66fdf3dde7ddeac2589158a48b1a4398190fbfe0721",
    "source_id": "asr:guard_fact:3ce44a6bbc42b0a50ddf36693fcf3071c69201f7560bf33a62c59fc70a59aec8",
@@ -6060,19 +6392,7 @@
    "exact": true,
    "kind": "DERIVED_FROM",
    "payload": {
-    "rule": "graph-normalize/1"
-   },
-   "relation_id": "rel:a341953494f6fa6725f81fbc898bc450d59a7c927d4a7e5b565399817e85aea3",
-   "source_id": "asr:flow_summary:24eec466745d78ffc12c05ae851cc3fec17fb030c3e72a1961bed8c58c33a739",
-   "target_id": "asr:symbol:cb818ab23b3785076fd541656fa1591d140b2de9066b2a0be12e1341cd7796ef"
-  },
-  {
-   "ambiguity": null,
-   "confidence": 1.0,
-   "exact": true,
-   "kind": "DERIVED_FROM",
-   "payload": {
-    "rule": "graph-normalize/1"
+    "rule": "graph-normalize/2"
    },
    "relation_id": "rel:a4d6098df55bddb97275155e7dd2504a434502d36fa68cc8ed3f39f53d627302",
    "source_id": "asr:range_fact:b0b7094aa4201a3497f53a4b4b4919f245d55f17ecfcc6313052c553bd95303f",
@@ -6084,7 +6404,7 @@
    "exact": true,
    "kind": "GUARDS",
    "payload": {
-    "rule": "graph-normalize/1"
+    "rule": "graph-normalize/2"
    },
    "relation_id": "rel:ab84e6e1cb40f433bdf989d21576a73ed34e8757f157893eb384dd746b413597",
    "source_id": "asr:guard_fact:f22fde1b5ea898eead0df6ac7bee28f9f648138de3bc6aa6bef1a6e44028c9b8",
@@ -6096,7 +6416,7 @@
    "exact": true,
    "kind": "GUARDS",
    "payload": {
-    "rule": "graph-normalize/1"
+    "rule": "graph-normalize/2"
    },
    "relation_id": "rel:acd96f9deb081de53f656894f1c880038457794437e12026378c341c2b5a170e",
    "source_id": "asr:guard_fact:507aec3a98609db9693f17d5ae631af9e4add867799309c19d6af7c0ee8264ff",
@@ -6112,7 +6432,7 @@
     "path_ids": [
      "asr:dataflow_path:377391afcd3a8f9e638afc9f3eefcd485037c725e21bed7493a046d1b3143ee8"
     ],
-    "rule": "graph-normalize/1"
+    "rule": "graph-normalize/2"
    },
    "relation_id": "rel:ae3842f1f2ffa7e9c64ec297007f7cd29405f66c089b3137963c21daa7b17246",
    "source_id": "asr:entry_point:073bb592be091a88ceac1535d8c335d9f6f9be41e7eb455a49f571698299ce72",
@@ -6122,21 +6442,9 @@
    "ambiguity": null,
    "confidence": 1.0,
    "exact": true,
-   "kind": "DERIVED_FROM",
-   "payload": {
-    "rule": "graph-normalize/1"
-   },
-   "relation_id": "rel:b28eddc3ac31444a144fb253223eb61541f36383f58103bcbcc0b41643d3b63f",
-   "source_id": "asr:flow_summary:c479342382c711c05180ab0fe17514eca167a4f007d0ff28b027749fe910b862",
-   "target_id": "asr:symbol:464fb5453f3d316fea50c0c132d28de96419cc4bc7348ec32f5cd2bbc0f09e39"
-  },
-  {
-   "ambiguity": null,
-   "confidence": 1.0,
-   "exact": true,
    "kind": "GUARDS",
    "payload": {
-    "rule": "graph-normalize/1"
+    "rule": "graph-normalize/2"
    },
    "relation_id": "rel:b88ff1c3a9c4db24ebb930ab994fda10b4d44cf1cd51fdb7b97e575b2fe54354",
    "source_id": "asr:guard_fact:365dd52d20b96e09a4335a382381bcb93a128db40a88fe5a944d846337dc7eee",
@@ -6148,7 +6456,7 @@
    "exact": true,
    "kind": "DERIVED_FROM",
    "payload": {
-    "rule": "graph-normalize/1"
+    "rule": "graph-normalize/2"
    },
    "relation_id": "rel:b9f0c80263c859b82ac9db6ab5d2b7234a877168344fe30a7956b57a203feddc",
    "source_id": "asr:range_fact:a6fc7c338f27f73ab367891a094f1fc4d1fc527b422573ffd80795192d85788b",
@@ -6160,7 +6468,7 @@
    "exact": true,
    "kind": "CALLS",
    "payload": {
-    "rule": "graph-normalize/1"
+    "rule": "graph-normalize/2"
    },
    "relation_id": "rel:bc20fcbd30a1a37dc1427717c4ee648fb7e43cb7eb8363237d754ac0930e0ab2",
    "source_id": "asr:call_site:0a9f9e603c45b40e0d45d2aac822b26bdaa7c3d7cd268778a98b4cebca4b24d6",
@@ -6172,7 +6480,7 @@
    "exact": true,
    "kind": "CONTAINS",
    "payload": {
-    "rule": "graph-normalize/1"
+    "rule": "graph-normalize/2"
    },
    "relation_id": "rel:be0fccec1eb759b00425ca23065fc4655c5b88353244a849dd6ee9740beb1624",
    "source_id": "asr:symbol:dee676bc898a51c6ad4e64b823e73a64335708b32fe483c24cb5d692fbf5b85a",
@@ -6184,7 +6492,7 @@
    "exact": true,
    "kind": "CONTAINS",
    "payload": {
-    "rule": "graph-normalize/1"
+    "rule": "graph-normalize/2"
    },
    "relation_id": "rel:c227c8a7da4986414aefa2c378e7199c1db50e803a940ae43d51c88b3be4f881",
    "source_id": "asr:symbol:dee676bc898a51c6ad4e64b823e73a64335708b32fe483c24cb5d692fbf5b85a",
@@ -6196,7 +6504,7 @@
    "exact": true,
    "kind": "GUARDS",
    "payload": {
-    "rule": "graph-normalize/1"
+    "rule": "graph-normalize/2"
    },
    "relation_id": "rel:c3529c9bdd5b4196afa772d898f7f90e4abcff771499c8b8371020c9c7909fd4",
    "source_id": "asr:guard_fact:86419181b918ce515946d26a1835896072ff7ce6ad72b7f212e393e45b096c69",
@@ -6208,7 +6516,7 @@
    "exact": true,
    "kind": "GUARDS",
    "payload": {
-    "rule": "graph-normalize/1"
+    "rule": "graph-normalize/2"
    },
    "relation_id": "rel:c6c959946e8101575f2e1146470a7549ce12acea62b0100502df8335fc524778",
    "source_id": "asr:guard_fact:5977748acea7c2cd0d4f508d9d269141bff648e3275485cd2d44e69ed69d280f",
@@ -6220,7 +6528,7 @@
    "exact": true,
    "kind": "CONTAINS",
    "payload": {
-    "rule": "graph-normalize/1"
+    "rule": "graph-normalize/2"
    },
    "relation_id": "rel:cb27d0818aa899734b44a58d48a85963d8bce9bbdbe29658f9125eb890b06178",
    "source_id": "asr:symbol:a0f73aee7988d2924015871c4708aa98c6e78d7fcc9deba3e1718a0551377897",
@@ -6230,9 +6538,21 @@
    "ambiguity": null,
    "confidence": 1.0,
    "exact": true,
+   "kind": "DERIVED_FROM",
+   "payload": {
+    "rule": "graph-normalize/2"
+   },
+   "relation_id": "rel:cde20315412247ac25dc46c3e58ce0f796dce3e0cbf265a2797840f467b42d08",
+   "source_id": "asr:flow_summary:885353cac5e3719ef8f406a1be37e6db4b14bec8d45f781e82350bd5d2481ffc",
+   "target_id": "asr:symbol:a0f73aee7988d2924015871c4708aa98c6e78d7fcc9deba3e1718a0551377897"
+  },
+  {
+   "ambiguity": null,
+   "confidence": 1.0,
+   "exact": true,
    "kind": "CONTAINS",
    "payload": {
-    "rule": "graph-normalize/1"
+    "rule": "graph-normalize/2"
    },
    "relation_id": "rel:cfff8e675f612e34c72caa173a564624859aa87e1217f57661cec3e4910ae795",
    "source_id": "asr:symbol:dee676bc898a51c6ad4e64b823e73a64335708b32fe483c24cb5d692fbf5b85a",
@@ -6242,21 +6562,9 @@
    "ambiguity": null,
    "confidence": 1.0,
    "exact": true,
-   "kind": "DERIVED_FROM",
-   "payload": {
-    "rule": "graph-normalize/1"
-   },
-   "relation_id": "rel:dbb37f7472c0a72f2b87a949c52cc9aaf69356b06ee709c48c32aae337abb5fd",
-   "source_id": "asr:flow_summary:3ab4306a5f0b8d88354954408331c4c9602162d7810702cf42a4c3f42fab18f7",
-   "target_id": "asr:symbol:e571637f02f571ed6d3ed7d049eb1f6ed02d968984941ff9eccc4fc18cd60393"
-  },
-  {
-   "ambiguity": null,
-   "confidence": 1.0,
-   "exact": true,
    "kind": "CONTAINS",
    "payload": {
-    "rule": "graph-normalize/1"
+    "rule": "graph-normalize/2"
    },
    "relation_id": "rel:dd5d30dac84c7f6e13402eaf2d28b5cbcb46a8b8776336da149a0aed435904f6",
    "source_id": "asr:symbol:dee676bc898a51c6ad4e64b823e73a64335708b32fe483c24cb5d692fbf5b85a",
@@ -6268,7 +6576,7 @@
    "exact": true,
    "kind": "CONTAINS",
    "payload": {
-    "rule": "graph-normalize/1"
+    "rule": "graph-normalize/2"
    },
    "relation_id": "rel:ddebc2ab326a977efffa2720dce87af9a72a8b5598ee6ec7fe8e8f555b3d3b3e",
    "source_id": "asr:symbol:cb818ab23b3785076fd541656fa1591d140b2de9066b2a0be12e1341cd7796ef",
@@ -6284,7 +6592,7 @@
     "path_ids": [
      "asr:dataflow_path:0c50d3434feafa41b6c43bc0a3dfe855c40fcf1b8ad464e4d298670113177f17"
     ],
-    "rule": "graph-normalize/1"
+    "rule": "graph-normalize/2"
    },
    "relation_id": "rel:e2363b23a036a96bcd304b709b251d277acb7f304e37f0b8784eccaf815bf9ff",
    "source_id": "asr:entry_point:cb698658e9337ca4e2d7f05fa8e1f8695c3db05eb0be2dd3f4ee63771a73b35f",
@@ -6296,7 +6604,7 @@
    "exact": true,
    "kind": "DERIVED_FROM",
    "payload": {
-    "rule": "graph-normalize/1"
+    "rule": "graph-normalize/2"
    },
    "relation_id": "rel:e30b40d1a4c287d5cb3a3f8b4160c4342196e8354b61e4670960f5b5bb4611a0",
    "source_id": "asr:range_fact:4e72130293e0793abca3c547ff748a48b2ec1523da67c1d07a44b6600ea08789",
@@ -6308,7 +6616,7 @@
    "exact": true,
    "kind": "CONTAINS",
    "payload": {
-    "rule": "graph-normalize/1"
+    "rule": "graph-normalize/2"
    },
    "relation_id": "rel:ea070fe36b53b611833db7b10c8404132123ba0f7d9b49c803bbe6d7c843979a",
    "source_id": "asr:symbol:6974a3a62f41e258e465a323471d0f5272209c8da0e6cd1e349efcd02e74ae42",
@@ -6320,7 +6628,7 @@
    "exact": true,
    "kind": "CONTAINS",
    "payload": {
-    "rule": "graph-normalize/1"
+    "rule": "graph-normalize/2"
    },
    "relation_id": "rel:ebe6cbe203306b7c347e0c4e67be25d228df41847d39bf02ddeee3afccabf6c7",
    "source_id": "asr:symbol:5b08f02e26bae3737ce9d8bf36aa362fb9170ee94d7f0a39d5973a36716e0482",
@@ -6332,7 +6640,7 @@
    "exact": true,
    "kind": "CONTAINS",
    "payload": {
-    "rule": "graph-normalize/1"
+    "rule": "graph-normalize/2"
    },
    "relation_id": "rel:ef20e6381b3b397beeff43037dcde28fdbceaffea0a62e4e6bcc5527dc407946",
    "source_id": "asr:symbol:464fb5453f3d316fea50c0c132d28de96419cc4bc7348ec32f5cd2bbc0f09e39",
@@ -6344,7 +6652,7 @@
    "exact": true,
    "kind": "CALLS",
    "payload": {
-    "rule": "graph-normalize/1"
+    "rule": "graph-normalize/2"
    },
    "relation_id": "rel:ef4e5f879a250806a49bc2a694f41e9cf8aad54605bb30c703bc618a44aefd4a",
    "source_id": "asr:call_site:710eba67a94b20d2a8901218bae9bf6ad7ddb20d8fd511a10228f697aacc6e76",
@@ -6356,7 +6664,7 @@
    "exact": true,
    "kind": "CONTAINS",
    "payload": {
-    "rule": "graph-normalize/1"
+    "rule": "graph-normalize/2"
    },
    "relation_id": "rel:f35c1826b10fbabce1aa37c16c20ff533db07aa9028109c659161bada864de9a",
    "source_id": "asr:symbol:dee676bc898a51c6ad4e64b823e73a64335708b32fe483c24cb5d692fbf5b85a",
@@ -6368,7 +6676,7 @@
    "exact": true,
    "kind": "CONTAINS",
    "payload": {
-    "rule": "graph-normalize/1"
+    "rule": "graph-normalize/2"
    },
    "relation_id": "rel:fb90c0ab8c76cf58e53af90be491edcb91feb65a6310ecb38fb9eba7c3e790c2",
    "source_id": "asr:symbol:6974a3a62f41e258e465a323471d0f5272209c8da0e6cd1e349efcd02e74ae42",
@@ -6380,14 +6688,14 @@
    "exact": true,
    "kind": "CONTAINS",
    "payload": {
-    "rule": "graph-normalize/1"
+    "rule": "graph-normalize/2"
    },
    "relation_id": "rel:fff9743c91a6b7434e0a1d2049fc7380e9aac1d5e69f20e0194a0c05f3111cc2",
    "source_id": "asr:symbol:e571637f02f571ed6d3ed7d049eb1f6ed02d968984941ff9eccc4fc18cd60393",
    "target_id": "asr:call_site:4d2cfbf907fd6ca91cd75d6e7311b986edc193b93863529c0b133c446a434c30"
   }
  ],
- "rule": "graph-normalize/1",
+ "rule": "graph-normalize/2",
  "scope_id": "codeql-unit-synthetic",
  "symbols": [
   {
@@ -6423,7 +6731,7 @@
     "mapping_method": "codeql-location-exact",
     "producer": "codeql-export",
     "qualified_name": "forward",
-    "rule_version": "graph-normalize/1",
+    "rule_version": "graph-normalize/2",
     "scope": {
      "build_unit_id": "synthetic",
      "component_id": "component:synthetic",
@@ -6466,7 +6774,7 @@
     "mapping_method": "codeql-location-exact",
     "producer": "codeql-export",
     "qualified_name": "LogHandler::handle",
-    "rule_version": "graph-normalize/1",
+    "rule_version": "graph-normalize/2",
     "scope": {
      "build_unit_id": "synthetic",
      "component_id": "component:synthetic",
@@ -6509,7 +6817,7 @@
     "mapping_method": "codeql-location-exact",
     "producer": "codeql-export",
     "qualified_name": "dispatch",
-    "rule_version": "graph-normalize/1",
+    "rule_version": "graph-normalize/2",
     "scope": {
      "build_unit_id": "synthetic",
      "component_id": "component:synthetic",
@@ -6552,7 +6860,7 @@
     "mapping_method": "codeql-location-exact",
     "producer": "codeql-export",
     "qualified_name": "copy_checked",
-    "rule_version": "graph-normalize/1",
+    "rule_version": "graph-normalize/2",
     "scope": {
      "build_unit_id": "synthetic",
      "component_id": "component:synthetic",
@@ -6595,7 +6903,7 @@
     "mapping_method": "codeql-location-exact",
     "producer": "codeql-export",
     "qualified_name": "copy_unchecked",
-    "rule_version": "graph-normalize/1",
+    "rule_version": "graph-normalize/2",
     "scope": {
      "build_unit_id": "synthetic",
      "component_id": "component:synthetic",
@@ -6638,7 +6946,7 @@
     "mapping_method": "codeql-location-exact",
     "producer": "codeql-export",
     "qualified_name": "main",
-    "rule_version": "graph-normalize/1",
+    "rule_version": "graph-normalize/2",
     "scope": {
      "build_unit_id": "synthetic",
      "component_id": "component:synthetic",
@@ -6681,7 +6989,7 @@
     "mapping_method": "codeql-location-exact",
     "producer": "codeql-export",
     "qualified_name": "CopyHandler::handle",
-    "rule_version": "graph-normalize/1",
+    "rule_version": "graph-normalize/2",
     "scope": {
      "build_unit_id": "synthetic",
      "component_id": "component:synthetic",
@@ -6724,7 +7032,7 @@
     "mapping_method": "codeql-location-exact",
     "producer": "codeql-export",
     "qualified_name": "run_callback",
-    "rule_version": "graph-normalize/1",
+    "rule_version": "graph-normalize/2",
     "scope": {
      "build_unit_id": "synthetic",
      "component_id": "component:synthetic",

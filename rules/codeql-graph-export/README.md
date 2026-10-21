@@ -62,6 +62,18 @@ Column conventions:
 - `guards` emits one `none` row per sink that no guard controls. Its condition columns are `""`
   and `0`. Non-dominating and post-dominating guards are listed only when they mention a variable
   of the sink operand.
+- `guards` rows of a comparison also carry its two operands (`lhs_*`, `rhs_*`): the five location
+  columns, `<role>_kind` (`variable | field | constant | sizeof | call | other`, syntactic only)
+  and `<role>_value` (the decimal value of an integer compile-time constant, else `""`). A guard
+  that is not a comparison, and every `none` row, has empty paths, zero positions, kind `other`
+  and value `""`. The operand text is not exported; the normalizer slices it from the accepted
+  source bytes. Inside a macro expansion an operand may be located at the whole expansion site.
+- `destination_object_bytes` (last `guards` column) is the byte size of the destination object
+  (argument 0) of a catalog memory-write API sink (`memcpy`, `memmove`, `memset`, `strcpy`,
+  `strcat`, `strncpy`, `strncat`) when its unconverted type is a fixed-size array or it is the
+  address of a variable or field of a complete type; `-1` otherwise and for every other sink. It
+  is an object-size fact, not a safety claim, and the export classifies no relation between a
+  guard and the sink or the destination.
 - `ranges` emits `"unknown"` for a bound equal to the operand type's extreme. A finite bound is
   CodeQL's `float.toString()`, for example `"63.0"`. Non-integral operands have applicability
   `not_applicable` and empty bounds.

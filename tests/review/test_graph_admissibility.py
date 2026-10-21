@@ -93,7 +93,8 @@ def results_for(family: Family, source_class: str = "remote", *, sink: str | Non
                                "sink": {"sink_site": sink, "sink_class": "memory_write", "cwe_family": "CWE-787"},
                                "steps": [], "hop_count": 1, "truncated_steps": False},
         Family.GUARD_FACT: {"sink": {"sink_site": sink}, "guard_state": "none", "polarity": "unknown",
-                            "constrains_sink_operand": "unknown"},
+                            "constrains_sink_operand": "unknown", "comparison": None,
+                            "destination": {"object_bytes": None}},
         Family.RANGE_FACT: {"sink": {"sink_site": sink}, "operand_index": 2, "interval": "unknown"},
     }[family]
 
