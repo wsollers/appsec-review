@@ -76,6 +76,68 @@
       "minLength": 1,
       "maxLength": 200
     },
+    "lead_severity_record": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["original", "assessed", "references", "effective", "gap"],
+      "properties": {
+        "original": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["reported_severity", "native_severity", "severity_basis", "severity_rule", "scanner", "rule_id"],
+          "properties": {
+            "reported_severity": {"enum": ["critical", "high", "medium", "low", "info", "unknown"]},
+            "native_severity": {"type": ["string", "null"], "maxLength": 128},
+            "severity_basis": {"type": "string", "minLength": 1, "maxLength": 200},
+            "severity_rule": {"type": "string", "minLength": 1, "maxLength": 200},
+            "scanner": {"type": "string", "minLength": 1, "maxLength": 200},
+            "rule_id": {"type": "string", "minLength": 1, "maxLength": 512}
+          }
+        },
+        "assessed": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["value", "source", "basis", "reason", "rule_or_prompt_version", "triage_id"],
+              "properties": {
+                "value": {"enum": ["critical", "high", "medium", "low", "info"]},
+                "source": {"enum": ["rule_table", "cwe_catalog", "model_triage"]},
+                "basis": {"type": "string", "minLength": 1, "maxLength": 200},
+                "reason": {"type": "string", "minLength": 1, "maxLength": 200},
+                "rule_or_prompt_version": {"type": "string", "minLength": 1, "maxLength": 200},
+                "triage_id": {"type": "string", "pattern": "^triage-[0-9a-f]{64}$"}
+              }
+            },
+            {"type": "null"}
+          ]
+        },
+        "references": {"type": "array", "items": {"type": "object"}, "maxItems": 8},
+        "effective": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["value", "from"],
+          "properties": {
+            "value": {"enum": ["critical", "high", "medium", "low", "info", "unknown"]},
+            "from": {"enum": ["reported", "assessed", "unknown"]}
+          }
+        },
+        "gap": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["code", "reason"],
+              "properties": {
+                "code": {"type": "string", "minLength": 1, "maxLength": 200},
+                "reason": {"type": ["string", "null"], "maxLength": 200}
+              }
+            },
+            {"type": "null"}
+          ]
+        }
+      }
+    },
     "text": {
       "type": "string",
       "maxLength": 2000

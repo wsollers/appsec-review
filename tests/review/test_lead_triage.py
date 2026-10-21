@@ -9,6 +9,7 @@ from appsec_review.jobs.job_inference_security_review.schemas import SchemaSet
 from appsec_review.review.lead_families import Lead, with_triage
 from appsec_review.review.lead_triage import RESULT_SCHEMA, TriageGuidance, finding_input, run_triage
 from appsec_review.review.lead_triage_settings import TriageRule, TriageSettings
+from appsec_review.review.packages import PackageSettings, admission_reasons, lead_record
 from appsec_review.review.references import CweConsequence, CweEntry, CweReference
 
 
@@ -58,11 +59,15 @@ def test_rule_table_runs_before_the_model_and_records_original_and_assessed_seve
         "unknown_leads": 2, "rule_table": 1, "cwe_catalog": 0, "model_triage": 1,
         "unresolved": 0, "leads_total": 3, "reused_from_cache": 0, "batches": 1, "model_calls": 1,
     }
-    table_record = with_triage(table_lead, outcome.assessments["lead-table"]).severity_record()
+    triaged_table = with_triage(table_lead, outcome.assessments["lead-table"])
+    table_record = triaged_table.severity_record()
     model_record = with_triage(model_lead, outcome.assessments["lead-model"]).severity_record()
     assert table_record["original"]["reported_severity"] == "unknown"
     assert table_record["assessed"]["value"] == "high"
     assert "hard-coded credential" in table_record["assessed"]["reason"].lower()
+    assert admission_reasons(triaged_table, PackageSettings()) == ["assessed_severity"]
+    menu = lead_record(triaged_table, "component-a", None, admission=["assessed_severity"])
+    assert menu["reported_severity"] == "unknown" and menu["severity_record"] == table_record
     assert model_record["original"]["reported_severity"] == "unknown"
     assert model_record["assessed"]["value"] == "medium"
     assert "bounded excerpt" in model_record["assessed"]["reason"].lower()

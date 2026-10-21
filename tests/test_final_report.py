@@ -141,8 +141,13 @@ def test_ship_block_and_claim_states_are_projected_verbatim(chain: Chain) -> Non
     statuses = {item["finding_package_id"]: item["ship_block"]["status"]
                 for item in [*report["findings"], *report["verification_backlog"], *report["withheld"]]}
     assert statuses == {item["finding_package_id"]: item["ship_block"]["status"] for item in gate["packages"]}
-    # Under the checked-in single-model configuration the confirmed critical finding is pending, never blocking.
-    assert report["summary"]["ship_block"]["by_status"]["ship_blocking_pending_distinct_verification"] == 1
+    # The confirmed finding has only an interval assessment, so missing decision inputs take precedence over
+    # verifier distinctness: it is decision_pending, never ship-blocking.
+    confirmed = next(item for item in gate["packages"] if item["state"] == "confirmed")
+    assert confirmed["ship_block"]["status"] == "decision_pending"
+    assert "technical_severity_unrated" in confirmed["ship_block"]["reasons"]
+    assert report["summary"]["ship_block"]["by_status"]["decision_pending"] >= 1
+    assert report["summary"]["ship_block"]["by_status"]["ship_blocking_pending_distinct_verification"] == 0
     assert report["summary"]["ship_block"]["by_status"]["ship_blocking"] == 0
 
 
@@ -166,10 +171,10 @@ def test_degraded_review_is_surfaced_as_named_limitations_and_not_a_failure(chai
     by_id = {item["limitation_id"]: item for item in gate["limitations"]}
     assert gate["review"]["status"] == "DEGRADED" and gate["status"] == "PUBLISHABLE_WITH_LIMITATIONS"
     for identity in ("review_degraded", "gaps_recorded", "lane_degraded", "coverage_incomplete",
-                     "pending_distinct_verification", "possible_duplicates"):
+                     "technical_severity_unrated", "decision_pending", "possible_duplicates"):
         assert by_id[identity]["kind"] == "gap", identity
     assert by_id["gaps_recorded"]["count"] == len(gate["gap_ids"]) > 0
-    assert "same model" in by_id["pending_distinct_verification"]["statement"]
+    assert "not a release decision" in by_id["decision_pending"]["statement"]
     # Remediation planning and validation do not exist yet: named limitations, not failures.
     for identity in ("remediation_planning_not_run", "remediation_validation_not_run", "attack_chain_composition_not_run",
                      "poc_lane_not_run"):
@@ -411,17 +416,18 @@ def test_gate_rejects_a_handoff_whose_partition_disagrees_with_its_packages(pris
 
 
 def test_gate_recounts_ship_block_totals_including_decision_pending(pristine: Chain) -> None:
-    """A forged (re-hashed) handoff that reports a finding as decision_pending fails the gate's recount."""
+    """A forged (re-hashed) handoff ship-block summary fails the gate's recount."""
     copy_ = pristine
     reference = gate_document(copy_)["inputs"]["review_handoff"]
     path = copy_.run_root / reference["path"]
     document = json.loads(path.read_text(encoding="utf-8"))
     summary = document["ship_block"]
-    status = next(key for key, count in summary["by_status"].items() if count and key != "decision_pending")
+    status = next(key for key, count in summary["by_status"].items() if count)
+    replacement = "not_ship_blocking" if status == "decision_pending" else "decision_pending"
     lane = next(key for key, row in summary["by_lane"].items() if row[status])
     for counts in (summary["by_status"], summary["by_lane"][lane]):
         counts[status] -= 1
-        counts["decision_pending"] += 1
+        counts[replacement] += 1
     path.write_text(json.dumps(document, sort_keys=True, separators=(",", ":")) + "\n", encoding="utf-8")
     handoff_path = copy_.run_root / reference["path"].split("/steps/")[0] / "handoff.json"
     handoff = json.loads(handoff_path.read_text(encoding="utf-8"))

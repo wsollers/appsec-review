@@ -209,8 +209,10 @@ class Assembly:
 
 
 def admission_reasons(lead: Lead, settings: PackageSettings) -> list[str]:
-    """Why lane A admits ``lead``: its reported severity, a KEV listing, both, or nothing."""
-    reasons = ["reported_severity"] if lead.reported_severity in settings.admit_severities else []
+    """Why lane A admits ``lead``: reported/assessed severity, a KEV listing, or nothing."""
+    reasons = []
+    if lead.effective_severity in settings.admit_severities:
+        reasons.append("reported_severity" if lead.effective_from == "reported" else "assessed_severity")
     if settings.admit_kev and lead.kev_listed is True:
         reasons.append("kev_listed")
     return reasons
@@ -231,6 +233,7 @@ def lead_record(lead: Lead, component_id: str, build_unit_id: str | None, *,
         "rule_id": lead.rule_id, "message": lead.message, "rule_cwe": list(lead.rule_cwe),
         "native_severity": lead.native_severity, "reported_severity": lead.reported_severity,
         "severity_rule": lead.severity_rule, "severity_basis": lead.severity_basis,
+        "severity_record": lead.severity_record(),
         "component_id": component_id, "build_unit_id": build_unit_id,
         "suppression_status": lead.suppression_status if lead.suppression_status in SUPPRESSION_STATES else "unknown",
         "duplicate_of": duplicate, "location_exact": lead.location_exact, "flow_ids": list(lead.flow_ids),
@@ -916,7 +919,7 @@ class _Assembler:
                truncation: Mapping[str, Any], graph_families: Iterable[str] = (),
                graph_shards: Iterable[str] = (), graph_scopes: Iterable[str] = (),
                neighborhood: Mapping[str, Any] | None = None) -> tuple[str, bytes]:
-        leads = sorted(menu, key=lambda item: (SEVERITY_ORDER[item[0].reported_severity], item[0].observation_id))
+        leads = sorted(menu, key=lambda item: (SEVERITY_ORDER[item[0].effective_severity], item[0].observation_id))
         lead_ids = sorted(item[0].observation_id for item in leads)
         entities = sorted({*lead_ids, *scope_record["source_ids"], *scope_record["artifact_ids"],
                            *(item.id for item in context)})
@@ -1111,12 +1114,12 @@ def audit_membership(collection: LeadCollection, packages: Iterable[Package],
                      admit: Iterable[str], admit_kev: bool = False) -> dict[str, Any]:
     """Gate 5 for lane A: E ⊆ F per family and severity, exactly once, with no invented lead.
 
-    ``E`` holds every lead whose reported severity is admitted and, with ``admit_kev``, every
-    KEV-listed lead whatever its reported severity.
+    ``E`` holds every lead whose effective severity is admitted and, with ``admit_kev``, every
+    KEV-listed lead whatever its effective severity.
     """
     admitted = set(admit)
     expected = {lead.observation_id: lead for lead in collection.leads
-                if lead.reported_severity in admitted or (admit_kev and lead.kev_listed is True)}
+                if lead.effective_severity in admitted or (admit_kev and lead.kev_listed is True)}
     seen: Counter[str] = Counter()
     for package in packages:
         if package.kind == "finding_lead":
@@ -1128,11 +1131,12 @@ def audit_membership(collection: LeadCollection, packages: Iterable[Package],
         raise IntegrityError(f"lane A membership audit failed: missing={missing[:5]} repeated={repeated[:5]} "
                              f"invented={invented[:5]}")
     by_cell: dict[str, dict[str, dict[str, int]]] = {}
-    severities = admitted | {lead.reported_severity for lead in expected.values()}
+    severities = admitted | {lead.effective_severity for lead in expected.values()}
     for family in FAMILIES:
         by_cell[family] = {}
         for severity in sorted(severities, key=SEVERITY_ORDER.__getitem__):
-            members = [key for key, lead in expected.items() if lead.family == family and lead.reported_severity == severity]
+            members = [key for key, lead in expected.items() if lead.family == family
+                       and lead.effective_severity == severity]
             packaged = sum(seen[key] for key in members)
             if packaged != len(members):
                 raise IntegrityError(f"lane A membership audit failed for {family}/{severity}")
@@ -1140,7 +1144,7 @@ def audit_membership(collection: LeadCollection, packages: Iterable[Package],
     return {"status": "passed", "expected": len(expected), "packaged": sum(seen.values()), "by_family": by_cell,
             "suppressed": sum(1 for lead in expected.values() if lead.suppression_status == "suppressed"),
             "duplicates": sum(1 for lead in expected.values() if lead.duplicate_of),
-            "kev_admitted": sum(1 for lead in expected.values() if lead.reported_severity not in admitted)}
+            "kev_admitted": sum(1 for lead in expected.values() if lead.effective_severity not in admitted)}
 
 
 def audit_hunts(hunted: Iterable[RankedUnit], packages: Iterable[Package]) -> dict[str, Any]:

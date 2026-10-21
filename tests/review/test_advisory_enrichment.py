@@ -333,3 +333,19 @@ def test_claim_lead_families_mark_dependency_findings_from_lead_packages_only(fi
     merged = {"proposal_packages": {"claim-a": [lead, hunt], "claim-b": [hunt]}}
     families = stages.claim_lead_families(merged, documents)
     assert families == {"claim-a": ("dependency_advisory",)}       # a hunt menu names no single lead
+
+
+def test_claim_lead_severities_keep_original_unknown_and_assessment_reason() -> None:
+    record = {
+        "original": {"reported_severity": "unknown"},
+        "assessed": {"value": "high", "source": "rule_table", "reason": "hard-coded credential"},
+        "references": [], "effective": {"value": "high", "from": "assessed"}, "gap": None,
+    }
+    documents = {
+        "lead": {"kind": "finding_lead", "lead_menu": [{"observation_id": "obs-a", "severity_record": record}]},
+        "hunt": {"kind": "hunt", "lead_menu": [{"observation_id": "obs-b", "severity_record": record}]},
+    }
+    merged = {"proposal_packages": {"claim-a": ["hunt", "lead"], "claim-b": ["hunt"]}}
+    assert stages.claim_lead_severities(merged, documents) == {
+        "claim-a": ({"observation_id": "obs-a", "severity_record": record},),
+    }

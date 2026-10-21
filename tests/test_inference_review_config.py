@@ -89,7 +89,7 @@ def test_registered_job_is_resolved_with_the_registry_set_and_package_bounds() -
     resolved = json.loads(config.resolved_json)
     assert "pending_jobs" not in resolved
     assert resolved["jobs"][JOB]["settings"]["teams"]["review_teams"] == 5
-    assert tuple(config.job(JOB).steps) == ("scope", "packages", "lead_review", "hunt_review", "merge",
+    assert tuple(config.job(JOB).steps) == ("scope", "triage", "packages", "lead_review", "hunt_review", "merge",
                                             "adjudicate", "scoring", "completeness", "publication")
     from appsec_review.review.packages import PackageSettings
     packages = PackageSettings.from_review_settings(_settings(config))

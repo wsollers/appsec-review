@@ -846,6 +846,31 @@
         "unknown"
       ]
     },
+    "inference_lead_severity_record": {
+      "oneOf": [
+        {"type": "null"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["original", "assessed", "references", "effective", "gap"],
+          "properties": {
+            "original": {"type": "object"},
+            "assessed": {"type": ["object", "null"]},
+            "references": {"type": "array", "items": {"type": "object"}, "maxItems": 8},
+            "effective": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["value", "from"],
+              "properties": {
+                "value": {"$ref": "#/$defs/inference_severity"},
+                "from": {"enum": ["reported", "assessed", "unknown"]}
+              }
+            },
+            "gap": {"type": ["object", "null"]}
+          }
+        }
+      ]
+    },
     "inference_gap": {
       "type": "object",
       "additionalProperties": false,
@@ -1568,6 +1593,7 @@
         "reported_severity",
         "severity_rule",
         "severity_basis",
+        "severity_record",
         "component_id",
         "build_unit_id",
         "suppression_status",
@@ -1596,6 +1622,7 @@
           "items": {
             "enum": [
               "reported_severity",
+              "assessed_severity",
               "kev_listed"
             ]
           },
@@ -1649,6 +1676,9 @@
         "severity_basis": {
           "type": "string",
           "minLength": 1
+        },
+        "severity_record": {
+          "$ref": "#/$defs/inference_lead_severity_record"
         },
         "component_id": {
           "type": "string",

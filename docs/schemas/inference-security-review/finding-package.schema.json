@@ -23,6 +23,7 @@
     "remediation_inputs",
     "independence",
     "judge_verdict",
+    "lead_severities",
     "ship_block",
     "gaps",
     "provenance"
@@ -209,6 +210,19 @@
           "type": "null"
         }
       ]
+    },
+    "lead_severities": {
+      "type": "array",
+      "maxItems": 32,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["observation_id", "severity_record"],
+        "properties": {
+          "observation_id": {"$ref": "common.schema.json#/$defs/entity_id"},
+          "severity_record": {"$ref": "common.schema.json#/$defs/lead_severity_record"}
+        }
+      }
     }
   },
   "allOf": [

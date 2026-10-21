@@ -22,6 +22,7 @@
     "ship_block",
     "verification",
     "planned_consumers",
+    "lead_severity_triage",
     "poc_candidates"
   ],
   "properties": {
@@ -589,6 +590,35 @@
         "$ref": "common.schema.json#/$defs/poc_candidate"
       },
       "description": "Claims that meet every proof-of-concept condition; consumed by job_poc_generation."
+    },
+    "lead_severity_triage": {
+      "oneOf": [
+        {"type": "null"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabled", "rule_table_version", "unknown_leads", "rule_table", "cwe_catalog", "model_triage", "unresolved", "model_calls", "artifact"],
+          "properties": {
+            "enabled": {"const": true},
+            "rule_table_version": {"const": "lead-severity-rules/1"},
+            "unknown_leads": {"type": "integer", "minimum": 0},
+            "rule_table": {"type": "integer", "minimum": 0},
+            "cwe_catalog": {"type": "integer", "minimum": 0},
+            "model_triage": {"type": "integer", "minimum": 0},
+            "unresolved": {"type": "integer", "minimum": 0},
+            "model_calls": {"type": "integer", "minimum": 0},
+            "artifact": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["path", "sha256"],
+              "properties": {
+                "path": {"type": "string", "minLength": 1, "maxLength": 512},
+                "sha256": {"$ref": "common.schema.json#/$defs/sha256"}
+              }
+            }
+          }
+        }
+      ]
     }
   }
 }

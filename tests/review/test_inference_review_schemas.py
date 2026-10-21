@@ -21,7 +21,8 @@ from tests.review.test_ledger import cell_id, entity, write_sample
 ROOT = Path(__file__).resolve().parents[2] / "docs" / "schemas" / "inference-security-review"
 NAMES = ("common", "ledger-event", "claim", "evidence-relation", "cell-record", "gap", "worker-turn",
          "red-discovery-result", "blue-result", "verifier-result", "adjudication", "score-package", "finding-package", "handoff",
-         "red-compact", "blue-compact", "verifier-compact", "judge-result-compact", "judge-result")
+         "red-compact", "blue-compact", "verifier-compact", "judge-result-compact", "judge-result",
+         "lead-triage-result")
 SCHEMAS = {name: json.loads((ROOT / f"{name}.schema.json").read_text()) for name in NAMES}
 REGISTRY = Registry().with_resources(
     (schema["$id"], Resource.from_contents(schema)) for schema in SCHEMAS.values())
@@ -259,6 +260,7 @@ def _finding() -> dict:
         "judge_verdict": {"verdict": "red_correct", "disagrees_with_state": False, "judges": [{
             "verdict_id": ident("judge_verdict"), "verdict": "red_correct", "cell_id": cell_id("judge"),
             "judge_model_distinct": True, "reason": "the cited rows show the copy is unbounded"}]},
+        "lead_severities": [],
         "ship_block": _ship_block(),
         "gaps": [ident("gap")], "provenance": {"run_manifest_sha256": SHA, "ledger_head_sha256": SHA},
     }
@@ -456,7 +458,8 @@ def _handoff_review_fields(intake=(), backlog=()) -> dict:
                              "red": {role: {"provider": "claude-cli", "model": "claude-haiku-5-5"}
                                      for role in ("hypothesis_hunter", "red_team_analyst")},
                              "distinct": False, "warning": "same model"},
-            "planned_consumers": [dict(item) for item in PLANNED_CONSUMERS], "poc_candidates": []}
+            "planned_consumers": [dict(item) for item in PLANNED_CONSUMERS],
+            "lead_severity_triage": None, "poc_candidates": []}
 
 
 def test_handoff_partitions_remediation_intake_from_the_verification_backlog(tmp_path: Path) -> None:

@@ -279,6 +279,26 @@ def claim_lead_families(merged: Mapping[str, Any], documents: Mapping[str, Mappi
     return found
 
 
+def claim_lead_severities(merged: Mapping[str, Any], documents: Mapping[str, Mapping[str, Any]]
+                          ) -> dict[str, tuple[dict[str, Any], ...]]:
+    """Audited lead-severity records from finding-lead packages that proposed each claim."""
+    found: dict[str, tuple[dict[str, Any], ...]] = {}
+    for claim_id, package_ids in sorted(merged.get("proposal_packages", {}).items()):
+        records: dict[str, dict[str, Any]] = {}
+        for package_id in sorted(package_ids):
+            document = documents.get(package_id) or {}
+            if document.get("kind") != "finding_lead":
+                continue
+            for lead in document.get("lead_menu", ()):
+                record = lead.get("severity_record")
+                if isinstance(record, Mapping):
+                    records[str(lead["observation_id"])] = {
+                        "observation_id": str(lead["observation_id"]), "severity_record": dict(record)}
+        if records:
+            found[claim_id] = tuple(records[key] for key in sorted(records))
+    return found
+
+
 def score_claims(adjudications: Sequence[Mapping[str, Any]], projection: Projection,
                  cwe_impact_overrides: Mapping[str, Any], out_dir: Path, ledger_path: Path, stream: str,
                  schemas: SchemaSet, references: Mapping[str, Mapping[str, Any]] | None = None, *,
@@ -455,6 +475,7 @@ def finding_packages(projection: Projection, adjudications: Sequence[Mapping[str
                      merged: Mapping[str, Any], scores: Sequence[Mapping[str, Any]], *, manifest_sha256: str,
                      out_dir: Path, schemas: SchemaSet, references: Mapping[str, Mapping[str, Any]] | None = None,
                      lead_families: Mapping[str, Sequence[str]] | None = None,
+                     lead_severities: Mapping[str, Sequence[Mapping[str, Any]]] | None = None,
                      ship_block_settings: ShipBlockSettings = ShipBlockSettings(),
                      require_distinct_model: bool = True) -> list[dict[str, Any]]:
     """Confirmed and supported claims only; supported is labelled not independently confirmed.
@@ -509,6 +530,7 @@ def finding_packages(projection: Projection, adjudications: Sequence[Mapping[str
                              "verifier_model_distinct": model_distinct,
                              "judge_model_distinct": all(item.judge_model_distinct for item in judged) if judged else None},
             "judge_verdict": judge,
+            "lead_severities": [dict(item) for item in (lead_severities or {}).get(claim.claim_id, ())],
             "ship_block": decision.record(inputs, adjudication_id=record["adjudication_id"],
                                           verification_review_id=review_id, displayed_context=displayed),
             "gaps": sorted(set(claim_gaps.get(claim.claim_id, ())) | set(record["gap_ids"]))[:256],
@@ -587,6 +609,7 @@ def build_handoff(*, run_id: str, manifest_sha256: str, configuration_sha256: st
                   scores: Sequence[Mapping[str, Any]], package_manifest_sha256: str,
                   coverage: Mapping[str, Any], possible: Sequence[Sequence[str]], schemas: SchemaSet,
                   ship_block_policy_sha256: str, verification: Mapping[str, Any],
+                  lead_severity_triage: Mapping[str, Any] | None = None,
                   poc_candidate_list: Sequence[Mapping[str, Any]] = ()) -> dict[str, Any]:
     if not accounting.exact:
         reasons = ", ".join(sorted({gap.reason for gap in accounting.violations}))
@@ -604,6 +627,7 @@ def build_handoff(*, run_id: str, manifest_sha256: str, configuration_sha256: st
                                               for item in findings),
                        "policy_sha256": ship_block_policy_sha256},
         "verification": dict(verification),
+        "lead_severity_triage": dict(lead_severity_triage) if lead_severity_triage is not None else None,
         "planned_consumers": [dict(item) for item in PLANNED_CONSUMERS],
         "score_packages": [{"score_id": item["score_id"], "sha256": item["sha256"]} for item in scores],
         "gap_ids": [gap.gap_id for gap in projection.gaps],
@@ -655,6 +679,6 @@ def verify_receipts(projection: Projection, receipts_root: Path) -> int:
     return checked
 
 
-__all__ = ["apply_policy", "audit", "build_handoff", "claim_lead_families", "claim_references", "coverage_matrix",
+__all__ = ["apply_policy", "audit", "build_handoff", "claim_lead_families", "claim_lead_severities", "claim_references", "coverage_matrix",
            "completeness_gaps", "finding_judge", "finding_packages", "merge_claims", "poc_candidates", "merge_verified", "remediation_partition",
            "score_claims", "scorer_actor", "shard_records", "verify_receipts", "write_ledger"]
