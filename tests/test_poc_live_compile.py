@@ -30,7 +30,7 @@ SOURCES = ("config", "diag", "frame", "log", "main", "packet", "session")
 
 
 def _image_id() -> str | None:
-    if shutil.which("docker") is None or not poc_support.TARGET.is_dir():
+    if shutil.which("docker") is None:
         return None
     try:
         done = subprocess.run(["docker", "image", "inspect", TAG, "--format", "{{.Id}}"], capture_output=True,
@@ -40,8 +40,6 @@ def _image_id() -> str | None:
     return done.stdout.strip() if done.returncode == 0 and done.stdout.strip().startswith("sha256:") else None
 
 
-IMAGE = _image_id()
-pytestmark = pytest.mark.skipif(IMAGE is None, reason=f"Docker or the {TAG} image is unavailable")
 TRANSCRIPT = bool(os.environ.get("POC_LIVE_TRANSCRIPT"))
 
 
@@ -52,13 +50,17 @@ def show(*parts: object) -> None:
 
 @pytest.fixture(scope="module")
 def build(tmp_path_factory):
+    IMAGE = _image_id()                   # asked when a test needs it, never while collecting
+    if IMAGE is None:
+        pytest.skip(f"Docker or the {TAG} image is unavailable")
     root = tmp_path_factory.mktemp("poc-live")
     workspace, _manifest = poc_support.relay_workspace(root / "workspace", with_objects=False)
     profile = BuildProfile("native", TAG, IMAGE, "10001:10001")
     executor = BuildContainerExecutor(profile, timeout_seconds=300, output_bytes=8 * 1024 * 1024, network="none")
     executor.resolve()
     objects = []
-    for name in SOURCES:                      # the accepted build: the project's own command per translation unit
+    for name in (name for name in SOURCES if (workspace / "src" / f"{name}.cpp").is_file()):
+        # the accepted build: the project's own command per translation unit
         output = f"build/CMakeFiles/relay.dir/src/{name}.cpp.o"
         (workspace / output).parent.mkdir(parents=True, exist_ok=True)
         argv = ["/usr/bin/clang++", "-I/workspace/include", "-O2", "-g", "-DNDEBUG", "-std=c++17", "-Wall", "-Wextra",

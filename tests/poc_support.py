@@ -60,15 +60,8 @@ def relay_workspace(destination: Path, *, with_objects: bool = True) -> tuple[Pa
     """A copy of the cpp-multivuln source with placeholder object files, and the manifest of every file."""
     if destination.exists():
         shutil.rmtree(destination)
-    if TARGET.is_dir():
-        shutil.copytree(TARGET, destination)
-    else:                                    # the offline fallback: the two files the PoC needs
-        (destination / "include" / "relay").mkdir(parents=True)
-        (destination / "src").mkdir()
-        (destination / "include" / "relay" / "relay.hpp").write_text(
-            "#pragma once\nnamespace relay { struct Header { unsigned short kind; unsigned short length; "
-            "char name[16]; }; int parse_header(const unsigned char *, unsigned long, Header &); }\n")
-        (destination / "src" / "packet.cpp").write_text("// packet\n")
+    # The whole cpp-multivuln target when this host has it; otherwise the two files the reproducer needs.
+    shutil.copytree(TARGET if TARGET.is_dir() else FIXTURES / "relay_source", destination)
     if with_objects:
         for relative in OBJECTS:
             path = destination / relative
