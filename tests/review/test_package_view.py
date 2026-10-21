@@ -181,7 +181,9 @@ def test_neighborhood_is_selected_by_function_scope_with_callers_and_callees(sco
     view = build_view(package, core, LIMITS)
     [span] = [item for item in view.document["source"] if item["role"] == "function"]
     assert span["ref"] == ids["p"] and span["lines"] == "2-4"
-    assert [row["summary"] for row in view.document["neighborhood"]["callers"]][0].startswith("q -> p")
+    # q -> p is also the first hop of the entry chain, so it is labelled once, in the chain.
+    hop = view.document["neighborhood"]["chain"]["hops"][0]
+    assert hop["summary"].startswith("q -> p") and view.document["neighborhood"]["callers"] == []
     assert view.document["neighborhood"]["function"]["name"] == "p"
     assert view.labels[span["label"]] == ids["p"]
 
