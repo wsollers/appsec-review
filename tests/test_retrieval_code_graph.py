@@ -158,7 +158,8 @@ def build_graph_run(tmp_path: Path, *, omit: Iterable[str] = (),
         return _fact(c.Family.GUARD_FACT, native, f"guard-{state}", {
             "sink": {"sink_site": ids["sink_memcpy"]}, "guard_state": state, "polarity": "true_branch",
             "condition": {"display": "n < 8", "location": {"path": "src/net.c", "start_line": 3}},
-            "constrains_sink_operand": True, "comparison": None}, at(3, start, start + 3))
+            "constrains_sink_operand": True, "comparison": None,
+            "destination": {"object_bytes": None}}, at(3, start, start + 3))
 
     guards = {"none": guard("none", 70), "dominating": guard("dominating", 72)}
     for key, record in guards.items():

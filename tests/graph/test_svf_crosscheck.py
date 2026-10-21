@@ -61,7 +61,10 @@ def _guard(condition: str, sink: c.GraphFact, constrains) -> c.GraphFact:
         "condition_start_byte": location.start_byte, "condition_end_byte": location.end_byte})
     result = {"sink": {"sink_site": sink.identity.value, "sink_class": "memory_write"}, "guard_state": "dominating",
               "polarity": "true_branch", "condition": {"display": condition, "location": None, "in_macro": False},
-              "constrains_sink_operand": constrains, "comparison": {"operator": "!=", "bound_display": "NULL"}}
+              "constrains_sink_operand": constrains, "comparison": {"operator": "!=", "bound_display": "NULL", "operands": [
+                  {"role": role, "kind": "other", "value": None, "text": None, "location": None}
+                  for role in ("lhs", "rhs")]},
+              "destination": {"object_bytes": None}}
     return c.GraphFact(identity, condition, payload(c.Family.GUARD_FACT, result), location)
 
 

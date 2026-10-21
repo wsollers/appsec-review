@@ -310,7 +310,7 @@ protected raw export.
   "schema": "appsec-review/graph-fact/1",
   "family": "dataflow_path",
   "producer": {"name": "codeql-export", "tool_version": "2.27.0", "export_pack_sha256": "…",
-               "catalog_version": "appsec-review/graph-catalog/1", "rule_version": "graph-normalize/1"},
+               "catalog_version": "appsec-review/graph-catalog/1", "rule_version": "graph-normalize/2"},
   "scope": {"scope_id": "…", "language": "c/c++", "build_unit_id": "…", "component_id": "…"},
   "exact": true,
   "coverage_status": "complete",
@@ -435,7 +435,28 @@ the scope's coverage row.
   operand when it is the sink operand or an alias CodeQL's local flow connects to it, and the
   dominance state; plus one `none` fact per sink with no controlling guard.
 - **Result.** `{sink: {sink_site}, guard_state, polarity, condition: {display, location},
-  constrains_sink_operand: true | false | unknown, comparison: {operator, bound_display} | null}`.
+  constrains_sink_operand: true | false | unknown, comparison: {operator, bound_display,
+  operands: [{role: lhs | rhs, kind, value, text, location}]} | null, destination: {object_bytes:
+  int | null}}`.
+- **Compared operands.** CodeQL's `toString()` elides operands (`... < ...`), so a comparison
+  guard also exports its two operands, each as a source location, a `kind` from the closed
+  syntactic set `variable | field | constant | sizeof | call | other` and, for an integer
+  compile-time constant, its decimal `value` (`null` otherwise). The operand `text` is never
+  exported by CodeQL: the normalizer slices it from the accepted source bytes at the operand
+  location (exact and hash-bound), bounded to 200 characters. `text` is `null` with a named gap
+  (`operand_text_unavailable`) when the location does not resolve exactly or a macro operand is
+  reported at the whole expansion site, and a cut text carries `operand_text_truncated`. A guard
+  that is not a comparison has `comparison = null`.
+- **Destination object size.** `destination.object_bytes` is the byte size of the destination
+  object (argument 0) of a catalog memory-write API sink (`memcpy`, `memmove`, `memset`, `strcpy`,
+  `strcat`, `strncpy`, `strncat`) when its unconverted type is a fixed-size array or it is the
+  address of a variable or field of a complete type; `null` for a pointer, an offset, an
+  incomplete type and every other sink. It is an object-size fact, not a safety claim.
+- **Facts, not judgments.** These fields are facts a reviewer reasons from. The export does not
+  classify how a guard relates to the sink operand or to the destination and publishes no
+  adequacy judgment: whether `size < 4u + out.length` protects `out.name` (16 bytes) is a question
+  for the red and blue review teams, who read the operands and the object size and may research
+  them with the retrieval tools. The admissibility and R4 mapping below are unchanged by them.
 - **Soundness gaps.** Guards on operands CodeQL cannot connect to the sink operand are
   `constrains_sink_operand = unknown`; conditions inside macros map to the expansion site with
   `exact=false`; `post_dominating_only` guards (checks after the sink) are listed separately and
@@ -658,7 +679,7 @@ internal ids and are never served).
 |---|---|---|---|
 | CodeQL database | unchanged (`_database_identity`) | source, build recipe, extractor, runtime change | export pack or catalog change |
 | Raw export (`export-checkpoint.json`) | database identity + tree sha, export pack sha and version, `export_queries` settings (row bounds, timeouts), runner version | export pack, catalog query text, bounds change | SARIF suite change |
-| `graph` shard per `(scope, family)` | export artifact hashes, catalog sha, `graph-normalize/1`, `graph-cross-check/1`, `graph-sarif-correlation/1`, `graph-fact-admissibility/1`, the exact upstream shard identities read (clangd, IR, AST, observations, priority), bounded settings | any of those | SARIF suite or prioritization heuristics that do not change the shards read |
+| `graph` shard per `(scope, family)` | export artifact hashes, catalog sha, `graph-normalize/2`, `graph-cross-check/1`, `graph-sarif-correlation/1`, `graph-fact-admissibility/1`, the exact upstream shard identities read (clangd, IR, AST, observations, priority), bounded settings | any of those | SARIF suite or prioritization heuristics that do not change the shards read |
 | `code_graph` matrix lane, follow-ups | accepted `graph` shard identities | graph shards change | — |
 | `hotspot_context`, `review_package` (stage 3, later) | their declared inputs including `graph` shard identities | graph shards change | — |
 
