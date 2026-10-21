@@ -1,15 +1,16 @@
-"""Build ``red-discovery-result/1`` final results for scripted red workers.
+"""Build ``red-compact/1`` final results for scripted red workers.
 
-A scripted worker reads the echo block and the package lead menu from its cell input and returns a
-result that accounts for every lead exactly once: ``proposal`` for the leads its proposals develop,
-``no_proposal`` for every other lead (which is never clean coverage).
+A scripted worker reads the package leads from its cell input and answers in the compact form a model gives
+(review-protocol/2): claims with label (here: raw identity) citations, and every lead that no claim develops
+listed under ``no_claim``, which is never clean coverage. The application expands the answer into
+``red-discovery-result/1`` (``review.compact.expand_red``) before any validator runs.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any, Mapping, Sequence
 
-RED_SCHEMA = "appsec-review/red-discovery-result/1"
+COMPACT_SCHEMA = "appsec-review/red-compact/1"
 
 
 @dataclass(frozen=True)
@@ -22,64 +23,50 @@ class Proposal:
     statement: str
     support: Sequence[tuple[str, str]] = ()          # (R4 predicate, entity id) supporting references
     leads: Sequence[str] = ()                        # source lead (observation) ids
-    requests: Sequence[Mapping[str, Any]] = ()       # evidence requests (predicate, requested_kind, scope)
-    taint: Mapping[str, Any] | None = None           # one taint path, already in schema shape
-    extra_refs: Sequence[Mapping[str, Any]] = field(default_factory=tuple)
+    counter: Sequence[tuple[str, str]] = ()          # (R4 predicate, entity id) counterevidence
+    missing: Sequence[str] = ()                      # named gaps
+    poc_basis: Mapping[str, Any] | None = None
+    extra: Mapping[str, Any] = field(default_factory=dict)
 
 
-def invocation(task_input: Mapping[str, Any]) -> tuple[dict[str, Any], list[str]]:
-    payload = task_input["input"]
-    return dict(payload["echo"]), [lead["observation_id"] for lead in payload["package"]["lead_menu"]]
+def lead_refs(task_input: Mapping[str, Any]) -> list[str]:
+    return [lead["ref"] for lead in task_input["input"]["package"]["leads"]]
 
 
-def evidence_ref(local_id: str, entity_id: str, predicate: str, relation: str = "supports") -> dict[str, Any]:
-    return {"local_id": local_id, "entity_id": entity_id, "shard_id": None, "shard_sha256": None,
-            "relation": relation, "predicate": predicate,
-            "locator": {"kind": "unresolved", "reason": "the scripted worker relies on re-resolution"}}
+def _by_predicate(pairs: Sequence[tuple[str, str]]) -> dict[str, list[str]]:
+    found: dict[str, list[str]] = {}
+    for predicate, ref in pairs:
+        bucket = found.setdefault(predicate, [])
+        if ref not in bucket:
+            bucket.append(ref)
+    return found
 
 
-def red_result(task_input: Mapping[str, Any], proposals: Sequence[Proposal] = (), *,
-               chain_seeds: Sequence[Mapping[str, Any]] = (), gaps: Sequence[Mapping[str, Any]] = ()
-               ) -> dict[str, Any]:
-    echo, leads = invocation(task_input)
-    refs: list[dict[str, Any]] = []
-    built: list[dict[str, Any]] = []
-    requests: list[dict[str, Any]] = []
-    paths: list[dict[str, Any]] = []
+def red_result(task_input: Mapping[str, Any], proposals: Sequence[Proposal] = (), *, blocked: Sequence[str] = (),
+               omit_leads: bool = False) -> dict[str, Any]:
+    """The compact answer of a scripted red worker for the leads in ``task_input``."""
+    leads = lead_refs(task_input)
+    claims = []
     for proposal in proposals:
-        evidence_ids = []
-        for index, (predicate, entity) in enumerate(proposal.support):
-            local = f"{proposal.local_id}-e{index}"
-            refs.append(evidence_ref(local, entity, predicate))
-            evidence_ids.append(local)
-        refs.extend(dict(item) for item in proposal.extra_refs)
-        for index, request in enumerate(proposal.requests):
-            requests.append({"local_id": f"{proposal.local_id}-r{index}", "proposal_id": proposal.local_id,
-                             "reason": "the scripted worker could not decide this predicate", **request})
-        path_ids = []
-        if proposal.taint is not None:
-            paths.append({**proposal.taint, "proposal_id": proposal.local_id})
-            path_ids.append(proposal.taint["local_id"])
-        built.append({
-            "local_id": proposal.local_id, "source_lead_ids": list(proposal.leads),
-            "affected_entities": list(proposal.affected), "statement": proposal.statement,
-            "mechanism": f"{proposal.statement} [mechanism]",
-            "weakness": {"namespace": "CWE", "id": proposal.cwe} if proposal.cwe else None,
-            "security_predicate": proposal.predicate,
-            "attacker_entry": {"entity_id": None, "control": f"{proposal.statement} [attacker control]",
-                               "preconditions": list(proposal.preconditions)},
-            "trigger": f"{proposal.statement} [trigger]",
-            "suspected_consequence": f"{proposal.statement} [consequence]",
-            "assumptions": [], "evidence_ids": evidence_ids, "counterevidence_ids": [], "obligation_ids": [],
-            "taint_path_ids": path_ids})
-    accounting = []
-    for lead in leads:
-        developing = [item["local_id"] for item in built if lead in item["source_lead_ids"]]
-        accounting.append({"observation_id": lead, "outcome": "proposal" if developing else "no_proposal",
-                           "proposal_ids": developing, "gap_ids": [],
-                           "reason": "developed into a proposal" if developing else
-                           "this bounded lens proposed nothing for the lead"})
-    return {"schema": RED_SCHEMA, **echo, "result_status": "partial" if gaps else "completed",
-            "lead_accounting": accounting, "proposals": built, "proof_obligations": [], "taint_paths": paths,
-            "chain_seeds": list(chain_seeds), "evidence_refs": refs, "evidence_requests": requests,
-            "gaps": list(gaps)}
+        claim: dict[str, Any] = {
+            "id": proposal.local_id, "leads": list(proposal.leads), "security_predicate": proposal.predicate,
+            "statement": proposal.statement, "support": _by_predicate(proposal.support),
+            "affected": list(proposal.affected), **dict(proposal.extra)}
+        if proposal.cwe:
+            claim["cwe"] = proposal.cwe
+        if proposal.preconditions:
+            claim["preconditions"] = list(proposal.preconditions)
+        if proposal.counter:
+            claim["counter"] = _by_predicate(proposal.counter)
+        if proposal.missing:
+            claim["missing"] = list(proposal.missing)
+        if proposal.poc_basis is not None:
+            claim["poc_basis"] = dict(proposal.poc_basis)
+        claims.append(claim)
+    developed = {lead for proposal in proposals for lead in proposal.leads}
+    result: dict[str, Any] = {"claims": claims}
+    if not omit_leads:
+        result["no_claim"] = [{"lead": lead, "why": "this bounded lens proposed nothing for the lead"}
+                              for lead in leads if lead not in developed and lead not in blocked]
+        result["blocked"] = [{"lead": lead, "why": "the lens could not assess the lead"} for lead in blocked]
+    return result

@@ -151,6 +151,11 @@ class PackageAssemblySettings:
     max_memory_context_entries: int
     max_callers: int
     caller_depth: int
+    # Model-facing package view (review-protocol-v2.md section 4): byte budget of one view, the longest
+    # function source excerpt in lines, and how many type declarations a view may embed.
+    max_view_bytes: int
+    max_view_source_lines: int
+    max_view_type_declarations: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -581,7 +586,8 @@ def parse_inference_review_settings(value: Mapping[str, Any]) -> InferenceSecuri
     field = f"{_PREFIX}.packages"
     packages_value = _table(settings["packages"], field, {
         "hunt_menu_partition_size", "unit_max_files", "max_context_entries", "max_package_bytes",
-        "max_page_size", "max_pages", "max_depth", "max_memory_context_entries", "max_callers", "caller_depth"})
+        "max_page_size", "max_pages", "max_depth", "max_memory_context_entries", "max_callers", "caller_depth",
+        "max_view_bytes", "max_view_source_lines", "max_view_type_declarations"})
     packages = PackageAssemblySettings(
         hunt_menu_partition_size=_int(packages_value["hunt_menu_partition_size"],
                                       f"{field}.hunt_menu_partition_size", 1, 10_000),
@@ -595,6 +601,10 @@ def parse_inference_review_settings(value: Mapping[str, Any]) -> InferenceSecuri
                                         f"{field}.max_memory_context_entries", 1, 1_000),
         max_callers=_int(packages_value["max_callers"], f"{field}.max_callers", 1, 1_000),
         caller_depth=_int(packages_value["caller_depth"], f"{field}.caller_depth", 1, 4),
+        max_view_bytes=_int(packages_value["max_view_bytes"], f"{field}.max_view_bytes", 4096, 1024 * 1024),
+        max_view_source_lines=_int(packages_value["max_view_source_lines"], f"{field}.max_view_source_lines", 10, 2000),
+        max_view_type_declarations=_int(packages_value["max_view_type_declarations"],
+                                        f"{field}.max_view_type_declarations", 0, 32),
     )
     if packages.hunt_menu_partition_size > LEAD_ACCOUNTING_CEILING:
         raise ValueError(f"{field}.hunt_menu_partition_size must not exceed {LEAD_ACCOUNTING_CEILING}: every lead "

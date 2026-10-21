@@ -2300,6 +2300,11 @@ max_depth = 4
 max_memory_context_entries = 24
 max_callers = 16
 caller_depth = 2
+# Model-facing package view (docs/architecture/review-protocol-v2.md section 4): the view of one package is
+# trimmed to this byte budget, with omitted counts and a truncated gap.
+max_view_bytes = 49152
+max_view_source_lines = 160
+max_view_type_declarations = 6
 
 [jobs.job_inference_security_review.settings.budgets]
 budget_team_packages = 200

@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://appsec-review.local/schemas/inference-security-review/blue-compact.schema.json",
+  "title": "Compact blue answer, version 1 (review-protocol/2)",
+  "description": "A blue refuter states a stance on one claim with label citations for one predicate (stance, predicate, cites) or several (per_predicate). The application expands it into blue-result/1.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "stance"
+  ],
+  "properties": {
+    "schema": {
+      "const": "appsec-review/blue-compact/1"
+    },
+    "claim": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80
+    },
+    "stance": {
+      "$ref": "common.schema.json#/$defs/compact_stance"
+    },
+    "predicate": {
+      "$ref": "common.schema.json#/$defs/predicate"
+    },
+    "cites": {
+      "$ref": "common.schema.json#/$defs/labels"
+    },
+    "why": {
+      "$ref": "common.schema.json#/$defs/compact_why"
+    },
+    "per_predicate": {
+      "$ref": "common.schema.json#/$defs/compact_per_predicate"
+    }
+  }
+}

@@ -357,7 +357,10 @@ def parse_role_text(text: str, *, role_id: str, tools: Iterable[str]) -> dict[st
     """A role record file has fixed sections; its Tools section lists exactly the registry tools."""
     lines = text.strip().split("\n")
     _require(bool(lines) and lines[0].startswith("# Role: "), f"role {role_id} must start with '# Role: '")
-    sections = split_sections("\n".join(lines[1:]), ROLE_SECTIONS)
+    body = "\n".join(lines[1:])
+    # An ``Examples`` section (worked compact answers) is optional and follows ``Tools``.
+    expected = (*ROLE_SECTIONS, "Examples") if re.search(r"^## Examples\s*$", body, re.MULTILINE) else ROLE_SECTIONS
+    sections = split_sections(body, expected)
     for name, content in sections.items():
         _require(bool(content), f"role {role_id} section is empty: {name}")
     listed = sorted(set(re.findall(r"`([a-z_]+)`", sections["Tools"])))

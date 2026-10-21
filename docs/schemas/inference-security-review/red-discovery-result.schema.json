@@ -81,7 +81,29 @@
         "evidence_ids": {"$ref": "#/$defs/local_ids"},
         "counterevidence_ids": {"$ref": "#/$defs/local_ids"},
         "obligation_ids": {"$ref": "#/$defs/local_ids"},
-        "taint_path_ids": {"$ref": "#/$defs/local_ids"}
+        "taint_path_ids": {"$ref": "#/$defs/local_ids"},
+        "poc_basis": {"$ref": "#/$defs/poc_basis"}
+      }
+    },
+    "poc_text": {"type": "string", "minLength": 1, "maxLength": 240},
+    "poc_basis": {
+      "description": "Application-expanded brief for a later proof-of-concept job, stored as a run-owned artifact beside the claim. It is not code, not evidence and never a claim-state input.",
+      "type": "object", "additionalProperties": false,
+      "required": ["entry", "path", "trigger", "input_format", "preconditions", "expected_observation", "unknowns"],
+      "properties": {
+        "entry": {"type": "array", "maxItems": 8, "items": {"$ref": "#/$defs/entity_id"}},
+        "path": {"type": "array", "maxItems": 16, "items": {"$ref": "#/$defs/entity_id"}},
+        "trigger": {"type": "array", "maxItems": 8, "items": {
+          "type": "object", "additionalProperties": false, "required": ["field", "where", "constraint", "why"],
+          "properties": {
+            "field": {"$ref": "#/$defs/poc_text"}, "where": {"$ref": "#/$defs/poc_text"},
+            "constraint": {"$ref": "#/$defs/poc_text"}, "why": {"$ref": "#/$defs/poc_text"}
+          }
+        }},
+        "input_format": {"$ref": "#/$defs/poc_text"},
+        "preconditions": {"type": "array", "maxItems": 8, "items": {"$ref": "#/$defs/poc_text"}},
+        "expected_observation": {"$ref": "#/$defs/poc_text"},
+        "unknowns": {"type": "array", "maxItems": 8, "items": {"$ref": "#/$defs/poc_text"}}
       }
     },
     "obligation": {

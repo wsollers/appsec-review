@@ -28,8 +28,14 @@ from typing import Any, Callable, Iterator, Mapping, Sequence
 
 from appsec_review.inference import ModelOutputError, ModelResult, ReviewModelRequest
 from appsec_review.retrieval.core import RetrievalGap, RetrievalIntegrityError
-from appsec_review.review.capability import GRAPH_ROW_KINDS, AuthorityDenied, CellCapability, TOOL_SCHEMAS
+from appsec_review.review.capability import (
+    EXPAND_SCHEMA, EXPAND_TOOL, GRAPH_ROW_KINDS, LOCATOR_TOOLS, AuthorityDenied, CellCapability, TOOL_SCHEMAS,
+)
+from appsec_review.review.cell_retrieval import adapt_graph_request, corrected_shape, expand_plan, related_identities
+from appsec_review.review.fact_summary import summarize_fact
 from appsec_review.review.identity import make_id, sha256_hex
+from appsec_review.review.labels import LabelTable
+from appsec_review.review.package_view import PROTOCOL
 from appsec_review.review.models import (
     CellRecord, CellStatus, Gap, GapClass, IntegrityError, Lane, Role,
 )
@@ -37,10 +43,13 @@ from appsec_review.storage import atomic_json, file_sha256
 
 TURN_SCHEMA = "appsec-review/worker-turn/1"
 RECEIPT_SCHEMA = "appsec-review/cell-attempt-receipt/1"
-EXECUTOR_VERSION = "review-cell-executor/1"
+EXECUTOR_VERSION = "review-cell-executor/2"
 MAX_REQUESTS_PER_TURN = 16
 MAX_REPAIR_ERRORS = 20
+MAX_IDENTICAL_DENIALS = 2        # the second identical denial in a cell ends it (review-protocol-v2.md section 5.5)
 _LOGICAL_ID = re.compile(r"^asr:[a-z][a-z0-9_]*:[0-9a-f]{64}$")
+_SUMMARIZED_KINDS = frozenset({"sink_site", "range_fact", "guard_fact", "call_site", "entry_point", "dataflow_path",
+                               "flow_summary"})
 _ATTEMPT_FILE = re.compile(r"^attempt-([1-9][0-9]{0,5})\.json$")
 # Response fields that vary with wall-clock time; they never enter a receipt hash.
 _VOLATILE_RESPONSE_FIELDS = frozenset({"duration_ms"})
@@ -91,6 +100,12 @@ class CellSpec:
     # When set, replaces the whole-manifest and package identities in the fingerprint with the
     # hash of the accepted shards and package content this cell can read (selective invalidation).
     reuse_basis: str | None = None
+    # The cell's model-facing package view (``review.package_view.PackageView``). It is already part of
+    # ``task_input`` (hashed into the fingerprint); the view object supplies the label table and the files.
+    view: Any = field(default=None, compare=False, repr=False)
+    # Expands the compact answer into the role\'s result document (``review.compact``); ``None`` accepts a
+    # final result as is. Not part of the fingerprint: the output schema and validator version are.
+    expand: Any = field(default=None, compare=False, repr=False)
 
 
 @dataclass(frozen=True, slots=True)
@@ -151,6 +166,11 @@ class _Attempt:
     seen: set[str] = field(default_factory=set)
     queries: int = 0
     denials: int = 0
+    denied: dict[tuple[str, str], int] = field(default_factory=dict)
+    repeated: str | None = None
+    compact: Mapping[str, Any] | None = None
+    feedback: list[str] = field(default_factory=list)
+    labels: LabelTable = field(default_factory=lambda: LabelTable({}))
     input_tokens: int = 0
     output_tokens: int = 0
 
@@ -232,13 +252,31 @@ def _tool_catalog(capability: CellCapability) -> list[dict[str, Any]]:
     from appsec_review.mcp.schema import TOOLS
 
     by_name = {tool["name"]: tool for tool in TOOLS}
-    return [{"name": name, "description": by_name[name].get("description", ""),
-             "parameters": by_name[name]["inputSchema"]} for name in sorted(capability.tools) if name in by_name]
+    locator = {"type": "object", "required": ["path", "line"],
+               "properties": {"path": {"type": "string"}, "line": {"type": "integer", "minimum": 1}}}
+    catalog = []
+    for name in sorted(capability.tools):
+        if name == EXPAND_TOOL:
+            catalog.append({"name": name, "parameters": EXPAND_SCHEMA, "description": (
+                "More about one item you can already see: the labelled rows that bear on a label (a sink, guard, "
+                "function, flow, call site), within your grant. Give exactly one of label, ref or files; files "
+                "names a file listed under the package files and offset pages it.")})
+        elif name in by_name:
+            schema = by_name[name]["inputSchema"]
+            description = by_name[name].get("description", "")
+            if name in LOCATOR_TOOLS:
+                schema = {**schema, "properties": {**schema["properties"], "locator": locator}}
+                description += (" Instead of a path, give locator {path, line} naming a file and line shown in the "
+                                "package; the application resolves it to identities in the package scope.")
+            catalog.append({"name": name, "description": description, "parameters": schema})
+    return catalog
 
 
 def _request_example(capability: CellCapability) -> dict[str, Any]:
     """One well-formed request for the first granted tool, with placeholders for its required parameters."""
 
+    if EXPAND_TOOL in capability.tools:
+        return {"tool": EXPAND_TOOL, "parameters": {"label": "K1"}}
     catalog = _tool_catalog(capability)
     if not catalog:
         return {"tool": "<a tool from tool_catalog>", "parameters": {}}
@@ -266,9 +304,11 @@ def _run_attempt(spec: CellSpec, cell_id: str, number: int, *, infer: Infer, cor
     attempt = _Attempt(number)
     transcript: list[dict[str, Any]] = []
     citable_package = set(spec.evidence_set)
+    view = spec.view
+    attempt.labels = (view.table(citable_package) if view is not None else LabelTable({}, known=citable_package))
     task_input = {
-        "task": spec.task, "round": spec.round, "input": _plain(spec.task_input),
-        "output_schema": spec.output_schema, "package_identities": sorted(citable_package),
+        "protocol": PROTOCOL, "task": spec.task, "round": spec.round, "input": _plain(spec.task_input),
+        "output_schema": spec.output_schema,
         "capability": capability.public_view(),
         "turn_protocol": {"schema": TURN_SCHEMA, "actions": ["retrieve", "final"],
                           "max_requests_per_turn": MAX_REQUESTS_PER_TURN,
@@ -322,13 +362,23 @@ def _run_attempt(spec: CellSpec, cell_id: str, number: int, *, infer: Infer, cor
             return attempt
         entry["action"] = turn["action"]
         if turn["action"] == "final":
-            errors = _citation_errors(turn["result"], attempt.seen | citable_package)
-            errors.extend(str(item)[:256] for item in validate_final(turn["result"]))
+            final = turn["result"]
+            if spec.expand is not None:
+                expansion = spec.expand(final, attempt.labels)
+                attempt.feedback.extend(expansion.feedback)
+                if expansion.errors or expansion.result is None:
+                    attempt.end(CellStatus.INVALID, GapClass.SCHEMA_ERROR, "final_result_rejected")
+                    attempt.repair_errors = tuple(expansion.errors[:MAX_REPAIR_ERRORS]) or (
+                        "the compact answer could not be expanded",)
+                    return attempt
+                attempt.compact, final = final, _plain(expansion.result)
+            errors = _citation_errors(final, attempt.seen | citable_package)
+            errors.extend(str(item)[:256] for item in validate_final(final))
             if errors:
                 attempt.end(CellStatus.INVALID, GapClass.SCHEMA_ERROR, "final_result_rejected")
                 attempt.repair_errors = tuple(errors[:MAX_REPAIR_ERRORS])
                 return attempt
-            attempt.result = turn["result"]
+            attempt.result = final
             return attempt
         if final_required:
             attempt.end(CellStatus.TIMED_OUT, GapClass.BUDGET_GAP, "cap_reached_without_final")
@@ -336,6 +386,10 @@ def _run_attempt(spec: CellSpec, cell_id: str, number: int, *, infer: Infer, cor
             return attempt
         responses = [_retrieve(spec, cell_id, attempt, capability, core, turn_number, index, item, entry)
                      for index, item in enumerate(turn["requests"])]
+        if attempt.repeated is not None:
+            attempt.end(CellStatus.INVALID, GapClass.AUTHORITY_ERROR, attempt.repeated)
+            attempt.repair_errors = ("the same request was denied twice; the cell ended without a usable result",)
+            return attempt
         transcript.append({"turn": turn_number, "from": "worker", "content": turn})
         transcript.append({
             "turn": turn_number, "from": "application", "responses": responses,
@@ -348,25 +402,41 @@ def _run_attempt(spec: CellSpec, cell_id: str, number: int, *, infer: Infer, cor
 
 def _retrieve(spec: CellSpec, cell_id: str, attempt: _Attempt, capability: CellCapability, core: Any,
               turn: int, index: int, request: Any, entry: dict[str, Any]) -> dict[str, Any]:
-    decision = capability.authorize(request, queries_used=attempt.queries, granted=attempt.seen)
+    """Run one model request. A denial is feedback (code, reason, corrected shape), never a gap by itself."""
+    view = spec.view
+    request, notes = adapt_graph_request(core, request)
+    decision = capability.authorize(
+        request, queries_used=attempt.queries, granted=attempt.seen, labels=attempt.labels.labels,
+        locator_paths=view.locator_paths if view is not None else frozenset())
     tool = request.get("tool") if isinstance(request, Mapping) else None
     tool = tool if isinstance(tool, str) and tool in TOOL_SCHEMAS else "<unknown>"
     call: dict[str, Any] = {"index": index, "tool": tool, "filter_sha256": decision.filter_sha256}
     entry["retrievals"].append(call)
     if isinstance(decision, AuthorityDenied):
         attempt.denials += 1
+        if decision.code != "query_cap_exceeded":
+            attempt.queries += 1                      # a denied request costs one query from the budget
         call.update(status="denied", denial_code=decision.code)
-        attempt.gaps.append(_gap(cell_id, spec, attempt.number, f"{turn}/{index}",
-                                 GapClass.AUTHORITY_ERROR, f"denied:{decision.code}"))
         attempt.security_events.append({
             "event": "REVIEW_CELL_AUTHORITY_DENIED", "cell_id": cell_id, "attempt": attempt.number,
             "turn": turn, "request_index": index, "tool": tool, "denial_code": decision.code,
             "filter_sha256": decision.filter_sha256,
             "capability_sha256": capability.capability_sha256})
-        return {"index": index, "status": "denied", "code": decision.code, "reason": decision.reason}
+        key = (decision.filter_sha256, decision.code)
+        attempt.denied[key] = attempt.denied.get(key, 0) + 1
+        if attempt.denied[key] >= MAX_IDENTICAL_DENIALS and attempt.repeated is None:
+            shown = json.dumps(request, sort_keys=True, default=str, ensure_ascii=True)[:120]
+            attempt.repeated = f"repeated_denial:{decision.code}:{tool} {shown}"
+        return {"index": index, "status": "denied", "code": decision.code, "reason": decision.reason,
+                "corrected": corrected_shape(request, decision.code, capability.tools),
+                "counted_as_query": decision.code != "query_cap_exceeded"}
     attempt.queries += 1
+    skipped: list[dict[str, str]] = []
     try:
-        response = getattr(core, decision.tool)(**dict(decision.parameters))
+        if decision.tool == EXPAND_TOOL:
+            response, skipped = _expand(spec, attempt, capability, core, decision)
+        else:
+            response = getattr(core, decision.tool)(**dict(decision.parameters))
     except IntegrityError:
         raise
     except RetrievalIntegrityError as exc:
@@ -377,17 +447,91 @@ def _retrieve(spec: CellSpec, cell_id: str, attempt: _Attempt, capability: CellC
                                  GapClass.COVERAGE_GAP, f"tool_error:{decision.tool}:{type(exc).__name__}"))
         return {"index": index, "status": "tool_error", "tool": decision.tool,
                 "error_class": type(exc).__name__}
+    if decision.line is not None:
+        response = {**response, "results": [row for row in response.get("results", ())
+                                            if _covers_line(row, decision.line)]}
     granted: set[str] = set()
     bounded, withheld = _bound(decision.tool, response, capability, attempt.seen, granted)
     seen = {identity for identity in _identities(bounded["results"])
             if capability.entity_in_scope(identity) or identity in attempt.seen or identity in granted}
     attempt.seen |= seen
+    attempt.labels.know(seen)
+    _label_rows(bounded["results"], attempt.labels)
+    for key in ("file", "count", "next_offset"):
+        if key in response:
+            bounded[key] = response[key]
     call.update(status="executed", result_count=len(bounded["results"]), withheld_count=withheld,
                 gap_count=len(bounded["coverage_gaps"]), truncated=bounded["truncated"],
                 response_sha256=sha256_hex({key: value for key, value in _plain(response).items()
                                             if key not in _VOLATILE_RESPONSE_FIELDS}),
                 bytes=len(json.dumps(bounded, sort_keys=True, default=str).encode()))
-    return {"index": index, "status": "ok", **bounded}
+    extra: dict[str, Any] = {}
+    if notes:
+        extra["adapted"] = notes
+    if skipped:
+        extra["skipped"] = skipped
+    return {"index": index, "status": "ok", **extra, **bounded}
+
+
+def _covers_line(row: Any, line: int) -> bool:
+    location = row.get("location") if isinstance(row, Mapping) else None
+    if not isinstance(location, Mapping):
+        return False
+    try:
+        return int(location["start_line"]) <= line <= int(location.get("end_line", location["start_line"]))
+    except (KeyError, TypeError, ValueError):
+        return False
+
+
+def _expand(spec: CellSpec, attempt: _Attempt, capability: CellCapability, core: Any, decision: Any
+            ) -> tuple[dict[str, Any], list[dict[str, str]]]:
+    """``expand``: the rows bearing on one identity (or one page of a package file), within the cell\'s grant."""
+    parameters = decision.parameters
+    if "files" in parameters:
+        page = spec.view.file_page(str(parameters["files"]), int(parameters.get("offset", 0)), capability.page_size) \
+            if spec.view is not None else None
+        if page is None:
+            raise LookupError("the package has no such file")
+        return {"results": page["rows"], "coverage_gaps": [], "truncated": page["next_offset"] is not None,
+                "file": page["file"], "count": page["count"], "next_offset": page["next_offset"]}, []
+    ref = str(parameters["ref"])
+    results: list[dict[str, Any]] = []
+    gaps: list[str] = []
+    skipped: list[dict[str, str]] = []
+    truncated = False
+    manifest: Mapping[str, Any] = {}
+    queue = expand_plan(ref, max_depth=capability.max_depth)
+    done: set[str] = set()
+    while queue:
+        tool, params = queue.pop(0)
+        sub = capability.authorize({"tool": tool, "parameters": params}, queries_used=0, granted=attempt.seen)
+        if isinstance(sub, AuthorityDenied):
+            skipped.append({"tool": tool, "code": sub.code})
+            continue
+        if sub.filter_sha256 in done:
+            continue
+        done.add(sub.filter_sha256)
+        try:
+            response = getattr(core, sub.tool)(**dict(sub.parameters))
+        except (RetrievalGap, ValueError, LookupError, OSError, RuntimeError, sqlite3.Error) as exc:
+            if isinstance(exc, RetrievalIntegrityError):
+                raise
+            skipped.append({"tool": tool, "code": f"tool_error:{type(exc).__name__}"})
+            continue
+        manifest = response.get("index_manifest") or manifest
+        gaps.extend(str(item) for item in response.get("coverage_gaps", ()) or ())
+        truncated = truncated or bool(response.get("truncated"))
+        rows = [_plain(row) for row in response.get("results", ()) or ()]
+        results.extend(rows)
+        if tool == "find" and params.get("identity") == ref:
+            for row in rows[:1]:
+                queue.extend(("find", {"identity": item}) for item in related_identities(row)
+                             if item not in {params["identity"] for _t, params in queue})
+    unique: dict[str, dict[str, Any]] = {}
+    for row in results:
+        unique.setdefault(str(row.get("identity", id(row))), row)
+    return {"results": list(unique.values()), "coverage_gaps": list(dict.fromkeys(gaps))[:20],
+            "truncated": truncated, "index_manifest": manifest, "pagination": {}}, skipped
 
 
 def _bound(tool: str, response: Mapping[str, Any], capability: CellCapability,
@@ -425,6 +569,24 @@ def _bound(tool: str, response: Mapping[str, Any], capability: CellCapability,
         bounded["truncated"] = True
         bounded["next_cursor"] = None
     return bounded, withheld
+
+
+def _label_rows(rows: list[Any], labels: LabelTable) -> None:
+    """Give every returned row its cell label (an existing package label, else the next ``Q`` label).
+
+    A graph fact row also carries its one-line ``summary`` (``review.fact_summary``), the same text the
+    package neighborhood shows for the fact.
+    """
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        entity = row.get("entity") if isinstance(row.get("entity"), dict) else row
+        identity = entity.get("identity")
+        if isinstance(identity, str) and _LOGICAL_ID.fullmatch(identity):
+            row["label"] = labels.add_retrieved(identity)
+        if entity.get("kind") in _SUMMARIZED_KINDS and isinstance(entity.get("payload"), dict):
+            location = entity.get("location") if isinstance(entity.get("location"), dict) else {}
+            entity["summary"] = summarize_fact(str(entity["kind"]), entity["payload"], line=location.get("start_line"))
 
 
 def _grant_graph_row(row: Any, capability: CellCapability, granted: set[str]) -> None:
@@ -559,6 +721,9 @@ def _write_receipt(cell_root: Path, spec: CellSpec, cell_id: str, capability: Ce
                  for gap in gaps],
         "security_events": attempt.security_events,
         "seen_identities": sorted(attempt.seen),
+        "label_table": {"retrieved": dict(attempt.labels.retrieved)},
+        "compact_result": attempt.compact, "feedback": attempt.feedback,
+        "repair_errors": list(attempt.repair_errors),
         "result": attempt.result,
         "result_sha256": sha256_hex(attempt.result) if attempt.result is not None else None,
     })
@@ -568,7 +733,8 @@ def _write_receipt(cell_root: Path, spec: CellSpec, cell_id: str, capability: Ce
 _RECEIPT_KEYS = frozenset({"schema", "cell_id", "attempt", "attempt_id", "executor_version",
                            "validator_version", "capability_sha256", "guidance_bundle_sha256",
                            "provider", "model", "status", "gap_class", "reason", "turns", "counts",
-                           "gaps", "security_events", "seen_identities", "result", "result_sha256"})
+                           "gaps", "security_events", "seen_identities", "label_table", "compact_result",
+                           "feedback", "repair_errors", "result", "result_sha256"})
 
 
 def _load_receipt(path: Path, cell_id: str, number: int) -> Mapping[str, Any]:

@@ -215,7 +215,13 @@ def test_context_and_byte_bounds_create_truncation_gaps_or_split_partitions(fixt
     truncated = [item.document() for item in capped.packages if item.document()["truncation"]["omitted_context"]]
     assert truncated
     for document in truncated:
-        assert len(document["context"]) == 1
+        # Neighborhood rows are bounded by the code-graph settings, not by ``max_context_entries``.
+        neighborhood = document["neighborhood"]
+        refs = {row["ref"] for name in ("sinks", "ranges", "guards", "callers", "callees", "flows", "entries",
+                                        "corroboration") for row in neighborhood[name]}
+        refs |= {item["ref"] for item in (neighborhood["build"],) if item} | (
+            {neighborhood["function"]["symbol"]} if neighborhood["function"] else set())
+        assert len([item for item in document["context"] if item["id"] not in refs]) == 1
         assert any(gap["state"] == "truncated" for gap in document["coverage_gaps"])
     assert any(gap["state"] == "truncated" for gap in capped.manifest["gaps"])
     assert capped.manifest["audit"]["lane_a"]["status"] == "passed"

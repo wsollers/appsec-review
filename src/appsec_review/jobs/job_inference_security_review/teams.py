@@ -34,9 +34,10 @@ from appsec_review.guidance.routing import unit_sources
 from appsec_review.inference import ModelResult, ReviewModelRequest
 from appsec_review.retrieval.index import INDEX_NAMES
 from appsec_review.review.budget import JobBudget
-from appsec_review.review.capability import IN_PROCESS_TOOLS, CellCapability
+from appsec_review.review.capability import EXPAND_TOOL, IN_PROCESS_TOOLS, CellCapability
 from appsec_review.review.cells import CellBudgetExceeded, CellOutcome, CellSpec, cell_fingerprint, reuse_or_run
 from appsec_review.review.claims import normalize_claim
+from appsec_review.review.compact import Expander, expand_blue, expand_red, expand_verifier
 from appsec_review.review.evidence import resolve_relation, satisfies
 from appsec_review.review.identity import make_id, sha256_hex
 from appsec_review.review.independence import ActorRecord, model_distinct, provider_distinct, verify_independence
@@ -46,6 +47,7 @@ from appsec_review.review.models import (
     RelationKind, Role, make_gap,
 )
 from appsec_review.review.obligations import required_predicates
+from appsec_review.review.package_view import PackageView, ViewLimits, build_view
 from appsec_review.review import red_discovery
 from appsec_review.review.red_discovery import RED_ROLES, Citation, RedInvocation
 from appsec_review.review.teams import FairShareScheduler, QueuedPackage, ReviewTeamSemaphore, TeamUnavailable
@@ -54,12 +56,16 @@ from appsec_review.storage import atomic_json, file_sha256
 from .schemas import SchemaSet
 
 LANE_SCHEMA = "appsec-review/inference-review-lane/1"
-VALIDATOR_VERSION = "inference-review-results/2"
+VALIDATOR_VERSION = "inference-review-results/3"
 CHAIN_SEEDS_SCHEMA = "appsec-review/red-chain-seeds/1"
+POC_BASIS_SCHEMA = "appsec-review/red-poc-basis/1"
 RESULT_SCHEMAS = {Role.RED_TEAM_ANALYST: red_discovery.SCHEMA_NAME, Role.HYPOTHESIS_HUNTER: red_discovery.SCHEMA_NAME,
                   Role.BLUE_TEAM_REFUTER: "blue-result", Role.INDEPENDENT_VERIFIER: "verifier-result"}
-OUTPUT_SCHEMAS = {name: f"appsec-review/{name}/1" for name in (red_discovery.SCHEMA_NAME, "blue-result",
-                                                               "verifier-result")}
+# The schema a model is told to answer in is the compact one (review-protocol/2); the application expands it
+# into RESULT_SCHEMAS[role] (``review.compact``) before any validator runs.
+OUTPUT_SCHEMAS = {red_discovery.SCHEMA_NAME: "appsec-review/red-compact/1",
+                  "blue-result": "appsec-review/blue-compact/1",
+                  "verifier-result": "appsec-review/verifier-compact/1"}
 LEAD_LENSES = ("lead_red_stack", "lead_red_preconditions", "lead_red_failure_modes")
 VERIFIER_TASK = "blind_verifier"
 # Relation kinds each role may author (the registry ``outputs`` of each role; red evidence travels
@@ -72,7 +78,6 @@ ROLE_RELATION_KINDS = {
 }
 MIN_MARKER_CHARACTERS = 16
 MAX_RESULT_BYTES = 64 * 1024
-SANITIZED_PACKAGE_KEYS = frozenset({"package_id", "manifest_sha256", "input_fingerprint", "run_id"})
 
 
 # ------------------------------------------------------------------------------------------------
@@ -90,12 +95,6 @@ class PackageWork:
     entities: tuple[str, ...]           # capability entity scope (guidance/evaluator files removed)
     unit_key: str | None
 
-    def view(self, routing: Mapping[str, Any]) -> dict[str, Any]:
-        """The package as a worker sees it: run/manifest identities removed, routing set."""
-        body = {key: value for key, value in self.document.items() if key not in SANITIZED_PACKAGE_KEYS}
-        body["persona"] = routing.get("persona")
-        body["stack_profile"] = routing.get("stack")
-        return body
 
 
 @dataclass
@@ -124,6 +123,7 @@ class ReviewContext:
     max_depth: int = 4
     _bundles: dict[str, dict[str, Any]] = field(default_factory=dict)
     _pinned: set[str] = field(default_factory=set)
+    _views: dict[str, PackageView] = field(default_factory=dict)
     _resolves: dict[str, bool] = field(default_factory=dict)
     _names: dict[str, str | None] = field(default_factory=dict)
     _locations: dict[str, Mapping[str, Any] | None] = field(default_factory=dict)
@@ -135,7 +135,9 @@ class ReviewContext:
     def bundle(self, *, role: Role, persona: str, stack: str, task: str, lane: Lane,
                capability: CellCapability) -> dict[str, Any]:
         """Compose (once) and pin a hash-pinned guidance bundle; conflicting guidance raises."""
-        receipt = {"granted_tools": list(capability.tools), "max_queries": capability.max_queries,
+        # ``expand`` is application navigation, not a registry tool: the role allowlist and the receipt omit it.
+        receipt = {"granted_tools": [name for name in capability.tools if name != EXPAND_TOOL],
+                   "max_queries": capability.max_queries,
                    "max_turns": capability.max_turns, "page_size": capability.page_size}
         key = sha256_hex({"role": role.value, "persona": persona, "stack": stack, "task": task,
                           "lane": lane.value, "receipt": receipt})
@@ -154,6 +156,16 @@ class ReviewContext:
             self._pinned.add(identity)
         if pin:
             pin_bundle(self.run_root, cached["bundle"])
+        return cached
+
+    def package_view(self, work: PackageWork) -> PackageView:
+        """The labelled, budgeted model-facing view of a package (built once per package; ``package-view/1``)."""
+        with self._lock:
+            cached = self._views.get(work.package_id)
+        if cached is None:
+            cached = build_view(work.document, self.core, ViewLimits.from_settings(self.settings.packages))
+            with self._lock:
+                cached = self._views.setdefault(work.package_id, cached)
         return cached
 
     def resolves(self, identity: str) -> bool:
@@ -229,6 +241,7 @@ class TeamResult:
     leads: tuple[str, ...] = ()                                   # the package's lead menu
     lead_entries: list[tuple[str, str, str]] = field(default_factory=list)   # (cell, lead, outcome)
     chain_seeds: list[dict[str, Any]] = field(default_factory=list)
+    poc_basis: list[dict[str, Any]] = field(default_factory=list)
     launched: bool = False
     counts: dict[str, int] = field(default_factory=lambda: {"cells_run": 0, "cells_reused": 0,
                                                             "cells_not_launched": 0})
@@ -275,8 +288,12 @@ def lane_allocation(lead_count: int, hunt_count: int, lead_share: float, budget_
 # Cell construction
 
 
-def _claim_view(claim: Claim, *, statement: bool) -> dict[str, Any]:
-    view = {"claim_id": claim.claim_id, "affected_entities": list(claim.affected_entities),
+def _claim_view(claim: Claim, *, statement: bool, labels: Mapping[str, str] | None = None,
+                names: Callable[[str], str | None] = lambda _ref: None) -> dict[str, Any]:
+    """The claim as a blue or verifier cell sees it: affected entities by label, never by raw identity."""
+    view = {"claim_id": claim.claim_id,
+            "affected": [{"label": (labels or {}).get(ref, "?"), "name": names(ref)}
+                         for ref in claim.affected_entities],
             "weakness_cwe": claim.weakness_cwe, "security_predicate": str(claim.security_predicate),
             "preconditions": list(claim.preconditions),
             "required_predicates": sorted(item.value for item in required_predicates(claim.preconditions))}
@@ -285,15 +302,29 @@ def _claim_view(claim: Claim, *, statement: bool) -> dict[str, Any]:
     return view
 
 
+def _routed(view: PackageView, routing: Mapping[str, Any], persona: str) -> dict[str, Any]:
+    """The view document of one cell: the package view plus the cell\'s persona and stack profile."""
+    return {**view.document, "persona": persona, "stack_profile": routing.get("stack")}
+
+
 def _cell(ctx: ReviewContext, work: PackageWork, routing: Mapping[str, Any], *, role: Role, persona: str,
           task: str, kind: str, task_input: Mapping[str, Any], claim: Claim | None = None,
-          strategy: str | None = None) -> _Cell:
+          strategy: str | None = None, view: PackageView | None = None) -> _Cell:
     invocation = None
+    expand: Expander
+    schema_errors = ctx.schemas.errors
     if role in RED_ROLES:
         invocation = RedInvocation(role, 0, work.basis, _lead_ids(work))
-        task_input = {**task_input, "echo": invocation.echo()}
+        expand = lambda compact, labels: expand_red(  # noqa: E731
+            compact, labels, invocation=invocation, schema_errors=schema_errors)
+    elif role is Role.BLUE_TEAM_REFUTER:
+        expand = lambda compact, labels: expand_blue(  # noqa: E731
+            compact, labels, claim_id=claim.claim_id, task=task, schema_errors=schema_errors)
+    else:
+        expand = lambda compact, labels: expand_verifier(  # noqa: E731
+            compact, labels, claim_id=claim.claim_id, schema_errors=schema_errors)
     profile = ctx.profile(role)
-    tools = tuple(sorted(set(ctx.role_tools.get(role.value, ())) & IN_PROCESS_TOOLS))
+    tools = tuple(sorted((set(ctx.role_tools.get(role.value, ())) & IN_PROCESS_TOOLS) | {EXPAND_TOOL}))
     capability = CellCapability.issue(
         run_id=ctx.run_id, manifest_sha256=ctx.core.manifest_sha256, package_id=work.package_id,
         package_sha256=work.sha256, role=role, round=0, tools=tools,
@@ -313,7 +344,8 @@ def _cell(ctx: ReviewContext, work: PackageWork, routing: Mapping[str, Any], *, 
         provider=profile.provider, model=profile.model, reasoning=profile.reasoning,
         max_input_tokens=profile.max_input_tokens, max_output_tokens=profile.max_output_tokens,
         timeout_seconds=profile.timeout_seconds, output_schema=OUTPUT_SCHEMAS[schema],
-        validator_version=ctx.red_validator_version() if invocation else VALIDATOR_VERSION, reuse_basis=work.basis)
+        validator_version=ctx.red_validator_version() if invocation else VALIDATOR_VERSION, reuse_basis=work.basis,
+        view=view if view is not None else ctx.package_view(work), expand=expand)
     return _Cell(spec, capability, kind, strategy, invocation)
 
 
@@ -557,14 +589,16 @@ def route(ctx: ReviewContext, work: PackageWork) -> dict[str, Any]:
 
 
 def _red_cells(ctx: ReviewContext, work: PackageWork, routing: Mapping[str, Any]) -> list[_Cell]:
-    view = work.view(routing)
+    view = ctx.package_view(work)
     if work.lane is Lane.LEAD:
+        document = _routed(view, routing, routing["persona"])
         return [_cell(ctx, work, routing, role=Role.RED_TEAM_ANALYST, persona=routing["persona"], task=lens,
-                      kind="red", task_input={"package": view, "lens": lens})
+                      kind="red", task_input={"package": document, "lens": lens})
                 for lens in LEAD_LENSES[:ctx.settings.teams.red_per_team]]
     return [_cell(ctx, work, routing, role=Role.HYPOTHESIS_HUNTER, persona=item["persona"], task=item["strategy"],
                   kind="red", strategy=item["strategy"],
-                  task_input={"package": view, "strategy": item["strategy"], "known_claims": []})
+                  task_input={"package": _routed(view, routing, item["persona"]), "strategy": item["strategy"],
+                              "known_claims": []})
             for item in routing["panel"][:ctx.settings.teams.red_per_team]]
 
 
@@ -665,16 +699,22 @@ def _team_body(ctx: ReviewContext, work: PackageWork, routing: Mapping[str, Any]
     reviews: list[tuple[dict[str, Any], _Cell, _Cell, _Cell]] = []
     for group in admitted:
         claim: Claim = group["claim"]
-        blue_input = {"claim": _claim_view(claim, statement=True), "package_entities": list(work.entities)}
-        verifier_input = {"claim": _claim_view(claim, statement=False), "package_entities": list(work.entities)}
+        claim_view, added = ctx.package_view(work).with_extra(claim.affected_entities)
+        document = _routed(claim_view, routing, group["persona"])
+        blue_input = {"claim": _claim_view(claim, statement=True, labels=added, names=ctx.entity_name),
+                      "package": document}
+        # The blind verifier\'s request is built here and only here: the claim\'s identity fields and the package.
+        verifier_input = {"claim": _claim_view(claim, statement=False, labels=added, names=ctx.entity_name),
+                          "package": document}
         control = _cell(ctx, work, routing, role=Role.BLUE_TEAM_REFUTER, persona=group["persona"],
-                        task=BlueTask.CONTROL.value, kind="blue", claim=claim,
+                        task=BlueTask.CONTROL.value, kind="blue", claim=claim, view=claim_view,
                         task_input={**blue_input, "task": BlueTask.CONTROL.value})
         reach = _cell(ctx, work, routing, role=Role.BLUE_TEAM_REFUTER, persona=group["persona"],
-                      task=BlueTask.REACHABILITY.value, kind="blue", claim=claim,
+                      task=BlueTask.REACHABILITY.value, kind="blue", claim=claim, view=claim_view,
                       task_input={**blue_input, "task": BlueTask.REACHABILITY.value})
         verifier = _cell(ctx, work, routing, role=Role.INDEPENDENT_VERIFIER, persona=group["persona"],
-                         task=VERIFIER_TASK, kind="verifier", claim=claim, task_input=verifier_input)
+                         task=VERIFIER_TASK, kind="verifier", claim=claim, view=claim_view,
+                         task_input=verifier_input)
         reviews.append((group, control, reach, verifier))
     workers = max(1, teams.blue_per_team + teams.verifier_per_team)
     with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="review") as pool:
@@ -728,6 +768,10 @@ def _normalize(ctx: ReviewContext, work: PackageWork, reds: list[_Cell], result:
                 continue
             claim = normalized.claim
             local_claims[reference] = claim.claim_id
+            if proposal.get("poc_basis") is not None:
+                result.poc_basis.append({"claim_id": claim.claim_id, "package_id": work.package_id,
+                                         "lane": work.lane.value, "cell_id": cell.cell_id,
+                                         "poc_basis": dict(proposal["poc_basis"])})
             group = groups.setdefault(claim.claim_id, {"claim": claim, "cells": [], "items": [],
                                                        "gaps": [], "persona": cell.spec.persona})
             group["cells"].append(cell)
@@ -970,6 +1014,7 @@ def _seal(ctx: ReviewContext | None, lane: Lane, teams: Sequence[TeamResult], al
         "triage": {team.package_id: team.triage for team in teams},
         "lead_accounting": {team.package_id: _lead_summary(team) for team in teams},
         "chain_seeds": seeds,
+        "poc_basis": _poc_basis_artifact(lane, teams, Path(ledger_path).with_name("poc-basis.json")),
         "coverage": [row for team in teams for row in team.coverage],
         "capabilities": [row for team in teams for row in team.capabilities],
         "security_events": [dict(event) for team in teams for event in team.security_events],
@@ -1012,6 +1057,21 @@ def _chain_seed_artifact(lane: Lane, teams: Sequence[TeamResult], path: Path, pe
                                     "not claims, findings or confirmed chains",
                        "seeds": seeds})
     return {"path": str(path), "schema": CHAIN_SEEDS_SCHEMA, "count": len(seeds), "sha256": file_sha256(path)}
+
+
+def _poc_basis_artifact(lane: Lane, teams: Sequence[TeamResult], path: Path) -> dict[str, Any]:
+    """Persist the red cells\' proof-of-concept briefs beside the claims, for a later PoC-generation job.
+
+    A brief is neither a claim, nor evidence, nor executable: nothing in adjudication, scoring or the report reads
+    it.
+    """
+    entries = sorted((item for team in teams for item in team.poc_basis),
+                     key=lambda item: (item["claim_id"], item["cell_id"]))
+    atomic_json(path, {"schema": POC_BASIS_SCHEMA, "lane": lane.value,
+                       "statement": "proof-of-concept briefs are inputs to a later job; they are not claims, evidence "
+                                    "or executable code, and no claim state depends on them",
+                       "briefs": entries})
+    return {"path": str(path), "schema": POC_BASIS_SCHEMA, "count": len(entries), "sha256": file_sha256(path)}
 
 
 def _merge_lists(items: Iterable[Mapping[str, list[Any]]]) -> dict[str, list[Any]]:

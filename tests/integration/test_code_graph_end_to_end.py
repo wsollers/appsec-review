@@ -53,7 +53,7 @@ from appsec_review.review.models import IntegrityError
 from appsec_review.review.scope import accept_manifest
 from appsec_review.runtime.runner import JobRunner
 from appsec_review.storage import atomic_json, file_sha256
-from tests.fixtures.inference_review.red import Proposal, evidence_ref, red_result
+from tests.fixtures.inference_review.red import Proposal, red_result
 
 ROOT = Path(__file__).resolve().parents[2]
 EXPORTS = ROOT / "tests" / "fixtures" / "graph" / "codeql_export"
@@ -341,46 +341,32 @@ class GraphWorker:
         if request.role == "hypothesis_hunter":
             return self._hunter(request, payload)
         if request.role == "blue_team_refuter":
-            claim = payload["claim"]
-            return self._final({"schema": "appsec-review/blue-result/1", "claim_id": claim["claim_id"], "citations": {},
-                                "proposed_relations": [], "evidence_requests": [], "task": payload["task"],
-                                "disposition": "unresolved",
-                                "rationale": "no dominating guard and no reachability break was found here"})
+            return self._final({"stance": "unresolved",
+                                "why": "no dominating guard and no reachability break was found here"})
         if request.role == "independent_verifier":
             return self._verifier(request, payload)
         raise AssertionError(request.role)
 
+    @staticmethod
+    def _view_rows(payload: Mapping[str, Any], section: str) -> list[Mapping[str, Any]]:
+        return list(payload["package"]["neighborhood"][section])
+
     def _lead_red(self, cell_input: Mapping[str, Any], payload: Mapping[str, Any]) -> ModelResult:
-        context = {entry["role"]: entry["id"] for entry in payload["package"]["context"]
-                   if entry["kind"] in GRAPH_KINDS and entry["role"] in {"path", "sink"}}
-        if cell_input["task"] != "lead_red_stack" or {"path", "sink"} - set(context):
+        sinks, paths = self._view_rows(payload, "sinks"), self._view_rows(payload, "flows")
+        if cell_input["task"] != "lead_red_stack" or not sinks or not paths:
             return self._final(red_result(cell_input))
-        lead = payload["package"]["lead_menu"][0]["observation_id"]
-        # The sink is cited by the proposal; the correlated dataflow path is cited only by the observed
-        # (accepted_tool_path) hop of the taint path, and the hypothesized hop from the environment
-        # source cites the lead observation, which therefore never becomes a relation.
-        taint = {"local_id": "g1-path", "source_node": "env", "sink_node": "copy", "basis": "partial",
-                 "nodes": [{"local_id": "env", "role": "source", "entity_id": None,
-                            "description": "INPUT_LEN environment variable"},
-                           {"local_id": "len", "role": "transform", "entity_id": context["path"],
-                            "description": "length parsed from the environment"},
-                           {"local_id": "copy", "role": "sink", "entity_id": context["sink"],
-                            "description": "memcpy into a 64 byte stack buffer"}],
-                 "edges": [{"from_node": "env", "to_node": "len", "kind": "data", "basis": "analyst_hypothesis",
-                            "evidence_ids": ["g1-lead"], "open_question": "is getenv the only writer?"},
-                           {"from_node": "len", "to_node": "copy", "kind": "data", "basis": "accepted_tool_path",
-                            "evidence_ids": ["g1-path-ref"], "open_question": None}],
-                 "gap_ids": []}
+        lead = payload["package"]["leads"][0]["ref"]
+        # The sink and the correlated dataflow path are cited; the lead observation is not, so it never becomes
+        # a relation (the compact answer carries no taint hops).
         proposal = Proposal(
-            "g1", [context["sink"]], None, "memory_corruption", ["attacker_controls_environment_variable"],
+            "g1", [sinks[0]["ref"]], None, "memory_corruption", ["attacker_controls_environment_variable"],
             "the INPUT_LEN environment variable bounds a memcpy into a 64 byte stack buffer",
-            support=[("affected_construct", context["sink"])], leads=[lead], taint=taint,
-            extra_refs=[evidence_ref("g1-path-ref", context["path"], "source_to_sink_reachability"),
-                        evidence_ref("g1-lead", lead, "attacker_input_control")])
+            support=[("affected_construct", sinks[0]["ref"]), ("source_to_sink_reachability", paths[0]["ref"])],
+            leads=[lead])
         return self._final(red_result(cell_input, [proposal]))
 
     def _hunter(self, request, payload: Mapping[str, Any]) -> ModelResult:
-        sinks = sorted(entry["id"] for entry in payload["package"]["context"] if entry["role"] == "sink")
+        sinks = sorted(row["ref"] for row in self._view_rows(payload, "sinks"))
         empty = red_result(request.task_input)
         if payload.get("strategy") != "sink_up" or not sinks:
             return self._final(empty)
@@ -398,10 +384,8 @@ class GraphWorker:
 
     def _verifier(self, request, payload: Mapping[str, Any]) -> ModelResult:
         claim = payload["claim"]
-        sink = claim["affected_entities"][0]
-        base = {"schema": "appsec-review/verifier-result/1", "claim_id": claim["claim_id"], "citations": {},
-                "proposed_relations": [], "evidence_requests": [], "proposed_disposition": "supported",
-                "rationale": "re-derived the path and the guard state at the sink from the code graph"}
+        by_label = {row["label"]: row["ref"] for row in self._view_rows(payload, "sinks")}
+        sink = by_label[claim["affected"][0]["label"]]
         if not request.transcript:
             return self._retrieve({"tool": "query_code_graph", "parameters": {"mode": "paths", "subject": sink}},
                                   {"tool": "query_code_graph", "parameters": {"mode": "guards", "subject": sink}})
@@ -410,18 +394,15 @@ class GraphWorker:
         guards = [row for row in self._rows(request, "guard_fact")
                   if row["payload"]["result"]["guard_state"] in {"none", "non_dominating"}
                   and row["payload"]["admissibility"]["direct_eligible"]]
-        relations = [{"predicate": "affected_construct", "kind": "supports", "entity_id": sink,
-                      "rationale": "the sink site re-resolves to the memcpy call"}]
-        relations += [{"predicate": predicate, "kind": "supports", "entity_id": paths[0]["identity"],
-                       "rationale": f"retrieved dataflow path supports {predicate}"}
-                      for predicate in ("source_to_sink_reachability", "attacker_input_control") if paths]
-        relations += [{"predicate": "missing_or_ineffective_guard", "kind": "supports",
-                       "entity_id": guards[0]["identity"], "rationale": "no guard dominates the sink operand"}
-                      for _ in guards[:1]]
-        citations: dict[str, list[str]] = {}
-        for item in relations:
-            citations.setdefault(item["predicate"], []).append(item["entity_id"])
-        return self._final({**base, "proposed_relations": relations, "citations": citations})
+        cited = {"affected_construct": [sink]}
+        for predicate in ("source_to_sink_reachability", "attacker_input_control"):
+            if paths:
+                cited[predicate] = [paths[0]["identity"]]
+        if guards:
+            cited["missing_or_ineffective_guard"] = [guards[0]["identity"]]
+        return self._final({"disposition": "supported", "why": "re-derived the path and the guard state at the sink",
+                            "per_predicate": {predicate: {"stance": "supports", "cites": refs}
+                                              for predicate, refs in cited.items()}})
 
 
 # ------------------------------------------------------------------------------------------------ pipeline
@@ -568,7 +549,7 @@ def test_a_bridged_codeql_lead_is_supported_by_direct_graph_relations(pipeline) 
     assert states == {"bridged"}
 
 
-def test_red_taint_hops_cite_graph_facts_and_hypothesized_hops_stay_unpromoted(pipeline) -> None:
+def test_red_citations_of_graph_facts_become_direct_relations_and_the_lead_is_never_cited(pipeline) -> None:
     lane = _json(_review_unit(pipeline, "lead_review.teams") / "lane.json")
     reds = {row["cell_id"] for row in lane["capabilities"] if row["role"] == "red_team_analyst"}
     ledger = [json.loads(line) for line in (_review_unit(pipeline, "publication.publish_claim_ledger")
@@ -576,10 +557,10 @@ def test_red_taint_hops_cite_graph_facts_and_hypothesized_hops_stay_unpromoted(p
     red = [event["body"]["relation"] for event in ledger
            if event["kind"] == "relation_added" and event["body"]["relation"]["producing_cell_id"] in reds]
     cited = {(item["predicate"], item["entity_kind"], item["admissibility"]) for item in red}
-    # The accepted_tool_path hop's graph fact became a direct relation through resolve_relation...
+    # The cited graph facts became direct relations through resolve_relation...
     assert ("source_to_sink_reachability", "dataflow_path", "direct_for_mapped_predicate") in cited
     assert ("affected_construct", "sink_site", "direct_for_mapped_predicate") in cited
-    # ...while the analyst_hypothesis hop's citation (the lead observation) never became one.
+    # ...while the lead observation, which red did not cite, never became one.
     assert not any(item["entity_kind"] == "tool_observation" for item in red)
     # Every package lead is accounted; a lens that proposed nothing is never clean coverage.
     outcomes = {lead["outcome"] for leads in lane["lead_accounting"].values() for lead in leads.values()}

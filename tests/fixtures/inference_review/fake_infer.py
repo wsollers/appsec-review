@@ -138,8 +138,8 @@ class ScriptedInfer:
             time.sleep(0.05)
 
     def _lead(self, payload: Mapping[str, Any]) -> str:
-        menu = payload["package"]["lead_menu"]
-        return self.keys.get(menu[0]["observation_id"], "?") if menu else "?"
+        menu = payload["package"]["leads"]
+        return self.keys.get(menu[0]["ref"], "?") if menu else "?"
 
     def _lead_red(self, request: ReviewModelRequest, task: str, payload: Mapping[str, Any]) -> ModelResult:
         lead = self._lead(payload)
@@ -169,7 +169,7 @@ class ScriptedInfer:
         return self._red(request, [])
 
     def _hunter(self, request: ReviewModelRequest, payload: Mapping[str, Any]) -> ModelResult:
-        leads = {self.keys.get(item["observation_id"]) for item in payload["package"]["lead_menu"]}
+        leads = {self.keys.get(item["ref"]) for item in payload["package"]["leads"]}
         proposals: list[Proposal] = []
         if "sast_critical" in leads and request.persona == "memory_safety_native":
             proposals = [
@@ -187,44 +187,34 @@ class ScriptedInfer:
         return self._red(request, proposals)
 
     def _blue(self, payload: Mapping[str, Any]) -> ModelResult:
+        """A compact blue answer (review-protocol/2): a stance, one predicate and the identities it cites."""
         claim, task = payload["claim"], payload["task"]
-        result = {"schema": "appsec-review/blue-result/1", "claim_id": claim["claim_id"], "citations": {},
-                  "proposed_relations": [], "evidence_requests": [], "task": task, "disposition": "unresolved",
-                  "rationale": NARRATIVES["blue"].format(claim=claim["security_predicate"], task=task)}
+        answer: dict[str, Any] = {"stance": "unresolved",
+                                  "why": NARRATIVES["blue"].format(claim=claim["security_predicate"], task=task)}
         if claim["security_predicate"] == "integer_error" and task == "blue_control":
-            relation = self._relation("missing_or_ineffective_guard", "unit:native-main", "contradicts",
-                                      NARRATIVES["blue-guard"])
-            result.update(disposition="contradicts", rationale=NARRATIVES["blue-guard"],
-                          proposed_relations=[relation],
-                          citations={"missing_or_ineffective_guard": [relation["entity_id"]]})
-        return self._final(result)
+            answer = {"stance": "contradicts", "predicate": "missing_or_ineffective_guard",
+                      "cites": [self.ids["unit:native-main"]], "why": NARRATIVES["blue-guard"]}
+        return self._final(answer)
 
     def _verifier(self, request: ReviewModelRequest, payload: Mapping[str, Any]) -> ModelResult:
         claim = payload["claim"]
         predicate = claim["security_predicate"]
         if predicate == "resource_exhaustion":
             raise RuntimeError("scripted verifier provider failure")
-        base = {"schema": "appsec-review/verifier-result/1", "claim_id": claim["claim_id"], "citations": {},
-                "proposed_relations": [], "evidence_requests": [], "rationale": NARRATIVES["verifier"],
-                "proposed_disposition": "insufficient_evidence"}
         plan = {"memory_corruption": [(item, "unit:native-main") for item in PREDICATES],
                 "sql_injection": [("affected_construct", "sast_high")],
                 "command_injection": [("affected_construct", "unit:native-main")]}.get(predicate, [])
         if not plan:
-            base["evidence_requests"] = [{"predicate": "missing_or_ineffective_guard", "requested_kind": "symbol",
-                                          "anchors": list(claim["affected_entities"]),
-                                          "question": "which guard bounds the affected construct"}]
-            return self._final(base)
+            return self._final({"disposition": "insufficient_evidence", "per_predicate": {},
+                                "why": NARRATIVES["verifier"]})
         if not request.transcript:
             return self._retrieve([{"tool": "find", "parameters": {"identity": self.ids[key]}}
                                    for key in sorted({key for _, key in plan})])
-        relations = [self._relation(item, key, rationale=f"verifier re-resolved {key} for {item}") for item, key in plan]
-        citations: dict[str, list[str]] = {}
-        for relation in relations:
-            citations.setdefault(relation["predicate"], []).append(relation["entity_id"])
-        base.update(proposed_relations=relations, citations=citations,
-                    proposed_disposition="confirmed" if len(plan) == len(PREDICATES) else "supported")
-        return self._final(base)
+        per_predicate: dict[str, Any] = {}
+        for item, key in plan:
+            per_predicate.setdefault(item, {"stance": "supports", "cites": []})["cites"].append(self.ids[key])
+        return self._final({"disposition": "confirmed" if len(plan) == len(PREDICATES) else "supported",
+                            "per_predicate": per_predicate, "why": NARRATIVES["verifier"]})
 
 
 class _EnvInfer:

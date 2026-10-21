@@ -381,55 +381,47 @@ def _rewriting(inner, rewrite):
     return infer
 
 
-def test_a_lead_missing_from_lead_accounting_is_a_schema_error_cell_gap(prepared) -> None:
+def test_a_lead_the_answer_omits_is_a_blocked_lead_with_a_named_gap(prepared) -> None:
     def drop(request, result):
-        result["lead_accounting"] = []
+        result.pop("no_claim", None)
+        result.pop("blocked", None)
 
     result = run_team(prepared.context(_rewriting(prepared.infer, drop)), prepared.work("lead", "sast_high"),
                       launch=True)
     reds = [item for item in result.cells if item.role is Role.RED_TEAM_ANALYST]
-    assert reds and {item.status for item in reds} == {CellStatus.INVALID}
-    assert not result.claims and not result.lead_entries
-    for record in reds:
-        assert any(gap.gap_class is GapClass.SCHEMA_ERROR and gap.subject_id == record.cell_id for gap in result.gaps)
+    assert reds and {item.status for item in reds} == {CellStatus.SUCCEEDED}
+    outcomes = {outcome for _cell, _lead, outcome in result.lead_entries}
+    assert "blocked" in outcomes and "proposal" in outcomes                   # an omitted lead is never clean
+    assert any(gap.reason.startswith("worker_named_gap:missing:") for gap in result.gaps)
 
 
-def test_red_citations_that_disagree_with_re_resolution_are_evidence_gaps(prepared) -> None:
-    def miscite(request, result):
-        for item in result["evidence_refs"]:
-            if item["predicate"] == "affected_construct":
-                item["shard_id"] = "observations/not-the-accepted-shard"
-            elif item["predicate"] == "attacker_input_control":
-                item["locator"] = {"kind": "source_line", "path": "elsewhere.py", "file_sha256": "e" * 64,
-                                   "start_line": 1, "end_line": 2}
+def test_red_citations_that_disagree_with_re_resolution_are_evidence_gaps() -> None:
+    from appsec_review.jobs.job_inference_security_review.teams import _citation_mismatch
+    from appsec_review.review.red_discovery import Citation
 
-    # Honest citations of the same proposal become relations (test_lead_lane_* and the C2 acceptance state).
-    result = run_team(prepared.context(_rewriting(prepared.infer, miscite), attempt="miscite"),
-                      prepared.work("lead", "sast_high"), launch=True)
-    reds = {item.cell_id for item in result.cells if item.role is Role.RED_TEAM_ANALYST}
-    assert not [item for item in result.relations if item.producing_cell_id in reds]
-    reasons = {gap.reason for gap in result.gaps if gap.gap_class is GapClass.EVIDENCE_GAP}
-    assert "cited shard is not the accepted shard the entity re-resolves to" in reasons
-    assert any(reason.startswith("source-line locator") for reason in reasons)
+    ctx = SimpleNamespace(shard_sha256=lambda label: "a" * 64,
+                          location=lambda identity: {"path": "a.py", "file_sha256": "b" * 64, "start_line": 5, "end_line": 6})
+    relation = SimpleNamespace(shard_id="observations/real", entity_id="asr:symbol:" + "1" * 64)
+
+    def citation(**changes):
+        base = dict(local_id="e1", entity_id=relation.entity_id, predicate=None, kind=None, shard_id=None,
+                    shard_sha256=None, locator={"kind": "unresolved", "reason": "x"}, via="proposal")
+        return Citation(**{**base, **changes})
+
+    assert _citation_mismatch(ctx, relation, citation()) is None
+    assert _citation_mismatch(ctx, relation, citation(shard_id="observations/other")) == (
+        "cited shard is not the accepted shard the entity re-resolves to")
+    assert _citation_mismatch(ctx, relation, citation(shard_id="observations/real", shard_sha256="c" * 64)) == (
+        "cited shard hash does not match the accepted manifest")
+    elsewhere = {"kind": "source_line", "path": "elsewhere.py", "file_sha256": "e" * 64, "start_line": 1, "end_line": 2}
+    assert _citation_mismatch(ctx, relation, citation(locator=elsewhere)).startswith("source-line locator")
 
 
-def test_lead_accounting_named_gaps_and_chain_seeds_reach_the_lane(prepared) -> None:
+def test_lead_accounting_and_named_gaps_reach_the_lane(prepared) -> None:
     def enrich(request, result):
-        if request.task_input["task"] != "lead_red_stack" or not result["proposals"]:
+        if request.task_input["task"] != "lead_red_stack" or not result["claims"]:
             return
-        local = result["proposals"][0]["local_id"]
-        result["gaps"] = [{"local_id": "g-cfg", "kind": "unavailable", "scope": "deployment configuration",
-                           "reason": "no deployment snapshot in the package"}]
-        result["result_status"] = "partial"
-        result["chain_seeds"] = [{
-            "local_id": "seed", "objective": "escalate from the parsed request",
-            "steps": [{"local_id": "s1", "description": "reach the weakness", "proposal_id": local,
-                       "prerequisite": "network access", "resulting_state": "corrupted state", "entity_ids": []},
-                      {"local_id": "s2", "description": "use the corrupted state", "proposal_id": None,
-                       "prerequisite": "corrupted state", "resulting_state": "attacker objective", "entity_ids": []}],
-            "links": [{"from_step": "s1", "to_step": "s2", "continuity_dimensions": ["temporal"], "evidence_ids": [],
-                       "open_questions": ["does the state survive the request?"]}],
-            "gap_ids": ["g-cfg"]}]
+        result["claims"][0]["missing"] = ["no deployment snapshot in the package"]
 
     ctx = prepared.context(_rewriting(prepared.infer, enrich), lane="lead")
     shards = prepared.tmp / "seeded"
@@ -440,12 +432,26 @@ def test_lead_accounting_named_gaps_and_chain_seeds_reach_the_lane(prepared) -> 
     assert outcomes[prepared.fixture.ids["sast_critical"]] == "proposal"
     assert set(outcomes.values()) <= {"proposal", "no_proposal", "blocked", "unaccounted"}
     assert "no_proposal" in outcomes.values()                         # looked, proposed nothing: not clean
+    # The compact protocol carries no chain seeds: the artifact stays, empty, and the briefs artifact is empty too.
     artifact = json.loads((shards / "chain-seeds.json").read_text())
-    assert artifact["schema"] == "appsec-review/red-chain-seeds/1"
-    assert artifact["seeds"] and lane["chain_seeds"]["count"] == len(artifact["seeds"])
-    assert all(seed["seed"]["local_id"] == "seed" for seed in artifact["seeds"])
+    assert artifact["schema"] == "appsec-review/red-chain-seeds/1" and artifact["seeds"] == []
+    assert lane["chain_seeds"]["count"] == 0 and lane["poc_basis"]["count"] == 0
+    assert json.loads((shards / "poc-basis.json").read_text())["schema"] == "appsec-review/red-poc-basis/1"
     projection = project(merge_shards([shards / "ledger.jsonl"]).events)
-    claimed = {claim_id for seed in artifact["seeds"] for claim_id in seed["proposal_claims"].values()}
-    assert claimed and claimed <= set(projection.claims)               # seeds point at claims; they are not claims
-    assert any(gap.gap_class is GapClass.COVERAGE_GAP and gap.reason.startswith("worker_named_gap:unavailable:g-cfg")
+    assert any(gap.gap_class is GapClass.EVIDENCE_GAP and
+               gap.reason.startswith("worker_named_gap:unresolved:g1: no deployment snapshot in the package")
                for gap in projection.gaps)
+
+
+def test_poc_basis_briefs_are_stored_beside_the_claims_and_never_as_claim_state(tmp_path) -> None:
+    from appsec_review.jobs.job_inference_security_review.teams import TeamResult, _poc_basis_artifact
+
+    team = TeamResult("package-1", Lane.LEAD, None)
+    team.poc_basis = [{"claim_id": "claim-" + "b" * 64, "package_id": "package-1", "lane": "lead",
+                       "cell_id": "cell-" + "2" * 64, "poc_basis": {"entry": [], "path": []}},
+                      {"claim_id": "claim-" + "a" * 64, "package_id": "package-1", "lane": "lead",
+                       "cell_id": "cell-" + "1" * 64, "poc_basis": {"entry": [], "path": []}}]
+    entry = _poc_basis_artifact(Lane.LEAD, [team], tmp_path / "poc-basis.json")
+    document = json.loads((tmp_path / "poc-basis.json").read_text())
+    assert entry["count"] == 2 and [item["claim_id"][-1] for item in document["briefs"]] == ["a", "b"]
+    assert "not claims, evidence" in document["statement"]

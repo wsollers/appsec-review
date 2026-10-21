@@ -286,6 +286,24 @@ When the run has accepted `graph` shards (`job_code_graph_index`; today C/C++ on
 `tests/integration/test_code_graph_end_to_end.py` exercises this path offline with an injected
 worker. No live model or live CodeQL export has run it.
 
+## Review protocol v2 observability
+
+The model-facing layer ([`review-protocol-v2.md`](../architecture/review-protocol-v2.md)) leaves these traces:
+
+- **Denials.** A denied retrieval request is not a gap. It appears as a `REVIEW_CELL_AUTHORITY_DENIED` security event
+  and in the cell receipt (`turns[].retrievals[]` with `status: denied` and its code); `counts.denials` and
+  `counts.queries` include it. A cell that repeats an identical denial ends `invalid` with one `authority_error` gap
+  `repeated_denial:<code>:<tool> <request>`.
+- **Label feedback.** The cell receipt records `feedback` (labels dropped, stances recorded as unresolved, leads the
+  answer did not account for), `compact_result` (what the model wrote), `result` (the expanded document the
+  validators saw), `repair_errors` (why the last attempt was rejected) and `label_table.retrieved` (the `Q` labels). Old receipts are not reused: the executor version
+  and validator versions changed.
+- **Briefs.** Each lane writes `poc-basis.json` beside `chain-seeds.json` (now empty: the compact answer carries no
+  chain seeds) and names it in the lane document under `poc_basis`.
+- **View bounds.** `max_view_bytes`, `max_view_source_lines` and `max_view_type_declarations` under
+  `[jobs.job_inference_security_review.settings.packages]` bound what a cell sees. A view that omitted rows names
+  them in a material gap and in `omitted`; the whole stored package, including every gap, stays hash-pinned.
+
 ## Ship-block status
 
 Every finding package records a `ship_block` decision under `ship-block-policy/1` (decision 1),

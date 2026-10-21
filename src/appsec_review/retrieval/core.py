@@ -632,6 +632,36 @@ class RetrievalCore:
             return [result], [], False, 0
         return self._execute("read_excerpt", parameters, operation)
 
+    def read_source_lines(self, *, identity: str) -> tuple[dict[str, Any] | None, str | None]:
+        """Every line of the verified source file that holds ``identity``'s accepted location.
+
+        Returns ``({"location": ..., "lines": [...]}, None)`` or ``(None, reason)``. The checks are
+        ``read_excerpt``'s: the entity is resolved in the accepted indexes, the file lies under the target
+        root, its SHA-256 equals the hash the index recorded, and it is UTF-8 text within the verification
+        bound. It is not a model-facing tool: the review-package view slices function and declaration spans
+        from the lines it returns, so a span is always read through an accepted entity.
+        """
+        LogicalIdentity.parse(identity)
+        matches = self.find(identity=identity, limit=2)["results"]
+        if not matches:
+            return None, "source identity was not found in accepted indexes"
+        location = matches[0].get("location")
+        if location is None:
+            return None, "entity has no resolving source location"
+        source = (self.target_root / normalize_relative_path(location["path"])).resolve()
+        if self.target_root not in source.parents or not source.is_file():
+            return None, "indexed source is unavailable"
+        if file_sha256(source) != location["file_sha256"]:
+            return None, "target source changed after indexing"
+        data = source.read_bytes()
+        if len(data) > 16 * 1024 * 1024:
+            return None, "source exceeds excerpt verification bound"
+        try:
+            lines = data.decode("utf-8").splitlines()
+        except UnicodeDecodeError:
+            return None, "source excerpt is not UTF-8 text"
+        return {"location": dict(location), "lines": lines}, None
+
     def trace(self, *, identity: str, relations: Iterable[str] = (), depth: int = 2,
               limit: int = 50) -> dict[str, Any]:
         LogicalIdentity.parse(identity)

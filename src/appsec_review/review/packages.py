@@ -42,16 +42,21 @@ import json
 from pathlib import Path
 from typing import Any
 
-from appsec_review.graph.contract import FAMILY_KINDS, GRAPH_INDEX, Family
+from appsec_review.graph.contract import FAMILY_KINDS, GRAPH_INDEX, Family, GraphSettings
+from appsec_review.graph.settings import run_graph_settings
 from appsec_review.graph.svf_crosscheck import function_tail
 from appsec_review.indexing.store import ShardSet, shard_key
 from appsec_review.retrieval.model import LogicalIdentity
 from appsec_review.retrieval.observations import REPORTED_SEVERITIES, SEVERITY_ORDER
 from appsec_review.review import advisories as advisory_reference
+from appsec_review.review.fact_summary import SUMMARY_RULE, summarize_fact
 from appsec_review.review.identity import sha256_hex
 from appsec_review.review.lead_families import FAMILIES, FAMILY_RULES, Lead, LeadCollection, collect_leads
-from appsec_review.review.memory_context import MEMORY_CONTEXT_RULE, MemoryContext
+from appsec_review.review.memory_context import C_FAMILY_SUFFIXES, MEMORY_CONTEXT_RULE, MemoryContext
 from appsec_review.review.models import IntegrityError, Predicate
+from appsec_review.review.neighborhood import (
+    BUILD_RULE, NEIGHBORHOOD_RULE, SECTIONS as NEIGHBORHOOD_SECTIONS, BuildContext, NeighborhoodRow, empty_record,
+)
 from appsec_review.review.ranking import DEFAULT_RANK_WEIGHTS, RankWeights
 from appsec_review.review.references import CweReference
 from appsec_review.review.scope import AcceptedScope, ScopeGap, sorted_gaps
@@ -62,8 +67,8 @@ from appsec_review.storage import atomic_bytes, file_sha256
 from appsec_review.storage.atomic import canonical_json
 
 
-PACKAGE_SCHEMA = "appsec-review/review-package/5"
-ASSEMBLY_RULE = "appsec-review/assemble-review-packages/5"
+PACKAGE_SCHEMA = "appsec-review/review-package/6"
+ASSEMBLY_RULE = "appsec-review/assemble-review-packages/6"
 GRAPH_CONTEXT_RULE = "appsec-review/package-graph-context/2"
 CALLER_ROLE = "caller"
 CALLER_PRODUCER = "code_graph_callers"
@@ -74,6 +79,7 @@ GRAPH_ROLES: Mapping[str, str] = {"entry_point": "entry_point", "sink_site": "si
 CORRELATED_STATES = frozenset({"bridged", "partial"})
 _GRAPH_KINDS = tuple(sorted(kind.value for kind in FAMILY_KINDS.values()))
 MAX_WEAKNESSES = 8
+MAX_CORROBORATION = 16
 MANIFEST_SCHEMA = "appsec-review/review-package-manifest/1"
 OBLIGATION_RULE = "appsec-review/package-obligations/1"
 SUPPRESSION_STATES = ("suppressed", "possibly_suppressed", "not_suppressed", "unknown")
@@ -252,6 +258,9 @@ class _Fact:
     sink: str | None                   # the sink_site a path, guard or range fact names
     entry: str | None                  # the entry_point a path names
     shard_sha256: str
+    line: int | None = None
+    function: str | None = None        # the enclosing function symbol a sink_site or entry_point names
+    summary: str = ""                  # fact-summary/1
 
 
 @dataclass(frozen=True, slots=True)
@@ -263,6 +272,17 @@ class _Call:
     callee_name: str
     path: str | None
     line: int | None
+    shard_sha256: str
+    summary: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class _Symbol:
+    identity: str
+    name: str
+    path: str
+    line: int
+    file_sha256: str | None
     shard_sha256: str
 
 
@@ -320,6 +340,8 @@ class GraphContext:
         self.facts: dict[str, _Fact] = {}
         self.correlated: dict[str, set[str]] = defaultdict(set)
         self.calls: list[_Call] = []
+        self.symbols: dict[str, _Symbol] = {}
+        self.symbols_by_path: dict[str, list[_Symbol]] = defaultdict(list)
         # (path, line) -> enclosing functions named by sink_site and call_site facts on that line.
         self.enclosing: dict[tuple[str, int], set[tuple[str | None, str]]] = defaultdict(set)
         store = scope.store
@@ -337,11 +359,19 @@ class GraphContext:
                 families.add(str(producer["family"]))
             if isinstance(producer.get("build_unit_id"), str) and producer["build_unit_id"]:
                 units.add(str(producer["build_unit_id"]))
-            for row in store.entities((shard,), kinds=_GRAPH_KINDS):
+            for row in store.entities((shard,), kinds=(*_GRAPH_KINDS, "symbol")):
                 payload = row["payload"] if isinstance(row["payload"], Mapping) else {}
                 result = payload.get("result") if isinstance(payload.get("result"), Mapping) else {}
                 kind = str(row["kind"])
                 path = (row.get("location") or {}).get("path")
+                if kind == "symbol":
+                    location = row.get("location") or {}
+                    if path and location.get("start_line") and payload.get("kind") == "function":
+                        symbol = _Symbol(str(row["identity"]), str(payload.get("qualified_name") or row["native_id"]),
+                                         str(path), int(location["start_line"]), location.get("file_sha256"), sha)
+                        self.symbols[symbol.identity] = symbol
+                        self.symbols_by_path[symbol.path].append(symbol)
+                    continue
                 families.add(kind)
                 unit = _nested(payload, "scope", "build_unit_id")
                 if isinstance(unit, str) and unit:
@@ -357,7 +387,7 @@ class GraphContext:
                     call = _Call(str(row["identity"]), _identity_or_none(caller.get("symbol")),
                                  function_tail(caller.get("display")), _identity_or_none(callee.get("symbol")),
                                  function_tail(callee.get("display")), str(path) if path else None,
-                                 int(line) if line else None, sha)
+                                 int(line) if line else None, sha, summarize_fact(kind, payload))
                     self.calls.append(call)
                     if path and line:
                         self.enclosing[(str(path), int(line))].add((call.caller_symbol, call.caller_name))
@@ -371,16 +401,38 @@ class GraphContext:
                     str(row["identity"]), kind, str(path) if path else None,
                     str(klass) if isinstance(klass, str) and klass else None,
                     _identity_or_none(_nested(result, "sink", "sink_site")),
-                    _identity_or_none(_nested(result, "source", "entry_point")), sha)
+                    _identity_or_none(_nested(result, "source", "entry_point")), sha,
+                    int(line) if line else None, _identity_or_none(_nested(result, "enclosing_function", "symbol")),
+                    summarize_fact(kind, payload, line=int(line) if line else None))
             state, reason = _shard_state(store.coverage((shard,)))
             self.shards.append(_GraphShard(f"{shard['name']}/{shard.get('shard_id', 'default')}", sha,
                                            frozenset(families), frozenset(units), frozenset(paths),
                                            frozenset(scope_ids), state, reason))
+        for items in self.symbols_by_path.values():
+            items.sort(key=lambda item: (item.line, item.identity))
+        self.calls_by_id = {call.identity: call for call in self.calls}
+        self.calls_by_callee_symbol: dict[str, list[_Call]] = defaultdict(list)
+        self.calls_by_callee_name: dict[str, list[_Call]] = defaultdict(list)
+        for call in self.calls:
+            if call.callee_symbol:
+                self.calls_by_callee_symbol[call.callee_symbol].append(call)
+            self.calls_by_callee_name[call.callee_name].append(call)
         for relation in store.relations(shards, kinds=("DERIVED_FROM",)):
             source = self.facts.get(str(relation["source_id"]))
             if (source is not None and source.kind == "dataflow_path"
                     and _nested(relation["payload"], "state") in CORRELATED_STATES):
                 self.correlated[str(relation["target_id"])].add(source.identity)
+        # Indexes for package neighborhoods: facts by enclosing function, by sink, and by source line.
+        self.by_function: dict[str, list[_Fact]] = defaultdict(list)
+        self.by_sink: dict[str, list[_Fact]] = defaultdict(list)
+        self.at_line: dict[tuple[str, int], list[_Fact]] = defaultdict(list)
+        for fact in sorted(self.facts.values(), key=lambda item: (item.line or 0, item.identity)):
+            if fact.function:
+                self.by_function[fact.function].append(fact)
+            if fact.sink and fact.kind in {"guard_fact", "range_fact", "dataflow_path"}:
+                self.by_sink[fact.sink].append(fact)
+            if fact.path and fact.line:
+                self.at_line[(fact.path, fact.line)].append(fact)
 
     def applying(self, build_unit_id: str | None, paths: Iterable[str]) -> list[_GraphShard]:
         members = set(paths)
@@ -516,11 +568,243 @@ class GraphContext:
         return chosen, total - len(chosen)
 
 
+    # -- package neighborhood (package-neighborhood/1) --------------------------------------------------
+    def function_at(self, path: str | None, line: int | None) -> tuple[_Symbol | None, str]:
+        """The function a lead line belongs to and how it was chosen.
+
+        A function that a sink or call fact on the line names is exact. Otherwise the nearest preceding
+        function definition in the same file is used and the choice is recorded as an inference.
+        """
+        if not path or not line:
+            return None, "none"
+        direct = sorted(symbol for symbol, _name in self.enclosing_functions(path, line) if symbol in self.symbols)
+        if direct:
+            return self.symbols[direct[0]], "enclosing_fact_on_line"
+        best = None
+        for item in self.symbols_by_path.get(str(path), ()):
+            if item.line <= int(line):
+                best = item
+            else:
+                break
+        return (best, "nearest_preceding_definition") if best else (None, "none")
+
+    def _walk(self, functions: Iterable[tuple[str | None, str]], *, direction: str, depth: int, limit: int
+              ) -> tuple[list[NeighborhoodRow], int, bool]:
+        """Call sites reaching (``callers``) or leaving (``callees``) ``functions``, breadth-first to ``depth``."""
+        frontier = {(symbol, name) for symbol, name in functions if name}
+        seen_functions = set(frontier)
+        taken: set[str] = set()
+        rows: list[NeighborhoodRow] = []
+        omitted, by_name = 0, False
+        role = "caller" if direction == "callers" else "callee"
+        for level in range(1, depth + 1):
+            symbols = {symbol for symbol, _name in frontier if symbol}
+            names = {name for _symbol, name in frontier}
+            unsymbolled = {name for symbol, name in frontier if not symbol}
+            matches = []
+            for call in self.calls:
+                if call.identity in taken:
+                    continue
+                if direction == "callers":
+                    near_symbol, near_name = call.callee_symbol, call.callee_name
+                else:
+                    near_symbol, near_name = call.caller_symbol, call.caller_name
+                if near_symbol is not None and near_symbol in symbols:
+                    matches.append(call)
+                elif near_name in (names if near_symbol is None else unsymbolled):
+                    matches.append(call)
+                    by_name = True
+            matches.sort(key=lambda item: item.identity)
+            following: set[tuple[str | None, str]] = set()
+            for call in matches:
+                taken.add(call.identity)
+                if len(rows) < limit:
+                    rows.append(NeighborhoodRow(call.identity, role, call.summary, call.line, {"depth": level}))
+                else:
+                    omitted += 1
+                far = ((call.caller_symbol, call.caller_name) if direction == "callers"
+                       else (call.callee_symbol, call.callee_name))
+                if far[1] and far not in seen_functions:
+                    seen_functions.add(far)
+                    following.add(far)
+            if not following:
+                break
+            frontier = following
+        return rows, omitted, by_name
+
+    def entry_chain(self, functions: Iterable[tuple[str | None, str]], depth: int
+                    ) -> tuple[list[NeighborhoodRow], list[NeighborhoodRow], bool, bool]:
+        """The upward call chain from ``functions`` to the nearest function holding an ``entry_point`` fact.
+
+        Breadth-first over call sites to ``depth`` levels (existing ``CALLS`` edges: ``call_site`` facts), the
+        shallowest level that reaches an entry point wins and ties break by identity, so the chain is
+        deterministic. Returns (hops from the lead\'s function upward, entry points reached, reached, matched by
+        name). ``reached`` is false when no entry point lies within ``depth`` levels; that is a gap, not a finding.
+        """
+        start = sorted({(symbol, name) for symbol, name in functions if name}, key=repr)
+
+        def entries_of(nodes: Iterable[tuple[str | None, str]]) -> list[NeighborhoodRow]:
+            facts = {fact.identity: fact for symbol, _name in nodes if symbol
+                     for fact in self.by_function.get(symbol, ()) if fact.kind == "entry_point"}
+            return [NeighborhoodRow(fact.identity, "entry_point", fact.summary, fact.line)
+                    for fact in sorted(facts.values(), key=lambda item: item.identity)]
+
+        found = entries_of(start)
+        if found:
+            return [], found, True, False
+        parents: dict[tuple[str | None, str], tuple[tuple[str | None, str], _Call]] = {}
+        seen = set(start)
+        frontier = list(start)
+        by_name = False
+        for _level in range(depth):
+            following: list[tuple[str | None, str]] = []
+            for node in frontier:
+                symbol, name = node
+                matches = {call.identity: call for call in self.calls_by_callee_symbol.get(symbol, ())} if symbol else {}
+                for call in self.calls_by_callee_name.get(name, ()):
+                    if call.callee_symbol is None or not symbol:
+                        matches.setdefault(call.identity, call)
+                        by_name = True
+                for call in sorted(matches.values(), key=lambda item: item.identity):
+                    far = (call.caller_symbol, call.caller_name)
+                    if not far[1] or far in seen:
+                        continue
+                    seen.add(far)
+                    parents[far] = (node, call)
+                    reached = entries_of([far])
+                    if reached:
+                        hops: list[NeighborhoodRow] = []
+                        cursor = far
+                        while cursor in parents:
+                            cursor, via = parents[cursor][0], parents[cursor][1]
+                            hops.append(NeighborhoodRow(via.identity, "caller", via.summary, via.line))
+                        hops.reverse()
+                        hops = [NeighborhoodRow(hop.ref, hop.role, hop.summary, hop.line, {"depth": number})
+                                for number, hop in enumerate(hops, start=1)]
+                        return hops, reached, True, by_name
+                    following.append(far)
+            if not following:
+                break
+            frontier = following
+        return [], [], False, by_name
+
+    def neighborhood(self, path: str | None, line: int | None, settings: GraphSettings, subject: str
+                     ) -> tuple[dict[str, Any], list[ContextEntry], list[ScopeGap]]:
+        """The ``package-neighborhood/1`` record for one lead location, its context entries and gaps."""
+        record = empty_record(settings.max_call_depth)
+        gaps: list[ScopeGap] = []
+        if not self.available or not path or not line:
+            return record, [], gaps
+        fn, basis = self.function_at(path, line)
+        symbol = fn.identity if fn else None
+        omitted = record["omitted"]
+        rows: dict[str, list[NeighborhoodRow]] = {section: [] for section in NEIGHBORHOOD_SECTIONS}
+
+        chosen = {fact.identity: fact for fact in self.at_line.get((str(path), int(line)), ()) if fact.kind == "sink_site"}
+        if symbol:
+            chosen.update((fact.identity, fact) for fact in self.by_function.get(symbol, ()) if fact.kind == "sink_site")
+        ordered = sorted(chosen.values(), key=lambda fact: (abs((fact.line or 0) - int(line)), fact.line or 0, fact.identity))
+        sinks = ordered[:settings.max_neighbors_per_function]
+        omitted["sinks"] = len(ordered) - len(sinks)
+        rows["sinks"] = [NeighborhoodRow(fact.identity, "sink", fact.summary, fact.line) for fact in sinks]
+        flow_facts: list[_Fact] = []
+        for sink in sinks:
+            related = self.by_sink.get(sink.identity, ())
+            for kind, section, role, bound in (("range_fact", "ranges", "range", settings.max_guards_per_sink),
+                                               ("guard_fact", "guards", "guard", settings.max_guards_per_sink),
+                                               ("dataflow_path", "flows", "path", settings.max_paths_per_sink)):
+                members = [fact for fact in related if fact.kind == kind]
+                rows[section].extend(NeighborhoodRow(fact.identity, role, fact.summary, fact.line)
+                                     for fact in members[:bound])
+                omitted[section] += max(0, len(members) - bound)
+                if kind == "dataflow_path":
+                    flow_facts.extend(members[:bound])
+        entry_ids = {fact.entry for fact in flow_facts if fact.entry}
+        entry_facts = {fact.identity: fact for fact in self.by_function.get(symbol, ()) if fact.kind == "entry_point"} \
+            if symbol else {}
+        entry_facts.update((identity, self.facts[identity]) for identity in entry_ids if identity in self.facts)
+        entries = sorted(entry_facts.values(), key=lambda fact: (fact.line or 0, fact.identity))
+        rows["entries"] = [NeighborhoodRow(fact.identity, "entry_point", fact.summary, fact.line)
+                           for fact in entries[:settings.max_neighbors_per_function]]
+        omitted["entries"] = max(0, len(entries) - settings.max_neighbors_per_function)
+        functions = set(self.enclosing_functions(path, line))
+        if fn:
+            functions.add((fn.identity, function_tail(fn.name)))
+        by_name = False
+        for direction, section in (("callers", "callers"), ("callees", "callees")):
+            found, dropped, named = self._walk(functions, direction=direction, depth=settings.max_call_depth,
+                                               limit=settings.max_neighbors_per_function)
+            rows[section], omitted[section], by_name = found, dropped, by_name or named
+        if by_name:
+            gaps.append(ScopeGap("code_graph_neighborhood", subject, "ambiguous",
+                                 "some callers or callees were matched by unqualified function name because a call "
+                                 "site or the function has no symbol; overloads and same-named functions may be included"))
+        hops, reached_entries, reached, chain_by_name = self.entry_chain(functions, settings.max_call_depth)
+        record["chain"] = {"reached": reached, "depth_limit": settings.max_call_depth,
+                           "hops": [row.record() for row in hops], "entries": [row.record() for row in reached_entries]}
+        if chain_by_name and reached:
+            by_name = True
+        if not reached:
+            gaps.append(ScopeGap(
+                "code_graph_neighborhood", subject, "unavailable",
+                f"no entry_point fact is reachable from the lead\'s function within {settings.max_call_depth} call "
+                "levels of accepted call sites; whether an attacker can reach the lead is unknown, not excluded"))
+        context: list[ContextEntry] = [
+            context_entry(row.ref, row.role, self.calls_by_id[row.ref].shard_sha256 if row.ref in self.calls_by_id
+                          else self.facts[row.ref].shard_sha256 if row.ref in self.facts else None)
+            for row in (*hops, *reached_entries)]
+        if fn:
+            record["function"] = {"symbol": fn.identity, "name": fn.name, "path": fn.path, "start_line": fn.line,
+                                  "file_sha256": fn.file_sha256, "basis": basis}
+            context.append(context_entry(fn.identity, "function", fn.shard_sha256))
+            if basis != "enclosing_fact_on_line":
+                gaps.append(ScopeGap("code_graph_neighborhood", subject, "ambiguous",
+                                     f"the lead's function {fn.name} is the nearest preceding definition in the file, "
+                                     "not a function a fact on the lead's line names"))
+        else:
+            gaps.append(ScopeGap("code_graph_neighborhood", subject, "unavailable",
+                                 "no accepted graph symbol places the lead's line inside a known function; only facts "
+                                 "on the line itself are listed"))
+        if not sinks:
+            gaps.append(ScopeGap("code_graph_neighborhood", subject, "unavailable",
+                                 "no accepted sink_site fact is located in the lead's function or on its line; absence "
+                                 "of a sink fact is a gap, not evidence that the code has no sink"))
+        for section in NEIGHBORHOOD_SECTIONS:
+            record[section] = [row.record() for row in rows[section]]
+            for row in rows[section]:
+                fact = self.facts.get(row.ref)
+                context.append(context_entry(row.ref, row.role, fact.shard_sha256 if fact else
+                                             self.calls_by_id[row.ref].shard_sha256 if row.ref in self.calls_by_id
+                                             else None))
+        dropped = {key: value for key, value in omitted.items() if value}
+        if dropped:
+            gaps.append(ScopeGap("code_graph_neighborhood", subject, "truncated",
+                                 "neighborhood rows exceeded the code-graph bounds and were omitted: "
+                                 + ", ".join(f"{key}={value}" for key, value in sorted(dropped.items()))))
+        return record, context, gaps
+
+    def unit_neighborhood(self, entries: Iterable[ContextEntry], depth: int) -> dict[str, Any]:
+        """The neighborhood record of a hunt package: summaries of its embedded sink and entry-point facts."""
+        record = empty_record(depth)
+        for entry in sorted(entries, key=lambda item: (item.role, item.id)):
+            fact = self.facts.get(entry.id)
+            section = {"sink": "sinks", "entry_point": "entries"}.get(entry.role)
+            if fact is not None and section is not None:
+                record[section].append(NeighborhoodRow(fact.identity, entry.role, fact.summary, fact.line).record())
+        return record
+
+
 class _Assembler:
     def __init__(self, scope: AcceptedScope, settings: PackageSettings, collection: LeadCollection,
-                 cwe_reference: CweReference | None = None):
+                 cwe_reference: CweReference | None = None, graph_settings: GraphSettings | None = None):
         self.scope = scope
         self.settings = settings
+        self.graph_settings = graph_settings if graph_settings is not None else GraphSettings()
+        self.build_context = BuildContext(scope)
+        self.at_location: dict[tuple[str, int], list[Lead]] = defaultdict(list)
+        for lead in collection.leads:
+            if lead.path and lead.start_line:
+                self.at_location[(lead.path, lead.start_line)].append(lead)
         self.collection = collection
         self.correlation_hashes = tuple(sorted(str(item["sha256"]) for item in collection.correlation_shards))
         self.extra_gaps: list[ScopeGap] = []
@@ -528,6 +812,51 @@ class _Assembler:
         self.reference_weaknesses = _reference_weaknesses(scope)
         self.graph = GraphContext(scope)
         self.memory = MemoryContext(scope, max_entries=settings.max_memory_context_entries)
+
+    def corroboration(self, lead: Lead) -> tuple[list[NeighborhoodRow], int]:
+        """Other observations on the lead's own line, strongest first, bounded by ``MAX_CORROBORATION``."""
+        if not lead.path or not lead.start_line:
+            return [], 0
+        others = sorted((item for item in self.at_location.get((lead.path, lead.start_line), ())
+                         if item.observation_id != lead.observation_id),
+                        key=lambda item: (SEVERITY_ORDER[item.reported_severity], item.observation_id))
+        rows = [NeighborhoodRow(item.observation_id, "corroboration", f"{item.scanner} {item.rule_id}: "
+                                f"{(item.message or '')[:120]}".strip(), item.start_line,
+                                {"scanner": item.scanner, "rule": item.rule_id,
+                                 "severity": item.reported_severity, "relation": "same_location"})
+                for item in others[:MAX_CORROBORATION]]
+        return rows, max(0, len(others) - MAX_CORROBORATION)
+
+    def lead_neighborhood(self, lead: Lead, subject: str, unit_id: str | None
+                          ) -> tuple[dict[str, Any], list[ContextEntry], list[ScopeGap]]:
+        """Neighborhood record, context entries and gaps of a lane A lead."""
+        record, entries, gaps = self.graph.neighborhood(lead.path, lead.start_line, self.graph_settings, subject)
+        rows, dropped = self.corroboration(lead)
+        record["corroboration"] = [row.record() for row in rows]
+        record["omitted"]["corroboration"] = dropped
+        entries.extend(context_entry(row.ref, row.role) for row in rows)
+        build = self.build_context.summary(lead.path)
+        if build is not None:
+            record["build"] = build
+            entries.append(context_entry(build["ref"], "build"))
+        elif lead.path and Path(lead.path).suffix.lower() in C_FAMILY_SUFFIXES:
+            gaps.append(ScopeGap("build_provenance", subject, "unavailable" if self.build_context.available else "missing",
+                                 "no accepted build command fact compiles this file; compiler, flags and hardening are "
+                                 "unknown for it, not absent"))
+        return record, entries, gaps
+
+    @staticmethod
+    def trim_neighborhood(record: dict[str, Any], entries: list[ContextEntry]) -> bool:
+        """Drop the least valuable neighborhood row to respect ``max_package_bytes``; False when none is left."""
+        for section in ("corroboration", "callees", "callers", "flows", "entries", "guards", "ranges", "sinks"):
+            if record[section]:
+                row = record[section].pop()
+                record["omitted"][section] += 1
+                entries[:] = [item for item in entries if item.id != row["ref"] or item.role == "build"
+                              or any(other["ref"] == row["ref"] for name in NEIGHBORHOOD_SECTIONS
+                                     for other in record[name])]
+                return True
+        return False
 
     def weaknesses(self, lead: Lead) -> list[dict[str, Any]]:
         """Weakness blocks for the lead's rule CWEs and its advisories' NVD CWEs (bounded)."""
@@ -583,7 +912,8 @@ class _Assembler:
                partition: tuple[int, int], rank: Mapping[str, Any] | None, menu: list[tuple[Lead, str, str | None]],
                context: list[ContextEntry], obligations: Iterable[Predicate], gaps: Iterable[ScopeGap],
                truncation: Mapping[str, Any], graph_families: Iterable[str] = (),
-               graph_shards: Iterable[str] = (), graph_scopes: Iterable[str] = ()) -> tuple[str, bytes]:
+               graph_shards: Iterable[str] = (), graph_scopes: Iterable[str] = (),
+               neighborhood: Mapping[str, Any] | None = None) -> tuple[str, bytes]:
         leads = sorted(menu, key=lambda item: (SEVERITY_ORDER[item[0].reported_severity], item[0].observation_id))
         lead_ids = sorted(item[0].observation_id for item in leads)
         entities = sorted({*lead_ids, *scope_record["source_ids"], *scope_record["artifact_ids"],
@@ -602,9 +932,11 @@ class _Assembler:
                                             "rank": RANK_RULE, "families": FAMILY_RULES,
                                             "advisory_context": advisory_reference.CONTEXT_RULE,
                                             "graph_context": GRAPH_CONTEXT_RULE,
-                                            "memory_context": MEMORY_CONTEXT_RULE},
+                                            "memory_context": MEMORY_CONTEXT_RULE,
+                                            "neighborhood": NEIGHBORHOOD_RULE, "fact_summary": SUMMARY_RULE,
+                                            "build_summary": BUILD_RULE},
             "cwe_reference": self.cwe_reference.record() if self.cwe_reference is not None else None,
-            "caps": self.settings.record()})
+            "caps": self.settings.record(), "graph_caps": asdict(self.graph_settings)})
         body = {
             "schema": PACKAGE_SCHEMA, "kind": kind, "lane": "lead" if kind == "finding_lead" else "hunt",
             "lead_family": lead_family, "run_id": self.scope.run_id, "manifest_sha256": self.scope.manifest_sha256,
@@ -617,6 +949,8 @@ class _Assembler:
                                       if kind == "finding_lead" else None) for item in leads],
             "evidence": sorted((_evidence(item[0]) for item in leads), key=lambda value: value["entity_id"]),
             "context": [item.record() for item in context],
+            "neighborhood": dict(neighborhood) if neighborhood is not None
+            else empty_record(self.graph_settings.max_call_depth),
             "proof_obligations": sorted(item.value for item in obligations),
             "retrieval": retrieval, "coverage_gaps": [gap.record() for gap in sorted_gaps(gaps)],
             "truncation": dict(truncation),
@@ -672,6 +1006,8 @@ class _Assembler:
         families, graph_shards, graph_gaps = self.graph.families(unit_id, (lead.path,) if lead.path else (),
                                                                  partition_key)
         capped, omitted, gaps = self._cap(context, partition_key, lead.family)
+        neighborhood, nb_entries, nb_gaps = self.lead_neighborhood(lead, partition_key, unit_id)
+        gaps.extend(nb_gaps)
         gaps.extend(graph_gaps)
         gaps.extend(context_gaps)
         gaps.extend(gap for gap in self.collection.gaps if gap.producer == lead.family)
@@ -680,21 +1016,32 @@ class _Assembler:
                                  "lead location is unresolved or ambiguous; no source line is cited"))
         scope_record = {"component_id": component_id, "trust_boundary_id": None, "build_unit_id": unit_id,
                         "partition_key": partition_key, "source_ids": sorted(sources), "artifact_ids": sorted(artifacts)}
+        trimmed = 0
         while True:
+            merged = {(item.role, item.id): item for item in (*capped, *nb_entries)}
+            visible = gaps + ([ScopeGap("code_graph_neighborhood", partition_key, "truncated",
+                                        f"{trimmed} neighborhood row(s) omitted to respect max_package_bytes")]
+                              if trimmed else [])
             package_id, body = self._build(
                 kind="finding_lead", lead_family=lead.family, scope_record=scope_record, partition=(0, 1), rank=None,
-                menu=[(lead, component_id, unit_id)], context=capped, obligations=OBLIGATIONS[lead.family],
-                gaps=gaps, truncation={"omitted_leads": 0, "omitted_context": omitted, "next_partition": None},
+                menu=[(lead, component_id, unit_id)], context=[merged[key] for key in sorted(merged)],
+                obligations=OBLIGATIONS[lead.family],
+                gaps=visible, truncation={"omitted_leads": 0, "omitted_context": omitted, "next_partition": None},
                 graph_families=families, graph_shards=graph_shards,
-                graph_scopes=self.graph.scopes(unit_id, (lead.path,) if lead.path else ()))
+                graph_scopes=self.graph.scopes(unit_id, (lead.path,) if lead.path else ()),
+                neighborhood=neighborhood)
             if len(body) <= self.settings.max_package_bytes:
+                gaps = visible
                 break
+            if self.trim_neighborhood(neighborhood, nb_entries):
+                trimmed += 1
+                continue
             if not capped:
                 raise IntegrityError(f"finding-lead package for {lead.observation_id} exceeds max_package_bytes and "
                                      "cannot be partitioned; the membership gate is blocked")
             capped = capped[:-1]
             omitted += 1
-            gaps = [gap for gap in gaps if gap.state != "truncated"] + [ScopeGap(
+            gaps = [gap for gap in gaps if gap.state != "truncated" or gap.producer == "code_graph_neighborhood"] + [ScopeGap(
                 lead.family, partition_key, "truncated",
                 f"{omitted} context entries omitted to respect max_package_bytes")]
         self.extra_gaps.extend(gap for gap in gaps if gap.state == "truncated")
@@ -717,6 +1064,7 @@ class _Assembler:
                                  f"exceeded max_context_entries={bound}"))
         families, graph_shards, graph_gaps = self.graph.families(unit.build_unit_id, unit.paths, unit.key)
         graph_scopes = self.graph.scopes(unit.build_unit_id, unit.paths)
+        neighborhood = self.graph.unit_neighborhood(context, self.graph_settings.max_call_depth)
         missing = [gap for gap in (*self.scope.gaps, *self.collection.gaps) if gap.state == "missing"]
         scope_record = {"component_id": unit.component_id, "trust_boundary_id": unit.trust_boundary_id,
                         "build_unit_id": unit.build_unit_id, "source_ids": list(unit.source_ids),
@@ -732,7 +1080,8 @@ class _Assembler:
                 partition=(number, count), rank=rank, menu=chunk, context=context, obligations=OBLIGATIONS["hunt"],
                 gaps=[*gaps, *graph_gaps, *missing], truncation={"omitted_leads": 0, "omitted_context": omitted,
                                                                  "next_partition": following},
-                graph_families=families, graph_shards=graph_shards, graph_scopes=graph_scopes)
+                graph_families=families, graph_shards=graph_shards, graph_scopes=graph_scopes,
+                neighborhood=neighborhood)
 
         def split(chunk: list) -> list[list]:
             _identity, body = render(chunk, 99_998, 99_999)  # widest numbering bounds the final size
@@ -812,7 +1161,8 @@ def audit_hunts(hunted: Iterable[RankedUnit], packages: Iterable[Package]) -> di
 
 def assemble_packages(scope: AcceptedScope, settings: PackageSettings | None = None, *,
                       collection: LeadCollection | None = None,
-                      cwe_reference: CweReference | None = None) -> Assembly:
+                      cwe_reference: CweReference | None = None,
+                      graph_settings: GraphSettings | None = None) -> Assembly:
     """Assemble both lanes and the package manifest; raises on any membership or integrity failure.
 
     ``cwe_reference`` is the run-pinned MITRE CWE catalog (``review.references``); without it,
@@ -823,7 +1173,8 @@ def assemble_packages(scope: AcceptedScope, settings: PackageSettings | None = N
     collection = LeadCollection(tuple(sorted(collection.leads, key=lambda lead: lead.observation_id)),
                                 collection.gaps, collection.available, collection.correlation_audit,
                                 collection.correlation_shards, collection.non_lead_counts)
-    assembler = _Assembler(scope, settings, collection, cwe_reference)
+    graph_settings = graph_settings if graph_settings is not None else run_graph_settings(scope.run_root)
+    assembler = _Assembler(scope, settings, collection, cwe_reference, graph_settings)
     admitted = [lead for lead in collection.leads if admission_reasons(lead, settings)]
     packages = [assembler.finding_lead(lead) for lead in admitted]
     lane_a = audit_membership(collection, packages, settings.admit_severities, settings.admit_kev)
@@ -854,8 +1205,9 @@ def assemble_packages(scope: AcceptedScope, settings: PackageSettings | None = N
     document: dict[str, Any] = {
         "schema": MANIFEST_SCHEMA, "assembly_rule": ASSEMBLY_RULE, "package_schema": PACKAGE_SCHEMA,
         "run_id": scope.run_id, "manifest_sha256": scope.manifest_sha256, "target_snapshot": scope.target_snapshot,
-        "settings": settings.record(), "rules": {"families": dict(FAMILY_RULES), "rank": RANK_RULE,
-                                                 "obligations": OBLIGATION_RULE},
+        "settings": settings.record(), "graph_settings": asdict(graph_settings),
+        "rules": {"families": dict(FAMILY_RULES), "rank": RANK_RULE, "obligations": OBLIGATION_RULE,
+                  "neighborhood": NEIGHBORHOOD_RULE},
         "inputs": ShardSet.identities(scope.shards), "evidence_map_sha256": sha256_hex(scope.evidence_map()),
         "packages": [package.entry() for package in packages],
         "units": [{"unit_key": item.unit.key, **item.rank_record(), "hunted": item.unit.key in hunted_keys,

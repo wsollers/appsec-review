@@ -1,7 +1,7 @@
 # Review package and finding-lead contract
 
-Status: implementation contract. Inference review packages are schema version 5
-(`appsec-review/review-package/5`, assembly rule `assemble-review-packages/5`); the catalog-derived
+Status: implementation contract. Inference review packages are schema version 6
+(`appsec-review/review-package/6`, assembly rule `assemble-review-packages/6`); the catalog-derived
 document packages below stay at version 3. Accepted-manifest scope assembly, lane A
 finding-lead packages for every lead family, lane B review-unit ranking and hunt packages,
 membership audits and the package manifest are implemented in `src/appsec_review/review/`
@@ -10,6 +10,8 @@ from `advisories.py` and `references.py`). The inference job consumes these pack
 (`job_inference_security_review`). Version 3 added lead `advisory_context`, `advisory_summary`,
 `weaknesses` and `admission_reasons`, and the `advisory_kev`/`advisory_epss` rank signals.
 Version 4 adds accepted code-graph context (see [Code-graph context](#code-graph-context-version-4)).
+Version 6 adds the package neighborhood and the model-facing view (see
+[Neighborhood and view](#neighborhood-and-view-version-6)).
 Version 5 adds lead-level memory and caller context for C/C++ leads (see
 [Memory and caller context](#memory-and-caller-context-version-5)).
 
@@ -152,6 +154,69 @@ evidence and gaps sort by stable identity; no timestamps or completion order ent
 Reassembly from the same accepted inputs must produce byte-identical packages. The schema
 closes object keys and bounds structural types; a semantic validator must additionally verify
 hashes, sorted uniqueness, cited identities, page/byte caps and membership invariants.
+
+### Neighborhood and view (version 6)
+
+Review protocol v2 ([`review-protocol-v2.md`](review-protocol-v2.md)) changes what a cell is shown, not
+what the stored package pins. Two things are new.
+
+**The stored `neighborhood` (`package-neighborhood/1`, `review/neighborhood.py`, `GraphContext.neighborhood`).**
+Every package has a required `neighborhood` object. For a lane A lead it is selected by *location and
+function scope*, not by a correlated dataflow path:
+
+- `function`: the lead's function symbol, name, path, start line, file hash and `basis`
+  (`enclosing_fact_on_line` when a sink or call fact on the lead's line names it, otherwise
+  `nearest_preceding_definition`, which also adds an `ambiguous` gap);
+- `sinks`, `ranges`, `guards`, `flows`, `entries`: every `sink_site` on the lead's line or in its function, the
+  `range_fact`, `guard_fact` and `dataflow_path` facts of those sinks, and the `entry_point` facts of the function or
+  of those flows;
+- `callers`, `callees`: `call_site` facts to `max_call_depth` levels, matched like caller context;
+- `chain`: the shortest call-site chain upward from the lead's function to the nearest function that holds an
+  `entry_point` fact (`reached`, ordered `hops`, the `entries` reached). When no entry point lies within
+  `max_call_depth` levels the package carries an `unavailable` `code_graph_neighborhood` gap: reachability is
+  unknown, never excluded;
+- `corroboration`: other observations on the same line (strongest first, at most 16);
+- `build`: compiler, ordered flags and hardening flags from the accepted `build_provenance` command facts that
+  compile the file (`package-build-summary/1`), or a `build_provenance` gap;
+- `omitted`: per-section counts of rows removed by the bounds.
+
+Each row is an identity, a line and a one-line summary (`fact-summary/1`, `review/fact_summary.py`). A guard summary
+states the guard state, polarity, condition text, operator and operand texts, and nothing about whether the guard
+bounds the destination of a write. Every row is also a `context` entry (new roles `function`, `callee`,
+`corroboration`, `build`), so a cell may cite it. The bounds are the code-graph settings
+(`max_call_depth`, `max_neighbors_per_function`, `max_paths_per_sink`, `max_guards_per_sink`, frozen into the run) plus
+`max_package_bytes`; a row removed for bytes is counted in `omitted` and named by a `truncated`
+`code_graph_neighborhood` gap. Neighborhood rows are not capped by `max_context_entries`. A hunt package carries the
+summaries of its embedded sink and entry-point facts. The neighborhood enters the package fingerprint with
+`package-neighborhood/1`, `fact-summary/1`, `package-build-summary/1` and the graph caps.
+
+**The model-facing view (`package-view/1`, `review/package_view.py`).** A cell is shown a view built at cell time
+from the stored package, never stored as an identity and never part of a reuse basis (the basis stays the hash of the
+stored package). Labels are assigned in a fixed order so one package always yields the same labels: `L` lead, `S`
+source, `K` sink, `R` range, `G` guard, `F` call site (chain hops first, then callers, then callees), `P` flow, `E`
+entry point, `M` memory context, `C` corroborating finding, `B` build, `T` tag, `X` material gap, `O` other context;
+`Q` labels are added for every row a retrieval turn returns, and `A` labels for a claim's affected entities in blue and
+verifier cells. The view:
+
+- embeds the function's source text and, as a stated rule, the declaration (field names, types, array sizes) of every
+  type the function's signature and body name that the accepted index or the lead's file declares; source is read
+  through the accepted index (`RetrievalCore.read_source_lines`) and verified against the indexed file hash, and a
+  type that cannot be located is a material gap;
+- shows inline only the coverage gaps that bear on the package (its partition or unit, or naming its paths,
+  function, build unit, a lead or a sink: `package-gap-view/1`). Every other gap stays in the stored package and is
+  written once to a hash-referenced `gaps.jsonl` listed under `files` with its count and SHA-256, reachable with
+  `expand`; inline plus file always equals the stored gap count;
+- has a byte budget (`max_view_bytes`) and drops the least valuable rows first, counted in `omitted` and named by a
+  material gap;
+- omits `retrieval.entity_ids` and every raw identity that is not a labelled row.
+
+The three view bounds live next to the package bounds:
+
+| Setting | Meaning | Bounds |
+|---|---|---|
+| `max_view_bytes` | byte budget of one view | 4096–1048576 |
+| `max_view_source_lines` | longest function excerpt in lines | 10–2000 |
+| `max_view_type_declarations` | type declarations embedded in a view | 0–32 |
 
 ## Assembly and admission gates
 

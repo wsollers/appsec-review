@@ -168,7 +168,8 @@ def test_slice1_acceptance_both_lanes_parallel_and_capacity_invariant(tmp_path: 
     assert sum(lane["cells_by_status"]["failed"] for lane in lanes.values()) >= 1
     assert accounting["gaps_by_class"]["worker_gap"] >= 1
     assert lanes["hunt"]["cells_by_status"]["not_launched"] >= 1 and accounting["gaps_by_class"]["budget_gap"] >= 1
-    assert accounting["gaps_by_class"]["authority_error"] == 2
+    # The failure-modes lens probes two forbidden capabilities; denials are feedback, not gaps (review protocol v2).
+    assert accounting["gaps_by_class"].get("authority_error", 0) == 0
     projection = _json(_unit(attempt, "publication.publish_claim_ledger") / "projection.json")
     not_launched = [records[0] for records in projection["cells"].values() if records[0]["status"] == "not_launched"]
     budget_gaps = {gap["gap_id"] for gap in projection["gaps"] if gap["gap_class"] == "budget_gap"}
