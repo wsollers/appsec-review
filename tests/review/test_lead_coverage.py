@@ -15,6 +15,7 @@ import pytest
 
 from appsec_review.jobs.job_evidence_collection.adapters import adapter_registry
 from appsec_review.retrieval.core import RetrievalCore
+from appsec_review.retrieval.observations import classify
 from appsec_review.review import lead_families
 from appsec_review.review.lead_families import (
     CLASS_FAMILY, FAMILIES, FAMILY_PRODUCERS, FAMILY_RULES, NOT_A_LEAD_CLASSES, OBSERVATION_PRODUCERS,
@@ -109,10 +110,40 @@ def _evidence_tools() -> set[str]:
     return set(adapter_registry())
 
 
-def test_every_evidence_collection_tool_has_an_explicit_decision() -> None:
-    undecided = sorted(tool for tool in _evidence_tools()
-                       if producer_decision("job_evidence_collection", tool) is None)
-    assert not undecided, f"new evidence-collection tools need a family or a not-a-lead reason: {undecided}"
+# The category each evidence-collection parser emits for its findings (the true scanner category; the generic
+# ``static_analysis`` is retired). A tool is decided either by an explicit ``OBSERVATION_PRODUCERS`` row or, when its
+# category classifies into a lead family, by the class: this table is what the guard proves exhaustive.
+ADAPTER_CATEGORIES = {
+    "tool-gitleaks": "secret_detection", "tool-semgrep": "source_sast", "tool-opengrep": "source_sast",
+    "tool-gosec": "source_sast", "tool-mobsfscan": "source_sast", "tool-cppcheck": "source_sast",
+    "tool-pmd": "source_sast", "tool-phpstan": "source_sast", "tool-phpcs": "source_sast",
+    "tool-spotbugs": "source_sast", "tool-shellcheck": "shell_lint", "tool-psalm": "source_sast",
+    "tool-syft": "software_inventory", "tool-osv-scanner": "vulnerability_matching",
+    "tool-grype": "vulnerability_matching", "tool-hadolint": "config_lint", "tool-checkov": "configuration",
+    "tool-trivy": "configuration", "tool-zizmor": "ci_security", "tool-blint": "binary_hardening",
+}
+
+
+def test_every_evidence_collection_tool_declares_a_category_and_has_a_decision() -> None:
+    assert set(ADAPTER_CATEGORIES) == _evidence_tools(),         "a new or removed evidence-collection tool needs its parser category declared here"
+    undecided = []
+    for tool, category in sorted(ADAPTER_CATEGORIES.items()):
+        assert category != "static_analysis", f"{tool} emits the retired generic category"
+        if producer_decision("job_evidence_collection", tool) is not None:
+            continue
+        observation_class = classify({"tool_id": tool, "category": category})
+        if CLASS_FAMILY.get(observation_class) is None and observation_class != "dependency":
+            undecided.append((tool, category, observation_class))
+    assert not undecided, f"tools with neither a decision row nor a category that maps to a family: {undecided}"
+
+
+def test_category_decided_tools_need_no_scanner_id_row() -> None:
+    """gitleaks, shellcheck, psalm and hadolint follow from their categories; the old scanner-id rows are gone."""
+    for tool in ("tool-gitleaks", "tool-shellcheck", "tool-psalm", "tool-hadolint"):
+        assert producer_decision("job_evidence_collection", tool) is None
+    deliberate = {item.scanner for item in OBSERVATION_PRODUCERS if item.job == "job_evidence_collection"
+                  and item.family is None}
+    assert deliberate == {"tool-zizmor", "tool-syft", "tool-blint"}
 
 
 def test_every_job_that_publishes_tool_observations_is_decided() -> None:
@@ -154,14 +185,14 @@ def _shard(job: str, tool: str | None = None) -> dict:
 
 
 @pytest.mark.parametrize(("tool", "category", "family"), [
-    ("tool-gitleaks", "static_analysis", "secret"),
-    ("tool-shellcheck", "static_analysis", "source_sast"),       # generic category used to be dropped
-    ("tool-psalm", "static_analysis", "source_sast"),
+    ("tool-gitleaks", "secret_detection", "secret"),
+    ("tool-shellcheck", "shell_lint", "source_sast"),           # the generic ``static_analysis`` used to be dropped
+    ("tool-psalm", "source_sast", "source_sast"),
     ("tool-semgrep", "source_sast", "source_sast"),
-    ("tool-hadolint", "static_analysis", "config_scanner"),
+    ("tool-hadolint", "config_lint", "config_scanner"),
     ("tool-checkov", "configuration", "config_scanner"),
     ("tool-trivy", "configuration", "config_scanner"),
-    ("tool-zizmor", "static_analysis", None),
+    ("tool-zizmor", "ci_security", None),
     ("tool-syft", "software_inventory", None),
     ("tool-blint", "binary_hardening", None),
     ("tool-pmd", "tool_diagnostic", None),
@@ -205,7 +236,7 @@ def test_an_unmapped_scanner_is_a_named_gap_never_a_silent_drop(secret_run, monk
 def test_deliberate_non_leads_are_counted_in_the_manifest_not_in_gaps() -> None:
     row, shard = _row("tool-syft", category="software_inventory"), _shard("job_evidence_collection", "tool-syft")
     assert non_lead_key(row, shard) == "class:inventory"
-    row = _row("tool-zizmor", category="static_analysis")
+    row = _row("tool-zizmor", category="ci_security")
     assert non_lead_key(row, _shard("job_evidence_collection", "tool-zizmor")) == "scanner:tool-zizmor"
 
 
