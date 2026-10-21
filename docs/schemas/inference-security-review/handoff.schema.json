@@ -306,6 +306,7 @@
             "enum": [
               "ship_blocking",
               "ship_blocking_pending_distinct_verification",
+              "decision_pending",
               "not_ship_blocking"
             ]
           }
@@ -346,6 +347,7 @@
           "ship_block_status": {
             "enum": [
               "needs_verification",
+              "decision_pending",
               "not_ship_blocking"
             ]
           },

@@ -173,7 +173,9 @@ def _claim() -> dict:
 
 def _score() -> dict:
     return {
-        "schema": "appsec-review/score-package/2", "score_id": ident("score"), "claim_id": ident("claim"),
+        "schema": "appsec-review/score-package/3", "score_id": ident("score"), "claim_id": ident("claim"),
+        "severity_assessment": {"assessment": "complete", "severity_floor": None, "severity_ceiling": None,
+                                "unresolved_factors": []},
         "adjudication_id": ident("adjudication"),
         "provider": {"id": "cvss_v4", "interface": "appsec-review/scoring-provider/1", "implementation": "first-compatible/1"},
         "provider_config_sha256": SHA, "policy_sha256": SHA,
@@ -196,8 +198,16 @@ def _score() -> dict:
     }
 
 
-def test_score_package_2_rejects_version_1_and_malformed_factors() -> None:
+def test_score_package_3_rejects_old_versions_malformed_factors_and_bad_assessments() -> None:
     assert not valid("score-package", {**_score(), "schema": "appsec-review/score-package/1"})
+    assert not valid("score-package", {**_score(), "schema": "appsec-review/score-package/2"})
+    unrated = {"assessment": "unrated", "severity_floor": "medium", "severity_ceiling": "high",
+               "unresolved_factors": ["taint_path"]}
+    assert valid("score-package", {**_score(), "technical_severity": {"scale": "application_risk_matrix/3",
+                                                                      "rating": None}, "severity_assessment": unrated})
+    assert not valid("score-package", {**_score(), "severity_assessment": {**unrated, "assessment": "maybe"}})
+    assert not valid("score-package", {**_score(), "severity_assessment": {**unrated, "severity_floor": "severe"}})
+    assert not valid("score-package", {**_score(), "severity_assessment": {"assessment": "complete"}})
     factor = _score()["factors"][0]
     assert not valid("score-package", {**_score(), "factors": [{**factor, "detail": {"entity_kind": "dataflow_path"}}]})
     assert not valid("score-package", {**_score(), "factors": [{**factor, "points": 3}]})
@@ -207,17 +217,23 @@ def test_score_package_2_rejects_version_1_and_malformed_factors() -> None:
 
 
 def _ship_block(status: str = "ship_blocking", state: str = "confirmed") -> dict:
+    pending = status == "decision_pending"
     return {
         "policy": "ship-block-policy/1", "policy_sha256": SHA, "status": status,
         "conditions": {"claim_confirmed": state == "confirmed", "claim_supported": state == "supported",
-                       "technical_severity_qualifies": True, "dependency_finding": False,
+                       "technical_severity_qualifies": not pending, "dependency_finding": False,
                        "kev_dependency_qualifies": False, "distinct_verification_required": True,
-                       "verifier_model_distinct": True},
-        "reasons": ["technical_severity_high"],
+                       "verifier_model_distinct": True, "decision_input_missing": pending},
+        "reasons": ["technical_severity_unrated", "missing_factor_taint_path"] if pending
+        else ["technical_severity_high"],
         "inputs": {"claim_state": state, "lead_families": ["codeql"], "kev_listed": None,
                    "verifier_model_distinct": True,
-                   "technical_severity": {"provider": "application_risk_matrix/2", "rating": "high",
-                                          "score_id": ident("score", "matrix")}},
+                   "technical_severity": {"provider": "application_risk_matrix/3",
+                                          "rating": None if pending else "high",
+                                          "score_id": ident("score", "matrix"),
+                                          "severity_floor": "medium" if pending else "high",
+                                          "severity_ceiling": "high",
+                                          "missing_factors": ["taint_path"] if pending else []}},
         "citations": {"adjudication_id": ident("adjudication"), "score_ids": [ident("score", "matrix")],
                       "verification_review_id": ident("review")},
         "displayed_context": {"decides": False, "non_deciding_scores": [ident("score")],
@@ -270,9 +286,11 @@ def test_claim_and_finding_conditionals() -> None:
     ("confirmed", "ship_blocking", True),
     ("confirmed", "ship_blocking_pending_distinct_verification", True),
     ("confirmed", "not_ship_blocking", True),
+    ("confirmed", "decision_pending", True),
     ("confirmed", "needs_verification", False),
     ("supported", "needs_verification", True),
     ("supported", "not_ship_blocking", True),
+    ("supported", "decision_pending", True),
     ("supported", "ship_blocking", False),
     ("supported", "ship_blocking_pending_distinct_verification", False),
 ])
@@ -283,6 +301,16 @@ def test_finding_ship_block_status_matches_the_claim_state(state: str, status: s
     assert valid("finding-package", document) is ok
     # The job's closed validator agrees with jsonschema on the ship-block conditionals.
     assert (not SchemaSet(ROOT).errors("finding-package", document)) is ok
+
+
+def test_decision_pending_requires_a_missing_input_and_no_qualifying_severity() -> None:
+    block = _ship_block("decision_pending")
+    assert valid("finding-package", {**_finding(), "ship_block": block})
+    for key, value in (("decision_input_missing", False), ("technical_severity_qualifies", True),
+                       ("kev_dependency_qualifies", True)):
+        broken = {**block, "conditions": {**block["conditions"], key: value}}
+        assert not valid("finding-package", {**_finding(), "ship_block": broken})
+        assert SchemaSet(ROOT).errors("finding-package", {**_finding(), "ship_block": broken})
 
 
 def test_finding_ship_block_record_is_closed_and_never_lets_cvss_decide() -> None:
@@ -442,6 +470,10 @@ def test_handoff_partitions_remediation_intake_from_the_verification_backlog(tmp
     validator("handoff").validate(handoff)
     assert SchemaSet(ROOT).errors("handoff", handoff) == []
     assert handoff["ship_block"]["by_lane"]["hunt"]["needs_verification"] == 1
+    assert handoff["ship_block"]["by_status"]["decision_pending"] == 0
+    # An undecided finding is accounted in both tables, never dropped: confirmed in intake, supported in the backlog.
+    assert valid("handoff", {**handoff, "remediation_intake": [{**confirmed, "ship_block_status": "decision_pending"}]})
+    assert valid("handoff", {**handoff, "verification_backlog": [{**supported, "ship_block_status": "decision_pending"}]})
     # A supported package can never enter remediation intake, nor a confirmed one the backlog.
     assert not valid("handoff", {**handoff, "remediation_intake": [{**confirmed, "ship_block_status":
                                                                     "needs_verification"}]})

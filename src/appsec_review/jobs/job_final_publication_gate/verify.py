@@ -74,6 +74,7 @@ def project_score(reference: Mapping[str, str], package: Mapping[str, Any]) -> d
                    "score": native.get("score")},
         **{name: _dimension(package.get(name)) for name in DIMENSIONS},
         "missing_factors": sorted(package.get("missing_factors", ())),
+        "severity_assessment": dict(package["severity_assessment"]),
     }
 
 
@@ -90,6 +91,9 @@ def project_finding(reference: Mapping[str, str], package: Mapping[str, Any],
             "policy": block["policy"], "policy_sha256": block["policy_sha256"], "status": block["status"],
             "reasons": list(block["reasons"]), "technical_severity": severity["rating"],
             "technical_severity_score_id": severity["score_id"],
+            "technical_severity_floor": severity["severity_floor"],
+            "technical_severity_ceiling": severity["severity_ceiling"],
+            "missing_factors": list(severity["missing_factors"]),
             "distinct_verification_required": block["conditions"]["distinct_verification_required"],
             "verifier_model_distinct": block["conditions"]["verifier_model_distinct"]},
         "independence": dict(package["independence"]),

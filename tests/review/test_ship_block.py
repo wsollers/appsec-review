@@ -22,11 +22,79 @@ def test_confirmed_high_or_critical_with_distinct_verification_blocks(severity: 
     assert decision.conditions["technical_severity_qualifies"] and decision.reasons == (f"technical_severity_{severity}",)
 
 
-@pytest.mark.parametrize("severity", ["low", "medium", None])
-def test_confirmed_below_the_threshold_does_not_block(severity) -> None:
+@pytest.mark.parametrize("severity", ["low", "medium"])
+def test_confirmed_rated_below_the_threshold_does_not_block(severity) -> None:
     decision = decide(replace(BASE, technical_severity=severity))
     assert decision.status is ShipBlockStatus.NOT_SHIP_BLOCKING
-    assert ("technical_severity_unrated" in decision.reasons) is (severity is None)
+    assert "technical_severity_unrated" not in decision.reasons and not decision.conditions["decision_input_missing"]
+
+
+def test_unrated_is_decision_pending_and_never_not_ship_blocking() -> None:
+    """Deliberately changed from the old fallback, which published an unrated finding as not_ship_blocking."""
+    unrated = replace(BASE, technical_severity=None, severity_missing_factors=("taint_path", "impact_class"))
+    decision = decide(unrated)
+    assert decision.status is ShipBlockStatus.DECISION_PENDING
+    assert decision.reasons == ("technical_severity_unrated", "missing_factor_impact_class", "missing_factor_taint_path")
+    assert decision.conditions["decision_input_missing"] and not decision.conditions["technical_severity_qualifies"]
+    assert decide(replace(unrated, claim_state=ClaimState.SUPPORTED)).status is ShipBlockStatus.DECISION_PENDING
+    record = decision.record(unrated, adjudication_id="adjudication-x", verification_review_id=None,
+                             displayed_context={})
+    assert record["inputs"]["technical_severity"]["missing_factors"] == ["impact_class", "taint_path"]
+    assert record["status"] == "decision_pending"
+    # The decision does not depend on whether a distinct verifier ran: nothing qualifies yet.
+    assert decide(replace(unrated, verifier_model_distinct=False)).status is ShipBlockStatus.DECISION_PENDING
+
+
+def test_material_missing_factors_make_a_rated_finding_pending_too() -> None:
+    inputs = replace(BASE, technical_severity="medium", severity_missing_factors=("attacker_control",))
+    assert decide(inputs).status is ShipBlockStatus.DECISION_PENDING
+    # ...but a finding that already qualifies keeps the status that names its next action.
+    assert decide(replace(inputs, technical_severity="high")).status is ShipBlockStatus.SHIP_BLOCKING
+
+
+def test_unrated_kev_dependency_still_blocks() -> None:
+    decision = decide(replace(KEV_DEPENDENCY, technical_severity=None, severity_missing_factors=("exposure",)))
+    assert decision.status is ShipBlockStatus.SHIP_BLOCKING
+    assert "technical_severity_unrated" in decision.reasons and "kev_listed_dependency" in decision.reasons
+    pending = decide(replace(KEV_DEPENDENCY, technical_severity=None, verifier_model_distinct=False))
+    assert pending.status is ShipBlockStatus.PENDING_DISTINCT_VERIFICATION
+
+
+def _expected(state, severity, missing, distinct, kev) -> ShipBlockStatus:
+    """The decision table, written out independently of ``decide``."""
+    if state not in (ClaimState.CONFIRMED, ClaimState.SUPPORTED):
+        return ShipBlockStatus.NOT_SHIP_BLOCKING
+    qualifies = severity in ("high", "critical") or kev
+    if qualifies:
+        if state is ClaimState.SUPPORTED:
+            return ShipBlockStatus.NEEDS_VERIFICATION
+        return ShipBlockStatus.SHIP_BLOCKING if distinct else ShipBlockStatus.PENDING_DISTINCT_VERIFICATION
+    if severity is None or missing:
+        return ShipBlockStatus.DECISION_PENDING
+    return ShipBlockStatus.NOT_SHIP_BLOCKING
+
+
+@pytest.mark.parametrize("state", list(ClaimState))
+@pytest.mark.parametrize("severity", ["low", "medium", "high", "critical", None])
+@pytest.mark.parametrize("missing", [(), ("taint_path",)])
+@pytest.mark.parametrize("distinct", [True, False])
+@pytest.mark.parametrize("kev", [False, True])
+def test_every_state_rating_missing_distinct_kev_combination(state, severity, missing, distinct, kev) -> None:
+    inputs = ShipBlockInputs(
+        claim_state=state, technical_severity=severity, severity_score_id="score-x",
+        lead_families=("dependency_advisory",) if kev else ("codeql",), kev_listed=True if kev else None,
+        verifier_model_distinct=distinct, severity_missing_factors=missing)
+    decision = decide(inputs)
+    assert decision.status is _expected(state, severity, missing, distinct, kev)
+    if decision.status is ShipBlockStatus.NOT_SHIP_BLOCKING and state in (ClaimState.CONFIRMED, ClaimState.SUPPORTED):
+        # not_ship_blocking is only ever a rated finding below the thresholds.
+        assert severity in ("low", "medium") and not missing and not kev
+
+
+def test_precedence_of_the_five_statuses() -> None:
+    assert [status.value for status in ShipBlockStatus] == [
+        "ship_blocking", "ship_blocking_pending_distinct_verification", "needs_verification", "decision_pending",
+        "not_ship_blocking"]
 
 
 def test_kev_listed_dependency_finding_blocks_whatever_its_severity() -> None:
@@ -74,7 +142,7 @@ def test_same_model_verification_is_pending_distinct_verification() -> None:
 
 
 def test_cvss_and_ssvc_never_decide() -> None:
-    """Only the application_risk_matrix/2 rating is an input; CVSS context is displayed, never read."""
+    """Only the application_risk_matrix/3 rating is an input; CVSS context is displayed, never read."""
     decision = decide(replace(BASE, technical_severity="low"))
     record = decision.record(replace(BASE, technical_severity="low"), adjudication_id="adjudication-x",
                              verification_review_id=None, displayed_context={
@@ -84,7 +152,7 @@ def test_cvss_and_ssvc_never_decide() -> None:
                                  "non_deciding_scores": ["score-cvss"]})
     assert decision.status is ShipBlockStatus.NOT_SHIP_BLOCKING
     assert record["displayed_context"]["decides"] is False
-    assert record["inputs"]["technical_severity"]["provider"] == "application_risk_matrix/2"
+    assert record["inputs"]["technical_severity"]["provider"] == "application_risk_matrix/3"
     assert record["citations"] == {"adjudication_id": "adjudication-x", "score_ids": ["score-x"],
                                    "verification_review_id": None}
     assert record["policy"] == POLICY_VERSION
@@ -124,5 +192,5 @@ def test_decisions_are_deterministic_and_summaries_count_every_status_per_lane()
     summary = summarize([{"lane": "lead", "status": "ship_blocking"}, {"lane": "hunt", "status": "needs_verification"},
                          {"lane": "lead", "status": "ship_blocking"}])
     assert summary["by_status"] == {"ship_blocking": 2, "ship_blocking_pending_distinct_verification": 0,
-                                    "needs_verification": 1, "not_ship_blocking": 0}
+                                    "needs_verification": 1, "decision_pending": 0, "not_ship_blocking": 0}
     assert summary["by_lane"]["lead"]["ship_blocking"] == 2 and summary["by_lane"]["hunt"]["needs_verification"] == 1

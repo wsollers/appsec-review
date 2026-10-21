@@ -53,6 +53,19 @@ def _dimension(value: Mapping[str, Any] | None) -> str:
     return f"{rating} on scale {code(value['scale'])}{number}"
 
 
+def _pending_lines(block: Mapping[str, Any]) -> list[str]:
+    """The explicit label of a finding whose ship-block decision is pending (never "does not block")."""
+    if block["status"] != "decision_pending":
+        return []
+    missing = ", ".join(code(name) for name in block["missing_factors"]) or "the technical severity rating itself"
+    bounds = ""
+    if block["technical_severity_floor"] is not None:
+        bounds = (f"; the missing factors leave the severity between {code(block['technical_severity_floor'])} "
+                  f"and {code(block['technical_severity_ceiling'])}")
+    return [f"- **decision pending: severity not yet rated; what is missing: {missing}{bounds}**. "
+            "This is neither a ship-blocking decision nor a release decision."]
+
+
 def _finding(index: int, item: Mapping[str, Any], settings: Mapping[str, int], *, unconfirmed: bool = False) -> list[str]:
     block, independence = item["ship_block"], item["independence"]
     heading = "unconfirmed " if unconfirmed else ""
@@ -62,6 +75,7 @@ def _finding(index: int, item: Mapping[str, Any], settings: Mapping[str, int], *
              f"- ship-block status {code(block['status'])} under {code(block['policy'])}; reasons: "
              f"{', '.join(code(reason) for reason in block['reasons']) or 'none'}",
              f"- technical severity used by the policy: {'unrated' if block['technical_severity'] is None else code(block['technical_severity'])}",
+             *_pending_lines(block),
              f"- independence: independent verifier {'yes' if independence['independent'] else 'no'}, provider distinct "
              f"{'yes' if independence['provider_distinct'] else 'no'}, verifier model distinct "
              f"{'yes' if independence['verifier_model_distinct'] else 'no'}",
@@ -78,6 +92,10 @@ def _finding(index: int, item: Mapping[str, Any], settings: Mapping[str, int], *
             label = "no native rating" if native["rating"] is None else f"native rating {code(native['rating'])}"
             lines.append(f"  - {code(provider['id'])} ({code(provider['implementation'])}), {label}")
             lines.extend(f"    - {title}: {_dimension(score[key])}" for key, title in DIMENSION_LABELS)
+            assessment = score["severity_assessment"]
+            bounds = (f", severity between {code(assessment['severity_floor'])} and {code(assessment['severity_ceiling'])}"
+                      if assessment["assessment"] == "unrated" and assessment["severity_floor"] is not None else "")
+            lines.append(f"    - severity assessment: {code(assessment['assessment'])}{bounds}")
             if score["missing_factors"]:
                 lines.append("    - missing factors: " + ", ".join(code(name) for name in score["missing_factors"]))
     else:
@@ -117,6 +135,9 @@ def render_markdown(report: Mapping[str, Any], *, evidence_ids: int, gap_ids: in
               f"- ship-block status counts under {code(block['policy'])}: {_counts(block['by_status'])}",
               f"  - lead lane: {_counts(block['by_lane']['lead'])}",
               f"  - hunt lane: {_counts(block['by_lane']['hunt'])}",
+              *([f"- decision pending: {block['by_status']['decision_pending']} finding(s) have no technical severity "
+                 "yet, so they are neither ship-blocking nor cleared; each is marked below with what is missing"]
+                if block["by_status"]["decision_pending"] else []),
               f"- gap ratio {accounting['gap_ratio']:.3f} (incomplete above {accounting['incomplete_gap_ratio']:.3f}); "
               f"gaps by class: {_counts({k: v for k, v in accounting['gaps_by_class'].items() if v})}", ""]
     lines += _section("Findings (confirmed)", report["findings"], settings, "No confirmed finding packages are publishable.")

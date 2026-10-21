@@ -16,7 +16,7 @@ from .verify import ATTACK_CHAIN_UNAVAILABLE, POC_UNAVAILABLE
 
 LIMITATION_ORDER = (
     "review_degraded", "review_empty", "review_incomplete", "lane_degraded", "gaps_recorded", "coverage_incomplete",
-    "pending_distinct_verification", "technical_severity_unrated", "findings_without_scores",
+    "pending_distinct_verification", "technical_severity_unrated", "decision_pending", "findings_without_scores",
     "withheld_packages", "possible_duplicates", "remediation_planning_not_run", "remediation_validation_not_run",
     "attack_chain_composition_not_run", "poc_lane_not_run")
 
@@ -106,8 +106,13 @@ def limitations(verified: Mapping[str, Any], packages: Sequence[Mapping[str, Any
             + (f" {warning}" if warning else ""), len(pending))
     unrated = [item for item in packages if "technical_severity_unrated" in item["ship_block"]["reasons"]]
     if unrated:
-        add("technical_severity_unrated", "gap", f"{len(unrated)} finding package(s) have no application_risk_matrix/2 "
+        add("technical_severity_unrated", "gap", f"{len(unrated)} finding package(s) have no application_risk_matrix/3 "
             "technical severity. Unrated is a gap to resolve, not a low-risk verdict.", len(unrated))
+    undecided = [item for item in packages if item["ship_block"]["status"] == "decision_pending"]
+    if undecided:
+        add("decision_pending", "gap", f"{len(undecided)} finding package(s) have a ship-block decision pending: "
+            "their technical severity is not yet rated because scoring factors are missing. This is not a release "
+            "decision and not a verdict that the finding is safe to ship.", len(undecided))
     unscored = [item for item in packages if not item["scores"]]
     if unscored:
         add("findings_without_scores", "gap", f"{len(unscored)} finding package(s) have no score package.", len(unscored))

@@ -302,7 +302,10 @@
         "dataflow_path",
         "guard_fact",
         "range_fact",
-        "codeql_database"
+        "codeql_database",
+        "points_to_set",
+        "indirect_call_targets",
+        "memory_object"
       ]
     },
     "poc_status": {
@@ -707,6 +710,7 @@
         "ship_blocking",
         "ship_blocking_pending_distinct_verification",
         "needs_verification",
+        "decision_pending",
         "not_ship_blocking"
       ],
       "description": "ship-block-policy/1 status of a finding package."
@@ -718,6 +722,7 @@
         "ship_blocking",
         "ship_blocking_pending_distinct_verification",
         "needs_verification",
+        "decision_pending",
         "not_ship_blocking"
       ],
       "properties": {
@@ -730,6 +735,10 @@
           "minimum": 0
         },
         "needs_verification": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "decision_pending": {
           "type": "integer",
           "minimum": 0
         },

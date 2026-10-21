@@ -21,6 +21,8 @@ NOTICES = (
     "unconfirmed verification backlog and are not independently confirmed.",
     "Score dimensions are independent and are never combined or averaged. A missing dimension is a gap, "
     "not a low value.",
+    "A finding whose ship-block status is decision_pending has no technical severity yet because scoring "
+    "factors are missing. It is neither ship-blocking nor cleared; the missing factors are listed with it.",
     "The report holds identifiers, hashes and accepted summaries only. It contains no exploit code, proof "
     "payloads, queries or prompts.",
     "A named limitation is a limit of the review or of the pipeline, never evidence that the target is clean.",
