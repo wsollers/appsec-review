@@ -87,7 +87,9 @@ def _predicate_statuses(claim: Claim, relations: Iterable[EvidenceRelation],
     for relation in relations:
         if relation.claim_id != claim.claim_id:
             raise ValueError("evidence relation belongs to a different claim")
-        if not satisfies(relation):
+        if relation.provenance is not None or not satisfies(relation):
+            # A relation derived from a judge's citations is recorded and published but never counted: the judge
+            # proposes, the table decides (review-judge-and-poc.md section 3.4). Provenance is application-set.
             continue
         if relation.kind is RelationKind.SUPPORTS:
             support[relation.predicate].add(relation.relation_id)

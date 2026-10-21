@@ -2336,6 +2336,31 @@ workers = 4
 model_profile = "default"
 require_distinct_from_roles = ["hypothesis_hunter", "red_team_analyst", "blue_team_refuter"]
 
+# The adjudication judge (docs/architecture/review-judge-and-poc.md section 3). After the red, blue and blind
+# verifier cells of a team, a judge sees the labelled package and the two sides as A and B in a deterministic
+# shuffled order, and records which side is correct. It never sets a claim state: R5 and R6 are unchanged, and
+# confirmation still needs the blind verifier. `when` is "all" (every claim red affirmed) or "disagreement"
+# (red affirmed and blue contradicts, qualifies, leaves a predicate unresolved, or the blue cells disagree).
+# `require_distinct_from_roles` records judge_model_distinct and is never required. Set enabled = false to
+# switch the judge off; changing anything here changes the judge cells' fingerprints and the configuration hash.
+[jobs.job_inference_security_review.settings.roles.adjudication_judge]
+enabled = true
+when = "all"
+judges_per_claim = 1
+workers = 4
+model_profile = "default"
+require_distinct_from_roles = ["hypothesis_hunter", "red_team_analyst", "blue_team_refuter"]
+max_why_chars = 600                  # each side's reason, as shown to the judge
+max_cited_rows_per_side = 12         # distinct rows each side may cite to the judge
+max_cited_row_chars = 400            # resolved content shown per cited row
+
+# Review-judge-and-poc.md section 4: the handoff lists a claim in poc_candidates when it is supported or confirmed,
+# the judge said red_correct (partly only when accept_partly), it carries a resolved poc_basis, and its
+# application_risk_matrix/2 technical severity is one of risk_ratings.
+[jobs.job_inference_security_review.settings.poc_candidates]
+accept_partly = false
+risk_ratings = ["medium", "high", "critical"]
+
 # Decision 2: a ship-blocking candidate is published as ship_blocking only when its verifier's model
 # profile (provider + model) differs from every red cell's on the claim; otherwise it is published as
 # ship_blocking_pending_distinct_verification. Confirmation (R5/R6) never depends on it. With every

@@ -49,6 +49,7 @@ a wrong one fatal.
 |---|---|
 | **Lead** | A scanner observation (or a hunt unit) admitted for review. A lead is not a finding. |
 | **Claim** | A bounded security hypothesis tied to affected entities and a closed `security_predicate`. Proposed by red. |
+| **Judge** | A fifth role, `adjudication_judge`, that sees the package and the red and blue positions as sides A and B in a shuffled order and records which side is correct. It answers with the shared compact shape (stance, citations by label) plus a verdict, sets no state, and does not replace the blind verifier. See [the judge and PoC design](review-judge-and-poc.md). |
 | **Affirmation** | A stance of `supports` on a claim, with citations that the application can resolve. |
 | **Counter-claim** | A blue statement that contradicts or qualifies a claim, with its own citations. |
 | **Refutation** | An accepted contradiction: the application records a `contradicts` relation that survives evidence resolution, and R5 moves the claim to `contradicted`, `not_reachable` or `not_exploitable_in_observed_configuration`. |
@@ -309,6 +310,17 @@ concept**; it is the brief that job will read.
   preconditions. The bounded object itself is stored as `proposal.poc_basis` and copied by the application to a
   run-owned `poc-basis.json` beside the claim ledger. No relation, claim state, score or adjudication reads it.
 - Blue and the verifier have no `poc_basis`: their schemas are closed, so an answer that carries one is rejected.
+
+### 6.7 Judge
+
+A fifth role, `adjudication_judge`, answers with the same shared compact layer (`review/compact.py`:
+`resolve_position`, `citations_of`) but a different result: `verdict` (`A`, `B`, `both`, `neither`, `unresolved`), a
+`per_predicate` map of verdicts with `cites`, and a `reason`
+(`appsec-review/judge-result-compact/1`). Its request is built from the labelled package view and two sides shown as A
+and B in a deterministic shuffled order, with the rows either side cited re-presented under judge-scoped `J` labels.
+The application de-shuffles the verdict and records a `judge_verdict` ledger event; the judge sets no state and R5/R6
+do not read it. The whole design is in [the judge and PoC design](review-judge-and-poc.md), sections 3 and 4, and its
+implementation decisions in section 7 there.
 
 ## 7. From stance to state
 
