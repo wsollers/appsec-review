@@ -20,7 +20,8 @@ from tests.review.test_ledger import cell_id, entity, write_sample
 
 ROOT = Path(__file__).resolve().parents[2] / "docs" / "schemas" / "inference-security-review"
 NAMES = ("common", "ledger-event", "claim", "evidence-relation", "cell-record", "gap", "worker-turn",
-         "red-discovery-result", "blue-result", "verifier-result", "adjudication", "score-package", "finding-package", "handoff")
+         "red-discovery-result", "blue-result", "verifier-result", "adjudication", "score-package", "finding-package", "handoff",
+         "red-compact", "blue-compact", "verifier-compact")
 SCHEMAS = {name: json.loads((ROOT / f"{name}.schema.json").read_text()) for name in NAMES}
 REGISTRY = Registry().with_resources(
     (schema["$id"], Resource.from_contents(schema)) for schema in SCHEMAS.values())

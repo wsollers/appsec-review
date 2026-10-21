@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://appsec-review.local/schemas/inference-security-review/verifier-compact.schema.json",
+  "title": "Compact verifier answer, version 1 (review-protocol/2)",
+  "description": "A blind verifier proposes a disposition for one claim with a stance and label citations per predicate. The application expands it into verifier-result/1; the disposition is a proposal.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "disposition",
+    "per_predicate"
+  ],
+  "properties": {
+    "schema": {
+      "const": "appsec-review/verifier-compact/1"
+    },
+    "claim": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80
+    },
+    "disposition": {
+      "enum": [
+        "confirmed",
+        "supported",
+        "contradicted",
+        "not_reachable",
+        "not_exploitable_in_observed_configuration",
+        "insufficient_evidence"
+      ]
+    },
+    "per_predicate": {
+      "$ref": "common.schema.json#/$defs/compact_per_predicate"
+    },
+    "why": {
+      "$ref": "common.schema.json#/$defs/compact_why"
+    }
+  }
+}

@@ -10,6 +10,26 @@ exploitability rating, PoC eligibility, or final attack-chain identity.
 `src/appsec_review/review/red_discovery.py` implements the admission rules below, and
 `jobs/job_inference_security_review/teams.py` normalizes admitted results.
 
+## The compact layer (review protocol v2)
+
+A red cell does not write this document. It answers in `red-compact/1`
+([`red-compact.schema.json`](../schemas/inference-security-review/red-compact.schema.json)): claims with label
+citations, `no_claim` and `blocked` leads, and an optional bounded `poc_basis` per claim. The application expands that
+answer into `red-discovery-result/1` (`review/compact.py`, `expand_red`) before any validator runs, so every `v1`
+document in the ledger comes from an expansion and the admission rules below, normalization, R3, R5 and R6 are
+unchanged. See [review protocol v2](review-protocol-v2.md) section 6 for the shape and the expansion table. The
+expansion fills the schema, package echo, role and round, local ids, `source_lead_ids`, the evidence references
+(`supports` for `support`, `qualifies` for `counter`; a locator of kind `unresolved`, because the application
+re-resolves the identity), and the lead accounting: a lead no claim develops and the answer does not list under
+`no_claim` or `blocked` becomes `blocked` with a named `missing` gap. The compact form carries no taint paths, chain
+seeds or evidence requests; those fields are empty in an expanded result.
+
+`poc_basis` has no closed field in this document. Its labels are resolved to identities and its texts bounded, and the
+application stores it as the optional `proposal.poc_basis` field, which `teams.py` copies to the run-owned
+`poc-basis.json` beside the lane ledger. The artifact is a brief for a later proof-of-concept job: it is not a claim,
+not evidence and not code, and no claim state, relation or score reads it. Where a closed field exists it is filled too
+(`attacker_entry.entity_id` from the first cited entry point, closed `preconditions/1` members).
+
 ## Result contents
 
 | Field | Meaning |

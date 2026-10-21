@@ -93,7 +93,8 @@ def test_a_review_cell_receives_and_cites_graph_facts_of_its_granted_scope_only(
         # sym_parse was never received in scope, so the follow-up query is an authority denial.
         assert script.requests[2].transcript[3]["responses"][0]["code"] == "entity_out_of_scope"
         assert withheld.record.status is CellStatus.INVALID
-        assert any("authority_error" in gap.gap_class.value for gap in withheld.gaps)
+        # The denial is feedback, not a gap; the cell is invalid because it cited rows it never received.
+        assert [gap.gap_class.value for gap in withheld.gaps] == ["schema_error"]
 
 
 def test_graph_scope_grants_are_bound_into_the_capability_hash(graph) -> None:

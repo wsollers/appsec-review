@@ -1,0 +1,211 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://appsec-review.local/schemas/inference-security-review/red-compact.schema.json",
+  "title": "Compact red answer, version 1 (review-protocol/2)",
+  "description": "What a hypothesis_hunter or red_team_analyst cell returns. The application fills schema, package, role, round and local ids and expands it into red-discovery-result/1 before any validator runs.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "claims"
+  ],
+  "properties": {
+    "schema": {
+      "const": "appsec-review/red-compact/1"
+    },
+    "claims": {
+      "type": "array",
+      "maxItems": 32,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "leads",
+          "security_predicate",
+          "statement",
+          "support"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_-]{0,63}$"
+          },
+          "leads": {
+            "$ref": "common.schema.json#/$defs/labels"
+          },
+          "cwe": {
+            "oneOf": [
+              {
+                "$ref": "common.schema.json#/$defs/cwe"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "security_predicate": {
+            "$ref": "common.schema.json#/$defs/security_predicate"
+          },
+          "statement": {
+            "$ref": "common.schema.json#/$defs/compact_text"
+          },
+          "mechanism": {
+            "$ref": "common.schema.json#/$defs/compact_text"
+          },
+          "entry": {
+            "$ref": "common.schema.json#/$defs/compact_text"
+          },
+          "trigger": {
+            "$ref": "common.schema.json#/$defs/compact_text"
+          },
+          "consequence": {
+            "$ref": "common.schema.json#/$defs/compact_text"
+          },
+          "preconditions": {
+            "$ref": "common.schema.json#/$defs/preconditions"
+          },
+          "affected": {
+            "$ref": "common.schema.json#/$defs/labels"
+          },
+          "support": {
+            "$ref": "common.schema.json#/$defs/predicate_labels"
+          },
+          "counter": {
+            "$ref": "common.schema.json#/$defs/predicate_labels"
+          },
+          "missing": {
+            "type": "array",
+            "maxItems": 16,
+            "items": {
+              "$ref": "common.schema.json#/$defs/compact_why"
+            }
+          },
+          "poc_basis": {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "The brief a later proof-of-concept job reads: not code, not evidence, never a claim state input.",
+            "properties": {
+              "entry": {
+                "type": "array",
+                "maxItems": 8,
+                "uniqueItems": true,
+                "items": {
+                  "$ref": "common.schema.json#/$defs/label"
+                }
+              },
+              "path": {
+                "type": "array",
+                "maxItems": 16,
+                "uniqueItems": true,
+                "items": {
+                  "$ref": "common.schema.json#/$defs/label"
+                }
+              },
+              "trigger": {
+                "type": "array",
+                "maxItems": 8,
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "field",
+                    "where",
+                    "constraint",
+                    "why"
+                  ],
+                  "properties": {
+                    "field": {
+                      "$ref": "common.schema.json#/$defs/poc_text"
+                    },
+                    "where": {
+                      "$ref": "common.schema.json#/$defs/poc_text"
+                    },
+                    "constraint": {
+                      "$ref": "common.schema.json#/$defs/poc_text"
+                    },
+                    "why": {
+                      "$ref": "common.schema.json#/$defs/poc_text"
+                    }
+                  }
+                }
+              },
+              "input_format": {
+                "$ref": "common.schema.json#/$defs/poc_text"
+              },
+              "preconditions": {
+                "type": "array",
+                "maxItems": 8,
+                "items": {
+                  "$ref": "common.schema.json#/$defs/poc_text"
+                }
+              },
+              "expected_observation": {
+                "$ref": "common.schema.json#/$defs/poc_text"
+              },
+              "unknowns": {
+                "type": "array",
+                "maxItems": 8,
+                "uniqueItems": true,
+                "items": {
+                  "$ref": "common.schema.json#/$defs/label"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "no_claim": {
+      "type": "array",
+      "maxItems": 1024,
+      "items": {
+        "oneOf": [
+          {
+            "$ref": "common.schema.json#/$defs/label"
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "lead"
+            ],
+            "properties": {
+              "lead": {
+                "$ref": "common.schema.json#/$defs/label"
+              },
+              "why": {
+                "$ref": "common.schema.json#/$defs/compact_why"
+              }
+            }
+          }
+        ]
+      }
+    },
+    "blocked": {
+      "type": "array",
+      "maxItems": 1024,
+      "items": {
+        "oneOf": [
+          {
+            "$ref": "common.schema.json#/$defs/label"
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "lead"
+            ],
+            "properties": {
+              "lead": {
+                "$ref": "common.schema.json#/$defs/label"
+              },
+              "why": {
+                "$ref": "common.schema.json#/$defs/compact_why"
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}

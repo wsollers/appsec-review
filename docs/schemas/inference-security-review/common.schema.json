@@ -738,6 +738,117 @@
           "minimum": 0
         }
       }
+    },
+    "label": {
+      "type": "string",
+      "pattern": "^([A-Z][0-9]{1,4}|asr:[a-z][a-z0-9_]*:[0-9a-f]{64})$",
+      "description": "A cell-local evidence label (L1, K2, G1, Q7) or an identity the cell received."
+    },
+    "labels": {
+      "type": "array",
+      "maxItems": 32,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/label"
+      }
+    },
+    "compact_stance": {
+      "enum": [
+        "supports",
+        "contradicts",
+        "qualifies",
+        "unresolved"
+      ]
+    },
+    "compact_why": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1000
+    },
+    "compact_text": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2000
+    },
+    "predicate_labels": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Labels per obligation predicate, resolved by the application through the cell label table.",
+      "properties": {
+        "affected_construct": {
+          "$ref": "#/$defs/labels"
+        },
+        "attacker_input_control": {
+          "$ref": "#/$defs/labels"
+        },
+        "source_to_sink_reachability": {
+          "$ref": "#/$defs/labels"
+        },
+        "missing_or_ineffective_guard": {
+          "$ref": "#/$defs/labels"
+        },
+        "configuration_enables": {
+          "$ref": "#/$defs/labels"
+        },
+        "security_impact": {
+          "$ref": "#/$defs/labels"
+        }
+      }
+    },
+    "compact_position": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "stance",
+        "cites"
+      ],
+      "properties": {
+        "stance": {
+          "$ref": "#/$defs/compact_stance"
+        },
+        "cites": {
+          "$ref": "#/$defs/labels"
+        },
+        "why": {
+          "$ref": "#/$defs/compact_why"
+        },
+        "missing": {
+          "type": "array",
+          "maxItems": 8,
+          "items": {
+            "$ref": "#/$defs/compact_why"
+          }
+        }
+      }
+    },
+    "compact_per_predicate": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "affected_construct": {
+          "$ref": "#/$defs/compact_position"
+        },
+        "attacker_input_control": {
+          "$ref": "#/$defs/compact_position"
+        },
+        "source_to_sink_reachability": {
+          "$ref": "#/$defs/compact_position"
+        },
+        "missing_or_ineffective_guard": {
+          "$ref": "#/$defs/compact_position"
+        },
+        "configuration_enables": {
+          "$ref": "#/$defs/compact_position"
+        },
+        "security_impact": {
+          "$ref": "#/$defs/compact_position"
+        }
+      }
+    },
+    "poc_text": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 240
     }
   }
 }
