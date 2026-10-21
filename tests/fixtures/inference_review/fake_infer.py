@@ -3,13 +3,23 @@
 Answers are a pure function of (role, task, persona, package leads or claim) so that the slice 1
 definition-of-done states arise from the fixture accepted index set:
 
-* lane A ``sast_critical``: claim C1 (CWE-120) with direct support for every predicate; the blind
-  verifier re-retrieves the evidence itself -> ``confirmed``. The failure-modes lens also probes
-  forbidden capabilities (an evaluator path and an out-of-scope identity).
+* lane A ``sast_critical``: claim C1 (CWE-120) cites a lead observation for the construct and the
+  build action for every other predicate. Under ``predicate-admission/1`` only the construct counts
+  (the build action is relevant to configuration, not to attacker control, reachability or guards),
+  so C1 is ``supported`` and never ``confirmed``. The failure-modes lens also probes forbidden
+  capabilities (an evaluator path and an out-of-scope identity).
+* lane A ``ci_high``: claim C5 (supply chain, CI workflow) with direct support for exactly the
+  predicates its family requires (the CI rule observation maps to the construct and the
+  configuration); the blind verifier re-retrieves them itself -> ``confirmed``.
 * lane A ``sast_high``: claim C2 (CWE-89) with partial support -> ``supported``.
-* lane A ``codeql_high``: claim C3 whose ``blue_control`` finds a direct guard -> ``contradicted``.
+* lane A ``codeql_high``: claim C3 (configuration-scoped) whose ``blue_reachability`` finds a direct
+  configuration break in the build action -> ``not_exploitable_in_observed_configuration``.
 * lane A ``dep_high``: claim C4 whose verifier provider always fails -> ``insufficient_evidence``
   plus a cell ``worker_gap``.
+* the adjudication judge (``role == "adjudication_judge"``) is blind to who produced a side: it picks the side
+  whose overall stance is ``supports`` (the side that affirms the claim) and cites what that side cited. The scenario
+  key ``judge`` changes that: ``"blue"`` picks the other side, ``"both"``, ``"neither"`` and ``"unresolved"`` answer
+  so, and ``"uncited"`` names a side with no citation (recorded as unresolved).
 * lane B native unit: the memory-safety sweep re-proposes C1 (a duplicate proposal) and H1 with
   partial support; the injection sweep proposes H2 (no support, over the cap) and H3 (closed
   vocabulary violation, rejected by the gate).
@@ -42,12 +52,14 @@ NARRATIVES = {
     "C2": "C2 lead narrative: the handler concatenates the query string into raw SQL",
     "C3": "C3 lead narrative: the multiplication n times four can overflow a signed int",
     "C4": "C4 lead narrative: requests 2.0.0 allows unbounded resource consumption",
+    "C5": "C5 lead narrative: the workflow checks out and runs untrusted pull request code with a write token",
     "H1": "H1 hunt narrative: io.c reaches system() with a constant string after an early return",
     "H2": "H2 hunt narrative: a freed buffer might be reused in io.c on the error path",
     "H3": "H3 hunt narrative: root attacker variant that uses a precondition outside the vocabulary",
     "blue": "blue rationale {claim} {task}: no effective guard or reachability break was found here",
-    "blue-guard": "C3 blue control rationale: an explicit bound check guards the multiplication input",
+    "blue-guard": "C3 blue configuration rationale: the build configuration compiles the debug path out",
     "verifier": "verifier rationale: re-retrieved the affected construct and the build action itself",
+    "judge": "judge reason: the cited rows of the chosen side show its position and the other side cites none that do",
 }
 
 
@@ -125,6 +137,9 @@ class ScriptedInfer:
         if request.role == "independent_verifier":
             self._capture(request)
             return self._verifier(request, payload)
+        if request.role == "adjudication_judge":
+            self._capture(request)
+            return self._judge(payload)
         raise AssertionError(f"unexpected role {request.role}")
 
     def _gate(self) -> None:
@@ -161,8 +176,12 @@ class ScriptedInfer:
                 [("affected_construct", "sast_high"), ("attacker_input_control", "unit:py-svc")], lead="sast_high")])
         if lead == "codeql_high" and task == "lead_red_stack":
             return self._red(request, [self._proposal(
-                "c3", "native/src/parse.c", "CWE-190", "integer_error", [], "C3",
+                "c3", "native/src/parse.c", "CWE-190", "integer_error", ["debug_mode_enabled"], "C3",
                 [("affected_construct", "unit:native-main")], lead="codeql_high")])
+        if lead == "ci_high" and task == "lead_red_stack":
+            return self._red(request, [self._proposal(
+                "c5", "ci_high", "CWE-829", "supply_chain_compromise", [], "C5",
+                [("affected_construct", "ci_high"), ("configuration_enables", "ci_high")], lead="ci_high")])
         if lead == "dep_high" and task == "lead_red_stack":
             return self._red(request, [self._proposal(
                 "c4", "dep_high", "CWE-400", "resource_exhaustion", [], "C4", [], lead="dep_high")])
@@ -191,10 +210,35 @@ class ScriptedInfer:
         claim, task = payload["claim"], payload["task"]
         answer: dict[str, Any] = {"stance": "unresolved",
                                   "why": NARRATIVES["blue"].format(claim=claim["security_predicate"], task=task)}
-        if claim["security_predicate"] == "integer_error" and task == "blue_control":
-            answer = {"stance": "contradicts", "predicate": "missing_or_ineffective_guard",
+        if claim["security_predicate"] == "integer_error" and task == "blue_reachability":
+            answer = {"stance": "contradicts", "predicate": "configuration_enables",
                       "cites": [self.ids["unit:native-main"]], "why": NARRATIVES["blue-guard"]}
         return self._final(answer)
+
+    def _judge(self, payload: Mapping[str, Any]) -> ModelResult:
+        """A compact judge answer from the sides alone (it never learns which side is which role)."""
+        sides, mode = payload["sides"], self.scenario.get("judge", "red")
+        affirming = next((letter for letter in ("A", "B") if sides[letter]["stance"] == "supports"), "A")
+        other = "B" if affirming == "A" else "A"
+        reason = NARRATIVES["judge"]
+        if mode in ("neither", "unresolved"):
+            return self._final({"verdict": mode, "per_predicate": {}, "reason": reason})
+        if mode == "uncited":
+            return self._final({"verdict": affirming, "reason": reason, "per_predicate": {
+                "affected_construct": {"verdict": affirming, "cites": []}}})
+        letter = other if mode == "blue" else affirming
+        per_predicate = {name: {"verdict": letter, "cites": list(entry["cites"])}
+                         for name, entry in sides[letter]["per_predicate"].items() if entry["cites"]}
+        if mode == "both" and per_predicate:
+            first = sorted(per_predicate)[0]
+            per_predicate[first] = {"verdict": affirming, "cites": per_predicate[first]["cites"]}
+            others = {name: {"verdict": other, "cites": list(entry["cites"])}
+                      for name, entry in sides[other]["per_predicate"].items() if entry["cites"]}
+            per_predicate.update({name: value for name, value in others.items() if name != first})
+            return self._final({"verdict": "both", "per_predicate": per_predicate, "reason": reason})
+        if not per_predicate:
+            return self._final({"verdict": "unresolved", "per_predicate": {}, "reason": reason})
+        return self._final({"verdict": letter, "per_predicate": per_predicate, "reason": reason})
 
     def _verifier(self, request: ReviewModelRequest, payload: Mapping[str, Any]) -> ModelResult:
         claim = payload["claim"]
@@ -203,7 +247,9 @@ class ScriptedInfer:
             raise RuntimeError("scripted verifier provider failure")
         plan = {"memory_corruption": [(item, "unit:native-main") for item in PREDICATES],
                 "sql_injection": [("affected_construct", "sast_high")],
-                "command_injection": [("affected_construct", "unit:native-main")]}.get(predicate, [])
+                "command_injection": [("affected_construct", "unit:native-main")],
+                "supply_chain_compromise": [("affected_construct", "ci_high"),
+                                            ("configuration_enables", "ci_high")]}.get(predicate, [])
         if not plan:
             return self._final({"disposition": "insufficient_evidence", "per_predicate": {},
                                 "why": NARRATIVES["verifier"]})
@@ -213,7 +259,8 @@ class ScriptedInfer:
         per_predicate: dict[str, Any] = {}
         for item, key in plan:
             per_predicate.setdefault(item, {"stance": "supports", "cites": []})["cites"].append(self.ids[key])
-        return self._final({"disposition": "confirmed" if len(plan) == len(PREDICATES) else "supported",
+        return self._final({"disposition": "confirmed" if predicate in ("memory_corruption", "supply_chain_compromise")
+                            else "supported",
                             "per_predicate": per_predicate, "why": NARRATIVES["verifier"]})
 
 

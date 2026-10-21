@@ -12,6 +12,8 @@ from enum import StrEnum
 CLANG_STATIC_HANDOFF_SCHEMA = "appsec-review/clang-static-analysis-handoff/1"
 SVF_ALIAS_HANDOFF_SCHEMA = "appsec-review/svf-alias-analysis-handoff/1"
 SANITIZER_BUILD_HANDOFF_SCHEMA = "appsec-review/sanitizer-build-handoff/1"
+POC_GENERATION_HANDOFF_SCHEMA = "appsec-review/poc-generation-handoff/1"
+POC_GENERATION_SCHEMA = "appsec-review/poc-generation/1"
 FINAL_PUBLICATION_GATE_HANDOFF_SCHEMA = "appsec-review/final-publication-gate-handoff/1"
 FINAL_PUBLICATION_GATE_SCHEMA = "appsec-review/final-publication-gate/1"
 FINAL_REPORT_HANDOFF_SCHEMA = "appsec-review/final-report-handoff/1"

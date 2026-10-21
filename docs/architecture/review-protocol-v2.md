@@ -49,6 +49,7 @@ a wrong one fatal.
 |---|---|
 | **Lead** | A scanner observation (or a hunt unit) admitted for review. A lead is not a finding. |
 | **Claim** | A bounded security hypothesis tied to affected entities and a closed `security_predicate`. Proposed by red. |
+| **Judge** | A fifth role, `adjudication_judge`, that sees the package and the red and blue positions as sides A and B in a shuffled order and records which side is correct. It answers with the shared compact shape (stance, citations by label) plus a verdict, sets no state, and does not replace the blind verifier. See [the judge and PoC design](review-judge-and-poc.md). |
 | **Affirmation** | A stance of `supports` on a claim, with citations that the application can resolve. |
 | **Counter-claim** | A blue statement that contradicts or qualifies a claim, with its own citations. |
 | **Refutation** | An accepted contradiction: the application records a `contradicts` relation that survives evidence resolution, and R5 moves the claim to `contradicted`, `not_reachable` or `not_exploitable_in_observed_configuration`. |
@@ -310,6 +311,17 @@ concept**; it is the brief that job will read.
   run-owned `poc-basis.json` beside the claim ledger. No relation, claim state, score or adjudication reads it.
 - Blue and the verifier have no `poc_basis`: their schemas are closed, so an answer that carries one is rejected.
 
+### 6.7 Judge
+
+A fifth role, `adjudication_judge`, answers with the same shared compact layer (`review/compact.py`:
+`resolve_position`, `citations_of`) but a different result: `verdict` (`A`, `B`, `both`, `neither`, `unresolved`), a
+`per_predicate` map of verdicts with `cites`, and a `reason`
+(`appsec-review/judge-result-compact/1`). Its request is built from the labelled package view and two sides shown as A
+and B in a deterministic shuffled order, with the rows either side cited re-presented under judge-scoped `J` labels.
+The application de-shuffles the verdict and records a `judge_verdict` ledger event; the judge sets no state and R5/R6
+do not read it. The whole design is in [the judge and PoC design](review-judge-and-poc.md), sections 3 and 4, and its
+implementation decisions in section 7 there.
+
 ## 7. From stance to state
 
 The model never sets a state. For each cited label the application records an evidence relation to a
@@ -318,15 +330,35 @@ and R5 evaluates the claim.
 
 | What a cell says | What the application records | Effect |
 |---|---|---|
-| Red `support[p]: [labels]` | `supports` relation per label, per predicate | Counts as direct support only if the row is direct and resolves. |
+| Red `support[p]: [labels]` | `supports` relation per label, per predicate | Counts as direct support only if the `(kind, predicate)` cell is direct and the label resolves completely. An `analyst_assessed` cell is recorded and shown but never counts. |
 | Red `counter[p]: [labels]` | `qualifies` | Never contradicts. Contradiction belongs to blue and the verifier. |
 | Blue `contradicts p` with cites | `contradicts` relation per label; for a `guard_fact` or `range_fact` on `missing_or_ineffective_guard`, `qualifies` with a reason unless the facts show the destination is bounded (below) | A direct contradiction defeats the predicate (R5 rows 3 and 4). |
 | Blue `supports` or `qualifies` | `supports` or `qualifies` | Adds weight; cannot confirm. |
 | Verifier `disposition` | recorded as `proposed_disposition` | A proposal; R5 decides. |
 | Any `unresolved` or empty cite list | no relation | The predicate stays open (R5 row 6 or 7). |
 
+What a cell's citation can and cannot do (`predicate-admission/1`, R3 in
+[`inference-security-review.md`](inference-security-review.md)). A real label is authentic, but
+authenticity is not relevance and relevance is not support. The application classifies the
+`(entity kind, predicate)` pair and the model's wording never changes it:
+
+- A source span, AST node, IR entity or symbol is `direct` only for `affected_construct`. Cited for
+  `attacker_input_control`, `source_to_sink_reachability`, `missing_or_ineffective_guard` or
+  `configuration_enables` it is `analyst_assessed`: shown to a reviewer, never counted.
+- A package or archive member establishes that a component is present at a version. For attacker
+  control, reachability, guard and impact it is `indirect`.
+- A build action or compile unit is `direct` for `configuration_enables`; built binaries are
+  `analyst_assessed` at best.
+- No kind is `direct` for `security_impact`; impact is derived from the adjudicated claim, so it is
+  not a required predicate (R4).
+- A tool observation counts only for the predicates its producer and rule name, and a CodeQL result
+  that is not a path never counts for `source_to_sink_reachability`.
+
+So a cell that cites only source text yields `supported` at best, never `confirmed`: the application
+needs a direct fact (a graph path, a mapped path observation) for each remaining required predicate.
+
 Worked outcome for the `packet.cpp:16` claim: `affected_construct` has direct support from the sink
-fact. `attacker_input_control` cites source text. `missing_or_ineffective_guard` is contested: the
+fact. `attacker_input_control` cites source text, which is analyst-assessed and does not count. `missing_or_ineffective_guard` is contested: the
 dominating guard G2 compares the input size with the length field, not with the capacity of
 `out.name`. Had a dominating guard always contradicted this predicate, that would have wrongly
 refuted a real overflow.

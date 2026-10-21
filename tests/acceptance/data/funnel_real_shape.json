@@ -1,0 +1,3536 @@
+{
+"catalog": [
+"CMakeLists.txt",
+"README.md",
+"include/relay/relay.hpp",
+"src/config.cpp",
+"src/diag.cpp",
+"src/frame.cpp",
+"src/log.cpp",
+"src/main.cpp",
+"src/packet.cpp",
+"src/session.cpp"
+],
+"files": {
+"data/jobs/job_inference_security_review/attempts/attempt_0001/lanes/hunt.json": {
+"allocation": {
+"hunt": 5,
+"lead": 65
+},
+"declared": 2,
+"lane": "hunt",
+"package_ids": [
+"hunt-47e4cc3d9557d1a7ecbce30a9a88a49af2f0678c343275b71da8404228791638",
+"hunt-999e0d161f672db1870b8943026aa549623a508fd3a630f7e855cc906bdd3900"
+],
+"queue_empty": true,
+"schema": "appsec-review/inference-review-lane-queue/1"
+},
+"data/jobs/job_inference_security_review/attempts/attempt_0001/lanes/lead.json": {
+"allocation": {
+"hunt": 5,
+"lead": 65
+},
+"declared": 1,
+"lane": "lead",
+"package_ids": [
+"finding_lead-6f0fbf4aac4dcd01b2ebc8562f635bff7d57b8bfb54c680df8aca482d4a5133e"
+],
+"queue_empty": true,
+"schema": "appsec-review/inference-review-lane-queue/1"
+},
+"data/jobs/job_inference_security_review/attempts/attempt_0001/steps/lead_review/tasks/teams/ledger.jsonl": [
+"JSONL",
+{
+"body": {
+"cell": {
+"attempts": 1,
+"cell_id": "cell-f5906f74d858ccc6a19f264df9c09811f3d2eb6086f81668427b58eac3ec603f",
+"claim_id": null,
+"gap_ids": [
+"gap-389cd9f611b1c29dcbac62837bcc3afa1564056a0a5caecc1824a25e1c9ee5d8",
+"gap-810f05fc434f80b3d31d65f5c66ccd668bbefcf289cb9c9d131360b3aafd1d13",
+"gap-99993677eba5839e29f205f5922bed2beb0e4ccf6c765c52cf3131b61bb3da00",
+"gap-9a1c5233abfc9b8c977e6acc1a4b22bf1beb18d78959aab4e382c74b877f6163",
+"gap-b2a8f3bb93f6d7af7c62cbcd716b05e698e0633dedf8f0f0dd1c30d66019e60e",
+"gap-bf68f07983b9680aaeae1ac64ba137aa03c0457a3f27a8a24d015e981b713c52",
+"gap-c378401b182afb0946f775afb8545fcf6864723494be93e19f11abdd49e1d5c1",
+"gap-f8be464d13cee0fabc66e421aced6f356313027a31fdfd0108875ec4db733bce"
+],
+"lane": "lead",
+"package_id": "finding_lead-6f0fbf4aac4dcd01b2ebc8562f635bff7d57b8bfb54c680df8aca482d4a5133e",
+"persona": "generalist",
+"receipt_sha256": "019b747598ceba184459725a7c8e37f96a98dddebec4919a461456b5acc7c907",
+"role": "red_team_analyst",
+"schema": "appsec-review/cell-record/1",
+"stack_profile": "cpp_native_service",
+"status": "timed_out",
+"task": "lead_red_stack"
+}
+},
+"event_id": "event-37d8a7e1be788664d85f3faebd60db1bb525e406551552038fd2e216679ed0a8",
+"kind": "cell_terminal",
+"prev_event_sha256": "1030346bb66c4f045ba33ea90cfe40c8d07e16844f2fb74720f86117cd178e9e",
+"schema": "appsec-review/ledger-event/1",
+"sequence": 1133,
+"stream": "lead_review.teams",
+"subject_id": "cell-f5906f74d858ccc6a19f264df9c09811f3d2eb6086f81668427b58eac3ec603f"
+},
+{
+"body": {
+"cell": {
+"attempts": 1,
+"cell_id": "cell-0035d6db953d83190b00365271ac78a5cf50855095def94668faa5929d346a97",
+"claim_id": null,
+"gap_ids": [
+"gap-19bed3b305576639916a16eccdc1d858f925f84a27aef22808cb2921c432f3e2",
+"gap-20c41dd5860032ef0abe50c717d23f76102cff2eb0ab19d30f5ebcf2188ae315",
+"gap-6591f10341851e06411240cdd197ae3bbff392e0bb030878f985b8d38a7c733b",
+"gap-706832869fcd163a5b565b125ce6d593d11ce40445e5f1d9b963e56ee1179ec7",
+"gap-bca35ba7b05bbe209354de3a6ab0622491f9ab2d06dd1974dc6ca0a2bbbb6797",
+"gap-e5772a45df4774d09540d36f12029089679c6d8e06136c42ee88c8ee29622633",
+"gap-f2d2c1121e2cf75039372ac35454e26223b6698bbe80597baa9def285aef1ec2"
+],
+"lane": "lead",
+"package_id": "finding_lead-6f0fbf4aac4dcd01b2ebc8562f635bff7d57b8bfb54c680df8aca482d4a5133e",
+"persona": "generalist",
+"receipt_sha256": "0d17a80ca35d84eb6aaa95b23f55ff46becf306a9261fb45a50deecaabdfcc32",
+"role": "red_team_analyst",
+"schema": "appsec-review/cell-record/1",
+"stack_profile": "cpp_native_service",
+"status": "timed_out",
+"task": "lead_red_preconditions"
+}
+},
+"event_id": "event-e6b0892b50c4425b9d607d59445cb836cc06029746712307942e12f1574e147a",
+"kind": "cell_terminal",
+"prev_event_sha256": "0f54cb3ef59aa0718915a2a37917f70d35ab4a3441112e71f2fcac8e8edffe07",
+"schema": "appsec-review/ledger-event/1",
+"sequence": 1134,
+"stream": "lead_review.teams",
+"subject_id": "cell-0035d6db953d83190b00365271ac78a5cf50855095def94668faa5929d346a97"
+},
+{
+"body": {
+"cell": {
+"attempts": 1,
+"cell_id": "cell-0f28a08c0b5268f3b4e49ccc1b5d964a694cbb2de683e2e42cb12307e5b637c1",
+"claim_id": null,
+"gap_ids": [
+"gap-0fb3dd27cc093c36b1c7b92cbdcde90f45b11f89c8a5023c72076c0c8f3f5a7d",
+"gap-1b28b7714afb288426327ec5348a7c3f290aceb680b0cc7548c7ba12eb5320e0",
+"gap-5127132e0d29f07969191e3b15b34e0ae5bfea673bebc06ab5e3c5ef1b3dcc0f",
+"gap-58af91d36103aacec9a31637b3b79d3955d0c4dfdddbba291264f83031aa0a5e",
+"gap-7dcbb11878b94de64e06e1043f919a41083603146a282b00d1328bd9429cde60",
+"gap-8507e1c08ae34a2ca355a25ea08977bb60b3f5f42ee40ab34fc90621c2ded055",
+"gap-986cb63c24d61ab406074f0df4838b1b8e6e2207e9e88d86a757500eb5a9680d",
+"gap-d9471e5b9e62a4e83f49ced01dfe65c7b1f1eae2e7c52721a6834bf7fe6d22e2",
+"gap-e6520c801416efc62081ede9484236baf753311df0408a1e5b365ed255beba59",
+"gap-feed8fcba7c81e0a8607225c29ba730ac472781ea08fdbd872958e4af7c89de1"
+],
+"lane": "lead",
+"package_id": "finding_lead-6f0fbf4aac4dcd01b2ebc8562f635bff7d57b8bfb54c680df8aca482d4a5133e",
+"persona": "generalist",
+"receipt_sha256": "21d243e301c276fb858989ad39af6a8a79877c0b9627f7e3238ad58827943f26",
+"role": "red_team_analyst",
+"schema": "appsec-review/cell-record/1",
+"stack_profile": "cpp_native_service",
+"status": "timed_out",
+"task": "lead_red_failure_modes"
+}
+},
+"event_id": "event-be73de78133fb8299842e0adf411fad3a25cb423e609af25d0de4d88551d8b09",
+"kind": "cell_terminal",
+"prev_event_sha256": "b65e1eee99b4f33d104ee7ec0643c0dcf5b63ca49f68e89f29323cc73e892b1d",
+"schema": "appsec-review/ledger-event/1",
+"sequence": 1135,
+"stream": "lead_review.teams",
+"subject_id": "cell-0f28a08c0b5268f3b4e49ccc1b5d964a694cbb2de683e2e42cb12307e5b637c1"
+},
+{
+"body": {
+"gap": {
+"gap_class": "authority_error",
+"gap_id": "gap-0fb3dd27cc093c36b1c7b92cbdcde90f45b11f89c8a5023c72076c0c8f3f5a7d",
+"predicate": null,
+"reason": "denied:schema_violation",
+"round": 0,
+"schema": "appsec-review/gap/1",
+"subject_id": "cell-0f28a08c0b5268f3b4e49ccc1b5d964a694cbb2de683e2e42cb12307e5b637c1"
+}
+},
+"event_id": "event-d7fb6c60111fa5b131c351b6b8b0aff8454ba7db4572d828778f54c3c20dffba",
+"kind": "gap_recorded",
+"prev_event_sha256": "33d20c6de49a51c95cd6fdc99d92f686a6bfd51bfe58a00bac4b557936f01bec",
+"schema": "appsec-review/ledger-event/1",
+"sequence": 59,
+"stream": "lead_review.teams",
+"subject_id": "gap-0fb3dd27cc093c36b1c7b92cbdcde90f45b11f89c8a5023c72076c0c8f3f5a7d"
+},
+{
+"body": {
+"gap": {
+"gap_class": "authority_error",
+"gap_id": "gap-19bed3b305576639916a16eccdc1d858f925f84a27aef22808cb2921c432f3e2",
+"predicate": null,
+"reason": "denied:schema_violation",
+"round": 0,
+"schema": "appsec-review/gap/1",
+"subject_id": "cell-0035d6db953d83190b00365271ac78a5cf50855095def94668faa5929d346a97"
+}
+},
+"event_id": "event-64c1bb64dad867b406b6b873c18402731e3b854488e33702497ce5b45a931dbc",
+"kind": "gap_recorded",
+"prev_event_sha256": "1c52e72e016e2c7d548c1de208e0c162efb27935a7928282363941e004b1b9e3",
+"schema": "appsec-review/ledger-event/1",
+"sequence": 99,
+"stream": "lead_review.teams",
+"subject_id": "gap-19bed3b305576639916a16eccdc1d858f925f84a27aef22808cb2921c432f3e2"
+},
+{
+"body": {
+"gap": {
+"gap_class": "authority_error",
+"gap_id": "gap-1b28b7714afb288426327ec5348a7c3f290aceb680b0cc7548c7ba12eb5320e0",
+"predicate": null,
+"reason": "denied:schema_violation",
+"round": 0,
+"schema": "appsec-review/gap/1",
+"subject_id": "cell-0f28a08c0b5268f3b4e49ccc1b5d964a694cbb2de683e2e42cb12307e5b637c1"
+}
+},
+"event_id": "event-46adcda07d9ea49154d03cb2134d11c896d4cbe4df4473bdfd2ca1f2ef496476",
+"kind": "gap_recorded",
+"prev_event_sha256": "096f59c726b4270a02b9513d9311b4b8ec2542006391148cbee4cf12113f6242",
+"schema": "appsec-review/ledger-event/1",
+"sequence": 105,
+"stream": "lead_review.teams",
+"subject_id": "gap-1b28b7714afb288426327ec5348a7c3f290aceb680b0cc7548c7ba12eb5320e0"
+},
+{
+"body": {
+"gap": {
+"gap_class": "authority_error",
+"gap_id": "gap-20c41dd5860032ef0abe50c717d23f76102cff2eb0ab19d30f5ebcf2188ae315",
+"predicate": null,
+"reason": "denied:schema_violation",
+"round": 0,
+"schema": "appsec-review/gap/1",
+"subject_id": "cell-0035d6db953d83190b00365271ac78a5cf50855095def94668faa5929d346a97"
+}
+},
+"event_id": "event-d086608d2d2a008307924a9146fa15a48b6a1b7c12427bf55c9fa9d0dab2271b",
+"kind": "gap_recorded",
+"prev_event_sha256": "d1ad7d8e520f926248e675cf4e85e80d30dbc601d21031ca677c8ef0c2e69418",
+"schema": "appsec-review/ledger-event/1",
+"sequence": 130,
+"stream": "lead_review.teams",
+"subject_id": "gap-20c41dd5860032ef0abe50c717d23f76102cff2eb0ab19d30f5ebcf2188ae315"
+},
+{
+"body": {
+"gap": {
+"gap_class": "authority_error",
+"gap_id": "gap-389cd9f611b1c29dcbac62837bcc3afa1564056a0a5caecc1824a25e1c9ee5d8",
+"predicate": null,
+"reason": "denied:forbidden_parameter",
+"round": 0,
+"schema": "appsec-review/gap/1",
+"subject_id": "cell-f5906f74d858ccc6a19f264df9c09811f3d2eb6086f81668427b58eac3ec603f"
+}
+},
+"event_id": "event-86a885e8618b5be812963c6c262fc6ad9e19fe77a2ded3dddf640c6fc19ab795",
+"kind": "gap_recorded",
+"prev_event_sha256": "e75acdfd0c3108e21936470d0367ef7b28b5f577bf3ab01119ca9e54f5516297",
+"schema": "appsec-review/ledger-event/1",
+"sequence": 234,
+"stream": "lead_review.teams",
+"subject_id": "gap-389cd9f611b1c29dcbac62837bcc3afa1564056a0a5caecc1824a25e1c9ee5d8"
+},
+{
+"body": {
+"gap": {
+"gap_class": "budget_gap",
+"gap_id": "gap-5127132e0d29f07969191e3b15b34e0ae5bfea673bebc06ab5e3c5ef1b3dcc0f",
+"predicate": null,
+"reason": "cell_budget_exceeded:cell_token_cap",
+"round": 0,
+"schema": "appsec-review/gap/1",
+"subject_id": "cell-0f28a08c0b5268f3b4e49ccc1b5d964a694cbb2de683e2e42cb12307e5b637c1"
+}
+},
+"event_id": "event-538da9f78494616eeeac319250fab9a87ccc08ab8e71148677a8ef72dd3aea15",
+"kind": "gap_recorded",
+"prev_event_sha256": "30cc2104fda04f4e80526caa7962060530c0e071c940661319ddae997b8d8edd",
+"schema": "appsec-review/ledger-event/1",
+"sequence": 346,
+"stream": "lead_review.teams",
+"subject_id": "gap-5127132e0d29f07969191e3b15b34e0ae5bfea673bebc06ab5e3c5ef1b3dcc0f"
+},
+{
+"body": {
+"gap": {
+"gap_class": "authority_error",
+"gap_id": "gap-58af91d36103aacec9a31637b3b79d3955d0c4dfdddbba291264f83031aa0a5e",
+"predicate": null,
+"reason": "denied:schema_violation",
+"round": 0,
+"schema": "appsec-review/gap/1",
+"subject_id": "cell-0f28a08c0b5268f3b4e49ccc1b5d964a694cbb2de683e2e42cb12307e5b637c1"
+}
+},
+"event_id": "event-11b97620994f7bd26f587c209599b608393093562dd87a67f3aeeb8ca91d6218",
+"kind": "gap_recorded",
+"prev_event_sha256": "9ac135d27bb690f4f081c80a119a85cfe329b3dcad4a984c83583889e97fb08d",
+"schema": "appsec-review/ledger-event/1",
+"sequence": 370,
+"stream": "lead_review.teams",
+"subject_id": "gap-58af91d36103aacec9a31637b3b79d3955d0c4dfdddbba291264f83031aa0a5e"
+},
+{
+"body": {
+"gap": {
+"gap_class": "coverage_gap",
+"gap_id": "gap-6591f10341851e06411240cdd197ae3bbff392e0bb030878f985b8d38a7c733b",
+"predicate": null,
+"reason": "tool_error:query_code_graph:ValueError",
+"round": 0,
+"schema": "appsec-review/gap/1",
+"subject_id": "cell-0035d6db953d83190b00365271ac78a5cf50855095def94668faa5929d346a97"
+}
+},
+"event_id": "event-532632708fed6c6ef4238fd98c8b0ec8c992514a6ced30884569d921dc854917",
+"kind": "gap_recorded",
+"prev_event_sha256": "e0e2d8e023f88ae90159c4f0282656b8c5f2de6a882019e1b8c93a3a5b9e0c07",
+"schema": "appsec-review/ledger-event/1",
+"sequence": 428,
+"stream": "lead_review.teams",
+"subject_id": "gap-6591f10341851e06411240cdd197ae3bbff392e0bb030878f985b8d38a7c733b"
+},
+{
+"body": {
+"gap": {
+"gap_class": "authority_error",
+"gap_id": "gap-706832869fcd163a5b565b125ce6d593d11ce40445e5f1d9b963e56ee1179ec7",
+"predicate": null,
+"reason": "denied:schema_violation",
+"round": 0,
+"schema": "appsec-review/gap/1",
+"subject_id": "cell-0035d6db953d83190b00365271ac78a5cf50855095def94668faa5929d346a97"
+}
+},
+"event_id": "event-bff3b61b1a022a378bfbaad450624eb9d8a9a0f6357050d4cc67328af21c7b9f",
+"kind": "gap_recorded",
+"prev_event_sha256": "c877f9e143867b215baf853b6bc2a5b7e30f13693d391955e81cae90037fd8fb",
+"schema": "appsec-review/ledger-event/1",
+"sequence": 467,
+"stream": "lead_review.teams",
+"subject_id": "gap-706832869fcd163a5b565b125ce6d593d11ce40445e5f1d9b963e56ee1179ec7"
+},
+{
+"body": {
+"gap": {
+"gap_class": "authority_error",
+"gap_id": "gap-7dcbb11878b94de64e06e1043f919a41083603146a282b00d1328bd9429cde60",
+"predicate": null,
+"reason": "denied:schema_violation",
+"round": 0,
+"schema": "appsec-review/gap/1",
+"subject_id": "cell-0f28a08c0b5268f3b4e49ccc1b5d964a694cbb2de683e2e42cb12307e5b637c1"
+}
+},
+"event_id": "event-513cc2e512ff185fd6d9a0007f326fca26161b71f9f708aabc389d2a8b9436a0",
+"kind": "gap_recorded",
+"prev_event_sha256": "a6e87ae8cad79acf824bb1c0313610a9472b6cf1aaa564bc6ac0d74c438a0b17",
+"schema": "appsec-review/ledger-event/1",
+"sequence": 521,
+"stream": "lead_review.teams",
+"subject_id": "gap-7dcbb11878b94de64e06e1043f919a41083603146a282b00d1328bd9429cde60"
+},
+{
+"body": {
+"gap": {
+"gap_class": "authority_error",
+"gap_id": "gap-810f05fc434f80b3d31d65f5c66ccd668bbefcf289cb9c9d131360b3aafd1d13",
+"predicate": null,
+"reason": "denied:forbidden_parameter",
+"round": 0,
+"schema": "appsec-review/gap/1",
+"subject_id": "cell-f5906f74d858ccc6a19f264df9c09811f3d2eb6086f81668427b58eac3ec603f"
+}
+},
+"event_id": "event-4985b4156d0cb2731e1157e8f06c9da797d6e55ddd422469ca1c3017455b3656",
+"kind": "gap_recorded",
+"prev_event_sha256": "c0954287055f4a1d692ab26b9ad7433a5c54b6f6ef383d99b8975ad5109d4606",
+"schema": "appsec-review/ledger-event/1",
+"sequence": 529,
+"stream": "lead_review.teams",
+"subject_id": "gap-810f05fc434f80b3d31d65f5c66ccd668bbefcf289cb9c9d131360b3aafd1d13"
+},
+{
+"body": {
+"gap": {
+"gap_class": "authority_error",
+"gap_id": "gap-8507e1c08ae34a2ca355a25ea08977bb60b3f5f42ee40ab34fc90621c2ded055",
+"predicate": null,
+"reason": "denied:forbidden_parameter",
+"round": 0,
+"schema": "appsec-review/gap/1",
+"subject_id": "cell-0f28a08c0b5268f3b4e49ccc1b5d964a694cbb2de683e2e42cb12307e5b637c1"
+}
+},
+"event_id": "event-ddbc8aef1a0cb68bbc0cba879e4234b9a8bd56f7d5046d8df3d385a937467435",
+"kind": "gap_recorded",
+"prev_event_sha256": "ee49566ff09c7d3f39fa58acdc632f2aff948eee4266e750d1e7c71953b87e2b",
+"schema": "appsec-review/ledger-event/1",
+"sequence": 549,
+"stream": "lead_review.teams",
+"subject_id": "gap-8507e1c08ae34a2ca355a25ea08977bb60b3f5f42ee40ab34fc90621c2ded055"
+},
+{
+"body": {
+"gap": {
+"gap_class": "authority_error",
+"gap_id": "gap-986cb63c24d61ab406074f0df4838b1b8e6e2207e9e88d86a757500eb5a9680d",
+"predicate": null,
+"reason": "denied:forbidden_parameter",
+"round": 0,
+"schema": "appsec-review/gap/1",
+"subject_id": "cell-0f28a08c0b5268f3b4e49ccc1b5d964a694cbb2de683e2e42cb12307e5b637c1"
+}
+},
+"event_id": "event-8a8e1812d5ee4d06386904b83237183fc9968857620829274435135d7e693996",
+"kind": "gap_recorded",
+"prev_event_sha256": "f61bfb3cbcefe704f9dc0533ed3922e07e6cc7c1672ca71300ade3e329ca1e7b",
+"schema": "appsec-review/ledger-event/1",
+"sequence": 651,
+"stream": "lead_review.teams",
+"subject_id": "gap-986cb63c24d61ab406074f0df4838b1b8e6e2207e9e88d86a757500eb5a9680d"
+},
+{
+"body": {
+"gap": {
+"gap_class": "authority_error",
+"gap_id": "gap-99993677eba5839e29f205f5922bed2beb0e4ccf6c765c52cf3131b61bb3da00",
+"predicate": null,
+"reason": "denied:forbidden_parameter",
+"round": 0,
+"schema": "appsec-review/gap/1",
+"subject_id": "cell-f5906f74d858ccc6a19f264df9c09811f3d2eb6086f81668427b58eac3ec603f"
+}
+},
+"event_id": "event-cec100830a2d852562c57dab20695e5094d11100a22986b29dd3af3b790c30c0",
+"kind": "gap_recorded",
+"prev_event_sha256": "3eaa654362f201b66c15c0e7459aba165fac5496f4a06bc47d9af9f1e58657b6",
+"schema": "appsec-review/ledger-event/1",
+"sequence": 657,
+"stream": "lead_review.teams",
+"subject_id": "gap-99993677eba5839e29f205f5922bed2beb0e4ccf6c765c52cf3131b61bb3da00"
+},
+{
+"body": {
+"gap": {
+"gap_class": "authority_error",
+"gap_id": "gap-9a1c5233abfc9b8c977e6acc1a4b22bf1beb18d78959aab4e382c74b877f6163",
+"predicate": null,
+"reason": "denied:schema_violation",
+"round": 0,
+"schema": "appsec-review/gap/1",
+"subject_id": "cell-f5906f74d858ccc6a19f264df9c09811f3d2eb6086f81668427b58eac3ec603f"
+}
+},
+"event_id": "event-3574d5c195ea8bccba389ff5001551245c32710f3ba77ed710f132d5375cee26",
+"kind": "gap_recorded",
+"prev_event_sha256": "5f4c8358ea7d58cf7092b100750341331f184753f386c173165fd5fdecc0036f",
+"schema": "appsec-review/ledger-event/1",
+"sequence": 659,
+"stream": "lead_review.teams",
+"subject_id": "gap-9a1c5233abfc9b8c977e6acc1a4b22bf1beb18d78959aab4e382c74b877f6163"
+},
+{
+"body": {
+"gap": {
+"gap_class": "authority_error",
+"gap_id": "gap-b2a8f3bb93f6d7af7c62cbcd716b05e698e0633dedf8f0f0dd1c30d66019e60e",
+"predicate": null,
+"reason": "denied:schema_violation",
+"round": 0,
+"schema": "appsec-review/gap/1",
+"subject_id": "cell-f5906f74d858ccc6a19f264df9c09811f3d2eb6086f81668427b58eac3ec603f"
+}
+},
+"event_id": "event-849102c424c932a5dd9c20c9bc8916cb4d0544befbf40131eda12b60349670e4",
+"kind": "gap_recorded",
+"prev_event_sha256": "a1ae847765bbee53aec279334a297dd7e06936b891055c81cc8ba59812d4eacc",
+"schema": "appsec-review/ledger-event/1",
+"sequence": 744,
+"stream": "lead_review.teams",
+"subject_id": "gap-b2a8f3bb93f6d7af7c62cbcd716b05e698e0633dedf8f0f0dd1c30d66019e60e"
+},
+{
+"body": {
+"gap": {
+"gap_class": "authority_error",
+"gap_id": "gap-bca35ba7b05bbe209354de3a6ab0622491f9ab2d06dd1974dc6ca0a2bbbb6797",
+"predicate": null,
+"reason": "denied:schema_violation",
+"round": 0,
+"schema": "appsec-review/gap/1",
+"subject_id": "cell-0035d6db953d83190b00365271ac78a5cf50855095def94668faa5929d346a97"
+}
+},
+"event_id": "event-78d6f275dadef4c3f40d56116d79bea8a4aefeacc4e90d81bc82f39c0b58c019",
+"kind": "gap_recorded",
+"prev_event_sha256": "a8fa0fbd25d9d6a76d268ecfce3585ab27ebbac29001dcd398fc5246ba302d94",
+"schema": "appsec-review/ledger-event/1",
+"sequence": 777,
+"stream": "lead_review.teams",
+"subject_id": "gap-bca35ba7b05bbe209354de3a6ab0622491f9ab2d06dd1974dc6ca0a2bbbb6797"
+},
+{
+"body": {
+"gap": {
+"gap_class": "authority_error",
+"gap_id": "gap-bf68f07983b9680aaeae1ac64ba137aa03c0457a3f27a8a24d015e981b713c52",
+"predicate": null,
+"reason": "denied:schema_violation",
+"round": 0,
+"schema": "appsec-review/gap/1",
+"subject_id": "cell-f5906f74d858ccc6a19f264df9c09811f3d2eb6086f81668427b58eac3ec603f"
+}
+},
+"event_id": "event-d14e10c9db5667e4e94e9e89939c1a064ca9aa42ef2f63dae00483b49373416b",
+"kind": "gap_recorded",
+"prev_event_sha256": "d11f53a15eeb37631a58b63612548dc5c7e9307d83ca39cc4b45363f60d059dd",
+"schema": "appsec-review/ledger-event/1",
+"sequence": 786,
+"stream": "lead_review.teams",
+"subject_id": "gap-bf68f07983b9680aaeae1ac64ba137aa03c0457a3f27a8a24d015e981b713c52"
+},
+{
+"body": {
+"gap": {
+"gap_class": "authority_error",
+"gap_id": "gap-c378401b182afb0946f775afb8545fcf6864723494be93e19f11abdd49e1d5c1",
+"predicate": null,
+"reason": "denied:forbidden_parameter",
+"round": 0,
+"schema": "appsec-review/gap/1",
+"subject_id": "cell-f5906f74d858ccc6a19f264df9c09811f3d2eb6086f81668427b58eac3ec603f"
+}
+},
+"event_id": "event-16933ca66b5e4c44ff7270920ae37f1238569cd16dc4c5930e431ead3d42a10e",
+"kind": "gap_recorded",
+"prev_event_sha256": "15cbe80b9baed6593958761ea73b1687bcdcd6fc1b4327e71a2ec572ad533ba5",
+"schema": "appsec-review/ledger-event/1",
+"sequence": 802,
+"stream": "lead_review.teams",
+"subject_id": "gap-c378401b182afb0946f775afb8545fcf6864723494be93e19f11abdd49e1d5c1"
+},
+{
+"body": {
+"gap": {
+"gap_class": "authority_error",
+"gap_id": "gap-d9471e5b9e62a4e83f49ced01dfe65c7b1f1eae2e7c52721a6834bf7fe6d22e2",
+"predicate": null,
+"reason": "denied:schema_violation",
+"round": 0,
+"schema": "appsec-review/gap/1",
+"subject_id": "cell-0f28a08c0b5268f3b4e49ccc1b5d964a694cbb2de683e2e42cb12307e5b637c1"
+}
+},
+"event_id": "event-641ff6e8a5c9c76bac27a4d364189bf28e9eb3e7d34d0387375712691048cef8",
+"kind": "gap_recorded",
+"prev_event_sha256": "f9e50358f9a1feb75b6bccf842752ce6bc6fec17deeac90198f84e8f637c270f",
+"schema": "appsec-review/ledger-event/1",
+"sequence": 897,
+"stream": "lead_review.teams",
+"subject_id": "gap-d9471e5b9e62a4e83f49ced01dfe65c7b1f1eae2e7c52721a6834bf7fe6d22e2"
+},
+{
+"body": {
+"gap": {
+"gap_class": "budget_gap",
+"gap_id": "gap-e5772a45df4774d09540d36f12029089679c6d8e06136c42ee88c8ee29622633",
+"predicate": null,
+"reason": "cell_budget_exceeded:cell_token_cap",
+"round": 0,
+"schema": "appsec-review/gap/1",
+"subject_id": "cell-0035d6db953d83190b00365271ac78a5cf50855095def94668faa5929d346a97"
+}
+},
+"event_id": "event-470ebfe90c1d5efcba351e59025eb3e04e99909263db921f35c04539b66df6a1",
+"kind": "gap_recorded",
+"prev_event_sha256": "6350102c289e0493ca129c3d4a36e75fa5756b5004ad15768209d4d96eae9c93",
+"schema": "appsec-review/ledger-event/1",
+"sequence": 942,
+"stream": "lead_review.teams",
+"subject_id": "gap-e5772a45df4774d09540d36f12029089679c6d8e06136c42ee88c8ee29622633"
+},
+{
+"body": {
+"gap": {
+"gap_class": "authority_error",
+"gap_id": "gap-e6520c801416efc62081ede9484236baf753311df0408a1e5b365ed255beba59",
+"predicate": null,
+"reason": "denied:schema_violation",
+"round": 0,
+"schema": "appsec-review/gap/1",
+"subject_id": "cell-0f28a08c0b5268f3b4e49ccc1b5d964a694cbb2de683e2e42cb12307e5b637c1"
+}
+},
+"event_id": "event-6ecafcfcc1c9e5e95f70126989f217e00e447498ace983c53c0d1acebeb443ef",
+"kind": "gap_recorded",
+"prev_event_sha256": "841df6337225d31e715e2ffb0807a46d6dc8f0528835cdb2666c29b7dba1fa43",
+"schema": "appsec-review/ledger-event/1",
+"sequence": 950,
+"stream": "lead_review.teams",
+"subject_id": "gap-e6520c801416efc62081ede9484236baf753311df0408a1e5b365ed255beba59"
+},
+{
+"body": {
+"gap": {
+"gap_class": "authority_error",
+"gap_id": "gap-f2d2c1121e2cf75039372ac35454e26223b6698bbe80597baa9def285aef1ec2",
+"predicate": null,
+"reason": "denied:schema_violation",
+"round": 0,
+"schema": "appsec-review/gap/1",
+"subject_id": "cell-0035d6db953d83190b00365271ac78a5cf50855095def94668faa5929d346a97"
+}
+},
+"event_id": "event-cc285bac05872809c835bd00feaf88b4124c01b65d62d161038653a9f6616cc2",
+"kind": "gap_recorded",
+"prev_event_sha256": "8841e5958348adfe91b1f5fcf8d4183a432d1939812281b702accffb88bb4bf2",
+"schema": "appsec-review/ledger-event/1",
+"sequence": 996,
+"stream": "lead_review.teams",
+"subject_id": "gap-f2d2c1121e2cf75039372ac35454e26223b6698bbe80597baa9def285aef1ec2"
+},
+{
+"body": {
+"gap": {
+"gap_class": "budget_gap",
+"gap_id": "gap-f8be464d13cee0fabc66e421aced6f356313027a31fdfd0108875ec4db733bce",
+"predicate": null,
+"reason": "cell_budget_exceeded:cell_token_cap",
+"round": 0,
+"schema": "appsec-review/gap/1",
+"subject_id": "cell-f5906f74d858ccc6a19f264df9c09811f3d2eb6086f81668427b58eac3ec603f"
+}
+},
+"event_id": "event-b026c33d46275fc68d806e7fd57b78999b1eb6312b61ac4e8970711fad73b5eb",
+"kind": "gap_recorded",
+"prev_event_sha256": "297aaf964bd501a7ae5e70286856e7704b73e28c5ff2fa3413e942eb51906def",
+"schema": "appsec-review/ledger-event/1",
+"sequence": 1019,
+"stream": "lead_review.teams",
+"subject_id": "gap-f8be464d13cee0fabc66e421aced6f356313027a31fdfd0108875ec4db733bce"
+},
+{
+"body": {
+"gap": {
+"gap_class": "authority_error",
+"gap_id": "gap-feed8fcba7c81e0a8607225c29ba730ac472781ea08fdbd872958e4af7c89de1",
+"predicate": null,
+"reason": "denied:schema_violation",
+"round": 0,
+"schema": "appsec-review/gap/1",
+"subject_id": "cell-0f28a08c0b5268f3b4e49ccc1b5d964a694cbb2de683e2e42cb12307e5b637c1"
+}
+},
+"event_id": "event-11cd8fcef8b419a89296fe917309c077de5512e1f855ded8b2a0daa32bfd5f16",
+"kind": "gap_recorded",
+"prev_event_sha256": "22b8a4d01febca629662bad5daffba5c61bfd0f1a9bdf485c1f09330156b5649",
+"schema": "appsec-review/ledger-event/1",
+"sequence": 1041,
+"stream": "lead_review.teams",
+"subject_id": "gap-feed8fcba7c81e0a8607225c29ba730ac472781ea08fdbd872958e4af7c89de1"
+}
+],
+"data/jobs/job_inference_security_review/attempts/attempt_0001/steps/packages/tasks/assemble_lead_packages/assembly/packages/finding_lead-6f0fbf4aac4dcd01b2ebc8562f635bff7d57b8bfb54c680df8aca482d4a5133e.json": {
+"kind": "finding_lead",
+"lane": "lead",
+"lead_family": "codeql",
+"lead_menu": [
+{
+"location_exact": true,
+"observation_id": "asr:tool_observation:25df81e9700d254a532a5489ca03f230218d08d92d75f47d976caede2bf2d11b",
+"reported_severity": "unknown",
+"rule_id": "cpp/uncontrolled-allocation-size",
+"scanner": "codeql"
+}
+],
+"package_id": "finding_lead-6f0fbf4aac4dcd01b2ebc8562f635bff7d57b8bfb54c680df8aca482d4a5133e",
+"run_id": "2026-10-21-0007",
+"schema": "appsec-review/review-package/5"
+},
+"data/jobs/job_inference_security_review/attempts/attempt_0001/steps/packages/tasks/assemble_lead_packages/assembly/packages/hunt-47e4cc3d9557d1a7ecbce30a9a88a49af2f0678c343275b71da8404228791638.json": {
+"kind": "hunt",
+"lane": "hunt",
+"lead_family": null,
+"lead_menu": [
+{
+"location_exact": true,
+"observation_id": "asr:tool_observation:66cff81ca16c150f2d700499a1abb34d95b94419c9292ac1730c7f746cb01108",
+"reported_severity": "info",
+"rule_id": "rules.appsec-review.review-signal.sink.cpp-banned-function-review",
+"scanner": "tool-opengrep"
+},
+{
+"location_exact": true,
+"observation_id": "asr:tool_observation:6b86d0650d0ac4e4d2a7a8a8cc8177246b9cb3addc796cdeb3b85c2f76dbdaaf",
+"reported_severity": "info",
+"rule_id": "rules.appsec-review.review-signal.sink.cpp-banned-function-review",
+"scanner": "tool-semgrep"
+},
+{
+"location_exact": true,
+"observation_id": "asr:tool_observation:77e3959159d61704b036cab49a1b2cbcfaf80612b6e66bc6d8c88abb433a5b11",
+"reported_severity": "info",
+"rule_id": "rules.appsec-review.review-signal.sink.cpp-banned-function-review",
+"scanner": "tool-opengrep"
+},
+{
+"location_exact": true,
+"observation_id": "asr:tool_observation:814d5a185ff57d9b299b61638a742a09da02a2ee944bc8a551d65c82903ea719",
+"reported_severity": "info",
+"rule_id": "rules.appsec-review.review-signal.sink.cpp-banned-function-review",
+"scanner": "tool-semgrep"
+},
+{
+"location_exact": true,
+"observation_id": "asr:tool_observation:92278d92b7b3c1a044a5b90ce241f7ee7ceda29bbf0f4a0850bb1cff2506daae",
+"reported_severity": "info",
+"rule_id": "rules.appsec-review.review-signal.sink.cpp-banned-function-review",
+"scanner": "tool-opengrep"
+},
+{
+"location_exact": true,
+"observation_id": "asr:tool_observation:9e11bcd645921de64c91388bbf8af8a744b5d1d7d4a47b4434b6b323ea8192a3",
+"reported_severity": "info",
+"rule_id": "rules.appsec-review.review-signal.sink.cpp-banned-function-review",
+"scanner": "tool-semgrep"
+},
+{
+"location_exact": true,
+"observation_id": "asr:tool_observation:a5e22287b7776645dae81c814c786b5d12a36de25534cf3d11f0d6cc7f600f4e",
+"reported_severity": "info",
+"rule_id": "unusedStructMember",
+"scanner": "tool-cppcheck"
+},
+{
+"location_exact": true,
+"observation_id": "asr:tool_observation:a7a754878c89ef2fc96232772db362cdb20f35a278a71b3f5a9eaa072608ac9c",
+"reported_severity": "info",
+"rule_id": "unusedStructMember",
+"scanner": "tool-cppcheck"
+},
+{
+"location_exact": true,
+"observation_id": "asr:tool_observation:b5fefc183915b07fc11311235befedfa541efca52798f8ed9698ad4a9089f6f2",
+"reported_severity": "info",
+"rule_id": "rules.appsec-review.review-signal.sink.cpp-banned-function-review",
+"scanner": "tool-semgrep"
+},
+{
+"location_exact": true,
+"observation_id": "asr:tool_observation:ba0f57f32001e45ed69aa3bf330bd549fd8fef556590591cc6ebf9068eaa4591",
+"reported_severity": "info",
+"rule_id": "rules.appsec-review.review-signal.sink.cpp-banned-function-review",
+"scanner": "tool-semgrep"
+},
+{
+"location_exact": true,
+"observation_id": "asr:tool_observation:ba7483f620ee4dffdcfd73cdab983246a844e6c97d3d72608dd7841fdfcca6a5",
+"reported_severity": "info",
+"rule_id": "unusedStructMember",
+"scanner": "tool-cppcheck"
+},
+{
+"location_exact": true,
+"observation_id": "asr:tool_observation:ca526f14aa5840c612474e3f96b7626f7312e0459d4cfb195acb690833a0a98f",
+"reported_severity": "info",
+"rule_id": "rules.appsec-review.review-signal.sink.cpp-narrow-size-product",
+"scanner": "tool-semgrep"
+},
+{
+"location_exact": true,
+"observation_id": "asr:tool_observation:cd7e5f748130add2089ac0ea551211494eef28b34d395878e19cc6a8d908f845",
+"reported_severity": "info",
+"rule_id": "rules.appsec-review.review-signal.sink.cpp-banned-function-review",
+"scanner": "tool-opengrep"
+},
+{
+"location_exact": true,
+"observation_id": "asr:tool_observation:d1089fa0b39eb9948e1388a5ca9d74d5ac587653ea53d97e669b0efa55f66e9b",
+"reported_severity": "info",
+"rule_id": "rules.appsec-review.review-signal.sink.cpp-narrow-size-product",
+"scanner": "tool-opengrep"
+},
+{
+"location_exact": true,
+"observation_id": "asr:tool_observation:d91b7747634e70f4441efb3f9b43a24146656f31ffc3651f28ee4108c85b0e9c",
+"reported_severity": "info",
+"rule_id": "rules.appsec-review.review-signal.sink.cpp-banned-function-review",
+"scanner": "tool-semgrep"
+},
+{
+"location_exact": true,
+"observation_id": "asr:tool_observation:e524285fe706378f49c94c5215d11335c0915874dda06c12da5195cdf3a6c6ff",
+"reported_severity": "info",
+"rule_id": "unusedStructMember",
+"scanner": "tool-cppcheck"
+},
+{
+"location_exact": true,
+"observation_id": "asr:tool_observation:e802dc4327a7115a2cfb62e2a332cda58ebbb124e9398abe5e9bad41c4193107",
+"reported_severity": "info",
+"rule_id": "rules.appsec-review.review-signal.sink.cpp-banned-function-review",
+"scanner": "tool-semgrep"
+},
+{
+"location_exact": true,
+"observation_id": "asr:tool_observation:eb7f7b4ffb3b4058de53ced71493ee55e9f9705460e4b037ca8e94aec1d6a307",
+"reported_severity": "info",
+"rule_id": "unusedStructMember",
+"scanner": "tool-cppcheck"
+},
+{
+"location_exact": true,
+"observation_id": "asr:tool_observation:f5489355b37df8118a9a73d2435120457a1ca907f30a97e05e8e1bbdf699522f",
+"reported_severity": "info",
+"rule_id": "rules.appsec-review.review-signal.sink.cpp-banned-function-review",
+"scanner": "tool-opengrep"
+},
+{
+"location_exact": true,
+"observation_id": "asr:tool_observation:fca7d577e4863149afec846dce9089b9c5014410b36a57de7972d70770996798",
+"reported_severity": "info",
+"rule_id": "unusedStructMember",
+"scanner": "tool-cppcheck"
+},
+{
+"location_exact": true,
+"observation_id": "asr:tool_observation:16cacfef69046e650ac6321a8e496ec65a35fce5d2a47fb83faaa274e1751bf2",
+"reported_severity": "unknown",
+"rule_id": "cpp/command-line-injection",
+"scanner": "codeql"
+},
+{
+"location_exact": true,
+"observation_id": "asr:tool_observation:19b1295b485c242f73cea4bb2e004f5796b4857d8495c5548fe50f2b804df751",
+"reported_severity": "unknown",
+"rule_id": "cpp/non-constant-format",
+"scanner": "codeql"
+},
+{
+"location_exact": true,
+"observation_id": "asr:tool_observation:25df81e9700d254a532a5489ca03f230218d08d92d75f47d976caede2bf2d11b",
+"reported_severity": "unknown",
+"rule_id": "cpp/uncontrolled-allocation-size",
+"scanner": "codeql"
+},
+{
+"location_exact": true,
+"observation_id": "asr:tool_observation:37504175028a1331be7a47d9b557ff6b157727bebfa7800b3f4f81bc7104e5e7",
+"reported_severity": "unknown",
+"rule_id": "bugprone-easily-swappable-parameters",
+"scanner": "tool-clang-static-analysis"
+},
+{
+"location_exact": true,
+"observation_id": "asr:tool_observation:3d78b9a02c8427f8192bd6bc3d4c424e2463d3852a0c82b623b7d19e20f5ced5",
+"reported_severity": "unknown",
+"rule_id": "clang-analyzer-cplusplus.NewDelete",
+"scanner": "tool-clang-static-analysis"
+}
+],
+"package_id": "hunt-47e4cc3d9557d1a7ecbce30a9a88a49af2f0678c343275b71da8404228791638",
+"run_id": "2026-10-21-0007",
+"schema": "appsec-review/review-package/5"
+},
+"data/jobs/job_inference_security_review/attempts/attempt_0001/steps/packages/tasks/assemble_lead_packages/assembly/packages/hunt-999e0d161f672db1870b8943026aa549623a508fd3a630f7e855cc906bdd3900.json": {
+"kind": "hunt",
+"lane": "hunt",
+"lead_family": null,
+"lead_menu": [
+{
+"location_exact": true,
+"observation_id": "asr:tool_observation:35e8a110c78befe62e04df6fcfd9e9c4dd3e8b6372b68758194aed6a1d034500",
+"reported_severity": "high",
+"rule_id": "appsec-review.sei-cert.cpp.env33-c.command-processor-call",
+"scanner": "tool-semgrep"
+},
+{
+"location_exact": true,
+"observation_id": "asr:tool_observation:ad8ac0f4f15d5b7bb589fd55b338cb96eaae3a5ce9896cf101001606ee53e342",
+"reported_severity": "high",
+"rule_id": "appsec-review.sei-cert.cpp.env33-c.command-processor-call",
+"scanner": "tool-opengrep"
+},
+{
+"location_exact": true,
+"observation_id": "asr:tool_observation:076f5c4f95c5c6b3bc90a9e4a37e3b0723f00e30ae6ffee08b47af47291e15bd",
+"reported_severity": "medium",
+"rule_id": "appsec-review.sei-cert.cpp.err34-c.unchecked-conversion-function",
+"scanner": "tool-semgrep"
+},
+{
+"location_exact": true,
+"observation_id": "asr:tool_observation:152f54529bb80cff152af56eec5d8d26806a56801ca44d790c51d9b9b15b858e",
+"reported_severity": "medium",
+"rule_id": "uninitMemberVarNoCtor",
+"scanner": "tool-cppcheck"
+},
+{
+"location_exact": true,
+"observation_id": "asr:tool_observation:1af0d85c3478384e1c628025b84fec3b5acb2ac245443c27acb25017de5618a2",
+"reported_severity": "medium",
+"rule_id": "uninitMemberVarNoCtor",
+"scanner": "tool-cppcheck"
+},
+{
+"location_exact": true,
+"observation_id": "asr:tool_observation:7c9ebb9a9bcfb09fa7cb384cc23f07f859244c7e5a1ae9ff0c7ca5a82f1ab4f7",
+"reported_severity": "medium",
+"rule_id": "appsec-review.sei-cert.cpp.err34-c.unchecked-conversion-function",
+"scanner": "tool-opengrep"
+},
+{
+"location_exact": true,
+"observation_id": "asr:tool_observation:8000710ac204b4e8d3e5301e6a8184cc3a7ad0402fb3dc61b05a9ccf6ac8e2f4",
+"reported_severity": "medium",
+"rule_id": "appsec-review.sei-cert.cpp.fio30-c.nonliteral-format-without-arguments",
+"scanner": "tool-semgrep"
+},
+{
+"location_exact": true,
+"observation_id": "asr:tool_observation:9f3dc183c1edcba92b53c91905b1900752b2dc8ddce1589c820fdfb9499e5227",
+"reported_severity": "medium",
+"rule_id": "appsec-review.sei-cert.cpp.fio30-c.nonliteral-format-without-arguments",
+"scanner": "tool-opengrep"
+},
+{
+"location_exact": true,
+"observation_id": "asr:tool_observation:ee9940f670c64dbafdedfaf7334f494393c2ee32d8cd939a84e9981be95efc09",
+"reported_severity": "medium",
+"rule_id": "nullPointer",
+"scanner": "tool-cppcheck"
+},
+{
+"location_exact": true,
+"observation_id": "asr:tool_observation:00b9d99982477d414d5672e664a42f17b7dc293d7d8e3c5e4c67d258515a802c",
+"reported_severity": "info",
+"rule_id": "rules.appsec-review.review-signal.sink.cpp-banned-function-review",
+"scanner": "tool-opengrep"
+},
+{
+"location_exact": true,
+"observation_id": "asr:tool_observation:1acd17ad82530f5dbec575c452a0f8e73e56567a13bde5a4747b62392ef5de57",
+"reported_severity": "info",
+"rule_id": "rules.appsec-review.review-signal.sink.cpp-copy-length-not-bounded",
+"scanner": "tool-semgrep"
+},
+{
+"location_exact": true,
+"observation_id": "asr:tool_observation:1d87e0b6160e6b3aa88154afb159622223fc1134fab5f716757b8337fe7b901f",
+"reported_severity": "info",
+"rule_id": "rules.appsec-review.review-signal.sink.cpp-allocation-size-from-narrow-product",
+"scanner": "tool-semgrep"
+},
+{
+"location_exact": true,
+"observation_id": "asr:tool_observation:22626e8c42d46d03a8cb4eaf930228b24ba405c535f6113b9ae4840748d90070",
+"reported_severity": "info",
+"rule_id": "rules.appsec-review.review-signal.sink.cpp-allocation-size-from-narrow-product",
+"scanner": "tool-opengrep"
+},
+{
+"location_exact": true,
+"observation_id": "asr:tool_observation:227355f0aecaf55cb44a98dd15346e39eeb6b4b272856ffc6f367ac99a404b67",
+"reported_severity": "info",
+"rule_id": "constVariablePointer",
+"scanner": "tool-cppcheck"
+},
+{
+"location_exact": true,
+"observation_id": "asr:tool_observation:25120cdea2a5472bb81ffc5f4e010d6655835aafff929fe1bb52a9d27482f0ae",
+"reported_severity": "info",
+"rule_id": "rules.appsec-review.review-signal.sink.cpp-banned-function-review",
+"scanner": "tool-opengrep"
+},
+{
+"location_exact": true,
+"observation_id": "asr:tool_observation:2a546b89551201a15b03d4ec7c2203f4feed8b234beb7d08db6398bb0f80ba66",
+"reported_severity": "info",
+"rule_id": "unusedStructMember",
+"scanner": "tool-cppcheck"
+},
+{
+"location_exact": true,
+"observation_id": "asr:tool_observation:3cc55fbe55182dab05384cc2dacd784df6f0ca09eefed11c213001809b64a5c0",
+"reported_severity": "info",
+"rule_id": "rules.appsec-review.review-signal.sink.cpp-banned-function-review",
+"scanner": "tool-semgrep"
+},
+{
+"location_exact": true,
+"observation_id": "asr:tool_observation:3de7740e811cba3dd38f3216f023cf21750c704e4df7f50d640191b2ef9cb877",
+"reported_severity": "info",
+"rule_id": "unusedStructMember",
+"scanner": "tool-cppcheck"
+},
+{
+"location_exact": true,
+"observation_id": "asr:tool_observation:3f5e450a698309e1ba14921131b0cf026135bfdbb59d0b63e2f7ef60b17bb3b1",
+"reported_severity": "info",
+"rule_id": "rules.appsec-review.review-signal.sink.cpp-banned-function-review",
+"scanner": "tool-opengrep"
+},
+{
+"location_exact": true,
+"observation_id": "asr:tool_observation:41f4124d66ad022698d0a851cb7ce1ef62ffec1022e033e1fdeb4db6e116ae4a",
+"reported_severity": "info",
+"rule_id": "rules.appsec-review.review-signal.sink.cpp-banned-function-review",
+"scanner": "tool-semgrep"
+},
+{
+"location_exact": true,
+"observation_id": "asr:tool_observation:4529b048157f268ad6b67a678c04665cf63ab92985d7e973e7a12a3c238cc837",
+"reported_severity": "info",
+"rule_id": "rules.appsec-review.review-signal.sink.cpp-banned-function-review",
+"scanner": "tool-semgrep"
+},
+{
+"location_exact": true,
+"observation_id": "asr:tool_observation:46a94ae3c94a3d0bd87c05321a8c5103eb290bc238b649f966f958e25edc3648",
+"reported_severity": "info",
+"rule_id": "unusedStructMember",
+"scanner": "tool-cppcheck"
+},
+{
+"location_exact": true,
+"observation_id": "asr:tool_observation:4bb45463d347b2ab47435dbc654036e35356b33d5a8f97bd261a451ee476ce0f",
+"reported_severity": "info",
+"rule_id": "rules.appsec-review.review-signal.sink.cpp-banned-function-review",
+"scanner": "tool-opengrep"
+},
+{
+"location_exact": true,
+"observation_id": "asr:tool_observation:509a14413a641cf1f5f036f67cf641a835c249d6baeb5fefca26a325397a6286",
+"reported_severity": "info",
+"rule_id": "rules.appsec-review.review-signal.sink.cpp-banned-function-review",
+"scanner": "tool-opengrep"
+},
+{
+"location_exact": true,
+"observation_id": "asr:tool_observation:5d41b7c725e75ac72e9ae4d01f229e6e29683423d73431b30f0e82a949896282",
+"reported_severity": "info",
+"rule_id": "rules.appsec-review.review-signal.sink.cpp-copy-length-not-bounded",
+"scanner": "tool-opengrep"
+}
+],
+"package_id": "hunt-999e0d161f672db1870b8943026aa549623a508fd3a630f7e855cc906bdd3900",
+"run_id": "2026-10-21-0007",
+"schema": "appsec-review/review-package/5"
+},
+"data/jobs/job_inference_security_review/cells/cell-0035d6db953d83190b00365271ac78a5cf50855095def94668faa5929d346a97/attempt-1.json": {
+"attempt": 1,
+"cell_id": "cell-0035d6db953d83190b00365271ac78a5cf50855095def94668faa5929d346a97",
+"counts": {
+"denials": 5,
+"input_tokens": 6,
+"output_tokens": 7231,
+"queries": 13,
+"turns": 4
+},
+"gap_class": "budget_gap",
+"reason": "cell_budget_exceeded:cell_token_cap",
+"result": null,
+"status": "timed_out",
+"turns": [
+{
+"action": "retrieve",
+"retrievals": [
+{
+"denial_code": null,
+"index": 0,
+"result_count": 0,
+"status": "executed",
+"tool": "read_excerpt"
+},
+{
+"denial_code": "schema_violation",
+"index": 1,
+"result_count": null,
+"status": "denied",
+"tool": "query_code_graph"
+},
+{
+"denial_code": null,
+"index": 2,
+"result_count": 2,
+"status": "executed",
+"tool": "query_code_graph"
+},
+{
+"denial_code": null,
+"index": 3,
+"result_count": 1,
+"status": "executed",
+"tool": "query_code_graph"
+},
+{
+"denial_code": "schema_violation",
+"index": 4,
+"result_count": null,
+"status": "denied",
+"tool": "query_code_graph"
+},
+{
+"denial_code": "schema_violation",
+"index": 5,
+"result_count": null,
+"status": "denied",
+"tool": "query_code_graph"
+},
+{
+"denial_code": null,
+"index": 6,
+"result_count": 1,
+"status": "executed",
+"tool": "find"
+}
+],
+"turn": 1
+},
+{
+"action": "retrieve",
+"retrievals": [
+{
+"denial_code": null,
+"index": 0,
+"result_count": 0,
+"status": "executed",
+"tool": "read_excerpt"
+},
+{
+"denial_code": "schema_violation",
+"index": 1,
+"result_count": null,
+"status": "denied",
+"tool": "query_code_graph"
+},
+{
+"denial_code": "schema_violation",
+"index": 2,
+"result_count": null,
+"status": "denied",
+"tool": "query_code_graph"
+},
+{
+"denial_code": null,
+"index": 3,
+"result_count": 2,
+"status": "executed",
+"tool": "trace"
+},
+{
+"denial_code": null,
+"index": 4,
+"result_count": 1,
+"status": "executed",
+"tool": "find"
+}
+],
+"turn": 2
+},
+{
+"action": "retrieve",
+"retrievals": [
+{
+"denial_code": null,
+"index": 0,
+"result_count": 10,
+"status": "executed",
+"tool": "search"
+},
+{
+"denial_code": null,
+"index": 1,
+"result_count": 5,
+"status": "executed",
+"tool": "query_code_graph"
+},
+{
+"denial_code": null,
+"index": 2,
+"result_count": null,
+"status": "tool_error",
+"tool": "query_code_graph"
+},
+{
+"denial_code": null,
+"index": 3,
+"result_count": 1,
+"status": "executed",
+"tool": "query_code_graph"
+},
+{
+"denial_code": null,
+"index": 4,
+"result_count": 19,
+"status": "executed",
+"tool": "trace"
+},
+{
+"denial_code": null,
+"index": 5,
+"result_count": 12,
+"status": "executed",
+"tool": "trace"
+}
+],
+"turn": 3
+},
+{
+"action": null,
+"retrievals": [],
+"turn": 4
+}
+]
+},
+"data/jobs/job_inference_security_review/cells/cell-0509b0752ffd50b732691a1cef30e88034aafdda59a3ec282ced3c62b106f06b/attempt-1.json": {
+"attempt": 1,
+"cell_id": "cell-0509b0752ffd50b732691a1cef30e88034aafdda59a3ec282ced3c62b106f06b",
+"counts": {
+"denials": 9,
+"input_tokens": 16,
+"output_tokens": 29725,
+"queries": 28,
+"turns": 9
+},
+"gap_class": "budget_gap",
+"reason": "cell_budget_exceeded:cell_token_cap",
+"result": null,
+"status": "timed_out",
+"turns": [
+{
+"action": "retrieve",
+"retrievals": [
+{
+"denial_code": "page_cap_exceeded",
+"index": 0,
+"result_count": null,
+"status": "denied",
+"tool": "coverage"
+},
+{
+"denial_code": null,
+"index": 1,
+"result_count": 0,
+"status": "executed",
+"tool": "query_code_graph"
+},
+{
+"denial_code": null,
+"index": 2,
+"result_count": 0,
+"status": "executed",
+"tool": "query_code_graph"
+},
+{
+"denial_code": null,
+"index": 3,
+"result_count": 0,
+"status": "executed",
+"tool": "query_precomputed"
+},
+{
+"denial_code": null,
+"index": 4,
+"result_count": 1,
+"status": "executed",
+"tool": "query_codeql"
+},
+{
+"denial_code": null,
+"index": 5,
+"result_count": 10,
+"status": "executed",
+"tool": "find"
+}
+],
+"turn": 1
+},
+{
+"action": "retrieve",
+"retrievals": [
+{
+"denial_code": null,
+"index": 0,
+"result_count": 0,
+"status": "executed",
+"tool": "read_excerpt"
+},
+{
+"denial_code": null,
+"index": 1,
+"result_count": 0,
+"status": "executed",
+"tool": "read_excerpt"
+},
+{
+"denial_code": null,
+"index": 2,
+"result_count": 0,
+"status": "executed",
+"tool": "read_excerpt"
+},
+{
+"denial_code": "schema_violation",
+"index": 3,
+"result_count": null,
+"status": "denied",
+"tool": "query_code_graph"
+}
+],
+"turn": 2
+},
+{
+"action": "retrieve",
+"retrievals": [
+{
+"denial_code": "entity_out_of_scope",
+"index": 0,
+"result_count": null,
+"status": "denied",
+"tool": "query_code_graph"
+},
+{
+"denial_code": "entity_out_of_scope",
+"index": 1,
+"result_count": null,
+"status": "denied",
+"tool": "query_code_graph"
+},
+{
+"denial_code": "entity_out_of_scope",
+"index": 2,
+"result_count": null,
+"status": "denied",
+"tool": "query_code_graph"
+},
+{
+"denial_code": "forbidden_parameter",
+"index": 3,
+"result_count": null,
+"status": "denied",
+"tool": "query_observations"
+},
+{
+"denial_code": "forbidden_parameter",
+"index": 4,
+"result_count": null,
+"status": "denied",
+"tool": "query_observations"
+},
+{
+"denial_code": "forbidden_parameter",
+"index": 5,
+"result_count": null,
+"status": "denied",
+"tool": "query_observations"
+}
+],
+"turn": 3
+},
+{
+"action": "retrieve",
+"retrievals": [
+{
+"denial_code": null,
+"index": 0,
+"result_count": 0,
+"status": "executed",
+"tool": "read_excerpt"
+},
+{
+"denial_code": null,
+"index": 1,
+"result_count": 0,
+"status": "executed",
+"tool": "read_excerpt"
+},
+{
+"denial_code": null,
+"index": 2,
+"result_count": 0,
+"status": "executed",
+"tool": "read_excerpt"
+},
+{
+"denial_code": null,
+"index": 3,
+"result_count": 0,
+"status": "executed",
+"tool": "query_precomputed"
+},
+{
+"denial_code": null,
+"index": 4,
+"result_count": 0,
+"status": "executed",
+"tool": "query_observations"
+}
+],
+"turn": 4
+},
+{
+"action": "retrieve",
+"retrievals": [
+{
+"denial_code": null,
+"index": 0,
+"result_count": 4,
+"status": "executed",
+"tool": "trace"
+},
+{
+"denial_code": null,
+"index": 1,
+"result_count": 2,
+"status": "executed",
+"tool": "trace"
+},
+{
+"denial_code": null,
+"index": 2,
+"result_count": null,
+"status": "tool_error",
+"tool": "find"
+}
+],
+"turn": 5
+},
+{
+"action": "retrieve",
+"retrievals": [
+{
+"denial_code": null,
+"index": 0,
+"result_count": 1,
+"status": "executed",
+"tool": "trace"
+},
+{
+"denial_code": null,
+"index": 1,
+"result_count": 1,
+"status": "executed",
+"tool": "trace"
+},
+{
+"denial_code": null,
+"index": 2,
+"result_count": 2,
+"status": "executed",
+"tool": "trace"
+},
+{
+"denial_code": null,
+"index": 3,
+"result_count": 2,
+"status": "executed",
+"tool": "query_observations"
+},
+{
+"denial_code": null,
+"index": 4,
+"result_count": 0,
+"status": "executed",
+"tool": "query_precomputed"
+}
+],
+"turn": 6
+},
+{
+"action": "retrieve",
+"retrievals": [
+{
+"denial_code": null,
+"index": 0,
+"result_count": 1,
+"status": "executed",
+"tool": "trace"
+},
+{
+"denial_code": null,
+"index": 1,
+"result_count": 0,
+"status": "executed",
+"tool": "query_observations"
+},
+{
+"denial_code": null,
+"index": 2,
+"result_count": 0,
+"status": "executed",
+"tool": "query_observations"
+},
+{
+"denial_code": null,
+"index": 3,
+"result_count": 0,
+"status": "executed",
+"tool": "query_observations"
+}
+],
+"turn": 7
+},
+{
+"action": "retrieve",
+"retrievals": [
+{
+"denial_code": null,
+"index": 0,
+"result_count": 0,
+"status": "executed",
+"tool": "search"
+},
+{
+"denial_code": "schema_violation",
+"index": 1,
+"result_count": null,
+"status": "denied",
+"tool": "query_code_graph"
+},
+{
+"denial_code": null,
+"index": 2,
+"result_count": 1,
+"status": "executed",
+"tool": "query_codeql"
+},
+{
+"denial_code": null,
+"index": 3,
+"result_count": 2,
+"status": "executed",
+"tool": "trace"
+}
+],
+"turn": 8
+},
+{
+"action": null,
+"retrievals": [],
+"turn": 9
+}
+]
+},
+"data/jobs/job_inference_security_review/cells/cell-0f28a08c0b5268f3b4e49ccc1b5d964a694cbb2de683e2e42cb12307e5b637c1/attempt-1.json": {
+"attempt": 1,
+"cell_id": "cell-0f28a08c0b5268f3b4e49ccc1b5d964a694cbb2de683e2e42cb12307e5b637c1",
+"counts": {
+"denials": 9,
+"input_tokens": 6,
+"output_tokens": 9552,
+"queries": 14,
+"turns": 4
+},
+"gap_class": "budget_gap",
+"reason": "cell_budget_exceeded:cell_token_cap",
+"result": null,
+"status": "timed_out",
+"turns": [
+{
+"action": "retrieve",
+"retrievals": [
+{
+"denial_code": null,
+"index": 0,
+"result_count": 0,
+"status": "executed",
+"tool": "read_excerpt"
+},
+{
+"denial_code": null,
+"index": 1,
+"result_count": 1,
+"status": "executed",
+"tool": "query_observations"
+},
+{
+"denial_code": "schema_violation",
+"index": 2,
+"result_count": null,
+"status": "denied",
+"tool": "query_code_graph"
+},
+{
+"denial_code": null,
+"index": 3,
+"result_count": 2,
+"status": "executed",
+"tool": "query_code_graph"
+},
+{
+"denial_code": null,
+"index": 4,
+"result_count": 1,
+"status": "executed",
+"tool": "query_code_graph"
+},
+{
+"denial_code": "schema_violation",
+"index": 5,
+"result_count": null,
+"status": "denied",
+"tool": "query_code_graph"
+},
+{
+"denial_code": "schema_violation",
+"index": 6,
+"result_count": null,
+"status": "denied",
+"tool": "query_code_graph"
+},
+{
+"denial_code": "schema_violation",
+"index": 7,
+"result_count": null,
+"status": "denied",
+"tool": "query_code_graph"
+},
+{
+"denial_code": null,
+"index": 8,
+"result_count": 3,
+"status": "executed",
+"tool": "trace"
+}
+],
+"turn": 1
+},
+{
+"action": "retrieve",
+"retrievals": [
+{
+"denial_code": null,
+"index": 0,
+"result_count": 0,
+"status": "executed",
+"tool": "read_excerpt"
+},
+{
+"denial_code": null,
+"index": 1,
+"result_count": 0,
+"status": "executed",
+"tool": "read_excerpt"
+},
+{
+"denial_code": null,
+"index": 2,
+"result_count": 0,
+"status": "executed",
+"tool": "read_excerpt"
+},
+{
+"denial_code": "schema_violation",
+"index": 3,
+"result_count": null,
+"status": "denied",
+"tool": "query_code_graph"
+},
+{
+"denial_code": "schema_violation",
+"index": 4,
+"result_count": null,
+"status": "denied",
+"tool": "query_code_graph"
+},
+{
+"denial_code": null,
+"index": 5,
+"result_count": 1,
+"status": "executed",
+"tool": "find"
+}
+],
+"turn": 2
+},
+{
+"action": "retrieve",
+"retrievals": [
+{
+"denial_code": null,
+"index": 0,
+"result_count": 10,
+"status": "executed",
+"tool": "search"
+},
+{
+"denial_code": null,
+"index": 1,
+"result_count": 2,
+"status": "executed",
+"tool": "query_code_graph"
+},
+{
+"denial_code": null,
+"index": 2,
+"result_count": 1,
+"status": "executed",
+"tool": "query_code_graph"
+},
+{
+"denial_code": "forbidden_parameter",
+"index": 3,
+"result_count": null,
+"status": "denied",
+"tool": "query_observations"
+},
+{
+"denial_code": "forbidden_parameter",
+"index": 4,
+"result_count": null,
+"status": "denied",
+"tool": "query_observations"
+},
+{
+"denial_code": null,
+"index": 5,
+"result_count": 3,
+"status": "executed",
+"tool": "find"
+},
+{
+"denial_code": null,
+"index": 6,
+"result_count": 15,
+"status": "executed",
+"tool": "trace"
+},
+{
+"denial_code": "schema_violation",
+"index": 7,
+"result_count": null,
+"status": "denied",
+"tool": "query_code_graph"
+}
+],
+"turn": 3
+},
+{
+"action": null,
+"retrievals": [],
+"turn": 4
+}
+]
+},
+"data/jobs/job_inference_security_review/cells/cell-259dd7e4eb417ab57ce2b395cc23bfd16c33e54baf7acd2578ebf3c9a48d1b81/attempt-1.json": {
+"attempt": 1,
+"cell_id": "cell-259dd7e4eb417ab57ce2b395cc23bfd16c33e54baf7acd2578ebf3c9a48d1b81",
+"counts": {
+"denials": 4,
+"input_tokens": 8,
+"output_tokens": 14091,
+"queries": 26,
+"turns": 5
+},
+"gap_class": "budget_gap",
+"reason": "cell_budget_exceeded:cell_token_cap",
+"result": null,
+"status": "timed_out",
+"turns": [
+{
+"action": "retrieve",
+"retrievals": [
+{
+"denial_code": null,
+"index": 0,
+"result_count": 0,
+"status": "executed",
+"tool": "read_excerpt"
+},
+{
+"denial_code": null,
+"index": 1,
+"result_count": 0,
+"status": "executed",
+"tool": "read_excerpt"
+},
+{
+"denial_code": null,
+"index": 2,
+"result_count": 0,
+"status": "executed",
+"tool": "read_excerpt"
+},
+{
+"denial_code": null,
+"index": 3,
+"result_count": 0,
+"status": "executed",
+"tool": "read_excerpt"
+},
+{
+"denial_code": null,
+"index": 4,
+"result_count": 0,
+"status": "executed",
+"tool": "read_excerpt"
+},
+{
+"denial_code": null,
+"index": 5,
+"result_count": 3,
+"status": "executed",
+"tool": "search"
+}
+],
+"turn": 1
+},
+{
+"action": "retrieve",
+"retrievals": [
+{
+"denial_code": null,
+"index": 0,
+"result_count": 0,
+"status": "executed",
+"tool": "query_precomputed"
+},
+{
+"denial_code": null,
+"index": 1,
+"result_count": 0,
+"status": "executed",
+"tool": "query_precomputed"
+},
+{
+"denial_code": null,
+"index": 2,
+"result_count": 0,
+"status": "executed",
+"tool": "query_observations"
+},
+{
+"denial_code": null,
+"index": 3,
+"result_count": 0,
+"status": "executed",
+"tool": "query_code_graph"
+},
+{
+"denial_code": null,
+"index": 4,
+"result_count": 0,
+"status": "executed",
+"tool": "query_code_graph"
+},
+{
+"denial_code": null,
+"index": 5,
+"result_count": 0,
+"status": "executed",
+"tool": "search"
+}
+],
+"turn": 2
+},
+{
+"action": "retrieve",
+"retrievals": [
+{
+"denial_code": null,
+"index": 0,
+"result_count": 0,
+"status": "executed",
+"tool": "read_excerpt"
+},
+{
+"denial_code": null,
+"index": 1,
+"result_count": 0,
+"status": "executed",
+"tool": "read_excerpt"
+},
+{
+"denial_code": null,
+"index": 2,
+"result_count": 0,
+"status": "executed",
+"tool": "read_excerpt"
+},
+{
+"denial_code": null,
+"index": 3,
+"result_count": 1,
+"status": "executed",
+"tool": "search"
+},
+{
+"denial_code": null,
+"index": 4,
+"result_count": 0,
+"status": "executed",
+"tool": "search"
+},
+{
+"denial_code": null,
+"index": 5,
+"result_count": 0,
+"status": "executed",
+"tool": "search"
+},
+{
+"denial_code": null,
+"index": 6,
+"result_count": 1,
+"status": "executed",
+"tool": "search"
+},
+{
+"denial_code": null,
+"index": 7,
+"result_count": 0,
+"status": "executed",
+"tool": "query_code_graph"
+}
+],
+"turn": 3
+},
+{
+"action": "retrieve",
+"retrievals": [
+{
+"denial_code": null,
+"index": 0,
+"result_count": 20,
+"status": "executed",
+"tool": "query_observations"
+},
+{
+"denial_code": "forbidden_parameter",
+"index": 1,
+"result_count": null,
+"status": "denied",
+"tool": "find"
+},
+{
+"denial_code": "forbidden_parameter",
+"index": 2,
+"result_count": null,
+"status": "denied",
+"tool": "find"
+},
+{
+"denial_code": "forbidden_parameter",
+"index": 3,
+"result_count": null,
+"status": "denied",
+"tool": "find"
+},
+{
+"denial_code": "forbidden_parameter",
+"index": 4,
+"result_count": null,
+"status": "denied",
+"tool": "find"
+},
+{
+"denial_code": null,
+"index": 5,
+"result_count": 4,
+"status": "executed",
+"tool": "query_hotspots"
+},
+{
+"denial_code": null,
+"index": 6,
+"result_count": 4,
+"status": "executed",
+"tool": "trace"
+},
+{
+"denial_code": null,
+"index": 7,
+"result_count": 6,
+"status": "executed",
+"tool": "trace"
+},
+{
+"denial_code": null,
+"index": 8,
+"result_count": 0,
+"status": "executed",
+"tool": "search"
+},
+{
+"denial_code": null,
+"index": 9,
+"result_count": 2,
+"status": "executed",
+"tool": "search"
+}
+],
+"turn": 4
+},
+{
+"action": null,
+"retrievals": [],
+"turn": 5
+}
+]
+},
+"data/jobs/job_inference_security_review/cells/cell-4627419469b9eefc7e7b496e65a06b6d530c39fca4db5ccaf5c9b45a3dc9fe56/attempt-1.json": {
+"attempt": 1,
+"cell_id": "cell-4627419469b9eefc7e7b496e65a06b6d530c39fca4db5ccaf5c9b45a3dc9fe56",
+"counts": {
+"denials": 17,
+"input_tokens": 16,
+"output_tokens": 39968,
+"queries": 40,
+"turns": 9
+},
+"gap_class": "budget_gap",
+"reason": "cell_budget_exceeded:cell_token_cap",
+"result": null,
+"status": "timed_out",
+"turns": [
+{
+"action": "retrieve",
+"retrievals": [
+{
+"denial_code": null,
+"index": 0,
+"result_count": 20,
+"status": "executed",
+"tool": "coverage"
+},
+{
+"denial_code": null,
+"index": 1,
+"result_count": 0,
+"status": "executed",
+"tool": "query_code_graph"
+},
+{
+"denial_code": null,
+"index": 2,
+"result_count": 0,
+"status": "executed",
+"tool": "query_code_graph"
+},
+{
+"denial_code": null,
+"index": 3,
+"result_count": 2,
+"status": "executed",
+"tool": "query_observations"
+},
+{
+"denial_code": null,
+"index": 4,
+"result_count": 2,
+"status": "executed",
+"tool": "query_observations"
+}
+],
+"turn": 1
+},
+{
+"action": "retrieve",
+"retrievals": [
+{
+"denial_code": null,
+"index": 0,
+"result_count": 2,
+"status": "executed",
+"tool": "query_observations"
+},
+{
+"denial_code": null,
+"index": 1,
+"result_count": 1,
+"status": "executed",
+"tool": "query_observations"
+},
+{
+"denial_code": "forbidden_parameter",
+"index": 2,
+"result_count": null,
+"status": "denied",
+"tool": "find"
+},
+{
+"denial_code": "forbidden_parameter",
+"index": 3,
+"result_count": null,
+"status": "denied",
+"tool": "find"
+},
+{
+"denial_code": "forbidden_parameter",
+"index": 4,
+"result_count": null,
+"status": "denied",
+"tool": "find"
+},
+{
+"denial_code": "entity_out_of_scope",
+"index": 5,
+"result_count": null,
+"status": "denied",
+"tool": "query_code_graph"
+},
+{
+"denial_code": "entity_out_of_scope",
+"index": 6,
+"result_count": null,
+"status": "denied",
+"tool": "query_code_graph"
+},
+{
+"denial_code": "entity_out_of_scope",
+"index": 7,
+"result_count": null,
+"status": "denied",
+"tool": "query_code_graph"
+}
+],
+"turn": 2
+},
+{
+"action": "retrieve",
+"retrievals": [
+{
+"denial_code": null,
+"index": 0,
+"result_count": 0,
+"status": "executed",
+"tool": "read_excerpt"
+},
+{
+"denial_code": null,
+"index": 1,
+"result_count": 0,
+"status": "executed",
+"tool": "read_excerpt"
+},
+{
+"denial_code": null,
+"index": 2,
+"result_count": 0,
+"status": "executed",
+"tool": "read_excerpt"
+},
+{
+"denial_code": null,
+"index": 3,
+"result_count": 0,
+"status": "executed",
+"tool": "read_excerpt"
+},
+{
+"denial_code": null,
+"index": 4,
+"result_count": 0,
+"status": "executed",
+"tool": "read_excerpt"
+},
+{
+"denial_code": null,
+"index": 5,
+"result_count": 0,
+"status": "executed",
+"tool": "read_excerpt"
+},
+{
+"denial_code": null,
+"index": 6,
+"result_count": 0,
+"status": "executed",
+"tool": "read_excerpt"
+},
+{
+"denial_code": null,
+"index": 7,
+"result_count": 0,
+"status": "executed",
+"tool": "read_excerpt"
+},
+{
+"denial_code": null,
+"index": 8,
+"result_count": 0,
+"status": "executed",
+"tool": "read_excerpt"
+},
+{
+"denial_code": null,
+"index": 9,
+"result_count": 0,
+"status": "executed",
+"tool": "read_excerpt"
+},
+{
+"denial_code": null,
+"index": 10,
+"result_count": 2,
+"status": "executed",
+"tool": "query_observations"
+},
+{
+"denial_code": null,
+"index": 11,
+"result_count": 2,
+"status": "executed",
+"tool": "query_observations"
+},
+{
+"denial_code": null,
+"index": 12,
+"result_count": 8,
+"status": "executed",
+"tool": "query_observations"
+},
+{
+"denial_code": null,
+"index": 13,
+"result_count": 2,
+"status": "executed",
+"tool": "query_observations"
+},
+{
+"denial_code": null,
+"index": 14,
+"result_count": 1,
+"status": "executed",
+"tool": "query_observations"
+}
+],
+"turn": 3
+},
+{
+"action": "retrieve",
+"retrievals": [
+{
+"denial_code": "forbidden_parameter",
+"index": 0,
+"result_count": null,
+"status": "denied",
+"tool": "query_precomputed"
+},
+{
+"denial_code": "forbidden_parameter",
+"index": 1,
+"result_count": null,
+"status": "denied",
+"tool": "query_precomputed"
+},
+{
+"denial_code": "forbidden_parameter",
+"index": 2,
+"result_count": null,
+"status": "denied",
+"tool": "query_precomputed"
+},
+{
+"denial_code": "forbidden_parameter",
+"index": 3,
+"result_count": null,
+"status": "denied",
+"tool": "query_precomputed"
+},
+{
+"denial_code": "forbidden_parameter",
+"index": 4,
+"result_count": null,
+"status": "denied",
+"tool": "query_precomputed"
+},
+{
+"denial_code": "forbidden_parameter",
+"index": 5,
+"result_count": null,
+"status": "denied",
+"tool": "query_precomputed"
+},
+{
+"denial_code": null,
+"index": 6,
+"result_count": 8,
+"status": "executed",
+"tool": "trace"
+},
+{
+"denial_code": null,
+"index": 7,
+"result_count": 4,
+"status": "executed",
+"tool": "trace"
+},
+{
+"denial_code": null,
+"index": 8,
+"result_count": 4,
+"status": "executed",
+"tool": "trace"
+}
+],
+"turn": 4
+},
+{
+"action": "retrieve",
+"retrievals": [
+{
+"denial_code": null,
+"index": 0,
+"result_count": 0,
+"status": "executed",
+"tool": "query_precomputed"
+},
+{
+"denial_code": null,
+"index": 1,
+"result_count": 0,
+"status": "executed",
+"tool": "query_precomputed"
+},
+{
+"denial_code": null,
+"index": 2,
+"result_count": 0,
+"status": "executed",
+"tool": "query_precomputed"
+},
+{
+"denial_code": null,
+"index": 3,
+"result_count": 1,
+"status": "executed",
+"tool": "search"
+},
+{
+"denial_code": null,
+"index": 4,
+"result_count": 1,
+"status": "executed",
+"tool": "search"
+},
+{
+"denial_code": null,
+"index": 5,
+"result_count": 1,
+"status": "executed",
+"tool": "search"
+}
+],
+"turn": 5
+},
+{
+"action": "retrieve",
+"retrievals": [
+{
+"denial_code": "schema_violation",
+"index": 0,
+"result_count": null,
+"status": "denied",
+"tool": "query_code_graph"
+},
+{
+"denial_code": "schema_violation",
+"index": 1,
+"result_count": null,
+"status": "denied",
+"tool": "query_code_graph"
+},
+{
+"denial_code": "schema_violation",
+"index": 2,
+"result_count": null,
+"status": "denied",
+"tool": "query_code_graph"
+},
+{
+"denial_code": null,
+"index": 3,
+"result_count": 0,
+"status": "executed",
+"tool": "trace"
+},
+{
+"denial_code": null,
+"index": 4,
+"result_count": 2,
+"status": "executed",
+"tool": "query_hotspots"
+}
+],
+"turn": 6
+},
+{
+"action": "retrieve",
+"retrievals": [
+{
+"denial_code": "schema_violation",
+"index": 0,
+"result_count": null,
+"status": "denied",
+"tool": "query_code_graph"
+},
+{
+"denial_code": "schema_violation",
+"index": 1,
+"result_count": null,
+"status": "denied",
+"tool": "query_code_graph"
+},
+{
+"denial_code": null,
+"index": 2,
+"result_count": 2,
+"status": "executed",
+"tool": "trace"
+},
+{
+"denial_code": null,
+"index": 3,
+"result_count": 2,
+"status": "executed",
+"tool": "trace"
+}
+],
+"turn": 7
+},
+{
+"action": "retrieve",
+"retrievals": [
+{
+"denial_code": null,
+"index": 0,
+"result_count": 0,
+"status": "executed",
+"tool": "read_excerpt"
+},
+{
+"denial_code": null,
+"index": 1,
+"result_count": 0,
+"status": "executed",
+"tool": "read_excerpt"
+},
+{
+"denial_code": null,
+"index": 2,
+"result_count": 0,
+"status": "executed",
+"tool": "read_excerpt"
+},
+{
+"denial_code": null,
+"index": 3,
+"result_count": 0,
+"status": "executed",
+"tool": "read_excerpt"
+},
+{
+"denial_code": null,
+"index": 4,
+"result_count": 0,
+"status": "executed",
+"tool": "read_excerpt"
+}
+],
+"turn": 8
+},
+{
+"action": null,
+"retrievals": [],
+"turn": 9
+}
+]
+},
+"data/jobs/job_inference_security_review/cells/cell-7441bc5e15635f53efb79af531e64da91f6f4f821961f74f354d14fd2a62ed94/attempt-1.json": {
+"attempt": 1,
+"cell_id": "cell-7441bc5e15635f53efb79af531e64da91f6f4f821961f74f354d14fd2a62ed94",
+"counts": {
+"denials": 6,
+"input_tokens": 6,
+"output_tokens": 11454,
+"queries": 21,
+"turns": 4
+},
+"gap_class": "budget_gap",
+"reason": "cell_budget_exceeded:cell_token_cap",
+"result": null,
+"status": "timed_out",
+"turns": [
+{
+"action": "retrieve",
+"retrievals": [
+{
+"denial_code": null,
+"index": 0,
+"result_count": 20,
+"status": "executed",
+"tool": "coverage"
+},
+{
+"denial_code": null,
+"index": 1,
+"result_count": 0,
+"status": "executed",
+"tool": "query_code_graph"
+},
+{
+"denial_code": null,
+"index": 2,
+"result_count": 0,
+"status": "executed",
+"tool": "query_code_graph"
+},
+{
+"denial_code": null,
+"index": 3,
+"result_count": 0,
+"status": "executed",
+"tool": "read_excerpt"
+},
+{
+"denial_code": null,
+"index": 4,
+"result_count": 0,
+"status": "executed",
+"tool": "read_excerpt"
+},
+{
+"denial_code": null,
+"index": 5,
+"result_count": 0,
+"status": "executed",
+"tool": "read_excerpt"
+}
+],
+"turn": 1
+},
+{
+"action": "retrieve",
+"retrievals": [
+{
+"denial_code": null,
+"index": 0,
+"result_count": 2,
+"status": "executed",
+"tool": "query_observations"
+},
+{
+"denial_code": null,
+"index": 1,
+"result_count": 2,
+"status": "executed",
+"tool": "query_observations"
+},
+{
+"denial_code": null,
+"index": 2,
+"result_count": 8,
+"status": "executed",
+"tool": "query_observations"
+},
+{
+"denial_code": "forbidden_parameter",
+"index": 3,
+"result_count": null,
+"status": "denied",
+"tool": "find"
+},
+{
+"denial_code": "forbidden_parameter",
+"index": 4,
+"result_count": null,
+"status": "denied",
+"tool": "find"
+},
+{
+"denial_code": "forbidden_parameter",
+"index": 5,
+"result_count": null,
+"status": "denied",
+"tool": "find"
+},
+{
+"denial_code": null,
+"index": 6,
+"result_count": 12,
+"status": "executed",
+"tool": "search"
+},
+{
+"denial_code": null,
+"index": 7,
+"result_count": 16,
+"status": "executed",
+"tool": "search"
+},
+{
+"denial_code": null,
+"index": 8,
+"result_count": 5,
+"status": "executed",
+"tool": "trace"
+},
+{
+"denial_code": null,
+"index": 9,
+"result_count": 4,
+"status": "executed",
+"tool": "trace"
+},
+{
+"denial_code": null,
+"index": 10,
+"result_count": 0,
+"status": "executed",
+"tool": "read_excerpt"
+},
+{
+"denial_code": null,
+"index": 11,
+"result_count": 0,
+"status": "executed",
+"tool": "read_excerpt"
+},
+{
+"denial_code": null,
+"index": 12,
+"result_count": 0,
+"status": "executed",
+"tool": "query_codeql"
+}
+],
+"turn": 2
+},
+{
+"action": "retrieve",
+"retrievals": [
+{
+"denial_code": "schema_violation",
+"index": 0,
+"result_count": null,
+"status": "denied",
+"tool": "query_code_graph"
+},
+{
+"denial_code": null,
+"index": 1,
+"result_count": 1,
+"status": "executed",
+"tool": "query_code_graph"
+},
+{
+"denial_code": null,
+"index": 2,
+"result_count": 4,
+"status": "executed",
+"tool": "query_code_graph"
+},
+{
+"denial_code": "forbidden_parameter",
+"index": 3,
+"result_count": null,
+"status": "denied",
+"tool": "query_observations"
+},
+{
+"denial_code": "forbidden_parameter",
+"index": 4,
+"result_count": null,
+"status": "denied",
+"tool": "query_observations"
+},
+{
+"denial_code": null,
+"index": 5,
+"result_count": 17,
+"status": "executed",
+"tool": "search"
+},
+{
+"denial_code": null,
+"index": 6,
+"result_count": 0,
+"status": "executed",
+"tool": "query_code_graph"
+},
+{
+"denial_code": null,
+"index": 7,
+"result_count": 20,
+"status": "executed",
+"tool": "query_code_graph"
+}
+],
+"turn": 3
+},
+{
+"action": null,
+"retrievals": [],
+"turn": 4
+}
+]
+},
+"data/jobs/job_inference_security_review/cells/cell-be95e76ccfb096cb509b3006cbdcaf254aea531fc17f3b990d00bdd0480bb073/attempt-1.json": {
+"attempt": 1,
+"cell_id": "cell-be95e76ccfb096cb509b3006cbdcaf254aea531fc17f3b990d00bdd0480bb073",
+"counts": {
+"denials": 10,
+"input_tokens": 10,
+"output_tokens": 22184,
+"queries": 27,
+"turns": 6
+},
+"gap_class": "budget_gap",
+"reason": "cell_budget_exceeded:cell_token_cap",
+"result": null,
+"status": "timed_out",
+"turns": [
+{
+"action": "retrieve",
+"retrievals": [
+{
+"denial_code": null,
+"index": 0,
+"result_count": 0,
+"status": "executed",
+"tool": "query_code_graph"
+},
+{
+"denial_code": null,
+"index": 1,
+"result_count": 0,
+"status": "executed",
+"tool": "query_code_graph"
+},
+{
+"denial_code": "schema_violation",
+"index": 2,
+"result_count": null,
+"status": "denied",
+"tool": "query_code_graph"
+},
+{
+"denial_code": null,
+"index": 3,
+"result_count": 1,
+"status": "executed",
+"tool": "query_codeql"
+},
+{
+"denial_code": null,
+"index": 4,
+"result_count": 1,
+"status": "executed",
+"tool": "query_codeql"
+}
+],
+"turn": 1
+},
+{
+"action": "retrieve",
+"retrievals": [
+{
+"denial_code": "forbidden_parameter",
+"index": 0,
+"result_count": null,
+"status": "denied",
+"tool": "find"
+},
+{
+"denial_code": "forbidden_parameter",
+"index": 1,
+"result_count": null,
+"status": "denied",
+"tool": "find"
+},
+{
+"denial_code": "forbidden_parameter",
+"index": 2,
+"result_count": null,
+"status": "denied",
+"tool": "find"
+},
+{
+"denial_code": "schema_violation",
+"index": 3,
+"result_count": null,
+"status": "denied",
+"tool": "query_code_graph"
+},
+{
+"denial_code": "schema_violation",
+"index": 4,
+"result_count": null,
+"status": "denied",
+"tool": "query_code_graph"
+},
+{
+"denial_code": "schema_violation",
+"index": 5,
+"result_count": null,
+"status": "denied",
+"tool": "query_code_graph"
+},
+{
+"denial_code": "schema_violation",
+"index": 6,
+"result_count": null,
+"status": "denied",
+"tool": "query_code_graph"
+},
+{
+"denial_code": null,
+"index": 7,
+"result_count": 0,
+"status": "executed",
+"tool": "query_observations"
+}
+],
+"turn": 2
+},
+{
+"action": "retrieve",
+"retrievals": [
+{
+"denial_code": null,
+"index": 0,
+"result_count": 0,
+"status": "executed",
+"tool": "read_excerpt"
+},
+{
+"denial_code": null,
+"index": 1,
+"result_count": 0,
+"status": "executed",
+"tool": "read_excerpt"
+},
+{
+"denial_code": null,
+"index": 2,
+"result_count": 0,
+"status": "executed",
+"tool": "read_excerpt"
+},
+{
+"denial_code": null,
+"index": 3,
+"result_count": 0,
+"status": "executed",
+"tool": "read_excerpt"
+},
+{
+"denial_code": null,
+"index": 4,
+"result_count": 1,
+"status": "executed",
+"tool": "query_observations"
+},
+{
+"denial_code": null,
+"index": 5,
+"result_count": 1,
+"status": "executed",
+"tool": "query_codeql"
+},
+{
+"denial_code": "schema_violation",
+"index": 6,
+"result_count": null,
+"status": "denied",
+"tool": "query_code_graph"
+},
+{
+"denial_code": "schema_violation",
+"index": 7,
+"result_count": null,
+"status": "denied",
+"tool": "query_code_graph"
+}
+],
+"turn": 3
+},
+{
+"action": "retrieve",
+"retrievals": [
+{
+"denial_code": null,
+"index": 0,
+"result_count": 11,
+"status": "executed",
+"tool": "find"
+},
+{
+"denial_code": null,
+"index": 1,
+"result_count": 2,
+"status": "executed",
+"tool": "query_code_graph"
+},
+{
+"denial_code": null,
+"index": 2,
+"result_count": 1,
+"status": "executed",
+"tool": "query_code_graph"
+},
+{
+"denial_code": null,
+"index": 3,
+"result_count": 4,
+"status": "executed",
+"tool": "query_code_graph"
+},
+{
+"denial_code": null,
+"index": 4,
+"result_count": 1,
+"status": "executed",
+"tool": "query_code_graph"
+},
+{
+"denial_code": null,
+"index": 5,
+"result_count": 2,
+"status": "executed",
+"tool": "query_code_graph"
+},
+{
+"denial_code": null,
+"index": 6,
+"result_count": 2,
+"status": "executed",
+"tool": "query_code_graph"
+},
+{
+"denial_code": null,
+"index": 7,
+"result_count": 2,
+"status": "executed",
+"tool": "query_observations"
+},
+{
+"denial_code": null,
+"index": 8,
+"result_count": 10,
+"status": "executed",
+"tool": "search"
+},
+{
+"denial_code": null,
+"index": 9,
+"result_count": 10,
+"status": "executed",
+"tool": "search"
+}
+],
+"turn": 4
+},
+{
+"action": "retrieve",
+"retrievals": [
+{
+"denial_code": null,
+"index": 0,
+"result_count": 0,
+"status": "executed",
+"tool": "query_code_graph"
+},
+{
+"denial_code": null,
+"index": 1,
+"result_count": 16,
+"status": "executed",
+"tool": "query_code_graph"
+},
+{
+"denial_code": null,
+"index": 2,
+"result_count": 1,
+"status": "executed",
+"tool": "query_code_graph"
+},
+{
+"denial_code": null,
+"index": 3,
+"result_count": 14,
+"status": "executed",
+"tool": "query_code_graph"
+},
+{
+"denial_code": null,
+"index": 4,
+"result_count": null,
+"status": "tool_error",
+"tool": "query_code_graph"
+},
+{
+"denial_code": null,
+"index": 5,
+"result_count": 3,
+"status": "executed",
+"tool": "query_code_graph"
+}
+],
+"turn": 5
+},
+{
+"action": null,
+"retrievals": [],
+"turn": 6
+}
+]
+},
+"data/jobs/job_inference_security_review/cells/cell-e4bc667511adbefc7feab0fc7e3a06a25c643155efa707444ccc3f07ad6f0ea8/attempt-1.json": {
+"attempt": 1,
+"cell_id": "cell-e4bc667511adbefc7feab0fc7e3a06a25c643155efa707444ccc3f07ad6f0ea8",
+"counts": {
+"denials": 5,
+"input_tokens": 4,
+"output_tokens": 5673,
+"queries": 18,
+"turns": 3
+},
+"gap_class": "budget_gap",
+"reason": "cell_budget_exceeded:cell_token_cap",
+"result": null,
+"status": "timed_out",
+"turns": [
+{
+"action": "retrieve",
+"retrievals": [
+{
+"denial_code": null,
+"index": 0,
+"result_count": 20,
+"status": "executed",
+"tool": "coverage"
+},
+{
+"denial_code": null,
+"index": 1,
+"result_count": 0,
+"status": "executed",
+"tool": "query_code_graph"
+},
+{
+"denial_code": null,
+"index": 2,
+"result_count": 0,
+"status": "executed",
+"tool": "query_code_graph"
+},
+{
+"denial_code": null,
+"index": 3,
+"result_count": 0,
+"status": "executed",
+"tool": "query_code_graph"
+},
+{
+"denial_code": null,
+"index": 4,
+"result_count": 0,
+"status": "executed",
+"tool": "query_code_graph"
+},
+{
+"denial_code": null,
+"index": 5,
+"result_count": 0,
+"status": "executed",
+"tool": "query_code_graph"
+},
+{
+"denial_code": null,
+"index": 6,
+"result_count": 0,
+"status": "executed",
+"tool": "query_code_graph"
+},
+{
+"denial_code": null,
+"index": 7,
+"result_count": 0,
+"status": "executed",
+"tool": "search"
+},
+{
+"denial_code": null,
+"index": 8,
+"result_count": 0,
+"status": "executed",
+"tool": "search"
+},
+{
+"denial_code": null,
+"index": 9,
+"result_count": 3,
+"status": "executed",
+"tool": "search"
+},
+{
+"denial_code": null,
+"index": 10,
+"result_count": 0,
+"status": "executed",
+"tool": "search"
+},
+{
+"denial_code": null,
+"index": 11,
+"result_count": 0,
+"status": "executed",
+"tool": "search"
+},
+{
+"denial_code": null,
+"index": 12,
+"result_count": 0,
+"status": "executed",
+"tool": "query_precomputed"
+}
+],
+"turn": 1
+},
+{
+"action": "retrieve",
+"retrievals": [
+{
+"denial_code": "forbidden_parameter",
+"index": 0,
+"result_count": null,
+"status": "denied",
+"tool": "find"
+},
+{
+"denial_code": "forbidden_parameter",
+"index": 1,
+"result_count": null,
+"status": "denied",
+"tool": "find"
+},
+{
+"denial_code": "forbidden_parameter",
+"index": 2,
+"result_count": null,
+"status": "denied",
+"tool": "find"
+},
+{
+"denial_code": "forbidden_parameter",
+"index": 3,
+"result_count": null,
+"status": "denied",
+"tool": "find"
+},
+{
+"denial_code": "forbidden_parameter",
+"index": 4,
+"result_count": null,
+"status": "denied",
+"tool": "find"
+},
+{
+"denial_code": null,
+"index": 5,
+"result_count": 0,
+"status": "executed",
+"tool": "read_excerpt"
+},
+{
+"denial_code": null,
+"index": 6,
+"result_count": 0,
+"status": "executed",
+"tool": "read_excerpt"
+},
+{
+"denial_code": null,
+"index": 7,
+"result_count": 3,
+"status": "executed",
+"tool": "search"
+},
+{
+"denial_code": null,
+"index": 8,
+"result_count": 1,
+"status": "executed",
+"tool": "search"
+},
+{
+"denial_code": null,
+"index": 9,
+"result_count": 0,
+"status": "executed",
+"tool": "search"
+}
+],
+"turn": 2
+},
+{
+"action": null,
+"retrievals": [],
+"turn": 3
+}
+]
+},
+"data/jobs/job_inference_security_review/cells/cell-f5906f74d858ccc6a19f264df9c09811f3d2eb6086f81668427b58eac3ec603f/attempt-1.json": {
+"attempt": 1,
+"cell_id": "cell-f5906f74d858ccc6a19f264df9c09811f3d2eb6086f81668427b58eac3ec603f",
+"counts": {
+"denials": 7,
+"input_tokens": 8,
+"output_tokens": 17727,
+"queries": 18,
+"turns": 5
+},
+"gap_class": "budget_gap",
+"reason": "cell_budget_exceeded:cell_token_cap",
+"result": null,
+"status": "timed_out",
+"turns": [
+{
+"action": "retrieve",
+"retrievals": [
+{
+"denial_code": null,
+"index": 0,
+"result_count": 0,
+"status": "executed",
+"tool": "read_excerpt"
+},
+{
+"denial_code": null,
+"index": 1,
+"result_count": 2,
+"status": "executed",
+"tool": "query_code_graph"
+},
+{
+"denial_code": "schema_violation",
+"index": 2,
+"result_count": null,
+"status": "denied",
+"tool": "query_code_graph"
+},
+{
+"denial_code": null,
+"index": 3,
+"result_count": 0,
+"status": "executed",
+"tool": "query_code_graph"
+},
+{
+"denial_code": "schema_violation",
+"index": 4,
+"result_count": null,
+"status": "denied",
+"tool": "query_code_graph"
+},
+{
+"denial_code": "schema_violation",
+"index": 5,
+"result_count": null,
+"status": "denied",
+"tool": "query_code_graph"
+},
+{
+"denial_code": null,
+"index": 6,
+"result_count": 1,
+"status": "executed",
+"tool": "query_observations"
+}
+],
+"turn": 1
+},
+{
+"action": "retrieve",
+"retrievals": [
+{
+"denial_code": "forbidden_parameter",
+"index": 0,
+"result_count": null,
+"status": "denied",
+"tool": "find"
+},
+{
+"denial_code": "forbidden_parameter",
+"index": 1,
+"result_count": null,
+"status": "denied",
+"tool": "find"
+},
+{
+"denial_code": null,
+"index": 2,
+"result_count": 1,
+"status": "executed",
+"tool": "find"
+},
+{
+"denial_code": null,
+"index": 3,
+"result_count": 1,
+"status": "executed",
+"tool": "find"
+},
+{
+"denial_code": null,
+"index": 4,
+"result_count": 1,
+"status": "executed",
+"tool": "find"
+},
+{
+"denial_code": null,
+"index": 5,
+"result_count": 1,
+"status": "executed",
+"tool": "find"
+},
+{
+"denial_code": null,
+"index": 6,
+"result_count": 2,
+"status": "executed",
+"tool": "trace"
+},
+{
+"denial_code": null,
+"index": 7,
+"result_count": 0,
+"status": "executed",
+"tool": "search"
+}
+],
+"turn": 2
+},
+{
+"action": "retrieve",
+"retrievals": [
+{
+"denial_code": null,
+"index": 0,
+"result_count": 1,
+"status": "executed",
+"tool": "search"
+},
+{
+"denial_code": null,
+"index": 1,
+"result_count": 1,
+"status": "executed",
+"tool": "search"
+},
+{
+"denial_code": null,
+"index": 2,
+"result_count": 0,
+"status": "executed",
+"tool": "find"
+},
+{
+"denial_code": null,
+"index": 3,
+"result_count": 3,
+"status": "executed",
+"tool": "query_code_graph"
+},
+{
+"denial_code": null,
+"index": 4,
+"result_count": 1,
+"status": "executed",
+"tool": "query_code_graph"
+},
+{
+"denial_code": null,
+"index": 5,
+"result_count": 0,
+"status": "executed",
+"tool": "read_excerpt"
+}
+],
+"turn": 3
+},
+{
+"action": "retrieve",
+"retrievals": [
+{
+"denial_code": null,
+"index": 0,
+"result_count": 1,
+"status": "executed",
+"tool": "query_code_graph"
+},
+{
+"denial_code": null,
+"index": 1,
+"result_count": 3,
+"status": "executed",
+"tool": "query_code_graph"
+},
+{
+"denial_code": "forbidden_parameter",
+"index": 2,
+"result_count": null,
+"status": "denied",
+"tool": "query_observations"
+},
+{
+"denial_code": "forbidden_parameter",
+"index": 3,
+"result_count": null,
+"status": "denied",
+"tool": "query_observations"
+}
+],
+"turn": 4
+},
+{
+"action": null,
+"retrievals": [],
+"turn": 5
+}
+]
+},
+"data/jobs/job_inference_security_review/latest.json": {
+"attempt_id": "attempt_0001",
+"handoff_path": "data/jobs/job_inference_security_review/attempts/attempt_0001/handoff.json",
+"handoff_sha256": "2d42d467b6c6cb20853ef3fd382ce593c8a4fd02bd3d733370e22274c3f70872",
+"schema": "appsec-review/latest-handoff/1"
+}
+},
+"observations": [
+[
+"asr:tool_observation:37504175028a1331be7a47d9b557ff6b157727bebfa7800b3f4f81bc7104e5e7",
+"tool_observation",
+"clang-tidy",
+"src/frame.cpp",
+8,
+8
+],
+[
+"asr:tool_observation:37504175028a1331be7a47d9b557ff6b157727bebfa7800b3f4f81bc7104e5e7",
+"tool_observation",
+"clang-tidy",
+"src/frame.cpp",
+8,
+8
+],
+[
+"asr:tool_observation:25df81e9700d254a532a5489ca03f230218d08d92d75f47d976caede2bf2d11b",
+"tool_observation",
+"cpp/uncontrolled-allocation-size",
+"src/frame.cpp",
+10,
+10
+],
+[
+"asr:tool_observation:47b896713072b28901992f9a972c09042863df2e3b9bb2303506f5c7c8856a94",
+"tool_observation",
+"generic-api-key",
+"src/config.cpp",
+6,
+6
+],
+[
+"asr:tool_observation:22626e8c42d46d03a8cb4eaf930228b24ba405c535f6113b9ae4840748d90070",
+"tool_observation",
+"rules.appsec-review.review-signal.sink.cpp-allocation-size-from-narrow-product",
+"src/frame.cpp",
+10,
+10
+],
+[
+"asr:tool_observation:25120cdea2a5472bb81ffc5f4e010d6655835aafff929fe1bb52a9d27482f0ae",
+"tool_observation",
+"rules.appsec-review.review-signal.sink.cpp-banned-function-review",
+"src/frame.cpp",
+23,
+23
+],
+[
+"asr:tool_observation:509a14413a641cf1f5f036f67cf641a835c249d6baeb5fefca26a325397a6286",
+"tool_observation",
+"rules.appsec-review.review-signal.sink.cpp-banned-function-review",
+"src/frame.cpp",
+10,
+10
+],
+[
+"asr:tool_observation:92278d92b7b3c1a044a5b90ce241f7ee7ceda29bbf0f4a0850bb1cff2506daae",
+"tool_observation",
+"rules.appsec-review.review-signal.sink.cpp-banned-function-review",
+"src/frame.cpp",
+15,
+16
+],
+[
+"asr:tool_observation:d1089fa0b39eb9948e1388a5ca9d74d5ac587653ea53d97e669b0efa55f66e9b",
+"tool_observation",
+"rules.appsec-review.review-signal.sink.cpp-narrow-size-product",
+"src/frame.cpp",
+9,
+9
+],
+[
+"asr:tool_observation:1d87e0b6160e6b3aa88154afb159622223fc1134fab5f716757b8337fe7b901f",
+"tool_observation",
+"rules.appsec-review.review-signal.sink.cpp-allocation-size-from-narrow-product",
+"src/frame.cpp",
+10,
+10
+],
+[
+"asr:tool_observation:4529b048157f268ad6b67a678c04665cf63ab92985d7e973e7a12a3c238cc837",
+"tool_observation",
+"rules.appsec-review.review-signal.sink.cpp-banned-function-review",
+"src/frame.cpp",
+15,
+16
+],
+[
+"asr:tool_observation:6b86d0650d0ac4e4d2a7a8a8cc8177246b9cb3addc796cdeb3b85c2f76dbdaaf",
+"tool_observation",
+"rules.appsec-review.review-signal.sink.cpp-banned-function-review",
+"src/frame.cpp",
+23,
+23
+],
+[
+"asr:tool_observation:ba0f57f32001e45ed69aa3bf330bd549fd8fef556590591cc6ebf9068eaa4591",
+"tool_observation",
+"rules.appsec-review.review-signal.sink.cpp-banned-function-review",
+"src/frame.cpp",
+10,
+10
+],
+[
+"asr:tool_observation:ca526f14aa5840c612474e3f96b7626f7312e0459d4cfb195acb690833a0a98f",
+"tool_observation",
+"rules.appsec-review.review-signal.sink.cpp-narrow-size-product",
+"src/frame.cpp",
+9,
+9
+]
+]
+}

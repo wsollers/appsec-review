@@ -12,7 +12,7 @@ from typing import Any, Mapping
 
 from appsec_review.review.identity import make_id
 from appsec_review.review.ledger import EvidenceRequestOutcome, Projection
-from appsec_review.review.models import CellStatus, ClaimState, Gap, GapClass, Lane
+from appsec_review.review.models import CellStatus, ClaimState, Gap, GapClass, JudgeVerdictValue, Lane
 
 FINAL_CLAIM_STATES = frozenset(ClaimState) - {ClaimState.PROPOSED}
 # How each package lead fared across its package's succeeded red cells (red-discovery-result/1 lead
@@ -96,6 +96,8 @@ class Accounting:
     outcome: PoolOutcome
     violations: tuple[Gap, ...]
     duplicate_proposals: int = 0
+    # Judge verdicts in the ledger by de-shuffled outcome, and how many came from a distinct model profile.
+    judge_verdicts: Mapping[str, Any] = field(default_factory=lambda: judge_summary(()))
 
     @property
     def exact(self) -> bool:
@@ -112,9 +114,19 @@ class Accounting:
                 "gaps_by_class": {gap_class.value: self.gaps_by_class[gap_class] for gap_class in GapClass},
                 "evidence_requests_by_outcome": {
                     outcome.value: self.evidence_requests_by_outcome[outcome] for outcome in EvidenceRequestOutcome},
+                "judge_verdicts": dict(self.judge_verdicts),
                 "lanes": [lane.to_json() for lane in self.lanes],
                 "violations": [{"gap_id": gap.gap_id, "subject_id": gap.subject_id, "reason": gap.reason}
                                for gap in self.violations]}
+
+
+def judge_summary(verdicts: Any) -> dict[str, Any]:
+    """``judge_accounting`` of an iterable of :class:`JudgeVerdict`: counts by outcome and by model distinctness."""
+    verdicts = list(verdicts)
+    by_outcome = Counter(item.verdict for item in verdicts)
+    return {"by_outcome": {outcome.value: by_outcome[outcome] for outcome in JudgeVerdictValue},
+            "model_distinct": sum(1 for item in verdicts if item.judge_model_distinct),
+            "not_model_distinct": sum(1 for item in verdicts if not item.judge_model_distinct)}
 
 
 def _ratio(gapped: int, expected: int) -> float:
@@ -256,4 +268,5 @@ def exact_accounting(projection: Projection, expected_cells: Mapping[str, Lane],
         outcome=_combine([lane.outcome for lane in lanes]),
         violations=tuple(sorted(unique.values(), key=lambda gap: (gap.subject_id, gap.reason))),
         duplicate_proposals=sum(duplicates.values()),
+        judge_verdicts=judge_summary(item for items in projection.judge_verdicts.values() for item in items),
     )

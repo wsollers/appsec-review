@@ -32,7 +32,7 @@ SEMANTIC_VIEW_SCHEMA = "appsec-review/inference-review-semantic-settings/1"
 REPORTED_SEVERITIES = ("critical", "high", "medium", "low", "info", "unknown")
 REASONING_LEVELS = ("low", "medium", "high", "xhigh", "max")
 SCORING_PROVIDERS = ("cvss_v4", "cvss_v31_compat", "application_risk_matrix", "ssvc_decision")
-RISK_MATRIX_IMPLEMENTATIONS = ("application_risk_matrix/1", "application_risk_matrix/2")
+RISK_MATRIX_IMPLEMENTATIONS = ("application_risk_matrix/1", "application_risk_matrix/3")
 RISK_MODEL_KEYS = ("exploitability", "environmental", "technical_severity")
 CVSS_METRIC_GROUPS = ("base", "threat", "environmental", "supplemental")
 IMPACT_CLASSES = ("critical", "high", "medium", "low")
@@ -200,6 +200,49 @@ class RoleSettings:
     require_distinct_from_roles: tuple[Role, ...] = ()
 
 
+JUDGE_WHEN = ("all", "disagreement")
+POC_RATINGS = ("low", "medium", "high", "critical")
+
+
+@dataclass(frozen=True, slots=True)
+class JudgeSettings(RoleSettings):
+    """``settings.roles.adjudication_judge`` (docs/architecture/review-judge-and-poc.md section 3).
+
+    ``when`` selects the claims that get a judge cell: ``all`` (every claim on which red affirmed a predicate) or
+    ``disagreement`` (red affirmed and a blue cell contradicts, qualifies, leaves a predicate unresolved, or the blue
+    cells disagree). The judge never sets a claim state. The bounds limit what each side may show the judge.
+    """
+
+    when: str = "all"
+    judges_per_claim: int = 1
+    enabled: bool = True
+    max_why_chars: int = 600
+    max_cited_rows_per_side: int = 12
+    max_cited_row_chars: int = 400
+
+
+@dataclass(frozen=True, slots=True)
+class PocCandidateSettings:
+    """``settings.poc_candidates`` (review-judge-and-poc.md section 4): which claims the handoff lists for a PoC.
+
+    A claim is a candidate when it is ``supported`` or ``confirmed``, the judge sided with red (``red_correct``, or
+    also ``partly`` when ``accept_partly``), it carries a resolved ``poc_basis``, and its risk-matrix technical
+    severity is one of ``risk_ratings``.
+    """
+
+    accept_partly: bool = False
+    risk_ratings: tuple[str, ...] = ("medium", "high", "critical")
+
+    @classmethod
+    def from_mapping(cls, value: object, field: str) -> "PocCandidateSettings":
+        if value is None:
+            return cls()
+        table = _table(value, field, set(), {"accept_partly", "risk_ratings"})
+        return cls(_bool(table.get("accept_partly", False), f"{field}.accept_partly"),
+                   _choices(table.get("risk_ratings", ["medium", "high", "critical"]), f"{field}.risk_ratings",
+                            POC_RATINGS, empty=True))
+
+
 @dataclass(frozen=True, slots=True)
 class RoutingSettings:
     persona_rule: str
@@ -210,7 +253,7 @@ class RoutingSettings:
 class ScoringProviderSettings:
     implementation: str
     metric_groups: tuple[str, ...] = ()
-    # application_risk_matrix/2 only: the declarative exploitability/environmental/severity model.
+    # application_risk_matrix/3 only: the declarative exploitability/environmental/severity model.
     model: RiskModel | None = None
 
 
@@ -296,6 +339,14 @@ class InferenceSecurityReviewSettings:
     # distinctness (``settings.verification``, decision 2); both semantic.
     ship_block: ShipBlockSettings = ShipBlockSettings()
     verification: VerificationSettings = VerificationSettings()
+    # PoC candidates the handoff lists (review-judge-and-poc.md section 4); semantic.
+    poc_candidates: PocCandidateSettings = PocCandidateSettings()
+
+    @property
+    def judge(self) -> JudgeSettings | None:
+        """The adjudication judge's settings when the role is configured and enabled, else ``None``."""
+        configured = self.roles.get(Role.ADJUDICATION_JUDGE)
+        return configured if isinstance(configured, JudgeSettings) and configured.enabled else None
 
     def verifier_distinctness(self) -> dict[str, Any]:
         """How the configured verifier profile relates to the red roles' profiles.
@@ -385,7 +436,10 @@ def _role(name: str, value: object, profiles: Mapping[str, ModelProfileSettings]
         role = Role(name)
     except ValueError as exc:
         raise ValueError(f"{_PREFIX}.roles has unknown role: {name}") from exc
-    table = _table(value, field, {"model_profile", "workers"}, {"require_distinct_from_roles"})
+    judge_keys = {"when", "judges_per_claim", "enabled", "max_why_chars", "max_cited_rows_per_side",
+                  "max_cited_row_chars"}
+    table = _table(value, field, {"model_profile", "workers"},
+                   {"require_distinct_from_roles"} | (judge_keys if role is Role.ADJUDICATION_JUDGE else set()))
     profile = _str(table["model_profile"], f"{field}.model_profile", _PROFILE)
     if profile not in profiles:
         raise ValueError(f"{field}.model_profile names an unconfigured model profile: {profile}")
@@ -393,8 +447,19 @@ def _role(name: str, value: object, profiles: Mapping[str, ModelProfileSettings]
                         tuple(item.value for item in Role), empty=True)
     if role.value in distinct:
         raise ValueError(f"{field}.require_distinct_from_roles must not name the role itself")
-    return role, RoleSettings(profile, _int(table["workers"], f"{field}.workers", 1, 64),
-                              tuple(Role(item) for item in distinct))
+    workers = _int(table["workers"], f"{field}.workers", 1, 64)
+    if role is Role.ADJUDICATION_JUDGE:
+        when = table.get("when", "all")
+        if when not in JUDGE_WHEN:
+            raise ValueError(f"{field}.when must be one of: {', '.join(JUDGE_WHEN)}")
+        return role, JudgeSettings(
+            profile, workers, tuple(Role(item) for item in distinct), when,
+            _int(table.get("judges_per_claim", 1), f"{field}.judges_per_claim", 1, 5),
+            _bool(table.get("enabled", True), f"{field}.enabled"),
+            _int(table.get("max_why_chars", 600), f"{field}.max_why_chars", 1, 2000),
+            _int(table.get("max_cited_rows_per_side", 12), f"{field}.max_cited_rows_per_side", 1, 32),
+            _int(table.get("max_cited_row_chars", 400), f"{field}.max_cited_row_chars", 50, 2000))
+    return role, RoleSettings(profile, workers, tuple(Role(item) for item in distinct))
 
 
 def _scoring(value: object) -> ScoringSettings:
@@ -429,7 +494,7 @@ def _scoring(value: object) -> ScoringSettings:
             if implementation not in RISK_MATRIX_IMPLEMENTATIONS:
                 raise ValueError(f"{provider_field}.implementation must be one of: "
                                  f"{', '.join(RISK_MATRIX_IMPLEMENTATIONS)}")
-            if implementation == "application_risk_matrix/2":
+            if implementation == "application_risk_matrix/3":
                 model = _risk_model(provider, provider_field)
             elif set(provider) & set(RISK_MODEL_KEYS):
                 raise ValueError(f"{provider_field}: application_risk_matrix/1 takes no "
@@ -465,7 +530,7 @@ def _impact_overrides(value: object, field: str) -> Mapping[str, ImpactOverride]
 
 
 def _risk_model(provider: Mapping[str, Any], field: str) -> RiskModel:
-    """``application_risk_matrix/2`` model; an absent table keeps its documented default whole."""
+    """``application_risk_matrix/3`` model; an absent table keeps its documented default whole."""
     dimensions: dict[str, DimensionModel] = {}
     for name in ("exploitability", "environmental"):
         default = DEFAULT_MODEL_DOCUMENT[name]
@@ -543,7 +608,7 @@ def parse_inference_review_settings(value: Mapping[str, Any]) -> InferenceSecuri
     """Validate ``jobs.job_inference_security_review.settings`` into frozen typed settings."""
     settings = _table(value, _PREFIX, {"rounds", "teams", "lanes", "packages", "budgets", "retry", "models",
                                        "roles", "routing", "scoring", "poc"},
-                      {"ranking", "red_output", "ship_block", "verification"})
+                      {"ranking", "red_output", "ship_block", "verification", "poc_candidates"})
 
     field = f"{_PREFIX}.rounds"
     rounds_value = _table(settings["rounds"], field, {"max_rounds", "stable_rounds_required",
@@ -661,4 +726,5 @@ def parse_inference_review_settings(value: Mapping[str, Any]) -> InferenceSecuri
         ship_block=ShipBlockSettings.from_mapping(settings.get("ship_block"), f"{_PREFIX}.ship_block",
                                                   known_families=LEAD_FAMILIES),
         verification=VerificationSettings.from_mapping(settings.get("verification"), f"{_PREFIX}.verification"),
+        poc_candidates=PocCandidateSettings.from_mapping(settings.get("poc_candidates"), f"{_PREFIX}.poc_candidates"),
     )

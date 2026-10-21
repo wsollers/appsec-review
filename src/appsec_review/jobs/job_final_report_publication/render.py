@@ -53,6 +53,28 @@ def _dimension(value: Mapping[str, Any] | None) -> str:
     return f"{rating} on scale {code(value['scale'])}{number}"
 
 
+def _pending_lines(block: Mapping[str, Any]) -> list[str]:
+    """The explicit label of a finding whose ship-block decision is pending (never "does not block")."""
+    if block["status"] != "decision_pending":
+        return []
+    missing = ", ".join(code(name) for name in block["missing_factors"]) or "the technical severity rating itself"
+    bounds = ""
+    if block["technical_severity_floor"] is not None:
+        bounds = (f"; the missing factors leave the severity between {code(block['technical_severity_floor'])} "
+                  f"and {code(block['technical_severity_ceiling'])}")
+    return [f"- **decision pending: severity not yet rated; what is missing: {missing}{bounds}**. "
+            "This is neither a ship-blocking decision nor a release decision."]
+
+
+def _judge(verdict: Mapping[str, Any] | None, independence: Mapping[str, Any]) -> str:
+    """The accepted judge verdict, shown beside the state; a disagreement with the state is never hidden."""
+    if verdict is None:
+        return "no judge verdict (the judge did not run for this claim)"
+    note = "; the judge disagrees with this finding's state" if verdict["disagrees_with_state"] else ""
+    distinct = {True: "yes", False: "no", None: "unknown"}[independence.get("judge_model_distinct")]
+    return f"{code(verdict['verdict'])}{note}; judge model distinct {distinct}"
+
+
 def _finding(index: int, item: Mapping[str, Any], settings: Mapping[str, int], *, unconfirmed: bool = False) -> list[str]:
     block, independence = item["ship_block"], item["independence"]
     heading = "unconfirmed " if unconfirmed else ""
@@ -62,11 +84,15 @@ def _finding(index: int, item: Mapping[str, Any], settings: Mapping[str, int], *
              f"- ship-block status {code(block['status'])} under {code(block['policy'])}; reasons: "
              f"{', '.join(code(reason) for reason in block['reasons']) or 'none'}",
              f"- technical severity used by the policy: {'unrated' if block['technical_severity'] is None else code(block['technical_severity'])}",
+             *_pending_lines(block),
              f"- independence: independent verifier {'yes' if independence['independent'] else 'no'}, provider distinct "
              f"{'yes' if independence['provider_distinct'] else 'no'}, verifier model distinct "
              f"{'yes' if independence['verifier_model_distinct'] else 'no'}",
+             f"- judge: {_judge(item['judge_verdict'], independence)}",
              f"- direct evidence relations ({len(item['direct_evidence'])}): "
-             f"{_ids(item['direct_evidence'], settings['evidence'])}"]
+             f"{_ids(item['direct_evidence'], settings['evidence'])}",
+             f"- analyst-assessed relations, recorded but not counted ({len(item['analyst_assessed_evidence'])}): "
+             f"{_ids(item['analyst_assessed_evidence'], settings['evidence'])}"]
     if item["missing_predicates"]:
         lines.append("- missing predicates: " + ", ".join(code(name) for name in item["missing_predicates"]))
     lines.append(f"- gaps ({len(item['gap_ids'])}): {_ids(item['gap_ids'], settings['gaps'])}")
@@ -78,6 +104,10 @@ def _finding(index: int, item: Mapping[str, Any], settings: Mapping[str, int], *
             label = "no native rating" if native["rating"] is None else f"native rating {code(native['rating'])}"
             lines.append(f"  - {code(provider['id'])} ({code(provider['implementation'])}), {label}")
             lines.extend(f"    - {title}: {_dimension(score[key])}" for key, title in DIMENSION_LABELS)
+            assessment = score["severity_assessment"]
+            bounds = (f", severity between {code(assessment['severity_floor'])} and {code(assessment['severity_ceiling'])}"
+                      if assessment["assessment"] == "unrated" and assessment["severity_floor"] is not None else "")
+            lines.append(f"    - severity assessment: {code(assessment['assessment'])}{bounds}")
             if score["missing_factors"]:
                 lines.append("    - missing factors: " + ", ".join(code(name) for name in score["missing_factors"]))
     else:
@@ -117,6 +147,9 @@ def render_markdown(report: Mapping[str, Any], *, evidence_ids: int, gap_ids: in
               f"- ship-block status counts under {code(block['policy'])}: {_counts(block['by_status'])}",
               f"  - lead lane: {_counts(block['by_lane']['lead'])}",
               f"  - hunt lane: {_counts(block['by_lane']['hunt'])}",
+              *([f"- decision pending: {block['by_status']['decision_pending']} finding(s) have no technical severity "
+                 "yet, so they are neither ship-blocking nor cleared; each is marked below with what is missing"]
+                if block["by_status"]["decision_pending"] else []),
               f"- gap ratio {accounting['gap_ratio']:.3f} (incomplete above {accounting['incomplete_gap_ratio']:.3f}); "
               f"gaps by class: {_counts({k: v for k, v in accounting['gaps_by_class'].items() if v})}", ""]
     lines += _section("Findings (confirmed)", report["findings"], settings, "No confirmed finding packages are publishable.")
@@ -124,7 +157,16 @@ def render_markdown(report: Mapping[str, Any], *, evidence_ids: int, gap_ids: in
     lines += [f"- {code(item)}" for item in report["attack_chains"]["items"]] + [""]
     lines += ["## Proof-of-trigger outcomes", "",
               f"Status {code(report['poc_outcomes']['status'])}: {plain(report['poc_outcomes']['reason'])}"]
-    lines += [f"- {code(item['finding_package_id'])}: {code(item['status'])}" for item in report["poc_outcomes"]["items"]]
+    for item in report["poc_outcomes"]["items"]:
+        lines.append(f"- {code(item['finding_package_id'])}: {code(item['status'])}")
+        if "claim_id" in item:                                        # outcomes of job_poc_generation
+            lines.append(f"  - claim {code(item['claim_id'])}: {plain(item['description'])}")
+            if item.get("functions"):
+                lines.append(f"  - test function {code(item['functions']['test_function'])}, negative control "
+                             f"{code(item['functions']['negative_control'])}")
+            if item.get("files"):
+                lines.append("  - files: " + ", ".join(code(item["files"][key]["path"]) for key in (
+                    "source", "compile", "readme", "provenance")))
     lines += [""]
     lines += _section("Verification backlog (unconfirmed)", report["verification_backlog"], settings,
                       "The verification backlog is empty.", unconfirmed=True)

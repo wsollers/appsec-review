@@ -20,6 +20,7 @@
     "remediation_priority",
     "assumptions",
     "missing_factors",
+    "severity_assessment",
     "evidence_relations",
     "factor_citations",
     "factors",
@@ -31,7 +32,7 @@
   ],
   "properties": {
     "schema": {
-      "const": "appsec-review/score-package/2"
+      "const": "appsec-review/score-package/3"
     },
     "score_id": {
       "$ref": "common.schema.json#/$defs/score_id"
@@ -263,6 +264,52 @@
       },
       "maxItems": 32,
       "uniqueItems": true
+    },
+    "severity_assessment": {
+      "description": "How firmly technical_severity is known. complete: every scored factor was present. bounded: some were missing but every value they could take gives the same severity. unrated: missing factors could change the severity, so technical_severity.rating is null; severity_floor and severity_ceiling bound it (null when the provider cannot) and unresolved_factors names what would resolve it.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "assessment",
+        "severity_floor",
+        "severity_ceiling",
+        "unresolved_factors"
+      ],
+      "properties": {
+        "assessment": {
+          "enum": [
+            "complete",
+            "bounded",
+            "unrated"
+          ]
+        },
+        "severity_floor": {
+          "enum": [
+            "low",
+            "medium",
+            "high",
+            "critical",
+            null
+          ]
+        },
+        "severity_ceiling": {
+          "enum": [
+            "low",
+            "medium",
+            "high",
+            "critical",
+            null
+          ]
+        },
+        "unresolved_factors": {
+          "type": "array",
+          "items": {
+            "$ref": "common.schema.json#/$defs/token"
+          },
+          "maxItems": 32,
+          "uniqueItems": true
+        }
+      }
     },
     "evidence_relations": {
       "$ref": "common.schema.json#/$defs/relation_ids"

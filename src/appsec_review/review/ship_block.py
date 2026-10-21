@@ -1,6 +1,6 @@
 """Deterministic ship-block policy ``ship-block-policy/1`` (design decision 1, with decision 2).
 
-``decide`` is a pure function of one finding's adjudicated state, its ``application_risk_matrix/2``
+``decide`` is a pure function of one finding's adjudicated state, its ``application_risk_matrix/3``
 technical severity, its dependency-lead and CISA KEV reference inputs, and whether its verifier ran
 on a different model profile than every red cell on the claim. The rows, first match wins:
 
@@ -10,10 +10,21 @@ row    condition                                                    status
 1      state ``confirmed``, qualifies, distinct verification held   ``ship_blocking``
 2      state ``confirmed``, qualifies, distinct verification not    ``ship_blocking_pending_distinct_verification``
 3      state ``supported``, qualifies                               ``needs_verification``
-4      anything else                                                ``not_ship_blocking``
+4      state ``confirmed`` or ``supported``, does not qualify,      ``decision_pending``
+       and a material input is missing (technical severity
+       unrated, or material missing factors listed)
+5      anything else                                                ``not_ship_blocking``
 =====  ==========================================================  ===============================================
 
-A finding *qualifies* when its ``application_risk_matrix/2`` technical severity is in
+Precedence: rows 1-3 come first because a qualifying finding already names its next action (block,
+obtain a distinct verifier, obtain independent confirmation), and a KEV-listed dependency qualifies
+even when its severity is unrated. ``decision_pending`` therefore applies only when the finding
+does not qualify *and* the missing input could still change that; it is never an affirmative
+release decision. ``not_ship_blocking`` is reserved for findings that were rated and fall below the
+blocking thresholds, and for claim states that cannot block (contradicted, not reachable,
+insufficient evidence, duplicate, out of scope), which are never published as findings at all.
+
+A finding *qualifies* when its ``application_risk_matrix/3`` technical severity is in
 ``blocking_technical_severities`` (default high, critical), or when ``kev_dependency_blocks`` is on
 and it is a dependency finding (proposed from a lane A lead of a ``dependency_lead_families``
 family) whose reference input is KEV-listed. *Distinct verification held* is true when
@@ -31,8 +42,8 @@ from appsec_review.review.models import ClaimState
 from appsec_review.review.scoring.risk_model import BANDS
 
 POLICY_VERSION = "ship-block-policy/1"
-SEVERITY_PROVIDER = "application_risk_matrix/2"   # the only implementation whose rating may decide
-SEVERITY_BANDS = BANDS                            # application_risk_matrix/2 technical severity bands
+SEVERITY_PROVIDER = "application_risk_matrix/3"   # the only implementation whose rating may decide
+SEVERITY_BANDS = BANDS                            # application_risk_matrix/3 technical severity bands
 DEPENDENCY_FAMILIES = ("dependency_advisory", "artifact_scanner")
 
 
@@ -40,6 +51,7 @@ class ShipBlockStatus(StrEnum):
     SHIP_BLOCKING = "ship_blocking"
     PENDING_DISTINCT_VERIFICATION = "ship_blocking_pending_distinct_verification"
     NEEDS_VERIFICATION = "needs_verification"
+    DECISION_PENDING = "decision_pending"
     NOT_SHIP_BLOCKING = "not_ship_blocking"
 
 
@@ -97,7 +109,8 @@ def policy_sha256(settings: ShipBlockSettings, require_distinct_model: bool) -> 
     """Identity of the policy as configured: version, severity provider, thresholds, distinctness."""
     return sha256_hex({"policy": POLICY_VERSION, "severity_provider": SEVERITY_PROVIDER,
                        "settings": settings.record(), "require_distinct_model": bool(require_distinct_model),
-                       "rows": [status.value for status in ShipBlockStatus]})
+                       "rows": [status.value for status in ShipBlockStatus],
+                       "unrated_precedence": "qualifying_statuses_before_decision_pending"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -105,11 +118,16 @@ class ShipBlockInputs:
     """Everything the policy reads for one finding; each field is cited in the decision record."""
 
     claim_state: ClaimState
-    technical_severity: str | None          # application_risk_matrix/2 rating; None when unrated
+    technical_severity: str | None          # application_risk_matrix/3 rating; None when unrated
     severity_score_id: str | None           # the score package that carried it
     lead_families: tuple[str, ...]          # lead families of the lane A lead packages that proposed it
     kev_listed: bool | None                 # merged reference input (None: no advisory context)
     verifier_model_distinct: bool
+    # Material missing inputs of the technical severity: the factors that kept it unrated, and the
+    # severity range they leave open (None when the provider could not bound it).
+    severity_missing_factors: tuple[str, ...] = ()
+    severity_floor: str | None = None
+    severity_ceiling: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -126,7 +144,10 @@ class ShipBlockDecision:
             "conditions": dict(self.conditions), "reasons": list(self.reasons),
             "inputs": {"claim_state": inputs.claim_state.value,
                        "technical_severity": {"provider": SEVERITY_PROVIDER, "rating": inputs.technical_severity,
-                                              "score_id": inputs.severity_score_id},
+                                              "score_id": inputs.severity_score_id,
+                                              "severity_floor": inputs.severity_floor,
+                                              "severity_ceiling": inputs.severity_ceiling,
+                                              "missing_factors": sorted(inputs.severity_missing_factors)},
                        "lead_families": sorted(inputs.lead_families), "kev_listed": inputs.kev_listed,
                        "verifier_model_distinct": inputs.verifier_model_distinct},
             "citations": {"adjudication_id": adjudication_id,
@@ -153,9 +174,15 @@ def decide(inputs: ShipBlockInputs, settings: ShipBlockSettings = ShipBlockSetti
         reasons.append(f"technical_severity_{inputs.technical_severity}")
     if kev:
         reasons.append("kev_listed_dependency")
-    if inputs.technical_severity is None and state in (ClaimState.CONFIRMED, ClaimState.SUPPORTED):
+    publishable = state in (ClaimState.CONFIRMED, ClaimState.SUPPORTED)
+    unrated = inputs.technical_severity is None
+    missing = tuple(sorted(inputs.severity_missing_factors))
+    if unrated and publishable:
         reasons.append("technical_severity_unrated")
+    if publishable:
+        reasons.extend(f"missing_factor_{name}" for name in missing)
     qualifies = severity or kev
+    conditions["decision_input_missing"] = publishable and (unrated or bool(missing))
     if state is ClaimState.CONFIRMED and qualifies and distinct_held:
         status = ShipBlockStatus.SHIP_BLOCKING
     elif state is ClaimState.CONFIRMED and qualifies:
@@ -164,6 +191,8 @@ def decide(inputs: ShipBlockInputs, settings: ShipBlockSettings = ShipBlockSetti
     elif state is ClaimState.SUPPORTED and qualifies:
         status = ShipBlockStatus.NEEDS_VERIFICATION
         reasons.append("claim_not_confirmed")
+    elif conditions["decision_input_missing"]:
+        status = ShipBlockStatus.DECISION_PENDING
     else:
         status = ShipBlockStatus.NOT_SHIP_BLOCKING
     return ShipBlockDecision(status, conditions, tuple(reasons), policy_sha256(settings, require_distinct_model))

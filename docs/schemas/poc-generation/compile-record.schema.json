@@ -1,0 +1,220 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://appsec-review.local/schemas/poc-generation/compile-record.schema.json",
+  "title": "compile.json of one PoC candidate (appsec-review/poc-compile/1)",
+  "description": "The validators' verdict and the compile check: the commands that ran (classified, never raw argv), exit codes, diagnostics, object hashes and the undefined-symbol check. Nothing was linked into an executable and nothing was run.",
+  "type": "object",
+  "required": [
+    "schema",
+    "claim_id",
+    "status",
+    "reason",
+    "execution_policy",
+    "steps",
+    "objects",
+    "symbol_check",
+    "policy",
+    "gaps"
+  ],
+  "properties": {
+    "schema": {
+      "const": "appsec-review/poc-compile/1"
+    },
+    "claim_id": {
+      "$ref": "common.schema.json#/$defs/claim_id"
+    },
+    "status": {
+      "enum": [
+        "compile_verified",
+        "compile_failed",
+        "artifact_generated",
+        "policy_denied"
+      ]
+    },
+    "reason": {
+      "type": "string",
+      "maxLength": 300
+    },
+    "execution_policy": {
+      "const": "nothing is linked into an executable and nothing is run"
+    },
+    "build_unit": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "image": {
+      "type": "object"
+    },
+    "translation_unit": {
+      "type": "object",
+      "required": [
+        "source",
+        "language",
+        "basis",
+        "working_directory",
+        "compiler",
+        "command_sha256",
+        "dropped_flags"
+      ],
+      "properties": {
+        "source": {
+          "type": "string"
+        },
+        "language": {
+          "enum": [
+            "c",
+            "cxx"
+          ]
+        },
+        "basis": {
+          "enum": [
+            "exact",
+            "unit_default"
+          ]
+        },
+        "working_directory": {
+          "type": "string"
+        },
+        "compiler": {
+          "type": "string"
+        },
+        "command_sha256": {
+          "$ref": "common.schema.json#/$defs/sha256"
+        },
+        "dropped_flags": {
+          "type": "object"
+        }
+      }
+    },
+    "steps": {
+      "type": "array",
+      "maxItems": 64,
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "command",
+          "command_sha256",
+          "working_directory",
+          "exit_code",
+          "timed_out",
+          "duration_ms",
+          "diagnostics"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "command": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "command_sha256": {
+            "$ref": "common.schema.json#/$defs/sha256"
+          },
+          "working_directory": {
+            "type": "string"
+          },
+          "exit_code": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "timed_out": {
+            "type": "boolean"
+          },
+          "duration_ms": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "diagnostics": {
+            "type": "array",
+            "maxItems": 64,
+            "items": {
+              "type": "string",
+              "maxLength": 300
+            }
+          }
+        }
+      }
+    },
+    "objects": {
+      "type": "object"
+    },
+    "symbol_check": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "policy": {
+      "type": "object",
+      "required": [
+        "schema",
+        "verdict",
+        "violations"
+      ],
+      "properties": {
+        "schema": {
+          "const": "appsec-review/poc-policy/1"
+        },
+        "verdict": {
+          "enum": [
+            "passed",
+            "denied",
+            "not_evaluated"
+          ]
+        },
+        "violations": {
+          "type": "array",
+          "maxItems": 51,
+          "items": {
+            "type": "object",
+            "required": [
+              "rule",
+              "message",
+              "line",
+              "function"
+            ],
+            "properties": {
+              "rule": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string",
+                "maxLength": 240
+              },
+              "line": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "function": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "settings_sha256": {
+      "$ref": "common.schema.json#/$defs/sha256"
+    },
+    "gaps": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "maxLength": 300
+      }
+    }
+  }
+}

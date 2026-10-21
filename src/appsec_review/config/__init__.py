@@ -9,9 +9,9 @@ from .codeql import (
 )
 
 from .inference_review import (
-    CAPACITY_KEYS, BudgetSettings, InferenceSecurityReviewSettings, LaneSettings, ModelProfileSettings,
+    CAPACITY_KEYS, BudgetSettings, InferenceSecurityReviewSettings, JudgeSettings, LaneSettings, ModelProfileSettings,
     PackageAssemblySettings,
-    PocEligibilityRule, PocSettings, RetrySettings, RoleSettings, RoundSettings, RoutingSettings,
+    PocCandidateSettings, PocEligibilityRule, PocSettings, RetrySettings, RoleSettings, RoundSettings, RoutingSettings,
     ScoringProviderSettings, ScoringSettings, TeamSettings, parse_inference_review_settings,
     semantic_settings_sha256, semantic_settings_view,
 )
@@ -31,8 +31,9 @@ __all__ = [
     "PhpBuildSettings", "ProcessingMode", "PythonBuildSettings", "RustBuildSettings", "ScheduleConfig", "StepConfig", "TargetDocumentSettings", "DocumentIssueSettings", "TaskConfig", "ToolCapabilityConfig",
     "WasmBuildSettings", "WasmProducerSettings", "load_config", "parse_codeql_settings",
     "BudgetSettings", "CAPACITY_KEYS", "InferenceSecurityReviewSettings", "LaneSettings", "ModelProfileSettings",
-    "OVERLAY_ENVIRONMENT", "PENDING_JOBS", "PROFILE_ENVIRONMENT", "PROFILES",
-    "profile_override_keys", "resolve_profile_name", "PackageAssemblySettings", "PocEligibilityRule", "PocSettings", "RetrySettings", "RoleSettings",
+    "OVERLAY_ENVIRONMENT", "PENDING_JOBS", "PROFILE_ENVIRONMENT", "PROFILES", "profile_override_keys",
+    "resolve_profile_name", "PackageAssemblySettings", "PocEligibilityRule", "PocSettings", "RetrySettings",
+    "RoleSettings", "JudgeSettings", "PocCandidateSettings",
     "RoundSettings", "RoutingSettings", "ScoringProviderSettings", "ScoringSettings", "TeamSettings",
     "overlay_capacity_keys", "parse_inference_review_settings", "semantic_settings_sha256",
     "semantic_settings_view", "ImagePinVerificationSettings", "parse_image_pin_verification_settings",

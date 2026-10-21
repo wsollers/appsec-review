@@ -15,10 +15,13 @@ from appsec_review.graph.contract import (
     ADMISSIBILITY_RULE as GRAPH_FACT_ADMISSIBILITY_RULE, ATTACKER_REACHABLE_SOURCES, FACT_PREDICATES_RULE,
     GRAPH_FACT_PREDICATES, Family,
 )
+from appsec_review.retrieval.model import EntityKind, LogicalIdentity
+from appsec_review.review import admission
 from appsec_review.review.identity import sha256_hex
-from appsec_review.review.models import Predicate
+from appsec_review.review.models import Claim, Predicate, SecurityPredicate
 
-RULES_VERSION = "obligation-rules/1"
+# /2: the required predicates depend on the claim family and ``security_impact`` is derived.
+RULES_VERSION = "obligation-rules/2"
 PRECONDITIONS_VERSION = "preconditions/1"
 # R3 classification rules (review/evidence.py). /2 adds the graph-fact branch: graph kinds are
 # direct only for their mapped predicates and only when the re-resolved fact is direct-eligible. /3: a dominating
@@ -26,6 +29,8 @@ PRECONDITIONS_VERSION = "preconditions/1"
 # destination (graph/bounds.py); otherwise it qualifies. This changes evidence relations, so cell and adjudication
 # reuse bases (which hash this version) no longer match /2 runs.
 ADMISSIBILITY_RULES_VERSION = "evidence-admissibility/3"
+# Pinned next to the admissibility version: which kind of cited content may bear on which predicate.
+PREDICATE_ADMISSION_VERSION = admission.VERSION
 
 
 class Precondition(StrEnum):
@@ -64,13 +69,57 @@ CONFIGURATION_SCOPED: frozenset[Precondition] = frozenset({
     Precondition.OPTIONAL_COMPONENT_ENABLED,
 })
 
+class ObligationFamily(StrEnum):
+    """Which proof a claim owes, from its security predicate and weakness (``obligation-rules/2``).
+
+    A memory or injection claim owes a source-to-sink argument; a hard-coded secret, a weak
+    primitive, a misconfiguration or a vulnerable dependency does not have one, and demanding it
+    would either block every such claim or invite a vacuous citation. The predicate vocabulary is
+    unchanged; only which predicates a family requires differs.
+    """
+
+    MEMORY_AND_INPUT = "memory_and_input"   # default: every weakness not listed below
+    SECRETS = "secrets"
+    CRYPTOGRAPHY = "cryptography"
+    CONFIGURATION = "configuration"
+    SUPPLY_CHAIN = "supply_chain"           # vulnerable dependencies, CI workflows
+
+
+_P = Predicate
+# The default family's set. The name is kept for the many callers that mean "the usual obligations".
 ALWAYS_REQUIRED: tuple[Predicate, ...] = (
-    Predicate.AFFECTED_CONSTRUCT,
-    Predicate.ATTACKER_INPUT_CONTROL,
-    Predicate.SOURCE_TO_SINK_REACHABILITY,
-    Predicate.MISSING_OR_INEFFECTIVE_GUARD,
-    Predicate.SECURITY_IMPACT,
+    _P.AFFECTED_CONSTRUCT,
+    _P.ATTACKER_INPUT_CONTROL,
+    _P.SOURCE_TO_SINK_REACHABILITY,
+    _P.MISSING_OR_INEFFECTIVE_GUARD,
 )
+REQUIRED_BY_FAMILY: dict[ObligationFamily, tuple[Predicate, ...]] = {
+    ObligationFamily.MEMORY_AND_INPUT: ALWAYS_REQUIRED,
+    # The secret is in the shipped artifact and nothing else keeps it from use (rotation, scoping).
+    ObligationFamily.SECRETS: (_P.AFFECTED_CONSTRUCT, _P.MISSING_OR_INEFFECTIVE_GUARD),
+    # The weak primitive is at the construct and no compensating control protects the data.
+    ObligationFamily.CRYPTOGRAPHY: (_P.AFFECTED_CONSTRUCT, _P.MISSING_OR_INEFFECTIVE_GUARD),
+    # The construct exists and the configuration that makes it a weakness is in effect.
+    ObligationFamily.CONFIGURATION: (_P.AFFECTED_CONSTRUCT, _P.CONFIGURATION_ENABLES),
+    # The component is present and enabled in this build or workflow.
+    ObligationFamily.SUPPLY_CHAIN: (_P.AFFECTED_CONSTRUCT, _P.CONFIGURATION_ENABLES),
+}
+# ``security_impact`` is derived, never cited: no entity kind is DIRECT for it under
+# ``predicate-admission/1``, because impact follows from the adjudicated facts of the claim (its
+# weakness class and the predicates above), so requiring a cited relation would make ``confirmed``
+# unreachable. It stays in the vocabulary: relations may still be recorded for it (analyst-assessed
+# at best), and scoring derives the impact class from the claim's CWE.
+DERIVED_PREDICATES: frozenset[Predicate] = frozenset({_P.SECURITY_IMPACT})
+# CWE ids that make a claim a secrets claim whatever security predicate the worker chose.
+SECRET_CWES: frozenset[str] = frozenset({"CWE-798", "CWE-259", "CWE-321", "CWE-256", "CWE-312", "CWE-522"})
+_SECURITY_PREDICATE_FAMILY: dict[SecurityPredicate, ObligationFamily] = {
+    SecurityPredicate.CRYPTO_WEAKNESS: ObligationFamily.CRYPTOGRAPHY,
+    SecurityPredicate.INSECURE_CONFIGURATION: ObligationFamily.CONFIGURATION,
+    SecurityPredicate.SUPPLY_CHAIN_COMPROMISE: ObligationFamily.SUPPLY_CHAIN,
+}
+# Claims about these affected entities concern the build itself, so the configuration predicate is
+# owed whatever preconditions the proposing model chose to list.
+BUILD_CONFIGURATION_KINDS: frozenset[EntityKind] = frozenset({EntityKind.BUILD_ACTION, EntityKind.COMPILE_UNIT})
 CONFIGURATION_PREDICATE = Predicate.CONFIGURATION_ENABLES
 
 
@@ -86,13 +135,47 @@ def parse_precondition(value: str | Precondition) -> Precondition:
         raise ValueError(f"unknown {PRECONDITIONS_VERSION} member") from exc
 
 
-def required_predicates(preconditions: Iterable[str | Precondition]) -> frozenset[Predicate]:
-    """Return the predicates a claim with ``preconditions`` must satisfy (R4)."""
+def obligation_family(security_predicate: SecurityPredicate | str | None = None,
+                      weakness_cwe: str | None = None) -> ObligationFamily:
+    """The claim's obligation family; a secrets CWE wins, anything unlisted is the default family."""
+    if weakness_cwe in SECRET_CWES:
+        return ObligationFamily.SECRETS
+    if security_predicate is None:
+        return ObligationFamily.MEMORY_AND_INPUT
+    return _SECURITY_PREDICATE_FAMILY.get(SecurityPredicate(security_predicate), ObligationFamily.MEMORY_AND_INPUT)
+
+
+def _concerns_build(affected_entities: Iterable[str]) -> bool:
+    for value in affected_entities:
+        try:
+            if LogicalIdentity.parse(str(value)).kind in BUILD_CONFIGURATION_KINDS:
+                return True
+        except ValueError:
+            continue
+    return False
+
+
+def required_predicates(preconditions: Iterable[str | Precondition], *,
+                        security_predicate: SecurityPredicate | str | None = None,
+                        weakness_cwe: str | None = None,
+                        affected_entities: Iterable[str] = ()) -> frozenset[Predicate]:
+    """Return the predicates a claim must satisfy (R4).
+
+    The set is the claim family's (``REQUIRED_BY_FAMILY``), plus ``configuration_enables`` when any
+    precondition is configuration-scoped or when an affected entity is a build action or compile
+    unit. Called with preconditions only, it is the default family's set.
+    """
     parsed = {parse_precondition(item) for item in preconditions}
-    required = set(ALWAYS_REQUIRED)
-    if parsed & CONFIGURATION_SCOPED:
+    required = set(REQUIRED_BY_FAMILY[obligation_family(security_predicate, weakness_cwe)])
+    if parsed & CONFIGURATION_SCOPED or _concerns_build(affected_entities):
         required.add(CONFIGURATION_PREDICATE)
     return frozenset(required)
+
+
+def required_predicates_for(claim: Claim) -> frozenset[Predicate]:
+    """:func:`required_predicates` for a claim record."""
+    return required_predicates(claim.preconditions, security_predicate=claim.security_predicate,
+                               weakness_cwe=claim.weakness_cwe, affected_entities=claim.affected_entities)
 
 
 def _graph_predicates_record(mapping: Mapping[Family, Iterable[Predicate]]) -> dict[str, object]:
@@ -109,10 +192,19 @@ def _policy_document(graph_predicates: Mapping[Family, Iterable[Predicate]] = GR
     return {
         "rules": RULES_VERSION,
         "admissibility": ADMISSIBILITY_RULES_VERSION,
+        "predicate_admission": {"version": PREDICATE_ADMISSION_VERSION, "table_sha256": admission.TABLE_SHA256},
         "graph_fact_predicates": _graph_predicates_record(graph_predicates),
         "preconditions": PRECONDITIONS_VERSION,
         "predicates": sorted(item.value for item in Predicate),
         "always_required": sorted(item.value for item in ALWAYS_REQUIRED),
+        "required_by_family": {family.value: sorted(item.value for item in predicates)
+                               for family, predicates in sorted(REQUIRED_BY_FAMILY.items(),
+                                                                key=lambda entry: entry[0].value)},
+        "derived_predicates": sorted(item.value for item in DERIVED_PREDICATES),
+        "secret_cwes": sorted(SECRET_CWES),
+        "security_predicate_families": {key.value: value.value for key, value
+                                        in sorted(_SECURITY_PREDICATE_FAMILY.items(), key=lambda e: e[0].value)},
+        "build_configuration_kinds": sorted(item.value for item in BUILD_CONFIGURATION_KINDS),
         "configuration_predicate": CONFIGURATION_PREDICATE.value,
         "precondition_scopes": {
             item.value: "configuration" if item in CONFIGURATION_SCOPED else "attacker"
@@ -123,6 +215,8 @@ def _policy_document(graph_predicates: Mapping[Family, Iterable[Predicate]] = GR
 
 POLICY_SHA256 = sha256_hex(_policy_document())
 
-__all__ = ["ADMISSIBILITY_RULES_VERSION", "ALWAYS_REQUIRED", "CONFIGURATION_PREDICATE", "CONFIGURATION_SCOPED",
-           "FACT_PREDICATES_RULE", "GRAPH_FACT_PREDICATES", "POLICY_SHA256", "PRECONDITIONS_VERSION", "Precondition",
-           "RULES_VERSION", "parse_precondition", "required_predicates"]
+__all__ = ["ADMISSIBILITY_RULES_VERSION", "ALWAYS_REQUIRED", "BUILD_CONFIGURATION_KINDS", "CONFIGURATION_PREDICATE",
+           "CONFIGURATION_SCOPED", "DERIVED_PREDICATES", "FACT_PREDICATES_RULE", "GRAPH_FACT_PREDICATES",
+           "ObligationFamily", "POLICY_SHA256", "PRECONDITIONS_VERSION", "PREDICATE_ADMISSION_VERSION",
+           "Precondition", "REQUIRED_BY_FAMILY", "RULES_VERSION", "SECRET_CWES", "obligation_family",
+           "parse_precondition", "required_predicates", "required_predicates_for"]
