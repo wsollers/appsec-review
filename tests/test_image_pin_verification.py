@@ -140,8 +140,9 @@ def test_repository_pins_cover_catalog_images_build_profiles_and_codeql_source()
     document = tomllib.loads((ROOT / "appsec-review.toml").read_text(encoding="utf-8"))
     catalog = tomllib.loads((ROOT / "containers" / "catalog.toml").read_text(encoding="utf-8"))["images"]
     sources = {pin["source"] for pin in configured_pins(catalog, document)}
-    enabled = {item["id"] for item in catalog if item.get("state") == "enabled"}
+    enabled = {item["id"] for item in catalog if item.get("state") == "enabled" and not item.get("manual")}
     assert {f"containers/catalog.toml images.{image}.image_id" for image in enabled} <= sources
+    assert not any(".tool-report-latex." in source for source in sources)  # manual: no pipeline job runs it
     profiles = document["jobs"]["job_project_build"]["settings"]["profiles"]
     assert {f"jobs.job_project_build.settings.profiles.{name}.image_id" for name in profiles} <= sources
     assert "jobs.job_codeql_analysis.settings.source_image_id" in sources
@@ -157,7 +158,8 @@ def test_configured_pins_cover_enabled_catalog_images_and_enabled_job_settings_o
     }}
     catalog = [{"id": "tool-x", "state": "enabled", "tag": "fixture/tool-x:1", "image_id": "sha256:" + "d" * 64},
                {"id": "tool-y", "state": "enabled", "tag": "fixture/tool-y:1"},
-               {"id": "tool-z", "state": "deferred", "tag": "fixture/tool-z:1"}]
+               {"id": "tool-z", "state": "deferred", "tag": "fixture/tool-z:1"},
+               {"id": "tool-m", "state": "enabled", "manual": True, "tag": "fixture/tool-m:1"}]
     pins = configured_pins(catalog, document)
     assert [(pin["source"], pin["tag"], pin["image_id"]) for pin in pins] == [
         ("containers/catalog.toml images.tool-x.image_id", "fixture/tool-x:1", "sha256:" + "d" * 64),

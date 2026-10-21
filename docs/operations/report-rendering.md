@@ -5,8 +5,9 @@ document compiled to PDF by the `tool-report-latex` image, or one self-contained
 standalone tool. No pipeline job runs it yet, `job_final_report_publication` does not call it, and
 `final-report.json` keeps `renderers.pdf.state = "not_rendered"` (see
 [`final-report.md`](final-report.md)). Because no job runs the image, `appsec-review.toml` has no pin
-for it; the image is an enabled catalog entry, so `job_image_pin_verification` requires it to be
-present locally like every other enabled image (build it with the command below).
+for it. The image stays an enabled catalog entry so it can be built and smoke-tested, but it is marked
+`manual = true`: `job_image_pin_verification` does not require it, and a host that never renders a report
+need not build it (build it with the command below when you do).
 
 ## What it renders
 

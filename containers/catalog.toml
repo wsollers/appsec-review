@@ -531,6 +531,9 @@ purpose = "Offline bounded Tree-sitter concrete-syntax-tree production for accep
 [[images]]
 id = "tool-report-latex"
 state = "enabled"
+# Built and run by hand (scripts/render-report.*). No pipeline job runs it, so job_image_pin_verification
+# does not require it. Remove this flag when a job starts running the image.
+manual = true
 kind = "tool"
 version = "1.0.0"
 tag = "appsec-review/tool-report-latex:1.0.0"
