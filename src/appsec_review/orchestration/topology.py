@@ -178,6 +178,10 @@ def wave1_dependencies(registered: Set[str]) -> dict[str, tuple[str, ...]] | Non
         wave_dependencies["job_review_package_assembly"] = ("job_review_data_indexing",)
     if "job_document_issue_analysis" in registered:
         wave_dependencies["job_document_issue_analysis"] = ("job_review_package_assembly",)
+    if "job_inference_security_review" in registered and "job_document_issue_analysis" in registered:
+        # The near-terminal review reads the accepted manifest, which holds every index shard and the
+        # assembled review packages, so it runs after both consumers of the index and is the one terminal job.
+        wave_dependencies["job_inference_security_review"] = ("job_document_issue_analysis",)
     return wave_dependencies
 
 

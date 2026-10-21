@@ -15,7 +15,7 @@ model_connectivity -> image_pin_verification -> review_intake -> target_catalog 
   -> [cpg_analysis only when enabled] -> evidence_collection -> dependency_intelligence
   -> change_context_analysis -> codeql_analysis -> review_prioritization
   -> code_graph_index -> review_data_indexing -> review_package_assembly
-  -> document_issue_analysis
+  -> document_issue_analysis -> inference_security_review
 ```
 
 Both surfaces verify in `image_pin_verification`, after the model gate and before intake, that every

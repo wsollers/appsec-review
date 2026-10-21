@@ -573,7 +573,7 @@ def test_topology_places_the_job_after_language_build_with_one_terminal_job() ->
     assert jobs[JOB_ID]["dependencies"] == ["job_language_build"]
     assert "job_language_build" in jobs[JOB_ID]["upstream_handoffs"]
     depended = {dependency for item in jobs.values() for dependency in item["dependencies"]}
-    assert set(jobs) - depended == {"job_document_issue_analysis"}  # exactly one terminal job
+    assert set(jobs) - depended == {"job_inference_security_review"}  # exactly one terminal job
     consumers = [job_id for job_id, item in jobs.items() if JOB_ID in item["dependencies"]]
     assert consumers == ["job_review_data_indexing"]
     for sibling in ("job_cpp_compiled_analysis", "job_codeql_analysis", "job_clang_static_analysis",
