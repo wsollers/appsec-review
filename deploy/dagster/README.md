@@ -70,6 +70,11 @@ For a bounded acceptance target already beneath the read-only `targets/` mount, 
 `APPSEC_REVIEW_TARGET` to its container path for the lifecycle and launch commands; otherwise the
 deployment defaults to `/opt/app/targets/appsec-multi-vuln`.
 
+The runtime profile is `APPSEC_REVIEW_PROFILE` (`dev` by default; `prod` opts into the more capable
+models and larger token limits from `profiles/prod.toml`, which the image copies next to
+`appsec-review.toml`). It is fixed when the containers are created, so switch with
+`scripts/stack-restart --profile prod`. See [model profiles](../../docs/operations/model-profiles.md).
+
 ```bash
 python deploy/dagster/bin/bootstrap.py
 python deploy/dagster/bin/lifecycle.py build
@@ -456,7 +461,7 @@ limit and is bounded only by `max_concurrent`.
 ## Environment variables
 
 `deploy/dagster/.env` (from bootstrap; see `.env.example`) supplies Compose interpolation:
-`DAGSTER_POSTGRES_PASSWORD`, `APPSEC_UID`/`APPSEC_GID`, `APPSEC_REVIEW_TARGET`, the three
+`DAGSTER_POSTGRES_PASSWORD`, `APPSEC_UID`/`APPSEC_GID`, `APPSEC_REVIEW_TARGET`, optionally `APPSEC_REVIEW_PROFILE` (`dev`|`prod`, default `dev`), the three
 `APPSEC_CLAUDE_*` bind paths for Linux/WSL, and optionally `ANTHROPIC_API_KEY`. Compose passes
 `ANTHROPIC_API_KEY` (empty by default) only to the code location; it is used only by models
 configured with `provider = "anthropic-api"`, and the `claude-cli` transport removes it from the

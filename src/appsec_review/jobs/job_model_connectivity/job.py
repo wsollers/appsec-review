@@ -3,11 +3,10 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 import hashlib
 from pathlib import Path
-import tomllib
 from typing import Any
 
 from appsec_review.jobs.cataloging import write_json
-from appsec_review.jobs.job_review_intake.job import PREFLIGHT_SCHEMA, configured_models
+from appsec_review.jobs.job_review_intake.job import PREFLIGHT_SCHEMA, configured_models, resolved_configuration
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from appsec_review.jobs.job_model_connectivity.datasets import CONSUMES, DATASETS
 
@@ -32,8 +31,7 @@ def _validate(context, _result) -> None:
 
 def build_job(*, check_models: ModelCheck | None = None) -> Job:
     def resolve_models(unit: UnitContext) -> Mapping[str, Any]:
-        frozen = unit.job.run_root / "data" / "configuration" / "appsec-review.toml"
-        required = configured_models(tomllib.loads(frozen.read_text(encoding="utf-8")))
+        required = configured_models(resolved_configuration(unit.job.run_root))
         return {"required": required,
                 "model_count": len({(item["provider"], item["model"]) for item in required})}
 

@@ -492,6 +492,33 @@ class JobConfig:
 PENDING_JOBS: frozenset[str] = frozenset()
 OVERLAY_ENVIRONMENT = "APPSEC_REVIEW_CONFIG_OVERLAY"
 OVERLAY_LAYER = "capacity_overlay"
+# Runtime profile: ``dev`` is the checked-in file as it is; ``prod`` is the layer file
+# ``profiles/prod.toml`` beside it. Nothing selects ``prod`` implicitly (docs/operations/model-profiles.md).
+PROFILE_ENVIRONMENT = "APPSEC_REVIEW_PROFILE"
+PROFILE_LAYER = "runtime_profile"
+DEFAULT_PROFILE = "dev"
+PROFILES: tuple[str, ...] = ("dev", "prod")
+PROFILE_DIRECTORY = "profiles"
+_NAME = re.compile(r"[a-z][a-z0-9_]{0,63}")
+PROFILE_MODEL_JOBS: tuple[str, ...] = (
+    "job_target_analysis_plan", "job_project_build", "job_post_build_security_assessment",
+    "job_dependency_intelligence", "job_owasp_control_assessment")
+PROFILE_JOB_MODEL_KEYS: Mapping[str, type] = MappingProxyType({
+    "provider": str, "model": str, "reasoning": str, "max_input_tokens": int, "max_output_tokens": int,
+    "timeout_seconds": int, "retries": int})
+PROFILE_REVIEW_MODEL_KEYS: Mapping[str, type] = MappingProxyType({
+    "provider": str, "model": str, "reasoning": str, "max_input_tokens": int, "max_output_tokens": int,
+    "max_queries": int, "max_turns": int, "timeout_seconds": int})
+PROFILE_BUDGET_KEYS: tuple[str, ...] = (
+    "max_model_turns", "max_input_tokens", "max_output_tokens", "max_retrieval_queries", "timeout_seconds")
+
+
+def resolve_profile_name(profile: str | None = None) -> str:
+    """The selected runtime profile: ``profile`` when given, else ``APPSEC_REVIEW_PROFILE``, else ``dev``."""
+    value = profile if profile is not None else (os.environ.get(PROFILE_ENVIRONMENT) or DEFAULT_PROFILE)
+    if value not in PROFILES:
+        raise ValueError(f"unknown runtime profile {value!r}; expected one of: {', '.join(PROFILES)}")
+    return value
 
 
 @dataclass(frozen=True, slots=True)
@@ -510,6 +537,9 @@ class AppConfig:
     overlay_sha256: str | None = None
     binary_decompilation: BinaryDecompilationSettings = BinaryDecompilationSettings()
     banned_functions: BannedFunctions = BannedFunctions()
+    profile: str = DEFAULT_PROFILE
+    profile_path: Path | None = None
+    profile_sha256: str | None = None
 
     def job(self, job_id: str) -> JobConfig:
         try:
@@ -520,10 +550,94 @@ class AppConfig:
     @property
     def layers(self) -> tuple[Mapping[str, str], ...]:
         """Configuration source layers in merge order, each with its own content hash."""
-        base = {"path": str(self.source_path), "sha256": self.source_sha256}
-        if self.overlay_path is None or self.overlay_sha256 is None:
-            return (base,)
-        return (base, {"path": str(self.overlay_path), "sha256": self.overlay_sha256, "layer": OVERLAY_LAYER})
+        layers: list[Mapping[str, str]] = [{"path": str(self.source_path), "sha256": self.source_sha256}]
+        if self.profile_path is not None and self.profile_sha256 is not None:
+            layers.append({"path": str(self.profile_path), "sha256": self.profile_sha256, "layer": PROFILE_LAYER})
+        if self.overlay_path is not None and self.overlay_sha256 is not None:
+            layers.append({"path": str(self.overlay_path), "sha256": self.overlay_sha256, "layer": OVERLAY_LAYER})
+        return tuple(layers)
+
+
+def profile_override_keys(document: object) -> tuple[str, ...]:
+    """Validate a runtime-profile layer against its closed allowlist and return the dotted keys it sets.
+
+    A profile may set only: the ``model`` table of the five model-calling jobs
+    (``PROFILE_JOB_MODEL_KEYS``), model profiles of the inference review
+    (``PROFILE_REVIEW_MODEL_KEYS``), ``model_profile`` of its roles, and its ``budgets``
+    (``PROFILE_BUDGET_KEYS``). Every other key, wrong type and empty table is rejected by name.
+    """
+    from .inference_review import JOB_ID
+
+    def table(value: object, field: str, allowed: set[str] | None = None) -> Mapping[str, Any]:
+        if not isinstance(value, Mapping) or not value:
+            raise ValueError(f"configuration profile {field or 'document'} must be a non-empty table")
+        unknown = set(value) - allowed if allowed is not None else set()
+        if unknown:
+            raise ValueError("configuration profile may set only model, limit and budget keys; rejected: " +
+                             ", ".join(sorted(f"{field}.{key}" if field else str(key) for key in unknown)))
+        return value
+
+    def typed(values: Mapping[str, Any], field: str, kinds: Mapping[str, type]) -> list[str]:
+        table(values, field, set(kinds))
+        for key, value in values.items():
+            kind = kinds[key]
+            if type(value) is not kind or (kind is str and not value.strip()) or (kind is int and value < 0):
+                raise ValueError(f"configuration profile {field}.{key} must be a "
+                                 f"{'non-empty string' if kind is str else 'non-negative integer'}")
+        return [f"{field}.{key}" for key in values]
+
+    root = table(document, "", {"jobs"})
+    jobs = table(root["jobs"], "jobs", {*PROFILE_MODEL_JOBS, JOB_ID})
+    keys: list[str] = []
+    for job_id in sorted(jobs):
+        field = f"jobs.{job_id}"
+        job = table(jobs[job_id], field, {"settings"})
+        if job_id != JOB_ID:
+            settings = table(job["settings"], f"{field}.settings", {"model"})
+            keys += typed(settings["model"], f"{field}.settings.model", PROFILE_JOB_MODEL_KEYS)
+            continue
+        settings = table(job["settings"], f"{field}.settings", {"models", "roles", "budgets"})
+        if "models" in settings:
+            models = table(settings["models"], f"{field}.settings.models")
+            for name in sorted(models):
+                if not _NAME.fullmatch(str(name)):
+                    raise ValueError(f"configuration profile model profile name is invalid: {name}")
+                keys += typed(models[name], f"{field}.settings.models.{name}", PROFILE_REVIEW_MODEL_KEYS)
+        if "roles" in settings:
+            roles = table(settings["roles"], f"{field}.settings.roles")
+            for name in sorted(roles):
+                role = table(roles[name], f"{field}.settings.roles.{name}", {"model_profile"})
+                keys += typed(role, f"{field}.settings.roles.{name}", {"model_profile": str})
+        if "budgets" in settings:
+            keys += typed(settings["budgets"], f"{field}.settings.budgets", {key: int for key in PROFILE_BUDGET_KEYS})
+    return tuple(sorted(keys))
+
+
+def _apply_profile(document: dict[str, Any], profile: Mapping[str, Any]) -> None:
+    """Deep-merge a validated profile over the base; a profile may not invent jobs, job models or roles."""
+    from .inference_review import JOB_ID
+
+    def base_table(path: tuple[str, ...]) -> dict[str, Any]:
+        node: Any = document
+        for part in path:
+            node = node.get(part) if isinstance(node, dict) else None
+        if not isinstance(node, dict):
+            raise ValueError(f"configuration profile sets {'.'.join(path)} but the base configuration has no such table")
+        return node
+
+    for job_id, job in profile["jobs"].items():
+        settings = job["settings"]
+        if job_id != JOB_ID:
+            base_table(("jobs", job_id, "settings", "model")).update(settings["model"])
+            continue
+        review = ("jobs", job_id, "settings")
+        for name, values in settings.get("models", {}).items():
+            models = base_table((*review, "models"))
+            models.setdefault(name, {}).update(values)
+        for name, values in settings.get("roles", {}).items():
+            base_table((*review, "roles", name)).update(values)
+        if "budgets" in settings:
+            base_table((*review, "budgets")).update(settings["budgets"])
 
 
 def overlay_capacity_keys(document: object) -> tuple[str, ...]:
@@ -606,8 +720,14 @@ def _config_source(path: str | Path) -> Path:
     return Path(path).resolve(strict=True)
 
 
-def load_config(path: str | Path = "appsec-review.toml", *, overlay: str | Path | None = None) -> AppConfig:
-    """Load the explicit (or repository default) configuration and an optional capacity overlay.
+def load_config(path: str | Path = "appsec-review.toml", *, overlay: str | Path | None = None,
+                profile: str | None = None) -> AppConfig:
+    """Load the explicit (or repository default) configuration, a runtime profile and an optional capacity overlay.
+
+    The profile is ``profile`` when given, otherwise ``APPSEC_REVIEW_PROFILE``, otherwise ``dev``. ``dev``
+    is the file as it is; ``prod`` merges ``profiles/prod.toml`` (beside the file) over it, before
+    validation, and freezes it as its own hashed layer. Every resolved configuration records
+    ``configuration_profile``. Layer order: base, profile, capacity overlay.
 
     The overlay is ``overlay`` when given, otherwise the local path or file URI named by
     ``APPSEC_REVIEW_CONFIG_OVERLAY`` when that variable is set and non-empty. It may set only
@@ -618,6 +738,19 @@ def load_config(path: str | Path = "appsec-review.toml", *, overlay: str | Path 
     repository_root = source.parent
     source_bytes = source.read_bytes()
     document = tomllib.loads(source_bytes.decode("utf-8"))
+    profile_name = resolve_profile_name(profile)
+    profile_source: Path | None = None
+    profile_sha256: str | None = None
+    profile_record: dict[str, Any] = {"name": profile_name, "path": None, "sha256": None, "keys": []}
+    if profile_name != DEFAULT_PROFILE:
+        profile_source = _config_source(repository_root / PROFILE_DIRECTORY / f"{profile_name}.toml")
+        profile_bytes = profile_source.read_bytes()
+        profile_document = tomllib.loads(profile_bytes.decode("utf-8"))
+        profile_keys = profile_override_keys(profile_document)
+        _apply_profile(document, profile_document)
+        profile_sha256 = hashlib.sha256(profile_bytes).hexdigest()
+        profile_record = {"layer": PROFILE_LAYER, "name": profile_name, "path": str(profile_source),
+                          "sha256": profile_sha256, "keys": list(profile_keys), "document": profile_document}
     overlay_value = overlay if overlay is not None else (os.environ.get(OVERLAY_ENVIRONMENT) or None)
     overlay_source: Path | None = None
     overlay_sha256: str | None = None
@@ -632,6 +765,7 @@ def load_config(path: str | Path = "appsec-review.toml", *, overlay: str | Path 
         overlay_record = {"layer": OVERLAY_LAYER, "path": str(overlay_source), "sha256": overlay_sha256,
                           "keys": list(overlay_keys), "document": overlay_document}
     resolved_document = copy.deepcopy(document)
+    resolved_document["configuration_profile"] = profile_record
     if overlay_record is not None:
         resolved_document["configuration_overlay"] = overlay_record
 
@@ -966,6 +1100,9 @@ def load_config(path: str | Path = "appsec-review.toml", *, overlay: str | Path 
         pending_jobs=MappingProxyType(pending),
         overlay_path=overlay_source,
         overlay_sha256=overlay_sha256,
+        profile=profile_name,
+        profile_path=profile_source,
+        profile_sha256=profile_sha256,
         binary_decompilation=binary_decompilation,
         banned_functions=banned_functions,
     )
