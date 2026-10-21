@@ -57,6 +57,7 @@ Repository authority remains in [`../../AGENTS.md`](../../AGENTS.md). This page 
   binary, starting and verifying a decompilation, failures, and the efficacy command.
 - [`telemetry.md`](telemetry.md) — structured event and redaction design.
 - [`windows-native-analysis-vm.md`](windows-native-analysis-vm.md) — proposed Windows-native analysis isolation.
+- [`windows-host-runner.md`](windows-host-runner.md) — native Windows host build runner (scripts under `deploy/windows/`).
 - [`inference-security-review.md`](inference-security-review.md) — near-terminal red/blue/verification,
   evidence-qualified adjudication, independent scoring, benign proof-of-trigger, attack-chain, and
   quorum design.

@@ -2,6 +2,10 @@
 
 Status: design only; no VM, image, installer, orchestration, or runtime implementation exists.
 
+For this deployment the owner chose to build on the Windows host directly instead of in a VM: see
+[`windows-host-runner.md`](windows-host-runner.md). This document remains the reference for the interface,
+evidence, and license gates; its VM isolation sections do not apply to the host runner.
+
 Research checked: 2026-10-08. Licensing conclusions in this document are engineering gates, not
 legal advice. The operator must confirm current terms and its own entitlements before acquiring or
 using any Microsoft or third-party product.

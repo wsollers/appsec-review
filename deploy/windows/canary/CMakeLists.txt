@@ -1,0 +1,8 @@
+cmake_minimum_required(VERSION 3.20)
+project(appsec_canary LANGUAGES CXX)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+add_executable(canary main.cpp)
+if(MSVC)
+  target_compile_options(canary PRIVATE /W4 /EHsc)
+endif()
