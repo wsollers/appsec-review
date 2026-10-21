@@ -43,7 +43,11 @@ CONTAINER_ACCEPTANCE = "/opt/app/test/acceptance"
 TARGET_VARIABLE = "APPSEC_REVIEW_TARGET"
 OVERLAY_VARIABLE = "APPSEC_REVIEW_CONFIG_OVERLAY"
 RECORDING_VARIABLE = "APPSEC_REVIEW_MODEL_RECORDING"
-DEPLOY_VARIABLES = (TARGET_VARIABLE, OVERLAY_VARIABLE, RECORDING_VARIABLE)
+PROFILE_VARIABLE = "APPSEC_REVIEW_PROFILE"
+DEFAULT_PROFILE = "dev"
+DEPLOY_VARIABLES = (TARGET_VARIABLE, OVERLAY_VARIABLE, RECORDING_VARIABLE, PROFILE_VARIABLE)
+PROFILE_NOTICE = ("profile prod uses the more capable models (Sonnet 5.5, Opus 5.5 verifier) and larger token limits; "
+                  "see docs/operations/model-profiles.md")
 OK, FAILED, USAGE, REFUSED, NOT_FOUND = 0, 1, 2, 3, 4
 APP_RUN_ID = re.compile(r"^\d{4}-\d{2}-\d{2}-\d{4}$")
 DAGSTER_RUN_ID = re.compile(r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
@@ -278,7 +282,14 @@ def requested_settings(args: argparse.Namespace) -> dict[str, str]:
         requested[OVERLAY_VARIABLE] = resolve_overlay(args.overlay)
     if getattr(args, "recording", None) is not None:
         requested[RECORDING_VARIABLE] = resolve_recording(args.recording)
+    if getattr(args, "profile", None) is not None:
+        requested[PROFILE_VARIABLE] = args.profile
     return requested
+
+
+def running_value(container: Container, key: str) -> str:
+    """The container's setting; an unset profile is the default profile."""
+    return container.settings.get(key, "") or (DEFAULT_PROFILE if key == PROFILE_VARIABLE else "")
 
 
 def effective_settings(containers: list[Container], requested: dict[str, str]) -> tuple[dict[str, str], bool]:
@@ -289,7 +300,7 @@ def effective_settings(containers: list[Container], requested: dict[str, str]) -
     """
     current = by_service(containers).get("code-location")
     carried = {key: value for key, value in (current.settings if current else {}).items() if value}
-    changes = bool(current) and any(current.settings.get(key, "") != value for key, value in requested.items())
+    changes = bool(current) and any(running_value(current, key) != value for key, value in requested.items())
     return {**carried, **requested}, changes
 
 
@@ -297,6 +308,8 @@ def add_deploy_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--target", help="review target: a name under targets/ or a container path")
     parser.add_argument("--overlay", help="capacity overlay file under test/acceptance, or 'none'")
     parser.add_argument("--recording", choices=("record", "replay", "off"), help="model recording mode")
+    parser.add_argument("--profile", choices=("dev", "prod"),
+                        help="runtime profile (default dev; prod = more capable models and larger limits)")
 
 
 # -- stack checks ---------------------------------------------------------------------------------
@@ -367,6 +380,10 @@ def bring_up(args: argparse.Namespace, project: str, containers: list[Container]
     url = args.url
     if stack_running(containers) and (build or changes):
         guard_active_runs(url, containers, args.force, action)
+    profile = settings.get(PROFILE_VARIABLE, DEFAULT_PROFILE)
+    say(f"profile: {profile}")
+    if profile != DEFAULT_PROFILE:
+        say(PROFILE_NOTICE)
     for key, value in settings.items():
         say(f"setting {key}={value or '(empty)'}{'' if key in requested else '  (carried over from the running stack)'}")
     image_missing = docker("image", "inspect", image_tag(), "--format", "{{.Id}}").returncode != 0
@@ -492,6 +509,7 @@ def cmd_stack_status(args: argparse.Namespace) -> int:
         check_overlay(containers)
         for key in DEPLOY_VARIABLES:
             say(f"  {key}={code.settings.get(key) or '(unset)'}")
+        say(f"  profile: {running_value(code, PROFILE_VARIABLE)}")
         created = docker("image", "inspect", code.image, "--format", "{{.Created}}")
         stamp = created.stdout.strip() if created.returncode == 0 else ""
         say(f"image: {code.image} created {stamp or 'unknown'}" + (f" ({_iso_age(stamp)} ago)" if stamp else ""))
@@ -560,9 +578,10 @@ def cmd_review_start(args: argparse.Namespace) -> int:
     require_own_stack(containers)
     requested = requested_settings(args)
     for key, wanted in requested.items():
-        actual = code.settings.get(key, "")
+        actual = running_value(code, key)
         if actual != wanted:
-            flag = {TARGET_VARIABLE: "--target", OVERLAY_VARIABLE: "--overlay", RECORDING_VARIABLE: "--recording"}[key]
+            flag = {TARGET_VARIABLE: "--target", OVERLAY_VARIABLE: "--overlay", RECORDING_VARIABLE: "--recording",
+                    PROFILE_VARIABLE: "--profile"}[key]
             raise OpsError(f"the running code-location has {key}={actual or '(unset)'}, not {wanted or '(unset)'}. "
                            f"The container fixes it at creation: run scripts/stack-restart {flag} <value> first.", REFUSED)
     if args.run_id:
@@ -587,6 +606,10 @@ def cmd_review_start(args: argparse.Namespace) -> int:
                "/opt/dagster/home/workspace.yaml", "-l", "appsec_review", "-j", JOB_NAME, "--run-id", dagster_run_id]
     if tags:
         command += ["--tags", json.dumps(tags, sort_keys=True)]
+    profile = running_value(code, PROFILE_VARIABLE)
+    say(f"profile:   {profile}")
+    if profile != DEFAULT_PROFILE:
+        say(PROFILE_NOTICE)
     say(f"target:    {code.settings.get(TARGET_VARIABLE) or '(default)'}")
     say(f"overlay:   {code.settings.get(OVERLAY_VARIABLE) or '(none)'}")
     say(f"recording: {code.settings.get(RECORDING_VARIABLE) or 'off'}")

@@ -8,6 +8,10 @@ This page covers operator settings for `job_inference_security_review` (Dagster 
 
 ## Model selection and upgrade
 
+The checked-in models are the `dev` profile. Real reviews select the `prod` profile, which uses more
+capable models, larger limits and a distinct `strong` verifier model; see
+[`model-profiles.md`](model-profiles.md) (`APPSEC_REVIEW_PROFILE=prod`, or `--profile prod` on the scripts).
+
 Models are configured as named profiles. Each role uses one profile, and a role without an entry
 uses `default`:
 

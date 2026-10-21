@@ -40,6 +40,8 @@ def parser() -> argparse.ArgumentParser:
     root = argparse.ArgumentParser(prog="appsec-review")
     root.add_argument("--config", default="appsec-review.toml",
                       help="optional local path or file URI (defaults to repository configuration)")
+    root.add_argument("--profile", choices=("dev", "prod"), default=None,
+                      help="runtime profile (default: APPSEC_REVIEW_PROFILE, else dev; prod = more capable models)")
     commands = root.add_subparsers(dest="command", required=True)
 
     run = commands.add_parser("run", help="dispatch one job")
@@ -98,7 +100,7 @@ def parser() -> argparse.ArgumentParser:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = parser().parse_args(argv)
-    config = load_config(args.config)
+    config = load_config(args.config, profile=args.profile)
     if args.command == "schedules":
         schedules = {
             job_id: {

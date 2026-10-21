@@ -420,12 +420,13 @@ def command_model_contract(args) -> int:
     calls = [call for directory in args.sources for call in model_contract.load_calls(Path(directory))]
     if not calls:
         raise StateError("no recorded model calls under the given directories")
-    document = model_contract.baseline_document(calls, masks, run_id=provenance["application_run_id"])
+    profile = model_contract.run_profile(ROOT / "runs" / provenance["application_run_id"])
+    document = model_contract.baseline_document(calls, masks, run_id=provenance["application_run_id"], profile=profile)
     destination = key_root / "model-contract.json"
     destination.write_text(json.dumps(document, indent=1, sort_keys=True) + "\n", encoding="utf-8")
     for job, entry in document["jobs"].items():
         print(f"   {job}: {len(entry['requests'])} request(s), {len(entry['responses'])} valid response(s)")
-    print(f"model contract -> {relative(destination)}")
+    print(f"model contract (profile {profile}) -> {relative(destination)}")
     return 0
 
 
@@ -471,8 +472,11 @@ def command_system(args) -> int:
     skipped: set[str] = set()
     if contract_file.is_file():
         run_masks = Masks.for_run(app_run_id)
+        run_profile = model_contract.run_profile(run_root)
+        print(f"   model-contract profile: run={run_profile}")
         contract = model_contract.check(json.loads(contract_file.read_text(encoding="utf-8")),
-                                        model_contract.load_calls(run_root / model_contract.RECORDINGS), run_masks, ROOT)
+                                        model_contract.load_calls(run_root / model_contract.RECORDINGS), run_masks, ROOT,
+                                        profile=run_profile)
         skipped = model_contract.tainted_jobs(contract.response_changed, topology["jobs"])
         for line in [*contract.input_problems, *contract.response_problems]:
             print(f"   model-contract {line}")

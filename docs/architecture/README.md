@@ -94,6 +94,7 @@ Repository authority remains in [`../../AGENTS.md`](../../AGENTS.md). This page 
 
 Operations pages not listed above:
 
+- [`../operations/model-profiles.md`](../operations/model-profiles.md) — the `dev` and `prod` runtime profiles: selection, the closed-allowlist `profiles/prod.toml` layer, and the effect on fingerprints and the model contract.
 - [`../operations/inference-security-review.md`](../operations/inference-security-review.md) — inference review model selection and upgrade, capacity overlay, and outcomes.
 - [`../operations/wave1-review.md`](../operations/wave1-review.md) — direct CLI and `wave1_review` scope.
 - [`../operations/third-party-data-sync.md`](../operations/third-party-data-sync.md) — feed synchronization.

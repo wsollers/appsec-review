@@ -840,3 +840,67 @@ def test_redact_hides_tokens_and_truncates() -> None:
     cleaned = ops.redact(text, 500)
     assert "sk-ant" not in cleaned and "abc.def" not in cleaned and "xxxx" not in cleaned
     assert len(ops.redact("y " * 500)) <= 400
+
+
+# -- runtime profile ------------------------------------------------------------------------------
+def test_stack_start_passes_the_requested_profile_to_lifecycle_and_prints_it(box: Sandbox) -> None:
+    box.dagster.runs()
+    dev = box.run("stack-start", "--no-probe")
+    assert dev.returncode == 0 and "profile: dev" in dev.stdout and "more capable models" not in dev.stdout
+    assert ops.PROFILE_VARIABLE not in box.lifecycle_calls()[-1]["env"]
+    prod = box.run("stack-start", "--no-probe", "--profile", "prod")
+    assert prod.returncode == 0, prod.stdout + prod.stderr
+    assert box.lifecycle_calls()[-1]["env"][ops.PROFILE_VARIABLE] == "prod"
+    assert "profile: prod" in prod.stdout and "more capable models" in prod.stdout
+
+
+def test_profile_must_be_dev_or_prod(box: Sandbox) -> None:
+    for script in ("stack-start", "stack-restart", "stack-rebuild", "review-start"):
+        assert box.run(script, "--profile", "staging").returncode == 2
+
+
+def test_stack_restart_carries_the_running_profile_over_and_switches_it_when_asked(box: Sandbox) -> None:
+    box.stack(settings={ops.PROFILE_VARIABLE: "prod"})
+    box.dagster.runs()
+    assert box.run("stack-restart", "--no-probe").returncode == 0
+    assert [call["env"] for call in box.lifecycle_calls()] == [{ops.PROFILE_VARIABLE: "prod"}] * 2
+    assert box.run("stack-restart", "--no-probe", "--profile", "dev").returncode == 0
+    assert box.lifecycle_calls()[-1]["env"] == {ops.PROFILE_VARIABLE: "dev"}
+
+
+def test_changing_the_profile_of_a_running_stack_is_guarded_by_active_runs(box: Sandbox) -> None:
+    box.dagster.runs(run(UUID_ONE, "STARTED", app=APP_ID))
+    assert box.run("stack-restart", "--profile", "prod").returncode == 3
+    assert box.lifecycle_calls() == []
+
+
+def test_stack_rebuild_takes_the_profile(box: Sandbox) -> None:
+    box.dagster.runs()
+    assert box.run("stack-rebuild", "--no-probe", "--profile", "prod").returncode == 0
+    assert [call["env"][ops.PROFILE_VARIABLE] for call in box.lifecycle_calls()] == ["prod", "prod"]
+
+
+def test_review_start_refuses_when_the_running_profile_differs(box: Sandbox) -> None:
+    box.dagster.runs()
+    refused = box.run("review-start", "--profile", "prod", "--dry-run")
+    assert refused.returncode == 3 and "APPSEC_REVIEW_PROFILE=dev" in refused.stderr
+    assert "stack-restart --profile" in refused.stderr
+    assert box.run("review-start", "--profile", "dev", "--dry-run").returncode == 0
+    box.stack(settings={ops.PROFILE_VARIABLE: "prod"})
+    assert box.run("review-start", "--profile", "dev", "--dry-run").returncode == 3
+    accepted = box.run("review-start", "--profile", "prod", "--dry-run")
+    assert accepted.returncode == 0 and "profile:   prod" in accepted.stdout and "more capable models" in accepted.stdout
+    assert "profile:   prod" in box.run("review-start", "--dry-run").stdout
+
+
+def test_stack_status_shows_the_profile(box: Sandbox) -> None:
+    box.dagster.runs()
+    assert "profile: dev" in box.run("stack-status").stdout
+    box.stack(settings={ops.PROFILE_VARIABLE: "prod"})
+    assert "profile: prod" in box.run("stack-status").stdout
+
+
+@pytest.mark.parametrize("name", ["stack-start", "stack-restart", "stack-rebuild", "review-start"])
+def test_powershell_twins_take_a_profile_parameter(name: str) -> None:
+    assert "[ValidateSet('dev', 'prod')][string]$Profile" in (SCRIPTS / f"{name}.ps1").read_text(encoding="utf-8")
+    assert "--profile" in real(name, "--help").stdout
