@@ -78,6 +78,7 @@ services:
       - ../../data:/opt/app/data
       - ../../targets:/opt/app/targets:ro
       - ../../rules:/opt/app/rules:ro
+      - ../../test/acceptance:/opt/app/test/acceptance:ro
       - /var/run/docker.sock:/var/run/docker.sock
     # Each check starts a Python process that imports dagster (~10-13s of CPU on a loaded host), so
     # the timeout must exceed that import and the interval must leave the CPU idle between checks.
