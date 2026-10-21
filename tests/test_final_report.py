@@ -229,6 +229,7 @@ def test_report_json_is_schema_valid_and_contains_the_required_sections(chain: C
     assert report["provenance"]["gate_document"]["sha256"] == file_sha256(
         chain.unit_file(GATE, *GATE_DOC))
     assert report["provenance"]["ledger_head_sha256"] == review_handoff(chain)["ledger_head_sha256"]
+    assert report["provenance"]["configuration_profile"] == {"name": "dev", "sha256": None}
 
 
 def test_report_artifacts_are_hash_pinned_by_the_accepted_handoff(chain: Chain) -> None:

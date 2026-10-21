@@ -28,7 +28,8 @@ NOTICES = (
 
 
 def build_report(gate: Mapping[str, Any], *, gate_handoff: Mapping[str, str],
-                 gate_document: Mapping[str, str]) -> dict[str, Any]:
+                 gate_document: Mapping[str, str],
+                 configuration_profile: Mapping[str, Any] | None = None) -> dict[str, Any]:
     packages = gate["packages"]
 
     def bucket(name: str) -> list[Any]:
@@ -41,6 +42,7 @@ def build_report(gate: Mapping[str, Any], *, gate_handoff: Mapping[str, str],
     return {
         "schema": FINAL_REPORT_SCHEMA, "run_id": gate["run_id"],
         "provenance": {
+            **({"configuration_profile": dict(configuration_profile)} if configuration_profile else {}),
             "gate_handoff": dict(gate_handoff), "gate_document": dict(gate_document),
             "review_handoff": dict(gate["inputs"]["review_handoff"]),
             "accepted_manifest_sha256": review["accepted_manifest_sha256"],

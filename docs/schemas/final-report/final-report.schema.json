@@ -40,6 +40,15 @@
         "ship_block_policy_sha256"
       ],
       "properties": {
+        "configuration_profile": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "sha256"],
+          "properties": {
+            "name": {"enum": ["dev", "prod"]},
+            "sha256": {"oneOf": [{"$ref": "common.schema.json#/$defs/sha256"}, {"type": "null"}]}
+          }
+        },
         "gate_handoff": {
           "$ref": "common.schema.json#/$defs/artifact_ref"
         },

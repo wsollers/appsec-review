@@ -27,6 +27,7 @@ from typing import Any
 from .normalize import Masks, canonical, normalize_value
 
 SCHEMA = "appsec-review/model-contract/1"
+DEFAULT_PROFILE = "dev"
 RECORDINGS = Path("data") / "inference-recordings"
 MAX_DEPENDENCY_CONFIDENCE = 0.95
 SCHEMA_FILES = {
@@ -41,6 +42,16 @@ class Call:
     request: Mapping[str, Any]
     proposal: Mapping[str, Any] | None
     error: Mapping[str, Any] | None
+
+
+def run_profile(run_root: Path) -> str:
+    """The runtime profile a run was configured with (``dev`` for a run that predates profiles)."""
+
+    try:
+        resolved = json.loads((Path(run_root) / "data" / "configuration" / "resolved.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError) as error:
+        raise ValueError(f"the run's resolved configuration is unreadable: {run_root}") from error
+    return str((resolved.get("configuration_profile") or {}).get("name") or DEFAULT_PROFILE)
 
 
 def load_calls(directory: Path) -> list[Call]:
@@ -73,7 +84,8 @@ def _chain(request: Mapping[str, Any], masks: Masks) -> str:
     return canonical(_normalized({**request, **{field: None for field in _REPAIR_FIELDS}}, masks))
 
 
-def baseline_document(calls: Iterable[Call], masks: Masks, *, run_id: str) -> dict[str, Any]:
+def baseline_document(calls: Iterable[Call], masks: Masks, *, run_id: str,
+                      profile: str = DEFAULT_PROFILE) -> dict[str, Any]:
     """The part of an accepted run that a later run is held to: its inputs, and its valid responses."""
 
     jobs: dict[str, dict[str, list]] = {}
@@ -86,7 +98,7 @@ def baseline_document(calls: Iterable[Call], masks: Masks, *, run_id: str) -> di
     for entry in jobs.values():
         entry["requests"].sort(key=canonical)
         entry["responses"].sort(key=canonical)
-    return {"schema": SCHEMA, "accepted_run": run_id, "jobs": dict(sorted(jobs.items()))}
+    return {"schema": SCHEMA, "accepted_run": run_id, "profile": profile, "jobs": dict(sorted(jobs.items()))}
 
 
 @dataclass
@@ -164,8 +176,17 @@ def response_problems(request: Mapping[str, Any], proposal: Mapping[str, Any], s
     return problems
 
 
-def check(baseline: Mapping[str, Any], calls: Sequence[Call], masks: Masks, schema_root: Path) -> ContractReport:
+def check(baseline: Mapping[str, Any], calls: Sequence[Call], masks: Masks, schema_root: Path,
+          profile: str = DEFAULT_PROFILE) -> ContractReport:
+    """Hold ``calls`` to ``baseline``. A baseline is valid only for the runtime profile it was recorded under
+    (a baseline without a ``profile`` was recorded under ``dev``); another profile is a named input problem."""
+
     report = ContractReport()
+    recorded = str(baseline.get("profile") or DEFAULT_PROFILE)
+    if recorded != profile:
+        report.input_problems.append(
+            f"profile mismatch: the model contract was recorded under profile {recorded!r} but this run used "
+            f"{profile!r}; its models and limits differ, so record a contract for {profile!r} instead")
     expected_jobs = baseline.get("jobs", {})
     by_job: dict[str, list[Call]] = {}
     for call in calls:

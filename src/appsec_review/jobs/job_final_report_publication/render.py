@@ -151,4 +151,6 @@ def render_markdown(report: Mapping[str, Any], *, evidence_ids: int, gap_ids: in
               f"- ledger head {code(provenance['ledger_head_sha256'])}",
               f"- configuration {code(provenance['configuration_sha256'])}",
               f"- ship-block policy {code(provenance['ship_block_policy_sha256'])}", ""]
+    if "configuration_profile" in provenance:
+        lines.insert(-1, f"- runtime profile {code(provenance['configuration_profile']['name'])}")
     return "\n".join(lines).rstrip("\n") + "\n"

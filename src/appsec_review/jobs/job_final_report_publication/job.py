@@ -9,9 +9,11 @@ calls no model and reads nothing the gate does not bind. PDF rendering is a late
 from __future__ import annotations
 
 import hashlib
+import json
 from pathlib import Path
 from typing import Any, Mapping
 
+from appsec_review.applicability import resolved_configuration_identity
 from appsec_review.indexing.store import accepted_handoff
 from appsec_review.jobs.bound_artifacts import artifact_ref, read_bound, read_bound_json, resolve_bound
 from appsec_review.jobs.engineering_contracts import (
@@ -35,6 +37,14 @@ TOPOLOGY = {"load": ("accepted_gate",), "report": ("assemble", "render"), "accep
 IMPLEMENTATION = "appsec-review/final-report-publication/1"
 REPORT_JSON = "final-report.json"
 REPORT_MARKDOWN = "final-report.md"
+
+
+def _configuration_profile(run_root: Path) -> Mapping[str, Any]:
+    """The runtime profile (name and layer hash) the run was configured with, from its verified resolved configuration."""
+    resolved_configuration_identity(run_root)
+    record = json.loads((run_root / "data" / "configuration" / "resolved.json").read_text(encoding="utf-8"))
+    profile = record.get("configuration_profile") or {"name": "dev", "sha256": None}
+    return {"name": profile["name"], "sha256": profile.get("sha256")}
 
 
 def _settings(unit: UnitContext) -> FinalReportSettings:
@@ -97,7 +107,8 @@ def build_job(*, repository_root: Path | None = None) -> Job:
     def assemble(unit: UnitContext) -> Mapping[str, Any]:
         loaded = unit.output("load.accepted_gate")
         gate = read_bound_json(unit.job.run_root, loaded["gate_document"])
-        report = build_report(gate, gate_handoff=loaded["gate_handoff"], gate_document=loaded["gate_document"])
+        report = build_report(gate, gate_handoff=loaded["gate_handoff"], gate_document=loaded["gate_document"],
+                              configuration_profile=_configuration_profile(unit.job.run_root))
         _check(_schemas(unit), "final-report", report)
         path = unit.unit_root / REPORT_JSON
         atomic_json(path, report)
