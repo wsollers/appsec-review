@@ -31,7 +31,7 @@ input, output, tool, and acceptance contracts.
 
 ## Registered jobs
 
-`runtime/registry.py` registers 36 jobs. Each has a `[jobs.<job_id>]` table in
+`runtime/registry.py` registers 37 jobs. Each has a `[jobs.<job_id>]` table in
 `appsec-review.toml`, and its Dagster job is named from that table's `name`.
 
 | Job | Purpose | Operations |
@@ -71,6 +71,7 @@ input, output, tool, and acceptance contracts.
 | `job_document_issue_analysis` | Private document candidate ledger with verified source mappings | [document-issue-analysis](../operations/document-issue-analysis.md) |
 | `job_inference_security_review` | Two-lane evidence-bound inference review (slice 1: claim ledger, adjudication, one scorer, accepted handoff) | [inference-security-review](inference-security-review.md) |
 | `job_final_publication_gate` | Deterministic, model-free gate: re-verifies the accepted review handoff from bytes and classifies every finding package as publishable, verification backlog or withheld, with named limitations | [final-report](../operations/final-report.md) |
+| `job_poc_generation` | Optional (shipped `settings.enabled = false`, run by hand): a model writes a unit-test function with no `main` and a negative control for each finding the judge agreed with; AST validators and a compile check in the build image verify it; nothing is linked or run | [poc-generation](../operations/poc-generation.md) |
 | `job_final_report_publication` | Deterministic, model-free terminal job: `final-report.json` and a byte-reproducible `final-report.md` from the accepted gate (PDF is a later step) | [final-report](../operations/final-report.md) |
 
 Each orchestrated graph launch also publishes an immutable run-level orchestration receipt. This
@@ -459,9 +460,15 @@ The generic native build container executes untrusted build logic but never targ
 workspace under the same rule and publishes an instrumented-output catalog that no existing job
 consumes ([`../operations/sanitizer-build.md`](../operations/sanitizer-build.md)).
 
+`job_poc_generation` sits between them when enabled and is transparent when disabled (the shipped default): the report
+then follows the gate exactly as before. It reads no target tree (the source copy is the run's accepted native build
+workspace, so it is not in `launch.TARGET_JOBS`), calls one model under the no-tools in-process loop, and compiles
+but never links or runs what the model wrote. A direct dispatch of this one job is allowed while it is disabled
+(`cli.MANUAL_JOB_IDS`) ([`../operations/poc-generation.md`](../operations/poc-generation.md)).
+
 `job_final_publication_gate` and `job_final_report_publication` call no model. The gate reads the
-accepted inference review handoff and re-hashes every artifact it binds; the report reads only the
-accepted gate handoff. Neither reinterprets a claim state or a ship-block status, and an integrity
+accepted inference review handoff and re-hashes every artifact it binds; the report reads the
+accepted gate handoff and, when the PoC job ran on that gate, its accepted handoff. Neither reinterprets a claim state or a ship-block status, and an integrity
 failure fails the job. The two remediation jobs reserved by decision 8 are not built, and the gate
 records that as a named limitation ([`../operations/final-report.md`](../operations/final-report.md)).
 The C++ analysis container only replays bounded compile units for analysis. Application code validates

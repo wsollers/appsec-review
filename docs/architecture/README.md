@@ -103,6 +103,7 @@ Operations pages not listed above:
   [`../operations/cpp-index-jobs.md`](../operations/cpp-index-jobs.md) — C/C++ analysis, clangd, and Joern.
 - [`../operations/post-build-security-assessment.md`](../operations/post-build-security-assessment.md) — build-hardening assessment.
 - [`../operations/sanitizer-build.md`](../operations/sanitizer-build.md) — ASan/UBSan rebuild of accepted native units; instrumented outputs are catalogued, never executed.
+- [`../operations/poc-generation.md`](../operations/poc-generation.md) — `job_poc_generation`: compile-checked proof-of-concept unit-test functions (no `main`, never run) for findings the judge agreed with; shipped disabled and run by hand.
 - [`../operations/final-report.md`](../operations/final-report.md) — final publication gate and final report: bucket accounting, limitations, `final-report.json` and the deterministic Markdown (PDF is a later step).
 - [`../operations/static-analysis.md`](../operations/static-analysis.md) — deterministic static evidence collection.
 - [`../operations/codeql-analysis.md`](../operations/codeql-analysis.md) — cross-language CodeQL.

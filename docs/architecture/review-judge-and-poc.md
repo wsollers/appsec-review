@@ -210,3 +210,69 @@ PoC box; the full reproducer stays in the run directory for the developer.
    function. Deferred; the first version emits a plain function.
 5. Whether a successful compile should additionally be checked by a model reviewer (does the function exercise
    the same path as `poc_basis.path`). The AST check covers the call to the sink function; a reviewer is deferred.
+
+## 8. Decisions taken at implementation (poc job)
+
+Where section 5 left a choice open, `job_poc_generation` took these. They change nothing in sections 1 to 4, and none of
+them touches the claim ledger, R5, R6 or the judge. Operating details are in
+[`../operations/poc-generation.md`](../operations/poc-generation.md).
+
+1. **The candidate contract.** The job reads `poc_candidates` from the verified review handoff as an array of
+   `{claim_id, package_id, state, judge_verdict, poc_basis: {sha256, value}, finding_package: {finding_package_id, sha256},
+   evidence_refs}` (schema `docs/schemas/poc-generation/poc-candidate.schema.json`, reader `candidates.py`). `poc_basis.sha256`
+   is `sha256(canonical_json(value))` (`review.identity.sha256_hex`). The reader is strict and cross-checks each entry against
+   the verified finding package (id, digest, claim, state). A handoff without the field is an older run (named gap
+   `no_poc_candidates`, empty valid handoff); a malformed field is an integrity failure. The handoff schema belongs to the judge
+   work, so the job validates the review handoff against the existing schema *without* the property (a thin wrapper around the
+   closed validator) and validates the property itself; nothing changes when the schema learns the property.
+2. **Not a target job; manual while disabled.** The job reads no target tree: the source copy is the run's accepted
+   `job_language_build` workspace (re-hashed file by file against its manifest), the compile command is the exact captured argv
+   of the sink's translation unit from the protected compile database, and the labelled package view comes from the retrieval
+   core pinned to the review's accepted manifest. It is therefore deliberately absent from `launch.TARGET_JOBS` (like the review,
+   the gate and the report) and runs with no target root and the `none` source fingerprint. `settings.enabled` (shipped `false`)
+   only decides membership in the automatic graphs. Because a finished run's resolved configuration is frozen, a direct dispatch
+   of a *disabled* job normally refused by `cli` is allowed for this job alone (`cli.MANUAL_JOB_IDS`), and
+   `topology.describe_wave1(..., include=...)` gives it the upstream handoffs it would have in the graph.
+3. **Graph position.** Enabled: `job_final_publication_gate -> job_poc_generation -> job_final_report_publication` (one terminal
+   job in both graphs). Disabled: the report follows the gate exactly as before. The report reads the run's accepted PoC handoff
+   when one exists, re-proves the summary and every file it names, and shows its outcomes in `poc_outcomes`; when none exists the
+   block is the previous "not run" text and the report is unchanged. A PoC handoff built from a different gate handoff is stale
+   and is reported as such, never shown.
+4. **The role is a runtime skill, not an inference role.** Inference role records in `pipeline/guidance/registry.json` are bound
+   to `review.models.Role`, which the judge work owns, and the review cell executor (`review.cells.run_cell`) is bound to that
+   enum and to manifest-scoped capabilities. `poc_writer` is therefore registered as a role record with a responsibility, its
+   body is `pipeline/prompt-fragments/roles/poc_writer.md`, and the guidance (rules, examples, non-examples) is the runtime skill
+   `pipeline/skills/poc-writer/SKILL.md` (job-scoped through `load_runtime_skill`). The job reuses the review cells' transport,
+   `worker-turn/1` schema, tolerant parsing and recording, and has its own small loop (`writer.py`) with the same denial policy.
+   Moving the role into the inference registry later is a mechanical change.
+5. **Retrieval.** The writer's two in-process requests are `read_source` and `find_declaration`, served from the hash-verified
+   accepted workspace and bounded by lines, bytes, queries and turns. The brief already carries the finding, the `poc_basis` with
+   resolved labels, the package view, the declarations at the sink and the safe build facts; retrieval is for the rest.
+6. **A decline form.** The answer may instead be `{decline: {status, why}}` with `insufficient_evidence`, `not_applicable` or
+   `unsafe_to_attempt`, because section 5.4 lists those statuses but 5.2 gives the writer no way to reach them.
+7. **Statuses.** `not_applicable`: the judge verdict is not accepted, or no accepted native build compiled the sink's file.
+   `insufficient_evidence`: no usable `poc_basis` (an entry, a path and a trigger), no known sink function (hunt packages have
+   none), unresolved labels, or a writer that produced no usable answer. `artifact_generated`: the build image, the accepted
+   workspace or the accepted objects were unavailable when the validators or the compile check needed them. `compile_failed`:
+   the code did not parse, did not compile, or needs a symbol neither the project nor a runtime library defines.
+   `policy_denied` is final: the schema leaves names and sizes loose so the writer cannot repair a `main` away.
+8. **Validators on a reduced AST, closed in both directions.** `clang ... -ast-dump=json` is tens of megabytes for a file that
+   includes `<string>`, so `ast_reduce.py` (stdlib only, copied into the scratch workspace) runs in the build image around the
+   compiler and returns the PoC file's nodes plus the identity of everything they reference; `policy.check_ast` is a pure
+   function of that document. Node kinds must be on a closed list; calls and variable references must be on the closed
+   allowlist (the allowlist wins; the denylist only names a refused call's category); types must be builtin, project or on the
+   type allowlist (which refuses a file stream that has no call to refuse); project calls are the sink and the brief's call path.
+   Integer literals are not bounded (integer-overflow triggers need large values); sizes that allocate memory are. A trigger
+   constraint without a number cannot be checked on the AST and is recorded, not refused.
+9. **Compile commands.** The replayed argv is the exact captured one (the safe build facts redact values and cannot be
+   replayed; the brief shows the safe facts). Dependency-file, output, plugin and `-Werror` flags are dropped, the project's
+   `-O` and `-g` are replaced for the object compiles, and any project `-fsanitize` is replaced for the sanitizer compile.
+   `BuildContainerExecutor` gained a `network` argument (default `bridge`, unchanged for every other job); this job uses
+   `none`, since it compiles already-fetched source.
+10. **Scratch.** The validate and compile steps each make their own hash-verified copy of the workspace under their unit root
+    and remove it afterwards; the two objects are hashed and discarded, so `data/poc/` holds only the four developer files.
+11. **Model.** The shipped writer profile reuses the pipeline's existing model so enabling the job adds nothing to the model
+    preflight (which walks every job's settings, enabled or not). A stronger writer is a configuration change.
+12. **Open.** The judge work must emit exactly the shape of decision 1 (the hash definition in particular). The job rebuilds the
+    package view with the same limits as the review cells so the labels in `poc_basis` resolve; if the review changes how
+    labels are assigned the plan step reports unresolved labels as `insufficient_evidence` rather than guessing.

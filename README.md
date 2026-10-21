@@ -531,6 +531,10 @@ workspace and never runs a produced binary; see
 `final_publication_gate` and `final_report_publication` call no model: they re-verify the accepted
 inference review and write `final-report.json` and a deterministic `final-report.md`; see
 [`docs/operations/final-report.md`](docs/operations/final-report.md).
+`poc_generation` is an optional job between them, shipped disabled and run by hand on a finished run
+(`appsec-review run job_poc_generation --run-id <id> --upstream-from-run`): a model writes a unit-test function with no
+`main` for each finding the judge agreed with, deterministic validators and a compile check in the build image verify it,
+and nothing is linked or run; see [`docs/operations/poc-generation.md`](docs/operations/poc-generation.md).
 See [`docs/operations/wave1-review.md`](docs/operations/wave1-review.md).
 
 ## Prepare an end-to-end run

@@ -444,7 +444,9 @@ Two jobs route by job before these step-name heuristics (`_JOB_STEP_POOLS` and
 `job_code_graph_index` runs in `index`, and `job_inference_security_review` runs `lead_review`
 and `hunt_review` in `inference_teams` (limit 2), `scoring` in `inference_score` (limit 4),
 `publication` in `lifecycle` and everything else in `application`. `job_final_publication_gate` and
-`job_final_report_publication` have no routing of their own and use the default `application` pool.
+`job_final_report_publication` have no routing of their own and use the default `application` pool. The optional
+`job_poc_generation` (shipped disabled) has none either; by the step-name heuristics its `compile` step runs in
+`cpp_build` and every other step in `application`.
 
 The checked-in configuration limits every pool except `application`, which has no configured
 limit and is bounded only by `max_concurrent`.
