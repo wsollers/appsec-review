@@ -91,7 +91,7 @@ applying shard covers it in any state but `unavailable`.
   citable by that cell. Rows of every other scope are withheld. There is no kind-wide grant.
 
 Graph context is a search aid. An embedded identity is evidence only when a cell cites it and
-`resolve_relation` re-resolves it under `evidence-admissibility/2`.
+`resolve_relation` re-resolves it under `evidence-admissibility/3`.
 
 ### Memory and caller context (version 5)
 

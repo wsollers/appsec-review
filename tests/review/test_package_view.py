@@ -283,3 +283,24 @@ def test_guard_summaries_state_the_fact_and_never_judge_it() -> None:
                     "(operator <, operand 4u + out.length), L13")
     for word in ("adequate", "sufficient", "effective", "bounds", "constrains", "protect", "safe"):
         assert word not in text
+
+
+def test_guard_summaries_with_operands_state_the_texts_and_the_destination_size_only() -> None:
+    from appsec_review.review.fact_summary import summarize_fact
+
+    def operand(role, kind, value, text):
+        return {"role": role, "kind": kind, "value": value, "text": text, "location": None}
+
+    payload = {"result": {"guard_state": "dominating", "polarity": "false_branch", "constrains_sink_operand": "unknown",
+                          "condition": {"display": "size < 4u + out.length"},
+                          "comparison": {"operator": "<", "bound_display": "4u + out.length", "operands": [
+                              operand("lhs", "variable", None, "size"),
+                              operand("rhs", "other", None, "4u + out.length")]},
+                          "destination": {"object_bytes": 16}}}
+    text = summarize_fact("guard_fact", payload, line=13)
+    assert text == ("dominating guard, polarity false_branch: size < 4u + out.length "
+                    "(operator <, lhs size, rhs 4u + out.length); destination object 16 bytes, L13")
+    unknown = {"result": {**payload["result"], "destination": {"object_bytes": None}}}
+    assert "destination" not in summarize_fact("guard_fact", unknown)
+    for word in ("adequate", "sufficient", "effective", "bounds", "protect", "safe"):
+        assert word not in text

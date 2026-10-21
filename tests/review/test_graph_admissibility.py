@@ -1,4 +1,4 @@
-"""R3 graph-fact admissibility (``evidence-admissibility/2``) and its review integration.
+"""R3 graph-fact admissibility (``evidence-admissibility/3``) and its review integration.
 
 docs/architecture/code-graph-precomputation.md sections 6 and 7.5: graph kinds are
 ``DIRECT_FOR_MAPPED_PREDICATE`` only for the predicate the family's mapping names (with its
@@ -216,8 +216,11 @@ def _location(source: Path, needle: str) -> SourceLocation:
                           column, end_column, {}, "codeql-location-exact", 1.0)
 
 
-def accepted_graph_run(tmp_path: Path) -> tuple[Path, dict[str, str]]:
-    """A minimal accepted index set whose ``graph`` shard holds eligible and ineligible facts."""
+def accepted_graph_run(tmp_path: Path, extra: Any = None) -> tuple[Path, dict[str, str]]:
+    """A minimal accepted index set whose ``graph`` shard holds eligible and ineligible facts.
+
+    ``extra(ids, add, condition, sink_span, call)`` may add further entities through ``add(key, entity)``.
+    """
     runs = tmp_path / "runs"
     run_root = runs / RUN_ID
     target = tmp_path / "target"
@@ -258,6 +261,8 @@ def accepted_graph_run(tmp_path: Path) -> tuple[Path, dict[str, str]]:
                               results_for(Family.GUARD_FACT, sink=ids["sink"]), condition))
     add("range", graph_entity(Family.RANGE_FACT, {"sink_identity": ids["sink"], "operand_index": 2},
                               results_for(Family.RANGE_FACT, sink=ids["sink"]), sink_span))
+    if extra is not None:
+        extra(ids, add, condition, sink_span, call)
     add("summary", graph_entity(Family.FLOW_SUMMARY, {"function_symbol": "asr:symbol:" + "5" * 64,
                                                       "rule_version": NORMALIZE_RULE},
                                 results_for(Family.FLOW_SUMMARY), _location(source, SOURCE.rstrip("\n"))))
@@ -273,8 +278,10 @@ def accepted_graph_run(tmp_path: Path) -> tuple[Path, dict[str, str]]:
                            shard_id="cpp-native")
     for entity in entities:
         builder.add_entity(entity)
-    builder.add_relation(RelationRecord(IndexRelation.GUARDS, ids["guard"], ids["sink"],
-                                        True, 1.0))
+    for entity in entities:
+        if entity.identity.kind is EntityKind.GUARD_FACT:
+            builder.add_relation(RelationRecord(IndexRelation.GUARDS, entity.identity.value,
+                                                entity.payload["result"]["sink"]["sink_site"], True, 1.0))
     builder.add_coverage(f"graph:{SCOPE_ID}:all", "complete", None)
     digest = builder.build()
     identity = IndexIdentity("graph", "appsec-review/retrieval-index/2", digest, fingerprint,
@@ -362,17 +369,20 @@ def test_satisfies_requires_complete_resolution(graph_run) -> None:
     assert relation.complete is False and not satisfies(relation)
 
 
-def test_a_dominating_guard_contradiction_and_a_none_guard_support_are_both_direct(graph_run) -> None:
+def test_a_none_guard_is_direct_support_and_a_contradiction_of_it_is_only_a_qualification(graph_run) -> None:
     runs, ids = graph_run
     core = RetrievalCore(runs, RUN_ID)
     support = _resolve(core, ids["guard"], P.MISSING_OR_INEFFECTIVE_GUARD)
     contra = _resolve(core, ids["guard"], P.MISSING_OR_INEFFECTIVE_GUARD, kind=RelationKind.CONTRADICTS)
     assert isinstance(support, EvidenceRelation) and isinstance(contra, EvidenceRelation)
     assert satisfies(support) and satisfies(contra) and support.relation_id != contra.relation_id
+    # A ``none`` guard bounds nothing, so a contradiction needs the facts to show a bound (evidence-admissibility/3).
+    assert support.kind is RelationKind.SUPPORTS and support.reason is None
+    assert contra.kind is RelationKind.QUALIFIES and contra.reason.startswith("guard_not_shown_to_bound_destination:")
 
 
 def test_relation_identity_records_the_admissibility_rule_version(graph_run) -> None:
-    assert ADMISSIBILITY_RULES_VERSION == "evidence-admissibility/2"
+    assert ADMISSIBILITY_RULES_VERSION == "evidence-admissibility/3"
     runs, ids = graph_run
     relation = _resolve(RetrievalCore(runs, RUN_ID), ids["sink"], P.AFFECTED_CONSTRUCT)
     assert isinstance(relation, EvidenceRelation) and relation.relation_id.startswith("evrel-")
@@ -384,7 +394,7 @@ def test_relation_identity_records_the_admissibility_rule_version(graph_run) -> 
 
 def test_policy_hash_pins_the_graph_mapping_and_admissibility_version() -> None:
     document = obligations._policy_document()
-    assert document["admissibility"] == "evidence-admissibility/2"
+    assert document["admissibility"] == "evidence-admissibility/3"
     assert document["graph_fact_predicates"]["rule"] == "graph-fact-predicates/1"
     assert document["graph_fact_predicates"]["families"] == {
         "call_site": ["affected_construct"], "sink_site": ["affected_construct"],
@@ -411,7 +421,7 @@ def test_policy_hash_pins_the_graph_mapping_and_admissibility_version() -> None:
 def test_package_reuse_basis_includes_the_evidence_rule_versions() -> None:
     from appsec_review.jobs.job_inference_security_review import job
     assert job.EVIDENCE_RULES == {
-        "rule_predicates": "tool-rule-predicates/1", "admissibility": "evidence-admissibility/2",
+        "rule_predicates": "tool-rule-predicates/1", "admissibility": "evidence-admissibility/3",
         "graph_fact_predicates": "graph-fact-predicates/1",
         "graph_fact_admissibility": "graph-fact-admissibility/1",
         "obligation_policy_sha256": obligations.POLICY_SHA256}
