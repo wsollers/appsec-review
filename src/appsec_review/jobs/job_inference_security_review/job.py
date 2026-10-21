@@ -71,6 +71,8 @@ TOOL_RULE_PREDICATES: Mapping[str, tuple[Predicate, ...]] = {
     "ci_rule": (Predicate.AFFECTED_CONSTRUCT, Predicate.CONFIGURATION_ENABLES),
     "post_build_hardening": (Predicate.AFFECTED_CONSTRUCT, Predicate.CONFIGURATION_ENABLES),
     "owasp_control": (Predicate.MISSING_OR_INEFFECTIVE_GUARD,),
+    "secret": (Predicate.AFFECTED_CONSTRUCT,),
+    "config_scanner": (Predicate.AFFECTED_CONSTRUCT,),
 }
 # Ground truth and target-owned agent guidance are never readable: a manifest naming an evaluator
 # root fails startup, and target guidance files are removed from every capability's entity scope.

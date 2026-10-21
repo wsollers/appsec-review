@@ -831,7 +831,9 @@
         "dependency_advisory",
         "ci_rule",
         "post_build_hardening",
-        "owasp_control"
+        "owasp_control",
+        "secret",
+        "config_scanner"
       ]
     },
     "inference_severity": {
@@ -1948,7 +1950,7 @@
           "$ref": "#/$defs/inference_sha"
         },
         "assembly_rule": {
-          "const": "appsec-review/assemble-review-packages/6"
+          "const": "appsec-review/assemble-review-packages/7"
         },
         "scope": {
           "$ref": "#/$defs/inference_scope"
