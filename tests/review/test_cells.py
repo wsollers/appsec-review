@@ -145,7 +145,7 @@ def test_receipts_hold_hashes_not_prompts_guidance_or_retrieved_text(tmp_path: P
     assert all(len(turn[key]) == 64 for key in ("request_sha256", "transcript_sha256", "response_sha256"))
 
 
-def test_denials_become_authority_gaps_and_security_events_and_the_loop_continues(tmp_path: Path) -> None:
+def test_denials_are_feedback_with_a_corrected_shape_not_gaps_and_the_loop_continues(tmp_path: Path) -> None:
     infer = ScriptedInfer(
         retrieve({"tool": "read_excerpt", "parameters": {"identity": OUTSIDE}},
                  {"tool": "shell", "parameters": {"cmd": "cat /etc/passwd"}},
@@ -154,14 +154,94 @@ def test_denials_become_authority_gaps_and_security_events_and_the_loop_continue
         final(SPAN))
     outcome = run(tmp_path, infer)
     assert outcome.record.status is CellStatus.SUCCEEDED
-    assert [gap.gap_class for gap in outcome.gaps] == [GapClass.AUTHORITY_ERROR] * 3
-    assert set(outcome.record.gap_ids) == {gap.gap_id for gap in outcome.gaps}
+    assert outcome.gaps == () and outcome.record.gap_ids == ()          # a denied request is not a ledger gap
     assert [event["denial_code"] for event in outcome.security_events] == [
-        "entity_out_of_scope", "unknown_tool", "regex_like_value"]
+        "entity_out_of_scope", "unknown_tool", "regex_like_value"]     # it is still a security event
     assert all("cat /etc/passwd" not in json.dumps(event) for event in outcome.security_events)
     responses = infer.requests[1].transcript[1]["responses"]
     assert [item["status"] for item in responses] == ["denied"] * 3
-    assert outcome.counts["denials"] == 3 and outcome.counts["queries"] == 1
+    assert [item["code"] for item in responses] == ["entity_out_of_scope", "unknown_tool", "regex_like_value"]
+    assert all(item["reason"] and item["corrected"] and item["counted_as_query"] for item in responses)
+    assert responses[0]["corrected"]["tool"] == "expand" and "use_one_of" in responses[1]["corrected"]
+    assert outcome.counts["denials"] == 3 and outcome.counts["queries"] == 4        # each denial costs one query
+
+
+def test_the_same_denial_twice_ends_the_cell_with_one_authority_gap(tmp_path: Path) -> None:
+    denied = {"tool": "read_excerpt", "parameters": {"identity": OUTSIDE}}
+    infer = ScriptedInfer(retrieve(denied), retrieve(denied), final(SPAN))
+    outcome = run(tmp_path, infer)
+    assert outcome.record.status is CellStatus.INVALID and len(infer.requests) == 2
+    [gap] = outcome.gaps
+    assert gap.gap_class is GapClass.AUTHORITY_ERROR
+    assert gap.reason.startswith("repeated_denial:entity_out_of_scope:read_excerpt") and OUTSIDE[-12:] in gap.reason
+    different = ScriptedInfer(retrieve(denied), retrieve({"tool": "read_excerpt", "parameters": {"identity": SINK}}),
+                              final(SINK))
+    assert run(tmp_path / "other", different).record.status is CellStatus.SUCCEEDED
+
+
+class RowCore(FakeCore):
+    """A core whose ``find`` returns located rows, to exercise ``expand`` and locators."""
+
+    def find(self, **parameters):
+        self.calls.append(("find", parameters))
+        rows = [{"identity": SPAN, "kind": "source_span", "name": "copy", "payload": {}, "index": "source",
+                 "shard_id": "default", "location": {"path": "src/a.c", "start_line": 3, "end_line": 4}},
+                {"identity": SINK, "kind": "source_span", "name": "far", "payload": {}, "index": "source",
+                 "shard_id": "default", "location": {"path": "src/a.c", "start_line": 40, "end_line": 41}}]
+        if "identity" in parameters:
+            rows = [row for row in rows if row["identity"] == parameters["identity"]]
+        return self._envelope("find", rows)
+
+
+def view_for(**overrides):
+    from appsec_review.review.package_view import PackageView
+    values = dict(document={}, labels={"L1": LEAD, "K1": SPAN}, files={"gaps.jsonl": ({"gap_id": "gap-1"}, {"gap_id": "gap-2"})},
+                  locator_paths=frozenset({"src/a.c"}), lead_refs=(LEAD,), packaged_refs=frozenset({LEAD, SPAN, SINK}))
+    values.update(overrides)
+    return PackageView(**values)
+
+
+def test_expand_answers_a_label_with_labelled_rows_and_counts_one_query(tmp_path: Path) -> None:
+    cap = capability(tools=("find", "expand"), entities=(SPAN, SINK, LEAD))
+    infer = ScriptedInfer(retrieve({"tool": "expand", "parameters": {"label": "K1"}}),
+                          retrieve({"tool": "expand", "parameters": {"files": "gaps.jsonl", "offset": 1}}),
+                          retrieve({"tool": "expand", "parameters": {"label": "K9"}}), final(SPAN))
+    core = RowCore()
+    outcome = run(tmp_path, infer, cell_spec=spec(view=view_for()), cap=cap, core=core)
+    assert outcome.record.status is CellStatus.SUCCEEDED and outcome.gaps == ()
+    first, second, third = (infer.requests[index].transcript[-1]["responses"][0] for index in (1, 2, 3))
+    assert first["status"] == "ok" and [(row["identity"], row["label"]) for row in first["results"]] == [(SPAN, "K1")]
+    assert core.calls[0][0] == "find" and core.calls[0][1]["identity"] == SPAN
+    assert second["results"] == [{"gap_id": "gap-2"}] and second["count"] == 2
+    assert third["status"] == "denied" and third["code"] == "unknown_label"
+    assert outcome.counts["queries"] == 3
+
+
+def test_retrieved_rows_get_q_labels_that_the_final_answer_can_cite(tmp_path: Path) -> None:
+    infer = ScriptedInfer(retrieve({"tool": "search", "parameters": {"query": "memcpy"}}), final(SPAN))
+    run(tmp_path, infer, core=RowCore())
+    rows = infer.requests[1].transcript[1]["responses"][0]["results"]
+    assert rows[0]["label"] == "Q1"
+    receipt = json.loads(next((tmp_path / "cells").rglob("attempt-1.json")).read_text())
+    assert receipt["label_table"]["retrieved"] == {"Q1": SPAN}
+
+
+def test_a_locator_names_a_file_and_line_inside_the_package_scope(tmp_path: Path) -> None:
+    cap = capability(tools=("find", "expand"), entities=(SPAN, SINK, LEAD))
+    ok = {"tool": "find", "parameters": {"locator": {"path": "src/a.c", "line": 3}}}
+    outside = {"tool": "find", "parameters": {"locator": {"path": "src/other.c", "line": 3}}}
+    flat = {"tool": "find", "parameters": {"path": "src/a.c"}}
+    infer = ScriptedInfer(retrieve(ok, outside, flat), final(SPAN))
+    core = RowCore()
+    outcome = run(tmp_path, infer, cell_spec=spec(view=view_for()), cap=cap, core=core)
+    responses = infer.requests[1].transcript[1]["responses"]
+    assert core.calls == [("find", {"path": "src/a.c", "indexes": ["source"], "limit": 10})]
+    assert [row["identity"] for row in responses[0]["results"]] == [SPAN]          # only rows covering line 3
+    assert responses[1]["code"] == "entity_out_of_scope"
+    assert responses[2]["code"] == "forbidden_parameter"
+    assert responses[2]["corrected"] == {"tool": "find", "parameters": {"locator": {
+        "path": "src/a.c", "line": "<line number>"}}}
+    assert outcome.gaps == ()
 
 
 def test_tool_errors_are_coverage_gaps_not_failures(tmp_path: Path) -> None:

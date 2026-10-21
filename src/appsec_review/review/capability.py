@@ -3,9 +3,10 @@
 A capability is a frozen record bound by SHA-256 to one run, accepted manifest, package, role,
 round, closed tool and index allowlists, entity scope, and caps. `authorize` decides one
 model-proposed retrieval request. A model asking for something outside the capability is
-expected adversarial input: the answer is an `AuthorityDenied` value, which the cell records as an
-`authority_error` gap and security event. Only a capability that fails its own hash check raises,
-because that means the application, not the model, is wrong.
+expected adversarial input: the answer is an `AuthorityDenied` value. The cell returns it to the model as
+feedback (code, reason, corrected shape), counts one query and records a security event; it is a gap only
+when the same denial repeats and ends the cell (review-protocol-v2.md section 5.5). Only a capability that
+fails its own hash check raises, because that means the application, not the model, is wrong.
 
 The tool catalog is `appsec_review.mcp.schema.TOOLS`, the runtime source that
 `docs/schemas/retrieval-mcp-tools.json` is tested to match.
@@ -30,9 +31,22 @@ CAPABILITY_SCHEMA = "appsec-review/cell-capability/1"
 
 # Tools a cell may run in-process on `RetrievalCore`. The OWASP workbench query reads a separate
 # store through the MCP adapter, so it is not grantable to a review cell.
-IN_PROCESS_TOOLS = frozenset(tool["name"] for tool in TOOLS) - {"query_owasp_workbench"}
+# ``expand`` is application-only navigation over those tools (review-protocol-v2.md section 5.3): it is not
+# in the published MCP catalog, so it has no registry allowlist entry and is granted to every review cell.
+EXPAND_TOOL = "expand"
+EXPAND_SCHEMA: Mapping[str, Any] = {
+    "type": "object", "required": [],
+    "properties": {
+        "label": {"type": "string", "pattern": "^[A-Z][0-9]{1,4}$"},
+        "ref": {"type": "string", "pattern": "^asr:[a-z][a-z0-9_]*:[0-9a-f]{64}$"},
+        "files": {"type": "string", "minLength": 1, "maxLength": 64},
+        "offset": {"type": "integer", "minimum": 0, "maximum": 100000}}}
+IN_PROCESS_TOOLS = (frozenset(tool["name"] for tool in TOOLS) - {"query_owasp_workbench"}) | {EXPAND_TOOL}
 TOOL_SCHEMAS: Mapping[str, Mapping[str, Any]] = {
-    tool["name"]: tool["inputSchema"] for tool in TOOLS if tool["name"] in IN_PROCESS_TOOLS}
+    **{tool["name"]: tool["inputSchema"] for tool in TOOLS if tool["name"] in IN_PROCESS_TOOLS},
+    EXPAND_TOOL: EXPAND_SCHEMA}
+# Tools that accept a ``locator`` {"path", "line"}: the application resolves it inside the package scope.
+LOCATOR_TOOLS = frozenset({"find", "query_observations", "query_codeql"})
 
 # Indexes each tool reads when it takes no `indexes` parameter. Identity-addressed tools
 # (`read_excerpt`, `trace`, `resolve_evidence`) are bounded by entity scope instead.
@@ -53,7 +67,7 @@ TOOL_INDEXES: Mapping[str, frozenset[str]] = {
 INDEX_PARAMETER_TOOLS = frozenset({"search", "find", "coverage"})
 IDENTITY_TOOLS = frozenset({"read_excerpt", "trace", "resolve_evidence"})
 IDENTITY_PARAMETERS = frozenset({"identity", "subject", "source", "artifact", "artifact_identity",
-                                 "producing_build_action", "database", "observation"})
+                                 "producing_build_action", "database", "observation", "ref"})
 # Parameter names that address the filesystem or a query language are never grantable.
 FORBIDDEN_PARAMETERS = frozenset({"path", "paths", "glob", "regex", "pattern", "sql", "query_sql",
                                   "expression", "file", "directory", "url"})
@@ -111,6 +125,7 @@ class Authorized:
     tool: str
     parameters: Mapping[str, Any]        # normalized: allowlisted indexes and page size applied
     filter_sha256: str
+    line: int | None = None              # a resolved locator\'s line; rows are kept only where they cover it
 
 
 @dataclass(frozen=True, slots=True)
@@ -123,7 +138,7 @@ class AuthorityDenied:
 _DENIAL_CODES = frozenset({"malformed_request", "unknown_tool", "tool_not_granted", "schema_violation",
                            "forbidden_parameter", "path_like_value", "regex_like_value", "sql_like_value",
                            "entity_out_of_scope", "index_not_granted", "query_cap_exceeded",
-                           "page_cap_exceeded", "depth_cap_exceeded"})
+                           "page_cap_exceeded", "depth_cap_exceeded", "unknown_label", "invalid_locator"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -236,11 +251,15 @@ class CellCapability:
         return isinstance(scope, Mapping) and scope.get("scope_id") in self.graph_scopes
 
     def authorize(self, request: Any, *, queries_used: int = 0,
-                  granted: frozenset[str] | set[str] = frozenset()) -> Authorized | AuthorityDenied:
+                  granted: frozenset[str] | set[str] = frozenset(),
+                  labels: Mapping[str, str] | None = None,
+                  locator_paths: frozenset[str] | set[str] = frozenset()) -> Authorized | AuthorityDenied:
         """Authorize one `{"tool", "parameters"}` request; never raises for model input.
 
         ``granted`` holds identities this cell already received in scope-checked graph rows (see
-        :meth:`graph_row_in_scope`); they may be addressed like package entities.
+        :meth:`graph_row_in_scope`); they may be addressed like package entities. ``labels`` is the cell\'s
+        label table (``expand`` takes a label), and ``locator_paths`` the paths a ``locator`` may name (the
+        package scope); both come from the application, never from the model.
         """
         self.verify()
         try:
@@ -269,9 +288,32 @@ class CellCapability:
         if forbidden := sorted(set(parameters) & FORBIDDEN_PARAMETERS):
             return deny("forbidden_parameter", f"parameter is never grantable: {forbidden[0]}")
         schema = TOOL_SCHEMAS[tool]
+        locator = None
+        if "locator" in parameters:
+            if tool not in LOCATOR_TOOLS:
+                return deny("schema_violation", "locator is accepted only by find, query_observations and query_codeql")
+            locator = parameters["locator"]
+            if (not isinstance(locator, Mapping) or set(locator) != {"path", "line"} or not isinstance(locator["path"], str)
+                    or not 1 <= len(locator["path"]) <= 1024 or isinstance(locator["line"], bool)
+                    or not isinstance(locator["line"], int) or not 1 <= locator["line"] <= 10_000_000):
+                return deny("invalid_locator", 'a locator is exactly {"path": <relative file path>, "line": <positive integer>}')
+            if _PATH_LIKE.search(locator["path"]) or _REGEX_LIKE.search(locator["path"]) or _SQL_LIKE.search(locator["path"]):
+                return deny("path_like_value", "locator path must be a plain relative path named by the package")
+            if locator["path"] not in locator_paths:
+                return deny("entity_out_of_scope", "locator path is outside the package scope")
+            parameters = {key: value for key, value in parameters.items() if key != "locator"}
+        label = None
+        if tool == EXPAND_TOOL and "label" in parameters:
+            label = parameters["label"]
+            ref = (labels or {}).get(label) if isinstance(label, str) else None
+            if ref is None:
+                return deny("unknown_label", "label is not in this cell\'s label table; use a label from the package or a Q label")
+            parameters = {**{key: value for key, value in parameters.items() if key != "label"}, "ref": ref}
         error = _schema_error(parameters, schema)
         if error:
             return deny("schema_violation", error)
+        if tool == EXPAND_TOOL and len({"ref", "files"} & set(parameters)) != 1:
+            return deny("schema_violation", "expand takes exactly one of label, ref or files")
         if tool == QUERY_CODE_GRAPH and (error := graph_request_error(parameters)):
             return deny("schema_violation", error)
         for key, value in parameters.items():
@@ -291,6 +333,12 @@ class CellCapability:
         if tool in IDENTITY_TOOLS and "identity" not in parameters:
             return deny("schema_violation", f"{tool} requires an identity")
         normalized = dict(parameters)
+        line = None
+        if locator is not None:
+            normalized["path"] = locator["path"]
+            line = int(locator["line"])
+            if tool == "query_observations":
+                normalized.update(start_line=line, end_line=line)
         if tool in INDEX_PARAMETER_TOOLS:
             requested = parameters.get("indexes")
             if requested is None:
@@ -315,7 +363,7 @@ class CellCapability:
             return deny("depth_cap_exceeded", "neighborhood depth exceeds the cell depth cap")
         if queries_used >= self.max_queries:
             return deny("query_cap_exceeded", "the cell query budget is exhausted")
-        return Authorized(tool, normalized, sha256_hex({"tool": tool, "parameters": normalized}))
+        return Authorized(tool, normalized, sha256_hex({"tool": tool, "parameters": normalized}), line)
 
 
 def _strings(value: Any):
@@ -377,5 +425,5 @@ def _value_error(value: Any, schema: Mapping[str, Any]) -> str | None:
     return None
 
 
-__all__ = ["AuthorityDenied", "Authorized", "CAPABILITY_SCHEMA", "CellCapability", "GRAPH_ROW_KINDS",
-           "IN_PROCESS_TOOLS", "TOOL_INDEXES", "TOOL_SCHEMAS"]
+__all__ = ["AuthorityDenied", "Authorized", "CAPABILITY_SCHEMA", "CellCapability", "EXPAND_SCHEMA", "EXPAND_TOOL",
+           "GRAPH_ROW_KINDS", "IN_PROCESS_TOOLS", "LOCATOR_TOOLS", "TOOL_INDEXES", "TOOL_SCHEMAS"]

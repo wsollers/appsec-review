@@ -29,7 +29,9 @@ def _capability(**overrides) -> CellCapability:
 def test_catalog_is_the_published_tool_schema_minus_the_owasp_store() -> None:
     catalog = json.loads((Path(__file__).resolve().parents[2] / "docs" / "schemas" /
                           "retrieval-mcp-tools.json").read_text(encoding="utf-8"))
-    assert IN_PROCESS_TOOLS == {tool["name"] for tool in catalog["tools"]} - {"query_owasp_workbench"}
+    # ``expand`` is the one application-only tool: it is in the in-process catalog but deliberately not published.
+    published = {tool["name"] for tool in catalog["tools"]} - {"query_owasp_workbench"}
+    assert IN_PROCESS_TOOLS == published | {"expand"} and "expand" not in {tool["name"] for tool in catalog["tools"]}
 
 
 @pytest.mark.parametrize("request_value", [
