@@ -268,6 +268,40 @@ def test_attempt_input_manifest_is_pinned_to_exact_parallel_handoffs(tmp_path: P
         "data/indices/manifests/branch_a.json", "data/indices/manifests/branch_b.json"}
 
 
+def test_a_job_that_does_not_read_the_target_inherits_the_snapshot_its_upstream_manifests_share(tmp_path: Path) -> None:
+    # The launch binds the snapshot "none" to jobs outside the target set (the inference review is one);
+    # the composed manifest must carry the real snapshot or every shard fails the loader's snapshot check.
+    runs, _ = _fixture(tmp_path)
+    core = RetrievalCore(runs, RUN_ID)
+    run_root = core.run_root
+    base_path = run_root / "data" / "indices" / "manifests" / "fixture.json"
+    base_sha = file_sha256(base_path)
+    identities = [IndexIdentity(**{**item, "gaps": tuple(item.get("gaps", ()))})
+                  for item in core.manifest["indexes"]]
+    handoffs = {}
+    for job_id, selected in (("branch_a", identities[:1]), ("branch_b", identities[1:2])):
+        manifest = run_root / "data" / "indices" / "manifests" / f"{job_id}.json"
+        write_manifest(manifest, run_id=RUN_ID, target_snapshot=core.manifest["target_snapshot"],
+                       target_root=core.target_root, indexes=selected,
+                       upstream_manifests=({"path": base_path.relative_to(run_root).as_posix(),
+                                            "sha256": base_sha},))
+        artifact = {"path": manifest.relative_to(run_root).as_posix(),
+                    "sha256": file_sha256(manifest), "size_bytes": manifest.stat().st_size}
+        handoff = run_root / "data" / "jobs" / job_id / "attempts" / "attempt_0001" / "handoff.json"
+        atomic_json(handoff, {"schema": "appsec-review/job-handoff/1", "status": "ACCEPTED",
+                              "job_id": job_id, "attempt_id": "attempt_0001", "artifacts": [artifact],
+                              "outputs": {"publication.publish": {"index_manifest": artifact}},
+                              "upstream_handoff_sha256": {}})
+        handoffs[job_id] = file_sha256(handoff)
+    attempt = run_root / "data" / "jobs" / "consumer" / "attempts" / "attempt_0001"
+    attempt.mkdir(parents=True)
+    path, _sha256 = materialize_attempt_input_manifest(
+        run_root=run_root, attempt_root=attempt, run_id=RUN_ID, target_snapshot="none", target_root=None,
+        upstream_handoffs=handoffs)
+    assert json.loads(path.read_text(encoding="utf-8"))["target_snapshot"] == core.manifest["target_snapshot"]
+    assert RetrievalCore(runs, RUN_ID, manifest_path=path).manifest["target_snapshot"] == core.manifest["target_snapshot"]
+
+
 def test_attempt_input_manifest_verifies_each_shared_ancestor_once(tmp_path: Path, monkeypatch) -> None:
     # Every job inherits the catalog lineage, so upstream manifests share ancestors. Verification
     # must be linear in distinct manifests, not in paths through the lineage graph (2**depth here).

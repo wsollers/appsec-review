@@ -217,6 +217,15 @@ def materialize_attempt_input_manifest(
     # one verification and flattening per manifest serves every root of this attempt.
     verified: dict[tuple[Path, str], Mapping[str, Any]] = {}
     flattened: dict[tuple[str, str], Any] = {}
+    if target_snapshot == "none":
+        # A job that does not read the target has no snapshot of its own (the launch binds "none"). The
+        # composed manifest carries the snapshot its upstream manifests agree on; they must agree.
+        snapshots = {str(load_verified_manifest(run_root, path, identity[1], verified=verified)[0]
+                         .get("target_snapshot")) for identity, path in roots.items()}
+        if len(snapshots) != 1:
+            raise RetrievalIntegrityError(
+                "upstream manifests disagree on the target snapshot: " + ", ".join(sorted(snapshots)))
+        target_snapshot = snapshots.pop()
     expanded = []
     for identity, path in roots.items():
         values, lineage = _flatten_manifest(run_root, path, identity[1], verified=verified, flattened=flattened)
