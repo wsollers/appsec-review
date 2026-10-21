@@ -19,8 +19,9 @@ Dagster job described in [`wave1-review.md`](wave1-review.md) and
   A dry run still reports a refusal and exits 3 when the real run would be refused.
 - Each script prints what it is about to do before it does it, and never prints secrets. Tool output
   that is shown (for example a failed model probe) has token-like strings replaced by `[redacted]`.
-  Only three deployment settings are ever read from a container's environment
-  (`APPSEC_REVIEW_TARGET`, `APPSEC_REVIEW_CONFIG_OVERLAY`, `APPSEC_REVIEW_MODEL_RECORDING`).
+  Only four deployment settings are ever read from a container's environment
+  (`APPSEC_REVIEW_TARGET`, `APPSEC_REVIEW_CONFIG_OVERLAY`, `APPSEC_REVIEW_MODEL_RECORDING`,
+  `APPSEC_REVIEW_PROFILE`).
 - Exit codes: `0` success, `1` the operation failed (or the final run status is not successful, or
   the stack is not healthy), `2` usage error, `3` refused by a safety rule, `4` nothing matched the
   id, target or file you named.
@@ -68,7 +69,7 @@ several sessions share one Docker daemon and one Dagster stack.
 
 | Script | Purpose |
 | --- | --- |
-| `stack-start [--build] [--no-probe] [--dry-run] [--force] [--target T] [--overlay F] [--recording M]` | Build if asked (or if the image is missing), `lifecycle.py start`, then check health, the overlay and the model. |
+| `stack-start [--build] [--no-probe] [--dry-run] [--force] [--target T] [--overlay F] [--recording M] [--profile dev|prod]` | Build if asked (or if the image is missing), `lifecycle.py start`, then check health, the overlay and the model. |
 | `stack-stop [--force] [--purge-volumes --yes] [--dry-run]` | `lifecycle.py stop`: containers stopped, volumes kept. |
 | `stack-restart [--code-location-only] [--no-probe] [--force] [--dry-run] [--target T] ...` | Stop then start; `--code-location-only` uses `lifecycle.py reload`. |
 | `stack-rebuild [--no-probe] [--force] [--dry-run] [--target T] ...` | `lifecycle.py build` then `start`, which recreates containers whose image changed. |
@@ -88,11 +89,19 @@ After starting, `stack-start`, `stack-restart` and `stack-rebuild` report:
 
 `--target` takes a name under `targets/` or a container path (`/opt/app/targets/...`); `--overlay`
 takes a capacity overlay file under `test/acceptance` (or `none`); `--recording` is `record`, `replay`
-or `off`. They set `APPSEC_REVIEW_TARGET`, `APPSEC_REVIEW_CONFIG_OVERLAY` and
-`APPSEC_REVIEW_MODEL_RECORDING` for the recreate (see
+or `off`; `--profile` is `dev` (default) or `prod`. They set `APPSEC_REVIEW_TARGET`,
+`APPSEC_REVIEW_CONFIG_OVERLAY`, `APPSEC_REVIEW_MODEL_RECORDING` and `APPSEC_REVIEW_PROFILE` for the recreate (see
 [`../processes/local-dagster-parity.md`](../processes/local-dagster-parity.md)). `replay` additionally
 needs `APPSEC_REVIEW_MODEL_REPLAY_DIR`, which the compose file does not pass; the parity walk replays
 locally instead.
+
+The profile selects the models and limits (`dev`: Haiku and today's limits; `prod`: Sonnet 5.5, an Opus 5.5
+verifier and larger limits; see [`model-profiles.md`](model-profiles.md)). Like the target it is container
+environment fixed at creation: the stack scripts print `profile: dev|prod` (and, for `prod`, a notice
+that it uses the more capable models and larger token limits), carry the running value over on a plain
+restart, and `stack-status` shows it. `review-start --profile X` means "I expect X" and refuses (exit 3)
+with the `scripts/stack-restart --profile X` command when the running stack has another profile.
+PowerShell: `-Profile dev|prod` on the same four scripts.
 
 `--purge-volumes` is separate and explicit. It prints the project's containers and volumes (the
 PostgreSQL database and the Dagster storage, with every run's history), refuses without `--yes`, and
