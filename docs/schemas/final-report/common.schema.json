@@ -1,0 +1,728 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://appsec-review.local/schemas/final-report/common.schema.json",
+  "title": "Shared definitions for the final publication gate and final report",
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "claim_id": {
+      "type": "string",
+      "pattern": "^claim-[0-9a-f]{64}$"
+    },
+    "finding_package_id": {
+      "type": "string",
+      "pattern": "^finding-[0-9a-f]{64}$"
+    },
+    "score_id": {
+      "type": "string",
+      "pattern": "^score-[0-9a-f]{64}$"
+    },
+    "relation_id": {
+      "type": "string",
+      "pattern": "^evrel-[0-9a-f]{64}$"
+    },
+    "gap_id": {
+      "type": "string",
+      "pattern": "^gap-[0-9a-f]{64}$"
+    },
+    "adjudication_id": {
+      "type": "string",
+      "pattern": "^adjudication-[0-9a-f]{64}$"
+    },
+    "review_id": {
+      "type": "string",
+      "pattern": "^review-[0-9a-f]{64}$"
+    },
+    "record_id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*-[0-9a-f]{64}$"
+    },
+    "token": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_.:/-]{0,127}$"
+    },
+    "short_text": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "text": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2000
+    },
+    "run_path": {
+      "type": "string",
+      "pattern": "^(?!.*(^|/)[.][.]?(/|$))[A-Za-z0-9_.-]+(/[A-Za-z0-9_.-]+)*$",
+      "maxLength": 512
+    },
+    "lane": {
+      "enum": [
+        "lead",
+        "hunt"
+      ]
+    },
+    "predicate": {
+      "enum": [
+        "affected_construct",
+        "attacker_input_control",
+        "source_to_sink_reachability",
+        "missing_or_ineffective_guard",
+        "configuration_enables",
+        "security_impact"
+      ]
+    },
+    "review_status": {
+      "enum": [
+        "COMPLETE",
+        "DEGRADED",
+        "EMPTY"
+      ]
+    },
+    "publication_status": {
+      "enum": [
+        "PUBLISHABLE",
+        "PUBLISHABLE_WITH_LIMITATIONS"
+      ],
+      "description": "PUBLISHABLE only when no limitation of kind gap exists; a not_run limitation never changes it."
+    },
+    "ship_block_status": {
+      "enum": [
+        "ship_blocking",
+        "ship_blocking_pending_distinct_verification",
+        "needs_verification",
+        "not_ship_blocking"
+      ]
+    },
+    "ship_block_counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ship_blocking",
+        "ship_blocking_pending_distinct_verification",
+        "needs_verification",
+        "not_ship_blocking"
+      ],
+      "properties": {
+        "ship_blocking": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "ship_blocking_pending_distinct_verification": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "needs_verification": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "not_ship_blocking": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "bucket": {
+      "enum": [
+        "publishable",
+        "verification_backlog",
+        "withheld"
+      ]
+    },
+    "withheld_reason": {
+      "enum": [
+        "poc_outcome_unavailable",
+        "attack_chain_unavailable"
+      ],
+      "description": "The package references an artifact class whose manifest does not exist, so the reference cannot be verified."
+    },
+    "artifact_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256"
+      ],
+      "properties": {
+        "path": {
+          "$ref": "common.schema.json#/$defs/run_path"
+        },
+        "sha256": {
+          "$ref": "common.schema.json#/$defs/sha256"
+        }
+      }
+    },
+    "unavailable": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "state",
+        "reason"
+      ],
+      "properties": {
+        "state": {
+          "const": "unavailable"
+        },
+        "reason": {
+          "$ref": "common.schema.json#/$defs/text"
+        }
+      }
+    },
+    "dimension": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "scale",
+            "rating",
+            "value"
+          ],
+          "properties": {
+            "scale": {
+              "$ref": "common.schema.json#/$defs/token"
+            },
+            "rating": {
+              "oneOf": [
+                {
+                  "$ref": "common.schema.json#/$defs/short_text"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "value": {
+              "type": [
+                "number",
+                "null"
+              ]
+            }
+          }
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "score_projection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "score_id",
+        "sha256",
+        "provider",
+        "native",
+        "technical_severity",
+        "exploitability_confidence",
+        "environmental_business_impact",
+        "remediation_priority",
+        "missing_factors"
+      ],
+      "properties": {
+        "score_id": {
+          "$ref": "common.schema.json#/$defs/score_id"
+        },
+        "sha256": {
+          "$ref": "common.schema.json#/$defs/sha256"
+        },
+        "provider": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "interface",
+            "implementation"
+          ],
+          "properties": {
+            "id": {
+              "$ref": "common.schema.json#/$defs/token"
+            },
+            "interface": {
+              "$ref": "common.schema.json#/$defs/short_text"
+            },
+            "implementation": {
+              "$ref": "common.schema.json#/$defs/short_text"
+            }
+          }
+        },
+        "native": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "nomenclature",
+            "rating",
+            "score"
+          ],
+          "properties": {
+            "nomenclature": {
+              "oneOf": [
+                {
+                  "$ref": "common.schema.json#/$defs/short_text"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "rating": {
+              "oneOf": [
+                {
+                  "$ref": "common.schema.json#/$defs/short_text"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "score": {
+              "type": [
+                "number",
+                "null"
+              ]
+            }
+          }
+        },
+        "technical_severity": {
+          "$ref": "common.schema.json#/$defs/dimension"
+        },
+        "exploitability_confidence": {
+          "$ref": "common.schema.json#/$defs/dimension"
+        },
+        "environmental_business_impact": {
+          "$ref": "common.schema.json#/$defs/dimension"
+        },
+        "remediation_priority": {
+          "$ref": "common.schema.json#/$defs/dimension"
+        },
+        "missing_factors": {
+          "type": "array",
+          "items": {
+            "$ref": "common.schema.json#/$defs/token"
+          },
+          "maxItems": 32,
+          "uniqueItems": true
+        }
+      },
+      "description": "One independent score package. The four dimensions are separate and are never combined or averaged."
+    },
+    "finding_projection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "finding_package_id",
+        "sha256",
+        "path",
+        "claim_id",
+        "adjudication_id",
+        "lane",
+        "state",
+        "label",
+        "title",
+        "ship_block",
+        "independence",
+        "verification_review_id",
+        "direct_evidence",
+        "missing_predicates",
+        "gap_ids",
+        "scores",
+        "poc",
+        "attack_chains",
+        "bucket",
+        "withheld_reasons"
+      ],
+      "properties": {
+        "finding_package_id": {
+          "$ref": "common.schema.json#/$defs/finding_package_id"
+        },
+        "sha256": {
+          "$ref": "common.schema.json#/$defs/sha256"
+        },
+        "path": {
+          "$ref": "common.schema.json#/$defs/run_path"
+        },
+        "claim_id": {
+          "$ref": "common.schema.json#/$defs/claim_id"
+        },
+        "adjudication_id": {
+          "$ref": "common.schema.json#/$defs/adjudication_id"
+        },
+        "lane": {
+          "$ref": "common.schema.json#/$defs/lane"
+        },
+        "state": {
+          "enum": [
+            "confirmed",
+            "supported"
+          ]
+        },
+        "label": {
+          "enum": [
+            "confirmed",
+            "not_independently_confirmed"
+          ]
+        },
+        "title": {
+          "$ref": "common.schema.json#/$defs/short_text"
+        },
+        "ship_block": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "policy",
+            "policy_sha256",
+            "status",
+            "reasons",
+            "technical_severity",
+            "technical_severity_score_id",
+            "distinct_verification_required",
+            "verifier_model_distinct"
+          ],
+          "properties": {
+            "policy": {
+              "const": "ship-block-policy/1"
+            },
+            "policy_sha256": {
+              "$ref": "common.schema.json#/$defs/sha256"
+            },
+            "status": {
+              "$ref": "common.schema.json#/$defs/ship_block_status"
+            },
+            "reasons": {
+              "type": "array",
+              "items": {
+                "$ref": "common.schema.json#/$defs/token"
+              },
+              "maxItems": 8,
+              "uniqueItems": true
+            },
+            "technical_severity": {
+              "oneOf": [
+                {
+                  "$ref": "common.schema.json#/$defs/short_text"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "technical_severity_score_id": {
+              "oneOf": [
+                {
+                  "$ref": "common.schema.json#/$defs/score_id"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "distinct_verification_required": {
+              "type": "boolean"
+            },
+            "verifier_model_distinct": {
+              "type": "boolean"
+            }
+          },
+          "description": "The accepted ship-block-policy/1 decision, copied verbatim; the gate and the report never reinterpret it."
+        },
+        "independence": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "independent",
+            "provider_distinct",
+            "verifier_model_distinct"
+          ],
+          "properties": {
+            "independent": {
+              "type": "boolean"
+            },
+            "provider_distinct": {
+              "type": "boolean"
+            },
+            "verifier_model_distinct": {
+              "type": "boolean"
+            }
+          }
+        },
+        "verification_review_id": {
+          "oneOf": [
+            {
+              "$ref": "common.schema.json#/$defs/review_id"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "direct_evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "common.schema.json#/$defs/relation_id"
+          },
+          "maxItems": 256,
+          "uniqueItems": true
+        },
+        "missing_predicates": {
+          "type": "array",
+          "items": {
+            "$ref": "common.schema.json#/$defs/predicate"
+          },
+          "maxItems": 6,
+          "uniqueItems": true
+        },
+        "gap_ids": {
+          "type": "array",
+          "items": {
+            "$ref": "common.schema.json#/$defs/gap_id"
+          },
+          "maxItems": 256,
+          "uniqueItems": true
+        },
+        "scores": {
+          "type": "array",
+          "items": {
+            "$ref": "common.schema.json#/$defs/score_projection"
+          },
+          "maxItems": 16,
+          "uniqueItems": true
+        },
+        "poc": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "status",
+                "result_id"
+              ],
+              "properties": {
+                "status": {
+                  "$ref": "common.schema.json#/$defs/token"
+                },
+                "result_id": {
+                  "oneOf": [
+                    {
+                      "$ref": "common.schema.json#/$defs/record_id"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "attack_chains": {
+          "type": "array",
+          "items": {
+            "$ref": "common.schema.json#/$defs/record_id"
+          },
+          "maxItems": 32,
+          "uniqueItems": true
+        },
+        "bucket": {
+          "$ref": "common.schema.json#/$defs/bucket"
+        },
+        "withheld_reasons": {
+          "type": "array",
+          "items": {
+            "$ref": "common.schema.json#/$defs/withheld_reason"
+          },
+          "maxItems": 2,
+          "uniqueItems": true
+        }
+      }
+    },
+    "limitation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "limitation_id",
+        "kind",
+        "statement",
+        "count"
+      ],
+      "properties": {
+        "limitation_id": {
+          "$ref": "common.schema.json#/$defs/token"
+        },
+        "kind": {
+          "enum": [
+            "gap",
+            "not_run"
+          ]
+        },
+        "statement": {
+          "$ref": "common.schema.json#/$defs/text"
+        },
+        "count": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "description": "gap: the review is incomplete, degraded or carries unresolved gaps. not_run: a stage that does not exist yet was not run; this is a named limitation, never a failure."
+    },
+    "accounting_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "outcome",
+        "review_incomplete",
+        "incomplete_gap_ratio",
+        "gap_ratio",
+        "claims_total",
+        "duplicate_proposals",
+        "claims_by_state",
+        "gaps_by_class"
+      ],
+      "properties": {
+        "outcome": {
+          "enum": [
+            "COMPLETE",
+            "DEGRADED",
+            "FAILED",
+            "CANCELED",
+            "EMPTY"
+          ]
+        },
+        "review_incomplete": {
+          "type": "boolean"
+        },
+        "incomplete_gap_ratio": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "gap_ratio": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "claims_total": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "duplicate_proposals": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "claims_by_state": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "gaps_by_class": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      }
+    },
+    "package_counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "total",
+        "publishable",
+        "verification_backlog",
+        "withheld",
+        "exact"
+      ],
+      "properties": {
+        "total": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "publishable": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "verification_backlog": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "withheld": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "exact": {
+          "const": true
+        }
+      },
+      "description": "Every finding package is in exactly one bucket: total = publishable + verification_backlog + withheld."
+    },
+    "ship_block_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "policy",
+        "policy_sha256",
+        "by_status",
+        "by_lane"
+      ],
+      "properties": {
+        "policy": {
+          "const": "ship-block-policy/1"
+        },
+        "policy_sha256": {
+          "$ref": "common.schema.json#/$defs/sha256"
+        },
+        "by_status": {
+          "$ref": "common.schema.json#/$defs/ship_block_counts"
+        },
+        "by_lane": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "lead",
+            "hunt"
+          ],
+          "properties": {
+            "lead": {
+              "$ref": "common.schema.json#/$defs/ship_block_counts"
+            },
+            "hunt": {
+              "$ref": "common.schema.json#/$defs/ship_block_counts"
+            }
+          }
+        }
+      }
+    },
+    "coverage_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "rows",
+        "summary",
+        "statement"
+      ],
+      "properties": {
+        "rows": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "summary": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "statement": {
+          "$ref": "common.schema.json#/$defs/text"
+        }
+      }
+    }
+  }
+}

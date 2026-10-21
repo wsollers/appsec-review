@@ -1018,23 +1018,33 @@ def test_downstream_review_consumers_are_registered_as_planned_producers_by_name
 
     planned = {producer for _source, producers, *_ in input_matrix.INPUT_SOURCES for producer in producers
                if producer.startswith("planned:")}
-    assert {f"planned:{job}" for job in DOWNSTREAM} <= planned
+    remediation = DOWNSTREAM[:2]
+    assert {f"planned:{job}" for job in remediation} <= planned
+    assert not {f"planned:{job}" for job in DOWNSTREAM[2:]} & planned          # the gate and report are real producers
+    named = {producer for _source, producers, *_ in input_matrix.INPUT_SOURCES for producer in producers}
+    assert set(DOWNSTREAM[2:]) <= named
     assert PLANNED_CONSUMER_JOBS == DOWNSTREAM
     assert tuple(consumer.removeprefix("planned:") for consumer, _ in input_matrix.PLANNED_CONSUMERS) == DOWNSTREAM
-    # Every consumed producer is the review itself or an earlier planned downstream job.
+    # Every consumed producer is the review itself or an earlier downstream job (planned or built).
     for index, (_consumer, producers) in enumerate(input_matrix.PLANNED_CONSUMERS):
-        earlier = {f"planned:{job}" for job in DOWNSTREAM[:index]}
+        earlier = {name for job in DOWNSTREAM[:index] for name in (job, f"planned:{job}")}
         assert set(producers) <= {"job_inference_security_review"} | earlier
     assert all(item["status"] == "planned" and item["reads"] for item in PLANNED_CONSUMERS)
     # Remediation reads only confirmed findings (decision 4); never the verification backlog.
     reads = {item["job_id"]: set(item["reads"]) for item in PLANNED_CONSUMERS}
     assert "verification_backlog" not in reads["job_remediation_planning"] | reads["job_remediation_validation"]
     assert "remediation_intake" in reads["job_remediation_planning"]
-    # Not yet built: they are planned, never registered, and reconcile reports them as planned.
-    assert not set(DOWNSTREAM) & set(builtin_registry().job_ids())
+    # The remediation jobs are not built: they are planned, never registered, and reconcile reports
+    # them as planned. The publication gate and the final report are built and registered.
+    built = {"job_final_publication_gate", "job_final_report_publication"}
+    assert set(DOWNSTREAM) & set(builtin_registry().job_ids()) == built
     rows, discrepancies = input_matrix.reconcile([], [], [], {}, "job_review_data_indexing")
     states = {item["source"]: item["producer_states"] for item in rows}
     assert states["remediation_plans"] == [{"producer": "planned:job_remediation_planning", "status": "planned"}]
+    assert states["publication_gate_decisions"] == [{"producer": "job_final_publication_gate", "status": "unregistered"}]
+    rows, discrepancies = input_matrix.reconcile(built, [], [], {}, "job_review_data_indexing")
+    assert {item["source"]: item["producer_states"][0]["status"] for item in rows}[
+        "final_report_publications"] == "not_executed"
     assert not any(job in item for item in discrepancies for job in DOWNSTREAM)
     # Once registered, a planned name resolves to the job itself without a matrix change.
     assert input_matrix.resolve_producer("planned:job_final_publication_gate", {"job_final_publication_gate"}) == \

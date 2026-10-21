@@ -15,7 +15,8 @@ model_connectivity -> image_pin_verification -> review_intake -> target_catalog 
   -> [cpg_analysis only when enabled] -> evidence_collection -> dependency_intelligence
   -> change_context_analysis -> codeql_analysis -> review_prioritization
   -> code_graph_index -> review_data_indexing -> review_package_assembly
-  -> document_issue_analysis -> inference_security_review
+  -> document_issue_analysis -> inference_security_review -> final_publication_gate
+  -> final_report_publication
 ```
 
 Both surfaces verify in `image_pin_verification`, after the model gate and before intake, that every
@@ -30,9 +31,9 @@ run job_third_party_data_sync`). Both surfaces run change-context analysis after
 production, review prioritization after CodeQL, review-package assembly after data indexing, and
 document issue analysis after package assembly. Use Dagster's
 `wave1_review`, which includes every registered job whose job-level `settings.enabled` is not false,
-except the standalone
-`third_party_data_sync` and `inference_security_review` jobs, when its
-additional branches are required. Dagster's current dependency graph is assembled from the registered,
+except the standalone `third_party_data_sync` job, when its additional branches are required.
+`final_report_publication` is its single terminal job; the gate and the report are described in
+[`final-report.md`](final-report.md). Dagster's current dependency graph is assembled from the registered,
 configured jobs and is summarized in [`../../deploy/dagster/README.md`](../../deploy/dagster/README.md).
 
 The direct sequence includes the engineering-signal producers and the code-graph normalizer. It is

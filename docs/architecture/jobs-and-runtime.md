@@ -16,10 +16,10 @@ processes cannot claim the same run concurrently.
 The direct CLI currently exercises this mechanism with a linear review graph from
 `job_model_connectivity` through `job_document_issue_analysis`. Dagster builds the broader, branched
 `wave1_review` topology from every registered, configured, enabled job except
-`job_third_party_data_sync` and `job_inference_security_review`, adding the CI configuration,
-post-build, OWASP, and security-tagging jobs that are not in the direct graph. The inference
-security review runs as its own standalone Dagster job over the run's accepted index set. Both surfaces use the same semantic registry and
-accepted-handoff format. The exact operator-visible distinction is documented in
+`job_third_party_data_sync`, adding the CI configuration, post-build, OWASP, and security-tagging
+jobs that are not in the direct graph. Both surfaces end with `job_inference_security_review`,
+`job_final_publication_gate` and `job_final_report_publication`, in that order; the report is the
+single terminal job. Both surfaces use the same semantic registry and accepted-handoff format. The exact operator-visible distinction is documented in
 [`../operations/wave1-review.md`](../operations/wave1-review.md).
 
 A boolean at `[jobs.<job_id>.settings].enabled` is the generic job dispatch gate. Missing means
@@ -31,7 +31,7 @@ input, output, tool, and acceptance contracts.
 
 ## Registered jobs
 
-`runtime/registry.py` registers 34 jobs. Each has a `[jobs.<job_id>]` table in
+`runtime/registry.py` registers 36 jobs. Each has a `[jobs.<job_id>]` table in
 `appsec-review.toml`, and its Dagster job is named from that table's `name`.
 
 | Job | Purpose | Operations |
@@ -54,6 +54,7 @@ input, output, tool, and acceptance contracts.
 | `job_artifact_security_analysis` | Produced-artifact security analysis | [artifact-security-analysis](../operations/artifact-security-analysis.md) |
 | `job_cpp_compiled_analysis` | C/C++ compiled analysis | [cpp-compiled-analysis](../operations/cpp-compiled-analysis.md) |
 | `job_clang_static_analysis` | Clang-Tidy and Clang Static Analyzer over accepted compile scopes | [clang-static-analysis](../operations/clang-static-analysis.md) |
+| `job_svf_alias_analysis` | Opt-in SVF points-to cross-check producer over linked `-O0` bitcode | [svf-alias-analysis](../operations/svf-alias-analysis.md) |
 | `job_sanitizer_build` | ASan/UBSan rebuild of accepted native units in a separate workspace; catalogues instrumented outputs and proves instrumentation from the ELF, never executes them | [sanitizer-build](../operations/sanitizer-build.md) |
 | `job_cpp_symbol_index` | clangd symbol index | [cpp-index-jobs](../operations/cpp-index-jobs.md) |
 | `job_cpg_analysis` | Joern code property graph (deprecated; shipped `settings.enabled = false`) | [cpp-index-jobs](../operations/cpp-index-jobs.md) |
@@ -69,6 +70,8 @@ input, output, tool, and acceptance contracts.
 | `job_review_package_assembly` | Deterministic pre-adjudication lead and hunt packages | [review-package-contract](review-package-contract.md) |
 | `job_document_issue_analysis` | Private document candidate ledger with verified source mappings | [document-issue-analysis](../operations/document-issue-analysis.md) |
 | `job_inference_security_review` | Two-lane evidence-bound inference review (slice 1: claim ledger, adjudication, one scorer, accepted handoff) | [inference-security-review](inference-security-review.md) |
+| `job_final_publication_gate` | Deterministic, model-free gate: re-verifies the accepted review handoff from bytes and classifies every finding package as publishable, verification backlog or withheld, with named limitations | [final-report](../operations/final-report.md) |
+| `job_final_report_publication` | Deterministic, model-free terminal job: `final-report.json` and a byte-reproducible `final-report.md` from the accepted gate (PDF is a later step) | [final-report](../operations/final-report.md) |
 
 Each orchestrated graph launch also publishes an immutable run-level orchestration receipt. This
 keeps the current Dagster run linked to the application run even when every job is reused and the
@@ -455,6 +458,12 @@ The generic native build container executes untrusted build logic but never targ
 `job_sanitizer_build` replays the accepted native build commands with sanitizer flags in a separate
 workspace under the same rule and publishes an instrumented-output catalog that no existing job
 consumes ([`../operations/sanitizer-build.md`](../operations/sanitizer-build.md)).
+
+`job_final_publication_gate` and `job_final_report_publication` call no model. The gate reads the
+accepted inference review handoff and re-hashes every artifact it binds; the report reads only the
+accepted gate handoff. Neither reinterprets a claim state or a ship-block status, and an integrity
+failure fails the job. The two remediation jobs reserved by decision 8 are not built, and the gate
+records that as a named limitation ([`../operations/final-report.md`](../operations/final-report.md)).
 The C++ analysis container only replays bounded compile units for analysis. Application code validates
 workspace manifests, compile commands, and artifacts; converts tool failures to explicit gaps; and
 retains framework integrity failures as hard failures. See

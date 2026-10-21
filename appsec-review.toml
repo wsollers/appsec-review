@@ -2472,6 +2472,57 @@ workers = 1
 [jobs.job_inference_security_review.steps.publication.tasks.publish_claim_ledger]
 [jobs.job_inference_security_review.steps.publication.tasks.publish_handoff]
 
+# Final publication gate (docs/operations/final-report.md). It re-verifies the accepted inference
+# review handoff and the artifacts it binds from bytes, then classifies every finding package as
+# publishable, verification backlog or withheld and names the limitations. It calls no model, so it
+# has no provider or model settings, and it never reinterprets a claim state or ship-block status.
+# max_packages bounds the finding packages one gate accounts for (the schema allows 10000).
+[jobs.job_final_publication_gate]
+name = "final_publication_gate"
+workers = 1
+
+[jobs.job_final_publication_gate.settings]
+enabled = true
+max_packages = 10000
+
+[jobs.job_final_publication_gate.steps.load]
+workers = 1
+[jobs.job_final_publication_gate.steps.load.tasks.verify_review]
+
+[jobs.job_final_publication_gate.steps.gate]
+workers = 1
+[jobs.job_final_publication_gate.steps.gate.tasks.classify]
+
+[jobs.job_final_publication_gate.steps.acceptance]
+workers = 1
+[jobs.job_final_publication_gate.steps.acceptance.tasks.publish_handoff]
+
+# Final report publication (docs/operations/final-report.md): the terminal job. It reads only the
+# accepted gate handoff and the artifacts the gate binds, and writes final-report.json and a
+# deterministic final-report.md. It calls no model. The two settings only shorten identifier lists in
+# the Markdown; the JSON always carries every identifier. PDF rendering is a later step.
+[jobs.job_final_report_publication]
+name = "final_report_publication"
+workers = 1
+
+[jobs.job_final_report_publication.settings]
+enabled = true
+markdown_evidence_ids = 8
+markdown_gap_ids = 16
+
+[jobs.job_final_report_publication.steps.load]
+workers = 1
+[jobs.job_final_report_publication.steps.load.tasks.accepted_gate]
+
+[jobs.job_final_report_publication.steps.report]
+workers = 1
+[jobs.job_final_report_publication.steps.report.tasks.assemble]
+[jobs.job_final_report_publication.steps.report.tasks.render]
+
+[jobs.job_final_report_publication.steps.acceptance]
+workers = 1
+[jobs.job_final_report_publication.steps.acceptance.tasks.publish_handoff]
+
 # ---------------------------------------------------------------------------------------------------------
 # Banned and unsafe C/C++ functions. A call to a listed name in C or C++ source is reported by Semgrep and
 # Opengrep as a review lead: `high` at ERROR (reported as high severity), `warning` at WARNING. A match is

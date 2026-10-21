@@ -303,7 +303,9 @@ flowchart TD
   CI --> AM
   RD --> AM
   AM --> R[job_inference_security_review]
-  R -.-> RP[job_remediation_planning] -.-> RV[job_remediation_validation] -.-> G[job_final_publication_gate] -.-> FR[job_final_report_publication]
+  R -.-> RP[job_remediation_planning] -.-> RV[job_remediation_validation]
+  R --> G[job_final_publication_gate] --> FR[job_final_report_publication]
+  RV -.-> G
 ```
 
 Planned job responsibilities:

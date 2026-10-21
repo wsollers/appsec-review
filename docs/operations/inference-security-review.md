@@ -334,7 +334,8 @@ Decision 4 separates the findings the handoff publishes:
 
 The handoff's `planned_consumers` names the four downstream jobs fixed by decision 8 and the
 handoff fields each one reads: `job_remediation_planning`, `job_remediation_validation`,
-`job_final_publication_gate` and `job_final_report_publication`. None of them is built yet.
+`job_final_publication_gate` and `job_final_report_publication`. The gate and the report are built and
+read this handoff ([`final-report.md`](final-report.md)); the two remediation jobs are not.
 
 ## Outcomes
 

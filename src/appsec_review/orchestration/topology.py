@@ -182,6 +182,12 @@ def wave1_dependencies(registered: Set[str]) -> dict[str, tuple[str, ...]] | Non
         # The near-terminal review reads the accepted manifest, which holds every index shard and the
         # assembled review packages, so it runs after both consumers of the index and is the one terminal job.
         wave_dependencies["job_inference_security_review"] = ("job_document_issue_analysis",)
+    if "job_final_publication_gate" in registered and "job_inference_security_review" in registered:
+        # The gate only projects the accepted review handoff and the artifacts it binds.
+        wave_dependencies["job_final_publication_gate"] = ("job_inference_security_review",)
+    if "job_final_report_publication" in registered and "job_final_publication_gate" in registered:
+        # The report reads only the accepted gate handoff and is the one terminal job of the graph.
+        wave_dependencies["job_final_report_publication"] = ("job_final_publication_gate",)
     return wave_dependencies
 
 

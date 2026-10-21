@@ -573,7 +573,7 @@ def test_topology_places_the_job_after_language_build_with_one_terminal_job() ->
     assert jobs[JOB_ID]["dependencies"] == ["job_language_build"]
     assert "job_language_build" in jobs[JOB_ID]["upstream_handoffs"]
     depended = {dependency for item in jobs.values() for dependency in item["dependencies"]}
-    assert set(jobs) - depended == {"job_inference_security_review"}  # exactly one terminal job
+    assert set(jobs) - depended == {"job_final_report_publication"}  # exactly one terminal job
     consumers = [job_id for job_id, item in jobs.items() if JOB_ID in item["dependencies"]]
     assert consumers == ["job_review_data_indexing"]
     for sibling in ("job_cpp_compiled_analysis", "job_codeql_analysis", "job_clang_static_analysis",
@@ -598,7 +598,8 @@ def test_only_the_dataset_inventory_declares_the_job_as_consumed() -> None:
 def test_disabled_job_is_transparent_to_topology() -> None:
     from appsec_review.orchestration.topology import wave1_dependencies
     registered = {job_id for job_id in builtin_registry().job_ids()
-                  if job_id not in {JOB_ID, "job_third_party_data_sync", "job_inference_security_review"}}
+                  if job_id not in {JOB_ID, "job_third_party_data_sync", "job_inference_security_review",
+                                    "job_final_publication_gate", "job_final_report_publication"}}
     dependencies = wave1_dependencies(registered)
     assert JOB_ID not in dependencies
     assert all(JOB_ID not in values for values in dependencies.values())
