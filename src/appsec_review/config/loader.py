@@ -503,6 +503,7 @@ _NAME = re.compile(r"[a-z][a-z0-9_]{0,63}")
 PROFILE_MODEL_JOBS: tuple[str, ...] = (
     "job_target_analysis_plan", "job_project_build", "job_post_build_security_assessment",
     "job_dependency_intelligence", "job_owasp_control_assessment")
+PROFILE_NAMED_MODEL_JOBS: tuple[str, ...] = ("job_poc_generation",)
 PROFILE_JOB_MODEL_KEYS: Mapping[str, type] = MappingProxyType({
     "provider": str, "model": str, "reasoning": str, "max_input_tokens": int, "max_output_tokens": int,
     "timeout_seconds": int, "retries": int})
@@ -587,14 +588,22 @@ def profile_override_keys(document: object) -> tuple[str, ...]:
         return [f"{field}.{key}" for key in values]
 
     root = table(document, "", {"jobs"})
-    jobs = table(root["jobs"], "jobs", {*PROFILE_MODEL_JOBS, JOB_ID})
+    jobs = table(root["jobs"], "jobs", {*PROFILE_MODEL_JOBS, *PROFILE_NAMED_MODEL_JOBS, JOB_ID})
     keys: list[str] = []
     for job_id in sorted(jobs):
         field = f"jobs.{job_id}"
         job = table(jobs[job_id], field, {"settings"})
-        if job_id != JOB_ID:
+        if job_id in PROFILE_MODEL_JOBS:
             settings = table(job["settings"], f"{field}.settings", {"model"})
             keys += typed(settings["model"], f"{field}.settings.model", PROFILE_JOB_MODEL_KEYS)
+            continue
+        if job_id in PROFILE_NAMED_MODEL_JOBS:
+            settings = table(job["settings"], f"{field}.settings", {"models"})
+            models = table(settings["models"], f"{field}.settings.models")
+            for name in sorted(models):
+                if not _NAME.fullmatch(str(name)):
+                    raise ValueError(f"configuration profile model profile name is invalid: {name}")
+                keys += typed(models[name], f"{field}.settings.models.{name}", PROFILE_REVIEW_MODEL_KEYS)
             continue
         settings = table(job["settings"], f"{field}.settings", {"models", "roles", "budgets"})
         if "models" in settings:
@@ -627,8 +636,13 @@ def _apply_profile(document: dict[str, Any], profile: Mapping[str, Any]) -> None
 
     for job_id, job in profile["jobs"].items():
         settings = job["settings"]
-        if job_id != JOB_ID:
+        if job_id in PROFILE_MODEL_JOBS:
             base_table(("jobs", job_id, "settings", "model")).update(settings["model"])
+            continue
+        if job_id in PROFILE_NAMED_MODEL_JOBS:
+            named = ("jobs", job_id, "settings", "models")
+            for name, values in settings["models"].items():
+                base_table((*named, name)).update(values)
             continue
         review = ("jobs", job_id, "settings")
         for name, values in settings.get("models", {}).items():

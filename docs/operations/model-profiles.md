@@ -52,6 +52,7 @@ rejected with a message that names the key.
 | --- | --- |
 | `jobs.<job>.settings.model` for `job_target_analysis_plan`, `job_project_build`, `job_post_build_security_assessment`, `job_dependency_intelligence`, `job_owasp_control_assessment` | `provider`, `model`, `reasoning`, `max_input_tokens`, `max_output_tokens`, `timeout_seconds`, `retries` |
 | `jobs.job_inference_security_review.settings.models.<profile>` (created or updated) | `provider`, `model`, `reasoning`, `max_input_tokens`, `max_output_tokens`, `max_queries`, `max_turns`, `timeout_seconds` |
+| `jobs.job_poc_generation.settings.models.<profile>` (existing profiles only) | `provider`, `model`, `reasoning`, `max_input_tokens`, `max_output_tokens`, `max_queries`, `max_turns`, `timeout_seconds` |
 | `jobs.job_inference_security_review.settings.roles.<role>` (the role must exist in the base) | `model_profile` |
 | `jobs.job_inference_security_review.settings.budgets` | `max_model_turns`, `max_input_tokens`, `max_output_tokens`, `max_retrieval_queries`, `timeout_seconds` |
 
@@ -66,6 +67,7 @@ rejected with a message that names the key.
 | `job_project_build` | `claude-sonnet-5-5` | medium | 128000 | 16000 | 600 |
 | inference review `models.default` | `claude-sonnet-5-5` | high | 200000 | 64000 | 1800 |
 | inference review `models.strong` (new) | `claude-opus-5-5` | high | 200000 | 64000 | 2400 |
+| PoC generation `models.default` | `claude-sonnet-5-5` | high | 200000 | 32000 | 600 |
 
 `default` and `strong` also set `max_queries = 60` and `max_turns = 16`. The inference review budgets
 become `max_model_turns = 60000`, `max_input_tokens = 600000000`, `max_output_tokens = 60000000`,

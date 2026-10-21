@@ -122,6 +122,9 @@ def test_prod_loads_the_exact_models_and_limits(monkeypatch) -> None:
             budgets.timeout_seconds) == (60000, 600000000, 60000000, 200000, 86400)
     if "adjudication_judge" in review.roles:
         assert review.roles["adjudication_judge"].model_profile == "strong"
+    poc = config.job("job_poc_generation").settings["models"]["default"]
+    assert (poc["model"], poc["reasoning"], poc["max_input_tokens"], poc["max_output_tokens"]) == (
+        "claude-sonnet-5-5", "high", 200000, 32000)
     assert "claude-fable-5-1" not in (ROOT / "profiles" / "prod.toml").read_text(encoding="utf-8")
 
 
@@ -131,6 +134,7 @@ def test_the_real_prod_file_passes_the_allowlist() -> None:
     keys = profile_override_keys(tomllib.loads((ROOT / "profiles" / "prod.toml").read_text(encoding="utf-8")))
     assert f"jobs.{JOB}.settings.models.strong.model" in keys
     assert f"jobs.{JOB}.settings.roles.independent_verifier.model_profile" in keys
+    assert "jobs.job_poc_generation.settings.models.default.model" in keys
 
 
 # ---------------------------------------------------------------- layer, freeze, fingerprints

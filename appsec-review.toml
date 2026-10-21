@@ -2332,8 +2332,8 @@ max_turns = 12
 timeout_seconds = 600
 
 # Lead severity triage (settings.triage): one short, tool-free turn per batch of 20 leads. The same provider and
-# Haiku model as "default" with small limits, so it is cheap in dev and prod; profiles/prod.toml leaves it alone
-# (its allowlist lets the operator override models.triage). max_queries must stay 0: triage grants no retrieval.
+# Haiku model as "default" with small limits, so it is cheap in dev. profiles/prod.toml upgrades the model while
+# keeping these bounded, tool-free limits. max_queries must stay 0: triage grants no retrieval.
 [jobs.job_inference_security_review.settings.models.triage]
 provider = "claude-cli"
 model = "claude-haiku-5-5"
