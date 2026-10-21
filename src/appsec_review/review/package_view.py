@@ -74,18 +74,20 @@ class PackageView:
     def table(self, extra_known: Iterable[str] = ()) -> LabelTable:
         return LabelTable(self.labels, known=(*self.packaged_refs, *extra_known), texts=self.texts)
 
-    def with_extra(self, refs: Iterable[str]) -> tuple["PackageView", dict[str, str]]:
-        """This view with ``A`` labels for identities it has no label for (a claim\'s affected entities)."""
+    def with_extra(self, refs: Iterable[str], *, prefix: str = "A") -> tuple["PackageView", dict[str, str]]:
+        """This view with ``prefix`` labels (``A`` by default: a claim\'s affected entities; ``J`` for the rows a
+        judge is shown) for identities it has no label for. Returns every given identity\'s label."""
         labels = dict(self.labels)
         by_ref: dict[str, str] = {}
         for label, ref in labels.items():
             by_ref.setdefault(ref, label)
         added: dict[str, str] = {}
-        count = 0
+        count = sum(1 for label in labels if label.startswith(prefix))
         for ref in refs:
             if ref not in by_ref:
                 count += 1
-                by_ref[ref] = labels.setdefault(f"A{count}", ref)
+                labels[f"{prefix}{count}"] = ref
+                by_ref[ref] = f"{prefix}{count}"
             added[ref] = by_ref[ref]
         return replace(self, labels=labels, packaged_refs=self.packaged_refs | frozenset(added)), added
 

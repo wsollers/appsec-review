@@ -29,6 +29,7 @@ class Role(StrEnum):
     ATTACK_CHAIN_ANALYST = "attack_chain_analyst"
     FINDING_ADJUDICATOR = "finding_adjudicator"
     COMPLETENESS_REVIEWER = "completeness_reviewer"
+    ADJUDICATION_JUDGE = "adjudication_judge"   # decides which side of a claim is correct; never sets a state
 
 
 class BlueTask(StrEnum):
@@ -211,6 +212,39 @@ class EvidenceRelation:
     complete: bool
     producing_cell_id: str
     retrieval_receipt_sha256: str | None
+    # ``adjudication_judge`` for a relation derived from a judge's citations; ``None`` for the relations the
+    # producing role itself authored. R5 and scoring count only the latter (review-judge-and-poc.md section 3.4).
+    provenance: str | None = None
+
+
+class JudgeVerdictValue(StrEnum):
+    """A judge's de-shuffled verdict on one claim (``judge-result/1``)."""
+
+    RED_CORRECT = "red_correct"
+    BLUE_CORRECT = "blue_correct"
+    PARTLY = "partly"
+    NEITHER = "neither"
+    UNRESOLVED = "unresolved"
+
+
+@dataclass(frozen=True, slots=True)
+class JudgePredicateVerdict:
+    predicate: Predicate
+    verdict: JudgeVerdictValue
+    cites: tuple[str, ...]           # resolved logical identities, sorted
+
+
+@dataclass(frozen=True, slots=True)
+class JudgeVerdict:
+    """The ledger record of one judge cell's verdict (``judge_verdict`` event). It sets no claim state."""
+
+    verdict_id: str                  # judge-<sha256> over (claim, cell)
+    claim_id: str
+    verdict: JudgeVerdictValue
+    per_predicate: tuple[JudgePredicateVerdict, ...]
+    reason: str
+    cell_id: str
+    judge_model_distinct: bool
 
 
 @dataclass(frozen=True, slots=True)
@@ -263,3 +297,6 @@ class CellRecord:
     attempts: int
     gap_ids: tuple[str, ...] = field(default_factory=tuple)
     receipt_sha256: str | None = None
+    # Judge cells only: the (side, role) pairs behind sides A and B of the cell's request
+    # (review-judge-and-poc.md section 3.2). It is kept here and appears nowhere in the model-facing request.
+    side_map: tuple[tuple[str, str], ...] | None = None

@@ -14,6 +14,7 @@ PREFIXES = {
     "claim": "claim", "evidence_relation": "evrel", "evidence_request": "evreq", "review": "review",
     "adjudication": "adjudication", "score": "score", "cell": "cell", "actor": "actor", "gap": "gap",
     "event": "event", "package": "package", "finding_package": "finding", "team": "team",
+    "judge_verdict": "judge",
 }
 
 

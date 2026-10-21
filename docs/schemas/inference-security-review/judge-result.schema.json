@@ -1,0 +1,165 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://appsec-review.local/schemas/inference-security-review/judge-result.schema.json",
+  "title": "Judge result, version 1 (expanded, de-shuffled)",
+  "description": "The application's expansion of a judge's compact answer: the verdict in terms of red and blue, the per-predicate verdicts with the identities their labels resolved to, and the reason. It names no side letter and no cell; the side-to-role map lives in the judge cell's terminal record.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "claim_id",
+    "verdict",
+    "per_predicate",
+    "citations",
+    "reason"
+  ],
+  "properties": {
+    "schema": {
+      "const": "appsec-review/judge-result/1"
+    },
+    "claim_id": {
+      "$ref": "common.schema.json#/$defs/claim_id"
+    },
+    "verdict": {
+      "$ref": "common.schema.json#/$defs/judge_outcome"
+    },
+    "per_predicate": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "affected_construct": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "verdict",
+            "cites"
+          ],
+          "properties": {
+            "verdict": {
+              "$ref": "common.schema.json#/$defs/judge_outcome"
+            },
+            "cites": {
+              "type": "array",
+              "maxItems": 32,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "common.schema.json#/$defs/entity_id"
+              }
+            }
+          }
+        },
+        "attacker_input_control": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "verdict",
+            "cites"
+          ],
+          "properties": {
+            "verdict": {
+              "$ref": "common.schema.json#/$defs/judge_outcome"
+            },
+            "cites": {
+              "type": "array",
+              "maxItems": 32,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "common.schema.json#/$defs/entity_id"
+              }
+            }
+          }
+        },
+        "source_to_sink_reachability": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "verdict",
+            "cites"
+          ],
+          "properties": {
+            "verdict": {
+              "$ref": "common.schema.json#/$defs/judge_outcome"
+            },
+            "cites": {
+              "type": "array",
+              "maxItems": 32,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "common.schema.json#/$defs/entity_id"
+              }
+            }
+          }
+        },
+        "missing_or_ineffective_guard": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "verdict",
+            "cites"
+          ],
+          "properties": {
+            "verdict": {
+              "$ref": "common.schema.json#/$defs/judge_outcome"
+            },
+            "cites": {
+              "type": "array",
+              "maxItems": 32,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "common.schema.json#/$defs/entity_id"
+              }
+            }
+          }
+        },
+        "configuration_enables": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "verdict",
+            "cites"
+          ],
+          "properties": {
+            "verdict": {
+              "$ref": "common.schema.json#/$defs/judge_outcome"
+            },
+            "cites": {
+              "type": "array",
+              "maxItems": 32,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "common.schema.json#/$defs/entity_id"
+              }
+            }
+          }
+        },
+        "security_impact": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "verdict",
+            "cites"
+          ],
+          "properties": {
+            "verdict": {
+              "$ref": "common.schema.json#/$defs/judge_outcome"
+            },
+            "cites": {
+              "type": "array",
+              "maxItems": 32,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "common.schema.json#/$defs/entity_id"
+              }
+            }
+          }
+        }
+      }
+    },
+    "citations": {
+      "$ref": "common.schema.json#/$defs/predicate_citations"
+    },
+    "reason": {
+      "$ref": "common.schema.json#/$defs/text"
+    }
+  }
+}

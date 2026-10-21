@@ -24,9 +24,11 @@ from appsec_review.review.labels import LabelTable
 from appsec_review.review.obligations import Precondition
 from appsec_review.review.red_discovery import RESULT_SCHEMA as RED_RESULT_SCHEMA, RedInvocation
 
-COMPACT_SCHEMAS = {"red": "red-compact", "blue": "blue-compact", "verifier": "verifier-compact"}
+COMPACT_SCHEMAS = {"red": "red-compact", "blue": "blue-compact", "verifier": "verifier-compact",
+                   "judge": "judge-result-compact"}
 BLUE_SCHEMA = "appsec-review/blue-result/1"
 VERIFIER_SCHEMA = "appsec-review/verifier-result/1"
+JUDGE_RESULT_SCHEMA = "appsec-review/judge-result/1"
 UNRESOLVED = "unresolved"
 STANCE_ORDER = ("contradicts", "qualifies", "supports", UNRESOLVED)
 MAX_FEEDBACK = 20
@@ -198,6 +200,44 @@ def expand_verifier(compact: Mapping[str, Any], labels: LabelTable, *, claim_id:
 
 
 # ------------------------------------------------------------------------------------------------
+# Judge wrapper (docs/architecture/review-judge-and-poc.md section 3.3)
+
+
+def deshuffle(choice: str, side_map: Mapping[str, str]) -> str:
+    """A judge's A/B/both/neither/unresolved in terms of red and blue, through the stored side-to-role map."""
+    if choice in side_map:
+        return f"{side_map[choice]}_correct"
+    return {"both": "partly"}.get(choice, choice)
+
+
+def expand_judge(compact: Mapping[str, Any], labels: LabelTable, *, claim_id: str, side_map: Mapping[str, str],
+                 schema_errors: SchemaErrors) -> Expansion:
+    """``judge-result-compact/1`` -> ``judge-result/1`` for one claim, de-shuffled through ``side_map``.
+
+    The judge's citations go through the shared position layer: a label that does not resolve is dropped with
+    feedback, and a side named with no resolvable citation becomes ``unresolved`` per predicate. An overall choice of
+    A, B or both needs at least one resolvable citation among the predicates; otherwise it is ``unresolved``. The
+    map is the application's: the model never sees it and the expanded result names no side letter.
+    """
+    expansion = Expansion()
+    if not _validate(compact, COMPACT_SCHEMAS["judge"], schema_errors, expansion):
+        return expansion
+    entries = {name: {"stance": entry["verdict"], "cites": entry.get("cites", ()), "why": entry.get("why")}
+               for name, entry in (compact.get("per_predicate") or {}).items()}
+    positions = positions_of({"per_predicate": entries}, labels, expansion, "judge")
+    verdict = compact["verdict"]
+    if verdict in ("A", "B", "both") and not any(item.refs for item in positions):
+        expansion.note(f"judge: verdict {verdict} has no resolvable citation; recorded as unresolved")
+        verdict = UNRESOLVED
+    expansion.result = {
+        "schema": JUDGE_RESULT_SCHEMA, "claim_id": claim_id, "verdict": deshuffle(verdict, side_map),
+        "per_predicate": {item.predicate: {"verdict": deshuffle(item.stance, side_map), "cites": list(item.refs)}
+                          for item in positions},
+        "citations": citations_of(positions), "reason": text(compact["reason"], "no reason given", MAX_TEXT)}
+    return expansion
+
+
+# ------------------------------------------------------------------------------------------------
 # Red wrapper
 
 
@@ -359,6 +399,7 @@ def expand_red(compact: Mapping[str, Any], labels: LabelTable, *, invocation: Re
     return expansion
 
 
-__all__ = ["expand_poc_basis", "BLUE_SCHEMA", "COMPACT_SCHEMAS", "Expander", "Expansion", "PREDICATES", "Position", "VERIFIER_SCHEMA",
-           "citations_of", "expand_blue", "expand_red", "expand_verifier", "overall_stance", "positions_of",
+__all__ = ["expand_poc_basis", "BLUE_SCHEMA", "COMPACT_SCHEMAS", "Expander", "Expansion", "JUDGE_RESULT_SCHEMA",
+           "PREDICATES", "Position", "VERIFIER_SCHEMA", "citations_of", "deshuffle", "expand_blue", "expand_judge",
+           "expand_red", "expand_verifier", "overall_stance", "positions_of",
            "relations_of", "resolve_position", "summary_why", "text"]

@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://appsec-review.local/schemas/inference-security-review/judge-result-compact.schema.json",
+  "title": "Compact judge answer, version 1 (review-protocol/2)",
+  "description": "A judge chooses side A, B, both, neither or unresolved, overall and per predicate, with label citations and a reason. The application de-shuffles the choice and expands it into judge-result/1; the verdict is a proposal and never sets a claim state.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "verdict",
+    "per_predicate",
+    "reason"
+  ],
+  "properties": {
+    "schema": {
+      "const": "appsec-review/judge-result-compact/1"
+    },
+    "claim": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80
+    },
+    "verdict": {
+      "$ref": "common.schema.json#/$defs/judge_side"
+    },
+    "per_predicate": {
+      "$ref": "common.schema.json#/$defs/compact_judge_per_predicate"
+    },
+    "reason": {
+      "$ref": "common.schema.json#/$defs/compact_why"
+    }
+  }
+}
