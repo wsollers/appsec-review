@@ -339,7 +339,7 @@ def test_scoring_model_and_rank_weights_default_to_the_documented_values(tmp_pat
 
     settings = _settings(load_config(ROOT / "appsec-review.toml"))
     matrix = settings.scoring.providers["application_risk_matrix"]
-    assert matrix.implementation == "application_risk_matrix/2"
+    assert matrix.implementation == "application_risk_matrix/3"
     assert matrix.model.document() == DEFAULT_RISK_MODEL.document()
     assert settings.ranking == RankWeights()
     assert PackageSettings.from_review_settings(settings).rank_weights == RankWeights()
@@ -355,7 +355,7 @@ def test_scoring_model_and_rank_weights_default_to_the_documented_values(tmp_pat
 
     raw = json.loads(load_config(ROOT / "appsec-review.toml").resolved_json)["jobs"][JOB]["settings"]
     raw.pop("ranking")
-    raw["scoring"]["providers"]["application_risk_matrix"] = {"implementation": "application_risk_matrix/2"}
+    raw["scoring"]["providers"]["application_risk_matrix"] = {"implementation": "application_risk_matrix/3"}
     parsed = parse_inference_review_settings(raw)
     assert parsed.ranking == RankWeights()
     assert parsed.scoring.providers["application_risk_matrix"].model.document() == DEFAULT_RISK_MODEL.document()
@@ -380,11 +380,11 @@ def test_scoring_and_ranking_tuning_changes_the_semantic_fingerprint(tmp_path: P
     ("advisory_kev = 250", "advisory_kev = 2500", "ranking.advisory_kev must be an integer between 0 and 1000"),
     ("lps = 1000", "lps = 1000\nbogus = 1", "ranking has unknown settings: bogus"),
     ("lps = 1000", "lps = 0.5", "ranking.lps must be an integer"),
-    ('implementation = "application_risk_matrix/2"', 'implementation = "application_risk_matrix/7"',
+    ('implementation = "application_risk_matrix/3"', 'implementation = "application_risk_matrix/7"',
      "implementation must be one of"),
-    ('implementation = "application_risk_matrix/2"', 'implementation = "application_risk_matrix/1"',
+    ('implementation = "application_risk_matrix/3"', 'implementation = "application_risk_matrix/1"',
      "application_risk_matrix/1 takes no"),
-    ('implementation = "application_risk_matrix/2"', 'implementation = "application_risk_matrix/2"\nweights = 1',
+    ('implementation = "application_risk_matrix/3"', 'implementation = "application_risk_matrix/3"\nweights = 1',
      "providers.application_risk_matrix has unknown settings: weights"),
     ("verification = { supported = 20, confirmed = 40 }", "verification = { supported = 50, confirmed = 40 }",
      "exploitability.points.verification must not decrease"),

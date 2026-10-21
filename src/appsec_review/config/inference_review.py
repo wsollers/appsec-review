@@ -32,7 +32,7 @@ SEMANTIC_VIEW_SCHEMA = "appsec-review/inference-review-semantic-settings/1"
 REPORTED_SEVERITIES = ("critical", "high", "medium", "low", "info", "unknown")
 REASONING_LEVELS = ("low", "medium", "high", "xhigh", "max")
 SCORING_PROVIDERS = ("cvss_v4", "cvss_v31_compat", "application_risk_matrix", "ssvc_decision")
-RISK_MATRIX_IMPLEMENTATIONS = ("application_risk_matrix/1", "application_risk_matrix/2")
+RISK_MATRIX_IMPLEMENTATIONS = ("application_risk_matrix/1", "application_risk_matrix/3")
 RISK_MODEL_KEYS = ("exploitability", "environmental", "technical_severity")
 CVSS_METRIC_GROUPS = ("base", "threat", "environmental", "supplemental")
 IMPACT_CLASSES = ("critical", "high", "medium", "low")
@@ -253,7 +253,7 @@ class RoutingSettings:
 class ScoringProviderSettings:
     implementation: str
     metric_groups: tuple[str, ...] = ()
-    # application_risk_matrix/2 only: the declarative exploitability/environmental/severity model.
+    # application_risk_matrix/3 only: the declarative exploitability/environmental/severity model.
     model: RiskModel | None = None
 
 
@@ -494,7 +494,7 @@ def _scoring(value: object) -> ScoringSettings:
             if implementation not in RISK_MATRIX_IMPLEMENTATIONS:
                 raise ValueError(f"{provider_field}.implementation must be one of: "
                                  f"{', '.join(RISK_MATRIX_IMPLEMENTATIONS)}")
-            if implementation == "application_risk_matrix/2":
+            if implementation == "application_risk_matrix/3":
                 model = _risk_model(provider, provider_field)
             elif set(provider) & set(RISK_MODEL_KEYS):
                 raise ValueError(f"{provider_field}: application_risk_matrix/1 takes no "
@@ -530,7 +530,7 @@ def _impact_overrides(value: object, field: str) -> Mapping[str, ImpactOverride]
 
 
 def _risk_model(provider: Mapping[str, Any], field: str) -> RiskModel:
-    """``application_risk_matrix/2`` model; an absent table keeps its documented default whole."""
+    """``application_risk_matrix/3`` model; an absent table keeps its documented default whole."""
     dimensions: dict[str, DimensionModel] = {}
     for name in ("exploitability", "environmental"):
         default = DEFAULT_MODEL_DOCUMENT[name]

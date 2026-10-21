@@ -2369,7 +2369,7 @@ risk_ratings = ["medium", "high", "critical"]
 [jobs.job_inference_security_review.settings.verification]
 require_distinct_model_for_ship_blocking = true
 
-# Decision 1: ship-block-policy/1. A confirmed finding blocks when application_risk_matrix/2 rates its
+# Decision 1: ship-block-policy/1. A confirmed finding blocks when application_risk_matrix/3 rates its
 # technical severity in blocking_technical_severities, or when it is a dependency finding (proposed
 # from a lane A lead of a dependency_lead_families family) with a KEV-listed reference input. CVSS and
 # SSVC outputs are displayed context only and never decide.
@@ -2391,11 +2391,12 @@ override_policy = "review_lead_only/1"
 implementation = "first-reference-compatible/1"
 metric_groups = ["base", "threat", "environmental", "supplemental"]
 
-# application_risk_matrix/2 rates score-factors/1 evidence factors. Points are summed per dimension
-# (a missing factor adds nothing) and must not decrease along a factor's scale. Replacing a table
+# application_risk_matrix/3 rates score-factors/1 evidence factors. Points are summed per dimension
+# (a missing factor is unknown: its minimum and maximum points bound the rating, and a rating that the
+# missing factors could change is withheld as unrated) and must not decrease along a factor's scale. Replacing a table
 # replaces it whole. See docs/operations/inference-security-review.md "Tuning scoring".
 [jobs.job_inference_security_review.settings.scoring.providers.application_risk_matrix]
-implementation = "application_risk_matrix/2"
+implementation = "application_risk_matrix/3"
 
 [jobs.job_inference_security_review.settings.scoring.providers.application_risk_matrix.exploitability.points]
 verification = { supported = 20, confirmed = 40 }
