@@ -519,10 +519,15 @@ Lane B (hunt): ranked review units ─► hunt packages ─► team: 3 red ─�
     otherwise the advisory's severity label;
   - CI rules;
   - post-build hardening;
-  - OWASP control failures.
+  - OWASP control failures;
+  - secret-scanner findings (`secret`; reported severity `unknown`, so admitted by default);
+  - Dockerfile and IaC misconfiguration (`config_scanner`).
 
   Each family has a versioned normalization rule (`lead-family/dependency_advisory/2` and
-  `lead-family/artifact_scanner/2` add the NVD band). Unknown severity is never treated as low.
+  `lead-family/artifact_scanner/2` add the NVD band; `lead-family/source_sast/2` adds the shellcheck, psalm and Infer
+  producers). Every observation producer has an explicit lead-or-not decision
+  ([`../reviews/lead-coverage-audit.md`](../reviews/lead-coverage-audit.md)); a credential literal is never shown to a
+  model (`secret-redaction/1`). Unknown severity is never treated as low.
   Lane A also admits every dependency or artifact-scanner lead whose advisory is listed in the
   run-pinned CISA KEV catalog, whatever its reported severity (`lanes.lead_admission_kev`, default
   `true`). Each lead package records its `admission_reasons` (`reported_severity`, `kev_listed`).
