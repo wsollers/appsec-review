@@ -18,6 +18,11 @@ expect "13.3.0" cc --version
 expect "13.3.0" c++ --version
 expect "18.1.3" clang --version
 expect "LLD 18.1.3" wasm-ld --version
+# clang can link the address and undefined-behaviour sanitizer runtimes (libclang-rt-18-dev); gcc ships its own.
+for runtime in libclang_rt.asan-x86_64.a libclang_rt.ubsan_standalone-x86_64.a; do
+  path=$(clang -print-file-name="$runtime")
+  [ -f "$path" ] || { printf 'clang sanitizer runtime %s is missing\n' "$runtime" >&2; exit 1; }
+done
 expect "GNU Make 4.3" make --version
 expect "1.8.1" pkg-config --version
 expect "Python 3.12.3" python3 --version
