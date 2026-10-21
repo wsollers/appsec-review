@@ -1,0 +1,8 @@
+# Capacity overlay for the acceptance corpus: one review team and one inference lane unit at a time,
+# so a full wave1_review makes a bounded number of live model calls. Capacity is excluded from cell
+# fingerprints, so this changes how fast the review runs, not what it produces.
+[jobs.job_inference_security_review.settings.teams]
+review_teams = 1
+
+[orchestration.dagster.pools]
+inference_teams = 1

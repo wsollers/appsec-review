@@ -7,6 +7,8 @@ x-dagster-environment: &dagster-environment
   APPSEC_REVIEW_TARGET: ${APPSEC_REVIEW_TARGET:-/opt/app/targets/appsec-multi-vuln}
   # "record" during a stepwise parity walk (docs/processes/local-dagster-parity.md); empty otherwise.
   APPSEC_REVIEW_MODEL_RECORDING: ${APPSEC_REVIEW_MODEL_RECORDING:-}
+  # A capacity overlay under /opt/app/test/acceptance (docs/operations/inference-security-review.md); empty otherwise.
+  APPSEC_REVIEW_CONFIG_OVERLAY: ${APPSEC_REVIEW_CONFIG_OVERLAY:-}
 
 x-dagster-service: &dagster-service
   image: appsec-review-dagster:${APPSEC_DEPLOYMENT_PLATFORM:?Run deploy/dagster/bin/bootstrap.py first}
@@ -18,6 +20,7 @@ x-dagster-service: &dagster-service
     - ../../data:/opt/app/data
     - ../../targets:/opt/app/targets:ro
     - ../../rules:/opt/app/rules:ro
+    - ../../test/acceptance:/opt/app/test/acceptance:ro
   init: true
   restart: unless-stopped
   logging:
