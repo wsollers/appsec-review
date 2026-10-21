@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from collections import Counter
 from collections.abc import Iterable, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 import math
 import re
 from typing import Any
@@ -144,6 +144,44 @@ _CWE = re.compile(r"(?i)\bcwe[-_/ ]?0*(\d{1,5})\b")
 _MESSAGE_BOUND = 1024
 
 
+SEVERITY_SOURCES = ("rule_table", "cwe_catalog", "model_triage")
+ASSESSED_VALUES = ("critical", "high", "medium", "low", "info")
+
+
+@dataclass(frozen=True, slots=True)
+class AssessedSeverity:
+    """An audited severity assigned to a lead whose scanner reported none (``review.lead_triage``).
+
+    It orders and admits the lead only; it never feeds scoring, ship-block decisions or claim states.
+    """
+
+    value: str
+    source: str                     # rule_table | cwe_catalog | model_triage
+    basis: str
+    reason: str
+    version: str                    # the rule-table version, or the triage prompt/guidance version
+    triage_id: str
+
+    def __post_init__(self) -> None:
+        if self.value not in ASSESSED_VALUES or self.source not in SEVERITY_SOURCES:
+            raise ValueError(f"invalid assessed severity: {self.value}/{self.source}")
+
+    def record(self) -> dict[str, str]:
+        return {"value": self.value, "source": self.source, "basis": self.basis, "reason": self.reason,
+                "rule_or_prompt_version": self.version, "triage_id": self.triage_id}
+
+
+@dataclass(frozen=True, slots=True)
+class LeadTriage:
+    """The triage outcome the severity-triage step hands to lead collection for one lead."""
+
+    state: str                              # assessed | unresolved | not_needed
+    assessed: AssessedSeverity | None = None
+    gap: str | None = None                  # triage_failed:<code> / triage_skipped:<code> for an unresolved lead
+    reason: str | None = None               # why the lead stays unknown (the model's reason for insufficient context)
+    references: tuple[Mapping[str, Any], ...] = ()
+
+
 @dataclass(frozen=True, slots=True)
 class Lead:
     """One accepted, normalized lead. Identity is the accepted record's logical identity."""
@@ -170,6 +208,42 @@ class Lead:
     component_hint: str | None = None
     # Bounded reference context from the accepted dependency_advisories facts (review.advisories).
     advisory: Mapping[str, Any] | None = field(default=None, compare=False, hash=False)
+    # Lead severity triage (review.lead_triage): ``reported_severity`` is the scanner's own value and is never
+    # rewritten. ``assessed_severity`` is a separate, audited assessment for a lead the scanner left ``unknown``.
+    # ``triage_state`` is None when no triage ran for this collection (the lead then has no severity record).
+    assessed_severity: "AssessedSeverity | None" = None
+    triage_state: str | None = None
+    triage_gap: str | None = None
+    triage_reason: str | None = None
+    severity_references: tuple[Mapping[str, Any], ...] = field(default=(), compare=False, hash=False)
+
+    @property
+    def effective_severity(self) -> str:
+        """The severity that orders and admits the lead: reported if known, else assessed, else ``unknown``."""
+        if self.reported_severity != "unknown":
+            return self.reported_severity
+        return self.assessed_severity.value if self.assessed_severity is not None else "unknown"
+
+    @property
+    def effective_from(self) -> str:
+        if self.reported_severity != "unknown":
+            return "reported"
+        return "assessed" if self.assessed_severity is not None else "unknown"
+
+    def severity_record(self) -> dict[str, Any] | None:
+        """The two-sided severity record (original and assessed), or None when no triage ran."""
+        if self.triage_state is None:
+            return None
+        return {
+            "original": {"reported_severity": self.reported_severity, "native_severity": self.native_severity,
+                         "severity_basis": self.severity_basis, "severity_rule": self.severity_rule,
+                         "scanner": self.scanner, "rule_id": self.rule_id},
+            "assessed": self.assessed_severity.record() if self.assessed_severity is not None else None,
+            "references": [dict(item) for item in self.severity_references],
+            "effective": {"value": self.effective_severity, "from": self.effective_from},
+            "gap": ({"code": self.triage_gap, "reason": self.triage_reason}
+                    if self.triage_gap else None),
+        }
 
     @property
     def kev_listed(self) -> bool | None:
@@ -202,6 +276,17 @@ class LeadCollection:
         for lead in self.leads:
             found[lead.family][lead.reported_severity] += 1
         return {family: {severity: found[family][severity] for severity in SEVERITY_ORDER} for family in FAMILIES}
+
+
+def with_triage(lead: Lead, outcome: LeadTriage | None) -> Lead:
+    """``lead`` carrying its triage outcome; ``reported_severity`` is never touched."""
+    if lead.reported_severity != "unknown":
+        return replace(lead, triage_state="not_needed")
+    if outcome is None:
+        return replace(lead, triage_state="unresolved", triage_gap="triage_failed:missing_result",
+                       triage_reason="the triage step produced no result for this lead")
+    return replace(lead, triage_state=outcome.state, assessed_severity=outcome.assessed, triage_gap=outcome.gap,
+                   triage_reason=outcome.reason, severity_references=tuple(outcome.references))
 
 
 def _band(number: float) -> str:
@@ -409,8 +494,12 @@ def _compare_correlation_audit(audit: Mapping[str, Any], sast: Mapping[str, str]
                                  f"accepted observations ({value})")
 
 
-def collect_leads(scope: AcceptedScope) -> LeadCollection:
-    """Normalize every accepted lead of every family; absent families are gaps, not empty."""
+def collect_leads(scope: AcceptedScope, triage: Mapping[str, LeadTriage] | None = None) -> LeadCollection:
+    """Normalize every accepted lead of every family; absent families are gaps, not empty.
+
+    ``triage`` (lead identity -> :class:`LeadTriage`, from ``review.lead_triage``) attaches the audited assessed
+    severity of leads the scanner left ``unknown``. Without it every lead is exactly as the scanner reported it.
+    """
     gaps: list[ScopeGap] = []
     available: dict[str, bool] = {}
     for family in FAMILIES:
@@ -534,5 +623,7 @@ def collect_leads(scope: AcceptedScope) -> LeadCollection:
     if audit is not None:
         _compare_correlation_audit(audit, sast_classified)
     ordered = tuple(leads[key] for key in sorted(leads))
+    if triage is not None:
+        ordered = tuple(with_triage(lead, triage.get(lead.observation_id)) for lead in ordered)
     return LeadCollection(ordered, sorted_gaps(gaps), available, audit, correlation_shards,
                           dict(sorted(non_lead.items())))

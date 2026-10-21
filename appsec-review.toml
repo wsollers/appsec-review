@@ -2331,6 +2331,19 @@ max_queries = 40
 max_turns = 12
 timeout_seconds = 600
 
+# Lead severity triage (settings.triage): one short, tool-free turn per batch of 20 leads. The same provider and
+# Haiku model as "default" with small limits, so it is cheap in dev and prod; profiles/prod.toml leaves it alone
+# (its allowlist lets the operator override models.triage). max_queries must stay 0: triage grants no retrieval.
+[jobs.job_inference_security_review.settings.models.triage]
+provider = "claude-cli"
+model = "claude-haiku-5-5"
+reasoning = "medium"
+max_input_tokens = 64000
+max_output_tokens = 16000
+max_queries = 0
+max_turns = 1
+timeout_seconds = 600
+
 [jobs.job_inference_security_review.settings.roles.independent_verifier]
 workers = 4
 model_profile = "default"
@@ -2343,6 +2356,62 @@ require_distinct_from_roles = ["hypothesis_hunter", "red_team_analyst", "blue_te
 # docs/operations/inference-security-review.md "Configuring a distinct verifier".
 [jobs.job_inference_security_review.settings.verification]
 require_distinct_model_for_ship_blocking = true
+
+# Lead severity triage (docs/operations/lead-severity-triage.md). A lead whose scanner reported no severity gets
+# an audited assessed severity before package assembly: first the deterministic table below
+# (lead-severity-rules/1), then the pinned MITRE CWE catalog (cwe-impact-derivation/1), then a short model pass
+# (model profile "triage", closed result appsec-review/lead-triage-result/1). reported_severity is never
+# rewritten; the assessed severity only orders and admits leads and never feeds scoring, ship-block or claim
+# states. A lead nothing decides stays unknown with a named gap. enabled = false restores the earlier behaviour.
+# Editing a row, the bounds or the profile changes every triage fingerprint, so cached results are not reused.
+[jobs.job_inference_security_review.settings.triage]
+enabled = true
+batch_size = 20
+model_profile = "triage"
+max_leads = 200
+max_excerpt_lines = 24
+max_reason_chars = 200
+# lead-severity-rules/1. scanner is the tool id without its "tool-" prefix; rule "*" is every rule of the
+# scanner; a row with scanner "*" and a cwe matches any scanner's lead with that rule CWE. The most specific
+# row decides: scanner and rule, then scanner, then CWE. Seeded from the leads of the sample review run
+# (gitleaks, CodeQL and Clang findings) plus the documented Dockerfile and shell rule ids.
+rules = [
+  { scanner = "gitleaks", rule = "*", severity = "high", basis = "rule_semantics", reason = "Hard-coded credential in the repository (CWE-798): everyone who can read the source holds it; real exposure depends on its scope." },
+  { scanner = "*", cwe = "CWE-798", severity = "high", basis = "rule_semantics", reason = "Use of hard-coded credentials (CWE-798): the secret travels with the source." },
+  { scanner = "codeql", rule = "cpp/command-line-injection", severity = "high", basis = "rule_semantics", reason = "OS command built from untrusted input (CWE-78): the catalog impact is execution of unauthorized commands." },
+  { scanner = "codeql", rule = "cpp/tainted-format-string", severity = "high", basis = "rule_semantics", reason = "Untrusted format string (CWE-134) can read or write memory." },
+  { scanner = "codeql", rule = "cpp/uncontrolled-process-operation", severity = "high", basis = "rule_semantics", reason = "Untrusted input selects the process or library to run (CWE-114)." },
+  { scanner = "codeql", rule = "cpp/uncontrolled-allocation-size", severity = "medium", basis = "rule_semantics", reason = "Untrusted allocation size (CWE-789) leads to resource exhaustion or size arithmetic faults." },
+  { scanner = "codeql", rule = "cpp/non-constant-format", severity = "medium", basis = "rule_semantics", reason = "Non-constant format string (CWE-134): exploitable only when the string is attacker influenced." },
+  { scanner = "clang-static-analysis", rule = "core.NullDereference", severity = "medium", basis = "rule_semantics", reason = "Null pointer dereference (CWE-476): a crash on the analysed path, rarely more." },
+  { scanner = "clang-static-analysis", rule = "clang-analyzer-core.NullDereference", severity = "medium", basis = "rule_semantics", reason = "Null pointer dereference (CWE-476): a crash on the analysed path, rarely more." },
+  { scanner = "clang-static-analysis", rule = "cplusplus.NewDelete", severity = "high", basis = "rule_semantics", reason = "Use after free or double free on the analysed path (CWE-416, CWE-415): memory corruption." },
+  { scanner = "clang-static-analysis", rule = "clang-analyzer-cplusplus.NewDelete", severity = "high", basis = "rule_semantics", reason = "Use after free or double free on the analysed path (CWE-416, CWE-415): memory corruption." },
+  { scanner = "clang-static-analysis", rule = "cert-env33-c", severity = "medium", basis = "rule_semantics", reason = "Call to the command processor (CERT ENV33-C): command injection when the string is influenced." },
+  { scanner = "clang-static-analysis", rule = "clang-diagnostic-format-security", severity = "medium", basis = "rule_semantics", reason = "Non-literal format string diagnostic (CWE-134): exploitable only with attacker influence." },
+  { scanner = "clang-static-analysis", rule = "cert-err33-c", severity = "low", basis = "rule_semantics", reason = "Unchecked return value of a library call (CERT ERR33-C): a robustness gap." },
+  { scanner = "clang-static-analysis", rule = "cert-err34-c", severity = "low", basis = "rule_semantics", reason = "Unchecked string-to-number conversion (CERT ERR34-C): a robustness gap." },
+  { scanner = "clang-static-analysis", rule = "concurrency-mt-unsafe", severity = "low", basis = "rule_semantics", reason = "Thread-unsafe library call: a reliability gap unless threads are attacker driven." },
+  { scanner = "clang-static-analysis", rule = "bugprone-easily-swappable-parameters", severity = "info", basis = "rule_semantics", reason = "Readability warning on a signature; no security consequence." },
+  { scanner = "checkov", rule = "CKV_DOCKER_3", severity = "medium", basis = "rule_semantics", reason = "No non-root user is created (CWE-250): a container escape or file write runs as root." },
+  { scanner = "checkov", rule = "CKV_DOCKER_8", severity = "medium", basis = "rule_semantics", reason = "The last USER is root (CWE-250): the container process keeps full privileges." },
+  { scanner = "checkov", rule = "CKV_DOCKER_1", severity = "medium", basis = "rule_semantics", reason = "Port 22 is exposed: a remote login surface inside the container." },
+  { scanner = "checkov", rule = "CKV_DOCKER_2", severity = "low", basis = "rule_semantics", reason = "No HEALTHCHECK: an availability and operations gap." },
+  { scanner = "checkov", rule = "CKV_DOCKER_4", severity = "low", basis = "rule_semantics", reason = "ADD instead of COPY can fetch remote content or unpack archives unexpectedly." },
+  { scanner = "checkov", rule = "CKV_DOCKER_7", severity = "low", basis = "rule_semantics", reason = "The base image is not pinned to a version tag: builds are not reproducible." },
+  { scanner = "hadolint", rule = "DL3002", severity = "medium", basis = "rule_semantics", reason = "The last USER is root (CWE-250): the container process keeps full privileges." },
+  { scanner = "hadolint", rule = "DL3004", severity = "medium", basis = "rule_semantics", reason = "sudo inside a container image hides privilege use and widens what a compromise can do." },
+  { scanner = "hadolint", rule = "DL3006", severity = "low", basis = "rule_semantics", reason = "The image is not tagged with an explicit version: builds are not reproducible." },
+  { scanner = "hadolint", rule = "DL3007", severity = "low", basis = "rule_semantics", reason = "The image uses the latest tag: builds are not reproducible." },
+  { scanner = "hadolint", rule = "DL3020", severity = "low", basis = "rule_semantics", reason = "ADD instead of COPY can fetch remote content or unpack archives unexpectedly." },
+  { scanner = "hadolint", rule = "DL4006", severity = "low", basis = "rule_semantics", reason = "A pipe without pipefail can hide a failed step in the image build." },
+  { scanner = "hadolint", rule = "DL3059", severity = "info", basis = "rule_semantics", reason = "Style: consecutive RUN instructions could be merged." },
+  { scanner = "shellcheck", rule = "SC2086", severity = "medium", basis = "rule_semantics", reason = "Unquoted expansion splits and globs (CWE-78 when the value is influenced)." },
+  { scanner = "shellcheck", rule = "SC2046", severity = "medium", basis = "rule_semantics", reason = "Unquoted command substitution splits and globs (CWE-78 when the value is influenced)." },
+  { scanner = "shellcheck", rule = "SC2164", severity = "low", basis = "rule_semantics", reason = "cd without a failure branch continues in the wrong directory." },
+  { scanner = "shellcheck", rule = "SC2034", severity = "info", basis = "rule_semantics", reason = "Unused variable: no security consequence." },
+  { scanner = "shellcheck", rule = "SC2155", severity = "info", basis = "rule_semantics", reason = "Declare and assign separately to keep the exit status: a style point." },
+]
 
 # Decision 1: ship-block-policy/1. A confirmed finding blocks when application_risk_matrix/2 rates its
 # technical severity in blocking_technical_severities, or when it is a dependency finding (proposed
@@ -2442,6 +2511,10 @@ values = ["HIGH", "CRITICAL"]
 workers = 1
 [jobs.job_inference_security_review.steps.scope.tasks.accept_manifest]
 [jobs.job_inference_security_review.steps.scope.tasks.assemble_scope]
+
+[jobs.job_inference_security_review.steps.triage]
+workers = 1
+[jobs.job_inference_security_review.steps.triage.tasks.lead_severity]
 
 [jobs.job_inference_security_review.steps.packages]
 workers = 2

@@ -102,7 +102,8 @@
         "poc_verifier",
         "attack_chain_analyst",
         "finding_adjudicator",
-        "completeness_reviewer"
+        "completeness_reviewer",
+        "lead_triager"
       ]
     },
     "blue_task": {

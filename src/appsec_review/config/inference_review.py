@@ -17,6 +17,7 @@ from typing import Any, Mapping
 from appsec_review.review.models import Role
 from appsec_review.review.ranking import RankWeights
 from appsec_review.review.lead_families import FAMILIES as LEAD_FAMILIES
+from appsec_review.review.lead_triage_settings import TriageSettings
 from appsec_review.review.red_discovery import LEAD_ACCOUNTING_CEILING, RED_ROLES, RedOutputLimits
 from appsec_review.review.scoring.cwe_impact import MAX_REASON_CHARS as MAX_OVERRIDE_REASON, ImpactOverride
 from appsec_review.review.scoring.risk_model import DEFAULT_MODEL_DOCUMENT, DimensionModel, RiskModel
@@ -296,6 +297,8 @@ class InferenceSecurityReviewSettings:
     # distinctness (``settings.verification``, decision 2); both semantic.
     ship_block: ShipBlockSettings = ShipBlockSettings()
     verification: VerificationSettings = VerificationSettings()
+    # Lead severity triage (``settings.triage``, review/lead_triage.py); semantic. Absent means off.
+    triage: TriageSettings = TriageSettings()
 
     def verifier_distinctness(self) -> dict[str, Any]:
         """How the configured verifier profile relates to the red roles' profiles.
@@ -543,7 +546,7 @@ def parse_inference_review_settings(value: Mapping[str, Any]) -> InferenceSecuri
     """Validate ``jobs.job_inference_security_review.settings`` into frozen typed settings."""
     settings = _table(value, _PREFIX, {"rounds", "teams", "lanes", "packages", "budgets", "retry", "models",
                                        "roles", "routing", "scoring", "poc"},
-                      {"ranking", "red_output", "ship_block", "verification"})
+                      {"ranking", "red_output", "ship_block", "verification", "triage"})
 
     field = f"{_PREFIX}.rounds"
     rounds_value = _table(settings["rounds"], field, {"max_rounds", "stable_rounds_required",
@@ -652,6 +655,13 @@ def parse_inference_review_settings(value: Mapping[str, Any]) -> InferenceSecuri
                               _str(routing_value["stack_rule"], f"{field}.stack_rule", _RULE_ID))
 
     scoring = _scoring(settings["scoring"])
+    triage = TriageSettings.from_mapping(settings.get("triage"), f"{_PREFIX}.triage")
+    if triage.enabled and triage.model_profile not in models:
+        raise ValueError(f"{_PREFIX}.triage.model_profile names an unconfigured model profile: "
+                         f"{triage.model_profile}")
+    if triage.enabled and models[triage.model_profile].max_queries != 0:
+        raise ValueError(f"{_PREFIX}.models.{triage.model_profile}.max_queries must be 0: lead triage grants no "
+                         "retrieval")
     return InferenceSecurityReviewSettings(
         rounds=rounds, teams=teams, lanes=lanes, packages=packages, budgets=budgets, retry=retry,
         models=MappingProxyType(models), roles=MappingProxyType(roles), routing=routing,
@@ -661,4 +671,5 @@ def parse_inference_review_settings(value: Mapping[str, Any]) -> InferenceSecuri
         ship_block=ShipBlockSettings.from_mapping(settings.get("ship_block"), f"{_PREFIX}.ship_block",
                                                   known_families=LEAD_FAMILIES),
         verification=VerificationSettings.from_mapping(settings.get("verification"), f"{_PREFIX}.verification"),
+        triage=triage,
     )

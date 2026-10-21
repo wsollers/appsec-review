@@ -1,7 +1,8 @@
 """``job_inference_security_review``: the slice 1 visible units of design R1.
 
 Units, in dependency order: ``scope.accept_manifest``, ``scope.assemble_scope``,
-``packages.assemble_lead_packages``, ``packages.assemble_hunt_packages``, ``lead_review.teams``,
+``triage.lead_severity`` (audited severity for leads the scanner left unknown; see
+``review/lead_triage.py``), ``packages.assemble_lead_packages``, ``packages.assemble_hunt_packages``, ``lead_review.teams``,
 ``hunt_review.teams``, ``merge.claims``, ``adjudicate.apply_policy``, ``scoring.score_claims``,
 ``completeness.audit``, ``publication.publish_claim_ledger``, ``publication.publish_handoff``.
 The two lane units depend only on their own package unit, so Dagster runs them in parallel; actual
@@ -23,6 +24,7 @@ from appsec_review.config.inference_review import (
 from appsec_review.graph.contract import ADMISSIBILITY_RULE as GRAPH_FACT_ADMISSIBILITY_RULE, FACT_PREDICATES_RULE
 from appsec_review.guidance import load_persona_covers, load_registry
 from appsec_review.guidance.coverage import crosswalk_tags
+from appsec_review.guidance.compose import pin_bundle
 from appsec_review.guidance.routing import unit_sources
 from appsec_review.indexing.store import open_shard
 from appsec_review.jobs.job_security_tagging.crosswalk import load_crosswalk
@@ -32,6 +34,11 @@ from appsec_review.review import obligations, ship_block
 from appsec_review.review.budget import JobBudget
 from appsec_review.review.claims import normalize_cwe
 from appsec_review.review.identity import sha256_hex
+from appsec_review.review.lead_families import collect_leads
+from appsec_review.review.lead_triage import (
+    assessments_from_document, disabled_document, handoff_summary, load_triage_guidance, menu_effective_severity,
+    run_triage,
+)
 from appsec_review.review.ledger import LedgerWriter, project
 from appsec_review.review.models import IntegrityError, Lane, Predicate
 from appsec_review.review.packages import (
@@ -52,7 +59,7 @@ from .schemas import SchemaSet, SCHEMA_DIRECTORY
 from .teams import PackageWork, ReviewContext, lane_failure, run_lane
 
 SCHEMA = "appsec-review/inference-security-review/1"
-TOPOLOGY = {"scope": ("accept_manifest", "assemble_scope"),
+TOPOLOGY = {"scope": ("accept_manifest", "assemble_scope"), "triage": ("lead_severity",),
             "packages": ("assemble_lead_packages", "assemble_hunt_packages"),
             "lead_review": ("teams",), "hunt_review": ("teams",), "merge": ("claims",),
             "adjudicate": ("apply_policy",), "scoring": ("score_claims",), "completeness": ("audit",),
@@ -274,6 +281,49 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
                 "scope_gaps": [gap.record() for gap in scope.gaps], "gaps": gaps[:200],
                 "terminal_status": _status(gaps)}
 
+    # triage -------------------------------------------------------------------------------------
+    def triage_leads(unit: UnitContext) -> Mapping[str, Any]:
+        """Audited severity for leads the scanner left unknown (``review/lead_triage.py``).
+
+        Never fails the run for a model problem: an undecided lead stays unknown with a named gap.
+        """
+        settings = _settings(unit)
+        if not settings.triage.enabled:
+            document = disabled_document(settings.triage)
+            return {"artifact": _write(unit, "lead-triage.json", document), "enabled": False,
+                    "counts": document["counts"], "gaps": [], "terminal_status": "SUCCEEDED"}
+        scope = _scope(unit)
+        collection = collect_leads(scope)
+        reference = load_cwe_reference(unit.job.run_root)
+        guidance = load_triage_guidance(repo(unit))
+        pin_bundle(unit.job.run_root, guidance.bundle, files={"prompt.md": guidance.text})
+        core = RetrievalCore(Path(unit.job.run_root).parent, unit.job.run_id,
+                             manifest_sha256=unit.output("scope.accept_manifest")["manifest_sha256"],
+                             manifest_path=unit.job.run_root / unit.output("scope.accept_manifest")["manifest_path"])
+
+        def read_excerpt(lead):
+            located, reason = core.read_source_lines(identity=lead.observation_id)
+            return (located["lines"] if located is not None else None), reason
+
+        outcome = run_triage(
+            collection.leads, settings=settings.triage, profile=settings.models[settings.triage.model_profile],
+            infer=infer or _default_infer(), read_excerpt=read_excerpt, reference=reference, guidance=guidance,
+            schemas=SchemaSet(repo(unit) / SCHEMA_DIRECTORY), cache_dir=job_data(unit) / "triage-cache")
+        document = {**outcome.document, "run_id": unit.job.run_id,
+                    "manifest_sha256": unit.output("scope.accept_manifest")["manifest_sha256"]}
+        counts = document["counts"]
+        gaps = ([f"lead_triage: {counts['unresolved']} of {counts['unknown_leads']} unknown-severity leads stay unknown"]
+                if counts["unresolved"] else [])
+        unit.job.events.write("INFERENCE_REVIEW_LEADS_TRIAGED", **{key: value for key, value in counts.items()
+                                                                  if isinstance(value, int)})
+        return {"artifact": _write(unit, "lead-triage.json", document), "enabled": True, "counts": counts,
+                "gaps": gaps, "terminal_status": _status(gaps)}
+
+    def triaged_collection(unit: UnitContext, scope: AcceptedScope):
+        """The lead collection with the triage step's assessed severities (the scanner's own when triage is off)."""
+        document = _read(unit.job.run_root, unit.output("triage.lead_severity")["artifact"])
+        return collect_leads(scope, assessments_from_document(document) if document.get("enabled") else None)
+
     # packages -----------------------------------------------------------------------------------
     def assemble(lane: Lane) -> Callable[[UnitContext], Mapping[str, Any]]:
         def handler(unit: UnitContext) -> Mapping[str, Any]:
@@ -283,7 +333,7 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
             # stale catalog falls back to the rule/crosswalk CWE set with a recorded coverage gap.
             reference = load_cwe_reference(unit.job.run_root)
             assembly = assemble_packages(scope, PackageSettings.from_review_settings(settings),
-                                         cwe_reference=reference)
+                                         collection=triaged_collection(unit, scope), cwe_reference=reference)
             manifest_path = publish_packages(assembly, unit.unit_root / "assembly")
             excluded = _excluded(scope)
             mine = [package for package in assembly.packages if package.lane == lane.value]
@@ -302,7 +352,9 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
             for package in mine:
                 document = package.document()
                 if lane is Lane.LEAD:
-                    rank = (0 if document["lead_menu"][0]["reported_severity"] == "critical" else 1, package.package_id)
+                    # lane A order uses the effective severity (reported if known, else assessed by triage)
+                    rank = (0 if menu_effective_severity(document["lead_menu"][0]) == "critical" else 1,
+                            package.package_id)
                 else:
                     rank = (int(positions[package.unit_key]), package.package_id)
                 sanitized = {key: value for key, value in document.items()
@@ -520,6 +572,7 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
                                            out_dir=unit.unit_root / "findings", schemas=schemas,
                                            references=stages.claim_references(merged_doc, documents),
                                            lead_families=stages.claim_lead_families(merged_doc, documents),
+                                           lead_severities=stages.claim_lead_severities(merged_doc, documents),
                                            ship_block_settings=settings.ship_block,
                                            require_distinct_model=require_distinct)
         verification = settings.verifier_distinctness()
@@ -528,6 +581,9 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
         hunt_packages = _read(unit.job.run_root, unit.output("packages.assemble_hunt_packages")["artifact"])
         matrix_ref = completeness_doc["coverage_matrix"]
         matrix = _read(unit.job.run_root, matrix_ref)
+        triage_out = unit.output("triage.lead_severity")
+        triage_doc = _read(unit.job.run_root, triage_out["artifact"])
+        triage_summary = handoff_summary(triage_doc, triage_out["artifact"]) if triage_doc.get("enabled") else None
         handoff = stages.build_handoff(
             run_id=unit.job.run_id, manifest_sha256=accepted["manifest_sha256"],
             configuration_sha256=semantic_settings_sha256(settings), projection=projection, accounting=accounting,
@@ -536,7 +592,7 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
             coverage={"path": matrix_ref["path"], "sha256": matrix_ref["sha256"], "rows": len(matrix["rows"])},
             possible=merged_doc["possible_duplicates"], schemas=schemas,
             ship_block_policy_sha256=ship_block.policy_sha256(settings.ship_block, require_distinct),
-            verification=verification)
+            verification=verification, lead_severity_triage=triage_summary)
         artifact = _write(unit, "inference-review-handoff.json", handoff)
         gaps = [f"status {handoff['status']}"] if handoff["status"] != "COMPLETE" else []
         if accounting.review_incomplete:
@@ -552,8 +608,9 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
     units = (
         Unit("scope.accept_manifest", accept),
         Unit("scope.assemble_scope", assemble_scope, ("scope.accept_manifest",)),
-        Unit("packages.assemble_lead_packages", assemble(Lane.LEAD), ("scope.assemble_scope",)),
-        Unit("packages.assemble_hunt_packages", assemble(Lane.HUNT), ("scope.assemble_scope",)),
+        Unit("triage.lead_severity", triage_leads, ("scope.assemble_scope",)),
+        Unit("packages.assemble_lead_packages", assemble(Lane.LEAD), ("triage.lead_severity",)),
+        Unit("packages.assemble_hunt_packages", assemble(Lane.HUNT), ("triage.lead_severity",)),
         Unit("lead_review.teams", review(Lane.LEAD), ("packages.assemble_lead_packages",)),
         Unit("hunt_review.teams", review(Lane.HUNT), ("packages.assemble_hunt_packages",)),
         Unit("merge.claims", merge, ("lead_review.teams", "hunt_review.teams")),

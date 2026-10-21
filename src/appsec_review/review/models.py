@@ -29,6 +29,7 @@ class Role(StrEnum):
     ATTACK_CHAIN_ANALYST = "attack_chain_analyst"
     FINDING_ADJUDICATOR = "finding_adjudicator"
     COMPLETENESS_REVIEWER = "completeness_reviewer"
+    LEAD_TRIAGER = "lead_triager"                # review.lead_triage: assigns a lead's priority severity only
 
 
 class BlueTask(StrEnum):
