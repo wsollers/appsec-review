@@ -92,11 +92,33 @@ def _is_dependency(shard: Mapping[str, Any]) -> bool:
     return shard["name"] == "observations" and _sid(shard) in DEPENDENCY_SHARDS
 
 
+def _tool(shard: Mapping[str, Any]) -> str | None:
+    return (shard.get("producer") or {}).get("producer")
+
+
+# job_evidence_collection runs one tool per shard (``producer.producer`` is the tool id). Tools whose
+# observations belong to a lead family other than source SAST, or are deliberately not leads (SBOM
+# inventory, binary hardening, workflow findings the CI job reviews itself), never count as source-SAST
+# coverage.
+SECRET_TOOLS = frozenset({"tool-gitleaks"})
+CONFIG_TOOLS = frozenset({"tool-hadolint", "tool-checkov", "tool-trivy"})
+NON_SAST_EVIDENCE_TOOLS = frozenset({*SECRET_TOOLS, *CONFIG_TOOLS, "tool-zizmor", "tool-syft", "tool-blint"})
+
+
+def _evidence_tool_in(tools: frozenset[str]) -> Callable[[Mapping[str, Any]], bool]:
+    return lambda shard: (shard["name"] == "observations" and _job(shard) == "job_evidence_collection"
+                          and _tool(shard) in tools)
+
+
 def _is_source_sast(shard: Mapping[str, Any]) -> bool:
-    return (shard["name"] == "observations" and
-            (_job(shard) == "job_clang_static_analysis" or
-             (_job(shard) == "job_evidence_collection" and
-              not (_is_dependency(shard) or _is_codeql(shard) or _is_ci(shard) or _is_artifact(shard)))))
+    if shard["name"] != "observations":
+        return False
+    if _job(shard) == "job_clang_static_analysis":
+        return True
+    if _job(shard) == "job_cpp_compiled_analysis":          # Infer; the other branches publish no observations
+        return (shard.get("producer") or {}).get("branch") == "infer"
+    return (_job(shard) == "job_evidence_collection" and _tool(shard) not in NON_SAST_EVIDENCE_TOOLS and
+            not (_is_dependency(shard) or _is_codeql(shard) or _is_ci(shard) or _is_artifact(shard)))
 
 
 def _precomputed(query_set: str) -> Callable[[Mapping[str, Any]], bool]:
@@ -113,6 +135,8 @@ PRODUCERS: Mapping[str, Callable[[Mapping[str, Any]], bool]] = {
     "catalog_components": _index("components"),
     "catalog_build": _index("build", "job_target_catalog"),
     "source_sast": _is_source_sast,
+    "secret_scanner": _evidence_tool_in(SECRET_TOOLS),
+    "config_scanner": _evidence_tool_in(CONFIG_TOOLS),
     "codeql": _is_codeql,
     "artifact_scanner": _is_artifact,
     "dependency_scanner": _is_dependency,

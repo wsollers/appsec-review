@@ -30,9 +30,10 @@ from typing import Any
 from appsec_review.review.identity import sha256_hex
 from appsec_review.review.labels import LabelTable
 from appsec_review.review.neighborhood import function_extent, type_names
+from appsec_review.review.secret_redaction import redact_source_line
 
 VIEW_SCHEMA = "appsec-review/review-package-view/1"
-VIEW_RULE = "appsec-review/package-view/1"
+VIEW_RULE = "appsec-review/package-view/2"
 GAP_VIEW_RULE = "appsec-review/package-gap-view/1"
 PROTOCOL = "review-protocol/2"
 MAX_INLINE_GAPS = 12
@@ -125,6 +126,8 @@ class _Builder:
         self._names: dict[str, str | None] = {}
         self.extra_gaps: list[str] = []
         self.locator_paths: set[str] = set()
+        # path -> (start, end) lines of ``secret`` leads: the literal there never reaches the model (secret-redaction/1)
+        self.secret_lines: dict[str, list[tuple[int, int]]] = {}
 
     # -- reads through the accepted index -----------------------------------------------------------------
     def location(self, ref: str) -> Mapping[str, Any] | None:
@@ -165,6 +168,10 @@ class _Builder:
                      "function": function.get("name") if len(self.package.get("lead_menu", ())) == 1 else None}
             if location.get("path"):
                 self.locator_paths.add(str(location["path"]))
+                if lead.get("lead_family") == "secret" and location.get("start_line"):
+                    start = int(location["start_line"])
+                    self.secret_lines.setdefault(str(location["path"]), []).append(
+                        (start, max(start, int(location.get("end_line") or start))))
             row = {"ref": ref, "family": lead.get("lead_family"), "scanner": lead.get("scanner"),
                    "rule": lead.get("rule_id"), "severity": lead.get("reported_severity"),
                    "native_severity": lead.get("native_severity"), "message": lead.get("message"),
@@ -219,10 +226,16 @@ class _Builder:
                 gaps.append(gap)
         return rows, gaps
 
-    @staticmethod
-    def _span(ref: str, path: str, file_sha: str, lines: Sequence[str], first: int, last: int, role: str,
+    def _line(self, path: str, number: int, text: str) -> str:
+        for start, end in self.secret_lines.get(path, ()):
+            if start <= number <= end:
+                return redact_source_line(text, whole_line=end > start)
+        return text
+
+    def _span(self, ref: str, path: str, file_sha: str, lines: Sequence[str], first: int, last: int, role: str,
               truncated: bool) -> dict[str, Any]:
-        text = [f"{number}| {lines[number - 1].rstrip()[:MAX_LINE_CHARS]}" for number in range(first, last + 1)]
+        text = [f"{number}| {self._line(path, number, lines[number - 1].rstrip())[:MAX_LINE_CHARS]}"
+                for number in range(first, last + 1)]
         return {"ref": ref, "role": role, "path": path, "lines": f"{first}-{last}", "file_sha256": file_sha,
                 "truncated": truncated, "text": text}
 
