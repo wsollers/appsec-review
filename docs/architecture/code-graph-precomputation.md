@@ -602,7 +602,7 @@ Rules:
 2. `precomputed_fact` stays in `REFERENCE_KINDS` (indirect for every predicate). `hotspot_context`
    and `review_package` facts that embed graph identities are search aids; the embedded identity
    must be cited itself.
-3. A `tool_observation` from CodeQL keeps its `tool-rule-predicates/1` mapping. Red cells are
+3. A `tool_observation` from CodeQL keeps its `tool-rule-predicates/2` mapping (a path result only; a point result is `affected_construct` alone). Red cells are
    expected, and the verifier is required by its task prompt, to cite the correlated
    `dataflow_path` (through `sarif_path`) rather than the observation alone when one exists; this
    is guidance, not a validator rule, because a `broken` correlation must not make a real alert

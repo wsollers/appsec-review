@@ -138,7 +138,7 @@ def test_blue_cells_never_see_each_other_and_the_verifier_is_blind(prepared) -> 
         text = json.dumps(asdict(request), default=str)
         assert "for the scripted review" not in text                  # no red relation rationale
         assert not request.transcript or all(turn["from"] in {"worker", "application"} for turn in request.transcript)
-        if request.task_input["task"] == "blue_reachability":
+        if request.task_input["task"] == "blue_control":
             assert guard not in text                                  # never the other blue's output
     verifiers = recording.by_role("independent_verifier")
     assert verifiers
@@ -149,7 +149,9 @@ def test_blue_cells_never_see_each_other_and_the_verifier_is_blind(prepared) -> 
         assert not any(marker in text for marker in markers)
 
     recording = Recording(prepared.infer)
-    result = run_team(prepared.context(recording, attempt="b"), prepared.work("lead", "sast_critical"), launch=True)
+    # ci_high: its CI rule observation is direct for exactly the predicates its claim family requires, so the
+    # blind verifier can re-retrieve independent support (the sast_critical claim cannot, see the next test).
+    result = run_team(prepared.context(recording, attempt="b"), prepared.work("lead", "ci_high"), launch=True)
     [record] = [item for values in result.independence.values() for item in values]
     assert record["independent"] is True and record["review_id"].startswith("review-")
     assert record["provider_distinct"] is False and record["verifier_model_distinct"] is False
@@ -169,13 +171,30 @@ def test_a_distinct_verifier_profile_is_recorded_without_changing_independence(p
     assert changed.verifier_distinctness()["distinct"] is True and changed.verifier_distinctness()["warning"] is None
     assert settings.verifier_distinctness()["warning"]                       # the checked-in default
     recording = Recording(prepared.infer)
-    result = run_team(prepared.context(recording, models=models, roles=roles), prepared.work("lead", "sast_critical"),
+    result = run_team(prepared.context(recording, models=models, roles=roles), prepared.work("lead", "ci_high"),
                       launch=True)
     [record] = [item for values in result.independence.values() for item in values]
     assert record["independent"] is True and record["verifier_model_distinct"] is True
     assert record["provider_distinct"] is False
     assert {item.model for item in recording.by_role("independent_verifier")} == {"claude-verifier-model"}
     assert {item.model for item in recording.by_role("red_team_analyst")} == {settings.models["default"].model}
+
+
+def test_a_verifier_citing_irrelevant_but_real_evidence_is_not_independent(prepared) -> None:
+    """The sast_critical verifier cites a real build action for attacker control, reachability and guards.
+
+    The citations resolve, but ``predicate-admission/1`` makes them indirect for those predicates, so no
+    required predicate besides the construct has independent support and the claim reaches supported at best.
+    """
+    result = run_team(prepared.context(Recording(prepared.infer), attempt="c"),
+                      prepared.work("lead", "sast_critical"), launch=True)
+    [record] = [item for values in result.independence.values() for item in values]
+    assert record["independent"] is False
+    cited = [relation for relation in result.relations if relation.entity_kind == "build_action"]
+    assert cited and not any(
+        relation.admissibility.value == "direct" and relation.predicate.value in {
+            "attacker_input_control", "source_to_sink_reachability", "missing_or_ineffective_guard"}
+        for relation in cited)
 
 
 # ------------------------------------------------------------------------------------------------ duplicates

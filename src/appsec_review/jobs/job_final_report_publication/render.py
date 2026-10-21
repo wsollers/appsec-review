@@ -66,7 +66,9 @@ def _finding(index: int, item: Mapping[str, Any], settings: Mapping[str, int], *
              f"{'yes' if independence['provider_distinct'] else 'no'}, verifier model distinct "
              f"{'yes' if independence['verifier_model_distinct'] else 'no'}",
              f"- direct evidence relations ({len(item['direct_evidence'])}): "
-             f"{_ids(item['direct_evidence'], settings['evidence'])}"]
+             f"{_ids(item['direct_evidence'], settings['evidence'])}",
+             f"- analyst-assessed relations, recorded but not counted ({len(item['analyst_assessed_evidence'])}): "
+             f"{_ids(item['analyst_assessed_evidence'], settings['evidence'])}"]
     if item["missing_predicates"]:
         lines.append("- missing predicates: " + ", ".join(code(name) for name in item["missing_predicates"]))
     lines.append(f"- gaps ({len(item['gap_ids'])}): {_ids(item['gap_ids'], settings['gaps'])}")

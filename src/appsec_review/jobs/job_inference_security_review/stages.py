@@ -21,7 +21,7 @@ from appsec_review.review.ledger import (
     EVENT_SCHEMA, LedgerWriter, MergedLedger, Projection, gap_from_json, merge_shards, project,
 )
 from appsec_review.review.models import (
-    ClaimState, Gap, GapClass, IntegrityError, Lane, make_gap,
+    Admissibility, ClaimState, Gap, GapClass, IntegrityError, Lane, RelationKind, make_gap,
 )
 from appsec_review.review.scoring import (
     DERIVATION_RULE, UNAVAILABLE_CATALOG, ImpactCatalog, consumed_factors, default_factor_registry, default_registry,
@@ -448,6 +448,9 @@ def finding_packages(projection: Projection, adjudications: Sequence[Mapping[str
         # Decision 2 is judged on the verifiers that count: the independent ones when any exist.
         model_distinct = any(item.get("verifier_model_distinct", False) for item in (independent or verifiers))
         supporting = sorted({relation for item in record["predicates"] for relation in item["supporting"]})
+        analyst = sorted(relation.relation_id for relation in projection.relations.get(claim.claim_id, ())
+                         if relation.kind is RelationKind.SUPPORTS and relation.complete
+                         and relation.admissibility is Admissibility.ANALYST_ASSESSED)
         missing = sorted(item["predicate"] for item in record["predicates"]
                          if item["required"] and item["outcome"] != "satisfied")
         review_id = reviewed[0]["review_id"] if reviewed else None
@@ -461,6 +464,7 @@ def finding_packages(projection: Projection, adjudications: Sequence[Mapping[str
             "label": "confirmed" if state is ClaimState.CONFIRMED else "not_independently_confirmed",
             "title": f"{claim.security_predicate} ({claim.weakness_cwe or 'unmapped weakness'})"[:200],
             "adjudication_id": record["adjudication_id"], "direct_evidence": supporting[:256],
+            "analyst_assessed_evidence": analyst[:256],
             "missing_predicates": missing,
             "verification_review_id": review_id,
             "scores": sorted(item["score_id"] for item in claim_scores)[:16], "poc": None, "attack_chains": [],

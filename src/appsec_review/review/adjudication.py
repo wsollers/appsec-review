@@ -116,7 +116,7 @@ def adjudicate(claim: Claim, relations: Iterable[EvidenceRelation], verifier_ind
     ``scope_entities`` is the package scope plus accepted components. ``verifier_gap`` is the failed
     verifier cell's ``worker_gap``; it is linked whenever given.
     """
-    required = obligations.required_predicates(claim.preconditions)
+    required = obligations.required_predicates_for(claim)
     statuses, counted = _predicate_statuses(claim, relations, required)
     by_predicate = {status.predicate: status for status in statuses}
     gaps: list[Gap] = []

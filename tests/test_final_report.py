@@ -110,7 +110,7 @@ def test_inference_gate_and_report_run_end_to_end_without_a_model(chain: Chain) 
 def test_gate_accounts_for_every_package_in_exactly_one_bucket(chain: Chain) -> None:
     gate, review = gate_document(chain), review_handoff(chain)
     ids = [item["finding_package_id"] for item in review["finding_packages"]]
-    assert len(ids) == 3 and sorted(ids) == sorted(item["finding_package_id"] for item in gate["packages"])
+    assert len(ids) == 4 and sorted(ids) == sorted(item["finding_package_id"] for item in gate["packages"])
     buckets = gate["buckets"]
     listed = [identity for bucket in buckets.values() for identity in bucket]
     assert sorted(listed) == sorted(ids) and len(listed) == len(set(listed))
@@ -118,7 +118,7 @@ def test_gate_accounts_for_every_package_in_exactly_one_bucket(chain: Chain) -> 
     assert buckets["verification_backlog"] == sorted(item["finding_package_id"] for item in review["verification_backlog"])
     assert buckets["withheld"] == []
     counts = gate["package_counts"]
-    assert counts == {"total": 3, "publishable": 1, "verification_backlog": 2, "withheld": 0, "exact": True}
+    assert counts == {"total": 4, "publishable": 1, "verification_backlog": 3, "withheld": 0, "exact": True}
     assert {item["bucket"] for item in gate["packages"]} == {"publishable", "verification_backlog"}
     for item in gate["packages"]:
         assert item["bucket"] == ("publishable" if item["state"] == "confirmed" else "verification_backlog")
@@ -178,7 +178,7 @@ def test_degraded_review_is_surfaced_as_named_limitations_and_not_a_failure(chai
         identity for identity in gate_classify.LIMITATION_ORDER if identity in by_id]
     assert chain.read(GATE, "acceptance.publish_handoff", "status.json")["status"] == "SUCCEEDED"
     outputs = chain.handoff(GATE)["outputs"]["acceptance.publish_handoff"]
-    assert outputs["terminal_status"] == "COMPLETED_WITH_GAPS" and outputs["item_count"] == 3
+    assert outputs["terminal_status"] == "COMPLETED_WITH_GAPS" and outputs["item_count"] == 4
     assert any(gap.startswith("review_degraded:") for gap in outputs["gaps"])
     assert not any("not_run" in gap or gap.startswith("remediation_") for gap in outputs["gaps"])
 
@@ -500,13 +500,14 @@ def test_packages_that_reference_unavailable_poc_or_chain_manifests_are_withheld
     value["packages"][1]["attack_chains"] = ["chain-" + "a" * 64]
     value["packages"][2]["poc"] = {"status": "verification_succeeded", "result_id": "pocresult-" + "b" * 64}
     value["packages"][2]["attack_chains"] = ["chain-" + "c" * 64]
+    value["packages"][3]["attack_chains"] = ["chain-" + "d" * 64]
     result = gate_classify.classify(value)
     reasons = {item["finding_package_id"]: item["withheld_reasons"] for item in result["packages"]}
-    assert sorted(len(item) for item in reasons.values()) == [1, 1, 2]
-    assert result["package_counts"] == {"total": 3, "publishable": 0, "verification_backlog": 0, "withheld": 3, "exact": True}
-    assert len(result["buckets"]["withheld"]) == 3
+    assert sorted(len(item) for item in reasons.values()) == [1, 1, 1, 2]
+    assert result["package_counts"] == {"total": 4, "publishable": 0, "verification_backlog": 0, "withheld": 4, "exact": True}
+    assert len(result["buckets"]["withheld"]) == 4
     withheld = next(item for item in result["limitations"] if item["limitation_id"] == "withheld_packages")
-    assert withheld["kind"] == "gap" and withheld["count"] == 3 and result["status"] == "PUBLISHABLE_WITH_LIMITATIONS"
+    assert withheld["kind"] == "gap" and withheld["count"] == 4 and result["status"] == "PUBLISHABLE_WITH_LIMITATIONS"
     # A withheld package keeps its accepted ship-block status; withholding never reclassifies it.
     assert [item["ship_block"]["status"] for item in result["packages"]] == [
         item["ship_block"]["status"] for item in value["packages"]]

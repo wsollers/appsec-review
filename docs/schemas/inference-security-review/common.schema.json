@@ -193,6 +193,7 @@
       "enum": [
         "direct",
         "direct_for_mapped_predicate",
+        "analyst_assessed",
         "indirect"
       ]
     },
@@ -302,7 +303,10 @@
         "dataflow_path",
         "guard_fact",
         "range_fact",
-        "codeql_database"
+        "codeql_database",
+        "points_to_set",
+        "indirect_call_targets",
+        "memory_object"
       ]
     },
     "poc_status": {

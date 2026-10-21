@@ -88,6 +88,8 @@ MITRE_WEAKNESSES = {
     "CWE-416": ("Use After Free", "Variant", [
         (["Integrity"], ["Modify Memory"]), (["Availability"], ["DoS: Crash, Exit, or Restart"]),
         (_CIA, ["Execute Unauthorized Code or Commands"])]),
+    "CWE-829": ("Inclusion of Functionality from Untrusted Control Sphere", "Base", [
+        (_CIA, ["Execute Unauthorized Code or Commands"])]),
     "CWE-787": ("Out-of-bounds Write", "Base", [
         (["Integrity"], ["Modify Memory", "DoS: Crash, Exit, or Restart", "Execute Unauthorized Code or Commands"])]),
 }
@@ -285,6 +287,7 @@ def build_accepted_index_set(base: Path, *, run_id: str = RUN_ID, omit: Iterable
         return EntityRecord(LogicalIdentity.parse(ids[key]), key, rule, f"github {rule}",
                             {"tool_id": "ci-static-rules", "native_rule_id": rule, "provider": "github",
                              "category": "untrusted-trigger-execution", "severity": severity,
+                             "rule_mapping": {"cwe": ["CWE-829"]},
                              "message": f"{rule} in workflow"}, location(".github/workflows/ci.yml", line))
     shard("ci", "observations", "ci_github", {"job": "job_ci_configuration_analysis", "provider": "github"},
           [ci("ci_high", "untrusted-checkout", "high", 1), ci("ci_medium", "unpinned-action", "medium", 4)])

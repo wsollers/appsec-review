@@ -233,6 +233,7 @@ def _finding() -> dict:
         "claim_id": ident("claim"), "lane": "lead", "state": "confirmed", "label": "confirmed",
         "title": "Unbounded copy on the accepted request path", "adjudication_id": ident("adjudication"),
         "direct_evidence": [ident("evidence_relation", "51"), ident("evidence_relation", "c2")],
+        "analyst_assessed_evidence": [ident("evidence_relation", "a7")],
         "missing_predicates": [],
         "verification_review_id": ident("review"), "scores": [ident("score"), ident("score", "matrix")],
         "poc": {"status": "verification_succeeded", "result_id": "pocresult-" + SHA},

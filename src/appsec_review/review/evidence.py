@@ -29,11 +29,13 @@ from appsec_review.review.models import (  # make_gap is re-exported for compati
     MAX_GAP_REASON, Admissibility, EvidenceRelation, Gap, GapClass, IntegrityError, Predicate, RelationKind,
     make_gap,
 )
+from appsec_review.review import admission
 from appsec_review.review.obligations import ADMISSIBILITY_RULES_VERSION
 EVIDENCE_RELATION_KINDS = frozenset({RelationKind.SUPPORTS, RelationKind.CONTRADICTS, RelationKind.QUALIFIES})
 SATISFYING_ADMISSIBILITY = frozenset({Admissibility.DIRECT, Admissibility.DIRECT_FOR_MAPPED_PREDICATE})
 
-# R3: kinds that are direct evidence for the construct the predicate names.
+# R3: kinds whose content can bear on a predicate. What each can establish for WHICH predicate is the
+# closed ``predicate-admission/1`` table (review/admission.py): DIRECT, ANALYST_ASSESSED or INDIRECT.
 DIRECT_KINDS: frozenset[EntityKind] = frozenset({
     EntityKind.SOURCE_SPAN, EntityKind.AST_NODE, EntityKind.IR_ENTITY, EntityKind.SYMBOL,
     EntityKind.BUILD_ACTION, EntityKind.COMPILE_UNIT, EntityKind.OBJECT_FILE, EntityKind.LIBRARY,
@@ -67,6 +69,8 @@ INDIRECT_KINDS = INDIRECT_KINDS | REFERENCE_KINDS
 GRAPH_KINDS: frozenset[EntityKind] = frozenset(FAMILY_KINDS.values())
 _EVIDENCE_BEARING = frozenset({EntityKind.TOOL_OBSERVATION, EntityKind.EVIDENCE_ARTIFACT,
                                EntityKind.FINDING_PACKAGE})
+if admission.ADMITTED_KINDS != DIRECT_KINDS:     # the table must cover exactly the kinds classify() sends to it
+    raise ImportError("predicate-admission table and DIRECT_KINDS differ")
 
 
 def graph_fact_predicates(entity_kind: EntityKind | str, fact_payload: Mapping[str, Any] | None
@@ -108,8 +112,8 @@ def classify(entity_kind: EntityKind | str, predicate: Predicate,
     predicate = Predicate(predicate)
     if kind in REFERENCE_KINDS:            # reference context: indirect for every predicate
         return Admissibility.INDIRECT
-    if kind in DIRECT_KINDS:
-        return Admissibility.DIRECT
+    if kind in DIRECT_KINDS:               # predicate-admission/1: relevance is per (kind, predicate)
+        return admission.admission(kind, predicate)
     if kind in MAPPED_KINDS:
         mapped = {Predicate(item) for item in tool_rule_mapping}
         return Admissibility.DIRECT_FOR_MAPPED_PREDICATE if predicate in mapped else Admissibility.INDIRECT
@@ -189,6 +193,7 @@ def resolve_relation(core: RetrievalCore, *, claim_id: str, predicate: Predicate
         "content_sha256": content_sha256, "locator": locator, "complete": complete,
         "producing_cell_id": producing_cell_id, "retrieval_receipt_sha256": retrieval_receipt_sha256,
         "manifest_sha256": core.manifest_sha256, "admissibility_rules": ADMISSIBILITY_RULES_VERSION,
+        "predicate_admission": admission.VERSION,
     }
     return EvidenceRelation(
         relation_id=make_id("evidence_relation", 1, body), claim_id=claim_id, predicate=predicate, kind=kind,

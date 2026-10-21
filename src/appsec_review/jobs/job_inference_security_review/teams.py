@@ -46,7 +46,7 @@ from appsec_review.review.models import (
     BlueTask, CellRecord, CellStatus, Claim, EvidenceRelation, Gap, GapClass, IntegrityError, Lane, Predicate,
     RelationKind, Role, make_gap,
 )
-from appsec_review.review.obligations import required_predicates
+from appsec_review.review.obligations import required_predicates_for
 from appsec_review.review.package_view import PackageView, ViewLimits, build_view
 from appsec_review.review import red_discovery
 from appsec_review.review.red_discovery import RED_ROLES, Citation, RedInvocation
@@ -296,7 +296,7 @@ def _claim_view(claim: Claim, *, statement: bool, labels: Mapping[str, str] | No
                          for ref in claim.affected_entities],
             "weakness_cwe": claim.weakness_cwe, "security_predicate": str(claim.security_predicate),
             "preconditions": list(claim.preconditions),
-            "required_predicates": sorted(item.value for item in required_predicates(claim.preconditions))}
+            "required_predicates": sorted(item.value for item in required_predicates_for(claim))}
     if statement:
         view["statement"] = claim.statement
     return view
@@ -882,7 +882,7 @@ def _review(ctx: ReviewContext, group: Mapping[str, Any], blues: tuple[_Cell, _C
     marker_digest = sha256_hex(sorted(set(markers)))
     request_bytes = _verifier_request_bytes(ctx, verifier, markers, marker_digest)
     independent, gaps = verify_independence(
-        _actor(verifier), others, request_bytes, markers, found, required_predicates(claim.preconditions),
+        _actor(verifier), others, request_bytes, markers, found, required_predicates_for(claim),
         {verifier.record.receipt_sha256} if verifier.record.receipt_sha256 else set(), claim_id=claim.claim_id)
     result.gaps.extend(gaps)
     result.independence.setdefault(claim.claim_id, []).append({

@@ -3,11 +3,17 @@
 Answers are a pure function of (role, task, persona, package leads or claim) so that the slice 1
 definition-of-done states arise from the fixture accepted index set:
 
-* lane A ``sast_critical``: claim C1 (CWE-120) with direct support for every predicate; the blind
-  verifier re-retrieves the evidence itself -> ``confirmed``. The failure-modes lens also probes
-  forbidden capabilities (an evaluator path and an out-of-scope identity).
+* lane A ``sast_critical``: claim C1 (CWE-120) cites a lead observation for the construct and the
+  build action for every other predicate. Under ``predicate-admission/1`` only the construct counts
+  (the build action is relevant to configuration, not to attacker control, reachability or guards),
+  so C1 is ``supported`` and never ``confirmed``. The failure-modes lens also probes forbidden
+  capabilities (an evaluator path and an out-of-scope identity).
+* lane A ``ci_high``: claim C5 (supply chain, CI workflow) with direct support for exactly the
+  predicates its family requires (the CI rule observation maps to the construct and the
+  configuration); the blind verifier re-retrieves them itself -> ``confirmed``.
 * lane A ``sast_high``: claim C2 (CWE-89) with partial support -> ``supported``.
-* lane A ``codeql_high``: claim C3 whose ``blue_control`` finds a direct guard -> ``contradicted``.
+* lane A ``codeql_high``: claim C3 (configuration-scoped) whose ``blue_reachability`` finds a direct
+  configuration break in the build action -> ``not_exploitable_in_observed_configuration``.
 * lane A ``dep_high``: claim C4 whose verifier provider always fails -> ``insufficient_evidence``
   plus a cell ``worker_gap``.
 * lane B native unit: the memory-safety sweep re-proposes C1 (a duplicate proposal) and H1 with
@@ -42,11 +48,12 @@ NARRATIVES = {
     "C2": "C2 lead narrative: the handler concatenates the query string into raw SQL",
     "C3": "C3 lead narrative: the multiplication n times four can overflow a signed int",
     "C4": "C4 lead narrative: requests 2.0.0 allows unbounded resource consumption",
+    "C5": "C5 lead narrative: the workflow checks out and runs untrusted pull request code with a write token",
     "H1": "H1 hunt narrative: io.c reaches system() with a constant string after an early return",
     "H2": "H2 hunt narrative: a freed buffer might be reused in io.c on the error path",
     "H3": "H3 hunt narrative: root attacker variant that uses a precondition outside the vocabulary",
     "blue": "blue rationale {claim} {task}: no effective guard or reachability break was found here",
-    "blue-guard": "C3 blue control rationale: an explicit bound check guards the multiplication input",
+    "blue-guard": "C3 blue configuration rationale: the build configuration compiles the debug path out",
     "verifier": "verifier rationale: re-retrieved the affected construct and the build action itself",
 }
 
@@ -161,8 +168,12 @@ class ScriptedInfer:
                 [("affected_construct", "sast_high"), ("attacker_input_control", "unit:py-svc")], lead="sast_high")])
         if lead == "codeql_high" and task == "lead_red_stack":
             return self._red(request, [self._proposal(
-                "c3", "native/src/parse.c", "CWE-190", "integer_error", [], "C3",
+                "c3", "native/src/parse.c", "CWE-190", "integer_error", ["debug_mode_enabled"], "C3",
                 [("affected_construct", "unit:native-main")], lead="codeql_high")])
+        if lead == "ci_high" and task == "lead_red_stack":
+            return self._red(request, [self._proposal(
+                "c5", "ci_high", "CWE-829", "supply_chain_compromise", [], "C5",
+                [("affected_construct", "ci_high"), ("configuration_enables", "ci_high")], lead="ci_high")])
         if lead == "dep_high" and task == "lead_red_stack":
             return self._red(request, [self._proposal(
                 "c4", "dep_high", "CWE-400", "resource_exhaustion", [], "C4", [], lead="dep_high")])
@@ -191,8 +202,8 @@ class ScriptedInfer:
         claim, task = payload["claim"], payload["task"]
         answer: dict[str, Any] = {"stance": "unresolved",
                                   "why": NARRATIVES["blue"].format(claim=claim["security_predicate"], task=task)}
-        if claim["security_predicate"] == "integer_error" and task == "blue_control":
-            answer = {"stance": "contradicts", "predicate": "missing_or_ineffective_guard",
+        if claim["security_predicate"] == "integer_error" and task == "blue_reachability":
+            answer = {"stance": "contradicts", "predicate": "configuration_enables",
                       "cites": [self.ids["unit:native-main"]], "why": NARRATIVES["blue-guard"]}
         return self._final(answer)
 
@@ -203,7 +214,9 @@ class ScriptedInfer:
             raise RuntimeError("scripted verifier provider failure")
         plan = {"memory_corruption": [(item, "unit:native-main") for item in PREDICATES],
                 "sql_injection": [("affected_construct", "sast_high")],
-                "command_injection": [("affected_construct", "unit:native-main")]}.get(predicate, [])
+                "command_injection": [("affected_construct", "unit:native-main")],
+                "supply_chain_compromise": [("affected_construct", "ci_high"),
+                                            ("configuration_enables", "ci_high")]}.get(predicate, [])
         if not plan:
             return self._final({"disposition": "insufficient_evidence", "per_predicate": {},
                                 "why": NARRATIVES["verifier"]})
@@ -213,7 +226,8 @@ class ScriptedInfer:
         per_predicate: dict[str, Any] = {}
         for item, key in plan:
             per_predicate.setdefault(item, {"stance": "supports", "cites": []})["cites"].append(self.ids[key])
-        return self._final({"disposition": "confirmed" if len(plan) == len(PREDICATES) else "supported",
+        return self._final({"disposition": "confirmed" if predicate in ("memory_corruption", "supply_chain_compromise")
+                            else "supported",
                             "per_predicate": per_predicate, "why": NARRATIVES["verifier"]})
 
 

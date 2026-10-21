@@ -195,7 +195,9 @@ def test_unknown_or_mismatched_graph_payloads_are_default_deny() -> None:
     # A graph payload never changes a non-graph kind's classification.
     assert classify("priority_item", P.AFFECTED_CONSTRUCT, (), good) is Admissibility.INDIRECT
     assert classify("tool_observation", P.AFFECTED_CONSTRUCT, (), good) is Admissibility.INDIRECT
-    assert classify("source_span", P.SECURITY_IMPACT, (), None) is Admissibility.DIRECT
+    # predicate-admission/1: a source span is direct only for the construct it is.
+    assert classify("source_span", P.AFFECTED_CONSTRUCT, (), None) is Admissibility.DIRECT
+    assert classify("source_span", P.SECURITY_IMPACT, (), None) is Admissibility.ANALYST_ASSESSED
     with pytest.raises(ValueError):
         classify("graph_fact", P.AFFECTED_CONSTRUCT, (), good)
 
@@ -410,7 +412,8 @@ def test_policy_hash_pins_the_graph_mapping_and_admissibility_version() -> None:
 def test_package_reuse_basis_includes_the_evidence_rule_versions() -> None:
     from appsec_review.jobs.job_inference_security_review import job
     assert job.EVIDENCE_RULES == {
-        "rule_predicates": "tool-rule-predicates/1", "admissibility": "evidence-admissibility/2",
+        "rule_predicates": "tool-rule-predicates/2", "admissibility": "evidence-admissibility/2",
+        "predicate_admission": "predicate-admission/1",
         "graph_fact_predicates": "graph-fact-predicates/1",
         "graph_fact_admissibility": "graph-fact-admissibility/1",
         "obligation_policy_sha256": obligations.POLICY_SHA256}

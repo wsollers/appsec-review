@@ -62,19 +62,21 @@ def test_request_bytes_with_narrative_or_actor_ids_are_not_independent(leak: byt
 
 
 def test_each_required_predicate_needs_support_from_verifier_receipts() -> None:
-    relations = [rel(p) for p in ALWAYS_REQUIRED if p is not Predicate.SECURITY_IMPACT]
+    guard = Predicate.MISSING_OR_INEFFECTIVE_GUARD
+    relations = [rel(p) for p in ALWAYS_REQUIRED if p is not guard]
     relations += [
-        rel(Predicate.SECURITY_IMPACT, receipt="c" * 64),                       # red's receipt
-        rel(Predicate.SECURITY_IMPACT, receipt=None),
-        rel(Predicate.SECURITY_IMPACT, admissibility=Admissibility.INDIRECT),
-        rel(Predicate.SECURITY_IMPACT, complete=False),
-        rel(Predicate.SECURITY_IMPACT, kind=RelationKind.CONTRADICTS),
-        rel(Predicate.SECURITY_IMPACT, claim="claim-" + "9" * 64),
+        rel(guard, receipt="c" * 64),                       # red's receipt
+        rel(guard, receipt=None),
+        rel(guard, admissibility=Admissibility.INDIRECT),
+        rel(guard, admissibility=Admissibility.ANALYST_ASSESSED),      # recorded and shown, never counted
+        rel(guard, complete=False),
+        rel(guard, kind=RelationKind.CONTRADICTS),
+        rel(guard, claim="claim-" + "9" * 64),
     ]
     independent, gaps = check(relations=relations)
     assert not independent
     assert [(gap.reason, gap.predicate) for gap in gaps] == [
-        ("verifier_lacks_independent_support", Predicate.SECURITY_IMPACT)]
+        ("verifier_lacks_independent_support", guard)]
 
 
 def test_provider_distinctness_recorded_but_not_required_by_default() -> None:
