@@ -866,7 +866,7 @@ timeout_seconds = 180
 
 [jobs.job_project_build.settings.profiles.native]
 tag = "audit-buildenv-cpp:local"
-image_id = "sha256:f685478eabb03555b412931a9ee9ebeb49e5a631cd6c33a2e471972816fdb9f4"
+image_id = "sha256:02c538dff3029f8c0e63cfeddcb00e7b3a0e1ab36224d1837d0850e1c049edb7"
 user = "10001:10001"
 [jobs.job_project_build.settings.profiles.rust]
 tag = "audit-buildenv-rust-wasm:local"
