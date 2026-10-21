@@ -6,6 +6,24 @@ only the layers the repository adds on top of it. Run every command from the rep
 
 ## Licensed source image
 
+If `audit-codeql:local` does not exist, `Dockerfile.bundle` builds it from the official
+`github/codeql-action@codeql-bundle-v2.27.0` Linux x64 bundle. CodeQL's license terms still apply.
+The base is the locally built `buildenv-native-toolchain` image, which supplies Python 3.12,
+glibc and native toolchain prerequisites. Download into an ignored, disposable staging directory;
+the Dockerfile verifies the bundle SHA-256 before extracting it, without network access:
+
+```powershell
+New-Item -ItemType Directory -Force test\tmp\codeql-image-build
+gh release download codeql-bundle-v2.27.0 --repo github/codeql-action --pattern codeql-bundle-linux64.tar.gz --pattern codeql-bundle-linux64.tar.gz.checksum.txt --dir test\tmp\codeql-image-build
+docker build --network=none --pull=false --file containers\tools\codeql\Dockerfile.bundle --tag audit-codeql:local test\tmp\codeql-image-build
+gh release download v2.62.0 --repo github/codeql-coding-standards --pattern coding-standards-codeql-packs.zip --dir test\tmp\codeql-image-build
+docker build --network=none --pull=false --file containers\tools\codeql\Dockerfile.custom-source --tag audit-codeql:custom-2.27.0 test\tmp\codeql-image-build
+```
+
+Check each command succeeds before continuing. Delete the downloaded archives and checksum file
+after the build; never commit licensed payloads. The final image must pass the runner's `inventory`
+action against `assets.lock.json` before updating its source-image identity and lock-file hash below.
+
 `Dockerfile.custom-source` layers the release-pinned CERT C++ coding-standards query pack onto an
 operator-provided licensed image (default `audit-codeql:local`). Download
 `coding-standards-codeql-packs.zip` from the `github/codeql-coding-standards@v2.62.0` release into

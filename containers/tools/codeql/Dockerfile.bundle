@@ -1,0 +1,12 @@
+ARG BASE_IMAGE=appsec-review/buildenv-native-toolchain:noble-gcc13.3-clang18.1
+FROM ${BASE_IMAGE}
+
+ARG CODEQL_BUNDLE_SHA256=8e870433e5c80d0e916c3c1aa9005fc88aab990bcdcc649fade9dfc4d7e94305
+USER 0:0
+COPY codeql-bundle-linux64.tar.gz /tmp/codeql-bundle-linux64.tar.gz
+RUN echo "${CODEQL_BUNDLE_SHA256}  /tmp/codeql-bundle-linux64.tar.gz" | sha256sum -c - \
+ && tar -xzf /tmp/codeql-bundle-linux64.tar.gz -C /opt \
+ && rm /tmp/codeql-bundle-linux64.tar.gz
+ENV PATH=/opt/codeql:${PATH}
+USER 10001:10001
+WORKDIR /scratch
