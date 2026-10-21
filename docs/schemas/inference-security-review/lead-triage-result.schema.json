@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://appsec-review.local/schemas/inference-security-review/lead-triage-result.schema.json",
+  "title": "Lead severity triage result",
+  "description": "The closed reply of one lead_triager batch turn (appsec-review/lead-triage-result/1). Exactly one item per lead of the request; a lead the excerpt cannot support is answered with basis insufficient_context and a null severity, which leaves the lead unknown. The reason bound here is the hard ceiling; triage.max_reason_chars tightens it.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "items"
+  ],
+  "properties": {
+    "schema": {
+      "const": "appsec-review/lead-triage-result/1"
+    },
+    "items": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 100,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "lead_id",
+          "severity",
+          "basis",
+          "reason"
+        ],
+        "properties": {
+          "lead_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "severity": {
+            "enum": [
+              "critical",
+              "high",
+              "medium",
+              "low",
+              "info",
+              null
+            ],
+            "description": "null only with basis insufficient_context; any other basis requires a severity."
+          },
+          "basis": {
+            "enum": [
+              "rule_semantics",
+              "code_context",
+              "exposure",
+              "insufficient_context"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "basis": {
+                  "const": "insufficient_context"
+                }
+              },
+              "required": [
+                "basis"
+              ]
+            },
+            "then": {
+              "properties": {
+                "severity": {
+                  "const": null
+                }
+              }
+            },
+            "else": {
+              "properties": {
+                "severity": {
+                  "enum": [
+                    "critical",
+                    "high",
+                    "medium",
+                    "low",
+                    "info"
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}
