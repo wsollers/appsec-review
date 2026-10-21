@@ -31,7 +31,7 @@ input, output, tool, and acceptance contracts.
 
 ## Registered jobs
 
-`runtime/registry.py` registers 32 jobs. Each has a `[jobs.<job_id>]` table in
+`runtime/registry.py` registers 34 jobs. Each has a `[jobs.<job_id>]` table in
 `appsec-review.toml`, and its Dagster job is named from that table's `name`.
 
 | Job | Purpose | Operations |
@@ -54,6 +54,7 @@ input, output, tool, and acceptance contracts.
 | `job_artifact_security_analysis` | Produced-artifact security analysis | [artifact-security-analysis](../operations/artifact-security-analysis.md) |
 | `job_cpp_compiled_analysis` | C/C++ compiled analysis | [cpp-compiled-analysis](../operations/cpp-compiled-analysis.md) |
 | `job_clang_static_analysis` | Clang-Tidy and Clang Static Analyzer over accepted compile scopes | [clang-static-analysis](../operations/clang-static-analysis.md) |
+| `job_sanitizer_build` | ASan/UBSan rebuild of accepted native units in a separate workspace; catalogues instrumented outputs and proves instrumentation from the ELF, never executes them | [sanitizer-build](../operations/sanitizer-build.md) |
 | `job_cpp_symbol_index` | clangd symbol index | [cpp-index-jobs](../operations/cpp-index-jobs.md) |
 | `job_cpg_analysis` | Joern code property graph (deprecated; shipped `settings.enabled = false`) | [cpp-index-jobs](../operations/cpp-index-jobs.md) |
 | `job_post_build_security_assessment` | Build-hardening assessment | [post-build-security-assessment](../operations/post-build-security-assessment.md) |
@@ -451,6 +452,9 @@ artifact-index, and C++ handoffs. It owns C/C++, Go, Java/Kotlin, C#, JavaScript
 Rust, and GitHub Actions database/query/SARIF production and publishes one composed accepted view.
 
 The generic native build container executes untrusted build logic but never target binaries or tests.
+`job_sanitizer_build` replays the accepted native build commands with sanitizer flags in a separate
+workspace under the same rule and publishes an instrumented-output catalog that no existing job
+consumes ([`../operations/sanitizer-build.md`](../operations/sanitizer-build.md)).
 The C++ analysis container only replays bounded compile units for analysis. Application code validates
 workspace manifests, compile commands, and artifacts; converts tool failures to explicit gaps; and
 retains framework integrity failures as hard failures. See

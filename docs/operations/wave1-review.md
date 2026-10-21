@@ -11,7 +11,7 @@ model_connectivity -> image_pin_verification -> review_intake -> target_catalog 
   -> tree_sitter_ast -> project_build -> language_build
   -> artifact_indexing -> test_coverage -> profile_data -> artifact_security_analysis
   -> cpp_compiled_analysis -> clang_static_analysis
-  -> svf_alias_analysis (opt-in; only when enabled) -> cpp_symbol_index
+  -> svf_alias_analysis (opt-in; only when enabled) -> sanitizer_build -> cpp_symbol_index
   -> [cpg_analysis only when enabled] -> evidence_collection -> dependency_intelligence
   -> change_context_analysis -> codeql_analysis -> review_prioritization
   -> code_graph_index -> review_data_indexing -> review_package_assembly
