@@ -4,10 +4,10 @@ from collections.abc import Callable, Mapping
 import hashlib
 import json
 from pathlib import Path
-import tomllib
 from typing import Any
 
-from appsec_review.config.loader import OVERLAY_LAYER, PENDING_JOBS, overlay_capacity_keys
+from appsec_review.config.loader import (
+    OVERLAY_LAYER, PENDING_JOBS, PROFILE_LAYER, overlay_capacity_keys, profile_override_keys)
 from appsec_review.storage import file_sha256
 from appsec_review.jobs.cataloging import Bounds, inventory, source_fingerprint, write_json
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
@@ -63,10 +63,19 @@ def configured_models(document: Mapping[str, Any]) -> list[dict[str, Any]]:
     return found
 
 
+def resolved_configuration(run_root: Path) -> Mapping[str, Any]:
+    """The run-owned resolved configuration (profile and overlay applied), verified against its manifest."""
+    configuration = run_root / "data" / "configuration"
+    manifest = json.loads((configuration / "manifest.json").read_text(encoding="utf-8"))
+    if file_sha256(configuration / "resolved.json") != manifest.get("resolved_sha256"):
+        raise ValueError("run-owned resolved configuration hash mismatch")
+    return json.loads((configuration / "resolved.json").read_text(encoding="utf-8"))
+
+
 def build_job(*, check_models: ModelCheck | None = None) -> Job:
     def resolve_models(unit: UnitContext) -> Mapping[str, Any]:
-        frozen = unit.job.run_root / "data" / "configuration" / "appsec-review.toml"
-        required = configured_models(tomllib.loads(frozen.read_text(encoding="utf-8")))
+        # The resolved document, not the base file: the runtime profile changes the models.
+        required = configured_models(resolved_configuration(unit.job.run_root))
         return {"required": required, "model_count": len({(item["provider"], item["model"]) for item in required})}
 
     def verify_models(unit: UnitContext) -> Mapping[str, Any]:
@@ -109,38 +118,63 @@ def build_job(*, check_models: ModelCheck | None = None) -> Job:
         return manifest["sources"][0]
 
     def resolve_layers(unit: UnitContext) -> Mapping[str, Any]:
-        """The explicit or repository-default file, plus at most one local capacity overlay.
+        """The explicit or repository-default file, plus at most one runtime profile and one capacity overlay.
 
-        The overlay is chosen with the configuration (``load_config(overlay=...)`` or
-        ``APPSEC_REVIEW_CONFIG_OVERLAY``), merged before validation, frozen into ``resolved.json``,
-        and listed in the run's configuration manifest as its own hashed layer. It is verified here
-        against both records and re-checked against the capacity-key allowlist.
+        The profile (``load_config(profile=...)`` or ``APPSEC_REVIEW_PROFILE``; ``dev`` has no file) and the
+        overlay (``load_config(overlay=...)`` or ``APPSEC_REVIEW_CONFIG_OVERLAY``) are merged before
+        validation, frozen into ``resolved.json``, and listed in the run's configuration manifest as their
+        own hashed layers, in that order. Each is verified here against both records and re-checked
+        against its allowlist.
         """
         source = unit.output("resolve_configuration.fetch_config")
-        configuration = unit.job.run_root / "data" / "configuration"
-        manifest = json.loads((configuration / "manifest.json").read_text(encoding="utf-8"))
-        if file_sha256(configuration / "resolved.json") != manifest.get("resolved_sha256"):
-            raise ValueError("run-owned resolved configuration hash mismatch")
-        record = json.loads((configuration / "resolved.json").read_text(encoding="utf-8")).get(
-            "configuration_overlay")
-        overlays = list(manifest["sources"][1:])
-        if record is None and not overlays:
-            return {"strategy": "single-explicit-or-repository-default", "layers": [source]}
-        if (record is None or len(overlays) != 1 or overlays[0].get("layer") != OVERLAY_LAYER or
-                overlays[0].get("sha256") != record.get("sha256") or
-                overlays[0].get("path") != record.get("path")):
+        resolved = resolved_configuration(unit.job.run_root)
+        manifest = json.loads((unit.job.run_root / "data" / "configuration" / "manifest.json").read_text(
+            encoding="utf-8"))
+        extra = list(manifest["sources"][1:])
+        profile = resolved.get("configuration_profile")
+        if not isinstance(profile, Mapping) or "name" not in profile:
+            raise ValueError("resolved configuration does not record its runtime profile")
+        layers = [source]
+        result: dict[str, Any] = {"profile": profile["name"]}
+        if profile.get("path") is None:
+            if profile["name"] != "dev":
+                raise ValueError("resolved configuration profile has no layer")
+        else:
+            if not extra or extra[0].get("layer") != PROFILE_LAYER:
+                raise ValueError("configuration profile layer does not match the resolved configuration")
+            layer = extra.pop(0)
+            if layer.get("sha256") != profile.get("sha256") or layer.get("path") != profile.get("path"):
+                raise ValueError("configuration profile layer does not match the resolved configuration")
+            keys = list(profile_override_keys(profile.get("document")))
+            if keys != profile.get("keys"):
+                raise ValueError("configuration profile keys do not match the resolved configuration")
+            layers.append(dict(layer))
+            result["profile_keys"] = keys
+        record = resolved.get("configuration_overlay")
+        if record is None and not extra:
+            pass
+        elif (record is None or len(extra) != 1 or extra[0].get("layer") != OVERLAY_LAYER or
+                extra[0].get("sha256") != record.get("sha256") or extra[0].get("path") != record.get("path")):
             raise ValueError("configuration overlay layer does not match the resolved configuration")
-        keys = list(overlay_capacity_keys(record.get("document")))
-        if keys != record.get("keys"):
-            raise ValueError("configuration overlay capacity keys do not match the resolved configuration")
-        return {"strategy": "explicit-or-repository-default-with-capacity-overlay",
-                "layers": [source, dict(overlays[0])], "capacity_keys": keys}
+        else:
+            keys = list(overlay_capacity_keys(record.get("document")))
+            if keys != record.get("keys"):
+                raise ValueError("configuration overlay capacity keys do not match the resolved configuration")
+            layers.append(dict(extra[0]))
+            result["capacity_keys"] = keys
+        profiled, overlaid = "profile_keys" in result, "capacity_keys" in result
+        strategy = ("explicit-or-repository-default" + ("-with-profile" if profiled else "") +
+                    ("-and-" if profiled and overlaid else "-with-" if overlaid else "") +
+                    ("capacity-overlay" if overlaid else ""))
+        return {"strategy": "single-explicit-or-repository-default" if len(layers) == 1 else strategy,
+                "layers": layers, **result}
 
     def freeze_config(unit: UnitContext) -> Mapping[str, Any]:
         path = unit.job.run_root / "data" / "configuration" / "appsec-review.toml"
         return {"path": path.relative_to(unit.job.run_root).as_posix(),
                 "sha256": __import__("appsec_review.storage", fromlist=["file_sha256"]).file_sha256(path),
-                "layers": unit.output("resolve_configuration.resolve_layers")["layers"]}
+                "layers": unit.output("resolve_configuration.resolve_layers")["layers"],
+                "profile": unit.output("resolve_configuration.resolve_layers")["profile"]}
 
     def resolve_target(unit: UnitContext) -> Mapping[str, Any]:
         target = _target(unit)
