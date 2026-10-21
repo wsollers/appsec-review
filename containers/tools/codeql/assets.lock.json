@@ -69,10 +69,10 @@
       "query_suite": "graph-export.qls",
       "query_suite_sha256": "c0120cc191ba3f7378f8e759c08b21e85c7cf32cf40426b1e15256775f8040e6",
       "query_pack_sha256": "5a1b7d2794951859393831f0bdaad3ab369718340806862ae3e036fe4e348bde",
-      "tree_sha256": "2379fcf1f429ad21b269a4d7e0b039493e193e79c6315f5b9f3c317da3395271",
+      "tree_sha256": "730b59ec4ad5bf02315545ce61cd4156f9899aad9078241d25e92795b3c3403b",
       "file_count": 12,
       "columns_path": "rules/codeql-graph-export/columns.json",
-      "columns_sha256": "91c13be2a39348fbb8b710d85b87cbd2fdbd23f425ae337ab2e02fb201ce7097",
+      "columns_sha256": "0d7508e2710c4abf4ac2e52f98a1d918d5c3f5d8190600b136c0af396078ab2b",
       "catalog_path": "rules/codeql-graph-export/catalog.json",
       "catalog_sha256": "1a290cf270f5469f02aaf6c10432457101c128ec17a0b340272ccc6b1ef7a0a5"
     }

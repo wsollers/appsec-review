@@ -1,4 +1,4 @@
-"""CodeQL graph-export normalizer, rule ``graph-normalize/1`` (code-graph chunk C3).
+"""CodeQL graph-export normalizer, rule ``graph-normalize/2`` (code-graph chunk C3).
 
 docs/architecture/code-graph-precomputation.md sections 3, 4 and 10 (C3) are normative. Pure
 functions: one CodeQL scope's verified raw exports (``appsec-review/codeql-graph-export/1`` objects,
@@ -34,6 +34,11 @@ published ``ambiguous`` with a named reason (``line_only_location``, ``macro_exp
 the gap is ``ambiguous_step_location``). Rows whose own location does not resolve to an accepted file
 are not published and are counted as the family gap ``unmapped_location``.
 
+Guard operands: a comparison guard publishes ``comparison.operands`` (role, closed syntactic kind, integer value,
+text, location) and ``destination.object_bytes``. The operand text is sliced here from the accepted source bytes at
+the exported operand location (bounded to 200 characters), never taken from the export; both are facts, and no
+guard-to-sink relation is classified.
+
 Symbols: one ``symbol`` entity per exported function (producer ``codeql-export``) located at the
 defining-name span (``Function.getLocation()`` start plus the unqualified name), the span clangd's
 ``SAME_AS`` link compares. Payload ``result`` fields that name functions carry these identities.
@@ -51,6 +56,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass, field, replace
@@ -67,6 +73,8 @@ from appsec_review.graph.contract import (
     AUTHORITY,
     CROSS_CHECK_RULE,
     GRAPH_FACT_SCHEMA,
+    GUARD_OPERAND_ROLES,
+    GUARD_OPERAND_TEXT_LIMIT,
     NORMALIZE_RULE,
     Coverage,
     CrossCheckState,
@@ -74,6 +82,7 @@ from appsec_review.graph.contract import (
     Family,
     GraphFact,
     GraphSettings,
+    GuardOperandKind,
     GuardPolarity,
     GuardState,
     Producer,
@@ -131,6 +140,7 @@ _GUARD_RANK = {state.value: rank for rank, state in enumerate(GuardState)}
 _GUARD_CONSERVATIVE = {GuardState.NONE.value: 0, GuardState.NON_DOMINATING.value: 1,
                        GuardState.POST_DOMINATING_ONLY.value: 2, GuardState.DOMINATING.value: 3}
 
+_INTEGER = re.compile(r"-?[0-9]+")
 Key5 = tuple[str, int, int, int, int]
 Key6 = tuple[str, int, int, int, int, int]
 
@@ -615,6 +625,52 @@ class _Normalizer:
                                 f"{self.producer['tool_version']}; frameworks without models yield no entry points",
                         partial=False)
 
+    @staticmethod
+    def guard_vocabulary_error(row: Mapping[str, Any]) -> str | None:
+        """The first closed-vocabulary or integer violation of a guard row's operand and object-size columns."""
+        for role in GUARD_OPERAND_ROLES:
+            if row[f"{role}_kind"] not in {kind.value for kind in GuardOperandKind}:
+                return f"{role}_kind {row[f'{role}_kind']!r}"
+            if not _INTEGER.fullmatch(str(row[f"{role}_value"])) and row[f"{role}_value"] != "":
+                return f"{role}_value {row[f'{role}_value']!r}"
+        if not isinstance(row["destination_object_bytes"], int) or row["destination_object_bytes"] < -1:
+            return f"destination_object_bytes {row['destination_object_bytes']!r}"
+        return None
+
+    def guard_operands(self, row: Mapping[str, Any]) -> tuple[list[dict[str, Any]], list[str]]:
+        """The ``lhs`` and ``rhs`` operands of a comparison row and the gaps of their text.
+
+        The text is sliced from the accepted source bytes at the operand location, so it is exact and
+        bound to the accepted file hash; it is never taken from the export. It is ``None`` (with a named
+        gap) when the location does not resolve exactly, or when a macro operand is reported at the whole
+        expansion site, where the bytes are the macro call and not the operand.
+        """
+        operands: list[dict[str, Any]] = []
+        gaps: list[str] = []
+        condition = self.key5(row, "condition")
+        for role in GUARD_OPERAND_ROLES:
+            key = self.key5(row, role)
+            mapped = self.locator.span(key) if key[0] else _Mapped(None, "unmapped_location")
+            text: str | None = None
+            if mapped.location is None:
+                gaps.append(f"operand_text_unavailable: {role} operand location does not resolve to an accepted "
+                            "source")
+            elif not mapped.exact:
+                gaps.append(f"operand_text_unavailable: {role} operand location is not exact ({mapped.reason})")
+            elif row["in_macro"] == "true" and key == condition:
+                gaps.append(f"operand_text_unavailable: {role} operand is reported at the macro expansion site")
+            else:
+                data = self.locator.sources[mapped.location.path].data
+                text = data[mapped.location.start_byte:mapped.location.end_byte].decode("utf-8", errors="replace")
+                if len(text) > GUARD_OPERAND_TEXT_LIMIT:
+                    text = text[:GUARD_OPERAND_TEXT_LIMIT]
+                    gaps.append(f"operand_text_truncated: {role} operand text is cut at "
+                                f"{GUARD_OPERAND_TEXT_LIMIT} characters")
+            value = row[f"{role}_value"]
+            operands.append({"role": role, "kind": row[f"{role}_kind"], "value": int(value) if value != "" else None,
+                             "text": text, "location": _location_dict(mapped)})
+        return operands, gaps
+
     def build_guards(self) -> None:
         family = Family.GUARD_FACT
         per_sink: dict[str, list[GraphFact]] = defaultdict(list)
@@ -629,6 +685,11 @@ class _Normalizer:
             state = str(row["guard_state"])
             if state not in _GUARD_RANK:
                 self.family_gap(family, f"unknown_guard_state: {state!r} at {key[0]}:{key[1]} was not published")
+                continue
+            vocabulary = self.guard_vocabulary_error(row)
+            if vocabulary:
+                self.family_gap(family, f"unknown_guard_vocabulary: {vocabulary} at {key[0]}:{key[1]} was not "
+                                        "published")
                 continue
             polarity = str(row["polarity"]) if row["polarity"] in {item.value for item in GuardPolarity} \
                 else GuardPolarity.UNKNOWN.value
@@ -663,12 +724,19 @@ class _Normalizer:
             if constrains == "unknown":
                 gaps.append("constrains_sink_operand_unknown: CodeQL local flow cannot connect the condition to the "
                             "sink operand")
+            comparison = None
+            if row["comparison_operator"]:
+                operands, operand_gaps = self.guard_operands(row)
+                gaps.extend(operand_gaps)
+                comparison = {"operator": row["comparison_operator"], "bound_display": row["bound_display"],
+                              "operands": operands}
+            object_bytes = int(row["destination_object_bytes"])
             result = {
                 "sink": {"sink_site": sink.identity.value, "sink_class": sink.payload["result"]["sink_class"]},
                 "guard_state": state, "polarity": polarity, "condition": condition,
                 "constrains_sink_operand": constrains,
-                "comparison": ({"operator": row["comparison_operator"], "bound_display": row["bound_display"]}
-                               if row["comparison_operator"] else None),
+                "comparison": comparison,
+                "destination": {"object_bytes": object_bytes if object_bytes > 0 else None},
             }
             name = f"{state}: {row['condition_display'] or 'no controlling guard'} -> {sink.name}"
             fact = self.fact(family, native, name, result, mapped, exact=exact, gaps=gaps)

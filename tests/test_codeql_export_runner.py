@@ -536,6 +536,22 @@ def test_catalog_api_and_model_rules_equal_what_the_queries_can_emit() -> None:
         rule["match"]["model"] for rule in _rules("sinks") if "model" in rule["match"]}
 
 
+def test_guard_columns_are_facts_and_the_destination_apis_are_catalog_memory_writes() -> None:
+    guards = next(query for query in QUERIES if query["query_id"] == "guards")
+    names = [column["name"] for column in guards["columns"]]
+    assert names[18:] == [f"{role}_{part}" for role in ("lhs", "rhs") for part in (
+        "path", "start_line", "start_column", "end_line", "end_column", "kind", "value")] + [
+        "destination_object_bytes"]
+    assert not [name for name in names if "relation" in name or "capacity" in name or "adequa" in name]
+    library = (PACK_ROOT / "cpp" / "GraphExport.qll").read_text(encoding="utf-8")
+    body = library.split("predicate destinationApi(string name) {", 1)[1].split("}", 1)[0]
+    destination_apis = set(re.findall(r'"(\w+)"', body))
+    memory_write = {rule["match"]["api"] for rule in _rules("sinks")
+                    if "api" in rule["match"] and rule["sink_class"] == "memory_write"}
+    assert destination_apis == {"memcpy", "memmove", "memset", "strcpy", "strcat", "strncpy", "strncat"}
+    assert destination_apis <= memory_write
+
+
 def _classify(kind: str, row: dict) -> str:
     """Test-local reading of README tier order (C3 owns the production classifier)."""
     rules = _rules(kind)
