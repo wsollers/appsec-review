@@ -94,6 +94,11 @@ def wave1_dependencies(registered: Set[str]) -> dict[str, tuple[str, ...]] | Non
             + (("job_evidence_collection",) if "job_evidence_collection" in registered else ()))
     if "job_clang_static_analysis" in registered and "job_cpp_compiled_analysis" in registered:
         wave_dependencies["job_clang_static_analysis"] = ("job_cpp_compiled_analysis",)
+    if "job_sanitizer_build" in registered and "job_language_build" in registered:
+        # A sibling of the C/C++ analysis: it rebuilds the accepted native units with sanitizers in
+        # its own workspace. No job consumes its output, so it is a leaf that the dataset inventory
+        # job (derived from the leaves below) closes, and the graph keeps exactly one terminal job.
+        wave_dependencies["job_sanitizer_build"] = ("job_language_build",)
     # The indexers and the SVF points-to producer consume only the accepted C++ handoff and never
     # wait for each other.
     for job_id in ("job_cpp_symbol_index", "job_cpg_analysis", "job_svf_alias_analysis"):

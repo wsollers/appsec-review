@@ -1374,6 +1374,45 @@ workers = 2
 workers = 1
 [jobs.job_svf_alias_analysis.steps.acceptance.tasks.publish_handoff]
 
+# AddressSanitizer/UndefinedBehaviorSanitizer rebuild of the accepted native build units
+# (docs/operations/sanitizer-build.md). It runs build tools only; no produced binary is ever
+# loaded or executed, and no other job consumes the instrumented tree. CFLAGS, CXXFLAGS and LDFLAGS
+# carry "-fsanitize=<sanitizers>" followed by extra_flags. required_evidence names the sanitizers
+# whose runtime must be referenced by every linked output (read from its ELF), or the unit is a gap.
+# build_environment is added to every replayed command: ASAN_OPTIONS=detect_leaks=0 stops
+# LeakSanitizer, which needs ptrace, from failing helper programs the build itself runs inside the
+# capability-dropped container.
+[jobs.job_sanitizer_build]
+name = "sanitizer_build"
+workers = 2
+
+[jobs.job_sanitizer_build.settings]
+enabled = true
+workers = 2
+sanitizers = ["address", "undefined"]
+extra_flags = ["-fno-omit-frame-pointer", "-g", "-O1"]
+required_evidence = ["address"]
+build_systems = ["cmake", "autotools", "meson", "make"]
+command_timeout_seconds = 1800
+output_bytes = 8388608
+artifact_count_limit = 10000
+max_units = 32
+
+[jobs.job_sanitizer_build.settings.build_environment]
+ASAN_OPTIONS = "detect_leaks=0"
+
+[jobs.job_sanitizer_build.steps.load]
+workers = 1
+[jobs.job_sanitizer_build.steps.load.tasks.accepted_native]
+
+[jobs.job_sanitizer_build.steps.build]
+workers = 2
+[jobs.job_sanitizer_build.steps.build.tasks.units]
+
+[jobs.job_sanitizer_build.steps.acceptance]
+workers = 1
+[jobs.job_sanitizer_build.steps.acceptance.tasks.publish_handoff]
+
 [jobs.job_codeql_analysis]
 name = "codeql_analysis"
 workers = 2
