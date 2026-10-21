@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>From code to a defensible finding | AppSec Review</title>
+<style>
+:root{color-scheme:light;--ink:#182c38;--muted:#5a6f7b;--line:#dce5e8;--teal:#087f78;--violet:#6d55b0;--amber:#9b6417}
+*{box-sizing:border-box}body{margin:0;background:#f3f6f5;color:var(--ink);font-family:Inter,"Segoe UI",Arial,sans-serif}
+button,a{touch-action:manipulation}button{font:inherit;cursor:pointer}
+header{background:#102e39;color:#fff;padding:38px max(28px,calc((100vw - 1530px)/2));position:relative;overflow:hidden}
+header:after{content:"";position:absolute;width:510px;height:510px;border:1px solid #42636a;border-radius:50%;right:-90px;top:-265px;pointer-events:none}
+.eyebrow{font-size:12px;letter-spacing:2.4px;font-weight:700;color:#89d9c9;text-transform:uppercase}
+h1{font-size:clamp(28px,3vw,44px);font-weight:650;letter-spacing:-1.5px;margin:13px 0}
+.subtitle{max-width:850px;font-size:16px;line-height:1.65;color:#ccdadf;margin:0}
+.meta{display:flex;flex-wrap:wrap;gap:10px;margin-top:24px}.meta span{border:1px solid #44616c;padding:7px 12px;border-radius:30px;font-size:12px;color:#e0eded}
+main{max-width:1590px;margin:auto;padding:24px 28px 38px}
+.toolbar{display:flex;align-items:center;justify-content:space-between;gap:15px;flex-wrap:wrap;margin-bottom:20px}
+.legend{display:flex;flex-wrap:wrap;gap:18px;font-size:13px;color:var(--muted);align-items:center}
+.dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:7px}.built{background:var(--teal)}.planned{background:var(--violet)}.proposed{background:var(--amber)}
+.controls{display:flex;gap:7px;flex-wrap:wrap}.controls button,.small-button{border:1px solid #cbd8dc;background:white;padding:8px 12px;border-radius:8px;color:var(--ink);font-size:12px}.controls button:hover,.small-button:hover{background:#e7f3f0}.controls button:focus-visible,.small-button:focus-visible{outline:3px solid #087f78;outline-offset:3px}
+.layout{display:grid;grid-template-columns:minmax(0,1fr) 302px;gap:22px;align-items:start}
+.paper{border:1px solid var(--line);background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 9px 32px #142f3810}
+.paper-title{display:flex;justify-content:space-between;gap:12px;padding:20px 24px;border-bottom:1px solid #e7edef;font-size:13px}
+.paper-title strong{font-size:15px}.paper-title span{color:var(--muted)}
+.viewport{overflow:auto}.viewport svg{display:block;width:100%;height:auto;min-width:690px}
+.note{padding:14px 24px;font-size:12px;line-height:1.65;color:var(--muted);background:#f8fbfa;border-top:1px solid #e7edef}
+aside{position:sticky;top:20px}.detail{background:white;border:1px solid var(--line);border-radius:16px;padding:24px;box-shadow:0 8px 24px #142f3808}
+.tag{display:inline-block;font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;padding:6px 9px;border-radius:5px;background:#e3f4ef;color:var(--teal)}
+.tag.planned-tag{background:#f0eafb;color:var(--violet)}.tag.proposed-tag{background:#fff2db;color:var(--amber)}
+h2{font-size:21px;letter-spacing:-.5px;line-height:1.25;margin:18px 0 12px}#description{font-size:14px;line-height:1.75;color:var(--muted)}
+.detail h3{margin:22px 0 8px;text-transform:uppercase;font-size:10px;letter-spacing:1.6px;color:#7d8b92}.detail p{margin:0}
+.detail ul{padding-left:17px;font-size:13px;line-height:1.7;margin:0;color:var(--ink)}.detail li+li{margin-top:8px}
+#source{font-family:Consolas,monospace;font-size:11px;line-height:1.6;overflow-wrap:anywhere;color:var(--muted)}
+.principle{margin-top:16px;padding:19px 22px;background:#e7f2ef;border:1px solid #cde3db;border-radius:14px;font-size:13px;line-height:1.7}.principle strong{display:block;color:#126559;margin-bottom:5px}
+.section-head{display:flex;gap:14px;align-items:baseline;margin:30px 0 15px}.section-head h2{margin:0;font-size:21px}.section-head span{font-size:12px;color:var(--muted)}
+.recommendation{padding:24px;border:1px solid #e9d3ad;background:#fffaf1;border-radius:14px;margin-top:22px}
+.recommendation h2{font-size:20px;margin:12px 0}.recommendation p{font-size:14px;line-height:1.75;max-width:960px;margin:0;color:#6b5e49}
+.checks{display:flex;flex-wrap:wrap;gap:8px;margin-top:17px}.checks span{background:white;border:1px solid #e8d9bf;border-radius:7px;padding:8px 11px;font-size:12px}
+footer{font-size:12px;line-height:1.7;color:var(--muted);padding:24px 2px 0}.hide-roadmap #roadmap-section{display:none}
+@media(max-width:1050px){.layout{grid-template-columns:1fr}aside{position:static;display:grid;grid-template-columns:1fr 1fr;gap:16px}.principle{margin-top:0}.detail{padding:20px}header{padding:28px}main{padding:18px}}
+@media(max-width:650px){aside{grid-template-columns:1fr}.paper-title{flex-direction:column}.section-head{display:block}.section-head span{display:block;margin-top:8px}.meta{gap:7px}}
+@media print{header{background:white;color:#182c38;padding:12px}.eyebrow,.subtitle{color:#405663}.meta,.toolbar,aside,.paper-title span{display:none}main{padding:0}.layout{display:block}.paper{box-shadow:none;break-inside:avoid}.viewport{overflow:visible}.viewport svg{min-width:0;width:100%!important}.recommendation{break-inside:avoid}footer{font-size:10px}}
+</style>
+</head>
+<body>
+<header>
+  <div class="eyebrow">AppSec Review / System map</div>
+  <h1>From code to a defensible finding.</h1>
+  <p class="subtitle">How analysis, adversarial review, independent verification and deterministic policy turn a target repository into an evidence-backed decision.</p>
+  <div class="meta"><span>Architecture snapshot &middot; d4905712</span><span>Updated &middot; 21 October 2026</span><span>Interactive &middot; offline &middot; exportable</span></div>
+</header>
+<main>
+  <div class="toolbar">
+    <div class="legend"><span><i class="dot built"></i>Implemented path*</span><span><i class="dot planned"></i>Planned extension</span><span><i class="dot proposed"></i>Discussion proposal</span></div>
+    <div class="controls">
+      <button id="fit" type="button">Fit width</button><button id="zoom" type="button">Actual size</button>
+      <button id="toggle" type="button" aria-pressed="true">Hide roadmap</button>
+      <button id="export" type="button">Download SVG</button><button id="print" type="button">Print / PDF</button>
+    </div>
+  </div>
+  <div class="layout">
+    <div>
+      <div class="paper">
+        <div class="paper-title"><strong>01 &mdash; The review, end to end</strong><span>Select a process to inspect its contract</span></div>
+        <div class="viewport"><svg id="flow" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 2130" role="img" aria-labelledby="flow-title flow-desc">
+          <title id="flow-title">Application security review process</title>
+          <desc id="flow-desc">Intake, planning and parallel analysis feed an immutable evidence index. Triaged leads and proactive hunts generate claims. Blue reviewers and a blind verifier investigate independently; a separate judge compares shuffled red and blue positions without setting claim states. Family-specific evidence policy decides claims, followed by scoring, a publication gate and final reporting. Optional proof-of-concept functions are compiled but never executed. HTML and PDF rendering is a separate manual tool.</desc>
+        </svg></div>
+        <div class="note">*Implemented means the code path exists, not that every analyzer or language has complete coverage. Live review runs informed protocol v2; full end-to-end live acceptance is not claimed here. PoC generation is shipped disabled, and HTML/PDF rendering is manual. Arrows summarize information dependencies, not exact Dagster scheduling.</div>
+      </div>
+      <section id="roadmap-section">
+        <div class="section-head"><h2>02 &mdash; Remaining planned extensions</h2><span>Not part of the current executable review path</span></div>
+        <div class="paper">
+          <div class="viewport"><svg id="roadmap" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 535" role="img" aria-labelledby="road-title road-desc">
+            <title id="road-title">Planned attack-chain analysis, feedback and remediation</title>
+            <desc id="road-desc">Adjudicated claims can feed planned attack-chain composition and independent refutation. New evidence feeds bounded variant hunts and re-adjudication. Planned remediation consumes only confirmed findings; missing remediation does not block the current report and is recorded as a limitation.</desc>
+          </svg></div>
+          <div class="note">The implemented PoC contract is compile-only: no pipeline executor, no observed trigger, no runtime result. Planned evidence feedback still requires re-resolution and deterministic adjudication. Missing remediation and chain stages are named report limitations, not clean results.</div>
+        </div>
+      </section>
+      <section class="recommendation">
+        <span class="tag proposed-tag">Discussion proposal &middot; not implemented</span>
+        <h2>A separate gate for critical-impact claims</h2>
+        <p>Keep vulnerability confirmation separate from validation of the claimed critical impact. Before asserting that impact, require one coherent attack scenario, a source-linked entry-to-impact path, and an independent attempt to falsify it. If proof is incomplete, retain a visible verification backlog item rather than treating uncertainty as safety.</p>
+        <div class="checks"><span>Real entry point</span><span>Same build + configuration</span><span>Impact actually supported</span><span>Strongest defense challenged</span><span>Explicit remaining gaps</span></div>
+      </section>
+    </div>
+    <aside>
+      <div class="detail" aria-live="polite">
+        <span class="tag" id="status">Implemented path</span>
+        <h2 id="detail-title">Read the decision, then follow the proof.</h2>
+        <p id="description">Select any process in the diagram. This panel explains what it consumes, what it produces, and the boundary that keeps its conclusions defensible.</p>
+        <h3 id="contract-label">How to read this map</h3>
+        <ul id="contract"><li>Solid teal flow: the implemented review path.</li><li>Dashed violet flow: planned processes, not live capabilities.</li><li>Amber panel: an additional gate proposed in this conversation.</li></ul>
+        <h3>Source of truth</h3>
+        <p id="source">README.md<br>docs/architecture/inference-security-review.md<br>src/appsec_review/jobs/job_inference_security_review/job.py</p>
+      </div>
+      <div class="principle"><strong>The central invariant</strong>Confirmation requires the claim family's obligations, complete counted direct evidence and independent verification. A judge's verdict is advisory and routes PoC candidates; its evidence relations do not count toward adjudication.</div>
+      <div class="principle" style="background:#eef0f8;border-color:#dce0ee"><strong style="color:#555b8c">Compile-verified &ne; runtime-proven</strong>A call edge shows a relationship. A mapped dataflow path supports reachability. The generated PoC is a test function plus a negative control, compiled but never run. Its status cannot promote a claim or change severity.</div>
+    </aside>
+  </div>
+  <footer>Source-grounded conceptual map of <strong>wsollers/appsec-review</strong> at <strong>d4905712</strong>. Updated from the current job implementations, predicate policy, review protocol v2, and PoC/final-report operations guides. Grouped analysis families are illustrative, not an exhaustive job inventory. No external scripts, fonts, services or runtime dependencies.</footer>
+</main>
+<script>
+"use strict";
+const NS="http://www.w3.org/2000/svg";
+const colors={built:{line:"#14897e",fill:"#e5f5ef",text:"#12675f"},planned:{line:"#8b77bd",fill:"#f1ebfa",text:"#7056a1"}};
+const details={};
+const svgStyle=`
+text{font-family:Inter,"Segoe UI",Arial,sans-serif;fill:#182c38}
+.phase{font-size:14px;font-weight:700;letter-spacing:2px;fill:#667c86}
+.node-title{font-size:23px;font-weight:650;letter-spacing:-.35px}
+.node-copy{font-size:18px;fill:#5b707c}
+.badge-text{font-size:12px;font-weight:700;letter-spacing:1px}
+.edge-label{font-size:15px;fill:#668078}
+.node{cursor:pointer;outline:none}
+.node:hover .card,.node:focus .card{stroke:#087f78;stroke-width:3}
+.node[aria-pressed="true"] .card{stroke:#087f78;stroke-width:3}
+.node:focus .node-title{text-decoration:underline}
+`;
+function el(name,attrs={},text){const e=document.createElementNS(NS,name);for(const[k,v]of Object.entries(attrs))e.setAttribute(k,v);if(text!==undefined)e.textContent=text;return e}
+function text(svg,x,y,value,cls){svg.append(el("text",{x,y,class:cls},value))}
+function init(id){
+  const svg=document.getElementById(id);
+  svg.append(el("style",{},svgStyle));
+  const defs=el("defs");
+  for(const [key,c]of Object.entries(colors)){
+    const m=el("marker",{id:id+"-"+key,viewBox:"0 0 10 10",refX:9,refY:5,markerWidth:7,markerHeight:7,orient:"auto-start-reverse"});
+    m.append(el("path",{d:"M 0 0 L 10 5 L 0 10 z",fill:c.line}));defs.append(m);
+  }
+  svg.append(defs);svg.append(el("rect",{x:0,y:0,width:1440,height:svg.viewBox.baseVal.height,fill:"#ffffff"}));return svg;
+}
+function phase(svg,y,n,label){svg.append(el("line",{x1:40,y1:y+14,x2:1400,y2:y+14,stroke:"#e6eeee"}));svg.append(el("rect",{x:40,y:y-4,width:Math.min(870,label.length*10+85),height:32,fill:"white"}));text(svg,48,y+17,n+"   "+label,"phase")}
+function edge(svg,d,label,x,y,status="built"){svg.append(el("path",{d,fill:"none",stroke:colors[status].line,"stroke-width":2.2,"stroke-dasharray":status==="planned"?"7 6":"none","marker-end":"url(#"+svg.id+"-"+status+")"}));if(label)text(svg,x,y,label,"edge-label")}
+function node(svg,id,x,y,w,h,title,lines,badge,description,contract,source,status="built"){
+  const c=colors[status],g=el("g",{class:"node",tabindex:0,role:"button","aria-label":title+"; "+(status==="built"?"implemented":"planned")+"; show details","aria-pressed":"false","data-id":id});
+  g.append(el("rect",{class:"card",x,y,width:w,height:h,rx:13,fill:"#ffffff",stroke:status==="planned"?"#d8cce8":"#d3e1e2","stroke-width":1.5,"stroke-dasharray":status==="planned"?"6 4":"none"}));
+  g.append(el("rect",{x:x+1,y:y+15,width:4,height:h-30,rx:2,fill:c.line}));
+  g.append(el("rect",{x:x+20,y:y+15,width:Math.max(72,badge.length*7.6+20),height:23,rx:5,fill:c.fill}));
+  const b=el("text",{x:x+30,y:y+31,class:"badge-text"},badge);b.style.fill=c.text;g.append(b);
+  g.append(el("text",{x:x+20,y:y+65,class:"node-title"},title));
+  lines.forEach((line,i)=>g.append(el("text",{x:x+20,y:y+92+i*25,class:"node-copy"},line)));
+  g.addEventListener("click",()=>select(id));g.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();select(id)}});
+  svg.append(g);details[id]={title,description,contract,source,status};
+}
+function select(id){
+  const d=details[id];document.getElementById("detail-title").textContent=d.title;document.getElementById("description").textContent=d.description;
+  const status=document.getElementById("status");status.textContent=d.status==="built"?"Implemented path":"Planned extension";status.className="tag"+(d.status==="planned"?" planned-tag":"");
+  document.getElementById("contract-label").textContent="Process contract";
+  const ul=document.getElementById("contract");ul.replaceChildren();for(const item of d.contract){const li=document.createElement("li");li.textContent=item;ul.append(li)}
+  document.getElementById("source").textContent=d.source;
+  document.querySelectorAll(".node").forEach(n=>n.setAttribute("aria-pressed",String(n.dataset.id===id)));
+  if(matchMedia("(max-width:1050px)").matches)document.querySelector("aside").scrollIntoView({behavior:"smooth",block:"start"});
+}
+const f=init("flow"),r=init("roadmap");
+const arch="docs/architecture/inference-security-review.md",job="src/appsec_review/jobs/job_inference_security_review/job.py";
+phase(f,30,"01","PREPARE THE TARGET & EVIDENCE");
+edge(f,"M 440 151 H 530");edge(f,"M 890 151 H 980");
+edge(f,"M 1180 217 V 275 H 1050");
+edge(f,"M 720 360 V 405 H 370 V 440");edge(f,"M 720 405 H 1070 V 440");
+node(f,"intake",60,90,380,127,"Pin the review target",["Source snapshot, scope, configuration"],"INTAKE","Establish the target and the reproducible context for the run.",["Input: a local target checkout and central configuration.","Output: run identity, immutable resolved configuration and target scope.","Target-owned instructions remain data, not review-worker authority."],"README.md; AGENTS.md");
+node(f,"plan",530,90,360,127,"Catalog & plan",["Components, languages, build units"],"PLANNING","Discover what the target contains and determine which analysis capabilities apply.",["Input: target snapshot and configured capabilities.","Output: component inventory, build discovery and analysis plan.","Unsupported or failed capabilities become named gaps, never clean results."],"README.md; docs/architecture/build-environments-and-execution-capture.md");
+node(f,"analysis",980,90,400,127,"Analyze in parallel",["Builds, SAST, CodeQL, SBOM, CI/IaC"],"ANALYSIS FAMILIES","Run applicable deterministic and specialist producers with their dependencies, including build, source, graph, binary, dependency and configuration analysis.",["Input: planned scopes and accepted build/source identities.","Output: run-owned observations, artifacts, source mappings and coverage.","Parallelism is dependency-bound; not every producer can run at the same time."],"README.md; "+arch);
+node(f,"evidence",390,240,660,120,"Freeze the accepted evidence manifest",["Labelled source + graph neighborhoods + build context + gaps"],"SHARED EVIDENCE","Compose accepted analysis shards into one immutable manifest. Protocol v2 packages embed bounded source, graph neighborhoods and build facts under short labels; application-mediated retrieval supplies the rest.",["Input: accepted producer outputs, or their gap/coverage records.","Output: labelled, hash-pinned package views and scoped in-process retrieval.","The application resolves citations; authentic source text is not automatically direct evidence for every predicate."],"docs/architecture/review-protocol-v2.md; src/appsec_review/review/admission.py");
+phase(f,386,"02","DISCOVER, CHALLENGE & VERIFY");
+edge(f,"M 370 565 V 586 H 600 V 610");edge(f,"M 1070 565 V 586 H 840 V 610");
+edge(f,"M 600 730 V 751 H 370 V 775");edge(f,"M 840 730 V 751 H 1070 V 775");
+edge(f,"M 370 895 V 922 H 580 V 947");edge(f,"M 1070 895 V 1166 H 960");
+edge(f,"M 720 730 V 947");
+node(f,"lead",120,440,500,125,"Lane A / Triage leads & package",["Assess unknown severity; retain provenance"],"LEAD INTAKE","Assess unknown scanner severity before assembling lead packages: deterministic rules, pinned reference data, then a bounded model fallback. This ordering step is distinct from lane B's claim-admission gate.",["Input: accepted lead families, including secrets and configuration findings; secret literals are redacted.","Known scanner severity is preserved; unresolved assessments remain unknown with named gaps. KEV-listed dependency leads can qualify regardless of severity.","Output: admitted, labelled lead packages. Nomination severity orders work; it is not adjudicated technical severity."],"docs/operations/lead-severity-triage.md; "+arch);
+node(f,"hunt",820,440,500,125,"Lane B / Proactive hunts",["Rank review units; investigate beyond leads"],"PARALLEL INTAKE","Investigate ranked review units using bounded hunt packages, rather than requiring an existing scanner hit.",["Input: ranked review units and accepted evidence context.","Output: candidate claims, with lane-B triage before full claim review.","Missing evidence is reported; it is not supplied by plausible narrative."],arch);
+node(f,"red",480,610,480,120,"Red discovery & claim normalization",["Claims + citations + bounded PoC basis"],"REVIEW TEAMS","Red workers propose compact, labelled claims and a PoC basis describing entry, path and trigger. The application expands and validates the answers before claim-level review.",["Input: one labelled lead or hunt package.","Output: normalized claims, preconditions, source-linked citations and PoC briefs.","Lane B applies its claim-admission gate; lane A applies its configured cap. No model assigns a final state."],"docs/architecture/review-protocol-v2.md; src/appsec_review/jobs/job_inference_security_review/teams.py");
+node(f,"blue",120,775,500,120,"Blue / Attempt falsification",["Same evidence package; no red narrative"],"PARALLEL CHALLENGE","Blue reviewers independently test the normalized claim against controls and reachability evidence, with the same package and retrieval surface as red but without red's reasoning.",["Input: normalized claim, labelled package and scoped evidence access.","Output: supporting, contradicting or qualifying relations with citations.","Disagreement is preserved. Missing output is a gap, not agreement or refutation."],"docs/architecture/review-protocol-v2.md; "+arch);
+node(f,"blind",820,775,500,120,"Blind / Independently verify",["Investigate the claim without red/blue narratives"],"PARALLEL VERIFICATION","A separate verifier investigates the claim independently. Confirmation requires independence; model-profile distinctness is an additional ship-block policy concern.",["Input: claim statement and scoped evidence, without the red/blue arguments.","Output: an independent verification record and resolving evidence.","Different model identity alone is not a substitute for direct evidence."],arch);
+node(f,"judge",480,947,480,128,"Judge / Compare shuffled A & B",["Red + blue positions; advisory verdict","Not the blind verifier; cannot set state"],"ADVISORY / CONFIGURED CLAIMS","After red and blue finish, a judge compares their positions as deterministically shuffled A/B sides. It does not see the verifier's result and cannot replace the independent verifier. The verifier's independent evidence bypasses this advisory step.",["Input: labelled package, claim and shuffled red/blue positions with resolving citations.","Output: a recorded verdict, reason and disagreements; a routing signal for PoC candidates.","The code explicitly excludes adjudication_judge relations from counted evidence. The deterministic table, not the judge, decides the claim."],"src/appsec_review/jobs/job_inference_security_review/teams.py; src/appsec_review/review/adjudication.py");
+edge(f,"M 720 1075 V 1110");
+node(f,"merge",480,1110,480,112,"Merge claims & evidence",["Canonical identities; preserve contradictions"],"DETERMINISTIC","Merge lane results deterministically and retain evidence lineage before applying the adjudication policy.",["Input: both lanes' normalized claims, reviews, evidence and advisory verdicts.","Output: canonical claims with counted support, analyst-assessed evidence, contradictions and gaps.","Duplicate opinions and judge endorsements cannot manufacture additional evidentiary weight."],job);
+phase(f,1245,"03","DECIDE, SCORE & HAND OFF");
+edge(f,"M 720 1222 V 1300");
+edge(f,"M 480 1366 H 411");
+edge(f,"M 960 1366 H 1029");
+edge(f,"M 1215 1440 V 1505 H 975");edge(f,"M 720 1440 V 1485");
+node(f,"outcomes",40,1300,370,140,"Retain every disposition",["Supported: verification backlog","Other states: retained in the ledger"],"NO SILENT DROPS","Supported findings remain explicitly not independently confirmed; all other dispositions stay accountable in the ledger.",["Supported: some required direct support, without a stronger earlier policy outcome.","Other states include contradicted, not reachable, configuration-disabled, duplicate, out of scope and insufficient evidence.","Analyst-assessed evidence is displayed separately. Supported findings do not enter remediation intake."],"src/appsec_review/review/adjudication.py; src/appsec_review/jobs/job_inference_security_review/stages.py");
+node(f,"adjudicate",480,1300,480,140,"Apply family-specific proof policy",["Required direct evidence + independence","Impact is derived, not a cited obligation"],"DETERMINISTIC ADJUDICATION","The first matching policy row decides state. obligation-rules/2 selects proof obligations by weakness family; predicate-admission/1 separates direct proof from analyst-assessed text.",["Memory/input: construct, input control, source-to-sink reachability and ineffective/missing guard. Secrets/cryptography: construct and guard. Configuration/supply chain: construct and configuration-enables.","Configuration preconditions or build-related entities add configuration-enables. security_impact is derived from claim facts and CWE, not required as a cited predicate.","Only complete counted direct or mapped-direct support can satisfy obligations. Source text alone cannot establish flow or guards; judge-derived relations never count."],"src/appsec_review/review/obligations.py; src/appsec_review/review/admission.py; src/appsec_review/review/adjudication.py");
+node(f,"score",1030,1300,370,140,"Score & apply ship policy",["Complete, bounded or unrated","Missing factors: decision pending"],"SEPARATE FROM CONFIRMATION","application_risk_matrix/3 preserves uncertainty with severity bounds rather than treating missing factors as low risk. Claim truth, severity and release policy remain separate.",["Input: adjudicated claims and evidence-backed score factors.","Output: separate score dimensions, severity floor/ceiling, missing factors and ship-block status.","An unrated severity can leave decision_pending: neither ship-blocking nor cleared. Distinct-verifier requirements still apply. CVSS v4/SSVC remain unimplemented."],"src/appsec_review/review/ship_block.py; docs/operations/final-report.md");
+node(f,"handoff",465,1485,510,145,"Audit completeness & publish handoff",["Ledger + packages + explicit gaps","Confirmed intake, backlog, PoC candidates"],"ACCEPTED REVIEW OUTPUT","Account for claims, worker outcomes and gaps, then publish the immutable ledger and accepted handoff. Candidate selection is not execution authorization or proof of exploitability.",["Output: finding and score packages, confirmed-only remediation intake and supported verification backlog.","PoC candidates require supported/confirmed state, an accepted judge verdict, a resolved entry/path basis and configured documentation severity.","Finding packages still have no runtime PoC result or attack-chain result. Judge disagreements and analyst-assessed evidence remain visible."],job+"; src/appsec_review/jobs/job_inference_security_review/stages.py");
+phase(f,1660,"04","PUBLISH THE DECISION / OPTIONAL DEVELOPER ARTIFACTS");
+edge(f,"M 720 1630 V 1698 H 260 V 1720");
+edge(f,"M 460 1790 H 980","default: no PoC generation",565,1777);
+edge(f,"M 260 1865 V 2000 H 520","manual / opt-in",292,1984);
+edge(f,"M 920 2000 H 950 V 1790");
+edge(f,"M 1180 1865 V 1940");
+node(f,"publication",60,1720,400,145,"Final publication gate",["Re-hash, validate and classify","Publishable / backlog / withheld"],"IMPLEMENTED / ENABLED","Re-verify the review's handoff, ledger, packages, scores and coverage from bytes. Every finding lands in exactly one output bucket. Integrity disagreement blocks publication.",["Input: accepted inference handoff and all hash-bound artifacts.","Output: publishable confirmed findings, supported verification backlog, withheld items and named limitations.","Remediation jobs and runtime PoC/chain manifests are absent and explicitly reported; they are not silently treated as success."],"docs/operations/final-report.md; src/appsec_review/jobs/job_final_publication_gate/job.py");
+node(f,"report",980,1720,400,145,"Publish final JSON + Markdown",["Accepted states, scores and limitations","Optional compile-only PoC status"],"IMPLEMENTED / ENABLED","The terminal job projects the accepted gate deterministically. It does not call a model, reinterpret a claim, or embed raw source, transcripts or PoC code.",["Input: accepted gate; an optional PoC handoff must be bound to this exact gate.","Output: hash-pinned final-report.json and final-report.md; bounded/unrated severity and pending decisions remain visible.","A stale PoC handoff is not shown. Missing proof or chain results remain explicit. This sanitized publication is distinct from the detailed manual renderer."],"docs/operations/final-report.md; src/appsec_review/jobs/job_final_report_publication/job.py");
+node(f,"poc",520,1940,400,145,"Generate & compile PoC functions",["Test + negative control; no main","NEVER EXECUTED by the pipeline"],"IMPLEMENTED / DEFAULT OFF","Optional job_poc_generation verifies candidate inputs, prepares a brief, generates two unit-test functions, applies fail-closed textual/AST policy and compiles against the accepted native build.",["Input: current gate, review PoC candidates, resolved entry/path/trigger and an accepted native build.","Checks: syntax, plain object, sanitizer object and symbol resolution. Output: source, compile record, developer write-up and provenance.","compile_verified proves compilation only; result_id stays null. No executable is linked or run. A compile status never changes claim state, score or ship-block policy."],"docs/operations/poc-generation.md; src/appsec_review/jobs/job_poc_generation/job.py");
+node(f,"renderer",980,1940,400,145,"Render detailed HTML / PDF",["Evidence + review-cell timelines","Standalone tool, not a pipeline job"],"IMPLEMENTED / MANUAL","A separate read-only renderer turns a finished run into a self-contained HTML report or a LaTeX/PDF artifact. It provides more review detail than the sanitized publication.",["Input: finished run, final JSON, packages, ledger and bounded inference recordings.","Output: evidence excerpts, model/retrieval timelines, outcomes and provenance with escaped, bounded content.","HTML needs Python; PDF uses the report container. Publication does not invoke this tool and retains PDF not_rendered."],"docs/operations/report-rendering.md; src/appsec_review/reporting/loader.py");
+text(f,60,2115,"Current PoC outputs document how a developer could reproduce a finding; they do not claim an observed trigger.","edge-label");
+phase(r,25,"A","ATTACK CHAINS & BOUNDED EVIDENCE FEEDBACK");
+edge(r,"M 680 172 H 760","","",0,"planned");
+node(r,"chains",60,95,620,155,"Compose & independently refute chains",["Adjudicated findings -> evidence-backed links","Preserve preconditions and disagreement"],"PLANNED","Build candidate attack chains and independently challenge the links. Existing red chain seeds are not confirmed chain packages.",["Input: adjudicated findings and evidence-backed preconditions.","Output: independently challenged chain packages and named gaps.","Multiple confirmed bugs do not automatically establish a usable attack chain."],arch,"planned");
+node(r,"rounds",760,95,620,155,"Run bounded follow-up rounds",["New evidence -> variant hunts -> review","Re-adjudicate before updating the handoff"],"PLANNED","Use genuinely new evidence and unresolved obligations to drive bounded follow-up; do not merely repeat opinions or promote compile-only PoCs into runtime proof.",["Input: evidence deltas, unresolved obligations and chain challenges.","Output: bounded review/hunt deltas or a finalized handoff.","Newly accepted upstream evidence requires a new manifest identity. Existing frozen evidence is not mutated."],arch,"planned");
+phase(r,302,"B","REMEDIATION / NOT A PREREQUISITE FOR TODAY'S REPORT");
+edge(r,"M 680 443 H 760","","",0,"planned");
+node(r,"remediate",60,360,620,135,"Plan remediation",["Accepted confirmed findings only","Propose fixes and safe regression specifications"],"PLANNED","Consume confirmed remediation intake without reinterpreting accepted states. Supported findings remain in the verification backlog.",["Input: confirmed packages, scores and evidence.","Output: remediation proposals and safe regression-test specifications.","The current gate records remediation_planning_not_run."],arch,"planned");
+node(r,"validate",760,360,620,135,"Validate remediation",["Fix evidence + regression checks","Publish remaining gaps, not assumed success"],"PLANNED","Validate proposed fixes against the original finding and approved safe regression artifacts.",["Input: remediation proposal and accepted finding evidence.","Output: remediation validation results and remaining gaps.","The current gate records remediation_validation_not_run."],arch,"planned");
+document.getElementById("fit").onclick=()=>document.querySelectorAll(".viewport svg").forEach(s=>s.style.width="100%");
+document.getElementById("zoom").onclick=()=>document.querySelectorAll(".viewport svg").forEach(s=>s.style.width="1440px");
+document.getElementById("toggle").onclick=function(){const hidden=document.body.classList.toggle("hide-roadmap");this.textContent=hidden?"Show roadmap":"Hide roadmap";this.setAttribute("aria-pressed",String(!hidden))};
+document.getElementById("print").onclick=()=>window.print();
+function exportSvg(){
+  const flowHeight=f.viewBox.baseVal.height,roadmapY=flowHeight+210,totalHeight=roadmapY+r.viewBox.baseVal.height+65;
+  const out=el("svg",{xmlns:NS,viewBox:"0 0 1440 "+totalHeight,width:1440,height:totalHeight,role:"img"});
+  out.append(el("title",{},"AppSec Review: implemented flow and planned extensions"));
+  out.append(el("rect",{width:1440,height:totalHeight,fill:"white"}));
+  out.append(el("style",{},svgStyle));
+  text(out,40,50,"APPSEC REVIEW / FROM CODE TO A DEFENSIBLE FINDING","phase");
+  text(out,40,87,"Teal: implemented* (some manual)  |  Dashed violet: planned  |  d4905712 / 21 Oct 2026","node-copy");
+  for(const[id,y]of [["flow",110],["roadmap",roadmapY]]){
+    const g=el("g",{transform:"translate(0 "+y+")"});
+    for(const child of document.getElementById(id).children)g.append(child.cloneNode(true));
+    g.querySelectorAll(".node").forEach(n=>{n.removeAttribute("tabindex");n.removeAttribute("role");n.removeAttribute("aria-pressed");n.removeAttribute("data-id")});
+    out.append(g);
+  }
+  text(out,40,flowHeight+160,"*Coverage varies. Live runs informed protocol v2; full live acceptance is not claimed. PoCs are never executed.","edge-label");
+  text(out,40,totalHeight-20,"Discussion proposal (not shown): separate critical-impact verification gate; see the accompanying HTML.","edge-label");
+  return new XMLSerializer().serializeToString(out);
+}
+document.getElementById("export").onclick=()=>{
+  const url=URL.createObjectURL(new Blob([exportSvg()],{type:"image/svg+xml"})),a=document.createElement("a");a.href=url;a.download="appsec-review-process.svg";a.click();setTimeout(()=>URL.revokeObjectURL(url),3000);
+};
+</script>
+</body>
+</html>
