@@ -68,6 +68,8 @@ Repository authority remains in [`../../AGENTS.md`](../../AGENTS.md). This page 
 - [`review-protocol-v2.md`](review-protocol-v2.md) — the model-facing layer of the review: labelled
   package v2 with embedded neighborhood facts, retrieval and `expand`, compact red, blue and verifier
   answers, and how stances become ledger states.
+- [`review-judge-and-poc.md`](review-judge-and-poc.md) — the judge role (A/B shuffled sides), PoC candidates, and
+  `job_poc_generation`: a never-executed, compile-checked unit-test function for developers.
 - [`indexing-and-query-reuse.md`](indexing-and-query-reuse.md) — review-data indexing and reusable
   query design.
 - [`code-graph-precomputation.md`](code-graph-precomputation.md) — the authoritative code-graph
