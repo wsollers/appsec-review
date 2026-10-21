@@ -5,6 +5,10 @@
   explicit LSP payload layers and add language-server fixtures; per-family compile fixtures exist
   under `tests/fixtures/build_toolchains/` and run in
   `tests/integration/test_family_project_builds.py`.
+- GCC build image: `audit-buildenv-cpp` now prefers clang (`CC=clang CXX=clang++`). A GCC counterpart
+  image (`CC=gcc CXX=g++`, with the sanitizer runtimes and `-fanalyzer`) and a retry on GCC when the clang
+  build fails are not built. The retry needs a second native build profile (`job_project_build` currently
+  requires exactly one profile per family) and a recorded fallback in the build result.
 - Native analysis: compiler tracing and C/C++ build/AST/IR/ELF evidence (`tool-native-cpp`), Infer
   (`tool-infer`), C/C++ symbol indexing (`tool-clangd-indexer`), and CPG production (`tool-joern`)
   are enabled narrow images, and CodeQL images are packaged outside the catalog
