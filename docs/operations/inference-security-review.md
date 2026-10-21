@@ -314,6 +314,13 @@ When the run has accepted `graph` shards (`job_code_graph_index`; today C/C++ on
   cell receives and may cite graph rows of its package's `graph_scopes` and nothing from another
   scope. `depth` is capped by `[jobs.job_code_graph_index.settings.graph].max_call_depth` as frozen
   into the run.
+- **Evidence admission.** A citation counts toward an obligation only when `predicate-admission/1`
+  makes its `(entity kind, predicate)` cell `direct`. Source text cited for anything but the
+  construct itself is `analyst_assessed`: recorded in the ledger, listed on the finding package as
+  `analyst_assessed_evidence` and in the report, never counted. A tool observation counts only for
+  the predicates `tool-rule-predicates/2` gives its producer, rule and result kind (a CodeQL point
+  result is `affected_construct` only). Both versions, and `obligation-rules/2` (required predicates
+  by claim family), are in the package reuse basis, so changing any of them reruns the affected cells.
 - **Evidence and scoring.** A cited graph fact counts as direct evidence only for its mapped
   predicate and only when the re-resolved fact is `direct_eligible`. A dominating guard or a bounded
   range only qualifies `missing_or_ineffective_guard` unless the exported facts show it bounds the

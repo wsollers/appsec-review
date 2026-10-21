@@ -379,6 +379,7 @@
         "judge_verdict",
         "verification_review_id",
         "direct_evidence",
+        "analyst_assessed_evidence",
         "missing_predicates",
         "gap_ids",
         "scores",
@@ -548,6 +549,14 @@
           ]
         },
         "direct_evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "common.schema.json#/$defs/relation_id"
+          },
+          "maxItems": 256,
+          "uniqueItems": true
+        },
+        "analyst_assessed_evidence": {
           "type": "array",
           "items": {
             "$ref": "common.schema.json#/$defs/relation_id"

@@ -868,6 +868,8 @@ Model prose, reported scanner severity and FIRST EPSS have no field in the facto
 never promotes a claim: only `confirmed` and `supported` claims are scored, and contradicting
 relations never set a factor.
 
+Factors read only *counted* relations. Under `predicate-admission/1` source text cited for attacker control, reachability or guards is analyst-assessed and never counted, so the weakest `code_evidence` basis of `taint_path`, `attacker_control` and `guard_absent` is reachable only through a counted relation of a kind the table leaves direct for that predicate (none today); in practice those factors come from a mapped tool observation or a direct-eligible graph fact, or are missing with a reason.
+
 | Factor | Closed scale (weakest first) | Derived from | Cites |
 |---|---|---|---|
 | `verification` | `supported`, `confirmed` | the R5 claim state | adjudication id |
@@ -1521,6 +1523,7 @@ The following documents are concise shape examples; hashes are shortened only fo
   "state": "confirmed",
   "title": "Unbounded copy on the accepted request path",
   "direct_evidence": ["evrel-51...", "evrel-c2..."],
+  "analyst_assessed_evidence": ["evrel-a7..."],
   "missing_predicates": [],
   "verification_review_id": "review-831c...",
   "independence": {"independent": true, "provider_distinct": false, "verifier_model_distinct": true},
@@ -1840,13 +1843,79 @@ the accepted manifest. It records the shard, content hash, locator, completeness
 retrieval receipt hash, then derives `evidence_relation_id`. A citation that cannot be resolved is
 recorded as an `evidence_gap`, not as a relation.
 
+Three questions are kept apart, because answering the first does not answer the others:
+
+- **Authenticity.** Does the citation resolve to accepted content? The validator enforces this above;
+  an unresolvable citation is an `evidence_gap`.
+- **Relevance.** Can this *kind* of content bear on *this* predicate? A package version is real
+  evidence of a component and says nothing about attacker control.
+- **Support.** Does the content establish the proposition without anyone interpreting it? A source
+  span proves the construct is at that location; whether a loop bounds the copy is a judgment.
+
+Relevance and support are the closed, versioned `predicate-admission/1` table
+(`review/admission.py`), pinned in the obligation policy hash. Each `(kind, predicate)` cell is one of:
+
+- `direct`: the application can establish the proposition from the entity's structured content.
+- `analyst_assessed`: authentic and relevant, but the proposition needs human-style judgment of the
+  cited text. It is recorded, shown on the finding package and in the report, and **never satisfies
+  an obligation**.
+- `indirect`: context that may guide search.
+
+`D` is `direct`, `A` is `analyst_assessed`, `I` is `indirect`. `AC` is `affected_construct`, `AIC`
+`attacker_input_control`, `S2S` `source_to_sink_reachability`, `GRD` `missing_or_ineffective_guard`,
+`CFG` `configuration_enables`, `IMP` `security_impact`.
+
+| Cited entity kind | AC | AIC | S2S | GRD | CFG | IMP | Why |
+|---|---|---|---|---|---|---|---|
+| `source_span` | D | A | A | A | A | A | the lines *are* the construct; the rest must be read |
+| `ast_node` | D | A | A | A | A | A | syntactic structure of the construct |
+| `symbol` | D | A | A | A | I | A | a declaration names the construct; configuration is not in a symbol |
+| `ir_entity` | D | A | A | A | I | I | lowered flow and checks are readable; configuration and impact are not |
+| `build_action`, `compile_unit` | D | I | I | I | D | I | their structured content is the flags, defines and commands that configure the build |
+| `executable`, `build_artifact` | D | I | I | I | A | I | exists; a hardening property must be read out of the binary |
+| `object_file`, `library` | D | I | I | I | I | I | exists |
+| `package`, `archive_member` | D | I | I | I | I | I | component presence at a version (SBOM, lockfile, inventory) |
+| `bytecode_module`, `managed_assembly`, `wasm_module` | D | I | I | I | I | I | no readable source in the entity; prefer indirect |
+| `evidence_artifact` | D | A | A | A | A | A | a run-owned tool artifact: its content is read, not computed |
+
+Principles: source content is direct only for the construct it is; component content is direct only
+for presence; configuration is direct only for build facts; and **no kind is direct for
+`security_impact`** (impact follows from the adjudicated facts of the claim, not from one cited
+entity; `obligation-rules/2` therefore does not require it, see R4). Where unsure a cell is the
+weaker one.
+
 | Admissibility | Cited entity kinds (`retrieval/model.py::EntityKind`) |
 |---|---|
-| direct, when the entity is the construct named by the predicate | `source_span`, `ast_node`, `ir_entity`, `symbol`; build kinds (`build_action` through `wasm_module`); `evidence_artifact` |
-| direct only for the predicate the producing rule's versioned mapping names | `tool_observation` (SAST, CodeQL path, post-build, CI) |
+| per cell of the table above | `source_span`, `ast_node`, `ir_entity`, `symbol`; build kinds (`build_action` through `wasm_module`); `evidence_artifact` |
+| direct only for the predicate the producing rule's versioned mapping names | `tool_observation` (SAST, CodeQL path, post-build, CI), mapped by producer, native rule identity and result kind (`tool-rule-predicates/2`, see below) |
 | direct only for the predicate the graph-fact family's versioned mapping (`graph-fact-predicates/1`) names, and only when the **re-resolved** fact's `admissibility.direct_eligible` is `true` (every cited location exact, fact coverage complete, no cross-check disagreement, classified source/sink) | `call_site` and `sink_site` (`affected_construct`); `entry_point` (`attacker_input_control` for attacker-reachable source classes); `dataflow_path` (`source_to_sink_reachability`, and `attacker_input_control` when its source class is attacker-reachable); `guard_fact` and `range_fact` (`missing_or_ineffective_guard`: support, qualify, or contradict only when the facts show the destination is bounded, see below) |
 | indirect: may guide search, never satisfies an obligation | `hotspot`, `priority_item`, `history_signal`, `change`, `change_context_signal`, `review_signal`, `tag_assignment`, `review_unit`, `flow_summary`, any graph kind whose `direct_eligible` is `false`, reported scanner severity, model prose |
 | indirect for **every** predicate: reference context (`review/evidence.py::REFERENCE_KINDS`) | `advisory`, `dependency_package` (a scanner-reported match), `precomputed_fact` (including `dependency_advisories` and `reference_intelligence` facts), and every OSV, NVD, CISA KEV, FIRST EPSS, and MITRE record they carry |
+
+Only complete `direct` and `direct_for_mapped_predicate` relations satisfy an obligation
+(`review/evidence.py::satisfies`). Under R5 a claim whose only relations are analyst-assessed stays
+`insufficient_evidence`; a claim with a direct `affected_construct` and analyst-assessed support for
+the rest is `supported`; `confirmed` needs every required predicate direct. Analyst-assessed
+relations still ride the ledger, and each finding package lists them
+(`analyst_assessed_evidence`) next to `direct_evidence`.
+
+**Tool observations by producer and rule.** `tool-rule-predicates/2` (`review/tool_rules.py`) maps a
+lead to the predicates its observation is direct for, keyed by lead family, producer (scanner
+identity), native rule or query identity and result kind (`path` when the lead carries data-flow
+steps, else `point`). The first matching row wins; a lead that matches no row, including every
+unknown family, producer or rule, gets none, and each family's catch-all row is its narrowest set.
+
+| Family | Producer | Rule | Result | Direct for |
+|---|---|---|---|---|
+| `codeql` | `codeql` | any | `path` | `affected_construct`, `source_to_sink_reachability` |
+| `codeql` | `codeql` | any | `point` | `affected_construct` |
+| `source_sast`, `artifact_scanner`, `dependency_advisory` | any | any | any | `affected_construct` |
+| `ci_rule`, `post_build_hardening` | any | any | any | `affected_construct`, `configuration_enables` |
+| `owasp_control` | any | any | any | `missing_or_ineffective_guard` |
+| any other | | | | none |
+
+A CodeQL alert that is not a path query therefore never makes `source_to_sink_reachability`
+admissible, and a lead whose scanner identity is not `codeql` gets nothing from the CodeQL rows.
 
 Reference records describe an advisory or weakness everywhere, never this target. A dependency
 claim still needs target evidence for `affected_construct`: the resolved package version from an
@@ -1872,13 +1941,27 @@ mapping, the eligibility rule and the tool that returns these kinds are specifie
 
 ### R4 Predicate vocabulary and obligations
 
-Slice 1 has a closed predicate enum (`obligation-rules/1`, in `review/obligations.py`):
+The predicate enum is closed (`obligation-rules/2`, in `review/obligations.py`):
 `affected_construct`, `attacker_input_control`, `source_to_sink_reachability`,
-`missing_or_ineffective_guard`, `configuration_enables`, and `security_impact`. Every claim
-requires the first four and `security_impact`. `configuration_enables` is also required when any
-precondition is configuration-scoped. Preconditions use a closed vocabulary (`preconditions/1`)
-owned by the same module. The rules are application policy, not prompt text. A change to them
-changes the adjudication policy hash.
+`missing_or_ineffective_guard`, `configuration_enables`, and `security_impact`. Which of them a claim
+**requires** depends on its family, derived from the claim's security predicate and CWE:
+
+| Family | Claims | Required |
+|---|---|---|
+| `memory_and_input` (default) | memory corruption, out-of-bounds, use-after-free, integer, injection, path traversal, SSRF, deserialization, authn/authz bypass, disclosure, race, exhaustion, other | `affected_construct`, `attacker_input_control`, `source_to_sink_reachability`, `missing_or_ineffective_guard` |
+| `secrets` | a CWE in `SECRET_CWES` (798, 259, 321, 256, 312, 522), whatever the security predicate | `affected_construct`, `missing_or_ineffective_guard` |
+| `cryptography` | `crypto_weakness` | `affected_construct`, `missing_or_ineffective_guard` |
+| `configuration` | `insecure_configuration` | `affected_construct`, `configuration_enables` |
+| `supply_chain` | `supply_chain_compromise` (vulnerable dependency, CI workflow) | `affected_construct`, `configuration_enables` |
+
+`configuration_enables` is also required when any precondition is configuration-scoped, or when an
+affected entity is a `build_action` or `compile_unit` (the claim is about the build itself). Anything
+the table does not name takes the default family, so injection-style claims keep the source-to-sink
+obligation. `security_impact` stays in the vocabulary but is **derived, not required**: no entity kind
+is direct for it (R3), so requiring a cited relation would make `confirmed` unreachable. Relations
+may still be recorded for it, and scoring derives the impact class from the claim's CWE. Preconditions
+use a closed vocabulary (`preconditions/1`) owned by the same module. The rules are application
+policy, not prompt text. A change to them changes the adjudication policy hash.
 
 ### R5 Adjudication decision table
 
@@ -2096,8 +2179,9 @@ These record how slice 1 meets the decisions above where the decisions leave a c
   the accepted shards (`name/shard@sha256`) that hold any entity in the package's capability scope.
   Changing one shard therefore reruns only the cells of packages that can read it.
 - **Evidence.** A tool observation is direct evidence only for the predicates of the versioned
-  `tool-rule-predicates/1` mapping (for example `affected_construct` for source SAST,
-  `affected_construct` and `source_to_sink_reachability` for CodeQL). Red relations may support or
+  `tool-rule-predicates/2` mapping (for example `affected_construct` for source SAST,
+  `affected_construct` and `source_to_sink_reachability` for a CodeQL path result,
+  `affected_construct` alone for a CodeQL point result). Red relations may support or
   qualify, blue relations may contradict or qualify, and verifier relations may do any of the three;
   anything else is a `schema_error`. A relation carries the producing cell's receipt hash only when
   the cell retrieved the cited identity itself, which is what R6 checks.
@@ -2195,9 +2279,9 @@ both lanes, and one score dimension. It does not execute PoCs, run variant hunts
   Unavailable language scopes lower evidence confidence truthfully.
 - Direct evidence for `source_to_sink_reachability`, `attacker_input_control` and
   `missing_or_ineffective_guard` comes from CodeQL `tool_observation`s (only
-  `source_to_sink_reachability`, besides `affected_construct`, per `TOOL_RULE_PREDICATES` in the
-  job module; `owasp_control` observations are direct for `missing_or_ineffective_guard`, and
-  `ci_rule`/`post_build_hardening` for `configuration_enables`), from source constructs the model cites, and, for C/C++ scopes with an
+  `source_to_sink_reachability`, besides `affected_construct`, and only for a path result, per
+  `review/tool_rules.py`; `owasp_control` observations are direct for `missing_or_ineffective_guard`, and
+  `ci_rule`/`post_build_hardening` for `configuration_enables`), from source constructs the model cites (analyst-assessed for everything but the construct itself, `predicate-admission/1`), and, for C/C++ scopes with an
   accepted graph export, from direct-eligible graph facts (`evidence-admissibility/3`,
   [`code-graph-precomputation.md`](code-graph-precomputation.md)): `dataflow_path`, `entry_point`,
   `sink_site`, `call_site`, `guard_fact` and `range_fact`. `sink_up` and `entry_down` launch per

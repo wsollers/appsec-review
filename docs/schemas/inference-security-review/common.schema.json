@@ -194,6 +194,7 @@
       "enum": [
         "direct",
         "direct_for_mapped_predicate",
+        "analyst_assessed",
         "indirect"
       ]
     },

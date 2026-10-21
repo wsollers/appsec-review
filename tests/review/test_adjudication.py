@@ -59,9 +59,11 @@ def test_ten_identical_unsupported_model_claims_cannot_confirm() -> None:
 
 
 def test_repeated_opinions_do_not_outweigh_one_contradiction() -> None:
-    supports = [rel(Predicate.SECURITY_IMPACT, tag=f"v{i}") for i in range(10)]
-    result = run([*all_supported(predicates=[p for p in ALWAYS_REQUIRED if p is not Predicate.SECURITY_IMPACT]),
-                  *supports, rel(Predicate.SECURITY_IMPACT, RelationKind.CONTRADICTS, tag="blue")])
+    # security_impact is derived, not required (obligation-rules/2), so the contested predicate is a guard.
+    guard = Predicate.MISSING_OR_INEFFECTIVE_GUARD
+    supports = [rel(guard, tag=f"v{i}") for i in range(10)]
+    result = run([*all_supported(predicates=[p for p in ALWAYS_REQUIRED if p is not guard]),
+                  *supports, rel(guard, RelationKind.CONTRADICTS, tag="blue")])
     assert result.state is ClaimState.INSUFFICIENT_EVIDENCE
     assert result.deciding_row is DecidingRow.UNRESOLVED_CONTRADICTION
 

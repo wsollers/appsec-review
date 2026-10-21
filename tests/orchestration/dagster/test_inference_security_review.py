@@ -161,7 +161,8 @@ def test_slice1_acceptance_both_lanes_parallel_and_capacity_invariant(tmp_path: 
     accounting = handoff["accounting"]
     assert accounting["exact"] and handoff["status"] == "DEGRADED" and accounting["review_incomplete"] is False
     states = accounting["claims_by_state"]
-    assert all(states[state] >= 1 for state in ("confirmed", "supported", "contradicted", "insufficient_evidence"))
+    assert all(states[state] >= 1 for state in ("confirmed", "supported", "not_exploitable_in_observed_configuration",
+                                        "insufficient_evidence"))
     assert states["duplicate"] == 0
     lanes = {item["lane"]: item for item in accounting["lanes"]}
     assert accounting["duplicate_proposals"] == 1 and lanes["hunt"]["duplicate_proposals"] == 1
