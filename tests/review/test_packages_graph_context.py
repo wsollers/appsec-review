@@ -198,7 +198,7 @@ def test_every_v4_package_validates_and_names_its_graph_families(graph_assembly)
     for package in graph_assembly.packages:
         document = package.document()
         validator.validate(document)
-        assert document["schema"] == PACKAGE_SCHEMA == "appsec-review/review-package/5"
+        assert document["schema"] == PACKAGE_SCHEMA == "appsec-review/review-package/6"
         assert document["retrieval"]["graph_families"] == sorted(set(document["retrieval"]["graph_families"]))
         assert "graph" in document["retrieval"]["indexes"]
     bad = _native_hunt(graph_assembly)
@@ -227,9 +227,18 @@ def test_codeql_lead_embeds_its_correlated_path_sink_guards_and_ranges(graph_fix
     graph_gaps = [gap for gap in document["coverage_gaps"] if gap["producer"] == "code_graph"]
     assert [(gap["state"], "call_site, flow_summary" in gap["reason"]) for gap in graph_gaps] == [
         ("unavailable", True)]
-    # A source-SAST lead in the same build unit gets the families, but no correlated path.
+    # A source-SAST lead in the same build unit has no correlated path, but package-neighborhood/1 selects the
+    # sink, guard and range facts located on its own line (and in its function) by location, not by correlation.
     sast = _lead(graph_assembly, fixture, "sast_critical")
-    assert not _graph_entries(sast) and sast["retrieval"]["graph_families"] == document["retrieval"]["graph_families"]
+    assert sast["retrieval"]["graph_families"] == document["retrieval"]["graph_families"]
+    assert not [entry for entry in _graph_entries(sast) if entry["id"] == ids["path_bridged"]]
+    neighborhood = sast["neighborhood"]
+    assert neighborhood["rule"] == "appsec-review/package-neighborhood/1"
+    assert ids["sink_strcpy"] in {row["ref"] for row in neighborhood["sinks"]}
+    assert ids["guard_strcpy"] in {row["ref"] for row in neighborhood["guards"]}
+    assert {row["ref"] for row in neighborhood["sinks"]} <= set(sast["retrieval"]["entity_ids"])
+    guard = next(row for row in neighborhood["guards"] if row["ref"] == ids["guard_strcpy"])
+    assert guard["summary"].startswith("none guard") and "adequate" not in guard["summary"]
     # A lead in a unit with no graph facts gets no family and a named gap.
     python = _lead(graph_assembly, fixture, "sast_high")
     assert python["retrieval"]["graph_families"] == []

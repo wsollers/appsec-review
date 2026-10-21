@@ -964,7 +964,11 @@
             "points_to",
             "indirect_call",
             "memory_object",
-            "caller"
+            "caller",
+            "function",
+            "callee",
+            "corroboration",
+            "build"
           ]
         }
       }
@@ -1893,6 +1897,7 @@
         "lead_menu",
         "evidence",
         "context",
+        "neighborhood",
         "proof_obligations",
         "retrieval",
         "coverage_gaps",
@@ -1900,7 +1905,7 @@
       ],
       "properties": {
         "schema": {
-          "const": "appsec-review/review-package/5"
+          "const": "appsec-review/review-package/6"
         },
         "kind": {
           "enum": [
@@ -1943,7 +1948,7 @@
           "$ref": "#/$defs/inference_sha"
         },
         "assembly_rule": {
-          "const": "appsec-review/assemble-review-packages/5"
+          "const": "appsec-review/assemble-review-packages/6"
         },
         "scope": {
           "$ref": "#/$defs/inference_scope"
@@ -2055,6 +2060,9 @@
               ]
             }
           }
+        },
+        "neighborhood": {
+          "$ref": "#/$defs/inference_neighborhood"
         }
       }
     },
@@ -2151,6 +2159,299 @@
           }
         }
       ]
+    },
+    "inference_neighborhood_row": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "ref",
+        "line",
+        "summary"
+      ],
+      "properties": {
+        "ref": {
+          "$ref": "#/$defs/inference_identity"
+        },
+        "line": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "summary": {
+          "type": "string",
+          "maxLength": 512
+        }
+      }
+    },
+    "inference_neighborhood": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "package-neighborhood/1: identities and fact summaries selected by location and function scope.",
+      "required": [
+        "rule",
+        "call_depth",
+        "function",
+        "sinks",
+        "ranges",
+        "guards",
+        "callers",
+        "callees",
+        "flows",
+        "entries",
+        "corroboration",
+        "chain",
+        "build",
+        "omitted"
+      ],
+      "properties": {
+        "rule": {
+          "const": "appsec-review/package-neighborhood/1"
+        },
+        "call_depth": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8
+        },
+        "function": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "symbol",
+                "name",
+                "path",
+                "start_line",
+                "file_sha256",
+                "basis"
+              ],
+              "properties": {
+                "symbol": {
+                  "$ref": "#/$defs/inference_identity"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "path": {
+                  "type": "string"
+                },
+                "start_line": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "file_sha256": {
+                  "oneOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "$ref": "#/$defs/inference_sha"
+                    }
+                  ]
+                },
+                "basis": {
+                  "enum": [
+                    "enclosing_fact_on_line",
+                    "nearest_preceding_definition"
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        "sinks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/inference_neighborhood_row"
+          }
+        },
+        "ranges": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/inference_neighborhood_row"
+          }
+        },
+        "guards": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/inference_neighborhood_row"
+          }
+        },
+        "callers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/inference_neighborhood_row"
+          }
+        },
+        "callees": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/inference_neighborhood_row"
+          }
+        },
+        "flows": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/inference_neighborhood_row"
+          }
+        },
+        "entries": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/inference_neighborhood_row"
+          }
+        },
+        "corroboration": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/inference_neighborhood_row"
+          }
+        },
+        "build": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "rule",
+                "ref",
+                "compiler",
+                "flags",
+                "flags_omitted",
+                "hardening",
+                "actions",
+                "complete"
+              ],
+              "properties": {
+                "rule": {
+                  "const": "appsec-review/package-build-summary/1"
+                },
+                "ref": {
+                  "$ref": "#/$defs/inference_identity"
+                },
+                "compiler": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "flags": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "flags_omitted": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "hardening": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "actions": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "complete": {
+                  "type": "boolean"
+                }
+              }
+            }
+          ]
+        },
+        "omitted": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "sinks",
+            "ranges",
+            "guards",
+            "callers",
+            "callees",
+            "flows",
+            "entries",
+            "corroboration"
+          ],
+          "properties": {
+            "sinks": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "ranges": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "guards": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "callers": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "callees": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "flows": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "entries": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "corroboration": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        "chain": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "reached",
+            "depth_limit",
+            "hops",
+            "entries"
+          ],
+          "description": "The call-site chain from the lead\\'s function to the nearest entry point, hops in order.",
+          "properties": {
+            "reached": {
+              "type": "boolean"
+            },
+            "depth_limit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 8
+            },
+            "hops": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/inference_neighborhood_row"
+              }
+            },
+            "entries": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/inference_neighborhood_row"
+              }
+            }
+          }
+        }
+      }
     }
   }
 }
