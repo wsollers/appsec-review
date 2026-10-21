@@ -731,4 +731,6 @@ After a batch of merged pull requests, reconcile the docs with the code delta re
 | `test/tmp/` | Disposable pytest temporary and cache state (local). |
 
 An MCP stdio server for retrieval is installed as `appsec-review-mcp`; see
-[`docs/operations/retrieval-mcp.md`](docs/operations/retrieval-mcp.md).
+[`docs/operations/retrieval-mcp.md`](docs/operations/retrieval-mcp.md). It serves external clients;
+review cells reach the same tools in-process (see
+[`docs/architecture/retrieval-surfaces.md`](docs/architecture/retrieval-surfaces.md)).

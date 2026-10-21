@@ -2,7 +2,9 @@
 
 Retrieval is a core application capability. Producers publish immutable, independently
 fingerprinted SQLite/FTS shards; application jobs call `appsec_review.retrieval` directly; the
-`appsec_review.mcp` package is only a read-only transport and authorization adapter.
+`appsec_review.mcp` package is only a read-only transport and authorization adapter. Review cells do not
+use that transport: see [`retrieval-surfaces.md`](retrieval-surfaces.md) for which consumer reaches the
+retrieval core how.
 
 ## Accepted index sets
 

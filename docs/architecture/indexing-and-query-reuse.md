@@ -141,13 +141,15 @@ a silent allowlist. `query_precomputed` is abbreviated `QP`; existing generic `f
 | Final publication gate decisions; `job_final_publication_gate` (decision 8) | Classify every finding package as publishable, verification backlog or withheld from exact accounting, ship-block status and gaps, and name the limitations | Artifact only: re-verifies the accepted review handoff and the artifacts it binds, then publishes a hash-bound gate document; it never reinterprets claim state or ship-block status | None | `coverage`; no skill |
 | Final report publications; `job_final_report_publication` (decision 8) | Publishable findings, verification backlog and limitations | Artifact only: `final-report.json` (`final-report/1`) and a deterministic `final-report.md` from the accepted gate; indexing sanitized findings for retrieval and PDF rendering are later steps | None | `coverage`; no skill |
 
-An MCP endpoint is justified only when `core`, an existing domain query, and `QP` cannot give a
+In this document "MCP endpoint" means a typed retrieval tool (see [`retrieval-surfaces.md`](retrieval-surfaces.md)). A
+retrieval tool is justified only when `core`, an existing domain query, and `QP` cannot give a
 bounded typed answer. `query_observations` (implemented) is the endpoint for scanner severity,
 suppression, rule, provider and location filters; it keeps tool findings distinct from confirmed
 findings. Other named planned endpoints above are conditional on their producers.
 Skills are operator procedures, not a way to provide target facts to review workers. New sources
 do not require new skills by default; add one only for a repeated operator workflow with its own
-validation steps. Worker access remains through accepted MCP indices and packages.
+validation steps. Worker access remains through accepted indices and packages, read with the retrieval
+tools (in-process for a review cell, over MCP for an external client).
 
 An implementation task must enumerate actual artifacts and handoffs for every enabled job. Each
 dataset gets `producer`, `scope`, `schema`, `hash`, `snapshot`, sensitivity, disposition
