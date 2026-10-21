@@ -12,6 +12,9 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/* \
  && sh /opt/native-toolchain/check-toolchain.sh \
  && cmake --version | grep -F 'cmake version 3.28.3'
+# clang is the preferred compiler: CMake, Autotools and make read CC/CXX from the environment. gcc stays
+# installed (cc and c++ still resolve to it) for recipes that name it or set CC/CXX themselves.
+ENV CC=clang CXX=clang++
 ENTRYPOINT []
 CMD []
 USER 10001:10001
