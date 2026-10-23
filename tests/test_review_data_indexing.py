@@ -35,6 +35,7 @@ from appsec_review.retrieval import (
 )
 from appsec_review.retrieval.observations import SEVERITY_RULE, normalize_reported_severity
 from appsec_review.jobs.job_review_data_indexing import build_job
+from appsec_review.jobs.job_evidence_collection.datasets import DATASETS as EVIDENCE_DATASETS
 from appsec_review.jobs.job_review_package_assembly import build_job as build_package_job
 from appsec_review.runtime.runner import JobRunner
 from appsec_review.storage import atomic_json, file_sha256
@@ -797,6 +798,46 @@ def test_inventory_claims_the_runner_written_attempt_input_manifest(tmp_path: Pa
         run_root, "2026-10-10-0001", SNAPSHOT, {"job_test": []}, {"job_test": []}, {}, {}, {}, []))
     unaccounted = {item["subject"] for item in result["audit"]["violations"] if item["code"] == "unaccounted_file"}
     assert unaccounted == {stray.relative_to(run_root).as_posix()}
+
+
+@pytest.mark.parametrize("attempt", ["attempt_0001", "attempt_0002", "attempt_0042"])
+def test_inventory_protects_merged_osv_output_without_claiming_other_task_files(tmp_path: Path,
+                                                                              attempt: str) -> None:
+    job_id = "job_evidence_collection"
+    root = f"data/jobs/{job_id}/attempts/{attempt}/steps"
+    merged = tmp_path / root / "vulnerability_matching/tasks/osv_scanner_scan/osv-scanner-merged.json"
+    merged.parent.mkdir(parents=True)
+    merged.write_text('{"results": []}', encoding="utf-8")
+    inputs = inventory.InventoryInputs(
+        tmp_path, "2026-10-10-0001", SNAPSHOT,
+        {job_id: ["source_sast", "evidence_publication", "vulnerability_matching"]},
+        {job_id: EVIDENCE_DATASETS}, {}, {}, {}, [])
+
+    result = inventory.build_inventory(inputs)
+    assert result["audit"]["status"] == "PASSED"
+    assert result["run_tree"]["unaccounted_count"] == 0
+    raw = next(row for row in result["rows"] if row["output_kind"] == "static_tool_io")
+    assert raw["disposition"] == "protected"
+    assert raw["sensitivity"] == "sensitive"
+    assert raw["index"] is None
+    assert raw["artifacts"]["file_count"] == 1
+    assert raw["exception_reason"]
+
+    strays = {
+        f"{root}/vulnerability_matching/tasks/osv_scanner_scan/undeclared.json",
+        f"{root}/vulnerability_matching/tasks/osv_scanner_scan/osv-scanner-merged.json.bak",
+        f"{root}/vulnerability_matching/tasks/another_scan/osv-scanner-merged.json",
+        f"{root}/source_sast/tasks/osv_scanner_scan/osv-scanner-merged.json",
+    }
+    for relative in strays:
+        path = tmp_path / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("{}", encoding="utf-8")
+    result = inventory.build_inventory(inputs)
+    assert result["audit"]["status"] == "FAILED"
+    assert result["run_tree"]["unaccounted_count"] == len(strays)
+    assert {item["subject"] for item in result["audit"]["violations"]
+            if item["code"] == "unaccounted_file"} == strays
 
 
 def test_fts_image_validation_gaps_and_required_mode(tmp_path: Path) -> None:

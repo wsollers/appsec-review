@@ -573,12 +573,16 @@ def build_job(*, infer: Infer | None = None) -> Job:
             settings = unit.job.config.settings["model"]
             guidance = load_runtime_skill(unit.job.repository_root, "post-build-security-assessment",
                                           job_id="job_post_build_security_assessment").text
-            guidance_sha = hashlib.sha256(guidance.encode()).hexdigest()
-            bundle = unit.job.run_root / "data" / "guidance" / guidance_sha
-            atomic_bytes(bundle / "SKILL.md", guidance.encode())
             model_identity = {"provider": str(settings["provider"]), "model": str(settings["model"]),
-                              "reasoning": str(settings["reasoning"]), "guidance_sha256": guidance_sha}
-            atomic_json(bundle / "model-identity.json", model_identity)
+                              "reasoning": str(settings["reasoning"])}
+            guidance_sha = hashlib.sha256(guidance.encode() + b"\0" + canonical_json(model_identity)).hexdigest()
+            model_identity["guidance_sha256"] = guidance_sha
+            bundle = unit.job.run_root / "data" / "guidance" / guidance_sha
+            from appsec_review.storage.shared import publish_named
+            publish_named(unit.job.run_root, bundle / "SKILL.md", guidance.encode(),
+                          namespace="guidance", computation=model_identity)
+            publish_named(unit.job.run_root, bundle / "model-identity.json", canonical_json(model_identity),
+                          namespace="guidance", computation=model_identity)
             if provenance_value.get("terminal_status") == "NOT_APPLICABLE":
                 document = {"schema": "appsec-review/build-security-inference/1",
                             "case_id": _display(case_id), "model_identity": model_identity,

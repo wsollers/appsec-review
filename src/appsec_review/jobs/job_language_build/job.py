@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from concurrent.futures import ThreadPoolExecutor
+from appsec_review.storage.shared import PublicationThreadPoolExecutor as ThreadPoolExecutor
 from datetime import datetime, timezone
 import hashlib
 import json

@@ -2,11 +2,14 @@ from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
-from dataclasses import replace
+from dataclasses import asdict, replace
 import hashlib
 import importlib.util
 import json
+import os
 from pathlib import Path
+import shlex
+import subprocess
 import threading
 import time
 import tomllib
@@ -28,10 +31,13 @@ from appsec_review.codeql.runtime import (
 from appsec_review.jobs.job_codeql_analysis.job import (
     FrameworkIntegrityError,
     _database_identity,
+    _normalize_one,
     _query_identity,
     _query_profiles,
     _stage_manifest_workspace,
+    _stage_workspace,
     _validate_scope_assets,
+    _verify_workspace_manifest,
     publication_status,
 )
 from appsec_review.storage import canonical_json
@@ -96,6 +102,119 @@ def test_materialized_workspace_staging_omits_container_owned_node_modules_symli
     assert not (staged / "projects" / "typescript" / "case-032" / "node_modules").is_symlink()
 
 
+def test_materialized_workspace_staging_omits_pinned_npm_workspace_directory_links(
+        tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    project = source / "projects" / "northwinds-v1"
+    modules = project / "node_modules" / "@northwinds"
+    modules.mkdir(parents=True)
+    (project / "package.json").write_text(
+        '{"workspaces":["backend","frontend"]}', encoding="utf-8")
+    for name in ("backend", "frontend"):
+        package = project / name
+        package.mkdir()
+        (package / "index.ts").write_text(f'export const name = "{name}";', encoding="utf-8")
+        _symlink_or_skip(modules / name, f"../../{name}", target_is_directory=True)
+    manifest = _workspace_manifest(source)
+
+    staged = tmp_path / "staged"
+    _stage_manifest_workspace(source, staged, manifest, file_limit=3)
+
+    assert _workspace_manifest(staged) == manifest
+    assert (staged / "projects" / "northwinds-v1" / "frontend" / "index.ts").is_file()
+    assert not any(path.is_symlink() for path in staged.rglob("*"))
+    assert not (staged / "projects" / "northwinds-v1" / "node_modules").exists()
+
+
+@pytest.mark.parametrize("target_kind", ["absolute", "outside", "dangling", "self", "pair", "ancestor"])
+def test_materialized_workspace_staging_rejects_unsafe_directory_links(
+        tmp_path: Path, target_kind: str) -> None:
+    source = tmp_path / "source"
+    real = source / "real"
+    real.mkdir(parents=True)
+    (real / "index.ts").write_text("export {};", encoding="utf-8")
+    link = real / "link" if target_kind == "ancestor" else source / "link"
+    targets = {
+        "absolute": real,
+        "outside": "../outside",
+        "dangling": "missing",
+        "self": "link",
+        "pair": "other",
+        "ancestor": ".",
+    }
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "untrusted.ts").write_text("outside", encoding="utf-8")
+    if target_kind == "pair":
+        _symlink_or_skip(source / "other", "link", target_is_directory=True)
+    manifest = _workspace_manifest(source)
+    _symlink_or_skip(link, targets[target_kind], target_is_directory=True)
+
+    with pytest.raises(FrameworkIntegrityError, match=r"(unsafe|invalid) symlink.*link"):
+        _stage_manifest_workspace(source, tmp_path / "staged", manifest, file_limit=10)
+    assert not (tmp_path / "staged").exists()
+
+
+@pytest.mark.parametrize("mutation", ["unlisted", "changed", "empty", "nested_escape", "file_bound"])
+def test_materialized_workspace_directory_link_does_not_bypass_manifest(
+        tmp_path: Path, mutation: str) -> None:
+    source = tmp_path / "source"
+    package = source / "frontend"
+    package.mkdir(parents=True)
+    payload = package / "index.ts"
+    payload.write_text("export {};", encoding="utf-8")
+    manifest = _workspace_manifest(source)
+    _symlink_or_skip(source / "linked", "frontend", target_is_directory=True)
+    if mutation == "unlisted":
+        (package / "extra.ts").write_text("unlisted", encoding="utf-8")
+    elif mutation == "changed":
+        payload.write_text("changed", encoding="utf-8")
+    elif mutation == "empty":
+        payload.unlink()
+        manifest = _workspace_manifest(source)
+    elif mutation == "nested_escape":
+        outside = tmp_path / "outside.ts"
+        outside.write_text("untrusted", encoding="utf-8")
+        _symlink_or_skip(package / "escape", "../../outside.ts")
+
+    with pytest.raises(FrameworkIntegrityError):
+        _stage_manifest_workspace(source, tmp_path / "staged", manifest,
+                                  file_limit=0 if mutation == "file_bound" else 10)
+    assert not (tmp_path / "staged").exists()
+
+
+def test_materialized_workspace_strict_verification_still_rejects_directory_links(
+        tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    package = source / "frontend"
+    package.mkdir(parents=True)
+    (package / "index.ts").write_text("export {};", encoding="utf-8")
+    manifest = _workspace_manifest(source)
+    _symlink_or_skip(source / "linked", "frontend", target_is_directory=True)
+
+    with pytest.raises(FrameworkIntegrityError, match="contains a symlink: 'linked'"):
+        _verify_workspace_manifest(source, manifest, file_limit=10)
+
+
+def test_materialized_workspace_symlink_error_identifies_scope(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from appsec_review.jobs.job_codeql_analysis import job as codeql_job
+
+    source = tmp_path / "source"
+    source.mkdir()
+    manifest = _workspace_manifest(source)
+    _symlink_or_skip(source / "linked", "missing", target_is_directory=True)
+    unit = SimpleNamespace(job=SimpleNamespace(target_root=tmp_path, run_root=tmp_path))
+    scope = SimpleNamespace(scope_id="codeql-unit-northwinds", root="frontend", files=(),
+                            language="javascript", mode="none")
+    monkeypatch.setattr(codeql_job, "_safe_json", lambda *args: manifest)
+    monkeypatch.setattr(codeql_job, "_settings", lambda unit: SimpleNamespace(database_file_limit=10))
+
+    with pytest.raises(FrameworkIntegrityError, match=r"codeql-unit-northwinds.*frontend.*linked.*missing"):
+        _stage_workspace(unit, scope, {"workspace_manifest": {}, "workspace": "source"},
+                         tmp_path / "staged")
+
+
 def test_materialized_workspace_staging_rejects_mismatched_container_node_modules_symlink(
         tmp_path: Path) -> None:
     source = tmp_path / "source"
@@ -141,7 +260,7 @@ def test_materialized_workspace_staging_rejects_manifest_path_through_symlink(
     assert isinstance(manifest_files, dict)
     manifest_files["linked/payload.js"] = hashlib.sha256(payload.read_bytes()).hexdigest()
 
-    with pytest.raises(FrameworkIntegrityError, match="unsafe symlink"):
+    with pytest.raises(FrameworkIntegrityError, match="identity changed"):
         _stage_manifest_workspace(source, tmp_path / "staged", manifest, file_limit=10)
 
 
@@ -581,6 +700,101 @@ def test_sarif_contract_rejects_malformed_top_level() -> None:
         normalize_sarif({"version": "1.0"}, files=[], root=".", query_identity="q", result_limit=1)
 
 
+def _normalization_fixture(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    from appsec_review.jobs.job_codeql_analysis import job as codeql_job
+
+    settings = SimpleNamespace(sarif_bytes_limit=1024 * 1024, result_limit=100, concurrency=2)
+    monkeypatch.setattr(codeql_job, "_settings", lambda unit: settings)
+    scopes = build_codeql_plan(
+        source_fingerprint="f" * 64,
+        files=[source(".github/workflows/ci.yml"), source("app.py")], receipts=[],
+        supported_extractors={"actions", "python"}, source_image_id=IMAGE,
+    ).scopes
+    queries = []
+    for scope in scopes:
+        sarif_path = tmp_path / f"{scope.language}.sarif"
+        sarif_path.write_text(json.dumps({"version": "2.1.0", "runs": [{
+            "tool": {"driver": {}}, "results": [{
+                "ruleId": "test/rule", "message": {"text": "observation"}, "locations": [],
+            }],
+        }]}), encoding="utf-8")
+        queries.append({
+            "scope": asdict(scope), "query_profile": {"query_id": "default", "kind": "default"},
+            "database_identity": "d" * 64, "query_identity": "q" * 64,
+            "terminal_status": "SUCCEEDED", "database_reused": True, "query_reused": True,
+            "gaps": [], "sarif": {
+                "path": sarif_path.name, "sha256": hashlib.sha256(sarif_path.read_bytes()).hexdigest(),
+                "size_bytes": sarif_path.stat().st_size,
+            },
+        })
+    assert len(queries) == 2
+    unit = SimpleNamespace(
+        job=SimpleNamespace(run_root=tmp_path, source_fingerprint="f" * 64),
+        unit_id="normalize.scopes", output=lambda name: {"queries": queries},
+    )
+    return unit, queries
+
+
+def test_normalize_scopes_resumes_mixed_reused_and_fresh_shards(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from appsec_review.jobs.job_codeql_analysis.job import build_job
+
+    unit, queries = _normalization_fixture(tmp_path, monkeypatch)
+    first = _normalize_one(unit, queries[0])
+    path = tmp_path / first["index"]["path"]
+    before = path.stat()
+    normalize = next(item for item in build_job().units if item.unit_id == "normalize.scopes")
+
+    resumed = normalize.handler(unit)
+    repeated = normalize.handler(unit)
+
+    assert resumed == repeated
+    assert resumed["scopes"][0] == first
+    assert len(resumed["scopes"]) == 2
+    assert resumed["observation_count"] == 2
+    assert len(list((tmp_path / "data/indices/observations").iterdir())) == 2
+    assert path.stat().st_ino == before.st_ino
+    assert path.stat().st_mtime_ns == before.st_mtime_ns
+    assert hashlib.sha256(path.read_bytes()).hexdigest() == first["index"]["sha256"]
+
+
+@pytest.mark.parametrize("corrupt", [False, True])
+def test_normalize_scope_rejects_conflicting_or_corrupt_shard(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch, corrupt: bool) -> None:
+    unit, queries = _normalization_fixture(tmp_path, monkeypatch)
+    first = _normalize_one(unit, queries[0])
+    path = tmp_path / first["index"]["path"]
+    if corrupt:
+        path.write_bytes(b"corrupt")
+    else:
+        queries[0]["gaps"] = ["different evidence with unchanged producer identity"]
+    before = path.read_bytes()
+    with pytest.raises(ValueError, match="immutable index shard"):
+        _normalize_one(unit, queries[0])
+    assert path.read_bytes() == before
+
+
+def test_normalize_changed_sarif_publishes_new_shard_and_preserves_prior(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    unit, queries = _normalization_fixture(tmp_path, monkeypatch)
+    query = queries[0]
+    first = _normalize_one(unit, query)
+    prior = tmp_path / first["index"]["path"]
+    before = prior.read_bytes()
+    sarif_path = tmp_path / query["sarif"]["path"]
+    sarif = json.loads(sarif_path.read_text(encoding="utf-8"))
+    sarif["runs"][0]["results"][0]["message"]["text"] = "changed observation"
+    sarif_path.write_text(json.dumps(sarif), encoding="utf-8")
+    query["sarif"] = {
+        "path": sarif_path.name, "sha256": hashlib.sha256(sarif_path.read_bytes()).hexdigest(),
+        "size_bytes": sarif_path.stat().st_size,
+    }
+    changed = _normalize_one(unit, query)
+    assert changed["index"]["path"] != first["index"]["path"]
+    assert _normalize_one(unit, query) == changed
+    assert prior.read_bytes() == before
+
+
 def _settings_value() -> dict[str, object]:
     lock = json.loads((ROOT / "containers/tools/codeql/assets.lock.json").read_text(encoding="utf-8"))
     modes = {"cpp": "manual", "go": "manual", "java": "manual", "csharp": "manual",
@@ -740,6 +954,42 @@ def test_derived_image_dockerfile_declares_both_global_build_arguments() -> None
 
     assert lines[:3] == ["ARG CODEQL_SOURCE_IMAGE", "ARG BUILD_IMAGE",
                          "FROM ${CODEQL_SOURCE_IMAGE} AS codeql_source"]
+
+
+@pytest.mark.parametrize("dockerfile", ["Dockerfile", "Dockerfile.source"])
+def test_codeql_image_opens_precompiled_assets_before_switching_user(
+        tmp_path: Path, dockerfile: str) -> None:
+    text = (ROOT / "containers/tools/codeql" / dockerfile).read_text()
+    command = "chmod -R a+rX /opt/codeql"
+    assert command in text
+    assert text.index("USER 0:0") < text.index(command) < text.index("USER ${RUNTIME_USER}")
+    if dockerfile == "Dockerfile":
+        assert text.index("COPY --from=codeql_source /opt/codeql /opt/codeql") < text.index(command)
+    if os.name != "posix":
+        pytest.skip("POSIX permission semantics required")
+
+    payload = tmp_path / "codeql"
+    precompiled = payload / "qlpacks" / ".codeql" / "precompiled"
+    precompiled.mkdir(parents=True)
+    artifact = precompiled / "shared.bytes.qlx"
+    artifact.write_bytes(b"precompiled-query")
+    artifact.chmod(0o600)
+    executable = payload / "codeql"
+    executable.write_bytes(b"executable")
+    executable.chmod(0o700)
+    for directory in (payload, *precompiled.parents):
+        if directory == tmp_path:
+            break
+        directory.chmod(0o700)
+    precompiled.chmod(0o700)
+
+    argv = shlex.split(command)
+    subprocess.run([*argv[:-1], str(payload)], check=True)
+    assert artifact.read_bytes() == b"precompiled-query"
+    assert artifact.stat().st_mode & 0o777 == 0o644
+    assert executable.stat().st_mode & 0o777 == 0o755
+    assert all(path.stat().st_mode & 0o777 == 0o755
+               for path in (payload, payload / "qlpacks", precompiled.parent, precompiled))
 
 
 def test_derived_image_build_holds_the_global_docker_build_lock(

@@ -1,3 +1,13 @@
+ARG TARGETARCH
+
+FROM scratch AS copilot-cli-amd64
+ADD --checksum=sha256:cabbb04a88a8034ddfa21234cbd52b7676536aec2b292624e6fd6796f891a8ff https://github.com/github/copilot-cli/releases/download/v1.0.102/copilot-linux-x64.tar.gz /copilot-cli.tar.gz
+
+FROM scratch AS copilot-cli-arm64
+ADD --checksum=sha256:634ee7cc4fa4b7447ac41e2c3ce54928d8f5214f418954e3af36f372e849c9c9 https://github.com/github/copilot-cli/releases/download/v1.0.102/copilot-linux-arm64.tar.gz /copilot-cli.tar.gz
+
+FROM copilot-cli-${TARGETARCH} AS copilot-cli
+
 FROM docker/buildx-bin:0.37.0@sha256:1387e0aa2b756894e8b6ee10d0f80904cb0badc4356a29e7843b230d0b8fd48f AS buildx
 
 FROM python:3.12-slim@sha256:2f17fc044b579bab302c2e8054d3a686e2cb9a83de48e70534b94cd8ebbe06a9 AS runtime
@@ -31,10 +41,34 @@ RUN python -m pip install --no-cache-dir --no-build-isolation --no-deps . \
     && mkdir -p /opt/dagster/home /var/dagster/compute-logs /var/dagster/artifacts /opt/app/runs /opt/app/data \
     && chmod 1777 /opt/dagster/home /var/dagster /var/dagster/compute-logs /var/dagster/artifacts \
     && python -c "from appsec_review.application_paths import verify_runtime_assets; verify_runtime_assets()" \
+    && python -c "from pathlib import Path; from appsec_review.container_runtime.catalog import load_catalog; load_catalog(Path.cwd())" \
     && python -c "from appsec_review.graph.catalog import load_catalog; load_catalog()" \
     && python -c "from appsec_review.orchestration.dagster.definitions import defs; defs.get_job_def('wave1_review')"
 
 COPY deploy/dagster/dagster.yaml deploy/dagster/workspace.yaml /opt/dagster/home/
+
+FROM runtime AS runtime-copilot
+COPY --from=copilot-cli /copilot-cli.tar.gz /tmp/copilot-cli.tar.gz
+RUN case "$(dpkg --print-architecture)" in \
+      amd64) bytes=128117626 ;; \
+      arm64) bytes=129124281 ;; \
+      *) echo "Unsupported Copilot CLI architecture" >&2; exit 1 ;; \
+    esac \
+    && test "$(stat -c %s /tmp/copilot-cli.tar.gz)" = "$bytes" \
+    && mkdir -p /opt/copilot-cli \
+    && tar -xzf /tmp/copilot-cli.tar.gz -C /opt/copilot-cli --no-same-owner \
+    && chmod 755 /opt/copilot-cli/copilot \
+    && ln -s /opt/copilot-cli/copilot /usr/local/bin/copilot \
+    && copilot --version | grep -F "GitHub Copilot CLI 1.0.102." \
+    && rm /tmp/copilot-cli.tar.gz
+COPY deploy/dagster/requirements.copilot.txt /tmp/dagster/
+ENV COPILOT_CLI_EXTRACT_DIR=/opt/copilot-runtime
+RUN python -m pip install --no-cache-dir -r /tmp/dagster/requirements.copilot.txt \
+        -c /tmp/dagster/requirements.lock.txt \
+    && python -m copilot download-runtime \
+    && chmod -R a+rX /opt/copilot-runtime \
+    && python -m pip check
+ENV COPILOT_SKIP_CLI_DOWNLOAD=1
 
 FROM runtime AS runtime-windows
 RUN apt-get update \

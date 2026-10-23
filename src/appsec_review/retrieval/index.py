@@ -6,8 +6,10 @@ from collections import Counter
 from dataclasses import asdict, dataclass
 import hashlib
 import json
+import os
 from pathlib import Path
 import sqlite3
+from tempfile import TemporaryDirectory
 from typing import Any, Iterable, Mapping
 
 from appsec_review.retrieval.model import EntityRecord, RelationRecord, canonical_json, sanitize_producer_data
@@ -128,14 +130,38 @@ class IndexBuilder:
         return [unique[key] for key in sorted(unique)], len(self.relations) - len(unique)
 
     def build(self) -> str:
+        from appsec_review.storage.shared import current, put_private_file, safe_path, verify_reference
+        owner = current()
+        if owner is not None:
+            safe_path(owner.run_root, self.path.relative_to(owner.run_root).as_posix())
         entities = self._unique_entities()
         relations, merged_relations = self._unique_relations()
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        if self.path.exists():
-            raise ValueError(f"immutable index shard already exists: {self.name}/{self.shard_id}")
-        temporary = self.path.with_name(self.path.name + ".building")
-        if temporary.exists():
-            temporary.unlink()
+        with TemporaryDirectory(prefix=".building-", dir=self.path.parent) as directory:
+            temporary = Path(directory) / "shard.sqlite"
+            self._write_database(temporary, entities, relations, merged_relations)
+            digest = file_sha256(temporary)
+            source = temporary
+            if owner is not None and self.path.is_relative_to(owner.run_root / "data" / "indices"):
+                source = verify_reference(owner.run_root, put_private_file(owner.run_root, temporary))
+            try:
+                # A same-filesystem link publishes complete bytes without replacing another writer.
+                os.link(source, self.path)
+            except FileExistsError:
+                if (self.path.is_symlink() or not self.path.is_file()
+                        or file_sha256(self.path) != digest):
+                    raise ValueError(
+                        f"immutable index shard conflicts with existing bytes: "
+                        f"{self.name}/{self.shard_id}"
+                    ) from None
+            if owner is not None and self.path.is_relative_to(owner.run_root / "data" / "indices"):
+                owner.named("index-shard", self.path, computed=True, computation={
+                    "fingerprint": self.fingerprint, "name": self.name, "shard_id": self.shard_id,
+                    "target_snapshot": self.target_snapshot, "schema": INDEX_SCHEMA})
+            return digest
+
+    def _write_database(self, temporary: Path, entities: list[EntityRecord],
+                        relations: list[RelationRecord], merged_relations: int) -> None:
         database = sqlite3.connect(temporary)
         try:
             database.executescript("""
@@ -212,8 +238,6 @@ class IndexBuilder:
             database.execute("VACUUM")
         finally:
             database.close()
-        temporary.replace(self.path)
-        return file_sha256(self.path)
 
 
 def _relation_rank(relation: RelationRecord) -> tuple[float, str]:
@@ -227,6 +251,14 @@ def write_manifest(
     values = sorted(indexes, key=lambda item: (item.name, item.shard_id))
     if len(values) != len({(item.name, item.shard_id) for item in values}):
         raise ValueError("manifest contains duplicate index shard identities")
+    from appsec_review.storage.shared import current, consume_named
+    owner = current()
+    if owner is not None:
+        for item in values:
+            if item.relative_path.startswith("data/indices/"):
+                consume_named(owner.run_root, owner.run_root / item.relative_path, namespace="index-shard")
+            elif item.producer.get("shared_receipt") is not None:
+                owner.consume_receipt(item.producer["shared_receipt"])
     document = {
         "schema": MANIFEST_SCHEMA, "run_id": run_id, "target_snapshot": target_snapshot,
         "target_root": str(Path(target_root).resolve()), "indexes": [asdict(item) for item in values],
@@ -284,11 +316,26 @@ def load_verified_manifest(run_root: Path, path: Path, expected_sha256: str | No
         if shard_key in seen:
             raise ValueError("duplicate index shard identity")
         seen.add(shard_key)
-        candidate = (run_root / identity.relative_path).resolve()
+        from appsec_review.storage.shared import safe_path
+        candidate = safe_path(run_root, identity.relative_path)
+        if identity.relative_path.startswith("data/shared/"):
+            from appsec_review.storage.shared import safe_path, verify_receipt
+            candidate = safe_path(run_root, identity.relative_path)
+            receipt = verify_receipt(run_root, identity.producer["shared_receipt"])
+            from appsec_review.storage.shared import current
+            owner = current()
+            if owner is not None:
+                owner.consume_receipt(identity.producer["shared_receipt"])
+            if not any(item["path"] == identity.relative_path and item["sha256"] == identity.sha256
+                       for item in receipt["dependencies"]):
+                raise ValueError("shared index is not bound to its producing receipt")
         if run_root not in candidate.parents or not candidate.is_file():
             raise ValueError(f"index is unavailable: {identity.name}")
         if file_sha256(candidate) != identity.sha256:
             raise ValueError(f"index integrity mismatch: {identity.name}")
+        if identity.relative_path.startswith("data/indices/"):
+            from appsec_review.storage.shared import consume_named
+            consume_named(run_root, candidate, namespace="index-shard")
         uri = f"file:{candidate.as_posix()}?mode=ro&immutable=1"
         with sqlite3.connect(uri, uri=True) as database:
             metadata = dict(database.execute("SELECT key, value FROM metadata"))

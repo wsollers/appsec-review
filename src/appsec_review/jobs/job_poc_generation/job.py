@@ -13,7 +13,7 @@ build workspace of ``job_language_build`` supplies the source copy, the compile 
 """
 from __future__ import annotations
 
-from concurrent.futures import ThreadPoolExecutor
+from appsec_review.storage.shared import PublicationThreadPoolExecutor as ThreadPoolExecutor
 import hashlib
 from pathlib import Path
 import shutil

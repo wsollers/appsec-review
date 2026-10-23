@@ -1579,6 +1579,54 @@
         }
       ]
     },
+    "inference_artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["identity", "name", "path", "workspace_path", "sha256", "build_unit_id", "provenance", "provenance_omitted"],
+      "properties": {
+        "identity": {"$ref": "#/$defs/inference_identity"},
+        "name": {"type": "string"},
+        "path": {"type": ["string", "null"]},
+        "workspace_path": {"type": ["string", "null"]},
+        "sha256": {"type": ["string", "null"]},
+        "build_unit_id": {"type": ["string", "null"]},
+        "provenance_omitted": {"type": "integer", "minimum": 0},
+        "provenance": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["relation", "source_id", "target_id", "exact", "confidence", "ambiguity",
+                         "name", "workspace_path", "tool", "working_directory", "argv_sha256", "commands"],
+            "properties": {
+              "relation": {"enum": ["GENERATED_FROM", "LINKS_INTO"]},
+              "source_id": {"$ref": "#/$defs/inference_identity"},
+              "target_id": {"$ref": "#/$defs/inference_identity"},
+              "exact": {"type": "boolean"},
+              "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+              "ambiguity": {"type": ["string", "null"]},
+              "name": {"type": "string"},
+              "workspace_path": {"type": ["string", "null"]},
+              "tool": {"type": ["string", "null"]},
+              "working_directory": {"type": ["string", "null"]},
+              "argv_sha256": {"type": ["string", "null"]},
+              "commands": {
+                "type": "array",
+                "items": {
+                  "type": "object", "additionalProperties": false,
+                  "required": ["ref", "text", "truncated"],
+                  "properties": {
+                    "ref": {"$ref": "#/$defs/inference_identity"},
+                    "text": {"type": "string", "maxLength": 1024},
+                    "truncated": {"type": "boolean"}
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "inference_lead": {
       "type": "object",
       "additionalProperties": false,
@@ -1604,6 +1652,10 @@
         "advisory_summary"
       ],
       "properties": {
+        "artifacts": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/inference_artifact"}
+        },
         "weaknesses": {
           "type": "array",
           "items": {
@@ -1980,7 +2032,7 @@
           "$ref": "#/$defs/inference_sha"
         },
         "assembly_rule": {
-          "const": "appsec-review/assemble-review-packages/7"
+          "const": "appsec-review/assemble-review-packages/8"
         },
         "scope": {
           "$ref": "#/$defs/inference_scope"

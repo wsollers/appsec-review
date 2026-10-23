@@ -492,12 +492,11 @@ class JobConfig:
 PENDING_JOBS: frozenset[str] = frozenset()
 OVERLAY_ENVIRONMENT = "APPSEC_REVIEW_CONFIG_OVERLAY"
 OVERLAY_LAYER = "capacity_overlay"
-# Runtime profile: ``dev`` is the checked-in file as it is; ``prod`` is the layer file
-# ``profiles/prod.toml`` beside it. Nothing selects ``prod`` implicitly (docs/operations/model-profiles.md).
+# ``dev`` is the checked-in file; other profiles are explicit layers in ``profiles/``.
 PROFILE_ENVIRONMENT = "APPSEC_REVIEW_PROFILE"
 PROFILE_LAYER = "runtime_profile"
 DEFAULT_PROFILE = "dev"
-PROFILES: tuple[str, ...] = ("dev", "prod")
+PROFILES: tuple[str, ...] = ("dev", "prod", "copilot-dev", "copilot-prod")
 PROFILE_DIRECTORY = "profiles"
 _NAME = re.compile(r"[a-z][a-z0-9_]{0,63}")
 PROFILE_MODEL_JOBS: tuple[str, ...] = (
@@ -739,7 +738,7 @@ def load_config(path: str | Path = "appsec-review.toml", *, overlay: str | Path 
     """Load the explicit (or repository default) configuration, a runtime profile and an optional capacity overlay.
 
     The profile is ``profile`` when given, otherwise ``APPSEC_REVIEW_PROFILE``, otherwise ``dev``. ``dev``
-    is the file as it is; ``prod`` merges ``profiles/prod.toml`` (beside the file) over it, before
+    is the file as it is; other profiles merge ``profiles/<profile>.toml`` (beside the file) over it, before
     validation, and freezes it as its own hashed layer. Every resolved configuration records
     ``configuration_profile``. Layer order: base, profile, capacity overlay.
 

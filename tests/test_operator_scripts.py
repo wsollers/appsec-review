@@ -904,29 +904,32 @@ def test_stack_restart_carries_the_running_profile_over_and_switches_it_when_ask
     assert box.lifecycle_calls()[-1]["env"] == {ops.PROFILE_VARIABLE: "dev"}
 
 
-def test_changing_the_profile_of_a_running_stack_is_guarded_by_active_runs(box: Sandbox) -> None:
+@pytest.mark.parametrize("profile", ["prod", "copilot-prod"])
+def test_changing_the_profile_of_a_running_stack_is_guarded_by_active_runs(box: Sandbox, profile: str) -> None:
     box.dagster.runs(run(UUID_ONE, "STARTED", app=APP_ID))
-    assert box.run("stack-restart", "--profile", "prod").returncode == 3
+    assert box.run("stack-restart", "--profile", profile).returncode == 3
     assert box.lifecycle_calls() == []
 
 
-def test_stack_rebuild_takes_the_profile(box: Sandbox) -> None:
+@pytest.mark.parametrize("profile", ["prod", "copilot-prod"])
+def test_stack_rebuild_takes_the_profile(box: Sandbox, profile: str) -> None:
     box.dagster.runs()
-    assert box.run("stack-rebuild", "--no-probe", "--profile", "prod").returncode == 0
-    assert [call["env"][ops.PROFILE_VARIABLE] for call in box.lifecycle_calls()] == ["prod", "prod"]
+    assert box.run("stack-rebuild", "--no-probe", "--profile", profile).returncode == 0
+    assert [call["env"][ops.PROFILE_VARIABLE] for call in box.lifecycle_calls()] == [profile, profile]
 
 
-def test_review_start_refuses_when_the_running_profile_differs(box: Sandbox) -> None:
+@pytest.mark.parametrize("profile", ["prod", "copilot-prod"])
+def test_review_start_refuses_when_the_running_profile_differs(box: Sandbox, profile: str) -> None:
     box.dagster.runs()
-    refused = box.run("review-start", "--profile", "prod", "--dry-run")
+    refused = box.run("review-start", "--profile", profile, "--dry-run")
     assert refused.returncode == 3 and "APPSEC_REVIEW_PROFILE=dev" in refused.stderr
     assert "stack-restart --profile" in refused.stderr
     assert box.run("review-start", "--profile", "dev", "--dry-run").returncode == 0
-    box.stack(settings={ops.PROFILE_VARIABLE: "prod"})
+    box.stack(settings={ops.PROFILE_VARIABLE: profile})
     assert box.run("review-start", "--profile", "dev", "--dry-run").returncode == 3
-    accepted = box.run("review-start", "--profile", "prod", "--dry-run")
-    assert accepted.returncode == 0 and "profile:   prod" in accepted.stdout and "more capable models" in accepted.stdout
-    assert "profile:   prod" in box.run("review-start", "--dry-run").stdout
+    accepted = box.run("review-start", "--profile", profile, "--dry-run")
+    assert accepted.returncode == 0 and f"profile:   {profile}" in accepted.stdout and "more capable models" in accepted.stdout
+    assert f"profile:   {profile}" in box.run("review-start", "--dry-run").stdout
 
 
 def test_stack_status_shows_the_profile(box: Sandbox) -> None:
@@ -936,7 +939,23 @@ def test_stack_status_shows_the_profile(box: Sandbox) -> None:
     assert "profile: prod" in box.run("stack-status").stdout
 
 
+@pytest.mark.parametrize("profile", ["copilot-dev", "copilot-prod"])
+def test_copilot_stack_keeps_its_overlay_image_and_account_probe(box: Sandbox, profile: str) -> None:
+    box.stack(settings={ops.PROFILE_VARIABLE: profile},
+              files=[str(box.deploy / "compose.yaml"), str(box.deploy / "compose.copilot.yaml")])
+    box.dagster.runs()
+    result = box.run("stack-start", "--profile", profile)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert ("more capable models" in result.stdout) == (profile == "copilot-prod")
+    assert "model catalog  ok" in result.stdout
+    assert box.lifecycle_calls()[-1]["env"][ops.PROFILE_VARIABLE] == profile
+    assert ops.image_tag(profile).endswith("-copilot")
+    stopped = box.run("stack-stop")
+    assert stopped.returncode == 0, stopped.stdout + stopped.stderr
+    assert box.lifecycle_calls()[-1]["env"][ops.PROFILE_VARIABLE] == profile
+
+
 @pytest.mark.parametrize("name", ["stack-start", "stack-restart", "stack-rebuild", "review-start"])
 def test_powershell_twins_take_a_profile_parameter(name: str) -> None:
-    assert "[ValidateSet('dev', 'prod')][string]$Profile" in (SCRIPTS / f"{name}.ps1").read_text(encoding="utf-8")
+    assert "[ValidateSet('dev', 'prod', 'copilot-dev', 'copilot-prod')][string]$Profile" in (SCRIPTS / f"{name}.ps1").read_text(encoding="utf-8")
     assert "--profile" in real(name, "--help").stdout

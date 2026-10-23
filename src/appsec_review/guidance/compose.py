@@ -316,13 +316,16 @@ def pin_bundle(run_root: Path, bundle: Mapping[str, Any], *,
     """Store a verified bundle once under ``runs/<run>/data/guidance/<bundle-sha256>/``."""
     identity = verify_bundle(bundle)
     root = Path(run_root) / "data" / "guidance" / identity
-    atomic_json(root / "bundle.json", dict(bundle))
+    from appsec_review.storage.shared import publish_named
+    publish_named(Path(run_root), root / "bundle.json", canonical_json(dict(bundle)),
+                  namespace="guidance", computation={"bundle_sha256": identity})
     extra = dict(files or {})
     if bundle.get("schema") == BUNDLE_SCHEMA:
         extra.setdefault("prompt.md", render_prompt(bundle))
     for name, text in sorted(extra.items()):
         _require(bool(re.fullmatch(r"[a-z0-9][a-z0-9.\-]*\.md", name)), f"pinned guidance file name is invalid: {name}")
-        atomic_bytes(root / name, text.encode("utf-8"))
+        publish_named(Path(run_root), root / name, text.encode("utf-8"),
+                      namespace="guidance", computation={"bundle_sha256": identity})
     return {"bundle_sha256": identity, "path": (Path("data") / "guidance" / identity / "bundle.json").as_posix()}
 
 

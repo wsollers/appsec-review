@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from appsec_review.config import load_config
-from appsec_review.jobs.job_third_party_data_sync.steps.nvd_sync.feed import NvdPublisher, timestamp
+from appsec_review.jobs.job_third_party_data_sync.steps.nvd_sync.feed import NvdPublisher, parse_meta, timestamp
 from appsec_review.jobs.job_third_party_data_sync.steps.nvd_sync.models import NvdSettings
 from tests.capture_fakes import build_capture_toml
 
@@ -58,7 +58,8 @@ class FakeClient:
         }
         return json.dumps(page, separators=(",", ":")).encode()
 
-    def download(self, url: str, destination: Path, api_key: str | None = None) -> int:
+    def download(self, url: str, destination: Path, api_key: str | None = None, *,
+                 expected_size: int | None = None) -> int:
         destination.write_bytes(self.compressed)
         return len(self.compressed)
 
@@ -218,3 +219,71 @@ def test_a_v1_parent_without_an_index_is_bootstrapped_not_replayed(tmp_path: Pat
     assert json.loads((feed_root / "current.json").read_text(encoding="utf-8"))["snapshot_id"] == pointer["snapshot_id"]
     assert (feed_root / "snapshots" / legacy / "manifest.json").is_file()
     assert publisher.verify()["chain_length"] == 1
+
+
+def test_verified_year_cache_survives_a_later_year_failure(tmp_path: Path) -> None:
+    clients = {year: FakeClient(json.dumps({
+        "format": "NVD_CVE", "version": "2.0",
+        "vulnerabilities": [vulnerability(f"CVE-{year}-1000")],
+    }).encode()) for year in (2025, 2026)}
+    downloads = []
+
+    class YearClient:
+        fail = True
+
+        def get_bytes(self, url, api_key=None):
+            year = int(url.rsplit("-", 1)[1].split(".", 1)[0])
+            return clients[year].get_bytes(url, api_key)
+
+        def download(self, url, destination, api_key=None, *, expected_size=None):
+            year = int(url.rsplit("-", 1)[1].split(".", 1)[0])
+            downloads.append(year)
+            if self.fail and year == 2026:
+                raise OSError("later year unavailable")
+            return clients[year].download(url, destination, api_key, expected_size=expected_size)
+
+    client = YearClient()
+    settings = NvdSettings.from_mapping(tmp_path, {"feed_root": "data/feeds/nvd", "first_year": 2025})
+    publisher = NvdPublisher(settings, client=client,
+                             clock=lambda: datetime(2026, 10, 21, tzinfo=timezone.utc))
+    with pytest.raises(OSError, match="later year unavailable"):
+        publisher.sync("failed")
+    assert not (settings.feed_root / "current.json").exists()
+    assert (settings.feed_root / "downloads/nvdcve-2.0-2025.json.gz").is_file()
+    client.fail = False
+    publisher.sync("retry")
+    assert downloads == [2025, 2026, 2026]
+    assert publisher.verify()["index"]["record_count"] == 2
+
+
+@pytest.mark.parametrize("change", ["corrupt-cache", "updated-source"])
+def test_year_cache_is_revalidated_against_current_metadata(tmp_path: Path, change: str) -> None:
+    client = FakeClient(b'{"vulnerabilities":[]}')
+    settings = NvdSettings.from_mapping(tmp_path, {"feed_root": "data/feeds/nvd"})
+    publisher = NvdPublisher(settings, client=client)
+    url = "https://nvd.example/nvdcve-2.0-2026.json.gz"
+    metadata = parse_meta(client.get_bytes(url + ".meta"))
+    cache = publisher._year_download(2026, url, metadata, None)
+    if change == "corrupt-cache":
+        cache.write_bytes(b"x" * len(client.compressed))
+    else:
+        client.raw_document = b'{"vulnerabilities":[], "updated":true}'
+        client.compressed = gzip.compress(client.raw_document, mtime=0)
+        metadata = parse_meta(client.get_bytes(url + ".meta"))
+    publisher._year_download(2026, url, metadata, None)
+    assert cache.read_bytes() == client.compressed
+
+
+def test_bad_year_hash_never_advances_pointer(tmp_path: Path) -> None:
+    class BadHashClient(FakeClient):
+        def get_bytes(self, url, api_key=None):
+            metadata = super().get_bytes(url, api_key)
+            return metadata.replace(hashlib.sha256(self.raw_document).hexdigest().encode(), b"0" * 64)
+
+    client = BadHashClient(b'{"vulnerabilities":[]}')
+    settings = NvdSettings.from_mapping(tmp_path, {"feed_root": "data/feeds/nvd", "first_year": 2026})
+    publisher = NvdPublisher(settings, client=client,
+                             clock=lambda: datetime(2026, 10, 21, tzinfo=timezone.utc))
+    with pytest.raises(ValueError, match="uncompressed hash or size mismatch"):
+        publisher.sync("bad-hash")
+    assert not (settings.feed_root / "current.json").exists()

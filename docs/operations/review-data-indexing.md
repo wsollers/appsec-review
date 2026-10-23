@@ -49,6 +49,160 @@ attempt, shard or artifact references and coverage state.
 Files the job runtime writes for every job are claimed as runtime receipts: attempt claims, status,
 results, handoffs and logs, per-task receipts, and the `inputs/retrieval-manifest.json` that
 `JobRunner` pins into an attempt inheriting more than one upstream index lineage.
+
+File ownership and publication requirements have separate scopes. File ownership includes every
+registered job present in the run-bound configuration, including downstream and disabled jobs.
+Only enabled producers in the indexing stage participate in required-output checks, accepted
+handoff reconciliation and coverage rows. A resume can therefore retain downstream receipts,
+document ledgers and inference artifacts without either treating them as stray files or accepting
+them as current evidence. Unknown jobs and files outside a declared pattern still fail the audit.
+
+Every new attempt's `claim.json` pins a hash-checked `dataset_contract` containing its output
+declarations and step topology. Files under that attempt are matched against the pinned contract,
+not a later implementation's declarations. Successful handoffs also hash-pin `claim.json` as an
+artifact, so later alteration invalidates accepted-artifact verification and resume reuse.
+Older attempts without this field use the current
+registered declarations and are explicitly labeled `current_declarations_legacy_attempt`; their
+claims are not rewritten. A missing claim is a provenance warning; a malformed, mismatched or
+hash-invalid claim is an audit violation.
+
+The report's `file_ownership` groups files by job, step, output kind and producing attempt.
+Each group records the count, bytes, deterministic path/size listing hash, bounded example paths,
+claim path/hash, contract basis and originating Dagster run ID. The unique producer key is the
+application run ID plus job ID plus attempt ID; the existing Dagster UUID identifies the graph
+invocation. No additional UUID is needed. Ownership is accounting metadata, never an accepted
+handoff or proof of successful coverage. Aggregate artifact rows do not attribute all historical
+files to the latest accepted attempt.
+
+Files outside attempt directories are explicitly `shared_or_run_scoped` with no inferred attempt
+or Dagster ID. Their content identity is separate from attempt provenance. For the migrated
+outputs below, immutable attempt receipts provide that provenance; legacy layouts cannot prove
+which invocation first created a file. Declared ownership does not manufacture that history,
+and the listing hash is not a content-integrity hash.
+
+### Shared immutable objects and attempt receipts
+
+The supported producers/consumers include lead-triage model results, review-data indexing's derived
+link/product/inventory shards and checkpoints, document-issue ledgers, review cells and their
+judge/verifier checks, shared v3 packages, pinned guidance, and producer SQLite/OWASP indexes.
+New bytes live once
+per run at `data/shared/objects/<sha256>`; the SHA-256 covers the **exact file bytes**. JSON
+producers use sorted compact UTF-8 JSON with one trailing newline. SQLite objects retain their
+exact database bytes. Private objects are never shared between application runs. Public reference
+snapshots use the independently retained publication records described below.
+
+Each producing or consuming attempt writes
+`data/jobs/<job>/attempts/<attempt>/shared/<namespace>/<fingerprint>.json`.
+The `appsec-review/shared-receipt/1` receipt records the application run/job/attempt, original
+orchestration correlation (including the actual Dagster invocation when present), hash-pinned
+claim, computation identity, object and dependency hashes, and `computed` versus `reused`.
+Fresh computation is still `computed` when the physical bytes already exist. Objects themselves
+do not claim a first producer: separate computations may independently produce identical bytes.
+A reuse receipt references the original computed receipt, never a later invocation's identity.
+Job-level reuse without executing another attempt continues to use orchestration receipts; it
+does not relabel the original claim or invent an additional computation.
+
+`data/shared/requests/<namespace>/<fingerprint>/<producer-receipt-sha256>.json` is an immutable
+lookup entry, not accepted evidence. A fingerprint identifies inputs/configuration/rules and,
+for triage, model/guidance/prompt identity; it does **not** prove deterministic model output.
+Different results for the same fingerprint remain separate objects and producing receipts.
+Selection is lexical by producer-receipt hash among complete entries visible at lookup time.
+An attempt then pins its selection permanently; later writers cannot rebind it. Competing
+different publications to the same attempt slot fail instead of clobbering evidence.
+
+Publication uses a private fsynced file followed by an atomic no-replace hardlink. Matching bytes
+are reused; conflicts, missing referenced bytes, symlinks and noncanonical/escaping paths fail.
+Caught failures remove only their private temporary file. A retry can complete a receipt's
+missing lookup entry without deleting earlier evidence. A process killed before cleanup can
+leave a `.publish-*` or private build file: it is not a lookup result or accepted artifact and
+the audit fails closed on it; this change does not purge interrupted evidence automatically.
+The filesystem and run root remain application-owned, not an adversarial concurrent mutation
+boundary.
+
+The original three jobs declare their receipt paths in their pinned dataset contracts. New
+`attempt-datasets/2` contracts also pin the runtime's enumerated publication namespaces; `/1`
+contracts keep their original declarations. The runtime declares objects, lookup entries and
+immutable named-layout bindings. The inventory verifies shared-file hashes,
+receipt/claim identities, pinned declarations and producer references, in addition to ordinary
+ownership accounting. Handoff publication pins the full receipt/object/dependency closure.
+Resume and accepted-handoff readers reverify it; shared index manifests also bind the shard
+to its original producing receipt. A valid receipt from a failed attempt may provide a
+computation-cache result, but never satisfies required accepted output by itself.
+
+Verified old triage entries and derived checkpoints can be read in place with a new consumer
+receipt marked `unknown-original-producer`. Existing document ledgers remain readable through
+their original handoffs. Old claims, manifests, paths and bytes are never rewritten.
+
+Required existing paths remain usable: guidance is still at `data/guidance/<bundle-hash>/`,
+producer indexes at `data/indices/` or `data/indexes/owasp/`, packages at `data/review-packages/`,
+and cells at `data/jobs/job_inference_security_review/cells/`. New files in these layouts are
+hardlinks to exact-byte objects, not duplicated payloads or replaceable symlinks. A named-layout
+fingerprint selects **path plus byte hash**, while the separate `computation` metadata records
+the input/model/tool/guidance fingerprint. `data/shared/named/<namespace>/<path-hash>.json`
+immutably binds the path to its bytes; an incomplete new publication cannot be silently treated
+as a legacy cache hit. Existing duplicate legacy files are not rewritten to deduplicate them.
+Fresh package assembly, guidance composition and index building remain `computed` even when
+the output bytes match. Verification-only consumers write reuse references.
+
+The classification of the examined layouts is:
+
+| Layout | Writer and consumer | Classification and guarantees |
+|---|---|---|
+| Inference v6 packages; lane/team ledgers and PoC seeds | `review/packages.py`; inference job's unit directories | **(a) Attempt-local**, unchanged; do not confuse these with shared v3 packages. |
+| Review-team semaphore locks and cell-number reservations | `review/teams.py`; `review/cells.py` | Mutable coordination, not immutable evidence. Exclusive empty reservation directories prevent concurrent cell attempts from overwriting one another. |
+| Review cells and judge/verifier sidecars | `review/cells.py`, inference `teams.py`; reuse, `stages.verify_receipts`, reporting cell readers | **(b) Closed for new publications**: original producing claim/invocation, immutable numbered results/checks and per-attempt reuse receipts. Legacy origin remains explicitly unknown. |
+| Shared v3 packages | `review_packages.publish_review_packages`; `verify_review_packages`, document-issue analysis | **(b)**: immutable exact bytes, input validation, computed-versus-reused receipts. |
+| Guidance bundles | `guidance.compose.pin_bundle`; target-plan, project-build, post-build, dependency and PoC guidance helpers | **(b)**: no-overwrite publication before inference, model-sensitive identities where model metadata is stored, attempt receipts. |
+| Non-derived SQLite and OWASP indexes | `retrieval.index.IndexBuilder`, `owasp_workbench.indexes`; manifest publication/verification and `WorkbenchIndex` | **(b)**: private build plus no-replace publication retained; physical dedupe is not a cache hit; consumers pin the selected original receipt. |
+| Public reference snapshots | Feed `publish_snapshot`, NVD `_publish`; `verify_current`, NVD incremental/verification paths, cve-bin-tool NVD resolver, indexing feed pins/products, review references and scanner feed readers | **(b)** for new claimed publications: independent immutable producer records and per-attempt consumption receipts. Legacy/imported origin remains explicitly unknown. |
+
+Job execution binds the current attempt explicitly at its validator/handler/finalizer boundary.
+The participating parallel producer pools propagate this context; no filesystem-wide write
+interception is used. Accepted-handoff consumption and derived-index reads produce small
+`shared-input` references, including downstream jobs that did not execute the original producer.
+Offline helpers and report readers without a claimed attempt do not invent one or write receipts.
+Registration and provenance do not make an output accepted; required publication, source
+snapshot and schema validation still apply. Mutable workspaces, status, logs, downloads, locks,
+operational metadata and latest pointers remain outside the immutable-output protocol.
+
+Public NVD, OSV, MITRE, KEV, EPSS and cve-bin-tool snapshots stay in their configured global feed
+roots under repository `data/`, with no snapshot payload copied into runs. Each new claimed
+computation publishes `provenance/<snapshot-id>/<record-sha256>.json`: an immutable application
+assertion binding the exact manifest, original run/job/attempt/invocation, claim/configuration
+hashes and a separate input/configuration/publisher computation fingerprint. Different
+computations retain separate records even when they deduplicate to the same snapshot.
+
+These records are retained independently of producing runs, together with their snapshots and
+NVD parent manifests/blobs. They remain verifiable after the entire producing run is removed.
+The original private claim is not exported or reconstructed: its hash is a correlation value,
+not a dependency on a retained run. Records contain no target contents, prompts, credentials or
+complete private configuration. Their authority is the application-owned feed filesystem, not a
+third-party signature or evidence that an output was accepted.
+
+Consumers write run-local `feed-snapshot` receipts and small content-addressed proofs, pinning
+the selected global record and snapshot. Feed roots are allowlisted by the consumer claim's
+SHA-pinned resolved configuration. Handoff/resume validation rechecks that configuration,
+manifest, payloads, record and NVD parent/blob chain, never the current pointer. Initial
+selection is lexical among complete records; an attempt cannot rebind its selection when later
+writers arrive. Downstream receipt consumption creates its own reference to the global record,
+not a dependency on an earlier consumer's claim.
+
+New manifests mark publication provenance as required. Missing/corrupt records, path escapes,
+symlinks, partial publications and mismatched content fail closed rather than becoming legacy
+cache hits. The existing feed writer lock still rejects competing snapshot publishers; immutable
+record publication is no-replace and concurrent-safe. Interrupted publication can retain a complete
+snapshot before its record/current pointer is published; retry preserves those bytes.
+NVD uses a complete private directory before exposing the final path, and no-replace blob links.
+New claimed incremental NVD computations require their selected parent snapshot to verify;
+they do not silently rebuild over a damaged pinned input.
+
+Legacy snapshots and Grype's imported-snapshot reader retain explicit `unknown-original-producer`
+consumption receipts; there is no application Grype producer to attribute. Offline helpers
+without a claimed attempt do not invent one. Old claims/manifests are not rewritten, legacy
+duplicate payloads are not reorganized, and no pruning or retention cleanup is introduced.
+All examined new shared immutable publication surfaces are covered; mutable operational
+workspaces/status/locks and historical unknown provenance remain outside that claim.
+
 The inventory also records this job's own reports and shard. Its own shard row names the
 `inventory/dataset-inventory` identity; the shard's SHA-256 resolves through the verified accepted
 manifest because a shard cannot contain its own content hash.
@@ -58,13 +212,17 @@ Violation codes: `undeclared_job`, `unknown_step`, `undeclared_shard`, `ambiguou
 `artifact_hash_mismatch`, `unaccounted_handoff_artifact`, `unaccounted_file`,
 `run_tree_truncated`, `run_tree_unreadable`, `snapshot_mismatch`, `missing_required_output`,
 `shard_conflict`, `indexed_without_route`, `exception_without_reason`,
-`registry_configuration_mismatch`, `duplicate_dataset_id`. Warnings (`unreferenced_index_files`,
-`upstream_not_run`) do not block
+`registry_configuration_mismatch`, `duplicate_dataset_id`, `invalid_attempt_claim`.
+Warnings (`unreferenced_index_files`, `upstream_not_run`, `attempt_provenance_unavailable`) do not block
 acceptance. A restored shard is recorded as a repair.
 
 When the audit fails, read `data/jobs/job_review_data_indexing/attempts/<attempt>/steps/audit/tasks/inventory/inventory.json`,
 fix the producer declaration or the producer, and resume the graph. Do not widen a declaration to
 silence an unknown output.
+`run_tree.unaccounted_count` is the total; the violation list contains at most 50 sampled
+unaccounted paths. Preserve failed attempts and accepted pointers rather than deleting files to
+make the audit pass. Before deploying an accounting change, reproduce the failure and replay the
+audit read-only over retained inputs; a successful offline replay does not launch or accept a run.
 
 ## Code-graph coverage
 
@@ -154,5 +312,10 @@ patterns are counted as a gap against the producing shard.
 
 Link and product shards are keyed by rule version, the exact upstream shard identities they read,
 pinned feed and OWASP identities, extra run-owned inputs and the settings they depend on. A
-verified checkpoint under `data/indexing/checkpoints/` reuses an unchanged shard; changing one
-rule rebuilds only that shard.
+verified shared checkpoint object and producing receipt reuse an unchanged shard; changing one
+rule rebuilds only that shard. Legacy checkpoints under `data/indexing/checkpoints/` are
+verified read-only and retain explicitly unknown original producers.
+The low-level `publish_derived` builder still permits callers without a job context to build
+legacy fixture/offline shards; it cannot assign attempt provenance. All production indexing-job
+call sites supply the shared-artifact context. This compatibility path also uses immutable
+no-replace publication and never removes a conflicting shard.

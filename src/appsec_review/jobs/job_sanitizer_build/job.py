@@ -13,7 +13,7 @@ later, separately authorized execution stage is the only thing that may run it
 
 from __future__ import annotations
 
-from concurrent.futures import ThreadPoolExecutor
+from appsec_review.storage.shared import PublicationThreadPoolExecutor as ThreadPoolExecutor
 from datetime import datetime, timezone
 import hashlib
 import json

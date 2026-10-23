@@ -4,6 +4,7 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 import shutil
+import pytest
 
 from appsec_review import cli
 
@@ -226,11 +227,27 @@ def test_document_issue_path_keeps_claims_private_and_resolves_source(tmp_path: 
                source_fingerprint=fingerprint)
     runner.run(build_packages(), run_id=outcome["run_id"], target_root=target,
                source_fingerprint=fingerprint)
-    runner.run(build_document_issues(), run_id=outcome["run_id"], target_root=target,
-               source_fingerprint=fingerprint)
-    ledgers = list((run_root / "data" / "document-issues").glob("*/ledger.json"))
-    assert len(ledgers) == 1
-    ledger = json.loads(ledgers[0].read_text(encoding="utf-8"))
+    document_result = runner.run(build_document_issues(), run_id=outcome["run_id"], target_root=target,
+                                 source_fingerprint=fingerprint,
+                                 orchestration={"system": "dagster", "run_id": "document-producer"})
+    output = document_result["result"]["outputs"]["analysis.map_and_adjudicate"]
+    ledger_path = run_root / output["artifact"]["path"]
+    assert output["artifact"]["path"].startswith("data/shared/objects/")
+    ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
+    from appsec_review.storage.shared import verify_receipt
+    producer = verify_receipt(run_root, output["shared_receipt"])
+    assert producer["mode"] == "computed"
+    before = ledger_path.read_bytes()
+    reused_result = runner.run(build_document_issues(), run_id=outcome["run_id"], target_root=target,
+                               source_fingerprint=fingerprint,
+                               orchestration={"system": "dagster", "run_id": "document-consumer"})
+    reused = reused_result["result"]["outputs"]["analysis.map_and_adjudicate"]
+    assert reused["reused"] and reused["artifact"] == output["artifact"]
+    consumer = verify_receipt(run_root, reused["shared_receipt"])
+    assert consumer["producer_receipt"] == output["shared_receipt"]
+    assert consumer["actor"]["orchestration"]["run_id"] == "document-consumer"
+    assert producer["actor"]["orchestration"]["run_id"] == "document-producer"
+    assert ledger_path.read_bytes() == before
     assert ledger["findings"] == ledger["scoring_inputs"] == []
     # The job is always partial while findings are unpublished, and it names that gap first.
     pointer = json.loads((run_root / "data/jobs/job_document_issue_analysis/latest.json").read_text(encoding="utf-8"))
@@ -248,6 +265,13 @@ def test_document_issue_path_keeps_claims_private_and_resolves_source(tmp_path: 
 
     # A security claim must carry distinct proof lines and independent review decisions.
     core = RetrievalCore(config.runtime.runs_dir, outcome["run_id"])
+    from appsec_review.document_issues import verify_document_issue_ledger
+    from appsec_review.storage import atomic_json
+    legacy = run_root / "data/document-issues" / ledger["content_sha256"] / "ledger.json"
+    atomic_json(legacy, ledger)
+    legacy_bytes = legacy.read_bytes()
+    assert verify_document_issue_ledger(core, legacy) == ledger
+    assert legacy.read_bytes() == legacy_bytes
     proof = dict(route["implementation_evidence"][0], line=5)
     proposed = {**route, "proof_evidence": [proof]}
     proof_ref = f"{proof['entity_id']}:{proof['line']}"
@@ -262,6 +286,11 @@ def test_document_issue_path_keeps_claims_private_and_resolves_source(tmp_path: 
                       verifier=verifier)["state"] == "insufficient_evidence"
     assert adjudicate(proposed, core=core, red=red, blue=blue, verifier=verifier)["state"] == "supported"
     # The assertion above proves the gate, not a vulnerability in Northwind.
+    source = target / "backend/orders.routes.ts"
+    source.write_text(source.read_text(encoding="utf-8") + "\n", encoding="utf-8")
+    with pytest.raises(RuntimeError, match="accepted source bytes changed"):
+        runner.run(build_document_issues(), run_id=outcome["run_id"], target_root=target,
+                   source_fingerprint=fingerprint)
 
 
 def test_document_issue_analysis_rejects_changed_source(tmp_path: Path) -> None:

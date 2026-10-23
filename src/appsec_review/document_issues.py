@@ -128,10 +128,18 @@ def adjudicate(candidate: Mapping[str, Any], *, core: RetrievalCore | None = Non
                                          "evidence_refs": sorted(ids)}} if supported else None)}
 
 
-def analyze_document_hunts(core: RetrievalCore, package_directory: Path, *, max_files: int = 20000,
-                           max_file_bytes: int = 1048576) -> dict[str, Any]:
+def verify_document_issue_inputs(core: RetrievalCore, package_directory: Path, *, max_files: int,
+                                 max_file_bytes: int) -> tuple[dict[str, Any], list[dict[str, Any]], list[str]]:
+    """Recheck every bounded input, including unmapped sources, before computing or reusing."""
     manifest = verify_review_packages(core, package_directory)
     source_routes, source_gaps = _source_lines(core, max_files, max_file_bytes)
+    return manifest, source_routes, source_gaps
+
+
+def analyze_document_hunts(core: RetrievalCore, package_directory: Path, *, max_files: int = 20000,
+                           max_file_bytes: int = 1048576) -> dict[str, Any]:
+    manifest, source_routes, source_gaps = verify_document_issue_inputs(
+        core, package_directory, max_files=max_files, max_file_bytes=max_file_bytes)
     candidates = []
     for entry in manifest["packages"]:
         if entry["kind"] != "document_hunt":
@@ -185,14 +193,18 @@ def analyze_document_hunts(core: RetrievalCore, package_directory: Path, *, max_
 
 
 def verify_document_issue_ledger(core: RetrievalCore, path: Path) -> dict[str, Any]:
-    path = Path(path).resolve()
-    if path.parent.parent != (core.run_root / "data" / "document-issues").resolve():
+    from appsec_review.storage.shared import OBJECTS, safe_path
+    path = safe_path(core.run_root, Path(path).relative_to(core.run_root).as_posix())
+    content_addressed = path.parent == core.run_root / OBJECTS
+    if not content_addressed and path.parent.parent != core.run_root / "data" / "document-issues":
         raise ValueError("document issue ledger escapes its run")
+    if content_addressed and file_sha256(path) != path.name:
+        raise ValueError("document issue ledger object hash mismatch")
     ledger = json.loads(path.read_text(encoding="utf-8"))
     if path.read_bytes() != canonical_json(ledger) + b"\n":
         raise ValueError("document issue ledger byte integrity mismatch")
     digest = ledger.pop("content_sha256", None)
-    if (digest != _hash(ledger) or path.parent.name != digest or
+    if (digest != _hash(ledger) or (not content_addressed and path.parent.name != digest) or
             ledger.get("run_id") != core.run_id or
             ledger.get("accepted_manifest_sha256") != core.manifest_sha256 or
             ledger.get("target_snapshot") != core.manifest["target_snapshot"]):

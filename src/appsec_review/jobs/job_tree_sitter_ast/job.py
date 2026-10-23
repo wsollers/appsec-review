@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import as_completed
+from appsec_review.storage.shared import PublicationThreadPoolExecutor as ThreadPoolExecutor
 from dataclasses import asdict
 import hashlib
 import json

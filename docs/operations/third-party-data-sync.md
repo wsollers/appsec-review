@@ -37,12 +37,60 @@ manifest. When the configured `image` tag is missing locally, the step runs `doc
 3600) bounds the networkless database build container. Scanning consumers must still treat CVE
 matches as applicability leads rather than findings.
 
+## Immutable publication provenance
+
+New claimed publications retain their existing shared snapshot payloads and add small immutable
+`provenance/<snapshot-id>/<sha256>.json` records. Each binds the manifest's exact bytes, original
+application run/job/attempt and orchestration invocation, claim/configuration hashes, and an
+input/configuration/publisher computation fingerprint. A fresh computation remains `computed`
+when identical snapshot bytes already exist; separate producers never overwrite one another.
+
+Publication records are retained **independently of producing runs**, alongside their snapshots
+and NVD parent/blob chains. Removing a producing run does not invalidate a consuming run's
+provenance. The retained record is an application assertion, not a reconstructed private claim;
+only hashes and bounded identity metadata are exported, not target contents, prompts,
+credentials or complete configuration. The application-owned feed root is the authority;
+these records are not third-party signatures or acceptance decisions.
+
+Consumers use per-attempt `feed-snapshot` receipts pointing to small run-local proofs and the
+global records. The consumer's hash-pinned configuration allowlists the exact feed root under
+repository `data/`. Snapshot selection is pinned permanently, independently of `current.json`.
+Acceptance and resume verify records, manifests and files again, including NVD parent/blob
+chains. A new manifest requiring provenance cannot be treated as legacy when a record is missing.
+Legacy snapshots and imported Grype databases retain explicit unknown-original-producer labels.
+
+The existing nonblocking writer lock continues to reject concurrent snapshot publishers.
+Record writes use atomic no-replace publication. NVD publishes a complete private directory
+before exposing its snapshot path; failures leave the prior current pointer unchanged and
+permit retry without replacing complete evidence. Claimed incremental NVD work verifies its
+selected parent rather than silently rebuilding over a damaged pinned input.
+No retention cleanup, live feed migration or copying of snapshots into runs is introduced.
+See [shared-artifact provenance](review-data-indexing.md#shared-immutable-objects-and-attempt-receipts)
+for the full scope and legacy limitations.
+
 ## Source and resource policy
 
 All source selections, paths, worker counts, byte/record bounds, timeouts, tool settings, and the
 schedule live in `appsec-review.toml` under the semantic job/step/task hierarchy.
 
 - NVD bootstraps the official CVE 2.0 yearly feeds and then uses bounded last-modified API windows.
+  Transport failures (including truncated responses, timeouts, HTTP 429 and transient server
+  errors) use bounded exponential backoff. The NVD settings centrally configure
+  `request_timeout_seconds`, `download_timeout_seconds` (socket timeouts), `max_attempts`,
+  `retry_delay_seconds`, and `retry_max_delay_seconds`. A `Retry-After` longer than the configured
+  delay bound fails rather than retrying too early. Permanent HTTP errors and integrity/protocol
+  violations fail immediately.
+  Within a download, retries resume the written offset using `Range` and a strong ETag or
+  Last-Modified `If-Range` validator. Changed identities or inconsistent ranges fail; a server
+  returning a full response restarts the file instead of appending it. Unverified partials are
+  never published and are restarted on the next job invocation.
+  Completed yearly downloads are cached in the ignored `data/feeds/nvd/downloads/` directory
+  (under the configured `feed_root` for other roots). Every bootstrap fetches fresh official
+  `.meta` files and rechecks compressed size, uncompressed size, and SHA-256 before reusing a
+  cached year. Changed or corrupt cache entries are explicitly invalidated and downloaded again,
+  so a late-year transport failure does not require downloading earlier verified years again.
+  A failed refresh still leaves the previous published pointer unchanged. An NVD API key is
+  optional and changes incremental API pacing; it does not repair truncated yearly feed files.
   Every snapshot (manifest schema `nvd-snapshot-manifest/2`) also publishes `index/nvd.sqlite`, keyed
   by CVE id with the English description, CWE weakness ids, CVSS metrics (family, version, vector,
   base score, base severity), `vulnStatus`, published and last-modified timestamps, and the raw

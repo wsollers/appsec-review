@@ -26,6 +26,7 @@ DATASETS = (
                   reason="same normalized records as the per-tool observation shards"),
     protected("static_tool_io", "source_sast", "scanner_findings", "appsec-review/container-execution/1",
               "Raw scanner output, staged inputs, SBOMs and execution streams.",
-              artifacts=(_A + "/steps/*/tasks/*/scratch/**", _A + "/steps/*/tasks/*/inputs/**"),
+              artifacts=(_A + "/steps/*/tasks/*/scratch/**", _A + "/steps/*/tasks/*/inputs/**",
+                         _A + "/steps/vulnerability_matching/tasks/osv_scanner_scan/osv-scanner-merged.json"),
               reason="raw scanner output can contain secret matches and unbounded target content"),
 )

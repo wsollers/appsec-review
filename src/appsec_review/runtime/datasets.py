@@ -9,8 +9,11 @@ not evidence: nothing here claims a dataset was produced.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
+import hashlib
+import json
 import re
+from typing import Any, Mapping, Sequence
 
 
 DISPOSITIONS = ("indexed", "artifact_only", "protected", "unavailable")
@@ -139,3 +142,61 @@ def validate_declarations(job_id: str, declarations: tuple[DatasetDeclaration, .
             if claim in claims.setdefault(key, set()):
                 raise ValueError(f"duplicate shard claim for index {index}: {job_id}")
             claims[key].add(claim)
+
+
+RUNTIME_SHARED_NAMESPACES = ("index-shard", "owasp-shard", "guidance", "review-package",
+                             "review-cell", "cell-check", "feed-snapshot", "shared-input")
+
+
+def dataset_contract(job_id: str, steps: Sequence[str],
+                     declarations: Sequence[DatasetDeclaration]) -> dict[str, Any]:
+    """Pin the producing attempt's output contract independently of later code changes."""
+    body = {"schema": "appsec-review/attempt-datasets/2", "job_id": job_id,
+            "shared_namespaces": list(RUNTIME_SHARED_NAMESPACES),
+            "steps": sorted(set(steps)), "datasets": [asdict(item) for item in declarations]}
+    return {**body, "sha256": hashlib.sha256(
+        json.dumps(body, sort_keys=True, separators=(",", ":")).encode()).hexdigest()}
+
+
+def read_dataset_contract(document: Mapping[str, Any], job_id: str
+                          ) -> tuple[tuple[str, ...], tuple[DatasetDeclaration, ...]]:
+    body = {key: value for key, value in document.items() if key != "sha256"}
+    expected = hashlib.sha256(json.dumps(body, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    fields = {"schema", "job_id", "steps", "datasets"}
+    if body.get("schema") == "appsec-review/attempt-datasets/2":
+        fields.add("shared_namespaces")
+        if (not isinstance(body.get("shared_namespaces"), list)
+                or any(name not in RUNTIME_SHARED_NAMESPACES for name in body["shared_namespaces"])):
+            raise ValueError("invalid attempt shared namespaces")
+    if document.get("sha256") != expected or body.get("schema") not in {
+            "appsec-review/attempt-datasets/1", "appsec-review/attempt-datasets/2"} \
+            or body.get("job_id") != job_id or set(body) != fields:
+        raise ValueError("invalid attempt dataset contract identity")
+    steps = body["steps"]
+    if not isinstance(steps, list) or not all(isinstance(step, str) and _NAME.fullmatch(step) for step in steps) \
+            or len(set(steps)) != len(steps) or not isinstance(body["datasets"], list):
+        raise ValueError("invalid attempt dataset contract topology")
+    declarations = []
+    for record in body["datasets"]:
+        if not isinstance(record, dict):
+            raise ValueError("invalid attempt dataset declaration")
+        values = dict(record)
+        for name in ("output_kind", "step", "family", "schema", "sensitivity", "disposition", "description"):
+            if not isinstance(values.get(name), str):
+                raise ValueError(f"invalid attempt dataset declaration {name}")
+        for name in ("query_route", "reason"):
+            if values.get(name) is not None and not isinstance(values[name], str):
+                raise ValueError(f"invalid attempt dataset declaration {name}")
+        if not isinstance(values.get("store", "retrieval"), str) or not isinstance(values.get("required", False), bool):
+            raise ValueError("invalid attempt dataset declaration store or required flag")
+        for field in ("indexes", "shard_prefixes", "shard_suffixes", "artifacts"):
+            members = values.get(field, ())
+            if not isinstance(members, (list, tuple)) or not all(isinstance(item, str) for item in members):
+                raise ValueError(f"invalid attempt dataset declaration {field}")
+            values[field] = tuple(members)
+        declaration = DatasetDeclaration(**values)
+        if declaration.step not in steps:
+            raise ValueError("attempt dataset declaration names an unknown step")
+        declarations.append(declaration)
+    validate_declarations(job_id, tuple(declarations))
+    return tuple(steps), tuple(declarations)

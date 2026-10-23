@@ -36,9 +36,12 @@ def test_infer_selects_the_transport_named_on_the_request(monkeypatch) -> None:
 
     monkeypatch.setitem(inference.PROVIDERS, "anthropic-api", transport("api"))
     monkeypatch.setitem(inference.PROVIDERS, "claude-cli", transport("cli"))
+    monkeypatch.setitem(inference.PROVIDERS, "copilot-sdk", transport("copilot"))
     assert infer(_request("claude-cli"), timeout_seconds=7).proposal == VALUE
     assert infer(_request("anthropic-api"), timeout_seconds=9).proposal == VALUE
-    assert seen == [("cli", "claude-haiku-5-5", 7), ("api", "claude-haiku-5-5", 9)]
+    assert infer(_request("copilot-sdk"), timeout_seconds=11).proposal == VALUE
+    assert seen == [("cli", "claude-haiku-5-5", 7), ("api", "claude-haiku-5-5", 9),
+                    ("copilot", "claude-haiku-5-5", 11)]
 
 
 def test_infer_rejects_a_provider_without_a_transport() -> None:
@@ -94,9 +97,11 @@ def _imports(path: Path) -> set[str]:
 
 def test_infer_is_the_only_path_from_the_application_to_a_model() -> None:
     """Jobs depend on `infer`; only the inference package knows a provider or its endpoint."""
-    transports = {"appsec_review.inference.anthropic_api", "appsec_review.inference.claude_cli"}
-    endpoints = ("api.anthropic.com", "api.openai.com", "generativelanguage.googleapis.com")
-    sdks = {"anthropic", "openai"}
+    transports = {"appsec_review.inference.anthropic_api", "appsec_review.inference.claude_cli",
+                  "appsec_review.inference.copilot_sdk"}
+    endpoints = ("api.anthropic.com", "api.openai.com", "generativelanguage.googleapis.com",
+                 "api.githubcopilot.com")
+    sdks = {"anthropic", "openai", "copilot"}
     offenders = []
     for path in sorted(SOURCE.rglob("*.py")):
         if SOURCE / "inference" in path.parents:
@@ -108,12 +113,13 @@ def test_infer_is_the_only_path_from_the_application_to_a_model() -> None:
             offenders.append(path.relative_to(SOURCE).as_posix())
     assert offenders == []
     # Inside the package, each provider module exposes exactly one transport function.
-    for module in (inference.anthropic_api, inference.claude_cli):
+    for module in (inference.anthropic_api, inference.claude_cli, inference.copilot_sdk):
         tree = ast.parse(Path(module.__file__).read_text(encoding="utf-8"))
         assert not [node for node in tree.body if isinstance(node, ast.ClassDef)
                     and node.name != "ModelOutputError"]
         assert callable(module.send)
-    assert set(inference.PROVIDERS.values()) == {inference.anthropic_api.send, inference.claude_cli.send}
+    assert set(inference.PROVIDERS.values()) == {
+        inference.anthropic_api.send, inference.claude_cli.send, inference.copilot_sdk.send}
 
 
 def test_registry_gives_every_model_calling_job_the_same_infer(monkeypatch) -> None:

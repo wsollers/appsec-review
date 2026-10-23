@@ -27,6 +27,17 @@ PLANNED_CONSUMERS: tuple[dict[str, object], ...] = tuple(
     ))
 PLANNED_CONSUMER_JOBS = tuple(str(item["job_id"]) for item in PLANNED_CONSUMERS)
 DATASETS = (
+    artifact_only("accepted_scope", "scope", "inference_review", "appsec-review/inference-review-accepted-scope/1",
+                  "Pinned accepted scope and evidence map used by this review attempt.",
+                  artifacts=(_A + "/steps/scope/tasks/accept_manifest/accepted-scope.json",
+                             _A + "/steps/scope/tasks/assemble_scope/evidence-map.json"),
+                  reason="attempt-local review inputs; only the accepted retrieval manifest grants evidence"),
+    protected("lead_triage", "triage", "inference_review", "application/json",
+              "Unknown-severity assessments, immutable shared-result receipts and legacy cache entries.",
+              artifacts=(_A + "/steps/triage/tasks/lead_severity/lead-triage.json",
+                         _A + "/shared/lead-triage/*.json",
+                         _J + "/triage-cache/*.json"),
+              reason="model assessments are untrusted intermediate results, not accepted findings"),
     artifact_only("review_packages", "packages", "inference_review", "appsec-review/review-package/6",
                   "Lane A finding-lead and lane B hunt packages with their verified package manifest.",
                   artifacts=(_A + "/steps/packages/**",),

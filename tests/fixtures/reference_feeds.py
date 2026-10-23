@@ -66,7 +66,8 @@ class _NvdClient:
         return json.dumps({"format": "NVD_CVE", "version": "2.0", "startIndex": 0, "resultsPerPage": len(self.pages),
                            "totalResults": len(self.pages), "vulnerabilities": self.pages}).encode()
 
-    def download(self, url: str, destination: Path, api_key: str | None = None) -> int:
+    def download(self, url: str, destination: Path, api_key: str | None = None, *,
+                 expected_size: int | None = None) -> int:
         destination.write_bytes(self.compressed)
         return len(self.compressed)
 

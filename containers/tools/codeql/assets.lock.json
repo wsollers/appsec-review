@@ -2,7 +2,7 @@
   "schema": "appsec-review/codeql-assets-lock/2",
   "source_image": {
     "tag": "audit-codeql:custom-2.27.0",
-    "image_id": "sha256:3344f8d8dacbd290a0e8cb51f3d648b7b6de56a6b5b086a240801c0d892efca2"
+    "image_id": "sha256:8a9142b90b8ab80562411b732621a6c358a1e0b55e3cd18826ac0c0b3b702096"
   },
   "codeql": {
     "version": "2.27.0",

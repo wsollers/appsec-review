@@ -4,18 +4,24 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterator, Mapping
 from datetime import datetime, timedelta, timezone
+from email.utils import parsedate_to_datetime
 import gzip
 import hashlib
+import http.client
 import io
 import json
+import logging
 import os
 from pathlib import Path
 import re
+import shutil
 import time
 from typing import Any, Protocol
 import urllib.parse
 import urllib.request
+import urllib.error
 import uuid
+import zlib
 
 from appsec_review.jobs.job_third_party_data_sync.publication import verify_snapshot_directory
 from appsec_review.jobs.job_third_party_data_sync.steps.nvd_sync import index as nvd_index
@@ -36,6 +42,7 @@ LIMITATION = (
     "reachability, exploitability, severity, or a security finding."
 )
 _CVE = re.compile(r"CVE-[0-9]{4}-[0-9]{4,}")
+_LOG = logging.getLogger(__name__)
 
 
 def utcnow() -> datetime:
@@ -58,52 +65,157 @@ def parse_time(value: object) -> datetime:
 class NvdClient(Protocol):
     def get_bytes(self, url: str, api_key: str | None = None) -> bytes: ...
 
-    def download(self, url: str, destination: Path, api_key: str | None = None) -> int: ...
+    def download(self, url: str, destination: Path, api_key: str | None = None, *,
+                 expected_size: int | None = None) -> int: ...
 
 
 class HttpNvdClient:
-    def __init__(self, *, request_timeout: float = 120, download_timeout: float = 300,
+    def __init__(self, *, request_timeout: float = 120, download_timeout: float = 90,
                  max_download_bytes: int = 512 * 1024 * 1024,
-                 max_api_response_bytes: int = 64 * 1024 * 1024):
+                 max_api_response_bytes: int = 64 * 1024 * 1024,
+                 max_attempts: int = 6, retry_delay_seconds: float = 5,
+                 retry_max_delay_seconds: float = 60,
+                 pause: Callable[[float], None] = time.sleep):
         self.request_timeout = request_timeout
         self.download_timeout = download_timeout
         self.max_download_bytes = max_download_bytes
         self.max_api_response_bytes = max_api_response_bytes
+        self.max_attempts = max_attempts
+        self.retry_delay_seconds = retry_delay_seconds
+        self.retry_max_delay_seconds = retry_max_delay_seconds
+        self.pause = pause
 
     @staticmethod
     def _headers(api_key: str | None) -> dict[str, str]:
-        headers = {"User-Agent": USER_AGENT, "Accept": "*/*"}
+        headers = {"User-Agent": USER_AGENT, "Accept": "*/*", "Accept-Encoding": "identity"}
         if api_key:
             headers["apiKey"] = api_key
         return headers
 
+    def _retry(self, error: Exception, attempt: int) -> None:
+        delay = min(self.retry_delay_seconds * 2 ** (attempt - 1), self.retry_max_delay_seconds)
+        if isinstance(error, urllib.error.HTTPError):
+            retry_after = error.headers.get("Retry-After")
+            error.close()
+            if error.code not in {408, 429, 500, 502, 503, 504}:
+                raise error
+            if retry_after:
+                try:
+                    requested = (float(int(retry_after)) if retry_after.isdigit()
+                                 else parsedate_to_datetime(retry_after).timestamp() - time.time())
+                except (ValueError, TypeError, OverflowError):
+                    _LOG.warning("NVD returned an invalid Retry-After header; using configured backoff")
+                else:
+                    if requested > self.retry_max_delay_seconds:
+                        _LOG.error("NVD Retry-After exceeds the configured retry delay bound")
+                        raise error
+                    delay = max(delay, requested)
+        elif not isinstance(error, (urllib.error.URLError, TimeoutError, ConnectionError,
+                                    http.client.IncompleteRead, http.client.RemoteDisconnected)):
+            raise error
+        if attempt >= self.max_attempts:
+            raise error
+        _LOG.warning("NVD transport attempt %s/%s failed (%s); retrying in %ss",
+                     attempt, self.max_attempts, error, delay)
+        self.pause(delay)
+
     def get_bytes(self, url: str, api_key: str | None = None) -> bytes:
         request = urllib.request.Request(url, headers=self._headers(api_key))
-        with urllib.request.urlopen(request, timeout=self.request_timeout) as response:
-            if getattr(response, "status", 200) != 200:
-                raise RuntimeError(f"NVD request returned HTTP {response.status}")
-            declared = response.headers.get("Content-Length")
-            if declared is not None and int(declared) > self.max_api_response_bytes:
-                raise ValueError("NVD response exceeds configured byte bound")
-            payload = response.read(self.max_api_response_bytes + 1)
-            if len(payload) > self.max_api_response_bytes:
-                raise ValueError("NVD response exceeded configured byte bound")
-            return payload
+        for attempt in range(1, self.max_attempts + 1):
+            try:
+                with urllib.request.urlopen(request, timeout=self.request_timeout) as response:
+                    if response.status != 200:
+                        raise ValueError(f"NVD request returned HTTP {response.status}")
+                    declared = response.headers.get("Content-Length")
+                    length = int(declared) if declared is not None else None
+                    if length is not None and not 0 <= length <= self.max_api_response_bytes:
+                        raise ValueError("NVD response exceeds configured byte bound")
+                    payload = response.read(self.max_api_response_bytes + 1)
+                    if len(payload) > self.max_api_response_bytes:
+                        raise ValueError("NVD response exceeded configured byte bound")
+                    if length is not None and len(payload) < length:
+                        raise http.client.IncompleteRead(payload, length - len(payload))
+                    if length is not None and len(payload) != length:
+                        raise ValueError("NVD response exceeds declared length")
+                    return payload
+            except (urllib.error.URLError, TimeoutError, ConnectionError,
+                    http.client.IncompleteRead, http.client.RemoteDisconnected) as error:
+                self._retry(error, attempt)
+        raise RuntimeError("NVD request exhausted its attempt budget")
 
-    def download(self, url: str, destination: Path, api_key: str | None = None) -> int:
-        request = urllib.request.Request(url, headers=self._headers(api_key))
+    def download(self, url: str, destination: Path, api_key: str | None = None, *,
+                 expected_size: int | None = None) -> int:
+        if expected_size is not None and not 0 < expected_size <= self.max_download_bytes:
+            raise ValueError("NVD expected download size exceeds configured byte bound")
+        if destination.exists():
+            raise FileExistsError(destination)
+        partial = destination.with_suffix(destination.suffix + ".partial")
+        if partial.exists():
+            _LOG.warning("Discarding an unverified NVD partial from an earlier invocation: %s", partial.name)
+            partial.unlink()
         size = 0
-        with urllib.request.urlopen(request, timeout=self.download_timeout) as response, destination.open("xb") as output:
-            if getattr(response, "status", 200) != 200:
-                raise RuntimeError(f"NVD request returned HTTP {response.status}")
-            for chunk in iter(lambda: response.read(1024 * 1024), b""):
-                output.write(chunk)
-                size += len(chunk)
-                if size > self.max_download_bytes:
-                    raise ValueError("NVD download exceeded configured byte bound")
-            output.flush()
-            os.fsync(output.fileno())
-        return size
+        validator: tuple[str, str] | None = None
+        total: int | None = None
+        for attempt in range(1, self.max_attempts + 1):
+            headers = self._headers(api_key)
+            resume = size > 0 and validator is not None and total is not None
+            if resume and validator is not None:
+                headers.update({"Range": f"bytes={size}-", "If-Range": validator[1]})
+            request = urllib.request.Request(url, headers=headers)
+            try:
+                with urllib.request.urlopen(request, timeout=self.download_timeout) as response:
+                    declared = response.headers.get("Content-Length")
+                    length = int(declared) if declared is not None else None
+                    if length is not None and not 0 <= length <= self.max_download_bytes:
+                        raise ValueError("NVD download exceeds configured byte bound")
+                    if response.status == 206:
+                        match = re.fullmatch(r"bytes (\d+)-(\d+)/(\d+)",
+                                             response.headers.get("Content-Range", ""))
+                        if not resume or validator is None or match is None:
+                            raise ValueError("NVD returned an unsolicited or invalid partial response")
+                        start, end, response_total = map(int, match.groups())
+                        if (start != size or not start <= end < response_total
+                                or response_total != total
+                                or response.headers.get(validator[0]) != validator[1]
+                                or (length is not None and length != end - start + 1)):
+                            raise ValueError("NVD resumed response identity or byte range changed")
+                        length = end - start + 1
+                        mode = "ab"
+                    elif response.status == 200:
+                        if size:
+                            _LOG.warning("NVD did not honor the range request; restarting the download")
+                        if expected_size is not None and length is not None and length != expected_size:
+                            raise ValueError("NVD Content-Length disagrees with feed metadata")
+                        size, total = 0, expected_size if expected_size is not None else length
+                        etag = response.headers.get("ETag")
+                        modified = response.headers.get("Last-Modified")
+                        validator = (("ETag", etag) if etag and not etag.startswith("W/")
+                                     else ("Last-Modified", modified) if modified else None)
+                        mode = "wb"
+                    else:
+                        raise ValueError(f"NVD download returned HTTP {response.status}")
+                    received = 0
+                    with partial.open(mode) as output:
+                        for chunk in iter(lambda: response.read(64 * 1024), b""):
+                            if size + len(chunk) > self.max_download_bytes:
+                                raise ValueError("NVD download exceeded configured byte bound")
+                            if total is not None and size + len(chunk) > total:
+                                raise ValueError("NVD download exceeds expected total length")
+                            if length is not None and received + len(chunk) > length:
+                                raise ValueError("NVD download exceeds declared response length")
+                            output.write(chunk)
+                            size += len(chunk)
+                            received += len(chunk)
+                        output.flush()
+                        os.fsync(output.fileno())
+                    if total is not None and size < total:
+                        raise http.client.IncompleteRead(b"", total - size)
+                    partial.replace(destination)
+                    return size
+            except (urllib.error.URLError, TimeoutError, ConnectionError,
+                    http.client.IncompleteRead, http.client.RemoteDisconnected) as error:
+                self._retry(error, attempt)
+        raise RuntimeError("NVD download exhausted its attempt budget")
 
 
 def parse_meta(payload: bytes) -> dict[str, Any]:
@@ -244,8 +356,16 @@ class NvdPublisher:
         pause: Callable[[float], None] = time.sleep,
     ):
         self.settings = settings
-        self.client = client or HttpNvdClient(max_download_bytes=settings.max_download_bytes,
-                                               max_api_response_bytes=settings.max_api_response_bytes)
+        self.client = client or HttpNvdClient(
+            max_download_bytes=settings.max_download_bytes,
+            max_api_response_bytes=settings.max_api_response_bytes,
+            request_timeout=settings.request_timeout_seconds,
+            download_timeout=settings.download_timeout_seconds,
+            max_attempts=settings.max_attempts,
+            retry_delay_seconds=settings.retry_delay_seconds,
+            retry_max_delay_seconds=settings.retry_max_delay_seconds,
+            pause=pause,
+        )
         self.clock = clock
         self.pause = pause
 
@@ -254,17 +374,12 @@ class NvdPublisher:
         return self.settings.feed_root
 
     def _put_blob(self, staged: Path, suffix: str) -> dict[str, Any]:
+        from appsec_review.storage.shared import _link, safe_path
+        safe_path(self.root, staged.relative_to(self.root).as_posix())
         digest = file_sha256(staged)
-        target = self.root / "blobs" / f"sha256-{digest}{suffix}"
-        target.parent.mkdir(parents=True, exist_ok=True)
-        if target.exists():
-            if file_sha256(target) != digest:
-                raise ValueError("content-addressed NVD blob hash mismatch")
-            staged.unlink()
-        else:
-            os.replace(staged, target)
-        return {"path": target.relative_to(self.root).as_posix(), "sha256": digest,
-                "size_bytes": target.stat().st_size}
+        result = _link(self.root, staged, f"blobs/sha256-{digest}{suffix}", digest)
+        staged.unlink()
+        return result
 
     @staticmethod
     def _snapshot_id(manifest: Mapping[str, Any]) -> str:
@@ -284,13 +399,14 @@ class NvdPublisher:
 
     def _chain(self, snapshot_id: str | None) -> list[dict[str, Any]]:
         """Manifests from the root bootstrap to ``snapshot_id``, oldest first."""
+        from appsec_review.storage.shared import safe_path
         chain: list[dict[str, Any]] = []
         seen: set[str] = set()
         while snapshot_id:
             if snapshot_id in seen:
                 raise ValueError("NVD snapshot parent cycle")
             seen.add(snapshot_id)
-            manifest = json.loads((self.root / "snapshots" / snapshot_id / "manifest.json").read_text(encoding="utf-8"))
+            manifest = json.loads(safe_path(self.root, f"snapshots/{snapshot_id}/manifest.json").read_bytes())
             chain.append(manifest)
             snapshot_id = manifest.get("parent_snapshot_id")
         return list(reversed(chain))
@@ -302,29 +418,52 @@ class NvdPublisher:
         metadata blobs a replay rebuilds the index from. A ``/1`` chain stored only raw feed blobs,
         so a missing ``/1`` index cannot be replayed and the feed is bootstrapped afresh instead.
         """
+        from appsec_review.storage.shared import safe_path
         snapshot_id = str(current["snapshot_id"])
-        parent = json.loads((self.root / "snapshots" / snapshot_id / "manifest.json").read_text(encoding="utf-8"))
+        parent = json.loads(safe_path(self.root, f"snapshots/{snapshot_id}/manifest.json").read_bytes())
         if self._parent_index(parent) is not None:
             return True
         return all("metadata_blob" in record for manifest in self._chain(snapshot_id)
                    for layer in manifest.get("layers", []) for record in layer.get("pages", [layer]))
 
     def _parent_index(self, parent: Mapping[str, Any]) -> Path | None:
+        from appsec_review.storage.shared import safe_path
         entry = (parent.get("files") or {}).get(nvd_index.LOGICAL_PATH)
-        path = self.root / "snapshots" / str(parent["snapshot_id"]) / nvd_index.LOGICAL_PATH
+        path = safe_path(self.root, f"snapshots/{parent['snapshot_id']}/{nvd_index.LOGICAL_PATH}")
         if not isinstance(entry, Mapping) or not path.is_file() or file_sha256(path) != entry.get("sha256"):
             return None
         return path
 
     def _publish(self, manifest: dict[str, Any], index_path: Path) -> dict[str, Any]:
+        from appsec_review.storage.feed_provenance import check_root, record_snapshot
+        from appsec_review.storage.shared import current, safe_path
+        check_root(self.root, "nvd", producing=True)
+        if index_path.is_symlink() or not index_path.is_file():
+            raise ValueError("NVD private index is missing or a symlink")
+        if current() is not None:
+            manifest = {**manifest, "publication_provenance": "required-v1"}
         snapshot_id = self._snapshot_id(manifest)
         signed = {**manifest, "snapshot_id": snapshot_id}
-        directory = self.root / "snapshots" / snapshot_id
-        directory.mkdir(parents=True, exist_ok=False)
-        (directory / "index").mkdir()
-        os.replace(index_path, directory / nvd_index.LOGICAL_PATH)
-        atomic_json(directory / "manifest.json", signed)
-        verify_snapshot_directory(directory, signed)
+        directory = safe_path(self.root, f"snapshots/{snapshot_id}")
+        stage = safe_path(self.root, f"staging/.snapshot-{uuid.uuid4().hex}")
+        stage.mkdir(parents=True)
+        try:
+            (stage / "index").mkdir()
+            os.link(index_path, stage / nvd_index.LOGICAL_PATH)
+            atomic_json(stage / "manifest.json", signed)
+            verify_snapshot_directory(stage, signed)
+            directory.parent.mkdir(parents=True, exist_ok=True)
+            if directory.exists():
+                existing = safe_path(directory, "manifest.json")
+                if existing.read_bytes() != canonical_json(signed):
+                    raise ValueError("immutable NVD snapshot conflicts")
+                verify_snapshot_directory(directory, signed)
+            else:
+                os.rename(stage, directory)
+        finally:
+            if stage.exists():
+                shutil.rmtree(stage)
+        record_snapshot(self.root, "nvd", snapshot_id, computed=True)
         pointer = {
             "schema": POINTER_SCHEMA,
             "feed_id": "nvd",
@@ -334,7 +473,38 @@ class NvdPublisher:
             "cursor": signed["cursor"],
         }
         atomic_json(self.root / "current.json", pointer)
+        index_path.unlink()
         return pointer
+
+    @staticmethod
+    def _verify_year(path: Path, year: int, metadata: Mapping[str, Any]) -> None:
+        if path.stat().st_size != metadata["gzSize"]:
+            raise ValueError(f"NVD {year} transport length mismatch")
+        size, digest = _gzip_properties(path)
+        if size != metadata["size"] or digest.lower() != metadata["sha256"].lower():
+            raise ValueError(f"NVD {year} uncompressed hash or size mismatch")
+
+    def _year_download(self, year: int, source_url: str, metadata: Mapping[str, Any],
+                       api_key: str | None) -> Path:
+        if not 0 < metadata["gzSize"] <= self.settings.max_download_bytes:
+            raise ValueError(f"NVD {year} download exceeds configured byte bound")
+        cache = self.root / "downloads" / f"nvdcve-2.0-{year}.json.gz"
+        cache.parent.mkdir(parents=True, exist_ok=True)
+        if cache.exists():
+            try:
+                self._verify_year(cache, year, metadata)
+            except (ValueError, gzip.BadGzipFile, EOFError, zlib.error) as error:
+                _LOG.warning("Invalidating NVD %s cached download: %s", year, error)
+                cache.unlink()
+            else:
+                _LOG.info("Reusing verified NVD %s download", year)
+                return cache
+        _LOG.info("Downloading NVD %s into the verified yearly cache", year)
+        size = self.client.download(source_url, cache, api_key, expected_size=metadata["gzSize"])
+        if size != metadata["gzSize"]:
+            raise ValueError(f"NVD {year} transport length mismatch")
+        self._verify_year(cache, year, metadata)
+        return cache
 
     def _bootstrap(self, staging: Path, api_key: str | None) -> tuple[Path, dict[str, Any]]:
         instant = self.clock()
@@ -346,13 +516,8 @@ class NvdPublisher:
             source_url = f"{FEED_BASE}/{name}.json.gz"
             source_metadata = parse_meta(self.client.get_bytes(metadata_url, api_key))
             raw_path = staging / f"{name}.json.gz"
-            if self.client.download(source_url, raw_path, api_key) != source_metadata["gzSize"]:
-                raise ValueError(f"NVD {year} transport length mismatch")
-            if raw_path.stat().st_size > self.settings.max_download_bytes:
-                raise ValueError(f"NVD {year} download exceeded configured byte bound")
-            size, digest = _gzip_properties(raw_path)
-            if size != source_metadata["size"] or digest.lower() != source_metadata["sha256"].lower():
-                raise ValueError(f"NVD {year} uncompressed hash or size mismatch")
+            cache = self._year_download(year, source_url, source_metadata, api_key)
+            shutil.copyfile(cache, raw_path)
             metadata_path = staging / f"{name}.metadata.jsonl.gz"
             with gzip.open(raw_path, "rb") as stream:
                 identifiers, count = _write_metadata(iter_vulnerabilities(stream), metadata_path)
@@ -398,10 +563,15 @@ class NvdPublisher:
 
     def _incremental(self, staging: Path, current: Mapping[str, Any], api_key: str | None
                      ) -> tuple[Path, dict[str, Any]]:
-        manifest_path = self.root / "snapshots" / str(current["snapshot_id"]) / "manifest.json"
+        from appsec_review.storage.shared import safe_path
+        manifest_path = safe_path(self.root, f"snapshots/{current['snapshot_id']}/manifest.json")
         if file_sha256(manifest_path) != current["manifest_sha256"]:
             raise ValueError("current NVD manifest hash mismatch")
         parent = json.loads(manifest_path.read_text(encoding="utf-8"))
+        from appsec_review.storage.shared import current as current_attempt
+        if current_attempt() is not None:
+            from appsec_review.storage.feed_provenance import record_snapshot
+            record_snapshot(self.root, "nvd", current["snapshot_id"], computed=False)
         start = parse_time(parent["cursor"])
         finish = self.clock()
         if finish < start:
@@ -454,10 +624,10 @@ class NvdPublisher:
             window_start = window_end
             if window_start < finish:
                 self.pause(delay)
-        new_layers = [self.root / path for path in self._metadata_paths({"layers": layers})]
+        new_layers = [safe_path(self.root, path) for path in self._metadata_paths({"layers": layers})]
         base = self._parent_index(parent)
         if base is None:      # a /1 parent or a missing parent index: replay the whole chain
-            replay = [self.root / path for manifest in self._chain(str(current["snapshot_id"]))
+            replay = [safe_path(self.root, path) for manifest in self._chain(str(current["snapshot_id"]))
                       for path in self._metadata_paths(manifest)]
             index_path, index_fields = self._index(staging, replay + new_layers, None)
         else:
@@ -478,13 +648,16 @@ class NvdPublisher:
         }
 
     def sync(self, coordinator_id: str, api_key: str | None = None) -> dict[str, Any]:
+        from appsec_review.storage.feed_provenance import check_root
+        from appsec_review.storage.shared import safe_path
+        check_root(self.root, "nvd", producing=True)
         if not coordinator_id.strip():
             raise ValueError("coordinator identity is required")
         self.root.mkdir(parents=True, exist_ok=True)
         attempt_id = timestamp(self.clock()).replace(":", "").replace(".", "-") + "-" + uuid.uuid4().hex[:8]
-        staging = self.root / "staging" / attempt_id
+        staging = safe_path(self.root, f"staging/{attempt_id}")
         staging.mkdir(parents=True, exist_ok=False)
-        current_path = self.root / "current.json"
+        current_path = safe_path(self.root, "current.json")
         current = None
         attempt_path = staging / "attempt.json"
         try:
@@ -508,6 +681,8 @@ class NvdPublisher:
             raise
 
     def verify(self) -> dict[str, Any]:
+        from appsec_review.jobs.job_third_party_data_sync.publication import verify_current
+        verify_current(self.root, "nvd")
         current_path = self.root / "current.json"
         if not current_path.exists():
             raise FileNotFoundError("NVD has no published snapshot")

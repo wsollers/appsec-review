@@ -14,6 +14,7 @@ appsec-review = "appsec_review.cli:main"
 appsec-review-mcp = "appsec_review.mcp.stdio:main"
 
 [project.optional-dependencies]
+copilot = ["github-copilot-sdk==1.0.25"]
 # Validator, evaluation harness, and tests for rules/sei-cert. The review runtime does not need it.
 # Pinned to the version in deploy/dagster/requirements.lock.txt.
 rulepacks = ["PyYAML==6.0.3"]

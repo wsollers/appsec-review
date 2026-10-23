@@ -11,6 +11,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict, dataclass, field
 import json
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import Any
 
 from appsec_review.indexing.store import digest
@@ -19,7 +20,10 @@ from appsec_review.retrieval.model import (
     EntityKind, EntityRecord, LogicalIdentity, RelationKind, RelationRecord, SourceLocation,
 )
 from appsec_review.retrieval.precomputed import FACT_SCHEMA
-from appsec_review.storage import atomic_json, file_sha256
+from appsec_review.storage import canonical_json, file_sha256
+from appsec_review.storage.shared import (
+    SharedArtifacts, immutable_bytes, put_bytes, put_file, reference, safe_path, verify_reference,
+)
 
 
 DERIVED_SCHEMA = "appsec-review/derived-shard/1"
@@ -84,19 +88,42 @@ def publish_derived(
     run_root: Path, *, index: str, shard_id: str, job_id: str, unit_id: str, rule: str, rule_version: str,
     snapshot: str, inputs: Mapping[str, Any], build: Callable[[], Derived],
     producer: Mapping[str, Any] | None = None,
+    shared: SharedArtifacts | None = None,
 ) -> dict[str, Any]:
     """Publish or reuse one derived shard; ``inputs`` must fully identify everything ``build`` reads."""
     fingerprint = digest({"schema": DERIVED_SCHEMA, "index": index, "shard_id": shard_id, "rule": rule,
                           "rule_version": rule_version, "target_snapshot": snapshot, "inputs": inputs})
     path = run_root / "data" / "indices" / index / shard_id / f"{fingerprint}.sqlite"
     checkpoint = run_root / "data" / "indexing" / "checkpoints" / index / shard_id / f"{fingerprint}.json"
+    computation = {"rule": rule, "rule_version": rule_version, "inputs_sha256": digest(inputs),
+                   "target_snapshot": snapshot, "unit_id": unit_id}
+    if shared is not None:
+        hit = shared.lookup("derived-index", fingerprint)
+        if hit is not None:
+            receipt, ref = hit
+            document = json.loads(verify_reference(run_root, receipt["object"]).read_bytes())
+            if document.get("fingerprint") != fingerprint or document.get("inputs_sha256") != digest(inputs):
+                raise ValueError("shared derived checkpoint identity mismatch")
+            if receipt["legacy"] is None:
+                document["index_identity"]["producer"]["shared_receipt"] = receipt["producer_receipt"] or ref
+            return {**document, "reused": True, "shared_receipt": ref}
+    safe_path(run_root, path.relative_to(run_root).as_posix())
+    safe_path(run_root, checkpoint.relative_to(run_root).as_posix())
     if path.is_file() and checkpoint.is_file():
         document = json.loads(checkpoint.read_text(encoding="utf-8"))
-        if document.get("fingerprint") == fingerprint and \
-                file_sha256(path) == document.get("index_identity", {}).get("sha256"):
-            return {**document, "reused": True}
-    if path.exists():
-        path.unlink()  # an unverifiable leftover from an interrupted attempt; never accepted
+        identity = document.get("index_identity", {})
+        if (document.get("schema") != DERIVED_SCHEMA or document.get("fingerprint") != fingerprint
+                or document.get("inputs_sha256") != digest(inputs)
+                or identity.get("relative_path") != path.relative_to(run_root).as_posix()
+                or file_sha256(path) != identity.get("sha256")):
+            raise ValueError("legacy derived checkpoint/shard integrity mismatch")
+        ref = None
+        if shared is not None:
+            _, ref = shared.legacy("derived-index", fingerprint, reference(run_root, checkpoint),
+                                   computation=computation, dependencies=(reference(run_root, path),))
+        return {**document, "reused": True, "shared_receipt": ref}
+    if checkpoint.exists():
+        raise ValueError("derived checkpoint has no immutable shard")
     derived = build()
     builder = IndexBuilder(path, name=index, fingerprint=fingerprint, target_snapshot=snapshot, shard_id=shard_id)
     seen: set[str] = set()
@@ -111,7 +138,16 @@ def publish_derived(
             builder.add_relation(relation)
     for area, status, gap in derived.coverage:
         builder.add_coverage(area, status, gap)
-    sha = builder.build()
+    if shared is None:
+        sha = builder.build()
+        shard_ref = reference(run_root, path)
+    else:
+        with TemporaryDirectory(prefix=".shared-build-", dir=shared.attempt_root) as directory:
+            builder.path = Path(directory) / "shard.sqlite"
+            builder.build()
+            shard_ref = put_file(run_root, builder.path)
+        sha = shard_ref["sha256"]
+        path = run_root / shard_ref["path"]
     states = [status for _area, status, _gap in derived.coverage]
     terminal = ("UNAVAILABLE" if states and all(value == "unavailable" for value in states) else
                 "PARTIAL" if derived.gaps or any(value != "complete" for value in states) else "SUCCEEDED")
@@ -123,5 +159,12 @@ def publish_derived(
                 "counts": {**dict(sorted(derived.counts.items())), "entities": len(seen),
                            "relations": len(relation_ids)},
                 "gaps": derived.gaps[:200], "terminal_status": terminal}
-    atomic_json(checkpoint, document)
-    return {**document, "reused": False}
+    ref = None
+    if shared is None:
+        immutable_bytes(run_root, checkpoint.relative_to(run_root).as_posix(), canonical_json(document))
+    else:
+        obj = put_bytes(run_root, canonical_json(document))
+        ref = shared.computed("derived-index", fingerprint, obj, computation=computation,
+                              dependencies=(shard_ref,))
+        document["index_identity"]["producer"]["shared_receipt"] = ref
+    return {**document, "reused": False, "shared_receipt": ref}

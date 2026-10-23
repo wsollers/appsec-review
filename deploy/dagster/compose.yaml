@@ -9,7 +9,7 @@ x-dagster-environment: &dagster-environment
   APPSEC_REVIEW_MODEL_RECORDING: ${APPSEC_REVIEW_MODEL_RECORDING:-}
   # A capacity overlay under /opt/app/test/acceptance (docs/operations/inference-security-review.md); empty otherwise.
   APPSEC_REVIEW_CONFIG_OVERLAY: ${APPSEC_REVIEW_CONFIG_OVERLAY:-}
-  # Runtime profile, fixed when the containers are created: dev (default) or prod (docs/operations/model-profiles.md).
+  # Runtime profile: dev (default), prod, or copilot-dev (docs/operations/model-profiles.md).
   APPSEC_REVIEW_PROFILE: ${APPSEC_REVIEW_PROFILE:-dev}
 
 x-dagster-service: &dagster-service

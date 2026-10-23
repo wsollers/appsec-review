@@ -44,8 +44,8 @@ def parser() -> argparse.ArgumentParser:
     root = argparse.ArgumentParser(prog="appsec-review")
     root.add_argument("--config", default="appsec-review.toml",
                       help="optional local path or file URI (defaults to repository configuration)")
-    root.add_argument("--profile", choices=("dev", "prod"), default=None,
-                      help="runtime profile (default: APPSEC_REVIEW_PROFILE, else dev; prod = more capable models)")
+    root.add_argument("--profile", choices=("dev", "prod", "copilot-dev", "copilot-prod"), default=None,
+                      help="runtime profile (default: APPSEC_REVIEW_PROFILE, else dev; Copilot profiles use a separate login)")
     commands = root.add_subparsers(dest="command", required=True)
 
     run = commands.add_parser("run", help="dispatch one job")

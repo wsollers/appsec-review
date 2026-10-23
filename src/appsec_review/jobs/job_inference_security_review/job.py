@@ -35,6 +35,7 @@ from appsec_review.review.budget import JobBudget
 from appsec_review.review.claims import normalize_cwe
 from appsec_review.review.identity import sha256_hex
 from appsec_review.review.lead_families import collect_leads
+from appsec_review.storage.shared import SharedArtifacts
 from appsec_review.review.lead_triage import (
     assessments_from_document, disabled_document, handoff_summary, load_triage_guidance, menu_effective_severity,
     run_triage,
@@ -299,7 +300,8 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
         outcome = run_triage(
             collection.leads, settings=settings.triage, profile=settings.models[settings.triage.model_profile],
             infer=infer or _default_infer(), read_excerpt=read_excerpt, reference=reference, guidance=guidance,
-            schemas=SchemaSet(repo(unit) / SCHEMA_DIRECTORY), cache_dir=job_data(unit) / "triage-cache")
+            schemas=SchemaSet(repo(unit) / SCHEMA_DIRECTORY), cache_dir=job_data(unit) / "triage-cache",
+            shared=SharedArtifacts.for_job(unit.job))
         document = {**outcome.document, "run_id": unit.job.run_id,
                     "manifest_sha256": unit.output("scope.accept_manifest")["manifest_sha256"]}
         counts = document["counts"]
@@ -613,7 +615,9 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
         Unit("publication.publish_claim_ledger", publish_ledger, ("completeness.audit",)),
         Unit("publication.publish_handoff", publish_handoff, ("publication.publish_claim_ledger",)),
     )
-    sources = sorted(Path(__file__).parent.glob("*.py"))
+    sources = sorted([*Path(__file__).parent.glob("*.py"),
+                      Path(__file__).parents[2] / "review" / "lead_triage.py",
+                      Path(__file__).parents[2] / "storage" / "shared.py"])
     implementation = hashlib.sha256(b"".join(path.read_bytes() for path in sources)).hexdigest()
 
     def validate(context, _result) -> None:

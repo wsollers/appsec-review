@@ -39,22 +39,22 @@ def publish_shard(run_root: Path, *, family: str, shard_id: str,
         raise ValueError(f"unknown OWASP index family: {family}")
     logical_shard_id = str(shard_id)
     storage_key = _safe(logical_shard_id)
-    fingerprint = _fingerprint({"family": family, "shard_id": logical_shard_id,
-                                "inputs": fingerprint_inputs})
     document = {
         "schema": INDEX_SCHEMA, "family": family, "shard_id": logical_shard_id,
-        "fingerprint": fingerprint, "records": [dict(item) for item in records],
+        "records": [dict(item) for item in records],
         "gaps": list(gaps),
     }
     document["records_sha256"] = _fingerprint(document["records"])
+    fingerprint = _fingerprint({**document, "inputs": fingerprint_inputs})
+    document["fingerprint"] = fingerprint
     relative = Path("data") / "indexes" / "owasp" / family / storage_key / f"{fingerprint}.json"
     path = Path(run_root) / relative
-    if path.exists():
-        existing = json.loads(path.read_text(encoding="utf-8"))
-        if existing != document:
-            raise ValueError("immutable OWASP index shard conflicts with existing bytes")
-    else:
-        atomic_json(path, document)
+    from appsec_review.storage.shared import publish_named, safe_path
+    safe_path(Path(run_root), path.relative_to(run_root).as_posix())
+    if path.exists() and path.read_bytes() != canonical_json(document):
+        raise ValueError("immutable OWASP index shard conflicts with existing bytes")
+    publish_named(Path(run_root), path, canonical_json(document), namespace="owasp-shard",
+                  computation={"fingerprint": fingerprint, "inputs": fingerprint_inputs})
     return {"family": family, "shard_id": logical_shard_id, "schema": INDEX_SCHEMA,
             "fingerprint": fingerprint, "sha256": file_sha256(path),
             "path": relative.as_posix(), "record_count": len(records), "gaps": list(gaps)}
@@ -73,7 +73,9 @@ def publish_manifest(run_root: Path, *, run_id: str, shards: Sequence[Mapping[st
     manifest["fingerprint"] = _fingerprint(manifest)
     relative = Path("data") / "indexes" / "owasp" / "manifests" / f"{manifest['fingerprint']}.json"
     path = Path(run_root) / relative
-    atomic_json(path, manifest)
+    from appsec_review.storage.shared import publish_named
+    publish_named(Path(run_root), path, canonical_json(manifest), namespace="owasp-shard",
+                  computation={"fingerprint": manifest["fingerprint"]})
     pointer = Path(run_root) / "data" / "indexes" / "owasp" / "accepted.json"
     atomic_json(pointer, {"schema": "appsec-review/owasp-index-pointer/1",
                           "run_id": run_id, "manifest_path": relative.as_posix(),
@@ -100,12 +102,15 @@ class WorkbenchIndex:
             encoding="utf-8"))
         if pointer.get("run_id") != run_id:
             raise ValueError("accepted OWASP index belongs to another run")
-        manifest_path = (self.run_root / str(pointer.get("manifest_path", ""))).resolve()
+        from appsec_review.storage.shared import safe_path
+        manifest_path = safe_path(self.run_root, str(pointer.get("manifest_path", "")))
         if self.run_root not in manifest_path.parents or file_sha256(manifest_path) != pointer.get("manifest_sha256"):
             raise ValueError("accepted OWASP index manifest cannot be resolved")
         self.manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         if self.manifest.get("schema") != MANIFEST_SCHEMA or self.manifest.get("run_id") != run_id:
             raise ValueError("accepted OWASP index manifest is invalid")
+        from appsec_review.storage.shared import consume_named
+        consume_named(self.run_root, manifest_path, namespace="owasp-shard")
         self.run_id = run_id
 
     @staticmethod
@@ -156,11 +161,14 @@ class WorkbenchIndex:
                 continue
             if "shard" in active and identity["shard_id"] != active["shard"]:
                 continue
-            path = (self.run_root / identity["path"]).resolve()
+            from appsec_review.storage.shared import safe_path
+            path = safe_path(self.run_root, identity["path"])
             if self.run_root not in path.parents or file_sha256(path) != identity["sha256"]:
                 gaps.append(f"{identity['family']}/{identity['shard_id']}: shard resolution failed")
                 continue
             document = json.loads(path.read_text(encoding="utf-8"))
+            from appsec_review.storage.shared import consume_named
+            consume_named(self.run_root, path, namespace="owasp-shard")
             gaps.extend(f"{identity['family']}/{identity['shard_id']}: {gap}"
                         for gap in document.get("gaps", ()))
             for record in document["records"]:

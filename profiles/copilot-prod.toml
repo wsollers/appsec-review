@@ -1,0 +1,94 @@
+# Opt-in Copilot production profile. Limits, reasoning and role bindings mirror prod.toml.
+# Only provider and exact catalog model IDs differ; tests enforce parity with prod.
+[jobs.job_target_analysis_plan.settings.model]
+provider = "copilot-sdk"
+model = "claude-sonnet-5.5"
+reasoning = "high"
+max_input_tokens = 200000
+max_output_tokens = 64000
+timeout_seconds = 900
+
+[jobs.job_post_build_security_assessment.settings.model]
+provider = "copilot-sdk"
+model = "claude-sonnet-5.5"
+reasoning = "high"
+max_input_tokens = 200000
+max_output_tokens = 32000
+timeout_seconds = 600
+
+[jobs.job_dependency_intelligence.settings.model]
+provider = "copilot-sdk"
+model = "claude-sonnet-5.5"
+reasoning = "high"
+max_input_tokens = 200000
+max_output_tokens = 32000
+timeout_seconds = 600
+
+[jobs.job_owasp_control_assessment.settings.model]
+provider = "copilot-sdk"
+model = "claude-sonnet-5.5"
+reasoning = "high"
+max_input_tokens = 200000
+max_output_tokens = 32000
+timeout_seconds = 600
+
+[jobs.job_project_build.settings.model]
+provider = "copilot-sdk"
+model = "claude-sonnet-5.5"
+reasoning = "medium"
+max_input_tokens = 128000
+max_output_tokens = 16000
+timeout_seconds = 600
+
+[jobs.job_inference_security_review.settings.models.default]
+provider = "copilot-sdk"
+model = "claude-sonnet-5.5"
+reasoning = "high"
+max_input_tokens = 200000
+max_output_tokens = 64000
+max_queries = 60
+max_turns = 16
+timeout_seconds = 1800
+
+[jobs.job_inference_security_review.settings.models.triage]
+provider = "copilot-sdk"
+model = "claude-sonnet-5.5"
+reasoning = "medium"
+max_input_tokens = 64000
+max_output_tokens = 16000
+max_queries = 0
+max_turns = 1
+timeout_seconds = 600
+
+[jobs.job_inference_security_review.settings.models.strong]
+provider = "copilot-sdk"
+model = "claude-opus-5.5"
+reasoning = "high"
+max_input_tokens = 200000
+max_output_tokens = 64000
+max_queries = 60
+max_turns = 16
+timeout_seconds = 2400
+
+[jobs.job_inference_security_review.settings.roles.independent_verifier]
+model_profile = "strong"
+
+[jobs.job_inference_security_review.settings.roles.adjudication_judge]
+model_profile = "strong"
+
+[jobs.job_poc_generation.settings.models.default]
+provider = "copilot-sdk"
+model = "claude-sonnet-5.5"
+reasoning = "high"
+max_input_tokens = 200000
+max_output_tokens = 32000
+max_queries = 8
+max_turns = 6
+timeout_seconds = 600
+
+[jobs.job_inference_security_review.settings.budgets]
+max_model_turns = 60000
+max_input_tokens = 600000000
+max_output_tokens = 60000000
+max_retrieval_queries = 200000
+timeout_seconds = 86400

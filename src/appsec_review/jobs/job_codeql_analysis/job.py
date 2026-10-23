@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence
-from concurrent.futures import ThreadPoolExecutor
+from appsec_review.storage.shared import PublicationThreadPoolExecutor as ThreadPoolExecutor
 from dataclasses import asdict
 import hashlib
 import json
@@ -247,14 +247,16 @@ def _workspace_manifest_files(workspace: Path, manifest: Mapping[str, Any], *, f
     actual: dict[str, str] = {}
     for path in sorted(workspace.rglob("*")):
         if path.is_symlink():
+            relative = path.relative_to(workspace).as_posix()
             if not allow_manifest_backed_symlinks:
-                raise FrameworkIntegrityError("CodeQL materialized environment contains a symlink")
+                raise FrameworkIntegrityError(
+                    f"CodeQL materialized environment contains a symlink: {relative!r}")
             try:
                 link_target = path.readlink()
             except (OSError, RuntimeError) as exc:
                 raise FrameworkIntegrityError(
-                    "CodeQL materialized environment contains an invalid symlink") from exc
-            relative = path.relative_to(workspace).as_posix()
+                    f"CodeQL materialized environment contains an invalid symlink: {relative!r}") from exc
+            link_identity = f"{relative!r} -> {link_target.as_posix()!r}"
             container_dependency = (
                 path.name == "node_modules" and
                 relative not in expected_files and
@@ -264,20 +266,28 @@ def _workspace_manifest_files(workspace: Path, manifest: Mapping[str, Any], *, f
                 continue
             if link_target.is_absolute():
                 raise FrameworkIntegrityError(
-                    "CodeQL materialized environment contains an unsafe symlink")
+                    f"CodeQL materialized environment contains an unsafe symlink: {link_identity}")
             try:
                 resolved = path.resolve(strict=True)
             except (OSError, RuntimeError) as exc:
                 raise FrameworkIntegrityError(
-                    "CodeQL materialized environment contains an invalid symlink") from exc
+                    f"CodeQL materialized environment contains an invalid symlink: {link_identity}") from exc
             if (workspace_root not in resolved.parents or
-                    not resolved.is_file() or resolved.is_symlink()):
+                    resolved in path.absolute().parents or
+                    not (resolved.is_file() or resolved.is_dir()) or resolved.is_symlink()):
                 raise FrameworkIntegrityError(
-                    "CodeQL materialized environment contains an unsafe symlink")
+                    f"CodeQL materialized environment contains an unsafe symlink: {link_identity}")
             resolved_relative = resolved.relative_to(workspace_root).as_posix()
+            if resolved.is_dir():
+                # npm workspace aliases are omitted, not traversed or copied. The full manifest
+                # comparison below verifies their real files at the canonical workspace paths.
+                if not any(name.startswith(resolved_relative + "/") for name in expected_files):
+                    raise FrameworkIntegrityError(
+                        f"CodeQL materialized environment contains an unpinned symlink: {link_identity}")
+                continue
             if expected_files.get(resolved_relative) != file_sha256(resolved):
                 raise FrameworkIntegrityError(
-                    "CodeQL materialized environment contains an unpinned symlink")
+                    f"CodeQL materialized environment contains an unpinned symlink: {link_identity}")
             continue
         if not path.is_file():
             continue
@@ -339,8 +349,12 @@ def _stage_workspace(unit: UnitContext, scope: CodeQLScope,
         source = (unit.job.run_root / workspace_value).resolve(strict=True)
         if unit.job.run_root.resolve() not in source.parents or not source.is_dir() or source.is_symlink():
             raise FrameworkIntegrityError("CodeQL materialized environment escaped the run")
-        _stage_manifest_workspace(
-            source, workspace, manifest, file_limit=_settings(unit).database_file_limit)
+        try:
+            _stage_manifest_workspace(
+                source, workspace, manifest, file_limit=_settings(unit).database_file_limit)
+        except FrameworkIntegrityError as exc:
+            raise FrameworkIntegrityError(
+                f"CodeQL scope {scope.scope_id!r} ({scope.root!r}): {exc}") from exc
     _verify_workspace_scope(workspace, scope)
     _make_workspace_accessible(workspace)
 

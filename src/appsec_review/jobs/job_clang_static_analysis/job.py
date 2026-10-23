@@ -8,7 +8,7 @@ retained as scope-specific coverage gaps.
 
 from __future__ import annotations
 
-from concurrent.futures import ThreadPoolExecutor
+from appsec_review.storage.shared import PublicationThreadPoolExecutor as ThreadPoolExecutor
 from dataclasses import asdict
 import re
 import hashlib

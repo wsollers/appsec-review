@@ -73,8 +73,9 @@ several sessions share one Docker daemon and one Dagster stack.
 2. **Own stack only.** The stack scripts and `review-start` refuse (exit 3) when the running
    containers were created from another checkout's compose files, because `lifecycle.py` would
    recreate them from this checkout's mounts. Run the scripts from the checkout that owns the stack.
-3. **Lifecycle only.** Stack changes call `deploy/dagster/bin/lifecycle.py`, which adds the Claude CLI
-   overlay (`compose.claude.yaml` on WSL and Linux, `compose.windows.yaml` on Windows). The scripts
+3. **Lifecycle only.** Stack changes call `deploy/dagster/bin/lifecycle.py`, which adds the provider
+   overlay (`compose.copilot.yaml` for `copilot-dev` and `copilot-prod`; otherwise `compose.claude.yaml` on WSL and
+   Linux or `compose.windows.yaml` on Windows). The scripts
    never run `docker compose` on `compose.yaml` alone. The only direct docker calls that change
    state are `docker exec ... dagster job launch` and, for `--purge-volumes`, removal of this
    project's own containers and volumes.
@@ -88,7 +89,7 @@ several sessions share one Docker daemon and one Dagster stack.
 
 | Script | Purpose |
 | --- | --- |
-| `stack-start [--build] [--no-probe] [--dry-run] [--force] [--target T] [--overlay F] [--recording M] [--profile dev|prod]` | Build if asked (or if the image is missing), `lifecycle.py start`, then check health, the overlay and the model. |
+| `stack-start [--build] [--no-probe] [--dry-run] [--force] [--target T] [--overlay F] [--recording M] [--profile dev\|prod\|copilot-dev\|copilot-prod]` | Build if asked (or if the image is missing), `lifecycle.py start`, then check health, the overlay and the model. |
 | `stack-stop [--force] [--purge-volumes --yes] [--dry-run]` | `lifecycle.py stop`: containers stopped, volumes kept. |
 | `stack-restart [--code-location-only] [--no-probe] [--force] [--dry-run] [--target T] ...` | Stop then start; `--code-location-only` uses `lifecycle.py reload`. |
 | `stack-rebuild [--no-probe] [--force] [--dry-run] [--target T] ...` | `lifecycle.py build` then `start`, which recreates containers whose image changed. |
@@ -106,21 +107,27 @@ After starting, `stack-start`, `stack-restart` and `stack-rebuild` report:
   read-only; on a native Windows stack, sign in again inside the container with
   `claude auth login` as in the deployment README.
 
+For `copilot-dev` and `copilot-prod`, the probe instead checks the dedicated Copilot login and configured model catalog,
+without inference. It does not call Claude or borrow the GitHub CLI account. Follow the
+[separate-account setup](model-profiles.md#copilot-with-a-separate-github-identity) to sign in.
+
 `--target` takes a name under `targets/` or a container path (`/opt/app/targets/...`); `--overlay`
 takes a capacity overlay file under `test/acceptance` (or `none`); `--recording` is `record`, `replay`
-or `off`; `--profile` is `dev` (default) or `prod`. They set `APPSEC_REVIEW_TARGET`,
+or `off`; `--profile` is `dev` (default), `prod`, `copilot-dev`, or `copilot-prod`. They set `APPSEC_REVIEW_TARGET`,
 `APPSEC_REVIEW_CONFIG_OVERLAY`, `APPSEC_REVIEW_MODEL_RECORDING` and `APPSEC_REVIEW_PROFILE` for the recreate (see
 [`../processes/local-dagster-parity.md`](../processes/local-dagster-parity.md)). `replay` additionally
 needs `APPSEC_REVIEW_MODEL_REPLAY_DIR`, which the compose file does not pass; the parity walk replays
 locally instead.
 
 The profile selects the models and limits (`dev`: Haiku and today's limits; `prod`: Sonnet 5.5, an Opus 5.5
-verifier and larger limits; see [`model-profiles.md`](model-profiles.md)). Like the target it is container
-environment fixed at creation: the stack scripts print `profile: dev|prod` (and, for `prod`, a notice
+verifier and larger limits; `copilot-dev`: Haiku through Copilot with unchanged dev limits;
+`copilot-prod`: Sonnet 5.5 with an Opus 5.5 verifier and judge through Copilot, retaining all prod limits;
+see [`model-profiles.md`](model-profiles.md)). Like the target it is container
+environment fixed at creation: the stack scripts print `profile: dev|prod|copilot-dev|copilot-prod` (and, for either production profile, a notice
 that it uses the more capable models and larger token limits), carry the running value over on a plain
 restart, and `stack-status` shows it. `review-start --profile X` means "I expect X" and refuses (exit 3)
 with the `scripts/stack-restart --profile X` command when the running stack has another profile.
-PowerShell: `-Profile dev|prod` on the same four scripts.
+PowerShell: `-Profile dev|prod|copilot-dev|copilot-prod` on the same four scripts.
 
 `--purge-volumes` is separate and explicit. It prints the project's containers and volumes (the
 PostgreSQL database and the Dagster storage, with every run's history), refuses without `--yes`, and

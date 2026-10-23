@@ -58,6 +58,14 @@ user on Docker's bridge network so manual builds can restore declared dependenci
 read-only root filesystem, dropped capabilities, bounded memory/CPU/PIDs, and bounded head/tail
 logs.
 
+Both derived-image build paths normalize bundled payload permissions with `chmod -R a+rX` before
+selecting the non-root runtime UID. This preserves precompiled query contents while making
+owner-only upstream `.qlx` files readable across UIDs; otherwise CodeQL falls back to compilation
+after `AccessDeniedException`, potentially exhausting query memory or time limits. A Dockerfile
+change invalidates the derived-image cache identity without changing the pinned source payload.
+The live `precompiled_queries` regression in `tests/test_live_codeql_toolchains.py` checks both
+image paths as non-root users, not as the build-time root user.
+
 Database and query checkpoints are separate. Each applicable scope runs a `default` query profile;
 Go, C# and Rust also run independently hash-pinned `security-extended` profiles (each configured
 under `languages.<language>.additional_queries` and present with the same suite hash in
@@ -70,9 +78,33 @@ extractor, source, runtime, or database-limit change invalidates it. Databases a
 run-owned and retained beneath `runs/<run-id>/data/codeql/scopes/<scope-id>/`; profile-specific
 query artifacts live under `queries/<profile-id>/`.
 
+Normalization can rerun with a mixture of reused and fresh query scopes. The shared SQLite
+index builder constructs each candidate shard in a private temporary directory and reuses an
+existing shard only when its complete bytes match the candidate's SHA-256. It does not overwrite
+or delete existing indexes, including shards left by a partially completed normalization step.
+Different content at the same identity, corrupt files, and symlinks fail publication explicitly.
+New shards are published with an atomic, non-replacing hard link on the same filesystem
+(supported by native WSL ext4 and Windows NTFS); an unsupported filesystem fails rather than
+falling back to overwrite. Temporary files belong to one builder and are cleaned on success or
+failure. Regression tests cover repeated and mixed-scope normalization, integrity rejection, and
+concurrent publication in `tests/test_codeql_analysis.py` and `tests/test_retrieval_core.py`.
+Byte comparison includes SQLite's serialized format, so replay retained shards with the pinned
+deployment runtime; a host Python using a different SQLite version can produce different bytes
+for the same logical records and is not a valid byte-identical recovery check.
+
 Ordinary producer failures are accepted as scope-local coverage gaps. A sibling scope continues.
 Changed accepted handoffs, source bytes, protected argv, image identities, database manifests,
 checkpoints, or SARIF identities are framework-integrity failures and stop publication.
+
+Source-mode workspace staging copies only manifest-pinned regular files at their canonical paths.
+Relative npm file aliases and workspace-directory aliases (for example,
+`node_modules/@northwinds/frontend -> ../../frontend`) are validated and omitted, not followed or
+recreated. Directory targets must be inside the workspace, not ancestors of the link, and contain
+manifest-backed files; the complete file inventory and hashes must still match. Absolute links
+remain rejected except the existing exact container-owned `/opt/project/.../node_modules` alias.
+Escaping, dangling, cyclic, and unpinned links still fail; manifest paths cannot traverse aliases.
+Integrity errors identify the scope and offending link. No target or retained build workspace is
+modified. Regression coverage lives in `tests/test_codeql_analysis.py`.
 
 ## Graph export step
 

@@ -280,6 +280,11 @@ def _feed_database(context: ProductContext, feed: str, logical: str) -> tuple[sq
     pin = context.feeds.get(feed) or {}
     if pin.get("status") != "pinned":
         return None, f"{feed} feed is unavailable: {pin.get('reason', 'no pinned snapshot')}"
+    from appsec_review.storage.feed_provenance import consume_pin
+    try:
+        consume_pin(context.run_root, pin)
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        return None, f"{feed} feed provenance unavailable ({type(exc).__name__}: {exc})"
     path = Path(str(pin["directory"])) / logical
     expected = (pin.get("files") or {}).get(logical)
     if not path.is_file() or expected is None or file_sha256(path) != expected:

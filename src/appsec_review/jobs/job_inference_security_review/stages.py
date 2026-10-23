@@ -675,6 +675,10 @@ def verify_receipts(projection: Projection, receipts_root: Path) -> int:
             path = Path(receipts_root) / cell_id / f"attempt-{record.attempts}.json"
             if not path.is_file() or file_sha256(path) != record.receipt_sha256:
                 raise IntegrityError(f"cell receipt cannot be verified: {cell_id}")
+            from appsec_review.storage.shared import current, consume_named
+            owner = current()
+            if owner is not None:
+                consume_named(owner.run_root, path, namespace="review-cell")
             checked += 1
     return checked
 

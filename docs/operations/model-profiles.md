@@ -1,8 +1,10 @@
-# Model profiles: dev and prod
+# Model profiles: dev, prod, copilot-dev and copilot-prod
 
 **Selection:** set `APPSEC_REVIEW_PROFILE=prod`, or use `--profile prod` on the stack and review
-scripts (`-Profile prod` in PowerShell). The default is `dev`. Any other value is an error. Nothing
-selects `prod` implicitly. The stack's profile is fixed when its containers are created, so switching
+scripts (`-Profile prod` in PowerShell). The default is `dev`; `copilot-dev` selects the separate
+Copilot subscription transport with development limits. `copilot-prod` uses that transport with
+production settings. Other values are errors. Nothing selects either production profile implicitly.
+The stack's profile is fixed when its containers are created, so switching
 needs a stack restart.
 
 ```bash
@@ -37,6 +39,92 @@ prod stack to dev the same way.
 | --- | --- | --- | --- |
 | `dev` (default) | `appsec-review.toml` exactly as checked in | Haiku 5.5 everywhere | the small limits in the file; cheap, for testing the pipeline |
 | `prod` | `profiles/prod.toml` merged over `appsec-review.toml` | Sonnet 5.5, with Opus 5.5 for the independent verifier | large token limits and budgets for real reviews |
+| `copilot-dev` | `profiles/copilot-dev.toml` merged over `appsec-review.toml` | Haiku 5.5 through Copilot (`claude-haiku-5.5`) | exactly the dev reasoning settings, limits, roles and budgets |
+| `copilot-prod` | `profiles/copilot-prod.toml` merged over `appsec-review.toml` | Sonnet 5.5 through Copilot (`claude-sonnet-5.5`), Opus 5.5 verifier and judge (`claude-opus-5.5`) | exactly the prod reasoning settings, limits, roles and budgets |
+
+## Copilot production
+
+`profiles/prod.toml` remains the authoritative production settings source. `copilot-prod.toml`
+mirrors its overrides, changing only providers to `copilot-sdk` and model IDs to the exact dotted
+Copilot catalog names. A regression test compares all resolved job settings with `prod`, including
+disabled model settings, retries, query/turn limits, timeouts, budgets and role bindings. When
+production settings change, update both files together. `dev`, `prod` and `copilot-dev` are unchanged.
+
+The independent verifier and adjudication judge use `strong` (`claude-opus-5.5`); primary workers
+use `claude-sonnet-5.5`, preserving distinct-model verification. Inference-review ceilings remain
+60,000 model turns, 600,000,000 input tokens, 60,000,000 output tokens, 200,000 retrieval queries
+and 86,400 seconds. These are limits, not consumption targets.
+
+Use the dedicated login below, verify the authenticated account and enabled exact model IDs,
+and verify reasoning and transport limit support before launching. Catalog verification is not
+an inference smoke test or proof of production-limit enforcement. There is no model substitution.
+After all existing Dagster runs are terminal and image pins pass:
+
+```bash
+APPSEC_REVIEW_PROFILE=copilot-prod .venv/bin/python -c \
+  "from appsec_review.inference.copilot_sdk import verify; print(verify())"
+scripts/stack-rebuild.sh --profile copilot-prod
+scripts/review-start.sh --profile copilot-prod --target appsec-multi-vuln
+```
+
+PowerShell uses `-Profile copilot-prod` on the corresponding scripts. Rebuilding is necessary
+when the running image predates this profile. Both Copilot profiles use the same Copilot image
+tag and overlay; changing profiles does not change the login or borrow Git credentials.
+
+## Copilot with a separate GitHub identity
+
+The optional `copilot-sdk` transport uses `github-copilot-sdk==1.0.25` and its checksum-verified
+pinned runtime. Git and `gh` keep their existing account. Workers use a **separate** Copilot login;
+they never use `gh auth token`, `GH_TOKEN`, `GITHUB_TOKEN`, or `COPILOT_GITHUB_TOKEN`. Those
+ambient token variables are removed from the worker runtime environment.
+
+From the checkout's own virtual environment on Linux/WSL:
+
+```bash
+python -m pip install -e '.[test,dagster,copilot]'
+python -m copilot download-runtime
+# Install Copilot CLI using https://docs.github.com/copilot/how-tos/copilot-cli/install-copilot-cli.
+env -u GH_TOKEN -u GITHUB_TOKEN -u COPILOT_GITHUB_TOKEN \
+  COPILOT_HOME="$HOME/.config/appsec-review/copilot" copilot login --device-code
+# Authorize with the account whose Copilot subscription should run the jobs, not the Git account.
+APPSEC_REVIEW_PROFILE=copilot-dev python -c \
+  "from appsec_review.inference.copilot_sdk import verify; print(verify())"
+```
+
+`APPSEC_COPILOT_HOME` can select another dedicated login directory. It is a host path, never a
+token. Keep it outside the repository. On Windows, set `COPILOT_HOME` to that same dedicated
+directory for `copilot login`, with the three ambient token variables unset. The normal Git
+credential helper and GitHub CLI configuration are not changed.
+
+The check above authenticates and checks the model catalog, without starting a review or making
+an inference request. Missing login, missing SDK/runtime, disabled models, unavailable exact model
+IDs, or unsupported reasoning settings fail explicitly; there is no model or account fallback.
+Copilot uses a dotted model version while Claude CLI uses `claude-haiku-5-5`; both profiles select
+Haiku 5.5. Do not change to a different model merely to pass preflight.
+
+Workers run in SDK `empty` mode with a temporary working directory, no tools, no MCP servers,
+no skills, no extensions, no repository/user instruction discovery, and no file hooks or host Git
+operations. Only application-supplied bounded prompts reach the model. Session-store persistence
+and infinite-session compaction are disabled; timeout cancellation aborts the request and shuts
+down the owned runtime. The transport records usage and verifies the returned model identity.
+
+For Dagster, run bootstrap after the separate login, then select `copilot-dev` (or explicitly
+`copilot-prod` for production) for every lifecycle
+command (or save only `APPSEC_REVIEW_PROFILE=copilot-dev` in the ignored deployment `.env`):
+
+```bash
+python deploy/dagster/bin/bootstrap.py
+APPSEC_REVIEW_PROFILE=copilot-dev python deploy/dagster/bin/lifecycle.py build
+APPSEC_REVIEW_PROFILE=copilot-dev python deploy/dagster/bin/smoke.py --platform wsl --mode config
+scripts/stack-start.sh --profile copilot-dev
+```
+
+The profile selects `compose.copilot.yaml` and the separate `<platform>-copilot` image tag. Only
+the code location mounts the dedicated Copilot login, writable for token refresh; no credential
+is copied into the image or repository. The SDK runtime is installed at image build time, never
+downloaded during review inference. Claude authentication and Claude bind paths are not required.
+As with every stack start, the daemon may run enabled schedules; do not start it during an
+environment-only task that prohibits metadata refreshes.
 
 `profiles/prod.toml` is a configuration layer. It is deep-merged over the base file before
 validation, so the normal typed validation checks the result (an unknown model profile for a role,
@@ -85,8 +173,8 @@ every red cell's.
 
 ## Visibility and safety
 
-- The active profile is printed as `profile: dev|prod` by `stack-start`, `stack-restart`,
-  `stack-rebuild` and `review-start`, and shown by `stack-status`. `--profile prod` also prints a
+- The active profile is printed as `profile: dev|prod|copilot-dev|copilot-prod` by `stack-start`, `stack-restart`,
+  `stack-rebuild` and `review-start`, and shown by `stack-status`. Both production profiles also print a
   notice that prod uses the more capable models and larger token limits.
 - `review-start --profile X` compares X with the running code-location's `APPSEC_REVIEW_PROFILE`
   (unset means `dev`) and refuses with exit 3, printing the `scripts/stack-restart --profile X` command,

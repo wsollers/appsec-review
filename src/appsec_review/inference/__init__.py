@@ -13,7 +13,7 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 from typing import Any
 
-from . import anthropic_api, claude_cli, openai_api
+from . import anthropic_api, claude_cli, copilot_sdk, openai_api
 from .claude_cli import ModelOutputError, parse_model_payload
 from .request import Infer, ModelRequest, ModelResult, ReviewModelRequest
 
@@ -21,6 +21,7 @@ from .request import Infer, ModelRequest, ModelResult, ReviewModelRequest
 PROVIDERS: dict[str, Infer] = {
     "anthropic-api": anthropic_api.send,
     "claude-cli": claude_cli.send,
+    "copilot-sdk": copilot_sdk.send,
 }
 
 
@@ -39,6 +40,7 @@ def infer(request: ModelRequest | ReviewModelRequest, *, timeout_seconds: int) -
 MODEL_CHECKS: dict[str, Callable[..., dict[str, Any]]] = {
     "anthropic-api": anthropic_api.models,
     "claude-cli": claude_cli.models,
+    "copilot-sdk": copilot_sdk.models,
     "openai": openai_api.models,
 }
 

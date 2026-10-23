@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -16,6 +17,11 @@ class NvdSettings:
     request_delay_without_key_seconds: float
     max_download_bytes: int
     max_api_response_bytes: int
+    request_timeout_seconds: float = 120
+    download_timeout_seconds: float = 90
+    max_attempts: int = 6
+    retry_delay_seconds: float = 5
+    retry_max_delay_seconds: float = 60
 
     @classmethod
     def from_mapping(cls, root: Path, value: Mapping[str, Any]) -> "NvdSettings":
@@ -33,6 +39,11 @@ class NvdSettings:
             request_delay_without_key_seconds=float(value.get("request_delay_without_key_seconds", 6.0)),
             max_download_bytes=int(value.get("max_download_bytes", 512 * 1024 * 1024)),
             max_api_response_bytes=int(value.get("max_api_response_bytes", 64 * 1024 * 1024)),
+            request_timeout_seconds=float(value.get("request_timeout_seconds", 120)),
+            download_timeout_seconds=float(value.get("download_timeout_seconds", 90)),
+            max_attempts=int(value.get("max_attempts", 6)),
+            retry_delay_seconds=float(value.get("retry_delay_seconds", 5)),
+            retry_max_delay_seconds=float(value.get("retry_max_delay_seconds", 60)),
         )
         if settings.first_year < 1999:
             raise ValueError("first_year cannot precede CVE year 1999")
@@ -46,4 +57,13 @@ class NvdSettings:
             raise ValueError("request delays cannot be negative")
         if settings.max_download_bytes < 1 or settings.max_api_response_bytes < 1:
             raise ValueError("NVD download bounds must be positive")
+        if not 1 <= settings.max_attempts <= 10:
+            raise ValueError("NVD max_attempts must be between 1 and 10")
+        for timeout in (settings.request_timeout_seconds, settings.download_timeout_seconds):
+            if not math.isfinite(timeout) or not 0 < timeout <= 3600:
+                raise ValueError("NVD timeouts must be finite and within (0, 3600] seconds")
+        if not (math.isfinite(settings.retry_delay_seconds)
+                and math.isfinite(settings.retry_max_delay_seconds)
+                and 0 <= settings.retry_delay_seconds <= settings.retry_max_delay_seconds <= 3600):
+            raise ValueError("NVD retry delays must be finite and satisfy 0 <= delay <= maximum <= 3600")
         return settings

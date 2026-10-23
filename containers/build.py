@@ -827,6 +827,7 @@ def functional_smoke(ids: list[str], catalog: dict[str, Any], policy: dict[str, 
             fixture = (fixtures / "osv").resolve()
             output_dir = run_dir / "tool-osv-scanner"
             output_dir.mkdir(exist_ok=True)
+            output_dir.chmod(0o777)
             database = output_dir / "database" / "osv-scanner" / "PyPI"
             database.mkdir(parents=True)
             shutil.copyfile(source_zip, database / "all.zip")

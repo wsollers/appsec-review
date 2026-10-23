@@ -1,0 +1,33 @@
+# Opt-in Copilot subscription transport; retain every dev budget and reasoning setting.
+# Copilot uses dotted model versions. No aliasing or fallback is performed by the transport.
+[jobs.job_target_analysis_plan.settings.model]
+provider = "copilot-sdk"
+model = "claude-haiku-5.5"
+
+[jobs.job_post_build_security_assessment.settings.model]
+provider = "copilot-sdk"
+model = "claude-haiku-5.5"
+
+[jobs.job_dependency_intelligence.settings.model]
+provider = "copilot-sdk"
+model = "claude-haiku-5.5"
+
+[jobs.job_owasp_control_assessment.settings.model]
+provider = "copilot-sdk"
+model = "claude-haiku-5.5"
+
+[jobs.job_project_build.settings.model]
+provider = "copilot-sdk"
+model = "claude-haiku-5.5"
+
+[jobs.job_inference_security_review.settings.models.default]
+provider = "copilot-sdk"
+model = "claude-haiku-5.5"
+
+[jobs.job_inference_security_review.settings.models.triage]
+provider = "copilot-sdk"
+model = "claude-haiku-5.5"
+
+[jobs.job_poc_generation.settings.models.default]
+provider = "copilot-sdk"
+model = "claude-haiku-5.5"

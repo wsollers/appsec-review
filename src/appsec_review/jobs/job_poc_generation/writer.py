@@ -60,6 +60,7 @@ class Guidance:
 
 def load_guidance(repository_root: Path, run_root: Path, job_id: str, profile: ModelProfile) -> Guidance:
     """The shared rules, the role and the runtime skill, pinned under ``data/guidance/<sha256>/``."""
+    from appsec_review.storage.shared import publish_named
     root = Path(repository_root)
     skill = load_runtime_skill(root, SKILL, job_id=job_id)
     files = {"governing-rules.md": (root / GOVERNING).read_text(encoding="utf-8"),
@@ -72,16 +73,14 @@ def load_guidance(repository_root: Path, run_root: Path, job_id: str, profile: M
     for name, text in sorted(files.items()):
         path = destination / name
         payload = text.encode()
-        if path.exists() and path.read_bytes() != payload:
+        if path.is_file() and path.read_bytes() != payload:
             raise ValueError("poc writer guidance changed after pinning")
-        if not path.exists():
-            atomic_bytes(path, payload)
+        publish_named(run_root, path, payload, namespace="guidance", computation=identity)
     metadata = canonical_json({**identity, "guidance_sha256": digest})
     pinned = destination / "model-identity.json"
-    if pinned.exists() and pinned.read_bytes() != metadata:
+    if pinned.is_file() and pinned.read_bytes() != metadata:
         raise ValueError("poc writer model identity changed after pinning")
-    if not pinned.exists():
-        atomic_bytes(pinned, metadata)
+    publish_named(run_root, pinned, metadata, namespace="guidance", computation=identity)
     return Guidance("\n\n".join((files["governing-rules.md"], files["role.md"], files["skill.md"])), digest)
 
 

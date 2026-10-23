@@ -75,6 +75,9 @@ def publish_snapshot(
     files: Mapping[str, Path],
     manifest_fields: Mapping[str, Any],
 ) -> dict[str, Any]:
+    from appsec_review.storage.feed_provenance import check_root
+    from appsec_review.storage.shared import current, safe_path
+    check_root(root, feed_id, producing=True)
     root.mkdir(parents=True, exist_ok=True)
     entries: dict[str, dict[str, Any]] = {}
     for logical, source in sorted(files.items()):
@@ -91,28 +94,33 @@ def publish_snapshot(
         **dict(manifest_fields),
         "files": entries,
     }
+    if current() is not None:
+        unsigned["publication_provenance"] = "required-v1"
     snapshot_id = "sha256-" + hashlib.sha256(canonical_json(unsigned)).hexdigest()[:24]
     manifest = {**unsigned, "snapshot_id": snapshot_id}
     with FileLock(root / "locks" / "writer.lock"):
-        stage = root / "staging" / (snapshot_id + "-" + uuid.uuid4().hex[:8])
+        stage = safe_path(root, "staging/" + snapshot_id + "-" + uuid.uuid4().hex[:8])
         stage.mkdir(parents=True, exist_ok=False)
         try:
             for logical, source in sorted(files.items()):
-                destination = require_beneath(stage, stage / logical, "snapshot destination")
+                destination = safe_path(stage, logical)
                 destination.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(source, destination)
             atomic_json(stage / "manifest.json", manifest)
             verify_snapshot_directory(stage, manifest)
-            destination = root / "snapshots" / snapshot_id
+            destination = safe_path(root, f"snapshots/{snapshot_id}")
             destination.parent.mkdir(parents=True, exist_ok=True)
             if destination.exists():
-                existing = json.loads((destination / "manifest.json").read_text(encoding="utf-8"))
+                existing_path = safe_path(destination, "manifest.json")
+                existing = json.loads(existing_path.read_text(encoding="utf-8"))
                 verify_snapshot_directory(destination, existing)
-                if existing != manifest:
+                if existing_path.read_bytes() != canonical_json(manifest):
                     raise ValueError("snapshot identity collision")
                 shutil.rmtree(stage)
             else:
                 os.replace(stage, destination)
+            from appsec_review.storage.feed_provenance import record_snapshot
+            record_snapshot(root, feed_id, snapshot_id, computed=True)
             pointer = {
                 "schema": "appsec-review/feed-pointer/1",
                 "feed_id": feed_id,
@@ -129,11 +137,12 @@ def publish_snapshot(
 
 
 def verify_snapshot_directory(directory: Path, manifest: Mapping[str, Any]) -> dict[str, Any]:
+    from appsec_review.storage.shared import safe_path
     if manifest.get("snapshot_id") is None or not isinstance(manifest.get("files"), Mapping):
         raise ValueError("invalid snapshot manifest")
     checked = 0
     for logical, entry in manifest["files"].items():
-        path = require_beneath(directory, directory / logical, "manifest file")
+        path = safe_path(directory, logical)
         if not path.is_file() or path.is_symlink():
             raise ValueError(f"published file is missing: {logical}")
         if path.stat().st_size != entry["size_bytes"] or file_sha256(path) != entry["sha256"]:
@@ -146,19 +155,24 @@ POINTER_SCHEMAS = ("appsec-review/feed-pointer/1", "appsec-review/nvd-current-po
 
 
 def verify_current(root: Path, expected_feed: str) -> dict[str, Any]:
-    """Verify ``current.json`` and every file its snapshot manifest hashes (read-only)."""
-    pointer = json.loads((root / "current.json").read_text(encoding="utf-8"))
+    """Verify the snapshot; claimed jobs also pin immutable consumption provenance."""
+    from appsec_review.storage.feed_provenance import check_root, record_snapshot
+    from appsec_review.storage.shared import safe_path
+    check_root(root, expected_feed)
+    pointer = json.loads(safe_path(root, "current.json").read_text(encoding="utf-8"))
     if pointer.get("schema") not in POINTER_SCHEMAS or pointer.get("feed_id") != expected_feed:
         raise ValueError(f"invalid {expected_feed} current pointer")
-    directory = require_beneath(root, root / "snapshots" / pointer["snapshot_id"], "snapshot")
-    manifest_path = directory / "manifest.json"
+    directory = safe_path(root, f"snapshots/{pointer['snapshot_id']}")
+    manifest_path = safe_path(root, f"snapshots/{pointer['snapshot_id']}/manifest.json")
     if file_sha256(manifest_path) != pointer["manifest_sha256"]:
         raise ValueError(f"{expected_feed} manifest hash mismatch")
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     if manifest.get("snapshot_id") != pointer["snapshot_id"] or manifest.get("feed_id") != expected_feed:
         raise ValueError(f"{expected_feed} snapshot identity mismatch")
     verified = verify_snapshot_directory(directory, manifest)
-    return {**verified, "manifest_sha256": pointer["manifest_sha256"], "directory": str(directory)}
+    provenance = record_snapshot(root, expected_feed, pointer["snapshot_id"], computed=False)
+    return {**verified, "manifest_sha256": pointer["manifest_sha256"], "directory": str(directory),
+            **({"provenance": provenance} if provenance is not None else {})}
 
 
 def publish_metadata(metadata_root: Path, kind: str, identity: str, value: Mapping[str, Any]) -> Path:

@@ -12,6 +12,7 @@ from appsec_review.guidance.compose import load_registry
 from appsec_review.guidance.skills import load_runtime_skill
 from appsec_review.inference import Infer, ModelRequest
 from appsec_review.storage import atomic_bytes, canonical_json
+from appsec_review.storage.shared import publish_named
 
 from .resolution import apply_model_resolution
 
@@ -48,16 +49,14 @@ def _guidance(repository_root: Path, run_root: Path, model: Mapping[str, Any]) -
     for name, text in sorted(files.items()):
         path = destination / name
         payload = text.encode()
-        if path.exists() and path.read_bytes() != payload:
+        if path.is_file() and path.read_bytes() != payload:
             raise ValueError("dependency inference guidance changed after pinning")
-        if not path.exists():
-            atomic_bytes(path, payload)
+        publish_named(run_root, path, payload, namespace="guidance", computation=identity)
     metadata = canonical_json({**identity, "guidance_sha256": digest})
     metadata_path = destination / "model-identity.json"
-    if metadata_path.exists() and metadata_path.read_bytes() != metadata:
+    if metadata_path.is_file() and metadata_path.read_bytes() != metadata:
         raise ValueError("dependency inference model identity changed after pinning")
-    if not metadata_path.exists():
-        atomic_bytes(metadata_path, metadata)
+    publish_named(run_root, metadata_path, metadata, namespace="guidance", computation=identity)
     joined = "\n\n".join((files["persona.md"], files["role.md"], files["task.md"], files["skill.md"]))
     return joined, digest
 

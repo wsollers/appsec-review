@@ -8,7 +8,7 @@ normalizes declarations, definitions, and call/reference edges between accepted 
 
 from __future__ import annotations
 
-from concurrent.futures import ThreadPoolExecutor
+from appsec_review.storage.shared import PublicationThreadPoolExecutor as ThreadPoolExecutor
 from dataclasses import asdict
 import hashlib
 from pathlib import Path, PurePosixPath

@@ -15,10 +15,26 @@ smoke = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(smoke)
 
 
+@pytest.fixture(autouse=True)
+def default_development_profile(monkeypatch):
+    monkeypatch.setenv("APPSEC_REVIEW_PROFILE", "dev")
+
+
 def test_compose_uses_host_specific_cli_layout() -> None:
     assert smoke.compose("windows")[-1].endswith("compose.windows.yaml")
     assert smoke.compose("linux")[-1].endswith("compose.claude.yaml")
     assert smoke.compose("wsl")[-1].endswith("compose.claude.yaml")
+
+
+@pytest.mark.parametrize("profile", ["copilot-dev", "copilot-prod"])
+def test_copilot_uses_its_own_overlay_and_catalog_probe(monkeypatch, profile):
+    monkeypatch.setenv("APPSEC_REVIEW_PROFILE", profile)
+    commands = []
+    monkeypatch.setattr(smoke, "run", lambda command, **_: commands.append(command))
+    for platform in ("windows", "linux", "wsl"):
+        assert smoke.compose(platform)[-1].endswith("compose.copilot.yaml")
+        smoke.check_cli(platform)
+    assert all("copilot_sdk" in command[-1] and "claude" not in command for command in commands)
 
 
 def test_live_smoke_lock_excludes_parallel_runs_and_cleans_up(tmp_path: Path, monkeypatch) -> None:

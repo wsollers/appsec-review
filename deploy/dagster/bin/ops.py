@@ -1,7 +1,7 @@
 """Operator commands for the local Dagster stack and the reviews it runs.
 
 The shell and PowerShell scripts under ``scripts/`` are thin wrappers around the subcommands here.
-Stack changes go through ``lifecycle.py`` (it adds the Claude CLI overlay compose file), never
+Stack changes go through ``lifecycle.py`` (it adds the selected provider's overlay compose file), never
 through ``docker compose`` on ``compose.yaml`` alone. Reviews are launched with the same
 ``dagster job launch`` call the documentation uses and ended with ``recover_runs.py``.
 Every state-changing command refuses to disturb a non-terminal Dagster run unless ``--force`` is given.
@@ -27,7 +27,7 @@ from urllib.error import URLError
 from urllib.request import Request, urlopen
 from uuid import uuid4
 
-from host import actual_platform, project_name, read_environment
+from host import actual_platform, deployment_profile, project_name, provider_overlay, read_environment
 
 
 DEPLOYMENT = Path(__file__).resolve().parents[1]
@@ -46,7 +46,7 @@ RECORDING_VARIABLE = "APPSEC_REVIEW_MODEL_RECORDING"
 PROFILE_VARIABLE = "APPSEC_REVIEW_PROFILE"
 DEFAULT_PROFILE = "dev"
 DEPLOY_VARIABLES = (TARGET_VARIABLE, OVERLAY_VARIABLE, RECORDING_VARIABLE, PROFILE_VARIABLE)
-PROFILE_NOTICE = ("profile prod uses the more capable models (Sonnet 5.5, Opus 5.5 verifier) and larger token limits; "
+PROFILE_NOTICE = ("profile {profile} uses the more capable models (Sonnet 5.5, Opus 5.5 verifier) and larger token limits; "
                   "see docs/operations/model-profiles.md")
 OK, FAILED, USAGE, REFUSED, NOT_FOUND = 0, 1, 2, 3, 4
 APP_RUN_ID = re.compile(r"^\d{4}-\d{2}-\d{2}-\d{4}$")
@@ -147,12 +147,13 @@ def by_service(containers: list[Container]) -> dict[str, Container]:
     return {item.service: item for item in containers}
 
 
-def overlay_name() -> str:
-    return "compose.windows.yaml" if actual_platform() == "windows" else "compose.claude.yaml"
+def overlay_name(profile: str = "dev") -> str:
+    return provider_overlay(actual_platform(), profile)
 
 
-def image_tag() -> str:
-    return f"appsec-review-dagster:{actual_platform()}"
+def image_tag(profile: str = "dev") -> str:
+    suffix = "-copilot" if profile in {"copilot-dev", "copilot-prod"} else ""
+    return f"appsec-review-dagster:{actual_platform()}{suffix}"
 
 
 # -- Dagster GraphQL ------------------------------------------------------------------------------
@@ -308,8 +309,8 @@ def add_deploy_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--target", help="review target: a name under targets/ or a container path")
     parser.add_argument("--overlay", help="capacity overlay file under test/acceptance, or 'none'")
     parser.add_argument("--recording", choices=("record", "replay", "off"), help="model recording mode")
-    parser.add_argument("--profile", choices=("dev", "prod"),
-                        help="runtime profile (default dev; prod = more capable models and larger limits)")
+    parser.add_argument("--profile", choices=("dev", "prod", "copilot-dev", "copilot-prod"),
+                        help="runtime profile (Copilot profiles use a separate login; prod profiles use production limits)")
 
 
 # -- stack checks ---------------------------------------------------------------------------------
@@ -330,14 +331,14 @@ def check_health(project: str) -> tuple[bool, list[Container]]:
 
 def check_overlay(containers: list[Container]) -> bool:
     code = by_service(containers).get("code-location")
-    expected = overlay_name()
+    expected = overlay_name(running_value(code, PROFILE_VARIABLE) if code else "dev")
     if code is None:
         say("  overlay        cannot check: no code-location container")
         return False
     if not any(Path(path.replace("\\", "/")).name == expected for path in code.config_files):
         say(f"  overlay        MISSING: {expected} is not in the running project's compose files "
             f"({', '.join(code.config_files) or 'none recorded'})")
-        say("                 the stack was created without the Claude CLI overlay; recreate it with "
+        say("                 the stack was created without the provider overlay; recreate it with "
             "scripts/stack-restart (lifecycle.py adds the overlay)")
         return False
     say(f"  overlay        ok ({expected} in compose config files)")
@@ -356,6 +357,14 @@ def probe_model(containers: list[Container], timeout: float = 180) -> bool:
     code = by_service(containers).get("code-location")
     if code is None or code.state != "running":
         say("  model probe    skipped: code-location is not running")
+        return False
+    if running_value(code, PROFILE_VARIABLE) in {"copilot-dev", "copilot-prod"}:
+        result = docker("exec", code.id, "python", "-c",
+                        "from appsec_review.inference.copilot_sdk import verify; verify()", timeout=timeout)
+        if result.returncode == 0:
+            say("  model catalog  ok (dedicated Copilot login; configured models enabled)")
+            return True
+        say(f"  model catalog  FAILED: {redact(result.stderr or result.stdout)}")
         return False
     try:
         result = docker("exec", code.id, "claude", "-p", "Reply with the single word: ok", timeout=timeout)
@@ -380,15 +389,15 @@ def bring_up(args: argparse.Namespace, project: str, containers: list[Container]
     url = args.url
     if stack_running(containers) and (build or changes):
         guard_active_runs(url, containers, args.force, action)
-    profile = settings.get(PROFILE_VARIABLE, DEFAULT_PROFILE)
+    profile = settings.get(PROFILE_VARIABLE) or deployment_profile(DEPLOYMENT / ".env")
     say(f"profile: {profile}")
-    if profile != DEFAULT_PROFILE:
-        say(PROFILE_NOTICE)
+    if profile in {"prod", "copilot-prod"}:
+        say(PROFILE_NOTICE.format(profile=profile))
     for key, value in settings.items():
         say(f"setting {key}={value or '(empty)'}{'' if key in requested else '  (carried over from the running stack)'}")
-    image_missing = docker("image", "inspect", image_tag(), "--format", "{{.Id}}").returncode != 0
+    image_missing = docker("image", "inspect", image_tag(profile), "--format", "{{.Id}}").returncode != 0
     if build or image_missing:
-        reason = "--build" if build else f"image {image_tag()} is missing"
+        reason = "--build" if build else f"image {image_tag(profile)} is missing"
         say(f"building the image ({reason})")
         if lifecycle("build", settings, args.dry_run) != 0:
             raise OpsError("lifecycle build failed")
@@ -461,7 +470,8 @@ def cmd_stack_stop(args: argparse.Namespace) -> int:
             raise OpsError("--purge-volumes deletes the Dagster database and storage; add --yes to confirm", REFUSED)
         purge = volumes
     guard_active_runs(args.url, containers, args.force, "stop the stack")
-    if lifecycle("stop", {}, args.dry_run) != 0:
+    settings, _ = effective_settings(containers, {})
+    if lifecycle("stop", settings, args.dry_run) != 0:
         raise OpsError("lifecycle stop failed")
     if args.purge_volumes:
         for command in (["rm", *[item.id for item in containers]], ["volume", "rm", *purge] if purge else None):
@@ -608,8 +618,8 @@ def cmd_review_start(args: argparse.Namespace) -> int:
         command += ["--tags", json.dumps(tags, sort_keys=True)]
     profile = running_value(code, PROFILE_VARIABLE)
     say(f"profile:   {profile}")
-    if profile != DEFAULT_PROFILE:
-        say(PROFILE_NOTICE)
+    if profile in {"prod", "copilot-prod"}:
+        say(PROFILE_NOTICE.format(profile=profile))
     say(f"target:    {code.settings.get(TARGET_VARIABLE) or '(default)'}")
     say(f"overlay:   {code.settings.get(OVERLAY_VARIABLE) or '(none)'}")
     say(f"recording: {code.settings.get(RECORDING_VARIABLE) or 'off'}")

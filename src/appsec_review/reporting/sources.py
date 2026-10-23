@@ -1,6 +1,7 @@
 """Read-only access to the run artifacts the report is built from.
 
-Nothing here writes. A missing, unreadable or malformed artifact becomes a *named gap* on the reader
+Offline reading never writes; job execution records immutable cell consumption receipts.
+A missing, unreadable or malformed artifact becomes a *named gap* on the reader
 (``reader.gaps``); the report then says so instead of failing or implying that the artifact was clean.
 """
 from __future__ import annotations
@@ -141,13 +142,22 @@ class RunReader:
 
     # -- cell receipts -------------------------------------------------------------------------
 
+    def read_cell_receipt(self, path: Path) -> Any | None:
+        from appsec_review.storage.shared import consume_named
+        try:
+            consume_named(self.run_dir, path, namespace="review-cell")
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            self.gap(f"cell provenance: {self.rel(path)} cannot be verified ({type(exc).__name__})")
+            return None
+        return self.read_json(path, "cell receipt")
+
     def cell_receipts(self, cell_id: str) -> list[tuple[Path, dict[str, Any]]]:
         if not _SAFE_SEGMENT.match(cell_id):
             return []
         directory = self.data / "jobs" / JOB / "cells" / cell_id
         receipts: list[tuple[Path, dict[str, Any]]] = []
         for path in sorted(directory.glob("attempt-*.json")):
-            value = self.read_json(path, f"cell receipt {cell_id[:17]}")
+            value = self.read_cell_receipt(path)
             if isinstance(value, dict):
                 receipts.append((path, value))
         return receipts

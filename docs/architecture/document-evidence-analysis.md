@@ -60,8 +60,11 @@ verifies target bytes against catalog hashes, and recognizes literal route regis
 line; no match and multiple matches remain explicit mapping gaps. Dynamic registrations,
 cross-file mount prefixes, and semantic trust-boundary mappings are outside this first rule and
 must not be inferred as absent behavior. Size, decode, and inventory bounds are coverage gaps.
-The private content-addressed `data/document-issues/<hash>/ledger.json` contains one candidate
-per document hunt, with document and implementation evidence separated. All automated candidates
+The private exact-byte-addressed `data/shared/objects/<sha256>` ledger contains one candidate
+per document hunt, with document and implementation evidence separated. Attempt-local shared
+receipts pin the computation and original producer or reuse; legacy
+`data/document-issues/<hash>/ledger.json` files remain readable without rewriting their history.
+All automated candidates
 remain `insufficient_evidence`; the accepted ledger has no findings or scoring inputs without
 independent claim review. The adjudication gate requires distinct source proof lines plus red,
 blue, and independent verifier decisions that resolve to the accepted source snapshot. The job

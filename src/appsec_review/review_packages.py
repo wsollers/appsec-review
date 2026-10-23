@@ -16,6 +16,7 @@ from appsec_review.indexing.products_base import AcceptedShards
 from appsec_review.retrieval import RetrievalCore
 from appsec_review.retrieval.model import LogicalIdentity, canonical_json
 from appsec_review.storage import atomic_json, file_sha256
+from appsec_review.storage.shared import publish_named, consume_named, safe_path
 
 
 SCHEMA = "appsec-review/review-package/3"
@@ -497,24 +498,21 @@ def assemble_review_packages(core: RetrievalCore, *, max_page_size: int = 20) ->
 def publish_review_packages(core: RetrievalCore, *, max_page_size: int = 20) -> Path:
     packages, manifest = assemble_review_packages(core, max_page_size=max_page_size)
     destination = core.run_root / "data" / "review-packages" / manifest["content_sha256"]
-    if (destination / "manifest.json").exists():
-        verify_review_packages(core, destination)
-        return destination
+    safe_path(core.run_root, destination.relative_to(core.run_root).as_posix())
     destination.mkdir(parents=True, exist_ok=True)
     for item in packages:
         path = destination / f"{item['package_id']}.json"
-        if path.exists():
-            if path.read_bytes() != canonical_json(item) + b"\n":
-                raise ValueError("partial review package publication has changed bytes")
-        else:
-            atomic_json(path, item)
-    atomic_json(destination / "manifest.json", manifest)
+        publish_named(core.run_root, path, canonical_json(item) + b"\n", namespace="review-package",
+                      computation={"assembly_rule": ASSEMBLY_RULE, "manifest_sha256": core.manifest_sha256})
+    publish_named(core.run_root, destination / "manifest.json", canonical_json(manifest) + b"\n",
+                  namespace="review-package",
+                  computation={"assembly_rule": ASSEMBLY_RULE, "manifest_sha256": core.manifest_sha256})
     verify_review_packages(core, destination)
     return destination
 
 
 def verify_review_packages(core: RetrievalCore, directory: Path) -> dict[str, Any]:
-    directory = Path(directory).resolve()
+    directory = safe_path(core.run_root, Path(directory).relative_to(core.run_root).as_posix())
     if directory.parent != (core.run_root / "data" / "review-packages").resolve():
         raise ValueError("review package directory escapes its run")
     manifest_path = directory / "manifest.json"
@@ -532,6 +530,7 @@ def verify_review_packages(core: RetrievalCore, directory: Path) -> dict[str, An
         if Path(name).name != name:
             raise ValueError("review package path is invalid")
         path = directory / f"{name}.json"
+        safe_path(core.run_root, path.relative_to(core.run_root).as_posix())
         package = json.loads(path.read_text(encoding="utf-8"))
         if (path.read_bytes() != canonical_json(package) + b"\n" or
             _digest(package) != entry["sha256"] or package.get("package_id") != name or
@@ -540,4 +539,7 @@ def verify_review_packages(core: RetrievalCore, directory: Path) -> dict[str, An
     _, expected = assemble_review_packages(core, max_page_size=manifest["max_page_size"])
     if manifest != expected:
         raise ValueError("review package membership or accepted input integrity mismatch")
+    for entry in manifest["packages"]:
+        consume_named(core.run_root, directory / f"{entry['package_id']}.json", namespace="review-package")
+    consume_named(core.run_root, manifest_path, namespace="review-package")
     return manifest
