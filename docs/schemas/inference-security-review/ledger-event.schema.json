@@ -162,6 +162,15 @@
               "requested_kind": {
                 "$ref": "common.schema.json#/$defs/token"
               },
+              "anchors": {
+                "$ref": "common.schema.json#/$defs/entity_ids"
+              },
+              "question": {
+                "$ref": "common.schema.json#/$defs/text"
+              },
+              "specialist": {
+                "$ref": "compact-investigation.schema.json#/$defs/specialist"
+              },
               "round": {
                 "$ref": "common.schema.json#/$defs/round"
               },

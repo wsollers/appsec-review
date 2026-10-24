@@ -240,14 +240,15 @@ defaults, then validates the expanded document with the existing validators.
 ```json
 {"action": "final", "result": {
   "claim": "c1",
-  "stance": "contradicts",
+  "stance": "qualifies",
   "predicate": "missing_or_ineffective_guard",
   "cites": ["G2", "S1"],
-  "why": "The guard at line 13 rejects short input."
+  "why": "The guard rejects short source input but does not bound writes to the 16-byte destination."
 }}
 ```
 
-`stance` is one of `supports`, `contradicts`, `qualifies`, `unresolved`. The application turns each
+`stance` is one of `contradicts`, `qualifies`, `unresolved`. Blue cannot author support, including in
+per-predicate answers; unsupported authority fails compact validation. The application turns each
 citation into a relation to the named predicate. Whether a `contradicts` stands is decided by the
 evidence rules (section 7), not by the stance word.
 
@@ -333,7 +334,7 @@ and R5 evaluates the claim.
 | Red `support[p]: [labels]` | `supports` relation per label, per predicate | Counts as direct support only if the `(kind, predicate)` cell is direct and the label resolves completely. An `analyst_assessed` cell is recorded and shown but never counts. |
 | Red `counter[p]: [labels]` | `qualifies` | Never contradicts. Contradiction belongs to blue and the verifier. |
 | Blue `contradicts p` with cites | `contradicts` relation per label; for a `guard_fact` or `range_fact` on `missing_or_ineffective_guard`, `qualifies` with a reason unless the facts show the destination is bounded (below) | A direct contradiction defeats the predicate (R5 rows 3 and 4). |
-| Blue `supports` or `qualifies` | `supports` or `qualifies` | Adds weight; cannot confirm. |
+| Blue `qualifies` | `qualifies` | Retains a material limitation; cannot confirm. |
 | Verifier `disposition` | recorded as `proposed_disposition` | A proposal; R5 decides. |
 | Any `unresolved` or empty cite list | no relation | The predicate stays open (R5 row 6 or 7). |
 
@@ -458,13 +459,15 @@ Where this document left a choice open, the implementation took these. None of t
    unique. The response names the change.
 9. **Omitted lead.** A lead that no claim, `no_claim` or `blocked` entry accounts for is expanded as `blocked` with a
    `missing` named gap. The previous behaviour (an `invalid` cell) is gone.
-10. **No chain seeds, taint paths or evidence requests in the compact answer.** The expanded result holds empty lists
-    for them, and `chain-seeds.json` is empty. The chain of calls from an entry point is now package data and a
-    `poc_basis` field instead.
-11. **Blue `supports`.** It is expanded faithfully (disposition and a `supports` proposed relation). The existing
-    relation-authority table (`ROLE_RELATION_KINDS`) still lets blue author only `contradicts` and `qualifies`, so a
-    blue `supports` relation is recorded as a `schema_error` gap and is not a ledger relation. Changing blue's
-    authority is a policy decision this implementation did not take.
+10. **Bounded investigation details.** Red claims can carry obligations, provenance-labelled taint paths and
+    evidence requests, and red results can carry chain seeds. Blue and verifier can request evidence too.
+    `compact-investigation.schema.json` defines exact closed shapes and bounds; see the
+    [red output contract](red-discovery-output.md) for expansion, nomination and uncertainty semantics.
+    Request questions, resolved anchors and optional specialists survive ledger projection, without expanding
+    worker authority. A `poc_basis` remains a separate non-evidentiary brief.
+11. **Blue authority is enforced before expansion.** Blue `supports` is rejected by the compact schema rather
+    than advertised to a worker and subsequently rejected by the relation-authority table. Only verifier and
+    red support citations can nominate support within their existing roles.
 12. **Leads in the view.** The view lists leads under `leads` for both lanes (a lane A package has one); there is no
     separate `lead` object, which would repeat the row.
 13. **`claim` in blue and verifier answers** is advisory: the cell is bound to one claim, and the application fills

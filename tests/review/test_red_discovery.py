@@ -236,7 +236,7 @@ def test_cited_entities_and_requests() -> None:
     proposal = document["proposals"][0]
     assert cited_entities(document, proposal) == {SINK, PATH, LEAD_A, SPAN}
     assert proposal_requests(document, "p1") == [{"predicate": "attacker_input_control", "requested_kind": "dataflow",
-                                                  "anchors": [PATH]}]
+                                                  "anchors": [PATH], "question": "first hop"}]
     assert proposal_requests(document, "p2") == []
 
 

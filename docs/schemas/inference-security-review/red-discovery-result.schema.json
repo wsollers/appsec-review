@@ -238,9 +238,10 @@
         "local_id": {"$ref": "#/$defs/local_id"},
         "proposal_id": {"$ref": "#/$defs/local_id"},
         "predicate": {"$ref": "common.schema.json#/$defs/predicate"},
-        "requested_kind": {"enum": ["source_line", "compiled_view", "dataflow", "configuration", "build_provenance", "deployment", "run_artifact", "other"]},
+        "requested_kind": {"$ref": "compact-investigation.schema.json#/$defs/requested_kind"},
         "scope_entity_ids": {"$ref": "#/$defs/entity_ids"},
-        "reason": {"$ref": "#/$defs/text"}
+        "reason": {"$ref": "#/$defs/text"},
+        "specialist": {"$ref": "compact-investigation.schema.json#/$defs/specialist"}
       }
     },
     "gap": {

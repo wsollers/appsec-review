@@ -21,8 +21,21 @@ unchanged. See [review protocol v2](review-protocol-v2.md) section 6 for the sha
 expansion fills the schema, package echo, role and round, local ids, `source_lead_ids`, the evidence references
 (`supports` for `support`, `qualifies` for `counter`; a locator of kind `unresolved`, because the application
 re-resolves the identity), and the lead accounting: a lead no claim develops and the answer does not list under
-`no_claim` or `blocked` becomes `blocked` with a named `missing` gap. The compact form carries no taint paths, chain
-seeds or evidence requests; those fields are empty in an expanded result.
+`no_claim` or `blocked` becomes `blocked` with a named `missing` gap.
+
+The optional investigation fields share the bounded
+[`compact-investigation.schema.json`](../schemas/inference-security-review/compact-investigation.schema.json)
+definitions. Claims may carry `obligations`, `taint_paths`, and `evidence_requests`; the result may carry
+`chain_seeds`. Obligation citations nominate evidence, never support a predicate automatically: every open
+obligation also becomes a question and gap. Path nodes and edge citations resolve cell-local labels; an observed
+hop missing an endpoint or resolvable citation becomes an explicit hypothesis, gap and dataflow request.
+Hypothetical hops never become support relations. Malformed topology and configured size limits still reject
+the expanded result. Chain links retain their open continuity questions and remain nominations, not claims.
+
+Requests contain a predicate, requested evidence kind, label anchors, a concrete question, and an optional
+registered specialist. The application preserves resolved anchors, question and specialist in the ledger and
+projection. These are bounded evidence/referral cues, not worker delegation or authority to widen a package.
+Unknown request anchors reject the answer rather than silently broadening its scope.
 
 `poc_basis` has no closed field in this document. Its labels are resolved to identities and its texts bounded, and the
 application stores it as the optional `proposal.poc_basis` field, which `teams.py` copies to the run-owned
@@ -80,7 +93,7 @@ inherit a red seed as a confirmed chain.
 Rules 1 to 3 run as the cell's final-result validation (`red_discovery.admission_errors`). Any
 violation makes the cell's result invalid: the cell ends `invalid` with a `schema_error` gap and
 exactly one terminal record, and it is retried only as the retry policy allows. The validator
-version of a red cell names the admission rules (`red-discovery-admission/1`) and a hash of the
+version of a red cell names the admission rules (`red-discovery-admission/2`) and a hash of the
 resolved limits, so changing either invalidates red cell reuse.
 
 1. Validate the closed schema and the limits on bytes, counts, text lengths, path depth (nodes per

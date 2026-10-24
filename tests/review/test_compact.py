@@ -151,10 +151,12 @@ def test_a_contradiction_that_does_not_resolve_stays_unresolved() -> None:
     assert classify("tag_assignment", Predicate.MISSING_OR_INEFFECTIVE_GUARD) is Admissibility.INDIRECT
 
 
-def test_blue_support_and_qualification_are_expanded_faithfully() -> None:
+def test_blue_support_is_rejected_and_qualification_is_expanded() -> None:
     supports = blue({"stance": "supports", "predicate": "affected_construct", "cites": ["K1"], "why": "same sink"})
-    assert supports.result["disposition"] == "supports"
-    assert supports.result["proposed_relations"][0]["kind"] == "supports"
+    assert supports.result is None and supports.errors
+    nested = blue({"stance": "unresolved", "per_predicate": {
+        "affected_construct": {"stance": "supports", "cites": ["K1"]}}})
+    assert nested.result is None and nested.errors
     qualifies = blue({"stance": "qualifies", "predicate": "attacker_input_control", "cites": ["E1"], "why": "only local"})
     assert qualifies.result["proposed_relations"][0]["kind"] == "qualifies"
     assert SCHEMAS.errors("blue-result", qualifies.result) == []
@@ -260,3 +262,103 @@ def test_a_claim_may_use_any_local_id_without_colliding_with_named_gaps() -> Non
     result = assert_admitted(red({"claims": [claim(id="g1", missing=["X1"]), claim(id="g2", missing=["X1"])]}))
     ids = [item["local_id"] for item in result["proposals"]] + [item["local_id"] for item in result["gaps"]]
     assert len(ids) == len(set(ids)) and {"g1", "g2"} <= set(ids)
+
+
+def investigation_path(*, basis: str = "accepted_tool_path", cites: list[str] | None = None) -> dict:
+    return {"source": "input", "sink": "copy", "nodes": [
+        {"id": "input", "role": "source", "label": "E1", "why": "file input"},
+        {"id": "copy", "role": "sink", "label": "K1", "why": "copy length"}],
+        "edges": [{"from": "input", "to": "copy", "kind": "data", "basis": basis,
+                   "cites": ["F1"] if cites is None else cites}]}
+
+
+def request(**changes) -> dict:
+    return {"predicate": "configuration_enables", "requested_kind": "configuration", "anchors": ["S1"],
+            "question": "Which deployed profile enables this route?", "specialist": "cloud_container_deployment",
+            **changes}
+
+
+def test_investigation_details_survive_expansion_and_admission() -> None:
+    answer = {"claims": [claim(id="e1", missing=[], taint_paths=[investigation_path()],
+                              obligations=[{"predicate": "missing_or_ineffective_guard",
+                                            "question": "Does this guard bound the destination?", "cites": ["G1"]}],
+                              evidence_requests=[request()])]}
+    result = assert_admitted(red(answer))
+    [proposal] = result["proposals"]
+    [obligation] = result["proof_obligations"]
+    [path] = result["taint_paths"]
+    assert proposal["obligation_ids"] == [obligation["local_id"]]
+    assert proposal["taint_path_ids"] == [path["local_id"]]
+    assert path["basis"] == "reported"
+    assert {node["entity_id"] for node in path["nodes"]} == {ENTRY, SINK}
+    assert any(cite.via == "taint_edge" and cite.entity_id == HOP
+               for cite in red_discovery.proposal_citations(result, proposal))
+    assert red_discovery.proposal_requests(result, "e1") == [{
+        "predicate": "missing_or_ineffective_guard", "requested_kind": "other", "anchors": [SINK, FUNCTION],
+        "question": "Does this guard bound the destination?"},
+        {
+        "predicate": "configuration_enables", "requested_kind": "configuration", "anchors": [FUNCTION],
+        "question": request()["question"], "specialist": "cloud_container_deployment"}]
+    ids = [item["local_id"] for key in ("proposals", "proof_obligations", "taint_paths", "evidence_refs",
+                                      "evidence_requests", "gaps") for item in result[key]]
+    assert len(ids) == len(set(ids))
+
+
+@pytest.mark.parametrize("basis,cites", [
+    ("analyst_hypothesis", ["F1"]), ("accepted_tool_path", []), ("source_mapped_analysis", ["F99"])])
+def test_unproven_hop_stays_hypothetical_with_request_and_gap(basis: str, cites: list[str]) -> None:
+    result = assert_admitted(red({"claims": [claim(missing=[], taint_paths=[investigation_path(basis=basis, cites=cites)])]}))
+    [path] = result["taint_paths"]
+    assert path["basis"] == "hypothesized" and path["gap_ids"]
+    assert path["edges"][0]["basis"] == "analyst_hypothesis"
+    assert result["evidence_requests"][0]["requested_kind"] == "dataflow"
+    assert result["evidence_requests"][0]["scope_entity_ids"] == [ENTRY, SINK]
+    assert result["result_status"] == "partial"
+    assert not any(cite.via == "taint_edge" for cite in
+                   red_discovery.proposal_citations(result, result["proposals"][0]))
+
+
+def test_missing_obligation_evidence_opens_a_request_without_asserting_support() -> None:
+    result = assert_admitted(red({"claims": [claim(missing=[], obligations=[
+        {"predicate": "security_impact", "question": "What privilege does this worker hold?", "cites": []}])]}))
+    assert result["proof_obligations"][0]["candidate_evidence_ids"] == []
+    assert result["evidence_requests"][0]["predicate"] == "security_impact"
+    assert result["gaps"]
+
+
+@pytest.mark.parametrize("role", ["blue", "verifier"])
+def test_challenge_requests_preserve_scope_question_and_specialist(role: str) -> None:
+    body = {"stance": "unresolved"} if role == "blue" else {"disposition": "insufficient_evidence", "per_predicate": {}}
+    invoke = blue if role == "blue" else verifier
+    expansion = invoke({**body, "evidence_requests": [request()]})
+    assert not expansion.errors
+    assert expansion.result["evidence_requests"] == [{**request(), "anchors": [FUNCTION]}]
+    assert SCHEMAS.errors(f"{role}-result", expansion.result) == []
+    assert invoke({**body, "evidence_requests": [request(anchors=["S99"])]}).errors
+    assert invoke({**body, "evidence_requests": [request(specialist="unregistered_agent")]}).errors
+
+
+def test_chain_seed_is_preserved_but_is_not_evidence_for_an_accepted_chain() -> None:
+    seed = {"objective": "Cross two trust boundaries", "steps": [
+        {"id": "first", "claim": "c1", "description": "Read the record", "prerequisite": "ordinary account",
+         "resulting_state": "record known", "anchors": ["S1"]},
+        {"id": "second", "claim": None, "description": "Use the record in a worker", "prerequisite": "record known",
+         "resulting_state": "unknown worker effect", "anchors": ["K1"]}],
+        "links": [{"from": "first", "to": "second", "continuity_dimensions": ["identity"],
+                   "cites": [], "questions": ["Does the worker consume the same record?"]}]}
+    result = assert_admitted(red({"claims": [claim()], "chain_seeds": [seed]}))
+    [expanded] = result["chain_seeds"]
+    assert expanded["steps"][0]["proposal_id"] == "c1"
+    assert expanded["steps"][0]["entity_ids"] == [FUNCTION]
+    assert expanded["links"][0]["open_questions"] == ["Does the worker consume the same record?"]
+    assert expanded["gap_ids"]
+
+
+def test_path_topology_and_configured_output_limits_are_still_enforced() -> None:
+    path = investigation_path()
+    path["edges"][0]["to"] = "unknown"
+    result = red({"claims": [claim(taint_paths=[path])]}).result
+    assert any("unknown node" in error for error in red_discovery.admission_errors(result, invocation(), RedOutputLimits()))
+    valid_result = red({"claims": [claim(evidence_requests=[request(), request(question="Is the feature enabled?")])]}).result
+    assert any("evidence_requests" in error for error in red_discovery.admission_errors(
+        valid_result, invocation(), RedOutputLimits(max_evidence_requests=1)))

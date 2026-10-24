@@ -94,6 +94,34 @@ def test_writer_seals_verifiable_chain(tmp_path: Path) -> None:
     assert verify_chain(paths[0], expected_head=sha256_hex(events[-1])) == events
 
 
+def test_request_question_and_specialist_survive_ledger_projection(tmp_path: Path) -> None:
+    target = claim("request")
+    writer = LedgerWriter(tmp_path / "requests.jsonl", "review")
+    writer.propose_claim(target)
+    writer.open_request(request_id("details"), target.claim_id, Predicate.CONFIGURATION_ENABLES,
+                        "configuration", anchors=target.affected_entities, question="Which overlay is deployed?",
+                        specialist="cloud_container_deployment")
+    writer.seal()
+    view = project(verify_chain(writer.path))
+    request = view.evidence_requests[request_id("details")]
+    assert request.anchors == target.affected_entities
+    assert request.question == "Which overlay is deployed?"
+    assert request.specialist == "cloud_container_deployment"
+    assert view.to_json()["evidence_requests"][0]["question"] == request.question
+
+
+def test_request_identity_cannot_be_reused_for_a_different_question(tmp_path: Path) -> None:
+    target = claim("request")
+    writer = LedgerWriter(tmp_path / "requests.jsonl", "review")
+    writer.propose_claim(target)
+    for question in ("Which overlay is deployed?", "Who owns this record?"):
+        writer.open_request(request_id("collision"), target.claim_id, Predicate.CONFIGURATION_ENABLES,
+                            "configuration", question=question)
+    writer.seal()
+    with pytest.raises(IntegrityError, match="question or scope"):
+        project(verify_chain(writer.path))
+
+
 def test_seal_is_immutable(tmp_path: Path) -> None:
     writer = LedgerWriter(tmp_path / "s.jsonl", "unit")
     writer.propose_claim(claim("a"))

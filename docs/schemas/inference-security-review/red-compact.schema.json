@@ -73,6 +73,15 @@
           "counter": {
             "$ref": "common.schema.json#/$defs/predicate_labels"
           },
+          "obligations": {
+            "$ref": "compact-investigation.schema.json#/$defs/obligations"
+          },
+          "taint_paths": {
+            "$ref": "compact-investigation.schema.json#/$defs/taint_paths"
+          },
+          "evidence_requests": {
+            "$ref": "compact-investigation.schema.json#/$defs/requests"
+          },
           "missing": {
             "type": "array",
             "maxItems": 16,
@@ -154,6 +163,9 @@
           }
         }
       }
+    },
+    "chain_seeds": {
+      "$ref": "compact-investigation.schema.json#/$defs/chain_seeds"
     },
     "no_claim": {
       "type": "array",

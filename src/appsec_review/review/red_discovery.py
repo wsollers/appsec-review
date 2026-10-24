@@ -26,7 +26,7 @@ from appsec_review.review.models import Predicate, RelationKind, Role
 
 RESULT_SCHEMA = "appsec-review/red-discovery-result/1"
 SCHEMA_NAME = "red-discovery-result"
-ADMISSION_RULES_VERSION = "red-discovery-admission/1"
+ADMISSION_RULES_VERSION = "red-discovery-admission/2"
 RED_ROLES = frozenset({Role.HYPOTHESIS_HUNTER, Role.RED_TEAM_ANALYST})
 LEAD_OUTCOMES = ("proposal", "no_proposal", "blocked")
 OBSERVED_EDGE_BASES = frozenset({"accepted_tool_path", "source_mapped_analysis"})
@@ -434,7 +434,8 @@ def cited_entities(result: Mapping[str, Any], proposal: Mapping[str, Any]) -> se
 def proposal_requests(result: Mapping[str, Any], proposal_id: str) -> list[dict[str, Any]]:
     """The proposal's evidence requests in the ledger request shape (anchors are the scope entities)."""
     return [{"predicate": item["predicate"], "requested_kind": item["requested_kind"],
-             "anchors": list(item["scope_entity_ids"])}
+             "anchors": list(item["scope_entity_ids"]), "question": item["reason"],
+             **({"specialist": item["specialist"]} if "specialist" in item else {})}
             for item in result.get("evidence_requests", ()) if item["proposal_id"] == proposal_id]
 
 

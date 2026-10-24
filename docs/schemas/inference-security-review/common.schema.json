@@ -474,13 +474,16 @@
           "$ref": "#/$defs/predicate"
         },
         "requested_kind": {
-          "$ref": "#/$defs/entity_kind"
+          "$ref": "compact-investigation.schema.json#/$defs/requested_kind"
         },
         "anchors": {
           "$ref": "#/$defs/entity_ids"
         },
         "question": {
           "$ref": "#/$defs/text"
+        },
+        "specialist": {
+          "$ref": "compact-investigation.schema.json#/$defs/specialist"
         }
       }
     },

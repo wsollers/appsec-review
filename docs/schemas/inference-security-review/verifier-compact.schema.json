@@ -33,6 +33,9 @@
     },
     "why": {
       "$ref": "common.schema.json#/$defs/compact_why"
+    },
+    "evidence_requests": {
+      "$ref": "compact-investigation.schema.json#/$defs/requests"
     }
   }
 }

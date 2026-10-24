@@ -248,10 +248,19 @@ class LedgerWriter:
                            {"duplicate_of": duplicate_of, "reason": _bounded(reason), "round": round})
 
     def open_request(self, request_id: str, claim_id: str, predicate: Predicate, requested_kind: str, *,
-                     round: int = 0, origin_cell_id: str | None = None) -> dict[str, Any]:
+                     round: int = 0, origin_cell_id: str | None = None, anchors: Iterable[str] = (),
+                     question: str | None = None, specialist: str | None = None) -> dict[str, Any]:
+        details: dict[str, Any] = {}
+        if question is not None:
+            details["question"] = _bounded(question)
+        if specialist is not None:
+            details["specialist"] = specialist
+        anchors = sorted(set(anchors))
+        if anchors:
+            details["anchors"] = anchors
         return self.append(EventKind.EVIDENCE_REQUEST_OPENED, request_id, {
             "claim_id": claim_id, "predicate": Predicate(predicate).value, "requested_kind": requested_kind,
-            "round": round, "origin_cell_id": origin_cell_id})
+            "round": round, "origin_cell_id": origin_cell_id, **details})
 
     def close_request(self, request_id: str, claim_id: str, outcome: EvidenceRequestOutcome, *, reason: str,
                       round: int = 0) -> dict[str, Any]:
@@ -439,6 +448,9 @@ class EvidenceRequestView:
     requested_kind: str | None
     opened: int                          # number of open events
     outcomes: tuple[EvidenceRequestOutcome, ...]
+    anchors: tuple[str, ...] = ()
+    question: str | None = None
+    specialist: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -474,7 +486,10 @@ class Projection:
             "evidence_requests": [{"request_id": view.request_id, "claim_id": view.claim_id,
                                    "predicate": view.predicate.value if view.predicate else None,
                                    "requested_kind": view.requested_kind, "opened": view.opened,
-                                   "outcomes": [outcome.value for outcome in view.outcomes]}
+                                   "outcomes": [outcome.value for outcome in view.outcomes],
+                                   **({"anchors": list(view.anchors)} if view.anchors else {}),
+                                   **({"question": view.question} if view.question is not None else {}),
+                                   **({"specialist": view.specialist} if view.specialist is not None else {})}
                                   for _, view in sorted(self.evidence_requests.items())],
         }
 
@@ -608,10 +623,16 @@ def project(events: Iterable[Mapping[str, Any]]) -> Projection:
         if first["claim_id"] not in claims:
             raise IntegrityError(f"evidence request for unknown claim: {request_id}")
         source = opened[request_id][0] if opened.get(request_id) else None
+        if source and any(any(body.get(key) != source.get(key) for key in (
+                "predicate", "requested_kind", "anchors", "question", "specialist"))
+                          for body in opened[request_id]):
+            raise IntegrityError(f"evidence request changes its question or scope: {request_id}")
         requests[request_id] = EvidenceRequestView(
             request_id, first["claim_id"], Predicate(source["predicate"]) if source else None,
             source["requested_kind"] if source else None, len(opened.get(request_id, ())),
-            tuple(sorted(EvidenceRequestOutcome(body["outcome"]) for body in closed.get(request_id, ()))))
+            tuple(sorted(EvidenceRequestOutcome(body["outcome"]) for body in closed.get(request_id, ()))),
+            tuple(source.get("anchors", ())) if source else (), source.get("question") if source else None,
+            source.get("specialist") if source else None)
     return Projection(
         head=ledger_head(ordered),
         claims=dict(sorted(claims.items())),

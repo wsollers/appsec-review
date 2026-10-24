@@ -18,7 +18,7 @@
       "maxLength": 80
     },
     "stance": {
-      "$ref": "common.schema.json#/$defs/compact_stance"
+      "enum": ["contradicts", "qualifies", "unresolved"]
     },
     "predicate": {
       "$ref": "common.schema.json#/$defs/predicate"
@@ -30,7 +30,13 @@
       "$ref": "common.schema.json#/$defs/compact_why"
     },
     "per_predicate": {
-      "$ref": "common.schema.json#/$defs/compact_per_predicate"
+      "allOf": [
+        {"$ref": "common.schema.json#/$defs/compact_per_predicate"},
+        {"additionalProperties": {"properties": {"stance": {"enum": ["contradicts", "qualifies", "unresolved"]}}}}
+      ]
+    },
+    "evidence_requests": {
+      "$ref": "compact-investigation.schema.json#/$defs/requests"
     }
   }
 }

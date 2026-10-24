@@ -167,6 +167,24 @@ def _validate(compact: Any, name: str, schema_errors: SchemaErrors, expansion: E
     return not errors
 
 
+def expand_requests(items: Iterable[Mapping[str, Any]], labels: LabelTable, expansion: Expansion,
+                    owner: str) -> list[dict[str, Any]]:
+    """Requests name missing evidence, not permission to fetch outside the cell's scope."""
+    requests: list[dict[str, Any]] = []
+    for item in items:
+        anchors, dropped = labels.resolve_all(item["anchors"])
+        if dropped:
+            expansion.errors.append(f"{owner}: evidence request has unresolved anchors: {', '.join(dropped)}")
+            continue
+        request = {"predicate": item["predicate"], "requested_kind": item["requested_kind"],
+                   "anchors": anchors, "question": item["question"]}
+        if "specialist" in item:
+            request["specialist"] = item["specialist"]
+        if request not in requests:
+            requests.append(request)
+    return requests
+
+
 # ------------------------------------------------------------------------------------------------
 # Blue and verifier wrappers
 
@@ -179,9 +197,12 @@ def expand_blue(compact: Mapping[str, Any], labels: LabelTable, *, claim_id: str
     # ``claim`` is advisory: the cell is bound to one claim and the application fills ``claim_id``.
     positions = positions_of(compact, labels, expansion, "blue")
     stance = overall_stance(compact, positions)
+    requests = expand_requests(compact.get("evidence_requests", ()), labels, expansion, "blue")
+    if expansion.errors:
+        return expansion
     expansion.result = {
         "schema": BLUE_SCHEMA, "claim_id": claim_id, "citations": citations_of(positions),
-        "proposed_relations": relations_of(positions), "evidence_requests": [],
+        "proposed_relations": relations_of(positions), "evidence_requests": requests,
         "rationale": summary_why(compact, positions), "task": task, "disposition": stance}
     return expansion
 
@@ -192,9 +213,12 @@ def expand_verifier(compact: Mapping[str, Any], labels: LabelTable, *, claim_id:
     if not _validate(compact, COMPACT_SCHEMAS["verifier"], schema_errors, expansion):
         return expansion
     positions = positions_of({**compact, "stance": None, "predicate": None}, labels, expansion, "verifier")
+    requests = expand_requests(compact.get("evidence_requests", ()), labels, expansion, "verifier")
+    if expansion.errors:
+        return expansion
     expansion.result = {
         "schema": VERIFIER_SCHEMA, "claim_id": claim_id, "citations": citations_of(positions),
-        "proposed_relations": relations_of(positions), "evidence_requests": [],
+        "proposed_relations": relations_of(positions), "evidence_requests": requests,
         "rationale": summary_why(compact, positions), "proposed_disposition": compact["disposition"]}
     return expansion
 
@@ -306,18 +330,48 @@ def expand_red(compact: Mapping[str, Any], labels: LabelTable, *, invocation: Re
             return None
         return ref
 
-    claim_ids = {claim["id"] for claim in compact["claims"]}
+    allocated = {claim["id"] for claim in compact["claims"]}
+    obligations: list[dict[str, Any]] = []
+    paths: list[dict[str, Any]] = []
+    requests: list[dict[str, Any]] = []
+    seeds: list[dict[str, Any]] = []
+
+    def new_id(prefix: str) -> str:
+        number = 1
+        while f"{prefix}{number}" in allocated:
+            number += 1
+        local = f"{prefix}{number}"
+        allocated.add(local)
+        return local
 
     def new_gap(kind: str, scope: str, reason: str) -> str:
-        number = 1
-        while f"g{number}" in claim_ids or any(item["local_id"] == f"g{number}" for item in gaps):
-            number += 1                                   # a gap id never collides with a claim or another gap
-        local = f"g{number}"
+        local = new_id("g")
         gaps.append({"local_id": local, "kind": kind, "scope": text(scope, "package", 1000),
                      "reason": text(reason, DEFAULT_TEXT, 1000)})
         return local
 
-    for index, claim in enumerate(compact["claims"], start=1):
+    def references(tokens: Iterable[str], predicate: str, relation: str, owner: str) -> list[str]:
+        found, dropped = labels.resolve_all(tokens)
+        for token in dropped:
+            expansion.note(f"{owner}: citation {token} does not resolve and was dropped")
+        result = []
+        for ref in found:
+            local = new_id("e")
+            refs.append({"local_id": local, "entity_id": ref, "shard_id": None, "shard_sha256": None,
+                         "relation": relation, "predicate": predicate,
+                         "locator": {"kind": "unresolved", "reason": "cited by label; re-resolved by the application"}})
+            result.append(local)
+        return result
+
+    def request_for(proposal_id: str, predicate: str, kind: str, anchors: list[str], question: str,
+                    specialist: str | None = None) -> None:
+        request = {"local_id": new_id("r"), "proposal_id": proposal_id, "predicate": predicate,
+                   "requested_kind": kind, "scope_entity_ids": anchors, "reason": question}
+        if specialist is not None:
+            request["specialist"] = specialist
+        requests.append(request)
+
+    for claim in compact["claims"]:
         local = claim["id"]
         if local in used_ids:
             expansion.errors.append(f"claim id {local} is repeated")
@@ -335,7 +389,7 @@ def expand_red(compact: Mapping[str, Any], labels: LabelTable, *, invocation: Re
                 for token in dropped:
                     expansion.note(f"{owner}: {field_name} {predicate} citation {token} does not resolve and was dropped")
                 for ref in found:
-                    name = f"{local}-e{len(refs) + 1}"
+                    name = new_id("e")
                     refs.append({"local_id": name, "entity_id": ref, "shard_id": None, "shard_sha256": None,
                                  "relation": relation, "predicate": predicate,
                                  "locator": {"kind": "unresolved",
@@ -358,7 +412,7 @@ def expand_red(compact: Mapping[str, Any], labels: LabelTable, *, invocation: Re
             new_gap("unresolved", "no entry point is cited for the proof-of-concept basis; how input reaches the "
                                   "lead is unknown", f"stated by the analyst for {owner}")
         preconditions = list(dict.fromkeys([*claim.get("preconditions", ()), *closed]))
-        proposals.append({
+        proposal = {
             "local_id": local, "source_lead_ids": sources, "affected_entities": affected, "statement": statement,
             "mechanism": text(claim.get("mechanism"), statement),
             "weakness": {"namespace": "CWE", "id": claim["cwe"]} if claim.get("cwe") else None,
@@ -367,9 +421,86 @@ def expand_red(compact: Mapping[str, Any], labels: LabelTable, *, invocation: Re
                                "preconditions": preconditions},
             "trigger": text(claim.get("trigger")), "suspected_consequence": text(claim.get("consequence")),
             "assumptions": [], "evidence_ids": evidence_ids, "counterevidence_ids": counter_ids,
-            "obligation_ids": [], "taint_path_ids": [], **({"poc_basis": poc} if poc is not None else {})})
+            "obligation_ids": [], "taint_path_ids": [], **({"poc_basis": poc} if poc is not None else {})}
+        proposals.append(proposal)
+        for item in claim.get("obligations", ()):
+            oid = new_id("o")
+            candidates = references(item["cites"], item["predicate"], "nominates", f"{owner} obligation")
+            obligations.append({"local_id": oid, "proposal_id": local, "predicate": item["predicate"],
+                                "question": item["question"], "candidate_evidence_ids": candidates})
+            proposal["obligation_ids"].append(oid)
+            new_gap("unresolved", oid, item["question"])
+            request_for(local, item["predicate"], "other", affected, item["question"])
+        for item in expand_requests(claim.get("evidence_requests", ()), labels, expansion, owner):
+            request_for(local, item["predicate"], item["requested_kind"], item["anchors"],
+                        item["question"], item.get("specialist"))
+            new_gap("unresolved", local, item["question"])
+        for item in claim.get("taint_paths", ()):
+            pid = new_id("p")
+            nodes = []
+            path_gaps = []
+            for node in item["nodes"]:
+                entity = labels.resolve(node["label"]) if node["label"] else None
+                if entity is None:
+                    path_gaps.append(new_gap("unresolved", f"{pid}:{node['id']}", node["why"]))
+                nodes.append({"local_id": node["id"], "role": node["role"], "entity_id": entity,
+                              "description": node["why"],
+                              **({"guard_effect": node["guard_effect"]} if "guard_effect" in node else {})})
+            entities = {node["local_id"]: node["entity_id"] for node in nodes}
+            edges = []
+            for edge in item["edges"]:
+                basis = edge["basis"]
+                cited = references(edge["cites"], "source_to_sink_reachability",
+                                   "nominates" if basis == "analyst_hypothesis" else "supports",
+                                   f"{owner} path {pid}")
+                incomplete = (not cited or not entities.get(edge["from"]) or not entities.get(edge["to"]))
+                if incomplete and basis != "analyst_hypothesis":
+                    expansion.note(f"{owner} path {pid}: incomplete observed hop retained as analyst_hypothesis")
+                    basis = "analyst_hypothesis"
+                    for reference in refs:
+                        if reference["local_id"] in cited:
+                            reference["relation"] = "nominates"
+                question = edge.get("question")
+                if basis == "analyst_hypothesis":
+                    question = question or f"Establish value continuity from {edge['from']} to {edge['to']}."
+                    path_gaps.append(new_gap("unresolved", pid, question))
+                    anchors = list(dict.fromkeys(ref for ref in (entities.get(edge["from"]),
+                                                                entities.get(edge["to"])) if ref))
+                    request_for(local, "source_to_sink_reachability", "dataflow", anchors or affected, question)
+                edges.append({"from_node": edge["from"], "to_node": edge["to"], "kind": edge["kind"],
+                              "basis": basis, "evidence_ids": cited, "open_question": question})
+            hypothesis_count = sum(edge["basis"] == "analyst_hypothesis" for edge in edges)
+            path_basis = ("hypothesized" if hypothesis_count == len(edges) else "partial") if hypothesis_count else "reported"
+            paths.append({"local_id": pid, "proposal_id": local, "source_node": item["source"],
+                          "sink_node": item["sink"], "basis": path_basis, "nodes": nodes, "edges": edges,
+                          "gap_ids": path_gaps})
+            proposal["taint_path_ids"].append(pid)
         for ref in sources:
             developing.setdefault(ref, []).append(local)
+    for item in compact.get("chain_seeds", ()):
+        sid = new_id("s")
+        steps = []
+        seed_gaps = []
+        for step in item["steps"]:
+            anchors, dropped = labels.resolve_all(step["anchors"])
+            if dropped:
+                expansion.errors.append(f"chain seed {sid}: unresolved step anchors: {', '.join(dropped)}")
+            steps.append({"local_id": step["id"], "proposal_id": step["claim"], "description": step["description"],
+                          "prerequisite": step["prerequisite"], "resulting_state": step["resulting_state"],
+                          "entity_ids": anchors})
+        links = []
+        for link in item["links"]:
+            cited = references(link["cites"], "source_to_sink_reachability", "nominates", f"chain seed {sid}")
+            questions = list(link["questions"])
+            if not cited and not questions:
+                questions.append(f"Establish continuity from {link['from']} to {link['to']}.")
+            for question in questions:
+                seed_gaps.append(new_gap("unresolved", sid, question))
+            links.append({"from_step": link["from"], "to_step": link["to"],
+                          "continuity_dimensions": link["continuity_dimensions"], "evidence_ids": cited,
+                          "open_questions": questions})
+        seeds.append({"local_id": sid, "objective": item["objective"], "steps": steps, "links": links,
+                      "gap_ids": seed_gaps})
     accounting = []
     noted: dict[str, tuple[str, str]] = {}
     for group, outcome in (("no_claim", "no_proposal"), ("blocked", "blocked")):
@@ -399,8 +530,8 @@ def expand_red(compact: Mapping[str, Any], labels: LabelTable, *, invocation: Re
         return expansion
     expansion.result = {
         "schema": RED_RESULT_SCHEMA, **echo, "result_status": "partial" if gaps else "completed",
-        "lead_accounting": accounting, "proposals": proposals, "proof_obligations": [], "taint_paths": [],
-        "chain_seeds": [], "evidence_refs": refs, "evidence_requests": [], "gaps": gaps}
+        "lead_accounting": accounting, "proposals": proposals, "proof_obligations": obligations, "taint_paths": paths,
+        "chain_seeds": seeds, "evidence_refs": refs, "evidence_requests": requests, "gaps": gaps}
     return expansion
 
 
