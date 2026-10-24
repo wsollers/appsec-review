@@ -70,6 +70,17 @@ state = "enabled"
 description = "Repository-authored Semgrep rules (security.yml, review-signals.yml, and banned-functions.yml generated from [banned_functions]), locked by rules.lock.json."
 
 [[packs]]
+id = "lua-game-security"
+path = "rules/lua-game-security"
+engine = "semgrep"
+language = "lua"
+image = "appsec-review/tool-semgrep:1.178.0"
+library = "semgrep@1.178.0"
+verify = "validate"
+state = "enabled"
+description = "Opt-in Lua game-security review leads; not loaded by the review graph. Exact fixture matches are also tested with the pinned OpenGrep image."
+
+[[packs]]
 id = "gitleaks-generic-secrets"
 path = "rules/gitleaks"
 engine = "gitleaks"

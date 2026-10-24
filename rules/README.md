@@ -26,6 +26,10 @@ The registry fixes the two causes:
 
 ## Verifying
 
+The opt-in [Lua game-security pack](lua-game-security/README.md) provides Semgrep/OpenGrep
+review leads for embedded/game scripts. It is registered for validation but is not loaded by
+the review graph; its README documents standalone scans, exact fixture tests, and coverage gaps.
+
 ```bash
 python3 containers/build.py query-packs              # every registered pack
 python3 containers/build.py query-packs graph-export-cpp
