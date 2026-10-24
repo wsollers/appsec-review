@@ -367,6 +367,7 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
                 "lane_counts": {item.value: sum(1 for package in assembly.packages if package.lane == item.value)
                                 for item in Lane},
                 "packages": sorted(records, key=lambda item: (item["rank"], item["package_id"])),
+                "admission": assembly.manifest["admission"],
                 "accepted_cwe_ids": sorted(item for item in cwe_ids if item),
                 "cwe_reference": reference.record(),
                 "rule_predicates": {lead["observation_id"]: [item.value for item in tool_rules.lead_predicates(lead)]
@@ -499,7 +500,7 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
         ledger_path = unit.unit_root / "ledger.jsonl"
         writer = LedgerWriter(ledger_path, unit.unit_id)
         for gap in stages.completeness_gaps(packages["units"], unit.output("scope.assemble_scope")["scope_gaps"],
-                                            packages.get("cwe_reference")):
+                                            packages.get("cwe_reference"), packages.get("admission", ())):
             writer.record_gap(gap)
         writer.seal()
         paths = shard_paths(unit, LEDGER_UNITS[:4]) + [ledger_path]
@@ -508,7 +509,13 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
         matrix_ref = _write(unit, "coverage-matrix.json", matrix)
         document = {"schema": "appsec-review/inference-review-completeness/1", "ledger_head_sha256": merged.head,
                     "projection_sha256": projection.sha256(), "accounting": accounting.to_json(),
-                    "status": stages.handoff_status(accounting), "coverage_matrix": matrix_ref}
+                    "status": stages.handoff_status(accounting), "coverage_matrix": matrix_ref,
+                    "actor": "deterministic_completeness_auditor",
+                    "admission": packages.get("admission", ()),
+                    "expected_specialists": {package_id: routing.get("expected_personas", [])
+                                             for lane in lanes for package_id, routing in lane.get("routing", {}).items()},
+                    "exploration": {package_id: record for lane in lanes
+                                    for package_id, record in lane.get("exploration", {}).items()}}
         gaps = ([f"review_incomplete: gap ratio {accounting.gap_ratio:.3f}"] if accounting.review_incomplete else []) + (
             [f"accounting violation: {gap.reason}" for gap in accounting.violations])
         return {"artifact": _write(unit, "completeness.json", document),

@@ -35,9 +35,11 @@ from typing import Any, Callable, Iterable, Mapping, Sequence
 from appsec_review.config.inference_review import InferenceSecurityReviewSettings, ModelProfileSettings
 from appsec_review.guidance import compose_bundle, hunt_panel, pin_bundle, render_prompt, route_persona, route_stack
 from appsec_review.guidance.routing import unit_sources
+from appsec_review.guidance.routing import rank_personas
 from appsec_review.inference import ModelResult, ReviewModelRequest
 from appsec_review.retrieval.index import INDEX_NAMES
 from appsec_review.review.budget import JobBudget
+from appsec_review.review.adjudication import adjudicate
 from appsec_review.review.capability import EXPAND_TOOL, IN_PROCESS_TOOLS, CellCapability
 from appsec_review.review.cells import CellBudgetExceeded, CellOutcome, CellSpec, cell_fingerprint, reuse_or_run
 from appsec_review.review.claims import normalize_claim
@@ -52,7 +54,7 @@ from appsec_review.review.judge import (
 )
 from appsec_review.review.ledger import EvidenceRequestOutcome, LedgerWriter, gap_json
 from appsec_review.review.models import (
-    BlueTask, CellRecord, CellStatus, Claim, EvidenceRelation, Gap, GapClass, HuntStrategy, IntegrityError,
+    BlueTask, CellRecord, CellStatus, Claim, ClaimState, EvidenceRelation, Gap, GapClass, HuntStrategy, IntegrityError,
     JudgePredicateVerdict, JudgeVerdict, JudgeVerdictValue, Lane, Predicate, RelationKind, Role, make_gap,
 )
 from appsec_review.review.obligations import required_predicates_for
@@ -65,7 +67,7 @@ from appsec_review.storage import atomic_json, file_sha256
 from .schemas import SchemaSet
 
 LANE_SCHEMA = "appsec-review/inference-review-lane/1"
-VALIDATOR_VERSION = "inference-review-results/3"
+VALIDATOR_VERSION = "inference-review-results/4"
 CHAIN_SEEDS_SCHEMA = "appsec-review/red-chain-seeds/1"
 POC_BASIS_SCHEMA = "appsec-review/red-poc-basis/1"
 RESULT_SCHEMAS = {Role.RED_TEAM_ANALYST: red_discovery.SCHEMA_NAME, Role.HYPOTHESIS_HUNTER: red_discovery.SCHEMA_NAME,
@@ -110,6 +112,11 @@ class PackageWork:
     basis: str                          # dependency fingerprint used as the cell reuse basis
     entities: tuple[str, ...]           # capability entity scope (guidance/evaluator files removed)
     unit_key: str | None
+    round_index: int = 0
+    known_claims: tuple[Mapping[str, Any], ...] = ()
+    prior_claim_ids: tuple[str, ...] = ()
+    active_claim_limit: int | None = None
+    pending_requests: tuple[Mapping[str, Any], ...] = ()
 
 
 
@@ -286,6 +293,7 @@ class TeamResult:
     poc_basis: list[dict[str, Any]] = field(default_factory=list)
     judge_verdicts: list[JudgeVerdict] = field(default_factory=list)
     judging: dict[str, Any] = field(default_factory=dict)         # claim id -> judge cells / why none was selected
+    rounds: list[dict[str, Any]] = field(default_factory=list)
     launched: bool = False
     counts: dict[str, int] = field(default_factory=lambda: {"cells_run": 0, "cells_reused": 0,
                                                             "cells_not_launched": 0})
@@ -343,6 +351,12 @@ def _claim_view(claim: Claim, *, statement: bool, labels: Mapping[str, str] | No
             "required_predicates": sorted(item.value for item in required_predicates_for(claim))}
     if statement:
         view["statement"] = claim.statement
+    else:
+        view["hypothesis"] = {
+            "condition": str(claim.security_predicate),
+            "affected_labels": [(labels or {}).get(ref, "?") for ref in claim.affected_entities],
+            "weakness_cwe": claim.weakness_cwe, "preconditions": list(claim.preconditions),
+        }
     return view
 
 
@@ -359,7 +373,7 @@ def _cell(ctx: ReviewContext, work: PackageWork, routing: Mapping[str, Any], *, 
     expand: Expander
     schema_errors = ctx.schemas.errors
     if role in RED_ROLES:
-        invocation = RedInvocation(role, 0, work.basis, _lead_ids(work))
+        invocation = RedInvocation(role, work.round_index, work.basis, _lead_ids(work))
         expand = lambda compact, labels: expand_red(  # noqa: E731
             compact, labels, invocation=invocation, schema_errors=schema_errors)
     elif role is Role.BLUE_TEAM_REFUTER:
@@ -375,7 +389,7 @@ def _cell(ctx: ReviewContext, work: PackageWork, routing: Mapping[str, Any], *, 
     tools = tuple(sorted((set(ctx.role_tools.get(role.value, ())) & IN_PROCESS_TOOLS) | {EXPAND_TOOL}))
     capability = CellCapability.issue(
         run_id=ctx.run_id, manifest_sha256=ctx.core.manifest_sha256, package_id=work.package_id,
-        package_sha256=work.sha256, role=role, round=0, tools=tools,
+        package_sha256=work.sha256, role=role, round=work.round_index, tools=tools,
         indexes=tuple(name for name in ctx.index_names if name in INDEX_NAMES),
         entities=(*work.entities, *extra_entities),
         graph_scopes=tuple((work.document.get("retrieval") or {}).get("graph_scopes", ())),
@@ -387,8 +401,12 @@ def _cell(ctx: ReviewContext, work: PackageWork, routing: Mapping[str, Any], *, 
     spec = CellSpec(
         manifest_sha256=ctx.core.manifest_sha256, lane=work.lane, package_id=work.package_id,
         package_sha256=work.sha256, claim_id=claim.claim_id if claim else None, role=role, persona=persona,
-        stack_profile=stack, strategy=strategy, task=task, task_input=dict(task_input), round=0,
-        round_delta_sha256=None, evidence_set=tuple(sorted({*work.entities, *extra_entities})),
+        stack_profile=stack, strategy=strategy, task=task, task_input=dict(task_input), round=work.round_index,
+        round_delta_sha256=sha256_hex({"round": work.round_index, "known_claims": work.known_claims,
+                                       "prior_claim_ids": work.prior_claim_ids,
+                                       "pending_requests": work.pending_requests,
+                                       "active_claim_limit": work.active_claim_limit}),
+        evidence_set=tuple(sorted({*work.entities, *extra_entities})),
         guidance_bundle_sha256=guidance["bundle"]["sha256"], guidance_text=guidance["text"],
         provider=profile.provider, model=profile.model, reasoning=profile.reasoning,
         max_input_tokens=profile.max_input_tokens, max_output_tokens=profile.max_output_tokens,
@@ -428,6 +446,8 @@ class _Guard:
         self.deadline: float | None = None
 
     def __call__(self, request: ReviewModelRequest, *, timeout_seconds: int) -> ModelResult:
+        if not self.ctx.budget.cell_launch_allowed():
+            raise CellBudgetExceeded(f"job budget exhausted ({self.ctx.budget.usage_exhausted()})")
         now = self.clock()
         if self.deadline is None:
             self.deadline = now + self.profile.timeout_seconds
@@ -513,7 +533,9 @@ def _requests(cell: _Cell, claim_id: str, items: Iterable[Mapping[str, Any]]) ->
     found = []
     for item in items:
         body = {"claim_id": claim_id, "predicate": item["predicate"], "requested_kind": item["requested_kind"],
-                "anchors": sorted(item.get("anchors", ())), "origin_cell_id": cell.cell_id}
+                "anchors": sorted(item.get("anchors", ())), "origin_cell_id": cell.cell_id,
+                "round": cell.spec.round}
+        body.update({key: item[key] for key in ("question", "specialist") if item.get(key) is not None})
         found.append({**body, "request_id": make_id("evidence_request", 1, body)})
     return found
 
@@ -585,7 +607,7 @@ def _worker_gap(cell: _Cell, item: Mapping[str, Any]) -> Gap:
 _LANGUAGE_TAGS = {"c": "lang:c", "c++": "lang:cpp", "cpp": "lang:cpp", "c#": "lang:csharp", "csharp": "lang:csharp",
                   "python": "lang:python", "java": "lang:java", "kotlin": "lang:kotlin", "go": "lang:go",
                   "rust": "lang:rust", "javascript": "lang:javascript", "typescript": "lang:typescript",
-                  "php": "lang:php"}
+                  "php": "lang:php", "swift": "lang:swift", "c-cpp-header": "lang:c-cpp-header"}
 
 
 def route(ctx: ReviewContext, work: PackageWork) -> dict[str, Any]:
@@ -609,11 +631,40 @@ def route(ctx: ReviewContext, work: PackageWork) -> dict[str, Any]:
         tag = "cwe:" + cwe.split("-", 1)[-1].lstrip("0")
         tags[tag] = tags.get(tag, 0.0) + 1.0
     subject = sorted(tag for tag in tags if tag.startswith(("infra:", "func:")))
-    stack = route_stack(languages=languages, subject_tags=subject)
+    components = sorted(tag for tag in tags if tag.startswith("component:"))
+    build_facts: set[str] = set()
+    interfaces: set[str] = set()
+    fact_refs: set[str] = set()
+    for entry in document.get("context", ()):
+        if entry.get("kind") not in {"build_unit", "build_action", "component"}:
+            continue
+        rows = ctx.core.find(identity=entry["id"], limit=1)["results"]
+        if not rows:
+            continue
+        payload = rows[0].get("payload") or {}
+        for field_name, destination in (("build_facts", build_facts), ("interfaces", interfaces)):
+            facts = payload.get(field_name, ())
+            if isinstance(facts, (list, tuple)):
+                destination.update(item for item in facts if isinstance(item, str))
+                if facts:
+                    fact_refs.add(entry["id"])
+    build = (document.get("neighborhood") or {}).get("build") or {}
+    flags = set(build.get("flags", ()))
+    for flag, fact in (("-ffreestanding", "freestanding"), ("-nostdlib", "no-libc")):
+        if flag in flags:
+            build_facts.add(fact)
+            fact_refs.add(build["ref"])
+    if build.get("compiler") in {"emcc", "em++", "emcc.py"}:
+        build_facts.add("wasm")
+        fact_refs.add(build["ref"])
+    stack = route_stack(languages=languages, components=components, build_facts=build_facts,
+                        interfaces=interfaces, subject_tags=subject)
     gaps: list[Gap] = []
     if stack.get("routing_gap"):
         gaps.append(make_gap(GapClass.ROUTING_GAP, f"{work.package_id}:routing:stack", stack.get("reason", "")))
-    routing: dict[str, Any] = {"stack": stack["stack"], "stack_basis": stack["basis"], "tags": sorted(tags)}
+    routing: dict[str, Any] = {"stack": stack["stack"], "stack_basis": stack["basis"], "tags": sorted(tags),
+                               "round": work.round_index, "fact_refs": sorted(fact_refs),
+                               "exploration": _exploratory(work)}
     if work.lane is Lane.LEAD:
         persona = route_persona(ctx.covers, lead_cwe=lead_cwes[0] if lead_cwes else None,
                                 location_tags=sorted(tag for tag in tags if not tag.startswith("cwe:")))
@@ -625,7 +676,10 @@ def route(ctx: ReviewContext, work: PackageWork) -> dict[str, Any]:
     else:
         # Graph-backed strategies unlock per unit, from the families accepted for the package scope.
         sources = unit_sources(ctx.available_sources, (document.get("retrieval") or {}).get("graph_families", ()))
-        panel = hunt_panel(ctx.covers, unit_tags=tags, available_sources=sources)
+        if any(item["state"] == ClaimState.CONFIRMED.value for item in work.known_claims):
+            sources = (*sources, "confirmed_claims")
+        panel = hunt_panel(ctx.covers, unit_tags=tags, available_sources=sources, round_index=work.round_index,
+                           size=ctx.settings.teams.red_per_team)
         routing.update(persona=panel["cells"][0]["persona"], panel=panel["cells"], panel_rule=panel["rule"])
         for item in panel["gaps"]:
             gaps.append(make_gap(GapClass.COVERAGE_GAP, f"{work.package_id}:strategy:{item['strategy']}",
@@ -634,21 +688,55 @@ def route(ctx: ReviewContext, work: PackageWork) -> dict[str, Any]:
             gaps.append(make_gap(GapClass.ROUTING_GAP, f"{work.package_id}:routing:panel",
                                  "panel_includes_generalist"))
         routing["strategy_gaps"] = list(panel["gaps"])
+        expected_strategies = {"sink_up", "entry_down", "control_gap"}
+        if work.round_index:
+            expected_strategies.add("variant")
+        accounted = {item["strategy"] for item in panel["cells"]} | {item["strategy"] for item in panel["gaps"]}
+        for strategy in sorted(expected_strategies - accounted):
+            item = {"strategy": strategy, "reason": "panel_size_cutoff", "gap_class": GapClass.COVERAGE_GAP.value}
+            routing["strategy_gaps"].append(item)
+            gaps.append(make_gap(GapClass.COVERAGE_GAP, f"{work.package_id}:strategy:{strategy}",
+                                 item["reason"], round=work.round_index))
+        routing["expected_strategies"] = sorted(expected_strategies)
+    expected = [item["persona"] for item in rank_personas(ctx.covers, tags) if item["score"] > 0]
+    selected_personas = {item["persona"] for item in routing.get("panel", ())} or {routing["persona"]}
+    routing["expected_personas"] = expected
+    routing["missing_personas"] = sorted(set(expected) - selected_personas)
+    for persona_id in routing["missing_personas"]:
+        gaps.append(make_gap(GapClass.COVERAGE_GAP, f"{work.package_id}:specialist:{persona_id}",
+                             "expected_specialist_not_scheduled", round=work.round_index))
     routing["gaps"] = gaps
     return routing
 
 
 def _red_cells(ctx: ReviewContext, work: PackageWork, routing: Mapping[str, Any]) -> list[_Cell]:
     view = ctx.package_view(work)
+    entities = sorted({identity for seed in work.known_claims for identity in seed["evidence_entities"]}
+                      | {identity for request in work.pending_requests for identity in request["anchors"]})
+    view, labels = view.with_extra(entities)
+    known = [{key: value for key, value in seed.items() if key not in {"evidence_entities", "affected_entities"}}
+             | {"affected_labels": [labels.get(identity, "?") for identity in seed["affected_entities"]],
+                "evidence_labels": [labels.get(identity, "?") for identity in seed["evidence_entities"]]}
+             for seed in work.known_claims]
+    requests = [{key: value for key, value in item.items() if key != "anchors"}
+                | {"anchors": [labels[identity] for identity in item["anchors"]]}
+                for item in work.pending_requests]
     if work.lane is Lane.LEAD:
         document = _routed(view, routing, routing["persona"])
         return [_cell(ctx, work, routing, role=Role.RED_TEAM_ANALYST, persona=routing["persona"], task=lens,
-                      kind="red", task_input={"package": document, "lens": lens})
+                      kind="red", view=view, task_input={"package": document, "lens": lens, "round": work.round_index,
+                                             "known_claims": known,
+                                             "evidence_requests": requests,
+                                             "prior_claim_ids": list(work.prior_claim_ids)})
                 for lens in LEAD_LENSES[:ctx.settings.teams.red_per_team]]
     return [_cell(ctx, work, routing, role=Role.HYPOTHESIS_HUNTER, persona=item["persona"], task=item["strategy"],
-                  kind="red", strategy=item["strategy"],
+                  kind="red", strategy=item["strategy"], view=view,
                   task_input={"package": _routed(view, routing, item["persona"]), "strategy": item["strategy"],
-                              "known_claims": []})
+                              "round": work.round_index, "known_claims": known,
+                              "evidence_requests": requests,
+                              "prior_claim_ids": list(work.prior_claim_ids),
+                              "variant_seeds": [dict(seed) for seed in known
+                                                if seed["state"] == ClaimState.CONFIRMED.value]})
             for item in routing["panel"][:ctx.settings.teams.red_per_team]]
 
 
@@ -674,6 +762,7 @@ def _coverage_row(work: PackageWork, cell: _Cell) -> dict[str, Any]:
     state = ("reviewed" if status is CellStatus.SUCCEEDED else
              "not_launched" if status is CellStatus.NOT_LAUNCHED else "gap")
     return {"unit_key": work.unit_key, "package_id": work.package_id, "strategy": cell.strategy,
+            "round": work.round_index,
             "persona": cell.spec.persona, "status": state, "cell_id": cell.cell_id, "reason": None}
 
 
@@ -692,17 +781,18 @@ def run_team(ctx: ReviewContext, work: PackageWork, *, launch: bool, not_launche
     try:
         with ctx.semaphore.acquire(work.lane):
             result.launched = True
-            _team_body(ctx, work, routing, reds, result)
+            _run_rounds(ctx, work, routing, reds, result)
     except TeamUnavailable:
         _skip(result, work, reds, "no review team became free within the wait bound", GapClass.WORKER_GAP)
     except IntegrityError:
         raise
-    except Exception as exc:  # a team failure is a package gap; partial team output is discarded
-        failed = TeamResult(work.package_id, work.lane, work.unit_key, routing=result.routing, launched=True,
-                            leads=result.leads)
-        failed.gaps.extend(routing["gaps"])
+    except Exception as exc:  # Preserve completed rounds and their accounting when later work fails.
+        failed = result
         failed.gaps.append(make_gap(GapClass.WORKER_GAP, work.package_id, f"team failure: {type(exc).__name__}"))
+        recorded = {item.cell_id for item in failed.cells}
         for cell in reds:
+            if cell.cell_id in recorded:
+                continue
             gap = make_gap(GapClass.WORKER_GAP, cell.cell_id, f"team failure: {type(exc).__name__}")
             cell.record = CellRecord(cell_id=cell.cell_id, lane=work.lane, package_id=work.package_id,
                                      role=cell.spec.role, persona=cell.spec.persona,
@@ -714,6 +804,89 @@ def run_team(ctx: ReviewContext, work: PackageWork, *, launch: bool, not_launche
                 failed.coverage.append(_coverage_row(work, cell))
         return failed
     return result
+
+
+def _round_state(ctx: ReviewContext, work: PackageWork, result: TeamResult) -> tuple[list[dict[str, Any]], str]:
+    """Only deterministic R5 states, with R6 independence, can supply accepted seed facts."""
+    known = []
+    states = []
+    for claim in sorted(result.claims, key=lambda item: item.claim_id):
+        relations = [item for item in result.relations if item.claim_id == claim.claim_id]
+        independent = any(item["independent"] for item in result.independence.get(claim.claim_id, ()))
+        decision = adjudicate(claim, relations, independent, work.entities, (), round=work.round_index)
+        states.append({"claim_id": claim.claim_id, "state": decision.state.value,
+                       "predicates": [(item.predicate.value, item.outcome.value) for item in decision.predicates]})
+        if decision.state not in {ClaimState.SUPPORTED, ClaimState.CONFIRMED}:
+            continue
+        counted = [item for item in relations if item.relation_id in decision.counted_relation_ids]
+        entities = sorted({*claim.affected_entities, *(item.entity_id for item in counted)})
+        if not set(entities).issubset(work.entities) or not all(ctx.resolves(identity) for identity in entities):
+            result.gaps.append(make_gap(GapClass.EVIDENCE_GAP, claim.claim_id,
+                                        "accepted_seed_source_unavailable_or_outside_package", round=work.round_index))
+            continue
+        known.append({"claim_id": claim.claim_id, "state": decision.state.value,
+                      "security_predicate": str(claim.security_predicate), "weakness_cwe": claim.weakness_cwe,
+                      "preconditions": list(claim.preconditions), "affected_entities": list(claim.affected_entities),
+                      "evidence_entities": entities, "evidence_relations": sorted(decision.counted_relation_ids),
+                      "adjudication_id": decision.adjudication_id, "policy_sha256": decision.policy_sha256})
+    # Actor/receipt/round identity is not new evidence and cannot defeat convergence.
+    semantic_evidence = sorted({(item.claim_id, item.entity_id, item.predicate.value, item.kind.value,
+                                item.admissibility.value, item.complete)
+                               for item in result.relations if item.provenance is None})
+    return known, sha256_hex({"states": states, "evidence": semantic_evidence})
+
+
+def _run_rounds(ctx: ReviewContext, work: PackageWork, routing: Mapping[str, Any], reds: list[_Cell],
+                result: TeamResult) -> None:
+    previous = None
+    stable = 0
+    stop = "max_rounds"
+    for round_index in range(ctx.settings.rounds.max_rounds):
+        _team_body(ctx, work, routing, reds, result)
+        known, fingerprint = _round_state(ctx, work, result)
+        stable = stable + 1 if fingerprint == previous else 0
+        result.rounds.append({"round": round_index, "state_sha256": fingerprint, "stable_rounds": stable,
+                              "accepted_claim_ids": [item["claim_id"] for item in known],
+                              "variant_seed_ids": [item["claim_id"] for item in known
+                                                   if item["state"] == ClaimState.CONFIRMED.value],
+                              "seed_sha256": sha256_hex(known)})
+        if stable >= ctx.settings.rounds.stable_rounds_required:
+            stop = "stable"
+            break
+        if not ctx.budget.cell_launch_allowed():
+            stop = str(ctx.budget.usage_exhausted())
+            break
+        if round_index + 1 >= ctx.settings.rounds.max_rounds:
+            break
+        previous = fingerprint
+        work = replace(work, round_index=round_index + 1, known_claims=tuple(known),
+                       prior_claim_ids=tuple(sorted(item.claim_id for item in result.claims)),
+                       pending_requests=_pending_requests(ctx, work, result))
+        routing = route(ctx, work)
+        result.gaps.extend(routing["gaps"])
+        reds = _red_cells(ctx, work, routing)
+    result.rounds[-1]["stop_reason"] = stop
+    if stop != "stable":
+        result.gaps.append(make_gap(GapClass.COVERAGE_GAP, work.package_id,
+                                    f"follow_up_cutoff:{stop}", round=work.round_index))
+    result.gaps.append(make_gap(GapClass.COVERAGE_GAP, work.package_id,
+                                "cross_package_and_cross_lane_variant_seeds_unavailable"))
+
+
+def _pending_requests(ctx: ReviewContext, work: PackageWork, result: TeamResult) -> tuple[Mapping[str, Any], ...]:
+    unique = {}
+    for request in result.requests:
+        if not set(request["anchors"]).issubset(work.entities):
+            result.gaps.append(make_gap(GapClass.EVIDENCE_GAP, request["request_id"],
+                                        "follow_up_request_anchor_outside_package"))
+            continue
+        body = {key: value for key, value in request.items() if key not in {"origin_cell_id", "request_id", "round"}}
+        unique[sha256_hex(body)] = body
+    limit = ctx.settings.red_output.max_evidence_requests
+    if len(unique) > limit:
+        result.gaps.append(make_gap(GapClass.COVERAGE_GAP, work.package_id, "follow_up_evidence_request_cutoff",
+                                    round=work.round_index))
+    return tuple(unique[key] for key in sorted(unique)[:limit])
 
 
 def _skip(result: TeamResult, work: PackageWork, reds: list[_Cell], reason: str, gap_class: GapClass) -> None:
@@ -739,8 +912,13 @@ def _team_body(ctx: ReviewContext, work: PackageWork, routing: Mapping[str, Any]
         if work.lane is Lane.HUNT:
             result.coverage.append(_coverage_row(work, cell))
     if work.lane is Lane.HUNT:
+        for persona in routing.get("missing_personas", ()):
+            result.coverage.append({"unit_key": work.unit_key, "package_id": work.package_id,
+                                    "round": work.round_index, "strategy": None, "persona": persona,
+                                    "status": "gap", "cell_id": None, "reason": "expected_specialist_not_scheduled"})
         for item in routing.get("strategy_gaps", ()):
             result.coverage.append({"unit_key": work.unit_key, "package_id": work.package_id,
+                                    "round": work.round_index,
                                     "strategy": item["strategy"], "persona": None, "status": "gap",
                                     "cell_id": None, "reason": item["reason"]})
 
@@ -1050,7 +1228,17 @@ def _triage(ctx: ReviewContext, work: PackageWork, groups: list[dict[str, Any]],
     candidates = []
     for group in groups:
         claim = group["claim"]
-        result.claims.append(claim)
+        existing = {item.claim_id for item in result.claims}
+        active_limit = (ctx.settings.rounds.max_active_claims if work.active_claim_limit is None
+                        else work.active_claim_limit)
+        if claim.claim_id not in existing:
+            if len(existing) >= active_limit:
+                result.gaps.append(make_gap(GapClass.BUDGET_GAP, claim.claim_id, "max_active_claims",
+                                            round=work.round_index))
+                result.triage.append({"claim_id": claim.claim_id, "decision": "over_cap",
+                                      "reason": "max_active_claims", "support": group["support"]})
+                continue
+            result.claims.append(claim)
         result.gaps.extend(group["relation_gaps"])
         if work.lane is Lane.HUNT:
             unresolved = sorted(identity for _cell_, proposal, red, _seen in group["items"]
@@ -1064,16 +1252,21 @@ def _triage(ctx: ReviewContext, work: PackageWork, groups: list[dict[str, Any]],
                 continue
         candidates.append(group)
     candidates.sort(key=lambda group: (-group["support"], group["claim"].claim_id))
-    admitted = candidates[:cap]
-    for group in candidates[cap:]:
+    previous_admitted = {item["claim_id"] for item in result.triage if item["decision"] == "admitted"}
+    repeated = [group for group in candidates if group["claim"].claim_id in previous_admitted]
+    fresh = [group for group in candidates if group["claim"].claim_id not in previous_admitted]
+    remaining = max(0, cap - len(previous_admitted))
+    admitted = repeated + fresh[:remaining]
+    for group in fresh[remaining:]:
         claim_id = group["claim"].claim_id
         result.gaps.append(make_gap(GapClass.BUDGET_GAP, claim_id,
                                     f"triage: over the {work.lane.value} cap of {cap} claims per package"))
         result.triage.append({"claim_id": claim_id, "decision": "over_cap", "reason": "claims_per_package_cap",
                               "support": group["support"]})
     for group in admitted:
-        result.triage.append({"claim_id": group["claim"].claim_id, "decision": "admitted", "reason": None,
-                              "support": group["support"]})
+        if group["claim"].claim_id not in previous_admitted:
+            result.triage.append({"claim_id": group["claim"].claim_id, "decision": "admitted", "reason": None,
+                                  "support": group["support"]})
         result.relations.extend(group["relations"])
         result.requests.extend(group["requests"])
     return admitted
@@ -1161,7 +1354,7 @@ def _verifier_request_bytes(ctx: ReviewContext, verifier: _Cell, markers: Sequen
 def run_lane(ctx: ReviewContext, lane: Lane, packages: Sequence[PackageWork], *, other_lane_count: int,
              ledger_path: Path, stream: str, signal_dir: Path) -> dict[str, Any]:
     """Run every package of ``lane`` and seal the lane's ledger shard; returns the lane document."""
-    ordered = sorted(packages, key=lambda item: (item.rank, item.package_id))
+    ordered = sorted(packages, key=lambda item: (not _exploratory(item), item.rank, item.package_id))
     counts = {Lane.LEAD: len(ordered), Lane.HUNT: other_lane_count} if lane is Lane.LEAD else {
         Lane.LEAD: other_lane_count, Lane.HUNT: len(ordered)}
     allocation = lane_allocation(counts[Lane.LEAD], counts[Lane.HUNT], ctx.settings.lanes.lead_budget_share,
@@ -1172,6 +1365,12 @@ def run_lane(ctx: ReviewContext, lane: Lane, packages: Sequence[PackageWork], *,
     if declared is not None and int(declared["declared"]) != counts[other]:
         raise IntegrityError(f"lane {other.value} declared a different package queue than the accepted manifest")
     launches = allocation[lane]
+    total = sum(allocation.values())
+    lane_offset = 0 if lane is Lane.LEAD else allocation[Lane.LEAD]
+    claim_cap = ctx.settings.rounds.max_active_claims
+    ordered = [replace(work, active_claim_limit=(claim_cap // total +
+                       (index + lane_offset < claim_cap % total)) if index < launches and total else 0)
+               for index, work in enumerate(ordered)]
     with ThreadPoolExecutor(max_workers=max(1, ctx.settings.teams.review_teams), thread_name_prefix=lane.value) as pool:
         futures = [pool.submit(run_team, ctx, work, launch=index < launches,
                                not_launched_reason=(f"lane {lane.value} team-package allocation of {launches} "
@@ -1180,6 +1379,11 @@ def run_lane(ctx: ReviewContext, lane: Lane, packages: Sequence[PackageWork], *,
         teams = [future.result() for future in futures]
     _signal(signal_dir, lane, ordered, allocation, queue_empty=True)
     return _seal(ctx, lane, teams, allocation, ledger_path, stream)
+
+
+def _exploratory(work: PackageWork) -> bool:
+    return work.lane is Lane.LEAD and any(lead.get("admission_reasons") == ["exploration_reserve"]
+                                         for lead in work.document.get("lead_menu", ()))
 
 
 def lane_failure(lane: Lane, packages: Sequence[PackageWork], reason: str, ledger_path: Path, stream: str) -> dict[str, Any]:
@@ -1212,19 +1416,29 @@ def _seal(ctx: ReviewContext | None, lane: Lane, teams: Sequence[TeamResult], al
     writer = LedgerWriter(ledger_path, stream)
     gaps: dict[str, Gap] = {}
     for team in teams:
+        cell_rounds = {item["cell_id"]: item["round"] for item in team.capabilities}
         for claim in team.claims:
-            writer.propose_claim(claim)
+            writer.propose_claim(claim, round=min((cell_rounds.get(cell, 0) for cell in claim.origin_cell_ids),
+                                                  default=0))
         for relation in sorted({item.relation_id: item for item in team.relations}.values(),
                                key=lambda item: item.relation_id):
-            writer.add_relation(relation)
+            writer.add_relation(relation, round=cell_rounds.get(relation.producing_cell_id, 0))
         for verdict in sorted(team.judge_verdicts, key=lambda item: item.verdict_id):
-            writer.judge_verdict(verdict)
+            writer.judge_verdict(verdict, round=cell_rounds.get(verdict.cell_id, 0))
         for request in sorted({item["request_id"]: item for item in team.requests}.values(),
                               key=lambda item: item["request_id"]):
             writer.open_request(request["request_id"], request["claim_id"], Predicate(request["predicate"]),
-                                request["requested_kind"], origin_cell_id=request["origin_cell_id"])
+                                request["requested_kind"], origin_cell_id=request["origin_cell_id"],
+                                round=request.get("round", 0),
+                                anchors=request.get("anchors", ()), question=request.get("question"),
+                                specialist=request.get("specialist"))
             writer.close_request(request["request_id"], request["claim_id"], EvidenceRequestOutcome.UNSATISFIED,
-                                 reason="slice 1 runs round 0 only; no evidence-resolution round follows")
+                                 reason="bounded package rounds ended without a verified request resolution",
+                                 round=team.rounds[-1]["round"] if team.rounds else 0)
+            if request.get("specialist"):
+                gap = make_gap(GapClass.COVERAGE_GAP, request["request_id"],
+                               f"unresolved_specialist_referral:{request['specialist']}")
+                gaps.setdefault(gap.gap_id, gap)
         for gap in team.gaps:
             gaps.setdefault(gap.gap_id, gap)
     for gap_id in sorted(gaps):
@@ -1249,6 +1463,11 @@ def _seal(ctx: ReviewContext | None, lane: Lane, teams: Sequence[TeamResult], al
         "verifier_gaps": _merge_lists(team.verifier_gaps for team in teams),
         "judging": {claim_id: value for team in teams for claim_id, value in sorted(team.judging.items())},
         "routing": {team.package_id: team.routing for team in teams},
+        "rounds": {team.package_id: team.rounds for team in teams},
+        "exploration": {team.package_id: {"status": "explored" if team.launched else "not_launched",
+                                         "residual_coverage": "bounded_review_not_clean"
+                                         if team.launched else "budget_or_worker_gap"}
+                        for team in teams if team.routing.get("exploration")},
         "triage": {team.package_id: team.triage for team in teams},
         "lead_accounting": {team.package_id: _lead_summary(team) for team in teams},
         "chain_seeds": seeds,

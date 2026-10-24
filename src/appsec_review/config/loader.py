@@ -565,7 +565,8 @@ def profile_override_keys(document: object) -> tuple[str, ...]:
     A profile may set only: the ``model`` table of the five model-calling jobs
     (``PROFILE_JOB_MODEL_KEYS``), model profiles of the inference review
     (``PROFILE_REVIEW_MODEL_KEYS``), ``model_profile`` of its roles, and its ``budgets``
-    (``PROFILE_BUDGET_KEYS``). Every other key, wrong type and empty table is rejected by name.
+    (``PROFILE_BUDGET_KEYS``), plus the two explicit lane exploration settings. Every other key,
+    wrong type and empty table is rejected by name.
     """
     from .inference_review import JOB_ID
 
@@ -574,7 +575,7 @@ def profile_override_keys(document: object) -> tuple[str, ...]:
             raise ValueError(f"configuration profile {field or 'document'} must be a non-empty table")
         unknown = set(value) - allowed if allowed is not None else set()
         if unknown:
-            raise ValueError("configuration profile may set only model, limit and budget keys; rejected: " +
+            raise ValueError("configuration profile may set only model, limit, budget and exploration keys; rejected: " +
                              ", ".join(sorted(f"{field}.{key}" if field else str(key) for key in unknown)))
         return value
 
@@ -584,7 +585,7 @@ def profile_override_keys(document: object) -> tuple[str, ...]:
             kind = kinds[key]
             if type(value) is not kind or (kind is str and not value.strip()) or (kind is int and value < 0):
                 raise ValueError(f"configuration profile {field}.{key} must be a "
-                                 f"{'non-empty string' if kind is str else 'non-negative integer'}")
+                                 f"{'non-empty string' if kind is str else 'Boolean' if kind is bool else 'non-negative integer'}")
         return [f"{field}.{key}" for key in values]
 
     root = table(document, "", {"jobs"})
@@ -605,7 +606,10 @@ def profile_override_keys(document: object) -> tuple[str, ...]:
                     raise ValueError(f"configuration profile model profile name is invalid: {name}")
                 keys += typed(models[name], f"{field}.settings.models.{name}", PROFILE_REVIEW_MODEL_KEYS)
             continue
-        settings = table(job["settings"], f"{field}.settings", {"models", "roles", "budgets"})
+        settings = table(job["settings"], f"{field}.settings", {"models", "roles", "budgets", "lanes"})
+        if "lanes" in settings:
+            keys += typed(settings["lanes"], f"{field}.settings.lanes",
+                          {"exploration_enabled": bool, "exploration_reserve": int})
         if "models" in settings:
             models = table(settings["models"], f"{field}.settings.models")
             for name in sorted(models):
@@ -645,6 +649,8 @@ def _apply_profile(document: dict[str, Any], profile: Mapping[str, Any]) -> None
                 base_table((*named, name)).update(values)
             continue
         review = ("jobs", job_id, "settings")
+        if "lanes" in settings:
+            base_table((*review, "lanes")).update(settings["lanes"])
         for name, values in settings.get("models", {}).items():
             models = base_table((*review, "models"))
             models.setdefault(name, {}).update(values)

@@ -1623,7 +1623,8 @@
             "enum": [
               "reported_severity",
               "assessed_severity",
-              "kev_listed"
+              "kev_listed",
+              "exploration_reserve"
             ]
           },
           "minItems": 1,
@@ -1980,7 +1981,7 @@
           "$ref": "#/$defs/inference_sha"
         },
         "assembly_rule": {
-          "const": "appsec-review/assemble-review-packages/7"
+          "const": "appsec-review/assemble-review-packages/8"
         },
         "scope": {
           "$ref": "#/$defs/inference_scope"

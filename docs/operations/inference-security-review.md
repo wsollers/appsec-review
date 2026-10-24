@@ -111,6 +111,65 @@ It is recorded as its own hashed layer in the run's configuration manifest. Capa
 from cell fingerprints, so runs with different team counts reuse each other's cells and produce
 identical canonical outputs.
 
+## Routing, follow-up rounds, and coverage
+
+Stack selection uses accepted package-scoped language and component tags, indexed build/interface
+facts, and normalized build-command facts. Lead packages include source/component tag assignments
+under the same context bounds as hunt packages. Missing facts select a generic profile with a
+routing gap; a language alone is not evidence that a managed-language scope is a service.
+
+Teams run package-local follow-up rounds up to `rounds.max_rounds`. Each round applies the existing
+deterministic R5 evidence policy and R6 verifier-independence checks to accumulated evidence.
+`known_claims` contains only supported/confirmed claims; `variant` hunting is enabled from round 1
+only with confirmed, in-scope, re-resolvable seeds. Proposed-only hypotheses and red chain seeds
+never become accepted variant seeds. Every seed records its adjudication, policy hash, and counted
+evidence. Round index, prior identities, seed evidence, pending requests, and the active-claim
+allocation enter cell fingerprints. Repeating a claim does not add a second proposal to the ledger.
+
+`stable_rounds_required` counts consecutive rounds without a change to deterministic states,
+predicate outcomes, or semantic evidence; a new actor/receipt ID is not new evidence.
+`max_active_claims` is divided deterministically among the launched package allocations across both
+lanes, so concurrent packages cannot each consume the run-wide cap. Unused claim allocations are
+not transferred between packages. Per-package review caps also span all rounds. A team-package
+reservation covers all its rounds, while every actual model turn/token/retrieval charge continues
+to consume the original shared job budget. No model or budget limits are increased.
+
+The lane artifact records round summaries, stable-round counts, accepted seeds, and the stop reason.
+Round/usage cutoffs, missing seed sources, omitted strategies/specialists, and unresolved evidence
+requests are named gaps. Bounded evidence requests are re-presented to discovery cells as questions
+with scope labels, not accepted claims or worker instructions. Requests without a verified resolution
+close unsatisfied, including explicit specialist referrals; no automatic worker delegation occurs.
+**Cross-package and cross-lane seed sharing is not implemented** and is explicitly reported as a gap.
+Convergence is not a clean verdict.
+
+The blind verifier receives `claim.hypothesis` with `condition` (the canonical security consequence),
+`affected_labels`, `weakness_cwe`, and closed `preconditions`, alongside the claim ID and required
+predicates. It independently reconstructs the alleged condition from evidence. This is not the red
+worker's exact mechanism or statement: statement, argument, trigger, and rationale prose are withheld.
+
+## Opt-in medium/low exploration
+
+Both `dev` and `prod` default to:
+
+```toml
+[jobs.job_inference_security_review.settings.lanes]
+exploration_enabled = false
+exploration_reserve = 1
+```
+
+Enable exploration explicitly in the selected profile/base configuration. `exploration_reserve`
+limits the number of otherwise unadmitted medium/low lead packages, ordered by effective severity
+then accepted lead identity. These packages use reserved slots **inside** the existing lead-lane
+allocation and total team-package budget, not additional capacity. Critical/high/unknown and KEV
+admission remain unchanged; unknown is uncertainty, not low urgency. Informational leads are not
+admitted by this option. A profile may change these two settings; a capacity overlay may not.
+
+Package manifests record every lead's admission, reasons, and residual coverage, including reserve
+cutoffs and disabled exploration. Lane artifacts record exploratory packages as explored or not
+launched. The deterministic completeness artifact includes this admission inventory, expected
+specialists, and exploration outcomes. A successful cell covers only its actual lens, not every
+expected specialist or strategy, and does not mean the package is defect-free.
+
 ## Tuning scoring
 
 Scoring is deterministic and runs only on `confirmed` and `supported` claims. The default provider

@@ -2248,6 +2248,9 @@ verifier_per_team = 1
 lead_admission = ["critical", "high", "unknown"]
 # KEV-listed advisory leads enter lane A whatever their reported severity (EPSS is context only).
 lead_admission_kev = true
+# Opt-in medium/low exploration uses existing team-package capacity, never an extra budget.
+exploration_enabled = false
+exploration_reserve = 1
 lead_budget_share = 0.5
 lead_max_claims_per_package = 3
 hunt_max_units = 50

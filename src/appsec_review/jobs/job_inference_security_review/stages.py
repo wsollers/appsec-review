@@ -105,6 +105,10 @@ def merge_claims(lanes: Sequence[Mapping[str, Any]], shard_paths: Sequence[Path]
         "verifier_gaps": {key: sorted(values, key=lambda item: item["gap_id"])
                           for key, values in sorted(verifier_gaps.items())},
         "scope_entities": scope,
+        "claim_rounds": {claim_id: max((record["round"] for lane in lanes
+                                       for package_id in proposals[claim_id]
+                                       for record in lane.get("rounds", {}).get(package_id, ())), default=0)
+                         for claim_id in sorted(proposals)},
         "possible_duplicates": [list(pair) for pair in possible_duplicates(claims)],
     }
 
@@ -113,8 +117,8 @@ def merge_claims(lanes: Sequence[Mapping[str, Any]], shard_paths: Sequence[Path]
 # adjudicate.apply_policy
 
 
-def adjudication_json(item: Adjudication) -> dict[str, Any]:
-    return {"adjudication_id": item.adjudication_id, "claim_id": item.claim_id, "round": 0,
+def adjudication_json(item: Adjudication, round_index: int = 0) -> dict[str, Any]:
+    return {"adjudication_id": item.adjudication_id, "claim_id": item.claim_id, "round": round_index,
             "prior_state": item.prior_state.value, "state": item.state.value, "deciding_row": item.deciding_row.value,
             "duplicate_of": item.duplicate_of, "verifier_independent": item.verifier_independent,
             "predicates": [{"predicate": status.predicate.value, "required": status.required,
@@ -130,6 +134,7 @@ def apply_policy(merged: Mapping[str, Any], projection: Projection, ledger_path:
     records: list[dict[str, Any]] = []
     gaps: dict[str, Gap] = {}
     for claim_id, view in projection.claims.items():          # canonical claim id order
+        round_index = merged.get("claim_rounds", {}).get(claim_id, 0)
         verifiers = merged["independence"].get(claim_id, [])
         independent = any(item["independent"] for item in verifiers)
         verifier_gap = None
@@ -137,13 +142,13 @@ def apply_policy(merged: Mapping[str, Any], projection: Projection, ledger_path:
             verifier_gap = gap_from_json(merged["verifier_gaps"][claim_id][0])
         decision = adjudicate(view.claim, projection.relations.get(claim_id, ()), independent,
                               merged["scope_entities"].get(claim_id, ()), adjudicated, view.claim.state,
-                              verifier_gap=verifier_gap)
+                              verifier_gap=verifier_gap, round=round_index)
         adjudicated.append(claim_id)
-        records.append(adjudication_json(decision))
+        records.append(adjudication_json(decision, round_index))
         state = ClaimState.PROPOSED
         for target in TRANSITION_PATHS.get(decision.state, (decision.state,)):
             writer.transition(claim_id, state, target, reason=f"{r5.RULES_VERSION}:{decision.deciding_row.value}",
-                              adjudication_id=decision.adjudication_id)
+                              adjudication_id=decision.adjudication_id, round=round_index)
             state = target
         for gap in decision.gaps:
             gaps.setdefault(gap.gap_id, gap)
@@ -392,11 +397,15 @@ def coverage_matrix(hunt_lane: Mapping[str, Any], units: Iterable[Mapping[str, A
 
 
 def completeness_gaps(units: Iterable[Mapping[str, Any]], scope_gaps: Iterable[Mapping[str, Any]],
-                      cwe_reference: Mapping[str, Any] | None = None) -> list[Gap]:
+                      cwe_reference: Mapping[str, Any] | None = None,
+                      admission: Iterable[Mapping[str, Any]] = ()) -> list[Gap]:
     gaps = [make_gap(GapClass.COVERAGE_GAP, str(unit["unit_key"]), "below_hunt_cutoff")
             for unit in units if not unit.get("hunted")]
     gaps.extend(make_gap(GapClass.COVERAGE_GAP, f"producer:{gap['producer']}:{gap['scope']}",
                          f"{gap['state']}: {gap['reason']}") for gap in scope_gaps)
+    gaps.extend(make_gap(GapClass.COVERAGE_GAP, str(item["lead_id"]),
+                         f"lead_not_admitted:{item['residual_coverage']}")
+                for item in admission if item["status"] == "not_admitted")
     if cwe_reference and cwe_reference.get("gap"):
         # Claim CWEs were validated against the narrower rule/crosswalk set; never silently.
         gaps.append(make_gap(GapClass.COVERAGE_GAP, "reference:mitre_cwe",
