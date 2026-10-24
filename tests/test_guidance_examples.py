@@ -91,3 +91,31 @@ def test_the_judge_guidance_shows_every_verdict_and_names_neither_side() -> None
     assert any(item["verdict"] not in {"A", "B", "both", "neither", "unresolved"} for item in finals)
     assert any(entry["cites"] and not re.fullmatch(r"[A-Z][0-9]+", entry["cites"][0])
                for item in finals for entry in item["per_predicate"].values())
+
+
+def test_blue_examples_never_support_and_fixed_guard_cites_capacity_and_dominance() -> None:
+    good, _ = blocks("blue_team_refuter")
+    finals = [item["result"] for item in good if item["action"] == "final"]
+    assert {item["stance"] for item in finals} == {"contradicts", "qualifies", "unresolved"}
+    contradictions = [item for item in finals if item["stance"] == "contradicts"]
+    assert contradictions and all(set(item["cites"]) >= {"G2", "S1", "S2"} for item in contradictions)
+    for role in ("blue_team_refuter", "independent_verifier"):
+        text = (ROOT / "pipeline" / "prompt-fragments" / "roles" / f"{role}.md").read_text(encoding="utf-8")
+        assert "24-byte source with length 20" in text
+        assert "n > sizeof out.name || n > size - 4" in text
+        assert "mutation" in text and "array, not a pointer" in text
+
+
+def test_small_examples_cover_async_authorization_configuration_and_invariants() -> None:
+    hunters, _ = blocks("hypothesis_hunter")
+    claims = [claim for item in hunters if item["action"] == "final" for claim in item["result"]["claims"]]
+    authz = next(claim for claim in claims if claim["security_predicate"] == "authz_bypass")
+    assert authz["obligations"] and authz["evidence_requests"]
+    assert authz["taint_paths"][0]["edges"][0]["basis"] == "analyst_hypothesis"
+    assert authz["taint_paths"][0]["edges"][0]["cites"] == []
+    blue, _ = blocks("blue_team_refuter")
+    verifier, _ = blocks("independent_verifier")
+    for answers, specialist in [(blue, "ci_cd_pipeline"), (verifier, "business_logic_abuse")]:
+        requests = [request for item in answers if item["action"] == "final"
+                    for request in item["result"].get("evidence_requests", [])]
+        assert any(request["specialist"] == specialist for request in requests)

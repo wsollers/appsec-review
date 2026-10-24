@@ -12,7 +12,7 @@ concrete code path?
 
 ## Expected result
 Zero or more hypotheses in the role's result schema with per-predicate evidence that names
-resolvable identities. A control failure alone is not a weakness: show the affected construct and
+cell-local labels. A control failure alone is not a weakness: show the affected construct and
 the path. Known claims in the task input are not re-reported.
 Account for every lead on the package menu exactly once; not developing a lead is never a
 statement that it is safe. Each hypothesis names its security consequence from the closed

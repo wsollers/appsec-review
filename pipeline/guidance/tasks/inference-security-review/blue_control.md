@@ -12,5 +12,6 @@ behaviour.
 
 ## Expected result
 Evidence relations in the role's result schema. Each names the predicate it bears on and a
-resolvable identity for the guard. A guard counts only when it is on the claimed path and covers
-the claimed input; otherwise say why it does not apply.
+cell-local label for the guard. A guard counts only when it dominates the claimed operation,
+protects the same value and capacity, and survives intervening mutation; otherwise say why it
+does not apply. Use contradicts, qualifies or unresolved, never supports.

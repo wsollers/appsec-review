@@ -1,6 +1,6 @@
 ---
 id: mobile_platform
-version: 1
+version: 2
 covers: ["cwe:749", "cwe:921", "cwe:925", "cwe:926", "cwe:927", "cwe:939", "func:mobile:*", "masvs2:*"]
 standards: ["cwe", "masvs2", "capec", "attack"]
 max_tokens: 1500
@@ -15,7 +15,7 @@ decisions the client makes that the server should.
 GENERATED
 
 ## Likely failure modes
-- Android exported components (`exported="true"` or an `<intent-filter>` without explicit false)
+- Android exported components (explicit `exported="true"` or legacy component-specific defaults)
   for activities, services, receivers, or providers that act on extras without permission checks;
   `ContentProvider` with `grantUriPermissions` and path traversal in `openFile`.
 - Implicit intents carrying tokens or `PendingIntent` objects that are mutable and implicit;
@@ -34,7 +34,10 @@ GENERATED
 - ATS or network security config disabled, cleartext allowed, custom trust managers.
 
 ## Effective controls
-- `android:exported="false"` by default, signature-level permissions on inter-app components,
+- Explicit `android:exported="false"` where external access is unnecessary; defaults depend on
+  component type and platform/target SDK. Android 12+ requires an explicit exported value for
+  activities, services and receivers with intent filters when targeting API 31+.
+  Signature-level permissions on inter-app components,
   explicit intents, `FLAG_IMMUTABLE` PendingIntents.
 - Deep-link parameters validated and actions requiring an explicit in-app user step; verified App Links
   and universal links.

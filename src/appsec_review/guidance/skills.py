@@ -17,7 +17,6 @@ from typing import Any, Mapping
 
 from appsec_review.application_paths import application_root
 
-from .compose import load_registry
 from .fragments import GuidanceError
 
 RUNTIME_SKILLS_DIRECTORY = "pipeline/skills"
@@ -38,6 +37,10 @@ class RuntimeSkill:
     text: str
     sha256: str
     path: str  # repository-relative POSIX path, always under pipeline/skills
+
+    @property
+    def body(self) -> str:
+        return self.text.split("---\n", 2)[-1]
 
 
 def front_matter(text: str) -> dict[str, str]:
@@ -107,10 +110,13 @@ def _resolve(root: Path, relative: str) -> Path | None:
     return resolved
 
 
-def load_runtime_skill(repository_root: Path, name: str, *, job_id: str) -> RuntimeSkill:
+def load_runtime_skill(repository_root: Path, name: str, *, job_id: str,
+                       fallback_to_package: bool = True) -> RuntimeSkill:
     """Load one registered runtime skill for ``job_id``; development skills are unreachable."""
+    from .compose import load_registry
+
     roots = [Path(repository_root)]
-    if Path(repository_root).resolve() != _PACKAGE_REPOSITORY:
+    if fallback_to_package and Path(repository_root).resolve() != _PACKAGE_REPOSITORY:
         roots.append(_PACKAGE_REPOSITORY)
     for root in roots:
         if not (root / "pipeline" / "guidance" / "registry.json").is_file():
@@ -130,3 +136,15 @@ def load_runtime_skill(repository_root: Path, name: str, *, job_id: str) -> Runt
             raise GuidanceError(f"runtime skill {name} must declare name {name} and audience {RUNTIME_AUDIENCE}")
         return RuntimeSkill(name, text, hashlib.sha256(text.encode("utf-8")).hexdigest(), record["path"])
     raise GuidanceError(f"runtime skill file is unavailable: {name}")
+
+
+def select_review_procedures(*, role: str, task: str) -> tuple[str, ...]:
+    """Select bounded procedures from trusted role/task IDs, never from target text."""
+    if role in {"hypothesis_hunter", "red_team_analyst"}:
+        return (("generative-investigation", "effective-control-verification") if task == "control_gap"
+                else ("generative-investigation",))
+    return {
+        "blue_team_refuter": ("effective-control-verification",),
+        "independent_verifier": ("predicate-verification",),
+        "adjudication_judge": ("conflict-resolution",),
+    }.get(role, ())

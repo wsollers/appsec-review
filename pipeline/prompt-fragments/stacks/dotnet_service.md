@@ -1,6 +1,6 @@
 ---
 id: dotnet_service
-version: 1
+version: 2
 covers: []
 standards: ["cwe", "asvs5", "api-top10-2023"]
 max_tokens: 1500
@@ -16,8 +16,10 @@ drive routing, binding, and authorization.
   methods, gRPC services, queue and blob triggers, `IHostedService` consumers.
 - Model binding fills parameters from route, query, form, headers, and JSON body; complex types
   bind recursively.
-- `app.UseAuthentication()` and `app.UseAuthorization()` must run between `UseRouting` and the
-  endpoints; `[Authorize]`, `[AllowAnonymous]`, policies, and fallback policies govern access.
+- For an explicitly configured middleware pipeline, authentication precedes authorization after
+  routing and before endpoint execution. Minimal hosting can add this middleware automatically;
+  inspect the actual version and pipeline rather than requiring explicit calls in every app.
+  `[Authorize]`, `[AllowAnonymous]`, policies, and fallback policies govern access.
 
 ## Idiomatic security mechanisms
 - `AuthorizationOptions.FallbackPolicy` requiring authenticated users; resource-based
@@ -33,6 +35,9 @@ drive routing, binding, and authorization.
 - `@Html.Raw`, `MarkupString` in Blazor, `HtmlString` around user content.
 - `BinaryFormatter`, `LosFormatter`, `ObjectStateFormatter`, `NetDataContractSerializer`,
   Newtonsoft `TypeNameHandling` other than `None`; ViewState without MAC on .NET Framework.
+  `BinaryFormatter` is unsafe for untrusted data even with a binder; modern .NET disables or
+  removes its in-box implementation depending on version. Inspect the deployed runtime and
+  compatibility packages rather than assuming a named call is executable.
 - `XmlDocument`/`XmlTextReader` on .NET Framework before 4.5.2 resolving external entities.
 - Middleware order mistakes (authorization before routing, endpoints mapped before auth),
   `[AllowAnonymous]` on a controller overriding action-level `[Authorize]`.

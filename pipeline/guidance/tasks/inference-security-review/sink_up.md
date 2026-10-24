@@ -13,7 +13,7 @@ callers.
 ## Expected result
 Zero or more hypotheses in the role's result schema. Each names the sink, the controlled input,
 the path between them, and the missing or ineffective guard, with per-predicate evidence that names
-resolvable identities. Known claims in the task input are not re-reported.
+cell-local labels. Known claims in the task input are not re-reported.
 Account for every lead on the package menu exactly once; not developing a lead is never a
 statement that it is safe. Each hypothesis names its security consequence from the closed
 vocabulary. Label every taint hop by its basis: a hop resting on an accepted tool path, an accepted

@@ -1,8 +1,8 @@
 """Shared guidance registry, hash-pinned bundle assembly, and run pinning.
 
 Assembly order (design "Guidance assembly"): governing rules, one role record, one persona record
-(role-selected sections plus generated coverage), one stack profile, one task prompt, and a
-generated capability/budget receipt carried as structured metadata. Every section is hash-pinned
+(role-selected sections plus generated coverage), one stack profile, one task prompt, selected
+runtime procedures, and a generated capability/budget receipt carried as structured metadata. Every section is hash-pinned
 and the canonical bundle hash names its run directory. Conflicts fail assembly; ordering never
 resolves authority.
 """
@@ -24,21 +24,24 @@ from appsec_review.storage import atomic_bytes, atomic_json, canonical_json
 from .coverage import expand_coverage
 from .fragments import (
     Fragment, GuidanceError, TaskPrompt, load_tool_names, parse_fragment, parse_role_text, parse_task,
-    policy_keys, text_sha256,
+    policy_keys, text_sha256, validate_procedure_text,
 )
 from .routing import GENERALIST, STACK_IDS
+from .skills import load_runtime_skill, select_review_procedures
 
 
 REGISTRY_SCHEMA = "appsec-review/guidance-registry/1"
-BUNDLE_SCHEMA = "appsec-review/guidance-bundle/2"
+BUNDLE_SCHEMA = "appsec-review/guidance-bundle/3"
+LEGACY_BUNDLE_SCHEMA = "appsec-review/guidance-bundle/2"
 REGISTRY_PATH = Path("pipeline") / "guidance" / "registry.json"
 GOVERNING_PATH = Path("pipeline") / "prompt-fragments" / "governing-rules.md"
 REVIEW_JOB = "inference-security-review"
-SECTION_ORDER = ("governing_rules", "role", "persona", "stack", "task", "receipt")
+LEGACY_SECTION_ORDER = ("governing_rules", "role", "persona", "stack", "task", "receipt")
+SECTION_ORDER = ("governing_rules", "role", "persona", "stack", "task", "procedures", "receipt")
 LENSES = ("generative", "skeptical")
 PERSONA_VIEWS = {
-    "generative": ("Viewpoint", "Coverage", "Likely failure modes", "Evidence by predicate"),
-    "skeptical": ("Viewpoint", "Effective controls", "False positives", "Evidence by predicate"),
+    "generative": ("Viewpoint", "Coverage", "Likely failure modes", "Evidence by predicate", "Hand-offs"),
+    "skeptical": ("Viewpoint", "Effective controls", "False positives", "Evidence by predicate", "Hand-offs"),
 }
 LEGACY_ROLE_KEYS = frozenset({"responsibility"})
 INFERENCE_ROLE_KEYS = frozenset({"responsibility", "path", "lens", "output_schema", "outputs",
@@ -211,6 +214,12 @@ def compose_bundle(repository_root: Path, *, role: str, persona: str, stack: str
     _require(role in task_prompt.roles, f"task {task} is not assigned to role {role}")
     unlisted = sorted(set(task_prompt.requests_tools) - set(role_record["tools"]))
     _require(not unlisted, f"task {task} requests a tool absent from role {role}: {', '.join(unlisted)}")
+    procedures = [
+        load_runtime_skill(root, name, job_id=f"job_{job.replace('-', '_')}", fallback_to_package=False)
+        for name in select_review_procedures(role=role, task=task)
+    ]
+    for procedure in procedures:
+        validate_procedure_text(f"procedure {procedure.name}", procedure.body, tools)
 
     _require(isinstance(task_input, Mapping) and all(_KEY.fullmatch(str(key)) for key in task_input),
              "task input keys must be lower_snake_case")
@@ -262,6 +271,9 @@ def compose_bundle(repository_root: Path, *, role: str, persona: str, stack: str
         _sealed({"name": "task", "id": task, "job": job, "version": task_prompt.version, "text": task_prompt.text,
                  "requests_tools": list(task_prompt.requests_tools), "input": task_input,
                  "source_sha256": task_prompt.sha256}),
+        _sealed({"name": "procedures", "items": [
+            {"id": procedure.name, "path": procedure.path, "text": procedure.text,
+             "source_sha256": procedure.sha256} for procedure in procedures]}),
         _sealed({"name": "receipt", "capability": capability}),
     ]
     bundle: dict[str, Any] = {
@@ -276,23 +288,32 @@ def verify_bundle(bundle: Mapping[str, Any]) -> str:
     """Recompute section and bundle hashes; any mismatch is a framework-integrity failure."""
     identity = str(bundle.get("sha256", ""))
     _require(bool(re.fullmatch(r"[0-9a-f]{64}", identity)), "guidance bundle identity is invalid")
-    if bundle.get("schema") == BUNDLE_SCHEMA:
+    if bundle.get("schema") in {BUNDLE_SCHEMA, LEGACY_BUNDLE_SCHEMA}:
         sections = bundle["sections"]
-        if [section["name"] for section in sections] != list(SECTION_ORDER):
+        order = SECTION_ORDER if bundle["schema"] == BUNDLE_SCHEMA else LEGACY_SECTION_ORDER
+        if [section["name"] for section in sections] != list(order):
             raise IntegrityError("guidance bundle sections are not in assembly order")
         for section in sections:
             recorded = bundle["section_sha256"].get(section["name"])
             if section_sha256(section) != section["sha256"] or recorded != section["sha256"]:
                 raise IntegrityError(f"guidance section hash mismatch: {section['name']}")
+            if section["name"] == "procedures":
+                for procedure in section["items"]:
+                    if text_sha256(procedure["text"]) != procedure["source_sha256"]:
+                        raise IntegrityError(f"guidance procedure source hash mismatch: {procedure['id']}")
+    for procedure in bundle.get("procedures", ()):
+        if text_sha256(procedure["text"]) != procedure["source_sha256"]:
+            raise IntegrityError(f"guidance procedure source hash mismatch: {procedure['id']}")
     if bundle_sha256(bundle) != identity:
         raise IntegrityError("guidance bundle hash mismatch")
     return identity
 
 
 def render_prompt(bundle: Mapping[str, Any]) -> str:
-    """Render a v2 bundle as delimited sections; the receipt stays structured JSON."""
+    """Render an inference bundle as delimited sections; the receipt stays structured JSON."""
     verify_bundle(bundle)
-    _require(bundle.get("schema") == BUNDLE_SCHEMA, "only inference guidance bundles render")
+    _require(bundle.get("schema") in {BUNDLE_SCHEMA, LEGACY_BUNDLE_SCHEMA},
+             "only inference guidance bundles render")
     parts: list[str] = []
     for section in bundle["sections"]:
         if section["name"] in {"persona", "stack"}:
@@ -303,6 +324,8 @@ def render_prompt(bundle: Mapping[str, Any]) -> str:
         elif section["name"] == "receipt":
             receipt = canonical_json(section["capability"]).decode().strip()
             body = "Capability receipt (trusted structured metadata):\n" + receipt
+        elif section["name"] == "procedures":
+            body = "\n\n".join(item["text"] for item in section["items"])
         else:
             body = section["text"].strip()
         label = section.get("id", section["name"])
@@ -318,7 +341,7 @@ def pin_bundle(run_root: Path, bundle: Mapping[str, Any], *,
     root = Path(run_root) / "data" / "guidance" / identity
     atomic_json(root / "bundle.json", dict(bundle))
     extra = dict(files or {})
-    if bundle.get("schema") == BUNDLE_SCHEMA:
+    if bundle.get("schema") in {BUNDLE_SCHEMA, LEGACY_BUNDLE_SCHEMA}:
         extra.setdefault("prompt.md", render_prompt(bundle))
     for name, text in sorted(extra.items()):
         _require(bool(re.fullmatch(r"[a-z0-9][a-z0-9.\-]*\.md", name)), f"pinned guidance file name is invalid: {name}")

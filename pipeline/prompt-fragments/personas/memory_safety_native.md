@@ -45,7 +45,8 @@ GENERATED
   `-fstack-protector-strong`, CFI, ASLR/PIE, `-ftrivial-auto-var-init=zero`, hardened allocators.
 
 ## False positives
-- `memcpy` whose length is a compile-time constant or `sizeof` of the destination.
+- `memcpy` whose constant length fits both live objects, or whose `sizeof` refers to the actual
+  destination array rather than a pointer, with sufficient readable source bytes.
 - Lengths already clamped by a framing layer that rejects larger frames before this code runs.
 - Sanitizer reports from test harnesses that feed impossible states through private APIs.
 - `strcpy` from string literals; `alloca` with a constant small size.

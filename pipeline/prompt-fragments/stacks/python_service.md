@@ -1,6 +1,6 @@
 ---
 id: python_service
-version: 1
+version: 2
 covers: []
 standards: ["cwe", "asvs5", "api-top10-2023"]
 max_tokens: 1500
@@ -25,7 +25,8 @@ marshmallow) enforces it. C extensions (numpy, lxml, Pillow) carry native risk.
 - `subprocess.run([...])` without `shell=True`; `shlex.quote` only as a last resort.
 - `secrets`, `hmac.compare_digest`, `django.contrib.auth.hashers`, passlib/argon2-cffi.
 - `yaml.safe_load`, `defusedxml`, `json`; pydantic models with constrained types.
-- DRF `IsAuthenticated` defaults and object-level `has_object_permission`.
+- Explicit DRF `IsAuthenticated` policy and object-level `has_object_permission`; DRF's default
+  permission policy is `AllowAny` unless the application changes it.
 
 ## Stack-specific pitfalls
 - `cursor.execute(f"... {x}")`, `%` formatting into SQL, `.raw()`/`.extra()`/`RawSQL`,
@@ -38,12 +39,16 @@ marshmallow) enforces it. C extensions (numpy, lxml, Pillow) carry native risk.
 - `@csrf_exempt` on cookie-authenticated views; DRF `AllowAny` defaults.
 - `requests` with `verify=False`; `requests.get(user_url)` (SSRF).
 - `tempfile.mktemp`; `random` for tokens; `assert` used for security checks (removed with `-O`).
-- `tarfile.extractall`/`zipfile.extractall` on uploads before Python 3.12 extraction filters;
-  `urllib.parse` differences from the HTTP client enabling SSRF allowlist bypass.
+- `tarfile` extraction filters were introduced in Python 3.12 (and backported to some security
+  releases); the default became `data` in 3.14. Earlier filter-capable versions still require
+  explicit selection. Even `data` is not a complete resource-exhaustion defense.
+- ZIP extraction is separate: inspect the exact `zipfile` API, member-path handling and resource
+  limits rather than assuming TAR filter behavior applies.
+- `urllib.parse` differences from the HTTP client enabling SSRF allowlist bypass.
 
 ## Build and deployment facts to check
 - Settings module used in deployment and its `DEBUG`, `SECRET_KEY` source, cookie flags, and
   `SECURE_*` settings.
 - Pinned requirements or lockfiles (`poetry.lock`, `uv.lock`, hashes) and resolved versions.
 - WSGI/ASGI server config (gunicorn, uvicorn) bind address and workers; Celery serializer settings.
-- Python version, since stdlib defaults differ (e.g. `tarfile` extraction filters in 3.12+).
+- Python patch version and effective extraction-filter selection, not merely a `3.12+` check.

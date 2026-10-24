@@ -273,6 +273,12 @@ def policy_keys(text: str) -> frozenset[str]:
     return frozenset(key for key in _POLICY_LINE.findall(text) if key not in _PREDICATES)
 
 
+def validate_procedure_text(label: str, text: str, tools: Iterable[str]) -> None:
+    """Procedures describe evidence checks, never new tools or policy settings."""
+    validate_task_text(label, text, tools, ())
+    _require(not policy_keys(text), f"{label} defines policy settings")
+
+
 # ---------------------------------------------------------------------------------------------
 # Parsed records
 
