@@ -54,7 +54,7 @@ def prepared(tmp_path: Path, monkeypatch):
     runner = JobRunner(load_config(config))
     claim = runner.begin_attempt(job, run_id=fixture.run_id)
     outputs = {}
-    for unit in ("scope.accept_manifest", "scope.assemble_scope", "packages.assemble_lead_packages",
+    for unit in ("scope.accept_manifest", "scope.assemble_scope", "triage.lead_severity", "packages.assemble_lead_packages",
                  "packages.assemble_hunt_packages"):
         outputs[unit] = runner.execute_or_reuse_unit(job, claim, unit)
     settings = load_config(config).job(JOB).typed_settings
@@ -64,6 +64,7 @@ def prepared(tmp_path: Path, monkeypatch):
                           .read_text())
 
     def context(infer, *, lane: str = "lead", attempt: str = "a", **changes):
+        changes.setdefault("rounds", replace(settings.rounds, max_rounds=1, stable_rounds_required=1))
         return review_context(run_root=fixture.run_root, run_id=fixture.run_id,
                               attempt_root=tmp_path / "attempts" / attempt, repository_root=ROOT,
                               settings=replace(settings, **changes) if changes else settings, infer=infer,
@@ -256,7 +257,7 @@ def test_provider_and_schema_failures_are_typed_gaps_with_terminal_records(prepa
     assert any(gap.gap_class is GapClass.SCHEMA_ERROR and gap.subject_id == blues[0].cell_id for gap in result.gaps)
 
 
-def test_a_team_failure_is_a_package_gap_with_terminal_red_records(prepared, monkeypatch) -> None:
+def test_a_team_failure_preserves_completed_red_records_and_names_the_gap(prepared, monkeypatch) -> None:
     from appsec_review.jobs.job_inference_security_review import teams
 
     def broken(*args, **kwargs):
@@ -264,7 +265,8 @@ def test_a_team_failure_is_a_package_gap_with_terminal_red_records(prepared, mon
 
     monkeypatch.setattr(teams, "_normalize", broken)
     result = run_team(prepared.context(prepared.infer), prepared.work("lead", "sast_critical"), launch=True)
-    assert [record.status for record in result.cells] == [CellStatus.FAILED] * 3
+    assert [record.status for record in result.cells] == [CellStatus.SUCCEEDED] * 3
+    assert len({record.cell_id for record in result.cells}) == 3
     assert not result.claims and not result.relations
     assert any(gap.subject_id == result.package_id and gap.gap_class is GapClass.WORKER_GAP for gap in result.gaps)
 

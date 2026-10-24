@@ -55,6 +55,13 @@ rejected with a message that names the key.
 | `jobs.job_poc_generation.settings.models.<profile>` (existing profiles only) | `provider`, `model`, `reasoning`, `max_input_tokens`, `max_output_tokens`, `max_queries`, `max_turns`, `timeout_seconds` |
 | `jobs.job_inference_security_review.settings.roles.<role>` (the role must exist in the base) | `model_profile` |
 | `jobs.job_inference_security_review.settings.budgets` | `max_model_turns`, `max_input_tokens`, `max_output_tokens`, `max_retrieval_queries`, `timeout_seconds` |
+| `jobs.job_inference_security_review.settings.lanes` | `exploration_enabled` (Boolean), `exploration_reserve` (positive integer) |
+
+Medium/low exploration is **off in both profiles**. Production's larger budget does not opt in.
+Set `exploration_enabled = true` explicitly for the selected profile to admit up to
+`exploration_reserve` otherwise-unadmitted medium/low packages within the existing lead allocation
+and total budget. It does not admit informational leads or change unknown-severity handling.
+See [review admission and rounds](inference-security-review.md#opt-in-mediumlow-exploration).
 
 ## The prod values
 

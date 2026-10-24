@@ -303,8 +303,11 @@ def test_graph_context_reads_only_accepted_graph_shards(graph_fixture) -> None:
 
 def _route(document: dict, available: tuple[str, ...]) -> dict:
     ctx = SimpleNamespace(source_languages={}, build_unit_languages={}, entity_name=lambda identity: None,
-                          covers=PERSONAS, available_sources=available)
-    work = SimpleNamespace(document=document, lane=Lane.HUNT, package_id="hunt-" + "1" * 64)
+                          covers=PERSONAS, available_sources=available,
+                          core=SimpleNamespace(find=lambda **kwargs: {"results": []}),
+                          settings=SimpleNamespace(teams=SimpleNamespace(red_per_team=3)))
+    work = teams.PackageWork("hunt-" + "1" * 64, Lane.HUNT, "1" * 64, document, (0, "hunt"),
+                             "1" * 64, (), None)
     return teams.route(ctx, work)
 
 

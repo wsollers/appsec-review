@@ -68,7 +68,7 @@ from appsec_review.storage.atomic import canonical_json
 
 
 PACKAGE_SCHEMA = "appsec-review/review-package/6"
-ASSEMBLY_RULE = "appsec-review/assemble-review-packages/7"
+ASSEMBLY_RULE = "appsec-review/assemble-review-packages/8"
 GRAPH_CONTEXT_RULE = "appsec-review/package-graph-context/2"
 CALLER_ROLE = "caller"
 CALLER_PRODUCER = "code_graph_callers"
@@ -106,6 +106,8 @@ OBLIGATIONS: Mapping[str, tuple[Predicate, ...]] = {
 class PackageSettings:
     admit_severities: tuple[str, ...] = ("critical", "high", "unknown")
     admit_kev: bool = True
+    exploration_enabled: bool = False
+    exploration_reserve: int = 1
     hunt_max_units: int = 8
     hunt_menu_partition_size: int = 25
     unit_max_files: int = 200
@@ -129,6 +131,10 @@ class PackageSettings:
         object.__setattr__(self, "admit_severities", tuple(sorted(admitted, key=SEVERITY_ORDER.__getitem__)))
         if not isinstance(self.admit_kev, bool):
             raise ValueError("admit_kev must be a Boolean")
+        if not isinstance(self.exploration_enabled, bool):
+            raise ValueError("exploration_enabled must be a Boolean")
+        if type(self.exploration_reserve) is not int or self.exploration_reserve < 1:
+            raise ValueError("exploration_reserve must be a positive integer")
         for name in ("hunt_menu_partition_size", "unit_max_files", "max_context_entries", "max_package_bytes",
                      "max_memory_context_entries", "max_callers"):
             value = getattr(self, name)
@@ -152,9 +158,12 @@ class PackageSettings:
         bounds = settings.packages
         return cls(admit_severities=tuple(settings.lanes.lead_admission),
                    admit_kev=settings.lanes.lead_admission_kev,
+                   exploration_enabled=settings.lanes.exploration_enabled,
+                   exploration_reserve=min(settings.lanes.exploration_reserve, settings.budgets.budget_team_packages),
                    hunt_max_units=settings.lanes.hunt_max_units, rank_weights=settings.ranking,
                    **{item.name: getattr(bounds, item.name) for item in fields(cls)
-                      if item.name not in {"admit_severities", "admit_kev", "hunt_max_units", "rank_weights"}})
+                      if item.name not in {"admit_severities", "admit_kev", "exploration_enabled", "exploration_reserve",
+                                           "hunt_max_units", "rank_weights"}})
 
     @classmethod
     def from_mapping(cls, value: Mapping[str, Any] | None) -> "PackageSettings":
@@ -215,7 +224,18 @@ def admission_reasons(lead: Lead, settings: PackageSettings) -> list[str]:
         reasons.append("reported_severity" if lead.effective_from == "reported" else "assessed_severity")
     if settings.admit_kev and lead.kev_listed is True:
         reasons.append("kev_listed")
+    if not reasons and settings.exploration_enabled and lead.effective_severity in {"medium", "low"}:
+        reasons.append("exploration_reserve")
     return reasons
+
+
+def admitted_leads(collection: LeadCollection, settings: PackageSettings) -> list[Lead]:
+    urgent = [lead for lead in collection.leads
+              if admission_reasons(lead, settings) and admission_reasons(lead, settings) != ["exploration_reserve"]]
+    exploratory = sorted((lead for lead in collection.leads
+                          if admission_reasons(lead, settings) == ["exploration_reserve"]),
+                         key=lambda lead: (SEVERITY_ORDER[lead.effective_severity], lead.observation_id))
+    return urgent + exploratory[:settings.exploration_reserve]
 
 
 def lead_record(lead: Lead, component_id: str, build_unit_id: str | None, *,
@@ -817,6 +837,19 @@ class _Assembler:
         self.reference_weaknesses = _reference_weaknesses(scope)
         self.graph = GraphContext(scope)
         self.memory = MemoryContext(scope, max_entries=settings.max_memory_context_entries)
+        self.routing_tags: dict[str, list[ContextEntry]] = defaultdict(list)
+        for shard in scope.producer("security_tagging").shards:
+            for row in scope.store.entities((shard,), kinds=("tag_assignment",)):
+                subject = row["payload"].get("subject") or {}
+                keys = [subject.get("logical_id"), subject.get("path")]
+                if subject.get("kind") == "component":
+                    keys.append(subject.get("component_id"))
+                for key in {key for key in keys if isinstance(key, str) and key}:
+                    self.routing_tags[key].append(context_entry(row["identity"], "tag",
+                                                               shard_sha256=scope.shard_sha256(shard)))
+
+    def scoped_tags(self, component_id: str, source_ids: Iterable[str], paths: Iterable[str]) -> list[ContextEntry]:
+        return [entry for key in {component_id, *source_ids, *paths} for entry in self.routing_tags.get(key, ())]
 
     def corroboration(self, lead: Lead) -> tuple[list[NeighborhoodRow], int]:
         """Other observations on the lead's own line, strongest first, bounded by ``MAX_CORROBORATION``."""
@@ -981,6 +1014,7 @@ class _Assembler:
             context.append(context_entry(component.identity, "component"))
         if unit is not None:
             context.append(context_entry(unit.identity, "build_unit"))
+        context.extend(self.scoped_tags(component_id, sources, (lead.path,) if lead.path else ()))
         if lead.duplicate_of:
             context.append(context_entry(lead.duplicate_of, "duplicate_of"))
         context.extend(context_entry(identity, "flow") for identity in lead.flow_ids)
@@ -1061,7 +1095,9 @@ class _Assembler:
         bound = self.settings.max_context_entries
         budget = bound - len({(item.role, item.id) for item in unit.context})
         graph_context, graph_omitted = self.graph.unit_context(unit.paths, budget)
-        context, omitted, gaps = self._cap((*unit.context, *graph_context), unit.key, "lane_b_hunt")
+        context, omitted, gaps = self._cap(
+            (*unit.context, *graph_context, *self.scoped_tags(unit.component_id, unit.source_ids, unit.paths)),
+            unit.key, "lane_b_hunt")
         if graph_omitted:
             omitted += graph_omitted
             gaps.append(ScopeGap(GRAPH_PRODUCER, unit.key, "truncated",
@@ -1111,15 +1147,18 @@ class _Assembler:
 
 
 def audit_membership(collection: LeadCollection, packages: Iterable[Package],
-                     admit: Iterable[str], admit_kev: bool = False) -> dict[str, Any]:
+                     admit: Iterable[str], admit_kev: bool = False, exploration_enabled: bool = False,
+                     exploration_reserve: int = 1) -> dict[str, Any]:
     """Gate 5 for lane A: E ⊆ F per family and severity, exactly once, with no invented lead.
 
     ``E`` holds every lead whose effective severity is admitted and, with ``admit_kev``, every
     KEV-listed lead whatever its effective severity.
     """
     admitted = set(admit)
-    expected = {lead.observation_id: lead for lead in collection.leads
-                if lead.effective_severity in admitted or (admit_kev and lead.kev_listed is True)}
+    expected = {lead.observation_id: lead for lead in admitted_leads(
+        collection, PackageSettings(admit_severities=tuple(admitted), admit_kev=admit_kev,
+                                    exploration_enabled=exploration_enabled,
+                                    exploration_reserve=exploration_reserve))}
     seen: Counter[str] = Counter()
     for package in packages:
         if package.kind == "finding_lead":
@@ -1144,7 +1183,8 @@ def audit_membership(collection: LeadCollection, packages: Iterable[Package],
     return {"status": "passed", "expected": len(expected), "packaged": sum(seen.values()), "by_family": by_cell,
             "suppressed": sum(1 for lead in expected.values() if lead.suppression_status == "suppressed"),
             "duplicates": sum(1 for lead in expected.values() if lead.duplicate_of),
-            "kev_admitted": sum(1 for lead in expected.values() if lead.effective_severity not in admitted)}
+            "kev_admitted": sum(1 for lead in expected.values()
+                                if lead.kev_listed is True and lead.effective_severity not in admitted)}
 
 
 def audit_hunts(hunted: Iterable[RankedUnit], packages: Iterable[Package]) -> dict[str, Any]:
@@ -1181,9 +1221,11 @@ def assemble_packages(scope: AcceptedScope, settings: PackageSettings | None = N
                                 collection.correlation_shards, collection.non_lead_counts)
     graph_settings = graph_settings if graph_settings is not None else run_graph_settings(scope.run_root)
     assembler = _Assembler(scope, settings, collection, cwe_reference, graph_settings)
-    admitted = [lead for lead in collection.leads if admission_reasons(lead, settings)]
+    admitted = admitted_leads(collection, settings)
+    admitted_ids = {lead.observation_id for lead in admitted}
     packages = [assembler.finding_lead(lead) for lead in admitted]
-    lane_a = audit_membership(collection, packages, settings.admit_severities, settings.admit_kev)
+    lane_a = audit_membership(collection, packages, settings.admit_severities, settings.admit_kev,
+                             settings.exploration_enabled, settings.exploration_reserve)
 
     units = build_units(scope, collection, unit_max_files=settings.unit_max_files, weights=settings.rank_weights)
     ranked = rank_units(units)
@@ -1207,11 +1249,19 @@ def assemble_packages(scope: AcceptedScope, settings: PackageSettings | None = N
                                               and lead.reported_severity == severity)
                                 for severity in settings.admit_severities} for family in FAMILIES}
     kev_admitted = {family: sum(1 for lead in admitted if lead.family == family
+                                and lead.kev_listed is True
                                 and lead.reported_severity not in settings.admit_severities) for family in FAMILIES}
     document: dict[str, Any] = {
         "schema": MANIFEST_SCHEMA, "assembly_rule": ASSEMBLY_RULE, "package_schema": PACKAGE_SCHEMA,
         "run_id": scope.run_id, "manifest_sha256": scope.manifest_sha256, "target_snapshot": scope.target_snapshot,
         "settings": settings.record(), "graph_settings": asdict(graph_settings),
+        "admission": [{"lead_id": lead.observation_id, "effective_severity": lead.effective_severity,
+                       "status": "admitted" if lead.observation_id in admitted_ids else "not_admitted",
+                       "reasons": admission_reasons(lead, settings),
+                       "residual_coverage": "review_pending" if lead.observation_id in admitted_ids
+                       else "exploration_reserve_cutoff" if admission_reasons(lead, settings)
+                       else "outside_admission_policy"}
+                      for lead in sorted(collection.leads, key=lambda item: item.observation_id)],
         "rules": {"families": dict(FAMILY_RULES), "rank": RANK_RULE, "obligations": OBLIGATION_RULE,
                   "neighborhood": NEIGHBORHOOD_RULE},
         "inputs": ShardSet.identities(scope.shards), "evidence_map_sha256": sha256_hex(scope.evidence_map()),

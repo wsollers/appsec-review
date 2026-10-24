@@ -4,7 +4,7 @@
 # --profile prod); the default profile "dev" is appsec-review.toml exactly as it is. This file is a
 # closed-allowlist layer deep-merged over appsec-review.toml before validation (see
 # docs/operations/model-profiles.md): it may set only the model tables of the model-calling jobs, the
-# inference review's model profiles, role model_profile bindings and budgets. Edit the model names
+# inference review's model profiles, role model_profile bindings, budgets and opt-in exploration. Edit the model names
 # here when an account's model list differs, then rerun; the file hash is part of the run.
 
 [jobs.job_target_analysis_plan.settings.model]
@@ -79,6 +79,10 @@ model_profile = "strong"
 
 [jobs.job_inference_security_review.settings.roles.adjudication_judge]
 model_profile = "strong"
+
+[jobs.job_inference_security_review.settings.lanes]
+exploration_enabled = false
+exploration_reserve = 1
 
 [jobs.job_poc_generation.settings.models.default]
 model = "claude-sonnet-5-5"
