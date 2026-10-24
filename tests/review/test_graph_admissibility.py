@@ -438,7 +438,8 @@ def _support(relations: list[EvidenceRelation]) -> int:
     return len({item.predicate for item in relations if item.kind is RelationKind.SUPPORTS and satisfies(item)})
 
 
-def test_triage_orders_graph_cited_hypotheses_above_prose(graph_run) -> None:
+@pytest.mark.parametrize("active_claim_limit", [1, 2])
+def test_triage_orders_graph_cited_hypotheses_above_prose(graph_run, active_claim_limit) -> None:
     from appsec_review.jobs.job_inference_security_review import teams
     runs, ids = graph_run
     core = RetrievalCore(runs, RUN_ID)
@@ -458,7 +459,8 @@ def test_triage_orders_graph_cited_hypotheses_above_prose(graph_run) -> None:
     ctx = SimpleNamespace(settings=SimpleNamespace(lanes=SimpleNamespace(hunt_max_claims_per_package=1,
                                                                          lead_max_claims_per_package=1)),
                           resolves=lambda identity: True)
-    work = SimpleNamespace(lane=Lane.HUNT, package_id="hunt-" + "1" * 64)
+    work = SimpleNamespace(lane=Lane.HUNT, package_id="hunt-" + "1" * 64,
+                           active_claim_limit=active_claim_limit, round_index=0)
     result = teams.TeamResult(work.package_id, Lane.HUNT, None)
     admitted = teams._triage(ctx, work, [prose, graph], result)
     assert [item["claim"].claim_id for item in admitted] == [graph["claim"].claim_id]

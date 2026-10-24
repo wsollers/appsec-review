@@ -12,8 +12,15 @@ CWE impact class are implemented ([decisions](#decisions-and-open-questions) 1, 
 and 11), as are evidence-driven scoring (`score-factors/1`, `application_risk_matrix/3`) and
 code-graph evidence (`evidence-admissibility/3`, `query_code_graph`, package graph context). The
 remaining parts of slices 2-4 (CVSS v4 and SSVC providers, which the scoring registry skips while
-unimplemented, PoC, chains, rounds and variant hunts) remain design only, and no live-model
+unimplemented, PoC, chains, global round barriers and cross-package variant hunts) remain design only, and no live-model
 acceptance has run.
+Package-local follow-up rounds are now implemented inside each team: accepted, re-resolved
+supported/confirmed claims supply known-claim context, only confirmed claims seed variants, and
+semantic stability plus existing budgets bound repetition. This is not the global round-controller
+design below: cross-package/cross-lane seeds and unresolved specialist referrals remain explicit gaps.
+See [current execution boundaries](../operations/inference-security-review.md#routing-follow-up-rounds-and-coverage).
+Role-selected, pinned procedures and evidence-preserving compact investigation fields are described
+in [guidance procedures](guidance-procedures.md) and [red discovery output](red-discovery-output.md).
 The separate `job_document_issue_analysis` publishes a private, hash-pinned candidate ledger;
 its document hunts are not yet consumed by the inference review job.
 
@@ -668,6 +675,9 @@ Budgets are expressed per lane in team-packages, with cell-level caps beneath th
 
 ### Parallel lanes, rounds, and determinism
 
+The following is the global-round design. The current implementation instead runs deterministic,
+bounded follow-ups within each package, without exchanging seeds across concurrent packages or lanes.
+
 Round 0 runs lane A and lane B fully in parallel. Variant hunts are not inserted while round 0 is
 running, because that would make *what gets reviewed under a budget* depend on timing. Round 1
 creates `variant` hunt packages from round 0's confirmed claims, in canonical order, and runs them
@@ -706,6 +716,10 @@ carries `review_incomplete = true` with per-lane counts. It is still published, 
 present it as a complete review.
 
 ## Delta-driven rounds and resumption
+
+The full downstream delta controller described here remains a design target. The implemented team
+loop fingerprints local accepted states and evidence, carries bounded open requests forward, and
+stops at semantic stability or configured limits; it does not claim downstream PoC/chain resynthesis.
 
 A round is not a repeated full review. Round 0 creates the initial scope, packages, claims, reviews,
 scores, PoC decisions, and chain candidates. A later round contains only deltas produced by the

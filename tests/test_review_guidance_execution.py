@@ -25,6 +25,35 @@ from tests.review.test_team_handler import Recording, prepared
 from tests.test_inference_review_config import _variant
 
 
+def test_later_round_failure_keeps_completed_cells_and_accounts_for_current_reds(prepared, monkeypatch):
+    from appsec_review.jobs.job_inference_security_review import teams
+    from appsec_review.review.models import CellStatus
+
+    original_run = teams._run
+    failed = set()
+    completed = set()
+
+    def run_with_one_failure(ctx, cell, validate, **kwargs):
+        if cell.spec.round == 1 and cell.spec.task == "lead_red_stack":
+            failed.add(cell.cell_id)
+            raise OSError("fixture receipt write failure")
+        original_run(ctx, cell, validate, **kwargs)
+        if cell.spec.round == 1:
+            completed.add(cell.cell_id)
+
+    monkeypatch.setattr(teams, "_run", run_with_one_failure)
+    ctx = prepared.context(prepared.infer, rounds=replace(prepared.settings.rounds, max_rounds=2))
+    result = run_team(ctx, prepared.work("lead", "ci_high"), launch=True)
+    records = {record.cell_id: record for record in result.cells}
+    assert failed and completed
+    assert failed <= records.keys() and completed <= records.keys()
+    assert all(records[cell].status is CellStatus.FAILED for cell in failed)
+    assert all(records[cell].status is CellStatus.SUCCEEDED for cell in completed)
+    assert len(records) == len(result.cells)
+    assert any(item["round"] == 0 for item in result.capabilities)
+    assert {item["cell_id"] for item in result.capabilities if item["round"] == 1} == failed | completed
+
+
 @pytest.mark.parametrize(("languages", "component", "facts", "interfaces", "expected"), [
     (["Python"], "component:application-api-server", [], [], "python_service"),
     (["Java", "Python"], "component:application-api-server", [], [], "jvm_service"),

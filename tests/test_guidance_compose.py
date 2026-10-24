@@ -115,6 +115,8 @@ def test_persona_sections_are_selected_by_role_lens(repo: Path, taxonomy) -> Non
                      capability={"granted_tools": ["find", "read_excerpt"]})
     assert judge["sections"][1]["id"] == "adjudication_judge" and judge["sections"][4]["id"] == "adjudicate_claim"
     assert judge["sections"][2]["lens"] == "skeptical"
+    assert "Hand-offs" not in [item["heading"] for item in judge["sections"][2]["sections"]]
+    assert "injection_interpreters" not in render_prompt(judge)
     with pytest.raises(GuidanceError, match="not assigned to role"):
         _compose(repo, taxonomy, role="adjudication_judge", task="blind_verifier",
                  capability={"granted_tools": ["find"]})

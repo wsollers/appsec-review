@@ -240,7 +240,8 @@ def compose_bundle(repository_root: Path, *, role: str, persona: str, stack: str
     coverage = expand_coverage(persona_fragment.covers, persona_fragment.standards, vocabulary, crosswalk)
     persona_sections = [{"heading": heading,
                          "text": coverage["text"] if heading == "Coverage" else persona_fragment.sections[heading]}
-                        for heading in PERSONA_VIEWS[lens]]
+                        for heading in PERSONA_VIEWS[lens]
+                        if role != "adjudication_judge" or heading != "Hand-offs"]
     governing = governing_rules(root)
 
     defined: dict[str, list[str]] = {}

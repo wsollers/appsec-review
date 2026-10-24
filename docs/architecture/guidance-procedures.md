@@ -35,7 +35,9 @@ and weakness; the worker reconstructs the bounded condition without another work
 
 ## Evidence-conditioned knowledge
 
-Both persona views now include `Hand-offs`. The governing rules interpret these as bounded
+Both investigation persona views now include `Hand-offs`. The blind adjudication judge omits that
+section so specialist identifiers cannot disclose either side's persona; its conflict-resolution
+procedure remains available. The governing rules interpret hand-offs as bounded
 cross-specialist cues, not delegation. Where the compact contract supports it, `evidence_requests`
 can nominate a specialist and cite local anchors for a missing fact. An `obligations` item remains
 a question, not discharged evidence. A `taint_paths` edge distinguishes accepted analysis from

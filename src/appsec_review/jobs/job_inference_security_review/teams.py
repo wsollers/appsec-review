@@ -762,7 +762,7 @@ def _coverage_row(work: PackageWork, cell: _Cell) -> dict[str, Any]:
     state = ("reviewed" if status is CellStatus.SUCCEEDED else
              "not_launched" if status is CellStatus.NOT_LAUNCHED else "gap")
     return {"unit_key": work.unit_key, "package_id": work.package_id, "strategy": cell.strategy,
-            "round": work.round_index,
+            "round": cell.spec.round,
             "persona": cell.spec.persona, "status": state, "cell_id": cell.cell_id, "reason": None}
 
 
@@ -788,17 +788,20 @@ def run_team(ctx: ReviewContext, work: PackageWork, *, launch: bool, not_launche
         raise
     except Exception as exc:  # Preserve completed rounds and their accounting when later work fails.
         failed = result
-        failed.gaps.append(make_gap(GapClass.WORKER_GAP, work.package_id, f"team failure: {type(exc).__name__}"))
+        failed.gaps.append(make_gap(GapClass.WORKER_GAP, work.package_id, f"team failure: {type(exc).__name__}",
+                                   round=max((cell.spec.round for cell in reds), default=work.round_index)))
         recorded = {item.cell_id for item in failed.cells}
         for cell in reds:
             if cell.cell_id in recorded:
                 continue
-            gap = make_gap(GapClass.WORKER_GAP, cell.cell_id, f"team failure: {type(exc).__name__}")
-            cell.record = CellRecord(cell_id=cell.cell_id, lane=work.lane, package_id=work.package_id,
-                                     role=cell.spec.role, persona=cell.spec.persona,
-                                     stack_profile=cell.spec.stack_profile, task=cell.spec.task, claim_id=None,
-                                     status=CellStatus.FAILED, attempts=0, gap_ids=(gap.gap_id,))
-            cell.outcome = CellOutcome(cell.record, None, (gap,), (), (), False, {})
+            if cell.record is None:
+                gap = make_gap(GapClass.WORKER_GAP, cell.cell_id, f"team failure: {type(exc).__name__}",
+                               round=cell.spec.round)
+                cell.record = CellRecord(cell_id=cell.cell_id, lane=work.lane, package_id=work.package_id,
+                                         role=cell.spec.role, persona=cell.spec.persona,
+                                         stack_profile=cell.spec.stack_profile, task=cell.spec.task, claim_id=None,
+                                         status=CellStatus.FAILED, attempts=0, gap_ids=(gap.gap_id,))
+                cell.outcome = CellOutcome(cell.record, None, (gap,), (), (), False, {})
             _record(failed, cell)
             if work.lane is Lane.HUNT:
                 failed.coverage.append(_coverage_row(work, cell))
@@ -864,7 +867,8 @@ def _run_rounds(ctx: ReviewContext, work: PackageWork, routing: Mapping[str, Any
                        pending_requests=_pending_requests(ctx, work, result))
         routing = route(ctx, work)
         result.gaps.extend(routing["gaps"])
-        reds = _red_cells(ctx, work, routing)
+        # Keep the outer failure handler pointed at the current round's workers.
+        reds[:] = _red_cells(ctx, work, routing)
     result.rounds[-1]["stop_reason"] = stop
     if stop != "stable":
         result.gaps.append(make_gap(GapClass.COVERAGE_GAP, work.package_id,
@@ -1226,7 +1230,7 @@ def _triage(ctx: ReviewContext, work: PackageWork, groups: list[dict[str, Any]],
     lanes = ctx.settings.lanes
     cap = lanes.hunt_max_claims_per_package if work.lane is Lane.HUNT else lanes.lead_max_claims_per_package
     candidates = []
-    for group in groups:
+    for group in sorted(groups, key=lambda item: (-item["support"], item["claim"].claim_id)):
         claim = group["claim"]
         existing = {item.claim_id for item in result.claims}
         active_limit = (ctx.settings.rounds.max_active_claims if work.active_claim_limit is None
@@ -1434,7 +1438,7 @@ def _seal(ctx: ReviewContext | None, lane: Lane, teams: Sequence[TeamResult], al
                                 specialist=request.get("specialist"))
             writer.close_request(request["request_id"], request["claim_id"], EvidenceRequestOutcome.UNSATISFIED,
                                  reason="bounded package rounds ended without a verified request resolution",
-                                 round=team.rounds[-1]["round"] if team.rounds else 0)
+                                 round=max(cell_rounds.values(), default=0))
             if request.get("specialist"):
                 gap = make_gap(GapClass.COVERAGE_GAP, request["request_id"],
                                f"unresolved_specialist_referral:{request['specialist']}")

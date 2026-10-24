@@ -346,11 +346,11 @@ def test_judge_relations_carry_provenance_and_follow_the_admissibility_rules(pre
 
 
 @pytest.mark.parametrize("when, answers, judged", [
-    ("disagreement", lambda task: "supports", 0),                                            # blue agrees with red
+    ("disagreement", lambda task: "supports", 1),                 # invalid blue support is not agreement
     ("disagreement", lambda task: "contradicts", 1),                                         # blue opposes red
-    ("disagreement", lambda task: "supports" if task == "blue_control" else "qualifies", 1), # blue against blue
+    ("disagreement", lambda task: "supports" if task == "blue_control" else "qualifies", 1), # invalid plus qualification
     ("disagreement", lambda task: "unresolved", 1),                                          # a predicate left open
-    ("all", lambda task: "supports", 1)])                                                    # all judges even agreement
+    ("all", lambda task: "supports", 1)])                         # all judges even invalid blue output
 def test_when_selects_judge_cells_in_a_real_team(prepared, when, answers, judged) -> None:
     class Scripted(ScriptedInfer):
         def _blue(self, payload):
