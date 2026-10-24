@@ -1,14 +1,16 @@
 ---
 id: control_gap
-version: 2
+version: 3
 roles: ["hypothesis_hunter"]
-requests_tools: ["find", "query_owasp_workbench", "read_excerpt", "trace"]
+requests_tools: ["find", "read_excerpt", "trace"]
 max_tokens: 400
 ---
 ## Question
 The accepted control-assessment result in the task input reports a control that failed or is
 missing in this unit. What can an attacker do here because of that gap, and through which
 concrete code path?
+Use the accepted assessment supplied in the package; a live workbench query is not available
+to this in-process review cell. Missing assessment detail remains an evidence request.
 
 ## Expected result
 Zero or more hypotheses in the role's result schema with per-predicate evidence that names

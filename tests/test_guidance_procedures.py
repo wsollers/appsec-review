@@ -56,6 +56,18 @@ def test_every_registered_review_task_has_bounded_real_rendered_guidance(taxonom
             assert len(_section(bundle, "procedures")["items"]) <= 2
 
 
+def test_review_guidance_never_advertises_an_unimplemented_in_process_tool():
+    from appsec_review.guidance.compose import load_task
+    from appsec_review.review.capability import IN_PROCESS_TOOLS
+    from appsec_review.review.models import Role
+
+    registry = load_registry(ROOT)
+    for role in Role:
+        assert set(registry["roles"][role.value]["tools"]) <= IN_PROCESS_TOOLS
+    for task_id in registry["tasks"]["inference-security-review"]:
+        assert set(load_task(ROOT, registry, task_id=task_id).requests_tools) <= IN_PROCESS_TOOLS
+
+
 def test_only_selected_skill_changes_bundle_identity(repo, taxonomy):
     first = _compose(repo, taxonomy)
     selected = repo / "pipeline" / "skills" / "generative-investigation" / "SKILL.md"
