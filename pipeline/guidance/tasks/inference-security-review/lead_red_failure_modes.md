@@ -12,7 +12,7 @@ weakness has a different, more precise affected construct nearby in the package.
 
 ## Expected result
 Zero or more proposals in the role's result schema with per-predicate evidence that names
-resolvable identities. Do not restate the lead's reported severity as evidence.
+cell-local labels. Do not restate the lead's reported severity as evidence.
 Account for the package lead exactly once: developed into a proposal, not developed by this lens
 (never a statement that it is safe), or blocked by a named gap. Each proposal names its security
 consequence from the closed vocabulary and its preconditions from the closed precondition

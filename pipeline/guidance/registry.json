@@ -1,6 +1,6 @@
 {
   "schema": "appsec-review/guidance-registry/1",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "roles": {
     "build_engineer_native": {"responsibility": "Produce bounded reproducible C/C++ and native build-system recipes."},
     "build_engineer_rust": {"responsibility": "Produce bounded reproducible Rust and Cargo build recipes."},
@@ -79,6 +79,10 @@
     "deployment_operations": "cloud_container_deployment"
   },
   "runtime_skills": {
+    "generative-investigation": {"path": "pipeline/skills/generative-investigation/SKILL.md", "jobs": ["job_inference_security_review"]},
+    "effective-control-verification": {"path": "pipeline/skills/effective-control-verification/SKILL.md", "jobs": ["job_inference_security_review", "job_owasp_control_assessment"]},
+    "predicate-verification": {"path": "pipeline/skills/predicate-verification/SKILL.md", "jobs": ["job_inference_security_review", "job_owasp_control_assessment"]},
+    "conflict-resolution": {"path": "pipeline/skills/conflict-resolution/SKILL.md", "jobs": ["job_inference_security_review", "job_owasp_control_assessment"]},
     "build-image-repair": {"path": "pipeline/skills/build-image-repair/SKILL.md", "jobs": ["job_project_build"]},
     "post-build-security-assessment": {"path": "pipeline/skills/post-build-security-assessment/SKILL.md", "jobs": ["job_post_build_security_assessment"]},
     "target-analysis-planning": {"path": "pipeline/skills/target-analysis-planning/SKILL.md", "jobs": ["job_target_analysis_plan"]},

@@ -12,4 +12,4 @@ and deployment configuration disables the claimed behaviour.
 
 ## Expected result
 Evidence relations in the role's result schema. Each names the predicate it bears on and a
-resolvable identity for the break.
+cell-local label for the break.

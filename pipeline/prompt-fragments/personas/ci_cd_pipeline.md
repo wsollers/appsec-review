@@ -1,6 +1,6 @@
 ---
 id: ci_cd_pipeline
-version: 1
+version: 2
 covers: ["cwe:829", "infra:ci:*"]
 standards: ["cwe", "attack", "ssdf", "slsa1", "cicd-top10", "scorecard"]
 max_tokens: 1500
@@ -19,7 +19,9 @@ GENERATED
   secrets or a write token.
 - Expression injection: `${{ github.event.issue.title }}`, `head_ref`, PR body, commit message,
   or branch names interpolated into `run:` scripts or `actions/github-script` code.
-- Over-broad tokens: no `permissions:` block (inheriting write-all), `contents: write` or
+- Over-broad tokens: omitted `permissions:` inherits repository or organization defaults, which
+  may be restricted or permissive; effective scopes also depend on job settings and event policy.
+  Unnecessary `contents: write` or
   `id-token: write` on jobs that do not need them; GitLab `CI_JOB_TOKEN` scope too wide.
 - OIDC trust: cloud roles whose trust policy accepts any repository, branch, or `pull_request`
   subject claim.
@@ -47,7 +49,9 @@ GENERATED
   code.
 - `${{ }}` expressions over trusted values (`github.sha`, `matrix` constants, `inputs` of a
   maintainer-only `workflow_dispatch`).
-- Tag-pinned first-party actions from the same organization under branch protection.
+- Same-organization actions with evidence of immutable release tags and controlled update paths
+  may have reduced reference-mutation exposure. Same-organization ownership and branch protection
+  alone do not protect tags, transitive dependencies or action behavior; a tag pin is not a SHA pin.
 
 ## Evidence by predicate
 - `affected_construct`: the workflow file, job, step, and line with the trigger, checkout,
@@ -56,7 +60,7 @@ GENERATED
   controls, given the trigger.
 - `source_to_sink_reachability`: trigger to job to step ordering showing untrusted content reaches
   execution within the privileged context.
-- `missing_or_ineffective_guard`: absent `permissions:`, missing actor or label conditions, inline
+- `missing_or_ineffective_guard`: excessive effective token scopes, missing actor or label conditions, inline
   interpolation, unpinned reference, or no environment gate.
 - `configuration_enables`: repository settings for fork workflows, required approvals for outside
   contributors, runner groups, cloud trust policies.

@@ -34,7 +34,8 @@ A hypothesis for a unit is a claim that names the leads it develops, or none whe
 ```json
 {"action": "final", "result": {"claims": [{"id": "h1", "leads": [], "cwe": "CWE-787",
   "security_predicate": "memory_corruption", "statement": "relay::parse_header copies an attacker length into out.name.",
-  "support": {"affected_construct": ["K1"], "attacker_input_control": ["E1"]}, "counter": {"missing_or_ineffective_guard": ["G2"]},
+  "support": {"affected_construct": ["K1"], "attacker_input_control": ["E1"],
+              "missing_or_ineffective_guard": ["G2", "S1", "S2"]}, "counter": {},
   "missing": ["X1"]}], "no_claim": [{"lead": "L1", "why": "covered by h1"}], "blocked": []}}
 ```
 
@@ -43,6 +44,26 @@ An unresolved lead is accounted for with a reason, and more is asked with the to
 ```json
 {"action": "retrieve", "requests": [{"tool": "expand", "parameters": {"label": "K1"}}]}
 {"action": "final", "result": {"claims": [], "no_claim": [], "blocked": [{"lead": "L1", "why": "the unit has no source text"}]}}
+```
+
+Separate authorization/queue example: E1 labels a request carrying a document id; K1 labels a
+consumer's document update. Their connection is not yet proven. Preserve the question rather
+than promoting a plausible asynchronous link into accepted dataflow. Obligation citations
+nominate evidence to investigate; they do not discharge the obligation. A specialist request
+names missing knowledge, not another worker to invoke.
+
+```json
+{"action": "final", "result": {"claims": [{"id": "h2", "leads": [], "cwe": "CWE-862",
+  "security_predicate": "authz_bypass", "statement": "The queued update may use a document id without rechecking actor and tenant.",
+  "support": {"affected_construct": ["K1"]},
+  "obligations": [{"predicate": "missing_or_ineffective_guard", "question": "Does the consumer bind actor, action, document and tenant at use?", "cites": ["K1"]}],
+  "taint_paths": [{"source": "n1", "sink": "n2", "nodes": [
+    {"id": "n1", "role": "source", "label": "E1", "why": "Request document id"},
+    {"id": "n2", "role": "sink", "label": "K1", "why": "Queued document update"}],
+    "edges": [{"from": "n1", "to": "n2", "kind": "cross_boundary", "basis": "analyst_hypothesis", "cites": [],
+      "question": "Which serialized actor and document fields reach this consumer?"}]}],
+  "evidence_requests": [{"predicate": "source_to_sink_reachability", "requested_kind": "dataflow", "anchors": ["E1", "K1"],
+    "question": "Resolve producer-to-consumer field flow and checks after dequeue.", "specialist": "authorization_access_control"}]}]}}
 ```
 
 Do not do this: citing prose, asking for a path, or answering without a lead:

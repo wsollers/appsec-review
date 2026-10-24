@@ -12,7 +12,7 @@ data flow shape?
 
 ## Expected result
 Zero or more new hypotheses in the role's result schema, each at a different affected construct
-than the seed claim, with per-predicate evidence that names resolvable identities. Known claims in
+than the seed claim, with per-predicate evidence that cites cell-local labels. Known claims in
 the task input are not re-reported.
 Account for every lead on the package menu exactly once; not developing a lead is never a
 statement that it is safe. Each hypothesis names its security consequence from the closed

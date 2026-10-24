@@ -1,6 +1,6 @@
 ---
 id: parsing_deserialization
-version: 1
+version: 2
 covers: ["cwe:20", "cwe:409", "cwe:502", "cwe:611", "cwe:674", "cwe:776", "cwe:827", "cwe:1287", "cwe:1333", "func:data:parse-json", "func:data:parse-xml", "func:data:parse-yaml", "func:data:deserialize-native", "func:data:regex", "func:data:archive-extract"]
 standards: ["cwe", "capec", "attack", "asvs5"]
 max_tokens: 1500
@@ -33,16 +33,22 @@ GENERATED
 ## Effective controls
 - Data-only formats bound to fixed DTO types: Jackson without polymorphic default typing or with a
   `PolymorphicTypeValidator` allowlist, `System.Text.Json`, `yaml.safe_load`, `json.loads`.
-- Java `ObjectInputFilter` (JEP 290) allowlists; .NET `SerializationBinder` that rejects by default.
+- Java `ObjectInputFilter` (JEP 290) class and resource limits, checked for the actual stream.
+  A restrictive Newtonsoft.Json `ISerializationBinder` can constrain type selection when
+  `TypeNameHandling` is needed, but does not by itself bound resource use or trusted-type behavior.
+  A .NET `SerializationBinder` does not make `BinaryFormatter` safe for untrusted input;
+  replacing that serializer is the relevant control.
 - XML hardening: `disallow-doctype-decl` true, `XMLConstants.FEATURE_SECURE_PROCESSING`, external
-  entity features false, `XmlResolver = null`, `defusedxml`.
+  entity features false, `XmlResolver = null`, `defusedxml`. Resolver restrictions address external
+  fetches; internal expansion, depth and resource exhaustion need separate limits.
 - Linear-time engines (RE2, Go `regexp`, Rust `regex`) or match timeouts (.NET `Regex` timeout).
 - Explicit limits: maximum depth, message size, element count, decompressed size and ratio.
 - Schema validation after a safe parse, on the same object later used.
 
 ## False positives
 - `readObject` on bytes the process itself signed and verified before parsing.
-- Modern XML stacks whose defaults already disable DTDs (.NET Core `XmlReader`, Go `encoding/xml`).
+- XML stacks whose observed settings prohibit DTD processing or external resolution (.NET Core
+  `XmlReader`, Go `encoding/xml`); internal expansion and resource limits are separate questions.
 - Regex flagged as ReDoS that runs on a bounded short field or on a linear engine.
 - `pickle` of local cache files under a directory only the service user writes.
 

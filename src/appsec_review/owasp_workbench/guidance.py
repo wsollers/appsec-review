@@ -5,6 +5,8 @@ from pathlib import Path
 from typing import Any
 
 from appsec_review.guidance import compose as shared
+from appsec_review.guidance.fragments import load_tool_names, validate_procedure_text
+from appsec_review.guidance.skills import load_runtime_skill
 
 
 ROLES = {
@@ -15,6 +17,14 @@ PERSONAS = {
     "authentication_session", "authorization_access_control", "cryptography_data_protection",
     "api_web", "mobile_platform", "build_supply_chain", "deployment_operations",
 }
+PROCEDURES = {
+    "applicability_router": "effective-control-verification",
+    "control_assessor": "effective-control-verification",
+    "evidence_verifier": "predicate-verification",
+    "independent_reviewer": "predicate-verification",
+    "result_adjudicator": "conflict-resolution",
+}
+KNOWLEDGE_SECTIONS = ("Viewpoint", "Effective controls", "False positives", "Evidence by predicate", "Hand-offs")
 
 
 def load_registry(repository_root: Path) -> dict[str, Any]:
@@ -58,13 +68,29 @@ def compose(repository_root: Path, *, role: str, persona: str | None,
         raise ValueError("task prompt must contain only the bounded question contract")
     governing = shared.governing_rules(repository_root)
     role_text = str(registry["roles"][role]["responsibility"])
-    persona_text = None if persona is None else str(registry["personas"][persona]["viewpoint"])
+    specialist = None
+    if persona is not None:
+        source_id = registry["persona_migrations"].get(persona, persona)
+        fragment = shared.load_fragment(repository_root, registry, kind="persona", fragment_id=source_id)
+        specialist = {
+            "id": persona, "source_id": source_id, "source_sha256": fragment.sha256,
+            "path": registry["personas"][source_id]["path"],
+            "text": "\n\n".join(f"## {heading}\n{fragment.sections[heading]}" for heading in KNOWLEDGE_SECTIONS),
+        }
+    procedures = []
+    if role in PROCEDURES:
+        procedure = load_runtime_skill(repository_root, PROCEDURES[role], job_id="job_owasp_control_assessment",
+                                       fallback_to_package=False)
+        validate_procedure_text(f"procedure {procedure.name}", procedure.body, load_tool_names(repository_root))
+        procedures.append({"id": procedure.name, "path": procedure.path, "text": procedure.text,
+                           "source_sha256": procedure.sha256})
     bundle = {
         "schema": "appsec-review/guidance-bundle/1",
         "registry_version": registry["version"],
         "governing_rules": governing,
         "role": {"id": role, "text": role_text},
-        "persona": None if persona is None else {"id": persona, "text": persona_text},
+        "persona": specialist,
+        "procedures": procedures,
         "task": dict(task),
     }
     bundle["sha256"] = shared.bundle_sha256(bundle)

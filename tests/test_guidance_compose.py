@@ -106,7 +106,7 @@ def test_persona_sections_are_selected_by_role_lens(repo: Path, taxonomy) -> Non
     blue = _compose(repo, taxonomy, role="blue_team_refuter", task="blue_control",
                     capability={"granted_tools": ["resolve_evidence"]})
     headings = [item["heading"] for item in blue["sections"][2]["sections"]]
-    assert headings == ["Viewpoint", "Effective controls", "False positives", "Evidence by predicate"]
+    assert headings == ["Viewpoint", "Effective controls", "False positives", "Evidence by predicate", "Hand-offs"]
     verifier = _compose(repo, taxonomy, role="independent_verifier", task="blind_verifier",
                         capability={"granted_tools": []})
     assert verifier["sections"][2]["lens"] == "skeptical"
@@ -276,7 +276,7 @@ def test_every_task_prompt_parses_and_fits_its_roles() -> None:
     tasks = registry["tasks"]["inference-security-review"]
     assert {"variant", "sink_up", "entry_down", "control_gap", "persona_sweep", "blue_control",
             "blue_reachability", "blind_verifier", "lead_red_stack", "lead_red_preconditions",
-            "lead_red_failure_modes", "adjudicate_claim"} == set(tasks)
+            "lead_red_failure_modes", "adjudicate_claim", "lead_severity"} == set(tasks)
     for task_id, record in tasks.items():
         task = parse_task((ROOT / record["path"]).read_text(), tools=TOOLS, expected_id=task_id)
         for role in task.roles:

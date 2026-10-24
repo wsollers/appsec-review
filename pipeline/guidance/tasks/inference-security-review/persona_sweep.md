@@ -12,7 +12,7 @@ stack.
 
 ## Expected result
 Zero or more hypotheses in the role's result schema with per-predicate evidence that names
-resolvable identities. Known claims in the task input are not re-reported. Finding nothing is a
+cell-local labels. Known claims in the task input are not re-reported. Finding nothing is a
 valid result and never a statement that the unit is free of defects.
 Account for every lead on the package menu exactly once; not developing a lead is never a
 statement that it is safe. Each hypothesis names its security consequence from the closed

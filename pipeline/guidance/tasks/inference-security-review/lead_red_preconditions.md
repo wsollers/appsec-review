@@ -13,7 +13,7 @@ in the closed precondition vocabulary.
 
 ## Expected result
 Zero or more proposals in the role's result schema, each listing its preconditions and
-per-predicate evidence that names resolvable identities. A configuration-scoped precondition needs
+per-predicate evidence that cites cell-local labels. A configuration-scoped precondition needs
 evidence for the configuration predicate.
 Account for the package lead exactly once: developed into a proposal, not developed by this lens
 (never a statement that it is safe), or blocked by a named gap. Each proposal names its security
