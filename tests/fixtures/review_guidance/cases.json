@@ -1,0 +1,166 @@
+{
+  "schema": "appsec-review/guidance-evaluation-cases/1",
+  "cases": [
+    {
+      "id": "case-01", "family": "native_capacity", "expected": "vulnerable",
+      "persona": "memory_safety_native", "stack": "cpp_rpc_service",
+      "condition": "memory_corruption", "cwe": "CWE-787",
+      "question": "Can a caller-provided frame overwrite the destination name?",
+      "sources": [
+        {"label": "S1", "path": "frame.cpp", "start_line": 1, "text": "struct Frame { char name[24]; };\nvoid decode(const unsigned char *wire, size_t size, Frame &out) {\n  if (size < 6) return;\n  unsigned length = wire[4] | (unsigned(wire[5]) << 8);\n  if (length > size - 6) return;\n  memcpy(out.name, wire + 6, length);\n}"},
+        {"label": "S2", "path": "service.cpp", "start_line": 1, "text": "// The public TCP handler passes every received frame, unchanged, to decode.\n// The caller allocates exactly one Frame on the stack."}
+      ],
+      "decisive_labels": ["S1", "S2"]
+    },
+    {
+      "id": "case-02", "family": "native_capacity", "expected": "safe",
+      "persona": "memory_safety_native", "stack": "cpp_rpc_service",
+      "condition": "memory_corruption", "cwe": "CWE-787",
+      "question": "Can a caller-provided frame overwrite the destination name?",
+      "sources": [
+        {"label": "S1", "path": "frame.cpp", "start_line": 1, "text": "struct Frame { char name[24]; };\nvoid decode(const unsigned char *wire, size_t size, Frame &out) {\n  if (size < 6) return;\n  unsigned length = wire[4] | (unsigned(wire[5]) << 8);\n  if (length > size - 6 || length > sizeof(out.name)) return;\n  memcpy(out.name, wire + 6, length);\n}"},
+        {"label": "S2", "path": "service.cpp", "start_line": 1, "text": "// The public TCP handler passes every received frame, unchanged, to decode.\n// The caller allocates exactly one Frame on the stack. No string operations follow."}
+      ],
+      "decisive_labels": ["S1"]
+    },
+    {
+      "id": "case-03", "family": "native_capacity", "expected": "abstain",
+      "persona": "memory_safety_native", "stack": "cpp_rpc_service",
+      "condition": "memory_corruption", "cwe": "CWE-787",
+      "question": "Can a caller-provided frame overwrite the destination name?",
+      "sources": [
+        {"label": "S1", "path": "frame.cpp", "start_line": 1, "text": "void decode(const unsigned char *wire, size_t size, Frame &out) {\n  if (size < 6) return;\n  unsigned length = wire[4] | (unsigned(wire[5]) << 8);\n  if (length > size - 6) return;\n  memcpy(out.name, wire + 6, length);\n}"}
+      ],
+      "decisive_labels": ["S1"]
+    },
+    {
+      "id": "case-04", "family": "object_authorization", "expected": "vulnerable",
+      "persona": "authorization_access_control", "stack": "python_service",
+      "condition": "authz_bypass", "cwe": "CWE-639",
+      "question": "Can an authenticated user read another tenant's export?",
+      "sources": [
+        {"label": "S1", "path": "exports.py", "start_line": 1, "text": "@authenticated\ndef download(user, export_id):\n    row = db.execute('SELECT body FROM exports WHERE id = ?', [export_id]).one()\n    return row.body"},
+        {"label": "S2", "path": "access_contract.txt", "start_line": 1, "text": "export_id is a caller-controlled integer. Exports are private to tenant_id. Database row-level security is disabled. authenticated validates only that the session user exists. No middleware performs object authorization."}
+      ],
+      "decisive_labels": ["S1", "S2"]
+    },
+    {
+      "id": "case-05", "family": "object_authorization", "expected": "safe",
+      "persona": "authorization_access_control", "stack": "python_service",
+      "condition": "authz_bypass", "cwe": "CWE-639",
+      "question": "Can an authenticated user read another tenant's export?",
+      "sources": [
+        {"label": "S1", "path": "exports.py", "start_line": 1, "text": "@authenticated\ndef download(user, export_id):\n    row = db.execute('SELECT body FROM exports WHERE id = ? AND tenant_id = ?', [export_id, user.tenant_id]).one_or_none()\n    if row is None:\n        raise NotFound()\n    return row.body"},
+        {"label": "S2", "path": "access_contract.txt", "start_line": 1, "text": "export_id is caller-controlled. Exports are private to tenant_id. user.tenant_id comes only from the server-authenticated session and is not writable through request parameters."}
+      ],
+      "decisive_labels": ["S1", "S2"]
+    },
+    {
+      "id": "case-06", "family": "object_authorization", "expected": "abstain",
+      "persona": "authorization_access_control", "stack": "python_service",
+      "condition": "authz_bypass", "cwe": "CWE-639",
+      "question": "Can an authenticated user read another tenant's export?",
+      "sources": [
+        {"label": "S1", "path": "exports.py", "start_line": 1, "text": "@authenticated\ndef download(user, export_id):\n    return export_service.read_for_user(user, export_id)"}
+      ],
+      "decisive_labels": ["S1"]
+    },
+    {
+      "id": "case-07", "family": "async_identity", "expected": "vulnerable",
+      "persona": "authorization_access_control", "stack": "python_service",
+      "condition": "authz_bypass", "cwe": "CWE-863",
+      "question": "Can a queued export disclose a resource after it has moved to another tenant?",
+      "sources": [
+        {"label": "S1", "path": "queue.py", "start_line": 1, "text": "def enqueue(user, resource_id):\n    assert db.owner(resource_id) == user.tenant_id\n    jobs.send({'id': resource_id, 'recipient': user.email, 'tenant': user.tenant_id})\ndef consume(job):\n    body = db.load_current_body(job['id'])\n    mail.send(job['recipient'], body)"},
+        {"label": "S2", "path": "queue_contract.txt", "start_line": 1, "text": "Jobs are integrity-protected but may wait for hours. Resource IDs remain stable when ownership transfers. New tenant-private data can replace the body before consumption. Worker database access is service-wide; load_current_body performs no authorization. Cross-tenant transfers are supported."}
+      ],
+      "decisive_labels": ["S1", "S2"]
+    },
+    {
+      "id": "case-08", "family": "async_identity", "expected": "safe",
+      "persona": "authorization_access_control", "stack": "python_service",
+      "condition": "authz_bypass", "cwe": "CWE-863",
+      "question": "Can a queued export disclose a resource after it has moved to another tenant?",
+      "sources": [
+        {"label": "S1", "path": "queue.py", "start_line": 1, "text": "def enqueue(user, resource_id):\n    assert db.owner(resource_id) == user.tenant_id\n    jobs.send({'id': resource_id, 'recipient': user.email, 'tenant': user.tenant_id})\ndef consume(job):\n    row = db.execute('SELECT body FROM resources WHERE id = ? AND tenant_id = ?', [job['id'], job['tenant']]).one_or_none()\n    if row is None:\n        return\n    mail.send(job['recipient'], row.body)"},
+        {"label": "S2", "path": "queue_contract.txt", "start_line": 1, "text": "Jobs are integrity-protected and tenant comes from the authenticated server session. The database SELECT is a single atomic snapshot. Ownership and replacement body change together in one transaction. The returned body is an immutable value. No alternate send path exists."}
+      ],
+      "decisive_labels": ["S1", "S2"]
+    },
+    {
+      "id": "case-09", "family": "async_identity", "expected": "abstain",
+      "persona": "authorization_access_control", "stack": "python_service",
+      "condition": "authz_bypass", "cwe": "CWE-863",
+      "question": "Can a queued export disclose a resource after it has moved to another tenant?",
+      "sources": [
+        {"label": "S1", "path": "queue.py", "start_line": 1, "text": "def enqueue(user, resource_id):\n    assert db.owner(resource_id) == user.tenant_id\n    jobs.send({'id': resource_id, 'recipient': user.email, 'tenant': user.tenant_id})\ndef consume(job):\n    return export_service.deliver_authorized(job)"}
+      ],
+      "decisive_labels": ["S1"]
+    },
+    {
+      "id": "case-10", "family": "deployed_configuration", "expected": "vulnerable",
+      "persona": "cloud_container_deployment", "stack": "generic",
+      "condition": "authn_bypass", "cwe": "CWE-306",
+      "question": "Can an unauthenticated external caller read private administrative data?",
+      "sources": [
+        {"label": "S1", "path": "effective.toml", "start_line": 1, "text": "[admin]\nenabled = true\nbind = '0.0.0.0:9000'\nauthentication = 'none'"},
+        {"label": "S2", "path": "deployment_receipt.txt", "start_line": 1, "text": "Accepted effective configuration for the deployed instance is effective.toml. The administrative route /private returns tenant-private records without further authorization. Public ingress forwards port 9000. No upstream authentication, network allowlist, or service-mesh authorization is present."}
+      ],
+      "decisive_labels": ["S1", "S2"]
+    },
+    {
+      "id": "case-11", "family": "deployed_configuration", "expected": "safe",
+      "persona": "cloud_container_deployment", "stack": "generic",
+      "condition": "authn_bypass", "cwe": "CWE-306",
+      "question": "Can an unauthenticated external caller read private administrative data?",
+      "sources": [
+        {"label": "S1", "path": "effective.toml", "start_line": 1, "text": "[admin]\nenabled = true\nbind = '0.0.0.0:9000'\nauthentication = 'mutual_tls'"},
+        {"label": "S2", "path": "deployment_receipt.txt", "start_line": 1, "text": "Accepted effective configuration is effective.toml. Every administrative request is rejected before routing unless its client certificate validates to the private admin CA. Only authorized administrators hold those keys. No alternative plaintext listener or auth bypass path exists."}
+      ],
+      "decisive_labels": ["S1", "S2"]
+    },
+    {
+      "id": "case-12", "family": "deployed_configuration", "expected": "abstain",
+      "persona": "cloud_container_deployment", "stack": "generic",
+      "condition": "authn_bypass", "cwe": "CWE-306",
+      "question": "Can an unauthenticated external caller read private administrative data?",
+      "sources": [
+        {"label": "S1", "path": "defaults.toml", "start_line": 1, "text": "[admin]\nenabled = true\nbind = '0.0.0.0:9000'\nauthentication = 'none'"},
+        {"label": "S2", "path": "startup.py", "start_line": 1, "text": "settings = load_defaults('defaults.toml')\nsettings.update(load_deployment_overlay())\nstart_admin(settings['admin'])"}
+      ],
+      "decisive_labels": ["S1", "S2"]
+    },
+    {
+      "id": "case-13", "family": "state_invariant", "expected": "vulnerable",
+      "persona": "business_logic_abuse", "stack": "python_service",
+      "condition": "race_condition", "cwe": "CWE-362",
+      "question": "Can concurrent authorized requests refund one purchase more than once?",
+      "sources": [
+        {"label": "S1", "path": "refund.py", "start_line": 1, "text": "def refund(user, purchase_id):\n    purchase = db.get_owned_purchase(user.id, purchase_id)\n    if purchase.refunded:\n        return\n    payments.credit(user.id, purchase.amount)\n    db.mark_refunded(purchase_id)"},
+        {"label": "S2", "path": "payments_contract.txt", "start_line": 1, "text": "Multiple workers can execute refund concurrently. Database calls each commit independently, without locks or a surrounding transaction. credit is non-idempotent and adds money on every call. No unique refund key is enforced. Users can submit concurrent requests for their own purchases."}
+      ],
+      "decisive_labels": ["S1", "S2"]
+    },
+    {
+      "id": "case-14", "family": "state_invariant", "expected": "safe",
+      "persona": "business_logic_abuse", "stack": "python_service",
+      "condition": "race_condition", "cwe": "CWE-362",
+      "question": "Can concurrent authorized requests refund one purchase more than once?",
+      "sources": [
+        {"label": "S1", "path": "refund.py", "start_line": 1, "text": "def refund(user, purchase_id):\n    purchase = db.get_owned_purchase(user.id, purchase_id)\n    payments.credit_once(key=('refund', purchase_id), account=user.id, amount=purchase.amount)\n    db.mark_refunded(purchase_id)"},
+        {"label": "S2", "path": "payments_contract.txt", "start_line": 1, "text": "credit_once atomically inserts the unique key and credits the balance in the same serializable database transaction. The key has a database UNIQUE constraint; a conflicting transaction returns its prior result without crediting again. Keys persist permanently. Purchase IDs are globally unique and immutable."}
+      ],
+      "decisive_labels": ["S1", "S2"]
+    },
+    {
+      "id": "case-15", "family": "state_invariant", "expected": "abstain",
+      "persona": "business_logic_abuse", "stack": "python_service",
+      "condition": "race_condition", "cwe": "CWE-362",
+      "question": "Can concurrent authorized requests refund one purchase more than once?",
+      "sources": [
+        {"label": "S1", "path": "refund.py", "start_line": 1, "text": "def refund(user, purchase_id):\n    purchase = db.get_owned_purchase(user.id, purchase_id)\n    return payments.issue_refund(purchase)"}
+      ],
+      "decisive_labels": ["S1"]
+    }
+  ]
+}

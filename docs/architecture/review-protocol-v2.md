@@ -159,8 +159,9 @@ application authorizes each against the cell capability and runs it in-process o
 the next turn carries the bounded rows. The tool names and parameter schemas are the ones published
 in `docs/schemas/retrieval-mcp-tools.json`, and the authority checks are the ones the MCP adapter
 enforces, but the transport is the application loop. The MCP stdio adapter (`appsec_review.mcp`) is a
-separate, read-only surface for external clients and the OWASP workbench. Runtime skills under
-`pipeline/skills/` serve the build and planning workers and say nothing about review retrieval.
+separate, read-only surface for external clients and the OWASP workbench. Registered runtime skills under
+`pipeline/skills/` now also supply bounded, role-selected review procedures; they do not grant tools
+or widen retrieval capabilities. See [role-selected procedures](guidance-procedures.md).
 
 ### 5.2 The tool catalog in the prompt
 

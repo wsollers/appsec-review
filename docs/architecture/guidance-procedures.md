@@ -70,6 +70,11 @@ tests.
 writer guidance (12,500 characters). These are deterministic regression bounds, not token-usage,
 latency or detection-quality claims; task input and other personas can change prompt size.
 
+The [opt-in evaluation harness](../operations/guidance-evaluation.md) uses separate vulnerable,
+fixed and incomplete-evidence fixtures and the actual role bundles. It reports role-appropriate
+quality and usage metrics and supports a hash-distinct procedure-only ablation. Offline tests do
+not establish live performance gains.
+
 Technical reference points:
 - [Python TAR extraction filters](https://docs.python.org/3/library/tarfile.html#extraction-filters):
   introduced in 3.12, `data` default in 3.14; ZIP APIs are separate.
