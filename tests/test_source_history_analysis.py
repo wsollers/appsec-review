@@ -165,14 +165,19 @@ def emulate_tree_sitter(request_path: Path, output_path: Path, target: Path) -> 
 
 class LocalDocker:
     """Emulate ``docker run``: tool-git maps mounts and environment onto host git, and tool-tree-sitter
-    is emulated for Python sources."""
+    is emulated for Python sources. Track named runs for executor cleanup."""
 
     def __init__(self, *, tree_sitter_fails: bool = False) -> None:
         self.runs: list[dict[str, object]] = []
+        self.containers: set[str] = set()
         self.tree_sitter_fails = tree_sitter_fails
 
     def __call__(self, argv, timeout):
         argv = list(argv)
+        if argv[:3] == ["docker", "rm", "--force"]:
+            assert len(argv) == 4 and argv[3] in self.containers, argv
+            self.containers.remove(argv[3])
+            return CommandOutcome(0, b"", b"")
         if argv[:2] == ["docker", "inspect"]:
             return CommandOutcome(0, b'[{"Source":"/work","Destination":"/work"}]\n', b"")
         if argv[:3] == ["docker", "image", "inspect"]:
@@ -181,6 +186,7 @@ class LocalDocker:
                 return CommandOutcome(0, pinned.expected_image_id.encode() + b"\n", b"")
             return CommandOutcome(0, b"sha256:" + b"a" * 64 + b"\n", b"")
         assert argv[:2] == ["docker", "run"], argv
+        self.containers.add(argv[argv.index("--name") + 1])
         mounts: dict[str, str] = {}
         environment: dict[str, str] = {}
         workdir = "/"
@@ -247,6 +253,34 @@ class LocalDocker:
         code = 128 - completed.returncode if completed.returncode < 0 else completed.returncode
         self.runs.append({"arguments": arguments, "environment": environment, "exit": code, "file_size": file_size})
         return CommandOutcome(code, completed.stdout, completed.stderr)
+
+
+@pytest.mark.parametrize("tree_sitter_fails", (False, True))
+def test_local_docker_cleanup_only_removes_its_named_run(tmp_path: Path, tree_sitter_fails: bool) -> None:
+    docker = LocalDocker(tree_sitter_fails=tree_sitter_fails)
+    name = "appsec-history-fixture"
+    (tmp_path / "request.json").write_text(json.dumps({
+        "files": [], "scope_id": "fixture", "language": "python",
+    }), encoding="utf-8")
+    outcome = docker([
+        "docker", "run", "--rm", "--name", name, "--network", "none",
+        "--mount", f"type=bind,src={tmp_path},dst=/target,readonly",
+        "--mount", f"type=bind,src={tmp_path},dst=/scratch",
+        "--entrypoint", "/opt/appsec/parser.py", "fixture-image",
+        "parse", "--request", "/scratch/request.json", "--output", "/scratch/output.json",
+    ], 60)
+    assert outcome.exit_code == int(tree_sitter_fails)
+    assert docker.containers == {name}
+    for command in (
+        ["docker", "rm", "--force", "unowned"],
+        ["docker", "rm", "--force", name, "unowned"],
+        ["docker", "rm", name],
+    ):
+        with pytest.raises(AssertionError):
+            docker(command, 60)
+        assert docker.containers == {name}
+    assert docker(["docker", "rm", "--force", name], 60).exit_code == 0
+    assert docker.containers == set()
 
 
 def git(repo: Path, *args: str, when: int | None = None, check: bool = True,
