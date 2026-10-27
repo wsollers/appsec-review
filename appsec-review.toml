@@ -368,6 +368,10 @@ workers = 1
 max_document_files = 128
 max_document_file_bytes = 256000
 max_document_records = 2000
+max_document_chunk_lines = 80
+max_document_chunk_bytes = 4096
+max_document_parse_depth = 64
+max_document_parse_nodes = 200000
 
 [jobs.job_target_catalog.steps.repository_discovery]
 workers = 1

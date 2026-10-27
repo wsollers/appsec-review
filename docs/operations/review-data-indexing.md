@@ -16,7 +16,10 @@ immutable shards it publishes.
 consumes the catalog's hash-pinned file inventory and publishes the `documents` shard into the
 accepted catalog manifest. This indexing job carries that shard forward and audits its dataset
 declaration. Use `search`, `find`, and `read_excerpt` with `index=documents` to inspect declared
-OpenAPI operations and target-owned test/document intent. Missing files and unsupported formats
+OpenAPI/Swagger HTTP operations, AsyncAPI, gRPC and GraphQL declarations, bounded full-text
+document chunks, and target-owned test/document intent. Chunks and operations retain inclusive
+source-line and byte spans. Non-HTTP declarations remain searchable records; they are not promoted
+to HTTP route-context candidates. Missing files and unsupported formats
 appear as coverage gaps; neither a design statement nor a test is observed enforcement.
 `precompute.document_context` groups exact method/route and trust-boundary identifiers from the
 accepted document shard. Query it with `query_precomputed(query_set="document_context")`; its facts

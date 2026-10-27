@@ -16,9 +16,16 @@ from typing import Any, Iterable, Mapping
 from urllib.parse import urlsplit
 
 from appsec_review.retrieval.model import normalize_relative_path
+from appsec_review.indexing.document_interfaces import (
+    DocumentParseError, idl_operations, structured_operations,
+)
 
 
-KINDS = frozenset({"design", "threat_model", "dfd", "openapi", "postman", "unit_test"})
+PARSER_IDENTITY = "target-documents/2"
+ADDITIONAL_INTERFACE_KINDS = frozenset({"asyncapi", "protobuf", "graphql"})
+KINDS = frozenset({"design", "threat_model", "dfd", "openapi", "postman", "unit_test"}) | ADDITIONAL_INTERFACE_KINDS
+_TEXT_SUFFIXES = {".md", ".markdown", ".rst", ".adoc", ".asciidoc", ".org", ".txt"}
+_DESIGN_DIRS = {"docs", "design", "designs", "architecture", "adr", "adrs", "specs", "specifications"}
 METHODS = frozenset({"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"})
 _HEADING = re.compile(r"^#{1,6} +(.+?)\s*$")
 _THREAT = re.compile(r"^\|\s*([STRIDE]\d+)\s*\|(.+?)\|\s*(TB\d+(?:/TB\d+)*)\s*\|(.+?)\|(.+?)\|\s*$")
@@ -48,19 +55,25 @@ def select_document_inventory(files: Iterable[Mapping[str, Any]]) -> tuple[dict[
         name = parts[-1]
         suffix = Path(name).suffix.lower()
         kind: str | None = None
-        if suffix == ".md" and "docs" in parts[:-1]:
+        if suffix == ".proto":
+            kind = "protobuf"
+        elif suffix in {".graphql", ".graphqls", ".gql"}:
+            kind = "graphql"
+        elif suffix in {".json", ".yaml", ".yml"} and "asyncapi" in name:
+            kind = "asyncapi"
+        elif suffix in _TEXT_SUFFIXES and set(parts[:-1]) & _DESIGN_DIRS:
             if "threat" in name or "stride" in name:
                 kind = "threat_model"
             elif "dfd" in name or "data-flow" in name or "data_flow" in name:
                 kind = "dfd"
             else:
                 kind = "design"
-        elif suffix in {".json", ".ts"} and ("openapi" in name or "swagger" in name):
+        elif suffix in {".json", ".yaml", ".yml", ".ts"} and ("openapi" in name or "swagger" in name):
             kind = "openapi"
         elif suffix == ".json" and ("postman" in parts or "postman" in name):
             kind = "postman"
-        elif (name.startswith("test_") and suffix == ".py") or re.search(
-            r"\.(?:test|spec)\.(?:[cm]?js|[cm]?ts|tsx|jsx|py)$", name
+        elif (name.startswith("test_") and suffix in {".py", ".rs", ".c", ".cpp"}) or re.search(
+            r"\.(?:test|spec)\.(?:[cm]?js|[cm]?ts|tsx|jsx|py)$|_test\.go$|_spec\.rb$", name
         ):
             kind = "unit_test"
         if kind is not None:
@@ -74,9 +87,44 @@ def _route(value: str) -> str:
     return re.sub(r"/\d+(?=/|$)", "/{id}", path).rstrip("/") or "/"
 
 
+def _text_chunks(content: str, suffix: str, max_lines: int, max_bytes: int):
+    lines = content.splitlines(keepends=True)
+    start, size, fence = 0, 0, ""
+    for index, line in enumerate(lines):
+        marker = re.match(r"^\s*(`{3,}|~{3,})", line)
+        heading = False
+        if marker:
+            token = marker.group(1)
+            if not fence:
+                fence = token
+            elif token[0] == fence[0] and len(token) >= len(fence):
+                fence = ""
+        elif not fence:
+            heading = bool(_HEADING.match(line))
+            if suffix in {".adoc", ".asciidoc", ".org"}:
+                heading = bool(re.match(r"^(?:={1,6}|\*{1,6}) +\S", line))
+            elif suffix == ".rst" and index + 1 < len(lines):
+                underline = lines[index + 1].strip()
+                heading = bool(line.strip() and len(underline) >= len(line.strip())
+                               and re.fullmatch(r"([=\-~^\"'`#+])\1{2,}", underline))
+        length = len(line.encode("utf-8"))
+        if index > start and (heading or index - start >= max_lines or size + length > max_bytes):
+            yield start + 1, index, "".join(lines[start:index]), None
+            start, size = index, 0
+        if length > max_bytes:
+            yield index + 1, index + 1, "", "single document line exceeds chunk byte bound"
+            start, size = index + 1, 0
+        else:
+            size += length
+    if start < len(lines):
+        yield start + 1, len(lines), "".join(lines[start:]), None
+
+
 def collect_target_documents(
     target_root: Path, target_snapshot: str, inventory: Iterable[Mapping[str, str]], *,
     max_files: int = 128, max_file_bytes: int = 256_000, max_records: int = 2_000,
+    max_chunk_lines: int = 80, max_chunk_bytes: int = 4096,
+    max_parse_depth: int = 64, max_parse_nodes: int = 200_000,
 ) -> DocumentResult:
     """Extract bounded facts from an accepted inventory, without executing target code.
 
@@ -85,7 +133,8 @@ def collect_target_documents(
     """
     if not target_snapshot:
         raise ValueError("target snapshot is required")
-    if min(max_files, max_file_bytes, max_records) < 1:
+    if min(max_files, max_file_bytes, max_records, max_chunk_lines, max_chunk_bytes,
+           max_parse_depth, max_parse_nodes) < 1:
         raise ValueError("collection bounds must be positive")
     root = target_root.resolve()
     records: list[dict[str, Any]] = []
@@ -95,17 +144,19 @@ def collect_target_documents(
         gaps.append({"path": "", "reason": "file_limit", "detail": str(max_files)})
 
     def emit(path: str, sha: str, kind: str, subtype: str, line: int, text: str,
-             fields: Mapping[str, Any] | None = None) -> None:
+             fields: Mapping[str, Any] | None = None, *, end_line: int | None = None) -> None:
         if len(records) >= max_records:
             if not any(gap["reason"] == "record_limit" for gap in gaps):
                 gaps.append({"path": path, "reason": "record_limit", "detail": str(max_records)})
             return
-        record_id = hashlib.sha256(json.dumps([target_snapshot, path, sha, kind, subtype, line, text],
+        end_line = line if end_line is None else end_line
+        record_id = hashlib.sha256(json.dumps([target_snapshot, path, sha, kind, subtype, line, end_line, text],
                                                ensure_ascii=False).encode()).hexdigest()
         records.append({"id": record_id, "target_snapshot": target_snapshot, "path": path,
                         "file_sha256": sha, "kind": kind, "subtype": subtype,
-                        "authority": "declared" if kind == "openapi" else "intent",
-                        "line": line, "text": text[:500], "fields": dict(fields or {})})
+                        "authority": "declared" if kind in {"openapi", "asyncapi", "protobuf", "graphql"} else "intent",
+                        "line": line, "end_line": end_line,
+                        "text": text if subtype == "text_chunk" else text[:500], "fields": dict(fields or {})})
 
     for entry in entries[:max_files]:
         raw_path, sha, kind = entry.get("path", ""), entry.get("sha256", ""), entry.get("kind", "")
@@ -158,6 +209,31 @@ def collect_target_documents(
                              {"boundary_id": boundary.group(1)})
                     if "-->" in line:
                         emit(path, sha, kind, "flow", number, line.strip())
+            for start, end, text, gap in _text_chunks(content, source.suffix.lower(),
+                                                      max_chunk_lines, max_chunk_bytes):
+                if gap:
+                    gaps.append({"path": path, "reason": "chunk_byte_limit", "detail": f"line {start}: {gap}"})
+                elif text.strip():
+                    emit(path, sha, kind, "text_chunk", start, text, end_line=end)
+        elif kind in {"asyncapi", "protobuf", "graphql"} or (
+            kind == "openapi" and source.suffix.lower() in {".yaml", ".yml"}
+        ):
+            parser = idl_operations if kind in {"protobuf", "graphql"} else structured_operations
+            try:
+                operations, limitations = parser(content, kind, max_depth=max_parse_depth,
+                                                  max_nodes=max_parse_nodes)
+            except DocumentParseError as exc:
+                gaps.append({"path": path, "reason": "parse_error", "detail": str(exc)})
+                continue
+            for operation in operations:
+                start, end = operation["start_line"], operation["end_line"]
+                fields = {key: value for key, value in operation.items() if key not in {"start_line", "end_line"}}
+                emit(path, sha, kind, "operation", start,
+                     f"{operation['method']} {operation['route']}", fields, end_line=end)
+            if not operations:
+                limitations.append("no supported interface operation")
+            gaps.extend({"path": path, "reason": "interface_coverage", "detail": gap}
+                        for gap in sorted(set(limitations)))
         elif kind == "unit_test":
             for number, line in enumerate(lines, 1):
                 match = _TEST.search(line)
@@ -177,6 +253,21 @@ def collect_target_documents(
                 gaps.append({"path": path, "reason": "parse_error", "detail": "invalid JSON"})
                 continue
             if kind == "openapi":
+                if isinstance(document, dict) and document.get("swagger") == "2.0":
+                    try:
+                        operations, limitations = structured_operations(
+                            content, kind, max_depth=max_parse_depth, max_nodes=max_parse_nodes)
+                    except DocumentParseError as exc:
+                        gaps.append({"path": path, "reason": "parse_error", "detail": str(exc)})
+                        continue
+                    for operation in operations:
+                        emit(path, sha, kind, "operation", operation["start_line"],
+                             f"{operation['method']} {operation['route']}",
+                             {key: value for key, value in operation.items()
+                              if key not in {"start_line", "end_line"}}, end_line=operation["end_line"])
+                    gaps.extend({"path": path, "reason": "interface_coverage", "detail": gap}
+                                for gap in limitations)
+                    continue
                 if not isinstance(document, dict) or not str(document.get("openapi", "")).startswith("3.") \
                         or not isinstance(document.get("paths"), dict):
                     gaps.append({"path": path, "reason": "parse_error", "detail": "invalid OpenAPI 3 document"})

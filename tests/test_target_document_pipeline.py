@@ -33,7 +33,7 @@ FIXTURES = ROOT / "tests" / "fixtures" / "northwinds_documents"
 def _run(tmp_path: Path, *, openapi_source: bool = False, fts_disabled: bool = False,
          implementation: bool = False, duplicate_route: bool = False,
          releases: dict[str, str] | None = None, assurance_mode: str = "strict",
-         include_packages: bool = False):
+         include_packages: bool = False, extra_documents: dict[str, str] | None = None):
     config_path = tmp_path / "appsec-review.toml"
     config_text = (ROOT / "appsec-review.toml").read_text(encoding="utf-8")
     if fts_disabled:
@@ -72,6 +72,10 @@ def _run(tmp_path: Path, *, openapi_source: bool = False, fts_disabled: bool = F
     if duplicate_route:
         (target / "backend" / "duplicate.routes.ts").write_text(
             "router.get('/api/v1/orders/:id', handler);\n", encoding="utf-8")
+    for name, text in (extra_documents or {}).items():
+        path = target / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
     jobs = [build_intake(), build_catalog()]
     if include_packages:
         jobs.extend((build_indexing(), build_packages()))
@@ -295,6 +299,38 @@ def test_document_analysis_publishes_bounded_route_and_boundary_context(tmp_path
     assert boundary["payload"]["fact_type"] == "boundary_context"
     assert boundary["payload"]["result"]["members"]["dfd"]
     assert boundary["payload"]["result"]["members"]["threat_model"]
+
+
+def test_ported_documents_flow_through_existing_indexes_and_source_retrieval(tmp_path):
+    documents = {
+        "architecture/checkout.md": "# Checkout\n\nproseonlytoken describes the checkout boundary.\n",
+        "api/openapi.yaml": "openapi: 3.0.3\npaths:\n  /checkout:\n    get:\n      responses: {}\n",
+        "api/checkout.proto": "service Checkout { rpc Submit (Request) returns (Reply); }\n",
+        "api/schema.graphql": "type Mutation { checkout(id: ID!): Receipt }\n",
+    }
+    config, target, outcome, _ = _run(tmp_path, fts_disabled=True, extra_documents=documents)
+    JobRunner(config).run(build_indexing(), run_id=outcome["run_id"], target_root=target,
+                          source_fingerprint=source_fingerprint(target))
+    core = RetrievalCore(config.runtime.runs_dir, outcome["run_id"])
+    text = core.search(query="proseonlytoken", indexes=("documents",), limit=10)["results"]
+    assert len(text) == 1
+    assert text[0]["payload"]["subtype"] == "text_chunk"
+    assert text[0]["payload"]["authority"] == "intent"
+    excerpt = core.read_excerpt(identity=text[0]["identity"], context_lines=0)["results"][0]["excerpt"]
+    assert "proseonlytoken" in excerpt
+    assert text[0]["location"]["end_line"] > text[0]["location"]["start_line"]
+    for path in ("api/openapi.yaml", "api/checkout.proto", "api/schema.graphql"):
+        record = core.find(path=path, kind="document_record", indexes=("documents",), limit=10)["results"][0]
+        assert record["payload"]["authority"] == "declared"
+        location = record["location"]
+        raw = (target / path).read_bytes()
+        assert raw[location["start_byte"]:location["end_byte"]]
+        assert "source" not in record["payload"].get("authority", "")
+    rows = core.query_precomputed(query_set="document_context", limit=100)["results"]
+    route = next(row for row in rows if row["payload"]["result"]["key"] == "GET /checkout")
+    assert route["payload"]["result"]["members"]["openapi"]
+    assert route["payload"]["result"]["inference_use"] == "review context only; verify behavior in source or run evidence"
+    assert not any(row["payload"]["result"]["key"].startswith(("RPC ", "MUTATION ")) for row in rows)
 
 
 def test_document_analysis_reports_missing_declaration_without_finding(tmp_path: Path) -> None:

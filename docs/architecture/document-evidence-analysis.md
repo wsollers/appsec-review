@@ -30,6 +30,40 @@ Dagster `wave1_review`. It accepts only inventory paths and hashes, verifies tar
 publishes the `documents` shard. Parser limitations, absent kinds, and bounded truncation are
 named gaps. A changed accepted file hash or escaped path is an integrity failure.
 
+The same producer accepts Markdown, reStructuredText, AsciiDoc, Org and plain-text documents under
+`docs`, `design`, `designs`, `architecture`, `adr`, `adrs`, `specs` and `specifications`. In addition
+to existing heading, threat and boundary facts, it indexes bounded `text_chunk` records so prose
+between headings is searchable. Each chunk retains its exact inclusive source-line span and byte
+range. Oversized individual lines and record/file limits are explicit gaps, not silently complete
+text coverage.
+
+Declared interfaces include OpenAPI 3 JSON/YAML, Swagger 2 JSON/YAML, AsyncAPI 2/3, protobuf/gRPC,
+and GraphQL schema root fields. JSON/YAML specifications are selected by `openapi`, `swagger` or
+`asyncapi` in the filename; `.proto`, `.graphql`, `.graphqls` and `.gql` are recognized by suffix.
+YAML composition rejects aliases, anchors, duplicate keys and custom tags, with depth/node bounds.
+References are never fetched. Unresolved references and unsupported or malformed declarations
+remain coverage gaps. HTTP operations join the existing route-context product; asynchronous,
+gRPC and GraphQL declarations are searchable source-located records, not HTTP route candidates or
+proof that an implementation exists. No additional job or MCP endpoint is introduced.
+The additional AsyncAPI/gRPC/GraphQL coverage areas are published when those inputs are present;
+a target need not contain all three formats for its existing document dataset to remain indexed.
+
+Collection settings live in `[jobs.job_target_catalog.settings]`:
+
+| Setting | Default | Bound |
+| --- | ---: | --- |
+| `max_document_files` | 128 | accepted files |
+| `max_document_file_bytes` | 256000 | bytes per file |
+| `max_document_records` | 2000 | all facts and text chunks combined |
+| `max_document_chunk_lines` | 80 | lines per text chunk |
+| `max_document_chunk_bytes` | 4096 | UTF-8 bytes per text chunk |
+| `max_document_parse_depth` | 64 | specification/interface nesting |
+| `max_document_parse_nodes` | 200000 | YAML parser events or IDL tokens |
+
+These settings and the parser identity participate in the documents-shard fingerprint. Operators
+must update declared component releases when deploying changed producer software. PDF/DOCX and
+other binary conversion remains deferred; this path does not invoke converters, OCR or target code.
+
 `job_review_data_indexing.precompute.document_context` reads only the accepted `documents` shard.
 It groups OpenAPI operations, Postman requests, and unit-test requests by exact method and route;
 DFD boundaries and STRIDE threats are grouped by exact boundary ID. It publishes one

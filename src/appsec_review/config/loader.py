@@ -50,6 +50,10 @@ class TargetDocumentSettings:
     max_files: int
     max_file_bytes: int
     max_records: int
+    max_chunk_lines: int = 80
+    max_chunk_bytes: int = 4096
+    max_parse_depth: int = 64
+    max_parse_nodes: int = 200_000
 
     def __post_init__(self) -> None:
         if not 1 <= self.max_files <= 10_000:
@@ -58,6 +62,11 @@ class TargetDocumentSettings:
             raise ValueError("target document max_file_bytes is invalid")
         if not 1 <= self.max_records <= 100_000:
             raise ValueError("target document max_records is invalid")
+        for name, upper in (("max_chunk_lines", 1000), ("max_chunk_bytes", 65536),
+                            ("max_parse_depth", 128), ("max_parse_nodes", 1_000_000)):
+            value = getattr(self, name)
+            if type(value) is not int or not 1 <= value <= upper:
+                raise ValueError(f"target document {name} is invalid")
 
 
 @dataclass(frozen=True, slots=True)
@@ -1043,12 +1052,17 @@ def load_config(path: str | Path = "appsec-review.toml", *, overlay: str | Path 
                 compiler_artifact_collection_overrides=artifact_overrides,
             )
         elif job_id == "job_target_catalog":
-            if set(settings) != {"max_document_files", "max_document_file_bytes", "max_document_records"}:
+            required = {"max_document_files", "max_document_file_bytes", "max_document_records"}
+            optional = {"max_document_chunk_lines", "max_document_chunk_bytes",
+                        "max_document_parse_depth", "max_document_parse_nodes"}
+            if not required <= set(settings) or set(settings) - required - optional:
                 raise ValueError("jobs.job_target_catalog.settings must define document collection bounds")
             typed_settings = TargetDocumentSettings(
                 max_files=int(settings["max_document_files"]),
                 max_file_bytes=int(settings["max_document_file_bytes"]),
                 max_records=int(settings["max_document_records"]),
+                **{key.replace("max_document_", "max_", 1): settings[key]
+                   for key in optional if key in settings},
             )
         elif job_id == "job_document_issue_analysis":
             if set(settings) != {"max_source_files", "max_source_file_bytes"}:

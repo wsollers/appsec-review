@@ -16,7 +16,8 @@ from appsec_review.jobs.build_discovery import (
     source_only_scopes, unsupported_build_gaps,
 )
 from appsec_review.indexing.target_documents import (
-    KINDS, InventoryIntegrityError, collect_target_documents, select_document_inventory,
+    ADDITIONAL_INTERFACE_KINDS, KINDS, PARSER_IDENTITY, InventoryIntegrityError,
+    collect_target_documents, select_document_inventory,
 )
 from appsec_review.retrieval import (
     EntityKind, EntityRecord, IndexBuilder, IndexIdentity, LogicalIdentity, RelationKind,
@@ -373,8 +374,10 @@ def build_job(*, fail_task: str | None = None) -> Job:
             producer_artifacts=[partition["artifact"]],
             tool_identity={"producer": "job_target_catalog", "limits": {
                 "files": settings.max_files, "file_bytes": settings.max_file_bytes,
-                "records": settings.max_records}},
-            parser_identity=unit.job.review_policy.releases.values.get("target_documents", "undeclared"),
+                "records": settings.max_records, "chunk_lines": settings.max_chunk_lines,
+                "chunk_bytes": settings.max_chunk_bytes, "parse_depth": settings.max_parse_depth,
+                "parse_nodes": settings.max_parse_nodes}},
+            parser_identity=f"{PARSER_IDENTITY}:{unit.job.review_policy.releases.values.get('target_documents', 'undeclared')}",
             normalizer_identity="retrieval-normalizer/1", mapping_identity="source-line-exact/1",
         )
         path = unit.job.run_root / "data" / "indices" / "documents" / f"{fingerprint}.sqlite"
@@ -382,10 +385,13 @@ def build_job(*, fail_task: str | None = None) -> Job:
             _target(unit), unit.job.source_fingerprint, entries,
             max_files=settings.max_files, max_file_bytes=settings.max_file_bytes,
             max_records=settings.max_records,
+            max_chunk_lines=settings.max_chunk_lines, max_chunk_bytes=settings.max_chunk_bytes,
+            max_parse_depth=settings.max_parse_depth, max_parse_nodes=settings.max_parse_nodes,
         )
         kinds = {entry["kind"] for entry in entries}
+        coverage_kinds = (KINDS - ADDITIONAL_INTERFACE_KINDS) | kinds
         gaps = []
-        for kind in sorted(KINDS - kinds):
+        for kind in sorted(coverage_kinds - kinds):
             gaps.append(f"{kind}: no accepted target document")
         gaps.extend(f"{item['path'] or '<inventory>'}: {item['reason']} ({item['detail']})"
                     for item in result.gaps)
@@ -415,17 +421,18 @@ def build_job(*, fail_task: str | None = None) -> Job:
                     position += len(line)
                 line_offsets[source_path] = offsets
             offsets = line_offsets[source_path]
-            if not 1 <= record["line"] <= len(offsets):
+            if not 1 <= record["line"] <= record["end_line"] <= len(offsets):
                 raise ValueError(f"document source location cannot be resolved: {source_path}")
-            start, end = offsets[record["line"] - 1]
+            start = offsets[record["line"] - 1][0]
+            end = offsets[record["end_line"] - 1][1]
             identity = LogicalIdentity.derive(EntityKind.DOCUMENT_RECORD, unit.job.source_fingerprint,
                                               {"record_id": record["id"]})
             identities[record["id"]] = identity.value
             location = SourceLocation(
                 target_snapshot=unit.job.source_fingerprint, path=source_path,
                 file_sha256=record["file_sha256"], start_byte=start, end_byte=end,
-                start_line=record["line"], end_line=record["line"], start_column=1,
-                end_column=1, producer_location={"extractor": "target-documents/1", "line": record["line"]},
+                start_line=record["line"], end_line=record["end_line"], start_column=1,
+                end_column=1, producer_location={"extractor": PARSER_IDENTITY, "line": record["line"]},
                 mapping_method="source-line-exact", confidence=1.0,
             )
             builder.add_entity(EntityRecord(
@@ -440,7 +447,7 @@ def build_job(*, fail_task: str | None = None) -> Job:
                 bool(link["exact"]), 1.0 if link["exact"] else 0.5,
                 payload={"relation": link["relation"], "authority": link["authority"]},
             ))
-        for kind in sorted(KINDS):
+        for kind in sorted(coverage_kinds):
             count = sum(record["kind"] == kind for record in result.records)
             builder.add_coverage(f"target-documents:{kind}",
                                  "complete" if count and not gaps else "partial" if count else "unavailable",
