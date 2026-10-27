@@ -168,7 +168,15 @@ The job's terminal status is `PARTIAL` whenever any named gap exists.
   order.
 
 Resume reruns the job when the mainline commit, object format, or shallow boundary changes, even if
-the tree bytes did not. A rerun invalidates the plan and everything below it. These gaps are marked
+the tree bytes did not. The history shard fingerprint binds the ranked signals, hotspots,
+normalized changes, GitHub enrichment artifact, and exact retained Git log/message identities.
+It also binds the actual Git image, configured resource bounds, and bounded stream-parser version,
+while retaining the line-history, symbol, complexity, and SII identities. Identical rankings do not
+permit reuse when their retained provenance changes.
+As with other producers, deployment operators must bump the declared source-history component
+release when deploying changed software; the runtime does not hash installed implementation files.
+
+A rerun invalidates the plan and everything below it. These gaps are marked
 retriable, so a later resume retries them:
 
 - GitHub rate limiting;

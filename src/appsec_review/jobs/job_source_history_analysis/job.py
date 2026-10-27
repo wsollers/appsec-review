@@ -242,6 +242,33 @@ def _limits(unit: UnitContext) -> GitLimits:
     return GitLimits.from_settings(_settings(unit.job).git)
 
 
+def _history_index_fingerprint(
+    *, snapshot: str, source_identity: str, settings: Mapping[str, Any],
+    ranked: Mapping[str, Any], normalized: Mapping[str, Any],
+    acquired: Mapping[str, Any], github: Mapping[str, Any],
+) -> str:
+    artifacts = [value[key] for value, key in (
+        (ranked, "artifact"), (ranked, "hotspots"), (normalized, "artifact"), (github, "artifact"),
+    ) if key in value]
+    artifacts.extend(
+        {key: acquired[name][key] for key in ("path", "sha256", "size_bytes")}
+        for name in ("raw_log", "raw_messages") if name in acquired
+    )
+    return index_fingerprint(
+        name="history", target_snapshot=snapshot, producer_artifacts=artifacts,
+        tool_identity={
+            "history_identity": source_identity, "rules": history_signals.RULES_IDENTITY,
+            "ranking": SII_IDENTITY, "symbols": SYMBOL_IDENTITY, "complexity": COMPLEXITY_IDENTITY,
+            "argv": ARGV_VERSION, "image": acquired.get("image_id"),
+            "git_limits": GitLimits.from_settings(settings["git"]).as_dict(),
+            "config": hashlib.sha256(canonical_json(dict(settings))).hexdigest(),
+        },
+        parser_identity=f"{PARSER_IDENTITY}+git-log-u0/1",
+        normalizer_identity=history_signals.NORMALIZER_IDENTITY,
+        mapping_identity="git-blob-binding/1+tree-sitter-spans/1",
+    )
+
+
 def _ranking_candidates(files: Mapping[str, Mapping[str, Any]]) -> list[str]:
     """Rank-eligible files, most churn first; the order every bounded per-file step uses."""
     return sorted((path for path, value in files.items() if value["rank_eligibility"] == "eligible"),
@@ -1024,16 +1051,11 @@ def build_job(*, executor_factory: ExecutorFactory | None = None,
         normalized = unit.output("acquire.normalize_changes")
         changes_doc = _read(unit.job.run_root, normalized["artifact"]) if "artifact" in normalized else {"changes": []}
         classes = classes_of(unit)
-        producer_artifacts = [value[key] for value, key in ((ranked, "artifact"), (ranked, "hotspots"),
-                                                            (normalized, "artifact")) if key in value]
-        fingerprint = index_fingerprint(
-            name="history", target_snapshot=snapshot, producer_artifacts=producer_artifacts,
-            tool_identity={"history_identity": resolved["identity"], "rules": history_signals.RULES_IDENTITY,
-                           "ranking": SII_IDENTITY, "symbols": SYMBOL_IDENTITY, "complexity": COMPLEXITY_IDENTITY,
-                           "argv": ARGV_VERSION,
-                           "config": hashlib.sha256(canonical_json(dict(unit.job.config.settings))).hexdigest()},
-            parser_identity="git-log-numstat-z/1+git-log-u0/1", normalizer_identity=history_signals.NORMALIZER_IDENTITY,
-            mapping_identity="git-blob-binding/1+tree-sitter-spans/1")
+        fingerprint = _history_index_fingerprint(
+            snapshot=snapshot, source_identity=resolved["identity"], settings=unit.job.config.settings,
+            ranked=ranked, normalized=normalized, acquired=unit.output("acquire.git_history"),
+            github=unit.output("acquire.github_enrichment"),
+        )
         shard_id = "git-history"
         path = unit.job.run_root / "data" / "indices" / "history" / shard_id / f"{fingerprint}.sqlite"
         eligible = eligible_of(unit)
