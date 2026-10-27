@@ -355,10 +355,13 @@ def make_hostile(target: Path, canary: Path) -> None:
 
 
 def configured(tmp_path: Path, *, github: bool = False, replacements: tuple[tuple[str, str], ...] = (),
-               overrides: dict[str, str] | None = None):
+               overrides: dict[str, str] | None = None, declared_releases: bool = False):
     text = (ROOT / "appsec-review.toml").read_text(encoding="utf-8").replace(
         "[jobs.job_target_analysis_plan.settings.model]\nenabled = true",
         "[jobs.job_target_analysis_plan.settings.model]\nenabled = false")
+    if declared_releases:
+        text = text.replace("[review_policy.releases]\n", '[review_policy.releases]\n'
+                            'platform = "fixture-platform/1"\nvalidation = "fixture-validation/1"\n', 1)
     for old, new in (*replacements, *((overrides or {}).items())):
         assert old in text, old
         text = text.replace(old, new)
@@ -480,7 +483,7 @@ def test_source_resolution_rejects_escapes_and_selects_mainline(tmp_path: Path) 
 
 
 def test_job_binds_mainline_history_ranks_by_sii_and_feeds_the_plan(tmp_path: Path) -> None:
-    config = configured(tmp_path)
+    config = configured(tmp_path, declared_releases=True)
     target = tmp_path / "target"
     ids = build_repository(target)
     canary = tmp_path / "canary"
@@ -817,7 +820,7 @@ def test_large_message_and_path_bounds_never_yield_complete_history(tmp_path: Pa
 
 
 def test_successful_history_is_retained_in_full_and_never_read_whole(tmp_path: Path, monkeypatch) -> None:
-    config = configured(tmp_path)
+    config = configured(tmp_path, declared_releases=True)
     target = tmp_path / "target"
     build_repository(target)
     original = Path.read_bytes
