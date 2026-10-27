@@ -96,8 +96,10 @@ def resolve_with_inference(dependency: Mapping[str, Any], *, repository_root: Pa
     if len(canonical_json(summary)) + len(guidance.encode()) > request.max_input_tokens * 4:
         return dict(dependency), {"dependency_id": dependency_id, "kind": "bounds",
                                   "detail": "native inference request exceeds its token-derived byte bound"}
+    from appsec_review.runtime import execution_safety as safety
     errors: list[str] = []
-    for attempt in range(int(model["retries"]) + 1):
+    for attempt in range(1 if safety.active() else int(model["retries"]) + 1):
+        safety.check_running()
         try:
             result = infer(request, timeout_seconds=int(model["timeout_seconds"]))
             proposal = result.proposal
@@ -109,6 +111,8 @@ def resolve_with_inference(dependency: Mapping[str, Any], *, repository_root: Pa
             return resolved, None
         except Exception as exc:
             errors = [f"{type(exc).__name__}: {exc}"[:2048]]
+            safety.retain_failure("dependency.inference", exc, dependency_id=dependency_id)
+            safety.fail(errors[0], action="dependency.inference")
             if attempt < int(model["retries"]):
                 request = replace(request, repair_errors=tuple(errors), prior_response=None)
     return dict(dependency), {"dependency_id": dependency_id, "kind": "model_failure",

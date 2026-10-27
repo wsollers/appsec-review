@@ -18,6 +18,7 @@ from uuid import uuid4
 from appsec_review.config.assurance import ResourceBudget
 from appsec_review.observability.events import EventLog
 from appsec_review.storage import atomic_json, bounded_file_lock
+from appsec_review.runtime import execution_safety as safety
 
 
 def process_identity(pid: int) -> str | None:
@@ -53,7 +54,8 @@ def review_resource_scope(metadata_root: Path, budget: ResourceBudget, events: E
         raise ValueError("container removal policy must be boolean")
     token = _OWNER.set((ResourceAdmission(
         metadata_root, budget,
-        require_container_removal=require_container_removal or native_execution_requested()), events))
+        require_container_removal=(require_container_removal or native_execution_requested()
+                                   or safety.active())), events))
     try:
         yield
     finally:
@@ -75,7 +77,7 @@ def require_bounded_image_builder() -> None:
 
 
 @contextmanager
-def reserve_execution(*, cpu: str, memory: str, action: str, timeout_seconds: int):
+def _reserve_execution(*, cpu: str, memory: str, action: str, timeout_seconds: int):
     owner, active = _OWNER.get(), _ACTIVE.get()
     if owner is None and active is None:
         yield
@@ -109,6 +111,14 @@ def reserve_execution(*, cpu: str, memory: str, action: str, timeout_seconds: in
             yield
 
 
+@contextmanager
+def reserve_execution(*, cpu: str, memory: str, action: str, timeout_seconds: int):
+    with safety.operation(action), _reserve_execution(
+            cpu=cpu, memory=memory, action=action, timeout_seconds=timeout_seconds):
+        safety.check_running()
+        yield
+
+
 def bounded_execution(*, cpu: str, memory: str, action: str):
     """Reserve preparation and execution together for fixed-limit build executors."""
     def decorate(method):
@@ -125,31 +135,38 @@ def bounded_execution(*, cpu: str, memory: str, action: str):
 def tracked_container(name: str, runner, *, label: str):
     track_container(name)
     try:
+        safety.check_running()
         yield
     finally:
-        removed = runner(("docker", "rm", "--force", name), 60)
-        active = _ACTIVE.get()
-        require_absence = active is not None and active.admission.require_container_removal
-        confirmed = not removed[3] and removed[0] == 0
-        if require_absence or not confirmed:
-            inspected = runner(("docker", "container", "inspect", name,
-                                "--format", "{{.State.Running}}"), 60)
-            if require_absence:
-                absent = {f"{prefix}No such {kind}: {name}".encode()
-                          for prefix in ("", "Error: ", "Error response from daemon: ")
-                          for kind in ("container", "object")}
-                confirmed = (not inspected[3] and inspected[0] not in (None, 0)
-                             and inspected[2].strip() in absent)
-            else:
-                confirmed = not inspected[3] and (
-                    (inspected[0] == 0 and inspected[1].strip() == b"false")
-                    or (inspected[0] != 0 and b"No such" in inspected[2]))
-        if confirmed:
-            container_stopped(name)
+        with safety.cleanup_scope():
+            _remove_tracked_container(name, runner, label=label)
+
+
+def _remove_tracked_container(name: str, runner, *, label: str):
+    removed = runner(("docker", "rm", "--force", name), 60)
+    active = _ACTIVE.get()
+    require_absence = (safety.active()
+                       or active is not None and active.admission.require_container_removal)
+    confirmed = not removed[3] and removed[0] == 0
+    if require_absence or not confirmed:
+        inspected = runner(("docker", "container", "inspect", name,
+                            "--format", "{{.State.Running}}"), 60)
+        if require_absence:
+            absent = {f"{prefix}No such {kind}: {name}".encode()
+                      for prefix in ("", "Error: ", "Error response from daemon: ")
+                      for kind in ("container", "object")}
+            confirmed = (not inspected[3] and inspected[0] not in (None, 0)
+                         and inspected[2].strip() in absent)
         else:
-            condition = "removal" if require_absence else "death"
-            quarantine_resources(f"{label.lower()}_container_{condition}_unconfirmed")
-            raise RuntimeError(f"{label} container {condition} is unconfirmed ({name}); resources quarantined")
+            confirmed = not inspected[3] and (
+                (inspected[0] == 0 and inspected[1].strip() == b"false")
+                or (inspected[0] != 0 and b"No such" in inspected[2]))
+    if confirmed:
+        container_stopped(name)
+    else:
+        condition = "removal" if require_absence else "death"
+        quarantine_resources(f"{label.lower()}_container_{condition}_unconfirmed")
+        raise RuntimeError(f"{label} container {condition} is unconfirmed ({name}); resources quarantined")
 
 
 def track_container(name: str) -> None:
@@ -176,6 +193,7 @@ def track_image_build(build: dict, *, max_concurrency: int, timeout_seconds: flo
         raise RuntimeError("image builder requires an active resource reservation")
     deadline = time.monotonic() + timeout_seconds
     while True:
+        safety.check_running()
         with bounded_file_lock(active.admission.root / "admission.lock", 30):
             path = active.admission.root / "leases.json"
             state = json.loads(path.read_text())
@@ -389,6 +407,7 @@ class ResourceAdmission:
         events.write("RESOURCE_ELIGIBLE", **correlation, reservation=asdict(request))
         path = self.root / "leases.json"
         while True:
+            safety.check_running()
             with bounded_file_lock(self.root / "admission.lock", 30):
                 state = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {
                     "schema": "appsec-review/resource-leases/1", "leases": {}}
@@ -429,6 +448,7 @@ class ResourceAdmission:
             events.write("RESOURCE_ADMITTED", **correlation,
                          queue_delay_ms=int((time.monotonic() - start) * 1000),
                          reservation=asdict(request))
+            safety.check_running()
             yield lease_id
         finally:
             with active.execution_lock:

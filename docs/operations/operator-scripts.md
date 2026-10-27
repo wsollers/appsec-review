@@ -188,7 +188,54 @@ mismatches retain the reservation; do not delete the intent or invent a new UUID
 them. Reconciliation itself never submits a run. A subsequent separately authorized launch archives
 the acknowledged intent as `<uuid>.json` before recording a new one; old UUIDs cannot be reused.
 This acknowledgement does **not** certify descendant/container cleanup, release resource leases,
-enable automatic retries, or implement stop-on-first-error. Those remain separate operator duties.
+enable automatic retries, or establish first-error safety. First-error safety is a separate,
+explicit launch policy described below; cleanup still requires independent confirmation.
+
+### Opt-in first-error policy
+
+After deployment and resource preflight, `review-start --stop-on-first-error` (PowerShell:
+`-StopOnFirstError`) or `review_run.py submit --stop-on-first-error` freezes an execution-safety
+envelope in the Dagster run configuration. It binds the Dagster UUID and the submission's
+source, target and configuration identities. Its correlation hash and `dagster/max_retries=0`
+are run tags. The deployed executor validates the envelope against the loaded configuration,
+disables step retries, and starts one admission controller inside the existing run worker.
+It does not start another scheduler or change profile files, models, budgets, or assurance.
+
+The controller serializes cross-process admission through a private, same-UID Unix socket.
+Its journal and ordered events are retained at
+`runs/metadata/dagster-safety/<dagster-uuid>.json` and `.jsonl`. An admitted action is recorded
+before its grant is returned. The first unexpected failure closes admission permanently;
+queued threads, new model requests, retries, build repairs and further tool actions cannot
+obtain another grant. Lost controller contact, failed journal writes and uncertain grant
+responses fail closed. An existing journal is never adopted or restarted automatically.
+Without the opt-in envelope, existing retry and gap behavior is unchanged.
+
+Producer failures are intercepted before normal failure-to-gap conversion. Declared findings
+exit codes, OSV's documented unsupported-input result, missing history, and cell authority or
+budget dispositions retain their existing meaning. A producer exceeding a configured output
+bound stops with `expected_policy_stop` recorded rather than being represented as a clean
+completed result. Partial tool output, failed durations, cell attempts and exception evidence
+remain in the run; failed outputs are not successful reusable checkpoints.
+
+The controller requests termination of that exact Dagster run once. A termination request is
+not proof that work died. Cleanup removes only tracked containers and requires explicit
+absence, not just `Running=false`; dependent volumes are retained if container removal is
+uncertain. Local CLI process groups are generation-checked before signaling. Unknown
+descendants, incomplete SDK teardown, uncertain cancellation and quarantined resource leases
+remain unresolved rather than being released or reported as cleaned up. Inspect the
+controller journal, resource leases, Dagster state and actual descendants before recovery.
+Partial execution receipts marked `cleanup: PENDING` deliberately do not certify cleanup.
+
+This mode requires the matching installed implementation and Linux peer-authenticated Unix
+sockets. Native-broker cancellation is not commissioned for this mode and is refused, never
+replaced with ambient Docker execution. This software policy does not supply an aggregate
+service/tool cgroup budget, commission an image builder, install dependencies, activate new
+images, or make compilation ready. Those are separate deployment prerequisites.
+
+The flag rejects application-run resume. A stopped policy journal or submission intent must
+not be deleted to obtain a retry. Recovery requires separately approved compatible checkpoints
+and a supported, explicitly linked new run segment; this option does not implement automatic
+re-execution or authorize a second submission.
 
 The target, the capacity overlay and the recording mode are environment variables of the running
 containers, fixed when they were created. `review-start` therefore checks the requested `--target`,
@@ -197,7 +244,7 @@ containers, fixed when they were created. `review-start` therefore checks the re
 
 | Script | Purpose |
 | --- | --- |
-| `review-start [--target T] [--overlay F] [--recording M] [--run-id ID] [--id-wait S] [--dry-run] [--force]` | Launch `wave1_review` and return at once. Prints the Dagster run id, the application run id (read back for up to `--id-wait` seconds, default 60, else "pending") and the URL. `--run-id` resumes an existing application run (it must exist under `runs/`). Refuses when the stack is down, an image pin has moved, or a run is active (unless `--force`). |
+| `review-start [--target T] [--overlay F] [--recording M] [--run-id ID] [--stop-on-first-error] [--id-wait S] [--dry-run] [--force]` | Launch `wave1_review` and return at once. Prints the Dagster run id, the application run id (read back for up to `--id-wait` seconds, default 60, else "pending") and the URL. `--run-id` resumes an existing application run (it must exist under `runs/`) and cannot be combined with first-error mode. Refuses when the stack is down, an image pin has moved, or a run is active (unless `--force`). |
 | `review-watch [--run ID] [--once] [--interval S]` | Poll the GraphQL API. Prints one line when each job starts (`[ 12.3 min] started codeql_analysis (14/33 jobs)`), one line per failed step, and a final line. Works for any run, whoever started it; `--run` takes a Dagster uuid or an application run id; without it the active run (else the latest). Exit 0 for `SUCCESS`, 1 for `FAILURE`/`CANCELED`. `--once` prints a snapshot and exits. |
 | `review-status [--limit N]` | Recent runs with status, application run id, start and duration, and for each active run its started and finished jobs and current steps. |
 | `review-stop [--now] [--yes] [--reason TEXT] [--dry-run]` | End the current review: lists every non-terminal run, then terminates them through `recover_runs.py`. Default policy `SAFE_TERMINATE`; `--now` uses `MARK_AS_CANCELED_IMMEDIATELY`, which marks runs canceled without waiting (their tool containers may keep running). Needs `--yes` when more than one run is affected. Nothing active is a no-op, exit 0. |

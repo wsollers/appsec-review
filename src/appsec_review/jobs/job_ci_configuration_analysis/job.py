@@ -226,11 +226,13 @@ def _scan(unit: UnitContext, spec: ToolSpec, executor_factory: ExecutorFactory,
                 continue
             records.extend(scan_text(spec.provider, definition["path"], text, tool_id=spec.tool_id))
     else:
+        from appsec_review.runtime import execution_safety as safety
         try:
             executor = executor_factory(unit)
             tool = executor.catalog.tool(spec.tool_id)
             image_id = executor.resolve_image(tool)
         except (KeyError, RuntimeError, ValueError) as exc:
+            safety.fail(f"{spec.tool_id} image resolution failed: {exc}", action="ci.image")
             gaps.append(f"{spec.tool_id}: pinned offline image unavailable ({type(exc).__name__}: {exc})")
             tool = None
             image_id = None
@@ -243,14 +245,17 @@ def _scan(unit: UnitContext, spec: ToolSpec, executor_factory: ExecutorFactory,
                     result = executor.execute(ExecutionRequest(
                         tool_id=spec.tool_id, argv=_argv(spec, tool.executable, definition["path"]),
                         target_root=unit.job.target_root or Path(), scratch_root=scratch,
+                        accepted_exit_codes=frozenset({0, 1}),
                     ))
                     executions.append(asdict(result))
                     stdout = unit.job.run_root / result.stdout_path
                     if result.timed_out or result.oom_killed or result.exit_code not in {0, 1}:
+                        safety.fail(f"{spec.tool_id} execution failed", action="ci.scan")
                         gaps.append(f"{definition['path']}: {spec.tool_id} failed with exit={result.exit_code}")
                         continue
                     records.extend(_generic_external_records(spec, stdout.read_bytes(), definition["path"]))
                 except (OSError, RuntimeError, ValueError, subprocess.SubprocessError) as exc:
+                    safety.fail(f"{spec.tool_id} failed: {exc}", action="ci.scan")
                     gaps.append(f"{definition['path']}: {spec.tool_id} unavailable ({type(exc).__name__}: {exc})")
     if len(records) > max_observations:
         records = records[:max_observations]

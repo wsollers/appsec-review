@@ -790,6 +790,9 @@ def run_team(ctx: ReviewContext, work: PackageWork, *, launch: bool, not_launche
     except IntegrityError:
         raise
     except Exception as exc:  # Preserve completed rounds and their accounting when later work fails.
+        from appsec_review.runtime import execution_safety as safety
+        safety.retain_failure("review.team", exc, package_id=work.package_id)
+        safety.fail(f"review team failed: {type(exc).__name__}", action="review.team")
         failed = result
         failed.gaps.append(make_gap(GapClass.WORKER_GAP, work.package_id, f"team failure: {type(exc).__name__}",
                                    round=max((cell.spec.round for cell in reds), default=work.round_index)))

@@ -16,7 +16,6 @@ from dagster import (
     Out,
     ScheduleDefinition,
     graph,
-    multiprocess_executor,
     op,
 )
 
@@ -31,6 +30,7 @@ from appsec_review.storage import atomic_json
 from appsec_review.orchestration.topology import (
     gate_dependencies, gate_ids, launch_upstream_handoffs, wave1_dependencies)
 from .error_state import build_error_state_definitions
+from .fail_fast import execution_definition, guarded_op
 
 RunnerFactory = Callable[[AppConfig], JobRunner]
 
@@ -160,6 +160,7 @@ def _build_dagster_graph(name: str, jobs: tuple[Job, ...], config: AppConfig,
             @op(name=_node_name(selected, "begin", node_namespace), ins=dict(ins), out=Out(dict),
                 tags={"appsec/pool": "lifecycle"}, pool="lifecycle",
                 description=f"Claim and validate an application attempt for {selected.job_id}.")
+            @guarded_op(config)
             def begin(context, **inputs):
                 upstream_values = [dict(value) for value in inputs.values()]
                 run_ids = {str(value.get("run_id")) for value in upstream_values if value.get("run_id")}
@@ -230,6 +231,7 @@ def _build_dagster_graph(name: str, jobs: tuple[Job, ...], config: AppConfig,
                     out=Out(Nothing), tags={"appsec/pool": _pool_for(selected_unit.unit_id, selected_job.job_id)},
                     pool=_pool_for(selected_unit.unit_id, selected_job.job_id),
                     description=f"Execute or reuse {selected_job.job_id}.{selected_unit.unit_id}.")
+                @guarded_op(config)
                 def execute(context, claim, **_dependencies):
                     correlated = {**dict(claim), "orchestration": {
                         **dict(claim.get("orchestration", {})), "node": context.op.name}}
@@ -255,6 +257,7 @@ def _build_dagster_graph(name: str, jobs: tuple[Job, ...], config: AppConfig,
             @op(name=_node_name(selected, "finalize", node_namespace), ins=dict(selected_ins), out=Out(dict),
                 tags={"appsec/pool": "lifecycle"}, pool="lifecycle",
                 description=f"Validate and publish the accepted handoff for {selected.job_id}.")
+            @guarded_op(config)
             def finalize(context, claim, **_units):
                 outcome = runner_factory(config).finalize_attempt(selected, claim)
                 context.instance.add_run_tags(context.run_id, {
@@ -327,16 +330,9 @@ def _build_dagster_graph(name: str, jobs: tuple[Job, ...], config: AppConfig,
             raise ValueError(f"Dagster application graph requires one terminal job: {sorted(terminal_jobs)}")
         return finalized[next(iter(terminal_jobs))]
 
-    executor = multiprocess_executor.configured({
-        "max_concurrent": config.dagster.max_concurrent,
-        "tag_concurrency_limits": [
-            {"key": "appsec/pool", "value": pool, "limit": limit}
-            for pool, limit in sorted(config.dagster.pool_limits.items())
-        ],
-    })
     return generated_graph.to_job(
         description=f"Application-owned integrity lifecycle exposed as the real {name} Dagster DAG.",
-        executor_def=executor,
+        executor_def=execution_definition(config),
     )
 
 

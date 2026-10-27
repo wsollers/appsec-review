@@ -14,6 +14,7 @@ param(
     [ValidateSet('dev', 'prod', 'copilot-dev', 'copilot-prod')][string]$Profile,
     [string]$RunId,
     [double]$IdWait,
+    [switch]$StopOnFirstError,
     [switch]$DryRun,
     [switch]$Force,
     [string]$Url,

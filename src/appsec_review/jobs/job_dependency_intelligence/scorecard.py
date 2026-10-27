@@ -183,19 +183,28 @@ class ScorecardClient:
         self.requests = 0
 
     def fetch(self, repository: Mapping[str, str]) -> tuple[dict[str, Any], bytes]:
+        from appsec_review.runtime import execution_safety as safety
+        safety.check_running()
         if self.requests >= self.max_requests:
             raise ScorecardError("bounds", "Scorecard request bound exhausted")
         host, owner, name = _repository_parts(repository)
         url = f"{self.base_url}/projects/{quote(host, safe='')}/{quote(owner, safe='')}/{quote(name, safe='')}"
         response: HttpResponse | None = None
         last_error: Exception | None = None
-        for attempt in range(self.retries + 1):
+        for attempt in range(1 if safety.active() else self.retries + 1):
+            safety.check_running()
             if self.requests >= self.max_requests:
                 raise ScorecardError("bounds", "Scorecard request bound exhausted")
             self.requests += 1
             try:
-                response = self.transport(url, timeout_seconds=self.timeout_seconds,
-                                          max_bytes=self.max_response_bytes)
+                with safety.operation("scorecard.http"):
+                    response = self.transport(url, timeout_seconds=self.timeout_seconds,
+                                              max_bytes=self.max_response_bytes)
+                    if response.status != 404 and not 200 <= response.status < 300:
+                        error = ScorecardError("request_failure", f"HTTP {response.status}")
+                        safety.retain_failure("scorecard.http", error, response=response.body.decode(
+                            "utf-8", "replace")[:self.max_response_bytes])
+                        safety.fail(f"Scorecard HTTP {response.status}", action="scorecard.http")
             except (OSError, URLError, socket.timeout, TimeoutError, ValueError) as exc:
                 last_error = exc
                 if attempt < self.retries:
@@ -221,7 +230,13 @@ class ScorecardClient:
             break
         if response is None:  # pragma: no cover - loop guarantees response or exception
             raise ScorecardError("request_failure", str(last_error or "Scorecard request failed"))
-        return self.normalize(repository, response.body, url=url, response=response)
+        with safety.operation("scorecard.normalize"):
+            try:
+                return self.normalize(repository, response.body, url=url, response=response)
+            except Exception as exc:
+                safety.retain_failure("scorecard.normalize", exc, response=response.body.decode(
+                    "utf-8", "replace")[:self.max_response_bytes])
+                raise
 
     def normalize(self, repository: Mapping[str, str], payload: bytes, *, url: str | None = None,
                   response: HttpResponse | None = None) -> tuple[dict[str, Any], bytes]:

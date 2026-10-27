@@ -30,11 +30,17 @@ def infer(request: ModelRequest | ReviewModelRequest, *, timeout_seconds: int) -
 
     A `ReviewModelRequest` is one review-cell turn; its validated proposal is the worker turn.
     """
+    from appsec_review.runtime import execution_safety as safety
     try:
         send = PROVIDERS[request.provider]
     except KeyError as exc:
         raise ValueError(f"unsupported inference provider: {request.provider}") from exc
-    return send(request, timeout_seconds=timeout_seconds)
+    with safety.operation(f"inference.{request.provider}.{request.model}"):
+        try:
+            return send(request, timeout_seconds=timeout_seconds)
+        except Exception as exc:
+            safety.retain_failure("inference", exc, provider=request.provider, model=request.model)
+            raise
 
 
 MODEL_CHECKS: dict[str, Callable[..., dict[str, Any]]] = {
@@ -51,6 +57,7 @@ def check_models(provider: str, names: Sequence[str], *, timeout_seconds: int) -
     A provider that cannot be reached, is not authenticated, or has no inference transport makes
     every one of its models unavailable, with the provider's error retained.
     """
+    from appsec_review.runtime import execution_safety as safety
     wanted = sorted(set(names))
     report: dict[str, Any] = {"provider": provider, "transport": provider in PROVIDERS,
                               "method": None, "listed": None, "error": None, "models": {}}
@@ -58,8 +65,10 @@ def check_models(provider: str, names: Sequence[str], *, timeout_seconds: int) -
     try:
         if check is None:
             raise ValueError(f"unsupported inference provider: {provider}")
-        report.update(check(wanted, timeout_seconds=timeout_seconds))
+        with safety.operation(f"model_catalog.{provider}"):
+            report.update(check(wanted, timeout_seconds=timeout_seconds))
     except Exception as exc:  # every provider failure is evidence for the preflight report
+        safety.fail(f"model catalog failed: {type(exc).__name__}", action=f"model_catalog.{provider}")
         report["error"] = f"{type(exc).__name__}: {exc}"[:2048]
     for name in wanted:
         entry = dict(report["models"].get(name) or {

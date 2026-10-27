@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping, Sequence
 from contextlib import nullcontext
 from dataclasses import dataclass
+from datetime import datetime, timezone
 import hashlib
 import json
 import os
@@ -12,6 +13,7 @@ import re
 import shutil
 import signal
 import subprocess
+import time
 import uuid
 from typing import Any
 
@@ -22,6 +24,7 @@ from appsec_review.runtime.resources import (
     bounded_execution, reserve_execution, review_resources_active, tracked_container,
 )
 from appsec_review.storage import atomic_json, canonical_json
+from appsec_review.runtime import execution_safety as safety
 from .catalog import load_catalog
 from .identity import application_runtime_user
 from .build_capture import (
@@ -80,6 +83,8 @@ Runner = Callable[[Sequence[str], int], tuple[int | None, bytes, bytes, bool]]
 
 
 def _run(argv: Sequence[str], timeout: int) -> tuple[int | None, bytes, bytes, bool]:
+    if safety.active():
+        return safety.run_process(argv, timeout)
     from .native_client import native_run
     native = native_run(argv, timeout)
     if native is not None:
@@ -120,6 +125,12 @@ def _container_name() -> str:
 def _run_to_files(argv: Sequence[str], timeout: int, stdout_path: Path,
                   stderr_path: Path) -> tuple[int | None, bool]:
     """Run without pipe buffering and retain both diagnostic streams in full."""
+    if safety.active():
+        stdout_path.parent.mkdir(parents=True, exist_ok=True)
+        with stdout_path.open("wb") as stdout, stderr_path.open("wb") as stderr:
+            code, _out, _err, timed_out = safety.run_process(
+                argv, timeout, stdout=stdout, stderr=stderr)
+        return code, timed_out
     from .native_client import native_run
     native = native_run(argv, timeout)
     if native is not None:
@@ -278,6 +289,7 @@ class BuildContainerExecutor:
     def execute(self, argv: Sequence[str], *, workspace: Path, working_directory: str,
                 environment: Mapping[str, str], instrumentation_root: Path | None = None,
                 instrumentation_evidence_root: Path | None = None) -> BuildCommandResult:
+        started_at, started = datetime.now(timezone.utc).isoformat(), time.monotonic()
         if not argv or any(not isinstance(value, str) or "\0" in value for value in argv):
             raise ValueError("build command argv is invalid")
         if (instrumentation_root is None) != (instrumentation_evidence_root is None):
@@ -305,6 +317,18 @@ class BuildContainerExecutor:
             command.extend(("--entrypoint", argv[0], self.profile.image_id, *argv[1:]))
             with self._container(command):
                 code, stdout, stderr, timed_out = self.runner(command, self.timeout_seconds)
+                if safety.active():
+                    retained = _root / ".appsec-execution" / command[command.index("--name") + 1]
+                    retained.mkdir(parents=True)
+                    (retained / "stdout").write_bytes(stdout[:self.output_bytes])
+                    (retained / "stderr").write_bytes(stderr[:self.output_bytes])
+                    atomic_json(retained / "outcome.json", {"exit_code": code, "timed_out": timed_out,
+                                                            "started_at": started_at,
+                                                            "completed_at": datetime.now(timezone.utc).isoformat(),
+                                                            "duration_ms": max(0, int((time.monotonic() - started) * 1000)),
+                                                            "cleanup": "PENDING"})
+                    safety.failed_result(timed_out or code != 0,
+                                         f"build command failed; evidence: {retained}", action="build.execute")
                 self._stop_on_timeout(command, timed_out)
         finally:
             self._restrict_workspace(_root)
@@ -322,7 +346,7 @@ class BuildContainerExecutor:
 
     def _container(self, command: Sequence[str]):
         return (tracked_container(command[command.index("--name") + 1], self.runner, label="Build")
-                if review_resources_active() else nullcontext())
+                if review_resources_active() or safety.active() else nullcontext())
 
     @bounded_execution(cpu="2", memory="4g", action="build.capture")
     def execute_captured(self, argv: Sequence[str], *, workspace: Path,
@@ -336,6 +360,7 @@ class BuildContainerExecutor:
         ``snapshot_files`` maps workspace-relative paths to pre-build ``sha256``, ``size_bytes``
         and ``mtime_ns``; unchanged files reuse those hashes in the post-build file inventory.
         """
+        started_at, started = datetime.now(timezone.utc).isoformat(), time.monotonic()
         if capture_config.backend != "ptrace":
             raise ValueError("this executor supports the ptrace build-capture backend")
         if not argv or any(not isinstance(value, str) or "\0" in value for value in argv):
@@ -402,12 +427,22 @@ class BuildContainerExecutor:
                 if self.runner is _run:
                     code, timed_out = _run_to_files(
                         command, self.timeout_seconds, stdout_path, stderr_path)
-                    self._stop_on_timeout(command, timed_out)
+                    if not safety.active():
+                        self._stop_on_timeout(command, timed_out)
                 else:
                     code, stdout, stderr, timed_out = self.runner(command, self.timeout_seconds)
-                    self._stop_on_timeout(command, timed_out)
+                    if not safety.active():
+                        self._stop_on_timeout(command, timed_out)
                     stdout_path.write_bytes(stdout)
                     stderr_path.write_bytes(stderr)
+                if safety.active():
+                    atomic_json(capture_root / "execution-outcome.json", {
+                        "exit_code": code, "timed_out": timed_out, "cleanup": "PENDING",
+                        "started_at": started_at, "completed_at": datetime.now(timezone.utc).isoformat(),
+                        "duration_ms": max(0, int((time.monotonic() - started) * 1000)),
+                        "raw_traces": "retained in capture directory; not validated"})
+                    safety.failed_result(timed_out or code != 0,
+                                         f"captured build failed; evidence: {capture_root}", action="build.capture")
         finally:
             self._restrict_workspace(root)
             capture_root.chmod(0o755)  # the build container's write window into the capture closed

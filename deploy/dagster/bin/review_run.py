@@ -222,11 +222,13 @@ def show_run(run: dict) -> None:
             print(f"error_state_file=pending failed_steps={','.join(failed[-5:]) or '-'}", flush=True)
 
 
-def submit(run_id: str, url: str = "http://127.0.0.1:3000/graphql") -> None:
+def submit(run_id: str, url: str = "http://127.0.0.1:3000/graphql", *,
+           stop_on_first_error: bool = False) -> None:
     import ops
 
     args = ops.build_parser().parse_args(["review-start", "--url", url, "--id-wait", "0"])
     args.dagster_run_id = run_id
+    args.stop_on_first_error = stop_on_first_error
     ops.cmd_review_start(args)
     print(f"submitted_dagster_run_id={run_id}", flush=True)
 
@@ -237,6 +239,7 @@ def main() -> int:
     parser.add_argument("--run-id", help="Dagster UUID; generated for submit")
     parser.add_argument("--url", default="http://127.0.0.1:3000/graphql")
     parser.add_argument("--interval-seconds", type=int, default=30)
+    parser.add_argument("--stop-on-first-error", action="store_true")
     args = parser.parse_args()
     if args.action != "submit" and not args.run_id:
         parser.error("--run-id is required for status and watch")
@@ -250,7 +253,7 @@ def main() -> int:
             if args.action == "reconcile":
                 reconcile_submission(run_id, args.url)
                 return 0
-            submit(run_id, args.url)
+            submit(run_id, args.url, stop_on_first_error=args.stop_on_first_error)
         except ops.OpsError as error:
             print(f"error: {error}", file=sys.stderr, flush=True)
             return error.code

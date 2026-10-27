@@ -183,17 +183,29 @@ def run_cell(spec: CellSpec, *, infer: Infer, core: Any, capability: CellCapabil
              retry_on_timeout: bool = True, retry_on_provider_error: bool = True,
              retry_on_invalid_output: bool = False) -> CellOutcome:
     """Run one cell to exactly one terminal status, retrying per policy without widening it."""
+    from appsec_review.runtime import execution_safety as safety
+    safety.check_running()
     cell_id = _bind(spec, capability, core)
     cell_root = Path(receipts_root) / cell_id
     attempts: list[_Attempt] = []
     paths: list[Path] = []
     repair: tuple[str, ...] = ()
-    for _ in range(max(1, int(max_attempts))):
+    for _ in range(1 if safety.active() else max(1, int(max_attempts))):
+        safety.check_running()
         number = _reserve_number(cell_root)
-        attempt = _run_attempt(spec, cell_id, number, infer=infer, core=core, capability=capability,
-                               validate_final=validate_final, repair_errors=repair)
+        attempt = _Attempt(number)
+        try:
+            attempt = _run_attempt(spec, cell_id, number, infer=infer, core=core, capability=capability,
+                                   validate_final=validate_final, repair_errors=repair, attempt=attempt)
+        except safety.ReviewStopped:
+            attempt.end(CellStatus.FAILED, GapClass.WORKER_GAP, "run_stopped")
+            _write_receipt(cell_root, spec, cell_id, capability, attempt)
+            raise
         attempts.append(attempt)
         paths.append(_write_receipt(cell_root, spec, cell_id, capability, attempt))
+        if attempt.status is not CellStatus.SUCCEEDED and attempt.gap_class not in {
+                GapClass.AUTHORITY_ERROR, GapClass.BUDGET_GAP}:
+            safety.fail(attempt.reason, action="review.cell")
         if attempt.status is CellStatus.SUCCEEDED or not _retryable(
                 attempt, retry_on_timeout, retry_on_provider_error, retry_on_invalid_output):
             break
@@ -303,8 +315,8 @@ def _bind(spec: CellSpec, capability: CellCapability, core: Any) -> str:
 
 def _run_attempt(spec: CellSpec, cell_id: str, number: int, *, infer: Infer, core: Any,
                  capability: CellCapability, validate_final: ValidateFinal,
-                 repair_errors: tuple[str, ...]) -> _Attempt:
-    attempt = _Attempt(number)
+                 repair_errors: tuple[str, ...], attempt: _Attempt | None = None) -> _Attempt:
+    attempt = attempt if attempt is not None else _Attempt(number)
     transcript: list[dict[str, Any]] = []
     citable_package = set(spec.evidence_set)
     view = spec.view
@@ -448,6 +460,9 @@ def _retrieve(spec: CellSpec, cell_id: str, attempt: _Attempt, capability: CellC
         call.update(status="tool_error", error_class=type(exc).__name__)
         attempt.gaps.append(_gap(cell_id, spec, attempt.number, f"{turn}/{index}",
                                  GapClass.COVERAGE_GAP, f"tool_error:{decision.tool}:{type(exc).__name__}"))
+        if not isinstance(exc, RetrievalGap):
+            from appsec_review.runtime import execution_safety as safety
+            safety.fail(f"retrieval failed: {type(exc).__name__}", action=f"review.{decision.tool}")
         return {"index": index, "status": "tool_error", "tool": decision.tool,
                 "error_class": type(exc).__name__}
     if decision.line is not None:
@@ -489,6 +504,7 @@ def _covers_line(row: Any, line: int) -> bool:
 def _expand(spec: CellSpec, attempt: _Attempt, capability: CellCapability, core: Any, decision: Any
             ) -> tuple[dict[str, Any], list[dict[str, str]]]:
     """``expand``: the rows bearing on one identity (or one page of a package file), within the cell\'s grant."""
+    from appsec_review.runtime import execution_safety as safety
     parameters = decision.parameters
     if "files" in parameters:
         page = spec.view.file_page(str(parameters["files"]), int(parameters.get("offset", 0)), capability.page_size) \
@@ -519,6 +535,9 @@ def _expand(spec: CellSpec, attempt: _Attempt, capability: CellCapability, core:
         except (RetrievalGap, ValueError, LookupError, OSError, RuntimeError, sqlite3.Error) as exc:
             if isinstance(exc, RetrievalIntegrityError):
                 raise
+            if not isinstance(exc, RetrievalGap):
+                safety.retain_failure("review.expand", exc)
+                safety.fail(f"retrieval expansion failed: {type(exc).__name__}", action="review.expand")
             skipped.append({"tool": tool, "code": f"tool_error:{type(exc).__name__}"})
             continue
         manifest = response.get("index_manifest") or manifest

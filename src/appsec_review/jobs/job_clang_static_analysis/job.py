@@ -71,38 +71,50 @@ def _settings(unit: UnitContext) -> dict[str, Any]:
 
 def _read_output(path: Path, *, engine: str, max_bytes: int, max_diagnostics: int) -> tuple[list[dict[str, Any]], list[str]]:
     """Read one strict, bounded wrapper result; malformed output is a gap, never clean."""
+    from appsec_review.runtime import execution_safety as safety
     gaps: list[str] = []
     if not path.is_file() or path.is_symlink():
+        safety.fail(f"{engine} omitted its result document", action="clang.output")
         return [], [f"{engine} produced no result document"]
     size = path.stat().st_size
     if size > max_bytes:
+        safety.fail(f"{engine} exceeded its output bound", action="clang.output", expected=True)
         return [], [f"{engine} result exceeded the {max_bytes}-byte output bound"]
     try:
         document = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, ValueError):
+        safety.fail(f"{engine} returned malformed JSON", action="clang.output")
         return [], [f"{engine} result was malformed JSON"]
     if not isinstance(document, Mapping) or document.get("schema") != OUTPUT_SCHEMA or document.get("engine") != engine:
+        safety.fail(f"{engine} returned an invalid envelope", action="clang.output")
         return [], [f"{engine} result envelope was malformed"]
     raw = document.get("diagnostics")
     if not isinstance(raw, list):
+        safety.fail(f"{engine} returned invalid diagnostics", action="clang.output")
         return [], [f"{engine} diagnostics were malformed"]
     if len(raw) > max_diagnostics:
+        safety.fail(f"{engine} exceeded its diagnostic bound", action="clang.output", expected=True)
         return [], [f"{engine} exceeded the {max_diagnostics}-diagnostic bound"]
     if document.get("truncated") is True:
+        safety.fail(f"{engine} output was truncated", action="clang.output", expected=True)
         gaps.append(f"{engine} output was truncated by its bounded wrapper")
     records: list[dict[str, Any]] = []
     for index, item in enumerate(raw):
         if not isinstance(item, Mapping):
+            safety.fail(f"{engine} returned an invalid diagnostic", action="clang.output")
             return [], [f"{engine} diagnostic {index} was malformed"]
         required = ("rule_id", "message", "path", "line", "column")
         if any((not isinstance(item.get(key), str)) if key in {"rule_id", "message", "path"}
                else type(item.get(key)) is not int for key in required):
+            safety.fail(f"{engine} returned invalid diagnostic fields", action="clang.output")
             return [], [f"{engine} diagnostic {index} was malformed"]
         if len(item["rule_id"]) > 512 or len(item["message"]) > 16384 or len(item["path"]) > 4096 \
                 or int(item["line"]) < 1 or int(item["column"]) < 1:
+            safety.fail(f"{engine} returned an out-of-contract diagnostic", action="clang.output")
             return [], [f"{engine} diagnostic {index} exceeded field bounds"]
         notes = item.get("notes", [])
         if not isinstance(notes, list) or len(notes) > 256:
+            safety.fail(f"{engine} returned an invalid trace", action="clang.output")
             return [], [f"{engine} diagnostic {index} had an unbounded trace"]
         records.append({
             "engine": engine, "rule_id": item["rule_id"], "message": item["message"],
@@ -214,11 +226,19 @@ def _analyze_scope(unit: UnitContext, scope: IndexScope, executor_factory: Any,
                 file_size_limit_bytes=settings["max_output_bytes"] + 1, compile_rows=rows,
             )
         except Exception as exc:
+            from appsec_review.runtime import execution_safety as safety
+            safety.fail(f"{engine} failed: {type(exc).__name__}", action="clang.execution")
             gaps.append(f"{engine} tool/image unavailable: {type(exc).__name__}: {exc}")
             engine_failed.add(engine)
             continue
         executions[engine] = execution
         raw_artifacts.extend((execution["receipt"], execution["compile_database"]))
+        from appsec_review.runtime import execution_safety as safety
+        safety.failed_result(
+            execution["timed_out"] or execution["oom_killed"] or execution["file_size_limit_reached"]
+            or execution["stdout_truncated"] or execution["stderr_truncated"]
+            or execution["exit_code"] != 0,
+            f"{engine} execution failed or exceeded its bounds", action="clang.execution")
         if execution["timed_out"]:
             gaps.append(f"{engine} timed out")
             engine_failed.add(engine)
@@ -234,6 +254,9 @@ def _analyze_scope(unit: UnitContext, scope: IndexScope, executor_factory: Any,
         output_path = scratch / ("tidy.json" if engine == "clang-tidy" else "analyze.json")
         units = _read_units(output_path, max_bytes=settings["max_output_bytes"]) if run is not None else None
         bad = [item for item in units or () if item["exit_code"] != 0]
+        from appsec_review.runtime import execution_safety as safety
+        safety.failed_result(bool(bad) or execution["exit_code"] != 0,
+                             f"{engine} failed on a translation unit", action="clang.execution")
         if execution["exit_code"] != 0 and not (run is not None and bad):
             gaps.append(f"{engine} exited with status {execution['exit_code']}")
             engine_failed.add(engine)

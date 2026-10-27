@@ -632,12 +632,25 @@ def _review_start(args: argparse.Namespace) -> int:
         profile=running_value(code, PROFILE_VARIABLE), overlay=code.settings.get(OVERLAY_VARIABLE, ""),
         recording=code.settings.get(RECORDING_VARIABLE, ""), image_id=code.image_id,
         project=project, url=args.url, application_run_id=args.run_id)
+    safety_policy = None
+    if getattr(args, "stop_on_first_error", False):
+        if args.run_id:
+            raise OpsError("first-error mode requires a fresh review; recovery needs separate approval", REFUSED)
+        from appsec_review.runtime import execution_safety
+        identity["execution_safety"] = execution_safety.SCHEMA
+        safety_policy = execution_safety.policy(dagster_run_id, identity)
     review_run.check_submission(ROOT, identity, dagster_run_id)
     tags = {"appsec/application_run_id": args.run_id} if args.run_id else {}
     tags["appsec/submission_identity"] = review_run.submission_identity_sha256(identity)
+    if safety_policy is not None:
+        tags["appsec/safety_identity"] = execution_safety.identity(safety_policy)
+        tags["dagster/max_retries"] = "0"
     command = ["exec", webserver.id, "dagster", "job", "launch", "-w",
                "/opt/dagster/home/workspace.yaml", "-l", "appsec_review", "-j", JOB_NAME, "--run-id", dagster_run_id]
     command += ["--tags", json.dumps(tags, sort_keys=True)]
+    if safety_policy is not None:
+        command += ["--config-json", json.dumps(
+            {"execution": {"config": {"safety": safety_policy}}}, sort_keys=True)]
     profile = running_value(code, PROFILE_VARIABLE)
     say(f"profile:   {profile}")
     if profile in {"prod", "copilot-prod"}:
@@ -881,6 +894,8 @@ def build_parser() -> argparse.ArgumentParser:
                  dry_run=True, force=True)
     add_deploy_options(review)
     review.add_argument("--run-id", help="resume this existing application run (adds the appsec/application_run_id tag)")
+    review.add_argument("--stop-on-first-error", action="store_true",
+                        help="freeze the run-scoped no-retry safety policy; requires the matching deployed code")
     review.add_argument("--id-wait", type=float, default=60, help="seconds to wait for the application run id (default %(default)s)")
     watch = add("review-watch", cmd_review_watch, "Print one line per newly started job and the final status.")
     watch.add_argument("--run", help="Dagster run id or application run id (default: the active run)")

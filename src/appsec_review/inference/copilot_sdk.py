@@ -138,15 +138,51 @@ async def _send(request: ModelRequest | ReviewModelRequest, timeout_seconds: int
 
 
 def _run(operation, timeout_seconds: int):
+    from appsec_review.runtime import execution_safety as safety
     if timeout_seconds <= 0:
         operation.close()
         raise ValueError("Copilot timeout_seconds must be positive")
 
     async def bounded():
         async with asyncio.timeout(timeout_seconds):
-            return await operation
+            if not safety.active():
+                return await operation
+            task = asyncio.create_task(operation)
+            try:
+                while not task.done():
+                    safety.check_running()
+                    await asyncio.wait({task}, timeout=0.1)
+                return await task
+            except BaseException:
+                task.cancel()
+                done, pending = await asyncio.wait({task}, timeout=5)
+                if not pending:
+                    await asyncio.gather(*done, return_exceptions=True)
+                raise
 
-    return asyncio.run(bounded())
+    if not safety.active():
+        return asyncio.run(bounded())
+    loop = asyncio.new_event_loop()
+    try:
+        return loop.run_until_complete(bounded())
+    finally:
+        pending = asyncio.all_tasks(loop)
+        try:
+            if pending:
+                for task in pending:
+                    task.cancel()
+                done, pending = loop.run_until_complete(asyncio.wait(pending, timeout=5))
+                for task in done:
+                    if not task.cancelled():
+                        task.exception()
+            if pending:
+                from appsec_review.runtime.resources import quarantine_resources
+                quarantine_resources("copilot_teardown_unconfirmed")
+                error = RuntimeError("Copilot teardown exceeded its cancellation bound")
+                safety.retain_failure("copilot.cleanup", error, pending_tasks=len(pending))
+                safety.fail(str(error), action="copilot.cleanup")
+        finally:
+            loop.close()
 
 
 def send(request: ModelRequest | ReviewModelRequest, *, timeout_seconds: int) -> ModelResult:

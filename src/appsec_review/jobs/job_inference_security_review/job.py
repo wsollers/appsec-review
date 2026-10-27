@@ -409,6 +409,9 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
             except IntegrityError:
                 raise
             except Exception as exc:  # an entire lane failing is an ordinary, accounted gap
+                from appsec_review.runtime import execution_safety as safety
+                safety.retain_failure(f"review.lane.{lane.value}", exc, ledger_path=str(ledger_path))
+                safety.fail(f"review lane failed: {type(exc).__name__}", action=f"review.lane.{lane.value}")
                 if ledger_path.exists():
                     ledger_path.unlink()
                 document = lane_failure(lane, works, f"{type(exc).__name__}", ledger_path, unit.unit_id)

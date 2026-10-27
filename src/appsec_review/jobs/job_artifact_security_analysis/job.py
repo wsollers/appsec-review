@@ -242,6 +242,8 @@ def _scan_one(unit: UnitContext, artifact: Mapping[str, Any], capability: str,
     root = unit.job.attempt_root / "artifacts" / "asa" / artifact["artifact_id"][-12:] / capability
     root.mkdir(parents=True, exist_ok=True)
     started = time.monotonic()
+    from appsec_review.runtime import execution_safety as safety
+    safety.check_running()
     observation: Mapping[str, Any] = {}
     gaps: list[str] = []
     stdout = b""
@@ -253,11 +255,23 @@ def _scan_one(unit: UnitContext, artifact: Mapping[str, Any], capability: str,
     execution_receipt: Mapping[str, Any] | None = None
     tool_identity: Mapping[str, Any] = (dict(resolved_tool_identity) if resolved_tool_identity else
         {"scanner": scanner_identity, "rules": scanner_identity, "image": None})
+    def stop(reason: str, *, action: str, expected: bool = False) -> None:
+        if safety.active():
+            limit, tail = int(settings["stream_limit_bytes"]), int(settings["diagnostic_tail_bytes"])
+            retained = [_stream(unit, root, "stdout.bin", stdout, limit, tail),
+                        _stream(unit, root, "stderr.bin", stderr, limit, tail)]
+            if parser_payload is not None:
+                retained.append(_stream(unit, root, "parser-input.bin", parser_payload, limit, tail))
+            atomic_json(root / "stopped.json", {
+                "reason": reason, "raw_artifacts": retained, "execution_receipt": execution_receipt,
+                "duration_ms": max(0, int((time.monotonic() - started) * 1000))})
+        safety.latch(reason, action=action, expected=expected)
     try:
         if capability in {"inventory", "native", "jvm", "packages", "wasm"}:
             observation, gaps = builtin_observation(path, classification, capability, limits)
             stdout = canonical_json(observation)
         elif runner is None:
+            stop("artifact scanner executor is unavailable", action="artifact.scan")
             exit_code = None
             gaps = [f"{capability} scanner unavailable: no pinned executor configured"]
             stderr = gaps[0].encode()
@@ -274,6 +288,7 @@ def _scan_one(unit: UnitContext, artifact: Mapping[str, Any], capability: str,
                     observation = ADAPTERS[capability].parse(
                         parser_payload if parser_payload is not None else stdout)
                 except (ValueError, UnicodeError, ET.ParseError) as exc:
+                    stop(f"artifact output parse failed: {type(exc).__name__}", action="artifact.parse")
                     gaps.append(f"{capability} scanner output could not be parsed: {type(exc).__name__}: {exc}")
             tool_identity = raw.get("tool_identity", tool_identity)
             receipt_value = raw.get("execution_receipt")
@@ -292,8 +307,11 @@ def _scan_one(unit: UnitContext, artifact: Mapping[str, Any], capability: str,
                 # The scanner was not launched for a named, data-coverage reason (for example the
                 # offline OSV snapshot lacks this lockfile's ecosystem): a gap, never "clean".
                 gaps.append(str(raw["precondition_gap"]))
-            elif timed_out: gaps.append(f"{capability} scanner timed out")
+            elif timed_out:
+                stop(f"{capability} scanner timed out", action="artifact.scan")
+                gaps.append(f"{capability} scanner timed out")
             elif exit_code not in ADAPTERS[capability].accepted_exit_codes:
+                stop(f"{capability} scanner exited {exit_code}", action="artifact.scan")
                 missing = osv_missing_ecosystems(stderr) if capability == "osv" else ()
                 if missing:
                     gaps.append(osv_missing_ecosystem_gap(missing, "this produced lockfile"))
@@ -301,13 +319,17 @@ def _scan_one(unit: UnitContext, artifact: Mapping[str, Any], capability: str,
                     detail = bounded_diagnostic(stderr)
                     gaps.append(f"{capability} scanner exited {exit_code}" + (f": {detail}" if detail else ""))
             elif capability == "blint" and observation and not observation.get("analyzed"):
+                stop("blint omitted its required analysis output", action="artifact.parse")
                 # blint writes a per-binary metadata report for every binary it analyzes; none
                 # means this supported artifact was not analyzed, which is not a clean result.
                 gaps.append("blint produced no per-binary analysis report for this artifact")
-            if raw.get("truncated"): gaps.append(f"{capability} scanner output was truncated")
+            if raw.get("truncated"):
+                stop(f"{capability} scanner output bound exceeded", action="artifact.scan", expected=True)
+                gaps.append(f"{capability} scanner output was truncated")
     except FrameworkIntegrityError:
         raise
     except (OSError, RuntimeError, ValueError, json.JSONDecodeError) as exc:
+        stop(f"{capability} scanner failed: {type(exc).__name__}", action="artifact.scan")
         exit_code = None
         gaps.append(f"{capability} scanner parse or execution failure: {type(exc).__name__}: {exc}")
         stderr = str(exc).encode("utf-8", errors="replace")
@@ -317,6 +339,7 @@ def _scan_one(unit: UnitContext, artifact: Mapping[str, Any], capability: str,
     raw_artifacts = [stdout_identity, stderr_identity]
     if parser_payload is not None:
         raw_artifacts.append(_stream(unit, root, "parser-input.bin", parser_payload, stream_limit, tail))
+    safety.check_running()
     result = {"schema": OBSERVATION_SCHEMA, "fingerprint": fingerprint,
         "artifact_id": artifact["artifact_id"], "artifact": {key: artifact.get(key) for key in
             ("path", "workspace_path", "sha256", "size_bytes", "kind", "build_unit_id", "canonical_identity")},

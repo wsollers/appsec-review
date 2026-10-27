@@ -349,7 +349,9 @@ def build_job(*, infer: Infer | None = None, fail_task: str | None = None) -> Jo
             errors: list[str] = []
             last_error: Exception | None = None
             group_slug = hashlib.sha256(f"{family}:{build_system}:{image_profile}".encode()).hexdigest()[:12]
-            for retry in range(int(model["retries"]) + 1):
+            from appsec_review.runtime import execution_safety as safety
+            for retry in range(1 if safety.active() else int(model["retries"]) + 1):
+                safety.check_running()
                 calls += 1
                 invocation = hashlib.sha256(
                     f"{unit.job.run_id}:{unit.job.attempt_id}:{group_slug}:{retry}:{request_sha}".encode()).hexdigest()
@@ -390,6 +392,7 @@ def build_job(*, infer: Infer | None = None, fail_task: str | None = None) -> Jo
                     unit.job.events.write("ANALYSIS_PLAN_VALIDATION_REJECTED",
                         rejection_count=len(errors), build_family=family, build_system=build_system,
                         proposal_sha256=hashlib.sha256(canonical_json(proposal)).hexdigest())
+                    safety.fail("analysis-plan model output failed validation", action="target_plan.inference")
                     if retry < int(model["retries"]):
                         request = replace(request, repair_errors=tuple(errors[:20]),
                             prior_response=canonical_json(result.proposal).decode()[:131072])
@@ -411,6 +414,8 @@ def build_job(*, infer: Infer | None = None, fail_task: str | None = None) -> Jo
                         duration_ms=int((time.monotonic() - started) * 1000), retry_count=retry,
                         error_class=type(exc).__name__, job_id="job_target_analysis_plan",
                         attempt_id=unit.job.attempt_id, build_family=family, build_system=build_system)
+                    safety.fail(f"analysis-plan inference failed: {type(exc).__name__}",
+                                action="target_plan.inference")
             if errors:
                 return {"status": "REJECTED", "proposal": None, "calls": calls, "errors": errors[:20],
                         "gap": f"{family}/{build_system}: recipe proposal rejected after bounded repair"}

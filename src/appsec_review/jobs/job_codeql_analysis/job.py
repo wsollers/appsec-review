@@ -38,6 +38,7 @@ from appsec_review.storage.atomic import copy_file
 from appsec_review.codeql.scheduler import ready_scopes
 from appsec_review.observability.spans import operation_span
 from appsec_review.runtime.resources import Reservation, ResourceAdmission
+from appsec_review.runtime import execution_safety as safety
 
 from .planning import (
     CodeQLPlan, CodeQLScope, build_codeql_plan, export_lock_mismatches, plan_graph_exports,
@@ -603,6 +604,8 @@ def _database_one(unit: UnitContext, scope: CodeQLScope,
                           **_metrics_scope(scope),
                           database_identity=identity, image_id=image.image_id)
     result = executor.execute("database", tuple(argv), scratch_root=root)
+    safety.failed_result(result.timed_out or result.exit_code != 0,
+                         "CodeQL database creation failed", action="codeql.database")
     status = "FAILED" if result.timed_out or result.exit_code != 0 else "SUCCEEDED"
     gaps = (["CodeQL database creation timed out"] if result.timed_out else
             [f"CodeQL database creation exited {result.exit_code}"] if result.exit_code != 0 else [])
@@ -633,6 +636,7 @@ def _database_isolated(unit: UnitContext, scope: CodeQLScope,
     try:
         return _database_one(unit, scope, receipts)
     except (RuntimeError, TimeoutError) as exc:
+        safety.fail(f"CodeQL database producer failed: {type(exc).__name__}", action="codeql.database")
         gap = f"CodeQL {scope.language} database producer failed ({type(exc).__name__})"
         return {"scope": asdict(scope), "terminal_status": "FAILED", "database_reused": False,
                 "database_identity": None, "gaps": [gap]}
@@ -714,6 +718,8 @@ def _query_one(unit: UnitContext, database: Mapping[str, Any],
         *selection, "--threads", str(settings.threads), "--ram", str(settings.ram_mb),
         "--max-paths", str(settings.max_paths),
     ), scratch_root=root)
+    safety.failed_result(result.timed_out or result.exit_code != 0,
+                         "CodeQL query execution failed", action="codeql.query")
     shutil.rmtree(query_database)
     status = "FAILED" if result.timed_out or result.exit_code != 0 else "SUCCEEDED"
     gaps = (["CodeQL query execution timed out"] if result.timed_out else
@@ -725,6 +731,7 @@ def _query_one(unit: UnitContext, database: Mapping[str, Any],
                                result_limit=settings.result_limit)
             result_count = sum(len(run.get("results", ())) for run in sarif["runs"])
         except (OSError, ValueError, UnicodeError, json.JSONDecodeError) as exc:
+            safety.fail(f"CodeQL returned invalid SARIF: {type(exc).__name__}", action="codeql.query")
             status, gaps = "FAILED", [f"CodeQL query produced invalid bounded SARIF ({type(exc).__name__})"]
     execution = _execution_artifact(unit, root, "query")
     unit.job.events.write("TOOL_INVOCATION_COMPLETED", unit_id=unit.unit_id, tool_id="codeql", tool_invocation_id=invocation,
@@ -999,6 +1006,8 @@ def _export_one(unit: UnitContext, database: Mapping[str, Any], *,
         seeds_file=f"export/{SEEDS_FILE}")
     unit.job.events.write("TOOL_INVOCATION_STARTED", **event, image_id=image.image_id)
     result = executor.execute("export", argv, scratch_root=scope_root)
+    safety.failed_result(result.timed_out or result.exit_code != 0,
+                         "CodeQL graph export failed", action="codeql.export")
     shutil.rmtree(staging)
     status = "FAILED" if result.timed_out or result.exit_code != 0 else "SUCCEEDED"
     gaps = (["CodeQL graph export timed out"] if result.timed_out else
@@ -1012,6 +1021,7 @@ def _export_one(unit: UnitContext, database: Mapping[str, Any], *,
                                                seed_count=len(seed_rows))
             _require_seed_reports(documents, settings)
         except (OSError, ValueError) as exc:
+            safety.fail(f"CodeQL export output is invalid: {type(exc).__name__}", action="codeql.export")
             status, gaps = "FAILED", [f"CodeQL graph export produced an invalid bounded export ({type(exc).__name__})"]
     execution = _execution_artifact(unit, scope_root, "export")
     unit.job.events.write("TOOL_INVOCATION_COMPLETED", **event, image_id=image.image_id,
@@ -1061,6 +1071,8 @@ def _precompile_export_pack(unit: UnitContext, image: Any, executor: Any, scope_
         compile_event = {**event, "tool_id": "codeql-graph-export-compile", "tool_invocation_id": uuid4().hex}
         unit.job.events.write("TOOL_INVOCATION_STARTED", **compile_event, image_id=image.image_id)
         result = executor.execute("compile", argv, scratch_root=scope_root)
+        safety.failed_result(result.timed_out or result.exit_code != 0,
+                             "CodeQL query compilation failed", action="codeql.compile")
         failed = result.timed_out or result.exit_code != 0
         gaps = (["CodeQL graph export query compile timed out"] if result.timed_out else
                 [f"CodeQL graph export query compile exited {result.exit_code}"] if failed else [])
@@ -1084,6 +1096,7 @@ def _export_isolated(unit: UnitContext, database: Mapping[str, Any], *,
     try:
         return _export_one(unit, database, executor_factory=executor_factory, seed_plan=seed_plan)
     except (RuntimeError, TimeoutError) as exc:
+        safety.fail(f"CodeQL export producer failed: {type(exc).__name__}", action="codeql.export")
         scope = _scope_from(database["scope"])
         return {**_export_base(scope, database), "export_status": "FAILED",
                 "gaps": [f"CodeQL {scope.language} graph export producer failed ({type(exc).__name__})"]}
@@ -1339,6 +1352,7 @@ def build_job() -> Job:
             if inventory.get("schema") != "appsec-review/codeql-extractor-inventory/1":
                 raise FrameworkIntegrityError("pinned CodeQL extractor inventory is invalid")
         except RuntimeError as exc:
+            safety.fail(f"CodeQL runtime failed: {type(exc).__name__}", action="codeql.inventory")
             from appsec_review.runtime.resources import ImagePreparationUnavailable
             runtime_gaps.append(str(exc) if isinstance(exc, ImagePreparationUnavailable) else
                                 f"CodeQL runtime dependency is unavailable ({type(exc).__name__})")
@@ -1427,6 +1441,7 @@ def build_job() -> Job:
                                        resource_lease_id=lease_id):
                     return function(*args)
             except (RuntimeError, TimeoutError) as exc:
+                safety.fail(f"CodeQL {action} failed: {type(exc).__name__}", action=f"codeql.{action}")
                 if action == "database":
                     base = {"scope": asdict(args[1]), "database_identity": None, "database_reused": False}
                 elif action == "export":

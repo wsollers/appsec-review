@@ -93,8 +93,12 @@ def _symbol_identity(scope: IndexScope, clangd_id: str) -> LogicalIdentity:
 def normalize_scope(unit: UnitContext, scope: IndexScope, execution: Mapping[str, Any],
                     limits: Mapping[str, int], builder: IndexBuilder, shard: str) -> dict[str, Any]:
     """Normalize one clangd YAML index into the builder; return counts and gaps."""
+    from appsec_review.runtime import execution_safety as safety
     gaps: list[str] = []
     run_root = unit.job.run_root
+    safety.failed_result(execution["timed_out"] or execution["oom_killed"]
+                         or execution["exit_code"] != 0 or execution["stdout_truncated"],
+                         "clangd execution failed or truncated its index", action="cpp.symbols")
     if execution["timed_out"]:
         gaps.append("clangd-indexer timed out")
     elif execution["oom_killed"]:
@@ -108,6 +112,7 @@ def normalize_scope(unit: UnitContext, scope: IndexScope, execution: Mapping[str
     expected = {row["file"] for row in scope.container_compile_database()}
     missing = sorted(expected - processed)
     if missing:
+        safety.fail("clangd omitted required translation units", action="cpp.symbols")
         gaps.append(f"clangd-indexer processed {len(expected) - len(missing)} of {len(expected)} "
                     "translation units")
     text = (run_root / execution["stdout_path"]).read_text(encoding="utf-8", errors="replace")
@@ -115,9 +120,13 @@ def normalize_scope(unit: UnitContext, scope: IndexScope, execution: Mapping[str
         documents, truncated_tail, capped = parse_documents(
             text, document_limit=limits["max_documents_per_scope"])
     except ValueError as exc:
+        from appsec_review.runtime import execution_safety as safety
+        safety.fail(f"clangd output is malformed: {exc}", action="cpp.symbols")
         documents, truncated_tail, capped = [], False, False
         gaps.append(f"clangd index output is malformed: {exc}")
     if truncated_tail:
+        from appsec_review.runtime import execution_safety as safety
+        safety.fail("clangd output ended inside a document", action="cpp.symbols")
         gaps.append("clangd index output ended inside a document")
     if capped:
         gaps.append("clangd index document limit reached")

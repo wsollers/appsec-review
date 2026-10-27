@@ -350,6 +350,8 @@ def build_job(*, executor_factory: ExecutorFactory | None = None,
         git = runner(unit)
         tree_run = git.tree()
         if tree_run.exit_code != 0 or tree_run.timed_out:
+            from appsec_review.runtime import execution_safety as safety
+            safety.fail("Git tree acquisition failed", action="history.tree")
             return {"binding": "unavailable", "eligible": {}, "gaps": ["git_execution_failed:ls-tree"],
                     "executions": [tree_run.execution], "terminal_status": "PARTIAL",
                     "dispositions": [{"disposition": "GAP", "reason": "git_execution_failed"}]}
@@ -409,12 +411,25 @@ def build_job(*, executor_factory: ExecutorFactory | None = None,
         limits = _limits(unit)
         git = runner(unit)
         count = settings.max_changes + 1
-        runs = (("log", git.log(count)), ("messages", git.messages(count)))
+        from appsec_review.runtime import execution_safety as safety
+        runs = []
+        for name, producer in (("log", git.log), ("messages", git.messages)):
+            run = producer(count)
+            runs.append((name, run))
+            if run.output_limit_reached:
+                safety.fail("Git output bound reached; partial output retained",
+                            action=f"history.{name}", expected=True)
+            safety.failed_result(run.exit_code != 0 or run.timed_out or run.output is None,
+                                 f"Git {name} producer failed; partial output retained",
+                                 action=f"history.{name}")
         executions = [run.execution for _, run in runs]
         limited = [name for name, run in runs if run.output_limit_reached]
         failed = [name for name, run in runs if name not in limited and
                   (run.exit_code != 0 or run.timed_out or run.output is None)]
         if limited or failed:
+            from appsec_review.runtime import execution_safety as safety
+            safety.fail("Git history acquisition failed or exceeded its bound; partial output retained",
+                        action="history.acquire", expected=bool(limited) and not failed)
             for _, run in runs:
                 if run.output is not None:
                     run.output.unlink(missing_ok=True)
@@ -639,6 +654,8 @@ def build_job(*, executor_factory: ExecutorFactory | None = None,
                     histories[path] = parse_file_history(run.stdout)
                     statuses[path] = "complete"
                 except ValueError:
+                    from appsec_review.runtime import execution_safety as safety
+                    safety.fail("Git line-history output is malformed", action="history.lines")
                     statuses[path] = "unavailable:line_history_unparseable"
         gaps = sorted({f"line_history:{_reason(value)}" if _reason(value) == "git_execution_failed" else _reason(value)
                        for value in statuses.values() if value != "complete"} - {"working_tree_divergent"})
@@ -695,6 +712,8 @@ def build_job(*, executor_factory: ExecutorFactory | None = None,
                 executor = factory(unit)
                 image_id = executor.resolve_image(executor.catalog.tool(TREE_SITTER_TOOL))
             except (KeyError, OSError, RuntimeError, ValueError):
+                from appsec_review.runtime import execution_safety as safety
+                safety.fail("source-history parser image is unavailable", action="history.parser")
                 statuses.update({path: "unavailable:tree_sitter_unavailable" for path in selected})
                 output["dispositions"] = [{"disposition": "GAP", "reason": "tree_sitter_unavailable"}]
                 selected = []
@@ -724,10 +743,14 @@ def build_job(*, executor_factory: ExecutorFactory | None = None,
                                            "--output", "/scratch/output.json"),
                         unit.job.target_root or Path(), scratch, working_directory="/scratch"))
                 except (OSError, RuntimeError, ValueError):
+                    from appsec_review.runtime import execution_safety as safety
+                    safety.fail("source-history parser execution failed", action="history.parser")
                     execution = None
                 output_path = scratch / "output.json"
                 if (execution is None or execution.exit_code != 0 or execution.timed_out or execution.oom_killed
                         or not output_path.is_file()):
+                    from appsec_review.runtime import execution_safety as safety
+                    safety.fail("source-history parser failed or omitted output", action="history.parser")
                     statuses.update({path: "unavailable:tree_sitter_execution_failed" for path in paths})
                     output["dispositions"] = [{"disposition": "GAP", "reason": "tree_sitter_execution_failed"}]
                     continue

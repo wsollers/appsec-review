@@ -580,7 +580,9 @@ def _run_invocation(unit: UnitContext, adapter: ToolAdapter, catalog: ScanCatalo
                                       {"project_root": invocation.project_root,
                                        "lockfile_count": len(selection.files)})
     tool_identity = {"name": tool.name, "version": tool.version, "image_id": image_id}
-    for attempt in range(retries + 1):
+    from appsec_review.runtime import execution_safety as safety
+    for attempt in range(1 if safety.active() else retries + 1):
+        safety.check_running()
         outcome.attempt = attempt
         outcome.observations = []
         if invocation.project_root is None:
@@ -636,6 +638,10 @@ def _run_invocation(unit: UnitContext, adapter: ToolAdapter, catalog: ScanCatalo
                 tool_id=adapter.tool_id, argv=adapter.argv(tool.executable, selection),
                 target_root=execution_target, scratch_root=scratch,
                 extra_mounts=mounts, environment=environment, memory=memory,
+                accepted_exit_codes=frozenset(adapter.accepted_exit_codes),
+                expected_nonzero=lambda code, _stdout, stderr: (
+                    adapter.tool_id == "tool-osv-scanner"
+                    and no_packages_declared(code, stderr, selection.files)),
             ))
             outcome.result = result
             attempt_paths = (unit.job.run_root / result.stdout_path,
@@ -747,6 +753,7 @@ def _run_invocation(unit: UnitContext, adapter: ToolAdapter, catalog: ScanCatalo
                                   checkpoint_reused=False, truncated=False,
                                   duration_ms=max(0, int((time.monotonic() - invoked) * 1000)),
                                   **project_fields)
+            safety.fail(f"{adapter.tool_id} failed: {exc}", action=f"scanner.{adapter.tool_id}")
     return outcome
 
 

@@ -497,6 +497,7 @@ def _probe_one(unit: UnitContext, entry: Mapping[str, Any], executor_factory=Non
             raise RuntimeError("Node dependency-bearing builds require a dependency-view executor")
         prepare(workspace=workspace, source_dir=str(recipe["source_dir"]),
                 dependency_root=node_dependency_root(recipe))
+    from appsec_review.runtime import execution_safety as safety
     command_receipts, gaps = [], []
     build_failed = False
     for ordinal, argv in enumerate([*recipe["configure_commands"], *recipe["build_commands"]], 1):
@@ -559,6 +560,12 @@ def _probe_one(unit: UnitContext, entry: Mapping[str, Any], executor_factory=Non
             gap_count=len(capture_gaps) + (1 if failed else 0),
             truncated=stdout_identity["truncated"] or stderr_identity["truncated"],
             duration_ms=int((time.monotonic() - started) * 1000))
+        if safety.active() and (failed or capture_gaps or stdout_identity["truncated"]
+                                or stderr_identity["truncated"]):
+            atomic_json(root / "stopped-command.json", {
+                "commands": command_receipts, "capture_gaps": capture_gaps,
+                "failed": failed})
+            safety.fail("build command or required execution capture failed", action="project_build")
         if failed:
             build_failed = True
             if result.timed_out or result.exit_code != 0:
@@ -580,6 +587,9 @@ def _probe_one(unit: UnitContext, entry: Mapping[str, Any], executor_factory=Non
                "terminal_status": status,
                "probe_disposition": "FAILED" if status == "FAILED" else "PROBED", "gaps": gaps,
                "checkpoint_reused": False, "attempt_number": attempt_number}
+    if safety.active() and output_gaps:
+        atomic_json(root / "stopped-probe.json", receipt)
+        safety.fail("build did not produce its required outputs", action="project_build")
     if status == "SUCCEEDED" and reusable:
         cache.parent.mkdir(parents=True, exist_ok=True)
         with FileLock(cache.parent / "probe.lock"):
@@ -727,8 +737,12 @@ def _infer_repair(unit: UnitContext, *, action: Mapping[str, Any], recipe: Mappi
 
 def _probe_with_repairs(unit: UnitContext, entry: Mapping[str, Any], *, profile: BuildProfile,
                         resolver: Any, infer: Infer | None, executor_factory=None) -> dict[str, Any]:
+    from appsec_review.runtime import execution_safety as safety
+    safety.check_running()
     action, image = dict(entry["action"]), entry.get("image")
     first = _probe_one(unit, entry, executor_factory, attempt_number=1)
+    safety.failed_result(first["terminal_status"] == "FAILED",
+                         "initial project build failed; repair is disabled for this run", action="build.probe")
     accepted_recipe = action.get("recipe")
     attempts: list[dict[str, Any]] = [{
         "attempt_number": 1,

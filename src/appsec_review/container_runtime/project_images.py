@@ -441,6 +441,8 @@ class ProjectImageResolver:
         return identity, ("\n".join(lines) + "\n").encode("utf-8")
 
     def resolve(self, recipe: Mapping[str, Any], profile: BuildProfile) -> tuple[ProjectImage, bytes, bytes]:
+        from appsec_review.runtime import execution_safety as safety
+        safety.check_running()
         from .image_builder import bounded_image_preparation, builder_namespace, verify_builder_receipt
         from appsec_review.storage.shared import safe_path
         hashes = dependency_hashes(self.target_root, recipe)
@@ -485,6 +487,7 @@ class ProjectImageResolver:
                                     retained_definition.is_symlink() else
                                     "manifest_identity_mismatch")
             from appsec_review.runtime.resources import require_bounded_image_builder
+            safety.check_running()
             require_bounded_image_builder()
             with bounded_image_preparation(identity=identity, tag=tag,
                                            timeout_seconds=self.timeout_seconds) as builder:

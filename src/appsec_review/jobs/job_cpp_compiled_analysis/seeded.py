@@ -239,6 +239,9 @@ def ir_result(unit: UnitContext, case_id: str, cataloged: Mapping[str, Any], set
     subset = [commands[index] for index in selection.selected]
     replay = _write_replay(unit, case_id, "ir", subset)
     execution = base._run_tool(unit, case_id, ("ir",), executor_factory)
+    from appsec_review.runtime import execution_safety as safety
+    safety.failed_result(execution["timed_out"] or execution["oom_killed"] or execution["exit_code"] != 0,
+                         "seeded IR execution failed", action="cpp.ir")
     tool_gap = None if execution["exit_code"] == 0 else f"{case_id} ir failed with exit {execution['exit_code']}"
     failures: dict[int, str] | None = None
     if not execution["timed_out"] and not execution["oom_killed"]:
@@ -248,6 +251,7 @@ def ir_result(unit: UnitContext, case_id: str, cataloged: Mapping[str, Any], set
         elif tool_gap and failures:
             tool_gap += "; " + "; ".join(list(failures.values())[:5])
     if failures is None and tool_gap is None:
+        safety.fail("seeded IR omitted its replay outcomes", action="cpp.ir")
         tool_gap = f"{case_id} ir replay receipt unusable"
     tool_identity = {"tool": "clang-18-llvm-ir", "image": execution["image_id"], **identity}
     artifacts = [execution["execution"], cataloged["compile_database"], replay]
@@ -454,6 +458,9 @@ def ast_result(unit: UnitContext, case_id: str, cataloged: Mapping[str, Any], se
     subset = [{**commands[index], "ast_filters": sorted(names_by_row[index])[:400]} for index in selected]
     replay = _write_replay(unit, case_id, "ast", subset)
     execution = base._run_tool(unit, case_id, ("ast",), executor_factory)
+    from appsec_review.runtime import execution_safety as safety
+    safety.failed_result(execution["timed_out"] or execution["oom_killed"] or execution["exit_code"] != 0,
+                         "seeded AST execution failed", action="cpp.ast")
     tool_gap = None if execution["exit_code"] == 0 else f"{case_id} ast failed with exit {execution['exit_code']}"
     failures: dict[int, str] | None = None
     if not execution["timed_out"] and not execution["oom_killed"]:
@@ -463,6 +470,7 @@ def ast_result(unit: UnitContext, case_id: str, cataloged: Mapping[str, Any], se
         elif tool_gap and failures:
             tool_gap += "; " + "; ".join(list(failures.values())[:5])
     if failures is None and tool_gap is None:
+        safety.fail("seeded AST omitted its replay outcomes", action="cpp.ast")
         tool_gap = f"{case_id} ast replay receipt unusable"
     tool_identity = {"tool": "clang-18", "image": execution["image_id"], "callee_decl": 1, **identity}
     artifacts = [execution["execution"], cataloged["compile_database"], replay]

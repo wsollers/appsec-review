@@ -21,6 +21,7 @@ from appsec_review.runtime.resume import ResumePlanner, job_config_sha256
 from appsec_review.runtime.datasets import dataset_contract
 from appsec_review.runtime.job import Job, JobContext
 from appsec_review.runtime.units import UnitContext, UnitExecutor
+from appsec_review.runtime import execution_safety as safety
 from appsec_review.storage import RunStore, FileLock, LockUnavailable, atomic_bytes, atomic_json, file_sha256
 from appsec_review.storage.shared import publication_scope, safe_path, verify_reference
 from appsec_review.storage.validation import validation_scope, verified_digest
@@ -48,9 +49,18 @@ class JobRunner:
     def _bind_configuration(self, run_root) -> None:
         destination = run_root / "data" / "configuration"
         manifest_path = destination / "manifest.json"
+        safety_path = destination / "execution-safety.json"
+        envelope = safety.current_policy()
+        if safety_path.exists():
+            if envelope != json.loads(safety_path.read_text(encoding="utf-8")):
+                raise ValueError("run is bound to another execution safety policy")
+        elif envelope is not None:
+            if manifest_path.exists():
+                raise ValueError("legacy run cannot acquire a new execution safety policy")
+            atomic_json(safety_path, envelope)
+        if envelope is not None:
+            safety.bind_run(run_root.name)
         if manifest_path.exists():
-            import json
-
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
             if manifest.get("resolved_sha256") != self.config.resolved_sha256:
                 raise ValueError("run is already bound to a different configuration")
@@ -71,6 +81,10 @@ class JobRunner:
         })
 
     def _context_from_claim(self, job: Job, claim: Mapping[str, Any]) -> JobContext:
+        safety.check_running()
+        safety_path = self.runs.resolve(str(claim["run_id"])) / "data/configuration/execution-safety.json"
+        if safety_path.exists() and json.loads(safety_path.read_text()) != safety.current_policy():
+            raise ValueError("attempt execution safety identity differs from its frozen run")
         policy = self.config.review_policy
         if "review_policy" not in claim and policy.mode is not AssuranceMode.STRICT:
             raise ValueError("legacy attempt requires strict re-admission before managed assurance")
@@ -462,9 +476,15 @@ class JobRunner:
         except BaseException as exc:
             failed = datetime.now(timezone.utc).isoformat()
             (unit_root / "traceback.txt").write_text(traceback.format_exc(), encoding="utf-8")
+            duration = max(0, int((datetime.fromisoformat(failed) -
+                                  datetime.fromisoformat(started)).total_seconds() * 1000))
             atomic_json(status_path, {**running, "status": "FAILED", "completed_at": failed,
+                                      "duration_ms": duration,
                                       "error": {"type": type(exc).__name__, "message": str(exc)}})
-            context.events.write("TASK_FAILED", unit_id=unit_id, error_type=type(exc).__name__)
+            context.events.write("TASK_FAILED", unit_id=unit_id, error_type=type(exc).__name__,
+                                 duration_ms=duration)
+            if safety.active():
+                self._fail_attempt(context, claim, exc)
             raise
 
     def _fail_attempt(self, context: JobContext, claim: Mapping[str, Any], exc: BaseException) -> None:
@@ -473,6 +493,8 @@ class JobRunner:
                   "attempt_id": context.attempt_id, "trigger": context.trigger,
                   "orchestration": dict(context.orchestration), "status": "FAILED",
                   "started_at": claim["started_at"], "completed_at": failed,
+                  "duration_ms": max(0, int((datetime.fromisoformat(failed) -
+                      datetime.fromisoformat(str(claim["started_at"]))).total_seconds() * 1000)),
                   "error": {"type": type(exc).__name__, "message": str(exc)}}
         atomic_json(context.attempt_root / "status.json", status)
         (context.attempt_root / "logs" / "traceback.txt").parent.mkdir(parents=True, exist_ok=True)

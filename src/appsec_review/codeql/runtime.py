@@ -22,6 +22,7 @@ from appsec_review.config.assurance import ComponentReleases
 from appsec_review.config.codeql import CodeQLPreinstalledRuntime
 from appsec_review.config.native_dagster import native_execution_requested
 from appsec_review.storage import atomic_json, bounded_file_lock, canonical_json, file_sha256
+from appsec_review.runtime import execution_safety as safety
 
 
 IMAGE_SCHEMA = "appsec-review/codeql-derived-image/3"
@@ -507,15 +508,33 @@ class CodeQLExecutor:
                 self._initialize_volume(volume_name, f"/scratch/{database_name}", runtime_user)
             with self._container(container_name):
                 code, stdout, stderr, timed_out = self.runner(command, timeout)
+                if safety.active():
+                    retained = scratch / "executions" / action
+                    retained.mkdir(parents=True, exist_ok=True)
+                    _bounded_stream(retained / "stdout.bin", stdout, self.settings.output_bytes)
+                    _bounded_stream(retained / "stderr.bin", stderr, self.settings.output_bytes)
+                    atomic_json(retained / "partial-receipt.json", {
+                        "schema": EXECUTION_SCHEMA, "action": action, "image_id": self.image.image_id,
+                        "started_at": started, "completed_at": _stamp(),
+                        "duration_ms": max(0, int((time.monotonic() - monotonic) * 1000)),
+                        "exit_code": code, "timed_out": timed_out, "cleanup": "PENDING",
+                        "container": container_name, "volume": volume_name})
+                    if timed_out or code != 0:
+                        safety.latch(f"CodeQL {action} failed; evidence: {retained}", action=f"codeql.{action}")
             container_removed = True
         finally:
             if native_database is not None and container_removed:
                 shutil.rmtree(native_database)
             if volume_created:
-                removed = self.runner(("docker", "volume", "rm", volume_name), 60)
+                if safety.active() and not container_removed:
+                    quarantine_resources("codeql_container_removal_unconfirmed")
+                    raise safety.ReviewStopped("CodeQL volume retained until container removal is confirmed")
+                with safety.cleanup_scope():
+                    removed = self.runner(("docker", "volume", "rm", volume_name), 60)
                 if removed[3] or removed[0] != 0:
                     quarantine_resources("codeql_volume_cleanup_failed")
                     raise RuntimeError("CodeQL temporary database volume could not be removed")
+        safety.check_running()
         if action == "database" and not timed_out and code == 0:
             exported = scratch / "database-export"
             database = scratch / str(database_name)

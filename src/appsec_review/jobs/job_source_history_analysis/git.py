@@ -125,6 +125,8 @@ class GitRunner:
         }
 
     def run(self, name: str, arguments: tuple[str, ...], *, output_file: bool = False) -> GitRun:
+        from appsec_review.runtime import execution_safety as safety
+        safety.check_running()
         if not re.fullmatch(r"[a-z0-9_-]{1,64}", name):
             raise ValueError("git execution name is unsafe")
         scratch = self.scratch_root / "executions" / name
@@ -141,6 +143,8 @@ class GitRunner:
             extra_mounts=(Mount(self.scratch_root / "gitdir", "/gitdir", True),),
             environment=self.environment(), working_directory="/scratch",
             file_size_limit_bytes=self.limits.max_output_bytes + 1,
+            accepted_exit_codes=(frozenset({0, 1}) if arguments[:2] == ("merge-base", "--is-ancestor")
+                                 else frozenset({0})),
         ))
         # stdout is already bounded and truncated by the executor's per-tool output limit.
         stdout = (self.executor.run_root / result.stdout_path).read_bytes()
@@ -151,6 +155,8 @@ class GitRunner:
             limited = limited or output_path.stat().st_size > self.limits.max_output_bytes
         execution = asdict(result)
         execution["output_limit_reached"] = limited
+        if limited:
+            safety.fail("Git producer output bound reached", action="history.git", expected=True)
         return GitRun(stdout, output, result.exit_code, result.timed_out,
                       result.stdout_truncated, execution, limited)
 

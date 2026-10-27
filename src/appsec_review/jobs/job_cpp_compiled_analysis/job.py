@@ -346,18 +346,24 @@ def replay_failures(root: Path, mode: str, commands: list[Mapping[str, Any]]) ->
     A header the replay image does not carry is named as such, so a missing include path is a
     visible gap rather than an empty index. Returns ``None`` when the receipt is unusable.
     """
+    from appsec_review.runtime import execution_safety as safety
     path = root / "analysis" / mode / "receipt.json"
     if not path.is_file() or path.is_symlink() or path.stat().st_size > 64 * 1024 * 1024:
+        safety.fail("required replay receipt is missing or unsafe", action=f"compiled.{mode}")
         return None
     try:
         records = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError, UnicodeDecodeError):
+    except (OSError, ValueError, UnicodeDecodeError) as exc:
+        safety.retain_failure(f"compiled.{mode}", exc)
+        safety.fail("required replay receipt is malformed", action=f"compiled.{mode}")
         return None
     if not isinstance(records, list) or len(records) != len(commands):
+        safety.fail("replay receipt does not cover its commands", action=f"compiled.{mode}")
         return None
     failures: dict[int, str] = {}
     for index, (record, command) in enumerate(zip(records, commands)):
         if not isinstance(record, Mapping) or record.get("index") != index:
+            safety.fail("replay receipt command identity is invalid", action=f"compiled.{mode}")
             return None
         if record.get("exit_code") == 0:
             continue
@@ -374,6 +380,8 @@ def replay_failures(root: Path, mode: str, commands: list[Mapping[str, Any]]) ->
             first = next((line.strip() for line in stderr.splitlines() if "error" in line), "")
             failures[index] = f"{prefix} failed with exit {record.get('exit_code')}" + (
                 f": {first[:512]}" if first else "")
+    if failures:
+        safety.fail("replay contains failed compilation commands", action=f"compiled.{mode}")
     return failures
 
 
@@ -585,6 +593,8 @@ def _add_ast_entities(unit: UnitContext, case_id: str, catalog: Mapping[str, Any
         try:
             document = _load_ast_document(ast_path)
         except (OSError, ValueError, UnicodeDecodeError):
+            from appsec_review.runtime import execution_safety as safety
+            safety.fail("Clang AST output is unavailable or malformed", action="cpp.ast")
             gaps.append(f"{command['target_path']}: Clang AST output unavailable or invalid")
             continue
         for node in _walk_ast(document):
@@ -716,6 +726,8 @@ def _infer_index(unit: UnitContext, case_id: str, catalog: Mapping[str, Any],
     try:
         records = _bounded_infer_report(report_path)
     except (OSError, ValueError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        from appsec_review.runtime import execution_safety as safety
+        safety.fail(f"Infer output is invalid: {type(exc).__name__}", action="cpp.infer")
         records = []
         gaps.append(f"Infer report unavailable or invalid: {exc}")
 
@@ -798,6 +810,8 @@ def _binary_index(unit: UnitContext, case_id: str, catalog: Mapping[str, Any], e
     try:
         records = json.loads(records_path.read_text(encoding="utf-8"))
     except (OSError, ValueError, UnicodeDecodeError):
+        from appsec_review.runtime import execution_safety as safety
+        safety.fail("binary analysis output is unavailable or malformed", action="cpp.binary")
         records, gaps = [], ["binary/symbol analysis produced no valid bounded record set"]
     builder, path, fingerprint, shard = _new_builder(unit, "compiled", case_id, "binary",
         [execution["execution"], catalog["artifact_catalog"]], gaps,
@@ -1089,6 +1103,8 @@ def build_job(*, executor_factory=None) -> Job:
                 tool_input_json(normalized, commands)
                 compile_artifact = _artifact(unit.job.run_root, normalized)
             except (OSError, ValueError, json.JSONDecodeError) as exc:
+                from appsec_review.runtime import execution_safety as safety
+                safety.fail(f"produced compile database is invalid: {type(exc).__name__}", action="cpp.catalog")
                 projects[case_id] = {"project_key": case_id, "mapping": mapping,
                     "gaps": [f"{case_id} compile database invalid: {type(exc).__name__}: {exc}"],
                     "terminal_status": "INVALID_COMPILE_DATABASE"}
@@ -1181,6 +1197,10 @@ def build_job(*, executor_factory=None) -> Job:
                     if name in {"ast", "ir"}:
                         seeded.clear_replay(unit, case_id, name)   # a stale seeded subset must never be replayed
                     execution = _run_tool(unit, case_id, (tool_mode,), executor_factory)
+                    from appsec_review.runtime import execution_safety as safety
+                    safety.failed_result(execution["timed_out"] or execution["oom_killed"]
+                                         or execution["exit_code"] != 0,
+                                         f"{case_id} {name} execution failed", action=f"cpp.{name}")
                     tool_gap = (None if execution["exit_code"] == 0 else
                                 f"{case_id} {name} failed with exit {execution['exit_code']}")
                     failures: dict[int, str] | None = None

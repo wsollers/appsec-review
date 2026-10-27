@@ -526,7 +526,12 @@ class PublicationThreadPoolExecutor(ThreadPoolExecutor):
     """Preserve the invoking attempt across explicitly parallel producer tasks."""
 
     def submit(self, fn, /, *args, **kwargs):
-        return super().submit(copy_context().run, fn, *args, **kwargs)
+        from appsec_review.runtime.execution_safety import operation
+
+        def guarded():
+            with operation(f"thread.{getattr(fn, '__name__', type(fn).__name__)}"):
+                return fn(*args, **kwargs)
+        return super().submit(copy_context().run, guarded)
 
 
 @contextmanager

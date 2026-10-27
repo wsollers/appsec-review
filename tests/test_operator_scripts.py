@@ -362,10 +362,12 @@ def test_stack_logs_reads_one_service_through_docker_logs(box: Sandbox) -> None:
 
 
 # -- review start ---------------------------------------------------------------------------------
-def test_review_start_launches_wave1_review_through_the_webserver(box: Sandbox) -> None:
+@pytest.mark.parametrize("stop_policy", [False, True])
+def test_review_start_launches_wave1_review_through_the_webserver(box: Sandbox, stop_policy: bool) -> None:
     box.dagster.runs()
     box.dagster.script("OpsRun", run_data(run("x", "STARTED", app="2026-10-21-0012")))
-    result = box.run("review-start", "--id-wait", "2")
+    result = box.run("review-start", "--id-wait", "2",
+                     *(["--stop-on-first-error"] if stop_policy else []))
     assert result.returncode == 0, result.stdout + result.stderr
     launch = [call for call in box.docker_calls() if "launch" in call]
     assert len(launch) == 1
@@ -374,11 +376,22 @@ def test_review_start_launches_wave1_review_through_the_webserver(box: Sandbox) 
     assert argv[argv.index("-j") + 1] == "wave1_review"
     assert argv[argv.index("-w") + 1] == "/opt/dagster/home/workspace.yaml" and argv[argv.index("-l") + 1] == "appsec_review"
     tags = json.loads(argv[argv.index("--tags") + 1])
-    assert list(tags) == ["appsec/submission_identity"]
+    assert set(tags) == ({"appsec/submission_identity", "appsec/safety_identity", "dagster/max_retries"}
+                         if stop_policy else {"appsec/submission_identity"})
     intent = review_run.read_submission(box.repo)
     assert intent["state"] == "SUBMITTED"
     assert tags["appsec/submission_identity"] == intent["identity_sha256"]
     dagster_id = argv[argv.index("--run-id") + 1]
+    if stop_policy:
+        from appsec_review.runtime import execution_safety as safety
+        envelope = json.loads(argv[argv.index("--config-json") + 1])["execution"]["config"]["safety"]
+        assert envelope["dagster_run_id"] == dagster_id
+        assert envelope["submission"] == intent["identity"]
+        assert tags["appsec/safety_identity"] == safety.identity(envelope)
+        assert tags["dagster/max_retries"] == "0"
+        assert "[switch]$StopOnFirstError" in (REPOSITORY / "scripts/review-start.ps1").read_text()
+    else:
+        assert "--config-json" not in argv
     assert f"dagster run id:      {dagster_id}" in result.stdout
     assert "application run id:  2026-10-21-0012" in result.stdout and f"/runs/{dagster_id}" in result.stdout
     assert box.dagster.calls("OpsRun")[0] == {"runId": dagster_id}
@@ -458,10 +471,12 @@ def test_review_start_stops_on_a_moved_image_pin(box: Sandbox) -> None:
     assert not [call for call in box.docker_calls() if "launch" in call]
 
 
-def test_single_submission_concurrent_invocations_launch_once(box: Sandbox) -> None:
+@pytest.mark.parametrize("stop_policy", [False, True])
+def test_single_submission_concurrent_invocations_launch_once(box: Sandbox, stop_policy: bool) -> None:
     box.dagster.runs()
     with ThreadPoolExecutor(max_workers=2) as pool:
-        results = list(pool.map(lambda _: box.run("review-start", "--id-wait", "0"), range(2)))
+        results = list(pool.map(lambda _: box.run("review-start", "--id-wait", "0",
+            *(["--stop-on-first-error"] if stop_policy else [])), range(2)))
     assert sorted(result.returncode for result in results) == [0, 3]
     assert len([call for call in box.docker_calls() if "launch" in call]) == 1
     record = review_run.read_submission(box.repo)
@@ -471,14 +486,16 @@ def test_single_submission_concurrent_invocations_launch_once(box: Sandbox) -> N
     assert record["identity"]["configuration"]["base_sha256"]
 
 
-def test_single_submission_lost_response_retains_intent(box: Sandbox) -> None:
+@pytest.mark.parametrize("stop_policy", [False, True])
+def test_single_submission_lost_response_retains_intent(box: Sandbox, stop_policy: bool) -> None:
     box.dagster.runs()
     box.stack(probe={"match": "dagster job launch", "rc": 1, "stderr": "connection lost after submission"})
-    result = box.run("review-start", "--id-wait", "0")
+    flags = ["--stop-on-first-error"] if stop_policy else []
+    result = box.run("review-start", "--id-wait", "0", *flags)
     assert result.returncode == 1 and "UNCERTAIN" in result.stderr
     record = review_run.read_submission(box.repo)
     assert record["state"] == "UNCERTAIN"
-    again = box.run("review-start", "--force", "--id-wait", "0")
+    again = box.run("review-start", "--force", "--id-wait", "0", *flags)
     assert again.returncode == 3 and record["dagster_run_id"] in again.stderr
     assert review_run.read_submission(box.repo) == record
     assert len([call for call in box.docker_calls() if "launch" in call]) == 1

@@ -21,8 +21,9 @@ from appsec_review.osv_offline import (
     DATABASE_ROOT as OSV_DATABASE_ROOT, ENVIRONMENT as OSV_DB_ENVIRONMENT, offline_database_mounts,
     snapshot_ecosystems,
 )
-from appsec_review.tool_inputs import osv_ecosystem, osv_missing_ecosystem_gap
+from appsec_review.tool_inputs import osv_ecosystem, osv_missing_ecosystem_gap, osv_reported_no_package_sources
 from appsec_review.storage import file_sha256
+from appsec_review.runtime import execution_safety as safety
 
 
 def _bounded(value: Any, *, depth: int = 0) -> Any:
@@ -140,6 +141,7 @@ class ContainerScannerRunner:
             tool = self.catalog.tool(adapter.tool_id)
             image_id = self.executor.resolve_image(tool)
         except (KeyError, RuntimeError) as exc:
+            safety.fail(f"artifact image resolution failed: {exc}", action="artifact.image")
             value = {"scanner": adapter.tool_id, "adapter": adapter.identity,
                      "unavailable": f"pinned scanner image unavailable: {type(exc).__name__}: {exc}"}
             self._identities[capability] = value
@@ -157,6 +159,7 @@ class ContainerScannerRunner:
                 value["rules"] = {"feed": feed, "snapshot_id": current["snapshot_id"],
                                   "manifest_sha256": current["manifest_sha256"]}
             except (OSError, ValueError, KeyError, json.JSONDecodeError) as exc:
+                safety.fail(f"artifact feed integrity failed: {type(exc).__name__}", action="artifact.feed")
                 value["unavailable"] = f"verified immutable {feed} database unavailable: {type(exc).__name__}"
         self._identities[capability] = value
         return value
@@ -202,7 +205,10 @@ class ContainerScannerRunner:
         tool = self.catalog.tool(adapter.tool_id)
         result = self.executor.execute(ExecutionRequest(adapter.tool_id,
             adapter.argv(tool.executable, input_name), target_root, scratch,
-            extra_mounts=tuple(mounts), environment=environment, memory=memory))
+            extra_mounts=tuple(mounts), environment=environment, memory=memory,
+            accepted_exit_codes=frozenset(adapter.accepted_exit_codes),
+            expected_nonzero=lambda code, stdout, stderr: (
+                capability == "osv" and osv_reported_no_package_sources(code, stdout + b"\n" + stderr))))
         stdout = (self.run_root / result.stdout_path).read_bytes()
         stderr = (self.run_root / result.stderr_path).read_bytes()
         output = scratch / PurePosixPath(adapter.output_file).name

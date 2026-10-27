@@ -19,6 +19,7 @@ from appsec_review.container_runtime.identity import application_runtime_user
 from appsec_review.config.native_dagster import native_execution_requested
 from appsec_review.storage import atomic_json, file_sha256
 from appsec_review.runtime.resources import reserve_execution, review_resources_active, tracked_container
+from appsec_review.runtime import execution_safety as safety
 
 
 @dataclass(frozen=True, slots=True)
@@ -46,6 +47,8 @@ class ExecutionRequest:
     # for a tool whose data set (osv-scanner's offline databases) needs more than the uniform
     # scanner limit. Isolation settings are never overridable.
     memory: str | None = None
+    accepted_exit_codes: frozenset[int] = frozenset({0})
+    expected_nonzero: Callable[[int | None, bytes, bytes], bool] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -102,6 +105,9 @@ def _stamp() -> str:
 
 
 def _default_runner(argv: Sequence[str], timeout: int) -> CommandOutcome:
+    if safety.active():
+        code, stdout, stderr, timed_out = safety.run_process(argv, timeout)
+        return CommandOutcome(code, stdout, stderr, timed_out, oom_killed=code == 137)
     from .native_client import native_run
     native = native_run(argv, timeout)
     if native is not None:
@@ -249,10 +255,30 @@ class ContainerExecutor:
         started = _stamp()
         try:
             lifecycle = (tracked_container(name, self._container_control, label="Scanner")
-                         if review_resources_active() else nullcontext())
+                         if review_resources_active() or safety.active() else nullcontext())
             with lifecycle:
                 outcome = self.runner(command, tool.timeout_seconds)
-                if outcome.timed_out:
+                if safety.active():
+                    stdout_path.write_bytes(outcome.stdout[:tool.output_bytes])
+                    stderr_path.write_bytes(outcome.stderr[:tool.output_bytes])
+                    atomic_json(receipt_path, {
+                        "schema": "appsec-review/container-execution-partial/1",
+                        "tool_id": tool.tool_id, "image_id": image_id, "container_name": name,
+                        "started_at": started, "completed_at": _stamp(),
+                        "duration_ms": max(0, int((datetime.now(timezone.utc) -
+                            datetime.fromisoformat(started)).total_seconds() * 1000)),
+                        "exit_code": outcome.exit_code, "timed_out": outcome.timed_out,
+                        "oom_killed": outcome.oom_killed, "cleanup": "PENDING",
+                        "stdout_sha256": file_sha256(stdout_path),
+                        "stderr_sha256": file_sha256(stderr_path),
+                    })
+                    expected = (outcome.exit_code in request.accepted_exit_codes
+                                or request.expected_nonzero is not None
+                                and request.expected_nonzero(outcome.exit_code, outcome.stdout, outcome.stderr))
+                    safety.failed_result(outcome.timed_out or outcome.oom_killed or not expected,
+                                         f"{tool.tool_id} execution failed; evidence: {receipt_path}",
+                                         action=f"scanner.{tool.tool_id}")
+                if outcome.timed_out and not safety.active():
                     self._run_control(("docker", "kill", name))
         finally:
             # The scanner's write window has closed: retained scratch evidence is not world-writable.
