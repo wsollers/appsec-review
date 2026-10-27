@@ -16,6 +16,18 @@ and tool images, project-image probes and builds, language builds, CodeQL, and t
 cve-bin-tool database builder. Socket access is equivalent to host root, so do not expose the code
 location to untrusted code.
 
+The current review-host configuration declares preinstalled CodeQL inventory and C/C++ runtimes
+with `runner_source = "application"` and effective user `1000:1000`. The code location mounts
+this checkout's exact `containers/tools/codeql/codeql_runner.py` read-only at its application
+asset path. This lets the executor translate the file to a host-backed read-only tool mount;
+an image-only application asset is insufficient. Keep the checkout and declared runner release
+fixed during a review. These declarations do not rebuild or relabel the old image wrapper, and
+an unmapped accepted dependency environment remains an explicit gap.
+Use the integrated `main` checkout for both deployment and review launches, not another
+worktree's configuration or virtual environment. Rebuild the application image after integrating
+code, then verify the loaded code location before launching; the fixed wrapper mount alone does
+not update the application package.
+
 ## Windows host WSL memory limit
 
 On the current Windows Docker Desktop host, the global WSL 2 configuration is stored at

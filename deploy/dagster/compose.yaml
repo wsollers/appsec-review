@@ -81,6 +81,7 @@ services:
       - ../../targets:/opt/app/targets:ro
       - ../../rules:/opt/app/rules:ro
       - ../../test/acceptance:/opt/app/test/acceptance:ro
+      - ../../containers/tools/codeql/codeql_runner.py:/opt/app/containers/tools/codeql/codeql_runner.py:ro
       - /var/run/docker.sock:/var/run/docker.sock
     # Each check starts a Python process that imports dagster (~10-13s of CPU on a loaded host), so
     # the timeout must exceed that import and the interval must leave the CPU idle between checks.

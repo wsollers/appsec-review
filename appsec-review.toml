@@ -19,6 +19,8 @@ approved_first_party_projects = []
 [review_policy.releases]
 # Deployment operators declare opaque release IDs here and bump them when supplied software
 # changes. Missing declarations disable reuse; installed payloads are never fingerprinted.
+codeql = "codeql-2.27.0-cert-v2.62.0"
+codeql_runner = "appsec-codeql-runner-6aaa1cc6"
 
 [review_policy.resources]
 # Budget available to review actions AFTER operator-reserved host/service headroom.
@@ -1471,6 +1473,26 @@ max_paths = 4
 # Graph export step (docs/architecture/code-graph-precomputation.md section 7.1). The bounds equal
 # the GraphSettings contract defaults: rows decoded per export query, total export bytes per scope,
 # and the runner `export` action timeout.
+# This review host has preinstalled inventory and C/C++ runtimes. Other accepted
+# dependency environments require an explicit compatible mapping; there is no fallback.
+[[jobs.job_codeql_analysis.settings.preinstalled_runtimes]]
+source_image_id = "sha256:8a9142b90b8ab80562411b732621a6c358a1e0b55e3cd18826ac0c0b3b702096"
+build_image_id = "sha256:8a9142b90b8ab80562411b732621a6c358a1e0b55e3cd18826ac0c0b3b702096"
+runtime_image_id = "sha256:6d42fb11646bc42e1f15e72bc916da7516c64fb957fca8fdb70dbc329b7235d1"
+runtime_user = "1000:1000"
+codeql_release_id = "codeql-2.27.0-cert-v2.62.0"
+runner_release_id = "appsec-codeql-runner-6aaa1cc6"
+runner_source = "application"
+
+[[jobs.job_codeql_analysis.settings.preinstalled_runtimes]]
+source_image_id = "sha256:8a9142b90b8ab80562411b732621a6c358a1e0b55e3cd18826ac0c0b3b702096"
+build_image_id = "sha256:6e0c9f5f8430595d2c08d6ac97acbad733d658c692d26cbecc29afd3e6101aaa"
+runtime_image_id = "sha256:c1dd8158da4044b7a88cef57c2962faf68849298e7fda2e7f116aa5d24107632"
+runtime_user = "1000:1000"
+codeql_release_id = "codeql-2.27.0-cert-v2.62.0"
+runner_release_id = "appsec-codeql-runner-6aaa1cc6"
+runner_source = "application"
+
 [jobs.job_codeql_analysis.settings.export_queries]
 enabled = true
 row_limit = 200000
