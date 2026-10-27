@@ -1,5 +1,22 @@
 # Architecture TODOs
 
+## Hook up Lua game-security rule scanning
+
+- [ ] Integrate `rules/lua-game-security/game-security.yml` into
+  `job_evidence_collection`'s existing `source_sast` step using the Semgrep/OpenGrep
+  images. The 20-rule pack currently supports standalone scans only.
+- [ ] Add typed central configuration, Lua source applicability and accepted dispatch
+  selection; verify and hash-pin the rule bundle before mounting it read-only.
+  Include source, rule, configuration and tool identities in checkpoint reuse.
+- [ ] Normalize and index matches as review leads with resolving source locations,
+  not confirmed vulnerabilities. Preserve parser failures, unsupported dialects
+  (including Luau extensions), skipped files and timeouts as explicit coverage gaps.
+- [ ] Add dispatch, configuration, provenance, normalization and failure/resume tests,
+  plus an end-to-end Lua fixture run through the job using both pinned scanners.
+  Retain exact-match rule fixtures and verify non-Lua scans remain unchanged.
+- [ ] Update the pack README and pipeline operations documentation once the hookup
+  is implemented; do not describe standalone fixture coverage as pipeline acceptance.
+
 ## Complete the Linux execution vertical before expanding platforms
 
 Use `targets/appsec-multi-vuln` as the acceptance target until the generic execution path is
