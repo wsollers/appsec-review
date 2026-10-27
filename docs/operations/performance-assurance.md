@@ -149,6 +149,15 @@ applicability, and target intake integrity is checked before an early probe hit.
 emit `CHECKPOINT_MISSED` with `missing_release_identity` and execute the ordinary bounded path,
 subject to the separate builder prerequisite below. Language-build keys bind relevant releases;
 unrelated query-pack declarations do not invalidate these build checkpoints.
+CodeQL also supports explicit [preinstalled runtime declarations](codeql-analysis.md#explicit-preinstalled-runtimes)
+binding source image, accepted build image, effective user, CodeQL/runner releases and inspected
+runtime image ID. This is distinct no-build provenance, not reuse of a historical derived-image
+manifest. An incomplete configured mapping fails; an absent mapping preserves bounded preparation.
+An explicit ordinary-only `runner_source = "application"` mounts the fixed current platform
+wrapper read-only rather than mislabeling an older wrapper inside the image. Its declared release
+and source mode participate in provenance and identity; there is no arbitrary host-path option
+or native mount-grant exemption. Execution reservations, protected target/build inputs and
+cleanup remain unchanged.
 SARIF observation publication binds `codeql_normalizer` as well as its normalizer schema;
 changing that declaration selects a new observation shard without invalidating databases or
 queries. Normalization still computes and independently validates its output rather than treating

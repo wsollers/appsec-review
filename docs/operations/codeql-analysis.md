@@ -58,6 +58,109 @@ user on Docker's bridge network so manual builds can restore declared dependenci
 read-only root filesystem, dropped capabilities, bounded memory/CPU/PIDs, and bounded head/tail
 logs.
 
+### Explicit preinstalled runtimes
+
+An operator may configure `jobs.job_codeql_analysis.settings.preinstalled_runtimes` as an array
+of at most 128 exact declarations. This selects preinstalled-only resolution: every requested
+build-environment/user pair must have one declaration. Missing, duplicate or conflicting mappings
+fail rather than using a different tag or silently preparing a layer. With the array absent or
+empty, the existing bounded-layer preparation path is unchanged.
+
+Each declaration has six required string fields: `source_image_id`, `build_image_id`,
+`runtime_image_id`, `runtime_user`, `codeql_release_id`, and `runner_release_id`. The only optional
+field is `runner_source`, either `image` (default) or `application`. All image fields
+are full immutable `sha256:` image IDs. The source ID must match the configured licensed source;
+both release IDs must match the frozen `[review_policy.releases]` values `codeql` and
+`codeql_runner`. The user is a non-root numeric `UID:GID` and must match the effective application
+user. Selection uses the existing `application_runtime_user` translation of the caller's nominal
+user before requiring an explicit matching declaration. On an ordinary host running as `1000:1000`,
+nominal source/build users such as `10001:10001` therefore require a declaration for `1000:1000`;
+no source/build profile override is needed. The selected effective user is bound into runtime,
+database and predecessor identities; execution rejects subsequent user drift. This does not
+change legacy derived-image identity semantics.
+
+The following is a shape example, not an enabled or usable image declaration. Replace the
+placeholders with operator-approved installed IDs/releases and the actual application UID/GID:
+
+```toml
+[review_policy.releases]
+codeql = "operator-codeql-release"
+codeql_runner = "operator-runner-release"
+
+[[jobs.job_codeql_analysis.settings.preinstalled_runtimes]]
+source_image_id = "sha256:<64-hex-source-id>"
+build_image_id = "sha256:<same-source-id-for-inventory>"
+runtime_image_id = "sha256:<64-hex-installed-source-runtime-id>"
+runtime_user = "1000:1000"
+codeql_release_id = "operator-codeql-release"
+runner_release_id = "operator-runner-release"
+runner_source = "application"
+
+[[jobs.job_codeql_analysis.settings.preinstalled_runtimes]]
+source_image_id = "sha256:<64-hex-source-id>"
+build_image_id = "sha256:<64-hex-accepted-build-environment-id>"
+runtime_image_id = "sha256:<64-hex-installed-compatible-build-runtime-id>"
+runtime_user = "1000:1000"
+codeql_release_id = "operator-codeql-release"
+runner_release_id = "operator-runner-release"
+runner_source = "application"
+```
+
+The second mapping must match the image in the actual accepted build receipt and the effective
+application user selected from its nominal user, including its dependency
+environment; a generic C++ image is not authorization for a different dependency-bearing image.
+Inventory always needs the source-environment mapping. Additional accepted environments need
+their own entries. A source-only runtime does not establish compiled CodeQL coverage.
+
+Resolution inspects source/build tag bindings and the selected runtime by immutable ID each
+time, and execution independently inspects that ID again. It does not scan installed payloads,
+read an old image manifest to establish trust, pull/tag/build images, or bypass execution
+reservations, target verification, protected build replay or cleanup. The operator declaration
+asserts runtime compatibility and installed release provenance; tool inventory and real
+compilation/query failures remain visible rather than being assumed successful from that assertion.
+With `runner_source = "image"`, the image must already supply the compatible
+`/opt/appsec/codeql_runner.py`: capability-only
+inventory with platform-payload verification excluded; protected manual replay and source-only
+mode separation; staged database export/query handling; and, when enabled, compile/export actions
+with availability-only checks on supplied packs. Customer-generated databases, command identities
+and BQRS/SARIF outputs remain verified. The interpreter, CLI, extractors, query packs and precompiled
+queries must be usable by the declared non-root user on the existing constrained filesystem.
+An old schema2 image is not presumed compatible. An unknown installed runner is an unmet operator
+prerequisite, even when the image ID is present; this declaration neither installs nor repairs it.
+
+For ordinary (non-native) execution, `runner_source = "application"` instead mounts the current
+application's fixed `containers/tools/codeql/codeql_runner.py` read-only at
+`/opt/appsec/codeql_runner.py`. The existing application-asset lookup supports both the trusted
+source checkout and installed deployment layout; existing host-bind translation selects the
+engine-visible path. A containerized application must already expose that asset through a host
+mount; an image-only application asset cannot be translated and fails explicitly.
+There is no configurable host path, target-selected wrapper, copying into
+target/evidence, payload hash or fallback to the image wrapper. Missing, symlinked or escaping
+assets fail before tool launch. Keep that application release and its declared `codeql_runner`
+release frozen throughout the run; this is operator provenance, not detection of undeclared edits.
+The image still supplies its pinned CodeQL/tools/dependency environment and interpreter, while
+provenance explicitly identifies the application-supplied wrapper instead of claiming it lives in
+the image. Changing the runner-source mode changes runtime/database identity; execution also
+rejects a declaration that no longer matches its resolved image record.
+
+Application-supplied wrappers are explicitly unsupported in native execution in this slice.
+The option does not widen broker mount grants or bypass them. Native preinstalled runtimes with
+the default image-supplied wrapper retain their existing operator-grant requirements.
+
+Distinct `appsec-review/codeql-preinstalled-image/1` records under metadata
+`codeql-preinstalled-images/` and run-owned scope `image.json` identify `preinstalled = true`,
+`image_build_performed = false`, `reused = false`, `runner_source`, and no builder receipt. Repeated selection is
+still not a cache hit or saved build. The selected runtime ID participates in that environment's
+database identity; changing it invalidates the database and downstream work without invalidating
+unrelated environment mappings. Legacy derived manifests are neither upgraded nor adopted.
+
+The `codeql.runtime_resolution` span measures selection time, including failures.
+`CODEQL_RUNTIME_RESOLVED` records preinstalled/derived provenance, runner source/release, nominal
+and effective users, and whether a build occurred. Tool receipts also record runner source/release.
+Successful preinstalled spans report `preinstalled_runtimes = 1` and `builder_launches = 0`;
+actual database/query work and its reuse remain separately measured. This support does not
+provision images, license CodeQL, fill missing target dependencies or authorize a review launch.
+
 Both derived-image build paths normalize bundled payload permissions with `chmod -R a+rX` before
 selecting the non-root runtime UID. This preserves precompiled query contents while making
 owner-only upstream `.qlx` files readable across UIDs; otherwise CodeQL falls back to compilation

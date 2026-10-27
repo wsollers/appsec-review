@@ -51,6 +51,13 @@ The CodeQL resolver (`src/appsec_review/codeql/runtime.py`) requests required la
 operator-commissioned bounded builder, using run/tenant-private tags and manifests under
 `codeql-images/` metadata. Do not tag these by hand or bypass a missing backend with an
 uncustomized image. See [builder requirements](../../../docs/operations/performance-assurance.md#scheduling-and-limits).
+An operator-approved compatible runtime already installed by immutable image ID can instead use
+[explicit preinstalled declarations](../../../docs/operations/codeql-analysis.md#explicit-preinstalled-runtimes).
+That path performs no build and claims no cache reuse; it requires exact source/build/user/release
+bindings and does not upgrade old manifests or runners.
+For an older image wrapper, explicit ordinary-only `runner_source = "application"` can supply the
+current fixed application wrapper through a read-only bind, with distinct release/source
+provenance and no image mutation. This does not supply missing CodeQL tools or target dependencies.
 The manual commands below are separate platform-maintenance examples, not the customer-review
 execution path or a substitute for backend commissioning; `<build-image>` is an accepted build
 environment image and `<uid>:<gid>` its numeric non-root runtime user.
