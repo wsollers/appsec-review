@@ -35,11 +35,19 @@ TARGET_JOBS = frozenset({
     "job_review_data_indexing", "job_review_package_assembly", "job_document_issue_analysis",
 })
 TARGET_ENVIRONMENT = "APPSEC_REVIEW_TARGET"
+TARGET_INDEPENDENT_JOBS = frozenset({
+    "job_model_connectivity", "job_image_pin_verification", "job_third_party_data_sync",
+    "job_inference_security_review", "job_final_publication_gate", "job_poc_generation",
+    "job_final_report_publication",
+})
+TARGET_INDEPENDENT_METADATA_JOBS = frozenset({
+    "job_model_connectivity", "job_image_pin_verification", "job_third_party_data_sync",
+})
 
 
 @dataclass(frozen=True)
 class LaunchInputs:
-    """What an attempt is claimed with: the target it reads and the upstream handoffs it binds."""
+    """Source access and selected upstreams; managed evidence identity is derived at admission."""
 
     target_root: Path | None
     source_fingerprint: str
@@ -49,7 +57,12 @@ class LaunchInputs:
 def configured_target(repository_root: Path) -> Path:
     """The target a launch reviews: ``APPSEC_REVIEW_TARGET``, else the repository's default corpus."""
 
-    return Path(os.environ.get(TARGET_ENVIRONMENT, Path(repository_root) / "targets" / "appsec-multi-vuln")).resolve()
+    from appsec_review.config.native_dagster import native_execution_requested
+    if native_execution_requested():
+        from appsec_review.orchestration.dagster.native import validate_native_launch
+        return Path(validate_native_launch().target_root)
+    # Do not resolve symlinks/stat the checkout before we know the job reads it.
+    return Path(os.environ.get(TARGET_ENVIRONMENT, Path(repository_root) / "targets" / "appsec-multi-vuln")).absolute()
 
 
 def launch_inputs(job: Job, *, target: Path, upstream_handoffs: Mapping[str, str]) -> LaunchInputs:
@@ -65,6 +78,16 @@ def begin(runner: Any, job: Job, inputs: LaunchInputs, *, run_id: str | None, tr
           orchestration: Mapping[str, str]) -> Mapping[str, Any]:
     """Claim (or reuse) the attempt exactly as every driver does."""
 
+    from appsec_review.config.native_dagster import reject_uncommissioned_native_execution
+    reject_uncommissioned_native_execution()
+    from appsec_review.config.native_dagster import native_execution_requested
+    if native_execution_requested():
+        from appsec_review.orchestration.dagster.native import validate_native_launch
+        contract = validate_native_launch()
+        if (run_id != contract.binding["run_id"]
+                or (inputs.target_root is not None and inputs.target_root.resolve() != Path(contract.target_root))
+                or inputs.source_fingerprint not in {"none", contract.binding["target_snapshot"]}):
+            raise ValueError("native launch differs from its exact authorized run/target")
     begin_method = getattr(runner, "begin_or_reuse_attempt", runner.begin_attempt)
     return begin_method(job, run_id=run_id, trigger=trigger, orchestration=dict(orchestration),
                         target_root=inputs.target_root, source_fingerprint=inputs.source_fingerprint,

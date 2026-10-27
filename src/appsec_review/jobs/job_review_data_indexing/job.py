@@ -431,6 +431,7 @@ def build_job(*, providers: Providers = registry_providers,
             unit_statuses=document["unit_statuses"], shards=[*document["shards"], *document["restored_shards"]],
             restored_shards=document["restored_shards"], shard_conflicts=document["shard_conflicts"],
             max_files=int(settings["max_run_files"]),
+            managed_publications=unit.job.review_policy.mode.value == "first_party_managed",
             file_job_steps=file_job_steps, file_declarations=file_declarations))
         violations = inventory["audit"]["violations"]
         for job_id in document["registry_configuration_mismatch"]:
@@ -588,12 +589,8 @@ def build_job(*, providers: Providers = registry_providers,
     units.append(Unit("publish.inventory_index", publish,
                       ("load.accepted_inputs", "links.cross_domain", *product_units, "fts.image_validation",
                        "audit.inventory", "matrix.coverage")))
-    sources = sorted([*Path(__file__).parent.glob("*.py"), *Path(__file__).parents[2].joinpath("indexing").glob("*.py"),
-                      Path(__file__).parents[2] / "storage" / "shared.py",
-                      Path(__file__).parents[2] / "retrieval" / "observations.py"])
-    implementation = hashlib.sha256(b"".join(path.read_bytes() for path in sources)).hexdigest()
     return Job(JOB_ID, "review_data_indexing", UnitExecutor(tuple(units)).execute, input_validators=(_validate,),
-               schema_identity=SCHEMA, implementation_identity=implementation, units=tuple(units),
+               schema_identity=SCHEMA, units=tuple(units),
                datasets=DATASETS, consumes=CONSUMES)
 
 

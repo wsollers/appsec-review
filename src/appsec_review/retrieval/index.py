@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from appsec_review.storage.validation import validation_operation
+
 from collections import Counter
 from dataclasses import asdict, dataclass
 import hashlib
@@ -256,7 +258,8 @@ def write_manifest(
     if owner is not None:
         for item in values:
             if item.relative_path.startswith("data/indices/"):
-                consume_named(owner.run_root, owner.run_root / item.relative_path, namespace="index-shard")
+                consume_named(owner.run_root, owner.run_root / item.relative_path, namespace="index-shard",
+                              expected_sha256=item.sha256)
             elif item.producer.get("shared_receipt") is not None:
                 owner.consume_receipt(item.producer["shared_receipt"])
     document = {
@@ -269,6 +272,7 @@ def write_manifest(
     return document
 
 
+@validation_operation
 def load_verified_manifest(run_root: Path, path: Path, expected_sha256: str | None = None,
                            _seen: frozenset[Path] = frozenset(),
                            verified: dict[tuple[Path, str], Mapping[str, Any]] | None = None,
@@ -286,11 +290,19 @@ def load_verified_manifest(run_root: Path, path: Path, expected_sha256: str | No
     seen_manifests = _seen | {resolved}
     if run_root not in resolved.parents:
         raise ValueError("index manifest path escapes run")
-    actual = file_sha256(resolved)
+    from appsec_review.storage.validation import verified_digest, current_validation
+    validation = current_validation(run_root)
+    actual = (verified_digest(run_root, resolved, expected_sha256)
+              if expected_sha256 is not None else file_sha256(resolved))
     if expected_sha256 is not None and actual != expected_sha256:
         raise ValueError("index manifest integrity mismatch")
     if verified is None:
         verified = {}
+    manifest_key = ("manifest", str(resolved), actual)
+    if validation is not None and manifest_key in validation.records:
+        return validation.records[manifest_key], actual
+    from appsec_review.observability.spans import count_work
+    count_work("manifest_validations")
     if (resolved, actual) in verified:
         return verified[(resolved, actual)], actual
     document = json.loads(resolved.read_text(encoding="utf-8"))
@@ -300,6 +312,18 @@ def load_verified_manifest(run_root: Path, path: Path, expected_sha256: str | No
     if content_hash != hashlib.sha256(canonical_json(document)).hexdigest():
         raise ValueError("index manifest content hash mismatch")
     document["content_sha256"] = content_hash
+    if validation is not None:
+        admitted = validation.admitted_manifests.get(resolved.relative_to(run_root).as_posix())
+        if admitted is not None and admitted["sha256"] == actual:
+            if admitted["document"] != document:
+                raise ValueError("admitted manifest differs from its validated projection")
+            from appsec_review.storage.shared import safe_path
+            for raw in document["indexes"]:
+                candidate = safe_path(run_root, raw["relative_path"])
+                if not candidate.is_file():
+                    raise ValueError("admitted index output is unavailable")
+            validation.records[manifest_key] = document
+            return document, actual
     swift_enabled = swift_enabled_from_run(run_root)
     for upstream in document.get("upstream_manifests", []):
         upstream_path = (run_root / str(upstream.get("path", ""))).resolve()
@@ -311,6 +335,7 @@ def load_verified_manifest(run_root: Path, path: Path, expected_sha256: str | No
     entity_ids: set[str] = set()
     relations: list[tuple[str, str, str, str]] = []
     for raw in document.get("indexes", []):
+        count_work("shard_references")
         identity = IndexIdentity(**{**raw, "gaps": tuple(raw.get("gaps", ()))})
         shard_key = (identity.name, identity.shard_id)
         if shard_key in seen:
@@ -331,11 +356,21 @@ def load_verified_manifest(run_root: Path, path: Path, expected_sha256: str | No
                 raise ValueError("shared index is not bound to its producing receipt")
         if run_root not in candidate.parents or not candidate.is_file():
             raise ValueError(f"index is unavailable: {identity.name}")
-        if file_sha256(candidate) != identity.sha256:
+        if verified_digest(run_root, candidate, identity.sha256) != identity.sha256:
             raise ValueError(f"index integrity mismatch: {identity.name}")
         if identity.relative_path.startswith("data/indices/"):
             from appsec_review.storage.shared import consume_named
-            consume_named(run_root, candidate, namespace="index-shard")
+            consume_named(run_root, candidate, namespace="index-shard", expected_sha256=identity.sha256)
+        summary_key = ("shard", canonical_json({
+            "identity": raw, "target_snapshot": document.get("target_snapshot"),
+            "swift_enabled": swift_enabled,
+        }).decode("utf-8"), identity.sha256)
+        if validation is not None and summary_key in validation.records:
+            cached_entities, cached_relations = validation.records[summary_key]
+            entity_ids.update(cached_entities)
+            relations.extend(cached_relations)
+            continue
+        count_work("shard_validations")
         uri = f"file:{candidate.as_posix()}?mode=ro&immutable=1"
         with sqlite3.connect(uri, uri=True) as database:
             metadata = dict(database.execute("SELECT key, value FROM metadata"))
@@ -364,12 +399,18 @@ def load_verified_manifest(run_root: Path, path: Path, expected_sha256: str | No
                     reject_swift_derived(
                         json.loads(str(payload_json)), enabled=False,
                         context=f"index {identity.name}/{identity.shard_id}")
-            entity_ids.update(str(row[0]) for row in database.execute("SELECT identity FROM entities"))
-            relations.extend((str(row[0]), str(row[1]), str(row[2]), identity.shard_id)
-                             for row in database.execute(
-                                 "SELECT relation_id, source_id, target_id FROM relations"))
+            shard_entities = frozenset(str(row[0]) for row in database.execute("SELECT identity FROM entities"))
+            shard_relations = tuple((str(row[0]), str(row[1]), str(row[2]), identity.shard_id)
+                                   for row in database.execute(
+                                       "SELECT relation_id, source_id, target_id FROM relations"))
+            entity_ids.update(shard_entities)
+            relations.extend(shard_relations)
+            if validation is not None:
+                validation.records[summary_key] = (shard_entities, shard_relations)
     for relation_id, source_id, target_id, shard_id in relations:
         if source_id not in entity_ids or target_id not in entity_ids:
             raise ValueError(f"relation closure mismatch: {shard_id}/{relation_id}")
     verified[(resolved, actual)] = document
+    if validation is not None:
+        validation.records[manifest_key] = document
     return document, actual

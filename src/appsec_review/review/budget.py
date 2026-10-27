@@ -2,9 +2,10 @@
 
 The counters live in one JSON document under the run's data directory and change only under a
 kernel file lock, so the lane units (separate processes) and their worker threads share one
-budget. ``budget_team_packages`` and the turn, token, query, and wall-clock ceilings are hard job
+budget. A finite ``budget_team_packages`` and the turn, token, query, and wall-clock ceilings are hard job
 limits: reaching any of them stops new launches for the rest of the run, and every package still
 queued ends ``not_launched`` with a ``budget_gap`` (design: "Budgets", R8).
+``budget_team_packages = "all"`` removes only the package-count ceiling.
 """
 from __future__ import annotations
 
@@ -83,7 +84,8 @@ class JobBudget:
             if state[counter] >= getattr(self.limits, ceiling):
                 state["exhausted"] = ceiling
                 return
-        if sum(state["team_packages"].values()) >= self.limits.budget_team_packages:
+        if (self.limits.budget_team_packages != "all" and
+                sum(state["team_packages"].values()) >= self.limits.budget_team_packages):
             state["exhausted"] = "budget_team_packages"
         elif self.clock() - state["started_at"] >= self.limits.timeout_seconds:
             state["exhausted"] = "timeout_seconds"

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
+from contextlib import nullcontext
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 import hashlib
@@ -15,7 +16,9 @@ import uuid
 
 from appsec_review.container_runtime.catalog import ContainerCatalog, ToolImage
 from appsec_review.container_runtime.identity import application_runtime_user
+from appsec_review.config.native_dagster import native_execution_requested
 from appsec_review.storage import atomic_json, file_sha256
+from appsec_review.runtime.resources import reserve_execution, review_resources_active, tracked_container
 
 
 @dataclass(frozen=True, slots=True)
@@ -23,6 +26,7 @@ class Mount:
     source: Path
     target: str
     read_only: bool = True
+    supplied_platform: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -98,6 +102,11 @@ def _stamp() -> str:
 
 
 def _default_runner(argv: Sequence[str], timeout: int) -> CommandOutcome:
+    from .native_client import native_run
+    native = native_run(argv, timeout)
+    if native is not None:
+        return CommandOutcome(native[0], native[1], native[2], native[3],
+                              oom_killed=native[0] == 137)
     try:
         completed = subprocess.run(
             list(argv), stdin=subprocess.DEVNULL, capture_output=True, check=False, timeout=timeout
@@ -138,7 +147,7 @@ class ContainerExecutor:
         scratch.mkdir(parents=True, exist_ok=True)
         # The scanner inherits the application uid/gid. Keep the writable boundary limited to its
         # run-owned scratch; target, rules, and database mounts remain read-only.
-        scratch.chmod(0o777)
+        scratch.chmod(0o700 if native_execution_requested() else 0o777)
         if not request.argv or request.argv[0] not in (tool.executable, *tool.additional_executables):
             raise ValueError(f"argv must begin with the cataloged executable for {tool.tool_id}")
         if any(not isinstance(arg, str) or "\0" in arg for arg in request.argv):
@@ -171,6 +180,10 @@ class ContainerExecutor:
 
     def _docker_bind_source(self, path: Path) -> Path:
         """Translate a path inside the Dagster code-location container to its host bind source."""
+        if native_execution_requested():
+            if Path("/.dockerenv").exists():
+                raise ValueError("native execution cannot translate a container filesystem")
+            return path
         hostname = os.environ.get("HOSTNAME")
         if not hostname or not Path("/.dockerenv").exists():
             return path
@@ -191,6 +204,16 @@ class ContainerExecutor:
         return max(candidates, key=lambda item: item[0])[1]
 
     def execute(self, request: ExecutionRequest) -> ExecutionResult:
+        tool = self.catalog.tool(request.tool_id)
+        with reserve_execution(cpu=tool.cpus, memory=request.memory or tool.memory,
+                               action=f"scanner.{tool.tool_id}", timeout_seconds=tool.timeout_seconds):
+            return self._execute(request)
+
+    def _container_control(self, argv: Sequence[str], timeout: int):
+        outcome = self.runner(argv, timeout)
+        return outcome.exit_code, outcome.stdout, outcome.stderr, outcome.timed_out
+
+    def _execute(self, request: ExecutionRequest) -> ExecutionResult:
         tool = self.catalog.tool(request.tool_id)
         runtime_user = application_runtime_user(tool.user)
         _, mounts = self._validate(request, tool)
@@ -225,9 +248,12 @@ class ContainerExecutor:
         command.extend(("--entrypoint", request.argv[0], image_id, *request.argv[1:]))
         started = _stamp()
         try:
-            outcome = self.runner(command, tool.timeout_seconds)
-            if outcome.timed_out:
-                self._run_control(("docker", "kill", name))
+            lifecycle = (tracked_container(name, self._container_control, label="Scanner")
+                         if review_resources_active() else nullcontext())
+            with lifecycle:
+                outcome = self.runner(command, tool.timeout_seconds)
+                if outcome.timed_out:
+                    self._run_control(("docker", "kill", name))
         finally:
             # The scanner's write window has closed: retained scratch evidence is not world-writable.
             request.scratch_root.resolve().chmod(0o755)

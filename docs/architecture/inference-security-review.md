@@ -659,8 +659,11 @@ The unit of review capacity is the **review team**: `red_per_team` (default 3) r
 
 Budgets are expressed per lane in team-packages, with cell-level caps beneath them:
 
-- `budget_team_packages` is the job total. `lead_budget_share` (default 0.5) splits it between the
-  lanes, and unused share flows to the other lane as described above.
+- A positive integer `budget_team_packages` is the job total. `lead_budget_share` (default 0.5)
+  splits it between the lanes, and unused share flows to the other lane as described above.
+  `budget_team_packages = "all"` instead admits both complete generated package queues without
+  package-count truncation or lane-share quotas. `prod` and `copilot-prod` select `"all"`; `dev`
+  and `copilot-dev` retain 200. The run-wide budget still counts every launched package.
 - Each cell is bounded by its model profile's turn, token, query, and timeout caps from
   [R2](#r2-worker-transport-and-bounded-retrieval-loop).
 - `max_model_turns` and the token totals are hard job ceilings. Reaching any ceiling stops new team
@@ -1085,7 +1088,7 @@ max_view_source_lines = 160      # longest function excerpt in a view
 max_view_type_declarations = 6   # type declarations embedded in a view
 
 [jobs.job_inference_security_review.settings.budgets]
-budget_team_packages = 200       # split between lanes by lead_budget_share
+budget_team_packages = 200       # dev: split by lead_budget_share; prod profiles use "all"
 max_model_turns = 12000
 max_input_tokens = 60000000
 max_output_tokens = 6000000

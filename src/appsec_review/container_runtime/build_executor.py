@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
+from contextlib import nullcontext
 from dataclasses import dataclass
 import hashlib
 import json
@@ -16,6 +17,10 @@ from typing import Any
 
 from appsec_review.application_paths import application_root as _application_root
 from appsec_review.config import BuildCaptureConfig
+from appsec_review.config.native_dagster import native_execution_requested
+from appsec_review.runtime.resources import (
+    bounded_execution, reserve_execution, review_resources_active, tracked_container,
+)
 from appsec_review.storage import atomic_json, canonical_json
 from .catalog import load_catalog
 from .identity import application_runtime_user
@@ -75,6 +80,10 @@ Runner = Callable[[Sequence[str], int], tuple[int | None, bytes, bytes, bool]]
 
 
 def _run(argv: Sequence[str], timeout: int) -> tuple[int | None, bytes, bytes, bool]:
+    from .native_client import native_run
+    native = native_run(argv, timeout)
+    if native is not None:
+        return native
     process = subprocess.Popen(
         list(argv), stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
         start_new_session=os.name == "posix",
@@ -111,6 +120,14 @@ def _container_name() -> str:
 def _run_to_files(argv: Sequence[str], timeout: int, stdout_path: Path,
                   stderr_path: Path) -> tuple[int | None, bool]:
     """Run without pipe buffering and retain both diagnostic streams in full."""
+    from .native_client import native_run
+    native = native_run(argv, timeout)
+    if native is not None:
+        stdout_path.parent.mkdir(parents=True, exist_ok=True)
+        stderr_path.parent.mkdir(parents=True, exist_ok=True)
+        stdout_path.write_bytes(native[1])
+        stderr_path.write_bytes(native[2])
+        return native[0], native[3]
     stdout_path.parent.mkdir(parents=True, exist_ok=True)
     with stdout_path.open("wb") as stdout, stderr_path.open("wb") as stderr:
         process = subprocess.Popen(
@@ -136,6 +153,10 @@ def _run_to_files(argv: Sequence[str], timeout: int, stdout_path: Path,
 
 def resolve_host_bind_path(path: Path, runner: Runner) -> Path:
     """Resolve a path through the current container's bind mounts for sibling Docker runs."""
+    if native_execution_requested():
+        if Path("/.dockerenv").exists():
+            raise ValueError("native execution cannot translate a container filesystem")
+        return path
     hostname = os.environ.get("HOSTNAME")
     if not hostname or not Path("/.dockerenv").exists():
         return path
@@ -202,9 +223,9 @@ class BuildContainerExecutor:
             mode = path.stat().st_mode
             try:
                 if path.is_dir():
-                    path.chmod(mode | 0o007)
+                    path.chmod(((mode & ~0o022) | 0o700) if native_execution_requested() else mode | 0o007)
                 elif path.is_file():
-                    path.chmod(mode | 0o006)
+                    path.chmod(((mode & ~0o022) | 0o600) if native_execution_requested() else mode | 0o006)
             except PermissionError:
                 if path.stat().st_uid != container_uid:
                     raise
@@ -253,18 +274,42 @@ class BuildContainerExecutor:
             command.extend(("--env", f"{key}={value}"))
         return root, command
 
+    @bounded_execution(cpu="2", memory="4g", action="build.execute")
     def execute(self, argv: Sequence[str], *, workspace: Path, working_directory: str,
-                environment: Mapping[str, str]) -> BuildCommandResult:
+                environment: Mapping[str, str], instrumentation_root: Path | None = None,
+                instrumentation_evidence_root: Path | None = None) -> BuildCommandResult:
         if not argv or any(not isinstance(value, str) or "\0" in value for value in argv):
             raise ValueError("build command argv is invalid")
-        _root, command = self._prepare(
-            workspace=workspace, working_directory=working_directory, environment=environment)
-        command.extend(("--entrypoint", argv[0], self.profile.image_id, *argv[1:]))
+        if (instrumentation_root is None) != (instrumentation_evidence_root is None):
+            raise ValueError("instrumentation and evidence roots must be supplied together")
+        _root = workspace.resolve(strict=True)
+        instrumentation = evidence = None
+        if instrumentation_root is not None and instrumentation_evidence_root is not None:
+            instrumentation = instrumentation_root.resolve(strict=True)
+            evidence = instrumentation_evidence_root.resolve(strict=True)
+            roots = (_root, instrumentation, evidence)
+            if (instrumentation_root.is_symlink() or instrumentation_evidence_root.is_symlink()
+                    or not instrumentation.is_dir() or not evidence.is_dir()
+                    or any(left.is_relative_to(right) or right.is_relative_to(left)
+                           for index, left in enumerate(roots) for right in roots[index + 1:])):
+                raise ValueError("instrumentation and evidence require separate roots outside the workspace")
         try:
-            code, stdout, stderr, timed_out = self.runner(command, self.timeout_seconds)
-            self._stop_on_timeout(command, timed_out)
+            _root, command = self._prepare(
+                workspace=workspace, working_directory=working_directory, environment=environment)
+            if instrumentation is not None and evidence is not None:
+                self._make_workspace_writable(evidence)
+                command.extend((
+                    "--mount", f"type=bind,src={self._bind_source(instrumentation)},dst=/appsec-jvm,readonly",
+                    "--mount", f"type=bind,src={self._bind_source(evidence)},dst=/appsec-jvm-evidence",
+                ))
+            command.extend(("--entrypoint", argv[0], self.profile.image_id, *argv[1:]))
+            with self._container(command):
+                code, stdout, stderr, timed_out = self.runner(command, self.timeout_seconds)
+                self._stop_on_timeout(command, timed_out)
         finally:
             self._restrict_workspace(_root)
+            if evidence is not None:
+                self._restrict_workspace(evidence)
         stdout_truncated, stderr_truncated = len(stdout) > self.output_bytes, len(stderr) > self.output_bytes
         tail_bytes = min(32768, self.output_bytes)
         return BuildCommandResult(
@@ -275,6 +320,11 @@ class BuildContainerExecutor:
             stderr_tail=stderr[-tail_bytes:] if stderr_truncated else b"",
         )
 
+    def _container(self, command: Sequence[str]):
+        return (tracked_container(command[command.index("--name") + 1], self.runner, label="Build")
+                if review_resources_active() else nullcontext())
+
+    @bounded_execution(cpu="2", memory="4g", action="build.capture")
     def execute_captured(self, argv: Sequence[str], *, workspace: Path,
                          working_directory: str, environment: Mapping[str, str],
                          capture_directory: Path, capture_config: BuildCaptureConfig,
@@ -348,15 +398,16 @@ class BuildContainerExecutor:
                         "1" if capture_config.capture_envp else "0", *argv))
         stdout_path, stderr_path = capture_root / "stdout", capture_root / "stderr"
         try:
-            if self.runner is _run:
-                code, timed_out = _run_to_files(
-                    command, self.timeout_seconds, stdout_path, stderr_path)
-                self._stop_on_timeout(command, timed_out)
-            else:
-                code, stdout, stderr, timed_out = self.runner(command, self.timeout_seconds)
-                self._stop_on_timeout(command, timed_out)
-                stdout_path.write_bytes(stdout)
-                stderr_path.write_bytes(stderr)
+            with self._container(command):
+                if self.runner is _run:
+                    code, timed_out = _run_to_files(
+                        command, self.timeout_seconds, stdout_path, stderr_path)
+                    self._stop_on_timeout(command, timed_out)
+                else:
+                    code, stdout, stderr, timed_out = self.runner(command, self.timeout_seconds)
+                    self._stop_on_timeout(command, timed_out)
+                    stdout_path.write_bytes(stdout)
+                    stderr_path.write_bytes(stderr)
         finally:
             self._restrict_workspace(root)
             capture_root.chmod(0o755)  # the build container's write window into the capture closed
@@ -584,8 +635,10 @@ class BuildContainerExecutor:
                 "/scratch/gitleaks.json", "--exit-code", "1",
             ]
             try:
-                code, stdout, stderr, timed_out = self.runner(command, tool.timeout_seconds)
-                self._stop_on_timeout(command, timed_out)
+                with reserve_execution(cpu=tool.cpus, memory=tool.memory, action="build.capture_secret_scan",
+                                       timeout_seconds=tool.timeout_seconds), self._container(command):
+                    code, stdout, stderr, timed_out = self.runner(command, tool.timeout_seconds)
+                    self._stop_on_timeout(command, timed_out)
             finally:
                 scan_root.chmod(0o755)  # gitleaks wrote its report; close its write window
             scan_code, scan_timed_out = code, timed_out

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
 import subprocess
 import time
@@ -28,6 +29,8 @@ TERMINAL = {"SUCCESS", "FAILURE", "CANCELED"}
 
 
 def verify_build_profile_images(document: dict, *, runner=subprocess.run) -> None:
+    if any(name.startswith("APPSEC_NATIVE_") for name in os.environ):
+        raise RuntimeError("Compose cannot execute native configuration; ambient engine fallback is prohibited")
     profiles = document["jobs"]["job_project_build"]["settings"]["profiles"]
     mismatches = []
     for name, profile in sorted(profiles.items()):

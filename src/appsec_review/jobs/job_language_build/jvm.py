@@ -13,14 +13,17 @@ import shutil
 import time
 from typing import Any
 
+from appsec_review.config.assurance import ComponentReleases
 from appsec_review.jobs.artifact_kinds import require_artifact_kind
+from appsec_review.jobs.delivery_scope import POLICY_IDENTITY, apply_scope, scope_fields
 from appsec_review.container_runtime import BuildContainerExecutor, BuildProfile
 from appsec_review.jobs.build_discovery import jvm_build_command_errors
 from appsec_review.retrieval import (
     EntityKind, EntityRecord, IndexBuilder, IndexIdentity, LogicalIdentity,
     RelationKind, RelationRecord, index_fingerprint,
 )
-from appsec_review.storage import FileLock, atomic_json, canonical_json, file_sha256, protected_json
+from appsec_review.storage import FileLock, atomic_json, canonical_json, file_sha256
+from appsec_review.storage.shared import immutable_bytes
 
 from . import gradle_provenance
 
@@ -28,6 +31,9 @@ from . import gradle_provenance
 JVM_EXECUTOR_IDENTITY = "appsec-review/jvm-language-build-executor/3"
 JVM_CAPTURE_IDENTITY = "appsec-review/jvm-build-capture/3"
 JVM_RECEIPT_SCHEMA = "appsec-review/language-build-receipt/1"
+_RELEASE_COMPONENTS = ("platform", "validation", "build_toolchain", "jvm_instrumentation")
+_INSTRUMENTATION_MOUNT = "/appsec-jvm"
+_EVIDENCE_MOUNT = "/appsec-jvm-evidence"
 _SECRET = re.compile(r"(SECRET|TOKEN|PASSWORD|PASSWD|API_KEY|PRIVATE_KEY|CREDENTIAL)", re.I)
 _TOOLS = {
     "javac": "compiler", "kotlinc": "compiler", "kapt": "annotation-processor",
@@ -148,13 +154,8 @@ def _resolved_tool(tool: str, configured: str) -> str:
             f'then printf %s "$JAVA_HOME/bin/"{fallback}; else printf %s {configured}; fi)"')
 
 
-def _logical_root(source_dir: str) -> str:
-    return f"/workspace/{source_dir}/.appsec-review-jvm"
-
-
-def _instrumentation(workspace: Path, source_dir: str, settings: Mapping[str, Any]) -> tuple[Path, str]:
-    root = workspace / Path(*PurePosixPath(source_dir).parts) / ".appsec-review-jvm"
-    binary, trace = root / "bin", root / "invocations.bin"
+def _instrumentation(root: Path, evidence_root: Path, settings: Mapping[str, Any]) -> tuple[Path, str]:
+    binary, trace = root / "bin", evidence_root / "invocations.bin"
     binary.mkdir(parents=True, exist_ok=True)
     for tool, real in sorted(settings["tool_paths"].items()):
         script = binary / tool
@@ -166,25 +167,31 @@ def _instrumentation(workspace: Path, source_dir: str, settings: Mapping[str, An
         script.chmod(0o755)
     # Per-invocation records (and the Gradle task records) are written by that same identity;
     # the executor makes the run-owned workspace writable for it.
-    trace.with_name("invocations.d").mkdir(exist_ok=True)
+    trace.with_name("invocations.d").mkdir(parents=True, exist_ok=True)
     gradle_provenance.write_init_script(root, {
         tool: _wrapper_script(tool, gradle_provenance.TEMPLATE_PLACEHOLDER)
         for tool in gradle_provenance.MIRRORED_TOOLS})
-    return trace, _logical_root(source_dir)
+    return trace, _INSTRUMENTATION_MOUNT
 
 
-def _environment(recipe: Mapping[str, Any], workspace: Path, settings: Mapping[str, Any]) -> tuple[dict[str, str], Path]:
+def _environment(recipe: Mapping[str, Any], workspace: Path, settings: Mapping[str, Any], *,
+                 instrumentation_root: Path, evidence_root: Path) -> tuple[dict[str, str], Path]:
     from .job import _probe_environment
 
     environment = _probe_environment({**recipe, "build_system": recipe.get("build_system")})
-    trace, logical = _instrumentation(workspace, str(recipe["source_dir"]), settings)
+    roots = [path.resolve() for path in (workspace, instrumentation_root, evidence_root)]
+    if any(left.is_relative_to(right) or right.is_relative_to(left)
+           for index, left in enumerate(roots) for right in roots[index + 1:]):
+        raise JvmIntegrityError("JVM instrumentation and evidence must be outside the target workspace")
+    trace, logical = _instrumentation(instrumentation_root, evidence_root, settings)
     profile = str(recipe.get("image_profile", ""))
     system_paths = settings["system_paths"]
     if profile not in system_paths:
         raise JvmIntegrityError(f"JVM image profile has no configured system path: {profile}")
-    environment["APPSEC_JVM_TRACE"] = logical + "/invocations.bin"
-    environment["APPSEC_JVM_TRACE_DIR"] = logical + "/invocations.d"
+    environment["APPSEC_JVM_TRACE"] = _EVIDENCE_MOUNT + "/invocations.bin"
+    environment["APPSEC_JVM_TRACE_DIR"] = _EVIDENCE_MOUNT + "/invocations.d"
     environment["APPSEC_JVM_INSTRUMENTATION"] = logical
+    environment["APPSEC_JVM_EVIDENCE"] = _EVIDENCE_MOUNT
     environment["PATH"] = logical + "/bin:" + str(system_paths[profile])
     environment.setdefault("MAVEN_OPTS", "-Dmaven.repo.local=/opt/project-deps/maven")
     if str(recipe.get("build_system", "")) == "maven":
@@ -514,12 +521,14 @@ def _mapped(workspace: Path, directory: str, values: list[str]) -> list[dict[str
 def _remove_jdk_mirrors(root: Path, gaps: list[str]) -> None:
     """Remove the run-owned JDK mirrors; their links name container paths and are not evidence."""
     mirrors = root / "jdk"
-    if not mirrors.exists() or mirrors.is_symlink():
+    if mirrors.is_symlink():
+        raise JvmIntegrityError("JVM mirror directory is a symlink")
+    if not mirrors.exists():
         return
     try:
         shutil.rmtree(mirrors)  # Never follows the mirror's links into the real JDK.
     except OSError as exc:
-        gaps.append(f"run-owned Gradle JDK mirror could not be removed ({type(exc).__name__})")
+        raise JvmIntegrityError("supplied Gradle JDK mirrors could not be removed before publication") from exc
 
 
 def _artifact_kind(path: Path) -> str | None:
@@ -538,7 +547,7 @@ def _catalog(run_root: Path, workspace: Path, before: Mapping[str, str], limit: 
     artifacts, gaps = [], []
     for path in sorted(workspace.rglob("*")):
         try:
-            if path.is_symlink() or not path.is_file() or ".appsec-review-jvm" in path.parts:
+            if path.is_symlink() or not path.is_file():
                 continue
         except OSError:
             continue
@@ -549,7 +558,7 @@ def _catalog(run_root: Path, workspace: Path, before: Mapping[str, str], limit: 
         artifacts.append({"path": path.relative_to(run_root).as_posix(), "workspace_path": relative,
             "sha256": digest, "size_bytes": path.stat().st_size, "kind": require_artifact_kind(kind),
             "build_unit_id": build_unit_id, "mapping": "exact-workspace-path",
-            "mapping_confidence": 1.0})
+            "mapping_confidence": 1.0, "artifact_origin": "build-output"})
         if len(artifacts) >= limit:
             gaps.append("JVM artifact catalog truncated at configured count bound")
             break
@@ -561,14 +570,19 @@ def _manifest(workspace: Path, limit: int) -> dict[str, str]:
     return _snapshot(workspace, limit)
 
 
-def _fingerprint(dispatch: Mapping[str, Any], accepted: Mapping[str, Any], settings: Mapping[str, Any]) -> str:
+def _fingerprint(dispatch: Mapping[str, Any], accepted: Mapping[str, Any], settings: Mapping[str, Any], *,
+                 releases: ComponentReleases | None = None, policy: Mapping[str, Any] | None = None) -> str:
     image = dispatch["image"]
     return hashlib.sha256(canonical_json({"schema": JVM_RECEIPT_SCHEMA,
         "target": dispatch["source_fingerprint"], "recipe": dispatch["recipe_identity"],
         "dependencies": image["dependency_hashes"], "build_dependencies": dispatch.get("build_dependencies", ()),
         "image": image["image_id"], "executor": JVM_EXECUTOR_IDENTITY, "capture": JVM_CAPTURE_IDENTITY,
         "toolchain": {"family": "java", "image_id": image["image_id"], "settings": settings},
-        "gradle_init_script": gradle_provenance.INIT_SCRIPT_SHA256,
+        "component_releases": {key: (releases.values.get(key) if releases else None)
+                               for key in _RELEASE_COMPONENTS},
+        "review_policy": {key: value for key, value in (policy or {}).items() if key != "releases"},
+        "workspace_layout": "jvm-detached-instrumentation/1",
+        "delivery_policy": POLICY_IDENTITY,
         "probe": dispatch["probe_identity"], "upstream_handoff": accepted["project_build_handoff_sha256"]
     })).hexdigest()
 
@@ -577,7 +591,8 @@ def _index(unit: Any, receipt: Mapping[str, Any]) -> dict[str, Any]:
     producer = [{"sha256": item["sha256"]} for item in receipt["artifacts"]]
     fingerprint = index_fingerprint(name="build", target_snapshot=unit.job.source_fingerprint,
         producer_artifacts=producer, tool_identity={"executor": JVM_EXECUTOR_IDENTITY,
-        "image": receipt["image"]["image_id"]}, parser_identity="jvm-provenance/2",
+        "image": receipt["image"]["image_id"], "delivery_policy": POLICY_IDENTITY},
+        parser_identity="jvm-provenance/2",
         normalizer_identity="jvm-build-normalizer/1", mapping_identity="jvm-workspace-path/1")
     shard = "jvm-" + str(receipt["build_unit_id"])
     path = unit.job.run_root / "data" / "indices" / "build" / f"{fingerprint}-{shard}.sqlite"
@@ -634,13 +649,15 @@ def _index(unit: Any, receipt: Mapping[str, Any]) -> dict[str, Any]:
             builder.add_entity(EntityRecord(identity, artifact["sha256"],
                 PurePosixPath(artifact["workspace_path"]).name,
                 f"{artifact['kind']} {artifact['workspace_path']}",
-                {key: artifact[key] for key in ("workspace_path", "sha256", "size_bytes", "kind",
-                                                 "build_unit_id", "mapping", "mapping_confidence")}))
+                {**{key: artifact[key] for key in ("workspace_path", "sha256", "size_bytes", "kind",
+                                                  "build_unit_id", "mapping", "mapping_confidence")},
+                 **scope_fields(artifact)}))
             for action_id in action_ids:
                 builder.add_relation(RelationRecord(RelationKind.GENERATED_FROM, identity.value,
                                                      action_id, True, 1.0))
-        builder.add_coverage("jvm-build", "complete" if receipt["terminal_status"] == "SUCCEEDED" else "partial",
-                             None if receipt["terminal_status"] == "SUCCEEDED" else "; ".join(receipt["gaps"][:10]))
+        complete = receipt["terminal_status"] == "SUCCEEDED" and not receipt["gaps"]
+        builder.add_coverage("jvm-build", "complete" if complete else "partial",
+                             None if complete else "; ".join(receipt["gaps"][:10]))
         sha = builder.build()
     else:
         sha = file_sha256(path)
@@ -659,6 +676,8 @@ def execute_jvm_one(unit: Any, dispatch: Mapping[str, Any], accepted: Mapping[st
     settings = unit.job.config.settings["jvm"]
     artifact_overrides = unit.job.config.settings.get("compiler_artifact_collection_overrides", {})
     capture = unit.job.config.settings.get("build_capture", {})
+    releases = unit.job.review_policy.releases
+    reusable, reuse_reason = releases.require(*_RELEASE_COMPONENTS)
     fingerprint = _fingerprint(dispatch, accepted, {
         **settings,
         "processing_modes": {
@@ -667,12 +686,16 @@ def execute_jvm_one(unit: Any, dispatch: Mapping[str, Any], accepted: Mapping[st
                 "java", unit.job.config.settings.get(
                     "compiler_artifact_collection_mode", "required")),
         },
-    })
+    }, releases=releases, policy=unit.job.review_policy.view())
     root = unit.job.run_root / "data" / "build" / "jvm" / "units" / build_unit_id
     workspace = root / "workspace"
-    cache = unit.job.metadata_root / "language-builds" / "jvm" / fingerprint / "accepted.json"
+    namespace = hashlib.sha256(str(unit.job.run_root.resolve()).encode()).hexdigest()
+    cache = unit.job.metadata_root / "language-builds" / namespace / "jvm" / fingerprint / "accepted.json"
+    if not reusable:
+        unit.job.events.write("CHECKPOINT_MISSED", unit_id=unit.unit_id, build_unit_id=build_unit_id,
+                              action="jvm_build", reason=reuse_reason)
     with FileLock(cache.parent / "build.lock"):
-        if cache.is_file():
+        if reusable and cache.is_file():
             prior = json.loads(cache.read_text(encoding="utf-8"))
             if prior.get("fingerprint") != fingerprint or prior.get("terminal_status") != "SUCCEEDED":
                 raise JvmIntegrityError("JVM checkpoint identity is invalid")
@@ -686,6 +709,18 @@ def execute_jvm_one(unit: Any, dispatch: Mapping[str, Any], accepted: Mapping[st
             expected = prior.get("workspace_files")
             if not isinstance(expected, Mapping) or _manifest(workspace, int(unit.job.config.settings["artifact_count_limit"]) * 10) != expected:
                 raise JvmIntegrityError("JVM checkpoint workspace identity changed")
+            evidence = prior.get("instrumentation_evidence_files")
+            evidence_root = root / "instrumentation-evidence"
+            if (not isinstance(evidence, Mapping) or not evidence_root.is_dir()
+                    or (evidence_root / "jdk").exists() or (evidence_root / "jdk").is_symlink()
+                    or _manifest(evidence_root, int(unit.job.config.settings["artifact_count_limit"]) * 10)
+                    != evidence):
+                raise JvmIntegrityError("JVM checkpoint instrumentation evidence changed")
+            evidence_manifest = prior["receipt"].get("instrumentation_evidence_manifest", {})
+            if (evidence_manifest.get("path") != (root / "instrumentation-evidence-manifest.json").relative_to(
+                    unit.job.run_root).as_posix()
+                    or file_sha256(root / "instrumentation-evidence-manifest.json") != evidence_manifest.get("sha256")):
+                raise JvmIntegrityError("JVM checkpoint instrumentation evidence manifest changed")
             receipt = {**prior["receipt"], "workspace": workspace.relative_to(unit.job.run_root).as_posix(),
                        "checkpoint_reused": True, "completed_at": datetime.now(timezone.utc).isoformat()}
             return receipt
@@ -694,7 +729,15 @@ def execute_jvm_one(unit: Any, dispatch: Mapping[str, Any], accepted: Mapping[st
     image_profile = str(recipe.get("image_profile", ""))
     if image_profile not in {"java", "android"} or str(image.get("family", "")) != image_profile:
         raise JvmIntegrityError("JVM recipe and accepted image profiles do not match")
-    environment, trace = _environment({**recipe, "build_system": dispatch.get("build_system")}, workspace, settings)
+    instrumentation_root, evidence_root = root / "instrumentation", root / "instrumentation-evidence"
+    for directory in (instrumentation_root, evidence_root):
+        if directory.is_symlink():
+            raise JvmIntegrityError("JVM instrumentation directory is a symlink")
+        if directory.exists():
+            shutil.rmtree(directory)
+    environment, trace = _environment(
+        {**recipe, "build_system": dispatch.get("build_system")}, workspace, settings,
+        instrumentation_root=instrumentation_root, evidence_root=evidence_root)
     profile = BuildProfile(image_profile, str(image["image_tag"]), str(image["image_id"]), str(image["user"]))
     executor = executor_factory(unit, profile) if executor_factory else BuildContainerExecutor(
         profile, timeout_seconds=int(unit.job.config.settings["command_timeout_seconds"]),
@@ -717,15 +760,16 @@ def execute_jvm_one(unit: Any, dispatch: Mapping[str, Any], accepted: Mapping[st
         instrumentation = None
         if Path(argv[0]).name == "gradle":
             argv, instrumentation = gradle_provenance.instrument_argv(
-                argv, _logical_root(str(recipe["source_dir"])))
+                argv, _INSTRUMENTATION_MOUNT, release_id=releases.values.get("jvm_instrumentation"))
         attempt_identity = hashlib.sha256(canonical_json({"run": unit.job.run_id,
             "attempt": unit.job.attempt_id, "unit": build_unit_id, "ordinal": ordinal})).hexdigest()
         command_id = hashlib.sha256(canonical_json({"attempt": attempt_identity, "argv": list(argv)})).hexdigest()
         command_environment = {**environment, "APPSEC_JVM_PARENT_COMMAND": command_id}
         exact = protected / f"{command_id}.json"
-        protected_json(exact, {"schema": "appsec-review/protected-build-command/2", "argv": list(argv),
+        immutable_bytes(unit.job.run_root, exact.relative_to(unit.job.run_root).as_posix(),
+            canonical_json({"schema": "appsec-review/protected-build-command/2", "argv": list(argv),
             "working_directory": str(recipe["source_dir"]), "environment": command_environment,
-            "access": "run-owned-protected"})
+            "access": "run-owned-protected"}))
         try:
             exact.chmod(0o600)
         except OSError:
@@ -733,7 +777,8 @@ def execute_jvm_one(unit: Any, dispatch: Mapping[str, Any], accepted: Mapping[st
         command_started = time.monotonic()
         try:
             result = executor.execute(argv, workspace=workspace,
-                working_directory=str(recipe["source_dir"]), environment=command_environment)
+                working_directory=str(recipe["source_dir"]), environment=command_environment,
+                instrumentation_root=instrumentation_root, instrumentation_evidence_root=evidence_root)
         except (RuntimeError, OSError) as exc:
             gaps.append(f"JVM build command {ordinal} failed to start ({type(exc).__name__}: {exc})")
             break
@@ -767,6 +812,7 @@ def execute_jvm_one(unit: Any, dispatch: Mapping[str, Any], accepted: Mapping[st
     artifacts, artifact_gaps = _catalog(unit.job.run_root, workspace, before,
         int(unit.job.config.settings["artifact_count_limit"]), build_unit_id)
     gaps.extend(artifact_gaps)
+    gaps.extend(apply_scope(artifacts))
     rows, trace_gaps = _trace_rows(trace, workspace, int(settings["provenance_count_limit"]),
                                    int(settings["trace_bytes"]), str(recipe["source_dir"]))
     if trace.is_file():
@@ -775,9 +821,8 @@ def execute_jvm_one(unit: Any, dispatch: Mapping[str, Any], accepted: Mapping[st
         except OSError:
             pass
     gaps.extend(trace_gaps)
-    instrumentation_root = trace.parent
     records, record_gaps = gradle_provenance.read_task_records(
-        instrumentation_root / "gradle-tasks.jsonl", int(settings["trace_bytes"]),
+        evidence_root / "gradle-tasks.jsonl", int(settings["trace_bytes"]),
         int(settings["provenance_count_limit"]))
     gaps.extend(record_gaps)
     declared, declared_gaps = gradle_provenance.declared_compilations(
@@ -787,7 +832,7 @@ def execute_jvm_one(unit: Any, dispatch: Mapping[str, Any], accepted: Mapping[st
             not any(item.get("record_kind") == "session" for item in records)):
         gaps.append("Gradle provenance init script did not report; Gradle compiler provenance is unavailable")
     for path in [trace.with_name("invocations.d"), *trace.with_name("invocations.d").glob("*"),
-                 instrumentation_root / "gradle-tasks.jsonl"]:
+                 evidence_root / "gradle-tasks.jsonl"]:
         try:
             if path.exists() and not path.is_symlink():
                 path.chmod(0o700 if path.is_dir() else 0o600)
@@ -798,8 +843,9 @@ def execute_jvm_one(unit: Any, dispatch: Mapping[str, Any], accepted: Mapping[st
     for row in rows:
         row["parent_streams"] = command_streams.get(row["parent_command_id"], {})
     trace_protected = protected / f"jvm-invocations-{unit.job.attempt_id}.json"
-    protected_json(trace_protected, {"schema": "appsec-review/protected-jvm-invocations/2", "rows": rows,
-                                     "declared_compilations": declared})
+    immutable_bytes(unit.job.run_root, trace_protected.relative_to(unit.job.run_root).as_posix(),
+        canonical_json({"schema": "appsec-review/protected-jvm-invocations/2", "rows": rows,
+                        "declared_compilations": declared}))
     try:
         trace_protected.chmod(0o600)
     except OSError:
@@ -815,6 +861,13 @@ def execute_jvm_one(unit: Any, dispatch: Mapping[str, Any], accepted: Mapping[st
                               canonical_json(row["declared_arguments"])).hexdigest()}
                           for row in declared]
     workspace_files = _manifest(workspace, int(unit.job.config.settings["artifact_count_limit"]) * 10)
+    instrumentation_evidence_files = _manifest(
+        evidence_root, int(unit.job.config.settings["artifact_count_limit"]) * 10)
+    evidence_manifest = root / "instrumentation-evidence-manifest.json"
+    atomic_json(evidence_manifest, {"schema": "appsec-review/jvm-instrumentation-evidence/1",
+        "build_unit_id": build_unit_id,
+        "files": [{"path": (evidence_root / relative).relative_to(unit.job.run_root).as_posix(),
+                   "sha256": digest} for relative, digest in sorted(instrumentation_evidence_files.items())]})
     workspace_manifest = root / "workspace-manifest.json"
     atomic_json(workspace_manifest, {"schema": "appsec-review/build-workspace-manifest/1",
         "build_unit_id": build_unit_id, "files": workspace_files})
@@ -832,15 +885,22 @@ def execute_jvm_one(unit: Any, dispatch: Mapping[str, Any], accepted: Mapping[st
             "sha256": file_sha256(trace_protected), "byte_count": trace_protected.stat().st_size},
         "workspace_manifest": {"path": workspace_manifest.relative_to(unit.job.run_root).as_posix(),
             "sha256": file_sha256(workspace_manifest)}, "artifacts": artifacts,
+        "instrumentation_evidence_manifest": {
+            "path": evidence_manifest.relative_to(unit.job.run_root).as_posix(),
+            "sha256": file_sha256(evidence_manifest)},
+        "component_releases": {key: releases.values.get(key) for key in _RELEASE_COMPONENTS},
+        "checkpoint_reuse_reason": reuse_reason,
         "gaps": list(dict.fromkeys(gaps)), "terminal_status": status, "checkpoint_reused": False,
         "started_at": started_at, "completed_at": datetime.now(timezone.utc).isoformat(),
         "duration_ms": int((time.monotonic() - started) * 1000),
         "executor_identity": JVM_EXECUTOR_IDENTITY, "capture_identity": JVM_CAPTURE_IDENTITY}
     if status == "SUCCEEDED":
         receipt["retrieval_index"] = _index(unit, receipt)
+    if status == "SUCCEEDED" and reusable:
         cache.parent.mkdir(parents=True, exist_ok=True)
         with FileLock(cache.parent / "build.lock"):
             atomic_json(cache, {"schema": "appsec-review/language-build-checkpoint/1",
                 "fingerprint": fingerprint, "terminal_status": status, "workspace": str(workspace),
-                "workspace_files": workspace_files, "receipt": receipt})
+                "workspace_files": workspace_files, "instrumentation_evidence_files": instrumentation_evidence_files,
+                "receipt": receipt})
     return receipt

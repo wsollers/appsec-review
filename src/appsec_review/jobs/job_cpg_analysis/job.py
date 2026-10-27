@@ -375,12 +375,7 @@ def build_job(*, executor_factory=None) -> Job:
         Unit("generate.scopes", generate, ("load.accepted_cpp",)),
         Unit("acceptance.publish_handoff", publish, ("load.accepted_cpp", "generate.scopes")),
     )
-    implementation = hashlib.sha256(
-        b"".join(path.read_bytes() for path in sorted(Path(__file__).parent.glob("*.py"))) +
-        Path(__file__).parents[1].joinpath("cpp_index_scopes.py").read_bytes() +
-        Path(__file__).parents[1].joinpath("cpp_seeded.py").read_bytes() +
-        b"".join(path.read_bytes() for path in seeding.implementation_sources()) +
-        (b"injected-executor" if executor_factory else b"container-executor")).hexdigest()
+    implementation = None
     return Job(JOB_ID, "cpg_analysis", UnitExecutor(units).execute, input_validators=(_validate,),
                schema_identity=SCHEMA, implementation_identity=implementation, units=units,
                datasets=DATASETS, consumes=CONSUMES)

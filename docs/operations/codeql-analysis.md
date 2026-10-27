@@ -47,13 +47,13 @@ missing extractor or pack is a coverage gap, never clean Ruby coverage.
 
 The licensed base image is operator-provided. No proprietary payload is committed. The configured
 `audit-codeql:custom-2.27.0` source image adds the release-pinned CERT C++ coding-standards pack to
-that base. The reviewed asset lock pins the CLI, license, complete extractor trees,
-TypeScript/Rust analyzer prerequisites, default query packs, custom query trees, pack locks, and
-suites. `jobs.job_codeql_analysis.settings.asset_lock_sha256` in `appsec-review.toml` must equal
-the SHA-256 of `containers/tools/codeql/assets.lock.json`, and each configured query, additional,
-and custom suite must equal its locked entry; otherwise planning stops with a framework-integrity
-failure. Any change to the lock therefore updates `asset_lock_sha256` in the same change. A
-derived image layers that payload onto each accepted build image and runs as a distinct non-root
+that base. The supplied asset lock describes CLI/extractor/query capabilities; the customer review
+does not hash the lock, license, installed trees or supplied packs. Runtime reuse instead requires
+operator-declared component releases under `[review_policy.releases]`. Missing declarations disable
+reuse rather than trigger payload hashing. Configuration and capability incompatibilities still
+fail explicitly. Required image layering uses the separately configured
+[bounded builder](performance-assurance.md#scheduling-and-limits); an unavailable backend cannot
+be replaced by an uncustomized base image. A derived image layers that payload onto each accepted build image and runs as a distinct non-root
 user on Docker's bridge network so manual builds can restore declared dependencies,
 read-only root filesystem, dropped capabilities, bounded memory/CPU/PIDs, and bounded head/tail
 logs.
@@ -62,7 +62,8 @@ Both derived-image build paths normalize bundled payload permissions with `chmod
 selecting the non-root runtime UID. This preserves precompiled query contents while making
 owner-only upstream `.qlx` files readable across UIDs; otherwise CodeQL falls back to compilation
 after `AccessDeniedException`, potentially exhausting query memory or time limits. A Dockerfile
-change invalidates the derived-image cache identity without changing the pinned source payload.
+change requires the operator to update its declared component release; review execution does not
+fingerprint that Dockerfile.
 The live `precompiled_queries` regression in `tests/test_live_codeql_toolchains.py` checks both
 image paths as non-root users, not as the build-time root user.
 
@@ -77,6 +78,11 @@ dependency, environment,
 extractor, source, runtime, or database-limit change invalidates it. Databases and SARIF are
 run-owned and retained beneath `runs/<run-id>/data/codeql/scopes/<scope-id>/`; profile-specific
 query artifacts live under `queries/<profile-id>/`.
+
+A different query release requires a new frozen run, not an edit to an existing configuration.
+The explicitly authorized [predecessor DB path](performance-assurance.md#explicit-predecessor-database-reuse)
+re-admits only selected compatible databases into new-run custody. Current queries then run under
+the new declaration. This is not a global cache or permission to import retained operational data.
 
 Normalization can rerun with a mixture of reused and fresh query scopes. The shared SQLite
 index builder constructs each candidate shard in a private temporary directory and reuses an
@@ -108,9 +114,12 @@ modified. Regression coverage lives in `tests/test_codeql_analysis.py`.
 
 ## Graph export step
 
-The `export` step (unit `export.scopes`) runs the repository-owned, hash-pinned graph export pack
-on each successful database. It depends on `database.scopes` only, so query and export failures
-never invalidate each other. Its design is
+The export action inside `execution.scopes` runs the supplied graph export pack
+on each successful database without fingerprinting supplied pack files. Each database immediately
+makes its queries and export eligible, and query/export failures do not invalidate one another.
+The job-level topology is planning, ready-scope execution, then acceptance. Resource admission
+still applies; [current conservative limits](performance-assurance.md#scheduling-and-limits)
+do not permit two ordinary actions to overlap. Its design is
 [code-graph precomputation](../architecture/code-graph-precomputation.md) section 7. Only C/C++
 has a pack in this change. Every other language records the export disposition `NOT_APPLICABLE`
 with the reason "no hash-pinned CodeQL graph export pack for `<language>`". This is a named
@@ -124,21 +133,23 @@ Configuration lives in `appsec-review.toml`:
 - `[[jobs.job_codeql_analysis.settings.languages.cpp.export_queries]]` must equal
   `export_query_packs.cpp` in `containers/tools/codeql/assets.lock.json` field for field. At most
   one pack is allowed per language, and only `cpp` may declare one. Planning stops with a
-  framework-integrity failure when any language's block differs from its lock entry. The export
-  unit then rechecks the asset-lock hash, the pack tree hash and file count, `qlpack.yml`, the
-  suite, `columns.json` and `catalog.json` in the repository before it runs anything.
+  framework-integrity failure when any language's block differs from its lock entry. Runtime
+  reads the declared pack, column and catalog contracts for execution; it does not fingerprint
+  the supplied lock, pack tree, suite or runner. Relevant operator release declarations determine
+  reuse, and missing declarations disable it.
 
 For each exportable scope, the job stages scratch under `data/codeql/scopes/<scope-id>/export/`.
 The scratch holds a disposable database copy, the pack, `columns.json` and the asset lock. The
-runner verifies them against the lock again, inside a `--network none` container, and writes
+runner checks declared execution compatibility, not supplied payload integrity, inside a
+`--network none` container and writes
 `exports/<query_id>.json` plus `exports/export-manifest.json`. The scratch is then deleted.
 `load_graph_exports` re-verifies the directory against its manifest and the export contract. The
 manifest's language, pack identity and bounds must equal the configuration.
 
 The export checkpoint is `export-checkpoint.json`
 (`appsec-review/codeql-export-checkpoint/1`). Its identity binds the database identity and tree,
-the export pack entry without the catalog, the manifest schema, the bounds and the runner hash.
-A database, pack, bound or runner change reruns the export only. A query-suite or catalog change
+the effective export contract, the manifest schema, the bounds and declared export/runner releases.
+A database, declared pack release, bound or declared runner release change reruns the export only. A query-suite or catalog change
 does not. On reuse the exports are re-verified, and a changed, extra or missing export file is a
 framework-integrity failure. A timeout, a non-zero exit or an invalid fresh export is a scope gap.
 A failed database is the gap "export skipped because database creation failed". A truncated query
@@ -186,14 +197,16 @@ minutes of contended processes), so the `compile` action uses a single multi-thr
 project, the database and the scope.
 
 - **Cache.** `$HOME/.codeql/compile-cache` is persisted in the docker volume
-  `appsec-codeql-compile-<sha256(key)[:16]>`, mounted at `/codeql-cache` and linked by the runner.
-  The key is the pinned CodeQL payload image (`image.source_image_id`), not the derived project
-  image, so every project image and every runner-script edit shares one warm cache. A new CodeQL
-  payload starts cold by design.
-  Entries are readable only by the uid that wrote them, so `build.py query-packs --warm` runs as
-  the same uid the job does (the host process owner, `application_runtime_user`), and both
-  re-assert ownership of the volume recursively before use. A cache written as a different uid is
-  a silent miss: the job recompiled from cold (1053 s) against a volume warmed as uid 10001.
+  `appsec-codeql-compile-<sha256(declarations)[:24]>`, mounted at `/codeql-cache` and linked by
+  the runner. Its namespace includes the run root, declared CodeQL/runner releases and runtime
+  user. Customer runs never share writable compilation caches with other runs or platform
+  release tooling. Missing component declarations disable cache use explicitly.
+  Initialization is single-flight under a process-safe per-volume lock. Only the volume root
+  is chowned; existing cache contents are not recursively traversed. A Docker volume creation
+  timestamp binds the initialization record so a recreated volume is initialized again.
+  Initialization helpers are named, CPU/memory/PID bounded and tracked by the action's resource
+  lease. Unconfirmed container death quarantines the lease; initialization failure is a named
+  action failure, not a silent cold-cache fallback.
 - **`compile` action.** `codeql_runner.py compile` compiles the whole pack with
   `codeql query compile --threads` into the cache and writes nothing else. It has its own
   timeout, CPU and memory limits (`compile_timeout_seconds` 3600, `compile_threads` 8,
@@ -204,12 +217,10 @@ project, the database and the scope.
   process (per-key lock, in-memory memo) before the first export action. A compile that fails or
   times out makes that export `FAILED` with a named gap; it is never read as "no flows".
   Events use tool id `codeql-graph-export-compile`.
-- **Warming ahead of time.** `python containers/build.py query-packs` type-checks the registered
-  packs (`--check-only`, no cache). `python containers/build.py query-packs --warm` performs the
-  real compile into the same volume, for packs registered with `warm = true` in
-  `rules/registry.toml` (currently `graph-export-cpp`). Run it once per host and after a CodeQL
-  payload change. The cache is per host, so a fresh host pays the cold cost on its first export
-  unless it has been warmed.
+- **Platform release checks.** `python containers/build.py query-packs` and its `--warm` option
+  are separate platform-maintenance operations. Their cache is not the customer run's writable
+  cache, and their checks never run as customer-review assurance. A new customer run starts
+  with its own cold compilation cache.
 - **Other CodeQL packs.** `cert-cpp-coding-standards` is type-checked, not warmed (its 117 queries
   took 48 min 36 s with `--check-only` on the rebuilt payload, so the registry gives it a 7200 s
   timeout); registering it with `warm = true` would add that cost to every payload rebuild; it was

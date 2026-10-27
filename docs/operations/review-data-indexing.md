@@ -39,6 +39,13 @@ All bounds are in `[jobs.job_review_data_indexing.settings]` in `appsec-review.t
 
 ## Publication audit
 
+The following deep-audit description applies to `strict` customer-evidence assurance. Explicit
+`first_party_managed` runs instead authenticate producer admission records and account for
+accepted publications without enumerating scratch or revalidating admitted shard rows. Reports
+identify the audit scope and the omitted scratch assurance. Supplied platform payloads are excluded
+in both modes. See [performance and assurance](performance-assurance.md) for custody, release IDs,
+package validation and rollback.
+
 Each registered job declares its outputs in `src/appsec_review/jobs/<job>/datasets.py`
 (`DatasetDeclaration`, attached to `Job.datasets`). The audit enumerates the registry and the
 run-owned resolved configuration, scans the run-owned `data/` tree (bounded by `max_run_files`),
@@ -73,6 +80,12 @@ application run ID plus job ID plus attempt ID; the existing Dagster UUID identi
 invocation. No additional UUID is needed. Ownership is accounting metadata, never an accepted
 handoff or proof of successful coverage. Aggregate artifact rows do not attribute all historical
 files to the latest accepted attempt.
+
+Dagster node names identify lifecycle/task locations, not separate invocations. Shared publication
+allows the node name to differ between begin and task execution within the same identified Dagster
+run, while still requiring matching application run, job, attempt and all other orchestration fields.
+The immutable claim and shared receipt retain the original begin-node correlation; task receipts
+retain the actual executing node. Direct execution and uncorrelated contexts retain exact matching.
 
 Files outside attempt directories are explicitly `shared_or_run_scoped` with no inferred attempt
 or Dagster ID. Their content identity is separate from attempt provenance. For the migrated

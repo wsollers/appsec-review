@@ -48,12 +48,21 @@ prod stack to dev the same way.
 mirrors its overrides, changing only providers to `copilot-sdk` and model IDs to the exact dotted
 Copilot catalog names. A regression test compares all resolved job settings with `prod`, including
 disabled model settings, retries, query/turn limits, timeouts, budgets and role bindings. When
-production settings change, update both files together. `dev`, `prod` and `copilot-dev` are unchanged.
+production settings change, update both files together. `dev` and `copilot-dev` retain their finite
+package caps.
 
 The independent verifier and adjudication judge use `strong` (`claude-opus-5.5`); primary workers
 use `claude-sonnet-5.5`, preserving distinct-model verification. Inference-review ceilings remain
 60,000 model turns, 600,000,000 input tokens, 60,000,000 output tokens, 200,000 retrieval queries
 and 86,400 seconds. These are limits, not consumption targets.
+
+Both production profiles set `budgets.budget_team_packages = "all"`. Every generated lead and hunt
+package is eligible for a team launch: there is no package-count cutoff or fixed lane-share quota.
+For example, queues of 485 lead and 114 hunt packages admit all 599, not 100 per lane. This does not
+guarantee completion: token, turn, query, time, per-cell and concurrency safeguards remain in force,
+and exhaustion still records explicit gaps. `dev` and `copilot-dev` keep the 200-package ceiling and
+fair-share allocation. Existing runs retain their frozen settings; changing these profiles does not
+alter historical runs.
 
 Use the dedicated login below, verify the authenticated account and enabled exact model IDs,
 and verify reasoning and transport limit support before launching. Catalog verification is not
@@ -142,7 +151,7 @@ rejected with a message that names the key.
 | `jobs.job_inference_security_review.settings.models.<profile>` (created or updated) | `provider`, `model`, `reasoning`, `max_input_tokens`, `max_output_tokens`, `max_queries`, `max_turns`, `timeout_seconds` |
 | `jobs.job_poc_generation.settings.models.<profile>` (existing profiles only) | `provider`, `model`, `reasoning`, `max_input_tokens`, `max_output_tokens`, `max_queries`, `max_turns`, `timeout_seconds` |
 | `jobs.job_inference_security_review.settings.roles.<role>` (the role must exist in the base) | `model_profile` |
-| `jobs.job_inference_security_review.settings.budgets` | `max_model_turns`, `max_input_tokens`, `max_output_tokens`, `max_retrieval_queries`, `timeout_seconds` |
+| `jobs.job_inference_security_review.settings.budgets` | `budget_team_packages` (positive integer or `"all"`), `max_model_turns`, `max_input_tokens`, `max_output_tokens`, `max_retrieval_queries`, `timeout_seconds` |
 
 ## The prod values
 
@@ -158,7 +167,7 @@ rejected with a message that names the key.
 | PoC generation `models.default` | `claude-sonnet-5-5` | high | 200000 | 32000 | 600 |
 
 `default` and `strong` also set `max_queries = 60` and `max_turns = 16`. The inference review budgets
-become `max_model_turns = 60000`, `max_input_tokens = 600000000`, `max_output_tokens = 60000000`,
+become `budget_team_packages = "all"`, `max_model_turns = 60000`, `max_input_tokens = 600000000`, `max_output_tokens = 60000000`,
 `max_retrieval_queries = 200000` and `timeout_seconds = 86400`.
 
 ## The verifier uses a different model

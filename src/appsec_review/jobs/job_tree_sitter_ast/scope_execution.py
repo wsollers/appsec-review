@@ -10,6 +10,9 @@ from typing import Any
 from appsec_review.container_runtime import ContainerExecutor, ExecutionRequest, load_catalog
 from appsec_review.runtime import UnitContext
 from appsec_review.storage import atomic_json
+from appsec_review.storage.shared import immutable_bytes, safe_path
+from appsec_review.retrieval.source_resolution import read_source_bytes, source_native
+from appsec_review.jobs.delivery_scope import source_in_scope
 
 from .model import GrammarLock, Scope, scope_fingerprint
 from .normalize import NORMALIZER_SCHEMA, normalize_scope, reusable_shard
@@ -63,6 +66,20 @@ def parse_scope(unit: UnitContext, raw_scope: Mapping[str, Any],
     limits = {"max_file_bytes": int(settings["max_file_bytes"]),
               "max_nodes": int(settings["max_nodes_per_file"]),
               "max_scope_nodes": int(settings["max_nodes_per_scope"])}
+    generated = any("source_backing" in item for item in scope.files)
+    if any(not source_in_scope(item) for item in scope.files):
+        raise ValueError("out-of-scope source entered AST parsing")
+    if generated and not all("source_backing" in item for item in scope.files):
+        raise ValueError("generated and target sources must have separate parser mounts")
+    if generated and (len(scope.files) > int(settings["max_files_per_scope"]) or sum(
+            int(item.get("size_bytes", 0)) for item in scope.files) > int(settings["max_source_bytes_per_scope"])):
+        raise ValueError("AST source scope exceeds configured bounds")
+    generated_bytes = {
+        item["path"]: read_source_bytes(
+            unit.job.run_root, unit.job.target_root or Path(), target_snapshot=unit.job.source_fingerprint,
+            path=item["path"], sha256=item["sha256"], native=source_native(item), limit=limits["max_file_bytes"])
+        for item in scope.files if generated
+    }
     fingerprint = scope_fingerprint(target_snapshot=unit.job.source_fingerprint, scope=scope,
         grammar=grammar, image_id=loaded["image_id"], normalizer_schema=NORMALIZER_SCHEMA, limits=limits)
     artifact_path = unit.job.run_root / "data" / "treesitter" / "shards" / f"{fingerprint}.jsonl"
@@ -79,13 +96,21 @@ def parse_scope(unit: UnitContext, raw_scope: Mapping[str, Any],
                "max_file_bytes": limits["max_file_bytes"],
                "files": [{"path": item["path"], "sha256": item["sha256"]} for item in scope.files]}
     _write_container_request(scratch, request)
+    target_root = unit.job.target_root or Path()
+    if generated:
+        # Keep the source mount outside writable /scratch, with no writable alias.
+        target_root = unit.job.run_root / "data/treesitter/inputs" / fingerprint
+        for path, data in generated_bytes.items():
+            relative = (target_root / path).relative_to(unit.job.run_root).as_posix()
+            reference = immutable_bytes(unit.job.run_root, relative, data)
+            safe_path(unit.job.run_root, reference["path"]).chmod(0o444)
     # The scanner runs as the application uid/gid and writes only to this run-owned boundary. The
     # target mount remains read-only.
     executor = executor_factory(unit) if executor_factory else ContainerExecutor(
         load_catalog(unit.job.repository_root), unit.job.run_root)
     execution = executor.execute(ExecutionRequest("tool-tree-sitter",
         ("/opt/appsec/parser.py", "parse", "--request", "/scratch/request.json",
-         "--output", "/scratch/output.json"), unit.job.target_root or Path(), scratch,
+         "--output", "/scratch/output.json"), target_root, scratch,
         working_directory="/scratch"))
     if execution.exit_code != 0 or execution.timed_out or execution.oom_killed:
         return {"scope_id": scope.scope_id, "language": scope.language, "fingerprint": fingerprint,

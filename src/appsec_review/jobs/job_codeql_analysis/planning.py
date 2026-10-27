@@ -208,7 +208,8 @@ def _environment_identity(receipt: Mapping[str, Any]) -> str:
         "image_id": image.get("image_id"),
         "recipe_identity": receipt.get("recipe_identity"),
         "dependency_identity": receipt.get("dependency_identity"),
-        "workspace_manifest": receipt.get("workspace_manifest"),
+        "workspace_manifest_sha256": (receipt["workspace_manifest"].get("sha256")
+                                     if isinstance(receipt.get("workspace_manifest"), Mapping) else None),
     }
     if not isinstance(value["image_id"], str) or not value["image_id"].startswith("sha256:"):
         raise ValueError("accepted CodeQL environment image identity is invalid")
@@ -223,7 +224,6 @@ def _scope(*, language: str, source_languages: Iterable[str], mode: str, root: s
     native = {
         "language": language, "source_languages": sorted(set(source_languages)), "mode": mode,
         "root": root, "files": files, "build_unit_id": build_unit_id,
-        "build_receipt_fingerprint": receipt_fingerprint,
         "environment_identity": environment_identity,
     }
     scope_id = "codeql-unit-" + hashlib.sha256(canonical_json(native)).hexdigest()[:24]

@@ -10,6 +10,23 @@ runs_dir = "runs"
 data_dir = "data"
 metadata_dir = "runs/metadata"
 
+[review_policy]
+mode = "strict"
+approved_first_party_projects = []
+# Managed mode additionally requires an approved project_id, exact absolute target_root,
+# and custody = "application_private_v1". Target configuration cannot supply these grants.
+
+[review_policy.releases]
+# Deployment operators declare opaque release IDs here and bump them when supplied software
+# changes. Missing declarations disable reuse; installed payloads are never fingerprinted.
+
+[review_policy.resources]
+# Budget available to review actions AFTER operator-reserved host/service headroom.
+cpu = 8
+memory_mb = 10240
+io_slots = 1
+staging_memory_mb = 512
+
 [build_capture]
 mode = "required"
 backend = "ptrace"
@@ -1654,21 +1671,9 @@ prerequisites = []
 workers = 1
 [jobs.job_codeql_analysis.steps.plan.tasks.inventory]
 
-[jobs.job_codeql_analysis.steps.database]
-workers = 2
-[jobs.job_codeql_analysis.steps.database.tasks.scopes]
-
-[jobs.job_codeql_analysis.steps.query]
-workers = 2
-[jobs.job_codeql_analysis.steps.query.tasks.scopes]
-
-[jobs.job_codeql_analysis.steps.export]
-workers = 2
-[jobs.job_codeql_analysis.steps.export.tasks.scopes]
-
-[jobs.job_codeql_analysis.steps.normalize]
-workers = 2
-[jobs.job_codeql_analysis.steps.normalize.tasks.scopes]
+[jobs.job_codeql_analysis.steps.execution]
+workers = 1
+[jobs.job_codeql_analysis.steps.execution.tasks.scopes]
 
 [jobs.job_codeql_analysis.steps.acceptance]
 workers = 1

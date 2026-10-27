@@ -14,7 +14,6 @@ the lower rank (earlier tier, then earlier rule) is kept.
 """
 from __future__ import annotations
 
-import hashlib
 import json
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -129,7 +128,7 @@ class LanguageCatalog:
 class Catalog:
     schema: str
     revision: int
-    sha256: str
+    release_id: str
     attacker_reachable_sources: frozenset[str]
     languages: Mapping[str, LanguageCatalog]
 
@@ -170,8 +169,9 @@ def validate_catalog(document: Mapping[str, Any], schema: Mapping[str, Any] | No
     _unique(rule_ids, "rule ids")
 
 
-def parse_catalog(data: bytes, schema: Mapping[str, Any] | None = None) -> Catalog:
-    """Validate and load catalog bytes; the result carries their SHA-256."""
+def parse_catalog(data: bytes, schema: Mapping[str, Any] | None = None, *,
+                  release_id: str = "undeclared") -> Catalog:
+    """Load the supplied runtime contract without measuring its payload identity."""
     document = json.loads(data.decode("utf-8"))
     if not isinstance(document, Mapping):
         raise CatalogError("graph catalog must be a JSON object")
@@ -180,14 +180,15 @@ def parse_catalog(data: bytes, schema: Mapping[str, Any] | None = None) -> Catal
         name: LanguageCatalog(name, str(section["model_library"]), tuple(section["sinks"]), tuple(section["sources"]),
                               tuple(section["sanitizers"]))
         for name, section in sorted(document["languages"].items())}
-    return Catalog(str(document["schema"]), int(document["revision"]), hashlib.sha256(data).hexdigest(),
+    return Catalog(str(document["schema"]), int(document["revision"]), release_id,
                    frozenset(document["attacker_reachable_sources"]), languages)
 
 
-def load_catalog(path: Path | None = None, schema_path: Path | None = None) -> Catalog:
+def load_catalog(path: Path | None = None, schema_path: Path | None = None, *,
+                 release_id: str = "undeclared") -> Catalog:
     """Load and validate the repository catalog (or the one at ``path``)."""
     schema = json.loads((schema_path or CATALOG_SCHEMA_PATH).read_text(encoding="utf-8"))
-    return parse_catalog((path or CATALOG_PATH).read_bytes(), schema)
+    return parse_catalog((path or CATALOG_PATH).read_bytes(), schema, release_id=release_id)
 
 
 __all__ = ["CATALOG_PATH", "CATALOG_SCHEMA_PATH", "Catalog", "CatalogError", "Classification", "LanguageCatalog",

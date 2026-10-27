@@ -12,6 +12,7 @@ dependencies = ["jsonschema>=4.20", "tzdata; platform_system == 'Windows'"]
 [project.scripts]
 appsec-review = "appsec_review.cli:main"
 appsec-review-mcp = "appsec_review.mcp.stdio:main"
+appsec-review-native = "appsec_review.orchestration.dagster.native_operator:main"
 
 [project.optional-dependencies]
 copilot = ["github-copilot-sdk==1.0.25"]

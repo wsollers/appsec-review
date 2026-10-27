@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+from types import SimpleNamespace
 
 import pytest
 
@@ -69,6 +70,13 @@ class FakeExecutor:
 
 def fixture(tmp_path: Path):
     shutil.copy2(ROOT / "appsec-review.toml", tmp_path / "appsec-review.toml")
+    from appsec_review.jobs.job_evidence_collection.adapters import adapter_registry
+    config_path = tmp_path / "appsec-review.toml"
+    releases = ["platform", "validation", *adapter_registry(),
+                *(f"rules_{tool}" for tool in adapter_registry())]
+    text = config_path.read_text()
+    config_path.write_text(text.replace("[review_policy.releases]",
+        "[review_policy.releases]\n" + "\n".join(f'{key} = "fixture-1"' for key in releases), 1))
     shutil.copytree(ROOT / "containers", tmp_path / "containers")
     shutil.copytree(ROOT / "rules", tmp_path / "rules")
     if (ROOT / "data" / "feeds" / "osv").exists():
@@ -231,11 +239,8 @@ def test_sei_cert_pack_runs_under_semgrep_and_opengrep_with_mapping_and_gaps(tmp
         assert item["terminal_status"] == "PARTIAL"
         assert any("engine reported warn for /target/main.cpp" in gap for gap in evidence["exclusions_and_gaps"])
         assert any("absence of findings is not CERT conformance" in gap for gap in evidence["exclusions_and_gaps"])
-        pack = evidence["tool"]["rule_packs"]["appsec-review/sei-cert"]
-        assert pack["rule_files_sha256"] == lock["rule_files_sha256"] and pack["tree_sha256"] == lock["tree_sha256"]
-        assert pack["verified"] is True and pack["verified_scope"] == "complete-pack"
-        assert pack["rule_files_scope"].startswith("executable-rules-subset")
-        assert pack["tree_file_count"] == len(lock["files"])
+        pack = evidence["tool"]["rule_packs"][tool_id]
+        assert pack == {"release_id": "fixture-1", "assurance": "supplied_platform_excluded"}
         record = evidence["records"][0]
         assert record["native_rule_id"] == "appsec-review.sei-cert.cpp.err34-c.unchecked-conversion-function"
         assert record["rule_mapping"] == {"cert": "ERR34-C", "cert_url": "https://example.invalid/err34-c",
@@ -249,7 +254,7 @@ def test_sei_cert_pack_runs_under_semgrep_and_opengrep_with_mapping_and_gaps(tmp
     assert {arg for arg in opengrep.argv if arg.startswith("/target/")} == {"/target/main.cpp", "/target/MainActivity.java"}
 
 
-def test_sei_cert_pack_lock_mismatch_blocks_both_engines(tmp_path: Path) -> None:
+def test_sei_cert_pack_lock_mismatch_does_not_trigger_customer_platform_verification(tmp_path: Path) -> None:
     config, target = fixture(tmp_path)
     rule = tmp_path / "rules" / "sei-cert" / "rules" / "c" / "msc30-c.yml"
     rule.write_text(rule.read_text(encoding="utf-8").replace("pattern: rand()", "pattern: rand(...)"), encoding="utf-8")
@@ -260,10 +265,9 @@ def test_sei_cert_pack_lock_mismatch_blocks_both_engines(tmp_path: Path) -> None
     run_root = config.runtime.runs_dir / result["run_id"]
     for tool_id in ("tool-semgrep", "tool-opengrep"):
         item, evidence = _evidence(run_root, result, tool_id)
-        assert item["terminal_status"] == "BLOCKED"
-        assert any("SEI CERT rule pack is unavailable or does not match pack.lock.json" in gap
-                   for gap in evidence["exclusions_and_gaps"])
-        assert tool_id not in calls
+        assert item["terminal_status"] in {"SUCCEEDED", "PARTIAL"}
+        assert evidence["tool"]["rule_packs"][tool_id]["assurance"] == "supplied_platform_excluded"
+        assert tool_id in calls
 
 
 SEI_CERT_BLOCKED = "SEI CERT rule pack is unavailable or does not match pack.lock.json"
@@ -363,62 +367,47 @@ def test_sei_cert_pack_change_is_rejected_by_strict_verifier(tmp_path: Path, cas
 
 
 @pytest.mark.parametrize("case", sorted(PACK_MUTATIONS))
-def test_sei_cert_pack_change_blocks_both_engines(tmp_path: Path, case: str) -> None:
+def test_customer_prerequisites_never_hash_supplied_pack(tmp_path: Path, case: str, monkeypatch) -> None:
+    from appsec_review.jobs.job_evidence_collection import job
+    from appsec_review.jobs.job_evidence_collection.adapters import ScanCatalog, adapter_registry
     config, target = fixture(tmp_path)
     PACK_MUTATIONS[case][0](tmp_path / "rules" / "sei-cert")
-    calls: list[str] = []
-    factory = lambda unit: FakeExecutor(unit.job.repository_root, unit.job.run_root, calls)
-    result = GraphRunner(config, [build_intake(), build_catalog(), build_analysis_plan(), build_job(
-        executor_factory=factory)]).run(target_root=target, source_fingerprint=source_fingerprint(target))
-    run_root = config.runtime.runs_dir / result["run_id"]
+    unit = SimpleNamespace(job=SimpleNamespace(repository_root=tmp_path, review_policy=config.review_policy))
+    catalog = ScanCatalog("target", "handoff", ({"path": "main.cpp", "language": "C++"},), (), ())
+    def forbidden(path):
+        raise AssertionError("supplied pack must not be fingerprinted")
+    monkeypatch.setattr(job, "file_sha256", forbidden)
     for tool_id in ("tool-semgrep", "tool-opengrep"):
-        item, evidence = _evidence(run_root, result, tool_id)
-        assert item["terminal_status"] == "BLOCKED"
-        assert any(SEI_CERT_BLOCKED in gap for gap in evidence["exclusions_and_gaps"])
-        assert evidence["tool"]["rule_packs"]["appsec-review/sei-cert"] == {"verified": False}
-        assert tool_id not in calls
+        adapter = adapter_registry()[tool_id]
+        _, mounts, _, failure = job._prerequisites(unit, adapter, adapter.applicability(catalog))
+        assert failure is None
+        assert all(mount.supplied_platform for mount in mounts)
+        assert job._extra_identity(mounts) == {}
 
 
-def test_sei_cert_pack_change_never_reuses_checkpoint_under_old_identity(
+def test_declared_rule_release_changes_checkpoint_without_reading_supplied_payload(
         tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from dataclasses import replace
+    from appsec_review.config.assurance import ComponentReleases
+    from appsec_review.jobs.job_evidence_collection import job
+    from appsec_review.jobs.job_evidence_collection.adapters import ScanCatalog, adapter_registry
     config, target = fixture(tmp_path)
-    monkeypatch.setenv("APPSEC_REVIEW_CONFIG", str(tmp_path / "appsec-review.toml"))
-    pack = tmp_path / "rules" / "sei-cert"
-    fingerprint = source_fingerprint(target)
-    calls: list[str] = []
-    factory = lambda unit: FakeExecutor(unit.job.repository_root, unit.job.run_root, calls)
-    graph = lambda: GraphRunner(config, [build_intake(), build_catalog(), build_analysis_plan(), build_job(
-        executor_factory=factory)])
-    first = graph().run(target_root=target, source_fingerprint=fingerprint)
-    run_id = first["run_id"]
-    run_root = config.runtime.runs_dir / run_id
-    assert {"tool-semgrep", "tool-opengrep"} <= set(calls)
-    old = _evidence(run_root, first, "tool-semgrep")[1]["tool"]["rule_packs"]["appsec-review/sei-cert"]
-
-    # A locked mapping changes without re-locking: the job must re-run and block, not reuse.
-    _append("mappings/c.json")(pack)
-    before = len(calls)
-    blocked = graph().run(target_root=target, source_fingerprint=fingerprint, run_id=run_id)
-    assert blocked["decisions"][-1]["action"] != "REUSE"
-    for tool_id in ("tool-semgrep", "tool-opengrep"):
-        item, evidence = _evidence(run_root, blocked, tool_id)
-        assert item["terminal_status"] == "BLOCKED" and not item.get("checkpoint_reused")
-        assert evidence["tool"]["rule_packs"]["appsec-review/sei-cert"] == {"verified": False}
-    assert not {"tool-semgrep", "tool-opengrep"} & set(calls[before:])
-
-    # Re-locked, the pack verifies under a new complete-pack identity. The executable subset is
-    # unchanged, so only the complete-pack binding prevents reuse of the old scan checkpoint.
-    write_lock(pack)
-    before = len(calls)
-    relocked = graph().run(target_root=target, source_fingerprint=fingerprint, run_id=run_id)
-    assert {"tool-semgrep", "tool-opengrep"} <= set(calls[before:])
-    for tool_id in ("tool-semgrep", "tool-opengrep"):
-        item, evidence = _evidence(run_root, relocked, tool_id)
-        assert not item.get("checkpoint_reused")
-        new = evidence["tool"]["rule_packs"]["appsec-review/sei-cert"]
-        assert new["verified"] is True and new["tree_sha256"] != old["tree_sha256"]
-        assert new["rule_files_sha256"] == old["rule_files_sha256"]
-        assert new["lock_sha256"] != old["lock_sha256"]
+    unit = SimpleNamespace(job=SimpleNamespace(repository_root=tmp_path, review_policy=config.review_policy,
+        config=SimpleNamespace(settings={}, step=lambda _: SimpleNamespace(task=lambda _: SimpleNamespace(settings={})))),
+        step_id="sast", task_id="semgrep_scan")
+    catalog = ScanCatalog("target", "handoff", ({"path": "main.cpp", "language": "C++", "sha256": "a" * 64},), (), ())
+    adapter = adapter_registry()["tool-semgrep"]
+    selection, mounts, _, failure = job._prerequisites(unit, adapter, adapter.applicability(catalog))
+    assert failure is None
+    def forbidden(path):
+        raise AssertionError("supplied pack must not be fingerprinted")
+    monkeypatch.setattr(job, "file_sha256", forbidden)
+    original = job._checkpoint_identity(unit, adapter, catalog, selection, DIGEST, mounts)
+    _append("mappings/c.json")(tmp_path / "rules" / "sei-cert")
+    assert job._checkpoint_identity(unit, adapter, catalog, selection, DIGEST, mounts) == original
+    unit.job.review_policy = replace(config.review_policy, releases=ComponentReleases({
+        **config.review_policy.releases.values, "rules_tool-semgrep": "fixture-2"}))
+    assert job._checkpoint_identity(unit, adapter, catalog, selection, DIGEST, mounts) != original
 
 
 def test_checkov_runs_every_planned_input_unrestricted_and_unrecognized_inputs_are_not_applicable() -> None:

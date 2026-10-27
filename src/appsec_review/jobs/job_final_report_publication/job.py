@@ -204,8 +204,7 @@ def build_job(*, repository_root: Path | None = None) -> Job:
         Unit("acceptance.publish_handoff", publish, ("load.accepted_gate", "report.assemble", "report.render")),
     )
     package = Path(__file__).parent
-    implementation = hashlib.sha256(
-        IMPLEMENTATION.encode() + b"".join(path.read_bytes() for path in sorted(package.glob("*.py")))).hexdigest()
+    implementation = None
     return Job(JOB_ID, "final_report_publication", UnitExecutor(units).execute, input_validators=(_validate,),
                schema_identity=FINAL_REPORT_HANDOFF_SCHEMA, implementation_identity=implementation,
                validation_identity=implementation, units=units, datasets=DATASETS, consumes=CONSUMES)

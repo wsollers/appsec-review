@@ -97,6 +97,56 @@ def canonical_artifact_identity(
     })
 
 
+def canonical_target_artifact_identity(target_snapshot: str, artifact: Mapping[str, Any]) -> LogicalIdentity:
+    path, digest, kind = _artifact_fields(artifact)
+    return LogicalIdentity.derive(artifact_family(kind), target_snapshot, {
+        "origin": "target-intake", "target_path": path, "sha256": digest, "format": kind,
+    })
+
+
+def _target_artifacts(unit: UnitContext) -> tuple[list[dict[str, Any]], list[str], str | None]:
+    from appsec_review.config.assurance import SCOPE_VERSION, ScopeRole
+    from appsec_review.jobs.job_evidence_collection.job import load_target_catalog
+    from appsec_review.storage.shared import verify_reference
+    if not (unit.job.run_root / "data/jobs/job_target_catalog/latest.json").is_file():
+        return [], ["accepted target artifact intake is unavailable"], None
+    catalog = load_target_catalog(unit.job.run_root)
+    if catalog.source_fingerprint != unit.job.source_fingerprint:
+        raise ArtifactIndexIntegrityError("target artifact intake belongs to a different target")
+    if not catalog.target_artifact_inventory_available:
+        return [], ["legacy target catalog has no target artifact inventory"], catalog.handoff_sha256
+    artifacts = []
+    paths = set()
+    gaps = list(catalog.target_artifact_gaps)
+    for raw in catalog.target_artifacts:
+        if not isinstance(raw, Mapping):
+            raise ArtifactIndexIntegrityError("target artifact intake entry is invalid")
+        artifact = dict(raw)
+        path, _, _ = _artifact_fields(artifact)
+        if (artifact.get("schema") != "appsec-review/target-artifact-intake/1"
+                or artifact.get("artifact_origin") != "target-intake"
+                or artifact.get("scope_version") != SCOPE_VERSION
+                or artifact.get("scope_role") != ScopeRole.UNKNOWN.value
+                or artifact.get("source_fingerprint") != catalog.source_fingerprint
+                or artifact.get("target_relative_path") != path
+                or artifact.get("delivery_status") != "unknown"
+                or artifact.get("mapping") != "exact-target-path"
+                or artifact.get("mapping_confidence") != 1.0
+                or not str(artifact.get("path", "")).startswith("data/shared/objects/")):
+            raise ArtifactIndexIntegrityError("target artifact intake provenance is invalid")
+        if path in paths:
+            raise ArtifactIndexIntegrityError("target artifact intake repeats a target path")
+        paths.add(path)
+        verify_reference(unit.job.run_root, artifact)
+        artifact["canonical_identity"] = canonical_target_artifact_identity(
+            catalog.source_fingerprint, artifact).value
+        artifact["producer"] = {"job_id": "job_target_catalog", "handoff_sha256": catalog.handoff_sha256,
+                                "source_fingerprint": catalog.source_fingerprint}
+        artifacts.append(artifact)
+        gaps.append(f"{path}: target artifact delivery status is unknown")
+    return artifacts, list(dict.fromkeys(gaps)), catalog.handoff_sha256
+
+
 def _member_path(value: str) -> str:
     if not isinstance(value, str) or not value or "\x00" in value:
         raise ArtifactIndexIntegrityError("archive member path is invalid")
@@ -442,6 +492,8 @@ def _catalogs(unit: UnitContext) -> Mapping[str, Any]:
                            ("workspace_path", "sha256", "size_bytes", "kind", "build_unit_id",
                             "mapping", "mapping_confidence", "loader_dependencies",
                             "loader_dependency_status", "build_id_sha256", "artifact_origin",
+                            "scope_version", "scope_role", "delivery_status",
+                            "analysis_reason", "analysis_lane", "delivery_evidence",
                             "source_map", "package_metadata", "dependency_metadata",
                             "package_archive", "native_addon", "package_integrity")}
                 payload.update({"artifact_family": family.value,
@@ -453,6 +505,31 @@ def _catalogs(unit: UnitContext) -> Mapping[str, Any]:
             identity, was_reused = _index_identity(unit, builder, path, (), family.value)
             identities.append(identity)
             reused += int(was_reused)
+    target_artifacts = loaded.get("target_artifacts", [])
+    if target_artifacts:
+        fingerprint = index_fingerprint(
+            name="artifacts", target_snapshot=unit.job.source_fingerprint,
+            producer_artifacts=target_artifacts, tool_identity={"producer": "target-intake"},
+            parser_identity=unit.job.config.settings["catalog_parser_identity"],
+            normalizer_identity=unit.job.config.settings["normalizer_identity"],
+            mapping_identity="exact-target-path/1")
+        shard_id = "catalog-target-intake"
+        path = _shard_path(unit, fingerprint, shard_id)
+        builder = IndexBuilder(path, name="artifacts", fingerprint=fingerprint,
+                               target_snapshot=unit.job.source_fingerprint, shard_id=shard_id)
+        for artifact in target_artifacts:
+            builder.add_entity(EntityRecord(
+                LogicalIdentity.parse(artifact["canonical_identity"]), artifact["target_relative_path"],
+                PurePosixPath(artifact["target_relative_path"]).name,
+                f"target artifact {artifact['target_relative_path']}",
+                {**artifact, "artifact_family": artifact_family(artifact["kind"]).value,
+                 "producer_family": "target-intake"}))
+        gaps = [f"{item['target_relative_path']}: target artifact delivery status is unknown"
+                for item in target_artifacts]
+        builder.add_coverage("target-artifact-intake", "partial", gaps[0])
+        identity, was_reused = _index_identity(unit, builder, path, gaps, "target-intake")
+        identities.append(identity)
+        reused += int(was_reused)
     return {"indexes": identities, "shard_count": len(identities), "reused_count": reused,
             "gaps": loaded["producer_gaps"],
             "terminal_status": "COMPLETED_WITH_GAPS" if loaded["producer_gaps"] else
@@ -694,10 +771,12 @@ def build_job() -> Job:
         upstream_sha = upstream["sha256"]
         receipts, producer_gaps = _validate_receipts(
             unit.job.run_root, unit.job.source_fingerprint, accepted.get("receipts", ()))
+        target_artifacts, intake_gaps, catalog_handoff = _target_artifacts(unit)
         if not receipts:
             producer_gaps.append("accepted language-build handoff contained no receipts")
-        all_gaps = list(dict.fromkeys([*accepted.get("gaps", ()), *producer_gaps]))
+        all_gaps = list(dict.fromkeys([*accepted.get("gaps", ()), *producer_gaps, *intake_gaps]))
         return {"receipts": receipts, "receipt_count": len(receipts),
+                "target_artifacts": target_artifacts, "target_catalog_handoff_sha256": catalog_handoff,
                 "producer_gaps": all_gaps,
                 "language_build_handoff_sha256": accepted["language_build_handoff_sha256"],
                 "upstream_manifest": {"path": upstream_path.relative_to(unit.job.run_root).as_posix(),
@@ -728,10 +807,12 @@ def build_job() -> Job:
                                   *(gap for branch in branches for gap in branch["gaps"])]))
         summary = {"schema": SCHEMA, "source_fingerprint": unit.job.source_fingerprint,
                    "language_build_handoff_sha256": loaded["language_build_handoff_sha256"],
+                   "target_catalog_handoff_sha256": loaded["target_catalog_handoff_sha256"],
+                   "target_artifacts": loaded["target_artifacts"],
                    "artifact_shard_count": len(current),
                    "reused_shard_count": sum(int(branch["reused_count"]) for branch in branches),
                    "artifact_count": sum(len(receipt["validated_artifacts"])
-                                         for receipt in loaded["receipts"]),
+                                         for receipt in loaded["receipts"]) + len(loaded["target_artifacts"]),
                    "gaps": gaps, "index_manifest": _artifact(unit, manifest_path)}
         summary_path = unit.job.attempt_root / "artifacts" / "artifact-indexing" / "accepted-index.json"
         summary_path.parent.mkdir(parents=True, exist_ok=True)
@@ -749,7 +830,7 @@ def build_job() -> Job:
         Unit("acceptance.publish_handoff", publish,
              ("index.catalogs", "index.members", "index.relationships")),
     )
-    implementation = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
+    implementation = None
     return Job("job_artifact_indexing", "artifact_indexing", UnitExecutor(units).execute,
                input_validators=(_validate_config,), schema_identity=SCHEMA,
                implementation_identity=implementation, validation_identity=implementation,

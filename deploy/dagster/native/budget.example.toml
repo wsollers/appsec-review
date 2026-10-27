@@ -1,0 +1,17 @@
+# Prepared fragments for TWO separate operator-owned configurations.
+# This is not an application configuration and is never loaded automatically.
+# Activation requires separate approval and matching frozen service/client contracts.
+
+# Copy into the explicitly prepared review configuration, preserving all other limits.
+[review_policy.resources]
+cpu = 9
+memory_mb = 12288
+io_slots = 1
+staging_memory_mb = 512
+
+# Copy into the explicitly prepared image-builder service configuration.
+[image_builder_service.resources]
+cpu = 9
+memory_mb = 12288
+io_slots = 1
+staging_memory_mb = 512

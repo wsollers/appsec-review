@@ -85,6 +85,9 @@ def resolve_nvd_snapshot(nvd_root: Path, expected_pointer: Mapping[str, Any]) ->
 
 
 def _docker_builder(settings: CveBinToolSettings, input_dir: Path, output_dir: Path) -> dict[str, str]:
+    from appsec_review.config.native_dagster import native_execution_requested
+    if native_execution_requested():
+        return _native_builder(settings, input_dir, output_dir)
     inspect = subprocess.run(["docker", "image", "inspect", settings.image, "--format", "{{.Id}}"],
                              stdin=subprocess.DEVNULL, capture_output=True, text=True, encoding="utf-8",
                              errors="replace", check=False)
@@ -124,6 +127,37 @@ def _docker_builder(settings: CveBinToolSettings, input_dir: Path, output_dir: P
     if completed.returncode != 0:
         raise RuntimeError(f"cve-bin-tool database build failed with exit {completed.returncode}")
     return {"image": settings.image, "image_id": image_id, "tool_version": settings.tool_version}
+
+
+def _native_builder(settings: CveBinToolSettings, input_dir: Path, output_dir: Path) -> dict[str, str]:
+    from appsec_review.container_runtime.native_client import native_run
+    from appsec_review.runtime.resources import reserve_execution, tracked_container
+
+    with reserve_execution(cpu="2", memory="4g", action="native.cve_bin_tool.database",
+                           timeout_seconds=settings.run_timeout_seconds):
+        inspected = native_run(("docker", "image", "inspect", settings.image, "--format", "{{.Id}}"), 60)
+        if inspected is None or inspected[0] != 0 or inspected[3]:
+            raise RuntimeError("native cve-bin-tool requires an approved preinstalled image")
+        image_id = inspected[1].decode().strip()
+        name = f"appsec-review-cve-bin-tool-{uuid.uuid4().hex}"
+        output_dir.chmod(0o700)
+        command = (
+            "docker", "run", "--rm", "--name", name, "--network", "none", "--read-only",
+            "--cap-drop", "ALL", "--security-opt", "no-new-privileges",
+            "--user", application_runtime_user("65532:65532"), "--cpus", "2", "--memory", "4g",
+            "--pids-limit", "128", "--tmpfs", "/tmp:rw,noexec,nosuid,nodev,size=256m",
+            "--workdir", "/output", "--mount", f"type=bind,src={input_dir.resolve()},dst=/input,readonly",
+            "--mount", f"type=bind,src={output_dir.resolve()},dst=/output",
+            "--entrypoint", "python", image_id, "/opt/builder/build_db.py", "/input", "/output",
+        )
+        with tracked_container(name, native_run, label="CveBinTool"):
+            completed = native_run(command, settings.run_timeout_seconds)
+        if completed is None:
+            raise RuntimeError("native cve-bin-tool lost its engine scope")
+        (output_dir / "builder.stderr.txt").write_bytes(completed[2][-1_000_000:])
+        if completed[3] or completed[0] != 0:
+            raise RuntimeError("native cve-bin-tool database execution failed")
+        return {"image": settings.image, "image_id": image_id, "tool_version": settings.tool_version}
 
 
 def _docker_bind_source(path: Path) -> Path:

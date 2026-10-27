@@ -24,6 +24,7 @@ from appsec_review.runtime.datasets import (
 )
 from appsec_review.storage import file_sha256
 from appsec_review.storage.shared import audit_file
+from appsec_review.storage.validation import validation_scope, verified_digest
 
 
 ROW_SCHEMA = "appsec-review/dataset-inventory-row/1"
@@ -275,6 +276,9 @@ def scan_run_tree(run_root: Path, claims: FileClaims, *, max_files: int, sample_
             if state["truncated"]:
                 return
             path = f"{relative}/{entry.name}"
+            from appsec_review.runtime.scope import supplied_run_path
+            if supplied_run_path(path):
+                continue
             try:
                 is_dir = entry.is_dir(follow_symlinks=False)
             except OSError as exc:
@@ -382,6 +386,39 @@ class InventoryInputs:
     max_files: int = 500_000
     file_job_steps: Mapping[str, Sequence[str]] | None = None
     file_declarations: Mapping[str, Sequence[DatasetDeclaration]] | None = None
+    managed_publications: bool = False
+
+
+def admitted_run_tree(inputs: InventoryInputs, claims: FileClaims) -> RunTree:
+    from appsec_review.storage.admission import consume_admission
+    from appsec_review.storage.validation import validation_scope
+    groups, ownership, attempts, shards = {}, {}, {}, {}
+    unaccounted, visited = [], set()
+    with validation_scope(inputs.run_root):
+        for job_id, accepted in sorted(inputs.handoffs.items()):
+            if accepted is None:
+                continue
+            handoff = accepted.handoff
+            if not consume_admission(inputs.run_root, handoff):
+                raise ValueError(f"{job_id} requires strict re-admission before managed inventory")
+            attempt_id = str(handoff["attempt_id"])
+            attempts[(job_id, attempt_id)] = {"contract_basis": "authenticated_publication",
+                                              "validation_record": handoff["validation_record"]}
+            for artifact in handoff["artifacts"]:
+                path, size = artifact["path"], artifact["size_bytes"]
+                if path in visited:
+                    continue
+                visited.add(path)
+                claim = claims.file(path)
+                if claim is not None:
+                    groups.setdefault(claim.key, FileGroup()).add(path, size)
+                    ownership.setdefault((*claim.key, attempt_id), FileGroup()).add(path, size)
+                elif path.startswith("data/indices/"):
+                    shards[path] = size
+                else:
+                    unaccounted.append(path)
+    return RunTree(groups, shards, unaccounted[:50], len(unaccounted), len(visited), False, [],
+                   ownership, attempts, [])
 
 
 def _owasp_shards(run_root: Path) -> tuple[list[Mapping[str, Any]], str | None]:
@@ -400,6 +437,11 @@ def _owasp_shards(run_root: Path) -> tuple[list[Mapping[str, Any]], str | None]:
 
 def build_inventory(inputs: InventoryInputs) -> dict[str, Any]:
     """Return inventory rows plus audit violations, warnings and repairs for one run."""
+    with validation_scope(inputs.run_root):
+        return _build_inventory(inputs)
+
+
+def _build_inventory(inputs: InventoryInputs) -> dict[str, Any]:
     run_root = inputs.run_root
     violations: list[dict[str, str]] = []
     warnings: list[dict[str, str]] = []
@@ -424,8 +466,9 @@ def build_inventory(inputs: InventoryInputs) -> dict[str, Any]:
                         f"declared step {declaration.step} is not in the resolved configuration")
             claims.append(Claim(job_id, declaration.step, declaration.output_kind, declaration))
     file_claims = FileClaims(claims)
-    tree = scan_run_tree(run_root, file_claims, max_files=inputs.max_files, run_id=inputs.run_id,
-                        target_snapshot=inputs.target_snapshot)
+    tree = (admitted_run_tree(inputs, file_claims) if inputs.managed_publications else
+            scan_run_tree(run_root, file_claims, max_files=inputs.max_files, run_id=inputs.run_id,
+                          target_snapshot=inputs.target_snapshot))
     if tree.truncated:
         violate("run_tree_truncated", RUNTIME, "data",
                 f"run tree enumeration stopped at {inputs.max_files} files; publication completeness is unknown")
@@ -533,7 +576,9 @@ def build_inventory(inputs: InventoryInputs) -> dict[str, Any]:
             if run_root.resolve() not in candidate.parents or not candidate.is_file():
                 violate("dangling_artifact", job_id, path, "handoff artifact is missing from the run")
                 continue
-            if file_sha256(candidate) != artifact.get("sha256"):
+            try:
+                verified_digest(run_root, candidate, artifact.get("sha256"))
+            except ValueError:
                 violate("artifact_hash_mismatch", job_id, path, "handoff artifact content changed")
                 continue
             if path in claimed_shard_paths:
@@ -634,6 +679,8 @@ def build_inventory(inputs: InventoryInputs) -> dict[str, Any]:
         "rows": rows, "disposition_counts": dict(sorted(counts.items())),
         "file_ownership": file_ownership,
         "run_tree": {"file_count": tree.file_count, "truncated": tree.truncated,
+                     "audit_scope": "accepted_publications" if inputs.managed_publications else "full_customer_evidence",
+                     "scratch_audited": not inputs.managed_publications,
                      "scan_errors": tree.scan_errors[:50],
                      "unaccounted_count": tree.unaccounted_count, "unreferenced_index_files": len(unreferenced)},
         "audit": {"schema": AUDIT_SCHEMA, "status": "FAILED" if violations else "PASSED",

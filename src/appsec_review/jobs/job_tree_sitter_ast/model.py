@@ -7,6 +7,8 @@ import re
 from typing import Any, Iterable, Mapping
 
 from appsec_review.retrieval.model import canonical_json
+from appsec_review.jobs.delivery_scope import POLICY_IDENTITY, scope_fields, source_in_scope
+from appsec_review.retrieval.source_resolution import IDENTITY as SOURCE_IDENTITY, source_native
 
 
 SUPPORTED_LANGUAGES = frozenset({
@@ -60,9 +62,10 @@ def plan_scopes(catalog: Mapping[str, Any], *, max_files_per_scope: int = 128,
     for item in sorted(files, key=lambda value: str(value.get("path", ""))):
         path = str(item.get("path", ""))
         language = item.get("language")
-        if not path or language is None or item.get("generated") is True:
+        if not path or language is None or not source_in_scope(item):
             continue
-        owners = [component for component in components if _under(path, str(component.get("root", ".")))]
+        ownership_path = str(item.get("workspace_path", path)) if item.get("source_backing") else path
+        owners = [component for component in components if _under(ownership_path, str(component.get("root", ".")))]
         owner = max(owners, key=lambda value: len(PurePosixPath(str(value.get("root", "."))).parts), default=components[0])
         project_id = str(owner.get("component_id", "component:0001"))
         project_root = str(owner.get("root", "."))
@@ -71,9 +74,12 @@ def plan_scopes(catalog: Mapping[str, Any], *, max_files_per_scope: int = 128,
         translation = max(candidates, key=lambda value: len(PurePosixPath(str(value.get("root", "."))).parts), default=None)
         translation_id = str(translation.get("build_unit_id")) if translation else f"source:{project_id}"
         translation_root = str(translation.get("root", project_root)) if translation else project_root
+        if item.get("source_backing"):
+            translation_id = "generated:" + str(item["build_unit_id"])
+            translation_root = str(item.get("build_root", project_root))
         routed_language = "TSX" if path.lower().endswith(".tsx") else str(language)
         key = (project_id, translation_id, routed_language)
-        buckets.setdefault(key, []).append(item)
+        buckets.setdefault(key, []).append({**item, **scope_fields(item)})
         metadata[key] = (project_root, translation_root)
     exclusions = tuple(item for item in catalog.get("gaps", ()) if isinstance(item, Mapping) and
                        item.get("reason") in {"excluded_directory", "generated_file_excluded", "file_too_large"})
@@ -98,9 +104,11 @@ def plan_scopes(catalog: Mapping[str, Any], *, max_files_per_scope: int = 128,
         if current:
             chunks.append(current)
         for chunk_index, chunk in enumerate(chunks):
-            native = {"project": project_id, "translation": translation_id, "language": language,
+            native = {"policy": POLICY_IDENTITY, "source_resolution": SOURCE_IDENTITY,
+                      "project": project_id, "translation": translation_id, "language": language,
                       "root": translation_root, "chunk": chunk_index,
-                      "files": [{"path": item["path"], "sha256": item["sha256"]} for item in chunk]}
+                      "files": [{"path": item["path"], "sha256": item["sha256"],
+                                 **scope_fields(item), **source_native(item)} for item in chunk]}
             digest = hashlib.sha256(canonical_json(native)).hexdigest()[:20]
             scopes.append(Scope(
                 f"{_slug(project_id)}-{_slug(translation_id)}-{_slug(language)}-{digest}",
@@ -128,10 +136,13 @@ def scope_fingerprint(*, target_snapshot: str, scope: Scope, grammar: GrammarLoc
     return hashlib.sha256(canonical_json({
         "schema": "appsec-review/tree-sitter-scope-fingerprint/1",
         "target_snapshot": target_snapshot,
+        "delivery_policy": POLICY_IDENTITY,
+        "source_resolution": SOURCE_IDENTITY,
         "scope": {"scope_id": scope.scope_id, "project_id": scope.project_id,
                   "project_root": scope.project_root, "translation_scope_id": scope.translation_scope_id,
                   "translation_root": scope.translation_root, "language": scope.language,
-                  "files": [{"path": item["path"], "sha256": item["sha256"]} for item in scope.files],
+                  "files": [{"path": item["path"], "sha256": item["sha256"],
+                             **scope_fields(item), **source_native(item)} for item in scope.files],
                   "exclusions": list(scope.exclusions)},
         "grammar": grammar.__dict__ if hasattr(grammar, "__dict__") else {
             field: getattr(grammar, field) for field in grammar.__slots__

@@ -87,6 +87,7 @@ max_turns = 6
 timeout_seconds = 600
 
 [jobs.job_inference_security_review.settings.budgets]
+budget_team_packages = "all"
 max_model_turns = 60000
 max_input_tokens = 600000000
 max_output_tokens = 60000000

@@ -33,6 +33,15 @@ are verified before checkpoint reuse. A changed target snapshot, recipe, depende
 derived image, probe, producer selection, toolchain, capture contract, limit, upstream handoff, or
 upstream build fingerprint invalidates only the affected checkpoint.
 
+Checkpoint lookup and publication also require operator-owned `platform`, `validation`,
+`build_toolchain`, and `wasm_instrumentation` release IDs in `[review_policy.releases]`.
+These are opaque declarations, not hashes of installed code, images, or supplied tools.
+Missing declarations emit `missing_release_identity` and disable checkpoint reuse and caching;
+execution does not fall back to fingerprinting platform payloads. Relevant release changes and
+the frozen assurance policy participate in the checkpoint identity. Checkpoints are private to
+the current run; they are not a cross-run import mechanism. Target outputs and execution evidence
+retain their content hashes in both assurance modes.
+
 Producer failures publish `FAILED` or `BLOCKED` receipts and preserve successful siblings. Path,
 hash, configuration, accepted-handoff, manifest, and checkpoint-integrity failures stop publication.
 `NOT_APPLICABLE` means no accepted recipe matched a configured WebAssembly producer; it is not a

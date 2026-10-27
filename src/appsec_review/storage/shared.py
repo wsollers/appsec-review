@@ -8,6 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from contextlib import contextmanager
 from contextvars import ContextVar, copy_context
+from copy import deepcopy
 from concurrent.futures import ThreadPoolExecutor
 import hashlib
 import json
@@ -19,6 +20,7 @@ import tempfile
 from typing import Any, Mapping, TYPE_CHECKING
 
 from .atomic import canonical_json, file_sha256
+from .validation import current_validation, validation_operation, validation_scope, verified_digest
 
 if TYPE_CHECKING:
     from appsec_review.runtime.job import JobContext
@@ -65,17 +67,24 @@ def safe_path(root: Path, relative: str) -> Path:
     return path
 
 
-def reference(root: Path, path: Path) -> dict[str, Any]:
+def reference(root: Path, path: Path, *, expected_sha256: str | None = None) -> dict[str, Any]:
     relative = path.relative_to(root).as_posix()
     path = safe_path(root, relative)
     if not path.is_file():
         raise ValueError(f"shared artifact missing: {relative}")
-    return {"path": relative, "sha256": file_sha256(path), "size_bytes": path.stat().st_size}
+    if relative.startswith(OBJECTS + "/"):
+        identity = _hash(path.name)
+        if expected_sha256 is not None and expected_sha256 != identity:
+            raise ValueError("shared object path differs from expected identity")
+        expected_sha256 = identity
+    digest = (verified_digest(root, path, _hash(expected_sha256)) if expected_sha256 is not None
+              else file_sha256(path))
+    return {"path": relative, "sha256": digest, "size_bytes": path.stat().st_size}
 
 
 def verify_reference(root: Path, ref: Mapping[str, Any]) -> Path:
     path = safe_path(root, ref["path"])
-    if (not path.is_file() or file_sha256(path) != _hash(ref["sha256"])
+    if (not path.is_file() or verified_digest(root, path, _hash(ref["sha256"])) != ref["sha256"]
             or path.stat().st_size != ref["size_bytes"]):
         raise ValueError(f"shared artifact integrity mismatch: {ref['path']}")
     return path
@@ -119,6 +128,10 @@ def put_file(root: Path, source: Path) -> dict[str, Any]:
             shutil.copyfileobj(stream, output)
             output.flush()
             os.fsync(output.fileno())
+            copied_bytes = output.tell()
+        from appsec_review.observability.spans import count_work
+        count_work("copy_bytes", copied_bytes)
+        count_work("copy_objects")
         if file_sha256(Path(temporary)) != digest:
             raise ValueError("shared artifact changed during publication")
         safe_path(root, relative)
@@ -147,9 +160,8 @@ def _link(root: Path, source: Path, relative: str, digest: str) -> dict[str, Any
 
 
 def put_private_file(root: Path, source: Path) -> dict[str, Any]:
-    """Adopt a completed, private builder file without copying its large payload."""
-    obj = reference(root, source)
-    return _link(root, source, f"{OBJECTS}/{obj['sha256']}", obj["sha256"])
+    """Detach publication from a builder's potentially writable aliases."""
+    return put_file(root, source)
 
 
 def _read(root: Path, ref: Mapping[str, Any]) -> dict[str, Any]:
@@ -175,10 +187,37 @@ def verify_binding(root: Path, ref: Mapping[str, Any]) -> dict[str, Any]:
     return value
 
 
+@validation_operation
 def verify_receipt(root: Path, ref: Mapping[str, Any], *,
                    seen: frozenset[str] = frozenset()) -> dict[str, Any]:
     if ref["path"] in seen:
         raise ValueError("shared receipt provenance cycle")
+    from appsec_review.observability.spans import count_work
+    count_work("receipt_references")
+    context = current_validation(root)
+    key = ("receipt", ref["path"], _hash(ref["sha256"]))
+    verify_reference(root, ref)
+    if context is not None:
+        with context.lock:
+            admitted = context.admitted_receipts.get(ref["path"])
+            if admitted is not None and admitted["sha256"] == ref["sha256"]:
+                value = deepcopy(admitted["value"])
+                for artifact in (value["object"], *value["dependencies"]):
+                    path = safe_path(root, artifact["path"])
+                    if not path.is_file() or path.stat().st_size != artifact["size_bytes"]:
+                        raise ValueError("admitted receipt output is unavailable")
+                return value
+            if key in context.records:
+                return deepcopy(context.records[key])
+            value = _verify_receipt(root, ref, seen=seen)
+            context.records[key] = deepcopy(value)
+            count_work("receipt_validations")
+            return value
+    return _verify_receipt(root, ref, seen=seen)
+
+
+def _verify_receipt(root: Path, ref: Mapping[str, Any], *,
+                    seen: frozenset[str]) -> dict[str, Any]:
     value = _read(root, ref)
     if value.get("schema") != RECEIPT_SCHEMA or value.get("mode") not in {"computed", "reused"}:
         raise ValueError("invalid shared receipt schema/mode")
@@ -267,9 +306,15 @@ class SharedArtifacts:
         claim_ref = reference(context.run_root, context.attempt_root / "claim.json")
         claim = json.loads(verify_reference(context.run_root, claim_ref).read_bytes())
         actor = {key: claim[key] for key in ("run_id", "job_id", "attempt_id", "orchestration")}
+        original_invocation = dict(actor["orchestration"])
+        current_invocation = dict(context.orchestration)
+        if original_invocation.get("system") == "dagster" and original_invocation.get("run_id"):
+            # Dagster correlates each task with its own node within the same invocation.
+            original_invocation.pop("node", None)
+            current_invocation.pop("node", None)
         if (actor["run_id"] != context.run_id or actor["attempt_id"] != context.attempt_id
                 or actor["job_id"] != context.config.job_id
-                or actor["orchestration"] != dict(context.orchestration)):
+                or original_invocation != current_invocation):
             raise ValueError("shared publication context differs from original invocation")
         return cls(context.run_root, context.attempt_root, {**actor, "claim": claim_ref})
 
@@ -331,9 +376,10 @@ class SharedArtifacts:
                             layout=value.get("layout"))
 
     def named(self, namespace: str, path: Path, *, computed: bool,
-              computation: Mapping[str, Any] | None = None) -> dict[str, Any]:
+              computation: Mapping[str, Any] | None = None,
+              expected_sha256: str | None = None) -> dict[str, Any]:
         """Record an explicitly registered immutable layout without copying its bytes."""
-        obj = reference(self.run_root, path)
+        obj = reference(self.run_root, path, expected_sha256=expected_sha256)
         if namespace not in NAMED_LAYOUTS or not obj["path"].startswith(NAMED_LAYOUTS[namespace]):
             raise ValueError("unregistered named immutable publication")
         fingerprint = hashlib.sha256(canonical_json(
@@ -402,6 +448,7 @@ def verify_request(root: Path, ref: Mapping[str, Any]) -> dict[str, Any]:
     return receipt
 
 
+@validation_operation
 def attempt_artifacts(root: Path, attempt_root: Path) -> list[dict[str, Any]]:
     """Verify and return the complete receipt closure for handoff/resume integrity."""
     artifacts: dict[str, dict[str, Any]] = {}
@@ -428,7 +475,11 @@ def attempt_artifacts(root: Path, attempt_root: Path) -> list[dict[str, Any]]:
     return list(artifacts.values())
 
 
+@validation_operation
 def verify_handoff(root: Path, handoff: Mapping[str, Any]) -> None:
+    from .admission import consume_admission
+    if consume_admission(root, handoff):
+        return
     attempt = safe_path(root, handoff["resolving_paths"]["attempt"])
     pinned = {item["path"]: item["sha256"] for item in handoff["artifacts"]}
     for artifact in handoff["artifacts"]:
@@ -481,7 +532,17 @@ class PublicationThreadPoolExecutor(ThreadPoolExecutor):
 @contextmanager
 def publication_scope(context: JobContext):
     """Bind provenance only for the explicit immutable writers using this module."""
-    with publication_scope_for_owner(SharedArtifacts.for_job(context)):
+    from appsec_review.runtime.scope import review_scope
+    from appsec_review.runtime.resources import review_resource_scope
+    from appsec_review.container_runtime.image_builder import image_builder_scope
+    from appsec_review.container_runtime.native_client import native_engine_scope
+    with review_resource_scope(context.metadata_root, context.review_policy.resources, context.events), \
+            image_builder_scope(context), \
+            native_engine_scope(context), \
+            review_scope(context.repository_root, context.run_root, context.target_root), validation_scope(
+            context.run_root, target_snapshot=getattr(context, "evidence_target_snapshot", None) or context.source_fingerprint,
+            policy_identity=hashlib.sha256(canonical_json(context.review_policy.view())).hexdigest()), \
+            publication_scope_for_owner(SharedArtifacts.for_job(context)):
         yield
 
 
@@ -514,12 +575,13 @@ def publish_named(root: Path, path: Path, payload: bytes, *, namespace: str,
 
 
 def consume_named(root: Path, path: Path, *, namespace: str,
-                  shared: SharedArtifacts | None = None) -> None:
+                  shared: SharedArtifacts | None = None,
+                  expected_sha256: str | None = None) -> None:
     owner = shared or current()
     if namespace not in NAMED_LAYOUTS:
         raise ValueError("unregistered named immutable consumption")
     safe_path(root, path.relative_to(root).as_posix())
-    obj = reference(root, path)
+    obj = reference(root, path, expected_sha256=expected_sha256)
     binding = safe_path(root, _binding_path(namespace, obj))
     if binding.exists():
         if verify_binding(root, reference(root, binding))["object"] != obj:
@@ -536,4 +598,4 @@ def consume_named(root: Path, path: Path, *, namespace: str,
     if owner is not None:
         if owner.run_root != root:
             raise ValueError("immutable consumption belongs to another run")
-        owner.named(namespace, path, computed=False)
+        owner.named(namespace, path, computed=False, expected_sha256=obj["sha256"])

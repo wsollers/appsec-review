@@ -10,6 +10,7 @@ import re
 from typing import Any
 
 from appsec_review.jobs.cataloging import BUILD_FILES, PROJECT_FILES, inventory, write_json
+from appsec_review.jobs.delivery_scope import POLICY_IDENTITY, scope_fields, source_in_scope
 from appsec_review.jobs.build_discovery import (
     android_descriptor_facts, descriptor_package, discover_build_units, required_image_profile,
     source_only_scopes, unsupported_build_gaps,
@@ -57,7 +58,7 @@ def _fingerprint(unit: UnitContext, name: str, artifacts: list[Mapping[str, Any]
     return index_fingerprint(
         name=name, target_snapshot=unit.job.source_fingerprint, producer_artifacts=artifacts,
         tool_identity={"producer": "job_target_catalog"}, parser_identity="catalog-parser/1",
-        normalizer_identity="retrieval-normalizer/1", mapping_identity="source-map/1",
+        normalizer_identity="retrieval-normalizer/1+" + POLICY_IDENTITY, mapping_identity="source-map/1",
     )
 
 
@@ -89,12 +90,41 @@ def build_job(*, fail_task: str | None = None) -> Job:
     def partition(unit: UnitContext) -> Mapping[str, Any]:
         maybe_fail(unit)
         snapshot = inventory(_target(unit), exclusions=unit.job.config.exclusions)
+        snapshot["files"] = [{**item, **scope_fields({**item, "artifact_origin": "target-intake"})}
+                             for item in snapshot["files"]]
+        from appsec_review.config.assurance import SCOPE_VERSION, ScopeRole
+        from appsec_review.jobs.artifact_kinds import ArtifactKind, binary_role
+        from appsec_review.storage.shared import put_bytes, safe_path
+        target_artifacts = []
+        for candidate in snapshot["artifact_candidates"]:
+            path = safe_path(_target(unit), candidate["path"])
+            kind, file_format = binary_role(path)
+            with path.open("rb") as stream:
+                payload = stream.read(candidate["size_bytes"] + 1)
+            if (len(payload) != candidate["size_bytes"]
+                    or hashlib.sha256(payload).hexdigest() != candidate["sha256"]):
+                raise ValueError("target artifact changed during bounded intake")
+            reference = put_bytes(unit.job.run_root, payload)
+            if (reference["sha256"] != candidate["sha256"]
+                    or reference["size_bytes"] != candidate["size_bytes"]):
+                raise ValueError("target artifact changed during intake publication")
+            target_artifacts.append({
+                **reference, "schema": "appsec-review/target-artifact-intake/1",
+                "target_relative_path": candidate["path"],
+                "workspace_path": candidate["path"], "kind": kind or ArtifactKind.RESOURCE.value,
+                "format": file_format, "source_fingerprint": unit.job.source_fingerprint,
+                "artifact_origin": "target-intake", "scope_role": ScopeRole.UNKNOWN.value,
+                "scope_version": SCOPE_VERSION, "delivery_status": "unknown",
+                "mapping": "exact-target-path", "mapping_confidence": 1.0,
+            })
+            target_artifacts[-1].update(scope_fields(target_artifacts[-1]))
         groups = Counter(item["path"].split("/", 1)[0] for item in snapshot["files"])
         doc = {"schema": "appsec-review/repository-partition/1", "source_fingerprint": unit.job.source_fingerprint,
                "partitions": [{"path": key, "file_count": groups[key]} for key in sorted(groups)],
-               **snapshot}
+               **snapshot, "target_artifacts": target_artifacts}
         return {"artifact": _artifact(unit, "repository-partition.json", doc),
                 "files": snapshot["files"], "gaps": snapshot["gaps"],
+                "target_artifacts": target_artifacts,
                 "configured_exclusions": snapshot["configured_exclusions"]}
 
     def census(unit: UnitContext) -> Mapping[str, Any]:
@@ -198,6 +228,15 @@ def build_job(*, fail_task: str | None = None) -> Job:
                         for name, version in sorted(value.get(section, {}).items()):
                             records.append({"component_id": component["component_id"], "name": name,
                                             "constraint": str(version), "source": manifest, "location": section})
+                            records[-1].update(scope_fields({
+                                "scope_role": "build_dependency" if section == "devDependencies" else "unknown",
+                                "artifact_origin": "target-intake",
+                                "delivery_evidence": {"kind": "manifest-dependency-declaration",
+                                                      "path": manifest, "sha256": component["manifest_sha256"],
+                                                      "section": section},
+                            }))
+                            if section == "dependencies":
+                                gaps.append(f"{manifest}#{section}.{name}: dependency delivery status is unknown")
                 else:
                     gaps.append(f"{manifest}: dependency parser deferred for this manifest type")
             except (OSError, UnicodeError, json.JSONDecodeError) as exc:
@@ -214,6 +253,8 @@ def build_job(*, fail_task: str | None = None) -> Job:
                                target_snapshot=unit.job.source_fingerprint)
         gaps = [_gap_text(gap) for gap in partition["gaps"]]
         for item in partition["files"]:
+            if not source_in_scope(item):
+                continue
             identity = LogicalIdentity.derive(EntityKind.SOURCE_FILE, unit.job.source_fingerprint,
                                               {"path": item["path"], "sha256": item["sha256"]})
             source = _target(unit) / item["path"]
@@ -232,7 +273,8 @@ def build_job(*, fail_task: str | None = None) -> Job:
                 mapping_method="inventory-exact", confidence=1.0,
             )
             builder.add_entity(EntityRecord(identity, item["path"], item["path"], text,
-                                             {"language": item["language"], "size_bytes": item["size_bytes"]}, location))
+                                             {"language": item["language"], "size_bytes": item["size_bytes"],
+                                              "generated": bool(item.get("generated")), **scope_fields(item)}, location))
         builder.add_coverage("target-files", "complete" if not gaps else "partial",
                              None if not gaps else "; ".join(gaps[:10]))
         sha256 = builder.build()
@@ -253,7 +295,10 @@ def build_job(*, fail_task: str | None = None) -> Job:
                                target_snapshot=unit.job.source_fingerprint)
         pattern = re.compile(r"^\s*(?:def|class|function|func|interface|struct|enum)\s+([A-Za-z_$][\w$]*)")
         for item in partition["files"]:
-            if item["generated"] or item["language"] is None:
+            if not source_in_scope(item) or item["language"] is None:
+                continue
+            if item["size_bytes"] > 16 * 1024 * 1024:
+                gaps.append(f"{item['path']}: symbol source byte bound reached")
                 continue
             path = _target(unit) / item["path"]
             try:
@@ -273,7 +318,9 @@ def build_job(*, fail_task: str | None = None) -> Job:
                             mapping_method="source-line-exact", confidence=1.0,
                         )
                         builder.add_entity(EntityRecord(symbol_id, match.group(1), match.group(1), line.rstrip(),
-                                                        {"language": item["language"]}, location))
+                                                        {"language": item["language"],
+                                                         "generated": bool(item.get("generated")),
+                                                         **scope_fields(item)}, location))
                         builder.add_relation(RelationRecord(RelationKind.DEFINES, file_id.value,
                                                             symbol_id.value, True, 1.0))
                         symbols.append(symbol_id.value)
@@ -327,8 +374,7 @@ def build_job(*, fail_task: str | None = None) -> Job:
             tool_identity={"producer": "job_target_catalog", "limits": {
                 "files": settings.max_files, "file_bytes": settings.max_file_bytes,
                 "records": settings.max_records}},
-            parser_identity="target-documents/1:" + hashlib.sha256(
-                Path(__file__).parents[2].joinpath("indexing", "target_documents.py").read_bytes()).hexdigest(),
+            parser_identity=unit.job.review_policy.releases.values.get("target_documents", "undeclared"),
             normalizer_identity="retrieval-normalizer/1", mapping_identity="source-line-exact/1",
         )
         path = unit.job.run_root / "data" / "indices" / "documents" / f"{fingerprint}.sqlite"
@@ -500,12 +546,8 @@ def build_job(*, fail_task: str | None = None) -> Job:
           "build_discovery.catalog_build_targets", "component_discovery.catalog_dependencies",
           "repository_discovery.census_languages")),
     )
-    implementation = hashlib.sha256(Path(__file__).read_bytes() +
-        Path(__file__).parents[1].joinpath("cataloging.py").read_bytes() +
-        Path(__file__).parents[1].joinpath("build_discovery.py").read_bytes() +
-        Path(__file__).parents[2].joinpath("indexing", "target_documents.py").read_bytes() +
-        str(fail_task).encode()).hexdigest()
-    validation = hashlib.sha256(Path(__file__).read_bytes() + b"validation").hexdigest()
+    implementation = None
+    validation = None
     return Job("job_target_catalog", "target_catalog", UnitExecutor(units).execute,
                input_validators=(_validate_config,), schema_identity="appsec-review/target-catalog-job/1",
                implementation_identity=implementation, validation_identity=validation, units=units,

@@ -76,7 +76,8 @@ def build_job(*, runner: Runner | None = None) -> Job:
             raise ValueError("image pin verification found no enabled catalog image or configured pin")
         document = {
             "schema": PLAN_SCHEMA,
-            "catalog": {"path": CATALOG.as_posix(), "sha256": hashlib.sha256(catalog_bytes).hexdigest()},
+            "catalog": {"path": CATALOG.as_posix(),
+                        "release_id": unit.job.review_policy.releases.values.get("platform")},
             "configuration": {"path": frozen.relative_to(unit.job.run_root).as_posix(),
                               "sha256": hashlib.sha256(frozen_bytes).hexdigest()},
             "pins": pins,
@@ -125,8 +126,7 @@ def build_job(*, runner: Runner | None = None) -> Job:
         Unit("verification.inspect_images", inspect_images, ("selection.resolve_pins",)),
         Unit("publication.publish_handoff", publish_handoff, ("verification.inspect_images",)),
     )
-    implementation = hashlib.sha256(Path(__file__).read_bytes() +
-                                    (b"image-inspector" if runner else b"no-image-inspector")).hexdigest()
+    implementation = None
     return Job(
         JOB_ID, "image_pin_verification", UnitExecutor(units).execute,
         input_validators=(_validate,), schema_identity="appsec-review/image-pin-verification-job/1",

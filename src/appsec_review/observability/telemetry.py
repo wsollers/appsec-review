@@ -277,7 +277,7 @@ def _review_metrics(run_root: Path, records: list[Mapping[str, Any]]) -> Mapping
     selected_by_language = Counter(str(item.get("family") or "unknown") for item in build_receipts)
 
     timings: dict[tuple[str, str, str, str, str, str, str, str, str], dict[str, Any]] = {}
-    starts: dict[tuple[str, str], list[datetime]] = {}
+    starts: dict[tuple[str, ...], list[datetime]] = {}
     database_images: dict[str, str] = {}
     for record in records:
         details = record.get("details", {})
@@ -288,7 +288,8 @@ def _review_metrics(run_root: Path, records: list[Mapping[str, Any]]) -> Mapping
         database_identity = str(details.get("database_identity") or "")
         if details.get("image_id"):
             database_images[database_identity] = str(details["image_id"])
-        pair = (action, identity)
+        pair = (str(record["run_id"]), str(record["job_id"]), str(record["attempt_id"]),
+                str(details.get("tool_invocation_id") or identity), action)
         stamp = datetime.fromisoformat(str(record["timestamp"]))
         if record.get("event_type") == "TOOL_INVOCATION_STARTED":
             starts.setdefault(pair, []).append(stamp)
@@ -350,8 +351,8 @@ def _review_metrics(run_root: Path, records: list[Mapping[str, Any]]) -> Mapping
     return {"semantics": METRICS_SEMANTICS,
             "classification": {"source": "appsec-review/source-counting/1",
                 "sloc": "UTF-8 non-empty physical lines; comments included",
-                "generated": "path segment generated or gen; dist/build trees are excluded gaps",
-                "vendored": "path segment vendor, vendors, or third_party; node_modules trees are excluded gaps",
+                "generated": "path segment generated or gen; delivered build/dist content is not blanket-excluded",
+                "vendored": "path segment vendor, vendors, or third_party; directory name is not platform ownership",
                 "tests": "test/tests/spec/specs segment or test_/spec_ filename",
                 "artifacts": "references count each build-unit edge; deduplicated totals use SHA-256 content identity"},
             "source_by_language": dict(sorted(source.items())),
@@ -380,6 +381,34 @@ def aggregate_run_metrics(run_root: Path) -> Mapping[str, Any]:
     records, torn = PipelineLog(run_root).read()
     for record in records:
         validate_event(record)
+    raw_event_count = len(records)
+    raw_event_counts = Counter(str(record["event_type"]) for record in records)
+    unique_records = []
+    seen_invocations: dict[tuple[str, ...], Mapping[str, Any]] = {}
+    duplicate_lifecycle_records = 0
+    lifecycle_conflicts = []
+    for record in records:
+        details = record.get("details", {})
+        invocation = (details.get("span_id") or details.get("model_invocation_id")
+                      or details.get("tool_invocation_id") or details.get("invocation_id"))
+        event = str(record["event_type"])
+        if invocation:
+            phase = "start" if event.endswith("STARTED") else "terminal" if event.endswith(
+                ("COMPLETED", "SUCCEEDED", "FAILED", "COMPLETED_WITH_GAPS", "CANCELLED", "TIMED_OUT")) else event
+            key = (str(record["run_id"]), str(record["job_id"]), str(record["attempt_id"]),
+                   event.split("_", 1)[0], str(invocation), phase)
+            if key in seen_invocations:
+                duplicate_lifecycle_records += 1
+                prior = seen_invocations[key]
+                if prior["event_type"] != event or prior.get("details", {}) != details:
+                    lifecycle_conflicts.append({
+                        "job_id": record["job_id"], "attempt_id": record["attempt_id"],
+                        "invocation_id": str(invocation), "phase": phase,
+                        "reason": "conflicting_lifecycle_records"})
+                continue
+            seen_invocations[key] = record
+        unique_records.append(record)
+    records = unique_records
     event_counts = Counter(str(record["event_type"]) for record in records)
     dispositions = Counter()
     tool_calls = Counter()
@@ -390,12 +419,59 @@ def aggregate_run_metrics(run_root: Path) -> Mapping[str, Any]:
     throughput_counts = Counter()
     operation_durations: dict[str, list[int]] = {}
     task_intervals: list[tuple[datetime, datetime, str, int]] = []
-    starts: dict[tuple[str, str, str, str], list[datetime]] = {}
+    starts: dict[tuple[str, ...], list[datetime]] = {}
     job_bounds: dict[str, list[datetime]] = {}
     queue_delays: list[int] = []
     reuse = Counter()
+    work = Counter()
+    measured_spans = []
+    resource_admissions = []
+    model_usage = []
+    lifecycle_gaps = []
+    ambiguous_pairs = set()
+    closed_attempts = {
+        (str(record["job_id"]), str(record["attempt_id"])) for record in records
+        if record["event_type"] in {"JOB_SUCCEEDED", "JOB_COMPLETED_WITH_GAPS", "JOB_FAILED",
+                                   "JOB_CANCELLED", "JOB_CANCELED", "JOB_TIMED_OUT"}
+    }
     for record in records:
         details = record.get("details", {})
+        if record["event_type"] == "OPERATION_COMPLETED":
+            work.update(details.get("work", {}))
+            measured_spans.append({
+                "run_id": record["run_id"], "job_id": record["job_id"], "attempt_id": record["attempt_id"],
+                "span_id": details.get("span_id"), "parent_span_id": details.get("parent_span_id"),
+                "unit_id": details.get("unit_id"), "scope_id": details.get("scope_id"),
+                "query_profile": details.get("query_profile"),
+                "resource_lease_id": details.get("resource_lease_id"),
+                "tool_invocation_id": details.get("tool_invocation_id"),
+                "stage": details.get("operation_id"), "terminal_status": details.get("terminal_status"),
+                "duration_ms": details.get("duration_ms"), "resources": details.get("resources"),
+                "work": details.get("work"),
+            })
+        if record["event_type"] in {"RESOURCE_ADMITTED", "RESOURCE_TIMED_OUT"}:
+            resource_admissions.append({
+                "run_id": record["run_id"], "job_id": record["job_id"], "attempt_id": record["attempt_id"],
+                "resource_lease_id": details.get("span_id"), "stage": details.get("operation_id"),
+                "unit_id": details.get("unit_id"), "scope_id": details.get("scope_id"),
+                "query_profile": details.get("query_profile"),
+                "status": record["event_type"].removeprefix("RESOURCE_"),
+                "queue_delay_ms": details.get("queue_delay_ms"),
+                "reservation": details.get("reservation"), "reason": details.get("reason"),
+            })
+        if record["event_type"] == "MODEL_CALL_COMPLETED":
+            model_usage.append({
+                "run_id": record["run_id"], "job_id": record["job_id"], "attempt_id": record["attempt_id"],
+                "invocation_id": details.get("model_invocation_id"),
+                "provider": details.get("provider"), "model": details.get("model"),
+                "duration_ms": details.get("duration_ms"), "retry_count": details.get("retry_count"),
+                "input_tokens": details.get("input_tokens"), "output_tokens": details.get("output_tokens"),
+                "cache_tokens": details.get("cache_tokens"), "cost": details.get("cost"),
+                "cost_unavailable_reason": None if details.get("cost") is not None else "no_trusted_rate_source",
+                "usage_unavailable_reason": ("provider_usage_unavailable" if any(
+                    details.get(name) is None for name in ("input_tokens", "output_tokens", "cache_tokens"))
+                    else None),
+            })
         disposition = details.get("disposition") or details.get("terminal_status") or details.get("completion_status")
         if disposition:
             dispositions[str(disposition)] += 1
@@ -403,7 +479,7 @@ def aggregate_run_metrics(run_root: Path) -> Mapping[str, Any]:
             tool_calls[str(details.get("tool_id") or details.get("mcp_tool") or "unknown")] += 1
         if record["event_type"] == "FINDING_TRANSITION":
             finding_states[str(details.get("new_state"))] += 1
-        if isinstance(details.get("duration_ms"), int):
+        if isinstance(details.get("duration_ms"), (int, float)):
             durations_ms[str(record["event_type"])] += details["duration_ms"]
             identity = _operation_identity(record)
             operation_durations.setdefault(identity, []).append(details["duration_ms"])
@@ -430,17 +506,33 @@ def aggregate_run_metrics(run_root: Path) -> Mapping[str, Any]:
         job_bounds.setdefault(job, []).append(timestamp)
         event = str(record["event_type"])
         family = event.split("_", 1)[0]
-        key = (family, job, str(record.get("step_id") or "-"), str(record.get("task_id") or "-"))
+        key = (family, job, str(record.get("step_id") or "-"), str(record.get("task_id") or "-"),
+               str(record.get("attempt_id") or "-"),
+               str(details.get("span_id") or details.get("model_invocation_id")
+                   or details.get("tool_invocation_id") or details.get("invocation_id") or "-"))
         if event.endswith("STARTED"):
             starts.setdefault(key, []).append(timestamp)
         elif event.endswith(("SUCCEEDED", "FAILED", "COMPLETED", "COMPLETED_WITH_GAPS",
                              "CANCELED", "CANCELLED", "TIMED_OUT")):
+            if key in ambiguous_pairs:
+                continue
             pending = starts.get(key, [])
             if pending:
+                if family in {"TOOL", "MODEL", "MCP"} and key[-1] == "-" and len(pending) > 1:
+                    lifecycle_gaps.append({
+                        "family": family, "job_id": job, "attempt_id": key[4],
+                        "invocation_id": None, "reason": "ambiguous_legacy_invocation_pairing"})
+                    ambiguous_pairs.add(key)
+                    starts.pop(key, None)
+                    continue
                 begun = pending.pop(0)
                 if family == "TASK":
                     task_intervals.append((begun, timestamp, _operation_identity(record),
                                            max(0, int((timestamp - begun).total_seconds() * 1000))))
+            elif family in {"TOOL", "MODEL", "MCP", "OPERATION", "TASK"}:
+                lifecycle_gaps.append({
+                    "family": family, "job_id": job, "attempt_id": key[4],
+                    "invocation_id": None if key[-1] == "-" else key[-1], "reason": "missing_start"})
     timestamps = [datetime.fromisoformat(str(item["timestamp"])) for item in records]
     wall_ms = max(0, int((max(timestamps) - min(timestamps)).total_seconds() * 1000)) if timestamps else 0
     summed_task_ms = sum(item[3] for item in task_intervals)
@@ -451,12 +543,40 @@ def aggregate_run_metrics(run_root: Path) -> Mapping[str, Any]:
     operation_summaries.sort(key=lambda item: (-int(item["p95_ms"] or 0), item["operation"]))
     job_spans = {job: max(0, int((max(values) - min(values)).total_seconds() * 1000))
                  for job, values in job_bounds.items() if values}
-    genuinely_running = [{"family": key[0], "job_id": key[1], "step_id": key[2], "task_id": key[3],
-                          "started_at": value.isoformat()}
-                         for key, values in sorted(starts.items()) for value in values]
+    genuinely_running = []
+    for key, values in sorted(starts.items()):
+        for value in values:
+            state = {"family": key[0], "job_id": key[1], "step_id": key[2], "task_id": key[3],
+                     "attempt_id": key[4], "invocation_id": None if key[-1] == "-" else key[-1],
+                     "started_at": value.isoformat()}
+            if (key[1], key[4]) in closed_attempts:
+                lifecycle_gaps.append({**state, "reason": "missing_terminal_after_job_finished"})
+            else:
+                genuinely_running.append(state)
     critical = max(task_intervals, key=lambda item: item[3], default=None)
     return {"schema": "appsec-review/run-metrics/3", "run_id": Path(run_root).name,
             "event_count": len(records), "event_counts": dict(sorted(event_counts.items())),
+            "raw_event_count": raw_event_count, "raw_event_counts": dict(sorted(raw_event_counts.items())),
+            "duplicate_lifecycle_records": duplicate_lifecycle_records,
+            "lifecycle_conflicts": lifecycle_conflicts,
+            "lifecycle_gaps": lifecycle_gaps,
+            "lifecycle_accounting": "partial" if lifecycle_gaps or lifecycle_conflicts else "complete",
+            "work_counters": dict(sorted(work.items())),
+            "platform_work": {
+                "hash_bytes": work.get("platform_hash_bytes"),
+                "scan_invocations": work.get("platform_scan_invocations"),
+                "measurement_scope": "explicit_instrumented_counters_only",
+                "unavailable_reason": (
+                    "platform_counters_not_emitted"
+                    if not {"platform_hash_bytes", "platform_scan_invocations"} <= work.keys() else None),
+            },
+            "resource_spans": measured_spans,
+            "resource_admissions": resource_admissions,
+            "resource_totals": None,
+            "resource_totals_unavailable_reason": "inclusive_process_spans_must_not_be_summed",
+            "model_invocations": model_usage,
+            "avoided_platform_work": None,
+            "avoided_platform_work_unavailable_reason": "excluded_trees_are_not_enumerated",
             "dispositions": dict(sorted(dispositions.items())),
             "tool_calls": dict(sorted(tool_calls.items())),
             "finding_states": dict(sorted(finding_states.items())),

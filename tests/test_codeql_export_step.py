@@ -17,6 +17,7 @@ from appsec_review.codeql.runtime import (
     action_timeout, graph_compile_arguments, graph_export_arguments, load_asset_lock,
 )
 from appsec_review.config import load_config, parse_codeql_settings
+from appsec_review.config.assurance import ComponentReleases, ReviewPolicy
 from appsec_review.graph.contract import GraphSettings
 from appsec_review.indexing.inventory import Claim, FileClaims, runtime_claims, scan_run_tree
 from appsec_review.jobs.job_codeql_analysis.datasets import DATASETS
@@ -83,6 +84,8 @@ class Events:
 def _unit(tmp_path: Path, databases: list[dict[str, Any]], settings=None) -> SimpleNamespace:
     run_root = tmp_path / "run"
     job = SimpleNamespace(run_root=run_root, repository_root=ROOT, source_fingerprint="f" * 64,
+                          review_policy=ReviewPolicy(releases=ComponentReleases(
+                              {"codeql_runner": "fixture-1", "export_cpp": "fixture-1"})),
                           events=Events(), attempt_root=run_root / "data" / "jobs" / JOB / "attempts" / "attempt_0001",
                           config=SimpleNamespace(typed_settings=settings or _settings()))
     outputs = {"database.scopes": {"databases": databases}}
@@ -97,10 +100,10 @@ def _database(tmp_path: Path, scope: CodeQLScope, *, identity: str = "d" * 64,
     (root / "database" / "db-cpp" / "default.trap").write_text("database bytes", encoding="utf-8")
     atomic_json(root / "database-checkpoint.json", {"schema": "appsec-review/codeql-database-checkpoint/3",
                                                      "identity": identity, "terminal_status": "SUCCEEDED"})
-    image = {"schema": "appsec-review/codeql-derived-image/2", "identity": "a" * 64, "source_image_id": IMAGE,
+    image = {"schema": "appsec-review/codeql-derived-image/3", "identity": "a" * 64, "source_image_id": IMAGE,
              "build_image_id": IMAGE, "build_image_tag": "build:local", "image_id": IMAGE,
-             "image_tag": "codeql:local", "runtime_user": "10001:10001", "dockerfile_sha256": "b" * 64,
-             "runner_sha256": "c" * 64, "reused": False, "manifest_path": "manifest.json"}
+             "image_tag": "codeql:local", "runtime_user": "10001:10001", "component_release_id": "fixture-1",
+             "runner_release_id": "fixture-1", "reused": False, "manifest_path": "manifest.json"}
     atomic_json(root / "image.json", image)
     image_artifact = {"path": (root / "image.json").relative_to(run_root).as_posix(),
                       "sha256": file_sha256(root / "image.json")}
@@ -211,17 +214,29 @@ def test_export_writes_exports_and_manifest_publishes_hashes_and_reuses(tmp_path
         {"scope_id": cpp.scope_id, "language": "cpp", "action": "export", "terminal_status": "SUCCEEDED"},
         {"scope_id": go.scope_id, "language": "go", "action": "export", "terminal_status": "NOT_APPLICABLE"}]
     export_events = [(name, details) for name, details in unit.job.events.records
-                     if details["tool_id"] == "codeql-graph-export"]
+                     if details.get("tool_id") == "codeql-graph-export"]
     assert [name for name, _details in export_events] == ["TOOL_INVOCATION_STARTED", "TOOL_INVOCATION_COMPLETED"]
     compile_events = [name for name, details in unit.job.events.records
-                      if details["tool_id"] == "codeql-graph-export-compile"]
+                      if details.get("tool_id") == "codeql-graph-export-compile"]
     assert compile_events == ["TOOL_INVOCATION_STARTED", "TOOL_INVOCATION_COMPLETED"]
+    preparation = [(name, details) for name, details in unit.job.events.records
+                   if details.get("operation_id") == "codeql.prepare.export"]
+    assert [name for name, _ in preparation] == ["OPERATION_STARTED", "OPERATION_COMPLETED"]
+    assert preparation[1][1]["terminal_status"] == "SUCCEEDED"
+    assert preparation[1][1]["work"] == {"copy_bytes": len(b"database bytes"), "copy_objects": 1}
+    for _, details in preparation:
+        assert details["scope_id"] == cpp.scope_id
+        assert details["tool_invocation_id"] == export_events[0][1]["tool_invocation_id"]
+        assert details["unit_id"] == unit.unit_id
 
-    rerun = _export_scopes(_unit(tmp_path, databases), executor_factory=_never)
+    rerun_unit = _unit(tmp_path, databases)
+    rerun = _export_scopes(rerun_unit, executor_factory=_never)
     reused = next(item for item in rerun["exports"] if item["scope_id"] == cpp.scope_id)
     assert reused["export_reused"] is True and rerun["export_reused"] == 1
     assert reused["export_identity"] == exported["export_identity"]
     assert reused["export_files"] == exported["export_files"]
+    assert not any(details.get("operation_id") == "codeql.prepare.export"
+                   for _, details in rerun_unit.job.events.records)
 
 
 def test_database_or_pack_change_invalidates_only_the_export_checkpoint(tmp_path: Path) -> None:
@@ -234,7 +249,8 @@ def test_database_or_pack_change_invalidates_only_the_export_checkpoint(tmp_path
     assert _export_identity({**database, "database_identity": "e" * 64}, profile, settings,
                             runner_sha256="9" * 64) != identity
     assert _export_identity(database, {**profile, "tree_sha256": "0" * 64}, settings,
-                            runner_sha256="9" * 64) != identity
+                            runner_sha256="9" * 64) == identity
+    assert _export_identity(database, profile, settings, runner_sha256="new-release") != identity
     assert _export_identity(database, profile, replace(settings, export_queries=replace(
         settings.export_queries, row_limit=10)), runner_sha256="9" * 64) != identity
     # The catalog is read only by the downstream normalizer: it never invalidates an export.
@@ -324,17 +340,18 @@ def test_changed_export_after_checkpoint_is_a_framework_integrity_error(tmp_path
         _export_one(_unit(tmp_path, databases), databases[0], executor_factory=_never)
 
 
-def test_export_sources_must_equal_the_lock_before_any_execution(tmp_path: Path) -> None:
-    cpp = _scope("cpp", "native", "a")
+def test_export_sources_are_not_fingerprinted(tmp_path: Path, monkeypatch) -> None:
+    from appsec_review.jobs.job_codeql_analysis import job as codeql_job
     settings = _settings()
     drifted = replace(settings, asset_lock_sha256="0" * 64)
-    with pytest.raises(FrameworkIntegrityError, match="asset lock"):
-        _export_scopes(_unit(tmp_path, [_database(tmp_path, cpp)], drifted), executor_factory=_never)
+    def forbidden(path):
+        raise AssertionError("supplied export assets must not be hashed")
+    monkeypatch.setattr(codeql_job, "file_sha256", forbidden)
+    codeql_job._verify_export_sources(ROOT, _export_profile(drifted, "cpp"), drifted)
     language = settings.languages["cpp"]
     moved = replace(settings, languages=MappingProxyType({**settings.languages, "cpp": replace(
         language, export_queries=(replace(language.export_queries[0], file_count=11),))}))
-    with pytest.raises(FrameworkIntegrityError, match="locked tree"):
-        _export_scopes(_unit(tmp_path, [_database(tmp_path, cpp)], moved), executor_factory=_never)
+    codeql_job._verify_export_sources(ROOT, _export_profile(moved, "cpp"), moved)
 
 
 def test_planning_compares_the_toml_export_block_with_the_lock_entry() -> None:
@@ -411,23 +428,25 @@ def test_typed_export_settings_are_strict_and_default_to_the_graph_contract() ->
             parse_codeql_settings(value)
 
 
-def test_config_topology_requires_the_export_step() -> None:
+def test_config_topology_requires_the_ready_execution_step() -> None:
     config = load_config(ROOT / "appsec-review.toml").job(JOB)
     _validate_config(SimpleNamespace(config=config), None)
-    steps = {name: value for name, value in config.steps.items() if name != "export"}
+    steps = {name: value for name, value in config.steps.items() if name != "execution"}
     missing = SimpleNamespace(steps=steps, step=lambda name: steps[name])
     with pytest.raises(ValueError, match="topology"):
         _validate_config(SimpleNamespace(config=missing), None)
     job = build_job()
     units = {unit.unit_id: unit.dependencies for unit in job.units}
-    assert units["export.scopes"] == ("database.scopes", "plan.inventory")
-    assert set(units["acceptance.publish_handoff"]) == {"normalize.scopes", "export.scopes"}
+    assert units["execution.scopes"] == ("plan.inventory",)
+    assert units["acceptance.publish_handoff"] == ("execution.scopes",)
     assert [unit.unit_id.split(".")[0] for unit in job.units] == list(config.steps)
 
 
-def test_dataset_declarations_account_for_exports_separately_from_scope_material(tmp_path: Path) -> None:
+def test_dataset_declarations_account_for_exports_separately_from_scope_material(tmp_path: Path, monkeypatch) -> None:
+    from appsec_review.indexing import inventory
+
     declaration = next(item for item in DATASETS if item.output_kind == "codeql_graph_export")
-    assert (declaration.step, declaration.disposition) == ("export", "artifact_only")
+    assert (declaration.step, declaration.disposition) == ("execution", "artifact_only")
     assert declaration.reason and declaration.query_route
     run = tmp_path / "run"
     scope = run / "data" / "codeql" / "scopes" / "codeql-unit-aaaaaaaaaaaaaaaaaaaaaaaa"
@@ -439,17 +458,27 @@ def test_dataset_declarations_account_for_exports_separately_from_scope_material
                                   scope / "image.json", scope / "database" / "db-cpp" / "a.trap",
                                   scope / "workspace" / "main.cpp", scope / "executions" / "export" / "stdout.bin",
                                   scope / "queries" / "default" / "sarif" / "results.sarif",
-                                  scope / "export" / "pack" / "qlpack.yml"],
+                                  scope / "workspace" / "export" / "pack" / "qlpack.yml"],
         "codeql_plan_and_summary": [attempt / "artifacts" / "codeql" / "summary.json"],
     }
-    for paths in files.values():
+    supplied = [scope / "export" / "pack" / "qlpack.yml",
+                scope / "export" / "columns.json", scope / "export" / "assets.lock.json"]
+    for paths in [*files.values(), supplied]:
         for path in paths:
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text("x", encoding="utf-8")
     steps = tuple(load_config(ROOT / "appsec-review.toml").job(JOB).steps)
     claims = runtime_claims({JOB: steps}) + [Claim(JOB, item.step, item.output_kind, item) for item in DATASETS]
+    scandir = inventory.os.scandir
+
+    def no_supplied_pack(directory):
+        assert Path(directory) != scope / "export" / "pack", "supplied pack was traversed"
+        return scandir(directory)
+
+    monkeypatch.setattr(inventory.os, "scandir", no_supplied_pack)
     tree = scan_run_tree(run, FileClaims(claims), max_files=1000)
     assert tree.unaccounted_count == 0 and not tree.scan_errors
+    assert tree.file_count == sum(len(paths) for paths in files.values())
     assert {key[2]: group.count for key, group in tree.groups.items()} == {
         kind: len(paths) for kind, paths in files.items()}
 

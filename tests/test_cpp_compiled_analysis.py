@@ -314,6 +314,35 @@ def test_project_failure_is_scoped_and_retry_reuses_other_checkpoints(tmp_path: 
     assert config.job("job_cpp_compiled_analysis").steps.keys().isdisjoint({"configure", "compile"})
 
 
+@pytest.mark.parametrize("stage,tool", (("catalog", "tool-native-cpp"), ("branch-infer", "tool-infer")))
+@pytest.mark.parametrize("mode", ("strict", "first_party_managed"))
+def test_cpp_checkpoint_requires_declared_platform_releases(tmp_path, stage, tool, mode):
+    from dataclasses import replace
+    from types import SimpleNamespace
+    from appsec_review.config.assurance import AssuranceMode, ComponentReleases, ReviewPolicy
+    from appsec_review.jobs.job_cpp_compiled_analysis.job import (
+        _checkpoint_identity, _load_checkpoint, _save_checkpoint,
+    )
+    policy = ReviewPolicy(mode=AssuranceMode(mode), project_id="fixture",
+                          approved_first_party_projects=("fixture",), target_root=str(tmp_path),
+                          custody="application_private_v1")
+    events = []
+    unit = SimpleNamespace(job=SimpleNamespace(
+        run_root=tmp_path, repository_root=tmp_path, review_policy=policy,
+        events=SimpleNamespace(write=lambda event, **details: events.append((event, details)))))
+    identity = _checkpoint_identity(unit, "fixture", stage, {}, tool_id=tool)
+    _save_checkpoint(unit, "fixture", stage, identity, {"terminal_status": "SUCCEEDED"})
+    assert _load_checkpoint(unit, "fixture", stage, identity) is None
+    assert events[-1][1]["reason"] == "missing_release_identity"
+    unit.job.review_policy = replace(policy, releases=ComponentReleases(
+        {"platform": "fixture/1", "validation": "fixture/1", tool: "fixture/1"}))
+    declared_identity = _checkpoint_identity(unit, "fixture", stage, {}, tool_id=tool)
+    assert declared_identity != identity
+    assert _load_checkpoint(unit, "fixture", stage, declared_identity) is None
+    _save_checkpoint(unit, "fixture", stage, declared_identity, {"terminal_status": "SUCCEEDED"})
+    assert _load_checkpoint(unit, "fixture", stage, declared_identity)["checkpoint_reused"]
+
+
 # PHP (phpize) and Python (setuptools) extension compiles are captured in buildenv-php and
 # buildenv-python and replayed in tool-native-cpp. Their absolute system include directories must
 # reach the replay unchanged and must exist in the replay image.

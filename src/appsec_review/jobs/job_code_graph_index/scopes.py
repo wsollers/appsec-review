@@ -69,19 +69,6 @@ def digest(value: Any) -> str:
     return hashlib.sha256(canonical_json(value)).hexdigest()
 
 
-def implementation_identity() -> str:
-    """Hash of every module whose behavior shapes a published graph shard."""
-    source = Path(__file__).resolve()
-    package = source.parents[2]
-    files = [*sorted(source.parent.glob("*.py")), *sorted((package / "graph").glob("*.py")),
-             *seeding.implementation_sources(),
-             package / "codeql" / "runtime.py", package / "jobs" / "job_codeql_analysis" / "sarif.py"]
-    value = hashlib.sha256()
-    for path in files:
-        value.update(path.relative_to(package).as_posix().encode() + b"\0" + path.read_bytes())
-    return value.hexdigest()
-
-
 def artifact(run_root: Path, path: Path) -> dict[str, Any]:
     resolved = path.resolve()
     if run_root.resolve() not in resolved.parents or not resolved.is_file() or path.is_symlink():
@@ -147,7 +134,7 @@ def is_seeded(scope: Mapping[str, Any]) -> bool:
 def load_codeql_inputs(run_root: Path, source_fingerprint: str) -> dict[str, Any]:
     """The accepted CodeQL handoff's per-scope export records, joined with the plan's scope files.
 
-    Only material bound to the accepted handoff is read: its ``export.scopes`` index artifact, its
+    Only material bound to the accepted handoff is read: its graph export index artifact, its
     result and plan, and per scope the export manifest identity the handoff carries. The export job's
     own ``export-checkpoint.json`` is never consulted.
     """
@@ -167,10 +154,18 @@ def load_codeql_inputs(run_root: Path, source_fingerprint: str) -> dict[str, Any
             raise IntegrityError(f"accepted CodeQL handoff does not bind its {what}")
         return read_artifact(run_root, identity)
 
-    export_output = (handoff.get("outputs") or {}).get("export.scopes")
-    if not isinstance(export_output, Mapping):
-        raise IntegrityError("accepted CodeQL handoff publishes no export.scopes output")
-    index = read_bound(export_output.get("artifact"), "graph export index")
+    outputs = handoff.get("outputs") or {}
+    if "execution.scopes" in outputs:
+        execution = outputs["execution.scopes"]
+        if not isinstance(execution, Mapping):
+            raise IntegrityError("accepted CodeQL execution.scopes output is invalid")
+        export_index = execution.get("graph_export_artifact")
+    else:
+        legacy = outputs.get("export.scopes")
+        if not isinstance(legacy, Mapping):
+            raise IntegrityError("accepted CodeQL handoff publishes no graph export index")
+        export_index = legacy.get("artifact")
+    index = read_bound(export_index, "graph export index")
     if not isinstance(index, Mapping) or index.get("schema") != GRAPH_EXPORTS_SCHEMA:
         raise IntegrityError("accepted CodeQL graph export index schema is unsupported")
     result_path = str((handoff.get("resolving_paths") or {}).get("result", ""))
@@ -204,13 +199,15 @@ def load_codeql_inputs(run_root: Path, source_fingerprint: str) -> dict[str, Any
             if not isinstance(manifest, Mapping) or bound.get(str(manifest.get("path"))) != manifest.get("sha256"):
                 raise IntegrityError(f"CodeQL export manifest of {scope_id} is not bound to the accepted handoff")
             pack = item.get("export_pack")
-            if not isinstance(pack, Mapping) or not pack.get("tree_sha256") or not pack.get("columns_sha256"):
+            if not isinstance(pack, Mapping):
                 raise IntegrityError(f"CodeQL export pack identity of {scope_id} is missing")
             record["export_manifest"] = {"path": str(manifest["path"]), "sha256": str(manifest["sha256"])}
             record["export_pack"] = dict(pack)
         records.append(record)
     if len({item["scope_id"] for item in records}) != len(records):
         raise IntegrityError("accepted CodeQL export index repeats a scope")
+    if {item["scope_id"] for item in records} != set(plan_scopes):
+        raise IntegrityError("accepted CodeQL export index omits a planned scope")
     return {"handoff": {"path": accepted.path, "sha256": accepted.sha256},
             "scopes": sorted(records, key=lambda item: item["scope_id"])}
 
@@ -224,10 +221,6 @@ def verify_exports(run_root: Path, record: Mapping[str, Any], settings: GraphSet
     if file_sha256(path) != manifest["sha256"]:
         raise IntegrityError(f"CodeQL graph export manifest of {record['scope_id']} differs from the accepted "
                              "handoff")
-    columns = hashlib.sha256(COLUMNS_PATH.read_bytes()).hexdigest()
-    if record["export_pack"].get("columns_sha256") != columns:
-        raise IntegrityError(f"CodeQL graph export of {record['scope_id']} was produced for a different "
-                             "columns.json contract")
     try:
         return load_graph_exports(path.parent, bytes_limit=settings.max_export_bytes)
     except (GraphExportIntegrityError, ValueError) as error:
@@ -393,7 +386,7 @@ def priority_shards(shard_set: ShardSet) -> list[dict[str, Any]]:
 # --------------------------------------------------------------------------- scope identity and checkpoints
 
 
-def scope_identity(scope: Mapping[str, Any], *, snapshot: str, catalog_sha256: str, columns_sha256: str,
+def scope_identity(scope: Mapping[str, Any], *, snapshot: str, catalog_release: str, columns_release: str,
                    settings: GraphSettings, tool_version: str, implementation: str) -> str:
     """Section 7.3: everything a scope's graph shards depend on, and nothing else."""
     inputs = scope["inputs"]
@@ -404,8 +397,8 @@ def scope_identity(scope: Mapping[str, Any], *, snapshot: str, catalog_sha256: s
         "reason": scope.get("reason"), "export_gaps": scope.get("export_gaps", []),
         "seeded": scope.get("seeded"), "source_languages": scope.get("source_languages"),
         "export_manifest_sha256": (scope.get("export_manifest") or {}).get("sha256"),
-        "export_pack": scope.get("export_pack"), "files": scope["files"], "catalog_sha256": catalog_sha256,
-        "columns_sha256": columns_sha256, "rules": RULES, "settings": asdict(settings),
+        "files": scope["files"], "catalog_release": catalog_release,
+        "columns_release": columns_release, "rules": RULES, "settings": asdict(settings),
         "tool_version": tool_version, "implementation": implementation,
         "secondary": {name: [shard_ref(item) for item in values]
                       for name, values in sorted(inputs["secondary"].items())},
@@ -687,10 +680,10 @@ def producers_shard_id(scope_id: str) -> str:
     return f"graph-{scope_id}-producers"
 
 
-def _producer(scope: Mapping[str, Any], family: Family | None, catalog_sha256: str, unit_id: str,
+def _producer(scope: Mapping[str, Any], family: Family | None, catalog_release: str, unit_id: str,
               kind: str = DATABASE_KIND) -> dict[str, Any]:
     value = {"job": JOB_ID, "unit": unit_id, "language": scope["language"], "scope_id": scope["scope_id"],
-             "build_unit_id": scope["build_unit_id"], "rule": NORMALIZE_RULE, "catalog_sha256": catalog_sha256}
+             "build_unit_id": scope["build_unit_id"], "rule": NORMALIZE_RULE, "catalog_release": catalog_release}
     # A fact-family shard names its family; the database-card shard names its kind instead, so no
     # consumer mistakes it for a seven-family fact shard.
     return {**value, "family": family.value} if family is not None else {**value, "kind": kind}
@@ -698,7 +691,7 @@ def _producer(scope: Mapping[str, Any], family: Family | None, catalog_sha256: s
 
 def _publish_one(run_root: Path, *, scope: Mapping[str, Any], family: Family | None, snapshot: str, identity: str,
                  entities: Sequence[EntityRecord], relations: Sequence[RelationRecord],
-                 area: str, status: str, gaps: Sequence[str], catalog_sha256: str, unit_id: str,
+                 area: str, status: str, gaps: Sequence[str], catalog_release: str, unit_id: str,
                  kind: str = DATABASE_KIND) -> dict[str, Any]:
     shard_id = (shard_id_for(scope["scope_id"], family) if family is not None else
                 producers_shard_id(scope["scope_id"]) if kind == PRODUCERS_KIND else
@@ -723,14 +716,14 @@ def _publish_one(run_root: Path, *, scope: Mapping[str, Any], family: Family | N
     builder.add_coverage(area, status, "; ".join(gaps)[:4096] or None)
     sha = builder.build()
     index = IndexIdentity(GRAPH_INDEX, INDEX_SCHEMA, sha, fingerprint, path.relative_to(run_root).as_posix(),
-                          _producer(scope, family, catalog_sha256, unit_id, kind),
+                          _producer(scope, family, catalog_release, unit_id, kind),
                           tuple(gap[:300] for gap in gaps[:50]), shard_id)
     return asdict(index)
 
 
 def publish_scope(run_root: Path, *, scope: Mapping[str, Any], snapshot: str, identity: str,
                   facts: Sequence[GraphFact], symbols: Sequence[EntityRecord], relations: Sequence[RelationRecord],
-                  coverage: Sequence[CoverageRow], catalog_sha256: str, unit_id: str,
+                  coverage: Sequence[CoverageRow], catalog_release: str, unit_id: str,
                   card: EntityRecord | None = None,
                   neighborhood: producers.ProducerRows | None = None) -> list[dict[str, Any]]:
     """One ``graph`` shard per family plus the database-card shard and the producer-neighborhood shard.
@@ -758,19 +751,19 @@ def publish_scope(run_root: Path, *, scope: Mapping[str, Any], snapshot: str, id
         row = rows[family]
         shards.append(_publish_one(run_root, scope=scope, family=family, snapshot=snapshot, identity=identity,
                                    entities=entities, relations=grouped[family], area=row.area,
-                                   status=row.status.value, gaps=row.gaps, catalog_sha256=catalog_sha256,
+                                   status=row.status.value, gaps=row.gaps, catalog_release=catalog_release,
                                    unit_id=unit_id))
     if card is not None:
         state = card.payload["coverage"]
         shards.append(_publish_one(run_root, scope=scope, family=None, snapshot=snapshot, identity=identity,
                                    entities=[card], relations=(), area=f"graph:{scope['scope_id']}:database",
-                                   status=state, gaps=card.payload["gaps"], catalog_sha256=catalog_sha256,
+                                   status=state, gaps=card.payload["gaps"], catalog_release=catalog_release,
                                    unit_id=unit_id))
     if neighborhood is not None:
         shards.append(_publish_one(run_root, scope=scope, family=None, snapshot=snapshot, identity=identity,
                                    entities=neighborhood.entities, relations=(),
                                    area=f"graph:{scope['scope_id']}:producers", status=neighborhood.status,
-                                   gaps=neighborhood.gaps, catalog_sha256=catalog_sha256, unit_id=unit_id,
+                                   gaps=neighborhood.gaps, catalog_release=catalog_release, unit_id=unit_id,
                                    kind=PRODUCERS_KIND))
     return shards
 

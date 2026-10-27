@@ -97,6 +97,15 @@ def test_registered_job_is_resolved_with_the_registry_set_and_package_bounds() -
     assert (packages.hunt_max_units, packages.hunt_menu_partition_size, packages.max_package_bytes) == (50, 25, 65536)
 
 
+def test_all_package_budget_is_typed_serialized_and_semantic(tmp_path: Path) -> None:
+    finite = _settings(_variant(tmp_path / "finite"))
+    all_packages = _settings(_variant(tmp_path / "all", ("budget_team_packages = 200",
+                                                        'budget_team_packages = "all"')))
+    assert all_packages.budgets.budget_team_packages == "all"
+    assert all_packages.as_document()["budgets"]["budget_team_packages"] == "all"
+    assert semantic_settings_sha256(all_packages) != semantic_settings_sha256(finite)
+
+
 # ---------------------------------------------------------------- rejection
 
 

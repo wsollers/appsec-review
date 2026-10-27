@@ -42,6 +42,13 @@ the architecture index is [`docs/architecture/README.md`](docs/architecture/READ
 All runtime settings (models, timeouts, worker counts, schedules, feed sources) live in
 [`appsec-review.toml`](appsec-review.toml). Change them there rather than in prompts or scripts.
 
+Customer evidence uses strict assurance by default. Reduced repeated verification is an explicit
+operator opt-in for approved first-party projects. Both modes exclude supplied platform
+software/images/tools from customer scanning and payload fingerprinting; customer deliverables,
+dependencies, generated outputs and build-chain evidence remain in scope. See
+[performance and assurance](docs/operations/performance-assurance.md) for immutable policy,
+declared releases, resource admission, required builder readiness and rollout limitations.
+
 ### Software inventory
 
 Everything below is declared in the file named in the last column; nothing else is required.
@@ -51,7 +58,7 @@ Everything below is declared in the file named in the last column; nothing else 
 | Requirement | Needed for | Where declared |
 | --- | --- | --- |
 | Python >= 3.11 and `jsonschema>=4.20` (`tzdata` on Windows), installed by `pip install -e .` | The package and the `appsec-review` and `appsec-review-mcp` commands | `pyproject.toml` (`requires-python`, `dependencies`) |
-| Docker with `docker buildx` (`--load`, `--network none`) | Tool and build-environment images, project builds, CodeQL image layering | `containers/build.py`, `src/appsec_review/codeql/runtime.py`, `src/appsec_review/container_runtime/project_images.py` |
+| Docker with `docker buildx` (`--load`, `--network none`) | Operator tool/build-environment provisioning and container execution; review-time derived images use the bounded builder below | `containers/build.py`, `src/appsec_review/container_runtime/` |
 | Claude Code CLI `claude` on `PATH`, signed in | Model calls; `provider = "claude-cli"` | `appsec-review.toml`, `src/appsec_review/inference/claude_cli.py` |
 | Tool images (below), built locally | Every analysis job that is not a coverage gap | `containers/catalog.toml` |
 
@@ -70,6 +77,7 @@ Everything below is declared in the file named in the last column; nothing else 
 | `dagster` extra (`dagster`, `dagster-postgres`, `dagster-webserver`, all pinned) | Dagster tests on the host; otherwise they are skipped. The deployment image installs its own pinned set | `pyproject.toml`, `deploy/dagster/requirements.txt` and `requirements.lock.txt` |
 | `rulepacks` extra (`PyYAML==6.0.3`) | Validating or evaluating `rules/sei-cert/` without the full `test` extra | `pyproject.toml` |
 | Docker Compose v2 plugin | The Dagster stack | `deploy/dagster/compose*.yaml` |
+| Commissioned bounded-builder service, immutable local BuildKit image, Docker/Skopeo and verified native cgroup-v2 limits | Required dependency or CodeQL derived images when no eligible prepared image exists; package-network recipes also need isolated operator egress. Not provisioned or enabled by this repository change | `review_policy.image_builder`; [performance and assurance](docs/operations/performance-assurance.md#scheduling-and-limits) |
 | Host `semgrep` or `opengrep` (or `APPSEC_REVIEW_SEMGREP` / `APPSEC_REVIEW_OPENGREP`) | Rule-pack engine tests (skipped without it; some use the pinned Semgrep image instead) | `src/appsec_review/rulepacks/sei_cert/engines.py`, `tests/test_semgrep_rules.py`, `tests/test_cpp_cert_rules.py` |
 | `bash`, and `pwsh` | The launcher-parity test (skipped without both) | `tests/test_container_builds.py` |
 | `java` and `APPSEC_GRADLE_HOME` | Gradle provenance test | `tests/test_gradle_provenance.py` |
@@ -95,7 +103,8 @@ opt-in live test above.
 repository: you supply a licensed base image tagged `audit-codeql:local`, download
 `coding-standards-codeql-packs.zip` (`github/codeql-coding-standards@v2.62.0`) into
 `containers/tools/codeql/`, and layer `audit-codeql:custom-2.27.0` with `Dockerfile.custom-source`.
-Its image ID and the hash of `assets.lock.json` are then pinned in `appsec-review.toml`. See
+Its execution image ID and declared component releases are configured in `appsec-review.toml`;
+customer review execution does not hash supplied assets or their lock file. See
 [`containers/tools/codeql/README.md`](containers/tools/codeql/README.md),
 [`LICENSE.md`](containers/tools/codeql/LICENSE.md) and
 [`docs/operations/codeql-analysis.md`](docs/operations/codeql-analysis.md). Without it, CodeQL

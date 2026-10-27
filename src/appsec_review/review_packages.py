@@ -17,6 +17,7 @@ from appsec_review.retrieval import RetrievalCore
 from appsec_review.retrieval.model import LogicalIdentity, canonical_json
 from appsec_review.storage import atomic_json, file_sha256
 from appsec_review.storage.shared import publish_named, consume_named, safe_path
+from appsec_review.observability.spans import count_work
 
 
 SCHEMA = "appsec-review/review-package/3"
@@ -91,7 +92,7 @@ def _lead(value: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def _document_hunt(core: RetrievalCore, row: Any, members: list[Any], gaps: list[dict[str, str]],
-                   omitted: int, max_page_size: int) -> dict[str, Any]:
+                   omitted: int, max_page_size: int, inputs: list[tuple[str, str, str]]) -> dict[str, Any]:
     result = row.payload["result"]
     partition = f"{result['subject_type']}:{result['key']}"
     context_ids = sorted({row.identity, *(item.identity for item in members)})
@@ -100,8 +101,6 @@ def _document_hunt(core: RetrievalCore, row: Any, members: list[Any], gaps: list
     evidence.extend({"entity_id": item.identity, "relation": "qualifies", "shard_id": item.shard_id,
                      "shard_sha256": item.shard_sha256,
                      "resolution": "source_line" if item.location else "unresolved"} for item in members)
-    inputs = sorted({(item["name"], item.get("shard_id", "default"), item["sha256"])
-                     for item in core.manifest["indexes"]})
     package = {"schema": SCHEMA, "kind": "document_hunt", "run_id": core.run_id,
                "manifest_sha256": core.manifest_sha256, "target_snapshot": core.manifest["target_snapshot"],
                "input_fingerprint": _digest([core.manifest_sha256, inputs, partition, context_ids, ASSEMBLY_RULE]),
@@ -131,7 +130,7 @@ def _package(core: RetrievalCore, *, kind: str, partition: str, leads: list[dict
              evidence: list[dict[str, Any]], gaps: list[dict[str, str]], next_partition: str | None,
              max_page_size: int, metrics: list[dict[str, Any]], build_context: dict[str, Any],
              source_ids: list[str], context_ids: list[str], tag_context: dict[str, Any],
-             compiled_context: list[dict[str, Any]]) -> dict[str, Any]:
+             compiled_context: list[dict[str, Any]], inputs: list[tuple[str, str, str]]) -> dict[str, Any]:
     component = leads[0]["component_id"]
     entity_ids = sorted({item["observation_id"] for item in leads} |
                         {item["entity_id"] for item in evidence} |
@@ -140,8 +139,6 @@ def _package(core: RetrievalCore, *, kind: str, partition: str, leads: list[dict
                         {item["entity_id"] for item in compiled_context} |
                         {item["scope_id"] for item in metrics} |
                         {flow for item in leads for flow in item["flow_ids"]})
-    inputs = sorted({(item["name"], item.get("shard_id", "default"), item["sha256"])
-                     for item in core.manifest["indexes"]})
     package = {"schema": SCHEMA, "kind": kind, "run_id": core.run_id,
                "manifest_sha256": core.manifest_sha256,
                "target_snapshot": core.manifest["target_snapshot"],
@@ -173,12 +170,15 @@ def validate_packages(core: RetrievalCore, packages: list[Mapping[str, Any]],
     finding: Counter[str] = Counter()
     document_hunts: list[str] = []
     hunt: dict[str, set[str]] = {key: set() for key in _MENU_SEVERITIES}
+    allowed_shards = {item["sha256"] for item in core.manifest["indexes"]}
     for package in packages:
         _CONTRACT.validate(package)
         if package.get("schema") != SCHEMA or package.get("assembly_rule") != ASSEMBLY_RULE:
             raise ValueError("unsupported review package schema or rule")
         if package.get("run_id") != core.run_id or package.get("manifest_sha256") != core.manifest_sha256:
             raise ValueError("review package run or manifest mismatch")
+        if package.get("target_snapshot") != core.manifest["target_snapshot"]:
+            raise ValueError("review package target snapshot mismatch")
         if package.get("package_id") != _identity(package) or package["package_id"] in ids:
             raise ValueError("review package identity mismatch")
         ids.add(package["package_id"])
@@ -209,7 +209,7 @@ def validate_packages(core: RetrievalCore, packages: list[Mapping[str, Any]],
                     if item["reported_severity"] in severities:
                         hunt[menu].add(item["observation_id"])
         for evidence in package["evidence"]:
-            if evidence["shard_sha256"] not in {item["sha256"] for item in core.manifest["indexes"]}:
+            if evidence["shard_sha256"] not in allowed_shards:
                 raise ValueError("review package evidence shard mismatch")
             if package["kind"] == "document_hunt" and evidence["entity_id"] not in grant:
                 raise ValueError("document hunt evidence is outside its retrieval grant")
@@ -231,9 +231,14 @@ def validate_packages(core: RetrievalCore, packages: list[Mapping[str, Any]],
             raise ValueError("scanner-correlation audit mismatch")
 
 
-def assemble_review_packages(core: RetrievalCore, *, max_page_size: int = 20) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+def _membership(core: RetrievalCore, max_page_size: int):
     if not 1 <= max_page_size <= 100:
         raise ValueError("invalid package page bound")
+    from appsec_review.storage.validation import current_validation
+    validation = current_validation(core.run_root)
+    cache_key = ("package-membership", core.manifest_sha256, str(max_page_size))
+    if validation is not None and cache_key in validation.records:
+        return validation.records[cache_key]
     view = AcceptedShards(core.run_root, core.manifest["indexes"], core.manifest["target_snapshot"])
     facts = _facts(view, "scanner_correlation")
     document_facts = [(payload, row) for payload, row in _facts(view, "document_context")
@@ -262,7 +267,6 @@ def assemble_review_packages(core: RetrievalCore, *, max_page_size: int = 20) ->
     if len(document_facts) > 2_000:
         raise ValueError("document review subjects exceed the package bound")
     expected["documents"] = {row.identity for _payload, row in document_facts}
-    document_rows = {row.identity: row for row in view.entities(view.select("documents"), ("document_record",))}
     listed: dict[str, list[str]] = {menu: [] for menu in _MENU_SEVERITIES}
     for menu in menus:
         kind = menu["menu"]
@@ -276,6 +280,18 @@ def assemble_review_packages(core: RetrievalCore, *, max_page_size: int = 20) ->
     for kind, identities in listed.items():
         if len(identities) != len(set(identities)) or set(identities) != expected[kind]:
             raise ValueError(f"{kind} scanner menu membership mismatch")
+    result = view, facts, document_facts, leads, menus, audits, expected
+    if validation is not None:
+        validation.records[cache_key] = result
+    return result
+
+
+def assemble_review_packages(core: RetrievalCore, *, max_page_size: int = 20) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    count_work("assembly_count")
+    view, facts, document_facts, leads, menus, audits, expected = _membership(core, max_page_size)
+    inputs = sorted({(item["name"], item.get("shard_id", "default"), item["sha256"])
+                     for item in core.manifest["indexes"]})
+    document_rows = {row.identity: row for row in view.entities(view.select("documents"), ("document_record",))}
     gaps = _coverage_gaps(view)
     if not facts:
         gaps.append(_gap("scanner_correlation", "source_sast", "unavailable",
@@ -441,7 +457,7 @@ def assemble_review_packages(core: RetrievalCore, *, max_page_size: int = 20) ->
                                  next_partition=None, max_page_size=max_page_size,
                                  metrics=metrics, build_context=build, source_ids=sources,
                                  context_ids=sorted({row.identity, *refs}), tag_context=tags,
-                                 compiled_context=compiled))
+                                 compiled_context=compiled, inputs=inputs))
     for menu in sorted(menus, key=lambda item: (item["menu"], item["component_id"], item["partition"])):
         chunk = sorted((leads[item["observation_id"]] for item in menu["members"]),
                        key=lambda pair: pair[0]["observation_id"])
@@ -457,7 +473,7 @@ def assemble_review_packages(core: RetrievalCore, *, max_page_size: int = 20) ->
                                  next_partition=menu["next_partition"], max_page_size=max_page_size,
                                  metrics=metrics, build_context=build, source_ids=sources,
                                  context_ids=sorted({*(row.identity for _, row in chunk), *refs}),
-                                 tag_context=tags, compiled_context=compiled))
+                                 tag_context=tags, compiled_context=compiled, inputs=inputs))
     for payload, row in sorted(document_facts, key=lambda pair: pair[1].identity):
         result = payload["result"]
         named = result.get("members") or {}
@@ -479,7 +495,7 @@ def assemble_review_packages(core: RetrievalCore, *, max_page_size: int = 20) ->
                                    f"{omitted} document source record(s) exceeded the package grant bound"))
         local_gaps.append(_gap("document_context", row.identity, "unavailable",
                                "route or boundary has not been mapped to a unique implementation component"))
-        packages.append(_document_hunt(core, row, selected, [*gaps, *local_gaps], omitted, max_page_size))
+        packages.append(_document_hunt(core, row, selected, [*gaps, *local_gaps], omitted, max_page_size, inputs))
     validate_packages(core, packages, expected, audits[0] if audits else None)
     manifest = {"schema": MANIFEST_SCHEMA, "run_id": core.run_id, "accepted_manifest_sha256": core.manifest_sha256,
                 "assembly_rule": ASSEMBLY_RULE, "max_page_size": max_page_size,
@@ -495,8 +511,17 @@ def assemble_review_packages(core: RetrievalCore, *, max_page_size: int = 20) ->
     return packages, manifest
 
 
+def _projection_path(core: RetrievalCore, max_page_size: int) -> str:
+    identity = _digest([core.run_id, core.manifest_sha256, ASSEMBLY_RULE, max_page_size])
+    return f"review-package-admission/{core.run_id}/{identity}.json"
+
+
 def publish_review_packages(core: RetrievalCore, *, max_page_size: int = 20) -> Path:
     packages, manifest = assemble_review_packages(core, max_page_size=max_page_size)
+    from appsec_review.storage.admission import publish_projection
+    publish_projection(core.run_root, _projection_path(core, max_page_size), {
+        "schema": "appsec-review/package-projection/1", "run_id": core.run_id,
+        "target_snapshot": core.manifest["target_snapshot"], "manifest": manifest})
     destination = core.run_root / "data" / "review-packages" / manifest["content_sha256"]
     safe_path(core.run_root, destination.relative_to(core.run_root).as_posix())
     destination.mkdir(parents=True, exist_ok=True)
@@ -507,7 +532,6 @@ def publish_review_packages(core: RetrievalCore, *, max_page_size: int = 20) -> 
     publish_named(core.run_root, destination / "manifest.json", canonical_json(manifest) + b"\n",
                   namespace="review-package",
                   computation={"assembly_rule": ASSEMBLY_RULE, "manifest_sha256": core.manifest_sha256})
-    verify_review_packages(core, destination)
     return destination
 
 
@@ -525,6 +549,17 @@ def verify_review_packages(core: RetrievalCore, directory: Path) -> dict[str, An
     if digest != _digest(manifest) or manifest.get("run_id") != core.run_id or manifest.get("accepted_manifest_sha256") != core.manifest_sha256:
         raise ValueError("review package manifest integrity mismatch")
     manifest["content_sha256"] = digest
+    if directory.name != digest or manifest.get("assembly_rule") != ASSEMBLY_RULE:
+        raise ValueError("review package directory or assembly rule mismatch")
+    from appsec_review.storage.admission import read_projection
+    projection = read_projection(core.run_root, _projection_path(core, manifest["max_page_size"]))
+    if projection != {"schema": "appsec-review/package-projection/1", "run_id": core.run_id,
+                       "target_snapshot": core.manifest["target_snapshot"], "manifest": manifest}:
+        raise ValueError("review packages differ from their validated assembly projection")
+    packages = []
+    expected_files = {"manifest.json", *(f"{entry['package_id']}.json" for entry in manifest["packages"])}
+    if {path.name for path in directory.iterdir()} != expected_files:
+        raise ValueError("review package directory membership mismatch")
     for entry in manifest["packages"]:
         name = entry["package_id"]
         if Path(name).name != name:
@@ -536,9 +571,32 @@ def verify_review_packages(core: RetrievalCore, directory: Path) -> dict[str, An
             _digest(package) != entry["sha256"] or package.get("package_id") != name or
             package.get("manifest_sha256") != core.manifest_sha256):
             raise ValueError("review package byte or manifest integrity mismatch")
-    _, expected = assemble_review_packages(core, max_page_size=manifest["max_page_size"])
-    if manifest != expected:
+        if package.get("kind") != entry.get("kind"):
+            raise ValueError("review package kind mismatch")
+        packages.append(package)
+    _, _, documents, leads, menus, audits, expected = _membership(core, manifest["max_page_size"])
+    validate_packages(core, packages, expected, audits[0] if audits else None)
+    counts = {"finding_lead": len(leads), "hunt": len(menus), "document_hunt": len(documents),
+              "high_critical": len(expected["high_critical"]), "unknown": len(expected["unknown"])}
+    gaps = sorted({gap["gap_id"]: gap for item in packages
+                   for gap in item["coverage_gaps"]}.values(), key=lambda item: item["gap_id"])
+    expected_menus = {
+        f"{menu['menu']}:{menu['component_id']}:{menu['partition']:05d}":
+            ([item["observation_id"] for item in sorted(menu["members"], key=lambda item: item["observation_id"])],
+             menu["next_partition"]) for menu in menus}
+    actual_menus = {
+        item["scope"]["partition_key"]:
+            ([lead["observation_id"] for lead in item["lead_menu"]], item["truncation"]["next_partition"])
+        for item in packages if item["kind"] == "hunt"}
+    if (manifest["counts"] != counts or manifest["coverage_gaps"] != gaps
+            or Counter(item["kind"] for item in packages) != Counter(
+                {key: counts[key] for key in ("finding_lead", "hunt", "document_hunt") if counts[key]})
+            or actual_menus != expected_menus):
         raise ValueError("review package membership or accepted input integrity mismatch")
+    for package in packages:
+        for lead in package["lead_menu"]:
+            if lead != leads[lead["observation_id"]][0]:
+                raise ValueError("review package lead differs from accepted input")
     for entry in manifest["packages"]:
         consume_named(core.run_root, directory / f"{entry['package_id']}.json", namespace="review-package")
     consume_named(core.run_root, manifest_path, namespace="review-package")

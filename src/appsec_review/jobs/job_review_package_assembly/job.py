@@ -31,12 +31,24 @@ def _validate_config(context, _result) -> None:
         raise ValueError("review package max_page_size must be an integer from 1 through 100")
 
 
+def _core(unit: UnitContext) -> tuple[RetrievalCore, Path, str]:
+    from appsec_review.storage.validation import current_validation
+    manifest_path, manifest_sha = resolve_context_manifest(unit.job)
+    validation = current_validation(unit.job.run_root)
+    key = ("package-core", str(manifest_path), manifest_sha)
+    if validation is not None and key in validation.records:
+        return validation.records[key], manifest_path, manifest_sha
+    core = RetrievalCore(unit.job.run_root.parent, unit.job.run_id,
+                         manifest_sha256=manifest_sha, manifest_path=manifest_path)
+    if validation is not None:
+        validation.records[key] = core
+    return core, manifest_path, manifest_sha
+
+
 def _validate_output(unit: UnitContext, result: Mapping[str, Any] | None) -> None:
     if result is None:
         raise ValueError("review package publication result is unavailable")
-    manifest_path, manifest_sha = resolve_context_manifest(unit.job)
-    core = RetrievalCore(unit.job.run_root.parent, unit.job.run_id,
-                         manifest_sha256=manifest_sha, manifest_path=manifest_path)
+    core, manifest_path, manifest_sha = _core(unit)
     if manifest_sha != str(result["accepted_manifest_sha256"]):
         raise ValueError("review package publication used a different input manifest")
     directory = (unit.job.run_root / str(result["package_directory"])).resolve()
@@ -52,9 +64,7 @@ def _validate_output(unit: UnitContext, result: Mapping[str, Any] | None) -> Non
 def build_job() -> Job:
     def publish(unit: UnitContext) -> Mapping[str, Any]:
         run_root = unit.job.run_root
-        accepted_path, accepted_sha = resolve_context_manifest(unit.job)
-        core = RetrievalCore(run_root.parent, unit.job.run_id, manifest_sha256=accepted_sha,
-                             manifest_path=accepted_path)
+        core, accepted_path, accepted_sha = _core(unit)
         if core.manifest["target_snapshot"] != unit.job.source_fingerprint:
             raise ValueError("review package target snapshot differs from the graph target")
         handoff = accepted_handoff(run_root, "job_review_data_indexing")
@@ -84,10 +94,7 @@ def build_job() -> Job:
                 "terminal_status": "COMPLETED_WITH_GAPS" if gaps else "SUCCEEDED"}
 
     units = (Unit("publication.publish_packages", publish, output_validators=(_validate_output,)),)
-    sources = [Path(__file__), Path(__file__).with_name("datasets.py"),
-               Path(__file__).parents[2] / "review_packages.py"]
-    identity = hashlib.sha256(b"".join(path.read_bytes() for path in sources)).hexdigest()
     return Job(JOB_ID, "review_package_assembly", UnitExecutor(units).execute,
                input_validators=(_validate_config,), schema_identity=SCHEMA,
-               implementation_identity=identity, validation_identity=identity, units=units,
+               units=units,
                datasets=DATASETS, consumes=CONSUMES)

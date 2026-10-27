@@ -31,12 +31,26 @@ FIXTURES = ROOT / "tests" / "fixtures" / "northwinds_documents"
 
 
 def _run(tmp_path: Path, *, openapi_source: bool = False, fts_disabled: bool = False,
-         implementation: bool = False, duplicate_route: bool = False):
+         implementation: bool = False, duplicate_route: bool = False,
+         releases: dict[str, str] | None = None, assurance_mode: str = "strict",
+         include_packages: bool = False):
     config_path = tmp_path / "appsec-review.toml"
     config_text = (ROOT / "appsec-review.toml").read_text(encoding="utf-8")
     if fts_disabled:
         config_text = config_text.replace('fts_image_validation = "optional"',
                                           'fts_image_validation = "disabled"')
+    if releases is not None:
+        marker = "[review_policy.releases]\n"
+        assert config_text.count(marker) == 1
+        declarations = "".join(f"{key} = {json.dumps(value)}\n" for key, value in sorted(releases.items()))
+        config_text = config_text.replace(marker, marker + declarations, 1)
+    if assurance_mode == "first_party_managed":
+        start = config_text.index("[review_policy]\n")
+        end = config_text.index("\n[review_policy.releases]", start)
+        config_text = config_text[:start] + (
+            '[review_policy]\nmode = "first_party_managed"\nproject_id = "fixture"\n'
+            'approved_first_party_projects = ["fixture"]\ncustody = "application_private_v1"\n'
+            f'target_root = {json.dumps(str(tmp_path / "target"))}\n') + config_text[end:]
     config_path.write_text(config_text, encoding="utf-8")
     config = load_config(config_path)
     assert isinstance(config.job("job_target_catalog").typed_settings, TargetDocumentSettings)
@@ -58,10 +72,115 @@ def _run(tmp_path: Path, *, openapi_source: bool = False, fts_disabled: bool = F
     if duplicate_route:
         (target / "backend" / "duplicate.routes.ts").write_text(
             "router.get('/api/v1/orders/:id', handler);\n", encoding="utf-8")
-    outcome = GraphRunner(config, [build_intake(), build_catalog()]).run(
+    jobs = [build_intake(), build_catalog()]
+    if include_packages:
+        jobs.extend((build_indexing(), build_packages()))
+    outcome = GraphRunner(config, jobs).run(
         target_root=target, source_fingerprint=source_fingerprint(target))
     run_root = config.runtime.runs_dir / outcome["run_id"]
     return config, target, outcome, run_root
+
+
+@pytest.mark.parametrize("mode", ("strict", "first_party_managed"))
+def test_target_to_package_graph_preserves_managed_work_removal(tmp_path, monkeypatch, mode):
+    import appsec_review.indexing.inventory as inventory
+    import appsec_review.review_packages as packages
+    import appsec_review.runtime.scope as scope
+    import appsec_review.runtime.runner as runtime_runner
+    from appsec_review.storage.shared import current
+    from appsec_review.storage.validation import current_validation
+
+    accepted_shards, hashes, scans, assemblies = set(), [], [], []
+    original_publish = JobRunner._publish_attempt_scoped
+    original_hash_guard = scope.require_hashable_evidence
+    original_scan, original_assemble = inventory.scan_run_tree, packages.assemble_review_packages
+    original_prepare = runtime_runner.materialize_attempt_input_manifest
+
+    def prepare(**kwargs):
+        assert current() is None
+        assert not (kwargs["attempt_root"] / "claim.json").exists()
+        validation = current_validation(kwargs["run_root"])
+        assert validation is not None
+        if mode == "first_party_managed":
+            admitted_paths = {(kwargs["run_root"] / path).resolve() for path, _ in validation.admitted}
+            assert accepted_shards <= admitted_paths
+        else:
+            assert not validation.admitted
+        return original_prepare(**kwargs)
+
+    def published(runner, job, context, claim, result):
+        output = original_publish(runner, job, context, claim, result)
+        if job.job_id == "job_target_catalog":
+            for artifact in output["handoff"]["artifacts"]:
+                if artifact["path"].endswith(".sqlite"):
+                    accepted_shards.add((context.run_root / artifact["path"]).resolve())
+                    accepted_shards.add((context.run_root / "data/shared/objects" / artifact["sha256"]).resolve())
+        return output
+
+    def hash_guard(path):
+        original_hash_guard(path)
+        if path.resolve() in accepted_shards:
+            import sys
+            frame, callers = sys._getframe(1), []
+            for _ in range(8):
+                if frame is None:
+                    break
+                callers.append(f"{Path(frame.f_code.co_filename).name}:{frame.f_code.co_name}")
+                frame = frame.f_back
+            hashes.append({"path": str(path), "bytes": path.stat().st_size, "callers": callers})
+
+    def scan(*args, **kwargs):
+        scans.append(1)
+        return original_scan(*args, **kwargs)
+
+    def assemble(*args, **kwargs):
+        assemblies.append(1)
+        return original_assemble(*args, **kwargs)
+
+    monkeypatch.setattr(JobRunner, "_publish_attempt_scoped", published)
+    monkeypatch.setattr(scope, "require_hashable_evidence", hash_guard)
+    monkeypatch.setattr(inventory, "scan_run_tree", scan)
+    monkeypatch.setattr(packages, "assemble_review_packages", assemble)
+    monkeypatch.setattr(runtime_runner, "materialize_attempt_input_manifest", prepare)
+    config, target, outcome, run_root = _run(
+        tmp_path, fts_disabled=True, implementation=True, assurance_mode=mode, include_packages=True)
+    (tmp_path / "managed-work-counts.json").write_text(json.dumps({
+        "mode": mode, "assemblies": len(assemblies), "scratch_scans": len(scans),
+        "accepted_shard_hashes": len(hashes), "accepted_shard_hash_bytes": sum(row["bytes"] for row in hashes),
+        "hash_calls": hashes,
+    }, indent=2), encoding="utf-8")
+    assert accepted_shards
+    assert len(assemblies) == 1
+    assert bool(scans) is (mode == "strict")
+    assert bool(hashes) is (mode == "strict"), hashes[:5]
+    package_outcome = outcome["jobs"]["job_review_package_assembly"]
+    output = package_outcome["result"]["outputs"]["publication.publish_packages"]
+    inventory_path = (Path(outcome["jobs"]["job_review_data_indexing"]["attempt_root"]) /
+                      "steps/audit/tasks/inventory/inventory.json")
+    inventory_rows = json.loads(inventory_path.read_text(encoding="utf-8"))["rows"]
+    upstream_receipts = [
+        row for row in inventory_rows
+        if row["job_id"] in {"job_review_intake", "job_target_catalog"}
+        and row["output_kind"] == "step_receipts"
+    ]
+    assert len(upstream_receipts) == 9
+    assert all(row["disposition"] == "protected" and row["coverage"]["state"] == "complete"
+               for row in upstream_receipts)
+    claim = json.loads((Path(package_outcome["attempt_root"]) / "claim.json").read_text(encoding="utf-8"))
+    assert claim["input_manifest_sha256"] == output["accepted_manifest_sha256"]
+    core = RetrievalCore(config.runtime.runs_dir, outcome["run_id"],
+                         manifest_path=run_root / claim["input_manifest_path"],
+                         manifest_sha256=claim["input_manifest_sha256"])
+    manifest = verify_review_packages(core, run_root / output["package_directory"])
+    assert manifest["packages"]
+    assert manifest["accepted_manifest_sha256"] == core.manifest_sha256
+    assert output["package_count"] == len(manifest["packages"])
+    assert output["coverage_gap_count"] == len(manifest["coverage_gaps"])
+    candidates = core.find(path="backend/orders.routes.ts", limit=1)["results"]
+    assert candidates
+    located, gap = core.read_source_lines(identity=candidates[0]["identity"])
+    assert gap is None
+    assert located["lines"] == (target / "backend/orders.routes.ts").read_text(encoding="utf-8").splitlines()
 
 
 def test_catalog_publishes_northwind_documents_with_queryable_provenance_and_intent(tmp_path: Path) -> None:
@@ -219,8 +338,27 @@ def test_document_hunts_grant_only_accepted_context_and_sources(tmp_path: Path) 
     assert verify_review_packages(core, publish_review_packages(core)) == manifest
 
 
-def test_document_issue_path_keeps_claims_private_and_resolves_source(tmp_path: Path) -> None:
-    config, target, outcome, run_root = _run(tmp_path, fts_disabled=True, implementation=True)
+@pytest.mark.parametrize("releases,reusable", [
+    ({"job_document_issue_analysis": "fixture-doc/1", "validation": "fixture-validation/1"}, True),
+    ({"platform": "fixture-platform/1", "validation": "fixture-validation/1"}, True),
+    ({}, False),
+    ({"job_document_issue_analysis": "fixture-doc/1"}, False),
+], ids=("job-release", "platform-release", "missing-releases", "missing-validation"))
+def test_document_issue_path_keeps_claims_private_and_resolves_source(
+        tmp_path: Path, monkeypatch, releases: dict[str, str], reusable: bool) -> None:
+    from appsec_review.storage.shared import SharedArtifacts
+
+    config, target, outcome, run_root = _run(
+        tmp_path, fts_disabled=True, implementation=True, releases=releases)
+    lookups = []
+    original_lookup = SharedArtifacts.lookup
+
+    def lookup(owner, namespace, fingerprint):
+        if namespace == "document-issues":
+            lookups.append(fingerprint)
+        return original_lookup(owner, namespace, fingerprint)
+
+    monkeypatch.setattr(SharedArtifacts, "lookup", lookup)
     fingerprint = source_fingerprint(target)
     runner = JobRunner(config)
     runner.run(build_indexing(), run_id=outcome["run_id"], target_root=target,
@@ -242,9 +380,21 @@ def test_document_issue_path_keeps_claims_private_and_resolves_source(tmp_path: 
                                source_fingerprint=fingerprint,
                                orchestration={"system": "dagster", "run_id": "document-consumer"})
     reused = reused_result["result"]["outputs"]["analysis.map_and_adjudicate"]
-    assert reused["reused"] and reused["artifact"] == output["artifact"]
+    assert reused["reused"] is reusable
+    assert reused["artifact"] == output["artifact"]
+    assert len(lookups) == (2 if reusable else 0)
     consumer = verify_receipt(run_root, reused["shared_receipt"])
-    assert consumer["producer_receipt"] == output["shared_receipt"]
+    if reusable:
+        assert consumer["producer_receipt"] == output["shared_receipt"]
+    else:
+        assert consumer["mode"] == "computed"
+    from appsec_review.observability import PipelineLog
+    checkpoints = [record for record in PipelineLog(run_root).read()[0]
+                   if record["details"].get("action") == "document-issues"]
+    assert [record["event_type"] for record in checkpoints] == [
+        "CHECKPOINT_MISSED", "CHECKPOINT_REUSED" if reusable else "CHECKPOINT_MISSED"]
+    if not reusable:
+        assert all(record["details"]["reason"] == "missing_release_identity" for record in checkpoints)
     assert consumer["actor"]["orchestration"]["run_id"] == "document-consumer"
     assert producer["actor"]["orchestration"]["run_id"] == "document-producer"
     assert ledger_path.read_bytes() == before

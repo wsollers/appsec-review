@@ -167,7 +167,7 @@ caches, then the configured default and security-extended suites operate on the 
 
 The adapter instruments available `javac`, `kotlinc`, annotation/code-generator, archiver, and
 related JVM tools and retains exact nested argv only in a protected trace. Each wrapper exec writes
-its own record file under `.appsec-review-jvm/invocations.d/`, so parallel compilations never
+its own record file under `/appsec-jvm-evidence/invocations.d/`, so parallel compilations never
 interleave. For every readable, non-symlink `@argfile` the record also keeps the file's path, the
 directory the tool ran in, and its first 1 MiB of contents with NUL bytes stripped, because Maven
 and Gradle delete their argument files once the compiler exits. One javac-compatible tokenizer
@@ -184,17 +184,28 @@ reports a provenance gap instead of inventing a command.
 
 Gradle compiles Java and Kotlin inside its own JVM, so every language-build Gradle command (plain
 and Android) runs with a run-owned init script,
-`.appsec-review-jvm/gradle/appsec-provenance.init.gradle`, generated from
+`/appsec-jvm/gradle/appsec-provenance.init.gradle`, generated from
 `job_language_build/gradle_provenance.py`. The accepted tasks are validated first. Execution then
 appends only options: `--no-daemon`, `--no-build-cache`, `--no-configuration-cache`,
 `-Pkotlin.compiler.execution.strategy=out-of-process`, and `--init-script <path>`. It removes recipe
 `--daemon`, `--build-cache`, and `--configuration-cache` flags, because a reused daemon, a cache hit,
 or a configuration-cache replay would hide compilation. The command receipt's `instrumentation`
-field records the script hash and every added or removed argument.
+field records the operator-declared instrumentation release and every added or removed argument,
+not a hash of the supplied script.
+
+Supplied wrappers and scripts live in the reserved run-owned
+`data/build/jvm/units/<unit>/instrumentation/` directory, mounted read-only at `/appsec-jvm`.
+Generated execution records have a separate writable mount at `/appsec-jvm-evidence`; the
+executor closes that write window on completion or failure. Neither mount overlaps `/workspace`.
+Target snapshots therefore retain target-owned lookalike paths without hashing the supplied
+instrumentation. Generated records remain verified evidence; transient JDK mirrors are removed
+and excluded from review payload hashing. JVM/Wasm reuse requires declared platform,
+validation, build-toolchain and `jvm_instrumentation`/`wasm_instrumentation` releases; missing
+declarations disable reuse rather than falling back to supplied-file hashes.
 
 - **Java (`JavaCompile`, including AGP's `compile*JavaWithJavac`).** Each task's `javaCompiler` is
   replaced lazily by a mirror of the JDK the task would have used: an explicit task toolchain, the
-  `java` extension toolchain, or the Gradle JVM. The mirror, under `.appsec-review-jvm/jdk/<hash>/`,
+  `java` extension toolchain, or the Gradle JVM. The mirror, under `/appsec-jvm-evidence/jdk/<id>/`,
   links every entry of that JDK except `bin/javac` and `bin/java`, which are the recording wrappers.
   Gradle therefore probes a complete JDK of the same version, and its fork-executable validation
   (which compares the canonical home of `forkOptions.executable` with the `javaCompiler` home)
@@ -235,7 +246,7 @@ field records the script hash and every added or removed argument.
   toolchain version is left untouched and reported.
 - **Declared task records.** Every compile task and every Android D8/R8 dex task
   (`com.android.build.*` `Dex*`/`D8*`/`L8Dex*`/`R8*` tasks) also writes a JSON record to
-  `.appsec-review-jvm/gradle-tasks.jsonl`. A record holds the task path and type, configured compiler
+  `/appsec-jvm-evidence/gradle-tasks.jsonl`. A record holds the task path and type, configured compiler
   arguments, sources, destination, classpath count, release/target settings, toolchain home,
   instrumentation outcome, and `did_work`. Records are bounded by the JVM `trace_bytes` and
   `provenance_count_limit` settings. They become receipt `declared_compilations` rows with
@@ -412,7 +423,11 @@ identities, and dependency relationships.
 Build-unit dependencies execute in topological layers. A failed dependency blocks its dependents,
 but unrelated units continue in the configured worker pool. A checkpoint is reusable only when its
 target snapshot, recipe, dependency hashes, image, executor/capture identity, toolchain, probe, and
-upstream handoff are unchanged and every retained artifact still verifies.
+upstream handoff are unchanged and every retained artifact still verifies. Checkpoint namespaces
+are run-private and require operator-declared `platform`, `build_toolchain` and `validation`
+releases. A missing declaration emits `CHECKPOINT_MISSED` with `missing_release_identity` and
+reruns the applicable build; changing any required release invalidates the checkpoint without
+fingerprinting installed software. Unrelated query-pack declarations do not invalidate it.
 
 Inspect `data/logs/pipeline.jsonl` for `LANGUAGE_BUILD_STARTED`, `BUILD_COMMAND_COMPLETED`,
 `LANGUAGE_BUILD_COMPLETED`, and `LANGUAGE_BUILD_REUSED`. Events intentionally contain identities,

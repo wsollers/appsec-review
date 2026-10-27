@@ -373,9 +373,7 @@ def build_job(*, infer: Callable[..., Any] | None = None, executor_factory: Exec
         Unit("publish.publish_handoff", publish, ("load.verify_inputs", "package.files")),
     )
     package_dir = Path(__file__).parent
-    implementation = hashlib.sha256(
-        IMPLEMENTATION.encode() + b"".join(path.read_bytes() for path in sorted(package_dir.glob("*.py"))) +
-        (b"injected-executor" if executor_factory else b"container-executor")).hexdigest()
+    implementation = None
     return Job(JOB_ID, "poc_generation", UnitExecutor(units).execute, input_validators=(_validate,),
                schema_identity=POC_GENERATION_HANDOFF_SCHEMA, implementation_identity=implementation,
                validation_identity=implementation, units=units, datasets=DATASETS, consumes=CONSUMES)

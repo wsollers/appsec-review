@@ -8,7 +8,7 @@ from pathlib import Path
 import subprocess
 import sys
 
-from host import actual_platform, deployment_profile, provider_overlay, reject_other_deployments, validate_deployment
+from host import actual_platform, deployment_profile, provider_overlay, reject_native_environment, reject_other_deployments, validate_deployment
 
 
 deployment = Path(__file__).resolve().parents[1]
@@ -35,6 +35,7 @@ commands = {
 
 
 def main() -> int:
+    reject_native_environment()
     parser = argparse.ArgumentParser()
     parser.add_argument("action", choices=commands)
     args = parser.parse_args()

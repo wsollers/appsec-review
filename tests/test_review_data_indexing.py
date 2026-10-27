@@ -553,6 +553,43 @@ def test_review_packages_keep_complete_membership_and_detect_tampering(accepted)
         verify_review_packages(core, directory)
 
 
+def test_package_projection_rejects_rehashed_grant_evidence_context_and_gap_changes(accepted, monkeypatch):
+    from copy import deepcopy
+    from appsec_review.retrieval.model import canonical_json
+    from appsec_review import review_packages as packages
+    config, run_id, run_root, *_ = accepted
+    core = RetrievalCore(config.runtime.runs_dir, run_id)
+    original = packages.publish_review_packages(core)
+    manifest = json.loads((original / "manifest.json").read_bytes())
+    def forbidden(*args, **kwargs):
+        raise AssertionError("serialized validation must not reconstruct packages")
+    monkeypatch.setattr(packages, "assemble_review_packages", forbidden)
+    packages.verify_review_packages(core, original)
+    for kind in ("finding_lead", "hunt"):
+        entry = next(item for item in manifest["packages"] if item["kind"] == kind)
+        baseline = json.loads((original / f"{entry['package_id']}.json").read_bytes())
+        for field in ("retrieval", "evidence", "context_ids", "coverage_gaps"):
+            changed = deepcopy(baseline)
+            if field == "retrieval":
+                changed[field]["max_pages"] += 1
+            else:
+                assert changed[field], field
+                changed[field].pop()
+            changed["package_id"] = packages._identity(changed)
+            altered = deepcopy(manifest)
+            replacement = next(item for item in altered["packages"] if item["package_id"] == entry["package_id"])
+            replacement.update(package_id=changed["package_id"], sha256=packages._digest(changed))
+            altered.pop("content_sha256")
+            altered["content_sha256"] = packages._digest(altered)
+            destination = original.parent / altered["content_sha256"]
+            shutil.copytree(original, destination)
+            (destination / f"{entry['package_id']}.json").unlink()
+            (destination / f"{changed['package_id']}.json").write_bytes(canonical_json(changed) + b"\n")
+            (destination / "manifest.json").write_bytes(canonical_json(altered) + b"\n")
+            with pytest.raises(ValueError, match="validated assembly projection"):
+                packages.verify_review_packages(core, destination)
+
+
 def test_query_observations_filters_and_paginates_without_raw_output(accepted) -> None:
     config, run_id, _run_root, _target, ids, _outcome, _executor = accepted
     core = RetrievalCore(config.runtime.runs_dir, run_id)
@@ -624,7 +661,7 @@ def test_metric_vectors_mark_missing_values_unknown_not_zero(accepted) -> None:
     assert metrics["cyclomatic_mean"]["gap_id"] == "cyclomatic_mean_not_produced_by_prioritization"
 
 
-def test_package_job_publishes_accepted_manifest_and_receipts(accepted) -> None:
+def test_package_job_publishes_accepted_manifest_and_receipts(accepted, monkeypatch) -> None:
     config, run_id, run_root, target, ids, indexing, _executor = accepted
     from appsec_review.review_packages import assemble_review_packages
     seed_core = RetrievalCore(config.runtime.runs_dir, run_id)
@@ -632,10 +669,17 @@ def test_package_job_publishes_accepted_manifest_and_receipts(accepted) -> None:
     partial = run_root / "data" / "review-packages" / seed_manifest["content_sha256"]
     partial.mkdir(parents=True)
     atomic_json(partial / f"{seed_packages[0]['package_id']}.json", seed_packages[0])
+    import appsec_review.review_packages as package_module
+    assembly_calls = []
+    def counted_assembly(*args, **kwargs):
+        assembly_calls.append(1)
+        return assemble_review_packages(*args, **kwargs)
+    monkeypatch.setattr(package_module, "assemble_review_packages", counted_assembly)
     outcome = JobRunner(config).run(
         build_package_job(), run_id=run_id, target_root=target, source_fingerprint=SNAPSHOT,
         upstream_handoffs={"job_review_data_indexing": indexing["handoff_sha256"]})
     assert outcome["handoff"]["status"] == "ACCEPTED"
+    assert len(assembly_calls) == 1
     result = outcome["result"]["outputs"]["publication.publish_packages"]
     core = RetrievalCore(config.runtime.runs_dir, run_id)
     from appsec_review.review_packages import verify_review_packages

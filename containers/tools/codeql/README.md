@@ -22,25 +22,28 @@ docker image inspect audit-codeql:custom-2.27.0 --format "{{.Id}}"
 
 The resulting image id must equal `source_image.image_id` in `assets.lock.json` and
 `jobs.job_codeql_analysis.settings.source_image_id` in `appsec-review.toml`; the runtime refuses a
-source tag whose identity changed. The SHA-256 of `assets.lock.json` itself must equal
-`jobs.job_codeql_analysis.settings.asset_lock_sha256`; the job refuses to plan otherwise, so any
-lock change updates that setting in the same change.
+source tag whose identity changed. Customer review execution does not hash `assets.lock.json`,
+the supplied runner or installed packs/extractors. Update the relevant
+`review_policy.releases` declarations when platform material changes; missing declarations disable
+reuse rather than restore payload fingerprinting.
 
 ## Derived analysis images
 
-The CodeQL job builds the derived images itself (`src/appsec_review/codeql/runtime.py`), tagging
-them `appsec-review-codeql:<identity>` and caching their manifest under the job's
-`codeql-images/` metadata directory. Do not tag these by hand. For diagnosis, the equivalent commands
-are below; `<build-image>` is an accepted build environment image and `<uid>:<gid>` its numeric
-non-root runtime user.
+The CodeQL resolver (`src/appsec_review/codeql/runtime.py`) requests required layering through an
+operator-commissioned bounded builder, using run/tenant-private tags and manifests under
+`codeql-images/` metadata. Do not tag these by hand or bypass a missing backend with an
+uncustomized image. See [builder requirements](../../../docs/operations/performance-assurance.md#scheduling-and-limits).
+The manual commands below are separate platform-maintenance examples, not the customer-review
+execution path or a substitute for backend commissioning; `<build-image>` is an accepted build
+environment image and `<uid>:<gid>` its numeric non-root runtime user.
 
 Both derived-image Dockerfiles make the bundled `/opt/codeql` tree readable and its directories
 searchable with `chmod -R a+rX` before switching users. Upstream precompiled `.qlx` files can be
 owner-only and owned by a different UID. Without this normalization, CodeQL rejects those plans
 with `AccessDeniedException` and recompiles them, which can exhaust the query memory/time budget.
 This does not grant write access or change query contents, the pinned source image, or asset hashes.
-The Dockerfile hash participates in the derived-image identity, so rebuilding uses a new image
-instead of a cached image with the old permissions.
+The operator's declared release participates in derived-image identity; update it when these
+supplied instructions change. The customer-review path does not hash the Dockerfile.
 
 The focused live regression test reads every bundled `.qlx` as non-root UIDs 1000 and 10001 across
 the source-only and build-environment image paths, with a read-only filesystem and no network:

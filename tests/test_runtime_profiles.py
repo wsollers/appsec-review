@@ -119,6 +119,7 @@ def test_prod_loads_the_exact_models_and_limits(monkeypatch) -> None:
         if role != "independent_verifier" and role != "adjudication_judge":
             assert settings.model_profile == "default"
     budgets = review.budgets
+    assert budgets.budget_team_packages == "all"
     assert (budgets.max_model_turns, budgets.max_input_tokens, budgets.max_output_tokens, budgets.max_retrieval_queries,
             budgets.timeout_seconds) == (60000, 600000000, 60000000, 200000, 86400)
     if "adjudication_judge" in review.roles:
@@ -194,7 +195,7 @@ BAD = [
     (f"[jobs.{JOB}.settings.teams]\nreview_teams = 1\n", f"rejected: jobs.{JOB}.settings.teams"),
     (f"[jobs.{JOB}.settings.verification]\nrequire_distinct_model_for_ship_blocking = false\n",
      "settings.verification"),
-    (f"[jobs.{JOB}.settings.budgets]\nbudget_team_packages = 1\n", "budgets.budget_team_packages"),
+    (f"[jobs.{JOB}.settings.budgets]\nbudget_team_packages = 'unlimited'\n", "budgets.budget_team_packages"),
     (f"[jobs.{JOB}.workers]\n", "rejected: jobs.job_inference_security_review.workers"),
     ("[jobs.job_target_analysis_plan.settings.model]\nenabled = false\n", "model.enabled"),
     ("[jobs.job_target_analysis_plan.settings.model]\nworkers = 1\n", "model.workers"),
@@ -216,6 +217,33 @@ BAD = [
 def test_profile_keys_outside_the_allowlist_are_rejected(tmp_path: Path, text: str, message: str) -> None:
     path = _checkout(tmp_path, profile_text=text)
     with pytest.raises(ValueError, match=message):
+        load_config(path, profile="prod")
+
+
+@pytest.mark.parametrize("profile,expected", [
+    ("dev", 200), ("copilot-dev", 200), ("prod", "all"), ("copilot-prod", "all")])
+def test_package_budget_profile_selection_preserves_other_safeguards(profile, expected) -> None:
+    config = load_config(ROOT / "appsec-review.toml", profile=profile)
+    review = _review(config)
+    dev = load_config(ROOT / "appsec-review.toml", profile="dev")
+    assert review.budgets.budget_team_packages == expected
+    assert json.loads(config.resolved_json)["jobs"][JOB]["settings"]["budgets"]["budget_team_packages"] == expected
+    assert review.teams == _review(dev).teams
+    assert review.lanes == _review(dev).lanes
+    assert review.retry == _review(dev).retry
+    assert config.dagster.pool_limits == dev.dagster.pool_limits
+
+
+@pytest.mark.parametrize("value,expected", [('"all"', "all"), ("1", 1), ("599", 599)])
+def test_profile_accepts_explicit_package_budget(tmp_path, value, expected) -> None:
+    path = _checkout(tmp_path, profile_text=f"[jobs.{JOB}.settings.budgets]\nbudget_team_packages = {value}\n")
+    assert _review(load_config(path, profile="prod")).budgets.budget_team_packages == expected
+
+
+@pytest.mark.parametrize("value", ['"ALL"', '"200"', '"none"', "true", "false", "0", "-1", "1.5"])
+def test_profile_rejects_invalid_package_budget(tmp_path, value) -> None:
+    path = _checkout(tmp_path, profile_text=f"[jobs.{JOB}.settings.budgets]\nbudget_team_packages = {value}\n")
+    with pytest.raises(ValueError, match="budgets.budget_team_packages"):
         load_config(path, profile="prod")
 
 

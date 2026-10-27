@@ -152,7 +152,7 @@ def test_node_catalog_and_package_script_provenance_include_maps_packages_and_na
                                       before={}, after=after)
     assert not gaps and [row["tool"] for row in rows] == ["npm", "webpack"]
     artifacts, gaps = node.catalog(tmp_path, workspace, {}, 100, "build-unit-fixture")
-    assert not gaps
+    assert gaps and all("delivery status is unknown" in gap for gap in gaps)
     assert {item["kind"] for item in artifacts} >= {
         "generated-code", "source-map", "native-addon", "package"}
     mapping = next(item for item in artifacts if item["kind"] == "source-map")
@@ -180,6 +180,7 @@ def test_npm_pack_json_retains_bounded_integrity_without_raw_stdout(tmp_path: Pa
     assert not gaps
     assert rows[0]["package_integrity"] == [{
         "workspace_path": "web/fixture-1.0.0.tgz", "sha256": digest,
+        "source_dir": "web",
         "integrity": "sha512-fixture", "shasum": "a" * 40,
         "size": 7, "unpackedSize": 12, "totalFiles": 2,
     }]
@@ -206,7 +207,7 @@ def test_node_catalog_retains_unchanged_coverage_with_origin_and_excludes_other_
 
     artifacts, gaps = node.catalog(tmp_path, workspace, before, 10, "node-unit")
 
-    assert not gaps
+    assert gaps == ["dist.js: delivery status is unknown (delivery_fact_unavailable)"]
     assert [(row["workspace_path"], row["kind"], row["artifact_origin"])
             for row in artifacts] == [
         ("coverage-final.json", "test-coverage", "accepted-input"),
@@ -262,7 +263,7 @@ def test_node_metadata_only_success_has_bounded_review_artifacts(tmp_path: Path)
     }
 
 
-def test_node_catalog_retains_runtime_outputs_and_excludes_dependency_trees_caches_and_intermediates(
+def test_node_catalog_retains_ambiguous_runtime_outputs_with_named_gaps(
         tmp_path: Path) -> None:
     workspace = tmp_path / "workspace"
     retained = {
@@ -273,13 +274,13 @@ def test_node_catalog_retains_runtime_outputs_and_excludes_dependency_trees_cach
         "build/Release/addon.pdb": b"symbols",
         "pkg/example-1.0.0.tgz": b"package",
         "pkg/example-1.0.0.tgz.sha512": b"sha512-fixture",
-    }
-    excluded = {
         "node_modules/dependency/index.js": b"dependency",
         ".yarn/cache/dependency.zip": b"cache",
         ".cache/generated.js": b"cache",
+        "build/Release/helper.dll": b"runtime-library-candidate",
+    }
+    excluded = {
         "build/obj/addon.o": b"object",
-        "build/Release/helper.dll": b"redundant-library",
         "build/Release/orphan.pdb": b"unbound-symbols",
         "unrelated.sha512": b"not-package-integrity",
         "notes.log": b"transient",
@@ -291,9 +292,11 @@ def test_node_catalog_retains_runtime_outputs_and_excludes_dependency_trees_cach
 
     artifacts, gaps = node.catalog(tmp_path, workspace, {}, 100, "node-unit")
 
-    assert not gaps
+    assert gaps and all("delivery status is unknown" in gap for gap in gaps)
     by_path = {row["workspace_path"]: row for row in artifacts}
     assert set(by_path) == set(retained)
+    assert by_path["build/Release/helper.dll"]["scope_role"] == "unknown"
+    assert any("build/Release/helper.dll: delivery status is unknown" in gap for gap in gaps)
     assert by_path["build/Release/addon.pdb"]["kind"] == "native-symbols"
     assert by_path["pkg/example-1.0.0.tgz.sha512"]["package_archive"] == {
         "workspace_path": "pkg/example-1.0.0.tgz",
@@ -402,11 +405,43 @@ def test_node_build_publishes_protected_provenance_and_sanitized_mcp_evidence(tm
     outcome = GraphRunner(config, [build_language(
         executor_factory=lambda unit, profile: capturing_fake(profile, _NodeExecutor(calls)))]).run(
             target_root=target, source_fingerprint=fingerprint, run_id=upstream["run_id"])
-    assert outcome["status"] == "SUCCEEDED", outcome
+    assert outcome["status"] == "COMPLETED_WITH_GAPS", outcome
     # The probe and the build each exposed the image-owned dependencies before running npm.
     assert calls.count(("prepare-node-dependencies", "web", "web")) == 2
-    receipt = load_accepted_language_build(config.runtime.runs_dir / upstream["run_id"])["receipts"][0]
+    accepted = load_accepted_language_build(config.runtime.runs_dir / upstream["run_id"])
+    [receipt] = accepted["receipts"]
     assert receipt["family"] == "node" and receipt["terminal_status"] == "SUCCEEDED"
+    # A successful bundler invocation establishes production, not delivery. The fake
+    # supplies no package-membership or delivery facts for these retained candidates.
+    expected_gaps = [
+        "web/dist/addon.node: delivery status is unknown (delivery_fact_unavailable)",
+        "web/dist/bundle.js: delivery status is unknown (delivery_fact_unavailable)",
+        "build-execution-capture: EVIDENCE_INCOMPLETE",
+        "compiler-artifact-collection: EVIDENCE_INCOMPLETE",
+    ]
+    assert receipt["gaps"] == expected_gaps
+    assert accepted["gaps"] == [
+        f"{receipt['build_unit_id']}: {gap}" for gap in expected_gaps
+    ]
+    assert [(decision["feature"], decision["disposition"], decision["reason_code"])
+            for decision in receipt["processing_decisions"]] == [
+        ("build-execution-capture", "GAP", "EVIDENCE_INCOMPLETE"),
+        ("compiler-artifact-collection", "GAP", "EVIDENCE_INCOMPLETE"),
+    ]
+    artifacts_by_path = {item["workspace_path"]: item for item in receipt["artifacts"]}
+    assert {path: item["scope_role"] for path, item in artifacts_by_path.items()} == {
+        "web/dist/addon.node": "unknown",
+        "web/dist/bundle.js": "unknown",
+        "web/dist/bundle.js.map": "intermediate_evidence",
+        "web/package-lock.json": "build_chain",
+        "web/package.json": "build_chain",
+    }
+    for path in ("web/dist/addon.node", "web/dist/bundle.js"):
+        artifact = artifacts_by_path[path]
+        assert artifact["artifact_origin"] == "build-output"
+        assert artifact["delivery_status"] == "unknown"
+        assert artifact["analysis_lane"] == "target"
+        assert artifact["analysis_reason"] == "delivery-unknown-candidate-review"
     assert receipt["dependency_identity"]["manager"] == "npm"
     assert {item["kind"] for item in receipt["artifacts"]} >= {
         "generated-code", "source-map", "native-addon"}

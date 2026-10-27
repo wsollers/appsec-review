@@ -84,6 +84,29 @@ def published(staged: Staged) -> tuple[Staged, dict[str, Any]]:
     return staged, outcome
 
 
+@pytest.mark.parametrize("legacy", [False, True])
+def test_graph_reads_bound_export_index_from_current_and_legacy_topologies(tmp_path, legacy):
+    from appsec_review.jobs.job_code_graph_index.scopes import load_codeql_inputs
+    staged = stage_run(tmp_path, legacy_codeql=legacy)
+    inputs = load_codeql_inputs(staged.run_root, SNAPSHOT)
+    assert {scope["scope_id"] for scope in inputs["scopes"]} == {SYNTHETIC, NATIVE, FAILED, GO}
+
+
+def test_catalog_release_changes_graph_scope_identity_without_changing_database(published):
+    from appsec_review.graph.contract import GraphSettings
+    from appsec_review.jobs.job_code_graph_index.scopes import scope_identity
+    _, outcome = published
+    loaded = _outputs(outcome)["load.accepted_inputs"]
+    scope = loaded["scopes"][0]
+    arguments = dict(snapshot=SNAPSHOT, columns_release=loaded["columns_release"],
+                     settings=GraphSettings(), tool_version=loaded["tool_version"],
+                     implementation=loaded["implementation"])
+    first = scope_identity(scope, catalog_release="fixture-1", **arguments)
+    second = scope_identity(scope, catalog_release="fixture-2", **arguments)
+    assert first != second
+    assert scope["database_identity"]
+
+
 # --------------------------------------------------------------------------- publication
 
 
@@ -212,7 +235,7 @@ def _changed_catalog(tmp_path: Path) -> Path:
     return changed
 
 
-def test_catalog_change_rebuilds_only_graph_shards(published, tmp_path: Path, monkeypatch) -> None:
+def test_supplied_catalog_change_without_release_bump_does_not_fingerprint_or_invalidate(published, tmp_path: Path) -> None:
     staged, _ = published
     document = _manifest(staged)
     graph_before = {item["shard_id"]: item["sha256"] for item in _all_graph(document)}
@@ -223,18 +246,15 @@ def test_catalog_change_rebuilds_only_graph_shards(published, tmp_path: Path, mo
     export_files = {path: file_sha256(path) for scope in SUCCEEDED_SCOPES
                     for path in staged.export_dir(scope).iterdir()}
     changed = _changed_catalog(tmp_path)
-    # A run configured with the revised catalog: its CodeQL export pin names the new catalog hash.
-    monkeypatch.setattr("appsec_review.jobs.job_code_graph_index.job.catalog_pins",
-                        lambda document: {"cpp": frozenset({file_sha256(changed)})})
     outputs = _outputs(_run(staged, build_job(catalog_path=changed)))
-    assert outputs["load.accepted_inputs"]["reused_count"] == 0
-    assert len(outputs["normalize.scopes"]["scopes"]) == 2
+    assert outputs["load.accepted_inputs"]["reused_count"] == 4
+    assert len(outputs["normalize.scopes"]["scopes"]) == 0
     after = _manifest(staged)
     graph_after = {item["shard_id"]: item["sha256"] for item in _all_graph(after)}
     assert graph_after.keys() == graph_before.keys()
-    assert all(graph_after[shard_id] != sha for shard_id, sha in graph_before.items())
-    assert {item["producer"]["catalog_sha256"] for item in _all_graph(after)} == {
-        outputs["load.accepted_inputs"]["catalog"]["sha256"]}
+    assert graph_after == graph_before
+    assert {item["producer"]["catalog_release"] for item in _all_graph(after)} == {
+        outputs["load.accepted_inputs"]["catalog"]["release_id"]}
     assert sorted((item["name"], item["shard_id"], item["sha256"]) for item in after["indexes"]
                   if item["name"] != GRAPH_INDEX) == others_before
     assert {scope: file_sha256(staged.export_dir(scope).parent / "export-checkpoint.json")
@@ -242,9 +262,13 @@ def test_catalog_change_rebuilds_only_graph_shards(published, tmp_path: Path, mo
     assert {path: file_sha256(path) for path in export_files} == export_files
 
 
-def test_a_catalog_other_than_the_configured_codeql_pin_fails_the_load_unit(staged: Staged, tmp_path: Path) -> None:
-    # The run-bound jobs.job_codeql_analysis.settings.languages.cpp.export_queries.catalog_sha256 pins
-    # the repository catalog; a different catalog would classify facts under rules the run never pinned.
+def test_a_catalog_declaration_other_than_the_frozen_release_fails_the_load_unit(
+        staged: Staged, tmp_path: Path, monkeypatch) -> None:
+    from dataclasses import replace
+    from appsec_review.graph.catalog import load_catalog
+    changed = replace(load_catalog(), release_id="different-release")
+    monkeypatch.setattr("appsec_review.jobs.job_code_graph_index.job.load_catalog",
+                        lambda *args, **kwargs: changed)
     with pytest.raises(RuntimeError, match="partial failure"):
         _run(staged, build_job(catalog_path=_changed_catalog(tmp_path)))
     attempt = next((staged.run_root / "data" / "jobs" / JOB_ID / "attempts").iterdir())

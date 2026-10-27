@@ -6,6 +6,7 @@ import json
 from pathlib import Path, PurePosixPath
 from typing import Any
 
+from appsec_review.jobs.delivery_scope import apply_scope, scope_fields
 from appsec_review.storage import canonical_json, file_sha256
 
 
@@ -89,6 +90,12 @@ def composer_metadata(workspace: Path, source_dir: str) -> tuple[dict[str, Any],
                        "scope": "development" if scope == "packages-dev" else "runtime",
                        "dist_sha256": str(raw.get("dist", {}).get("shasum", ""))
                            if isinstance(raw.get("dist"), Mapping) else ""}
+            package.update(scope_fields({
+                "scope_role": "build_dependency" if scope == "packages-dev" else "unknown",
+                "artifact_origin": "accepted-input",
+            }))
+            if scope == "packages":
+                gaps.append(f"{raw['name']}: Composer dependency delivery status is unknown")
             packages.append(package)
             requires = raw.get("require", {})
             if isinstance(requires, Mapping):
@@ -128,7 +135,7 @@ def artifact_kind(path: Path, relative: str, before: Mapping[str, str]) -> str |
         return "generated-autoload"
     if suffix == ".php" and before.get(relative) != file_sha256(path):
         return "generated-source"
-    if suffix == ".so":
+    if suffix in {".so", ".dll", ".dylib"} or ".so." in name:
         return "native-extension"
     if any(normalized.lower().endswith(value) for value in _ARCHIVE_SUFFIXES):
         return "distributable-archive"
@@ -150,12 +157,13 @@ def catalog(run_root: Path, workspace: Path, before: Mapping[str, str], limit: i
         if kind is None:
             continue
         digest = file_sha256(path)
-        if kind != "package-metadata" and before.get(relative) == digest:
+        if kind not in {"package-metadata", "native-extension", "distributable-archive"} and before.get(relative) == digest:
             continue
         artifacts.append({"path": path.relative_to(run_root).as_posix(), "workspace_path": relative,
                           "sha256": digest, "size_bytes": path.stat().st_size, "kind": kind,
                           "build_unit_id": build_unit_id, "mapping": "exact-workspace-path",
-                          "mapping_confidence": 1.0})
+                          "mapping_confidence": 1.0,
+                          "artifact_origin": "accepted-input" if before.get(relative) == digest else "build-output"})
         if len(artifacts) >= limit:
             gaps.append("PHP artifact catalog truncated at configured count bound")
             break
@@ -163,6 +171,7 @@ def catalog(run_root: Path, workspace: Path, before: Mapping[str, str], limit: i
         gaps.append("Composer autoload generation produced no retained autoload artifact")
     if build_system == "phpize" and not any(item["kind"] == "native-extension" for item in artifacts):
         gaps.append("phpize build produced no retained native extension module")
+    gaps.extend(apply_scope(artifacts))
     return artifacts, gaps
 
 

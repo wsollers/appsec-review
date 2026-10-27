@@ -12,7 +12,7 @@ import json
 import math
 import re
 from types import MappingProxyType
-from typing import Any, Mapping
+from typing import Any, Literal, Mapping
 
 from appsec_review.review.models import Role
 from appsec_review.review.ranking import RankWeights
@@ -29,6 +29,7 @@ REVIEW_TEAMS_KEY = f"jobs.{JOB_ID}.settings.teams.review_teams"
 POOLS_KEY = "orchestration.dagster.pools.*"
 CAPACITY_KEYS: tuple[str, ...] = (REVIEW_TEAMS_KEY, POOLS_KEY)
 SEMANTIC_VIEW_SCHEMA = "appsec-review/inference-review-semantic-settings/1"
+TeamPackageBudget = int | Literal["all"]
 
 REPORTED_SEVERITIES = ("critical", "high", "medium", "low", "info", "unknown")
 REASONING_LEVELS = ("low", "medium", "high", "xhigh", "max")
@@ -64,6 +65,14 @@ def _int(value: object, field: str, low: int = 1, high: int = 2**53) -> int:
     if type(value) is not int or not low <= value <= high:
         raise ValueError(f"{field} must be an integer between {low} and {high}")
     return value
+
+
+def parse_team_package_budget(value: object, field: str) -> TeamPackageBudget:
+    if value == "all":
+        return "all"
+    if type(value) is int and 1 <= value <= 2**53:
+        return value
+    raise ValueError(f"{field} must be an integer between 1 and {2**53} or 'all'")
 
 
 def _ratio(value: object, field: str) -> float:
@@ -161,7 +170,7 @@ class PackageAssemblySettings:
 
 @dataclass(frozen=True, slots=True)
 class BudgetSettings:
-    budget_team_packages: int
+    budget_team_packages: TeamPackageBudget
     max_model_turns: int
     max_input_tokens: int
     max_output_tokens: int
@@ -685,7 +694,11 @@ def parse_inference_review_settings(value: Mapping[str, Any]) -> InferenceSecuri
     budgets_value = _table(settings["budgets"], field, {
         "budget_team_packages", "max_model_turns", "max_input_tokens", "max_output_tokens",
         "max_retrieval_queries", "timeout_seconds"})
-    budgets = BudgetSettings(**{name: _int(budgets_value[name], f"{field}.{name}") for name in budgets_value})
+    budgets = BudgetSettings(
+        budget_team_packages=parse_team_package_budget(budgets_value["budget_team_packages"],
+                                                       f"{field}.budget_team_packages"),
+        **{name: _int(budgets_value[name], f"{field}.{name}") for name in budgets_value
+           if name != "budget_team_packages"})
 
     field = f"{_PREFIX}.retry"
     retry_value = _table(settings["retry"], field, {"max_attempts", "retry_on_timeout", "retry_on_provider_error",

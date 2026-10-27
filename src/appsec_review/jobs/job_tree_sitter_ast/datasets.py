@@ -11,7 +11,7 @@ from appsec_review.runtime.datasets import artifact_only, indexed, protected
 
 RAW = "raw tool streams and receipts may contain unredacted target content and host paths"
 _A = "data/jobs/job_tree_sitter_ast/attempts/*"
-CONSUMES = ('job_review_intake', 'job_target_catalog')
+CONSUMES = ('job_review_intake', 'job_target_catalog', 'job_language_build')
 DATASETS = (
     indexed("tree_sitter_ast", "parse", "syntax", "appsec-review/tree-sitter-normalizer/1",
             "Bounded Tree-sitter AST nodes with byte-exact spans and parent relations, one shard per scope.",
@@ -25,7 +25,11 @@ DATASETS = (
                              _A + "/steps/parse/tasks/dynamic_scopes/dynamic/*.json",
                              _A + "/steps/acceptance/tasks/publish_handoff/accepted-tree-sitter-ast.json"),
                   reason="same nodes as the accepted analysis shards; kept for deterministic reuse"),
+    artifact_only("generated_source_backing", "load", "syntax", "appsec-review/generated-source-backing/1",
+                  "Bounded accepted generated-source provenance; bytes reside in run-owned shared objects.",
+                  artifacts=("data/treesitter/sources/*.json",),
+                  reason="immutable source custody for AST and downstream resolving spans"),
     protected("tree_sitter_tool_io", "parse", "syntax", "appsec-review/container-execution/1",
               "Parser container requests, raw output and streams.",
-              artifacts=("data/treesitter/work/**",), reason=RAW),
+              artifacts=("data/treesitter/work/**", "data/treesitter/inputs/**"), reason=RAW),
 )

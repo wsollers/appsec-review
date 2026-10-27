@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -27,6 +29,145 @@ from tests.capture_fakes import capturing_fake
 ROOT = Path(__file__).parents[1]
 
 
+def _isolated_wasm_action(tmp_path, mode, *, missing=None):
+    from appsec_review.config.assurance import AssuranceMode, ComponentReleases, ReviewPolicy
+    from appsec_review.jobs.job_language_build import wasm
+
+    config, target = _fixture(tmp_path)
+    declarations = {key: "fixture/1" for key in wasm._RELEASE_COMPONENTS if key != missing}
+    policy = ReviewPolicy(mode=AssuranceMode(mode), project_id="fixture",
+        approved_first_party_projects=("fixture",), target_root=str(target.resolve()),
+        custody="application_private_v1", releases=ComponentReleases(declarations))
+    run_root = tmp_path / "run"
+    run_root.mkdir()
+    events, calls = [], []
+    unit = SimpleNamespace(unit_id="execute.wasm", job=SimpleNamespace(
+        config=config.job("job_language_build"), review_policy=policy, run_root=run_root,
+        metadata_root=tmp_path / "metadata", target_root=target, source_fingerprint=source_fingerprint(target),
+        run_id="fixture-run", attempt_id="fixture-attempt",
+        events=SimpleNamespace(write=lambda event, **values: events.append((event, values)))))
+    dispatch = {"build_unit_id": "wasm-fixture", "root": "crate", "family": "rust",
+        "source_fingerprint": unit.job.source_fingerprint, "recipe_identity": "recipe",
+        "probe_identity": "probe", "build_system": "cargo",
+        "recipe": {"source_dir": "crate", "image_profile": "rust", "configure_commands": [],
+                   "build_commands": [["cargo", "build", "--target", "wasm32-unknown-unknown"]],
+                   "environment": {}},
+        "image": {"image_tag": "fixture:local", "image_id": "sha256:" + "d" * 64,
+                  "user": "1000:1000", "dependency_hashes": {}}}
+    return unit, dispatch, {"project_build_handoff_sha256": "handoff"}, calls, events
+
+
+@pytest.mark.parametrize("mode", ["strict", "first_party_managed"])
+def test_wasm_declared_release_reuses_target_evidence_without_platform_hashes(tmp_path, monkeypatch, mode):
+    from appsec_review.jobs.job_language_build import job as generic, wasm
+
+    unit, dispatch, accepted, calls, _events = _isolated_wasm_action(tmp_path, mode)
+    hashed = []
+    original = file_sha256
+
+    def target_evidence_hash(path):
+        candidate = Path(path).resolve()
+        assert candidate.is_relative_to(unit.job.target_root) or candidate.is_relative_to(unit.job.run_root)
+        hashed.append(candidate)
+        return original(path)
+
+    monkeypatch.setattr(wasm, "file_sha256", target_evidence_hash)
+    monkeypatch.setattr(generic, "file_sha256", target_evidence_hash)
+    first = wasm._execute_one(unit, dispatch, accepted, "rust", {}, lambda *_: WasmExecutor(calls))
+    assert all(row["artifact_origin"] == "build-output" and row["scope_version"]
+               for row in first["artifacts"])
+    assert any("delivery_fact_unavailable" in gap for gap in first["gaps"])
+    second = wasm._execute_one(unit, dispatch, accepted, "rust", {}, lambda *_: WasmExecutor(calls))
+    assert not first["checkpoint_reused"] and second["checkpoint_reused"] and len(calls) == 1
+    artifact = unit.job.run_root / first["artifacts"][0]["path"]
+    assert artifact.resolve() in hashed
+    artifact.write_bytes(b"changed target output")
+    with pytest.raises(wasm.WasmIntegrityError, match="artifact identity changed"):
+        wasm._execute_one(unit, dispatch, accepted, "rust", {}, lambda *_: WasmExecutor(calls))
+
+
+@pytest.mark.parametrize("mode", ["strict", "first_party_managed"])
+@pytest.mark.parametrize("missing", ["platform", "validation", "build_toolchain", "wasm_instrumentation"])
+def test_wasm_missing_release_denies_checkpoint_reuse(tmp_path, mode, missing):
+    from appsec_review.jobs.job_language_build import wasm
+
+    unit, dispatch, accepted, calls, events = _isolated_wasm_action(tmp_path, mode, missing=missing)
+    original_publications = None
+    for _ in range(2):
+        receipt = wasm._execute_one(unit, dispatch, accepted, "rust", {}, lambda *_: WasmExecutor(calls))
+        assert not receipt["checkpoint_reused"]
+        assert receipt["checkpoint_reuse_reason"] == "missing_release_identity"
+        publications = {
+            item["path"]: ((unit.job.run_root / item["path"]).read_bytes(),
+                           (unit.job.run_root / item["path"]).stat().st_ino)
+            for item in (receipt["commands"][0]["protected_argv"], receipt["protected_tool_invocations"])}
+        if original_publications is None:
+            original_publications = publications
+        else:
+            assert publications == original_publications
+    assert len(calls) == 2
+    assert not list(unit.job.metadata_root.rglob("accepted.json"))
+    assert sum(event == "CHECKPOINT_MISSED" and value["reason"] == "missing_release_identity"
+               for event, value in events) == 2
+
+
+@pytest.mark.parametrize("mode", ["strict", "first_party_managed"])
+@pytest.mark.parametrize("publication", ["command", "invocations"])
+@pytest.mark.parametrize("corruption", ["different-content", "symlink"])
+def test_wasm_repeated_protected_publication_rejects_conflicts(
+        tmp_path, mode, publication, corruption):
+    from appsec_review.jobs.job_language_build import wasm
+
+    unit, dispatch, accepted, calls, _events = _isolated_wasm_action(
+        tmp_path, mode, missing="wasm_instrumentation")
+    receipt = wasm._execute_one(unit, dispatch, accepted, "rust", {}, lambda *_: WasmExecutor(calls))
+    identity = (receipt["commands"][0]["protected_argv"] if publication == "command"
+                else receipt["protected_tool_invocations"])
+    path = unit.job.run_root / identity["path"]
+    previous = path.read_bytes()
+    retained = tmp_path / "retained-original.json"
+    path.rename(retained)
+    if corruption == "symlink":
+        path.symlink_to(retained)
+    else:
+        path.write_bytes(b'{"different":"protected evidence"}\n')
+    conflict = path.read_bytes()
+
+    with pytest.raises(ValueError, match="immutable shared artifact conflicts|shared artifact symlink"):
+        wasm._execute_one(unit, dispatch, accepted, "rust", {}, lambda *_: WasmExecutor(calls))
+    assert retained.read_bytes() == previous
+    assert path.read_bytes() == conflict
+    assert path.is_symlink() is (corruption == "symlink")
+    assert not list(unit.job.metadata_root.rglob("accepted.json"))
+
+
+@pytest.mark.parametrize("mode", ["strict", "first_party_managed"])
+@pytest.mark.parametrize("component", ["platform", "validation", "build_toolchain", "wasm_instrumentation"])
+def test_wasm_changed_release_invalidates_family_checkpoint(tmp_path, mode, component):
+    from appsec_review.config.assurance import ComponentReleases
+    from appsec_review.jobs.job_language_build import wasm
+
+    unit, dispatch, accepted, calls, _events = _isolated_wasm_action(tmp_path, mode)
+    first = wasm._execute_one(unit, dispatch, accepted, "rust", {}, lambda *_: WasmExecutor(calls))
+    declarations = {**unit.job.review_policy.releases.view(), component: "fixture/2"}
+    unit.job.review_policy = replace(unit.job.review_policy, releases=ComponentReleases(declarations))
+    second = wasm._execute_one(unit, dispatch, accepted, "rust", {}, lambda *_: WasmExecutor(calls))
+    assert first["fingerprint"] != second["fingerprint"]
+    assert not second["checkpoint_reused"] and len(calls) == 2
+
+
+@pytest.mark.parametrize("mode", ["strict", "first_party_managed"])
+def test_wasm_delivery_policy_invalidates_family_checkpoint(tmp_path, monkeypatch, mode):
+    from appsec_review.jobs.job_language_build import wasm
+
+    unit, dispatch, accepted, calls, _events = _isolated_wasm_action(tmp_path, mode)
+    first = wasm._execute_one(unit, dispatch, accepted, "rust", {}, lambda *_: WasmExecutor(calls))
+    monkeypatch.setattr(wasm, "POLICY_IDENTITY", "fixture-delivery-policy/2")
+    second = wasm._execute_one(unit, dispatch, accepted, "rust", {}, lambda *_: WasmExecutor(calls))
+    assert first["fingerprint"] != second["fingerprint"]
+    assert not second["checkpoint_reused"] and len(calls) == 2
+
+
 class RustWasmRecipeModel:
     def complete(self, request, *, timeout_seconds):
         recipes = []
@@ -47,12 +188,12 @@ class RustWasmRecipeModel:
 
 
 class ImageResolver:
-    def __init__(self, target: Path):
-        self.target = target
+    def __init__(self, target: Path, releases=None):
+        self.target, self.releases = target, releases
 
     def resolve(self, recipe, profile):
         hashes = dependency_hashes(self.target, recipe)
-        identity = project_recipe_identity(recipe, profile, hashes)
+        identity = project_recipe_identity(recipe, profile, hashes, releases=self.releases)
         return ProjectImage("appsec-review/project-build-image/1", identity, profile.name,
             profile.image_id, "derived-rust-wasm:local", "sha256:" + "d" * 64,
             "f" * 64, True, False, hashes), b"", b""
@@ -82,6 +223,9 @@ class WasmExecutor:
 def _fixture(tmp_path: Path):
     config_path = tmp_path / "appsec-review.toml"
     text = (ROOT / "appsec-review.toml").read_text(encoding="utf-8")
+    text = text.replace("[review_policy.releases]\n", "[review_policy.releases]\n" +
+        "".join(f'{key} = "fixture/1"\n' for key in
+                ("platform", "validation", "build_toolchain", "wasm_instrumentation")))
     text = text.replace(
         "[jobs.job_language_build.settings]\ncommand_timeout_seconds = 1800\n"
         "# In-memory diagnostic preview only; captured build streams are retained as complete files.\n"
@@ -108,7 +252,7 @@ def _accepted_project(config, target, calls):
             target_root=target, source_fingerprint=fingerprint)
     GraphRunner(config, [build_projects(
         executor_factory=lambda unit, profile: capturing_fake(profile, WasmExecutor(calls)),
-        image_resolver_factory=lambda unit: ImageResolver(target))]).run(
+        image_resolver_factory=lambda unit: ImageResolver(target, config.review_policy.releases))]).run(
             target_root=target, source_fingerprint=fingerprint, run_id=upstream["run_id"])
     return upstream["run_id"], fingerprint
 

@@ -22,6 +22,7 @@ from appsec_review.codeql.runtime import (
     load_graph_exports,
 )
 from appsec_review.config import CodeQLAnalysisSettings, CodeQLExportSettings
+from appsec_review.config.assurance import ReviewPolicy
 from appsec_review.jobs.cataloging import source_fingerprint
 from appsec_review.jobs.job_evidence_collection.job import load_target_catalog
 from appsec_review.jobs.job_language_build import load_accepted_language_build
@@ -33,6 +34,10 @@ from appsec_review.retrieval.core import resolve_context_manifest
 from appsec_review.retrieval.index import load_verified_manifest
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from appsec_review.storage import atomic_json, canonical_json, file_sha256
+from appsec_review.storage.atomic import copy_file
+from appsec_review.codeql.scheduler import ready_scopes
+from appsec_review.observability.spans import operation_span
+from appsec_review.runtime.resources import Reservation, ResourceAdmission
 
 from .planning import (
     CodeQLPlan, CodeQLScope, build_codeql_plan, export_lock_mismatches, plan_graph_exports,
@@ -44,9 +49,9 @@ from appsec_review.jobs.job_codeql_analysis.datasets import CONSUMES, DATASETS
 
 
 SCHEMA = "appsec-review/codeql-analysis-handoff/1"
-DATABASE_CHECKPOINT_SCHEMA = "appsec-review/codeql-database-checkpoint/3"
-QUERY_CHECKPOINT_SCHEMA = "appsec-review/codeql-query-checkpoint/2"
-EXPORT_CHECKPOINT_SCHEMA = "appsec-review/codeql-export-checkpoint/1"
+DATABASE_CHECKPOINT_SCHEMA = "appsec-review/codeql-database-checkpoint/4"
+QUERY_CHECKPOINT_SCHEMA = "appsec-review/codeql-query-checkpoint/3"
+EXPORT_CHECKPOINT_SCHEMA = "appsec-review/codeql-export-checkpoint/2"
 GRAPH_EXPORTS_SCHEMA = "appsec-review/codeql-graph-exports/1"
 _RUNNER = ("containers", "tools", "codeql", "codeql_runner.py")
 _ASSET_LOCK = ("containers", "tools", "codeql", "assets.lock.json")
@@ -62,6 +67,32 @@ def _settings(unit: UnitContext) -> CodeQLAnalysisSettings:
     if not isinstance(value, CodeQLAnalysisSettings):
         raise ValueError("typed CodeQL analysis settings are required")
     return value
+
+
+def _policy(unit: UnitContext) -> ReviewPolicy:
+    return getattr(unit.job, "review_policy", ReviewPolicy())
+
+
+def _release_projection(unit: UnitContext, *components: str) -> dict[str, str | None]:
+    releases = _policy(unit).releases.values
+    return {component: releases.get(component) for component in components}
+
+
+def _query_material(profile: Mapping[str, Any]) -> dict[str, Any]:
+    return {key: value for key, value in profile.items()
+            if not key.endswith("_sha256") and key not in {"file_count"}}
+
+
+def _eligible_checkpoint(unit: UnitContext, path: Path, identity: str, schema: str,
+                         *components: str) -> Mapping[str, Any] | None:
+    with operation_span(unit.job.events, "codeql.cache_lookup", unit_id=unit.unit_id):
+        allowed, reason = _policy(unit).releases.require(*components)
+        result = _checkpoint(path, identity, schema) if allowed else None
+        if allowed and result is None:
+            reason = "missing" if not path.exists() else "identity_changed_or_incomplete"
+        unit.job.events.write("CACHE_LOOKUP_COMPLETED", action_schema=schema,
+                              outcome="candidate" if result is not None else "miss", reason=reason)
+        return result
 
 
 def _artifact(run_root: Path, path: Path) -> dict[str, Any]:
@@ -201,15 +232,14 @@ def _copy_clean_target(unit: UnitContext, workspace: Path) -> None:
     workspace.mkdir(parents=True)
     for path in sorted(target.rglob("*")):
         relative = path.relative_to(target)
-        if any(part in {".git", ".hg", ".svn", "build", "dist", "target", "bin", "obj",
-                        "__pycache__", ".pytest_cache"} for part in relative.parts):
+        if any(part in {".git", ".hg", ".svn"} for part in relative.parts):
             continue
         if path.is_symlink():
             raise FrameworkIntegrityError("CodeQL target contains an unsupported symlink")
         if path.is_file():
             destination = workspace / relative
             destination.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(path, destination)
+            copy_file(path, destination)
 
 
 def _make_workspace_accessible(workspace: Path, *, writable_files: bool = False) -> None:
@@ -329,7 +359,7 @@ def _stage_manifest_workspace(source: Path, workspace: Path, manifest: Mapping[s
             raise FrameworkIntegrityError("CodeQL materialized environment identity changed")
         destination = workspace / Path(*logical.parts)
         destination.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(source_path, destination)
+        copy_file(source_path, destination)
     _verify_workspace_manifest(workspace, manifest, file_limit=file_limit)
 
 
@@ -374,13 +404,19 @@ def _database_identity(unit: UnitContext, scope: CodeQLScope, *, image_identity:
                        replay: Mapping[str, Any] | None, settings: CodeQLAnalysisSettings,
                        asset_lock: Mapping[str, Any]) -> str:
     language = settings.languages[scope.language]
+    material_scope = {key: value for key, value in asdict(scope).items()
+                      if key != "build_receipt_fingerprint"}
+    material_replay = ({key: value for key, value in replay.items() if key != "protected_commands"}
+                       if replay is not None else None)
     return hashlib.sha256(canonical_json({
         "schema": DATABASE_CHECKPOINT_SCHEMA,
-        "scope": asdict(scope), "mode": scope.mode,
+        "scope": material_scope, "mode": scope.mode,
         "configured_execution_mode": language.mode.value,
         "environment_identity": scope.environment_identity,
-        "replay": replay, "codeql_image_identity": image_identity, "version": settings.version,
-        "cli_sha256": settings.cli_sha256, "extractor_tree_sha256": language.extractor_tree_sha256,
+        "replay": material_replay, "codeql_image_identity": image_identity,
+        "component_releases": _release_projection(
+            unit, "platform", "build_toolchain", "codeql", "codeql_runner", f"extractor_{scope.language}"),
+        "assurance": _policy(unit).mode.value,
         "runner_schema": "codeql-runner/2", "database_producer": "codeql-database/3",
         "limits": {"file_limit": settings.database_file_limit,
                    "bytes_limit": settings.database_bytes_limit,
@@ -404,13 +440,12 @@ def _query_profiles(language: Any) -> tuple[Mapping[str, Any], ...]:
 
 
 def _query_identity(database: Mapping[str, Any], query_profile: Mapping[str, Any],
-                    settings: CodeQLAnalysisSettings) -> str:
+                    settings: CodeQLAnalysisSettings, *, query_release: str | None = None) -> str:
     return hashlib.sha256(canonical_json({
         "schema": QUERY_CHECKPOINT_SCHEMA,
         "database_identity": database["database_identity"],
         "database_tree_sha256": database["database_tree_sha256"],
-        "query_profile": dict(query_profile),
-        "normalizer": NORMALIZER_IDENTITY,
+        "query_profile": _query_material(query_profile), "query_release": query_release,
         "limits": {"result_limit": settings.result_limit,
                    "sarif_bytes_limit": settings.sarif_bytes_limit,
                    "max_paths": settings.max_paths, "threads": settings.threads,
@@ -427,8 +462,46 @@ def _metrics_scope(scope: CodeQLScope) -> dict[str, Any]:
             "language": scope.language, "build_unit_id": scope.build_unit_id}
 
 
+def _import_predecessor_databases(unit: UnitContext, scopes: Sequence[CodeQLScope],
+                                 receipts: Mapping[str, Mapping[str, Any]],
+                                 settings: CodeQLAnalysisSettings) -> Mapping[str, Any] | None:
+    from appsec_review.codeql.predecessor import import_databases
+    policy = _policy(unit)
+    selection = policy.predecessor_databases
+    if selection is None:
+        return None
+    resolver = CodeQLImageResolver(
+        repository_root=unit.job.repository_root, metadata_root=unit.job.metadata_root,
+        settings=settings, timeout_seconds=settings.database_timeout_seconds,
+        output_bytes=settings.output_bytes, releases=policy.releases)
+    expected = {}
+    for scope in scopes:
+        if scope.scope_id not in selection.scope_ids:
+            continue
+        allowed, _ = policy.releases.require(
+            "platform", "build_toolchain", "codeql", "codeql_runner", f"extractor_{scope.language}")
+        if not allowed:
+            raise FrameworkIntegrityError("selected predecessor database lacks required release declarations")
+        receipt = receipts.get(scope.build_unit_id or "")
+        if scope.build_unit_id and receipt is None:
+            raise FrameworkIntegrityError("selected predecessor database lacks its accepted build unit")
+        image = receipt.get("image") if receipt is not None else {
+            "image_id": settings.source_image_id, "user": settings.runtime_user}
+        if not isinstance(image, Mapping):
+            raise FrameworkIntegrityError("selected predecessor database lacks its environment image")
+        identity = resolver.declared_identity(
+            build_image_id=str(image["image_id"]), runtime_user=str(image.get("user") or settings.runtime_user))
+        replay = _accepted_replay(unit, receipt) if scope.mode == "manual" and receipt is not None else None
+        expected[scope.scope_id] = _database_identity(
+            unit, scope, image_identity=identity, replay=replay, settings=settings, asset_lock={})
+    return import_databases(unit.job, expected, checkpoint_schema=DATABASE_CHECKPOINT_SCHEMA,
+                            file_limit=settings.database_file_limit, bytes_limit=settings.database_bytes_limit)
+
+
 def _database_one(unit: UnitContext, scope: CodeQLScope,
                   receipts: Mapping[str, Mapping[str, Any]]) -> Mapping[str, Any]:
+    from uuid import uuid4
+    invocation = uuid4().hex
     settings = _settings(unit)
     language = settings.languages[scope.language]
     receipt = receipts.get(scope.build_unit_id or "")
@@ -442,7 +515,8 @@ def _database_one(unit: UnitContext, scope: CodeQLScope,
         raise FrameworkIntegrityError("CodeQL environment image identity is unavailable")
     resolver = CodeQLImageResolver(repository_root=unit.job.repository_root,
         metadata_root=unit.job.metadata_root, settings=settings,
-        timeout_seconds=settings.database_timeout_seconds, output_bytes=settings.output_bytes)
+        timeout_seconds=settings.database_timeout_seconds, output_bytes=settings.output_bytes,
+        releases=_policy(unit).releases)
     image, _stdout, _stderr = resolver.resolve(
         build_image_tag=str(image_value["image_tag"]), build_image_id=str(image_value["image_id"]),
         runtime_user=str(image_value.get("user") or settings.runtime_user))
@@ -455,9 +529,15 @@ def _database_one(unit: UnitContext, scope: CodeQLScope,
                                   settings=settings, asset_lock=asset_lock)
     checkpoint_path, database_path = root / "database-checkpoint.json", root / "database"
     manifest_path = root / "database-manifest.json"
-    existing = _checkpoint(checkpoint_path, identity, DATABASE_CHECKPOINT_SCHEMA)
+    existing = _eligible_checkpoint(unit, checkpoint_path, identity, DATABASE_CHECKPOINT_SCHEMA,
+                                   "platform", "build_toolchain", "codeql", "codeql_runner",
+                                   f"extractor_{scope.language}")
+    selection = _policy(unit).predecessor_databases
+    if (selection is not None and scope.scope_id in selection.scope_ids
+            and (existing is None or not isinstance(existing.get("predecessor_import"), Mapping))):
+        raise FrameworkIntegrityError("selected predecessor database has no completed import checkpoint")
     if existing is not None:
-        unit.job.events.write("TOOL_INVOCATION_STARTED", unit_id=unit.unit_id, tool_id="codeql",
+        unit.job.events.write("TOOL_INVOCATION_STARTED", unit_id=unit.unit_id, tool_id="codeql", tool_invocation_id=invocation,
                               **_metrics_scope(scope),
                               database_identity=identity, image_id=image.image_id,
                               checkpoint_reused=True)
@@ -468,7 +548,10 @@ def _database_one(unit: UnitContext, scope: CodeQLScope,
                                bytes_limit=settings.database_bytes_limit)
         if retained != actual or file_sha256(manifest_path) != existing.get("manifest_sha256"):
             raise FrameworkIntegrityError("accepted CodeQL database or manifest changed")
-        unit.job.events.write("TOOL_INVOCATION_COMPLETED", unit_id=unit.unit_id, tool_id="codeql",
+        imported = existing.get("predecessor_import")
+        if imported is not None:
+            _safe_json(unit.job.run_root, imported)
+        unit.job.events.write("TOOL_INVOCATION_COMPLETED", unit_id=unit.unit_id, tool_id="codeql", tool_invocation_id=invocation,
                               **_metrics_scope(scope),
                               database_identity=identity, image_id=image.image_id,
                               disposition="SUCCEEDED", duration_ms=0, result_count=0, gap_count=0,
@@ -477,11 +560,13 @@ def _database_one(unit: UnitContext, scope: CodeQLScope,
         return {"scope": asdict(scope), "terminal_status": "SUCCEEDED", "database_identity": identity,
                 "database_tree_sha256": actual["tree_sha256"], "database_reused": True,
                 "database_manifest": _artifact(unit.job.run_root, manifest_path), "image": image_artifact,
-                "gaps": []}
+                "gaps": [], **({"predecessor_import": imported} if imported is not None else {})}
     for path in (database_path, root / "workspace", root / "executions" / "database"):
         if path.is_dir():
             shutil.rmtree(path)
-    _stage_workspace(unit, scope, receipt, root / "workspace")
+    with operation_span(unit.job.events, "codeql.prepare.target", unit_id=unit.unit_id,
+                        scope_id=scope.scope_id, tool_invocation_id=invocation):
+        _stage_workspace(unit, scope, receipt, root / "workspace")
     argv = ["--mode", scope.mode, "--language", scope.language, "--workspace", "workspace",
             "--source-subroot", scope.root,
             "--database", "database", "--threads", str(settings.threads), "--ram", str(settings.ram_mb)]
@@ -493,7 +578,7 @@ def _database_one(unit: UnitContext, scope: CodeQLScope,
         (root / "protected-replay.json").chmod(0o444)
         argv[4:4] = ["--replay", "protected-replay.json"]
     executor = CodeQLExecutor(image=image, run_root=unit.job.run_root, settings=settings)
-    unit.job.events.write("TOOL_INVOCATION_STARTED", unit_id=unit.unit_id, tool_id="codeql",
+    unit.job.events.write("TOOL_INVOCATION_STARTED", unit_id=unit.unit_id, tool_id="codeql", tool_invocation_id=invocation,
                           **_metrics_scope(scope),
                           database_identity=identity, image_id=image.image_id)
     result = executor.execute("database", tuple(argv), scratch_root=root)
@@ -501,7 +586,7 @@ def _database_one(unit: UnitContext, scope: CodeQLScope,
     gaps = (["CodeQL database creation timed out"] if result.timed_out else
             [f"CodeQL database creation exited {result.exit_code}"] if result.exit_code != 0 else [])
     execution = _execution_artifact(unit, root, "database")
-    unit.job.events.write("TOOL_INVOCATION_COMPLETED", unit_id=unit.unit_id, tool_id="codeql",
+    unit.job.events.write("TOOL_INVOCATION_COMPLETED", unit_id=unit.unit_id, tool_id="codeql", tool_invocation_id=invocation,
                           **_metrics_scope(scope),
                           database_identity=identity, image_id=image.image_id, disposition=status,
                           duration_ms=result.duration_ms, result_count=0, gap_count=len(gaps), gaps=gaps,
@@ -534,20 +619,25 @@ def _database_isolated(unit: UnitContext, scope: CodeQLScope,
 
 def _query_one(unit: UnitContext, database: Mapping[str, Any],
                query_profile: Mapping[str, Any]) -> Mapping[str, Any]:
+    from uuid import uuid4
+    invocation = uuid4().hex
     if database.get("terminal_status") != "SUCCEEDED":
         return {**database, "query_profile": dict(query_profile),
                 "query_reused": False, "query_identity": None,
                 "gaps": list(database.get("gaps", ())) + ["CodeQL query skipped because database creation failed"]}
     settings = _settings(unit)
     scope = _scope_from(database["scope"])
-    identity = _query_identity(database, query_profile, settings)
+    query_component = f"query_{scope.language}_{query_profile['query_id']}"
+    identity = _query_identity(database, query_profile, settings,
+                              query_release=_policy(unit).releases.values.get(query_component))
     scope_root = unit.job.run_root / "data" / "codeql" / "scopes" / scope.scope_id
     root = scope_root / "queries" / str(query_profile["query_id"])
     root.mkdir(parents=True, exist_ok=True)
     checkpoint_path, sarif_path = root / "query-checkpoint.json", root / "sarif" / "results.sarif"
-    existing = _checkpoint(checkpoint_path, identity, QUERY_CHECKPOINT_SCHEMA)
+    existing = _eligible_checkpoint(unit, checkpoint_path, identity, QUERY_CHECKPOINT_SCHEMA,
+                                   "codeql_runner", query_component)
     if existing is not None:
-        unit.job.events.write("TOOL_INVOCATION_STARTED", unit_id=unit.unit_id, tool_id="codeql",
+        unit.job.events.write("TOOL_INVOCATION_STARTED", unit_id=unit.unit_id, tool_id="codeql", tool_invocation_id=invocation,
                               **_metrics_scope(scope),
                               database_identity=database["database_identity"], query_identity=identity,
                               query_profile=query_profile["query_id"], query_suite=query_profile["query_suite"],
@@ -559,7 +649,7 @@ def _query_one(unit: UnitContext, database: Mapping[str, Any],
         sarif = load_sarif(sarif_path, bytes_limit=settings.sarif_bytes_limit,
                            result_limit=settings.result_limit)
         result_count = sum(len(run.get("results", ())) for run in sarif["runs"])
-        unit.job.events.write("TOOL_INVOCATION_COMPLETED", unit_id=unit.unit_id, tool_id="codeql",
+        unit.job.events.write("TOOL_INVOCATION_COMPLETED", unit_id=unit.unit_id, tool_id="codeql", tool_invocation_id=invocation,
                               **_metrics_scope(scope),
                               database_identity=database["database_identity"], query_identity=identity,
                               query_profile=query_profile["query_id"], query_suite=query_profile["query_suite"],
@@ -575,15 +665,18 @@ def _query_one(unit: UnitContext, database: Mapping[str, Any],
     query_database = root / "query-database"
     if query_database.exists():
         shutil.rmtree(query_database)
-    shutil.copytree(scope_root / "database", query_database)
-    _make_workspace_accessible(query_database, writable_files=True)
+    with operation_span(unit.job.events, "codeql.prepare.query", unit_id=unit.unit_id,
+                        scope_id=scope.scope_id, query_profile=query_profile["query_id"],
+                        tool_invocation_id=invocation):
+        shutil.copytree(scope_root / "database", query_database, copy_function=copy_file)
+        _make_workspace_accessible(query_database, writable_files=True)
     if sarif_path.parent.exists():
         shutil.rmtree(sarif_path.parent)
     image_value = _safe_json(unit.job.run_root, database["image"])
     from appsec_review.codeql import CodeQLImage
     image = CodeQLImage(**image_value)
     executor = CodeQLExecutor(image=image, run_root=unit.job.run_root, settings=settings)
-    unit.job.events.write("TOOL_INVOCATION_STARTED", unit_id=unit.unit_id, tool_id="codeql",
+    unit.job.events.write("TOOL_INVOCATION_STARTED", unit_id=unit.unit_id, tool_id="codeql", tool_invocation_id=invocation,
                           **_metrics_scope(scope),
                           database_identity=database["database_identity"], query_identity=identity,
                           image_id=image.image_id, query_profile=query_profile["query_id"],
@@ -613,7 +706,7 @@ def _query_one(unit: UnitContext, database: Mapping[str, Any],
         except (OSError, ValueError, UnicodeError, json.JSONDecodeError) as exc:
             status, gaps = "FAILED", [f"CodeQL query produced invalid bounded SARIF ({type(exc).__name__})"]
     execution = _execution_artifact(unit, root, "query")
-    unit.job.events.write("TOOL_INVOCATION_COMPLETED", unit_id=unit.unit_id, tool_id="codeql",
+    unit.job.events.write("TOOL_INVOCATION_COMPLETED", unit_id=unit.unit_id, tool_id="codeql", tool_invocation_id=invocation,
                           **_metrics_scope(scope),
                           database_identity=database["database_identity"], query_identity=identity,
                           image_id=image.image_id, query_profile=query_profile["query_id"],
@@ -643,33 +736,21 @@ def _export_profile(settings: CodeQLAnalysisSettings, language: str) -> Mapping[
     return asdict(configured.export_queries[0])
 
 
-def _pack_tree(root: Path) -> tuple[str, int]:
-    """Location-independent pack identity; the same algorithm the runner checks in scratch."""
-    rows = []
-    for path in sorted(root.rglob("*"), key=lambda item: item.relative_to(root).as_posix()):
-        if path.is_symlink():
-            raise FrameworkIntegrityError("CodeQL graph export pack contains a symlink")
-        if path.is_file():
-            rows.append(f"{file_sha256(path)}  {path.relative_to(root).as_posix()}\n".encode())
-    return hashlib.sha256(b"".join(rows)).hexdigest(), len(rows)
-
-
 def _verify_export_sources(repository_root: Path, profile: Mapping[str, Any],
                            settings: CodeQLAnalysisSettings) -> None:
-    """The repository pack, contracts and lock must still equal the configured lock entry."""
+    """Check supplied execution assets are available without measuring their payloads."""
     lock = repository_root.joinpath(*_ASSET_LOCK)
-    if not lock.is_file() or lock.is_symlink() or file_sha256(lock) != settings.asset_lock_sha256:
-        raise FrameworkIntegrityError("CodeQL asset lock differs from central configuration")
+    if not lock.is_file() or lock.is_symlink():
+        raise FrameworkIntegrityError("CodeQL asset configuration is unavailable")
     pack = repository_root / str(profile["source_path"])
-    if (not pack.is_dir() or pack.is_symlink() or
-            _pack_tree(pack) != (profile["tree_sha256"], profile["file_count"])):
-        raise FrameworkIntegrityError("CodeQL graph export pack differs from its locked tree")
+    if not pack.is_dir() or pack.is_symlink():
+        raise FrameworkIntegrityError("CodeQL graph export pack is unavailable")
     for path, digest in ((pack / "qlpack.yml", profile["query_pack_sha256"]),
                          (pack / str(profile["query_suite"]), profile["query_suite_sha256"]),
                          (repository_root / str(profile["columns_path"]), profile["columns_sha256"]),
                          (repository_root / str(profile["catalog_path"]), profile["catalog_sha256"])):
-        if not path.is_file() or path.is_symlink() or file_sha256(path) != digest:
-            raise FrameworkIntegrityError(f"CodeQL graph export input {path.name} differs from the lock")
+        if not path.is_file() or path.is_symlink():
+            raise FrameworkIntegrityError(f"CodeQL graph export input {path.name} is unavailable")
 
 
 def _export_identity(database: Mapping[str, Any], profile: Mapping[str, Any],
@@ -688,7 +769,7 @@ def _export_identity(database: Mapping[str, Any], profile: Mapping[str, Any],
         "schema": EXPORT_CHECKPOINT_SCHEMA,
         "database_identity": database["database_identity"],
         "database_tree_sha256": database["database_tree_sha256"],
-        "export_pack": {key: value for key, value in profile.items()
+        "export_pack": {key: value for key, value in _query_material(profile).items()
                         if key not in {"catalog_path", "catalog_sha256"}},
         "export_manifest_schema": EXPORT_MANIFEST_SCHEMA,
         "bounds": {"row_limit": settings.export_queries.row_limit,
@@ -713,7 +794,7 @@ def _stage_export(unit: UnitContext, scope_root: Path, staging: Path, profile: M
     """
     repository = unit.job.repository_root
     staging.mkdir(parents=True)
-    shutil.copytree(scope_root / "database", staging / "database")
+    shutil.copytree(scope_root / "database", staging / "database", copy_function=copy_file)
     _make_workspace_accessible(staging / "database", writable_files=True)
     shutil.copytree(repository / str(profile["source_path"]), staging / "pack")
     _make_workspace_accessible(staging / "pack")
@@ -838,15 +919,19 @@ def _export_one(unit: UnitContext, database: Mapping[str, Any], *,
         return {**base, "export_status": "SKIPPED", "reason": seeding.NO_SEEDS_GAP,
                 "seeded": section, "gaps": list(section["gaps"])}
     seed_rows = scope_seeds.rows if seeded_mode else ()
-    runner_sha256 = file_sha256(unit.job.repository_root.joinpath(*_RUNNER))
-    identity = _export_identity(database, profile, settings, runner_sha256=runner_sha256, seeds=seed_rows)
+    releases = _release_projection(unit, "codeql_runner", f"export_{scope.language}")
+    identity = _export_identity(database, profile, settings,
+                               runner_sha256=json.dumps(releases, sort_keys=True), seeds=seed_rows)
     scope_root = run_root / "data" / "codeql" / "scopes" / scope.scope_id
     exports_root, staging = scope_root / "exports", scope_root / "export"
     checkpoint_path = scope_root / "export-checkpoint.json"
-    event = {"unit_id": unit.unit_id, "tool_id": "codeql-graph-export", **_metrics_scope(scope),
+    from uuid import uuid4
+    event = {"unit_id": unit.unit_id, "tool_id": "codeql-graph-export", "tool_invocation_id": uuid4().hex,
+             **_metrics_scope(scope),
              "database_identity": database["database_identity"], "export_identity": identity,
              "export_pack": profile["query_pack"], "export_pack_version": profile["query_pack_version"]}
-    existing = _checkpoint(checkpoint_path, identity, EXPORT_CHECKPOINT_SCHEMA)
+    existing = _eligible_checkpoint(unit, checkpoint_path, identity, EXPORT_CHECKPOINT_SCHEMA,
+                                   "codeql_runner", f"export_{scope.language}")
     if existing is not None:
         unit.job.events.write("TOOL_INVOCATION_STARTED", **event, checkpoint_reused=True)
         try:
@@ -872,8 +957,10 @@ def _export_one(unit: UnitContext, database: Mapping[str, Any], *,
                  scope_root / "executions" / "compile"):
         if path.is_dir():
             shutil.rmtree(path)
-    _stage_export(unit, scope_root, staging, profile, mode=export.mode,
-                  depth=export.seed_depth if seeded_mode else 0, seed_rows=seed_rows)
+    with operation_span(unit.job.events, "codeql.prepare.export", unit_id=unit.unit_id,
+                        scope_id=scope.scope_id, tool_invocation_id=event["tool_invocation_id"]):
+        _stage_export(unit, scope_root, staging, profile, mode=export.mode,
+                     depth=export.seed_depth if seeded_mode else 0, seed_rows=seed_rows)
     from appsec_review.codeql import CodeQLImage
     image = CodeQLImage(**_safe_json(run_root, database["image"]))
     executor = (executor_factory or _default_export_executor)(image, run_root, settings)
@@ -938,16 +1025,19 @@ def _precompile_export_pack(unit: UnitContext, image: Any, executor: Any, scope_
     Returns ``None`` when the cache is warm and a failure record (a named gap, never a clean
     result) when the compile fails or times out.
     """
-    key = f"{compile_cache_volume(image)}:{profile['tree_sha256']}"
+    release = _policy(unit).releases.values.get(f"export_{language}")
+    cacheable = bool(image.component_release_id and image.runner_release_id and release)
+    key = f"{compile_cache_volume(image, unit.job.run_root)}:{language}:{release}"
     with _PRECOMPILE_GUARD:
         lock = _PRECOMPILE_LOCKS.setdefault(key, threading.Lock())
     with lock:
-        if key in _PRECOMPILED:
+        if cacheable and key in _PRECOMPILED:
             return None
         argv = graph_compile_arguments(
             pack="export/pack", columns="export/columns.json", asset_lock="export/assets.lock.json",
             language=language, threads=settings.compile_threads, ram_mb=settings.compile_ram_mb)
-        compile_event = {**event, "tool_id": "codeql-graph-export-compile"}
+        from uuid import uuid4
+        compile_event = {**event, "tool_id": "codeql-graph-export-compile", "tool_invocation_id": uuid4().hex}
         unit.job.events.write("TOOL_INVOCATION_STARTED", **compile_event, image_id=image.image_id)
         result = executor.execute("compile", argv, scratch_root=scope_root)
         failed = result.timed_out or result.exit_code != 0
@@ -962,7 +1052,8 @@ def _precompile_export_pack(unit: UnitContext, image: Any, executor: Any, scope_
                               metrics_receipt=execution)
         if failed:
             return {"execution": execution, "gaps": gaps}
-        _PRECOMPILED.add(key)
+        if cacheable:
+            _PRECOMPILED.add(key)
         return None
 
 
@@ -1039,7 +1130,8 @@ def _normalize_one(unit: UnitContext, query: Mapping[str, Any]) -> Mapping[str, 
         tool_identity={"tool": "codeql", "language": scope.language,
                        "query_profile": query_id,
                        "database_identity": query.get("database_identity"),
-                       "query_identity": query.get("query_identity")},
+                       "query_identity": query.get("query_identity"),
+                       "normalizer_release": _release_projection(unit, "codeql_normalizer")},
         parser_identity=NORMALIZER_IDENTITY, normalizer_identity=NORMALIZER_IDENTITY,
         mapping_identity="accepted-codeql-source-map/1")
     shard = f"codeql-{scope.language}-{scope.scope_id}-{query_id}"
@@ -1142,13 +1234,15 @@ def _normalize_one(unit: UnitContext, query: Mapping[str, Any]) -> Mapping[str, 
 
 
 def _validate_config(context, _result) -> None:
-    expected = {"plan": ("inventory",), "database": ("scopes",), "query": ("scopes",),
-                "export": ("scopes",), "normalize": ("scopes",), "acceptance": ("publish_handoff",)}
+    expected = {"plan": ("inventory",), "execution": ("scopes",), "acceptance": ("publish_handoff",)}
     if tuple(context.config.steps) != tuple(expected):
         raise ValueError("CodeQL analysis topology does not match central configuration")
     for step, tasks in expected.items():
         if tuple(context.config.step(step).tasks) != tasks:
             raise ValueError(f"CodeQL analysis task configuration mismatch: {step}")
+        if context.config.step(step).workers != 1 or any(
+                task.workers != 1 for task in context.config.step(step).tasks.values()):
+            raise ValueError("CodeQL settings.concurrency is the only action fan-out control")
     settings = getattr(context.config, "typed_settings", None)
     if isinstance(settings, CodeQLAnalysisSettings):
         # Re-run the typed validation: mode, 0 <= seed_depth <= max_seed_depth <= ceiling, seed_limit >= 1.
@@ -1206,9 +1300,6 @@ def build_job() -> Job:
                 source_fingerprint(unit.job.target_root or Path()) != unit.job.source_fingerprint):
             raise FrameworkIntegrityError("CodeQL accepted target snapshot changed")
         lock = load_asset_lock(unit.job.repository_root)
-        configured_lock = settings.asset_lock_sha256
-        if lock["sha256"] != configured_lock:
-            raise FrameworkIntegrityError("CodeQL asset lock differs from central configuration")
         root = unit.unit_root / "inventory"
         root.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(unit.job.repository_root / "containers" / "tools" / "codeql" / "assets.lock.json",
@@ -1218,7 +1309,8 @@ def build_job() -> Job:
         try:
             resolver = CodeQLImageResolver(repository_root=unit.job.repository_root,
                 metadata_root=unit.job.metadata_root, settings=settings,
-                timeout_seconds=settings.database_timeout_seconds, output_bytes=settings.output_bytes)
+                timeout_seconds=settings.database_timeout_seconds, output_bytes=settings.output_bytes,
+                releases=_policy(unit).releases)
             image, _stdout, _stderr = resolver.resolve(build_image_tag=settings.source_image_tag,
                 build_image_id=settings.source_image_id, runtime_user=settings.runtime_user)
             executor = CodeQLExecutor(image=image, run_root=unit.job.run_root, settings=settings)
@@ -1230,7 +1322,9 @@ def build_job() -> Job:
             if inventory.get("schema") != "appsec-review/codeql-extractor-inventory/1":
                 raise FrameworkIntegrityError("pinned CodeQL extractor inventory is invalid")
         except RuntimeError as exc:
-            runtime_gaps.append(f"CodeQL runtime dependency is unavailable ({type(exc).__name__})")
+            from appsec_review.runtime.resources import ImagePreparationUnavailable
+            runtime_gaps.append(str(exc) if isinstance(exc, ImagePreparationUnavailable) else
+                                f"CodeQL runtime dependency is unavailable ({type(exc).__name__})")
             inventory = {"schema": "appsec-review/codeql-extractor-inventory/1", "languages": [],
                          "roots": {}, "extractors": {}, "query_packs": {}, "prerequisites": {},
                          "gap": runtime_gaps[0]}
@@ -1280,7 +1374,7 @@ def build_job() -> Job:
         return {"plan": _json_artifact(unit.job.run_root, plan_path, planned.as_dict()),
                 "inventory": _artifact(unit.job.run_root, inventory_path),
                 "asset_lock": {"path": Path(lock["path"]).relative_to(unit.job.repository_root).as_posix(),
-                               "sha256": lock["sha256"]},
+                               "release_id": unit.job.review_policy.releases.values.get("codeql")},
                 "scope_count": len(planned.scopes), "gaps": list(planned.gaps),
                 "non_applicable": list(planned.non_applicable),
                 "processing_decisions": list(planned.decisions),
@@ -1289,41 +1383,95 @@ def build_job() -> Job:
                 "upstream_manifests": list({(item["path"], item["sha256"]): item
                                              for item in upstream_manifests}.values())}
 
-    def databases(unit: UnitContext) -> Mapping[str, Any]:
-        plan_value, receipts = _plan_from(unit), _receipt_map(unit)
-        with ThreadPoolExecutor(max_workers=_settings(unit).concurrency) as pool:
-            values = list(pool.map(lambda scope: _database_isolated(unit, scope, receipts), plan_value.scopes))
-        return {"databases": values, "database_count": sum(
-            item.get("terminal_status") == "SUCCEEDED" for item in values),
-            "database_reused": sum(bool(item.get("database_reused")) for item in values),
-            "gaps": [gap for item in values for gap in item.get("gaps", ())]}
+    def execute_scopes(unit: UnitContext) -> Mapping[str, Any]:
+        plan_value, receipts, settings = _plan_from(unit), _receipt_map(unit), _settings(unit)
+        imported = _import_predecessor_databases(unit, plan_value.scopes, receipts, settings)
+        budget = unit.job.review_policy.resources
+        admission = ResourceAdmission(unit.job.metadata_root, budget)
+        seed_plan = (_seed_plan(unit, list(plan_value.scopes))
+                     if settings.export_queries.enabled and settings.export_queries.mode == "seeded" else None)
 
-    def queries(unit: UnitContext) -> Mapping[str, Any]:
-        values = unit.output("database.scopes")["databases"]
-        scheduled = [(value, profile)
-                     for value in values
-                     for profile in _query_profiles(
-                         _settings(unit).languages[_scope_from(value["scope"]).language])]
-        with ThreadPoolExecutor(max_workers=_settings(unit).concurrency) as pool:
-            queried = list(pool.map(lambda item: _query_one(unit, item[0], item[1]), scheduled))
-        return {"queries": queried, "query_count": sum(
-            item.get("terminal_status") == "SUCCEEDED" for item in queried),
-            "query_reused": sum(bool(item.get("query_reused")) for item in queried),
-            "gaps": [gap for item in queried for gap in item.get("gaps", ())]}
+        def admitted(action, function, *args, scope_id, query_profile=None):
+            threads, ram = settings.threads, settings.ram_mb
+            if action == "export":
+                threads = max(threads, settings.compile_threads)
+                ram = max(ram, settings.compile_ram_mb)
+            elif action == "normalize":
+                threads, ram = 1, 1
+            overhead = 0 if action == "normalize" else 1024
+            request = Reservation(threads, ram + overhead + budget.staging_memory_mb)
+            try:
+                with admission.reserve(request, events=unit.job.events, action=f"codeql.{action}",
+                                       timeout_seconds=settings.database_timeout_seconds,
+                                       unit_id=unit.unit_id, scope_id=scope_id,
+                                       query_profile=query_profile) as lease_id, \
+                        operation_span(unit.job.events, f"codeql.{action}", unit_id=unit.unit_id,
+                                       scope_id=scope_id, query_profile=query_profile,
+                                       resource_lease_id=lease_id):
+                    return function(*args)
+            except (RuntimeError, TimeoutError) as exc:
+                if action == "database":
+                    base = {"scope": asdict(args[1]), "database_identity": None, "database_reused": False}
+                elif action == "export":
+                    base = _export_base(_scope_from(args[0]["scope"]), args[0])
+                else:
+                    base = dict(args[1])
+                    if action == "query":
+                        base.update(query_profile=dict(args[2]), query_identity=None, query_reused=False)
+                reason = f"CodeQL {action} operational failure ({type(exc).__name__})"
+                unit.job.events.write("CODEQL_ACTION_FAILED", action=action, reason=reason,
+                                      scope_id=base["scope"]["scope_id"])
+                return {**base, "terminal_status": "FAILED",
+                        **({"export_status": "FAILED"} if action == "export" else {}),
+                        "gaps": [*base.get("gaps", ()), reason]}
 
-    def normalize(unit: UnitContext) -> Mapping[str, Any]:
-        values = unit.output("query.scopes")["queries"]
-        with ThreadPoolExecutor(max_workers=_settings(unit).concurrency) as pool:
-            normalized = list(pool.map(lambda value: _normalize_one(unit, value), values))
-        return {"scopes": normalized,
+        def export_one(value):
+            scope = _scope_from(value["scope"])
+            profile = _export_profile(settings, scope.language)
+            if profile is not None and value.get("terminal_status") == "SUCCEEDED":
+                _verify_export_sources(unit.job.repository_root, profile, settings)
+            return _export_isolated(unit, value, seed_plan=seed_plan)
+
+        def export_ready(value):
+            if (not settings.export_queries.enabled or value.get("terminal_status") != "SUCCEEDED"
+                    or _export_profile(settings, value["scope"]["language"]) is None):
+                return export_one(value)
+            return admitted("export", export_one, value, scope_id=value["scope"]["scope_id"])
+
+        results = ready_scopes(
+            plan_value.scopes, concurrency=settings.concurrency,
+            database=lambda scope: admitted("database", _database_isolated, unit, scope, receipts,
+                                             scope_id=scope.scope_id),
+            profiles=lambda value: _query_profiles(settings.languages[value["scope"]["language"]]),
+            query=lambda value, profile: admitted("query", _query_one, unit, value, profile,
+                                                  scope_id=value["scope"]["scope_id"],
+                                                  query_profile=profile["query_id"]),
+            normalize=lambda value: admitted("normalize", _normalize_one, unit, value,
+                                              scope_id=value["scope"]["scope_id"],
+                                              query_profile=value["query_profile"]["query_id"]),
+            export=export_ready,
+        )
+        normalized, exports = results["normalize"], results["export"]
+        artifact = _json_artifact(unit.job.run_root,
+            unit.job.attempt_root / "artifacts" / "codeql" / "graph-exports.json",
+            {"schema": GRAPH_EXPORTS_SCHEMA, "source_fingerprint": unit.job.source_fingerprint,
+             "settings": asdict(settings.export_queries), "exports": exports})
+        return {"scopes": normalized, "exports": exports, "graph_export_artifact": artifact,
+                "databases": results["database"], "queries": results["query"],
+                **({"predecessor_import": imported} if imported is not None else {}),
                 "observation_count": sum(int(item.get("observation_count", 0)) for item in normalized),
-                "gaps": [gap for item in normalized for gap in item.get("gaps", ())]}
+                "gaps": list(dict.fromkeys(gap for item in [*normalized, *exports]
+                                           for gap in item.get("gaps", ())))}
 
     def publish(unit: UnitContext) -> Mapping[str, Any]:
-        plan_value, normalized = _plan_from(unit), unit.output("normalize.scopes")
+        plan_value, normalized = _plan_from(unit), unit.output("execution.scopes")
+        for item in normalized["scopes"]:
+            if "index_identity" not in item and (
+                    item.get("terminal_status") != "FAILED" or not item.get("gaps")):
+                raise FrameworkIntegrityError("CodeQL normalization omitted its index without an explicit failure gap")
         indexes = [IndexIdentity(**{**item["index_identity"],
                                     "gaps": tuple(item["index_identity"].get("gaps", ()))})
-                   for item in normalized["scopes"]]
+                   for item in normalized["scopes"] if "index_identity" in item]
         upstream_path, upstream_sha = resolve_context_manifest(unit.job)
         load_verified_manifest(unit.job.run_root, upstream_path, upstream_sha)
         destination = unit.job.run_root / "data" / "indices" / "manifests" / f"codeql-{unit.job.attempt_id}.json"
@@ -1351,8 +1499,7 @@ def build_job() -> Job:
                 "sarif_results": item.get("sarif_result_count", 0),
                 "normalized_observations": item.get("observation_count", 0),
                 "gaps": item.get("gaps", [])})
-        gaps = list(dict.fromkeys([*plan_value.gaps, *normalized["gaps"],
-                                   *unit.output("export.scopes")["gaps"]]))
+        gaps = list(dict.fromkeys([*plan_value.gaps, *normalized["gaps"]]))
         processing_decisions = []
         for raw in plan_value.decisions:
             decision = decision_from_mapping(raw)
@@ -1371,7 +1518,7 @@ def build_job() -> Job:
         gaps.extend(f"{item['project_id']}: {item['reason_code']}"
                     for item in processing_decisions if item.get("disposition") == "GAP")
         gaps = list(dict.fromkeys(gaps))
-        graph_exports = [dict(item) for item in unit.output("export.scopes")["exports"]]
+        graph_exports = [dict(item) for item in normalized["exports"]]
         summary = {"schema": SCHEMA, "source_fingerprint": unit.job.source_fingerprint,
                    "scopes": scopes, "graph_exports": graph_exports,
                    "extractor_inventory": list(plan_value.extractor_inventory),
@@ -1395,19 +1542,11 @@ def build_job() -> Job:
 
     units = (
         Unit("plan.inventory", plan),
-        Unit("database.scopes", databases, ("plan.inventory",)),
-        Unit("query.scopes", queries, ("database.scopes",)),
-        Unit("export.scopes", _export_scopes, ("database.scopes", "plan.inventory")),
-        Unit("normalize.scopes", normalize, ("query.scopes",)),
-        Unit("acceptance.publish_handoff", publish, ("normalize.scopes", "export.scopes")),
+        Unit("execution.scopes", execute_scopes, ("plan.inventory",)),
+        Unit("acceptance.publish_handoff", publish, ("execution.scopes",)),
     )
-    implementation = hashlib.sha256(
-        Path(__file__).read_bytes() + Path(applicability_contract.__file__).read_bytes() +
-        Path(__file__).with_name("planning.py").read_bytes() +
-        Path(__file__).with_name("sarif.py").read_bytes() +
-        Path(seeding.__file__).with_name("ledger.py").read_bytes() +
-        Path(__file__).parents[2].joinpath("codeql", "runtime.py").read_bytes()).hexdigest()
-    validation = hashlib.sha256(Path(__file__).read_bytes() + b"validation").hexdigest()
+    implementation = None
+    validation = None
     return Job("job_codeql_analysis", "codeql_analysis", UnitExecutor(units).execute,
                input_validators=(_validate_config,), schema_identity=SCHEMA,
                implementation_identity=implementation, validation_identity=validation, units=units,

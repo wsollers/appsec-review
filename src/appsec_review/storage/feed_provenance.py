@@ -168,11 +168,10 @@ def record_snapshot(root: Path, feed: str, snapshot_id: str, *, computed: bool,
             raise ValueError("feed selection differs from this attempt's immutable receipt")
         return ref
     if computed:
-        sources = Path(__file__).parents[1] / "jobs/job_third_party_data_sync"
-        implementation = hashlib.sha256(b"".join(
-            p.read_bytes() for p in sorted(sources.rglob("*.py")))).hexdigest()
+        frozen = json.loads(verify_reference(owner.run_root, config).read_bytes())
+        implementation = frozen.get("review_policy", {}).get("releases", {}).get("feed_publisher")
         computation = {"feed_id": feed, "configuration_sha256": config["sha256"],
-                       "publisher_sha256": implementation,
+                       "publisher_release_id": implementation,
                        "inputs_sha256": _digest({k: v for k, v in document.items()
                                                  if k not in {"files", "snapshot_id"}})}
         actor = _public_actor(owner.actor)

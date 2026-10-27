@@ -121,11 +121,26 @@ Concurrent image-repair telemetry identifies `family`, `root`, `build_system`, `
 `repair_number`. Operators must use those correlation fields rather than adjacent log order when
 multiple family lanes repair simultaneously.
 
+Derived image manifests use `appsec-review/project-build-image/2` and live under a run-private
+namespace in `runs/metadata/project-images/`. Reuse requires operator-declared `platform` and
+`build_toolchain` releases. Target dependency and effective recipe changes invalidate the image;
+unrelated query declarations do not. Supplied generator/Dockerfile payloads are not fingerprinted:
+`dockerfile_sha256` remains null, and the owner must update the relevant release declaration when
+the generator or build environment changes. Missing declarations disable image reuse.
+Under review admission, creation of an unavailable derived image is a named
+`derived_image_preparation_unavailable` gap until the operator supplies a resource-bounded
+builder with confirmed cancellation. No such builder contract is currently approved. This does
+not silently substitute the baseline image when the recipe requires dependency preparation.
+Eligible declared prepared images remain usable; platform image preparation is separate work.
+
 A repaired image that passes is accepted in
-`runs/metadata/project-build-repairs/<base-recipe-identity>/accepted.json`
-(`appsec-review/build-image-repair-cache/1`). A later run with the same base recipe identity
-revalidates that recipe and Dockerfile identity and reuses the image; a changed image ID repeats
-the probe sequence. Accepted probes are cached under `runs/metadata/project-probes/`.
+`runs/metadata/project-build-repairs/<run-scoped-identity>/accepted.json`
+(`appsec-review/build-image-repair-cache/1`). Same-run reuse requires declared `platform`,
+`build_toolchain` and `validation` releases, an unchanged target snapshot and base recipe, and
+matching capture/limit settings. It revalidates the target recipe and resolves the image; a changed
+image ID repeats the probe sequence. Accepted probes use equivalent run-scoped identities under
+`runs/metadata/project-probes/`. Missing releases emit `CHECKPOINT_MISSED` rather than allowing
+an early hit. Another application run does not inherit these probe or repair checkpoints.
 
 ## Outputs and recovery
 
@@ -137,5 +152,6 @@ build bookkeeping under `excluded_bookkeeping` instead of listing it (see
 [`language-build.md`](language-build.md)). A failed probe, a disabled or
 unavailable repair model, or exhausted repairs is a named gap and publishes no build dispatch for
 that unit; static dispatch and sibling units continue. Resume the same run: accepted probes are
-reused only when the recipe identity and resolved image ID still match. An invalid repair cache
+reused only when the release, target and run bindings, recipe identity and resolved image ID still
+match. An invalid repair cache
 or a changed accepted repair identity fails the task instead of being silently rebuilt.

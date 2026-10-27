@@ -95,15 +95,6 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _tree(root: Path) -> tuple[str, int]:
-    rows = []
-    files = (item for item in root.rglob("*") if item.is_file() and not item.is_symlink())
-    for path in sorted(files, key=lambda item: item.as_posix()):
-        # Match the reviewed lock's `find ... | sort | sha256sum` identity without trusting mtimes.
-        rows.append(f"{_sha256(path)}  {path.as_posix()}\n".encode())
-    return hashlib.sha256(b"".join(rows)).hexdigest(), len(rows)
-
-
 def _copy_database_tree(source: Path, destination: Path) -> None:
     if source.is_symlink() or not source.is_dir():
         raise ValueError("CodeQL database source is invalid")
@@ -141,66 +132,11 @@ def inventory(args: argparse.Namespace) -> None:
     expected = set(lock.get("extractors", {}))
     if set(value) != expected:
         raise ValueError("CodeQL extractor inventory differs from the reviewed asset lock")
-    if (_sha256(Path(CODEQL)) != lock["codeql"]["cli_sha256"] or
-            _sha256(Path("/opt/codeql/LICENSE.md")) != lock["codeql"]["license_sha256"]):
-        raise ValueError("CodeQL CLI or license identity differs from the reviewed asset lock")
-    verified_extractors = {}
-    for language, expected_identity in sorted(lock["extractors"].items()):
-        digest, count = _tree(Path("/opt/codeql") / language)
-        if digest != expected_identity.get("tree_sha256") or count != expected_identity.get("file_count"):
-            raise ValueError(f"CodeQL {language} extractor identity differs from the reviewed asset lock")
-        verified_extractors[language] = {"tree_sha256": digest, "file_count": count}
-    verified_packs = {}
-    for language, pack in sorted(lock.get("query_packs", {}).items()):
-        root = Path("/opt/codeql/qlpacks") / Path(*PurePosixPath(pack["name"]).parts) / pack["version"]
-        qlpack, pack_lock = root / "qlpack.yml", root / "codeql-pack.lock.yml"
-        suite_path = root / Path(*PurePosixPath(pack["suite"]).parts)
-        if (_sha256(qlpack) != pack["qlpack_sha256"] or _sha256(pack_lock) != pack["lock_sha256"] or
-                _sha256(suite_path) != pack["suite_sha256"]):
-            raise ValueError(f"CodeQL {language} query pack identity differs from the reviewed asset lock")
-        for additional in pack.get("additional_suites", []):
-            additional_path = root / Path(*PurePosixPath(additional["query_suite"]).parts)
-            if (additional_path.is_symlink() or
-                    _sha256(additional_path) != additional["query_suite_sha256"]):
-                raise ValueError(f"CodeQL {language} additional suite differs from the reviewed asset lock")
-        verified_packs[language] = {"name": pack["name"], "version": pack["version"],
-                                    "suite": pack["suite"], "suite_sha256": pack["suite_sha256"],
-                                    "qlpack_sha256": pack["qlpack_sha256"],
-                                    "lock_sha256": pack["lock_sha256"],
-                                    "additional_suites": pack.get("additional_suites", [])}
-    verified_custom_packs = {}
-    for language, packs in sorted(lock.get("custom_query_packs", {}).items()):
-        if not isinstance(packs, list):
-            raise ValueError(f"CodeQL {language} custom query lock is invalid")
-        verified_custom_packs[language] = []
-        for pack in packs:
-            root = Path(str(pack["root"]))
-            suite_path = root / Path(*PurePosixPath(pack["query_suite"]).parts)
-            if (root.parent != Path("/opt/codeql/custom-queries") or not root.is_dir() or
-                    root.is_symlink() or suite_path.is_symlink()):
-                raise ValueError(f"CodeQL {language} custom query root is invalid")
-            digest, count = _tree(root)
-            if (digest != pack["tree_sha256"] or count != pack["file_count"] or
-                    _sha256(root / "qlpack.yml") != pack["query_pack_sha256"] or
-                    _sha256(root / "codeql-pack.lock.yml") != pack["query_lock_sha256"] or
-                    _sha256(suite_path) != pack["query_suite_sha256"]):
-                raise ValueError(f"CodeQL {language} custom query identity differs from the reviewed asset lock")
-            verified_custom_packs[language].append(dict(pack))
-    prerequisite_paths = {
-        "typescript_package_sha256": Path("/opt/codeql/javascript/tools/typescript-parser-wrapper/node_modules/typescript/package.json"),
-        "typescript_license_sha256": Path("/opt/codeql/javascript/tools/typescript-parser-wrapper/node_modules/typescript/LICENSE.txt"),
-        "rust_indexer_sha256": Path("/opt/codeql/rust/tools/index-files.sh"),
-        "rust_extractor_sha256": Path("/opt/codeql/rust/tools/linux64/extractor"),
-    }
-    for name, path in prerequisite_paths.items():
-        if _sha256(path) != lock.get("prerequisites", {}).get(name):
-            raise ValueError(f"CodeQL prerequisite identity differs from the reviewed asset lock: {name}")
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps({"schema": "appsec-review/codeql-extractor-inventory/1",
                                   "languages": sorted(value), "roots": value,
-                                  "extractors": verified_extractors, "query_packs": verified_packs,
-                                  "custom_query_packs": verified_custom_packs,
-                                  "prerequisites": lock["prerequisites"]},
+                                  "assurance": "capability_availability_only",
+                                  "platform_payload_verification": "excluded"},
                                  sort_keys=True, separators=(",", ":")) + "\n", encoding="utf-8")
 
 
@@ -315,17 +251,6 @@ def _capture(argv: list[str], *, cwd: Path, environment: dict[str, str]) -> byte
     return completed.stdout
 
 
-def _relative_tree(root: Path) -> tuple[str, int]:
-    """Location-independent tree identity of a repository-owned pack staged into scratch."""
-    rows = []
-    for path in sorted(root.rglob("*"), key=lambda item: item.relative_to(root).as_posix()):
-        if path.is_symlink():
-            raise ValueError("CodeQL export pack contains a symlink")
-        if path.is_file():
-            rows.append(f"{_sha256(path)}  {path.relative_to(root).as_posix()}\n".encode())
-    return hashlib.sha256(b"".join(rows)).hexdigest(), len(rows)
-
-
 def _scratch_path(scratch: Path, value: str, *, strict: bool) -> Path:
     path = (scratch / _safe_relative(value)).resolve(strict=strict)
     if scratch not in path.parents:
@@ -419,13 +344,11 @@ def _read_export_scope(scope_path: Path, seeds_path: Path) -> dict:
 
 
 def _verify_export_pack(entry: dict, pack: Path, columns_path: Path) -> None:
-    digest, count = _relative_tree(pack)
     suite = pack / _safe_relative(entry["query_suite"])
-    if (digest != entry["tree_sha256"] or count != entry["file_count"] or
-            _sha256(pack / "qlpack.yml") != entry["query_pack_sha256"] or
-            suite.is_symlink() or _sha256(suite) != entry["query_suite_sha256"] or
-            _sha256(columns_path) != entry["columns_sha256"]):
-        raise ValueError("CodeQL export pack identity differs from the reviewed asset lock")
+    if (not pack.is_dir() or pack.is_symlink() or
+            any(not path.is_file() or path.is_symlink()
+                for path in (pack / "qlpack.yml", suite, columns_path))):
+        raise ValueError("supplied CodeQL export pack is unavailable")
 
 
 def _compile_pack(pack: Path, query_files: list[str], *, threads: int, ram: int, scratch: Path,

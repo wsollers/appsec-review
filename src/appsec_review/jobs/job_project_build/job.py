@@ -424,8 +424,15 @@ def _probe_cache(unit: UnitContext, recipe_identity: str,
     capture_mode = (unit.job.config.build_capture.mode.value
                     if unit.job.config.build_capture is not None else "required")
     identity = hashlib.sha256(canonical_json({
+        "run_scope": str(unit.job.run_root.resolve()),
+        "target_snapshot": unit.job.source_fingerprint,
+        "assurance_mode": unit.job.review_policy.mode.value,
+        "component_releases": {key: unit.job.review_policy.releases.values.get(key)
+                               for key in ("platform", "build_toolchain", "validation")},
         "recipe_identity": recipe_identity,
         "build_execution_capture": capture_mode,
+        "limits": {key: unit.job.config.settings[key] for key in
+                   ("command_timeout_seconds", "output_bytes", "artifact_count_limit")},
         "applicability": dict(applicability or {}),
     })).hexdigest()
     return unit.job.metadata_root / "project-probes" / identity / "accepted.json"
@@ -443,13 +450,20 @@ def _probe_one(unit: UnitContext, entry: Mapping[str, Any], executor_factory=Non
     if not isinstance(image, Mapping) or image.get("terminal_status") != "SUCCEEDED":
         return {**base, "terminal_status": "BLOCKED", "probe_disposition": "BLOCKED",
                 "gaps": list(entry.get("gaps", ())) or ["project build image is unavailable"]}
+    if source_fingerprint(unit.job.target_root or Path()) != unit.job.source_fingerprint:
+        raise ValueError("target changed after the accepted review snapshot")
     recipe_identity = str(image["recipe_identity"])
     cache = _probe_cache(unit, recipe_identity, {
         "facts": action.get("processing_facts"),
         "decision": action.get("build_capture_decision"),
     })
+    reusable, reuse_reason = unit.job.review_policy.releases.require(
+        "platform", "build_toolchain", "validation")
+    if not reusable:
+        unit.job.events.write("CHECKPOINT_MISSED", scope_id=build_unit_id,
+                              action="build_probe", reason=reuse_reason)
     with FileLock(cache.parent / "probe.lock"):
-        if cache.is_file() and not bool(unit.job.config.settings["force_buildability_probe"]):
+        if reusable and cache.is_file() and not bool(unit.job.config.settings["force_buildability_probe"]):
             prior = json.loads(cache.read_text(encoding="utf-8"))
             if (prior.get("recipe_identity") == recipe_identity and prior.get("image_id") == image["image_id"] and
                     prior.get("terminal_status") == "SUCCEEDED"):
@@ -460,8 +474,6 @@ def _probe_one(unit: UnitContext, entry: Mapping[str, Any], executor_factory=Non
                         "terminal_status": "SUCCEEDED", "probe_disposition": "REUSED",
                         "checkpoint_reused": True, "commands": [], "gaps": [],
                         "attempt_number": 0}
-    if source_fingerprint(unit.job.target_root or Path()) != unit.job.source_fingerprint:
-        raise ValueError("target changed after the accepted review snapshot")
     root = (unit.job.run_root / "data" / "build" / "probes" / build_unit_id / "attempts" /
             unit.job.attempt_id / f"probe-{attempt_number:03d}")
     workspace = root / "workspace"
@@ -568,7 +580,7 @@ def _probe_one(unit: UnitContext, entry: Mapping[str, Any], executor_factory=Non
                "terminal_status": status,
                "probe_disposition": "FAILED" if status == "FAILED" else "PROBED", "gaps": gaps,
                "checkpoint_reused": False, "attempt_number": attempt_number}
-    if status == "SUCCEEDED":
+    if status == "SUCCEEDED" and reusable:
         cache.parent.mkdir(parents=True, exist_ok=True)
         with FileLock(cache.parent / "probe.lock"):
             atomic_json(cache, {"schema": "appsec-review/build-probe-cache/1", "recipe_identity": recipe_identity,
@@ -577,7 +589,8 @@ def _probe_one(unit: UnitContext, entry: Mapping[str, Any], executor_factory=Non
 
 
 def _repair_cache(unit: UnitContext, base_recipe_identity: str) -> Path:
-    return unit.job.metadata_root / "project-build-repairs" / base_recipe_identity / "accepted.json"
+    identity = _probe_cache(unit, base_recipe_identity).parent.name
+    return unit.job.metadata_root / "project-build-repairs" / identity / "accepted.json"
 
 
 def _repair_validation_unit(action: Mapping[str, Any], recipe: Mapping[str, Any]) -> dict[str, Any]:
@@ -901,6 +914,11 @@ def _image_dict(image: Any, user: str) -> dict[str, Any]:
 
 def _reuse_accepted_repair(unit: UnitContext, action: Mapping[str, Any], base_identity: str,
                            resolver: Any, profile: BuildProfile) -> tuple[dict[str, Any], dict[str, Any]] | None:
+    reusable, reason = unit.job.review_policy.releases.require("platform", "build_toolchain", "validation")
+    if not reusable:
+        unit.job.events.write("CHECKPOINT_MISSED", scope_id=action["build_unit_id"],
+                              action="image_repair", reason=reason)
+        return None
     cache = _repair_cache(unit, base_identity)
     if not cache.is_file():
         return None
@@ -1125,6 +1143,7 @@ def build_job(*, executor_factory=None, image_resolver_factory=None,
             profiles = profiles_from_settings(unit.job.config.settings["profiles"])
             resolver = image_resolver_factory(unit) if image_resolver_factory else ProjectImageResolver(
                 metadata_root=unit.job.metadata_root, target_root=unit.job.target_root or Path(),
+                releases=unit.job.review_policy.releases, run_root=unit.job.run_root,
                 timeout_seconds=int(unit.job.config.settings["image_build_timeout_seconds"]),
                 output_bytes=int(unit.job.config.settings["output_bytes"]))
             entries, gaps = [], []
@@ -1235,6 +1254,7 @@ def build_job(*, executor_factory=None, image_resolver_factory=None,
             profiles = profiles_from_settings(unit.job.config.settings["profiles"])
             resolver = image_resolver_factory(unit) if image_resolver_factory else ProjectImageResolver(
                 metadata_root=unit.job.metadata_root, target_root=unit.job.target_root or Path(),
+                releases=unit.job.review_policy.releases, run_root=unit.job.run_root,
                 timeout_seconds=int(unit.job.config.settings["image_build_timeout_seconds"]),
                 output_bytes=int(unit.job.config.settings["output_bytes"]))
             receipts = []
@@ -1346,11 +1366,8 @@ def build_job(*, executor_factory=None, image_resolver_factory=None,
     source_files = (Path(__file__), Path(__file__).with_name("repair.py"),
                     Path(__file__).parents[2] / "container_runtime" / "build_executor.py",
                     Path(__file__).parents[2] / "container_runtime" / "project_images.py")
-    implementation = hashlib.sha256(b"".join(path.read_bytes() for path in source_files) +
-                                    Path(applicability_contract.__file__).read_bytes() +
-                                    (b"injected" if executor_factory or image_resolver_factory or infer
-                                     else b"docker")).hexdigest()
+    implementation = None
     return Job("job_project_build", "project_build", UnitExecutor(tuple(units)).execute,
                input_validators=(_validate_config,), schema_identity=SCHEMA, implementation_identity=implementation,
-               validation_identity=hashlib.sha256(Path(__file__).read_bytes() + b"validation").hexdigest(), units=tuple(units),
+               validation_identity=None, units=tuple(units),
                datasets=DATASETS, consumes=CONSUMES)

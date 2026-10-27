@@ -1,0 +1,19 @@
+# Prepared values only. No service is started or resource budget activated by this file.
+# Replace every operator path, storage identity and port before commissioning.
+[native_dagster]
+deployment_id = "operator-native-instance"
+repository_root = "/operator/checkout"
+python_executable = "/operator/checkout/.venv/bin/python"
+dagster_home = "/operator/private/native-dagster"
+review_config = "/operator/private/native-review.toml"
+runtime_profile = "copilot-prod"
+engine_contract = "/operator/private/native-engine.toml"
+client_uid = 1000
+postgres_host = "127.0.0.1"
+postgres_port = 15432
+postgres_database = "operator_existing_native_database"
+postgres_user = "operator_database_user"
+postgres_password_env = "NATIVE_DAGSTER_POSTGRES_PASSWORD"
+grpc_port = 14000
+webserver_port = 13000
+location_name = "appsec_review"

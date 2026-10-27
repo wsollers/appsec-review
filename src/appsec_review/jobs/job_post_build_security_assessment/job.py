@@ -909,8 +909,7 @@ def build_job(*, infer: Infer | None = None) -> Job:
                        "deterministic.native_units", "inference.native_units")))
     units.append(Unit("publication.publish_handoff", publish, ("index.native_units",)))
     values = tuple(units)
-    implementation = hashlib.sha256(Path(__file__).read_bytes() +
-                                    Path(__file__).with_name("assessment.py").read_bytes()).hexdigest()
+    implementation = None
     return Job("job_post_build_security_assessment", "post_build_security_assessment",
                UnitExecutor(values).execute, input_validators=(_validate_config,), schema_identity=SCHEMA,
                implementation_identity=implementation, validation_identity=implementation, units=values,

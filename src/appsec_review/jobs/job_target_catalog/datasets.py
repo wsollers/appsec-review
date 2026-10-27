@@ -12,6 +12,11 @@ from appsec_review.runtime.datasets import artifact_only, indexed, protected
 _A = "data/jobs/job_target_catalog/attempts/*"
 CONSUMES = ('job_review_intake',)
 DATASETS = (
+    artifact_only("target_artifact_inputs", "repository_discovery", "artifacts",
+                  "appsec-review/target-artifact-intake/1",
+                  "Bounded target-owned binary candidates with intake provenance and unknown delivery status.",
+                  artifacts=("data/shared/objects/*",),
+                  reason="target input bytes are bound by the catalog and indexed by job_artifact_indexing"),
     indexed("source_files", "retrieval_indexes", "source", "appsec-review/retrieval-index/2",
             "Accepted source files with language, size, hash and bounded text.",
             indexes=("source",), route="find/search/read_excerpt index=source", required=True),

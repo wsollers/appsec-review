@@ -72,9 +72,7 @@ class ScannerAdapter:
 
     @property
     def identity(self) -> str:
-        return hashlib.sha256(repr((self.capability, self.tool_id,
-            sorted(self.accepted_exit_codes), self.output_file, inspect.getsource(parse_json),
-            inspect.getsource(parse_spotbugs), inspect.getsource(type(self).argv))).encode()).hexdigest()
+        return "undeclared"
 
     def argv(self, executable: str, artifact_name: str) -> tuple[str, ...]:
         name = PurePosixPath(artifact_name).name
@@ -147,7 +145,7 @@ class ContainerScannerRunner:
             self._identities[capability] = value
             return value
         value: dict[str, Any] = {"scanner": adapter.tool_id, "version": tool.version,
-            "image": image_id, "manifest_sha256": file_sha256(tool.manifest_path),
+            "image": image_id,
             "adapter": adapter.identity, "rules": None}
         if capability in {"grype", "osv"}:
             feed = "grype" if capability == "grype" else "osv"
@@ -173,6 +171,15 @@ class ContainerScannerRunner:
         scratch = self.scratch_root / "containers" / token
         scratch.mkdir(parents=True, exist_ok=True)
         mounts: list[Mount] = []
+        input_name, target_root = path.name, path.parent
+        if artifact.get("artifact_origin") == "target-intake":
+            from appsec_review.retrieval.model import normalize_relative_path
+            original = normalize_relative_path(str(artifact["target_relative_path"]))
+            input_name = PurePosixPath(original).name
+            target_root = self.scratch_root / "target-inputs" / token
+            target_root.mkdir(parents=True, exist_ok=True)
+            (target_root / input_name).touch(exist_ok=True)
+            mounts.append(Mount(path, f"/target/{input_name}", True))
         environment: dict[str, str] = {}
         memory = None
         if capability == "grype":
@@ -180,10 +187,10 @@ class ContainerScannerRunner:
             mounts.append(Mount(Path(str(snapshot["directory"])), "/database", True))
             environment["GRYPE_DB_CACHE_DIR"] = "/database"
         elif capability == "osv":
-            ecosystem = osv_ecosystem(path.name)
+            ecosystem = osv_ecosystem(input_name)
             if ecosystem is not None and ecosystem not in self._osv_ecosystems:
                 # osv-scanner would abort with exit 127; record the data-coverage gap instead.
-                gap = osv_missing_ecosystem_gap((ecosystem,), f"produced lockfile {path.name}")
+                gap = osv_missing_ecosystem_gap((ecosystem,), f"produced lockfile {input_name}")
                 return {"stdout": b"", "stderr": gap.encode(), "exit_code": None, "timed_out": False,
                         "truncated": False, "precondition_gap": gap, "tool_identity": identity,
                         "execution_receipt": None}
@@ -194,7 +201,7 @@ class ContainerScannerRunner:
             memory = self.osv_memory
         tool = self.catalog.tool(adapter.tool_id)
         result = self.executor.execute(ExecutionRequest(adapter.tool_id,
-            adapter.argv(tool.executable, path.name), path.parent, scratch,
+            adapter.argv(tool.executable, input_name), target_root, scratch,
             extra_mounts=tuple(mounts), environment=environment, memory=memory))
         stdout = (self.run_root / result.stdout_path).read_bytes()
         stderr = (self.run_root / result.stderr_path).read_bytes()

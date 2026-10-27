@@ -89,8 +89,7 @@ def build_job(*, check_models: ModelCheck | None = None) -> Job:
         Unit("connectivity.verify_models", verify_models, ("connectivity.resolve_models",)),
         Unit("publication.publish_handoff", publish_handoff, ("connectivity.verify_models",)),
     )
-    implementation = hashlib.sha256(Path(__file__).read_bytes() +
-                                    (b"model-check" if check_models else b"no-model-check")).hexdigest()
+    implementation = None
     return Job(
         "job_model_connectivity", "model_connectivity", UnitExecutor(units).execute,
         input_validators=(_validate,), schema_identity="appsec-review/model-connectivity-job/1",

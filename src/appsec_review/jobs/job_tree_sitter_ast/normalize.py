@@ -48,7 +48,12 @@ def normalize_scope(*, run_root: Path, target_snapshot: str, scope: Scope, gramm
         raise ValueError("unsupported Tree-sitter container output schema")
     if container_output.get("scope_id") != scope.scope_id or container_output.get("language") != scope.language:
         raise ValueError("Tree-sitter output scope identity mismatch")
-    accepted = {str(item["path"]): str(item["sha256"]) for item in scope.files}
+    from appsec_review.jobs.delivery_scope import scope_fields, source_in_scope
+    from appsec_review.retrieval.source_resolution import source_native
+    sources = {str(item["path"]): item for item in scope.files}
+    if any(not source_in_scope(item) for item in sources.values()):
+        raise ValueError("out-of-scope source entered AST normalization")
+    accepted = {path: str(item["sha256"]) for path, item in sources.items()}
     lines: list[bytes] = []
     gaps = [f"{item.get('path')}: {item.get('reason')}" for item in scope.exclusions]
     diagnostics = files_parsed = bytes_parsed = nodes_parsed = 0
@@ -67,12 +72,17 @@ def normalize_scope(*, run_root: Path, target_snapshot: str, scope: Scope, gramm
             gaps.append(f"{path}: {record.get('reason', 'truncated')}")
             builder.add_coverage(path, "partial", gaps[-1])
             continue
+        if sources[path].get("source_backing") and int(record.get("bytes", -1)) != sources[path]["size_bytes"]:
+            raise ValueError("generated AST byte count differs from accepted source")
         files_parsed += 1
         bytes_parsed += int(record.get("bytes", 0))
         nodes = tuple(record.get("nodes", ()))
         nodes_parsed += len(nodes)
         ids: dict[tuple[int, ...], LogicalIdentity] = {}
         for node in nodes:
+            if sources[path].get("source_backing") and not (
+                    0 <= int(node["start_byte"]) <= int(node["end_byte"]) <= sources[path]["size_bytes"]):
+                raise ValueError("generated AST span exceeds accepted source bytes")
             ordinal = tuple(int(value) for value in node["ordinal_path"])
             identity = node_identity(target_snapshot, scope, grammar, path, accepted[path], node)
             ids[ordinal] = identity
@@ -81,7 +91,7 @@ def normalize_scope(*, run_root: Path, target_snapshot: str, scope: Scope, gramm
             location = SourceLocation(
                 target_snapshot, path, accepted[path], int(node["start_byte"]), int(node["end_byte"]),
                 start[0] + 1, end[0] + 1, start[1] + 1, end[1] + 1,
-                {"grammar": grammar.grammar, "ordinal_path": list(ordinal)},
+                {"grammar": grammar.grammar, "ordinal_path": list(ordinal), **source_native(sources[path])},
                 "tree-sitter-byte-and-point-exact", 1.0,
             )
             flags = {name: bool(node.get(name)) for name in ("named", "error", "missing", "extra", "has_error")}
@@ -90,7 +100,11 @@ def normalize_scope(*, run_root: Path, target_snapshot: str, scope: Scope, gramm
             payload = {"schema": NORMALIZER_SCHEMA, "grammar_native_type": node["type"],
                        "field": node.get("field"), **flags, "scope_id": scope.scope_id,
                        "project_id": scope.project_id, "translation_scope_id": scope.translation_scope_id,
-                       "language": scope.language, "syntax_only": True}
+                       "language": scope.language, "syntax_only": True, **scope_fields(sources[path]),
+                       **source_native(sources[path]),
+                       "canonical_artifact_identity": sources[path].get("canonical_artifact_identity"),
+                       "build_unit_id": sources[path].get("build_unit_id"),
+                       "workspace_path": sources[path].get("workspace_path")}
             builder.add_entity(EntityRecord(identity, "/".join(map(str, ordinal)) or "root",
                                              str(node["type"]), str(node["type"]), payload, location))
             normalized = {"identity": identity.value, "path": path, "file_sha256": accepted[path],
@@ -107,7 +121,17 @@ def normalize_scope(*, run_root: Path, target_snapshot: str, scope: Scope, gramm
                                                     {"path": path, "sha256": accepted[path]})
                 # Duplicate the source entity in this shard so relation closure is independent.
                 builder.add_entity(EntityRecord(source_id, path, path, path,
-                                                 {"language": scope.language, "sha256": accepted[path]}))
+                                                 {"language": scope.language, "sha256": accepted[path],
+                                                  **scope_fields(sources[path]), **source_native(sources[path]),
+                                                  "canonical_artifact_identity": sources[path].get("canonical_artifact_identity"),
+                                                  "build_unit_id": sources[path].get("build_unit_id")},
+                                                 SourceLocation(
+                                                     target_snapshot, path, accepted[path], 0,
+                                                     int(sources[path].get("size_bytes", record.get("bytes", 0))),
+                                                     1, int(node["end_point"][0]) + 1, 1,
+                                                     int(node["end_point"][1]) + 1,
+                                                     {"grammar": grammar.grammar, **source_native(sources[path])},
+                                                     "tree-sitter-file-span", 1.0)))
                 builder.add_relation(RelationRecord(RelationKind.CONTAINS, source_id.value,
                                                      ids[ordinal].value, True, 1.0,
                                                      payload={"syntax_relation": True}))

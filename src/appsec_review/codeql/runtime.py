@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 import hashlib
@@ -16,10 +17,12 @@ from uuid import uuid4
 
 from appsec_review.container_runtime.build_executor import Runner, _run, resolve_host_bind_path
 from appsec_review.container_runtime.identity import application_runtime_user
+from appsec_review.config.assurance import ComponentReleases
+from appsec_review.config.native_dagster import native_execution_requested
 from appsec_review.storage import atomic_json, bounded_file_lock, canonical_json, file_sha256
 
 
-IMAGE_SCHEMA = "appsec-review/codeql-derived-image/2"
+IMAGE_SCHEMA = "appsec-review/codeql-derived-image/3"
 EXECUTION_SCHEMA = "appsec-review/codeql-execution/2"
 EXPORT_MANIFEST_SCHEMA = "appsec-review/codeql-graph-export-manifest/1"
 EXPORT_MANIFEST_NAME = "export-manifest.json"
@@ -54,9 +57,18 @@ def action_timeout(settings: RuntimeSettings, action: str) -> int:
             "query": settings.query_timeout_seconds}[action]
 
 
-def compile_cache_volume(image: "CodeQLImage") -> str:
-    """Docker volume holding the content-addressed query compile cache for one CodeQL payload."""
-    return "appsec-codeql-compile-" + hashlib.sha256(image.source_image_id.encode()).hexdigest()[:16]
+def compile_cache_volume(image: "CodeQLImage", run_root: Path) -> str:
+    """Run-private compilation cache, keyed by declarations rather than supplied payloads."""
+    identity = {"run_root": str(run_root.resolve()), "codeql": image.component_release_id,
+                "runner": image.runner_release_id, "user": application_runtime_user(image.runtime_user)}
+    return "appsec-codeql-compile-" + hashlib.sha256(canonical_json(identity)).hexdigest()[:24]
+
+
+def action_resources(settings: RuntimeSettings, action: str) -> tuple[int, int]:
+    if action == "compile":
+        return (int(getattr(settings, "compile_threads", settings.threads)),
+                int(getattr(settings, "compile_ram_mb", settings.ram_mb)))
+    return settings.threads, settings.ram_mb
 
 
 def _stamp() -> str:
@@ -73,10 +85,11 @@ class CodeQLImage:
     image_id: str
     image_tag: str
     runtime_user: str
-    dockerfile_sha256: str
-    runner_sha256: str
+    component_release_id: str | None
+    runner_release_id: str | None
     reused: bool
     manifest_path: str
+    preparation_receipt: Mapping[str, Any] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -109,7 +122,7 @@ def load_asset_lock(repository_root: Path) -> Mapping[str, Any]:
     document = json.loads(path.read_text(encoding="utf-8"))
     if document.get("schema") != "appsec-review/codeql-assets-lock/2":
         raise ValueError("CodeQL asset lock schema is unsupported")
-    return {**document, "path": path.as_posix(), "sha256": file_sha256(path)}
+    return {**document, "path": path.as_posix()}
 
 
 class CodeQLImageResolver:
@@ -117,13 +130,14 @@ class CodeQLImageResolver:
 
     def __init__(self, *, repository_root: Path, metadata_root: Path, settings: RuntimeSettings,
                  timeout_seconds: int = 1800, output_bytes: int = 8 * 1024 * 1024,
-                 runner: Runner | None = None) -> None:
+                 runner: Runner | None = None, releases: ComponentReleases | None = None) -> None:
         self.repository_root = repository_root
         self.metadata_root = metadata_root
         self.settings = settings
         self.timeout_seconds = timeout_seconds
         self.output_bytes = output_bytes
         self.runner = runner or _run
+        self.releases = releases or ComponentReleases()
 
     def _inspect(self, reference: str) -> str | None:
         code, stdout, _stderr, timed_out = self.runner(
@@ -131,12 +145,24 @@ class CodeQLImageResolver:
         value = stdout.decode("utf-8", "replace").strip()
         return value if not timed_out and code == 0 and re.fullmatch(r"sha256:[0-9a-f]{64}", value) else None
 
-    def resolve(self, *, build_image_tag: str, build_image_id: str,
-                runtime_user: str) -> tuple[CodeQLImage, bytes, bytes]:
+    def declared_identity(self, *, build_image_id: str, runtime_user: str) -> str:
         if not re.fullmatch(r"sha256:[0-9a-f]{64}", build_image_id):
             raise ValueError("accepted CodeQL environment image id is invalid")
         if not re.fullmatch(r"[1-9][0-9]*:[1-9][0-9]*", runtime_user):
             raise ValueError("accepted CodeQL runtime user must be numeric and non-root")
+        return hashlib.sha256(canonical_json({
+            "schema": IMAGE_SCHEMA, "source_image_id": self.settings.source_image_id,
+            "build_image_id": build_image_id, "runtime_user": runtime_user,
+            "component_release_id": self.releases.values.get("codeql"),
+            "runner_release_id": self.releases.values.get("codeql_runner"),
+        })).hexdigest()
+
+    def resolve(self, *, build_image_tag: str, build_image_id: str,
+                runtime_user: str) -> tuple[CodeQLImage, bytes, bytes]:
+        from appsec_review.container_runtime.image_builder import (
+            bounded_image_preparation, builder_namespace, verify_builder_receipt,
+        )
+        identity = self.declared_identity(build_image_id=build_image_id, runtime_user=runtime_user)
         source_at_tag = self._inspect(self.settings.source_image_tag)
         if source_at_tag != self.settings.source_image_id:
             if self._inspect(self.settings.source_image_id) is None:
@@ -151,49 +177,59 @@ class CodeQLImageResolver:
         dockerfile = tool_root / ("Dockerfile.source" if build_image_id == self.settings.source_image_id
                                   else "Dockerfile")
         runner_path = tool_root / "codeql_runner.py"
-        identity = hashlib.sha256(canonical_json({
-            "schema": IMAGE_SCHEMA, "source_image_id": self.settings.source_image_id,
-            "build_image_id": build_image_id, "runtime_user": runtime_user,
-            "dockerfile_sha256": file_sha256(dockerfile), "runner_sha256": file_sha256(runner_path),
-        })).hexdigest()
-        root = self.metadata_root / "codeql-images" / identity
+        namespace = builder_namespace()
+        image_root = self.metadata_root / "codeql-images"
+        root = image_root / namespace / identity if namespace is not None else image_root / identity
         manifest_path = root / "manifest.json"
-        image_tag = f"appsec-review-codeql:{identity[:24]}"
+        image_tag = f"appsec-review-codeql:{namespace[:12] + identity[:12] if namespace else identity[:24]}"
         root.mkdir(parents=True, exist_ok=True)
         with bounded_file_lock(root / "build.lock", self.timeout_seconds):
             image_id = self._inspect(image_tag)
-            if manifest_path.is_file() and image_id is not None:
+            reusable, _reason = self.releases.require("codeql", "codeql_runner")
+            if reusable and manifest_path.is_file() and image_id is not None:
                 value = json.loads(manifest_path.read_text(encoding="utf-8"))
                 if (value.get("schema") == IMAGE_SCHEMA and value.get("identity") == identity and
                         value.get("image_id") == image_id):
+                    if namespace is not None:
+                        verify_builder_receipt(value["preparation_receipt"], identity=identity, tag=image_tag,
+                                               image_id=image_id)
                     return CodeQLImage(**{**value, "reused": True}), b"", b""
-            context = root / "context"
-            if context.exists():
-                shutil.rmtree(context)
-            context.mkdir(parents=True)
-            shutil.copyfile(dockerfile, context / "Dockerfile")
-            shutil.copyfile(runner_path, context / "codeql_runner.py")
-            source_tag = f"appsec-review-codeql-source:{self.settings.source_image_id[7:31]}"
-            base_tag = f"appsec-review-codeql-base:{build_image_id[7:31]}"
-            for image, tag in ((self.settings.source_image_id, source_tag), (build_image_id, base_tag)):
-                code, _stdout, stderr, timed_out = self.runner(("docker", "image", "tag", image, tag), 60)
-                if timed_out or code != 0:
-                    raise RuntimeError("could not bind an immutable CodeQL image input: " +
-                                       stderr[:4096].decode("utf-8", "replace"))
-            command_values = [
-                "docker", "buildx", "build", "--load", "--pull=false", "--network", "none",
-                "--tag", image_tag, "--build-arg", f"CODEQL_SOURCE_IMAGE={source_tag}",
-            ]
-            if build_image_id != self.settings.source_image_id:
-                command_values.extend(("--build-arg", f"BUILD_IMAGE={base_tag}"))
-            command_values.extend(("--build-arg", f"RUNTIME_USER={runtime_user}",
-                "--file", str((context / "Dockerfile").resolve()), str(context.resolve())))
-            command = tuple(command_values)
-            # Docker Desktop's layer commits are not reliably concurrent. Keep the
-            # immutable identity lock above, and serialize only the daemon mutation.
-            with bounded_file_lock(self.metadata_root / "codeql-images" / "docker-build.lock",
-                                   self.timeout_seconds):
-                code, stdout, stderr, timed_out = self.runner(command, self.timeout_seconds)
+            from appsec_review.runtime.resources import require_bounded_image_builder
+            require_bounded_image_builder()
+            with bounded_image_preparation(identity=identity, tag=image_tag,
+                                           timeout_seconds=self.timeout_seconds) as builder:
+                context = builder.context if builder is not None else root / "context"
+                if builder is None and context.exists():
+                    shutil.rmtree(context)
+                context.mkdir(parents=True, exist_ok=builder is not None)
+                shutil.copyfile(dockerfile, context / "Dockerfile")
+                shutil.copyfile(runner_path, context / "codeql_runner.py")
+                prefix = namespace[:12] if namespace else ""
+                source_tag = f"appsec-review-codeql-source:{prefix}{self.settings.source_image_id[7:31]}"
+                base_tag = f"appsec-review-codeql-base:{prefix}{build_image_id[7:31]}"
+                arguments = {"CODEQL_SOURCE_IMAGE": source_tag, "RUNTIME_USER": runtime_user}
+                if build_image_id != self.settings.source_image_id:
+                    arguments["BUILD_IMAGE"] = base_tag
+                images = {source_tag: self.settings.source_image_id, base_tag: build_image_id}
+                if builder is not None:
+                    code, stdout, stderr, timed_out = builder.build(
+                        network="none", build_args=arguments, image_inputs=images)
+                else:
+                    for tag, image in images.items():
+                        code, _stdout, stderr, timed_out = self.runner(("docker", "image", "tag", image, tag), 60)
+                        if timed_out or code != 0:
+                            raise RuntimeError("could not bind an immutable CodeQL image input: " +
+                                               stderr[:4096].decode("utf-8", "replace"))
+                    command_values = [
+                        "docker", "buildx", "build", "--load", "--pull=false", "--network", "none",
+                        "--tag", image_tag,
+                    ]
+                    for name, value in arguments.items():
+                        command_values.extend(("--build-arg", f"{name}={value}"))
+                    command_values.extend(("--file", str((context / "Dockerfile").resolve()), str(context.resolve())))
+                    with bounded_file_lock(self.metadata_root / "codeql-images" / "docker-build.lock",
+                                           self.timeout_seconds):
+                        code, stdout, stderr, timed_out = self.runner(tuple(command_values), self.timeout_seconds)
             if timed_out or code != 0:
                 detail = stderr[:self.output_bytes].decode("utf-8", "replace")
                 raise RuntimeError("CodeQL derived image build timed out" if timed_out else
@@ -201,11 +237,14 @@ class CodeQLImageResolver:
             image_id = self._inspect(image_tag)
             if image_id is None:
                 raise RuntimeError("CodeQL derived image is unavailable after build")
+            if builder is not None and image_id != builder.output_image_id:
+                raise ValueError("bounded builder output image differs from local image binding")
             value = asdict(CodeQLImage(
                 IMAGE_SCHEMA, identity, self.settings.source_image_id, build_image_id,
-                build_image_tag, image_id, image_tag, runtime_user, file_sha256(dockerfile),
-                file_sha256(runner_path), False,
+                build_image_tag, image_id, image_tag, runtime_user, self.releases.values.get("codeql"),
+                self.releases.values.get("codeql_runner"), False,
                 manifest_path.relative_to(self.metadata_root).as_posix(),
+                builder.receipt() if builder is not None else None,
             ))
             atomic_json(manifest_path, value)
             return CodeQLImage(**value), stdout[:self.output_bytes], stderr[:self.output_bytes]
@@ -231,6 +270,60 @@ class CodeQLExecutor:
         self.settings = settings
         self.runner = runner or _run
 
+    def _native_directory(self, relative: str) -> Path:
+        from appsec_review.container_runtime.buildkit_worker import private_path
+        from appsec_review.storage.shared import safe_path
+
+        path = safe_path(self.run_root, relative)
+        path.mkdir(parents=True, exist_ok=True, mode=0o700)
+        private_path(path)
+        return path
+
+    @contextmanager
+    def _container(self, name: str):
+        from appsec_review.runtime.resources import tracked_container
+        with tracked_container(name, self.runner, label="CodeQL"):
+            yield
+
+    def _initialize_volume(self, volume: str, mount: str, runtime_user: str) -> None:
+        name = f"appsec-review-codeql-init-{uuid4().hex}"
+        command = ("docker", "run", "--rm", "--name", name, "--network", "none",
+                   "--read-only", "--user", "0:0", "--cap-drop", "ALL",
+                   "--cap-add", "CHOWN", "--cap-add", "DAC_OVERRIDE",
+                   "--security-opt", "no-new-privileges", "--cpus", "1", "--memory", "128m",
+                   "--pids-limit", "64", "--mount", f"type=volume,src={volume},dst={mount}",
+                   "--entrypoint", "chown", self.image.image_id, runtime_user, mount)
+        with self._container(name):
+            result = self.runner(command, 60)
+        if result[3] or result[0] != 0:
+            raise RuntimeError(f"CodeQL volume initialization failed: {volume}")
+
+    def _compile_cache(self, runtime_user: str) -> str | None:
+        if not self.image.component_release_id or not self.image.runner_release_id:
+            return None
+        volume = compile_cache_volume(self.image, self.run_root)
+        if native_execution_requested():
+            return str(self._native_directory(f"data/codeql/native-compile-cache/{volume}"))
+        root = self.run_root / "data" / "codeql" / "cache-initialization"
+        marker = root / f"{volume}.json"
+        with bounded_file_lock(root / f"{volume}.lock", 60):
+            created = self.runner(("docker", "volume", "create",
+                                   "--label", "appsec-review=codeql-compile-cache", volume), 60)
+            if created[3] or created[0] != 0:
+                raise RuntimeError("CodeQL compile-cache volume could not be created")
+            inspected = self.runner(("docker", "volume", "inspect", volume,
+                                     "--format", "{{.CreatedAt}}"), 60)
+            if inspected[3] or inspected[0] != 0 or not inspected[1].strip():
+                raise RuntimeError("CodeQL compile-cache volume identity is unavailable")
+            identity = {"schema": "appsec-review/codeql-cache-initialization/1",
+                        "volume": volume, "created_at": inspected[1].decode().strip(),
+                        "runtime_user": runtime_user}
+            if marker.exists() and json.loads(marker.read_text(encoding="utf-8")) == identity:
+                return volume
+            self._initialize_volume(volume, COMPILE_CACHE_MOUNT, runtime_user)
+            atomic_json(marker, identity)
+        return volume
+
     def execute(self, action: str, argv: Sequence[str], *, scratch_root: Path) -> CodeQLExecution:
         if action not in ACTIONS or any(
                 not isinstance(value, str) or "\0" in value for value in argv):
@@ -238,7 +331,18 @@ class CodeQLExecutor:
         scratch = scratch_root.resolve()
         if scratch != self.run_root and self.run_root not in scratch.parents:
             raise ValueError("CodeQL scratch must be run-owned")
+        from appsec_review.runtime.resources import reserve_execution
+        threads, ram_mb = action_resources(self.settings, action)
+        with reserve_execution(cpu=str(threads), memory=f"{ram_mb + 1024}m",
+                               action=f"codeql.{action}", timeout_seconds=action_timeout(self.settings, action)):
+            try:
+                return self._execute(action, argv, scratch=scratch)
+            finally:
+                _close_write_window(scratch)
+
+    def _execute(self, action: str, argv: Sequence[str], *, scratch: Path) -> CodeQLExecution:
         scratch.mkdir(parents=True, exist_ok=True)
+        native = native_execution_requested()
         runtime_user = application_runtime_user(self.image.runtime_user)
         container_uid = int(runtime_user.split(":", 1)[0])
         # Query and graph export may run concurrently for one scope. Export owns only its staged
@@ -252,7 +356,9 @@ class CodeQLExecutor:
                 continue
             mode = path.stat().st_mode
             try:
-                path.chmod(mode | (0o007 if path.is_dir() else 0o006))
+                permissions = (0o700 if path.is_dir() else 0o600) if native else (
+                    0o007 if path.is_dir() else 0o006)
+                path.chmod(((mode & ~0o022) if native else mode) | permissions)
             except PermissionError:
                 # Outputs from an earlier CodeQL action share the application UID and remain
                 # accessible to the next action; unrelated ownership is an integrity error.
@@ -272,11 +378,10 @@ class CodeQLExecutor:
         timeout = action_timeout(self.settings, action)
         # Export reads a staged database and pack without network access.
         network = "none" if action in {"export", "compile"} else "bridge"
-        threads, ram_mb = ((int(getattr(self.settings, "compile_threads", self.settings.threads)),
-                            int(getattr(self.settings, "compile_ram_mb", self.settings.ram_mb)))
-                           if action == "compile" else (self.settings.threads, self.settings.ram_mb))
+        threads, ram_mb = action_resources(self.settings, action)
         database_name = None
         volume_name = None
+        native_database = None
         if action in {"database", "query"}:
             # CodeQL's pool writes require local Linux filesystem semantics. Keep only the
             # mutable database in a disposable Docker volume; the runner exports its bytes
@@ -287,33 +392,25 @@ class CodeQLExecutor:
                 raise ValueError("CodeQL database path is required") from exc
             if not re.fullmatch(r"[a-z][a-z0-9-]*", database_name):
                 raise ValueError("CodeQL database path is invalid")
-            volume_name = f"appsec-codeql-{uuid4().hex}"
+            if native:
+                native_database = self._native_directory(
+                    (scratch.relative_to(self.run_root) / f".native-codeql-{uuid4().hex}").as_posix())
+            else:
+                volume_name = f"appsec-codeql-{uuid4().hex}"
         mounts = ["--mount", f"type=bind,src={effective},dst=/scratch"]
-        if volume_name is not None:
-            mounts.extend(("--mount", f"type=volume,src={volume_name},dst=/scratch/{database_name}"))
+        staged_database = volume_name is not None or native_database is not None
+        if staged_database:
+            database_mount = (f"type=bind,src={native_database}" if native_database is not None
+                              else f"type=volume,src={volume_name}")
+            mounts.extend(("--mount", f"{database_mount},dst=/scratch/{database_name}"))
             if action == "query":
                 mounts.extend(("--mount", f"type=bind,src={effective},dst=/source,readonly"))
-        # CodeQL's compilation cache is content addressed, so a volume shared by every query,
-        # export and compile execution only ever turns a recompile into a hit. It is keyed by the
-        # pinned CodeQL payload image, not the derived image, so every project environment (and
-        # every edit of the runner script) reuses one warm cache. It is an optimization: a failure
-        # to provision it must not fail the analysis. Ownership is re-asserted recursively: entries
-        # written under another uid (``build.py query-packs --warm`` or a different host user) are
-        # otherwise unreadable to this execution's CodeQL, which then recompiles from cold.
         cache_volume = None
         if action in {"query", "export", "compile"}:
-            cache_volume = compile_cache_volume(self.image)
-            created = self.runner(("docker", "volume", "create",
-                "--label", "appsec-review=codeql-compile-cache", cache_volume), 60)
-            initialized = self.runner(("docker", "run", "--rm", "--network", "none",
-                "--read-only", "--user", "0:0", "--security-opt", "no-new-privileges",
-                "--mount", f"type=volume,src={cache_volume},dst={COMPILE_CACHE_MOUNT}",
-                "--entrypoint", "chown", self.image.image_id, "-R", runtime_user,
-                COMPILE_CACHE_MOUNT), 60) if not created[3] and created[0] == 0 else created
-            if initialized[3] or initialized[0] != 0:
-                cache_volume = None
-            else:
-                mounts.extend(("--mount", f"type=volume,src={cache_volume},dst={COMPILE_CACHE_MOUNT}"))
+            cache_volume = self._compile_cache(runtime_user)
+            if cache_volume is not None:
+                mounts.extend(("--mount", f"type={'bind' if native else 'volume'},"
+                               f"src={cache_volume},dst={COMPILE_CACHE_MOUNT}"))
         container_name = f"appsec-review-codeql-{uuid4().hex}"
         command = [
             "docker", "run", "--rm", "--name", container_name, "--network", network, "--read-only",
@@ -324,10 +421,12 @@ class CodeQLExecutor:
             "--env", "HOME=/tmp/codeql-home", "--env", "LANG=C.UTF-8", "--env", "LC_ALL=C.UTF-8",
             "--env", "TZ=UTC", "--entrypoint", "python3", self.image.image_id,
             "/opt/appsec/codeql_runner.py", action,
-            *(("--staged-database",) if volume_name is not None else ()), *argv,
+            *(("--staged-database",) if staged_database else ()), *argv,
         ]
         started, monotonic = _stamp(), time.monotonic()
+        from appsec_review.runtime.resources import quarantine_resources
         volume_created = False
+        container_removed = False
         try:
             if volume_name is not None:
                 created = self.runner(("docker", "volume", "create",
@@ -335,26 +434,17 @@ class CodeQLExecutor:
                 if created[3] or created[0] != 0:
                     raise RuntimeError("CodeQL temporary database volume could not be created")
                 volume_created = True
-                initialized = self.runner(("docker", "run", "--rm", "--network", "none",
-                    "--read-only", "--user", "0:0", "--security-opt", "no-new-privileges",
-                    "--mount", f"type=volume,src={volume_name},dst=/scratch/{database_name}",
-                    "--entrypoint", "chown", self.image.image_id, runtime_user,
-                    f"/scratch/{database_name}"), 60)
-                if initialized[3] or initialized[0] != 0:
-                    raise RuntimeError("CodeQL temporary database volume could not be initialized")
-            code, stdout, stderr, timed_out = self.runner(command, timeout)
-            if timed_out:
-                # Killing the docker client leaves the container running and holding the volume.
-                self.runner(("docker", "rm", "--force", container_name), 60)
+                self._initialize_volume(volume_name, f"/scratch/{database_name}", runtime_user)
+            with self._container(container_name):
+                code, stdout, stderr, timed_out = self.runner(command, timeout)
+            container_removed = True
         finally:
-            # The tree was opened to the container's user above, and the runner opens everything
-            # under its /scratch mount when it finishes; none of it stays world-writable once the
-            # container is gone, error or not. A concurrent action of the scope re-opens its own tree
-            # when it starts and runs as the tree's owner, so closing the whole scope is safe.
-            _close_write_window(scratch)
+            if native_database is not None and container_removed:
+                shutil.rmtree(native_database)
             if volume_created:
                 removed = self.runner(("docker", "volume", "rm", volume_name), 60)
                 if removed[3] or removed[0] != 0:
+                    quarantine_resources("codeql_volume_cleanup_failed")
                     raise RuntimeError("CodeQL temporary database volume could not be removed")
         if action == "database" and not timed_out and code == 0:
             exported = scratch / "database-export"
@@ -384,8 +474,13 @@ class CodeQLExecutor:
              "cap_drop": ["ALL"], "no_new_privileges": True, "threads": threads,
              "ram_mb": ram_mb, "timeout_seconds": timeout,
              "output_bytes": self.settings.output_bytes, "capture_mode": "head-tail",
-             "database_storage": "disposable-docker-volume" if volume_name else "run-bind",
-             "compile_cache": "persistent-docker-volume" if cache_volume else "none"},
+             "database_storage": ("disposable-native-bind" if native_database is not None else
+                                  "disposable-docker-volume" if volume_name else "run-bind"),
+             "compile_cache": ("run-private-native-bind" if native and cache_volume else
+                               "persistent-docker-volume" if cache_volume else "none"),
+             "compile_cache_reason": ("run_private_declared_release" if cache_volume else
+                                      "missing_release" if action in {"query", "export", "compile"}
+                                      else "not_applicable")},
         )
         atomic_json(log_root / "receipt.json", asdict(result))
         return result
