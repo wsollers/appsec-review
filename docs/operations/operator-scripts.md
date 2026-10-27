@@ -151,11 +151,44 @@ scripts/stack-logs.sh code-location --tail 50 --follow
 
 `review-start` uses the route the deployment README documents and `stepwise.py` and `review_run.py`
 share: `dagster job launch -w /opt/dagster/home/workspace.yaml -l appsec_review -j wave1_review
---run-id <uuid>` executed in the webserver container, with `--tags` only when resuming. It is the
+--run-id <uuid>` executed in the webserver container, with a submission-identity tag and an additional
+application-run tag when resuming. It is the
 supported route because the Dagster daemon and run storage stay the single owner of the run, the
 Dagster UUID is known before the run exists, and the application run id is read back from the run's
-`appsec/application_run_id` tag. `review_run.py submit` does the same without tags or guards, so the
-script adds the guards and the resume tag and reuses that helper's image-pin preflight.
+`appsec/application_run_id` tag. `review_run.py submit` enters the same guarded implementation,
+including the image-pin preflight; its `--run-id` supplies a Dagster UUID, whereas
+`review-start --run-id` selects an existing application run to resume.
+
+Both entrypoints serialize launch admission with a bounded kernel file lock under
+`runs/metadata/dagster-submission/`. After preflight, `active.json` durably records the Dagster UUID,
+source and target Git commits, configuration layer hashes (base, selected profile and overlay),
+recording mode, Compose project, GraphQL endpoint, application resume ID and running code-location
+image ID. Source tracked files must be unchanged and the target must be clean, including untracked
+files. The target must map beneath this checkout's `targets/` mount. These are operator-input
+identities, not proof that the image contains the checkout's implementation: installed-package
+provenance and resolved runtime configuration still require the deployment preflight.
+
+The intent is `UNCERTAIN` **before** invoking Dagster and becomes `SUBMITTED` only after the launch
+command returns successfully. Failure, timeout, interruption or lost response retains the intent.
+Another invocation, even with `--force`, cannot launch until explicit reconciliation. A changed
+source, target, configuration or image reports an identity mismatch rather than replacing the
+intent. A dry run writes nothing and still refuses an occupied intent. The lock coordinates these
+two entrypoints in this checkout; it cannot prevent an operator from bypassing them with a raw
+Dagster command or another deployment.
+
+Inspect the exact recorded UUID in Dagster before explicitly acknowledging a terminal run:
+
+```bash
+python deploy/dagster/bin/review_run.py reconcile --run-id DAGSTER_UUID --url http://127.0.0.1:3000/graphql
+```
+
+Reconciliation requires the original endpoint, exact UUID, terminal `wave1_review` state and
+matching `appsec/submission_identity` tag. Unknown runs, unavailable responses and identity
+mismatches retain the reservation; do not delete the intent or invent a new UUID to work around
+them. Reconciliation itself never submits a run. A subsequent separately authorized launch archives
+the acknowledged intent as `<uuid>.json` before recording a new one; old UUIDs cannot be reused.
+This acknowledgement does **not** certify descendant/container cleanup, release resource leases,
+enable automatic retries, or implement stop-on-first-error. Those remain separate operator duties.
 
 The target, the capacity overlay and the recording mode are environment variables of the running
 containers, fixed when they were created. `review-start` therefore checks the requested `--target`,

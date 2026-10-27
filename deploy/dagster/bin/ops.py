@@ -103,6 +103,7 @@ class Container:
     image: str
     config_files: tuple[str, ...]
     settings: dict[str, str] = field(default_factory=dict)
+    image_id: str = ""
 
     @property
     def healthy(self) -> bool:
@@ -139,7 +140,8 @@ def stack_containers(project: str) -> list[Container]:
             health=(state.get("Health") or {}).get("Status", "none"), image=item.get("Config", {}).get("Image", "?"),
             config_files=tuple(part for part in labels.get("com.docker.compose.project.config_files", "").split(",") if part),
             # Only the three non-secret deployment settings are kept; the rest of the environment is never read.
-            settings={key: environment[key] for key in DEPLOY_VARIABLES if key in environment}))
+            settings={key: environment[key] for key in DEPLOY_VARIABLES if key in environment},
+            image_id=item.get("Image", "")))
     return sorted(containers, key=lambda item: (SERVICES.index(item.service) if item.service in SERVICES else 99))
 
 
@@ -581,6 +583,18 @@ def webserver_and_code(containers: list[Container]) -> tuple[Container, Containe
 
 
 def cmd_review_start(args: argparse.Namespace) -> int:
+    import review_run
+
+    try:
+        if args.dry_run:
+            return _review_start(args)
+        with review_run.submission_lock(ROOT):
+            return _review_start(args)
+    except (OSError, ValueError, RuntimeError) as error:
+        raise OpsError(f"submission refused: {error}", REFUSED) from error
+
+
+def _review_start(args: argparse.Namespace) -> int:
     project = deployment_project()
     containers = stack_containers(project)
     say(f"review-start: project {project}" + (" (dry run)" if args.dry_run else ""))
@@ -610,12 +624,20 @@ def cmd_review_start(args: argparse.Namespace) -> int:
             raise OpsError(str(error), REFUSED) from error
     else:
         say("warning: appsec-review.toml not found; skipping the image pin preflight")
-    dagster_run_id = str(uuid4())
+    import review_run
+
+    dagster_run_id = getattr(args, "dagster_run_id", None) or str(uuid4())
+    identity = review_run.submission_identity(
+        ROOT, target=code.settings.get(TARGET_VARIABLE) or f"{CONTAINER_TARGETS}/appsec-multi-vuln",
+        profile=running_value(code, PROFILE_VARIABLE), overlay=code.settings.get(OVERLAY_VARIABLE, ""),
+        recording=code.settings.get(RECORDING_VARIABLE, ""), image_id=code.image_id,
+        project=project, url=args.url, application_run_id=args.run_id)
+    review_run.check_submission(ROOT, identity, dagster_run_id)
     tags = {"appsec/application_run_id": args.run_id} if args.run_id else {}
+    tags["appsec/submission_identity"] = review_run.submission_identity_sha256(identity)
     command = ["exec", webserver.id, "dagster", "job", "launch", "-w",
                "/opt/dagster/home/workspace.yaml", "-l", "appsec_review", "-j", JOB_NAME, "--run-id", dagster_run_id]
-    if tags:
-        command += ["--tags", json.dumps(tags, sort_keys=True)]
+    command += ["--tags", json.dumps(tags, sort_keys=True)]
     profile = running_value(code, PROFILE_VARIABLE)
     say(f"profile:   {profile}")
     if profile in {"prod", "copilot-prod"}:
@@ -627,9 +649,17 @@ def cmd_review_start(args: argparse.Namespace) -> int:
     if args.dry_run:
         say("dry run: nothing launched")
         return OK
-    launched = docker(*command, timeout=180)
+    record = review_run.begin_submission(ROOT, identity, dagster_run_id)
+    say(f"submission intent:  {review_run.submission_directory(ROOT) / 'active.json'}")
+    try:
+        launched = docker(*command, timeout=180)
+    except OpsError as error:
+        raise OpsError(f"{error}; submission {dagster_run_id} is UNCERTAIN; do not resubmit") from error
     if launched.returncode != 0:
-        raise OpsError(f"dagster job launch failed: {redact(launched.stderr or launched.stdout, 800)}")
+        raise OpsError(f"dagster job launch failed: {redact(launched.stderr or launched.stdout, 800)}; "
+                       f"submission {dagster_run_id} is UNCERTAIN; do not resubmit")
+    record["state"] = "SUBMITTED"
+    review_run.write_submission(ROOT, record)
     say(f"dagster run id:      {dagster_run_id}")
     allocated = args.run_id or ""
     deadline = time.monotonic() + args.id_wait

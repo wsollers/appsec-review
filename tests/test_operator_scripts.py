@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 import json
 import os
 from pathlib import Path
@@ -19,6 +20,7 @@ from tests.operator_support import (
 import ops  # noqa: E402  (tests.operator_support puts deploy/dagster/bin on sys.path)
 import ops_clean  # noqa: E402
 import ops_tests  # noqa: E402
+import review_run  # noqa: E402
 
 SCRIPTS = REPOSITORY / "scripts"
 NAMES = ("stack-start", "stack-stop", "stack-restart", "stack-rebuild", "stack-status", "stack-logs", "review-start",
@@ -38,7 +40,29 @@ def dagster():
 
 @pytest.fixture
 def box(tmp_path: Path, dagster: FakeDagster) -> Sandbox:
-    return Sandbox(tmp_path, dagster)
+    class SubmissionSandbox(Sandbox):
+        def save(self) -> None:
+            for item in self.state.get("containers", []):
+                item["Image"] = "sha256:" + "2" * 64
+            super().save()
+
+    sandbox = SubmissionSandbox(tmp_path, dagster)
+    (sandbox.repo / "targets" / "appsec-multi-vuln").mkdir()
+    (sandbox.repo / "profiles").mkdir()
+    for profile in ("prod", "copilot-dev", "copilot-prod"):
+        (sandbox.repo / "profiles" / f"{profile}.toml").write_text("# test profile\n", encoding="utf-8")
+    git = sandbox.bin / "git"
+    git.write_text(
+        f"#!{sys.executable}\n"
+        "import os, sys\n"
+        "args = sys.argv[1:]\n"
+        "if args[2:] == ['rev-parse', '--show-toplevel']: print(args[1])\n"
+        "elif args[2:] == ['rev-parse', 'HEAD']: print(os.environ.get('FAKE_GIT_HEAD', '1' * 40))\n"
+        "elif args[2:4] == ['status', '--porcelain']: print(os.environ.get('FAKE_GIT_STATUS', ''))\n"
+        "else: sys.exit(1)\n",
+        encoding="utf-8")
+    git.chmod(0o755)
+    return sandbox
 
 
 def real(script: str, *arguments: str) -> subprocess.CompletedProcess:
@@ -349,7 +373,11 @@ def test_review_start_launches_wave1_review_through_the_webserver(box: Sandbox) 
     assert argv[:4] == ["exec", WEBSERVER_ID, "dagster", "job"] and argv[4] == "launch"
     assert argv[argv.index("-j") + 1] == "wave1_review"
     assert argv[argv.index("-w") + 1] == "/opt/dagster/home/workspace.yaml" and argv[argv.index("-l") + 1] == "appsec_review"
-    assert "--tags" not in argv
+    tags = json.loads(argv[argv.index("--tags") + 1])
+    assert list(tags) == ["appsec/submission_identity"]
+    intent = review_run.read_submission(box.repo)
+    assert intent["state"] == "SUBMITTED"
+    assert tags["appsec/submission_identity"] == intent["identity_sha256"]
     dagster_id = argv[argv.index("--run-id") + 1]
     assert f"dagster run id:      {dagster_id}" in result.stdout
     assert "application run id:  2026-10-21-0012" in result.stdout and f"/runs/{dagster_id}" in result.stdout
@@ -362,7 +390,9 @@ def test_review_start_passes_the_application_run_tag_to_resume_a_run(box: Sandbo
     result = box.run("review-start", "--run-id", "2026-10-21-0003")
     assert result.returncode == 0
     argv = next(call for call in box.docker_calls() if "launch" in call)
-    assert json.loads(argv[argv.index("--tags") + 1]) == {"appsec/application_run_id": "2026-10-21-0003"}
+    tags = json.loads(argv[argv.index("--tags") + 1])
+    assert tags["appsec/application_run_id"] == "2026-10-21-0003"
+    assert tags["appsec/submission_identity"] == review_run.read_submission(box.repo)["identity_sha256"]
     assert "application run id:  2026-10-21-0003" in result.stdout
     missing = box.run("review-start", "--run-id", "2026-10-21-0999")
     assert missing.returncode == 4
@@ -395,7 +425,7 @@ def test_review_start_refuses_a_target_the_container_was_not_created_with(box: S
     accepted = box.run("review-start", "--target", "demo", "--id-wait", "1")
     assert accepted.returncode == 0 and "target:    /opt/app/targets/demo" in accepted.stdout
     container_path = box.run("review-start", "--target", "/opt/app/targets/demo", "--dry-run")
-    assert container_path.returncode == 0
+    assert container_path.returncode == 3 and "remains SUBMITTED" in container_path.stderr
 
 
 def test_review_start_checks_overlay_and_recording_against_the_container(box: Sandbox) -> None:
@@ -416,6 +446,7 @@ def test_review_start_dry_run_prints_the_launch_command_and_launches_nothing(box
     result = box.run("review-start", "--dry-run")
     assert result.returncode == 0 and "dagster job launch" in result.stdout and "dry run: nothing launched" in result.stdout
     assert not [call for call in box.docker_calls() if "launch" in call]
+    assert not review_run.submission_directory(box.repo).exists()
 
 
 def test_review_start_stops_on_a_moved_image_pin(box: Sandbox) -> None:
@@ -424,6 +455,135 @@ def test_review_start_stops_on_a_moved_image_pin(box: Sandbox) -> None:
     box.dagster.runs()
     result = box.run("review-start")
     assert result.returncode == 3 and "preflight failed" in result.stderr
+    assert not [call for call in box.docker_calls() if "launch" in call]
+
+
+def test_single_submission_concurrent_invocations_launch_once(box: Sandbox) -> None:
+    box.dagster.runs()
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(lambda _: box.run("review-start", "--id-wait", "0"), range(2)))
+    assert sorted(result.returncode for result in results) == [0, 3]
+    assert len([call for call in box.docker_calls() if "launch" in call]) == 1
+    record = review_run.read_submission(box.repo)
+    assert record["state"] == "SUBMITTED"
+    assert record["identity"]["source_commit"] == "1" * 40
+    assert record["identity"]["target_commit"] == "1" * 40
+    assert record["identity"]["configuration"]["base_sha256"]
+
+
+def test_single_submission_lost_response_retains_intent(box: Sandbox) -> None:
+    box.dagster.runs()
+    box.stack(probe={"match": "dagster job launch", "rc": 1, "stderr": "connection lost after submission"})
+    result = box.run("review-start", "--id-wait", "0")
+    assert result.returncode == 1 and "UNCERTAIN" in result.stderr
+    record = review_run.read_submission(box.repo)
+    assert record["state"] == "UNCERTAIN"
+    again = box.run("review-start", "--force", "--id-wait", "0")
+    assert again.returncode == 3 and record["dagster_run_id"] in again.stderr
+    assert review_run.read_submission(box.repo) == record
+    assert len([call for call in box.docker_calls() if "launch" in call]) == 1
+
+
+def test_single_submission_preflight_failure_does_not_launch(box: Sandbox) -> None:
+    box.dagster.runs()
+    box.state["images"]["img:p1"]["id"] = "sha256:moved"
+    box.save()
+    result = box.run("review-start", "--id-wait", "0")
+    assert result.returncode == 3 and "preflight failed" in result.stderr
+    assert review_run.read_submission(box.repo) is None
+    assert not [call for call in box.docker_calls() if "launch" in call]
+
+
+@pytest.mark.parametrize("changed", ["source", "target", "configuration", "image"])
+def test_single_submission_identity_mismatch_refuses(box: Sandbox, changed: str) -> None:
+    box.dagster.runs()
+    assert box.run("review-start", "--id-wait", "0").returncode == 0
+    record = review_run.read_submission(box.repo)
+    extra = {}
+    if changed == "source":
+        extra["FAKE_GIT_HEAD"] = "3" * 40
+    elif changed == "target":
+        box.stack(settings={ops.TARGET_VARIABLE: "/opt/app/targets/demo"})
+    elif changed == "configuration":
+        with (box.repo / "appsec-review.toml").open("a", encoding="utf-8") as stream:
+            stream.write("\n# changed configuration\n")
+    else:
+        for item in box.state["containers"]:
+            item["Image"] = "sha256:" + "4" * 64
+        box.state_file.write_text(json.dumps(box.state), encoding="utf-8")
+    result = box.run("review-start", "--id-wait", "0", extra=extra)
+    assert result.returncode == 3 and "identity mismatch" in result.stderr
+    assert review_run.read_submission(box.repo) == record
+    assert len([call for call in box.docker_calls() if "launch" in call]) == 1
+
+
+def test_single_submission_helper_cannot_bypass_guard(box: Sandbox) -> None:
+    box.dagster.runs()
+    assert box.run("review-start", "--id-wait", "0").returncode == 0
+    result = subprocess.run(
+        [sys.executable, str(box.deploy / "bin" / "review_run.py"), "submit",
+         "--run-id", UUID_TWO, "--url", box.dagster.url],
+        env=box.environment(), capture_output=True, text=True, timeout=30, check=False)
+    assert result.returncode == 3 and "remains SUBMITTED" in result.stderr
+    assert len([call for call in box.docker_calls() if "launch" in call]) == 1
+
+
+def test_single_submission_helper_binds_explicit_uuid(box: Sandbox) -> None:
+    box.dagster.runs()
+    box.dagster.script("ReviewRun", run_data(run(UUID_ONE, "STARTED")))
+    result = subprocess.run(
+        [sys.executable, str(box.deploy / "bin" / "review_run.py"), "submit",
+         "--run-id", UUID_ONE, "--url", box.dagster.url],
+        env=box.environment(), capture_output=True, text=True, timeout=30, check=False)
+    assert result.returncode == 0, result.stdout + result.stderr
+    record = review_run.read_submission(box.repo)
+    assert record["dagster_run_id"] == UUID_ONE and record["state"] == "SUBMITTED"
+    assert len([call for call in box.docker_calls() if "launch" in call]) == 1
+
+
+def test_single_submission_explicit_terminal_reconciliation_does_not_launch(box: Sandbox) -> None:
+    box.dagster.runs()
+    assert box.run("review-start", "--id-wait", "0").returncode == 0
+    record = review_run.read_submission(box.repo)
+    item = run(record["dagster_run_id"], "FAILURE")
+    item["tags"].append({"key": "appsec/submission_identity", "value": record["identity_sha256"]})
+    box.dagster.script("ReviewRun", run_data(item))
+    result = subprocess.run(
+        [sys.executable, str(box.deploy / "bin" / "review_run.py"), "reconcile",
+         "--run-id", record["dagster_run_id"], "--url", box.dagster.url],
+        env=box.environment(), capture_output=True, text=True, timeout=30, check=False)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert review_run.read_submission(box.repo)["state"] == "RECONCILED"
+    assert len([call for call in box.docker_calls() if "launch" in call]) == 1
+    assert box.run("review-start", "--id-wait", "0").returncode == 0
+    archived = review_run.submission_directory(box.repo) / f"{record['dagster_run_id']}.json"
+    assert json.loads(archived.read_text())["terminal_status"] == "FAILURE"
+    assert len([call for call in box.docker_calls() if "launch" in call]) == 2
+
+
+@pytest.mark.parametrize("status,matching", [("STARTED", True), ("FAILURE", False)])
+def test_single_submission_unconfirmed_reconciliation_retains_intent(
+        box: Sandbox, status: str, matching: bool) -> None:
+    box.dagster.runs()
+    assert box.run("review-start", "--id-wait", "0").returncode == 0
+    record = review_run.read_submission(box.repo)
+    item = run(record["dagster_run_id"], status)
+    if matching:
+        item["tags"].append({"key": "appsec/submission_identity", "value": record["identity_sha256"]})
+    box.dagster.script("ReviewRun", run_data(item))
+    result = subprocess.run(
+        [sys.executable, str(box.deploy / "bin" / "review_run.py"), "reconcile",
+         "--run-id", record["dagster_run_id"], "--url", box.dagster.url],
+        env=box.environment(), capture_output=True, text=True, timeout=30, check=False)
+    assert result.returncode == 1 and "intent retained" in result.stderr
+    assert review_run.read_submission(box.repo) == record
+
+
+def test_single_submission_dirty_checkout_refuses_without_intent(box: Sandbox) -> None:
+    box.dagster.runs()
+    result = box.run("review-start", "--id-wait", "0", extra={"FAKE_GIT_STATUS": " M source.c"})
+    assert result.returncode == 3 and "clean target" in result.stderr
+    assert review_run.read_submission(box.repo) is None
     assert not [call for call in box.docker_calls() if "launch" in call]
 
 
