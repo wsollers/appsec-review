@@ -11,6 +11,7 @@ import re
 from typing import Any
 
 from appsec_review.container_runtime import ContainerExecutor, ExecutionRequest, load_catalog
+from appsec_review.container_runtime.measurement import TreeSitterInvocation
 from appsec_review.retrieval import (
     EntityKind, EntityRecord, IndexBuilder, IndexIdentity, LogicalIdentity, RelationKind,
     RelationRecord, SourceLocation, index_fingerprint, write_manifest,
@@ -724,24 +725,28 @@ def build_job(*, executor_factory: ExecutorFactory | None = None,
                 else:
                     statuses[path] = "unavailable:symbol_language_unsupported"
             target = (unit.job.target_root or Path()).resolve()
-            for language, paths in sorted(groups.items()):
-                scratch = unit.unit_root / "scratch" / "tree-sitter" / re.sub(r"[^a-z0-9]+", "-", language.lower())
+            def parse_file(language: str, path: str) -> None:
+                # Bound both parser and consumer AST retention to one file, including JSON decoding.
+                file_id = hashlib.sha256(path.encode("utf-8")).hexdigest()
+                scratch = (unit.unit_root / "scratch" / "tree-sitter" /
+                           re.sub(r"[^a-z0-9]+", "-", language.lower()) / file_id)
                 scratch.mkdir(parents=True, exist_ok=True)
-                request = {"schema": "appsec-review/tree-sitter-request/1", "scope_id": f"history-{language}",
+                request = {"schema": "appsec-review/tree-sitter-request/1", "scope_id": f"history-{language}-{file_id}",
                            "language": language, "max_nodes": settings.symbols_max_nodes_per_file,
-                           "max_scope_nodes": settings.symbols_max_nodes_per_file * len(paths),
+                           "max_scope_nodes": settings.symbols_max_nodes_per_file,
                            "max_file_bytes": settings.symbols_max_file_bytes,
-                           "files": [{"path": path, "sha256": eligible[path]["sha256"]} for path in paths]}
+                           "files": [{"path": path, "sha256": eligible[path]["sha256"]}]}
                 request_path = scratch / "request.json"
                 atomic_json(request_path, request)
                 # The parser runs as a different non-root UID: it may read the request and create its output.
                 request_path.chmod(0o444)
                 scratch.chmod(0o733)
+                measurement = TreeSitterInvocation.for_unit(unit, request)
                 try:
                     execution = executor.execute(ExecutionRequest(
                         TREE_SITTER_TOOL, ("/opt/appsec/parser.py", "parse", "--request", "/scratch/request.json",
                                            "--output", "/scratch/output.json"),
-                        unit.job.target_root or Path(), scratch, working_directory="/scratch"))
+                        unit.job.target_root or Path(), scratch, working_directory="/scratch", measurement=measurement))
                 except (OSError, RuntimeError, ValueError):
                     from appsec_review.runtime import execution_safety as safety
                     safety.fail("source-history parser execution failed", action="history.parser")
@@ -751,9 +756,9 @@ def build_job(*, executor_factory: ExecutorFactory | None = None,
                         or not output_path.is_file()):
                     from appsec_review.runtime import execution_safety as safety
                     safety.fail("source-history parser failed or omitted output", action="history.parser")
-                    statuses.update({path: "unavailable:tree_sitter_execution_failed" for path in paths})
+                    statuses[path] = "unavailable:tree_sitter_execution_failed"
                     output["dispositions"] = [{"disposition": "GAP", "reason": "tree_sitter_execution_failed"}]
-                    continue
+                    return
                 container_output = json.loads(output_path.read_text(encoding="utf-8"))
                 _validate_container_output(container_output, scope=None, grammar=locks[language],
                                            asset_lock=asset_lock, image_id=image_id,
@@ -762,8 +767,7 @@ def build_job(*, executor_factory: ExecutorFactory | None = None,
                     raise ValueError("Tree-sitter output scope identity mismatch")
                 seen: set[str] = set()
                 for record in container_output.get("records", ()):
-                    path = str(record.get("path"))
-                    if path not in paths or path in seen or record.get("sha256") != eligible[path]["sha256"]:
+                    if record.get("path") != path or path in seen or record.get("sha256") != eligible[path]["sha256"]:
                         raise ValueError("Tree-sitter output names an unrequested path or a changed source hash")
                     seen.add(path)
                     if record.get("status") == "TRUNCATED":
@@ -774,8 +778,13 @@ def build_job(*, executor_factory: ExecutorFactory | None = None,
                         raise ValueError(f"accepted target bytes changed: {path}")
                     results[path] = extract(record, source, language, path)
                     statuses[path] = results[path]["status"]
-                for path in sorted(set(paths) - seen):
+                if path not in seen:
                     statuses[path] = "unavailable:tree_sitter_omitted_file"
+                measurement.record_output(unit.job.run_root, container_output)
+
+            for language, paths in sorted(groups.items()):
+                for path in paths:
+                    parse_file(language, path)
         gaps = sorted({_reason(value) for value in statuses.values() if value.startswith("unavailable:")} -
                       {"working_tree_divergent"} |
                       {gap for value in results.values() for gap in value["gaps"]})

@@ -152,6 +152,136 @@ def _timing_summary(bucket: Mapping[str, Any]) -> dict[str, Any]:
             "terminal_dispositions": dict(sorted(bucket["dispositions"].items()))}
 
 
+def _tree_sitter_metrics(run_root: Path, records: list[Mapping[str, Any]]) -> Mapping[str, Any]:
+    from appsec_review.container_runtime.measurement import COUNTERS, INVOCATION_SCHEMA
+    sources: dict[str, dict[str, Any]] = {}
+    reused: dict[str, Mapping[str, Any]] = {}
+    reused_tasks: set[tuple[str, str, str, str]] = set()
+    gaps: list[str] = []
+    kinds = {"TOOL_INVOCATION_STARTED": "start", "TOOL_INVOCATION_COMPLETED": "execution",
+             "TREE_SITTER_OUTPUT_VALIDATED": "output"}
+    for event in records:
+        details = event.get("details", {})
+        if event.get("event_type") == "TASK_REUSED" and event.get("job_id") in {
+                "job_source_history_analysis", "job_tree_sitter_ast"}:
+            reused_tasks.add(tuple(str(event.get(key)) for key in ("job_id", "attempt_id", "step_id", "task_id")))
+        if details.get("tool_id") != "tool-tree-sitter":
+            continue
+        if event["event_type"] == "TREE_SITTER_REUSED":
+            identity = str(details.get("reuse_id"))
+            if identity in reused and reused[identity] != details:
+                gaps.append(f"conflicting Tree-sitter reuse identity: {identity}")
+            reused[identity] = details
+            continue
+        kind = kinds.get(event["event_type"])
+        if kind is None:
+            continue
+        identity = str(details.get("tool_invocation_id") or "")
+        row = sources.setdefault(identity, {"references": {}, "documents": {}, "invalid": False})
+        reference = details.get("metrics_receipt")
+        if kind in row["references"]:
+            if row["references"][kind] != reference:
+                row["invalid"] = True
+                gaps.append(f"conflicting Tree-sitter invocation receipt: {identity}/{kind}")
+            continue
+        row["references"][kind] = reference
+        try:
+            document = _receipt_json(run_root, reference)
+            if document.get("invocation_id") != identity:
+                raise ValueError("invocation identity mismatch")
+            if kind != "output":
+                if document.get("schema") != INVOCATION_SCHEMA or any(
+                        document.get(key) != event.get(key) for key in ("run_id", "job_id", "attempt_id")):
+                    raise ValueError("invocation provenance mismatch")
+            elif document.get("schema") != "appsec-review/tree-sitter-output-metrics/1":
+                raise ValueError("output metrics schema mismatch")
+            row["documents"][kind] = document
+        except (OSError, ValueError, UnicodeError) as exc:
+            row["invalid"] = True
+            gaps.append(f"Tree-sitter invocation {identity}/{kind}: {exc}")
+
+    invocations = []
+    for identity, source in sorted(sources.items()):
+        documents = source["documents"]
+        start, execution, output = (documents.get(key, {}) for key in ("start", "execution", "output"))
+        base = execution or start
+        if start and execution and any(start.get(key) != execution.get(key) for key in start):
+            source["invalid"] = True
+            gaps.append(f"Tree-sitter start/completion mismatch: {identity}")
+        resources = execution.get("resources", {}) if not source["invalid"] else {}
+        invocations.append({
+            "invocation_id": identity,
+            **{key: base.get(key) for key in ("run_id", "job_id", "attempt_id", "unit_id", "scope_id", "language",
+                                             "image_id", "started_at", "completed_at", "duration_ms")},
+            "status": "INTEGRITY_ERROR" if source["invalid"] else execution.get("status", "INCOMPLETE"),
+            "exit_code": execution.get("exit_code"), "timed_out": execution.get("timed_out"),
+            "oom_killed": execution.get("oom_killed"), "configured_limits": base.get("configured_limits"),
+            "resources": resources, "receipts": source["references"],
+            "files_requested": len(base["files"]) if "files" in base else None,
+            **{key: output.get(key) if not source["invalid"] else None
+               for key in ("files_accounted", "files_parsed", "nodes_emitted", "truncated_files")},
+            "resource_accounting_complete": not source["invalid"] and execution.get(
+                "resource_accounting_complete", False),
+            "accounting_complete": bool(start and execution and output and not source["invalid"] and
+                                        execution.get("resource_accounting_complete")),
+        })
+
+    def summarize(rows):
+        complete_intervals = []
+        for row in rows:
+            if row["started_at"] and row["completed_at"] and row["status"] != "INTEGRITY_ERROR":
+                start = datetime.fromisoformat(row["started_at"])
+                end = datetime.fromisoformat(row["completed_at"])
+                if end >= start:
+                    complete_intervals.append((start, end))
+        points = sorted((stamp, delta) for start, end in complete_intervals if end > start
+                        for stamp, delta in ((start, 1), (end, -1)))
+        active = peak = covered_ms = 0
+        previous = None
+        for stamp, delta in points:
+            if active and previous is not None:
+                covered_ms += (stamp - previous).total_seconds() * 1000
+            active += delta
+            peak = max(peak, active)
+            previous = stamp
+        values = {key: [row["resources"].get(key) for row in rows
+                        if row["resources"].get(key) is not None] for key in COUNTERS}
+        measurements = {
+            key: {"value": (max(items) if key == "memory_peak_bytes" else sum(items)) if items else None,
+                  "measured_invocations": len(items), "unavailable_invocations": len(rows) - len(items),
+                  "complete": len(items) == len(rows) and all(row["resource_accounting_complete"] for row in rows)}
+            for key, items in values.items()}
+        durations = [row["duration_ms"] for row in rows if row["duration_ms"] is not None
+                     and row["status"] != "INTEGRITY_ERROR"]
+        elapsed = (int((max(end for _, end in complete_intervals) -
+                        min(start for start, _ in complete_intervals)).total_seconds() * 1000)
+                   if complete_intervals else None)
+        return {
+            "invocation_count": len(rows), "outcomes": dict(sorted(Counter(row["status"] for row in rows).items())),
+            "summed_invocation_duration_ms": sum(durations) if durations else None,
+            "elapsed_window_ms": elapsed, "covered_wall_ms": int(covered_ms) if complete_intervals else None,
+            "max_concurrency": peak if complete_intervals else None,
+            "timing_complete": len(complete_intervals) == len(rows),
+            "measurements": measurements,
+            "memory_peak_semantics": "maximum_individual_container_peak; concurrent_aggregate_peak_not_measured",
+            "counts": {key: {
+                "value": sum(row[key] for row in rows if row[key] is not None)
+                         if any(row[key] is not None for row in rows) else None,
+                "complete": all(row[key] is not None for row in rows)}
+                for key in ("files_requested", "files_accounted", "files_parsed", "nodes_emitted", "truncated_files")},
+            "accounting_complete": all(row["accounting_complete"] for row in rows),
+        }
+
+    groups = sorted({(str(row["job_id"]), str(row["attempt_id"])) for row in invocations})
+    return {"schema": "appsec-review/tree-sitter-metrics/1", **summarize(invocations),
+            "by_job_attempt": [{"job_id": job, "attempt_id": attempt, **summarize([
+                row for row in invocations if str(row["job_id"]) == job and str(row["attempt_id"]) == attempt])}
+                for job, attempt in groups],
+            "invocations": invocations, "reused_scopes": [reused[key] for key in sorted(reused)],
+            "reused_scope_count": len(reused), "reused_task_count": len(reused_tasks), "gaps": gaps,
+            "incomplete_accounting": bool(gaps) or any(not row["accounting_complete"] for row in invocations)}
+
+
 def _review_metrics(run_root: Path, records: list[Mapping[str, Any]]) -> Mapping[str, Any]:
     source_rows: list[Mapping[str, Any]] = []
     source_gaps: list[object] = []
@@ -381,6 +511,7 @@ def aggregate_run_metrics(run_root: Path) -> Mapping[str, Any]:
     records, torn = PipelineLog(run_root).read()
     for record in records:
         validate_event(record)
+    tree_sitter = _tree_sitter_metrics(Path(run_root), records)
     raw_event_count = len(records)
     raw_event_counts = Counter(str(record["event_type"]) for record in records)
     unique_records = []
@@ -597,6 +728,7 @@ def aggregate_run_metrics(run_root: Path) -> Mapping[str, Any]:
             "completed_work_count": sum(1 for item in records if str(item["event_type"]).endswith(
                 ("SUCCEEDED", "COMPLETED", "COMPLETED_WITH_GAPS", "REUSED"))),
             "review": _review_metrics(Path(run_root), records),
+            "tree_sitter": tree_sitter,
             "torn_tail_ignored": torn}
 
 

@@ -16,6 +16,9 @@ import uuid
 
 from appsec_review.container_runtime.catalog import ContainerCatalog, ToolImage
 from appsec_review.container_runtime.identity import application_runtime_user
+from appsec_review.container_runtime.measurement import (
+    InvocationMeasurement, SUPERVISOR_PATH, TreeSitterInvocation,
+)
 from appsec_review.config.native_dagster import native_execution_requested
 from appsec_review.storage import atomic_json, file_sha256
 from appsec_review.runtime.resources import reserve_execution, review_resources_active, tracked_container
@@ -49,6 +52,7 @@ class ExecutionRequest:
     memory: str | None = None
     accepted_exit_codes: frozenset[int] = frozenset({0})
     expected_nonzero: Callable[[int | None, bytes, bytes], bool] | None = None
+    measurement: TreeSitterInvocation | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -223,6 +227,14 @@ class ContainerExecutor:
         tool = self.catalog.tool(request.tool_id)
         runtime_user = application_runtime_user(tool.user)
         _, mounts = self._validate(request, tool)
+        measurement = None
+        if request.measurement is not None:
+            if request.tool_id != "tool-tree-sitter" or request.argv[:2] != ("/opt/appsec/parser.py", "parse"):
+                raise ValueError("resource measurement is restricted to Tree-sitter parsing")
+            if any(mount.target == SUPERVISOR_PATH for mount in mounts):
+                raise ValueError("Tree-sitter supervisor mount conflicts with supplied mounts")
+            measurement = InvocationMeasurement(self.run_root, request.scratch_root, request.measurement)
+            mounts = (*mounts, Mount(measurement.supervisor, SUPERVISOR_PATH, True, supplied_platform=True))
         memory = request.memory or tool.memory
         image_id = self.resolve_image(tool)
         raw = request.scratch_root / "raw"
@@ -251,13 +263,50 @@ class ContainerExecutor:
             command.extend(("--mount", spec))
         for key, value in sorted((request.environment or {}).items()):
             command.extend(("--env", f"{key}={value}"))
-        command.extend(("--entrypoint", request.argv[0], image_id, *request.argv[1:]))
+        if measurement is not None:
+            command.extend(("--entrypoint", "/usr/local/bin/python", image_id, SUPERVISOR_PATH,
+                            "--output", f"/scratch/{measurement.output.name}", "--", *request.argv))
+        else:
+            command.extend(("--entrypoint", request.argv[0], image_id, *request.argv[1:]))
+        limits = {
+            "network": "none", "user": runtime_user, "root_filesystem": "read-only",
+            "cap_drop": ["ALL"], "no_new_privileges": True, "cpus": tool.cpus,
+            "memory": memory, "memory_source": "request" if request.memory else "catalog",
+            "pids": tool.pids_limit,
+            "tmpfs": list(self.catalog.policy["tmpfs"]),
+            "timeout_seconds": tool.timeout_seconds, "stdout_bytes": tool.output_bytes,
+            "stderr_bytes": tool.output_bytes, "file_size_bytes": request.file_size_limit_bytes,
+        }
         started = _stamp()
+        if measurement is not None:
+            measurement.start(started, image_id=image_id, container_name=name, limits=limits)
+
+        def terminate_measured() -> Mapping[str, Any]:
+            with safety.cleanup_scope():
+                stopped = self.runner(("docker", "stop", "--time", "2", name), 5)
+            return {"requested": True, "exit_code": stopped.exit_code, "timed_out": stopped.timed_out,
+                    "snapshot_may_be_incomplete": stopped.exit_code != 0 or stopped.timed_out}
+
         try:
             lifecycle = (tracked_container(name, self._container_control, label="Scanner")
-                         if review_resources_active() or safety.active() else nullcontext())
+                         if review_resources_active() or safety.active() or measurement is not None else nullcontext())
             with lifecycle:
-                outcome = self.runner(command, tool.timeout_seconds)
+                try:
+                    outcome = self.runner(command, tool.timeout_seconds)
+                except BaseException as exc:
+                    if measurement is not None:
+                        termination = terminate_measured()
+                        reference = measurement.finish(error=exc, cleanup=termination)
+                        atomic_json(receipt_path, {
+                            "schema": "appsec-review/container-execution-partial/1",
+                            "tool_id": tool.tool_id, "image_id": image_id, "container_name": name,
+                            "started_at": started, "completed_at": _stamp(), "error_type": type(exc).__name__,
+                            "exit_code": None, "cleanup": "PENDING", "metrics_receipt": reference,
+                        })
+                    raise
+                if measurement is not None:
+                    termination = terminate_measured() if outcome.timed_out else None
+                    measurement.finish(outcome, cleanup=termination)
                 if safety.active():
                     stdout_path.write_bytes(outcome.stdout[:tool.output_bytes])
                     stderr_path.write_bytes(outcome.stderr[:tool.output_bytes])
@@ -271,6 +320,7 @@ class ContainerExecutor:
                         "oom_killed": outcome.oom_killed, "cleanup": "PENDING",
                         "stdout_sha256": file_sha256(stdout_path),
                         "stderr_sha256": file_sha256(stderr_path),
+                        **({"metrics_receipt": measurement.receipt} if measurement is not None else {}),
                     })
                     expected = (outcome.exit_code in request.accepted_exit_codes
                                 or request.expected_nonzero is not None
@@ -278,7 +328,7 @@ class ContainerExecutor:
                     safety.failed_result(outcome.timed_out or outcome.oom_killed or not expected,
                                          f"{tool.tool_id} execution failed; evidence: {receipt_path}",
                                          action=f"scanner.{tool.tool_id}")
-                if outcome.timed_out and not safety.active():
+                if outcome.timed_out and not safety.active() and measurement is None:
                     self._run_control(("docker", "kill", name))
         finally:
             # The scanner's write window has closed: retained scratch evidence is not world-writable.
@@ -292,15 +342,6 @@ class ContainerExecutor:
             "source": str(mount.source.resolve()), "target": mount.target,
             "runtime_source": str(effective_sources[mount.target]), "read_only": mount.read_only,
         } for mount in mounts)
-        limits = {
-            "network": "none", "user": runtime_user, "root_filesystem": "read-only",
-            "cap_drop": ["ALL"], "no_new_privileges": True, "cpus": tool.cpus,
-            "memory": memory, "memory_source": "request" if request.memory else "catalog",
-            "pids": tool.pids_limit,
-            "tmpfs": list(self.catalog.policy["tmpfs"]),
-            "timeout_seconds": tool.timeout_seconds, "stdout_bytes": tool.output_bytes,
-            "stderr_bytes": tool.output_bytes, "file_size_bytes": request.file_size_limit_bytes,
-        }
         argv_identity = hashlib.sha256(json.dumps(request.argv, separators=(",", ":")).encode()).hexdigest()
         result = ExecutionResult(
             schema="appsec-review/container-execution/1", tool_id=tool.tool_id,
@@ -321,5 +362,7 @@ class ContainerExecutor:
         receipt["terminal_status"] = result.terminal_status
         receipt["stdout_sha256"] = file_sha256(stdout_path)
         receipt["stderr_sha256"] = file_sha256(stderr_path)
+        if measurement is not None:
+            receipt["metrics_receipt"] = measurement.receipt
         atomic_json(receipt_path, receipt)
         return result
