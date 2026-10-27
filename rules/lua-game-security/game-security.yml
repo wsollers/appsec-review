@@ -1,0 +1,389 @@
+rules:
+  - id: appsec-review.lua.dynamic-code
+    languages: [lua]
+    severity: WARNING
+    message: >-
+      Runtime Lua compilation is a code-execution boundary. Never compile network messages,
+      save data, downloaded assets, or untrusted mods. Prefer a data-only format and an
+      allowlisted command dispatcher. Text-only loading and an environment table are not
+      sufficient isolation on their own.
+    metadata:
+      category: security
+      confidence: HIGH
+      cwe: ["CWE-95: Improper Neutralization of Directives in Dynamically Evaluated Code"]
+      review_signal: dangerous-capability
+    pattern-either:
+      - pattern: load(...)
+      - pattern: loadstring(...)
+      - pattern: RunString(...)
+      - pattern: RunStringEx(...)
+      - pattern: CompileString(...)
+
+  - id: appsec-review.lua.file-code-loading
+    languages: [lua]
+    severity: WARNING
+    message: >-
+      Loading a file as Lua executes code with the host's capabilities. Review the file's
+      provenance and canonical path, including mod/update signing and writable search
+      locations. Do not treat a save file or downloaded asset as executable Lua.
+    metadata:
+      category: security
+      confidence: HIGH
+      cwe: ["CWE-829: Inclusion of Functionality from Untrusted Control Sphere"]
+      review_signal: dangerous-capability
+    pattern-either:
+      - pattern: dofile(...)
+      - pattern: loadfile(...)
+      - pattern: love.filesystem.load(...)
+      - pattern: CompileFile(...)
+
+  - id: appsec-review.lua.shell-execution
+    languages: [lua]
+    severity: WARNING
+    message: >-
+      This API invokes an operating-system shell. Remove it from untrusted script
+      environments; use a restricted host API instead. Never construct shell commands
+      from player, mod, path, or network input.
+    metadata:
+      category: security
+      confidence: HIGH
+      cwe: ["CWE-78: Improper Neutralization of Special Elements used in an OS Command"]
+      review_signal: dangerous-capability
+    pattern-either:
+      - pattern: os.execute(...)
+      - pattern: io.popen(...)
+
+  - id: appsec-review.lua.native-code
+    languages: [lua]
+    severity: WARNING
+    message: >-
+      Native loading or LuaJIT FFI can bypass Lua-level isolation and reach process memory
+      and operating-system APIs. Do not expose these capabilities to untrusted mods.
+      Audit native module provenance and host bindings separately.
+    metadata:
+      category: security
+      confidence: HIGH
+      cwe: ["CWE-829: Inclusion of Functionality from Untrusted Control Sphere"]
+      review_signal: dangerous-capability
+    pattern-either:
+      - pattern: package.loadlib(...)
+      - pattern: require("ffi")
+      - pattern: ffi.load(...)
+      - pattern: ffi.cdef(...)
+      - pattern: ffi.C.$FUNC(...)
+
+  - id: appsec-review.lua.debug-capability
+    languages: [lua]
+    severity: WARNING
+    message: >-
+      Debug APIs can expose or mutate locals, upvalues, metatables, the registry, or
+      instruction hooks. Keep the debug library outside untrusted script environments.
+      Hook changes also require review of instruction-budget enforcement.
+    metadata:
+      category: security
+      confidence: HIGH
+      cwe: ["CWE-749: Exposed Dangerous Method or Function"]
+      review_signal: dangerous-capability
+    pattern-either:
+      - pattern: debug.getregistry(...)
+      - pattern: debug.getupvalue(...)
+      - pattern: debug.setupvalue(...)
+      - pattern: debug.upvaluejoin(...)
+      - pattern: debug.getlocal(...)
+      - pattern: debug.setlocal(...)
+      - pattern: debug.getmetatable(...)
+      - pattern: debug.setmetatable(...)
+      - pattern: debug.sethook(...)
+      - pattern: debug.debug(...)
+
+  - id: appsec-review.lua.environment-escape
+    languages: [lua]
+    severity: WARNING
+    message: >-
+      This environment operation can expose ambient globals or change a function's
+      capabilities. A sandbox must not inherit the unrestricted global environment.
+      Review both the table's contents and all objects reachable through it.
+    metadata:
+      category: security
+      confidence: MEDIUM
+      cwe: ["CWE-693: Protection Mechanism Failure"]
+      review_signal: dangerous-capability
+    pattern-either:
+      - pattern: getfenv(...)
+      - pattern: setfenv(...)
+      - pattern: __index = _G
+      - pattern: $ENV.__index = _G
+      - pattern: _ENV = _G
+
+  - id: appsec-review.lua.module-search-mutation
+    languages: [lua]
+    severity: WARNING
+    message: >-
+      Changing module search paths or loaders changes which code require can execute.
+      Exclude player-writable and download locations; use fixed trusted roots and
+      allowlisted loaders. This rule does not prove that a path is attacker controlled.
+    metadata:
+      category: security
+      confidence: HIGH
+      cwe: ["CWE-427: Uncontrolled Search Path Element"]
+      review_signal: dangerous-capability
+    pattern-either:
+      - pattern: package.path = $VALUE
+      - pattern: package.cpath = $VALUE
+      - pattern: package.searchers = $VALUE
+      - pattern: package.loaders = $VALUE
+      - pattern: package.searchers[$INDEX] = $VALUE
+      - pattern: package.loaders[$INDEX] = $VALUE
+      - pattern: table.insert(package.searchers, ...)
+      - pattern: table.insert(package.loaders, ...)
+
+  - id: appsec-review.lua.dynamic-module
+    languages: [lua]
+    severity: WARNING
+    message: >-
+      A nonliteral module or include target selects executable code dynamically.
+      Resolve player/mod choices through a fixed allowlist of trusted modules, not
+      directly through a name or asset ID supplied by the client.
+    metadata:
+      category: security
+      confidence: MEDIUM
+      cwe: ["CWE-829: Inclusion of Functionality from Untrusted Control Sphere"]
+      review_signal: dynamic-sink
+    patterns:
+      - pattern-either:
+          - pattern: require($MODULE)
+          - pattern: include($MODULE)
+      - pattern-not: require("...")
+      - pattern-not: include("...")
+
+  - id: appsec-review.lua.global-dispatch
+    languages: [lua]
+    severity: WARNING
+    message: >-
+      Dispatch through the global environment can let a client or mod select privileged
+      functions. Use a private allowlisted dispatch table and enforce server-side
+      authorization, argument validation, and rate limits for each operation.
+    metadata:
+      category: security
+      confidence: MEDIUM
+      cwe: ["CWE-470: Use of Externally-Controlled Input to Select Classes or Code"]
+      review_signal: dynamic-sink
+    pattern-either:
+      - pattern: _G[$NAME](...)
+      - pattern: _ENV[$NAME](...)
+
+  - id: appsec-review.lua.dynamic-file-access
+    languages: [lua]
+    severity: WARNING
+    message: >-
+      A nonliteral filesystem path needs review for traversal, absolute paths, symlink
+      escapes, and unintended overwrite/deletion. Resolve it beneath an approved root
+      using host-enforced containment; string prefix checks alone are insufficient.
+    metadata:
+      category: security
+      confidence: MEDIUM
+      cwe: ["CWE-22: Improper Limitation of a Pathname to a Restricted Directory"]
+      review_signal: dynamic-sink
+    patterns:
+      - pattern-either:
+          - pattern: io.open($PATH, ...)
+          - pattern: os.remove($PATH)
+          - pattern: love.filesystem.read($PATH, ...)
+          - pattern: love.filesystem.write($PATH, ...)
+          - pattern: love.filesystem.remove($PATH)
+          - pattern: file.Read($PATH, ...)
+          - pattern: file.Write($PATH, ...)
+          - pattern: file.Delete($PATH, ...)
+      - metavariable-pattern:
+          metavariable: $PATH
+          patterns:
+            - pattern-not: '"..."'
+
+  - id: appsec-review.lua.file-rename
+    languages: [lua]
+    severity: WARNING
+    message: >-
+      Review both source and destination of this rename for containment, symlink races,
+      and overwrite behavior. Untrusted scripts must not move files outside their
+      assigned storage root.
+    metadata:
+      category: security
+      confidence: HIGH
+      cwe: ["CWE-73: External Control of File Name or Path"]
+      review_signal: dangerous-capability
+    pattern: os.rename(...)
+
+  - id: appsec-review.lua.sql-string-construction
+    languages: [lua]
+    severity: WARNING
+    message: >-
+      SQL is constructed with concatenation or string.format at a query API. Use the
+      database driver's parameter binding for values and allowlists for identifiers.
+      Confirm the receiver is a database API and trace the interpolated value before
+      classifying injection.
+    metadata:
+      category: security
+      confidence: MEDIUM
+      cwe: ["CWE-89: Improper Neutralization of Special Elements used in an SQL Command"]
+      review_signal: dynamic-sink
+    patterns:
+      - pattern-either:
+          - pattern: sql.Query($SQL)
+          - pattern: $DB:execute($SQL, ...)
+          - pattern: $DB:exec($SQL, ...)
+          - pattern: $DB:query($SQL, ...)
+          - pattern: MySQL.Async.execute($SQL, ...)
+          - pattern: MySQL.Async.fetchAll($SQL, ...)
+          - pattern: MySQL.query($SQL, ...)
+      - metavariable-pattern:
+          metavariable: $SQL
+          pattern-either:
+            - pattern: $LEFT .. $RIGHT
+            - pattern: string.format(...)
+      - pattern-not: os.execute(...)
+
+  - id: appsec-review.lua.tls-verification-disabled
+    languages: [lua]
+    severity: WARNING
+    message: >-
+      This configuration disables TLS peer verification. If consumed by LuaSec or an
+      HTTP client, it permits an active network attacker to impersonate the server.
+      Require certificate validation and hostname verification; confirm the table's use.
+    metadata:
+      category: security
+      confidence: MEDIUM
+      cwe: ["CWE-295: Improper Certificate Validation"]
+      review_signal: insecure-configuration
+    pattern-either:
+      - pattern: $OPTIONS.verify = "none"
+      - pattern: $OPTIONS.ssl_verify = false
+      - pattern: verify = "none"
+      - pattern: ssl_verify = false
+
+  - id: appsec-review.lua.cleartext-http
+    languages: [lua]
+    severity: WARNING
+    message: >-
+      This HTTP request uses cleartext transport. Use authenticated HTTPS for credentials,
+      purchases, player data, and executable/content updates. Confirm whether the
+      endpoint is a deliberate local-only development service.
+    metadata:
+      category: security
+      confidence: HIGH
+      cwe: ["CWE-319: Cleartext Transmission of Sensitive Information"]
+      review_signal: insecure-configuration
+    patterns:
+      - pattern-either:
+          - pattern: http.request($URL, ...)
+          - pattern: http.Fetch($URL, ...)
+          - pattern: http.Post($URL, ...)
+          - pattern: PerformHttpRequest($URL, ...)
+      - metavariable-regex:
+          metavariable: $URL
+          regex: "^['\"]http://"
+
+  - id: appsec-review.lua.predictable-random
+    languages: [lua]
+    severity: INFO
+    message: >-
+      This is gameplay-grade randomness, not a cryptographic guarantee. Review only
+      security-sensitive uses such as session tokens, invitation codes, or economically
+      sensitive outcomes. Ordinary simulation, effects, and procedural generation are
+      expected uses and are not vulnerabilities.
+    metadata:
+      category: security
+      confidence: LOW
+      cwe: ["CWE-338: Use of Cryptographically Weak Pseudo-Random Number Generator"]
+      review_signal: audit
+    pattern-either:
+      - pattern: math.random(...)
+      - pattern: math.randomseed(...)
+      - pattern: love.math.random(...)
+      - pattern: love.math.setRandomSeed(...)
+
+  - id: appsec-review.lua.resource-amplification
+    languages: [lua]
+    severity: INFO
+    message: >-
+      String repetition or decompression can amplify a small request into substantial
+      memory/CPU use. Check server-enforced input, output, and work limits before this
+      call. A call alone does not establish that bounds are missing.
+    metadata:
+      category: security
+      confidence: LOW
+      cwe: ["CWE-400: Uncontrolled Resource Consumption"]
+      review_signal: audit
+    pattern-either:
+      - pattern: string.rep(...)
+      - pattern: util.Decompress(...)
+      - pattern: love.data.decompress(...)
+
+  - id: appsec-review.lua.read-all
+    languages: [lua]
+    severity: INFO
+    message: >-
+      Reading the entire stream can exhaust memory for large or unbounded inputs.
+      Enforce size limits or use bounded incremental reads, especially for sockets,
+      subprocess output, and player-supplied files.
+    metadata:
+      category: security
+      confidence: LOW
+      cwe: ["CWE-400: Uncontrolled Resource Consumption"]
+      review_signal: audit
+    pattern-either:
+      - pattern: $STREAM:read("*a")
+      - pattern: $STREAM:read("a")
+      - pattern: io.read("*a")
+      - pattern: io.read("a")
+      - pattern: $SOCKET:receive("*a")
+
+  - id: appsec-review.lua.network-entrypoint
+    languages: [lua]
+    severity: INFO
+    message: >-
+      Review this game-network entry point for server-side authority, identity,
+      ownership, argument/range checks, replay protection, and per-player rate limits.
+      Registration alone is not a vulnerability. Never trust a client-provided price,
+      reward, role, entity owner, or player identifier as authorization.
+    metadata:
+      category: security
+      confidence: LOW
+      cwe: ["CWE-862: Missing Authorization"]
+      review_signal: audit
+    pattern-either:
+      - pattern: net.Receive(...)
+      - pattern: RegisterNetEvent(...)
+      - pattern: RegisterServerEvent(...)
+      - pattern: $REMOTE.OnServerEvent:Connect(...)
+      - pattern: $REMOTE.OnServerInvoke = $HANDLER
+
+  - id: appsec-review.lua.game-command
+    languages: [lua]
+    severity: WARNING
+    message: >-
+      This executes a game/server console command. Trace client and mod input and
+      enforce an allowlist and server-side permissions. Console commands are not OS
+      shell commands, but may expose administration or additional execution features.
+    metadata:
+      category: security
+      confidence: MEDIUM
+      cwe: ["CWE-77: Improper Neutralization of Special Elements used in a Command"]
+      review_signal: dangerous-capability
+    pattern-either:
+      - pattern: RunConsoleCommand(...)
+      - pattern: game.ConsoleCommand(...)
+      - pattern: ExecuteCommand(...)
+
+  - id: appsec-review.lua.process-exit
+    languages: [lua]
+    severity: WARNING
+    message: >-
+      os.exit can terminate the hosting game or server process, not just this script.
+      Remove it from untrusted environments and use a host-controlled script
+      cancellation API. Review intentional shutdown paths for server-side authorization.
+    metadata:
+      category: security
+      confidence: HIGH
+      cwe: ["CWE-749: Exposed Dangerous Method or Function"]
+      review_signal: dangerous-capability
+    pattern: os.exit(...)
