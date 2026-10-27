@@ -15,19 +15,24 @@ import time
 from typing import Any, Protocol
 from uuid import uuid4
 
+from appsec_review.application_paths import application_asset
 from appsec_review.container_runtime.build_executor import Runner, _run, resolve_host_bind_path
 from appsec_review.container_runtime.identity import application_runtime_user
 from appsec_review.config.assurance import ComponentReleases
+from appsec_review.config.codeql import CodeQLPreinstalledRuntime
 from appsec_review.config.native_dagster import native_execution_requested
 from appsec_review.storage import atomic_json, bounded_file_lock, canonical_json, file_sha256
 
 
 IMAGE_SCHEMA = "appsec-review/codeql-derived-image/3"
+PREINSTALLED_IMAGE_SCHEMA = "appsec-review/codeql-preinstalled-image/1"
 EXECUTION_SCHEMA = "appsec-review/codeql-execution/2"
 EXPORT_MANIFEST_SCHEMA = "appsec-review/codeql-graph-export-manifest/1"
 EXPORT_MANIFEST_NAME = "export-manifest.json"
 COMPILE_CACHE_MOUNT = "/codeql-cache"
 ACTIONS = frozenset({"inventory", "database", "query", "export", "compile"})
+RUNNER_ASSET = "containers/tools/codeql/codeql_runner.py"
+RUNNER_CONTAINER_PATH = "/opt/appsec/codeql_runner.py"
 
 
 class RuntimeSettings(Protocol):
@@ -39,6 +44,7 @@ class RuntimeSettings(Protocol):
     output_bytes: int
     threads: int
     ram_mb: int
+    preinstalled_runtimes: tuple[CodeQLPreinstalledRuntime, ...]
 
 
 def action_timeout(settings: RuntimeSettings, action: str) -> int:
@@ -90,6 +96,9 @@ class CodeQLImage:
     reused: bool
     manifest_path: str
     preparation_receipt: Mapping[str, Any] | None = None
+    preinstalled: bool = False
+    image_build_performed: bool | None = None
+    runner_source: str = "image"
 
 
 @dataclass(frozen=True, slots=True)
@@ -126,7 +135,7 @@ def load_asset_lock(repository_root: Path) -> Mapping[str, Any]:
 
 
 class CodeQLImageResolver:
-    """Layer the pinned CodeQL payload onto an accepted build/source environment, offline."""
+    """Select an explicitly declared installed runtime or prepare its bounded offline layer."""
 
     def __init__(self, *, repository_root: Path, metadata_root: Path, settings: RuntimeSettings,
                  timeout_seconds: int = 1800, output_bytes: int = 8 * 1024 * 1024,
@@ -150,12 +159,35 @@ class CodeQLImageResolver:
             raise ValueError("accepted CodeQL environment image id is invalid")
         if not re.fullmatch(r"[1-9][0-9]*:[1-9][0-9]*", runtime_user):
             raise ValueError("accepted CodeQL runtime user must be numeric and non-root")
-        return hashlib.sha256(canonical_json({
+        preinstalled = self._preinstalled(build_image_id=build_image_id, runtime_user=runtime_user)
+        identity = {
             "schema": IMAGE_SCHEMA, "source_image_id": self.settings.source_image_id,
             "build_image_id": build_image_id, "runtime_user": runtime_user,
             "component_release_id": self.releases.values.get("codeql"),
             "runner_release_id": self.releases.values.get("codeql_runner"),
-        })).hexdigest()
+        }
+        if preinstalled is not None:
+            identity.update(schema=PREINSTALLED_IMAGE_SCHEMA, preinstalled=asdict(preinstalled),
+                            runtime_user=preinstalled.runtime_user)
+        return hashlib.sha256(canonical_json(identity)).hexdigest()
+
+    def _preinstalled(self, *, build_image_id: str, runtime_user: str) -> CodeQLPreinstalledRuntime | None:
+        declarations = getattr(self.settings, "preinstalled_runtimes", ())
+        if not declarations:
+            return None
+        effective_user = application_runtime_user(runtime_user)
+        matches = [item for item in declarations
+                   if item.build_image_id == build_image_id and item.runtime_user == effective_user]
+        if len(matches) != 1:
+            raise ValueError("CodeQL preinstalled runtime requires one exact environment/user declaration")
+        selected = matches[0]
+        if selected.runner_source == "application" and native_execution_requested():
+            raise ValueError("application-supplied CodeQL runner is unsupported with native execution")
+        if (selected.source_image_id != self.settings.source_image_id
+                or selected.codeql_release_id != self.releases.values.get("codeql")
+                or selected.runner_release_id != self.releases.values.get("codeql_runner")):
+            raise ValueError("CodeQL preinstalled runtime source or release declaration conflicts with frozen policy")
+        return selected
 
     def resolve(self, *, build_image_tag: str, build_image_id: str,
                 runtime_user: str) -> tuple[CodeQLImage, bytes, bytes]:
@@ -173,6 +205,19 @@ class CodeQLImageResolver:
             if self._inspect(build_image_id) is None:
                 raise RuntimeError("accepted CodeQL environment image is unavailable")
             raise ValueError("accepted CodeQL environment image tag changed identity")
+        preinstalled = self._preinstalled(build_image_id=build_image_id, runtime_user=runtime_user)
+        if preinstalled is not None:
+            if self._inspect(preinstalled.runtime_image_id) != preinstalled.runtime_image_id:
+                raise ValueError("CodeQL preinstalled runtime image is missing or differs from its immutable ID")
+            manifest_path = self.metadata_root / "codeql-preinstalled-images" / f"{identity}.json"
+            image = CodeQLImage(
+                PREINSTALLED_IMAGE_SCHEMA, identity, self.settings.source_image_id, build_image_id,
+                build_image_tag, preinstalled.runtime_image_id, preinstalled.runtime_image_id,
+                preinstalled.runtime_user, preinstalled.codeql_release_id, preinstalled.runner_release_id,
+                False, manifest_path.relative_to(self.metadata_root).as_posix(),
+                preinstalled=True, image_build_performed=False, runner_source=preinstalled.runner_source)
+            atomic_json(manifest_path, asdict(image))
+            return image, b"", b""
         tool_root = self.repository_root / "containers" / "tools" / "codeql"
         dockerfile = tool_root / ("Dockerfile.source" if build_image_id == self.settings.source_image_id
                                   else "Dockerfile")
@@ -193,7 +238,7 @@ class CodeQLImageResolver:
                     if namespace is not None:
                         verify_builder_receipt(value["preparation_receipt"], identity=identity, tag=image_tag,
                                                image_id=image_id)
-                    return CodeQLImage(**{**value, "reused": True}), b"", b""
+                    return CodeQLImage(**{**value, "reused": True, "image_build_performed": False}), b"", b""
             from appsec_review.runtime.resources import require_bounded_image_builder
             require_bounded_image_builder()
             with bounded_image_preparation(identity=identity, tag=image_tag,
@@ -245,6 +290,7 @@ class CodeQLImageResolver:
                 self.releases.values.get("codeql_runner"), False,
                 manifest_path.relative_to(self.metadata_root).as_posix(),
                 builder.receipt() if builder is not None else None,
+                image_build_performed=True,
             ))
             atomic_json(manifest_path, value)
             return CodeQLImage(**value), stdout[:self.output_bytes], stderr[:self.output_bytes]
@@ -344,6 +390,28 @@ class CodeQLExecutor:
         scratch.mkdir(parents=True, exist_ok=True)
         native = native_execution_requested()
         runtime_user = application_runtime_user(self.image.runtime_user)
+        if self.image.preinstalled and runtime_user != self.image.runtime_user:
+            raise ValueError("CodeQL preinstalled runtime user changed before execution")
+        if self.image.preinstalled:
+            if self.image.component_release_id is None or self.image.runner_release_id is None:
+                raise ValueError("CodeQL preinstalled runtime is missing declared releases")
+            declaration = CodeQLPreinstalledRuntime(
+                self.image.source_image_id, self.image.build_image_id, self.image.image_id,
+                self.image.runtime_user, self.image.component_release_id, self.image.runner_release_id,
+                self.image.runner_source)
+            if declaration not in getattr(self.settings, "preinstalled_runtimes", ()):
+                raise ValueError("CodeQL preinstalled runtime declaration changed before execution")
+        runner_mount = None
+        if self.image.runner_source == "application":
+            if not self.image.preinstalled or native:
+                raise ValueError("application-supplied CodeQL runner requires ordinary preinstalled execution")
+            runner_path = application_asset(RUNNER_ASSET)
+            if (runner_path.is_symlink() or not runner_path.is_file()
+                    or not runner_path.resolve().is_relative_to(runner_path.parents[3].resolve())):
+                raise ValueError("application-supplied CodeQL runner must remain in the trusted application root")
+            runner_mount = resolve_host_bind_path(runner_path, self.runner)
+        elif self.image.runner_source != "image":
+            raise ValueError("CodeQL runtime runner source is invalid")
         container_uid = int(runtime_user.split(":", 1)[0])
         # Query and graph export may run concurrently for one scope. Export owns only its staged
         # ``export`` tree plus the scope root used to create ``exports``; traversing sibling query
@@ -372,7 +440,7 @@ class CodeQLExecutor:
             reason = ("timed out" if inspected[3] else
                       inspected[2][:512].decode("utf-8", "replace").strip() or
                       f"resolved {inspected[1].decode('utf-8', 'replace').strip()}")
-            raise ValueError(f"CodeQL derived image {self.image.image_id} ({self.image.image_tag}) "
+            raise ValueError(f"CodeQL runtime image {self.image.image_id} ({self.image.image_tag}) "
                              f"is unavailable: {reason}")
         effective = resolve_host_bind_path(scratch, self.runner)
         timeout = action_timeout(self.settings, action)
@@ -398,6 +466,8 @@ class CodeQLExecutor:
             else:
                 volume_name = f"appsec-codeql-{uuid4().hex}"
         mounts = ["--mount", f"type=bind,src={effective},dst=/scratch"]
+        if runner_mount is not None:
+            mounts.extend(("--mount", f"type=bind,src={runner_mount},dst={RUNNER_CONTAINER_PATH},readonly"))
         staged_database = volume_name is not None or native_database is not None
         if staged_database:
             database_mount = (f"type=bind,src={native_database}" if native_database is not None
@@ -420,7 +490,7 @@ class CodeQLExecutor:
             "--tmpfs", "/tmp:rw,noexec,nosuid,size=2g", *mounts, "--workdir", "/scratch",
             "--env", "HOME=/tmp/codeql-home", "--env", "LANG=C.UTF-8", "--env", "LC_ALL=C.UTF-8",
             "--env", "TZ=UTC", "--entrypoint", "python3", self.image.image_id,
-            "/opt/appsec/codeql_runner.py", action,
+            RUNNER_CONTAINER_PATH, action,
             *(("--staged-database",) if staged_database else ()), *argv,
         ]
         started, monotonic = _stamp(), time.monotonic()
@@ -473,6 +543,7 @@ class CodeQLExecutor:
             {"network": network, "root_filesystem": "read-only", "user": runtime_user,
              "cap_drop": ["ALL"], "no_new_privileges": True, "threads": threads,
              "ram_mb": ram_mb, "timeout_seconds": timeout,
+             "runner_source": self.image.runner_source, "runner_release_id": self.image.runner_release_id,
              "output_bytes": self.settings.output_bytes, "capture_mode": "head-tail",
              "database_storage": ("disposable-native-bind" if native_database is not None else
                                   "disposable-docker-volume" if volume_name else "run-bind"),

@@ -8,6 +8,8 @@ import re
 from types import MappingProxyType
 from typing import Any
 
+from .assurance import ComponentReleases
+
 
 _SHA = re.compile(r"^[0-9a-f]{64}$")
 _IMAGE = re.compile(r"^sha256:[0-9a-f]{64}$")
@@ -242,6 +244,29 @@ class CodeQLLanguageSettings:
 
 
 @dataclass(frozen=True, slots=True)
+class CodeQLPreinstalledRuntime:
+    source_image_id: str
+    build_image_id: str
+    runtime_image_id: str
+    runtime_user: str
+    codeql_release_id: str
+    runner_release_id: str
+    runner_source: str = "image"
+
+    def __post_init__(self) -> None:
+        for name in ("source_image_id", "build_image_id", "runtime_image_id"):
+            value = getattr(self, name)
+            if not isinstance(value, str) or not _IMAGE.fullmatch(value):
+                raise ValueError(f"CodeQL preinstalled runtime {name} must be an immutable image ID")
+        if not isinstance(self.runtime_user, str) or not re.fullmatch(
+                r"[1-9][0-9]*:[1-9][0-9]*", self.runtime_user):
+            raise ValueError("CodeQL preinstalled runtime user must be numeric and non-root")
+        ComponentReleases({"codeql": self.codeql_release_id, "codeql_runner": self.runner_release_id})
+        if self.runner_source not in ("image", "application"):
+            raise ValueError("CodeQL preinstalled runner_source must be image or application")
+
+
+@dataclass(frozen=True, slots=True)
 class CodeQLAnalysisSettings:
     enabled: bool
     execution_mode: CodeQLExecutionMode
@@ -268,6 +293,7 @@ class CodeQLAnalysisSettings:
     max_paths: int
     languages: Mapping[str, CodeQLLanguageSettings]
     export_queries: CodeQLExportSettings = field(default_factory=CodeQLExportSettings)
+    preinstalled_runtimes: tuple[CodeQLPreinstalledRuntime, ...] = ()
 
     @property
     def export_timeout_seconds(self) -> int:
@@ -326,6 +352,17 @@ class CodeQLAnalysisSettings:
         exporting = {name for name, language in self.languages.items() if language.export_queries}
         if not exporting <= _EXPORT_LANGUAGES:
             raise ValueError("CodeQL graph export packs exist only for: " + ", ".join(sorted(_EXPORT_LANGUAGES)))
+        if (not isinstance(self.preinstalled_runtimes, tuple) or len(self.preinstalled_runtimes) > 128
+                or any(not isinstance(item, CodeQLPreinstalledRuntime) for item in self.preinstalled_runtimes)):
+            raise ValueError("CodeQL preinstalled_runtimes requires at most 128 typed declarations")
+        bindings = set()
+        for item in self.preinstalled_runtimes:
+            if item.source_image_id != self.source_image_id:
+                raise ValueError("CodeQL preinstalled runtime source differs from configured source image")
+            binding = (item.build_image_id, item.runtime_user)
+            if binding in bindings:
+                raise ValueError("CodeQL preinstalled runtime has a duplicate environment/user binding")
+            bindings.add(binding)
 
 
 def parse_codeql_settings(value: Mapping[str, Any]) -> CodeQLAnalysisSettings:
@@ -335,7 +372,7 @@ def parse_codeql_settings(value: Mapping[str, Any]) -> CodeQLAnalysisSettings:
         "concurrency", "inventory_timeout_seconds", "database_timeout_seconds",
         "query_timeout_seconds", "output_bytes", "database_file_limit", "database_bytes_limit",
         "sarif_bytes_limit", "result_limit", "threads", "ram_mb", "max_paths", "languages",
-        "export_queries",
+        "export_queries", "preinstalled_runtimes",
     }
     unknown = set(value) - allowed
     if unknown:
@@ -431,7 +468,18 @@ def parse_codeql_settings(value: Mapping[str, Any]) -> CodeQLAnalysisSettings:
         ram_mb=int(value.get("ram_mb", 0)), max_paths=int(value.get("max_paths", 0)),
         languages=MappingProxyType(languages),
         export_queries=_export_settings(value.get("export_queries")),
+        preinstalled_runtimes=_preinstalled_runtimes(value.get("preinstalled_runtimes", [])),
     )
+
+
+def _preinstalled_runtimes(value: object) -> tuple[CodeQLPreinstalledRuntime, ...]:
+    if not isinstance(value, list) or len(value) > 128:
+        raise ValueError("CodeQL preinstalled_runtimes must be an array of at most 128 tables")
+    fields = set(CodeQLPreinstalledRuntime.__dataclass_fields__)
+    required = fields - {"runner_source"}
+    if any(not isinstance(item, Mapping) or set(item) - fields or required - set(item) for item in value):
+        raise ValueError("CodeQL preinstalled runtime fields differ from the closed contract")
+    return tuple(CodeQLPreinstalledRuntime(**dict(item)) for item in value)
 
 
 _EXPORT_QUERY_FIELDS = tuple(CodeQLExportQuerySettings.__dataclass_fields__)

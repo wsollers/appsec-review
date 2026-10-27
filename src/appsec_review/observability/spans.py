@@ -21,7 +21,7 @@ _COUNTERS = frozenset({
     "path_count", "receipt_references", "receipt_validations",
     "shard_references", "shard_validations", "manifest_validations",
     "scratch_paths", "assembly_count", "platform_scan_invocations",
-    "platform_hash_bytes", "cache_hits", "cache_misses", "builder_launches",
+    "platform_hash_bytes", "cache_hits", "cache_misses", "builder_launches", "preinstalled_runtimes",
 })
 
 

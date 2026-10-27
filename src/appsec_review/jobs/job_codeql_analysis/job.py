@@ -17,7 +17,7 @@ from appsec_review.applicability import (
 )
 from appsec_review.codeql import CodeQLExecutor, CodeQLImageResolver, load_sarif, tree_manifest
 from appsec_review.codeql.runtime import (
-    EXPORT_MANIFEST_NAME, EXPORT_MANIFEST_SCHEMA, GraphExportIntegrityError, compile_cache_volume,
+    CodeQLImage, EXPORT_MANIFEST_NAME, EXPORT_MANIFEST_SCHEMA, GraphExportIntegrityError, compile_cache_volume,
     graph_compile_arguments, graph_export_arguments, load_asset_lock,
     load_graph_exports,
 )
@@ -462,6 +462,31 @@ def _metrics_scope(scope: CodeQLScope) -> dict[str, Any]:
             "language": scope.language, "build_unit_id": scope.build_unit_id}
 
 
+def _resolve_image(unit: UnitContext, *, build_image_tag: str, build_image_id: str,
+                   runtime_user: str, scope_id: str | None = None) -> tuple[CodeQLImage, bytes, bytes]:
+    settings = _settings(unit)
+    with operation_span(unit.job.events, "codeql.runtime_resolution",
+                        unit_id=unit.unit_id, scope_id=scope_id) as span:
+        resolver = CodeQLImageResolver(
+            repository_root=unit.job.repository_root, metadata_root=unit.job.metadata_root,
+            settings=settings, timeout_seconds=settings.database_timeout_seconds,
+            output_bytes=settings.output_bytes, releases=_policy(unit).releases)
+        result = resolver.resolve(build_image_tag=build_image_tag, build_image_id=build_image_id,
+                                  runtime_user=runtime_user)
+        image = result[0]
+        if image.preinstalled:
+            span.count("preinstalled_runtimes")
+            span.count("builder_launches", 0)
+        unit.job.events.write(
+            "CODEQL_RUNTIME_RESOLVED", unit_id=unit.unit_id, scope_id=scope_id, span_id=span.span_id,
+            image_id=image.image_id, image_identity=image.identity, build_image_id=image.build_image_id,
+            runtime_user=image.runtime_user, requested_runtime_user=runtime_user,
+            runner_source=image.runner_source, runner_release_id=image.runner_release_id,
+            preparation_kind="preinstalled" if image.preinstalled else "derived",
+            image_build_performed=image.image_build_performed, checkpoint_reused=image.reused)
+        return result
+
+
 def _import_predecessor_databases(unit: UnitContext, scopes: Sequence[CodeQLScope],
                                  receipts: Mapping[str, Mapping[str, Any]],
                                  settings: CodeQLAnalysisSettings) -> Mapping[str, Any] | None:
@@ -513,13 +538,9 @@ def _database_one(unit: UnitContext, scope: CodeQLScope,
     })
     if not isinstance(image_value, Mapping):
         raise FrameworkIntegrityError("CodeQL environment image identity is unavailable")
-    resolver = CodeQLImageResolver(repository_root=unit.job.repository_root,
-        metadata_root=unit.job.metadata_root, settings=settings,
-        timeout_seconds=settings.database_timeout_seconds, output_bytes=settings.output_bytes,
-        releases=_policy(unit).releases)
-    image, _stdout, _stderr = resolver.resolve(
+    image, _stdout, _stderr = _resolve_image(unit,
         build_image_tag=str(image_value["image_tag"]), build_image_id=str(image_value["image_id"]),
-        runtime_user=str(image_value.get("user") or settings.runtime_user))
+        runtime_user=str(image_value.get("user") or settings.runtime_user), scope_id=scope.scope_id)
     root = unit.job.run_root / "data" / "codeql" / "scopes" / scope.scope_id
     root.mkdir(parents=True, exist_ok=True)
     image_artifact = _json_artifact(unit.job.run_root, root / "image.json", asdict(image))
@@ -1307,11 +1328,7 @@ def build_job() -> Job:
         inventory_path = root / "extractor-inventory.json"
         runtime_gaps: list[str] = []
         try:
-            resolver = CodeQLImageResolver(repository_root=unit.job.repository_root,
-                metadata_root=unit.job.metadata_root, settings=settings,
-                timeout_seconds=settings.database_timeout_seconds, output_bytes=settings.output_bytes,
-                releases=_policy(unit).releases)
-            image, _stdout, _stderr = resolver.resolve(build_image_tag=settings.source_image_tag,
+            image, _stdout, _stderr = _resolve_image(unit, build_image_tag=settings.source_image_tag,
                 build_image_id=settings.source_image_id, runtime_user=settings.runtime_user)
             executor = CodeQLExecutor(image=image, run_root=unit.job.run_root, settings=settings)
             result = executor.execute("inventory", ("--asset-lock", "assets.lock.json",
