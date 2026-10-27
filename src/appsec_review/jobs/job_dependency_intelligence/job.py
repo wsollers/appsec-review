@@ -439,8 +439,7 @@ def build_job(*, infer: Infer | None = None, scorecard_transport: Transport = ht
              ("inputs.load_accepted", "resolution.infer_repositories", "repositories.deduplicate", "scorecards.fetch",
               "publication.publish_context")),
     )
-    implementation = hashlib.sha256(b"".join(Path(__file__).with_name(name).read_bytes() for name in
-        ("job.py", "native.py", "resolution.py", "inference.py", "scorecard.py"))).hexdigest()
+    implementation = None
     return Job(JOB_ID, "dependency_intelligence", UnitExecutor(units).execute,
                input_validators=(_validate_config,), schema_identity=DEPENDENCY_INTELLIGENCE_HANDOFF_SCHEMA,
                implementation_identity=implementation, validation_identity=implementation,

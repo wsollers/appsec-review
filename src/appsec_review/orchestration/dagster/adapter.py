@@ -21,6 +21,7 @@ from dagster import (
 )
 
 from appsec_review.config import AppConfig, load_config
+from appsec_review.config.native_dagster import reject_uncommissioned_native_execution
 from appsec_review.runtime.registry import JobRegistry, builtin_registry
 from appsec_review.runtime.runner import JobRunner
 from appsec_review.runtime import Job, job_is_enabled, plan_jobs
@@ -347,6 +348,7 @@ def build_definitions(
 ) -> Definitions:
     """Build Dagster definitions from the typed config and semantic job registry."""
 
+    reject_uncommissioned_native_execution(definitions=True)
     source = config_path or os.environ.get("APPSEC_REVIEW_CONFIG", "appsec-review.toml")
     config = load_config(source)
     registry = registry or builtin_registry()

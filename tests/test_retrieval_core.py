@@ -167,6 +167,169 @@ def test_identity_and_location_contracts_reject_unsafe_or_ambiguous_values() -> 
         "FLOWS_TO", "SAME_AS", "AFFECTED_BY", "GUARDS")}
 
 
+def test_standalone_managed_retrieval_keeps_admission_through_manifest_loading(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    from appsec_review.config.assurance import parse_review_policy
+    from appsec_review.storage.admission import create_admission, consume_admission
+    from appsec_review.storage import validation
+    from appsec_review.retrieval import index
+
+    runs, ids = _fixture(tmp_path)
+    root = runs / RUN_ID
+    pointer_path = root / "data/indices/accepted.json"
+    pointer = json.loads(pointer_path.read_bytes())
+    manifest = json.loads((root / pointer["manifest_path"]).read_bytes())
+    target = Path(manifest["target_root"])
+    policy = parse_review_policy({
+        "mode": "first_party_managed", "project_id": "fixture",
+        "approved_first_party_projects": ["fixture"],
+        "target_root": str(target), "custody": "application_private_v1",
+    })
+    configuration = root / "data/configuration"
+    atomic_json(configuration / "resolved.json", {"review_policy": policy.view()})
+    atomic_json(configuration / "manifest.json",
+                {"resolved_sha256": file_sha256(configuration / "resolved.json")})
+    handoff_path = root / pointer["handoff_path"]
+    handoff = json.loads(handoff_path.read_bytes())
+    handoff["source_fingerprint"] = manifest["target_snapshot"]
+    handoff["resolving_paths"] = {"attempt": handoff_path.parent.relative_to(root).as_posix()}
+    handoff["artifacts"].extend({
+        "path": shard["relative_path"], "sha256": shard["sha256"],
+        "size_bytes": (root / shard["relative_path"]).stat().st_size,
+    } for shard in manifest["indexes"])
+    context = SimpleNamespace(run_root=root, target_root=target, review_policy=policy,
+                              source_fingerprint=manifest["target_snapshot"])
+    handoff["validation_record"] = create_admission(context, handoff)
+    atomic_json(handoff_path, handoff)
+    atomic_json(pointer_path, {**pointer, "handoff_sha256": file_sha256(handoff_path)})
+    digest = validation.file_sha256
+
+    def no_payload_hash(path):
+        assert path.suffix != ".sqlite", "standalone constructor lost its authenticated admission"
+        return digest(path)
+
+    def no_sqlite_scan(*args, **kwargs):
+        pytest.fail("standalone managed constructor rescanned admitted SQLite payloads")
+
+    connect = index.sqlite3.connect
+    monkeypatch.setattr(validation, "file_sha256", no_payload_hash)
+    monkeypatch.setattr(index.sqlite3, "connect", no_sqlite_scan)
+    for _ in range(2):
+        core = RetrievalCore(runs, RUN_ID)
+        assert core.manifest_sha256 == pointer["manifest_sha256"]
+        assert len(core.manifest["indexes"]) == len(manifest["indexes"])
+        assert validation.current_validation(root) is None
+    monkeypatch.setattr(index.sqlite3, "connect", connect)
+    with validation.validation_scope(root):
+        assert consume_admission(root, handoff)
+        assert core.trace(identity=ids["observation"], depth=2)["results"]
+        assert core.find(identity=ids["symbol"])["results"]
+    assert validation.current_validation(root) is None
+
+
+def test_trace_hashes_each_shard_once_per_operation_and_rechecks_next_call(tmp_path, monkeypatch):
+    from collections import Counter
+    from appsec_review.storage import validation
+
+    runs, ids = _fixture(tmp_path)
+    core = RetrievalCore(runs, RUN_ID)
+    digest = validation.file_sha256
+    calls = []
+
+    def counted(path):
+        if path.suffix == ".sqlite":
+            calls.append(path)
+        return digest(path)
+
+    monkeypatch.setattr(validation, "file_sha256", counted)
+    shards = {core.run_root / item["relative_path"] for item in core.manifest["indexes"]}
+    for repetition in (1, 2):
+        trace = core.trace(identity=ids["observation"], depth=2)
+        assert max(item["depth"] for item in trace["results"]) == 2
+        assert Counter(calls) == {path: repetition for path in shards}
+        assert validation.current_validation(core.run_root) is None
+    path = core.run_root / core.indexes["source"]["relative_path"]
+    with path.open("ab") as stream:
+        stream.write(b"changed after the previous operation")
+    with pytest.raises(ValueError, match="integrity"):
+        core.trace(identity=ids["observation"], depth=2)
+
+
+def test_three_repeat_trace_work_comparison(tmp_path, monkeypatch):
+    from statistics import median
+    from time import perf_counter_ns
+    from appsec_review.observability import EventLog, PipelineLog
+    from appsec_review.observability.spans import operation_span
+    from appsec_review.storage import validation
+
+    runs, ids = _fixture(tmp_path)
+    core = RetrievalCore(runs, RUN_ID)
+    events = EventLog(core.run_root / "data/logs/trace-comparison.jsonl",
+                      PipelineLog(core.run_root), {"run_id": RUN_ID})
+    shards = {core.run_root / item["relative_path"] for item in core.manifest["indexes"]}
+    unique_bytes = sum(path.stat().st_size for path in shards)
+
+    def prior_per_open_verification(root, path, expected):
+        assert path in shards and root == core.run_root
+        actual = file_sha256(path)
+        if actual != expected:
+            raise ValueError("fixture target evidence integrity mismatch")
+        return actual
+
+    samples = []
+    expected_result = None
+    for repetition in range(3):
+        order = ("prior_per_open", "operation_scoped")
+        if repetition % 2:
+            order = tuple(reversed(order))
+        for variant in order:
+            with monkeypatch.context() as patch:
+                if variant == "prior_per_open":
+                    patch.setattr(validation, "verified_digest", prior_per_open_verification)
+                started = perf_counter_ns()
+                with operation_span(events, "fixture.trace_comparison") as span:
+                    result = core.trace(identity=ids["observation"], depth=2)
+                elapsed_ms = (perf_counter_ns() - started) / 1_000_000
+            comparable = {key: result[key] for key in ("results", "coverage_gaps", "pagination")}
+            if expected_result is None:
+                expected_result = comparable
+            assert comparable == expected_result
+            multiplier = 2 if variant == "prior_per_open" else 1
+            assert span.counters["target_hash_objects"] == multiplier * len(shards)
+            assert span.counters["target_hash_bytes"] == multiplier * unique_bytes
+            samples.append({"repetition": repetition + 1, "variant": variant,
+                            "order": list(order), "wall_ms": elapsed_ms,
+                            "work": dict(span.counters)})
+    medians = {
+        variant: median(item["wall_ms"] for item in samples if item["variant"] == variant)
+        for variant in ("prior_per_open", "operation_scoped")}
+    hash_bytes = {
+        variant: median(item["work"]["target_hash_bytes"] for item in samples if item["variant"] == variant)
+        for variant in medians}
+    work_reduction = 100 * (1 - hash_bytes["operation_scoped"] / hash_bytes["prior_per_open"])
+    assert work_reduction >= 50
+    report = {
+        "schema": "appsec-review/fixture-trace-comparison/1",
+        "assurance_mode": "strict",
+        "baseline": "prior per-open target-shard verification, not a historical end-to-end run",
+        "cache_state": "constructor-warmed fixture shards; no cold or CodeQL tool-cache trial",
+        "manifest_sha256": core.manifest_sha256,
+        "target_snapshot": core.manifest["target_snapshot"],
+        "samples": samples, "median_wall_ms": medians,
+        "hash_work_reduction_percent": work_reduction,
+        "component_wall_reduction_percent": 100 * (
+            1 - medians["operation_scoped"] / medians["prior_per_open"]),
+        "equal_results_and_gaps": True,
+        "p7_overhead_gate": "not_established_component_only",
+        "p7_codeql_nonregression_gate": "not_measured",
+        "limitations": ["small warm fixture", "only three repetitions", "shared-host timing noise",
+                        "no managed, package, cold-work or resume comparison",
+                        "no production performance claim"],
+    }
+    atomic_json(tmp_path / "trace-comparison.json", report)
+    print(json.dumps(report, sort_keys=True))
+
+
 def test_precomputed_and_hotspot_queries_are_bounded_and_report_missing_sets(tmp_path: Path) -> None:
     runs, ids = _fixture(tmp_path)
     core = RetrievalCore(runs, RUN_ID)

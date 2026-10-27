@@ -62,17 +62,17 @@ def wave1_dependencies(registered: Set[str]) -> dict[str, tuple[str, ...]] | Non
     wave_dependencies["job_target_analysis_plan"] = tuple(job_id for job_id in (
         "job_ci_configuration_analysis", "job_source_history_analysis") if job_id in registered) or (
         "job_target_catalog",)
-    if "job_tree_sitter_ast" in registered:
-        wave_dependencies["job_tree_sitter_ast"] = ("job_target_analysis_plan",)
-    if "job_change_context_analysis" in registered and "job_source_history_analysis" in registered:
-        # Function-level attribution reads accepted Tree-sitter spans when the wave produces them.
-        wave_dependencies["job_change_context_analysis"] = (
-            ("job_tree_sitter_ast",) if "job_tree_sitter_ast" in registered else ("job_target_analysis_plan",))
     if "job_project_build" in registered:
         wave_dependencies["job_project_build"] = ("job_target_analysis_plan",)
     if "job_language_build" in registered:
         wave_dependencies["job_language_build"] = (("job_project_build",)
             if "job_project_build" in registered else ("job_target_analysis_plan",))
+    if "job_tree_sitter_ast" in registered:
+        wave_dependencies["job_tree_sitter_ast"] = (("job_language_build",)
+            if "job_language_build" in registered else ("job_target_analysis_plan",))
+    if "job_change_context_analysis" in registered and "job_source_history_analysis" in registered:
+        wave_dependencies["job_change_context_analysis"] = (
+            ("job_tree_sitter_ast",) if "job_tree_sitter_ast" in registered else ("job_target_analysis_plan",))
     if "job_artifact_indexing" in registered:
         wave_dependencies["job_artifact_indexing"] = (("job_language_build",)
             if "job_language_build" in registered else ("job_project_build",))

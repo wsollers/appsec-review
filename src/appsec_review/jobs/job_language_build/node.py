@@ -7,8 +7,11 @@ import os
 from pathlib import Path, PurePosixPath
 import re
 import shlex
+import tarfile
 from typing import Any
 
+from appsec_review.config.assurance import ScopeRole
+from appsec_review.jobs.delivery_scope import apply_scope
 from appsec_review.jobs.job_language_build import node_scripts
 from appsec_review.jobs.job_project_build.job import node_installer_command
 from appsec_review.storage import canonical_json, file_sha256
@@ -65,10 +68,6 @@ _RESOLVED_DEPENDENCY_METADATA = {*LOCKFILES, ".pnp.cjs", ".pnp.loader.mjs"}
 _NATIVE_SYMBOL_SUFFIXES = {".pdb", ".debug", ".dwo", ".dwp", ".sym"}
 _PACKAGE_SUFFIXES = {".tgz", ".zip"}
 _INTEGRITY_SUFFIXES = (".integrity", ".sha1", ".sha256", ".sha512", ".shasum")
-_EXCLUDED_DIRECTORIES = {
-    "node_modules", ".cache", ".npm", ".pnpm-store", ".parcel-cache", ".turbo",
-    ".eslintcache", ".nyc_output", ".tmp", ".temp", "tmp", "temp",
-}
 _MAX_ARTIFACT_BYTES = 512 * 1024 * 1024
 _MAX_METADATA_BYTES = 64 * 1024 * 1024
 _MAX_SOURCE_MAP_BYTES = 16 * 1024 * 1024
@@ -136,6 +135,8 @@ def artifact_kind(path: Path) -> str | None:
         return "source-map"
     if suffix == ".node":
         return "native-addon"
+    if suffix in {".dll", ".so", ".dylib"} or ".so." in name:
+        return "shared-library"
     if suffix in _PACKAGE_SUFFIXES:
         return "package"
     if name.endswith(_INTEGRITY_SUFFIXES):
@@ -151,24 +152,93 @@ def artifact_kind(path: Path) -> str | None:
     return None
 
 
-def _excluded_directory(parent: PurePosixPath, name: str) -> bool:
-    lowered = name.lower()
-    if lowered in _EXCLUDED_DIRECTORIES:
-        return True
-    return lowered == "cache" and bool(parent.parts) and parent.parts[-1].lower() == ".yarn"
-
-
-def _catalog_files(workspace: Path) -> list[Path]:
-    """Walk without entering dependency trees, caches, or transient directories."""
+def _catalog_files(workspace: Path, limit: int) -> tuple[list[Path], list[str]]:
+    """Bound discovery, not delivery, by entry count; never infer scope from a directory."""
     files: list[Path] = []
+    gaps: list[str] = []
+    entries = 0
     for raw_root, directories, names in os.walk(workspace, followlinks=False):
         root = Path(raw_root)
-        parent = PurePosixPath(root.relative_to(workspace).as_posix())
+        entries += len(directories) + len(names)
+        if entries > limit:
+            gaps.append("Node workspace discovery bound reached; delivery coverage incomplete")
+            break
+        for name in sorted([*directories, *names]):
+            if (root / name).is_symlink():
+                gaps.append(f"{(root / name).relative_to(workspace).as_posix()}: symlink delivery unresolved")
         directories[:] = sorted(name for name in directories
-                                if not (root / name).is_symlink()
-                                and not _excluded_directory(parent, name))
+                                if not (root / name).is_symlink())
         files.extend(root / name for name in names)
-    return sorted(files, key=lambda path: path.relative_to(workspace).as_posix())
+    return sorted(files, key=lambda path: path.relative_to(workspace).as_posix()), gaps
+
+
+def _package_delivery(artifacts: list[dict[str, Any]], run_root: Path,
+                      package_facts: Sequence[Mapping[str, Any]]) -> list[str]:
+    """Bind npm package members to retained workspace bytes without extracting them.
+
+    Facts come only from a successful direct npm pack invocation, bound to its
+    output digest. Diagnostic command traces and package.json declarations do not
+    establish delivery.
+    """
+    by_path = {row["workspace_path"]: row for row in artifacts}
+    gaps: list[str] = []
+    if len(package_facts) > 256:
+        gaps.append("npm package delivery fact count bound reached")
+    for fact in package_facts[:256]:
+        package = by_path.get(str(fact.get("workspace_path", "")))
+        if package is None or package["sha256"] != fact.get("sha256") or package["kind"] != "package":
+            gaps.append("npm package delivery fact has no retained matching archive")
+            continue
+        source_dir = PurePosixPath(str(fact.get("source_dir", ".")))
+        if source_dir.is_absolute() or ".." in source_dir.parts:
+            raise ValueError("npm package delivery fact has an invalid source directory")
+        evidence = {"kind": "accepted-npm-pack", "workspace_path": package["workspace_path"],
+                    "sha256": package["sha256"]}
+        package.update(scope_role=ScopeRole.DELIVERABLE.value, delivery_evidence=evidence)
+        package_path = run_root / package["path"]
+        if package_path.is_symlink() or file_sha256(package_path) != package["sha256"]:
+            raise ValueError("npm package changed during delivery reconciliation")
+        try:
+            total = 0
+            with tarfile.open(package_path, "r|gz") as archive:
+                for ordinal, member in enumerate(archive, 1):
+                    total += member.size
+                    if ordinal > 4096 or total > _MAX_ARTIFACT_BYTES:
+                        gaps.append(f"{package['workspace_path']}: package delivery member bound reached")
+                        break
+                    logical = PurePosixPath(member.name)
+                    if (logical.is_absolute() or ".." in logical.parts or
+                            not logical.parts or logical.parts[0] != "package"):
+                        gaps.append(f"{package['workspace_path']}: package member path is unresolved")
+                        continue
+                    if member.isdir():
+                        continue
+                    if not member.isfile() or member.size > _MAX_METADATA_BYTES:
+                        gaps.append(f"{package['workspace_path']}: package member type or byte bound unsupported")
+                        continue
+                    relative = (source_dir / PurePosixPath(*logical.parts[1:])).as_posix()
+                    row = by_path.get(relative)
+                    if row is None:
+                        # Archive scanners still cover the member; source indexing cannot.
+                        gaps.append(f"{relative}: delivered package member lacks retained workspace mapping")
+                        continue
+                    stream = archive.extractfile(member)
+                    if stream is None:
+                        continue
+                    with stream:
+                        digest = hashlib.sha256(stream.read(member.size + 1)).hexdigest()
+                    if digest != row["sha256"] or member.size != row["size_bytes"]:
+                        gaps.append(f"{relative}: package member differs from retained workspace bytes")
+                        continue
+                    row.update(
+                        scope_role=(ScopeRole.SHIPPED_DEPENDENCY.value if "node_modules" in logical.parts
+                                    else ScopeRole.DELIVERABLE.value),
+                        delivery_evidence={**evidence, "kind": "accepted-package-member", "member": member.name})
+        except (OSError, tarfile.TarError, EOFError):
+            gaps.append(f"{package['workspace_path']}: package delivery members could not be inspected")
+        if file_sha256(package_path) != package["sha256"]:
+            raise ValueError("npm package changed during delivery reconciliation")
+    return gaps
 
 
 def _size_limit(kind: str) -> int:
@@ -207,10 +277,10 @@ def _symbol_addon(relative: str, addons: Mapping[str, str]) -> tuple[str, str] |
 
 
 def catalog(run_root: Path, workspace: Path, before: Mapping[str, str], limit: int,
-            build_unit_id: str) -> tuple[list[dict[str, Any]], list[str]]:
+            build_unit_id: str, *,
+            package_facts: Sequence[Mapping[str, Any]] = ()) -> tuple[list[dict[str, Any]], list[str]]:
     artifacts: list[dict[str, Any]] = []
-    gaps: list[str] = []
-    candidates = _catalog_files(workspace)
+    candidates, gaps = _catalog_files(workspace, max(1, limit) * 10)
     archives: dict[str, str] = {}
     addons: dict[str, str] = {}
     for candidate in candidates:
@@ -254,8 +324,8 @@ def catalog(run_root: Path, workspace: Path, before: Mapping[str, str], limit: i
         unchanged = before.get(relative) == digest
         if unchanged and kind not in {
             "test-coverage", "execution-profile", "package-metadata",
-            "resolved-dependency-metadata",
-        }:
+            "resolved-dependency-metadata", "native-addon", "shared-library",
+        } and "node_modules" not in PurePosixPath(relative).parts:
             continue
         value: dict[str, Any] = {
             "path": path.relative_to(run_root).as_posix(), "workspace_path": relative,
@@ -310,6 +380,8 @@ def catalog(run_root: Path, workspace: Path, before: Mapping[str, str], limit: i
         if len(artifacts) >= limit:
             gaps.append("Node artifact catalog truncated at configured count bound")
             break
+    gaps.extend(_package_delivery(artifacts, run_root, package_facts))
+    gaps.extend(apply_scope(artifacts))
     return artifacts, gaps
 
 
@@ -361,7 +433,8 @@ def validate_lifecycle_scripts(workspace: Path, source_dir: str,
 
 def _npm_pack_integrity(source_dir: str, argv: Sequence[str], after: Mapping[str, str],
                         stdout: bytes) -> tuple[list[dict[str, Any]], list[str]]:
-    if Path(str(argv[0])).name != "npm" or "pack" not in argv or "--json" not in argv:
+    if (Path(str(argv[0])).name != "npm" or tuple(argv[1:2]) != ("pack",)
+            or "--json" not in argv):
         return [], []
     try:
         document = json.loads(stdout.decode("utf-8"))
@@ -386,7 +459,8 @@ def _npm_pack_integrity(source_dir: str, argv: Sequence[str], after: Mapping[str
         digest = after.get(workspace_path)
         if digest is None:
             continue
-        value: dict[str, Any] = {"workspace_path": workspace_path, "sha256": digest}
+        value: dict[str, Any] = {"workspace_path": workspace_path, "sha256": digest,
+                                 "source_dir": source_dir}
         if isinstance(integrity, str) and len(integrity) <= 1024:
             value["integrity"] = integrity
         if isinstance(shasum, str) and re.fullmatch(r"[0-9a-fA-F]{40}", shasum):

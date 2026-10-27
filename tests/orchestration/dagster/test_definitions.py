@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import json
 import os
 import threading
 import time
@@ -15,6 +16,8 @@ from appsec_review.orchestration.dagster.adapter import _metadata_for_outcome
 from appsec_review.orchestration.dagster.error_state import record_error_state
 from appsec_review.runtime import Job, Unit, UnitExecutor
 from appsec_review.runtime.registry import JobRegistry
+from appsec_review.runtime.datasets import artifact_only
+from appsec_review.storage import shared
 from tests.capture_fakes import build_capture_toml
 
 
@@ -52,6 +55,106 @@ def _registry() -> JobRegistry:
         return Job("job_fixture", "fixture", UnitExecutor(units).execute, units=units)
     registry.register("job_fixture", build)
     return registry
+
+
+def test_real_dagster_lifecycle_publishes_and_reuses_shared_artifacts(tmp_path: Path) -> None:
+    config_path = _config(tmp_path)
+    with config_path.open("a") as stream:
+        stream.write("\n[jobs.job_fixture.steps.work.tasks.verify]\nworkers = 1\n")
+    seen_nodes = []
+    fingerprint = "a" * 64
+
+    def compute(context):
+        seen_nodes.append(context.job.orchestration["node"])
+        owner = shared.SharedArtifacts.for_job(context.job)
+        hit = owner.lookup("fixture", fingerprint)
+        if hit is None:
+            receipt = owner.computed("fixture", fingerprint, shared.put_bytes(owner.run_root, b"fixture"),
+                                     computation={"request": fingerprint})
+        else:
+            _, receipt = hit
+        return {"artifact": receipt, "reused": hit is not None}
+
+    def verify(context):
+        seen_nodes.append(context.job.orchestration["node"])
+        shared.verify_receipt(context.job.run_root, context.output("work.execute")["artifact"])
+        return {"verified": True}
+
+    declaration = artifact_only(
+        "shared", "work", "inventory", shared.RECEIPT_SCHEMA, "Fixture computation receipts",
+        artifacts=("data/jobs/job_fixture/attempts/*/shared/*/*.json",), reason="fixture, not review evidence")
+    registry = JobRegistry()
+    registry.register("job_fixture", lambda: Job(
+        "job_fixture", "fixture", compute,
+        units=(Unit("work.execute", compute), Unit("work.verify", verify, ("work.execute",))),
+        datasets=(declaration,), always_execute=True))
+    job = build_definitions(config_path, registry=registry).get_job_def("fixture")
+    first = job.execute_in_process()
+    assert first.success
+    run_root, = (tmp_path / "runs").glob("????-??-??-????")
+    attempts = run_root / "data/jobs/job_fixture/attempts"
+    original_claim = (attempts / "attempt_0001/claim.json").read_bytes()
+    second = job.execute_in_process(tags={"appsec/application_run_id": run_root.name})
+    assert second.success
+    assert seen_nodes == ["standalone__fixture__work__execute", "standalone__fixture__work__verify"] * 2
+    receipts = []
+    for number, invocation in ((1, first.run_id), (2, second.run_id)):
+        attempt = attempts / f"attempt_{number:04d}"
+        reference = shared.reference(run_root, attempt / f"shared/fixture/{fingerprint}.json")
+        receipt = shared.verify_receipt(run_root, reference)
+        receipts.append((reference, receipt))
+        assert receipt["actor"]["orchestration"] == {
+            "system": "dagster", "run_id": invocation, "node": "standalone__fixture__begin"}
+        status = json.loads((attempt / "steps/work/tasks/execute/status.json").read_text())
+        assert status["dagster_node"] == "standalone__fixture__work__execute"
+        assert status["dagster_run_id"] == invocation
+        assert json.loads((attempt / "handoff.json").read_text())["status"] == "ACCEPTED"
+    assert receipts[0][1]["mode"] == "computed"
+    assert receipts[1][1]["mode"] == "reused"
+    assert receipts[1][1]["producer_receipt"] == receipts[0][0]
+    assert (attempts / "attempt_0001/claim.json").read_bytes() == original_claim
+    assert len(list((run_root / shared.OBJECTS).iterdir())) == 1
+
+
+@pytest.mark.parametrize("mode", ("strict", "first_party_managed"))
+def test_dagster_reuses_accepted_target_attempt_with_original_policy(
+        tmp_path: Path, monkeypatch, mode: str) -> None:
+    target = tmp_path / "target"
+    target.mkdir()
+    (target / "app.py").write_text("print('fixture')\n", encoding="utf-8")
+    monkeypatch.setenv("APPSEC_REVIEW_TARGET", str(target))
+    config_path = _config(tmp_path, configured_job="job_target_catalog")
+    with config_path.open("a", encoding="utf-8") as stream:
+        stream.write(
+            '\n[jobs.job_target_catalog.settings]\nmax_document_files = 10\n'
+            'max_document_file_bytes = 1024\nmax_document_records = 100\n'
+            f'\n[review_policy]\nmode = "{mode}"\nproject_id = "fixture"\n'
+            'approved_first_party_projects = ["fixture"]\ncustody = "application_private_v1"\n'
+            f'target_root = {json.dumps(str(target))}\n'
+            '\n[review_policy.releases]\nplatform = "fixture/1"\nvalidation = "fixture/1"\n')
+    calls = []
+
+    def produce(unit):
+        calls.append(unit.job.attempt_id)
+        return {"artifact": shared.put_bytes(unit.job.run_root, b"customer evidence")}
+
+    registry = JobRegistry()
+    registry.register("job_target_catalog", lambda: Job(
+        "job_target_catalog", "fixture", produce, units=(Unit("work.execute", produce),)))
+    job = build_definitions(config_path, registry=registry).get_job_def("fixture")
+    assert job.execute_in_process().success
+    run_root, = (tmp_path / "runs").glob("????-??-??-????")
+    attempts = run_root / "data/jobs/job_target_catalog/attempts"
+    claim_path = attempts / "attempt_0001/claim.json"
+    original_claim = claim_path.read_bytes()
+    frozen_path = run_root / "data/configuration/resolved.json"
+    original_configuration = frozen_path.read_bytes()
+
+    assert job.execute_in_process(tags={"appsec/application_run_id": run_root.name}).success
+    assert calls == ["attempt_0001"]
+    assert [path.name for path in attempts.iterdir()] == ["attempt_0001"]
+    assert claim_path.read_bytes() == original_claim
+    assert frozen_path.read_bytes() == original_configuration
 
 
 def test_definitions_discover_registry_and_configure_schedule(tmp_path: Path) -> None:

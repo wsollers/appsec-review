@@ -3,7 +3,9 @@
 CodeQL is a GitHub product distributed under GitHub's CodeQL terms. The licensed CLI, extractor,
 query-pack, and library payloads are operator-provided runtime assets and are deliberately not
 stored in this repository. `assets.lock.json` records the reviewed version, immutable image
-identity, license-file hash, extractor tree hashes, and query-pack hashes required by the runtime.
+identity and acquisition metadata. Recorded license/extractor/query-pack hashes are historical
+platform-maintenance metadata, not customer-review verification requirements. Customer reviews
+use operator-declared releases and do not hash supplied CodeQL payloads or this lock.
 
 The C++ custom-query layer uses the official
 `github/codeql-coding-standards@v2.62.0` `coding-standards-codeql-packs.zip` release asset. The

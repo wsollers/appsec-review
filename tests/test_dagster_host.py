@@ -47,3 +47,19 @@ def test_start_rejects_other_stack(monkeypatch) -> None:
     with pytest.raises(RuntimeError, match="appsec-review-dagster-windows"):
         reject_other_deployments("wsl")
     reject_other_deployments("windows")
+
+
+def test_native_markers_refuse_compose_lifecycle_and_ops(monkeypatch, capsys) -> None:
+    import lifecycle
+    import ops
+
+    monkeypatch.setenv("APPSEC_NATIVE_DEPLOYMENT_ID", "fixture")
+
+    def forbidden(*_args, **_kwargs):
+        pytest.fail("prepared native configuration reached a Compose subprocess")
+
+    monkeypatch.setattr(subprocess, "run", forbidden)
+    with pytest.raises(RuntimeError, match="ambient engine fallback is prohibited"):
+        lifecycle.main()
+    assert ops.main(["stack-status"]) == ops.REFUSED
+    assert "ambient engine fallback is prohibited" in capsys.readouterr().err

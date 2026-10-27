@@ -81,6 +81,7 @@ def inventory(root: Path, bounds: Bounds = Bounds(), exclusions: PathExclusions 
     exclusions = exclusions or PathExclusions()
     configured: list[dict[str, str]] = []
     files: list[dict[str, Any]] = []
+    artifact_candidates: list[dict[str, Any]] = []
     gaps: list[dict[str, str]] = []
     excluded: set[str] = set()
     total = 0
@@ -100,7 +101,7 @@ def inventory(root: Path, bounds: Bounds = Bounds(), exclusions: PathExclusions 
                 configured.append({"path": candidate.relative_to(root).as_posix() + "/", **rule.as_dict()})
             elif candidate.is_symlink():
                 candidates.append(candidate)
-            elif name in {".git", ".hg", ".svn", "node_modules", ".venv", "dist", "build"}:
+            elif name in {".git", ".hg", ".svn"}:
                 relative = candidate.relative_to(root).as_posix()
                 gaps.append({"path": relative, "reason": "excluded_directory"})
                 excluded.add(relative)
@@ -140,9 +141,7 @@ def inventory(root: Path, bounds: Bounds = Bounds(), exclusions: PathExclusions 
                     source_metric_bytes += size
             except (OSError, UnicodeError):
                 source_metric_gaps.append({"path": relative, "reason": "source_decode_failed"})
-        excluded_part = next((part for part in parts if part in {
-            ".git", ".hg", ".svn", "node_modules", ".venv", "dist", "build"
-        }), None)
+        excluded_part = next((part for part in parts if part in {".git", ".hg", ".svn"}), None)
         if excluded_part:
             prefix = Path(*parts[:parts.index(excluded_part) + 1]).as_posix()
             if prefix not in excluded:
@@ -154,9 +153,6 @@ def inventory(root: Path, bounds: Bounds = Bounds(), exclusions: PathExclusions 
             continue
         if not path.is_file():
             continue
-        if any(part in {"generated", "vendor", "third_party"} for part in parts):
-            gaps.append({"path": relative, "reason": "generated_file_excluded"})
-            continue
         if len(relative) > bounds.max_path_length:
             gaps.append({"path": relative[:bounds.max_path_length], "reason": "path_too_long"})
             continue
@@ -164,20 +160,31 @@ def inventory(root: Path, bounds: Bounds = Bounds(), exclusions: PathExclusions 
         if size > bounds.max_file_bytes:
             gaps.append({"path": relative, "reason": "file_too_large"})
             continue
-        if len(files) >= bounds.max_files or total + size > bounds.max_total_bytes:
+        if len(files) + len(artifact_candidates) >= bounds.max_files or total + size > bounds.max_total_bytes:
             gaps.append({"path": relative, "reason": "inventory_bound_reached"})
             continue
-        sample = path.read_bytes()[:8192]
+        with path.open("rb") as stream:
+            sample = stream.read(8192)
         if b"\0" in sample:
-            gaps.append({"path": relative, "reason": "binary_excluded"})
+            artifact_candidates.append({"path": relative, "size_bytes": size,
+                                        "sha256": sha256_file(path)})
+            total += size
             continue
         digest = sha256_file(path)
+        from appsec_review.runtime.scope import target_role
+        from appsec_review.config.assurance import SCOPE_VERSION
         files.append({"path": relative, "size_bytes": size, "sha256": digest,
                       "language": language,
-                      "generated": False})
+                      "generated": any(part in {"generated", "gen"} for part in parts),
+                      "scope_role": target_role(relative).value, "scope_version": SCOPE_VERSION,
+                      "delivery_status": "unknown"})
         total += size
     snapshot = raw_snapshot(root)
-    return {"files": files, "gaps": gaps, "file_count": len(files), "total_bytes": total,
+    return {"files": files, "gaps": gaps, "file_count": len(files),
+            "total_bytes": sum(item["size_bytes"] for item in files),
+            "artifact_candidates": artifact_candidates,
+            "artifact_candidate_count": len(artifact_candidates),
+            "artifact_candidate_bytes": sum(item["size_bytes"] for item in artifact_candidates),
             "source_metrics_semantics": SOURCE_METRICS_SEMANTICS,
             "source_metrics": source_metrics, "source_metric_gaps": source_metric_gaps,
             "configured_exclusions": sorted(configured, key=lambda item: item["path"]),

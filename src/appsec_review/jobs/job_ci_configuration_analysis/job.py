@@ -552,24 +552,12 @@ def build_job(*, executor_factory: ExecutorFactory | None = None, fail_tool: str
     units.append(Unit("ci_coverage.publish_handoff", publish,
                       ("ci_coverage.join_coverage", "ci_correlation.correlate_findings", *tuple(index_ids))))
     source_files = (Path(__file__), Path(__file__).with_name("discovery.py"), Path(__file__).with_name("static_rules.py"))
-    implementation = hashlib.sha256(b"".join(path.read_bytes() for path in source_files) +
-                                    str(fail_tool).encode()).hexdigest()
+    implementation = None
 
-    def runtime_identity(repository_root: Path) -> str:
-        root = Path(repository_root).resolve()
-        digest = hashlib.sha256(RULESET_IDENTITY.encode())
-        for tool_id in ("tool-actionlint", "tool-checkov", "tool-zizmor"):
-            try:
-                tool = load_catalog(root).tool(tool_id)
-                digest.update(canonical_json({"id": tool_id, "tag": tool.tag, "manifest": file_sha256(tool.manifest_path)}))
-            except (KeyError, OSError, ValueError):
-                digest.update(f"{tool_id}:UNAVAILABLE".encode())
-        digest.update(b"injected-executor" if executor_factory else b"container-executor")
-        return digest.hexdigest()
 
     return Job("job_ci_configuration_analysis", "ci_configuration_analysis", UnitExecutor(tuple(units)).execute,
                input_validators=(validate,), schema_identity="appsec-review/ci-configuration-analysis-job/1",
                implementation_identity=implementation,
-               validation_identity=hashlib.sha256(Path(__file__).read_bytes() + b"validation").hexdigest(),
-               runtime_identity=runtime_identity, units=tuple(units),
+               validation_identity=None,
+               runtime_identity=None, units=tuple(units),
                datasets=DATASETS, consumes=CONSUMES)

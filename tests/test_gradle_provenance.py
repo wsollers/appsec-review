@@ -118,14 +118,17 @@ def _task_records(root: Path, records: list[dict]) -> None:
 
 def test_gradle_instrumentation_writes_the_init_script_and_mirror_templates(tmp_path: Path) -> None:
     settings = _settings()
-    _synthetic_project(tmp_path / "multi")
+    workspace = tmp_path / "workspace"
+    _synthetic_project(workspace / "multi")
+    supplied, evidence = tmp_path / "supplied", tmp_path / "evidence"
     environment, trace = _environment(
         {"image_profile": "java", "source_dir": "multi", "build_system": "gradle", "environment": {}},
-        tmp_path, settings)
-    root = tmp_path / "multi" / ".appsec-review-jvm"
-    assert trace == root / "invocations.bin" and (root / "invocations.d").is_dir()
-    assert environment["APPSEC_JVM_INSTRUMENTATION"] == "/workspace/multi/.appsec-review-jvm"
-    assert environment["APPSEC_JVM_TRACE_DIR"] == "/workspace/multi/.appsec-review-jvm/invocations.d"
+        workspace, settings, instrumentation_root=supplied, evidence_root=evidence)
+    root = supplied
+    assert trace == evidence / "invocations.bin" and (evidence / "invocations.d").is_dir()
+    assert environment["APPSEC_JVM_INSTRUMENTATION"] == "/appsec-jvm"
+    assert environment["APPSEC_JVM_EVIDENCE"] == "/appsec-jvm-evidence"
+    assert environment["APPSEC_JVM_TRACE_DIR"] == "/appsec-jvm-evidence/invocations.d"
     script = (root / "gradle" / gradle_provenance.INIT_SCRIPT_NAME).read_text(encoding="utf-8")
     assert script == gradle_provenance.INIT_SCRIPT
     # The script forks every JavaCompile (plain and AGP) through the mirror's command-line javac,
@@ -149,18 +152,38 @@ def test_gradle_argv_is_instrumented_without_changing_the_accepted_tasks() -> No
     accepted = ["gradle", "--daemon", "--build-cache", ":lib:assemble", ":app:assemble",
                 ":kt:assemble", "-x", "test"]
     assert jvm_build_command_errors("java", accepted) == ()
-    argv, facts = gradle_provenance.instrument_argv(accepted, "/workspace/multi/.appsec-review-jvm")
+    argv, facts = gradle_provenance.instrument_argv(accepted, "/appsec-jvm", release_id="fixture/1")
     assert [value for value in argv if not value.startswith("-")][:4] == [
         "gradle", ":lib:assemble", ":app:assemble", ":kt:assemble"]
     assert facts["removed_arguments"] == ["--daemon", "--build-cache"]
     assert argv[-2:] == ("--init-script",
-                         "/workspace/multi/.appsec-review-jvm/gradle/appsec-provenance.init.gradle")
+                         "/appsec-jvm/gradle/appsec-provenance.init.gradle")
     for flag in ("--no-daemon", "--no-build-cache", "--no-configuration-cache",
                  "-Pkotlin.compiler.execution.strategy=out-of-process"):
         assert argv.count(flag) == 1
-    assert facts["gradle_init_script"]["sha256"] == gradle_provenance.INIT_SCRIPT_SHA256
+    assert facts["gradle_init_script"]["release_id"] == "fixture/1"
+    assert "sha256" not in facts["gradle_init_script"]
     again, _facts = gradle_provenance.instrument_argv(["gradle", "--no-daemon", "assemble"], "/x")
     assert again.count("--no-daemon") == 1
+
+
+def test_gradle_instrumentation_identity_never_hashes_supplied_script(monkeypatch):
+    import hashlib
+    import importlib
+
+    original = hashlib.sha256
+    script = gradle_provenance.INIT_SCRIPT.encode("utf-8")
+
+    def no_script_hash(value=b"", *args, **kwargs):
+        assert value != script, "supplied instrumentation must use a declared release"
+        return original(value, *args, **kwargs)
+
+    monkeypatch.setattr(hashlib, "sha256", no_script_hash)
+    importlib.reload(gradle_provenance)
+    assert not hasattr(gradle_provenance, "INIT_SCRIPT_SHA256")
+    _, facts = gradle_provenance.instrument_argv(["gradle", "assemble"], "/appsec-jvm")
+    assert facts["gradle_init_script"]["release_id"] is None
+    assert "sha256" not in facts["gradle_init_script"]
 
 
 @pytest.mark.parametrize(("text", "expected"), [
@@ -178,12 +201,13 @@ def test_instrumented_wrapper_retains_deleted_argfiles_and_parses_into_provenanc
     resolve from the observed exec."""
     workspace = tmp_path / "workspace"
     _synthetic_project(workspace / "multi", kotlin=False)
-    trace, _logical = _instrumentation(workspace, "multi", _settings())
+    supplied = tmp_path / "supplied"
+    trace, _logical = _instrumentation(supplied, tmp_path / "evidence", _settings())
     root = trace.parent
     real = tmp_path / "real-javac"
     real.write_text("#!/bin/sh\necho compiled \"$@\"\n", encoding="utf-8")
     real.chmod(0o755)
-    template = (root / "gradle" / "javac.template").read_text(encoding="utf-8")
+    template = (supplied / "gradle" / "javac.template").read_text(encoding="utf-8")
     wrapper = tmp_path / "jdk" / "bin" / "javac"
     wrapper.parent.mkdir(parents=True)
     wrapper.write_text(template.replace(gradle_provenance.TEMPLATE_PLACEHOLDER, f"'{real}'"), encoding="utf-8")
@@ -219,7 +243,7 @@ def test_multi_module_records_separate_observed_execs_from_declared_tasks(tmp_pa
     destination, and every compilation without an observed exec is a named gap."""
     workspace = tmp_path / "workspace"
     _synthetic_project(workspace / "multi")
-    trace, _logical = _instrumentation(workspace, "multi", _settings())
+    trace, _logical = _instrumentation(tmp_path / "supplied", tmp_path / "evidence", _settings())
     root, trace_dir = trace.parent, trace.with_name("invocations.d")
     base = "/workspace/multi"
     lib_args = f"-d\n{base}/lib/build/classes/java/main\n{base}/lib/src/main/java/lib/Greeter.java\n"
@@ -307,7 +331,7 @@ def test_late_configured_compile_tasks_keep_the_mirror_fork(tmp_path: Path) -> N
     # and read its toolchain in one configure action could not be, and is a named gap.
     workspace = tmp_path / "workspace"
     (workspace / "mobile").mkdir(parents=True)
-    trace, _logical = _instrumentation(workspace, "mobile", _settings())
+    trace, _logical = _instrumentation(tmp_path / "supplied", tmp_path / "evidence", _settings())
     base = "/workspace/mobile"
     classes = f"{base}/app/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes"
     _record(trace.with_name("invocations.d"), "0001-1", "javac", [f"@{base}/app/build/tmp/args.txt"],
@@ -347,7 +371,7 @@ def test_late_configured_compile_tasks_keep_the_mirror_fork(tmp_path: Path) -> N
 def test_android_dex_tasks_are_declared_gaps_and_dex_outputs_are_cataloged(tmp_path: Path) -> None:
     workspace = tmp_path / "workspace"
     (workspace / "mobile").mkdir(parents=True)
-    trace, _logical = _instrumentation(workspace, "mobile", _settings())
+    trace, _logical = _instrumentation(tmp_path / "supplied", tmp_path / "evidence", _settings())
     base = "/workspace/mobile/app/build"
     _task_records(trace.parent, [
         {"record_kind": "session"},
@@ -400,11 +424,12 @@ def test_live_gradle_forks_every_java_compilation_through_the_instrumented_mirro
     workspace = tmp_path / "workspace"
     project = workspace / "multi"
     _synthetic_project(project, kotlin=False, toolchain=_java_feature_version(), late=True)
-    trace, _logical = _instrumentation(workspace, "multi", _settings())
+    supplied = tmp_path / "supplied"
+    trace, _logical = _instrumentation(supplied, tmp_path / "evidence", _settings())
     root = trace.parent
     argv, _facts = gradle_provenance.instrument_argv(
-        ["gradle", "--offline", *(["--parallel"] if parallel else []), "assemble"], str(root))
-    environment = {**os.environ, "APPSEC_JVM_INSTRUMENTATION": str(root),
+        ["gradle", "--offline", *(["--parallel"] if parallel else []), "assemble"], str(supplied))
+    environment = {**os.environ, "APPSEC_JVM_INSTRUMENTATION": str(supplied), "APPSEC_JVM_EVIDENCE": str(root),
                    "APPSEC_JVM_TRACE_DIR": str(root / "invocations.d"),
                    "APPSEC_JVM_PARENT_COMMAND": PARENT, "GRADLE_USER_HOME": str(tmp_path / "gradle-home")}
     completed = subprocess.run([str(gradle), *argv[1:]], cwd=project, env=environment,

@@ -20,6 +20,7 @@ from appsec_review.applicability import (
     resolved_configuration_identity,
 )
 from appsec_review.config import LanguageBuildSettings
+from appsec_review.config.assurance import ComponentReleases
 from appsec_review.container_runtime import (
     BuildContainerExecutor, BuildProfile, CaptureIntegrityError, CaptureScope, VerifiedCapture,
     verify_capture_record,
@@ -28,6 +29,7 @@ from appsec_review.container_runtime.build_capture import REQUIRED_EVENT_KINDS
 from appsec_review.container_runtime.project_images import node_dependency_root, project_recipe_identity
 from appsec_review.jobs.build_discovery import copied_source_symlink, validate_build_recipe
 from appsec_review.jobs.cataloging import source_fingerprint, write_json
+from appsec_review.jobs.delivery_scope import POLICY_IDENTITY, SCOPE_FIELDS, apply_scope
 from appsec_review.jobs.job_project_build import load_accepted_builds
 from appsec_review.jobs.job_project_build.job import (
     _node_recipe_restores_dependencies, _normalized_argv, _probe_environment, _safe_root,
@@ -53,7 +55,7 @@ from appsec_review.jobs.job_language_build.datasets import CONSUMES, DATASETS
 
 SCHEMA = "appsec-review/language-build-handoff/1"
 RECEIPT_SCHEMA = "appsec-review/language-build-receipt/1"
-EXECUTOR_IDENTITY = "appsec-review/generic-language-build-executor/3"
+EXECUTOR_IDENTITY = "appsec-review/generic-language-build-executor/3+" + POLICY_IDENTITY
 CAPTURE_DESCRIPTORS: dict[str, CapturedBuildDescriptor] = {
     descriptor.family: descriptor for descriptor in (
         dotnet.CAPTURE_DESCRIPTOR, native.CAPTURE_DESCRIPTOR, rust.CAPTURE_DESCRIPTOR,
@@ -186,7 +188,8 @@ def _dispatches(
         profile = BuildProfile(str(raw["family"]), str(image.get("image_tag", "")),
                                str(image.get("base_image_id", "")), str(image.get("user", "")))
         expected_recipe = project_recipe_identity({**recipe, "build_system": raw.get("build_system")}, profile,
-                                                   {str(k): str(v) for k, v in dependencies.items()})
+                                                   {str(k): str(v) for k, v in dependencies.items()},
+                                                   releases=unit.job.review_policy.releases)
         if expected_recipe != raw.get("recipe_identity"):
             raise ValueError("accepted build dispatch operational recipe identity mismatch")
         pseudo_unit = {"build_unit_id": build_unit_id, "family": family, "root": raw["root"],
@@ -214,7 +217,7 @@ def _copy_source(unit: UnitContext, dispatch: Mapping[str, Any], workspace: Path
         shutil.rmtree(workspace)
     destination = workspace if dispatch["root"] == "." else workspace / Path(*PurePosixPath(str(dispatch["root"])).parts)
     destination.parent.mkdir(parents=True, exist_ok=True)
-    ignored = frozenset({".git", ".hg", ".svn", "build", "target", "node_modules"})
+    ignored = frozenset({".git", ".hg", ".svn"})
     if copied_source_symlink(source, ignored) is not None:
         raise ValueError("build source contains an unsupported symlink")
     shutil.copytree(source, destination, ignore=shutil.ignore_patterns(*sorted(ignored)))
@@ -304,7 +307,9 @@ def _catalog(run_root: Path, workspace: Path, before: Mapping[str, str], limit: 
         relative, digest = path.relative_to(workspace).as_posix(), file_sha256(path)
         kind = _kind(path, family, relative=relative, before=before)
         unchanged = before.get(relative) == digest
-        if kind is None or (unchanged and kind not in {"test-coverage", "execution-profile"}):
+        if kind is None or (unchanged and kind not in {
+                "test-coverage", "execution-profile", "executable", "shared-library", "static-library",
+                "native-output", "package", "jvm-archive"}):
             continue
         reason = bookkeeping_reason(relative, cargo=family == "rust", cargo_profile_directories=profiles)
         if reason is not None:
@@ -331,6 +336,7 @@ def _catalog(run_root: Path, workspace: Path, before: Mapping[str, str], limit: 
         if len(artifacts) >= limit:
             gaps.append("artifact catalog truncated at configured count bound")
             break
+    gaps.extend(apply_scope(artifacts))
     return artifacts, gaps
 
 
@@ -550,7 +556,9 @@ def _dotnet_argv(argv: tuple[str, ...]) -> tuple[str, ...]:
     return tuple(values)
 
 
-def _fingerprint(dispatch: Mapping[str, Any], accepted: Mapping[str, Any], settings: Mapping[str, Any] | None = None) -> str:
+def _fingerprint(dispatch: Mapping[str, Any], accepted: Mapping[str, Any],
+                 settings: Mapping[str, Any] | None = None, *,
+                 releases: ComponentReleases | None = None) -> str:
     image = dispatch["image"]
     family = str(dispatch["family"])
     artifact_overrides = settings.get("compiler_artifact_collection_overrides", {}) if settings else {}
@@ -559,6 +567,8 @@ def _fingerprint(dispatch: Mapping[str, Any], accepted: Mapping[str, Any], setti
         if isinstance(artifact_overrides, Mapping) and settings else "required")
     capture = settings.get("build_capture", {}) if settings else {}
     return hashlib.sha256(canonical_json({"schema": RECEIPT_SCHEMA, "target": dispatch["source_fingerprint"],
+        "component_releases": {key: releases.values.get(key) if releases is not None else None
+                               for key in ("platform", "build_toolchain", "validation")},
         "recipe": dispatch["recipe_identity"], "dependencies": image["dependency_hashes"],
         "image": image["image_id"], "executor": EXECUTOR_IDENTITY,
         "capture": CAPTURE_IDENTITIES[str(dispatch["family"])],
@@ -622,7 +632,8 @@ def _stream_identity(run_root: Path, path: Path, result: Any, name: str, limit: 
 
 def _platform_receipt(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mapping[str, Any],
                       gaps: list[str], projects: list[dict[str, Any]]) -> dict[str, Any]:
-    return {"schema": RECEIPT_SCHEMA, "fingerprint": _fingerprint(dispatch, accepted, unit.job.config.settings),
+    return {"schema": RECEIPT_SCHEMA, "fingerprint": _fingerprint(
+                dispatch, accepted, unit.job.config.settings, releases=unit.job.review_policy.releases),
             "source_fingerprint": unit.job.source_fingerprint,
             "upstream_handoff_sha256": accepted["project_build_handoff_sha256"],
             "build_unit_id": dispatch["build_unit_id"], "family": "dotnet", "root": dispatch["root"],
@@ -690,7 +701,8 @@ def upstream_build_failure_receipt(probe: Mapping[str, Any], accepted: Mapping[s
 def _node_gap_receipt(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mapping[str, Any],
                       dependency: Mapping[str, Any], gaps: list[str]) -> dict[str, Any]:
     return {"schema": RECEIPT_SCHEMA,
-            "fingerprint": _fingerprint(dispatch, accepted, unit.job.config.settings),
+            "fingerprint": _fingerprint(dispatch, accepted, unit.job.config.settings,
+                                        releases=unit.job.review_policy.releases),
             "source_fingerprint": unit.job.source_fingerprint,
             "upstream_handoff_sha256": accepted["project_build_handoff_sha256"],
             "build_unit_id": dispatch["build_unit_id"], "family": "node", "root": dispatch["root"],
@@ -838,12 +850,19 @@ def _has_build_output(receipt: Mapping[str, Any]) -> bool:
 def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mapping[str, Any], executor_factory=None) -> dict[str, Any]:
     build_unit_id, recipe, image = str(dispatch["build_unit_id"]), dispatch["recipe"], dispatch["image"]
     family = str(dispatch["family"])
-    fingerprint = _fingerprint(dispatch, accepted, unit.job.config.settings)
+    fingerprint = _fingerprint(dispatch, accepted, unit.job.config.settings,
+                               releases=unit.job.review_policy.releases)
     root = unit.job.run_root / "data" / "build" / family / "units" / build_unit_id
     workspace = root / "workspace"
-    cache = unit.job.metadata_root / "language-builds" / fingerprint / "accepted.json"
+    namespace = hashlib.sha256(str(unit.job.run_root.resolve()).encode()).hexdigest()
+    cache = unit.job.metadata_root / "language-builds" / namespace / fingerprint / "accepted.json"
+    reusable, reuse_reason = unit.job.review_policy.releases.require(
+        "platform", "build_toolchain", "validation")
+    if not reusable:
+        unit.job.events.write("CHECKPOINT_MISSED", scope_id=build_unit_id,
+                              action="language_build", reason=reuse_reason)
     with FileLock(cache.parent / "build.lock"):
-        if cache.is_file():
+        if reusable and cache.is_file():
             prior = json.loads(cache.read_text(encoding="utf-8"))
             prior_workspace = Path(str(prior.get("workspace", "")))
             if (prior.get("fingerprint") == fingerprint and prior.get("terminal_status") == "SUCCEEDED" and
@@ -920,7 +939,8 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
         recipe_gaps = python.validate_dispatch(dispatch, workspace)
         if recipe_gaps:
             return {"schema": RECEIPT_SCHEMA,
-                    "fingerprint": _fingerprint(dispatch, accepted, unit.job.config.settings),
+                    "fingerprint": _fingerprint(dispatch, accepted, unit.job.config.settings,
+                                                releases=unit.job.review_policy.releases),
                     "source_fingerprint": unit.job.source_fingerprint,
                     "upstream_handoff_sha256": accepted["project_build_handoff_sha256"],
                     "build_unit_id": build_unit_id, "family": family, "root": dispatch["root"],
@@ -1096,6 +1116,12 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
         artifacts, catalog_gaps = php.catalog(unit.job.run_root, workspace, before,
             int(unit.job.config.settings["artifact_count_limit"]), build_unit_id,
             str(dispatch.get("build_system", "composer")))
+    elif family == "node":
+        artifacts, catalog_gaps = node.catalog(
+            unit.job.run_root, workspace, before,
+            int(unit.job.config.settings["artifact_count_limit"]), build_unit_id,
+            package_facts=[fact for row in node_rows if row.get("origin") == "accepted-recipe"
+                           for fact in row.get("package_integrity", ())])
     else:
         artifacts, catalog_gaps = _catalog(unit.job.run_root, workspace, before,
                                            int(unit.job.config.settings["artifact_count_limit"]), build_unit_id, family,
@@ -1316,7 +1342,7 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
         receipt["package_relationships"] = list((php_metadata or {}).get("relationships", ()))
     # A capture that lost evidence, or tool provenance it could not establish, is never
     # checkpointed: the next run must capture again.
-    if status == "SUCCEEDED" and capture_complete:
+    if status == "SUCCEEDED" and capture_complete and reusable:
         cache.parent.mkdir(parents=True, exist_ok=True)
         with FileLock(cache.parent / "build.lock"):
             atomic_json(cache, {"schema": "appsec-review/language-build-checkpoint/1", "fingerprint": fingerprint,
@@ -1459,7 +1485,8 @@ def _publish_build_index(unit: UnitContext, receipts: list[Mapping[str, Any]]) -
             builder.add_entity(EntityRecord(identity, str(artifact.get("workspace_path")),
                 str(artifact.get("workspace_path")), f"{artifact.get('kind')} {artifact.get('workspace_path')}",
                 {key: artifact.get(key) for key in ("workspace_path", "sha256", "size_bytes", "kind",
-                                                     "mapping", "mapping_confidence", "build_unit_id")}))
+                                                     "mapping", "mapping_confidence", "build_unit_id",
+                                                     *SCOPE_FIELDS)}))
     gaps = [gap for receipt in receipts for gap in receipt.get("gaps", ())]
     builder.add_coverage("language-build", "partial" if gaps else "complete", gaps[0] if gaps else None)
     sha = builder.build()
@@ -1709,13 +1736,7 @@ def build_job(*, executor_factory=None) -> Job:
              Unit("acceptance.publish_handoff", publish,
                   ("execute.native", "execute.go", "execute.dotnet", "execute.node", "execute.python",
                    "execute.rust", "execute.php", "execute.java", "execute.wasm")))
-    implementation = hashlib.sha256(Path(__file__).read_bytes() +
-        Path(applicability_contract.__file__).read_bytes() + Path(jvm.__file__).read_bytes() +
-        Path(gradle_provenance.__file__).read_bytes() +
-        Path(captured_build.__file__).read_bytes() + Path(elf.__file__).read_bytes() +
-        Path(go.__file__).read_bytes() + Path(python.__file__).read_bytes() + Path(rust.__file__).read_bytes() +
-        Path(wasm.__file__).read_bytes() + Path(native_components.__file__).read_bytes() +
-        (b"injected" if executor_factory else b"container")).hexdigest()
+    implementation = None
     return Job("job_language_build", "language_build", UnitExecutor(units).execute,
                input_validators=(_validate_config,), schema_identity=SCHEMA,
                implementation_identity=implementation, validation_identity=implementation, units=units,

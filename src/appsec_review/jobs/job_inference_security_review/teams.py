@@ -32,7 +32,7 @@ import threading
 import time
 from typing import Any, Callable, Iterable, Mapping, Sequence
 
-from appsec_review.config.inference_review import InferenceSecurityReviewSettings, ModelProfileSettings
+from appsec_review.config.inference_review import InferenceSecurityReviewSettings, ModelProfileSettings, TeamPackageBudget
 from appsec_review.guidance import compose_bundle, hunt_panel, pin_bundle, render_prompt, route_persona, route_stack
 from appsec_review.guidance.routing import unit_sources
 from appsec_review.guidance.routing import rank_personas
@@ -318,12 +318,16 @@ class _Cell:
 # Allocation (deterministic, work-conserving)
 
 
-def lane_allocation(lead_count: int, hunt_count: int, lead_share: float, budget_team_packages: int) -> dict[Lane, int]:
+def lane_allocation(lead_count: int, hunt_count: int, lead_share: float,
+                    budget_team_packages: TeamPackageBudget) -> dict[Lane, int]:
     """Team-packages each lane may launch: the fair-share scheduler run over both declared queues.
 
     Shares split ``budget_team_packages``; a lane whose queue empties releases its unused share to the
     other lane. The result depends only on the queue lengths and configuration, never on timing.
+    ``"all"`` admits both complete queues without a lane-share quota.
     """
+    if budget_team_packages == "all":
+        return {Lane.LEAD: lead_count, Lane.HUNT: hunt_count}
     scheduler = FairShareScheduler(lead_share, budget_team_packages)
     queues = {Lane.LEAD: [QueuedPackage(0, f"lead-{index:06d}") for index in range(lead_count)],
               Lane.HUNT: [QueuedPackage(0, f"hunt-{index:06d}") for index in range(hunt_count)]}

@@ -1,7 +1,6 @@
 """Keep local Dagster deployments bound to one native host workspace."""
 
 from __future__ import annotations
-
 import os
 from pathlib import Path
 import subprocess
@@ -9,6 +8,11 @@ import subprocess
 
 PROJECT_PREFIX = "appsec-review-dagster"
 PLATFORMS = {"windows", "wsl", "linux"}
+
+
+def reject_native_environment() -> None:
+    if any(name.startswith("APPSEC_NATIVE_") for name in os.environ):
+        raise RuntimeError("Compose cannot execute native configuration; ambient engine fallback is prohibited")
 
 
 def actual_platform() -> str:

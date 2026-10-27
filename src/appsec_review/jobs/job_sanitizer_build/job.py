@@ -425,10 +425,7 @@ def build_job(*, executor_factory: Callable[[UnitContext, BuildProfile], Any] | 
         Unit("acceptance.publish_handoff", publish, ("load.accepted_native", "build.units")),
     )
     package = Path(__file__).parent
-    implementation = hashlib.sha256(
-        IMPLEMENTATION.encode() + b"".join(path.read_bytes() for path in sorted(package.glob("*.py"))) +
-        Path(elf_reader.__file__).read_bytes() +
-        (b"injected-executor" if executor_factory else b"container-executor")).hexdigest()
+    implementation = None
     return Job(JOB_ID, "sanitizer_build", UnitExecutor(units).execute,
                input_validators=(_validate,), schema_identity=SANITIZER_BUILD_HANDOFF_SCHEMA,
                implementation_identity=implementation, validation_identity=implementation,

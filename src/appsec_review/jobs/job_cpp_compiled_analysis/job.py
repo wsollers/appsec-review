@@ -64,18 +64,28 @@ def _terminal_gap(output: Mapping[str, Any]) -> str | None:
 
 def _checkpoint_identity(unit: UnitContext, case_id: str, stage: str, values: Mapping[str, Any],
                          *, tool_id: str = "tool-native-cpp") -> str:
+    from appsec_review.config.assurance import ReviewPolicy
+    policy = getattr(unit.job, "review_policy", ReviewPolicy())
     tool = load_catalog(unit.job.repository_root).tool(tool_id) if (
         unit.job.repository_root / "containers" / "catalog.toml").is_file() else None
     tool_identity = ({"tag": tool.tag, "version": tool.version,
-                      "expected_image_id": tool.expected_image_id,
-                      "manifest_sha256": file_sha256(tool.manifest_path)} if tool else
+                      "expected_image_id": tool.expected_image_id} if tool else
                      {"injected_executor": True})
     return hashlib.sha256(canonical_json({"schema": "appsec-review/cpp-checkpoint/1",
         "project": case_id, "stage": stage,
-        "tool": tool_identity, "values": values})).hexdigest()
+        "tool": tool_identity, "values": values,
+        "releases": {key: policy.releases.values.get(key) for key in ("platform", "validation", tool_id)}
+        })).hexdigest()
 
 
 def _load_checkpoint(unit: UnitContext, case_id: str, stage: str, identity: str) -> Mapping[str, Any] | None:
+    from appsec_review.config.assurance import ReviewPolicy
+    policy = getattr(unit.job, "review_policy", ReviewPolicy())
+    tool_id = "tool-infer" if stage == "branch-infer" else "tool-native-cpp"
+    reusable, reason = policy.releases.require("platform", "validation", tool_id)
+    if not reusable:
+        unit.job.events.write("CHECKPOINT_MISSED", scope_id=case_id, action=stage, reason=reason)
+        return None
     path = _case_root(unit, case_id) / "checkpoints" / f"{stage}.json"
     if not path.is_file() or path.is_symlink():
         return None
@@ -1253,8 +1263,7 @@ def build_job(*, executor_factory=None) -> Job:
     dependencies = tuple(f"{name}.projects" for name in BRANCHES)
     units.append(Unit("acceptance.publish_handoff", publish, dependencies))
     values = tuple(units)
-    implementation = hashlib.sha256(b"".join(path.read_bytes() for path in _implementation_files()) +
-                                    (b"injected-executor" if executor_factory else b"container-executor")).hexdigest()
+    implementation = None
     return Job("job_cpp_compiled_analysis", "cpp_compiled_analysis", UnitExecutor(values).execute,
                input_validators=(_validate_config,), schema_identity=SCHEMA,
                implementation_identity=implementation, validation_identity=implementation,

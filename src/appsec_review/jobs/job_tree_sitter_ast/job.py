@@ -21,6 +21,7 @@ from appsec_review.swift_policy import SWIFT_KNOWN_GAP, is_swift_language
 from .model import GrammarLock, partition_scopes, plan_scopes
 from .normalize import NORMALIZER_SCHEMA
 from .scope_execution import parse_scope
+from .generated_sources import load_generated_sources
 from appsec_review.jobs.job_tree_sitter_ast.datasets import CONSUMES, DATASETS
 
 
@@ -57,7 +58,7 @@ def _accepted_handoff(run_root: Path, job_id: str) -> tuple[Mapping[str, Any], s
     return handoff, str(pointer["handoff_sha256"])
 
 
-def _load_inputs(run_root: Path) -> Mapping[str, Any]:
+def _load_inputs(run_root: Path, *, settings: Mapping[str, Any] | None = None) -> Mapping[str, Any]:
     intake_handoff, intake_sha = _accepted_handoff(run_root, "job_review_intake")
     catalog_handoff, catalog_sha = _accepted_handoff(run_root, "job_target_catalog")
     intake_identity = intake_handoff.get("outputs", {}).get("publish_intake.publish_handoff", {}).get("artifact", {})
@@ -72,7 +73,21 @@ def _load_inputs(run_root: Path) -> Mapping[str, Any]:
     builds = _read_verified(run_root, artifacts["build_discovery.catalog_build_targets"])
     if catalog_root.get("source_fingerprint") != intake.get("fingerprint", {}).get("sha256"):
         raise ValueError("target snapshot and catalog identities disagree")
-    return {"source_fingerprint": catalog_root["source_fingerprint"], "files": partition.get("files", ()),
+    limits = settings or {}
+    workers = int(limits.get("workers", 1))
+    generated, generated_gaps, build_sha = load_generated_sources(
+        run_root, target_snapshot=catalog_root["source_fingerprint"], relevant=bool(builds.get("targets")),
+        max_files=int(limits.get("max_files_per_scope", 128)) * workers,
+        max_file_bytes=int(limits.get("max_file_bytes", 2 * 1024 * 1024)),
+        max_total_bytes=int(limits.get("max_source_bytes_per_scope", 16 * 1024 * 1024)) * workers)
+    target_paths = {item["path"] for item in partition.get("files", ())}
+    if len({item["path"] for item in generated}) != len(generated) or any(
+            item["path"] in target_paths for item in generated):
+        raise ValueError("generated logical source identity collides with an accepted source")
+    return {"source_fingerprint": catalog_root["source_fingerprint"],
+            "files": [*partition.get("files", ()), *generated],
+            "generated_sources": generated, "generated_source_gaps": generated_gaps,
+            "language_build_handoff_sha256": build_sha,
             "gaps": partition.get("gaps", ()), "components": components.get("components", ()),
             "build_units": builds.get("targets", ()), "intake_handoff_sha256": intake_sha,
             "catalog_handoff_sha256": catalog_sha}
@@ -109,7 +124,7 @@ def _validate(context, _result) -> None:
 
 def build_job(*, executor_factory: ExecutorFactory | None = None) -> Job:
     def load(unit: UnitContext) -> Mapping[str, Any]:
-        accepted = _load_inputs(unit.job.run_root)
+        accepted = _load_inputs(unit.job.run_root, settings=unit.job.config.settings)
         if accepted["source_fingerprint"] != unit.job.source_fingerprint:
             raise ValueError("graph target fingerprint does not match accepted inputs")
         locks, asset_lock = _grammar_locks(unit.job.repository_root)
@@ -138,6 +153,11 @@ def build_job(*, executor_factory: ExecutorFactory | None = None) -> Job:
         locks = loaded["grammar_locks"]
         runnable, gaps = partition_scopes(scopes, {key: GrammarLock(**value) for key, value in locks.items()})
         gaps = (*policy_gaps, *gaps)
+        if loaded["accepted"].get("generated_source_gaps"):
+            gaps = (*gaps, {"scope_id": "generated-source-lane", "language": "n/a",
+                            "terminal_status": "PARTIAL", "reason": "generated source coverage gaps",
+                            "gaps": [f"{item['path']}: {item['reason']}"
+                                     for item in loaded["accepted"]["generated_source_gaps"]]})
         retained = {str(item.get("path")) for scope in scopes for item in scope.exclusions}
         orphaned = [item for item in loaded["accepted"]["gaps"]
                     if item.get("reason") in {"excluded_directory", "generated_file_excluded", "file_too_large"}
@@ -229,6 +249,9 @@ def build_job(*, executor_factory: ExecutorFactory | None = None) -> Job:
         counts = {key: sum(int(value.get("counts", {}).get(key, 0)) for value in successful)
                   for key in ("files_parsed", "bytes_parsed", "nodes_parsed", "diagnostic_count")}
         document = {"schema": SCHEMA, "target_snapshot": unit.job.source_fingerprint,
+                    "generated_sources": unit.output("load.accepted_inputs")["accepted"].get("generated_sources", []),
+                    "language_build_handoff_sha256": unit.output("load.accepted_inputs")["accepted"].get(
+                        "language_build_handoff_sha256"),
                     "image_id": unit.output("load.accepted_inputs")["image_id"],
                     "asset_lock": unit.output("load.accepted_inputs")["asset_lock"],
                     "normalizer_schema": NORMALIZER_SCHEMA, "dispositions": parsed["dispositions"],
@@ -251,8 +274,7 @@ def build_job(*, executor_factory: ExecutorFactory | None = None) -> Job:
         Unit("parse.dynamic_scopes", parse_scopes, ("load.accepted_inputs", "plan.route_scopes")),
         Unit("acceptance.publish_handoff", publish, ("load.accepted_inputs", "parse.dynamic_scopes")),
     )
-    implementation = hashlib.sha256(b"".join(path.read_bytes() for path in sorted(Path(__file__).parent.glob("*.py"))) +
-                                    (b"custom-executor" if executor_factory else b"container-only")).hexdigest()
+    implementation = None
     return Job("job_tree_sitter_ast", "tree_sitter_ast", UnitExecutor(units).execute,
                input_validators=(_validate,), schema_identity=SCHEMA,
                implementation_identity=implementation, units=units,

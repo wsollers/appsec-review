@@ -4,8 +4,18 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import shutil
 import tempfile
 from typing import Any
+
+
+def copy_file(source: str | Path, destination: str | Path) -> str | Path:
+    """Preserve copy2 semantics and count completed logical file copies, not physical I/O."""
+    copied = shutil.copy2(source, destination)
+    from appsec_review.observability.spans import count_work
+    count_work("copy_bytes", Path(copied).stat().st_size)
+    count_work("copy_objects")
+    return copied
 
 
 def canonical_json(value: Any) -> bytes:
@@ -57,8 +67,15 @@ def protected_json(path: Path, value: Any) -> None:
 
 
 def file_sha256(path: Path) -> str:
+    from appsec_review.runtime.scope import require_hashable_evidence
+    require_hashable_evidence(Path(path))
     digest = hashlib.sha256()
+    size = 0
     with Path(path).open("rb") as stream:
         for chunk in iter(lambda: stream.read(1024 * 1024), b""):
             digest.update(chunk)
+            size += len(chunk)
+    from appsec_review.observability.spans import count_work
+    count_work("target_hash_bytes", size)
+    count_work("target_hash_objects")
     return digest.hexdigest()

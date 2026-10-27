@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import asdict
+from dataclasses import asdict, replace
 import json
 import os
+import shutil
 from pathlib import Path
 from types import SimpleNamespace
 import zipfile
@@ -33,6 +34,12 @@ from tests.capture_fakes import capturing_fake
 
 
 ROOT = Path(__file__).parents[1]
+
+
+def _declare_fixture_releases(text: str) -> str:
+    return text.replace("[review_policy.releases]\n", "[review_policy.releases]\n" +
+        "".join(f'{key} = "fixture/1"\n' for key in
+                ("platform", "validation", "build_toolchain", "jvm_instrumentation")))
 
 
 class JvmRecipeModel:
@@ -70,12 +77,12 @@ class JvmRecipeModel:
 
 
 class ImageResolver:
-    def __init__(self, target: Path):
-        self.target = target
+    def __init__(self, target: Path, releases=None):
+        self.target, self.releases = target, releases
 
     def resolve(self, recipe, profile):
         hashes = dependency_hashes(self.target, recipe)
-        identity = project_recipe_identity(recipe, profile, hashes)
+        identity = project_recipe_identity(recipe, profile, hashes, releases=self.releases)
         image_id = "sha256:" + "d" * 64
         return ProjectImage("appsec-review/project-build-image/1", identity, profile.name,
             profile.image_id, "jvm-fixture:local", image_id, "f" * 64, True, False, hashes), b"", b""
@@ -90,7 +97,8 @@ class JvmExecutor:
     def resolve(self):
         return None
 
-    def execute(self, argv, *, workspace, working_directory, environment):
+    def execute(self, argv, *, workspace, working_directory, environment,
+                instrumentation_root=None, instrumentation_evidence_root=None):
         self.calls.append(tuple(argv))
         if self.environments is not None:
             self.environments.append(dict(environment))
@@ -115,7 +123,8 @@ class JvmExecutor:
             (meta / "pom.properties").write_text("version=1\n", encoding="utf-8")
             (root / "target" / "app.jar").write_bytes(b"PK\x03\x04jar")
             (root / "target" / "app.war").write_bytes(b"PK\x03\x04war")
-            trace = root / ".appsec-review-jvm" / "invocations.bin"
+            trace = ((instrumentation_evidence_root or root / ".fixture-probe-evidence")
+                     / "invocations.bin")
             trace.parent.mkdir(parents=True, exist_ok=True)
             parent = environment.get("APPSEC_JVM_PARENT_COMMAND", "unknown")
             fields = ["javac", parent, "4", "-d", "target/classes", "src/main/java/example/Main.java",
@@ -149,6 +158,7 @@ class JvmExecutor:
 
 def _fixture(tmp_path: Path, *, gradle: bool = False, output_bytes: int | None = None):
     config_text = (ROOT / "appsec-review.toml").read_text(encoding="utf-8")
+    config_text = _declare_fixture_releases(config_text)
     if output_bytes is not None:
         config_text = config_text.replace("output_bytes = 8388608", f"output_bytes = {output_bytes}")
     config_path = tmp_path / "appsec-review.toml"
@@ -168,7 +178,8 @@ def _fixture(tmp_path: Path, *, gradle: bool = False, output_bytes: int | None =
 
 def _android_fixture(tmp_path: Path):
     config_path = tmp_path / "appsec-review.toml"
-    config_path.write_text((ROOT / "appsec-review.toml").read_text(encoding="utf-8"), encoding="utf-8")
+    config_path.write_text(_declare_fixture_releases(
+        (ROOT / "appsec-review.toml").read_text(encoding="utf-8")), encoding="utf-8")
     target = tmp_path / "target"
     root = target / "android"
     (root / "app" / "src" / "main" / "java" / "example").mkdir(parents=True)
@@ -189,7 +200,7 @@ def _run_to_dispatch(config, target: Path, model: JvmRecipeModel, calls: list[tu
     upstream = GraphRunner(config, [build_intake(), build_catalog(), build_plan(infer=model.complete)]).run(
         target_root=target, source_fingerprint=fingerprint)
     project = build_projects(executor_factory=lambda unit, profile: capturing_fake(profile, JvmExecutor(calls)),
-        image_resolver_factory=lambda unit: ImageResolver(target))
+        image_resolver_factory=lambda unit: ImageResolver(target, config.review_policy.releases))
     GraphRunner(config, [project]).run(target_root=target, source_fingerprint=fingerprint,
                                        run_id=upstream["run_id"])
     return upstream["run_id"], fingerprint
@@ -269,7 +280,7 @@ def test_android_gradle_dispatch_survives_project_to_language_execution(tmp_path
     assert calls.count(("gradle", "--no-daemon", ":app:assembleDebug")) == 1
     (instrumented,) = [call for call in calls if "--init-script" in call]
     assert instrumented[:3] == ("gradle", "--no-daemon", ":app:assembleDebug")
-    assert instrumented[-1].endswith("/.appsec-review-jvm/gradle/appsec-provenance.init.gradle")
+    assert instrumented[-1] == "/appsec-jvm/gradle/appsec-provenance.init.gradle"
     assert receipt["commands"][0]["instrumentation"]["gradle_init_script"]["path"] == instrumented[-1]
     assert [profile.name for profile in profiles] == ["android"]
     assert environments and "/opt/gradle/gradle-8.9/bin" in environments[0]["PATH"].split(":")
@@ -441,6 +452,172 @@ def test_jvm_checkpoint_fingerprint_invalidates_on_capture_or_upstream_change() 
                                     {**settings, "trace_bytes": 9})
 
 
+def _isolated_jvm_action(tmp_path, monkeypatch, mode, *, missing=None):
+    from appsec_review.config.assurance import AssuranceMode, ComponentReleases, ReviewPolicy
+    from appsec_review.jobs.job_language_build import job as generic, jvm
+
+    config, target = _fixture(tmp_path)
+    declarations = {key: "fixture/1" for key in jvm._RELEASE_COMPONENTS if key != missing}
+    policy = ReviewPolicy(mode=AssuranceMode(mode), project_id="fixture",
+        approved_first_party_projects=("fixture",), target_root=str(target.resolve()),
+        custody="application_private_v1", releases=ComponentReleases(declarations))
+    run_root = tmp_path / "run"
+    run_root.mkdir()
+    records, calls = [], []
+    unit = SimpleNamespace(unit_id="execute.java", job=SimpleNamespace(
+        config=config.job("job_language_build"), review_policy=policy, run_root=run_root,
+        metadata_root=tmp_path / "metadata", target_root=target, source_fingerprint=source_fingerprint(target),
+        run_id="fixture-run", attempt_id="fixture-attempt",
+        events=SimpleNamespace(write=lambda event, **values: records.append((event, values)))))
+
+    def copy_source(_unit, _dispatch, workspace):
+        if workspace.exists():
+            shutil.rmtree(workspace)
+        shutil.copytree(target, workspace)
+
+    monkeypatch.setattr(generic, "_copy_source", copy_source)
+    monkeypatch.setattr(jvm, "_index", lambda *_args: {"fixture": True})
+    dispatch = {"build_unit_id": "jvm-fixture", "root": "maven", "family": "java",
+        "source_fingerprint": unit.job.source_fingerprint, "recipe_identity": "recipe",
+        "probe_identity": "probe", "build_system": "maven",
+        "recipe": {"source_dir": "maven", "image_profile": "java", "configure_commands": [],
+                   "build_commands": [["mvn", "-B", "-DskipTests", "package"]], "environment": {}},
+        "image": {"family": "java", "image_tag": "fixture:local", "image_id": "sha256:" + "d" * 64,
+                  "user": "1000:1000", "dependency_hashes": {}}}
+    return unit, dispatch, {"project_build_handoff_sha256": "handoff"}, calls, records
+
+
+@pytest.mark.parametrize("mode", ["strict", "first_party_managed"])
+def test_jvm_detached_instrumentation_is_not_hashed_on_publication_or_resume(tmp_path, monkeypatch, mode):
+    from appsec_review.jobs.job_language_build import job as generic, jvm
+
+    unit, dispatch, accepted, calls, _events = _isolated_jvm_action(tmp_path, monkeypatch, mode)
+    supplied = unit.job.run_root / "data/build/jvm/units/jvm-fixture/instrumentation"
+    evidence = supplied.with_name("instrumentation-evidence")
+    hashed = []
+    original = file_sha256
+
+    def hash_target_or_evidence(path):
+        assert not Path(path).resolve().is_relative_to(supplied.resolve())
+        hashed.append(Path(path))
+        return original(path)
+
+    monkeypatch.setattr(jvm, "file_sha256", hash_target_or_evidence)
+    monkeypatch.setattr(generic, "file_sha256", hash_target_or_evidence)
+
+    class Fake(JvmExecutor):
+        def execute(self, argv, **kwargs):
+            assert kwargs["instrumentation_root"] == supplied
+            assert kwargs["instrumentation_evidence_root"] == evidence
+            result = super().execute(argv, **kwargs)
+            lookalike = kwargs["workspace"] / "maven/.appsec-review-jvm/Customer.java"
+            lookalike.parent.mkdir(parents=True, exist_ok=True)
+            lookalike.write_text("class Customer {}", encoding="utf-8")
+            return result
+
+    first = jvm.execute_jvm_one(unit, dispatch, accepted, lambda *_: Fake(calls))
+    assert not first["checkpoint_reused"]
+    assert all(row["artifact_origin"] == "build-output" and row["scope_version"]
+               for row in first["artifacts"])
+    assert any("delivery_fact_unavailable" in gap for gap in first["gaps"])
+    manifest = json.loads((unit.job.run_root / first["workspace_manifest"]["path"]).read_text())
+    assert "maven/.appsec-review-jvm/Customer.java" in manifest["files"]
+    assert any(row["workspace_path"] == "maven/.appsec-review-jvm/Customer.java" for row in first["artifacts"])
+    assert evidence / "invocations.bin" in hashed
+    generated = json.loads((unit.job.run_root / first["instrumentation_evidence_manifest"]["path"]).read_text())
+    assert any(row["path"].endswith("/invocations.bin") for row in generated["files"])
+    # Deliberately changing supplied bytes is outside the customer-evidence integrity contract.
+    (supplied / "bin/javac").write_text("operator changed supplied wrapper", encoding="utf-8")
+    second = jvm.execute_jvm_one(unit, dispatch, accepted, lambda *_: Fake(calls))
+    assert second["checkpoint_reused"] and len(calls) == 1
+    (evidence / "invocations.bin").write_bytes(b"changed customer execution evidence")
+    with pytest.raises(JvmIntegrityError, match="instrumentation evidence changed"):
+        jvm.execute_jvm_one(unit, dispatch, accepted, lambda *_: Fake(calls))
+
+
+@pytest.mark.parametrize("mode", ["strict", "first_party_managed"])
+@pytest.mark.parametrize("missing", ["platform", "validation", "build_toolchain", "jvm_instrumentation"])
+def test_jvm_missing_release_denies_checkpoint_reuse(tmp_path, monkeypatch, mode, missing):
+    from appsec_review.jobs.job_language_build import jvm
+
+    unit, dispatch, accepted, calls, events = _isolated_jvm_action(
+        tmp_path, monkeypatch, mode, missing=missing)
+    original_publications = None
+    for _ in range(2):
+        receipt = jvm.execute_jvm_one(unit, dispatch, accepted, lambda *_: JvmExecutor(calls))
+        assert not receipt["checkpoint_reused"]
+        assert receipt["checkpoint_reuse_reason"] == "missing_release_identity"
+        publications = {
+            item["path"]: ((unit.job.run_root / item["path"]).read_bytes(),
+                           (unit.job.run_root / item["path"]).stat().st_ino)
+            for item in (receipt["commands"][0]["protected_argv"], receipt["protected_tool_invocations"])}
+        if original_publications is None:
+            original_publications = publications
+        else:
+            assert publications == original_publications
+    assert len(calls) == 2
+    assert not list(unit.job.metadata_root.rglob("accepted.json"))
+    assert sum(event == "CHECKPOINT_MISSED" and value["reason"] == "missing_release_identity"
+               for event, value in events) == 2
+
+
+@pytest.mark.parametrize("mode", ["strict", "first_party_managed"])
+@pytest.mark.parametrize("publication", ["command", "invocations"])
+@pytest.mark.parametrize("corruption", ["different-content", "symlink"])
+def test_jvm_repeated_protected_publication_rejects_conflicts(
+        tmp_path, monkeypatch, mode, publication, corruption):
+    from appsec_review.jobs.job_language_build import jvm
+
+    unit, dispatch, accepted, calls, _events = _isolated_jvm_action(
+        tmp_path, monkeypatch, mode, missing="jvm_instrumentation")
+    receipt = jvm.execute_jvm_one(unit, dispatch, accepted, lambda *_: JvmExecutor(calls))
+    identity = (receipt["commands"][0]["protected_argv"] if publication == "command"
+                else receipt["protected_tool_invocations"])
+    path = unit.job.run_root / identity["path"]
+    previous = path.read_bytes()
+    retained = tmp_path / "retained-original.json"
+    path.rename(retained)
+    if corruption == "symlink":
+        path.symlink_to(retained)
+    else:
+        path.write_bytes(b'{"different":"protected evidence"}\n')
+    conflict = path.read_bytes()
+
+    with pytest.raises(ValueError, match="immutable shared artifact conflicts|shared artifact symlink"):
+        jvm.execute_jvm_one(unit, dispatch, accepted, lambda *_: JvmExecutor(calls))
+    assert retained.read_bytes() == previous
+    assert path.read_bytes() == conflict
+    assert path.is_symlink() is (corruption == "symlink")
+    assert not list(unit.job.metadata_root.rglob("accepted.json"))
+
+
+@pytest.mark.parametrize("mode", ["strict", "first_party_managed"])
+@pytest.mark.parametrize("component", ["platform", "validation", "build_toolchain", "jvm_instrumentation"])
+def test_jvm_changed_release_invalidates_family_checkpoint(tmp_path, monkeypatch, mode, component):
+    from appsec_review.config.assurance import ComponentReleases
+    from appsec_review.jobs.job_language_build import jvm
+
+    unit, dispatch, accepted, calls, _events = _isolated_jvm_action(tmp_path, monkeypatch, mode)
+    first = jvm.execute_jvm_one(unit, dispatch, accepted, lambda *_: JvmExecutor(calls))
+    declarations = {**unit.job.review_policy.releases.view(), component: "fixture/2"}
+    unit.job.review_policy = replace(unit.job.review_policy, releases=ComponentReleases(declarations))
+    second = jvm.execute_jvm_one(unit, dispatch, accepted, lambda *_: JvmExecutor(calls))
+    assert first["fingerprint"] != second["fingerprint"]
+    assert not second["checkpoint_reused"] and len(calls) == 2
+
+
+@pytest.mark.parametrize("mode", ["strict", "first_party_managed"])
+def test_jvm_delivery_policy_invalidates_family_checkpoint(tmp_path, monkeypatch, mode):
+    from appsec_review.jobs.job_language_build import jvm
+
+    unit, dispatch, accepted, calls, _events = _isolated_jvm_action(tmp_path, monkeypatch, mode)
+    first = jvm.execute_jvm_one(unit, dispatch, accepted, lambda *_: JvmExecutor(calls))
+    monkeypatch.setattr(jvm, "POLICY_IDENTITY", "fixture-delivery-policy/2")
+    second = jvm.execute_jvm_one(unit, dispatch, accepted, lambda *_: JvmExecutor(calls))
+    assert first["fingerprint"] != second["fingerprint"]
+    assert not second["checkpoint_reused"] and len(calls) == 2
+
+
 def test_jvm_recipe_validation_rejects_test_and_application_tasks_before_probe() -> None:
     unit = {"build_unit_id": "build-unit-" + "a" * 20, "family": "java", "root": "app",
         "build_system": "gradle", "markers": [{"path": "app/build.gradle"}],
@@ -490,18 +667,22 @@ def test_maven_compilation_is_forked_through_the_instrumented_javac(tmp_path: Pa
     recipe = {"image_profile": "java", "source_dir": "projects/java/case-034",
               "build_system": "maven", "environment": {}}
     (tmp_path / "projects" / "java" / "case-034").mkdir(parents=True)
-    environment, _trace = _environment(recipe, tmp_path, _jvm_settings())
+    supplied, evidence = tmp_path / "supplied", tmp_path / "evidence"
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    environment, _trace = _environment(recipe, workspace, _jvm_settings(),
+                                       instrumentation_root=supplied, evidence_root=evidence)
     options = environment["MAVEN_OPTS"].split()
     assert "-Dmaven.compiler.fork=true" in options
-    assert ("-Dmaven.compiler.executable=/workspace/projects/java/case-034/"
-            ".appsec-review-jvm/bin/javac") in options
+    assert "-Dmaven.compiler.executable=/appsec-jvm/bin/javac" in options
     assert "-Dmaven.repo.local=/tmp/appsec-review-maven" in options
     assert "-Dmaven.repo.local.tail=/opt/project-deps/maven" in options
-    wrapper = tmp_path / "projects" / "java" / "case-034" / ".appsec-review-jvm" / "bin" / "javac"
+    wrapper = supplied / "bin" / "javac"
     # A root orchestrator runs the container as the profile user, which must execute the wrapper.
     assert wrapper.stat().st_mode & 0o777 == 0o755
 
-    direct, _trace = _environment({**recipe, "build_system": "javac"}, tmp_path, _jvm_settings())
+    direct, _trace = _environment({**recipe, "build_system": "javac"}, workspace, _jvm_settings(),
+                                  instrumentation_root=supplied, evidence_root=evidence)
     assert "maven.compiler.fork" not in direct["MAVEN_OPTS"]
 
 
@@ -520,12 +701,14 @@ def test_build_system_environment_generalizes_to_multi_module_layouts(tmp_path: 
                                      "</modules></project>\n", encoding="utf-8")
     maven = {"image_profile": "java", "source_dir": "services/billing", "build_system": "maven",
              "environment": {"MAVEN_OPTS": "-Xmx1g"}}
-    environment, trace = _environment(maven, tmp_path, _jvm_settings())
+    supplied, evidence, workspace = tmp_path / "supplied", tmp_path / "evidence", tmp_path / "workspace"
+    workspace.mkdir()
+    environment, trace = _environment(maven, workspace, _jvm_settings(),
+                                      instrumentation_root=supplied, evidence_root=evidence)
     options = environment["MAVEN_OPTS"].split()
     assert options.count("-Dmaven.compiler.fork=true") == 1 and "-Xmx1g" in options
-    assert ("-Dmaven.compiler.executable=/workspace/services/billing/.appsec-review-jvm/bin/javac"
-            in options)
-    assert trace == reactor / ".appsec-review-jvm" / "invocations.bin"
+    assert "-Dmaven.compiler.executable=/appsec-jvm/bin/javac" in options
+    assert trace == evidence / "invocations.bin"
 
     gradle_root = tmp_path / "mobile"
     for project in ("app", "feature-login", "core-network"):
@@ -535,7 +718,8 @@ def test_build_system_environment_generalizes_to_multi_module_layouts(tmp_path: 
         'include(":app", ":feature-login", ":core-network")\n', encoding="utf-8")
     gradle = {"image_profile": "java", "source_dir": "mobile", "build_system": "gradle",
               "environment": {}}
-    environment, _trace = _environment(gradle, tmp_path, _jvm_settings())
+    environment, _trace = _environment(gradle, workspace, _jvm_settings(),
+                                       instrumentation_root=supplied, evidence_root=evidence)
     assert environment["GRADLE_USER_HOME"] == "/tmp/appsec-review-gradle"
     assert environment["GRADLE_RO_DEP_CACHE"] == "/opt/project-deps/gradle/caches"
     assert "maven.compiler.fork" not in environment["MAVEN_OPTS"]

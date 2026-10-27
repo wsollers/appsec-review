@@ -279,7 +279,7 @@ def test_central_codeql_asset_lock_matches_tracked_lock() -> None:
     config = tomllib.loads((ROOT / "appsec-review.toml").read_text(encoding="utf-8"))
     settings = config["jobs"]["job_codeql_analysis"]["settings"]
     lock = load_asset_lock(ROOT)
-    assert settings["asset_lock_sha256"] == lock["sha256"]
+    assert "sha256" not in lock
     for language, configured in settings["languages"].items():
         locked = lock["query_packs"][language]
         assert configured.get("additional_queries", []) == locked.get("additional_suites", [])
@@ -743,10 +743,11 @@ def test_normalize_scopes_resumes_mixed_reused_and_fresh_shards(
     first = _normalize_one(unit, queries[0])
     path = tmp_path / first["index"]["path"]
     before = path.stat()
-    normalize = next(item for item in build_job().units if item.unit_id == "normalize.scopes")
-
-    resumed = normalize.handler(unit)
-    repeated = normalize.handler(unit)
+    def normalize():
+        values = [_normalize_one(unit, query) for query in queries]
+        return {"scopes": values, "observation_count": sum(item["observation_count"] for item in values)}
+    resumed = normalize()
+    repeated = normalize()
 
     assert resumed == repeated
     assert resumed["scopes"][0] == first
@@ -756,6 +757,123 @@ def test_normalize_scopes_resumes_mixed_reused_and_fresh_shards(
     assert path.stat().st_ino == before.st_ino
     assert path.stat().st_mtime_ns == before.st_mtime_ns
     assert hashlib.sha256(path.read_bytes()).hexdigest() == first["index"]["sha256"]
+
+
+def test_normalizer_release_changes_only_normalized_publication(tmp_path, monkeypatch):
+    from appsec_review.config.assurance import ComponentReleases, ReviewPolicy
+
+    unit, queries = _normalization_fixture(tmp_path, monkeypatch)
+    unit.job.review_policy = ReviewPolicy(releases=ComponentReleases({"codeql_normalizer": "v1"}))
+    first = _normalize_one(unit, queries[0])
+    original = tmp_path / first["index"]["path"]
+    original_bytes = original.read_bytes()
+    unit.job.review_policy = ReviewPolicy(releases=ComponentReleases({"codeql_normalizer": "v2"}))
+    second = _normalize_one(unit, queries[0])
+    assert second["index"]["path"] != first["index"]["path"]
+    assert second["observation_count"] == first["observation_count"]
+    assert queries[0]["database_reused"] and queries[0]["query_reused"]
+    assert original.read_bytes() == original_bytes
+    assert _normalize_one(unit, queries[0]) == second
+
+
+@pytest.mark.parametrize("invalid_output", [None, "success_without_index", "failure_without_gap"])
+def test_normalization_admission_timeout_publishes_successful_sibling(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch, invalid_output: str | None) -> None:
+    from appsec_review.config.assurance import ReviewPolicy
+    from appsec_review.jobs.job_codeql_analysis import job as codeql_job
+    from appsec_review.observability import EventLog
+    from appsec_review.retrieval.index import load_verified_manifest, write_manifest
+    from appsec_review.storage import file_sha256
+
+    unit, queries = _normalization_fixture(tmp_path, monkeypatch)
+    settings = parse_codeql_settings(_settings_value())
+    settings = replace(settings, concurrency=1,
+                       export_queries=replace(settings.export_queries, enabled=False))
+    plan = build_codeql_plan(
+        source_fingerprint=unit.job.source_fingerprint,
+        files=[source(".github/workflows/ci.yml"), source("app.py")], receipts=[],
+        supported_extractors={"actions", "python"}, source_image_id=IMAGE,
+    )
+    by_scope = {query["scope"]["scope_id"]: query for query in queries}
+    target = tmp_path / "target"
+    target.mkdir()
+    unit.job.target_root = target
+    unit.job.run_id = tmp_path.name
+    unit.job.attempt_id = "attempt_0001"
+    unit.job.attempt_root = tmp_path / "data/jobs/job_codeql_analysis/attempts/attempt_0001"
+    unit.job.metadata_root = tmp_path / "metadata"
+    unit.job.review_policy = ReviewPolicy()
+    unit.job.events = EventLog(tmp_path / "events.jsonl")
+    unit.unit_id = "execution.scopes"
+    upstream = tmp_path / "data/indices/manifests/upstream.json"
+    write_manifest(upstream, run_id=unit.job.run_id, target_snapshot=unit.job.source_fingerprint,
+                   target_root=target, indexes=[])
+    monkeypatch.setattr(codeql_job, "_settings", lambda _: settings)
+    monkeypatch.setattr(codeql_job, "_plan_from", lambda _: plan)
+    monkeypatch.setattr(codeql_job, "_receipt_map", lambda _: {})
+    monkeypatch.setattr(codeql_job, "_database_isolated",
+                        lambda _, scope, receipts: by_scope[scope.scope_id])
+    monkeypatch.setattr(codeql_job, "_query_one",
+                        lambda _, value, profile: {**value, "query_profile": dict(profile)})
+    monkeypatch.setattr(codeql_job, "_export_isolated",
+                        lambda _, value, **kwargs: {**value, "export_status": "NOT_APPLICABLE"})
+    monkeypatch.setattr(codeql_job, "resolve_context_manifest",
+                        lambda _: (upstream, file_sha256(upstream)))
+    reserve = codeql_job.ResourceAdmission.reserve
+    failures = []
+
+    @contextmanager
+    def fail_one_normalization(self, request, **kwargs):
+        if kwargs["action"] == "codeql.normalize" and not failures:
+            failures.append(kwargs["action"])
+            raise TimeoutError("fixture normalization admission timeout")
+        with reserve(self, request, **kwargs) as lease:
+            yield lease
+
+    monkeypatch.setattr(codeql_job.ResourceAdmission, "reserve", fail_one_normalization)
+    handlers = {item.unit_id: item.handler for item in codeql_job.build_job().units}
+    executed = handlers["execution.scopes"](unit)
+    events = [json.loads(line) for line in (tmp_path / "events.jsonl").read_text().splitlines()]
+    admissions = {event["span_id"]: event for event in events if event["event"] == "RESOURCE_ADMITTED"}
+    actions = [event for event in events if event["event"] == "OPERATION_COMPLETED"
+               and event["operation_id"] in {"codeql.database", "codeql.query", "codeql.normalize"}]
+    assert len(actions) == 5
+    assert {event["scope_id"] for event in actions} == set(by_scope)
+    for action in actions:
+        admitted = admissions[action["resource_lease_id"]]
+        assert action["scope_id"] == admitted["scope_id"]
+        assert action["query_profile"] == admitted["query_profile"]
+        assert action["unit_id"] == admitted["unit_id"] == "execution.scopes"
+        assert admitted["queue_delay_ms"] >= 0
+    failed = [item for item in executed["scopes"] if item["terminal_status"] == "FAILED"]
+    succeeded = [item for item in executed["scopes"] if item["terminal_status"] == "SUCCEEDED"]
+    assert len(failed) == len(succeeded) == len(failures) == 1
+    assert "index_identity" not in failed[0]
+    assert succeeded[0]["observation_count"] == executed["observation_count"] == 1
+    reason = "CodeQL normalize operational failure (TimeoutError)"
+    assert reason in failed[0]["gaps"] and reason in executed["gaps"]
+    outputs = {"execution.scopes": executed, "plan.inventory": {"upstream_manifests": []}}
+    unit.output = outputs.__getitem__
+    unit.unit_id = "acceptance.publish_handoff"
+    if invalid_output is not None:
+        if invalid_output == "success_without_index":
+            failed[0]["terminal_status"] = "SUCCEEDED"
+        else:
+            failed[0]["gaps"] = []
+        with pytest.raises(FrameworkIntegrityError, match="without an explicit failure gap"):
+            handlers["acceptance.publish_handoff"](unit)
+        return
+    published = handlers["acceptance.publish_handoff"](unit)
+    assert published["scope_count"] == 2 and published["item_count"] == 1
+    assert published["terminal_status"] != "SUCCEEDED"
+    assert reason in published["gaps"]
+    summary = json.loads((tmp_path / published["artifact"]["path"]).read_bytes())
+    statuses = {item["scope_id"]: item["terminal_status"] for item in summary["scopes"]}
+    assert statuses == {failed[0]["scope"]["scope_id"]: "FAILED",
+                        succeeded[0]["scope"]["scope_id"]: "SUCCEEDED"}
+    manifest, _ = load_verified_manifest(tmp_path, tmp_path / published["index_manifest"]["path"],
+                                        published["index_manifest"]["sha256"])
+    assert [item["sha256"] for item in manifest["indexes"]] == [succeeded[0]["index"]["sha256"]]
 
 
 @pytest.mark.parametrize("corrupt", [False, True])
@@ -822,7 +940,7 @@ def _settings_value() -> dict[str, object]:
         "source_image_id": lock["source_image"]["image_id"],
         "version": "2.27.0", "commit": "b47b3e59262c95aff4eeb84ac72d09e25a9c37e9",
         "cli_sha256": lock["codeql"]["cli_sha256"], "license_sha256": lock["codeql"]["license_sha256"],
-        "asset_lock_sha256": load_asset_lock(ROOT)["sha256"], "runtime_user": "10001:10001",
+        "asset_lock_sha256": "0" * 64, "runtime_user": "10001:10001",
         "retention": "run-owned", "concurrency": 4, "inventory_timeout_seconds": 300,
         "database_timeout_seconds": 1800, "query_timeout_seconds": 1800, "output_bytes": 1024,
         "database_file_limit": 200000, "database_bytes_limit": 8589934592,
@@ -880,7 +998,12 @@ def test_database_and_query_checkpoint_inputs_invalidate_independently() -> None
     extractor_settings = replace(settings, languages=MappingProxyType(
         {**settings.languages, "go": extractor_changed}))
     assert _database_identity(unit, scope, image_identity="6" * 64, replay=replay,
-                              settings=extractor_settings, asset_lock=lock) != database
+                              settings=extractor_settings, asset_lock=lock) == database
+    from appsec_review.config.assurance import ComponentReleases, ReviewPolicy
+    released = SimpleNamespace(job=SimpleNamespace(review_policy=ReviewPolicy(
+        releases=ComponentReleases({"extractor_go": "updated-release"}))))
+    assert _database_identity(released, scope, image_identity="6" * 64, replay=replay,
+                              settings=settings, asset_lock=lock) != database
     mode_language = replace(language, mode=CodeQLExecutionMode.SOURCE)
     mode_settings = replace(settings, languages=MappingProxyType(
         {**settings.languages, "go": mode_language}))
@@ -892,15 +1015,95 @@ def test_database_and_query_checkpoint_inputs_invalidate_independently() -> None
         parse_codeql_settings(broken)
 
 
+@pytest.mark.parametrize("path,value,expected", [
+    (("files", 0, "sha256"), "b" * 64, (True, True)),
+    (("receipts", 0, "dependency_identity"), "b" * 64, (True, True)),
+    (("receipts", 0, "recipe_identity"), "b" * 64, (True, True)),
+    (("receipts", 0, "workspace_manifest", "sha256"), "b" * 64, (True, True)),
+    (("receipts", 0, "image", "image_id"), "sha256:" + "b" * 64, (True, True)),
+    (("replay", "commands", 0, "argv_sha256"), "b" * 64, (True, True)),
+    (("replay", "environment"), {"GOFLAGS": "-tags=changed"}, (True, True)),
+    (("image_identity",), "b" * 64, (True, True)),
+    (("releases", "platform"), "v2", (True, True)),
+    (("releases", "build_toolchain"), "v2", (True, True)),
+    (("releases", "codeql"), "v2", (True, True)),
+    (("releases", "codeql_runner"), "v2", (True, True)),
+    (("releases", "extractor_go"), "v2", (True, True)),
+    (("mode",), "first_party_managed", (True, True)),
+    (("settings", "threads"), 3, (True, True)),
+    (("settings", "ram_mb"), 6144, (True, True)),
+    (("settings", "database_file_limit"), 100000, (True, True)),
+    (("settings", "database_bytes_limit"), 4294967296, (True, True)),
+    (("query_release",), "v2", (False, True)),
+    (("settings", "languages", "go", "query_suite"),
+     "codeql-suites/go-security-extended.qls", (False, True)),
+    (("settings", "result_limit"), 50000, (False, True)),
+    (("settings", "sarif_bytes_limit"), 134217728, (False, True)),
+    (("settings", "max_paths"), 2, (False, True)),
+    (("receipts", 0, "fingerprint"), "b" * 64, (False, False)),
+    (("receipts", 0, "workspace_manifest", "path"), "new-attempt/manifest.json", (False, False)),
+    (("receipts", 0, "workspace"), "new-attempt/workspace", (False, False)),
+    (("receipts", 0, "invocation_id"), "new-invocation", (False, False)),
+    (("receipts", 0, "timestamp"), "later", (False, False)),
+    (("replay", "protected_commands"), {"path": "new-attempt/commands.json"}, (False, False)),
+    (("releases", "extractor_java"), "v2", (False, False)),
+    (("releases", "codeql_normalizer"), "v2", (False, False)),
+    (("settings", "asset_lock_sha256"), "b" * 64, (False, False)),
+    (("settings", "languages", "go", "extractor_tree_sha256"), "b" * 64, (False, False)),
+])
+def test_codeql_material_provenance_invalidation_matrix(tmp_path, path, value, expected):
+    from copy import deepcopy
+    from appsec_review.config.assurance import AssuranceMode, ComponentReleases, ReviewPolicy
+
+    inputs = {
+        "files": [source("go/main.go")],
+        "receipts": [receipt("go", "go", "build-unit-aaaaaaaaaaaaaaaaaaaa")],
+        "settings": _settings_value(),
+        "replay": {"commands": [{"argv_sha256": "7" * 64}], "environment": {},
+                   "protected_commands": {"path": "old-attempt/commands.json"}},
+        "image_identity": "6" * 64, "query_release": "v1", "mode": "strict",
+        "releases": {name: "v1" for name in (
+            "platform", "build_toolchain", "codeql", "codeql_runner",
+            "extractor_go", "extractor_java", "codeql_normalizer")},
+    }
+
+    def identities(values):
+        settings = parse_codeql_settings(values["settings"])
+        scope = build_codeql_plan(
+            source_fingerprint="f" * 64, files=values["files"], receipts=values["receipts"],
+            supported_extractors={"go"}, source_image_id=IMAGE).scopes[0]
+        policy = ReviewPolicy(mode=AssuranceMode(values["mode"]), project_id="fixture",
+                              approved_first_party_projects=("fixture",),
+                              target_root=str(tmp_path), custody="application_private_v1",
+                              releases=ComponentReleases(values["releases"]))
+        unit = SimpleNamespace(job=SimpleNamespace(review_policy=policy))
+        database = _database_identity(
+            unit, scope, image_identity=values["image_identity"], replay=values["replay"],
+            settings=settings, asset_lock={"sha256": values["settings"]["asset_lock_sha256"]})
+        query = _query_identity(
+            {"database_identity": database, "database_tree_sha256": "5" * 64},
+            _query_profiles(settings.languages["go"])[0], settings,
+            query_release=values["query_release"])
+        return database, query
+
+    baseline = identities(inputs)
+    changed = deepcopy(inputs)
+    container = changed
+    for component in path[:-1]:
+        container = container[component]
+    container[path[-1]] = value
+    assert tuple(left != right for left, right in zip(baseline, identities(changed))) == expected
+
+
 def test_cpp_default_and_custom_queries_have_independent_identities() -> None:
     settings = parse_codeql_settings(_settings_value())
     language = settings.languages["cpp"]
     profiles = _query_profiles(language)
     assert [(item["query_id"], item["kind"]) for item in profiles] == [
-        ("default", "default"), ("cert-cpp", "custom")]
+        ("default", "default"), ("security-extended", "pack"), ("cert-cpp", "custom")]
     database = {"database_identity": "1" * 64, "database_tree_sha256": "2" * 64}
     identities = [_query_identity(database, profile, settings) for profile in profiles]
-    assert len(set(identities)) == 2
+    assert len(set(identities)) == 3
 
     changed_custom = replace(language.custom_queries[0], query_suite_sha256="3" * 64)
     changed_language = replace(language, custom_queries=(changed_custom,))
@@ -908,10 +1111,12 @@ def test_cpp_default_and_custom_queries_have_independent_identities() -> None:
         {**settings.languages, "cpp": changed_language}))
     changed_profiles = _query_profiles(changed_language)
     assert _query_identity(database, changed_profiles[0], changed_settings) == identities[0]
-    assert _query_identity(database, changed_profiles[1], changed_settings) != identities[1]
+    assert _query_identity(database, changed_profiles[-1], changed_settings) == identities[-1]
+    assert _query_identity(database, changed_profiles[-1], changed_settings,
+                           query_release="updated-release") != identities[-1]
 
 
-def test_runner_tree_identity_uses_posix_path_order(tmp_path: Path) -> None:
+def test_runner_has_no_supplied_tree_fingerprinter(tmp_path: Path) -> None:
     runner_path = ROOT / "containers" / "tools" / "codeql" / "codeql_runner.py"
     spec = importlib.util.spec_from_file_location("appsec_review_codeql_runner", runner_path)
     assert spec is not None and spec.loader is not None
@@ -920,10 +1125,7 @@ def test_runner_tree_identity_uses_posix_path_order(tmp_path: Path) -> None:
     (tmp_path / "a").mkdir()
     (tmp_path / "a.b").write_text("dot", encoding="utf-8")
     (tmp_path / "a" / "Z").write_text("nested", encoding="utf-8")
-    files = sorted((tmp_path / "a.b", tmp_path / "a" / "Z"), key=lambda item: item.as_posix())
-    rows = [f"{runner._sha256(path)}  {path.as_posix()}\n".encode() for path in files]
-
-    assert runner._tree(tmp_path) == (hashlib.sha256(b"".join(rows)).hexdigest(), 2)
+    assert not hasattr(runner, "_tree")
     assert runner._canonical(["build", "--flag"]) == canonical_json(["build", "--flag"])
     assert runner._working_directory(tmp_path, ".") == tmp_path
 
@@ -1037,6 +1239,7 @@ def test_derived_image_build_holds_the_global_docker_build_lock(
 
 def test_concurrent_derived_image_resolution_waits_and_reuses(
         tmp_path: Path) -> None:
+    from appsec_review.config.assurance import ComponentReleases
     source_id = "sha256:" + "1" * 64
     derived_id = "sha256:" + "2" * 64
     settings = SimpleNamespace(source_image_tag="codeql-source:test", source_image_id=source_id)
@@ -1065,7 +1268,9 @@ def test_concurrent_derived_image_resolution_waits_and_reuses(
         raise AssertionError(argv)
 
     resolver = CodeQLImageResolver(repository_root=ROOT, metadata_root=tmp_path / "metadata",
-                                   settings=settings, timeout_seconds=30, runner=runner)
+                                   settings=settings, timeout_seconds=30, runner=runner,
+                                   releases=ComponentReleases({"codeql": "fixture/1",
+                                                               "codeql_runner": "fixture/1"}))
     with ThreadPoolExecutor(max_workers=2) as pool:
         images = list(pool.map(lambda _ordinal: resolver.resolve(
             build_image_tag=settings.source_image_tag, build_image_id=source_id,

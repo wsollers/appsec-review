@@ -1241,23 +1241,7 @@ def build_job(*, executor_factory: ExecutorFactory | None = None,
         Unit("publish.index_history", index, ("analyze.rank",)),
         Unit("publish.publish_handoff", publish, ("publish.index_history",)),
     )
-    sources = sorted(Path(__file__).parent.glob("*.py"))
-    implementation = hashlib.sha256(b"".join(path.read_bytes() for path in sources) +
-                                    (b"custom-executor" if executor_factory else b"container-only") +
-                                    (b"custom-transport" if github_transport else b"https-transport")).hexdigest()
-
-    def runtime_identity(repository_root: Path) -> str:
-        root = Path(repository_root).resolve()
-        identities = {}
-        for tool_id in (TOOL_ID, TREE_SITTER_TOOL):
-            try:
-                tool = load_catalog(root).tool(tool_id)
-                identities[tool_id] = {"tag": tool.tag, "manifest": file_sha256(tool.manifest_path)}
-            except (KeyError, OSError, ValueError):
-                identities[tool_id] = "UNAVAILABLE"
-        return hashlib.sha256(canonical_json(identities)).hexdigest()
-
     return Job("job_source_history_analysis", "source_history_analysis", UnitExecutor(units).execute,
-               input_validators=(_validate,), schema_identity=SCHEMA, implementation_identity=implementation,
-               runtime_identity=runtime_identity, units=units, input_identity=history_identity,
+               input_validators=(_validate,), schema_identity=SCHEMA,
+               units=units, input_identity=history_identity,
                datasets=DATASETS, consumes=CONSUMES)

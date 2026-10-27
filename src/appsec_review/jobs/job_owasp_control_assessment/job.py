@@ -334,7 +334,7 @@ def build_job(*, fail_cell: str | None = None) -> Job:
           ("standards_selection.select_profiles", "join.deterministic_join", "publication.publish_indexes",
            *tuple(f"validation.{cell}" for cell in CELLS))),
     )
-    identity = hashlib.sha256(Path(__file__).read_bytes() + str(fail_cell).encode()).hexdigest()
+    identity = None
     return Job("job_owasp_control_assessment", "owasp_control_assessment", UnitExecutor(units).execute,
                input_validators=(_validate_config,), schema_identity=SCHEMA,
                implementation_identity=identity, validation_identity=identity, units=units,

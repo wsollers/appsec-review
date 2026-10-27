@@ -826,9 +826,6 @@ def build_job(*, executor_factory: ExecutorFactory | None = None) -> Job:
         Unit("publish.index_change_context", index, ("analyze.rank",)),
         Unit("publish.publish_handoff", publish, ("publish.index_change_context",)),
     )
-    sources = sorted(Path(__file__).parent.glob("*.py"))
-    implementation = hashlib.sha256(b"".join(path.read_bytes() for path in sources) +
-                                    (b"custom-executor" if executor_factory else b"container-only")).hexdigest()
     return Job(PRODUCER, "change_context_analysis", UnitExecutor(units).execute, input_validators=(_validate,),
-               schema_identity=SCHEMA, implementation_identity=implementation, units=units,
+               schema_identity=SCHEMA, units=units,
                datasets=DATASETS, consumes=CONSUMES)

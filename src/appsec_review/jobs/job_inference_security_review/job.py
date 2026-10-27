@@ -622,10 +622,6 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
         Unit("publication.publish_claim_ledger", publish_ledger, ("completeness.audit",)),
         Unit("publication.publish_handoff", publish_handoff, ("publication.publish_claim_ledger",)),
     )
-    sources = sorted([*Path(__file__).parent.glob("*.py"),
-                      Path(__file__).parents[2] / "review" / "lead_triage.py",
-                      Path(__file__).parents[2] / "storage" / "shared.py"])
-    implementation = hashlib.sha256(b"".join(path.read_bytes() for path in sources)).hexdigest()
 
     def validate(context, _result) -> None:
         if tuple(context.config.steps) != tuple(TOPOLOGY):
@@ -637,5 +633,5 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
             raise ValueError("job_inference_security_review settings are not typed")
 
     return Job(JOB_ID, "inference_security_review", UnitExecutor(units).execute, input_validators=(validate,),
-               schema_identity=SCHEMA, implementation_identity=implementation, units=units,
+               schema_identity=SCHEMA, units=units,
                datasets=DATASETS, consumes=CONSUMES)

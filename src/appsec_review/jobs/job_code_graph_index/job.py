@@ -43,7 +43,7 @@ from appsec_review.graph.correlate import correlate
 from appsec_review.graph.crosscheck import CrossCheckInputs, cross_check, read_secondary
 from appsec_review.graph.svf_crosscheck import read_svf, svf_cross_check
 from appsec_review.graph.normalize import COLUMNS_PATH, EXPORT_UPSTREAM_INDEX, normalize_scope
-from appsec_review.graph.settings import RunConfigurationError, catalog_pins, run_configuration
+from appsec_review.graph.settings import RunConfigurationError, run_configuration
 from appsec_review.indexing.store import ShardSet
 from appsec_review.retrieval import IndexIdentity, write_manifest
 from appsec_review.retrieval.core import resolve_context_manifest
@@ -98,13 +98,7 @@ def _validate(context, _result) -> None:
 
 
 def verify_catalog_pin(run_root: Path, current: Catalog, scopes: list[Mapping[str, Any]]) -> None:
-    """The catalog read here must be the one the run's CodeQL export configuration pins.
-
-    ``jobs.job_codeql_analysis.settings.languages.<language>.export_queries.catalog_sha256`` in the
-    run-bound resolved configuration names the catalog every succeeded export was verified against
-    (``_verify_export_sources``). A different catalog here would classify facts under rules the run
-    never pinned, so any mismatch, or a run without a bound configuration, is an integrity error.
-    """
+    """Bind the operator declaration, never fingerprint the supplied catalog."""
     exported = sorted({str(scope["language"]) for scope in scopes if scope["export_status"] == s.SUCCEEDED})
     if not exported:
         return
@@ -114,26 +108,22 @@ def verify_catalog_pin(run_root: Path, current: Catalog, scopes: list[Mapping[st
         raise IntegrityError(str(error)) from error
     if document is None:
         raise IntegrityError("the run has no bound configuration; the graph catalog pin cannot be verified")
-    pins = catalog_pins(document)
-    for language in exported:
-        pinned = pins.get(language, frozenset())
-        if current.sha256 not in pinned:
-            raise IntegrityError(
-                f"graph catalog {current.sha256} differs from the {language} pin in "
-                f"jobs.job_codeql_analysis.settings.languages.{language}.export_queries.catalog_sha256 "
-                f"({', '.join(sorted(pinned)) or 'none configured'})")
+    declared = document.get("review_policy", {}).get("releases", {}).get("graph_catalog", "undeclared")
+    if current.release_id != declared:
+        raise IntegrityError("graph catalog release differs from the frozen operator declaration")
 
 
 def build_job(*, catalog_path: Path | None = None) -> Job:
     """Build the job; ``catalog_path`` overrides the repository catalog (tests only)."""
 
-    def catalog() -> Catalog:
-        return load_catalog(catalog_path)
+    def catalog(unit: UnitContext) -> Catalog:
+        return load_catalog(catalog_path,
+                            release_id=unit.job.review_policy.releases.values.get("graph_catalog", "undeclared"))
 
     def loaded_catalog(unit: UnitContext) -> Catalog:
-        value = catalog()
-        if value.sha256 != unit.output("load.accepted_inputs")["catalog"]["sha256"]:
-            raise IntegrityError("the graph catalog changed during this attempt")
+        value = catalog(unit)
+        if value.release_id != unit.output("load.accepted_inputs")["catalog"]["release_id"]:
+            raise IntegrityError("the graph catalog declaration changed during this attempt")
         return value
 
     def scopes_needing(unit: UnitContext) -> list[Mapping[str, Any]]:
@@ -147,11 +137,12 @@ def build_job(*, catalog_path: Path | None = None) -> Job:
         manifest_path, manifest_sha = resolve_context_manifest(unit.job)
         manifest, _ = load_verified_manifest(run_root, manifest_path, manifest_sha)
         shard_set = ShardSet(run_root, manifest["indexes"])
-        current = catalog()
+        current = catalog(unit)
         verify_catalog_pin(run_root, current, codeql["scopes"])
-        columns = hashlib.sha256(COLUMNS_PATH.read_bytes()).hexdigest()
+        releases = unit.job.review_policy.releases
+        columns = releases.values.get("graph_columns", "undeclared")
         tool_version = s.codeql_version(run_root)
-        implementation = s.implementation_identity()
+        implementation = releases.values.get("graph_normalizer", "undeclared")
         restored = s.restored_secondary(run_root, shard_set.shards)
         secondary = s.assign_secondary(run_root, [*shard_set.shards, *restored], codeql["scopes"])
         analyzers = s.assign_analyzers([*shard_set.shards, *restored], codeql["scopes"])
@@ -167,15 +158,18 @@ def build_job(*, catalog_path: Path | None = None) -> Job:
                 "analyzers": analyzers.get(scope["scope_id"], {}),
                 "observations": s.observation_shards(shard_set, scope), "priority": priority}
             scope["identity"] = s.scope_identity(
-                scope, snapshot=unit.job.source_fingerprint, catalog_sha256=current.sha256, columns_sha256=columns,
+                scope, snapshot=unit.job.source_fingerprint, catalog_release=current.release_id, columns_release=columns,
                 settings=settings, tool_version=tool_version, implementation=implementation)
-            scope["reused"] = s.reuse_checkpoint(run_root, scope["scope_id"], scope["identity"])
+            reusable, reason = releases.require("graph_catalog", "graph_columns", "graph_normalizer", "validation")
+            scope["reused"] = s.reuse_checkpoint(run_root, scope["scope_id"], scope["identity"]) if reusable else None
+            if not reusable:
+                unit.job.events.write("CHECKPOINT_MISSED", scope_id=scope["scope_id"], reason=reason)
             values.append(scope)
         document = {
             "schema": SCHEMA, "codeql_handoff": codeql["handoff"],
             "accepted_manifest": {"path": manifest_path.relative_to(run_root).as_posix(), "sha256": manifest_sha},
-            "catalog": {"sha256": current.sha256, "version": current.version, "revision": current.revision},
-            "columns_sha256": columns, "settings": asdict(settings), "tool_version": tool_version,
+            "catalog": {"release_id": current.release_id, "version": current.version, "revision": current.revision},
+            "columns_release": columns, "settings": asdict(settings), "tool_version": tool_version,
             "implementation": implementation, "restored_secondary": restored, "scopes": values}
         summary = unit.unit_root / "code-graph-inputs.json"
         atomic_json(summary, {**document, "scopes": [
@@ -183,7 +177,7 @@ def build_job(*, catalog_path: Path | None = None) -> Job:
             | {"reused": scope["reused"] is not None} for scope in values]})
         unit.job.events.write("CODE_GRAPH_INPUTS_LOADED", scope_count=len(values),
                               reused_count=sum(scope["reused"] is not None for scope in values),
-                              restored_secondary_count=len(restored), catalog_sha256=current.sha256)
+                              restored_secondary_count=len(restored), catalog_release=current.release_id)
         return {**document, "artifact": s.artifact(run_root, summary), "scope_count": len(values),
                 "reused_count": sum(scope["reused"] is not None for scope in values), "gaps": [],
                 "terminal_status": "SUCCEEDED" if values else "NOT_APPLICABLE"}
@@ -293,7 +287,7 @@ def build_job(*, catalog_path: Path | None = None) -> Job:
     def correlate_scopes(unit: UnitContext) -> Mapping[str, Any]:
         loaded = unit.output("load.accepted_inputs")
         run_root = unit.job.run_root
-        catalog_sha = loaded["catalog"]["sha256"]
+        catalog_release = loaded["catalog"]["release_id"]
         stages = {item["scope_id"]: item["stage"] for item in unit.output("crosscheck.scopes")["scopes"]}
         if stages:
             loaded_catalog(unit)
@@ -308,7 +302,7 @@ def build_job(*, catalog_path: Path | None = None) -> Job:
                                                  relations=())
                 shards = s.publish_scope(run_root, scope=scope, snapshot=unit.job.source_fingerprint,
                                          identity=scope["identity"], facts=(), symbols=(), relations=(),
-                                         coverage=coverage, catalog_sha256=catalog_sha, unit_id=unit.unit_id,
+                                         coverage=coverage, catalog_release=catalog_release, unit_id=unit.unit_id,
                                          card=card, neighborhood=neighborhood)
                 summary: dict[str, Any] = {}
             else:
@@ -341,7 +335,7 @@ def build_job(*, catalog_path: Path | None = None) -> Job:
                 shards = s.publish_scope(run_root, scope=scope, snapshot=unit.job.source_fingerprint,
                                          identity=scope["identity"], facts=facts, symbols=symbols,
                                          relations=[*relations, *result.relations], coverage=coverage,
-                                         catalog_sha256=catalog_sha, unit_id=unit.unit_id, card=card,
+                                         catalog_release=catalog_release, unit_id=unit.unit_id, card=card,
                                          neighborhood=neighborhood)
             gaps = [f"{row.area}: {row.status.value}" + (f": {row.gap}" if row.gap else "")
                     for row in coverage if row.status is not Coverage.COMPLETE]
@@ -421,8 +415,7 @@ def build_job(*, catalog_path: Path | None = None) -> Job:
         Unit("correlate.scopes", correlate_scopes, ("load.accepted_inputs", "crosscheck.scopes")),
         Unit("acceptance.publish_handoff", publish, ("load.accepted_inputs", "correlate.scopes")),
     )
-    implementation = hashlib.sha256((s.implementation_identity() + (
-        f":catalog={catalog_path}" if catalog_path is not None else "")).encode()).hexdigest()
+    implementation = None
     return Job(JOB_ID, "code_graph_index", UnitExecutor(units).execute, input_validators=(_validate,),
                schema_identity=SCHEMA, implementation_identity=implementation, units=units, datasets=DATASETS,
                consumes=CONSUMES)

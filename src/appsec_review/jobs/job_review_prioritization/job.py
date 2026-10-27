@@ -26,6 +26,8 @@ from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from appsec_review.storage import atomic_json, canonical_json, file_sha256
 from appsec_review.swift_policy import SWIFT_KNOWN_GAP, is_swift_language, is_swift_path
 from appsec_review.jobs.component_ownership import resolve_root_ownership
+from appsec_review.jobs.delivery_scope import POLICY_IDENTITY, delivery_gap, scope_fields, source_in_scope
+from appsec_review.retrieval.source_resolution import read_source_bytes, source_native
 
 from . import scoring
 from .complexity import COGNITIVE_DEVIATIONS, COGNITIVE_IDENTITY, CYCLOMATIC_IDENTITY, file_summary, function_units
@@ -169,23 +171,31 @@ def _load_inputs(run_root: Path) -> dict[str, Any]:
                    key=lambda item: (-len(item[0]) if item[0] not in {"", "."} else 1, item[1]))
     files = {str(item["path"]): {"sha256": item["sha256"], "size_bytes": int(item["size_bytes"]),
                                  "language": item.get("language"), "generated": bool(item.get("generated")),
+                                 **scope_fields(item),
                                  "component_id": _component(str(item["path"]), roots)}
              for item in partition.get("files", ())}
+    for item in tree.get("generated_sources", ()):
+        if not isinstance(item, Mapping) or not source_in_scope(item):
+            raise ValueError("invalid generated source in accepted AST handoff")
+        native = source_native(item)
+        if not native or item["path"] in files:
+            raise ValueError("generated source backing absent or logical path duplicated")
+        read_source_bytes(run_root, Path("."), target_snapshot=catalog["source_fingerprint"],
+                          path=item["path"], sha256=item["sha256"], native=native)
+        files[item["path"]] = {**item, **scope_fields(item), **native,
+                               "component_id": _component(str(item["workspace_path"]), roots)}
     return {"source_fingerprint": catalog["source_fingerprint"], "catalog_handoff_sha256": catalog_sha,
             "tree_sitter_handoff_sha256": tree_sha, "tree_sitter_artifact": tree_handoff["outputs"][
                 "acceptance.publish_handoff"]["artifact"], "files": files,
             "components": [component for _root, component in roots]}
 
 
-def _target_bytes(unit: UnitContext, path: str, sha256: str) -> bytes:
-    target = (unit.job.target_root or Path()).resolve()
-    candidate = (target / Path(*PurePosixPath(path).parts)).resolve()
-    if target not in candidate.parents or candidate.is_symlink() or not candidate.is_file():
-        raise ValueError(f"accepted target file is unavailable or escapes the target: {path}")
-    data = candidate.read_bytes()
-    if hashlib.sha256(data).hexdigest() != sha256:
-        raise ValueError(f"accepted target bytes changed: {path}")
-    return data
+def _target_bytes(unit: UnitContext, path: str, sha256: str,
+                  source: Mapping[str, Any] | None = None) -> bytes:
+    return read_source_bytes(
+        unit.job.run_root, unit.job.target_root or Path(),
+        target_snapshot=str(getattr(unit.job, "source_fingerprint", "")),
+        path=path, sha256=sha256, native=source_native(source or {}))
 
 
 def _count(items: list[Mapping[str, Any]], key: str = "category") -> dict[str, int]:
@@ -275,8 +285,7 @@ def build_job() -> Job:
                 continue
             file_gaps = sorted(set(reasons.get(path, ())))
             rows = rows_by_path.get(path)
-            if value["generated"]:
-                gaps.append(f"{path}: generated_file_not_scored")
+            if not source_in_scope(value):
                 continue
             if not rows:
                 gaps.append(f"{path}: ast_unavailable ({'; '.join(file_gaps) or 'no accepted Tree-sitter rows'})")
@@ -298,7 +307,7 @@ def build_job() -> Job:
                 continue
             processed += 1
             spec = SPECS[row_grammar]
-            data = _target_bytes(unit, path, value["sha256"])
+            data = _target_bytes(unit, path, value["sha256"], value)
             root, errors = build_tree(rows)
             source = SourceFile(path, value["sha256"], row_grammar, spec.language, data, root, errors)
             units, truncated = function_units(source, spec, count_error_propagation=bool(
@@ -313,7 +322,7 @@ def build_job() -> Job:
             for item in extractor.suppressions:
                 item["signal_id"] = _identity("sup", item["rule_id"], item["path"], item["start_byte"], item["end_byte"])
             sloc = len(code_lines(root))
-            file_record_gaps = []
+            file_record_gaps = [gap] if (gap := delivery_gap(value)) else []
             if errors or "parse diagnostics present" in file_gaps:
                 file_record_gaps.append(f"parse_errors:{errors}")
             unsupported: Counter[str] = Counter()
@@ -336,6 +345,10 @@ def build_job() -> Job:
                 "path": path, "sha256": value["sha256"], "size_bytes": value["size_bytes"],
                 "line_count": source.line_count(), "language": spec.language, "grammar": row_grammar,
                 "component_id": value["component_id"], "parse_error_count": errors,
+                "generated": bool(value.get("generated")), **scope_fields(value),
+                **source_native(value),
+                "canonical_artifact_identity": value.get("canonical_artifact_identity"),
+                "build_unit_id": value.get("build_unit_id"), "workspace_path": value.get("workspace_path"),
                 **file_summary(units, sloc, thresholds),
                 "signal_counts": _count(extractor.signals), "suppression_counts": _count(extractor.suppressions),
                 "suppression_count": len(extractor.suppressions), "units": units, "signals": signals[:limit],
@@ -376,7 +389,7 @@ def build_job() -> Job:
         facts = syntax_doc(unit)["files"]
         builder = GraphBuilder({path: {"grammar": value["grammar"], "imports": value["imports"],
                                        "declarations": value["declarations"]} for path, value in facts.items()},
-                               files, lambda path: _target_bytes(unit, path, files[path]["sha256"]),
+                               files, lambda path: _target_bytes(unit, path, files[path]["sha256"], files[path]),
                                min_confidence=float(settings["min_edge_confidence"]),
                                max_records=int(settings["max_import_records"]))
         graph = builder.build({path: value["component_id"] for path, value in files.items()})
@@ -515,6 +528,9 @@ def build_job() -> Job:
                         *(item["signal_id"] for item in semgrep_by_file.get(path, ())),
                         *(item["signal_id"] for item in record["suppressions"])]
             file_items.append({"item_id": f"file:{path}", "scope": "file", "path": path, "name": path,
+                               "generated": bool(record.get("generated")), **scope_fields(record),
+                               **source_native(record),
+                               "canonical_artifact_identity": record.get("canonical_artifact_identity"),
                                "language": record["language"], "component_id": record["component_id"],
                                "start_line": 1, "features": features, "evidence": list(dict.fromkeys(evidence)),
                                "coupling_lower_bound": coupling.get("coupling_lower_bound", False),
@@ -540,6 +556,9 @@ def build_job() -> Job:
                          *(signal["signal_id"] for signal in semgrep_owned),
                          *(entry["signal_id"] for entry in record["suppressions"] if entry["function_id"] == function_id)]
                 function_items.append({
+                    "generated": bool(record.get("generated")), **scope_fields(record),
+                    **source_native(record),
+                    "canonical_artifact_identity": record.get("canonical_artifact_identity"),
                     "item_id": f"function:{function_id}", "scope": "function", "path": path, "function_id": function_id,
                     "name": item["qualified_name"], "language": record["language"], "component_id": record["component_id"],
                     "start_line": item["start_line"], "end_line": item["end_line"], "start_byte": item["start_byte"],
@@ -613,7 +632,7 @@ def build_job() -> Job:
                                                                 ranking_output)],
             tool_identity={"job": JOB_ID, "score": scoring.SCORE_IDENTITY, "rules": RULES_IDENTITY,
                            "config": hashlib.sha256(canonical_json(dict(settings))).hexdigest()},
-            parser_identity="tree-sitter-accepted-shards", normalizer_identity=MAPPING_IDENTITY,
+            parser_identity="tree-sitter-accepted-shards", normalizer_identity=MAPPING_IDENTITY + "+" + POLICY_IDENTITY,
             mapping_identity=GRAPH_IDENTITY)
         path = unit.job.run_root / "data" / "indices" / "priority" / SHARD_ID / f"{fingerprint}.sqlite"
         gaps = sorted(set([*syntax_output["gaps"], *graph_output["gaps"], *semantic_output["gaps"],
@@ -622,7 +641,7 @@ def build_job() -> Job:
 
         def data_of(file_path: str) -> bytes:
             if file_path not in data_cache:
-                data_cache[file_path] = _target_bytes(unit, file_path, files[file_path]["sha256"])
+                data_cache[file_path] = _target_bytes(unit, file_path, files[file_path]["sha256"], files[file_path])
             return data_cache[file_path]
 
         if not path.exists():
@@ -642,20 +661,22 @@ def build_job() -> Job:
                     sink = record["sink"]
                     location = _line_location(snapshot, data_of(sink["path"]), sink["path"], files[sink["path"]]["sha256"],
                                               int(sink["start_line"]), int(sink["end_line"]), "codeql-sarif-flow-step",
-                                              1.0, {"producer": "codeql", "role": "sink"})
+                                              1.0, {"producer": "codeql", "role": "sink", **source_native(files[sink["path"]])})
                     text = (f"semantic_path {record['rule_id']} {record['source']['path']}:{record['source']['start_line']}"
                             f" -> {sink['path']}:{sink['start_line']} steps {record['steps']}")
                 elif record.get("producer") == "semgrep":
                     location = _line_location(snapshot, data_of(record["path"]), record["path"],
                                               files[record["path"]]["sha256"], int(record["start_line"]),
                                               int(record["end_line"]), "semgrep-line-location", 0.9,
-                                              {"producer": "semgrep", "rule_id": record["rule_id"]})
+                                              {"producer": "semgrep", "rule_id": record["rule_id"],
+                                               **source_native(files[record["path"]])})
                     text = f"{record['category']} {record['surface']} {record['rule_id']} semgrep"
                 else:
                     location = SourceLocation(snapshot, record["path"], record["file_sha256"], int(record["start_byte"]),
                                               int(record["end_byte"]), int(record["start_line"]), int(record["end_line"]),
                                               int(record["start_column"]), int(record["end_column"]),
-                                              {"producer": "tree-sitter", "rule_id": record["rule_id"]},
+                                              {"producer": "tree-sitter", "rule_id": record["rule_id"],
+                                               **source_native(files[record["path"]])},
                                               "tree-sitter-byte-and-point-exact", 1.0)
                     kind = "suppression " + str(record.get("tool")) if signal_id.startswith("sup-") else record["surface"]
                     text = f"{record['category']} {kind} {record['rule_id']} {record.get('basis')}"
@@ -672,7 +693,8 @@ def build_job() -> Job:
                         step_location = _line_location(
                             snapshot, data_of(point["path"]), point["path"], files[point["path"]]["sha256"],
                             int(point["start_line"]), int(point["end_line"]), "codeql-sarif-flow-step", 1.0,
-                            {"producer": "codeql", "path_id": signal_id, "ordinal": step["ordinal"]})
+                            {"producer": "codeql", "path_id": signal_id, "ordinal": step["ordinal"],
+                             **source_native(files[point["path"]])})
                         step_text = (f"flow step {step['ordinal']} of {signal_id} "
                                      f"{point['path']}:{point['start_line']} {step['message']}")
                         builder.add_entity(EntityRecord(step_identity, f"{signal_id}:{step['ordinal']}",
@@ -697,12 +719,14 @@ def build_job() -> Job:
                     location = SourceLocation(snapshot, item["path"], record["sha256"], int(item["start_byte"]),
                                               int(item["end_byte"]), int(item["start_line"]), int(item["end_line"]),
                                               int(item["start_column"]), int(item["end_column"]),
-                                              {"producer": "tree-sitter", "function_id": item["function_id"]},
+                                              {"producer": "tree-sitter", "function_id": item["function_id"],
+                                               **source_native(files[item["path"]])},
                                               "tree-sitter-byte-and-point-exact", 1.0)
                 else:
                     location = SourceLocation(snapshot, item["path"], record["sha256"], 0, int(record["size_bytes"]), 1,
                                               max(1, int(record["line_count"])), 1, 1, {"producer": "tree-sitter",
-                                                                                        "scope": "file"},
+                                                                                        "scope": "file",
+                                                                                        **source_native(files[item["path"]])},
                                               "tree-sitter-file-span", 1.0)
                 top = sorted(item["percentiles"].items(), key=lambda pair: (-pair[1], pair[0]))[:5]
                 text = (f"review priority {item['scope']} rank {item['rank']} score {item['score']} {item['language']} "
@@ -739,11 +763,13 @@ def build_job() -> Job:
                 identity = LogicalIdentity.derive(EntityKind.REVIEW_CONTEXT_FILE, snapshot, {"path": file_path})
                 location = SourceLocation(snapshot, file_path, info["sha256"], 0, len(file_bytes), 1,
                                           max(1, len(file_bytes.splitlines())), 1, 1,
-                                          {"producer": "accepted-target", "scope": "dependency-context"},
+                                          {"producer": "accepted-source", "scope": "dependency-context",
+                                           **source_native(info)},
                                           "accepted-file-span", 1.0)
                 builder.add_entity(EntityRecord(identity, file_path, file_path,
                                                 f"dependency context {file_path}",
                                                 {"path": file_path, "scope": "dependency-context",
+                                                 **scope_fields(info), **source_native(info),
                                                  "authority": "graph context; not a vulnerability finding"}, location))
                 context_ids[file_path] = identity.value
                 return identity.value
@@ -864,18 +890,8 @@ def build_job() -> Job:
         Unit("publish.index_priority", index_priority, ("prioritize.score",)),
         Unit("publish.publish_handoff", publish, ("publish.index_priority",)),
     )
-    sources = sorted(Path(__file__).parent.glob("*.py"))
-    implementation = hashlib.sha256(b"".join(path.read_bytes() for path in sources)).hexdigest()
-
-    def runtime_identity(repository_root: Path) -> str:
-        root = Path(repository_root).resolve()
-        try:
-            return file_sha256(root / "rules" / "semgrep" / "rules.lock.json")
-        except OSError:
-            return "semgrep-rules-lock:UNAVAILABLE"
-
     return Job(JOB_ID, "review_prioritization", UnitExecutor(units).execute, input_validators=(_validate,),
-               schema_identity=SCHEMA, implementation_identity=implementation, runtime_identity=runtime_identity,
+               schema_identity=SCHEMA,
                units=units,
                datasets=DATASETS, consumes=CONSUMES)
 

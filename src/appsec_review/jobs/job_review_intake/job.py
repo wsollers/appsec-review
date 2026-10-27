@@ -220,10 +220,8 @@ def build_job(*, check_models: ModelCheck | None = None) -> Job:
              ("model_preflight.verify_models", "resolve_configuration.freeze_config",
               "prepare_target.fingerprint_target")),
     )
-    implementation = hashlib.sha256(Path(__file__).read_bytes() +
-        Path(__file__).parents[1].joinpath("cataloging.py").read_bytes() +
-        (b"model-check" if check_models else b"no-model-check")).hexdigest()
-    validation = hashlib.sha256(Path(__file__).read_bytes() + b"validation").hexdigest()
+    implementation = None
+    validation = None
     return Job("job_review_intake", "review_intake", UnitExecutor(units).execute,
                input_validators=(_validate,), schema_identity="appsec-review/review-intake-job/1",
                implementation_identity=implementation, validation_identity=validation, units=units,

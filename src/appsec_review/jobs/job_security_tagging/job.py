@@ -390,9 +390,7 @@ def build_job() -> Job:
           ("taxonomy.load_taxonomy", "scope.resolve_inputs", *COLLECTORS, "integrity.validate_assignments",
            "publication.publish_index", "publication.publish_tag_cloud")),
     )
-    sources = sorted(Path(__file__).parent.glob("*.py"))
-    identity = hashlib.sha256(b"".join(path.read_bytes() for path in sources)).hexdigest()
     return Job("job_security_tagging", "security_tagging", UnitExecutor(units).execute,
                input_validators=(_validate_config,), schema_identity=SCHEMA,
-               implementation_identity=identity, validation_identity=identity, units=units,
+               units=units,
                datasets=DATASETS, consumes=CONSUMES)

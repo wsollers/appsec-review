@@ -2,6 +2,7 @@
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 import hashlib
+import json
 from pathlib import Path
 from threading import Barrier
 from types import SimpleNamespace
@@ -46,6 +47,70 @@ def actor(root: Path, number: int, *, declarations=(DECLARATION,)) -> storage.Sh
 def produce(owner, payload=b"result", fingerprint=FP):
     obj = storage.put_bytes(owner.run_root, payload)
     return owner.computed("fixture", fingerprint, obj, computation={"request": fingerprint})
+
+
+def invocation_context(root):
+    owner = actor(root, 1)
+    path = owner.attempt_root / "claim.json"
+    claim = json.loads(path.read_bytes())
+    claim["orchestration"]["node"] = "fixture__begin"
+    atomic_json(path, claim)
+    return SimpleNamespace(
+        run_root=root, attempt_root=owner.attempt_root, run_id=root.name,
+        attempt_id=owner.attempt_root.name, orchestration=dict(claim["orchestration"]),
+        config=SimpleNamespace(job_id="job_fixture"))
+
+
+@pytest.mark.parametrize("node", ["fixture__begin", "fixture__work__execute", "fixture__finalize"])
+def test_dagster_nodes_share_attempt_identity_without_rewriting_producer(tmp_path, node):
+    context = invocation_context(tmp_path)
+    path = context.attempt_root / "claim.json"
+    original = path.read_bytes()
+    context.orchestration["node"] = node
+    owner = storage.SharedArtifacts.for_job(context)
+    receipt = storage.verify_receipt(tmp_path, produce(owner))
+    assert receipt["actor"]["orchestration"] == {
+        "system": "dagster", "run_id": "invocation-1", "node": "fixture__begin"}
+    assert context.orchestration["node"] == node
+    assert path.read_bytes() == original
+
+
+@pytest.mark.parametrize("field,value", [
+    ("run_id", "another-application-run"),
+    ("attempt_id", "attempt_9999"),
+    ("job_id", "job_other"),
+    ("orchestrator", "other"),
+    ("invocation", "another-dagster-run"),
+    ("correlation", "changed"),
+])
+def test_dagster_node_tolerance_does_not_allow_identity_substitution(tmp_path, field, value):
+    context = invocation_context(tmp_path)
+    context.orchestration["node"] = "fixture__work__execute"
+    if field == "job_id":
+        context.config.job_id = value
+    elif field in {"orchestrator", "invocation", "correlation"}:
+        key = {"orchestrator": "system", "invocation": "run_id", "correlation": "extra"}[field]
+        context.orchestration[key] = value
+    else:
+        setattr(context, field, value)
+    with pytest.raises(ValueError, match="differs from original invocation"):
+        storage.SharedArtifacts.for_job(context)
+
+
+@pytest.mark.parametrize("orchestration", [
+    {"system": "application", "run_id": "invocation-1", "node": "original"},
+    {"system": "dagster", "node": "original"},
+    {"system": "dagster", "run_id": "", "node": "original"},
+])
+def test_node_tolerance_requires_identified_dagster_invocation(tmp_path, orchestration):
+    context = invocation_context(tmp_path)
+    path = context.attempt_root / "claim.json"
+    claim = json.loads(path.read_bytes())
+    claim["orchestration"] = orchestration
+    atomic_json(path, claim)
+    context.orchestration = {**orchestration, "node": "changed"}
+    with pytest.raises(ValueError, match="differs from original invocation"):
+        storage.SharedArtifacts.for_job(context)
 
 
 def inventory(root):
@@ -314,9 +379,72 @@ def test_derived_shard_and_checkpoint_are_shared_and_legacy_is_preserved(tmp_pat
     assert path.read_bytes() == b"corrupt"
 
 
+@pytest.mark.parametrize("mode", ["strict", "first_party_managed"])
+def test_new_runner_restores_claimed_admission_before_unit_input_validation(tmp_path, monkeypatch, mode):
+    from appsec_review.storage import validation
+
+    target = tmp_path / "target"
+    target.mkdir()
+    config_path = write_config(tmp_path)
+    with config_path.open("a", encoding="utf-8") as stream:
+        stream.write(
+            f'\n[review_policy]\nmode = "{mode}"\nproject_id = "fixture"\n'
+            'approved_first_party_projects = ["fixture"]\ncustody = "application_private_v1"\n'
+            f'target_root = {json.dumps(str(target))}\n'
+            '\n[jobs.job_consumer]\nname = "consumer"\nworkers = 1\n')
+    config = load_config(config_path)
+
+    def compute(unit):
+        return {"receipt": produce(storage.SharedArtifacts.for_job(unit.job))}
+
+    producer = Job("job_fixture", "fixture", compute, units=(Unit("work.only", compute),),
+                   datasets=(DECLARATION,))
+    first = JobRunner(config).run(producer, target_root=target, source_fingerprint="target")
+    root = Path(first["attempt_root"]).parents[4]
+    ref = next(item for item in first["handoff"]["artifacts"]
+               if item["path"].startswith(storage.OBJECTS + "/"))
+    payload = root / ref["path"]
+    assert validation.current_validation(root) is None
+    digest = validation.file_sha256
+    hashes, phases = [], []
+
+    def counted(path):
+        if path == payload:
+            hashes.append(path)
+        return digest(path)
+
+    def validate_input(unit, result):
+        assert result is None
+        context = validation.current_validation(root)
+        assert context is not None
+        assert ((ref["path"], ref["sha256"]) in context.admitted) == (mode == "first_party_managed")
+        assert storage.verify_reference(root, ref).read_bytes() == b"result"
+        phases.append("validated")
+
+    def consume(unit):
+        assert phases == ["validated"]
+        storage.consume_handoff(root, first["handoff"])
+        return {"artifact": ref}
+
+    monkeypatch.setattr(validation, "file_sha256", counted)
+    consumer = Job("job_consumer", "consumer", consume,
+                   units=(Unit("work.only", consume, input_validators=(validate_input,)),),
+                   consumes=("job_fixture",))
+    outcome = JobRunner(config).run(
+        consumer, run_id=root.name, target_root=target, source_fingerprint="target",
+        upstream_handoffs={"job_fixture": first["handoff_sha256"]})
+    assert outcome["handoff"]["status"] == "ACCEPTED"
+    assert outcome["handoff"]["upstream_handoff_sha256"] == {"job_fixture": first["handoff_sha256"]}
+    assert (len(hashes) == 0) if mode == "first_party_managed" else bool(hashes)
+    assert validation.current_validation(root) is None
+
+
 @pytest.mark.parametrize("damage", ["object_tamper", "receipt_missing"])
 def test_handoff_resume_and_downstream_failure_keep_original_producer(tmp_path, damage):
-    runner = JobRunner(load_config(write_config(tmp_path)))
+    config_path = write_config(tmp_path)
+    with config_path.open("a", encoding="utf-8") as stream:
+        stream.write('\n[review_policy.releases]\nplatform = "fixture-1"\nvalidation = "fixture-1"\n')
+    runner = JobRunner(load_config(config_path))
 
     def compute(unit):
         owner = storage.SharedArtifacts.for_job(unit.job)

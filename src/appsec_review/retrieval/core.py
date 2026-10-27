@@ -119,9 +119,13 @@ def resolve_context_manifest(context: Any) -> tuple[Path, str]:
 
 
 def _accepted_handoff(run_root: Path, job_id: str, expected_sha256: str) -> tuple[Mapping[str, Any], Path]:
-    attempts = run_root / "data" / "jobs" / job_id / "attempts"
+    from appsec_review.storage.shared import safe_path
+    if not re.fullmatch(r"[a-z][a-z0-9_]*", job_id):
+        raise RetrievalIntegrityError("invalid claimed upstream job identity")
+    attempts = safe_path(run_root, f"data/jobs/{job_id}/attempts")
     matches = []
     for path in sorted(attempts.glob("attempt_*/handoff.json")):
+        path = safe_path(run_root, path.relative_to(run_root).as_posix())
         if file_sha256(path) == expected_sha256:
             matches.append(path)
     if len(matches) != 1:
@@ -206,6 +210,7 @@ def _flatten_manifest(
 def materialize_attempt_input_manifest(
     *, run_root: Path, attempt_root: Path, run_id: str, target_snapshot: str,
     target_root: Path | None, upstream_handoffs: Mapping[str, str],
+    evidence_target_snapshot: str | None = None,
 ) -> tuple[Path | None, str | None]:
     """Pin and merge the exact retrieval manifests reachable from this attempt's handoffs."""
 
@@ -213,13 +218,20 @@ def materialize_attempt_input_manifest(
     roots = _handoff_manifest_roots(run_root, upstream_handoffs)
     if not roots:
         return None, None
+    verified: dict[tuple[Path, str], Mapping[str, Any]] = {}
+    if evidence_target_snapshot is not None:
+        for (_relative, digest), path in roots.items():
+            document, _ = load_verified_manifest(run_root, path, digest, verified=verified)
+            if (document.get("run_id") != run_id
+                    or document.get("target_snapshot") != evidence_target_snapshot):
+                raise RetrievalIntegrityError("upstream manifest differs from authenticated evidence binding")
+        target_snapshot = evidence_target_snapshot
     if len(roots) == 1:
         (relative, sha256), path = next(iter(roots.items()))
-        load_verified_manifest(run_root, path, sha256)
+        load_verified_manifest(run_root, path, sha256, verified=verified)
         return path, sha256
     # Upstream lineages share ancestors (every job inherits the catalog manifest, for example), so
     # one verification and flattening per manifest serves every root of this attempt.
-    verified: dict[tuple[Path, str], Mapping[str, Any]] = {}
     flattened: dict[tuple[str, str], Any] = {}
     if target_snapshot == "none":
         # A job that does not read the target has no snapshot of its own (the launch binds "none"). The
@@ -282,23 +294,24 @@ class RetrievalCore:
             except RunConfigurationError as exc:
                 raise RetrievalIntegrityError(str(exc)) from exc
         self.graph_settings = graph_settings
-        if manifest_path is None:
-            manifest_path, accepted_sha = resolve_accepted_manifest(self.run_root)
-        else:
-            manifest_path = Path(manifest_path).resolve()
-            if self.run_root not in manifest_path.parents or not manifest_path.is_file():
-                raise RetrievalIntegrityError("explicit retrieval manifest is unavailable or escapes the run")
-            accepted_sha = file_sha256(manifest_path)
-        if manifest_sha256 is not None and not hmac.compare_digest(accepted_sha, manifest_sha256):
-            raise RetrievalIntegrityError("MCP session manifest pin does not match accepted index set")
-        try:
-            self.manifest, self.manifest_sha256 = load_verified_manifest(self.run_root, manifest_path, accepted_sha)
-        except RetrievalIntegrityError:
-            raise
-        except ValueError as exc:
-            # Manifest, shard and run-bound configuration checks (including the Swift policy's
-            # resolved-configuration hash) are framework-integrity failures, never tool gaps.
-            raise RetrievalIntegrityError(str(exc)) from exc
+        from appsec_review.storage.validation import validation_scope
+        with validation_scope(self.run_root):
+            if manifest_path is None:
+                manifest_path, accepted_sha = resolve_accepted_manifest(self.run_root)
+            else:
+                manifest_path = Path(manifest_path).resolve()
+                if self.run_root not in manifest_path.parents or not manifest_path.is_file():
+                    raise RetrievalIntegrityError("explicit retrieval manifest is unavailable or escapes the run")
+                accepted_sha = file_sha256(manifest_path)
+            if manifest_sha256 is not None and not hmac.compare_digest(accepted_sha, manifest_sha256):
+                raise RetrievalIntegrityError("MCP session manifest pin does not match accepted index set")
+            try:
+                self.manifest, self.manifest_sha256 = load_verified_manifest(self.run_root, manifest_path, accepted_sha)
+            except RetrievalIntegrityError:
+                raise
+            except ValueError as exc:
+                # Invalid evidence and configuration remain framework-integrity failures, never tool gaps.
+                raise RetrievalIntegrityError(str(exc)) from exc
         if self.manifest.get("run_id") != run_id:
             raise RetrievalIntegrityError("manifest run isolation mismatch")
         self.run_id = run_id
@@ -341,14 +354,19 @@ class RetrievalCore:
         _ACTIVE_MCP.reset(token)
 
     def _database(self, identity: Mapping[str, Any], deadline: float) -> sqlite3.Connection:
+        from appsec_review.storage.shared import safe_path
+        from appsec_review.storage.validation import verified_digest
+
         name = str(identity["name"])
         if name not in INDEX_NAMES:
             raise ValueError("invalid index name")
-        path = (self.run_root / identity["relative_path"]).resolve()
-        if self.run_root not in path.parents or not path.is_file():
+        path = safe_path(self.run_root, identity["relative_path"])
+        if not path.is_file():
             raise ValueError(f"index is unavailable: {name}")
-        if not hmac.compare_digest(file_sha256(path), str(identity["sha256"])):
-            raise RetrievalIntegrityError(f"index integrity mismatch: {name}")
+        try:
+            verified_digest(self.run_root, path, str(identity["sha256"]))
+        except ValueError as exc:
+            raise RetrievalIntegrityError(f"index integrity mismatch: {name}") from exc
         uri = f"file:{path.as_posix()}?mode=ro&immutable=1"
         database = sqlite3.connect(uri, uri=True, timeout=0.1)
         database.row_factory = sqlite3.Row
@@ -411,6 +429,11 @@ class RetrievalCore:
                 "path", "file_sha256", "start_byte", "end_byte", "start_line", "end_line",
                 "start_column", "end_column", "mapping_method", "confidence", "ambiguous",
             )}
+            if "producer_location_json" in row.keys() and row["producer_location_json"]:
+                from .source_resolution import source_native
+                native = json.loads(row["producer_location_json"])
+                if isinstance(native, Mapping) and ("source_backing" in native or "source_domain" in native):
+                    value["location"]["producer_location"] = source_native(native)
         else:
             value["artifact_reference"] = {"index": index, "identity": row["identity"]}
         return value
@@ -474,11 +497,14 @@ class RetrievalCore:
                        })
 
     def _execute(self, tool: str, parameters: Mapping[str, Any], operation: Callable[[float], tuple]) -> dict[str, Any]:
+        from appsec_review.storage.validation import validation_scope
+
         started = self.clock()
         request_hash = self._request_hash(tool, parameters)
         deadline = started + self.limits.timeout_ms / 1000
         try:
-            outcome = operation(deadline)
+            with validation_scope(self.run_root):
+                outcome = operation(deadline)
             if len(outcome) == 5:
                 results, gaps, has_more, offset, operation_truncated = outcome
             else:
@@ -612,14 +638,10 @@ class RetrievalCore:
             location = match.get("location")
             if location is None:
                 return [], ["entity has no resolving source location"], False, 0
-            source = (self.target_root / normalize_relative_path(location["path"])).resolve()
-            if self.target_root not in source.parents or not source.is_file():
-                return [], ["indexed source is unavailable"], False, 0
-            if file_sha256(source) != location["file_sha256"]:
-                return [], ["target source changed after indexing"], False, 0
-            data = source.read_bytes()
-            if len(data) > 16 * 1024 * 1024:
-                return [], ["source exceeds excerpt verification bound"], False, 0
+            try:
+                data = self._source_data(location)
+            except (OSError, ValueError) as exc:
+                return [], [str(exc)], False, 0
             try:
                 lines = data.decode("utf-8").splitlines()
             except UnicodeDecodeError:
@@ -639,11 +661,11 @@ class RetrievalCore:
     def read_source_lines(self, *, identity: str) -> tuple[dict[str, Any] | None, str | None]:
         """Every line of the verified source file that holds ``identity``'s accepted location.
 
-        Returns ``({"location": ..., "lines": [...]}, None)`` or ``(None, reason)``. The checks are
-        ``read_excerpt``'s: the entity is resolved in the accepted indexes, the file lies under the target
-        root, its SHA-256 equals the hash the index recorded, and it is UTF-8 text within the verification
-        bound. It is not a model-facing tool: the review-package view slices function and declaration spans
-        from the lines it returns, so a span is always read through an accepted entity.
+        Returns ``({"location": ..., "lines": [...]}, None)`` or ``(None, reason)``. Like
+        ``read_excerpt``, this resolves an accepted entity to target bytes or explicit,
+        run-bound generated-source custody. Both paths verify the source digest, UTF-8,
+        and byte bound. Generated paths never fall back to the target tree. Review-package
+        spans are therefore always read through an accepted, resolving entity.
         """
         LogicalIdentity.parse(identity)
         matches = self.find(identity=identity, limit=2)["results"]
@@ -652,19 +674,22 @@ class RetrievalCore:
         location = matches[0].get("location")
         if location is None:
             return None, "entity has no resolving source location"
-        source = (self.target_root / normalize_relative_path(location["path"])).resolve()
-        if self.target_root not in source.parents or not source.is_file():
-            return None, "indexed source is unavailable"
-        if file_sha256(source) != location["file_sha256"]:
-            return None, "target source changed after indexing"
-        data = source.read_bytes()
-        if len(data) > 16 * 1024 * 1024:
-            return None, "source exceeds excerpt verification bound"
+        try:
+            data = self._source_data(location)
+        except (OSError, ValueError) as exc:
+            return None, str(exc)
         try:
             lines = data.decode("utf-8").splitlines()
         except UnicodeDecodeError:
             return None, "source excerpt is not UTF-8 text"
         return {"location": dict(location), "lines": lines}, None
+
+    def _source_data(self, location: Mapping[str, Any]) -> bytes:
+        from .source_resolution import read_source_bytes
+        return read_source_bytes(
+            self.run_root, self.target_root, target_snapshot=str(self.manifest["target_snapshot"]),
+            path=location["path"], sha256=location["file_sha256"],
+            native=location.get("producer_location"))
 
     def trace(self, *, identity: str, relations: Iterable[str] = (), depth: int = 2,
               limit: int = 50) -> dict[str, Any]:

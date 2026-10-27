@@ -14,12 +14,14 @@ from referencing import Registry, Resource
 from appsec_review.config import load_config
 from appsec_review.inference import ModelResult
 from appsec_review.jobs.job_inference_security_review import build_job
+from appsec_review.jobs.job_inference_security_review import teams as team_handler
 from appsec_review.jobs.job_inference_security_review.job import (
     TARGET_GUIDANCE, _excluded, package_works, review_context,
 )
 from appsec_review.jobs.job_inference_security_review.schemas import SchemaSet
 from appsec_review.jobs.job_inference_security_review.teams import lane_allocation, lane_failure, run_lane, run_team
 from appsec_review.review.accounting import exact_accounting
+from appsec_review.review.budget import JobBudget
 from appsec_review.review.ledger import merge_shards, project
 from appsec_review.review.models import CellStatus, ClaimState, GapClass, Lane, Role
 from appsec_review.review.scope import SourceFile
@@ -89,6 +91,51 @@ def test_lane_allocation_is_fair_share_work_conserving_and_timing_free() -> None
     assert lane_allocation(3, 2, 0.5, 10) == {Lane.LEAD: 3, Lane.HUNT: 2}
     assert lane_allocation(0, 5, 0.5, 4) == {Lane.LEAD: 0, Lane.HUNT: 4}
     assert lane_allocation(4, 4, 0.5, 0) == {Lane.LEAD: 0, Lane.HUNT: 0}
+    assert lane_allocation(485, 114, 0.5, 200) == {Lane.LEAD: 100, Lane.HUNT: 100}
+
+
+@pytest.mark.parametrize("lead_count,hunt_count", [(485, 114), (114, 485), (201, 201), (0, 599), (599, 0), (0, 0)])
+@pytest.mark.parametrize("share", [0.0, 0.5, 1.0])
+def test_all_packages_allocation_has_no_lane_quota(lead_count, hunt_count, share) -> None:
+    assert lane_allocation(lead_count, hunt_count, share, "all") == {
+        Lane.LEAD: lead_count, Lane.HUNT: hunt_count}
+
+
+@pytest.mark.parametrize("profile,expected", [
+    ("prod", {Lane.LEAD: 485, Lane.HUNT: 114}),
+    ("copilot-prod", {Lane.LEAD: 485, Lane.HUNT: 114}),
+    ("dev", {Lane.LEAD: 100, Lane.HUNT: 100}),
+    ("copilot-dev", {Lane.LEAD: 100, Lane.HUNT: 100}),
+])
+@pytest.mark.parametrize("lane_order", [(Lane.LEAD, Lane.HUNT), (Lane.HUNT, Lane.LEAD)])
+def test_lane_dispatch_and_shared_reservations_follow_profile(tmp_path, monkeypatch, profile, expected,
+                                                             lane_order) -> None:
+    settings = load_config(ROOT / "appsec-review.toml", profile=profile).job(JOB).typed_settings
+    budget = JobBudget(tmp_path / "budget", settings.budgets)
+    ctx = SimpleNamespace(settings=settings, budget=budget)
+    counts = {Lane.LEAD: 485, Lane.HUNT: 114}
+
+    def reserve_team(ctx, work, *, launch, not_launched_reason):
+        return team_handler.TeamResult(work.package_id, work.lane, work.unit_key,
+                                       launched=launch and ctx.budget.reserve(work.lane))
+
+    monkeypatch.setattr(team_handler, "run_team", reserve_team)
+    for lane in lane_order:
+        packages = [team_handler.PackageWork(
+            package_id=f"{lane.value}-{index:04d}", lane=lane, sha256="a" * 64,
+            document={}, rank=(index, str(index)), basis="fixture", entities=(), unit_key=None)
+            for index in reversed(range(counts[lane]))]
+        result = run_lane(ctx, lane, packages, other_lane_count=counts[Lane.HUNT if lane is Lane.LEAD else Lane.LEAD],
+                          ledger_path=tmp_path / lane.value / "ledger.jsonl", stream=f"{lane.value}_review.teams",
+                          signal_dir=tmp_path / "signals")
+        assert result["allocation"] == {key.value: value for key, value in expected.items()}
+        assert len(result["packages"]) == counts[lane]
+        assert result["launched"] == [f"{lane.value}-{index:04d}" for index in range(expected[lane])]
+        signal = json.loads((tmp_path / "signals" / f"{lane.value}.json").read_text())
+        assert signal["queue_empty"] and signal["declared"] == counts[lane]
+    assert budget.team_packages() == expected
+    assert budget.snapshot().exhausted == (None if settings.budgets.budget_team_packages == "all"
+                                           else "budget_team_packages")
 
 
 # ------------------------------------------------------------------------------------------------ triage

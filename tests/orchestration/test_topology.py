@@ -25,7 +25,8 @@ def test_wave1_order_is_topological_and_closure_follows_propagation() -> None:
     assert jobs["job_review_intake"]["upstream_handoffs"] == []
     assert jobs["job_target_catalog"]["upstream_handoffs"] == ["job_review_intake"]
     assert jobs["job_change_context_analysis"]["upstream_handoffs"] == [
-        "job_ci_configuration_analysis", "job_review_intake", "job_source_history_analysis",
+        "job_ci_configuration_analysis", "job_language_build", "job_project_build",
+        "job_review_intake", "job_source_history_analysis",
         "job_target_analysis_plan", "job_target_catalog", "job_tree_sitter_ast"]
     assert "job_model_connectivity" not in jobs["job_codeql_analysis"]["upstream_handoffs"]
 

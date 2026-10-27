@@ -11,7 +11,9 @@ import shutil
 import time
 from typing import Any
 
+from appsec_review.config.assurance import ComponentReleases
 from appsec_review.jobs.artifact_kinds import require_artifact_kind
+from appsec_review.jobs.delivery_scope import POLICY_IDENTITY, apply_scope
 from appsec_review.container_runtime import BuildContainerExecutor, BuildProfile
 from appsec_review.jobs.cataloging import source_fingerprint
 from appsec_review.jobs.job_language_build.job import (
@@ -20,12 +22,14 @@ from appsec_review.jobs.job_language_build.job import (
 from appsec_review.jobs.job_project_build.job import _normalized_argv
 from appsec_review.jobs.job_language_build import native_components
 from appsec_review.runtime import UnitContext
-from appsec_review.storage import FileLock, atomic_json, canonical_json, file_sha256, protected_json
+from appsec_review.storage import FileLock, atomic_json, canonical_json, file_sha256
+from appsec_review.storage.shared import immutable_bytes
 
 
 RECEIPT_SCHEMA = "appsec-review/wasm-build-receipt/1"
 EXECUTOR_IDENTITY = "appsec-review/wasm-output-family-executor/2"
 CAPTURE_IDENTITY = "appsec-review/protected-build-capture/3"
+_RELEASE_COMPONENTS = ("platform", "validation", "build_toolchain", "wasm_instrumentation")
 _SECRET_KEY = re.compile(r"(SECRET|TOKEN|PASSWORD|PASSWD|API_KEY|PRIVATE_KEY|CREDENTIAL)", re.I)
 _WASM_MAGIC = b"\x00asm"
 _TOOL_KINDS = {
@@ -169,7 +173,7 @@ def _catalog(run_root: Path, workspace: Path, before: Mapping[str, str], limit: 
         artifacts.append({"path": path.relative_to(run_root).as_posix(), "workspace_path": relative,
                           "sha256": digest, "size_bytes": path.stat().st_size, "kind": require_artifact_kind(kind),
                           "build_unit_id": build_unit_id, "mapping": "exact-workspace-path",
-                          "mapping_confidence": 1.0})
+                          "mapping_confidence": 1.0, "artifact_origin": "build-output"})
         if len(artifacts) >= limit:
             gaps.append("artifact catalog truncated at configured count bound")
             break
@@ -242,7 +246,8 @@ def _observed_invocations(workspace: Path, working_directory: str, result: Any,
 
 
 def _fingerprint(dispatch: Mapping[str, Any], accepted: Mapping[str, Any], producer: str,
-                 upstream: Mapping[str, str], settings: Mapping[str, Any]) -> str:
+                 upstream: Mapping[str, str], settings: Mapping[str, Any], *,
+                 releases: ComponentReleases | None = None, policy: Mapping[str, Any] | None = None) -> str:
     image = dispatch["image"]
     return hashlib.sha256(canonical_json({
         "schema": RECEIPT_SCHEMA, "target": dispatch["source_fingerprint"],
@@ -251,6 +256,10 @@ def _fingerprint(dispatch: Mapping[str, Any], accepted: Mapping[str, Any], produ
         "toolchain": {"source_family": dispatch["family"], "producer": producer,
                       "image_id": image["image_id"]},
         "executor": EXECUTOR_IDENTITY, "capture": CAPTURE_IDENTITY,
+        "component_releases": {key: (releases.values.get(key) if releases else None)
+                               for key in _RELEASE_COMPONENTS},
+        "review_policy": {key: value for key, value in (policy or {}).items() if key != "releases"},
+        "delivery_policy": POLICY_IDENTITY,
         "capture_limit": settings["stream_limit_bytes"], "artifact_limit": settings["artifact_count_limit"],
         "processing_modes": settings["processing_modes"],
         "probe": dispatch["probe_identity"], "upstream_handoff": accepted["project_build_handoff_sha256"],
@@ -261,12 +270,19 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
                  upstream: Mapping[str, str], executor_factory=None) -> dict[str, Any]:
     build_unit_id, recipe, image = str(dispatch["build_unit_id"]), dispatch["recipe"], dispatch["image"]
     settings = _runtime_settings(unit)
-    fingerprint = _fingerprint(dispatch, accepted, producer, upstream, settings)
+    releases = unit.job.review_policy.releases
+    reusable, reuse_reason = releases.require(*_RELEASE_COMPONENTS)
+    fingerprint = _fingerprint(dispatch, accepted, producer, upstream, settings,
+                               releases=releases, policy=unit.job.review_policy.view())
     root = unit.job.run_root / "data" / "build" / "wasm" / "units" / build_unit_id
     workspace = root / "workspace"
-    cache = unit.job.metadata_root / "wasm-builds" / fingerprint / "accepted.json"
+    namespace = hashlib.sha256(str(unit.job.run_root.resolve()).encode()).hexdigest()
+    cache = unit.job.metadata_root / "wasm-builds" / namespace / fingerprint / "accepted.json"
+    if not reusable:
+        unit.job.events.write("CHECKPOINT_MISSED", unit_id=unit.unit_id, build_unit_id=build_unit_id,
+                              action="wasm_build", reason=reuse_reason)
     with FileLock(cache.parent / "build.lock"):
-        if cache.is_file():
+        if reusable and cache.is_file():
             prior = json.loads(cache.read_text(encoding="utf-8"))
             if prior.get("fingerprint") != fingerprint or prior.get("terminal_status") != "SUCCEEDED":
                 raise WasmIntegrityError("wasm-build checkpoint identity is invalid")
@@ -343,7 +359,8 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
         protected_command = {"schema": "appsec-review/protected-build-command/2",
             "argv": list(result.argv), "working_directory": str(recipe["source_dir"]),
             "environment": dict(environment), "access": "run-owned-protected"}
-        protected_json(exact, protected_command)
+        immutable_bytes(unit.job.run_root, exact.relative_to(unit.job.run_root).as_posix(),
+                        canonical_json(protected_command))
         try: exact.chmod(0o600)
         except OSError: pass
         logs = root / "logs"
@@ -378,6 +395,7 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
     artifacts, catalog_gaps = _catalog(unit.job.run_root, workspace, before,
         int(settings["artifact_count_limit"]), build_unit_id)
     gaps.extend(catalog_gaps)
+    gaps.extend(apply_scope(artifacts))
     native_database, native_gaps = native_components.publish(
         root, unit.job.run_root, dispatch=dispatch, workspace=workspace, captures=captures)
     gaps.extend(native_gaps)
@@ -392,8 +410,8 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
         })(), command["command_id"])]
     observed.extend(native_rows)
     observed_path = protected / f"observed-tool-invocations-{unit.job.attempt_id}.json"
-    protected_json(observed_path,
-        {"schema": "appsec-review/protected-tool-invocations/1", "rows": observed})
+    immutable_bytes(unit.job.run_root, observed_path.relative_to(unit.job.run_root).as_posix(),
+        canonical_json({"schema": "appsec-review/protected-tool-invocations/1", "rows": observed}))
     try: observed_path.chmod(0o600)
     except OSError: pass
     sanitized_observed = [{key: value for key, value in row.items() if key != "argv"} |
@@ -432,6 +450,8 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
         "workspace_manifest": {"path": manifest_path.relative_to(unit.job.run_root).as_posix(),
                                "sha256": file_sha256(manifest_path), "size_bytes": manifest_path.stat().st_size},
         "gaps": list(dict.fromkeys(gaps)), "terminal_status": status, "checkpoint_reused": False,
+        "component_releases": {key: releases.values.get(key) for key in _RELEASE_COMPONENTS},
+        "checkpoint_reuse_reason": reuse_reason,
         "started_at": started_at, "completed_at": datetime.now(timezone.utc).isoformat(),
         "duration_ms": int((time.monotonic()-started)*1000),
         "executor_identity": EXECUTOR_IDENTITY, "capture_identity": CAPTURE_IDENTITY}
@@ -441,7 +461,7 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
         receipt["native_components"] = list(native_database["native_components"])
         receipt["native_compile_database"] = {
             key: native_database[key] for key in ("path", "sha256", "entry_count", "family")}
-    if status == "SUCCEEDED":
+    if status == "SUCCEEDED" and reusable:
         cache.parent.mkdir(parents=True, exist_ok=True)
         with FileLock(cache.parent / "build.lock"):
             atomic_json(cache, {"schema": "appsec-review/wasm-build-checkpoint/1",

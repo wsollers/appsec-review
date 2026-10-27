@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from dataclasses import replace
 import json
 import os
 from pathlib import Path
@@ -10,8 +11,10 @@ from types import MappingProxyType
 from typing import Any, Mapping
 
 from appsec_review.config import AppConfig
+from appsec_review.config.assurance import AssuranceMode
 from appsec_review.inference.recording import unit_scope
 from appsec_review.observability import EventLog, PipelineLog, write_run_metrics
+from appsec_review.observability.spans import operation_span
 from appsec_review.retrieval.index import MANIFEST_SCHEMA as RETRIEVAL_MANIFEST_SCHEMA
 from appsec_review.retrieval.core import materialize_attempt_input_manifest
 from appsec_review.runtime.resume import ResumePlanner, job_config_sha256
@@ -19,7 +22,8 @@ from appsec_review.runtime.datasets import dataset_contract
 from appsec_review.runtime.job import Job, JobContext
 from appsec_review.runtime.units import UnitContext, UnitExecutor
 from appsec_review.storage import RunStore, FileLock, LockUnavailable, atomic_bytes, atomic_json, file_sha256
-from appsec_review.storage.shared import publication_scope
+from appsec_review.storage.shared import publication_scope, safe_path, verify_reference
+from appsec_review.storage.validation import validation_scope, verified_digest
 
 
 def _accepted_retrieval_manifest(run_root: Path, manifests: list[Mapping[str, Any]]):
@@ -67,6 +71,39 @@ class JobRunner:
         })
 
     def _context_from_claim(self, job: Job, claim: Mapping[str, Any]) -> JobContext:
+        policy = self.config.review_policy
+        if "review_policy" not in claim and policy.mode is not AssuranceMode.STRICT:
+            raise ValueError("legacy attempt requires strict re-admission before managed assurance")
+        if "review_policy" in claim and claim["review_policy"] != policy.view():
+            raise ValueError("attempt claim review policy differs from frozen configuration")
+        run_root = self.runs.resolve(str(claim["run_id"]))
+        if policy.mode is AssuranceMode.FIRST_PARTY_MANAGED:
+            from appsec_review.storage.admission import verify_claim
+            verify_claim(run_root, claim)
+            if (claim.get("job_id") != job.job_id
+                    or claim.get("repository_root") != str(self.config.runtime.repository_root)
+                    or claim.get("resolved_config_sha256") != self.config.resolved_sha256):
+                raise ValueError("managed attempt claim job or configuration mismatch")
+        context = self._context(job, claim)
+        if policy.mode is AssuranceMode.FIRST_PARTY_MANAGED:
+            persisted = json.loads((context.attempt_root / "claim.json").read_bytes())
+            verify_claim(run_root, persisted)
+            if not claim.get("reused") and (
+                    persisted["managed_claim_authentication"] != claim["managed_claim_authentication"]):
+                raise ValueError("managed attempt claim changed after preparation")
+            if claim.get("reused"):
+                from appsec_review.storage.admission import admit_upstreams
+                from appsec_review.storage.shared import verify_handoff
+                handoff_path = safe_path(run_root, str(claim["handoff_path"]))
+                if file_sha256(handoff_path) != claim["handoff_sha256"]:
+                    raise ValueError("reused handoff changed during Dagster execution")
+                with validation_scope(run_root, target_snapshot=context.evidence_target_snapshot):
+                    admit_upstreams(context, claim.get("upstream_handoffs", {}))
+                    verify_handoff(run_root, json.loads(handoff_path.read_bytes()))
+        return context
+
+    def _context(self, job: Job, claim: Mapping[str, Any]) -> JobContext:
+        """Construct internal preparation state; external claims use _context_from_claim."""
         run_root = self.runs.resolve(str(claim["run_id"]))
         attempt_root = (run_root / str(claim["attempt_path"])).resolve()
         if run_root.resolve() not in attempt_root.parents or not attempt_root.is_dir():
@@ -84,6 +121,8 @@ class JobRunner:
             run_root=run_root, attempt_root=attempt_root, metadata_root=self.config.runtime.metadata_dir,
             orchestration=MappingProxyType(orchestration), config=self.config.job(job.job_id), events=events,
             tools=self.config.tools,
+            review_policy=self.config.review_policy,
+            evidence_target_snapshot=claim.get("evidence_target_snapshot"),
             target_root=Path(str(target)).resolve() if target else None,
             source_fingerprint=str(claim.get("source_fingerprint", "none")),
             input_manifest_path=(run_root / str(claim["input_manifest_path"])).resolve()
@@ -92,6 +131,14 @@ class JobRunner:
                                    if claim.get("input_manifest_sha256") else None),
         )
 
+    def _check_target_inputs(self, job: Job, target_root: Path | None, source_fingerprint: str) -> None:
+        from appsec_review.runtime.launch import TARGET_INDEPENDENT_JOBS
+        if self.config.review_policy.mode is AssuranceMode.FIRST_PARTY_MANAGED and source_fingerprint == "none":
+            if target_root is not None or job.job_id not in TARGET_INDEPENDENT_JOBS:
+                raise ValueError("managed absent-target claim is not a target-independent job")
+            return
+        self.config.review_policy.check_target(target_root)
+
     def begin_attempt(
         self, job: Job, *, run_id: str | None = None, trigger: str = "manual",
         orchestration: Mapping[str, str] | None = None, now: datetime | None = None,
@@ -99,11 +146,14 @@ class JobRunner:
         upstream_handoffs: Mapping[str, str] | None = None,
     ) -> Mapping[str, Any]:
         instant = now or datetime.now(timezone.utc)
+        self._check_target_inputs(job, target_root, source_fingerprint)
         if run_id is None:
             run_id, run_root = self.runs.create(instant)
         else:
             run_root = self.runs.resolve(run_id)
         self._bind_configuration(run_root)
+        from appsec_review.storage.admission import prepare_custody
+        prepare_custody(run_root, self.config.review_policy)
         job_config = self.config.job(job.job_id)
         if job.name != job_config.name:
             raise ValueError(f"job name mismatch: code={job.name} config={job_config.name}")
@@ -133,6 +183,7 @@ class JobRunner:
             "source_fingerprint": source_fingerprint,
             "repository_root": str(self.config.runtime.repository_root),
             "resolved_config_sha256": self.config.resolved_sha256,
+            "review_policy": self.config.review_policy.view(),
             "upstream_handoffs": dict(upstream_handoffs or {}),
             "input_identity": job.probe_input_identity(target_root),
             "dataset_contract": dataset_contract(
@@ -140,14 +191,32 @@ class JobRunner:
                 job.datasets),
             "started_at": instant.isoformat(),
         }
-        input_manifest_path, input_manifest_sha = materialize_attempt_input_manifest(
-            run_root=run_root, attempt_root=attempt_root, run_id=str(run_id),
-            target_snapshot=source_fingerprint, target_root=target_root,
-            upstream_handoffs=dict(upstream_handoffs or {}),
-        )
-        if input_manifest_path is not None:
-            claim["input_manifest_path"] = input_manifest_path.relative_to(run_root).as_posix()
-            claim["input_manifest_sha256"] = input_manifest_sha
+        context = self._context(job, claim)
+        from appsec_review.runtime.scope import review_scope
+        from appsec_review.storage.admission import admit_upstreams, resolve_evidence_target, sign_claim
+        try:
+            with review_scope(self.config.runtime.repository_root, run_root, target_root), \
+                    validation_scope(run_root), operation_span(context.events, "attempt.prepare_inputs"):
+                if self.config.review_policy.mode is AssuranceMode.FIRST_PARTY_MANAGED:
+                    snapshot = resolve_evidence_target(context, claim["upstream_handoffs"])
+                    claim["evidence_target_snapshot"] = snapshot
+                    context = replace(context, evidence_target_snapshot=snapshot)
+                admit_upstreams(context, claim["upstream_handoffs"])
+                input_manifest_path, input_manifest_sha = materialize_attempt_input_manifest(
+                    run_root=run_root, attempt_root=attempt_root, run_id=str(run_id),
+                    target_snapshot=source_fingerprint, target_root=target_root,
+                    upstream_handoffs=claim["upstream_handoffs"],
+                    evidence_target_snapshot=context.evidence_target_snapshot,
+                )
+            if input_manifest_path is not None:
+                claim["input_manifest_path"] = input_manifest_path.relative_to(run_root).as_posix()
+                claim["input_manifest_sha256"] = input_manifest_sha
+            if self.config.review_policy.mode is AssuranceMode.FIRST_PARTY_MANAGED:
+                claim["managed_claim_authentication"] = sign_claim(run_root, claim)
+        except BaseException as exc:
+            atomic_json(attempt_root / "claim.json", claim)
+            self._fail_attempt(context, claim, exc)
+            raise
         atomic_json(attempt_root / "claim.json", claim)
         context = self._context_from_claim(job, claim)
         records, _ = PipelineLog(run_root).read()
@@ -164,6 +233,7 @@ class JobRunner:
                              trigger=trigger, orchestration=correlation)
         try:
             with publication_scope(context):
+                admit_upstreams(context, claim["upstream_handoffs"])
                 for validator in job.input_validators:
                     validator(context, None)
         except BaseException as exc:
@@ -175,6 +245,7 @@ class JobRunner:
         run_id = kwargs.get("run_id")
         upstream = dict(kwargs.get("upstream_handoffs") or {})
         source_fingerprint = str(kwargs.get("source_fingerprint", "none"))
+        self._check_target_inputs(job, kwargs.get("target_root"), source_fingerprint)
         if run_id is not None:
             run_root = self.runs.resolve(str(run_id))
             reasons, handoff_hash = ResumePlanner(
@@ -182,8 +253,24 @@ class JobRunner:
                 target_root=kwargs.get("target_root")).accepted(job, upstream)
             if not reasons and handoff_hash is not None:
                 pointer = json.loads((run_root / "data" / "jobs" / job.job_id / "latest.json").read_text(encoding="utf-8"))
-                handoff_path = (run_root / pointer["handoff_path"]).resolve()
+                handoff_path = safe_path(run_root, pointer["handoff_path"])
+                if file_sha256(handoff_path) != handoff_hash:
+                    raise ValueError("accepted handoff changed during reuse admission")
                 handoff = json.loads(handoff_path.read_text(encoding="utf-8"))
+                original_claim_path = f"{handoff['resolving_paths']['attempt']}/claim.json"
+                original_claim_reference = next(
+                    (item for item in handoff["artifacts"] if item["path"] == original_claim_path), None)
+                if original_claim_reference is None:
+                    raise ValueError("accepted handoff does not bind its original attempt claim")
+                original_claim = json.loads(
+                    verify_reference(run_root, original_claim_reference).read_text(encoding="utf-8"))
+                expected_claim = {"run_id": str(run_id), "job_id": job.job_id,
+                                  "attempt_id": handoff["attempt_id"],
+                                  "attempt_path": handoff["resolving_paths"]["attempt"]}
+                if not isinstance(original_claim, Mapping) or any(
+                        original_claim.get(key) != value for key, value in expected_claim.items()):
+                    raise ValueError("accepted attempt claim binding differs from its handoff")
+                self._context_from_claim(job, original_claim)
                 claim = {"schema": "appsec-review/attempt-claim/1", "run_id": str(run_id),
                          "job_id": job.job_id, "attempt_id": handoff["attempt_id"],
                          "attempt_path": str(handoff["resolving_paths"]["attempt"]),
@@ -194,6 +281,19 @@ class JobRunner:
                          "started_at": handoff["started_at"], "reused": True,
                          "handoff_path": handoff_path.relative_to(run_root).as_posix(),
                          "handoff_sha256": handoff_hash}
+                if "review_policy" in original_claim:
+                    claim["review_policy"] = original_claim["review_policy"]
+                if self.config.review_policy.mode is AssuranceMode.FIRST_PARTY_MANAGED:
+                    from appsec_review.storage.admission import sign_claim
+                    claim.update(
+                        evidence_target_snapshot=original_claim["evidence_target_snapshot"],
+                        repository_root=str(self.config.runtime.repository_root),
+                        resolved_config_sha256=self.config.resolved_sha256,
+                    )
+                    for key in ("input_manifest_path", "input_manifest_sha256"):
+                        if key in original_claim:
+                            claim[key] = original_claim[key]
+                    claim["managed_claim_authentication"] = sign_claim(run_root, claim)
                 PipelineLog(run_root).write("JOB_REUSED", run_id=str(run_id), job_id=job.job_id,
                                             attempt_id=handoff["attempt_id"],
                                             trigger=str(kwargs.get("trigger", "manual")),
@@ -332,8 +432,11 @@ class JobRunner:
         context.events.write("TASK_STARTED", unit_id=unit_id)
         unit_context = UnitContext(context, unit_id, step_id, task_id, unit_root, MappingProxyType(outputs))
         try:
-            with publication_scope(context), unit_scope(run_root=context.run_root, job_id=job.job_id,
+            with operation_span(context.events, "unit.execute", unit_id=unit_id), \
+                    publication_scope(context), unit_scope(run_root=context.run_root, job_id=job.job_id,
                             repository_root=context.repository_root, target_root=context.target_root):
+                from appsec_review.storage.admission import admit_upstreams
+                admit_upstreams(context, claim.get("upstream_handoffs", {}))
                 for validator in unit.input_validators:
                     validator(unit_context, None)
                 result = dict(unit.handler(unit_context))
@@ -411,17 +514,26 @@ class JobRunner:
                 outputs[unit.unit_id] = json.loads(result_path.read_text(encoding="utf-8"))
             result = UnitExecutor.summarize(job.units, receipts, outputs)
             with publication_scope(context):
+                from appsec_review.storage.admission import admit_upstreams
+                admit_upstreams(context, claim.get("upstream_handoffs", {}))
                 result = dict(job.finalize_result(context, result))
                 for validator in job.output_validators:
                     validator(context, result)
-            atomic_json(context.attempt_root / "result.json", result)
-            return self._publish_attempt(job, context, claim, result)
+                atomic_json(context.attempt_root / "result.json", result)
+                return self._publish_attempt(job, context, claim, result)
         except BaseException as exc:
             self._fail_attempt(context, claim, exc)
             raise
 
     def _publish_attempt(self, job: Job, context: JobContext, claim: Mapping[str, Any],
                          result: Mapping[str, Any]) -> Mapping[str, Any]:
+        with publication_scope(context), operation_span(context.events, "publication.handoff"):
+            return self._publish_attempt_scoped(job, context, claim, result)
+
+    def _publish_attempt_scoped(self, job: Job, context: JobContext, claim: Mapping[str, Any],
+                               result: Mapping[str, Any]) -> Mapping[str, Any]:
+        from appsec_review.storage.admission import admit_upstreams
+        admit_upstreams(context, claim.get("upstream_handoffs", {}))
         completed = datetime.now(timezone.utc).isoformat()
         completion_status = str(result.get("status", "SUCCEEDED"))
         status = {"job_id": job.job_id, "run_id": context.run_id, "attempt_id": context.attempt_id,
@@ -441,19 +553,33 @@ class JobRunner:
         claim_path = context.attempt_root / "claim.json"
         artifacts.append({"path": claim_path.relative_to(context.run_root).as_posix(),
                           "sha256": file_sha256(claim_path), "size_bytes": claim_path.stat().st_size})
+        for unit in job.units:
+            step_id, task_id = unit.unit_id.split(".")
+            unit_root = context.attempt_root / "steps" / step_id / "tasks" / task_id
+            for name in ("status.json", "result.json"):
+                path = unit_root / name
+                if path.is_symlink() or not path.is_file():
+                    raise ValueError(f"unit terminal receipt is missing or unsafe: {unit.unit_id}/{name}")
+                artifacts.append({"path": path.relative_to(context.run_root).as_posix(),
+                                  "sha256": file_sha256(path), "size_bytes": path.stat().st_size})
+        collected = {item["path"]: item["sha256"] for item in artifacts}
 
         def collect(value: Any) -> None:
             if isinstance(value, Mapping):
                 if isinstance(value.get("path"), str) and isinstance(value.get("sha256"), str):
                     candidate = (context.run_root / value["path"]).resolve()
                     if context.run_root.resolve() in candidate.parents and candidate.is_file():
-                        actual = file_sha256(candidate)
-                        if actual != value["sha256"]:
-                            raise ValueError(f"result artifact hash mismatch: {value['path']}")
-                        entry = {"path": candidate.relative_to(context.run_root).as_posix(),
-                                 "sha256": actual, "size_bytes": candidate.stat().st_size}
-                        if entry["path"] not in {item["path"] for item in artifacts}:
+                        relative = candidate.relative_to(context.run_root).as_posix()
+                        if relative in collected:
+                            if collected[relative] != value["sha256"]:
+                                raise ValueError(f"result artifact has conflicting identities: {value['path']}")
+                        else:
+                            actual = verified_digest(context.run_root, candidate, value["sha256"])
+                            if actual != value["sha256"]:
+                                raise ValueError(f"result artifact hash mismatch: {value['path']}")
+                            entry = {"path": relative, "sha256": actual, "size_bytes": candidate.stat().st_size}
                             artifacts.append(entry)
+                            collected[entry["path"]] = actual
                 for child in value.values():
                     collect(child)
             elif isinstance(value, (list, tuple)):
@@ -469,7 +595,7 @@ class JobRunner:
                     "schema", "artifact", "identity", "pointer", "metadata_path", "item_count",
                     "gaps", "index_manifest", "index_identity", "terminal_status", "dispositions",
                 ) if key in output}
-        identities = job.identities(self.config.runtime.repository_root)
+        identities = job.identities(self.config.runtime.repository_root, self.config.review_policy.releases)
         handoff = {"schema": "appsec-review/job-handoff/1", "job_id": job.job_id,
                    "attempt_id": context.attempt_id, "status": "ACCEPTED",
                    "completion_status": completion_status, "outputs": handoff_outputs,
@@ -484,7 +610,13 @@ class JobRunner:
                                        "result": result_path.relative_to(context.run_root).as_posix()},
                    "tool_identity": {"python": os.sys.version.split()[0]},
                    "input_identity": claim.get("input_identity")}
+        if context.evidence_target_snapshot is not None:
+            handoff["evidence_target_snapshot"] = context.evidence_target_snapshot
         handoff_path = context.attempt_root / "handoff.json"
+        from appsec_review.storage.admission import create_admission
+        admission = create_admission(context, handoff)
+        if admission is not None:
+            handoff["validation_record"] = admission
         atomic_json(handoff_path, handoff)
         handoff_hash = file_sha256(handoff_path)
         manifests = [output["index_manifest"] for output in result.get("outputs", {}).values()

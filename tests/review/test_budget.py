@@ -6,7 +6,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
-from appsec_review.config.inference_review import BudgetSettings
+from appsec_review.config.inference_review import BudgetSettings, TeamPackageBudget
 from appsec_review.review.budget import JobBudget
 from appsec_review.review.models import Lane
 
@@ -14,10 +14,10 @@ from appsec_review.review.models import Lane
 _CONTEXT = multiprocessing.get_context("fork" if "fork" in multiprocessing.get_all_start_methods() else "spawn")
 
 
-def _limits(**overrides: int) -> BudgetSettings:
-    values = {"budget_team_packages": 200, "max_model_turns": 12000, "max_input_tokens": 60_000_000,
+def _limits(*, budget_team_packages: TeamPackageBudget = 200, **overrides: int) -> BudgetSettings:
+    values = {"max_model_turns": 12000, "max_input_tokens": 60_000_000,
               "max_output_tokens": 6_000_000, "max_retrieval_queries": 40000, "timeout_seconds": 28800}
-    return BudgetSettings(**{**values, **overrides})
+    return BudgetSettings(budget_team_packages=budget_team_packages, **{**values, **overrides})
 
 
 def test_team_package_budget_stops_launches_and_names_the_unlaunched(tmp_path: Path) -> None:
@@ -31,20 +31,38 @@ def test_team_package_budget_stops_launches_and_names_the_unlaunched(tmp_path: P
         ("pkg-hunt-009", "not launched: job budget exhausted (budget_team_packages)")]
 
 
+def test_all_packages_budget_reserves_asymmetric_queues_and_persists(tmp_path: Path) -> None:
+    limits = _limits(budget_team_packages="all")
+    budget = JobBudget(tmp_path, limits)
+    for lane, count in ((Lane.LEAD, 485), (Lane.HUNT, 114)):
+        assert all(budget.reserve(lane) for _ in range(count))
+    reopened = JobBudget(tmp_path, limits)
+    assert reopened.team_packages() == {Lane.LEAD: 485, Lane.HUNT: 114}
+    assert reopened.can_launch() and reopened.cell_launch_allowed()
+    assert reopened.snapshot().exhausted is None
+    assert reopened.reserve(Lane.HUNT)
+    with pytest.raises(ValueError, match="different limits"):
+        JobBudget(tmp_path, _limits(budget_team_packages=200))
+
+
+@pytest.mark.parametrize("package_limit", [200, "all"])
 @pytest.mark.parametrize("charge, ceiling", [
     ({"model_turns": 10}, "max_model_turns"),
     ({"input_tokens": 1000}, "max_input_tokens"),
     ({"output_tokens": 100}, "max_output_tokens"),
     ({"retrieval_queries": 6}, "max_retrieval_queries"),
 ])
-def test_any_hard_ceiling_stops_new_launches(tmp_path: Path, charge: dict[str, int], ceiling: str) -> None:
-    budget = JobBudget(tmp_path, _limits(max_model_turns=10, max_input_tokens=1000, max_output_tokens=100,
+def test_any_hard_ceiling_stops_new_launches(tmp_path: Path, charge: dict[str, int], ceiling: str,
+                                           package_limit: TeamPackageBudget) -> None:
+    budget = JobBudget(tmp_path, _limits(budget_team_packages=package_limit,
+                                         max_model_turns=10, max_input_tokens=1000, max_output_tokens=100,
                                          max_retrieval_queries=5))
     assert budget.reserve(Lane.LEAD) and budget.charge() is None
     half = {name: value // 2 for name, value in charge.items()}
     assert budget.charge(**half) is None and budget.can_launch()
     assert budget.charge(**half) == ceiling
     assert budget.can_launch() is False and budget.reserve(Lane.HUNT) is False
+    assert budget.cell_launch_allowed() is False
     # In-flight work is still charged truthfully, and exhaustion is sticky.
     assert budget.charge(**charge) == ceiling
     snapshot = budget.snapshot()
@@ -53,13 +71,15 @@ def test_any_hard_ceiling_stops_new_launches(tmp_path: Path, charge: dict[str, i
     assert budget.not_launched(["cell-1"]) == [("cell-1", f"not launched: job budget exhausted ({ceiling})")]
 
 
-def test_wall_clock_ceiling_stops_new_launches(tmp_path: Path) -> None:
+@pytest.mark.parametrize("package_limit", [200, "all"])
+def test_wall_clock_ceiling_stops_new_launches(tmp_path: Path, package_limit: TeamPackageBudget) -> None:
     now = [1000.0]
-    budget = JobBudget(tmp_path, _limits(timeout_seconds=60), clock=lambda: now[0])
+    budget = JobBudget(tmp_path, _limits(budget_team_packages=package_limit, timeout_seconds=60), clock=lambda: now[0])
     assert budget.reserve(Lane.LEAD)
     now[0] += 60
     assert budget.reserve(Lane.LEAD) is False
     assert budget.snapshot().exhausted == "timeout_seconds"
+    assert budget.cell_launch_allowed() is False
 
 
 def test_counters_persist_and_limits_are_bound(tmp_path: Path) -> None:

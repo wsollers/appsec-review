@@ -366,8 +366,7 @@ def build_job() -> Job:
         Unit("acceptance.publish_handoff", publish,
              ("load.accepted_inputs", "normalize.profile_data", "index.profile_data")),
     )
-    implementation = hashlib.sha256(
-        Path(__file__).read_bytes() + Path(__file__).with_name("parsers.py").read_bytes()).hexdigest()
+    implementation = None
     return Job("job_profile_data", "profile_data", UnitExecutor(units).execute,
                input_validators=(_validate_config,), schema_identity=PROFILE_DATA_HANDOFF_SCHEMA,
                implementation_identity=implementation, validation_identity=implementation,

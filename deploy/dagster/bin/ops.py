@@ -27,7 +27,7 @@ from urllib.error import URLError
 from urllib.request import Request, urlopen
 from uuid import uuid4
 
-from host import actual_platform, deployment_profile, project_name, provider_overlay, read_environment
+from host import actual_platform, deployment_profile, project_name, provider_overlay, read_environment, reject_native_environment
 
 
 DEPLOYMENT = Path(__file__).resolve().parents[1]
@@ -886,6 +886,10 @@ def main(argv: list[str] | None = None) -> int:
             return USAGE
         args.extra = extra
     try:
+        try:
+            reject_native_environment()
+        except RuntimeError as error:
+            raise OpsError(str(error), REFUSED) from error
         return args.handler(args)
     except OpsError as error:
         print(f"error: {error}", file=sys.stderr, flush=True)

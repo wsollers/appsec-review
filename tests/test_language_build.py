@@ -9,6 +9,7 @@ from types import SimpleNamespace
 import pytest
 
 from appsec_review.config import load_config
+from appsec_review.config.assurance import ComponentReleases
 from appsec_review.container_runtime import BuildCommandResult, BuildProfile, ProjectImage
 from appsec_review.container_runtime.executor import ExecutionResult
 from appsec_review.container_runtime.project_images import dependency_hashes, project_recipe_identity
@@ -117,6 +118,15 @@ def test_processing_modes_change_language_build_checkpoint_identity() -> None:
         **settings, "build_capture": {"mode": "auto"}}) != baseline
     assert _fingerprint(dispatch, accepted, {
         **settings, "compiler_artifact_collection_overrides": {"native": "auto"}}) != baseline
+    declarations = {"platform": "fixture-platform", "build_toolchain": "fixture-build",
+                    "validation": "fixture-validation"}
+    released = _fingerprint(dispatch, accepted, settings, releases=ComponentReleases(declarations))
+    assert released != baseline
+    for component in declarations:
+        assert _fingerprint(dispatch, accepted, settings, releases=ComponentReleases({
+            **declarations, component: "changed"})) != released
+    assert _fingerprint(dispatch, accepted, settings, releases=ComponentReleases({
+        **declarations, "queries_python": "unrelated-query-change"})) == released
 
 
 @pytest.mark.parametrize(("name", "argv", "expected"), [
@@ -203,12 +213,13 @@ class DotnetRecipeModel:
 
 
 class ImageResolver:
-    def __init__(self, target: Path):
+    def __init__(self, target: Path, *, releases: ComponentReleases | None = None):
         self.target = target
+        self.releases = releases
 
     def resolve(self, recipe, profile):
         hashes = dependency_hashes(self.target, recipe)
-        identity = project_recipe_identity(recipe, profile, hashes)
+        identity = project_recipe_identity(recipe, profile, hashes, releases=self.releases)
         derived_id = "sha256:" + "d" * 64
         return ProjectImage("appsec-review/project-build-image/1", identity, profile.name,
             profile.image_id, "derived-native:local", derived_id, "f" * 64, True, False, hashes), b"", b""
@@ -409,9 +420,14 @@ class AnalysisExecutor:
             False, False, relative(stdout), relative(stderr), relative(receipt))
 
 
-def _fixture(tmp_path: Path):
+def _fixture(tmp_path: Path, *, declared_releases: bool = False):
     config_path = tmp_path / "appsec-review.toml"
-    config_path.write_text((ROOT / "appsec-review.toml").read_text(encoding="utf-8"), encoding="utf-8")
+    text = (ROOT / "appsec-review.toml").read_text(encoding="utf-8")
+    if declared_releases:
+        text = text.replace("[review_policy.releases]", '[review_policy.releases]\n'
+                            'platform = "fixture-platform"\nbuild_toolchain = "fixture-build"\n'
+                            'validation = "fixture-validation"', 1)
+    config_path.write_text(text, encoding="utf-8")
     target = tmp_path / "target"
     (target / "native").mkdir(parents=True)
     (target / "native" / "CMakeLists.txt").write_text(
@@ -426,7 +442,8 @@ def _accepted_project(config, target, calls):
     upstream = GraphRunner(config, [build_intake(), build_catalog(),
         build_plan(infer=NativeRecipeModel().complete)]).run(target_root=target, source_fingerprint=fingerprint)
     project = build_projects(executor_factory=lambda unit, profile: capturing_fake(profile, NativeExecutor(calls)),
-                             image_resolver_factory=lambda unit: ImageResolver(target))
+                             image_resolver_factory=lambda unit: ImageResolver(
+                                 target, releases=unit.job.review_policy.releases))
     GraphRunner(config, [project]).run(target_root=target, source_fingerprint=fingerprint,
                                        run_id=upstream["run_id"])
     return upstream["run_id"], fingerprint
@@ -543,7 +560,8 @@ def test_dispatch_validation_is_scoped_to_the_consuming_family(
     accepted["probe_receipts"] = [native_probe, bad_probe]
     monkeypatch.setattr(language_build_job, "load_accepted_builds", lambda _run_root: accepted)
     unit = SimpleNamespace(job=SimpleNamespace(
-        run_root=run_root, target_root=target, source_fingerprint=fingerprint))
+        run_root=run_root, target_root=target, source_fingerprint=fingerprint,
+        review_policy=config.review_policy))
 
     dispatches, _document = language_build_job._dispatches(
         unit, families=frozenset({"native"}))
@@ -553,8 +571,11 @@ def test_dispatch_validation_is_scoped_to_the_consuming_family(
         language_build_job._dispatches(unit, families=frozenset({"java"}))
 
 
-def test_multiple_native_units_isolate_sibling_failure_and_reuse_checkpoints(tmp_path: Path) -> None:
-    config, target = _fixture(tmp_path)
+@pytest.mark.parametrize("declared_releases", [False, True])
+def test_multiple_native_units_isolate_sibling_failure_and_reuse_checkpoints(
+        tmp_path: Path, declared_releases: bool) -> None:
+    from collections import Counter
+    config, target = _fixture(tmp_path, declared_releases=declared_releases)
     (target / "sibling").mkdir()
     (target / "sibling" / "CMakeLists.txt").write_text(
         "cmake_minimum_required(VERSION 3.20)\nproject(sibling)\nadd_executable(sibling main.cpp)\n",
@@ -576,11 +597,17 @@ def test_multiple_native_units_isolate_sibling_failure_and_reuse_checkpoints(tmp
     second = load_accepted_language_build(config.runtime.runs_dir / run_id)["receipts"]
     by_root = {item["root"]: item for item in second}
     assert resumed["status"] == "COMPLETED_WITH_GAPS"
-    assert by_root["native"]["checkpoint_reused"] is True
+    assert by_root["native"]["checkpoint_reused"] is declared_releases
     assert by_root["sibling"]["checkpoint_reused"] is False
-    assert calls == [("cmake", "-S", ".", "-B", "build", "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
+    expected = [("cmake", "-S", ".", "-B", "build", "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
                       "-DCMAKE_BUILD_TYPE=RelWithDebInfo"),
-                     ("cmake", "--build", "build", "--parallel", "2")]
+                ("cmake", "--build", "build", "--parallel", "2")]
+    assert Counter(calls) == Counter(expected * (1 if declared_releases else 2))
+    for root, receipt in by_root.items():
+        assert [item["ordinal"] for item in receipt["commands"]] == [1, 2]
+        assert [item["working_directory"] for item in receipt["commands"]] == [root, root]
+        assert [item["argv_sha256"] for item in receipt["commands"]] == [
+            hashlib.sha256(canonical_json(list(argv))).hexdigest() for argv in expected]
 
 
 def test_cpp_analysis_consumes_generic_native_build_without_rebuilding(tmp_path: Path) -> None:

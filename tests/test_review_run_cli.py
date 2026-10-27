@@ -44,3 +44,13 @@ def test_submit_preflight_reports_missing_profile_image() -> None:
 
     with pytest.raises(RuntimeError, match="resolved unavailable"):
         review_run.verify_build_profile_images(_document(), runner=runner)
+
+
+def test_native_marker_prevents_ambient_image_inspection(monkeypatch) -> None:
+    monkeypatch.setenv("APPSEC_NATIVE_ENGINE_CONTRACT", "")
+
+    def forbidden(*_args, **_kwargs):
+        pytest.fail("prepared native configuration reached ambient Docker")
+
+    with pytest.raises(RuntimeError, match="ambient engine fallback is prohibited"):
+        review_run.verify_build_profile_images(_document(), runner=forbidden)

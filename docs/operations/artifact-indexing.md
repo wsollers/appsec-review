@@ -1,14 +1,24 @@
 # Produced-artifact indexing
 
 `job_artifact_indexing` is the repository-independent boundary between accepted language builds and
-artifact consumers. It reads only the accepted, hash-verified `job_language_build` handoff, its
-workspace manifests, and its declared produced artifacts. It never discovers authority by scanning
-the target tree.
+artifact consumers. It reads the accepted, hash-verified `job_language_build` handoff, its
+workspace manifests and declared outputs, plus the accepted `job_target_catalog` target-artifact
+intake. It never discovers authority by scanning the target tree.
+
+Bounded NUL-containing target files are retained separately from the text inventory as
+`appsec-review/target-artifact-intake/1` records. They share the inventory's file/byte bounds,
+retain their target-relative paths and run-owned byte references, and have `target-intake` origin,
+unknown delivery status and an explicit delivery-status gap. A separate `catalog-target-intake`
+shard publishes them without a build-unit identity, image, invented build command or successful
+build receipt. Empty language-build receipts do not remove these target inputs. Missing or legacy
+target intake remains a named coverage gap. Supplied-looking paths inside the customer target are
+not exclusions; platform roles or references outside the accepted object store are rejected before
+payload verification.
 
 The job publishes immutable `artifacts` SQLite/FTS shards in three independently fingerprinted
 groups:
 
-- catalog shards per build unit and canonical artifact family;
+- catalog shards per build unit and canonical artifact family, plus the target-intake shard;
 - archive-member shards per package artifact and extractor identity; and
 - relationship shards per artifact.
 

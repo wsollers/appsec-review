@@ -17,6 +17,7 @@ from urllib.parse import unquote, urlparse
 from .binary_decompilation import BinaryDecompilationSettings, parse_binary_decompilation
 from .banned_functions import BannedFunctions, parse_banned_functions
 from .exclusions import PathExclusions, global_exclusions, job_exclusions
+from .assurance import ReviewPolicy, parse_review_policy
 
 
 class ProcessingMode(str, Enum):
@@ -510,7 +511,8 @@ PROFILE_REVIEW_MODEL_KEYS: Mapping[str, type] = MappingProxyType({
     "provider": str, "model": str, "reasoning": str, "max_input_tokens": int, "max_output_tokens": int,
     "max_queries": int, "max_turns": int, "timeout_seconds": int})
 PROFILE_BUDGET_KEYS: tuple[str, ...] = (
-    "max_model_turns", "max_input_tokens", "max_output_tokens", "max_retrieval_queries", "timeout_seconds")
+    "budget_team_packages", "max_model_turns", "max_input_tokens", "max_output_tokens",
+    "max_retrieval_queries", "timeout_seconds")
 
 
 def resolve_profile_name(profile: str | None = None) -> str:
@@ -540,6 +542,7 @@ class AppConfig:
     profile: str = DEFAULT_PROFILE
     profile_path: Path | None = None
     profile_sha256: str | None = None
+    review_policy: ReviewPolicy = ReviewPolicy()
 
     def job(self, job_id: str) -> JobConfig:
         try:
@@ -567,7 +570,7 @@ def profile_override_keys(document: object) -> tuple[str, ...]:
     (``PROFILE_BUDGET_KEYS``), plus the two explicit lane exploration settings. Every other key,
     wrong type and empty table is rejected by name.
     """
-    from .inference_review import JOB_ID
+    from .inference_review import JOB_ID, parse_team_package_budget
 
     def table(value: object, field: str, allowed: set[str] | None = None) -> Mapping[str, Any]:
         if not isinstance(value, Mapping) or not value:
@@ -621,7 +624,15 @@ def profile_override_keys(document: object) -> tuple[str, ...]:
                 role = table(roles[name], f"{field}.settings.roles.{name}", {"model_profile"})
                 keys += typed(role, f"{field}.settings.roles.{name}", {"model_profile": str})
         if "budgets" in settings:
-            keys += typed(settings["budgets"], f"{field}.settings.budgets", {key: int for key in PROFILE_BUDGET_KEYS})
+            budget_field = f"{field}.settings.budgets"
+            budgets = table(settings["budgets"], budget_field, set(PROFILE_BUDGET_KEYS))
+            if "budget_team_packages" in budgets:
+                parse_team_package_budget(budgets["budget_team_packages"], f"{budget_field}.budget_team_packages")
+                keys.append(f"{budget_field}.budget_team_packages")
+            counters = {key: value for key, value in budgets.items() if key != "budget_team_packages"}
+            if counters:
+                keys += typed(counters, budget_field, {key: int for key in PROFILE_BUDGET_KEYS
+                                                       if key != "budget_team_packages"})
     return tuple(sorted(keys))
 
 
@@ -784,6 +795,8 @@ def load_config(path: str | Path = "appsec-review.toml", *, overlay: str | Path 
         overlay_record = {"layer": OVERLAY_LAYER, "path": str(overlay_source), "sha256": overlay_sha256,
                           "keys": list(overlay_keys), "document": overlay_document}
     resolved_document = copy.deepcopy(document)
+    review_policy = parse_review_policy(document.get("review_policy", {}))
+    resolved_document["review_policy"] = review_policy.view()
     resolved_document["configuration_profile"] = profile_record
     if overlay_record is not None:
         resolved_document["configuration_overlay"] = overlay_record
@@ -1124,4 +1137,5 @@ def load_config(path: str | Path = "appsec-review.toml", *, overlay: str | Path 
         profile_sha256=profile_sha256,
         binary_decompilation=binary_decompilation,
         banned_functions=banned_functions,
+        review_policy=review_policy,
     )

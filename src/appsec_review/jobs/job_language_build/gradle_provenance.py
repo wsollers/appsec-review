@@ -20,7 +20,6 @@ observe Maven's forked javac never run. A run-owned init script closes that gap 
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-import hashlib
 import json
 from pathlib import Path
 from typing import Any
@@ -56,8 +55,9 @@ import java.security.MessageDigest
 def appsecRootPath = System.getenv('APPSEC_JVM_INSTRUMENTATION')
 if (appsecRootPath) {
   def appsecRoot = new File(appsecRootPath)
+  def appsecEvidence = new File(System.getenv('APPSEC_JVM_EVIDENCE'))
   def appsecParent = System.getenv('APPSEC_JVM_PARENT_COMMAND') ?: 'unknown'
-  def appsecRecords = new File(appsecRoot, 'gradle-tasks.jsonl')
+  def appsecRecords = new File(appsecEvidence, 'gradle-tasks.jsonl')
   def appsecLock = new Object()
 
   def appsecWrite = { Map record ->
@@ -108,7 +108,7 @@ if (appsecRootPath) {
     File home = realHome.canonicalFile
     File realBin = new File(home, 'bin')
     if (!new File(realBin, 'javac').canExecute()) throw new GradleException('JDK home has no javac: ' + home)
-    File mirror = new File(appsecRoot, 'jdk/' + appsecHex(home.path).substring(0, 16))
+    File mirror = new File(appsecEvidence, 'jdk/' + appsecHex(home.path).substring(0, 16))
     synchronized (appsecLock) {
       if (!new File(mirror, '.complete').isFile()) {
         appsecDelete(mirror)
@@ -174,7 +174,7 @@ if (appsecRootPath) {
   }
 
   def appsecIsMirror = { File home ->
-    home.parentFile?.canonicalFile == new File(appsecRoot, 'jdk').canonicalFile && new File(home, '.complete').isFile()
+    home.parentFile?.canonicalFile == new File(appsecEvidence, 'jdk').canonicalFile && new File(home, '.complete').isFile()
   }
   def appsecReplaceJavaToolchain = { task, String phase ->
     // Gradle 8 validates a fork executable against the canonical home of the task's javaCompiler
@@ -364,9 +364,6 @@ if (appsecRootPath) {
 }
 """
 
-INIT_SCRIPT_SHA256 = hashlib.sha256(INIT_SCRIPT.encode("utf-8")).hexdigest()
-
-
 def write_init_script(root: Path, templates: Mapping[str, str]) -> Path:
     """Write the init script and the mirror wrapper templates under the instrumentation root."""
     directory = root / "gradle"
@@ -381,7 +378,8 @@ def write_init_script(root: Path, templates: Mapping[str, str]) -> Path:
     return script
 
 
-def instrument_argv(argv: Sequence[str], logical_root: str) -> tuple[tuple[str, ...], dict[str, Any]]:
+def instrument_argv(argv: Sequence[str], logical_root: str, *,
+                    release_id: str | None = None) -> tuple[tuple[str, ...], dict[str, Any]]:
     """Add the provenance init script and the flags that keep compilation observable.
 
     Validation of the accepted command has already happened; the additions are options only, so
@@ -396,7 +394,8 @@ def instrument_argv(argv: Sequence[str], logical_root: str) -> tuple[tuple[str, 
     added = [flag for flag in _FORCED_FLAGS if flag not in kept]
     script = f"{logical_root}/gradle/{INIT_SCRIPT_NAME}"
     added.extend(("--init-script", script))
-    return tuple(kept + added), {"gradle_init_script": {"path": script, "sha256": INIT_SCRIPT_SHA256},
+    return tuple(kept + added), {"gradle_init_script": {"path": script, "release_id": release_id,
+                                                      "platform_payload_verification": "excluded"},
                                  "added_arguments": added, "removed_arguments": removed}
 
 

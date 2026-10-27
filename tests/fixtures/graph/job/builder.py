@@ -2,7 +2,7 @@
 
 The run holds, exactly in the shapes the producing jobs publish:
 
-* an accepted ``job_codeql_analysis`` handoff (C2 shape): ``export.scopes`` index artifact
+* an accepted ``job_codeql_analysis`` handoff: ``execution.scopes`` graph export artifact
   (``appsec-review/codeql-graph-exports/1``), result, plan and, per succeeded scope, the C1 recorded
   export directory under ``data/codeql/scopes/<scope>/exports`` with its manifest bound to the handoff;
 * four CodeQL scopes: the synthetic recording (root ``src``), the native recording (root ``native``),
@@ -55,9 +55,17 @@ CLANGD_CALLS = {("main", "copy_checked"): (56, 3), ("main", "forward"): (60, 3),
 
 
 def configured(tmp_path: Path):
+    from appsec_review.config.assurance import ComponentReleases
     base = load_config(ROOT / "appsec-review.toml")
     runs = tmp_path / "runs"
-    return replace(base, runtime=replace(base.runtime, runs_dir=runs, data_dir=tmp_path / "data",
+    policy = replace(base.review_policy, releases=ComponentReleases({
+        key: "fixture-1" for key in ("platform", "validation", "graph_catalog", "graph_columns", "graph_normalizer")}))
+    resolved = json.loads(base.resolved_json)
+    resolved["review_policy"] = policy.view()
+    payload = json.dumps(resolved, sort_keys=True, separators=(",", ":")).encode()
+    return replace(base, review_policy=policy, resolved_json=payload,
+                   resolved_sha256=hashlib.sha256(payload).hexdigest(),
+                   runtime=replace(base.runtime, runs_dir=runs, data_dir=tmp_path / "data",
                                          metadata_dir=runs / "metadata"))
 
 
@@ -117,7 +125,7 @@ BRIDGED_FLOW = ((55, 16, 55, 35), (55, 11, 55, 36), (58, 32, 58, 33), (41, 49, 4
 BROKEN_FLOW = ((41, 49, 41, 56), (45, 3, 45, 24))
 
 
-def stage_run(tmp_path: Path, *, with_priority: bool = True) -> Staged:
+def stage_run(tmp_path: Path, *, with_priority: bool = True, legacy_codeql: bool = False) -> Staged:
     config = configured(tmp_path)
     runner = JobRunner(config)
     run_id, run_root = runner.runs.create(datetime(2026, 10, 12, tzinfo=timezone.utc))
@@ -255,9 +263,12 @@ def stage_run(tmp_path: Path, *, with_priority: bool = True) -> Staged:
     staged.upstream_shards = json.loads(manifest_path.read_text(encoding="utf-8"))["indexes"]
 
     result_path = attempt / "result.json"
+    export_unit = "export.scopes" if legacy_codeql else "execution.scopes"
+    artifact_key = "artifact" if legacy_codeql else "graph_export_artifact"
+    export_output = {"schema": GRAPH_EXPORTS_SCHEMA, artifact_key: index, "exports": records, "gaps": []}
     atomic_json(result_path, {"schema": "appsec-review/unit-execution/2", "status": "SUCCEEDED", "outputs": {
         "plan.inventory": {"plan": plan},
-        "export.scopes": {"schema": GRAPH_EXPORTS_SCHEMA, "artifact": index, "exports": records, "gaps": []},
+        export_unit: export_output,
         "acceptance.publish_handoff": {"index_manifest": manifest, "gaps": []}}})
     artifacts = [_artifact(run_root, result_path), plan, index, manifest]
     for record in records:
@@ -269,7 +280,7 @@ def stage_run(tmp_path: Path, *, with_priority: bool = True) -> Staged:
     atomic_json(handoff_path, {
         "schema": "appsec-review/job-handoff/1", "job_id": CODEQL, "attempt_id": attempt.name, "status": "ACCEPTED",
         "completion_status": "COMPLETED_WITH_GAPS", "source_fingerprint": SNAPSHOT,
-        "outputs": {"export.scopes": {"schema": GRAPH_EXPORTS_SCHEMA, "artifact": index, "gaps": []},
+        "outputs": {export_unit: export_output,
                     "acceptance.publish_handoff": {"index_manifest": manifest, "gaps": []}},
         "artifacts": artifacts,
         "resolving_paths": {"attempt": attempt.relative_to(run_root).as_posix(),

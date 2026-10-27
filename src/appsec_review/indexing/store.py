@@ -99,6 +99,13 @@ def open_shard(run_root: Path, shard: Mapping[str, Any]) -> sqlite3.Connection:
 
 def shard_summary(run_root: Path, shard: Mapping[str, Any]) -> dict[str, Any]:
     """Counts and coverage straight from one shard; row counts are recomputed, not trusted."""
+    from copy import deepcopy
+    from appsec_review.storage.validation import current_validation
+    validation = current_validation(run_root)
+    if validation is not None:
+        summary = validation.records.get(("admitted-summary", shard["sha256"], validation.target_snapshot))
+        if summary is not None:
+            return deepcopy(summary)
     with open_shard(run_root, shard) as database:
         metadata = dict(database.execute("SELECT key, value FROM metadata"))
         entities = int(database.execute("SELECT COUNT(*) FROM entities").fetchone()[0])

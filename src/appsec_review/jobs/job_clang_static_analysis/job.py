@@ -415,11 +415,7 @@ def build_job(*, executor_factory: Any = None) -> Job:
         Unit("analyze.scopes", analyze, ("load.accepted_cpp",)),
         Unit("acceptance.publish_handoff", publish, ("load.accepted_cpp", "analyze.scopes")),
     )
-    implementation = hashlib.sha256(
-        b"".join(path.read_bytes() for path in
-                 (*sorted(Path(__file__).parent.glob("*.py")), *seeding.implementation_sources())) +
-        (b"injected-executor" if executor_factory else b"container-executor")
-    ).hexdigest()
+    implementation = None
     return Job(JOB_ID, "clang_static_analysis", UnitExecutor(units).execute,
                input_validators=(_validate,), schema_identity=CLANG_STATIC_HANDOFF_SCHEMA,
                implementation_identity=implementation, validation_identity=implementation,

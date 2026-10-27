@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from functools import lru_cache
 import json
 import os
 import platform
@@ -46,13 +47,62 @@ def _valid_lines(payload: bytes) -> tuple[list[dict[str, Any]], int]:
             break
         try:
             record = json.loads(line)
-        except (UnicodeDecodeError, json.JSONDecodeError):
-            break
-        if not isinstance(record, dict):
-            break
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise ValueError(f"malformed complete pipeline log record at byte {offset}") from exc
+        if not isinstance(record, dict) or record.get("sequence") != len(records) + 1:
+            raise ValueError(f"invalid pipeline log sequence at byte {offset}")
         records.append(record)
         offset += len(line)
     return records, offset
+
+
+@lru_cache(maxsize=256)
+def _tail_sequence(line: bytes) -> int:
+    if len(line) + 1 > MAX_RECORD_BYTES:
+        raise ValueError("pipeline log record exceeds the record bound")
+    try:
+        record = json.loads(line)
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError("malformed complete pipeline log tail record") from exc
+    sequence = record.get("sequence") if isinstance(record, dict) else None
+    if type(sequence) is not int or sequence < 1:
+        raise ValueError("invalid pipeline log tail sequence")
+    return sequence
+
+
+def _append_position(path: Path) -> tuple[int, int, int]:
+    """Validate a bounded tail; only an incomplete final line is recoverable."""
+    if not path.exists():
+        return 1, 0, 0
+    with path.open("rb") as stream:
+        stream.seek(0, os.SEEK_END)
+        size = stream.tell()
+        start = max(0, size - 2 * MAX_RECORD_BYTES - 2)
+        stream.seek(start)
+        tail = stream.read()
+    if start:
+        boundary = tail.find(b"\n")
+        if boundary < 0:
+            raise ValueError("pipeline log tail exceeds the record bound")
+        start += boundary + 1
+        tail = tail[boundary + 1:]
+    final_newline = tail.rfind(b"\n")
+    if final_newline < 0:
+        if start:
+            raise ValueError("pipeline log has no bounded complete tail record")
+        if len(tail) > MAX_RECORD_BYTES:
+            raise ValueError("pipeline log incomplete record exceeds the record bound")
+        return 1, 0, size
+    complete = tail[:final_newline + 1].splitlines()
+    previous = None
+    for line in complete:
+        sequence = _tail_sequence(line)
+        if ((previous is not None and sequence != previous + 1)
+                or (previous is None and start == 0 and sequence != 1)):
+            raise ValueError("invalid pipeline log tail sequence")
+        previous = sequence
+    valid_length = start + final_newline + 1
+    return previous + 1, valid_length, size - valid_length
 
 
 class PipelineLog:
@@ -89,14 +139,12 @@ class PipelineLog:
                     raise
                 time.sleep(0.005)
         try:
-            payload = self.path.read_bytes() if self.path.exists() else b""
-            records, valid_length = _valid_lines(payload)
-            if valid_length != len(payload):
+            sequence, valid_length, recovered_bytes = _append_position(self.path)
+            if recovered_bytes:
                 with self.path.open("r+b") as stream:
                     stream.truncate(valid_length)
                     stream.flush()
                     os.fsync(stream.fileno())
-            sequence = int(records[-1]["sequence"]) + 1 if records else 1
             record = {
                 "schema": "appsec-review/telemetry-event/1",
                 "sequence": sequence,
@@ -114,6 +162,8 @@ class PipelineLog:
                 "message": message or event_type.replace("_", " ").lower(),
                 "details": _bounded(dict(details or {})),
             }
+            if recovered_bytes:
+                record["details"]["log_recovery"] = {"incomplete_tail_bytes": recovered_bytes}
             record["event_id"] = __import__("hashlib").sha256(
                 f"{run_id}:{sequence}:{event_type}".encode()).hexdigest()
             line = (json.dumps(record, sort_keys=True, separators=(",", ":"), ensure_ascii=False) + "\n").encode("utf-8")

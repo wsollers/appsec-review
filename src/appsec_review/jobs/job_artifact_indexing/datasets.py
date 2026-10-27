@@ -10,10 +10,10 @@ from appsec_review.runtime.datasets import artifact_only, indexed, protected
 
 
 _A = "data/jobs/job_artifact_indexing/attempts/*"
-CONSUMES = ('job_language_build',)
+CONSUMES = ('job_language_build', 'job_target_catalog')
 DATASETS = (
     indexed("artifact_catalog", "index", "artifacts", "appsec-review/retrieval-index/2",
-            "Produced artifacts by build unit and family with exact hashes.",
+            "Produced artifacts and target-intake artifacts with exact hashes and distinct provenance.",
             indexes=("artifacts",), prefixes=("catalog-",),
             route="query_artifacts; query_precomputed query_set=artifact_inventory"),
     indexed("archive_members", "index", "artifacts", "appsec-review/retrieval-index/2",

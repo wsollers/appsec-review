@@ -3,9 +3,16 @@
 `job_artifact_security_analysis` consumes the accepted `job_language_build` publication and the
 accepted, hash-verified `job_artifact_indexing` handoff derived from it. The two handoffs must bind
 the same language-build identity and target snapshot. It never walks the target tree to find
-outputs. Every analyzed object must have an accepted run-relative path, SHA-256, byte count, build
-unit, and producer identity. A changed path, file, handoff, or index manifest is a framework-integrity
+outputs. Every analyzed object must have an accepted run-relative path, SHA-256, byte count and
+producer identity. Build outputs additionally bind a build unit; prebuilt target artifacts instead
+bind their target-intake catalog handoff and exact target-relative path, without claiming a build
+occurred. Unknown delivery status remains a coverage gap, not exclusion from conservative analysis.
+A changed path, file, handoff, or index manifest is a framework-integrity
 failure and stops publication.
+
+Prebuilt objects retain content-addressed storage, but scanner invocation mounts only the selected
+object read-only under its original basename in an otherwise empty target directory. This preserves
+filename-sensitive tool behavior without copying payloads or mounting the whole shared object store.
 
 The job classifies files from bounded magic bytes plus accepted producer metadata. A filename or
 extension is never sufficient. Supported families include ELF and native objects/libraries,
@@ -75,9 +82,11 @@ delete locks, edit pointers, or modify accepted files to force reuse.
 For every attempted scan, stdout and stderr are retained under the immutable application attempt
 with SHA-256, source byte count, capture limit, truncation state, optional tail identity, exit status,
 timeout, duration, artifact identity, tool/image/rule identity, and attempt identity. Retrieval stores
-only bounded sanitized observation records. The accepted observations manifest verifies both the new
-SQLite shard and the upstream build-index manifest, so every indexed observation resolves back to
-exact run-owned raw artifacts.
+only bounded sanitized observation records. The accepted observations manifest verifies the new
+SQLite shard and the upstream artifact-index manifest, and retains the upstream index entries alongside
+its observations. Standalone retrieval therefore keeps the artifact inventory, including distinct
+target paths with identical bytes, available after security analysis. Observations resolve back to
+exact run-owned raw artifacts without inventing source-line locations for binary inputs.
 
 Built-in parsers provide bounded inventory and structural metadata. Tool-dependent coverage is
 explicit: unavailable BLint, Syft, Grype, OSV, native-symbol/hardening, JVM bytecode, or full WASM

@@ -349,7 +349,7 @@ Analyzer and (enabled-only) CPG producers run from the findings outward and publ
 
 ## Close the remaining CodeQL platform and accepted-build gaps
 
-Cross-language CodeQL now provides hash-pinned offline extractors and query packs, exact protected
+Cross-language CodeQL uses operator-declared releases for supplied offline extractors and query packs, exact protected
 compiled-build replay, source/no-build analysis, bounded SARIF normalization, independent
 database/query checkpoints, and accepted MCP retrieval. The pinned `audit-buildenv-dotnet` image
 now backs the `dotnet` profile, and the accepted .NET fixture run recorded in
@@ -369,15 +369,38 @@ Run `2026-10-16-0004` (WSL host, 24 CPUs, 16 GB shared WSL limit) built 13 of 55
 about 20 minutes. `concurrency = 2`, `threads = 2` and `ram_mb = 4096` are already configurable,
 but at most two builds overlapped, and only briefly. Gaps of up to 7 minutes passed between
 `TOOL_INVOCATION_STARTED` events with no CodeQL container running, apparently preparing the next
-scope. Measure and name that per-scope preparation in telemetry, and make its parallelism a setting
-if it runs serially. Reconcile the two overlapping knobs (`steps.database.workers` and
-`settings.concurrency`) so one value controls the fan-out. Document how to size concurrency ×
-`ram_mb` against the host memory limit, and set per-host values for the review hosts.
+scope. That historical observation is not a current resource reservation or a matched benchmark.
+The ready-work coordinator now uses `settings.concurrency` for active CodeQL actions, with
+correlated preparation and queue/admission spans and cross-process resource reservations.
+Database completion releases that scope's query/export work without waiting for every database.
+Container memory, host staging, CPU and I/O reservations remain aggregate constraints: the
+checked-in 10,240 MiB/one-I/O-slot defaults cannot overlap two ordinary 4,096 MiB actions.
+See [performance and assurance](operations/performance-assurance.md) for sizing and custody.
+
+Remaining acceptance: repeated equal-coverage performance measurements, real host enforcement
+and eligible-overlap evidence, and separately authorized rollout. Fake scheduler/admission tests
+do not establish production headroom. Required derived images also need a commissioned bounded
+builder; missing preparation must not be treated as an acceptable coverage reduction.
+
+The registered [native operator](../deploy/dagster/native/README.md) now has fake end-to-end
+coverage through supervisor, simulated Dagster child, common launch, restricted broker and
+owned-container cleanup. A shared builder/tool sequence covers derived-image visibility,
+stopped-container exclusion and next-build admission after removal. Real installed-release
+custody, exclusive PostgreSQL ownership, engine/cgroup enforcement and complete persistent
+1-CPU/512-MiB baseline fit remain unproved. The prepared 9-CPU/12-GiB/one-I/O-slot contract is
+not activated; commissioning and a subsequent strict third-party review are separate decisions.
+
+Latest equal-semantic fixture medians were 23.176 seconds strict and 27.239 seconds managed
+(17.529% slower), with unchanged resolving evidence and 99 gaps. The performance goal is unmet,
+not a demonstrated gain. Historical overhead and real CodeQL non-regression gates remain
+unestablished; later custody/native changes are unbenchmarked. Keep strict as the default and
+follow the [rollback contract](operations/performance-assurance.md#metrics-and-comparison)
+without restoring supplied-platform scans or rewriting frozen runs.
 
 ## Define and test the CodeQL checkpoint identity matrix
 
-Document a matrix of identity inputs against the derived image, database, query, normalization,
-index, and publication checkpoints. It should cover CodeQL CLI and extractor versions, source
+Maintain the matrix of identity inputs against the derived image, database, query, normalization,
+index, and publication checkpoints. It covers declared CodeQL and extractor releases, source
 bytes, accepted build recipes and replay commands, compiler/toolchain identities, base and derived
 image identities, runtime policy and resource limits, query packs and suites, custom queries,
 normalizer versions, and output schemas. For each change, state the smallest affected scope and
@@ -385,11 +408,21 @@ whether the expected action is reuse, database rebuild, query-only rerun, renorm
 republication.
 
 Separate semantic execution inputs from provenance-only representation. A changed recipe or
-Dockerfile that resolves to a different compiler, toolchain, filesystem, runtime policy, or output
-image must invalidate dependent work; a textual refactor that produces the same verified effective
-environment should retain provenance without forcing unrelated databases or queries to rerun.
+target-owned build instructions that resolve to a different compiler, toolchain, filesystem,
+runtime policy, or output image must invalidate dependent work. Supplied platform Dockerfiles,
+source and image payloads are not fingerprinted: changed platform material requires an updated
+operator release declaration, and missing declarations disable reuse rather than trigger hashing.
+Provenance-only representation changes retain their original/current attribution without forcing
+unrelated databases or queries to rerun.
 Back the matrix with table-driven tests that change one dimension at a time and prove both required
 invalidation and required reuse across unrelated languages, projects, scopes, and query profiles.
+
+The explicit first-party predecessor path now accepts selected DB-only detached copies into a
+new run under both frozen configurations and operator tenant/project authorization. Fake
+`JobRunner` execute/finalize acceptance demonstrates new query declarations without new database
+launches, then query reuse; mismatched material, source claims and optional handoff run bindings
+fail. No prior queries, exports or guidance are imported. Retained real-run imports, performance
+gates and deployment remain separately blocked; the fixture result is not live commissioning.
 
 ## Graph modes: aliases, slices, type layouts, buffer bounds, sink CFG context
 

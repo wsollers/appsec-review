@@ -549,7 +549,7 @@ def test_native_recording_normalizes_against_its_build_fixture() -> None:
 
 def test_catalog_loads_validates_and_rejects_contract_drift() -> None:
     assert CATALOG.version == c.CATALOG_SCHEMA and CATALOG.language("c/c++") is CATALOG.language("cpp")
-    assert CATALOG.sha256 == __import__("hashlib").sha256(CATALOG_PATH.read_bytes()).hexdigest()
+    assert CATALOG.release_id == "undeclared"
     document = json.loads(CATALOG_PATH.read_text(encoding="utf-8"))
     drifted = copy.deepcopy(document)
     drifted["attacker_reachable_sources"].remove("ipc")

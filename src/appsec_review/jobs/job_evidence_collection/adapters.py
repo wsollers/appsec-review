@@ -54,6 +54,9 @@ class ScanCatalog:
     artifacts: tuple[Mapping[str, Any], ...] = ()
     target_root: Path | None = None
     compile_commands: tuple[Mapping[str, Any], ...] = ()
+    target_artifacts: tuple[Mapping[str, Any], ...] = ()
+    target_artifact_inventory_available: bool = False
+    target_artifact_gaps: tuple[str, ...] = ()
 
     @property
     def paths(self) -> tuple[str, ...]:
@@ -99,15 +102,11 @@ class ToolAdapter:
 
     @property
     def parser_identity(self) -> str:
-        return hashlib.sha256(inspect.getsource(self.parser).encode()).hexdigest()
+        return "undeclared"
 
     @property
     def adapter_identity(self) -> str:
-        value = (self.tool_id, self.capability, sorted(self.accepted_exit_codes), self.output_file,
-                 self.limitations, inspect.getsource(self.selector), inspect.getsource(self.argv_builder),
-                 self.parser_identity,
-                 *(inspect.getsource(item) for item in (self.collector, self.stderr_gaps) if item))
-        return hashlib.sha256(repr(value).encode()).hexdigest()
+        return "undeclared"
 
     def applicability(self, catalog: ScanCatalog) -> Applicability:
         return self.selector(catalog)

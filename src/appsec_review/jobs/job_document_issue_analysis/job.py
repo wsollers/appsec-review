@@ -14,6 +14,7 @@ from appsec_review.document_issues import (
     SCHEMA, analyze_document_hunts, verify_document_issue_inputs, verify_document_issue_ledger,
 )
 from appsec_review.indexing.store import accepted_handoff
+from appsec_review.observability.spans import count_work
 from appsec_review.retrieval import RetrievalCore
 from appsec_review.retrieval.core import resolve_context_manifest
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
@@ -86,12 +87,21 @@ def build_job() -> Job:
                    for item in handoff.handoff["artifacts"]):
             raise ValueError("review package manifest is not bound to its accepted handoff")
         shared = SharedArtifacts.for_job(unit.job)
+        releases = unit.job.review_policy.releases
+        implementation_key = JOB_ID if JOB_ID in releases.values else "platform"
+        reusable, miss_reason = releases.require(implementation_key, "validation")
         computation = {"accepted_manifest_sha256": core.manifest_sha256,
                        "package_manifest_sha256": file_sha256(directory / "manifest.json"),
                        "settings": dict(unit.job.config.settings),
-                       "implementation_sha256": identity, "target_snapshot": unit.job.source_fingerprint}
+                       "schema": SCHEMA, "target_snapshot": unit.job.source_fingerprint,
+                       "component_releases": {
+                           key: releases.values.get(key) for key in (implementation_key, "validation")}}
         fingerprint = hashlib.sha256(canonical_json(computation)).hexdigest()
-        hit = shared.lookup("document-issues", fingerprint)
+        hit = shared.lookup("document-issues", fingerprint) if reusable else None
+        count_work("cache_hits" if hit is not None else "cache_misses")
+        unit.job.events.write("CHECKPOINT_REUSED" if hit is not None else "CHECKPOINT_MISSED",
+                              unit_id=unit.unit_id, action="document-issues", fingerprint=fingerprint,
+                              reason=None if hit is not None else (miss_reason or "missing"))
         if hit is None:
             ledger = analyze_document_hunts(core, directory,
                 max_files=unit.job.config.settings["max_source_files"],
@@ -119,12 +129,7 @@ def build_job() -> Job:
                 "terminal_status": "COMPLETED_WITH_GAPS"}
 
     units = (Unit("analysis.map_and_adjudicate", analyze, output_validators=(_validate_output,)),)
-    sources = [Path(__file__), Path(__file__).with_name("datasets.py"),
-               Path(__file__).parents[2] / "document_issues.py",
-               Path(__file__).parents[2] / "storage" / "shared.py",
-               _schema_path()]
-    identity = hashlib.sha256(b"".join(path.read_bytes() for path in sources)).hexdigest()
     return Job(JOB_ID, "document_issue_analysis", UnitExecutor(units).execute,
                input_validators=(_validate_config,), schema_identity=SCHEMA,
-               implementation_identity=identity, validation_identity=identity, units=units,
+               units=units,
                datasets=DATASETS, consumes=CONSUMES)

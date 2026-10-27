@@ -420,7 +420,7 @@ def build_job() -> Job:
         Unit("index.coverage", index, ("load.accepted_inputs", "normalize.coverage")),
         Unit("acceptance.publish_handoff", publish, ("load.accepted_inputs", "normalize.coverage", "index.coverage")),
     )
-    implementation = hashlib.sha256(Path(__file__).read_bytes() + Path(__file__).with_name("parsers.py").read_bytes()).hexdigest()
+    implementation = None
     return Job("job_test_coverage", "test_coverage", UnitExecutor(units).execute,
                input_validators=(_validate_config,), schema_identity=TEST_COVERAGE_HANDOFF_SCHEMA,
                implementation_identity=implementation, validation_identity=implementation,

@@ -220,8 +220,7 @@ def tool_identity(repository_root: Path, tool_id: str) -> dict[str, Any]:
         return {"tool_id": tool_id, "injected_executor": True}
     tool = load_catalog(repository_root).tool(tool_id)
     return {"tool_id": tool_id, "tag": tool.tag, "version": tool.version,
-            "expected_image_id": tool.expected_image_id,
-            "manifest_sha256": file_sha256(tool.manifest_path)}
+            "expected_image_id": tool.expected_image_id}
 
 
 def execute_scope_tool(unit: Any, scope: IndexScope, tool_id: str, argv: tuple[str, ...],

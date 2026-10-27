@@ -51,14 +51,51 @@ def test_android_expected_output_requires_a_structurally_valid_apk(tmp_path: Pat
 
 
 def test_build_capture_mode_changes_project_probe_checkpoint_identity(tmp_path: Path) -> None:
-    job = load_config(ROOT / "appsec-review.toml").job("job_project_build")
-    unit = SimpleNamespace(job=SimpleNamespace(metadata_root=tmp_path, config=job))
+    config = load_config(ROOT / "appsec-review.toml")
+    job = config.job("job_project_build")
+    context = dict(metadata_root=tmp_path, run_root=tmp_path / "run",
+                   source_fingerprint="target", review_policy=config.review_policy)
+    unit = SimpleNamespace(job=SimpleNamespace(**context, config=job))
     baseline = _probe_cache(unit, "a" * 64)
     changed_job = replace(job, build_capture=replace(
         job.build_capture, mode=ProcessingMode.AUTO))
     changed = _probe_cache(SimpleNamespace(job=SimpleNamespace(
-        metadata_root=tmp_path, config=changed_job)), "a" * 64)
+        **context, config=changed_job)), "a" * 64)
     assert changed != baseline
+
+
+def test_probe_and_repair_identity_bind_relevant_releases_target_and_run(tmp_path: Path) -> None:
+    from appsec_review.config.assurance import ComponentReleases
+    from appsec_review.jobs.job_project_build.job import _repair_cache, _reuse_accepted_repair
+    config = load_config(ROOT / "appsec-review.toml")
+    releases = {"platform": "fixture-platform", "build_toolchain": "fixture-build",
+                "validation": "fixture-validation"}
+    context = dict(metadata_root=tmp_path, run_root=tmp_path / "run",
+                   source_fingerprint="target", config=config.job("job_project_build"),
+                   review_policy=replace(config.review_policy, releases=ComponentReleases(releases)))
+    for cache in (_probe_cache, _repair_cache):
+        baseline = cache(SimpleNamespace(job=SimpleNamespace(**context)), "recipe")
+        for component in releases:
+            policy = replace(config.review_policy, releases=ComponentReleases({
+                **releases, component: "changed"}))
+            assert cache(SimpleNamespace(job=SimpleNamespace(
+                **{**context, "review_policy": policy})), "recipe") != baseline
+        for field, value in (("run_root", tmp_path / "other-run"), ("source_fingerprint", "other-target")):
+            assert cache(SimpleNamespace(job=SimpleNamespace(
+                **{**context, field: value})), "recipe") != baseline
+        unrelated = replace(config.review_policy, releases=ComponentReleases({
+            **releases, "queries_python": "unrelated-query-change"}))
+        assert cache(SimpleNamespace(job=SimpleNamespace(
+            **{**context, "review_policy": unrelated})), "recipe") == baseline
+    events = []
+    unit = SimpleNamespace(job=SimpleNamespace(**{
+        **context, "review_policy": config.review_policy,
+        "events": SimpleNamespace(write=lambda event, **details: events.append((event, details))),
+    }))
+    # Missing declarations must return before consulting an old repair or invoking its resolver.
+    assert _reuse_accepted_repair(unit, {"build_unit_id": "fixture"}, "recipe", None, None) is None
+    assert events == [("CHECKPOINT_MISSED", {"scope_id": "fixture", "action": "image_repair",
+                                           "reason": "missing_release_identity"})]
 
 
 class RecipeModel:
@@ -617,9 +654,14 @@ def test_image_repair_vocabulary_names_no_case_identifiers() -> None:
     assert not re.search(r"case-?\d{3}", source) and "multivuln" not in source.lower()
 
 
-def _fixture(tmp_path: Path):
+def _fixture(tmp_path: Path, *, declared_releases: bool = False):
     config_path = tmp_path / "appsec-review.toml"
-    config_path.write_text((ROOT / "appsec-review.toml").read_text(encoding="utf-8"), encoding="utf-8")
+    text = (ROOT / "appsec-review.toml").read_text(encoding="utf-8")
+    if declared_releases:
+        text = text.replace("[review_policy.releases]", '[review_policy.releases]\n'
+                            'platform = "fixture-platform"\nbuild_toolchain = "fixture-build"\n'
+                            'validation = "fixture-validation"', 1)
+    config_path.write_text(text, encoding="utf-8")
     target = tmp_path / "target"
     (target / "native").mkdir(parents=True)
     (target / "native" / "CMakeLists.txt").write_text("project(sample)\n", encoding="utf-8")
@@ -783,24 +825,32 @@ def test_capture_gap_is_reported_without_triggering_image_repair(tmp_path: Path)
     assert all("capture:" in item["gaps"][0] for item in accepted["probe_receipts"])
 
 
-def test_unchanged_recipe_reuses_probe_across_application_runs(tmp_path: Path) -> None:
-    config, target = _fixture(tmp_path)
+@pytest.mark.parametrize("declared_releases", [False, True])
+@pytest.mark.parametrize("same_run", [False, True])
+def test_probe_reuse_requires_declarations_and_the_same_run(
+        tmp_path: Path, declared_releases: bool, same_run: bool) -> None:
+    config, target = _fixture(tmp_path, declared_releases=declared_releases)
     fingerprint = source_fingerprint(target)
     calls: list[tuple[str, ...]] = []
     job = build_projects(executor_factory=lambda unit, profile: FakeBuildExecutor(calls),
                          image_resolver_factory=lambda unit: FakeImageResolver())
     run_ids = []
-    for _ in range(2):
-        upstream = GraphRunner(
-            config, [build_intake(), build_catalog(), build_plan(infer=RecipeModel().complete)]
-        ).run(target_root=target, source_fingerprint=fingerprint)
+    for ordinal in range(2):
+        if ordinal == 0 or not same_run:
+            upstream = GraphRunner(
+                config, [build_intake(), build_catalog(), build_plan(infer=RecipeModel().complete)]
+            ).run(target_root=target, source_fingerprint=fingerprint)
         run_ids.append(upstream["run_id"])
         GraphRunner(config, [job]).run(target_root=target, source_fingerprint=fingerprint,
-                                      run_id=upstream["run_id"])
-    assert len(calls) == 3
+                                      run_id=upstream["run_id"],
+                                      force_from="job_project_build" if ordinal and same_run else None)
+    reused = declared_releases and same_run
+    assert len(calls) == (3 if reused else 6)
     second = load_accepted_builds(config.runtime.runs_dir / run_ids[1])
-    assert {item["probe_disposition"] for item in second["probe_receipts"]} == {"REUSED"}
-    assert all(item["probe_disposition"] == "REUSED" for item in second["build_dispatches"])
+    assert {item["probe_disposition"] for item in second["probe_receipts"]} == {
+        "REUSED" if reused else "PROBED"}
+    assert all(item["probe_disposition"] == ("REUSED" if reused else "PROBED")
+               for item in second["build_dispatches"])
 
 
 def test_force_probe_override_executes_unchanged_recipe(tmp_path: Path) -> None:
@@ -858,7 +908,7 @@ def test_forced_project_build_rerun_in_same_application_run_is_attempt_isolated(
 
 
 def test_failed_default_build_repairs_image_and_reuses_winning_definition(tmp_path: Path) -> None:
-    config, target = _fixture(tmp_path)
+    config, target = _fixture(tmp_path, declared_releases=True)
     fingerprint = source_fingerprint(target)
     model = RepairModel((["libone-dev"], ["libtwo-dev"]))
     resolver = RepairImageResolver(tmp_path / "image-metadata")
@@ -868,16 +918,18 @@ def test_failed_default_build_repairs_image_and_reuses_winning_definition(tmp_pa
             calls, profile, success_package="libtwo-dev"),
         image_resolver_factory=lambda unit: resolver, infer=model.complete)
     run_ids = []
-    for _ in range(2):
-        upstream = GraphRunner(
-            config, [build_intake(), build_catalog(), build_plan(infer=RecipeModel().complete)]
-        ).run(target_root=target, source_fingerprint=fingerprint)
+    upstream = GraphRunner(
+        config, [build_intake(), build_catalog(), build_plan(infer=RecipeModel().complete)]
+    ).run(target_root=target, source_fingerprint=fingerprint)
+    for ordinal in range(2):
         run_ids.append(upstream["run_id"])
         outcome = GraphRunner(config, [job]).run(
-            target_root=target, source_fingerprint=fingerprint, run_id=upstream["run_id"])
+            target_root=target, source_fingerprint=fingerprint, run_id=upstream["run_id"],
+            force_from="job_project_build" if ordinal else None)
         assert outcome["status"] == "SUCCEEDED"
+        if ordinal == 0:
+            first = load_accepted_builds(config.runtime.runs_dir / upstream["run_id"])
 
-    first = load_accepted_builds(config.runtime.runs_dir / run_ids[0])
     native_receipt = next(value for value in first["probe_receipts"] if value["family"] == "native")
     native_dispatch = next(value for value in first["build_dispatches"] if value["family"] == "native")
     assert native_receipt["repair_attempt_count"] == 2

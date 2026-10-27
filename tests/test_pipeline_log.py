@@ -50,6 +50,57 @@ def test_torn_final_record_is_ignored_and_recovered(tmp_path: Path) -> None:
     assert all(json.loads(line) for line in log.path.read_text(encoding="utf-8").splitlines())
 
 
+def test_append_does_not_read_complete_history(tmp_path: Path, monkeypatch) -> None:
+    log = PipelineLog(tmp_path)
+    for _ in range(40):
+        log.write("FIRST", run_id="run", details={"padding": "x" * 8192})
+    def denied(*args, **kwargs):
+        raise AssertionError("append must not read full log history")
+    monkeypatch.setattr(Path, "read_bytes", denied)
+    assert log.write("LAST", run_id="run")["sequence"] == 41
+
+
+def test_complete_corruption_is_not_discarded_as_torn_tail(tmp_path: Path) -> None:
+    log = PipelineLog(tmp_path)
+    log.write("FIRST", run_id="run")
+    with log.path.open("ab") as stream:
+        stream.write(b"malformed complete record\n")
+    before = log.path.read_bytes()
+    with pytest.raises(ValueError, match="malformed complete"):
+        log.write("LAST", run_id="run")
+    assert log.path.read_bytes() == before
+    with pytest.raises(ValueError, match="malformed complete"):
+        log.read()
+
+
+def test_append_reuses_only_exact_bounded_record_decodes(tmp_path: Path, monkeypatch) -> None:
+    from appsec_review.observability import events
+
+    log = PipelineLog(tmp_path)
+    for _ in range(40):
+        log.write("FIRST", run_id="run")
+    original = events.json.loads
+    decoded = []
+
+    def decode(payload, *args, **kwargs):
+        decoded.append(payload)
+        return original(payload, *args, **kwargs)
+
+    monkeypatch.setattr(events.json, "loads", decode)
+    assert log.write("NEXT", run_id="run")["sequence"] == 41
+    assert log.write("LAST", run_id="run")["sequence"] == 42
+    assert len(decoded) == 2
+    assert events._tail_sequence.cache_info().maxsize == 256
+
+    payload = log.path.read_bytes()
+    assert b'"sequence":41,' in payload
+    corrupted = payload.replace(b'"sequence":41,', b'"sequence":11,', 1)
+    log.path.write_bytes(corrupted)
+    with pytest.raises(ValueError, match="invalid pipeline log tail sequence"):
+        log.write("REJECT", run_id="run")
+    assert log.path.read_bytes() == corrupted
+
+
 def test_writer_failure_releases_kernel_lock(tmp_path: Path, monkeypatch) -> None:
     log = PipelineLog(tmp_path)
     original = os.fsync
@@ -112,6 +163,51 @@ def test_canonical_event_model_tool_and_gap_metrics_are_deterministic(tmp_path: 
     assert first == second
     assert first["model_tokens"] == {"cache_tokens": 2, "input_tokens": 10, "output_tokens": 5}
     assert first["dispositions"]["COMPLETED_WITH_GAPS"] == 1
+
+
+def test_parallel_tools_pair_by_invocation_job_and_attempt_not_fifo(tmp_path):
+    log = PipelineLog(tmp_path)
+    def emit(event, job, attempt, invocation, duration=None):
+        details = {"tool_id": "fixture", "tool_invocation_id": invocation}
+        if duration is not None:
+            details["duration_ms"] = duration
+        log.write(event, run_id="run", job_id=job, attempt_id=attempt, details=details)
+    for job, attempt, invocation in [("one", "a", "first"), ("one", "a", "second"),
+                                     ("two", "a", "first"), ("one", "b", "first")]:
+        emit("TOOL_INVOCATION_STARTED", job, attempt, invocation)
+    for job, attempt, invocation in [("one", "a", "second"), ("one", "b", "first"),
+                                     ("two", "a", "first"), ("one", "a", "first")]:
+        emit("TOOL_INVOCATION_COMPLETED", job, attempt, invocation, 10)
+    emit("TOOL_INVOCATION_COMPLETED", "one", "a", "first", 10)
+    metrics = aggregate_run_metrics(tmp_path)
+    assert metrics["duplicate_lifecycle_records"] == 1
+    assert metrics["event_count"] == sum(metrics["event_counts"].values()) == 8
+    assert metrics["raw_event_count"] == sum(metrics["raw_event_counts"].values()) == 9
+    assert metrics["event_counts"]["TOOL_INVOCATION_COMPLETED"] == 4
+    assert metrics["raw_event_counts"]["TOOL_INVOCATION_COMPLETED"] == 5
+    assert metrics["tool_calls"] == {"fixture": 4}
+    assert metrics["lifecycle_gaps"] == metrics["lifecycle_conflicts"] == []
+    assert metrics["lifecycle_accounting"] == "complete"
+    assert metrics["duration_ms_by_event"]["TOOL_INVOCATION_COMPLETED"] == 40
+
+
+def test_missing_and_conflicting_tool_terminals_are_explicit_metric_gaps(tmp_path):
+    log = PipelineLog(tmp_path)
+    values = dict(run_id="run", job_id="one", attempt_id="a")
+    log.write("TOOL_INVOCATION_STARTED", **values, details={"tool_invocation_id": "lost"})
+    log.write("TOOL_INVOCATION_STARTED", **values, details={"tool_invocation_id": "conflict"})
+    log.write("TOOL_INVOCATION_COMPLETED", **values,
+              details={"tool_invocation_id": "conflict", "duration_ms": 10})
+    log.write("TOOL_INVOCATION_COMPLETED", **values,
+              details={"tool_invocation_id": "conflict", "duration_ms": 99})
+    log.write("JOB_SUCCEEDED", **values)
+    metrics = aggregate_run_metrics(tmp_path)
+    assert metrics["lifecycle_accounting"] == "partial"
+    assert metrics["lifecycle_conflicts"][0]["invocation_id"] == "conflict"
+    assert metrics["lifecycle_gaps"] == [{
+        "family": "TOOL", "job_id": "one", "step_id": "-", "task_id": "-", "attempt_id": "a",
+        "invocation_id": "lost", "started_at": log.read()[0][0]["timestamp"],
+        "reason": "missing_terminal_after_job_finished"}]
 
 
 def test_finding_transitions_are_valid_idempotent_and_distinct_from_observations(tmp_path: Path) -> None:

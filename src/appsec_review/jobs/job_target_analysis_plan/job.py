@@ -560,11 +560,10 @@ def build_job(*, infer: Infer | None = None, fail_task: str | None = None) -> Jo
         u("plan_acceptance.publish_handoff", publish,
           ("plan_acceptance.validate_plan", "plan_acceptance.index_plan", "analysis_decisions.resolve_ambiguity")),
     )
-    implementation = hashlib.sha256(Path(__file__).read_bytes() + Path(__file__).with_name("planning.py").read_bytes() +
-                                    str(fail_task).encode() + (b"model-client" if infer else b"no-model-client")).hexdigest()
+    implementation = None
     return Job("job_target_analysis_plan", "target_analysis_plan", UnitExecutor(units).execute,
                input_validators=(_validate_config,), schema_identity=PLAN_SCHEMA,
                implementation_identity=implementation,
-               validation_identity=hashlib.sha256(Path(__file__).read_bytes() + b"validation").hexdigest(),
+               validation_identity=None,
                units=units,
                datasets=DATASETS, consumes=CONSUMES)

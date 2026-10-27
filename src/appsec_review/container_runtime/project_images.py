@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 import hashlib
 import json
 from pathlib import Path, PurePosixPath
@@ -10,11 +10,12 @@ import shutil
 from typing import Any
 
 from appsec_review.storage import FileLock, atomic_json, bounded_file_lock, canonical_json, file_sha256
+from appsec_review.config.assurance import ComponentReleases
 
 from .build_executor import BuildProfile, Runner, _run
 
 
-SCHEMA = "appsec-review/project-build-image/1"
+SCHEMA = "appsec-review/project-build-image/2"
 GENERATOR_IDENTITY = "appsec-review/project-dockerfile/8"
 
 
@@ -44,6 +45,8 @@ class ProjectImage:
     cache_disposition: str = "MISS"
     cache_rejection_reason: str | None = None
     saved_build_count: int = 0
+    component_releases: Mapping[str, str | None] = field(default_factory=dict)
+    preparation_receipt: Mapping[str, Any] | None = None
 
 
 def _safe_dependency(target_root: Path, relative: str) -> Path:
@@ -63,13 +66,16 @@ def dependency_hashes(target_root: Path, recipe: Mapping[str, Any]) -> dict[str,
 
 
 def project_recipe_identity(recipe: Mapping[str, Any], profile: BuildProfile,
-                            hashes: Mapping[str, str]) -> str:
+                            hashes: Mapping[str, str], *, releases: ComponentReleases | None = None) -> str:
     operational_recipe = {key: value for key, value in recipe.items() if key != "reason"}
+    releases = releases or ComponentReleases()
     value = {
         "schema": SCHEMA, "generator": GENERATOR_IDENTITY, "recipe": operational_recipe,
         "base_image_id": profile.image_id, "dependency_hashes": hashes,
         "platform": str(recipe.get("platform", "linux")),
         "architecture": str(recipe.get("architecture", "native")),
+        "component_releases": {key: releases.values.get(key)
+                               for key in ("platform", "build_toolchain")},
     }
     if node_workspace_layout(recipe):
         # Only images that carry the workspace layout step change identity; every other
@@ -364,12 +370,15 @@ class ProjectImageResolver:
     """Generate or reuse a dependency-bearing image derived from a pinned language baseline."""
 
     def __init__(self, *, metadata_root: Path, target_root: Path, timeout_seconds: int = 1800,
-                 output_bytes: int = 8 * 1024 * 1024, runner: Runner | None = None) -> None:
+                 output_bytes: int = 8 * 1024 * 1024, runner: Runner | None = None,
+                 releases: ComponentReleases | None = None, run_root: Path | None = None) -> None:
         self.metadata_root = metadata_root
         self.target_root = target_root
         self.timeout_seconds = timeout_seconds
         self.output_bytes = output_bytes
         self.runner = runner or _run
+        self.releases = releases or ComponentReleases()
+        self.cache_namespace = hashlib.sha256(str((run_root or target_root).resolve()).encode()).hexdigest()[:24]
 
     def _inspect(self, reference: str) -> str | None:
         code, stdout, _stderr, timed_out = self.runner(
@@ -378,9 +387,13 @@ class ProjectImageResolver:
         return value if not timed_out and code == 0 and value.startswith("sha256:") else None
 
     def definition(self, recipe: Mapping[str, Any], profile: BuildProfile) -> tuple[str, bytes]:
-        """Return the exact identity and Dockerfile used for this recipe without mutating Docker."""
+        """Return identity and baseline Dockerfile; bounded builds bind FROM to a private immutable alias."""
         hashes = dependency_hashes(self.target_root, recipe)
-        identity = project_recipe_identity(recipe, profile, hashes)
+        return self._definition(recipe, profile, hashes)
+
+    def _definition(self, recipe: Mapping[str, Any], profile: BuildProfile,
+                    hashes: Mapping[str, str]) -> tuple[str, bytes]:
+        identity = project_recipe_identity(recipe, profile, hashes, releases=self.releases)
         uid, gid = profile.user.split(":", 1)
         lines = [f"FROM {profile.tag}", "USER 0:0",
                  _json_instruction("RUN", ("mkdir", "-p", "/opt/project", "/opt/project-home",
@@ -428,69 +441,79 @@ class ProjectImageResolver:
         return identity, ("\n".join(lines) + "\n").encode("utf-8")
 
     def resolve(self, recipe: Mapping[str, Any], profile: BuildProfile) -> tuple[ProjectImage, bytes, bytes]:
+        from .image_builder import bounded_image_preparation, builder_namespace, verify_builder_receipt
+        from appsec_review.storage.shared import safe_path
         hashes = dependency_hashes(self.target_root, recipe)
-        identity, dockerfile = self.definition(recipe, profile)
+        identity, dockerfile = self._definition(recipe, profile, hashes)
         customized = (bool(recipe.get("system_packages")) or bool(recipe.get("network_required")) or
                       bool(recipe.get("image_repairs")))
         if self._inspect(profile.tag) != profile.image_id:
             raise ValueError(f"base build image identity changed: {profile.name}")
         if not customized:
             return ProjectImage(SCHEMA, identity, profile.name, profile.image_id, profile.tag,
-                                profile.image_id, None, False, True, hashes,
-                                cache_disposition="HIT", saved_build_count=1), b"", b""
-        cache_root = self.metadata_root / "project-images" / identity
+                                profile.image_id, None, False, False, hashes,
+                                cache_disposition="NOT_APPLICABLE"), b"", b""
+        namespace = builder_namespace() or self.cache_namespace
+        cache_root = self.metadata_root / "project-images" / namespace / identity
         manifest_path = cache_root / "manifest.json"
-        tag = f"appsec-review-project-{profile.name}:{identity[:24]}"
+        tag = f"appsec-review-project-{profile.name}:{namespace[:12]}{identity[:12]}"
         cache_root.mkdir(parents=True, exist_ok=True)
         with FileLock(cache_root / "build.lock"):
-            rejection_reason = None
-            if manifest_path.is_file():
+            reusable, rejection_reason = self.releases.require("platform", "build_toolchain")
+            declarations = {key: self.releases.values.get(key) for key in ("platform", "build_toolchain")}
+            if reusable and manifest_path.is_file():
                 try:
                     value = json.loads(manifest_path.read_text(encoding="utf-8"))
                 except (OSError, json.JSONDecodeError):
                     value = {}
                 image_id = self._inspect(tag)
-                retained_definition = cache_root / "context" / "Dockerfile"
+                retained_definition = (safe_path(self.metadata_root, value["dockerfile_path"])
+                                       if isinstance(value.get("dockerfile_path"), str)
+                                       else cache_root / "context" / "Dockerfile")
                 if (value.get("schema") == SCHEMA and value.get("recipe_identity") == identity and
                         image_id == value.get("image_id") and retained_definition.is_file() and
-                        not retained_definition.is_symlink() and
-                        file_sha256(retained_definition) == value.get("dockerfile_sha256")):
+                        not retained_definition.is_symlink() and value.get("component_releases") == declarations):
+                    if builder_namespace() is not None:
+                        verify_builder_receipt(value["preparation_receipt"], identity=identity, tag=tag,
+                                               image_id=image_id)
                     return ProjectImage(**{**value, "reused": True,
                                            "cache_disposition": "HIT",
                                            "cache_rejection_reason": None,
                                            "saved_build_count": 1}), b"", b""
                 rejection_reason = ("image_missing_or_changed" if image_id != value.get("image_id") else
-                                    "dockerfile_missing_or_changed" if not retained_definition.is_file() or
-                                    retained_definition.is_symlink() or
-                                    file_sha256(retained_definition) != value.get("dockerfile_sha256") else
+                                    "dockerfile_unavailable" if not retained_definition.is_file() or
+                                    retained_definition.is_symlink() else
                                     "manifest_identity_mismatch")
-            context = cache_root / "context"
-            if context.exists():
-                shutil.rmtree(context)
-            inputs = context / "inputs"
-            inputs.mkdir(parents=True)
-            for ordinal, relative in enumerate(sorted(hashes)):
-                source = _safe_dependency(self.target_root, relative)
-                staged = inputs / f"{ordinal:04d}"
-                shutil.copyfile(source, staged)
-            if _cargo_placeholder_dirs(recipe):
-                (context / "cargo-placeholder.rs").write_text("fn main() {}\n", encoding="utf-8")
-            packages = tuple(str(value) for value in recipe.get("system_packages", ()))
-            dockerfile_path = context / "Dockerfile"
-            dockerfile_path.write_bytes(dockerfile)
-            # `docker buildx build` reads and uploads its context in the CLI process. Unlike a
-            # sibling `docker run --mount`, this path must therefore remain in the code
-            # container's namespace rather than being translated into the daemon host's
-            # namespace.
-            build_context = context.resolve()
-            # Docker Desktop may expose only the legacy builder inside the code location.
-            # Its layer commits are not reliably concurrent, so serialize only this narrow
-            # daemon mutation while the surrounding family DAG remains parallel.
-            with bounded_file_lock(self.metadata_root / "project-images" / "docker-build.lock",
-                                   self.timeout_seconds):
-                code, stdout, stderr, timed_out = self.runner((
-                    "docker", "buildx", "build", "--load", "--pull=false", "--network", "default", "--tag", tag,
-                    "--file", str(build_context / "Dockerfile"), str(build_context)), self.timeout_seconds)
+            from appsec_review.runtime.resources import require_bounded_image_builder
+            require_bounded_image_builder()
+            with bounded_image_preparation(identity=identity, tag=tag,
+                                           timeout_seconds=self.timeout_seconds) as builder:
+                context = builder.context if builder is not None else cache_root / "context"
+                if builder is None and context.exists():
+                    shutil.rmtree(context)
+                inputs = context / "inputs"
+                inputs.mkdir(parents=True)
+                for ordinal, relative in enumerate(sorted(hashes)):
+                    source = _safe_dependency(self.target_root, relative)
+                    staged = inputs / f"{ordinal:04d}"
+                    shutil.copyfile(source, staged)
+                if _cargo_placeholder_dirs(recipe):
+                    (context / "cargo-placeholder.rs").write_text("fn main() {}\n", encoding="utf-8")
+                dockerfile_path = context / "Dockerfile"
+                if builder is not None:
+                    base_alias = f"appsec-review-project-base:{namespace[:12]}{profile.image_id[7:31]}"
+                    bound_dockerfile = (f"FROM {base_alias}\n".encode() + dockerfile.partition(b"\n")[2])
+                    dockerfile_path.write_bytes(bound_dockerfile)
+                    code, stdout, stderr, timed_out = builder.build(
+                        network="default", image_inputs={base_alias: profile.image_id})
+                else:
+                    dockerfile_path.write_bytes(dockerfile)
+                    build_context = context.resolve()
+                    with bounded_file_lock(self.metadata_root / "project-images" / "docker-build.lock",
+                                           self.timeout_seconds):
+                        code, stdout, stderr, timed_out = self.runner((
+                            "docker", "buildx", "build", "--load", "--pull=false", "--network", "default", "--tag", tag,
+                            "--file", str(build_context / "Dockerfile"), str(build_context)), self.timeout_seconds)
             if timed_out or code != 0:
                 raise ProjectImageBuildError(
                     "project build image creation timed out" if timed_out else
@@ -499,11 +522,14 @@ class ProjectImageResolver:
             image_id = self._inspect(tag)
             if image_id is None:
                 raise RuntimeError("project build image was not resolvable after creation")
+            if builder is not None and image_id != builder.output_image_id:
+                raise ValueError("bounded builder output image differs from local image binding")
             value = asdict(ProjectImage(SCHEMA, identity, profile.name, profile.image_id, tag,
-                                        image_id, hashlib.sha256(dockerfile).hexdigest(), True,
+                                        image_id, None, True,
                                         False, hashes,
                                         manifest_path.relative_to(self.metadata_root).as_posix(),
                                         dockerfile_path.relative_to(self.metadata_root).as_posix(),
-                                        "REJECTED" if rejection_reason else "MISS", rejection_reason, 0))
+                                        "REJECTED" if rejection_reason else "MISS", rejection_reason, 0,
+                                        declarations, builder.receipt() if builder is not None else None))
             atomic_json(manifest_path, value)
             return ProjectImage(**value), stdout[:self.output_bytes], stderr[:self.output_bytes]

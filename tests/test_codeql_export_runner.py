@@ -262,7 +262,7 @@ def test_row_bound_truncates_and_keeps_the_true_row_count(
         contract.validate_export(document)
 
 
-def test_export_rejects_a_tampered_pack_before_running_codeql(
+def test_export_does_not_fingerprint_supplied_pack(
         tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     scratch = _stage(tmp_path)
     fake = FakeCodeQL(_synthetic_rows())
@@ -270,9 +270,13 @@ def test_export_rejects_a_tampered_pack_before_running_codeql(
     guards = scratch / "export-pack" / "Guards.ql"
     guards.write_text(guards.read_text(encoding="utf-8") + "\n// changed\n", encoding="utf-8")
 
-    with pytest.raises(ValueError, match="export pack identity differs"):
-        RUNNER.export(_args(), scratch=scratch)
-    assert fake.calls == []
+    original = RUNNER._sha256
+    def target_evidence_only(path):
+        assert scratch / "export-pack" not in path.parents
+        return original(path)
+    monkeypatch.setattr(RUNNER, "_sha256", target_evidence_only)
+    RUNNER.export(_args(), scratch=scratch)
+    assert fake.calls
 
 
 def test_export_byte_bound_and_result_set_contract_fail_the_action(
@@ -379,13 +383,11 @@ def test_executor_export_action_runs_without_network_and_with_export_timeout(
 # --------------------------------------------------------------------------- lock and QL contract
 
 
-def test_lock_entry_equals_the_pack_tree_and_contract_files() -> None:
-    digest, count = RUNNER._relative_tree(PACK_ROOT / "cpp")
-    assert (digest, count) == (LOCK_ENTRY["tree_sha256"], LOCK_ENTRY["file_count"])
-    assert RUNNER._sha256(PACK_ROOT / "cpp" / "qlpack.yml") == LOCK_ENTRY["query_pack_sha256"]
-    assert RUNNER._sha256(PACK_ROOT / "cpp" / LOCK_ENTRY["query_suite"]) == LOCK_ENTRY["query_suite_sha256"]
-    assert RUNNER._sha256(ROOT / LOCK_ENTRY["columns_path"]) == LOCK_ENTRY["columns_sha256"]
-    assert RUNNER._sha256(ROOT / LOCK_ENTRY["catalog_path"]) == LOCK_ENTRY["catalog_sha256"]
+def test_supplied_pack_availability_uses_no_payload_hashes(monkeypatch) -> None:
+    def forbidden(path):
+        raise AssertionError("supplied pack must not be hashed")
+    monkeypatch.setattr(RUNNER, "_sha256", forbidden)
+    RUNNER._verify_export_pack(LOCK_ENTRY, PACK_ROOT / "cpp", ROOT / LOCK_ENTRY["columns_path"])
     assert ROOT / LOCK_ENTRY["source_path"] == PACK_ROOT / "cpp"
     qlpack = (PACK_ROOT / "cpp" / "qlpack.yml").read_text(encoding="utf-8")
     assert f"name: {LOCK_ENTRY['query_pack']}\n" in qlpack
@@ -394,12 +396,12 @@ def test_lock_entry_equals_the_pack_tree_and_contract_files() -> None:
         "export_pack"]
 
 
-def test_relative_tree_is_location_independent(tmp_path: Path) -> None:
+def test_supplied_pack_availability_is_location_independent(tmp_path: Path) -> None:
     for root in (tmp_path / "one", tmp_path / "two" / "nested"):
         shutil.copytree(PACK_ROOT / "cpp", root)
-    assert RUNNER._relative_tree(tmp_path / "one") == RUNNER._relative_tree(tmp_path / "two" / "nested")
+        RUNNER._verify_export_pack(LOCK_ENTRY, root, ROOT / LOCK_ENTRY["columns_path"])
     (tmp_path / "one" / "extra.ql").write_text("", encoding="utf-8")
-    assert RUNNER._relative_tree(tmp_path / "one")[1] == LOCK_ENTRY["file_count"] + 1
+    RUNNER._verify_export_pack(LOCK_ENTRY, tmp_path / "one", ROOT / LOCK_ENTRY["columns_path"])
 
 
 def _query_predicates() -> dict[str, tuple[str, list[tuple[str, str]]]]:
@@ -687,19 +689,21 @@ def test_compile_action_compiles_the_verified_pack_once_without_a_database(
     assert set(report["compile_s"]) == set(files)
 
 
-def test_compile_action_refuses_a_pack_that_differs_from_the_lock(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_compile_action_does_not_verify_supplied_payload(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     scratch = _stage(tmp_path)
     (scratch / "export-pack" / "CallSites.ql").write_text("// tampered\n", encoding="utf-8")
     fake = FakeCodeQL(_synthetic_rows())
     _fake(monkeypatch, fake)
     argv = graph_compile_arguments(pack="export-pack", columns="export-columns.json",
                                    asset_lock="assets.lock.json", language="cpp", threads=2, ram_mb=2048)
-    with pytest.raises(ValueError, match="differs from the reviewed asset lock"):
-        RUNNER.compile_export(RUNNER.parser().parse_args(["compile", *argv]), scratch=scratch)
-    assert fake.calls == []
+    def forbidden(path):
+        raise AssertionError("supplied pack must not be hashed")
+    monkeypatch.setattr(RUNNER, "_sha256", forbidden)
+    RUNNER.compile_export(RUNNER.parser().parse_args(["compile", *argv]), scratch=scratch)
+    assert fake.calls
 
 
-def test_executor_compile_action_has_its_own_timeout_resources_and_a_payload_keyed_cache(
+def test_executor_compile_action_has_its_own_timeout_resources_and_a_run_private_declared_cache(
         tmp_path: Path) -> None:
     settings = SimpleNamespace(inventory_timeout_seconds=30, database_timeout_seconds=30,
                                query_timeout_seconds=30, output_bytes=1024, threads=2, ram_mb=1024,
@@ -730,4 +734,4 @@ def test_executor_compile_action_has_its_own_timeout_resources_and_a_payload_key
         assert command[command.index("--network") + 1] == "none"
         assert command[-3:] == ("compile", "--language", "cpp")
         volumes.update(value for value in command if value.startswith("type=volume,src=appsec-codeql-compile-"))
-    assert len(volumes) == 1, "every derived image over one CodeQL payload shares one compile cache"
+    assert len(volumes) == 1, "derived images within one run and declared release share one compile cache"

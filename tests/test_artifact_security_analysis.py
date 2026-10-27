@@ -129,9 +129,13 @@ def test_spotbugs_failed_or_malformed_output_is_a_retained_gap(tmp_path: Path) -
 
 def _fixture(tmp_path: Path, payload: bytes = b"\0asm\x01\0\0\0", *, disable_grype: bool = False,
              duplicate_artifact: bool = False, no_artifacts: bool = False,
-             name: str = "module.wasm", kind: str = "wasm-module"):
+             name: str = "module.wasm", kind: str = "wasm-module", declared_releases: bool = True):
     config_path = tmp_path / "appsec-review.toml"
     text = (ROOT / "appsec-review.toml").read_text(encoding="utf-8")
+    if declared_releases:
+        components = ("platform", "validation", *(adapter.tool_id for adapter in ADAPTERS.values()))
+        text = text.replace("[review_policy.releases]", "[review_policy.releases]\n" +
+                            "\n".join(f'"{key}" = "fixture/1"' for key in components))
     if not disable_grype:
         text = text.replace("disable_grype = true", "disable_grype = false")
     config_path.write_text(text, encoding="utf-8")
@@ -208,7 +212,7 @@ def test_no_artifacts_is_a_named_gap_with_verified_empty_index(tmp_path: Path) -
     assert outcome["status"] == "COMPLETED_WITH_GAPS"
     accepted = load_accepted_artifact_security_analysis(run_root)
     assert accepted["artifact_count"] == accepted["observation_count"] == 0
-    assert "no produced artifacts were available for artifact security analysis" in accepted["gaps"]
+    assert "no target or produced artifacts were available for artifact security analysis" in accepted["gaps"]
 
 
 def test_job_isolates_scanner_failure_retains_raw_output_and_indexes_siblings(tmp_path: Path) -> None:
@@ -259,8 +263,10 @@ def test_changed_accepted_artifact_is_an_integrity_failure(tmp_path: Path) -> No
             source_fingerprint=fingerprint, run_id=run_id)
 
 
-def test_resume_reuses_verified_artifact_capability_shards(tmp_path: Path) -> None:
-    config, run_id, _run_root, target, fingerprint, _ = _fixture(tmp_path)
+@pytest.mark.parametrize("declared_releases", (False, True))
+def test_resume_reuses_verified_artifact_capability_shards(tmp_path: Path, declared_releases: bool) -> None:
+    config, run_id, _run_root, target, fingerprint, _ = _fixture(
+        tmp_path, declared_releases=declared_releases)
     first_calls: list[str] = []
     def scanner(capability, path, artifact, timeout, limit):
         first_calls.append(capability)
@@ -272,7 +278,7 @@ def test_resume_reuses_verified_artifact_capability_shards(tmp_path: Path) -> No
     first_calls.clear()
     GraphRunner(config, [job]).run(target_root=target, source_fingerprint=fingerprint, run_id=run_id,
                                    force_from="job_artifact_security_analysis")
-    assert first_calls == []
+    assert bool(first_calls) is not declared_releases
 
 
 def test_equal_content_artifacts_have_distinct_observation_checkpoints(tmp_path: Path) -> None:

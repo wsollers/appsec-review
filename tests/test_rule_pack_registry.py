@@ -106,7 +106,7 @@ def test_the_export_pack_is_registered_for_a_warm_compile() -> None:
     assert not any(pack.get("warm") for pack in packs.values() if pack["engine"] != "codeql")
 
 
-def test_warm_compile_targets_the_volume_and_pack_path_the_job_uses(
+def test_platform_warm_compile_is_separate_from_customer_run_caches(
         tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from types import SimpleNamespace
 
@@ -130,8 +130,8 @@ def test_warm_compile_targets_the_volume_and_pack_path_the_job_uses(
 
     derived = CodeQLImage("appsec-review/codeql-derived-image/2", "a" * 64, image_id, "b", "t", "c", "t",
                           "10001:10001", "d" * 64, "e" * 64, False, "m")
-    volume = compile_cache_volume(derived)
-    assert builder.compile_cache_volume(image_id) == volume and volume in detail
+    volume = builder.compile_cache_volume(image_id)
+    assert compile_cache_volume(derived, tmp_path / "run") != volume and volume in detail
     [argv] = seen
     assert f"type=volume,src={volume},dst=/codeql-cache" in argv
     assert any(value.endswith(",dst=/scratch/export/pack,readonly") for value in argv)

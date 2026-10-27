@@ -15,6 +15,7 @@ from appsec_review.container_runtime import (
     project_recipe_identity,
 )
 from appsec_review.container_runtime.project_images import _restore_command
+from appsec_review.config.assurance import ComponentReleases
 
 
 @pytest.mark.parametrize(("manager", "expected"), (
@@ -65,7 +66,9 @@ def test_project_image_is_derived_from_recipe_and_reused(tmp_path: Path) -> None
         "expected_outputs": ["web/dist"], "network_required": True,
         "reason": "fixture", "build_system": "node",
     }
-    resolver = ProjectImageResolver(metadata_root=tmp_path / "metadata", target_root=target, runner=runner)
+    resolver = ProjectImageResolver(metadata_root=tmp_path / "metadata", target_root=target, runner=runner,
+                                    releases=ComponentReleases({"platform": "fixture/1",
+                                                                "build_toolchain": "fixture/1"}))
     profile = BuildProfile("node", "node-base:local", base_id, "10001:10001")
     first, _, _ = resolver.resolve(recipe, profile)
     second, _, _ = resolver.resolve(recipe, profile)
@@ -79,7 +82,8 @@ def test_project_image_is_derived_from_recipe_and_reused(tmp_path: Path) -> None
     assert not rebuilt.reused and rebuilt.cache_disposition == "REJECTED"
     assert rebuilt.cache_rejection_reason == "image_missing_or_changed"
     assert first.dockerfile_path == second.dockerfile_path
-    dockerfile = next((tmp_path / "metadata" / "project-images").glob("*/context/Dockerfile")).read_text()
+    dockerfile_path = tmp_path / "metadata" / first.dockerfile_path
+    dockerfile = dockerfile_path.read_text()
     assert "FROM node-base:local" in dockerfile
     assert '["npm","ci","--ignore-scripts","--no-audit","--no-fund"]' in dockerfile
     assert "ENV NPM_CONFIG_CACHE=/opt/project-deps/npm-cache" in dockerfile
@@ -88,7 +92,8 @@ def test_project_image_is_derived_from_recipe_and_reused(tmp_path: Path) -> None
     assert sum(call[:3] == ("docker", "buildx", "build") for call in calls) == 2
     build_call = next(call for call in calls if call[:3] == ("docker", "buildx", "build"))
     assert build_call[build_call.index("--network") + 1] == "default"
-    assert build_call[-1] == str(next((tmp_path / "metadata" / "project-images").glob("*/context")).resolve())
+    assert build_call[-1] == str(dockerfile_path.parent.resolve())
+    assert first.dockerfile_sha256 is None
 
 
 def test_node_workspace_image_restores_and_exposes_root_dependencies(tmp_path: Path) -> None:
@@ -163,8 +168,8 @@ def test_networked_cargo_image_supplies_a_descriptor_only_fetch_target(tmp_path:
         "reason": "fixture", "build_system": "cargo",
     }
     resolver = ProjectImageResolver(metadata_root=tmp_path / "metadata", target_root=target, runner=runner)
-    resolver.resolve(recipe, BuildProfile("rust", "rust-base:local", base_id, "10001:10001"))
-    context = next((tmp_path / "metadata" / "project-images").glob("*/context"))
+    image, _, _ = resolver.resolve(recipe, BuildProfile("rust", "rust-base:local", base_id, "10001:10001"))
+    context = (tmp_path / "metadata" / image.dockerfile_path).parent
     dockerfile = (context / "Dockerfile").read_text(encoding="utf-8")
     assert (context / "cargo-placeholder.rs").read_text(encoding="utf-8") == "fn main() {}\n"
     assert '["cargo-placeholder.rs","/opt/project/src/main.rs"]' in dockerfile
@@ -203,7 +208,7 @@ def test_image_repairs_render_typed_environment_and_restores_into_the_dockerfile
     image, _, _ = resolver.resolve(recipe, BuildProfile("rust", "rust-base:local", base_id, "10001:10001"))
     # A repair without apt packages or network_required still derives an image.
     assert image.customized and image.image_id == derived_id
-    context = next((tmp_path / "metadata" / "project-images").glob("*/context"))
+    context = (tmp_path / "metadata" / image.dockerfile_path).parent
     lines = (context / "Dockerfile").read_text(encoding="utf-8").splitlines()
     assert 'ENV CARGO_NET_GIT_FETCH_WITH_CLI="true"' in lines
     assert lines[-3:] == ["WORKDIR /opt/project/crates/tool", 'RUN ["cargo","fetch","--locked"]',
@@ -313,3 +318,64 @@ def test_project_image_builds_wait_for_shared_docker_mutation_lock(tmp_path: Pat
         list(pool.map(lambda ordinal: resolver.resolve(
             {**base_recipe, "build_unit_id": "build-unit-" + str(ordinal) * 20}, profile), (1, 2)))
     assert maximum == 1
+
+
+@pytest.mark.parametrize("mode", ("strict", "first_party_managed"))
+@pytest.mark.parametrize("declared", (False, True))
+def test_image_reuse_requires_declarations_never_platform_payload_hashes(
+        tmp_path: Path, monkeypatch, mode: str, declared: bool) -> None:
+    from appsec_review.config.assurance import AssuranceMode, ReviewPolicy
+    from appsec_review.container_runtime import project_images
+    from appsec_review.runtime.scope import review_scope
+
+    target = tmp_path / "target"
+    target.mkdir()
+    (target / "package.json").write_text("{}")
+    releases = ComponentReleases({"platform": "fixture/1", "build_toolchain": "fixture/1"} if declared else {})
+    policy = ReviewPolicy(mode=AssuranceMode(mode), project_id="fixture",
+                          approved_first_party_projects=("fixture",), target_root=str(target),
+                          custody="application_private_v1", releases=releases)
+    base_id, derived_id = "sha256:" + "a" * 64, "sha256:" + "b" * 64
+    builds = []
+
+    def runner(argv, timeout):
+        if argv[:3] == ("docker", "image", "inspect"):
+            return 0, (base_id if argv[3] == "base" else derived_id).encode(), b"", False
+        assert argv[:3] == ("docker", "buildx", "build")
+        builds.append(argv[argv.index("--tag") + 1])
+        return 0, b"", b"", False
+
+    original = project_images.file_sha256
+    hashed = []
+    def target_hash_only(path):
+        assert path.is_relative_to(target), f"platform payload was hashed: {path}"
+        hashed.append(path)
+        return original(path)
+    monkeypatch.setattr(project_images, "file_sha256", target_hash_only)
+    recipe = {"source_dir": ".", "build_system": "node", "dependency_files": ["package.json"],
+              "system_packages": [], "network_required": True}
+    profile = BuildProfile("node", "base", base_id, "10001:10001")
+    run_root = tmp_path / "run-one"
+    resolver = ProjectImageResolver(metadata_root=tmp_path / "metadata", target_root=target,
+                                    runner=runner, releases=policy.releases, run_root=run_root)
+    with review_scope(tmp_path, run_root, target):
+        first = resolver.resolve(recipe, profile)[0]
+        (tmp_path / "metadata" / first.dockerfile_path).write_text("operator changed supplied template")
+        second = resolver.resolve(recipe, profile)[0]
+    assert second.reused is declared
+    assert len(builds) == (1 if declared else 2)
+    assert hashed == [target / "package.json"] * 2
+    assert first.dockerfile_sha256 is second.dockerfile_sha256 is None
+    if not declared:
+        assert second.cache_rejection_reason == "missing_release_identity"
+    else:
+        other = ProjectImageResolver(metadata_root=tmp_path / "metadata", target_root=target,
+                                     runner=runner, releases=releases, run_root=tmp_path / "run-two")
+        assert not other.resolve(recipe, profile)[0].reused
+        assert len(set(builds)) == 2
+        changed = ComponentReleases({**releases.view(), "build_toolchain": "fixture/2"})
+        assert project_recipe_identity(recipe, profile, {}, releases=changed) != project_recipe_identity(
+            recipe, profile, {}, releases=releases)
+        query_only = ComponentReleases({**releases.view(), "query_python": "fixture/2"})
+        assert project_recipe_identity(recipe, profile, {}, releases=query_only) == project_recipe_identity(
+            recipe, profile, {}, releases=releases)

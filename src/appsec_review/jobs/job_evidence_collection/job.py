@@ -195,6 +195,10 @@ def load_target_catalog(run_root: Path) -> ScanCatalog:
         handoff_sha256=str(latest["handoff_sha256"]), files=tuple(partition.get("files", [])),
         projects=tuple(projects.get("projects", [])), artifacts=artifacts, target_root=target_root,
         compile_commands=tuple(compile_commands.get("files", [])),
+        target_artifacts=tuple(partition.get("target_artifacts", [])),
+        target_artifact_inventory_available="target_artifacts" in partition,
+        target_artifact_gaps=tuple(f"{item['path']}: {item['reason']}" for item in partition.get("gaps", [])
+                                  if item["reason"] not in {"excluded_directory"}),
     )
 
 
@@ -223,18 +227,9 @@ def plan_applicability(run_root: Path) -> list[dict[str, Any]]:
 SEI_CERT_TOOLS = frozenset({"tool-semgrep", "tool-opengrep"})
 
 
-def _sei_cert_pack(repository: Path) -> PackIdentity | None:
-    """Strictly verify the complete SEI CERT pack against pack.lock.json.
-
-    Every regular file in ``rules/sei-cert`` (rules, mappings, source index, fixtures, manifest,
-    documents) must match the lock, so the complete-pack identity reported with evidence is the
-    identity that was actually verified. Any mismatch, unexpected file, symlink, or malformed lock
-    leaves the pack unverified.
-    """
-    try:
-        return verify_pack(repository / "rules" / "sei-cert")
-    except (PackError, OSError):
-        return None
+def _sei_cert_pack(repository: Path) -> Path | None:
+    root = repository / "rules" / "sei-cert" / "rules"
+    return root if root.is_dir() else None
 
 
 def _banned_function_drift(repository: Path) -> str | None:
@@ -260,39 +255,16 @@ def _semgrep_rule_files(*, repository_root: Path, tool_id: str) -> list[Path]:
                   for name in ("review-signals.yml", "banned-functions.yml")]
     pack = _sei_cert_pack(repository_root)
     if pack is not None:
-        files += sorted(path for path in pack.rules_root.rglob("*") if path.suffix in {".yml", ".yaml"})
+        files += sorted(path for path in pack.rglob("*") if path.suffix in {".yml", ".yaml"})
     return files
 
 
 def _rule_pack_identity(unit: UnitContext, adapter: ToolAdapter) -> dict[str, Any]:
-    """Rule-pack identities recorded with a tool's evidence, so results bind to exact rules."""
-    packs: dict[str, Any] = {}
-    repository = unit.job.repository_root
-    if adapter.tool_id in SEI_CERT_TOOLS:
-        verified = _sei_cert_pack(repository)
-        packs["appsec-review/sei-cert"] = verified.as_record() if verified else {"verified": False}
-    if adapter.tool_id == "tool-gitleaks":
-        try:
-            lock = json.loads((repository / "rules" / "gitleaks" / "rules.lock.json").read_text(encoding="utf-8"))
-            packs["gitleaks-generic-secrets"] = {"sha256": lock["files"]["generic-secrets.toml"]["sha256"]}
-        except (OSError, KeyError, json.JSONDecodeError):
-            packs["gitleaks-generic-secrets"] = {"verified": False}
-    if adapter.tool_id == "tool-opengrep":
-        try:
-            lock = json.loads((repository / "rules" / "semgrep" / "rules.lock.json").read_text(encoding="utf-8"))
-            packs["semgrep-review-signals"] = {"sha256": lock["files"]["review-signals.yml"]["sha256"]}
-            packs["semgrep-banned-functions"] = {"sha256": lock["files"]["banned-functions.yml"]["sha256"]}
-        except (OSError, KeyError, json.JSONDecodeError):
-            packs["semgrep-review-signals"] = {"verified": False}
-    if adapter.tool_id == "tool-semgrep":
-        try:
-            lock = json.loads((repository / "rules" / "semgrep" / "rules.lock.json").read_text(encoding="utf-8"))
-            packs["semgrep-security-baseline"] = {"sha256": lock["files"]["security.yml"]["sha256"]}
-            packs["semgrep-review-signals"] = {"sha256": lock["files"]["review-signals.yml"]["sha256"]}
-            packs["semgrep-banned-functions"] = {"sha256": lock["files"]["banned-functions.yml"]["sha256"]}
-        except (OSError, KeyError, json.JSONDecodeError):
-            packs["semgrep-security-baseline"] = {"verified": False}
-    return {"rule_packs": packs} if packs else {}
+    from appsec_review.config.assurance import ReviewPolicy
+    policy = getattr(unit.job, "review_policy", ReviewPolicy())
+    return {"rule_packs": {adapter.tool_id: {
+        "release_id": policy.releases.values.get(f"rules_{adapter.tool_id}"),
+        "assurance": "supplied_platform_excluded"}}}
 
 
 def _prerequisites(unit: UnitContext, adapter: ToolAdapter, selection: Applicability) -> tuple[Applicability, tuple[Mount, ...], dict[str, str], str | None]:
@@ -305,47 +277,25 @@ def _prerequisites(unit: UnitContext, adapter: ToolAdapter, selection: Applicabi
         rules = repository / "rules" / "semgrep"
         names = (("security.yml", "review-signals.yml", "banned-functions.yml") if adapter.tool_id == "tool-semgrep"
                  else ("review-signals.yml", "banned-functions.yml"))
-        try:
-            lock = json.loads((rules / "rules.lock.json").read_text(encoding="utf-8"))
-            verified = lock.get("schema") == "appsec-review/rule-bundle-lock/1" and all(
-                file_sha256(rules / name) == lock["files"][name]["sha256"] for name in names)
-        except (OSError, KeyError, ValueError, json.JSONDecodeError):
-            verified = False
-        if not verified:
-            return selection, (), {}, "hash-pinned Semgrep rule bundle is unavailable"
-        stale = _banned_function_drift(repository)
-        if stale:
-            return selection, (), {}, stale
-        mounts.append(Mount(rules, "/rules", True))
+        if not all((rules / name).is_file() for name in names):
+            return selection, (), {}, "supplied Semgrep rule bundle is unavailable"
+        mounts.append(Mount(rules, "/rules", True, supplied_platform=True))
     if adapter.tool_id == "tool-gitleaks":
         rules = repository / "rules" / "gitleaks"
-        try:
-            lock = json.loads((rules / "rules.lock.json").read_text(encoding="utf-8"))
-            verified = lock.get("schema") == "appsec-review/rule-bundle-lock/1" and \
-                file_sha256(rules / "generic-secrets.toml") == lock["files"]["generic-secrets.toml"]["sha256"]
-        except (OSError, KeyError, ValueError, json.JSONDecodeError):
-            verified = False
-        if not verified:
-            return selection, (), {}, "hash-pinned gitleaks rule bundle is unavailable"
-        mounts.append(Mount(rules, GITLEAKS_RULES_MOUNT, True))
+        if not (rules / "generic-secrets.toml").is_file():
+            return selection, (), {}, "supplied gitleaks rule bundle is unavailable"
+        mounts.append(Mount(rules, GITLEAKS_RULES_MOUNT, True, supplied_platform=True))
     if adapter.tool_id in SEI_CERT_TOOLS:
         verified_pack = _sei_cert_pack(repository)
         if verified_pack is None:
-            return selection, (), {}, "hash-pinned SEI CERT rule pack is unavailable or does not match pack.lock.json"
-        mounts.append(Mount(verified_pack.rules_root, SEI_CERT_MOUNT, True))
+            return selection, (), {}, "supplied SEI CERT rule pack is unavailable"
+        mounts.append(Mount(verified_pack, SEI_CERT_MOUNT, True, supplied_platform=True))
     if adapter.tool_id == "tool-pmd":
         rules = repository / "rules" / "pmd"
         ruleset = rules / "java-security.xml"
-        try:
-            lock = json.loads((rules / "rules.lock.json").read_text(encoding="utf-8"))
-            verified = (lock.get("schema") == "appsec-review/rules-lock/1" and
-                        lock.get("ruleset") == "rules/pmd/java-security.xml" and
-                        file_sha256(ruleset) == lock["sha256"])
-        except (OSError, KeyError, ValueError, json.JSONDecodeError):
-            verified = False
-        if not verified:
-            return selection, (), {}, "hash-pinned PMD security rules are unavailable"
-        mounts.append(Mount(rules, "/rules", True))
+        if not ruleset.is_file():
+            return selection, (), {}, "supplied PMD security rules are unavailable"
+        mounts.append(Mount(rules, "/rules", True, supplied_platform=True))
         file_list = unit.unit_root / "inputs" / "pmd-files.txt"
         file_list.parent.mkdir(parents=True, exist_ok=True)
         file_list.write_text("".join(f"/target/{path}\n" for path in selection.files), encoding="utf-8")
@@ -444,6 +394,8 @@ def _scope_identity(catalog: ScanCatalog, selection: Applicability) -> str:
 def _extra_identity(mounts: tuple[Mount, ...]) -> dict[str, str]:
     identity: dict[str, str] = {}
     for mount in mounts:
+        if mount.supplied_platform:
+            continue
         source = mount.source.resolve()
         if source.is_file():
             identity[mount.target] = file_sha256(source)
@@ -459,14 +411,16 @@ def _extra_identity(mounts: tuple[Mount, ...]) -> dict[str, str]:
 
 def _checkpoint_identity(unit: UnitContext, adapter: ToolAdapter, catalog: ScanCatalog,
                          selection: Applicability, image_id: str, mounts: tuple[Mount, ...]) -> str:
+    from appsec_review.config.assurance import ReviewPolicy
+    policy = getattr(unit.job, "review_policy", ReviewPolicy())
     value = {
         "tool_id": adapter.tool_id, "target_fingerprint": catalog.source_fingerprint,
         "catalog_handoff": catalog.handoff_sha256, "scope": _scope_identity(catalog, selection),
         "image_id": image_id, "adapter": adapter.adapter_identity, "parser": adapter.parser_identity,
         "normalizer": NORMALIZER_IDENTITY, "validator": "static-tool-evidence/2",
         "inputs": _extra_identity(mounts),
-        # Bind the complete verified rule-pack identity, not only the mounted rule files, so a
-        # changed mapping, source index, fixture, or manifest never reuses an older checkpoint.
+        "releases": {key: policy.releases.values.get(key) for key in
+                     ("platform", "validation", adapter.tool_id, f"rules_{adapter.tool_id}")},
         **_rule_pack_identity(unit, adapter),
         "job_settings": dict(unit.job.config.settings),
         "task_settings": dict(unit.job.config.step(unit.step_id).task(unit.task_id).settings),
@@ -910,7 +864,14 @@ def _execute_tool(unit: UnitContext, adapter: ToolAdapter, catalog: ScanCatalog,
         if retry_marker.is_file():
             marker = json.loads(retry_marker.read_text(encoding="utf-8"))
             retry_required = bool(marker.get("retry_required")) and marker.get("checkpoint_identity") == identity
-        checkpoint = None if retry_required else _valid_checkpoint(unit.job.run_root, checkpoint_path)
+        from appsec_review.config.assurance import ReviewPolicy
+        policy = getattr(unit.job, "review_policy", ReviewPolicy())
+        reusable, reason = policy.releases.require(
+            "platform", "validation", adapter.tool_id, f"rules_{adapter.tool_id}")
+        if not reusable:
+            unit.job.events.write("CHECKPOINT_MISSED", unit_id=unit.unit_id,
+                                  tool_id=adapter.tool_id, reason=reason)
+        checkpoint = None if retry_required or not reusable else _valid_checkpoint(unit.job.run_root, checkpoint_path)
         if checkpoint is not None:
             prior = checkpoint["output"]
             unit.job.events.write(
@@ -1280,45 +1241,12 @@ def build_job(*, executor_factory: ExecutorFactory | None = None, fail_tool: str
     units.append(Unit("evidence_publication.publish_handoff", publish,
                       ("evidence_publication.assemble_manifest",)))
     source_files = (Path(__file__), Path(__file__).with_name("adapters.py"), Path(__file__).with_name("evidence.py"))
-    implementation = hashlib.sha256(b"".join(path.read_bytes() for path in source_files) + str(fail_tool).encode()).hexdigest()
+    implementation = None
 
-    def runtime_identity(repository_root: Path) -> str:
-        root = Path(repository_root).resolve()
-        catalog = load_catalog(root)
-        static_tools = {tool_id: tool for tool_id, tool in catalog.tools.items()
-                        if tool.metadata.get("static_adapter", True) is not False}
-        paths = [root / "containers" / "catalog.toml", root / "containers" / "runtime-policy.toml",
-                 root / "rules" / "semgrep" / "security.yml", root / "rules" / "semgrep" / "review-signals.yml",
-                 root / "rules" / "semgrep" / "rules.lock.json",
-                 root / "rules" / "sei-cert" / "pack.lock.json",
-                 root / "data" / "feeds" / "osv" / "current.json",
-                 root / "data" / "feeds" / "grype" / "current.json",
-                 *(tool.manifest_path for tool in static_tools.values())]
-        digest = hashlib.sha256()
-        for path in paths:
-            digest.update(path.relative_to(root).as_posix().encode())
-            digest.update(path.read_bytes() if path.is_file() else b"MISSING")
-        # The lock bytes alone do not show whether the pack still matches them; bind the result of
-        # strict verification so any pack change forces the job to re-run rather than be reused.
-        sei_cert = _sei_cert_pack(root)
-        digest.update(canonical_json(sei_cert.as_record() if sei_cert else {"verified": False}))
-        if executor_factory is None:
-            for tool_id in sorted(static_tools):
-                tool = static_tools[tool_id]
-                inspected = subprocess.run(
-                    ["docker", "image", "inspect", tool.tag, "--format", "{{.Id}}"],
-                    capture_output=True, text=True, encoding="utf-8", errors="replace", check=False,
-                )
-                digest.update(tool_id.encode())
-                digest.update(tool.tag.encode())
-                digest.update(inspected.stdout.strip().encode() if inspected.returncode == 0 else b"UNAVAILABLE")
-        else:
-            digest.update(b"injected-executor")
-        return digest.hexdigest()
 
     return Job("job_evidence_collection", "evidence_collection", UnitExecutor(tuple(units)).execute,
                input_validators=(validate,), schema_identity="appsec-review/evidence-collection-job/1",
                implementation_identity=implementation,
-               validation_identity=hashlib.sha256(Path(__file__).read_bytes() + b"validation").hexdigest(),
-               runtime_identity=runtime_identity, units=tuple(units),
+               validation_identity=None,
+               runtime_identity=None, units=tuple(units),
                datasets=DATASETS, consumes=CONSUMES)

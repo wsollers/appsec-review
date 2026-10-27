@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-import hashlib
-import inspect
 from pathlib import Path
 from typing import Any, Callable, Mapping, Protocol, TYPE_CHECKING
 
 from appsec_review.config import JobConfig, ToolCapabilityConfig
+from appsec_review.config.assurance import ComponentReleases, ReviewPolicy
 from appsec_review.observability import EventLog
 from appsec_review.runtime.datasets import DatasetDeclaration, validate_declarations
 
@@ -31,6 +30,9 @@ class JobContext:
     source_fingerprint: str = "none"
     input_manifest_path: Path | None = None
     input_manifest_sha256: str | None = None
+    review_policy: ReviewPolicy = ReviewPolicy()
+    # Authenticated evidence identity, not permission to read a target checkout.
+    evidence_target_snapshot: str | None = None
 
 
 class JobHandler(Protocol):
@@ -53,8 +55,7 @@ class Job:
     schema_identity: str = "appsec-review/job-result/1"
     implementation_identity: str | None = None
     validation_identity: str | None = None
-    # Identity of runtime assets outside the job's source (tool catalog entries, rule locks), read
-    # from the repository root of the loaded configuration, never the working directory.
+    # Legacy callbacks are not invoked; identities() uses operator declarations only.
     runtime_identity: Callable[[Path], str] | None = None
     units: tuple["Unit", ...] = ()
     result_transform: Callable[[JobContext, Mapping[str, Any]], Mapping[str, Any]] | None = None
@@ -86,32 +87,12 @@ class Job:
     def finalize_result(self, context: JobContext, result: Mapping[str, Any]) -> Mapping[str, Any]:
         return self.result_transform(context, result) if self.result_transform is not None else result
 
-    def identities(self, repository_root: Path) -> Mapping[str, str]:
-        source = Path(__file__).parent.parent
-        publication_revision = hashlib.sha256(b"".join(
-            (source / path).read_bytes() for path in (
-                "storage/shared.py", "storage/feed_provenance.py", "runtime/datasets.py",
-                "runtime/runner.py", "retrieval/index.py"))).hexdigest()
-        def identity(values: tuple[object, ...], explicit: str | None = None) -> str:
-            digest = hashlib.sha256()
-            if explicit is not None:
-                digest.update(explicit.encode())
-            for value in values:
-                value = getattr(value, "__func__", value)
-                try:
-                    payload = inspect.getsource(value).encode()
-                except (OSError, TypeError):
-                    payload = repr(value).encode()
-                digest.update(payload)
-            return digest.hexdigest()
+    def identities(self, repository_root: Path, releases: ComponentReleases | None = None) -> Mapping[str, str]:
+        declared = releases.values if releases is not None else {}
         return {
-            "implementation": identity(
-                (self.handler, Job.execute, publication_revision,
-                 self.runtime_identity(repository_root) if self.runtime_identity is not None else ""),
-                self.implementation_identity,
-            ),
+            "implementation": declared.get(self.job_id, declared.get("platform", "undeclared")),
             "schema": self.schema_identity,
-            "validation": identity((*self.input_validators, *self.output_validators), self.validation_identity),
+            "validation": declared.get("validation", "undeclared"),
         }
 
     def execute(self, context: JobContext) -> Mapping[str, Any]:

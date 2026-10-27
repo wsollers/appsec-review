@@ -78,7 +78,9 @@ class ResumePlanner:
             handoff = json.loads(handoff_path.read_text(encoding="utf-8"))
         except (OSError, KeyError, ValueError, json.JSONDecodeError) as exc:
             return [f"accepted handoff is corrupt: {type(exc).__name__}"], None
-        expected = job.identities(self.config.runtime.repository_root)
+        expected = job.identities(self.config.runtime.repository_root, self.config.review_policy.releases)
+        if "undeclared" in expected.values():
+            return ["missing_release_identity"], handoff_hash
         checks = {
             "handoff schema": (handoff.get("schema"), "appsec-review/job-handoff/1"),
             "status": (handoff.get("status"), "ACCEPTED"),

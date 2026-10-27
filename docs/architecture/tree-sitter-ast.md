@@ -1,14 +1,24 @@
 # Tree-sitter AST production
 
 `job_tree_sitter_ast` is an independent syntax producer. It consumes the accepted review-intake
-target snapshot and target-catalog ownership/topology handoffs; it does not consume CodeQL,
-compiler AST/IR, SAST, or inference output.
+target snapshot and target-catalog ownership/topology handoffs, plus accepted language-build
+outputs when that producer is enabled. It does not consume CodeQL, compiler AST/IR, SAST, or
+inference output. Source-only graphs retain their original prerequisites.
 
 The planner assigns only accepted inventory files to the most-specific accepted component and
 build/source root, then partitions them by language and locked grammar. Each partition has a stable
 scope identity and fingerprint over the target snapshot, exact source hashes, accepted exclusions,
-grammar revision and generated parser hash, container image ID, normalizer version, and bounds.
+declared grammar-lock metadata, container execution image ID, normalizer version, and bounds.
 Changing one partition therefore invalidates only that partition.
+
+Workspace-only generated source uses a bounded lane of accepted artifact identities, not a
+workspace scan. Receipt/manifest validation binds selected customer bytes to their producer;
+detached read-only copies back explicit generated logical paths. Scope and source-backing
+provenance flow through AST/source entities and prioritization into source resolution. Retrieval
+checks the accepted backing's run, target, canonical artifact, hash, size and custody, never
+falling back to a similarly named target file. Supplied-platform roles are excluded before payload
+access. Generated origin alone neither excludes source nor proves delivery; unresolved shipping
+relationships remain gaps.
 
 Large language partitions are deterministically chunked by configured file-count and source-byte
 ceilings. The parser additionally enforces per-file bytes and nodes plus a total node ceiling for
@@ -19,6 +29,7 @@ The only production parser is `tool-tree-sitter`. Its image is assembled from a 
 Python base, hash-locked wheels, and pre-generated Linux grammar libraries. Image assembly verifies
 every cached byte. Review execution is non-root, read-only, network-disabled, capability-free, and
 bounded by the central container policy; it cannot download or compile grammars.
+Those acquisition checks are platform maintenance, not customer-review payload fingerprinting.
 
 The supported grammar contract is closed and identical across planner, parser routing, acquisition,
 and the asset lock: C, C++, C#, Go, Java, JavaScript, Kotlin, PHP, PowerShell, Python, Ruby, Rust, Shell,

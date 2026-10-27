@@ -12,6 +12,7 @@ import xml.etree.ElementTree as ET
 
 from appsec_review.jobs.job_language_build import load_accepted_language_build
 from appsec_review.jobs.job_artifact_indexing import canonical_artifact_identity, load_accepted_artifact_index
+from appsec_review.jobs.job_artifact_indexing.job import canonical_target_artifact_identity
 from appsec_review.retrieval import (EntityKind, EntityRecord, IndexBuilder, IndexIdentity,
     LogicalIdentity, RelationKind, RelationRecord, index_fingerprint, write_manifest)
 from appsec_review.retrieval.index import INDEX_SCHEMA, load_verified_manifest
@@ -22,6 +23,9 @@ from appsec_review.tool_inputs import (
     osv_missing_ecosystems, osv_reported_no_package_sources, partition_artifacts,
 )
 from appsec_review.applicability import ReasonCode
+from appsec_review.jobs.delivery_scope import (
+    POLICY_IDENTITY, analysis_scope, delivery_gap, scope_fields,
+)
 
 from .findings import FINDING_NORMALIZER, RECORD_SCHEMA, scan_records
 from .formats import ArchiveLimits, builtin_observation, classify
@@ -32,7 +36,7 @@ from appsec_review.jobs.job_artifact_security_analysis.datasets import CONSUMES,
 
 SCHEMA = "appsec-review/artifact-security-analysis/1"
 OBSERVATION_SCHEMA = "appsec-review/artifact-security-observation/1"
-PARSER_IDENTITY = "appsec-review/artifact-security-parsers/2"
+PARSER_IDENTITY = "appsec-review/artifact-security-parsers/2+" + POLICY_IDENTITY
 NORMALIZER_IDENTITY = "appsec-review/artifact-security-normalizer/1"
 # The observations shard is a function of the scan results (parser and normalizer identities, which also key the
 # scan checkpoints) and of the splitting of a scan into one summary and per-finding records (``findings.py``).
@@ -94,6 +98,10 @@ def _accepted_artifacts(run_root: Path) -> dict[str, Any]:
         for raw in receipt.get("artifacts", ()):
             if not isinstance(raw, Mapping):
                 raise FrameworkIntegrityError("language-build artifact identity is invalid")
+            from appsec_review.config.assurance import ScopeRole
+            role = ScopeRole(raw.get("scope_role", ScopeRole.UNKNOWN.value))
+            if role is ScopeRole.PLATFORM:
+                raise FrameworkIntegrityError("supplied platform content entered the customer artifact contract")
             path = _safe_file(run_root, raw)
             key = (str(raw.get("sha256", "")), str(raw.get("path", "")))
             if key in seen:
@@ -101,16 +109,33 @@ def _accepted_artifacts(run_root: Path) -> dict[str, Any]:
             seen.add(key)
             canonical = canonical_artifact_identity(str(accepted["source_fingerprint"]),
                                                     str(receipt.get("build_unit_id", "")), raw)
-            artifacts.append({**dict(raw), "producer": producer, "canonical_identity": canonical.value,
+            artifacts.append({**dict(raw), **scope_fields(raw),
+                              "producer": producer, "canonical_identity": canonical.value,
                               "artifact_id": "artifact-" + hashlib.sha256(canonical_json(key)).hexdigest()[:24],
                               "verified_path": path.relative_to(run_root).as_posix()})
+    for raw in indexed.get("target_artifacts", ()):
+        if (not isinstance(raw, Mapping) or raw.get("artifact_origin") != "target-intake"
+                or raw.get("scope_role") != "unknown"
+                or raw.get("source_fingerprint") != accepted["source_fingerprint"]
+                or raw.get("producer", {}).get("handoff_sha256") != indexed.get("target_catalog_handoff_sha256")
+                or not str(raw.get("path", "")).startswith("data/shared/objects/")):
+            raise FrameworkIntegrityError("target artifact intake provenance is invalid")
+        canonical = canonical_target_artifact_identity(str(accepted["source_fingerprint"]), raw)
+        if raw.get("canonical_identity") != canonical.value:
+            raise FrameworkIntegrityError("target artifact index identity changed")
+        from appsec_review.storage.shared import verify_reference
+        path = verify_reference(run_root, raw)
+        key = (str(raw["sha256"]), str(raw["path"]), str(raw["target_relative_path"]))
+        artifacts.append({**dict(raw), **scope_fields(raw), "artifact_id": "artifact-" + hashlib.sha256(
+            canonical_json(key)).hexdigest()[:24], "verified_path": path.relative_to(run_root).as_posix()})
     artifacts.sort(key=lambda item: item["artifact_id"])
     if not has_artifact_shard and (artifacts or indexed.get("artifact_count") != 0 or
                                    indexed.get("artifact_shard_count") != 0):
         raise FrameworkIntegrityError("accepted artifact-indexing manifest has no artifacts shard")
     producer_gaps = [*accepted.get("gaps", ()), *indexed.get("gaps", ())]
+    producer_gaps.extend(gap for artifact in artifacts if (gap := delivery_gap(artifact)))
     if not artifacts:
-        producer_gaps.append("no produced artifacts were available for artifact security analysis")
+        producer_gaps.append("no target or produced artifacts were available for artifact security analysis")
     return {"source_fingerprint": accepted.get("source_fingerprint"),
             "language_build_handoff_sha256": accepted["language_build_handoff_sha256"],
             "artifact_index": artifact_index, "artifacts": artifacts,
@@ -123,6 +148,8 @@ def _support_key(capability: str) -> str | None:
 
 def _artifact_name(artifact: Mapping[str, Any]) -> str:
     """The run-owned file name the scanner is handed (path-declared tools decide by it)."""
+    if artifact.get("artifact_origin") == "target-intake":
+        return PurePosixPath(str(artifact["target_relative_path"])).name
     return PurePosixPath(str(artifact.get("path") or "")).name
 
 
@@ -167,6 +194,15 @@ def _stream(unit: UnitContext, root: Path, name: str, data: bytes, limit: int, t
 
 def _scan_one(unit: UnitContext, artifact: Mapping[str, Any], capability: str,
               runner: ScannerRunner | None) -> dict[str, Any]:
+    allowed, reason = analysis_scope(artifact, capability)
+    if not allowed:
+        raise FrameworkIntegrityError(f"artifact analysis scope excludes {capability}: {reason}")
+    artifact = {**artifact, **scope_fields(artifact)}
+    from appsec_review.config.assurance import ReviewPolicy
+    policy = getattr(unit.job, "review_policy", ReviewPolicy())
+    components = ("platform", "validation", ADAPTERS[capability].tool_id) if capability in ADAPTERS else (
+        "platform", "validation")
+    reusable, reuse_reason = policy.releases.require(*components)
     settings = unit.job.config.settings
     limits = ArchiveLimits(int(settings["archive_member_limit"]), int(settings["archive_expanded_bytes"]),
                            int(settings["archive_member_bytes"]), int(settings["archive_ratio_limit"]),
@@ -184,14 +220,19 @@ def _scan_one(unit: UnitContext, artifact: Mapping[str, Any], capability: str,
         raise FrameworkIntegrityError("scanner identity provider returned an invalid identity")
     fingerprint = hashlib.sha256(canonical_json({"schema": OBSERVATION_SCHEMA,
         "artifact_sha256": artifact["sha256"],
+        "delivery_scope": scope_fields(artifact),
         "artifact_identity": artifact["canonical_identity"], "format": classification,
         "producer": artifact["producer"], "language_build_handoff": unit.output("load.accepted_artifacts")["language_build_handoff_sha256"],
         "artifact_index": unit.output("load.accepted_artifacts")["artifact_index"]["sha256"],
         "scanner": scanner_identity, "resolved_tool_identity": resolved_tool_identity,
+        "component_releases": {key: policy.releases.values.get(key) for key in components},
         "parser": PARSER_IDENTITY, "normalizer": NORMALIZER_IDENTITY,
         "configuration": {key: settings[key] for key in sorted(settings) if key != "scanner_identities"}})).hexdigest()
     checkpoint = unit.job.run_root / "data" / "artifact-security" / "shards" / capability / fingerprint / "result.json"
-    if checkpoint.is_file():
+    if not reusable:
+        unit.job.events.write("CHECKPOINT_MISSED", artifact_id=artifact["artifact_id"],
+                              action=capability, reason=reuse_reason)
+    if reusable and checkpoint.is_file():
         prior = json.loads(checkpoint.read_text(encoding="utf-8"))
         if prior.get("fingerprint") != fingerprint:
             raise FrameworkIntegrityError("artifact-security checkpoint fingerprint changed")
@@ -355,8 +396,17 @@ def build_job(*, scanner_runner: ScannerRunner | None = None) -> Job:
             effective_runner = scanner_runner
             observations, gaps = [], []
             skipped: list[Mapping[str, Any]] = []
+            scope_dispositions: list[Mapping[str, Any]] = []
             key = _support_key(capability)
             for artifact in loaded["artifacts"]:
+                allowed, reason = analysis_scope(artifact, capability)
+                scope_dispositions.append({"artifact_id": artifact["artifact_id"],
+                                           **scope_fields(artifact), "selected": allowed,
+                                           "reason": reason})
+                if not allowed:
+                    continue
+                if gap := delivery_gap(artifact):
+                    gaps.append(gap)
                 path = _safe_file(unit.job.run_root, artifact)
                 classification = classify(path, artifact)
                 if key is not None:
@@ -380,6 +430,7 @@ def build_job(*, scanner_runner: ScannerRunner | None = None) -> Job:
                 gaps.extend(f"{artifact['artifact_id']}: {gap}" for gap in result["gaps"])
             return {"capability": capability, "observations": observations,
                     "observation_count": len(observations), "gaps": gaps,
+                    "scope_dispositions": scope_dispositions,
                     "not_applicable_inputs": not_applicable_summary(skipped),
                     "terminal_status": "COMPLETED_WITH_GAPS" if gaps else "SUCCEEDED" if observations else "NOT_APPLICABLE"}
         return handler
@@ -430,10 +481,18 @@ def build_job(*, scanner_runner: ScannerRunner | None = None) -> Job:
         identity = IndexIdentity("observations", INDEX_SCHEMA, sha, fingerprint,
             path.relative_to(unit.job.run_root).as_posix(), {"job": "job_artifact_security_analysis"},
             tuple(gaps[:1000]), "artifact-security")
-        manifest_path = unit.job.run_root / "data" / "indices" / "manifests" / f"artifact-security-{fingerprint}.json"
+        upstream, _ = load_verified_manifest(
+            unit.job.run_root, unit.job.run_root / loaded["artifact_index"]["path"],
+            loaded["artifact_index"]["sha256"])
+        inherited = [IndexIdentity(**{**item, "gaps": tuple(item.get("gaps", ()))})
+                     for item in upstream["indexes"]
+                     if (item["name"], item.get("shard_id", "default")) !=
+                        (identity.name, identity.shard_id)]
+        manifest_path = (unit.job.run_root / "data" / "indices" / "manifests" /
+                         f"artifact-security-{fingerprint}-full.json")
         if not manifest_path.is_file():
             write_manifest(manifest_path, run_id=unit.job.run_id, target_snapshot=unit.job.source_fingerprint,
-                target_root=unit.job.target_root or unit.job.repository_root, indexes=[identity],
+                target_root=unit.job.target_root or unit.job.repository_root, indexes=[*inherited, identity],
                 upstream_manifests=[loaded["artifact_index"]])
         manifest = _identity(unit.job.run_root, manifest_path)
         load_verified_manifest(unit.job.run_root, manifest_path, manifest["sha256"])
@@ -446,7 +505,8 @@ def build_job(*, scanner_runner: ScannerRunner | None = None) -> Job:
     def publish(unit: UnitContext) -> Mapping[str, Any]:
         loaded, indexed = unit.output("load.accepted_artifacts"), unit.output("index.observations")
         capabilities = {capability: {key: unit.output(f"analyze.{capability}").get(key)
-                        for key in ("observation_count", "gaps", "terminal_status", "not_applicable_inputs")}
+                        for key in ("observation_count", "gaps", "terminal_status", "not_applicable_inputs",
+                                    "scope_dispositions")}
                         for capability in CAPABILITIES}
         document = {"schema": SCHEMA, "source_fingerprint": unit.job.source_fingerprint,
             "language_build_handoff_sha256": loaded["language_build_handoff_sha256"],
@@ -468,9 +528,7 @@ def build_job(*, scanner_runner: ScannerRunner | None = None) -> Job:
     units = (Unit("load.accepted_artifacts", load), *analyze_units,
              Unit("index.observations", index, index_dependencies),
              Unit("acceptance.publish_handoff", publish, ("index.observations",)))
-    implementation = hashlib.sha256(Path(__file__).read_bytes() + Path(__file__).with_name("formats.py").read_bytes() +
-                                    Path(__file__).with_name("scanners.py").read_bytes() +
-                                    Path(__file__).with_name("findings.py").read_bytes()).hexdigest()
+    implementation = None
     return Job("job_artifact_security_analysis", "artifact_security_analysis", UnitExecutor(units).execute,
                input_validators=(_validate_config,), schema_identity=SCHEMA,
                implementation_identity=implementation, validation_identity=implementation, units=units,
