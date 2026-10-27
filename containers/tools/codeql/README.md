@@ -34,6 +34,21 @@ them `appsec-review-codeql:<identity>` and caching their manifest under the job'
 are below; `<build-image>` is an accepted build environment image and `<uid>:<gid>` its numeric
 non-root runtime user.
 
+Both derived-image Dockerfiles make the bundled `/opt/codeql` tree readable and its directories
+searchable with `chmod -R a+rX` before switching users. Upstream precompiled `.qlx` files can be
+owner-only and owned by a different UID. Without this normalization, CodeQL rejects those plans
+with `AccessDeniedException` and recompiles them, which can exhaust the query memory/time budget.
+This does not grant write access or change query contents, the pinned source image, or asset hashes.
+The Dockerfile hash participates in the derived-image identity, so rebuilding uses a new image
+instead of a cached image with the old permissions.
+
+The focused live regression test reads every bundled `.qlx` as non-root UIDs 1000 and 10001 across
+the source-only and build-environment image paths, with a read-only filesystem and no network:
+
+```text
+.venv/bin/python -m pytest -q tests/test_live_codeql_toolchains.py -k precompiled_queries
+```
+
 `Dockerfile` copies `/opt/codeql` from the source image into an accepted build image:
 
 ```text

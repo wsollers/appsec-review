@@ -18,7 +18,7 @@ A CPG that reaches the bound is discarded and the scope publishes an explicit pr
 
 from __future__ import annotations
 
-from concurrent.futures import ThreadPoolExecutor
+from appsec_review.storage.shared import PublicationThreadPoolExecutor as ThreadPoolExecutor
 from dataclasses import asdict
 import hashlib
 import json

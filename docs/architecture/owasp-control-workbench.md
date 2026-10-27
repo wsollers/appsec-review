@@ -82,3 +82,12 @@ response carries run/index identity, pagination, truncation, ambiguity, and cove
 Component-specific fingerprints prevent a changed component from invalidating unrelated component
 shards. Global standards, profile, configuration, retrieval-manifest, model, parser, and guidance
 identities are still visible in dependent publications.
+
+Every shard fingerprint binds its schema, family, logical shard ID, complete records (including
+package IDs and retrieval-manifest paths/hashes), gaps, and caller-supplied provenance inputs.
+Identical publication reuses the same immutable shard. Changed content produces a distinct shard
+even if the batch fingerprint is unchanged on resume; existing shards are never overwritten.
+Conflicting content at the expected fingerprint remains an integrity error. Publication advances
+the accepted manifest pointer only after all shards have published successfully. Older accepted
+manifests remain readable through their recorded paths and SHA-256 hashes; no index migration or
+deletion is needed.

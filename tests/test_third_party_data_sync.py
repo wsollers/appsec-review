@@ -39,7 +39,7 @@ class NvdClient:
         return json.dumps({"format": "NVD_CVE", "version": "2.0", "startIndex": 0, "resultsPerPage": 0,
                            "totalResults": 0, "vulnerabilities": []}).encode()
 
-    def download(self, url, destination, api_key=None):
+    def download(self, url, destination, api_key=None, *, expected_size=None):
         destination.write_bytes(self.compressed)
         return len(self.compressed)
 
@@ -118,6 +118,14 @@ def test_complete_job_runs_all_units_and_places_global_and_run_metadata(tmp_path
     assert (metadata / "jobs" / "job_third_party_data_sync.json").is_file()
     attempt = Path(outcome["attempt_root"])
     assert (attempt / "result.json").is_file()
+    from appsec_review.storage.shared import reference, verify_receipt, verify_handoff
+    run_root = attempt.parents[4]
+    receipts = [verify_receipt(run_root, reference(run_root, path))
+                for path in (attempt / "shared/feed-snapshot").glob("*.json")]
+    expected_feeds = {"nvd", "osv", "mitre", "cve-bin-tool", "kev", "epss"}
+    for mode in ("computed", "reused"):
+        assert {item["computation"]["feed_id"] for item in receipts if item["mode"] == mode} == expected_feeds
+    verify_handoff(run_root, outcome["handoff"])
     assert len(list((attempt / "steps").glob("*/tasks/*/status.json"))) == 18
     settings = OsvSettings.from_mapping(tmp_path, load_config(tmp_path / "appsec-review.toml").job(
         "job_third_party_data_sync").step("osv_sync").settings)

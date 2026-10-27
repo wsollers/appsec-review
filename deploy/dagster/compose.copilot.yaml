@@ -1,0 +1,13 @@
+services:
+  code-location:
+    image: appsec-review-dagster:${APPSEC_DEPLOYMENT_PLATFORM}-copilot
+    build:
+      target: runtime-copilot
+    environment:
+      APPSEC_COPILOT_HOME: /var/copilot-home
+    volumes:
+      - ${APPSEC_COPILOT_CONFIG_DIR:?Sign in with the dedicated Copilot account and run bootstrap.py}:/var/copilot-home
+  webserver:
+    image: appsec-review-dagster:${APPSEC_DEPLOYMENT_PLATFORM}-copilot
+  daemon:
+    image: appsec-review-dagster:${APPSEC_DEPLOYMENT_PLATFORM}-copilot

@@ -15,9 +15,11 @@ from appsec_review.observability import EventLog, PipelineLog, write_run_metrics
 from appsec_review.retrieval.index import MANIFEST_SCHEMA as RETRIEVAL_MANIFEST_SCHEMA
 from appsec_review.retrieval.core import materialize_attempt_input_manifest
 from appsec_review.runtime.resume import ResumePlanner, job_config_sha256
+from appsec_review.runtime.datasets import dataset_contract
 from appsec_review.runtime.job import Job, JobContext
 from appsec_review.runtime.units import UnitContext, UnitExecutor
 from appsec_review.storage import RunStore, FileLock, LockUnavailable, atomic_bytes, atomic_json, file_sha256
+from appsec_review.storage.shared import publication_scope
 
 
 def _accepted_retrieval_manifest(run_root: Path, manifests: list[Mapping[str, Any]]):
@@ -129,8 +131,13 @@ class JobRunner:
             "orchestration": correlation,
             "target_root": str(target_root.resolve()) if target_root else None,
             "source_fingerprint": source_fingerprint,
+            "repository_root": str(self.config.runtime.repository_root),
+            "resolved_config_sha256": self.config.resolved_sha256,
             "upstream_handoffs": dict(upstream_handoffs or {}),
             "input_identity": job.probe_input_identity(target_root),
+            "dataset_contract": dataset_contract(
+                job.job_id, sorted(set(job_config.steps) | {unit.unit_id.split(".")[0] for unit in job.units}),
+                job.datasets),
             "started_at": instant.isoformat(),
         }
         input_manifest_path, input_manifest_sha = materialize_attempt_input_manifest(
@@ -156,8 +163,9 @@ class JobRunner:
         context.events.write("JOB_STARTED", job_id=job.job_id, run_id=run_id, attempt_id=attempt_id,
                              trigger=trigger, orchestration=correlation)
         try:
-            for validator in job.input_validators:
-                validator(context, None)
+            with publication_scope(context):
+                for validator in job.input_validators:
+                    validator(context, None)
         except BaseException as exc:
             self._fail_attempt(context, claim, exc)
             raise
@@ -324,13 +332,13 @@ class JobRunner:
         context.events.write("TASK_STARTED", unit_id=unit_id)
         unit_context = UnitContext(context, unit_id, step_id, task_id, unit_root, MappingProxyType(outputs))
         try:
-            for validator in unit.input_validators:
-                validator(unit_context, None)
-            with unit_scope(run_root=context.run_root, job_id=job.job_id,
+            with publication_scope(context), unit_scope(run_root=context.run_root, job_id=job.job_id,
                             repository_root=context.repository_root, target_root=context.target_root):
+                for validator in unit.input_validators:
+                    validator(unit_context, None)
                 result = dict(unit.handler(unit_context))
-            for validator in unit.output_validators:
-                validator(unit_context, result)
+                for validator in unit.output_validators:
+                    validator(unit_context, result)
             atomic_json(result_path, result)
             completed = datetime.now(timezone.utc).isoformat()
             receipt = {**running, "status": "SUCCEEDED", "completed_at": completed,
@@ -402,9 +410,10 @@ class JobRunner:
                 receipts[unit.unit_id] = receipt
                 outputs[unit.unit_id] = json.loads(result_path.read_text(encoding="utf-8"))
             result = UnitExecutor.summarize(job.units, receipts, outputs)
-            result = dict(job.finalize_result(context, result))
-            for validator in job.output_validators:
-                validator(context, result)
+            with publication_scope(context):
+                result = dict(job.finalize_result(context, result))
+                for validator in job.output_validators:
+                    validator(context, result)
             atomic_json(context.attempt_root / "result.json", result)
             return self._publish_attempt(job, context, claim, result)
         except BaseException as exc:
@@ -429,6 +438,9 @@ class JobRunner:
         result_path = context.attempt_root / "result.json"
         artifacts = [{"path": result_path.relative_to(context.run_root).as_posix(),
                       "sha256": file_sha256(result_path), "size_bytes": result_path.stat().st_size}]
+        claim_path = context.attempt_root / "claim.json"
+        artifacts.append({"path": claim_path.relative_to(context.run_root).as_posix(),
+                          "sha256": file_sha256(claim_path), "size_bytes": claim_path.stat().st_size})
 
         def collect(value: Any) -> None:
             if isinstance(value, Mapping):
@@ -448,6 +460,8 @@ class JobRunner:
                 for child in value:
                     collect(child)
         collect(result)
+        from appsec_review.storage.shared import attempt_artifacts
+        collect(attempt_artifacts(context.run_root, context.attempt_root))
         handoff_outputs = {}
         for unit_id, output in result.get("outputs", {}).items():
             if isinstance(output, Mapping):

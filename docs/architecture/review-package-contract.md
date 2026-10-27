@@ -1,7 +1,7 @@
 # Review package and finding-lead contract
 
 Status: implementation contract. Inference review packages are schema version 6
-(`appsec-review/review-package/6`, assembly rule `assemble-review-packages/7`); the catalog-derived
+(`appsec-review/review-package/6`, assembly rule `assemble-review-packages/8`); the catalog-derived
 document packages below stay at version 3. Accepted-manifest scope assembly, lane A
 finding-lead packages for every lead family, lane B review-unit ranking and hunt packages,
 membership audits and the package manifest are implemented in `src/appsec_review/review/`
@@ -47,7 +47,7 @@ exact route registration is not proof of control enforcement.
 | `persona`, `stack_profile` | Always `null` at assembly. Routing fills them later; assembly never guesses them. |
 | `evidence`, `context` | Accepted observation, priority, CodeQL, source, build and precomputed shard identities; `find`, `trace`, `resolve_evidence`, `query_codeql`, `query_hotspots`, `query_precomputed`. A cited relation is a nomination until it resolves to a source line or hash-verified run artifact. |
 | `proof_obligations` | Deterministic rule table keyed by lead class and observed prerequisites: affected construct, input control, reachability, guard/configuration state, and impact. Missing predicates stay open; model prose cannot close them. |
-| `coverage_gaps` | Accepted index coverage, dataset inventory, query-set and language/build-unit cells; `coverage`, `query_dataset_inventory`. A failed, absent or skipped producer is a named gap. |
+| `coverage_gaps` | Finding-local observation gaps, exact artifact/tool scan-summary gaps, explicit build/link mapping limitations, joined advisory-feed gaps and scoped context limitations. Family-wide and run-wide limitations remain in the assembly manifest, not copied onto every finding. A failed, absent or skipped producer is a named gap, not a vulnerability or a statement that another tool failed. |
 | `retrieval` | Intersection of accepted package identities, available index names, query sets and configured caps, plus `graph_families` (v4): the code-graph families accepted for the package scope, and `graph_scopes` (v4): the CodeQL scope ids of those facts, which bound every capability's scope-checked graph grant. These are grants proposed by assembly, not an MCP authorization token. |
 
 Each `context` entry is typed `{id, kind, role}`. `kind` is the retrieval entity kind of `id`.
@@ -59,6 +59,28 @@ wiring, `review/units.py` also emits `test_coverage`, `profile_hotspot`, `depend
 `job_dependency_intelligence` producers registered in `review/scope.py`. They are named once in
 `review/units.py::SIGNAL_CONTEXT_ROLES`, and `review-packages.schema.json` enumerates them for
 `inference_context.role`; `tests/review/test_packages.py` keeps the two in step.
+
+### Artifact-local evidence and coverage
+
+Assembly rule 8 adds optional `lead_menu[].artifacts`, resolved through accepted observation-to-artifact
+relations. It preserves the artifact identity, name, workspace and run-owned paths, hash and build unit.
+Lane A also includes accepted `GENERATED_FROM` and `LINKS_INTO` provenance with direction, exactness,
+confidence and ambiguity. Build commands come only from accepted `build_provenance` safe ordered tokens;
+raw argv, environment values and protected capture files are not read by package assembly. Command
+text is bounded to 1024 characters and command/relation lists to `max_context_entries`, with explicit
+truncation gaps and references for retrieval. No accepted link-use relation means **unknown**, not
+unused; an ambiguous producing-action mapping is not promoted to exact compiler/linker attribution.
+
+An artifact's scan-summary gaps retain the scanner identity and exact artifact identity. A Grype
+SBOM gap on one DLL neither invalidates a successful Blint observation nor applies to other DLLs.
+Global index/dataset coverage remains complete in the assembly manifest; gaps are not synthesized
+into vulnerability findings. Binary-only leads do not acquire source-code graph or source-text gaps
+merely because they have no source line. The model-facing view shows the artifact identity and
+available safe command/link context instead.
+
+Hunt menus carry compact artifact identity records with omitted-provenance counts, as they do compact
+advisory summaries. Each hunt partition grants only the artifacts of its own leads, not all artifacts
+of an unlocated unit. The configured package byte ceiling and membership gates are unchanged.
 
 ### Code-graph context (version 4)
 
@@ -77,9 +99,9 @@ applying shard covers it in any state but `unavailable`.
   round-robin by (role, class) in identity order within whatever `max_context_entries` leaves after
   the unit's other context; the rest are counted in `omitted_context` with a `code_graph`
   `truncated` gap.
-- `coverage_gaps` carry the scope's `code_graph` lane: `partial` for families covered only
+- `coverage_gaps` carry the applicable source scope's `code_graph` lane: `partial` for families covered only
   partially and `unavailable` for families with no accepted coverage. Without any accepted `graph`
-  index every package carries a `code_graph` `missing` gap, and the accepted scope's `code_graph`
+  index source-oriented packages carry a `code_graph` `missing` gap, and the accepted scope's `code_graph`
   producer (`review/scope.py`) adds the run-level one.
 - `retrieval.graph_families` also decides lane B strategies: `sink_site` provides
   `source_sink_facts` (`sink_up`) and `entry_point` provides `entry_point_catalog` (`entry_down`)

@@ -16,7 +16,8 @@ from uuid import uuid4
 
 from run_report import QUERY as RUNS_QUERY
 from verify import request_json
-from host import actual_platform, project_name, reject_other_deployments, validate_deployment
+from host import (actual_platform, deployment_profile, project_name, provider_overlay,
+                  reject_other_deployments, validate_deployment)
 
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -27,7 +28,7 @@ FEEDS = {"nvd_sync", "osv_sync", "mitre_sync", "kev_sync", "epss_sync", "cve_bin
 
 
 def compose(platform: str) -> list[str]:
-    overlay = "compose.windows.yaml" if platform == "windows" else "compose.claude.yaml"
+    overlay = provider_overlay(platform, deployment_profile(DEPLOYMENT / ".env"))
     return ["docker", "compose", "--env-file", str(DEPLOYMENT / ".env"),
             "-f", str(DEPLOYMENT / "compose.yaml"), "-f", str(DEPLOYMENT / overlay)]
 
@@ -57,7 +58,19 @@ def check_config(platform: str) -> dict:
         expected = str(ROOT / target.rsplit("/", 1)[-1])
         if os.path.normcase(os.path.normpath(source)) != os.path.normcase(os.path.normpath(expected)):
             raise RuntimeError(f"{target} must bind this host's checkout: {expected}")
-    if platform == "windows":
+    if deployment_profile(DEPLOYMENT / ".env") in {"copilot-dev", "copilot-prod"}:
+        if code["build"].get("target") != "runtime-copilot":
+            raise RuntimeError("Copilot code-location image does not install the SDK runtime")
+        mount = mounts.get("/var/copilot-home")
+        if not mount or not Path(mount["source"]).is_dir():
+            raise RuntimeError("Copilot requires the dedicated worker login directory")
+        if platform == "wsl" and not Path(mount["source"]).resolve().is_relative_to(Path.home().resolve()):
+            raise RuntimeError("Copilot worker login must be stored in the WSL home filesystem")
+        if code["environment"].get("APPSEC_COPILOT_HOME") != "/var/copilot-home":
+            raise RuntimeError("Copilot authentication directory is not configured")
+        if any(target in mounts for target in ("/usr/local/bin/claude", "/tmp/.claude", "/tmp/.claude.json")):
+            raise RuntimeError("Copilot Compose must not require Claude authentication")
+    elif platform == "windows":
         if any(services[name].get("user") != "0:0" for name in ("code-location", "webserver", "daemon")):
             raise RuntimeError("Windows services must ignore Linux uid/gid values in the shared environment")
         if any(target in mounts for target in ("/usr/local/bin/claude", "/tmp/.claude", "/tmp/.claude.json")):
@@ -75,7 +88,9 @@ def check_config(platform: str) -> dict:
                 raise RuntimeError(f"{target} must bind a real Linux {kind}")
             if platform == "wsl" and not source.resolve().is_relative_to(Path.home().resolve()):
                 raise RuntimeError(f"{target} must be stored in the WSL home filesystem")
-    return {"platform": platform, "services": sorted(services), "cli": "container" if platform == "windows" else "host-bind"}
+    return {"platform": platform, "services": sorted(services),
+            "cli": ("copilot-sdk" if deployment_profile(DEPLOYMENT / ".env") in {"copilot-dev", "copilot-prod"}
+                    else "container" if platform == "windows" else "host-bind")}
 
 
 @contextmanager
@@ -116,6 +131,10 @@ def reject_contention(url: str, platform: str) -> None:
 
 def check_cli(platform: str) -> None:
     prefix = compose(platform) + ["exec", "-T", "code-location"]
+    if deployment_profile(DEPLOYMENT / ".env") in {"copilot-dev", "copilot-prod"}:
+        run(prefix + ["python", "-c",
+                      "from appsec_review.inference.copilot_sdk import verify; verify()"], capture=True)
+        return
     run(prefix + ["claude", "--version"])
     # Match the model transport: an optional API key must not mask subscription state.
     auth = run(prefix + ["env", "-u", "ANTHROPIC_API_KEY", "claude", "auth", "status"], capture=True)

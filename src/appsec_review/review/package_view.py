@@ -33,7 +33,7 @@ from appsec_review.review.neighborhood import function_extent, type_names
 from appsec_review.review.secret_redaction import redact_source_line
 
 VIEW_SCHEMA = "appsec-review/review-package-view/1"
-VIEW_RULE = "appsec-review/package-view/2"
+VIEW_RULE = "appsec-review/package-view/3"
 GAP_VIEW_RULE = "appsec-review/package-gap-view/1"
 PROTOCOL = "review-protocol/2"
 MAX_INLINE_GAPS = 12
@@ -187,6 +187,8 @@ class _Builder:
                 row["advisory"] = lead.get("advisory_context")
             elif lead.get("advisory_summary") is not None:
                 row["advisory"] = lead.get("advisory_summary")
+            if lead.get("artifacts"):
+                row["artifacts"] = lead["artifacts"]
             rows.append(row)
         return rows
 
@@ -195,6 +197,8 @@ class _Builder:
         if self.package.get("kind") != "finding_lead" or len(leads) != 1:
             return [], []
         lead = leads[0]
+        if lead.get("artifacts") and not lead["where"].get("path"):
+            return [], []
         gaps: list[str] = []
         function = self.neighborhood.get("function")
         located, reason = self.source(lead["ref"])
@@ -321,6 +325,7 @@ def build_view(package: Mapping[str, Any], core: Any, limits: ViewLimits) -> Pac
 
     # Gaps: material ones inline (bounded), everything else in the hash-referenced file.
     terms = {str(item) for item in builder.locator_paths} | {lead["ref"] for lead in leads} | neighborhood_refs
+    terms.update(scope.get("artifact_ids", ()))
     terms |= {str(scope.get("build_unit_id"))} if scope.get("build_unit_id") else set()
     if nb.get("function") and len(nb["function"]["name"]) >= 4:
         terms.add(nb["function"]["name"])

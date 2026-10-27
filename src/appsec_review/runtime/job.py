@@ -87,6 +87,11 @@ class Job:
         return self.result_transform(context, result) if self.result_transform is not None else result
 
     def identities(self, repository_root: Path) -> Mapping[str, str]:
+        source = Path(__file__).parent.parent
+        publication_revision = hashlib.sha256(b"".join(
+            (source / path).read_bytes() for path in (
+                "storage/shared.py", "storage/feed_provenance.py", "runtime/datasets.py",
+                "runtime/runner.py", "retrieval/index.py"))).hexdigest()
         def identity(values: tuple[object, ...], explicit: str | None = None) -> str:
             digest = hashlib.sha256()
             if explicit is not None:
@@ -101,7 +106,7 @@ class Job:
             return digest.hexdigest()
         return {
             "implementation": identity(
-                (self.handler, Job.execute,
+                (self.handler, Job.execute, publication_revision,
                  self.runtime_identity(repository_root) if self.runtime_identity is not None else ""),
                 self.implementation_identity,
             ),

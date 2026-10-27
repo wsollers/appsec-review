@@ -4,6 +4,7 @@
 # Mutable NVD feed state is published locally and never committed. The feed
 # contract and operator README remain tracked under data/feeds/nvd/.
 /data/feeds/nvd/blobs/
+/data/feeds/nvd/downloads/
 /data/feeds/nvd/staging/
 /data/feeds/nvd/snapshots/
 /data/feeds/nvd/locks/

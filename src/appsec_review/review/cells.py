@@ -185,12 +185,11 @@ def run_cell(spec: CellSpec, *, infer: Infer, core: Any, capability: CellCapabil
     """Run one cell to exactly one terminal status, retrying per policy without widening it."""
     cell_id = _bind(spec, capability, core)
     cell_root = Path(receipts_root) / cell_id
-    number = max(_attempt_numbers(cell_root), default=0)
     attempts: list[_Attempt] = []
     paths: list[Path] = []
     repair: tuple[str, ...] = ()
     for _ in range(max(1, int(max_attempts))):
-        number += 1
+        number = _reserve_number(cell_root)
         attempt = _run_attempt(spec, cell_id, number, infer=infer, core=core, capability=capability,
                                validate_final=validate_final, repair_errors=repair)
         attempts.append(attempt)
@@ -238,6 +237,10 @@ def reuse_or_run(spec: CellSpec, *, infer: Infer, core: Any, capability: CellCap
             break
         gaps = tuple(Gap(item["gap_id"], GapClass(item["gap_class"]), cell_id, item["reason"],
                          round=spec.round) for item in receipt["gaps"])
+        from appsec_review.storage.shared import current, consume_named
+        owner = current()
+        if owner is not None:
+            consume_named(owner.run_root, path, namespace="review-cell")
         return CellOutcome(
             record=_record(spec, cell_id, CellStatus.SUCCEEDED, number, gaps, path),
             result=result, gaps=gaps, security_events=tuple(receipt["security_events"]),
@@ -690,10 +693,25 @@ def _record(spec: CellSpec, cell_id: str, status: CellStatus, attempts: int, gap
 
 
 def _attempt_numbers(cell_root: Path) -> list[int]:
+    from appsec_review.storage.shared import current, safe_path
+    owner = current()
+    if owner is not None:
+        safe_path(owner.run_root, cell_root.relative_to(owner.run_root).as_posix())
     if not cell_root.is_dir():
         return []
     return [int(match.group(1)) for path in cell_root.iterdir()
             if (match := _ATTEMPT_FILE.fullmatch(path.name))]
+
+
+def _reserve_number(cell_root: Path) -> int:
+    number = max(_attempt_numbers(cell_root), default=0) + 1
+    cell_root.mkdir(parents=True, exist_ok=True)
+    while True:
+        try:
+            (cell_root / f".reservation-{number}").mkdir()
+            return number
+        except FileExistsError:
+            number += 1
 
 
 def _write_receipt(cell_root: Path, spec: CellSpec, cell_id: str, capability: CellCapability,
@@ -704,7 +722,7 @@ def _write_receipt(cell_root: Path, spec: CellSpec, cell_id: str, capability: Ce
     gaps = list(attempt.gaps)
     if attempt.status is not CellStatus.SUCCEEDED:
         gaps.append(_gap(cell_id, spec, attempt.number, "terminal", attempt.gap_class, attempt.reason))
-    atomic_json(path, {
+    document = {
         "schema": RECEIPT_SCHEMA, "cell_id": cell_id, "attempt": attempt.number,
         "attempt_id": f"{cell_id}/attempt-{attempt.number}",
         "executor_version": EXECUTOR_VERSION, "validator_version": spec.validator_version,
@@ -726,7 +744,16 @@ def _write_receipt(cell_root: Path, spec: CellSpec, cell_id: str, capability: Ce
         "repair_errors": list(attempt.repair_errors),
         "result": attempt.result,
         "result_sha256": sha256_hex(attempt.result) if attempt.result is not None else None,
-    })
+    }
+    from appsec_review.storage import canonical_json
+    from appsec_review.storage.shared import current, publish_named
+    owner = current()
+    publish_named(owner.run_root if owner is not None else cell_root.parent, path,
+                  canonical_json(document), namespace="review-cell", computation={
+                      "cell_fingerprint": cell_id, "executor_version": EXECUTOR_VERSION,
+                      "validator_version": spec.validator_version,
+                      "guidance_sha256": spec.guidance_bundle_sha256,
+                      "provider": spec.provider, "model": spec.model})
     return path
 
 

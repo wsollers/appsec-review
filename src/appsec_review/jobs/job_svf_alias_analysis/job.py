@@ -11,7 +11,7 @@ finding, and a module that is not closed-world says so on every record it publis
 
 from __future__ import annotations
 
-from concurrent.futures import ThreadPoolExecutor
+from appsec_review.storage.shared import PublicationThreadPoolExecutor as ThreadPoolExecutor
 from dataclasses import asdict
 import hashlib
 import json

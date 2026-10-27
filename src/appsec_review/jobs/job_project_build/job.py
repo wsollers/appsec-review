@@ -616,17 +616,18 @@ def _repair_guidance(unit: UnitContext, family: str, model: Mapping[str, Any]) -
     persona = (prompt_root / "personas" / "devops-engineer.md").read_text(encoding="utf-8")
     role = (prompt_root / "roles" / f"build-engineer-{family}.md").read_text(encoding="utf-8")
     guidance = load_runtime_skill(repository, "build-image-repair", job_id="job_project_build").text
-    identity = hashlib.sha256(persona.encode() + b"\0" + role.encode() + b"\0" + guidance.encode()).hexdigest()
+    from appsec_review.storage.shared import publish_named
+    model_identity = {"provider": str(model["provider"]), "model": str(model["model"]),
+                      "reasoning": str(model["reasoning"]), "persona": "devops_engineer",
+                      "role": f"build_engineer_{family}", "task": "build_image_repair"}
+    identity = hashlib.sha256(persona.encode() + b"\0" + role.encode() + b"\0" + guidance.encode()
+                              + b"\0" + canonical_json(model_identity)).hexdigest()
     bundle = unit.job.run_root / "data" / "guidance" / identity
-    atomic_bytes(bundle / "persona.md", persona.encode("utf-8"))
-    atomic_bytes(bundle / "role.md", role.encode("utf-8"))
-    atomic_bytes(bundle / "task.md", guidance.encode("utf-8"))
-    atomic_json(bundle / "model-identity.json", {
-        "provider": str(model["provider"]), "model": str(model["model"]),
-        "reasoning": str(model["reasoning"]), "guidance_sha256": identity,
-        "persona": "devops_engineer", "role": f"build_engineer_{family}",
-        "task": "build_image_repair",
-    })
+    for name, payload in {"persona.md": persona.encode(), "role.md": role.encode(),
+                          "task.md": guidance.encode(), "model-identity.json": canonical_json({
+                              **model_identity, "guidance_sha256": identity})}.items():
+        publish_named(unit.job.run_root, bundle / name, payload, namespace="guidance",
+                      computation=model_identity)
     return persona, role, guidance, identity
 
 

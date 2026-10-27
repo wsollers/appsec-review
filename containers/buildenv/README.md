@@ -26,6 +26,14 @@ image, each installing exact-version apt packages (including the same `strace` 6
 Ubuntu 24.04 versions; downloaded release assets are listed with their size and SHA-256 in an
 `assets.lock.json` and verified before use.
 
+The shared native toolchain, its six derived family images, Java and .NET use Ubuntu's
+`20261015T070000Z` signed archive snapshot: the live archive no longer retains every pinned
+package version. The three parent Dockerfiles bootstrap HTTPS certificate trust from the same
+digest-pinned Python image used by `base-python`, then install the original pinned Ubuntu
+certificate package. TLS checks and APT signature verification remain enabled. Snapshot selection
+is inherited by the native toolchain's family images; package versions and asset hashes are
+unchanged. Updating this archive date requires rebuilding and checking all affected families.
+
 Build them in dependency order (the builder resolves `dependencies`):
 
 ```sh

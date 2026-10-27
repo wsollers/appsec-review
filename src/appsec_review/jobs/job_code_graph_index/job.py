@@ -30,7 +30,7 @@ docs/architecture/code-graph-precomputation.md (D4, sections 7.1 to 7.4) is norm
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
-from concurrent.futures import ThreadPoolExecutor
+from appsec_review.storage.shared import PublicationThreadPoolExecutor as ThreadPoolExecutor
 from dataclasses import asdict
 import hashlib
 from pathlib import Path

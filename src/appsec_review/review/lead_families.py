@@ -232,6 +232,7 @@ class Lead:
     triage_gap: str | None = None
     triage_reason: str | None = None
     severity_references: tuple[Mapping[str, Any], ...] = field(default=(), compare=False, hash=False)
+    coverage_gaps: tuple[ScopeGap, ...] = ()
 
     @property
     def effective_severity(self) -> str:
@@ -597,7 +598,9 @@ def collect_leads(scope: AcceptedScope, triage: Mapping[str, LeadTriage] | None 
                 suppression_status=str(state.get("suppression_status") or "unknown"),
                 duplicate_of=state.get("duplicate_of") if isinstance(state.get("duplicate_of"), str) else None,
                 flow_ids=tuple(sorted(str(item) for item in state.get("flow_ids") or ())),
-                related=related, advisory=context))
+                related=related, advisory=context,
+                coverage_gaps=tuple(ScopeGap(scanner_of(payload), row["identity"], "partial", gap)
+                                    for gap in payload.get("gaps", ()) if isinstance(gap, str) and gap)))
 
     for shard in scope.producer("post_build_hardening").shards:
         for row in scope.store.entities((shard,), kinds=("tool_observation",)):

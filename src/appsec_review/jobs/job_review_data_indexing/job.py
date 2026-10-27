@@ -22,6 +22,7 @@ from typing import Any
 from appsec_review.indexing import input_matrix, matrix, products
 from appsec_review.indexing import fts_worker
 from appsec_review.indexing.derive import Derived, publish_derived
+from appsec_review.storage.shared import SharedArtifacts
 from appsec_review.indexing.inventory import InventoryInputs, build_inventory, dataset_id
 from appsec_review.indexing.links import LINK_RULES, LinkContext, rule_versions
 from appsec_review.indexing.build_facts import build_command_facts, capture_events
@@ -41,7 +42,7 @@ from .datasets import CONSUMES, DATASETS
 
 JOB_ID = "job_review_data_indexing"
 SCHEMA = "appsec-review/review-data-indexing/1"
-INVENTORY_RULE = "appsec-review/dataset-inventory-index/1"
+INVENTORY_RULE = "appsec-review/dataset-inventory-index/2"
 PRODUCT_SETS = ("build_provenance", "artifact_inventory", "dependency_advisories", "scanner_correlation",
                 "ci_trust", "history_context", "control_evidence", "reference_intelligence", "symbol_links",
                 "document_context")
@@ -49,17 +50,16 @@ TOPOLOGY = {"load": ("accepted_inputs",), "links": ("cross_domain",), "precomput
             "fts": ("image_validation",), "audit": ("inventory",), "matrix": ("coverage",),
             "publish": ("inventory_index",)}
 Providers = Callable[[], tuple[tuple[str, ...], Mapping[str, Sequence[Any]], Mapping[str, Sequence[str]]]]
+DOWNSTREAM_JOBS = frozenset({
+    "job_review_package_assembly", "job_document_issue_analysis", "job_inference_security_review",
+    "job_final_publication_gate", "job_poc_generation", "job_final_report_publication",
+})
 
 
 def registry_providers() -> tuple[tuple[str, ...], dict[str, tuple[Any, ...]], dict[str, tuple[str, ...]]]:
-    """Jobs in the accepted index stage, their datasets, and consumed upstream jobs."""
+    """All registered file owners, their datasets, and consumed upstream jobs."""
     from appsec_review.runtime.registry import builtin_registry
-    # These consumers run after the index is accepted. Auditing them here would put false
-    # unavailable-output gaps into the very manifest they consume.
-    job_ids = tuple(job_id for job_id in builtin_registry().job_ids()
-                    if job_id not in {"job_review_package_assembly", "job_document_issue_analysis",
-                                      "job_inference_security_review", "job_final_publication_gate",
-                                      "job_poc_generation", "job_final_report_publication"})
+    job_ids = tuple(builtin_registry().job_ids())
     declarations: dict[str, tuple[Any, ...]] = {}
     consumes: dict[str, tuple[str, ...]] = {}
     for job_id in job_ids:
@@ -91,7 +91,7 @@ def _resolved_document(run_root: Path) -> dict[str, Any]:
     return json.loads((configuration / "resolved.json").read_text(encoding="utf-8"))
 
 
-def _resolved_steps(run_root: Path) -> dict[str, list[str]]:
+def _resolved_steps(run_root: Path, *, include_disabled: bool = False) -> dict[str, list[str]]:
     configuration = run_root / "data" / "configuration"
     manifest = json.loads((configuration / "manifest.json").read_text(encoding="utf-8"))
     if file_sha256(configuration / "resolved.json") != manifest.get("resolved_sha256"):
@@ -99,7 +99,7 @@ def _resolved_steps(run_root: Path) -> dict[str, list[str]]:
     document = json.loads((configuration / "resolved.json").read_text(encoding="utf-8"))
     return {job_id: list((value.get("steps") or {}).keys())
             for job_id, value in sorted((document.get("jobs") or {}).items())
-            if resolved_job_is_enabled(job_id, value)}
+            if include_disabled or resolved_job_is_enabled(job_id, value)}
 
 
 FEED_STEPS = {"nvd": "nvd_sync", "osv": "osv_sync", "mitre": "mitre_sync", "cve-bin-tool": "cve_bin_tool_db_build",
@@ -151,6 +151,7 @@ def feed_pins(repository_root: Path, resolved: Mapping[str, Any], max_age_days: 
         pins[feed] = {"feed_id": feed, "status": "pinned", "snapshot_id": verified["snapshot_id"],
                       "manifest_sha256": verified["manifest_sha256"], "directory": verified["directory"],
                       "published_at": published, "stale": age is None or age > bound, "max_age_days": bound,
+                      **({"provenance": verified["provenance"]} if "provenance" in verified else {}),
                       "files": {logical: (entry.get("sha256") if isinstance(entry, Mapping) else entry)
                                 for logical, entry in (manifest.get("files") or {}).items()}}
     return pins
@@ -238,10 +239,12 @@ def build_job(*, providers: Providers = registry_providers,
         if manifest.get("target_snapshot") != unit.job.source_fingerprint:
             raise ValueError("accepted index snapshot differs from the graph target snapshot")
         job_ids, declarations, consumes = providers()
+        file_job_steps = {job_id: steps for job_id, steps in _resolved_steps(
+            run_root, include_disabled=True).items() if job_id in job_ids}
         resolved_jobs = (_resolved_document(run_root).get("jobs") or {})
         disabled = {job_id for job_id, value in resolved_jobs.items()
                     if not resolved_job_is_enabled(job_id, value)}
-        active = set(_resolved_steps(run_root))
+        active = set(_resolved_steps(run_root)) - DOWNSTREAM_JOBS
         job_ids = tuple(job_id for job_id in job_ids if job_id in active)
         declarations = {job_id: values for job_id, values in declarations.items() if job_id in active}
         consumes = {job_id: tuple(upstream for upstream in values if upstream in active)
@@ -253,9 +256,7 @@ def build_job(*, providers: Providers = registry_providers,
             if run_root.resolve() not in candidate.parents or file_sha256(candidate) != shard["sha256"]:
                 raise ValueError(f"restored shard failed verification: {'/'.join(shard_key(shard))}")
         job_steps = {job_id: steps for job_id, steps in _resolved_steps(run_root).items()
-                     if job_id not in {"job_review_package_assembly", "job_document_issue_analysis",
-                                       "job_inference_security_review", "job_final_publication_gate",
-                                       "job_poc_generation", "job_final_report_publication"}}
+                     if job_id not in DOWNSTREAM_JOBS}
         feeds = feed_pins(unit.job.repository_root, _resolved_document(run_root),
                           int(settings_of(unit)["feed_max_age_days"]),
                           max_age_overrides={str(key): int(value) for key, value in dict(
@@ -266,6 +267,7 @@ def build_job(*, providers: Providers = registry_providers,
             "accepted_manifest": {"path": manifest_path.relative_to(run_root).as_posix(), "sha256": manifest_sha},
             "shards": accepted, "restored_shards": restored, "shard_conflicts": conflicts,
             "registry_jobs": list(job_ids), "registry_configuration_mismatch": mismatch, "job_steps": job_steps,
+            "file_job_steps": file_job_steps,
             "disabled_jobs": sorted(disabled),
             "declarations": {job_id: [item.output_kind for item in values] for job_id, values in declarations.items()},
             "consumes": {job_id: list(values) for job_id, values in consumes.items()},
@@ -298,7 +300,7 @@ def build_job(*, providers: Providers = registry_providers,
                 snapshot=document["target_snapshot"],
                 inputs={"shards": ShardSet.identities(selected), "max_links": context.max_links},
                 build=lambda rule=rule, selected=selected: rule.build(context, selected),
-                producer={"link_family": rule.family}))
+                producer={"link_family": rule.family}, shared=SharedArtifacts.for_job(unit.job)))
         gaps = [f"links/{item['rule']}: {gap}" for item in published for gap in item["gaps"]]
         return {"links": published, "gaps": gaps,
                 "terminal_status": "COMPLETED_WITH_GAPS" if gaps else "SUCCEEDED"}
@@ -366,7 +368,8 @@ def build_job(*, providers: Providers = registry_providers,
                 build = lambda: rule.build(context, selected)
             published = publish_derived(run_root, index="precomputed", shard_id=f"qs-{query_set}", job_id=JOB_ID,
                                         unit_id=unit.unit_id, rule=query_set, rule_version=version, snapshot=snapshot,
-                                        inputs=inputs, build=build, producer={"query_set": query_set})
+                                        inputs=inputs, build=build, producer={"query_set": query_set},
+                                        shared=SharedArtifacts.for_job(unit.job))
             status = {"SUCCEEDED": "complete", "UNAVAILABLE": "unavailable"}.get(published["terminal_status"], "partial")
             unit.job.events.write("PRECOMPUTED_PRODUCT_PUBLISHED", query_set=query_set, status=status,
                                   fact_count=published["counts"].get("entities", 0), reused=published["reused"])
@@ -415,6 +418,8 @@ def build_job(*, providers: Providers = registry_providers,
         settings = settings_of(unit)
         run_root = unit.job.run_root
         _job_ids, declarations, consumes = providers()
+        file_job_steps = document["file_job_steps"]
+        file_declarations = {job_id: values for job_id, values in declarations.items() if job_id in file_job_steps}
         active = set(document["registry_jobs"])
         declarations = {job_id: values for job_id, values in declarations.items() if job_id in active}
         consumes = {job_id: tuple(upstream for upstream in values if upstream in active)
@@ -425,7 +430,8 @@ def build_job(*, providers: Providers = registry_providers,
             job_steps=document["job_steps"], declarations=declarations, consumes=consumes, handoffs=handoffs,
             unit_statuses=document["unit_statuses"], shards=[*document["shards"], *document["restored_shards"]],
             restored_shards=document["restored_shards"], shard_conflicts=document["shard_conflicts"],
-            max_files=int(settings["max_run_files"])))
+            max_files=int(settings["max_run_files"]),
+            file_job_steps=file_job_steps, file_declarations=file_declarations))
         violations = inventory["audit"]["violations"]
         for job_id in document["registry_configuration_mismatch"]:
             violations.append({"code": "registry_configuration_mismatch", "job_id": job_id, "subject": job_id,
@@ -439,10 +445,12 @@ def build_job(*, providers: Providers = registry_providers,
         atomic_json(path, inventory)
         unit.job.events.write("DATASET_AUDIT_COMPLETED", status=inventory["audit"]["status"],
                               violation_count=len(violations), warning_count=len(inventory["audit"]["warnings"]),
+                              unaccounted_file_count=inventory["run_tree"]["unaccounted_count"],
                               row_count=len(inventory["rows"]))
         if violations:
             codes = sorted({item["code"] for item in violations})
-            raise ValueError(f"dataset publication audit failed ({len(violations)} violations: {', '.join(codes)}); "
+            raise ValueError(f"dataset publication audit failed ({len(violations)} reported violations: "
+                             f"{', '.join(codes)}; {inventory['run_tree']['unaccounted_count']} unaccounted files); "
                              f"report retained at {path.relative_to(run_root).as_posix()}")
         warnings = [f"{item['code']}: {item['detail']}" for item in inventory["audit"]["warnings"]]
         return {"artifact": _artifact(run_root, path), "row_count": len(inventory["rows"]),
@@ -544,7 +552,7 @@ def build_job(*, providers: Providers = registry_providers,
             rule="dataset_inventory", rule_version=INVENTORY_RULE, snapshot=snapshot,
             inputs={"inventory": digest(rows), "audit": digest(inventory["audit"]), "matrices": digest(matrices),
                     "fts": digest(fts_summary)},
-            build=build)
+            build=build, shared=SharedArtifacts.for_job(unit.job))
         manifest_reference = document["accepted_manifest"]
         upstream, _ = load_verified_manifest(run_root, run_root / manifest_reference["path"], manifest_reference["sha256"])
         indexes = [as_identity(item) for item in upstream["indexes"] if item.get("producer", {}).get("job") != JOB_ID]
@@ -581,6 +589,7 @@ def build_job(*, providers: Providers = registry_providers,
                       ("load.accepted_inputs", "links.cross_domain", *product_units, "fts.image_validation",
                        "audit.inventory", "matrix.coverage")))
     sources = sorted([*Path(__file__).parent.glob("*.py"), *Path(__file__).parents[2].joinpath("indexing").glob("*.py"),
+                      Path(__file__).parents[2] / "storage" / "shared.py",
                       Path(__file__).parents[2] / "retrieval" / "observations.py"])
     implementation = hashlib.sha256(b"".join(path.read_bytes() for path in sources)).hexdigest()
     return Job(JOB_ID, "review_data_indexing", UnitExecutor(tuple(units)).execute, input_validators=(_validate,),

@@ -87,6 +87,7 @@ def test_cli_profile_flag_is_global_and_defaults_to_the_environment() -> None:
 
     assert parser().parse_args(["schedules"]).profile is None
     assert parser().parse_args(["--profile", "prod", "schedules"]).profile == "prod"
+    assert parser().parse_args(["--profile", "copilot-prod", "schedules"]).profile == "copilot-prod"
     with pytest.raises(SystemExit):
         parser().parse_args(["--profile", "staging", "schedules"])
 

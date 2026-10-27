@@ -8,7 +8,7 @@ from pathlib import Path
 import subprocess
 import sys
 
-from host import actual_platform, reject_other_deployments, validate_deployment
+from host import actual_platform, deployment_profile, provider_overlay, reject_other_deployments, validate_deployment
 
 
 deployment = Path(__file__).resolve().parents[1]
@@ -21,7 +21,8 @@ base = [
     "-f",
     str(deployment / "compose.yaml"),
 ]
-base.extend(["-f", str(deployment / ("compose.windows.yaml" if os.name == "nt" else "compose.claude.yaml"))])
+base.extend(["-f", str(deployment / provider_overlay(
+    actual_platform(), deployment_profile(deployment / ".env")))])
 commands = {
     "config": ["config"],
     "build": ["build"],

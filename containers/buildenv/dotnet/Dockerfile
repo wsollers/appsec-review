@@ -10,7 +10,10 @@ LABEL org.opencontainers.image.title="audit-buildenv-dotnet" \
       org.opencontainers.image.version="sdk8.0.131-sdk10.0.112-apphost8.0.31"
 USER 0:0
 # python3 runs the build-capture tool wrapper; strace is the ptrace capture backend.
-RUN apt-get update \
+# Bootstrap HTTPS trust before installing the pinned Ubuntu certificate package.
+COPY --from=python:3.12-slim-bookworm@sha256:392307d22300de8b5986851a12d9176dfc0fc073e65bf6523ebd7dcbeb23564e /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
+RUN printf 'APT::Snapshot "20261015T070000Z";\n' > /etc/apt/apt.conf.d/50snapshot \
+ && apt-get -o APT::Update::Error-Mode=any update \
  && apt-get install -y --no-install-recommends \
       bash=5.2.21-2ubuntu4 ca-certificates=20260601~24.04.1 \
       coreutils=9.4-3ubuntu6.3 findutils=4.9.0-5build1 grep=3.11-4build1 \

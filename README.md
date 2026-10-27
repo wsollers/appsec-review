@@ -35,7 +35,7 @@ the architecture index is [`docs/architecture/README.md`](docs/architecture/READ
 | Git | Clone this repository and the review target. |
 | Python 3.11 or newer (3.12 matches the deployment image) | The `appsec-review` package and its CLI. |
 | Docker Engine with the Compose v2 plugin, or Docker Desktop | Tool images, isolated builds, the cve-bin-tool database builder, and the Dagster stack. |
-| Claude Code CLI (`claude`), signed in | Model calls in `appsec-review.toml` use `provider = "claude-cli"`. An unavailable model blocks a review at intake. |
+| Claude Code CLI (`claude`), signed in; or the opt-in Copilot SDK setup | Default model calls use `claude-cli`; `copilot-dev` and `copilot-prod` use a separate Copilot subscription login. An unavailable model blocks intake. |
 | Disk space | Feed data, tool images, and CodeQL databases are large. The cve-bin-tool database alone is about 530 MB for the full NVD. |
 | `NVD_API_KEY` (optional) | Uses the authenticated NVD rate during metadata sync. |
 
@@ -541,13 +541,21 @@ See [`docs/operations/wave1-review.md`](docs/operations/wave1-review.md).
 ## Model profiles: dev and prod
 
 **Selection:** set `APPSEC_REVIEW_PROFILE=prod`, or use `--profile prod` on the stack and review
-scripts (`-Profile prod` in PowerShell). The default is `dev`. Any other value is an error. The
+scripts (`-Profile prod` in PowerShell). The default is `dev`; `copilot-dev` is an opt-in
+Haiku development profile using a separate Copilot subscription login. Other values are errors. The
 stack's profile is fixed when its containers are created, so switching needs a stack restart.
 
 | Profile | Models | Limits |
 | --- | --- | --- |
 | `dev` (default) | Haiku 5.5, the checked-in `appsec-review.toml` | today's small limits, for testing |
 | `prod` | Sonnet 5.5, with an Opus 5.5 independent verifier (`profiles/prod.toml`) | larger token limits and budgets for real reviews |
+| `copilot-dev` | Haiku 5.5 through the Copilot SDK (`profiles/copilot-dev.toml`) | unchanged dev limits; Git and inference accounts stay separate |
+| `copilot-prod` | Sonnet 5.5 through Copilot, with Opus 5.5 verifier and judge (`profiles/copilot-prod.toml`) | unchanged prod limits, reasoning and role bindings; opt-in only |
+
+For Copilot installation, separate-account login, catalog verification and deployment commands, see
+[Copilot with a separate GitHub identity](docs/operations/model-profiles.md#copilot-with-a-separate-github-identity).
+The existing `dev` and `prod` profiles still use Claude; selecting either Copilot profile does not require a
+Claude login.
 
 ```bash
 scripts/stack-restart.sh --profile prod

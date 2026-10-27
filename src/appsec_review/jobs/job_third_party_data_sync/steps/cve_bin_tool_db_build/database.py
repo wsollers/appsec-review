@@ -46,7 +46,10 @@ class CveBinToolSettings:
 
 
 def resolve_nvd_snapshot(nvd_root: Path, expected_pointer: Mapping[str, Any]) -> dict[str, Any]:
-    pointer = json.loads((nvd_root / "current.json").read_text(encoding="utf-8"))
+    from appsec_review.storage.feed_provenance import check_root, record_snapshot
+    from appsec_review.storage.shared import safe_path
+    check_root(nvd_root, "nvd")
+    pointer = json.loads(safe_path(nvd_root, "current.json").read_text(encoding="utf-8"))
     for field in ("snapshot_id", "manifest_sha256"):
         if pointer.get(field) != expected_pointer.get(field):
             raise ValueError("NVD current pointer changed after this execution bound it")
@@ -57,7 +60,7 @@ def resolve_nvd_snapshot(nvd_root: Path, expected_pointer: Mapping[str, Any]) ->
         if snapshot_id in chain:
             raise ValueError("NVD snapshot chain contains a cycle")
         chain.append(snapshot_id)
-        manifest_path = require_beneath(nvd_root, nvd_root / "snapshots" / snapshot_id / "manifest.json", "NVD manifest")
+        manifest_path = safe_path(nvd_root, f"snapshots/{snapshot_id}/manifest.json")
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         if manifest.get("snapshot_id") != snapshot_id:
             raise ValueError("NVD snapshot manifest identity mismatch")
@@ -67,7 +70,7 @@ def resolve_nvd_snapshot(nvd_root: Path, expected_pointer: Mapping[str, Any]) ->
         for layer in manifest.get("layers", []):
             for item in layer.get("pages", [layer]):
                 blob = item["raw_blob"]
-                path = require_beneath(nvd_root, nvd_root / blob["path"], "NVD raw blob")
+                path = safe_path(nvd_root, blob["path"])
                 if not path.is_file() or path.stat().st_size != blob["size_bytes"] or file_sha256(path) != blob["sha256"]:
                     raise ValueError("NVD raw blob integrity mismatch")
                 snapshot_layers.append({"path": str(path), "sha256": blob["sha256"], "size_bytes": blob["size_bytes"]})
@@ -75,6 +78,7 @@ def resolve_nvd_snapshot(nvd_root: Path, expected_pointer: Mapping[str, Any]) ->
         snapshot_id = manifest.get("parent_snapshot_id")
     if not layers:
         raise ValueError("NVD snapshot has no replayable layers")
+    record_snapshot(nvd_root, "nvd", pointer["snapshot_id"], computed=False)
     return {"schema": "appsec-review/resolved-nvd-snapshot/1", "snapshot_id": pointer["snapshot_id"],
             "manifest_sha256": pointer["manifest_sha256"], "chain_snapshot_ids": chain,
             "layers": layers, "layer_count": len(layers)}

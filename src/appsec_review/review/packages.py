@@ -44,6 +44,7 @@ from typing import Any
 
 from appsec_review.graph.contract import FAMILY_KINDS, GRAPH_INDEX, Family, GraphSettings
 from appsec_review.graph.settings import run_graph_settings
+from appsec_review.review.artifact_context import ArtifactContext
 from appsec_review.graph.svf_crosscheck import function_tail
 from appsec_review.indexing.store import ShardSet, shard_key
 from appsec_review.retrieval.model import LogicalIdentity
@@ -826,6 +827,11 @@ class _Assembler:
         self.settings = settings
         self.graph_settings = graph_settings if graph_settings is not None else GraphSettings()
         self.build_context = BuildContext(scope)
+        self.artifacts = ArtifactContext(scope)
+        self.artifact_context = {
+            lead.observation_id: self.artifacts.for_lead(lead, limit=settings.max_context_entries)
+            for lead in collection.leads if any(role == "artifact" for _, role in lead.related)
+        }
         self.at_location: dict[tuple[str, int], list[Lead]] = defaultdict(list)
         for lead in collection.leads:
             if lead.path and lead.start_line:
@@ -917,8 +923,10 @@ class _Assembler:
         return blocks
 
     def _locate(self, lead: Lead) -> tuple[str, str | None, Any, Any]:
-        component = self.scope.component_for(lead.path)
-        unit = self.scope.build_unit_for(lead.path)
+        artifacts = self.artifact_context.get(lead.observation_id, ([], [], ()))[0]
+        path = lead.path or next((item["workspace_path"] for item in artifacts if item["workspace_path"]), None)
+        component = self.scope.component_for(path)
+        unit = self.scope.build_unit_for(path)
         return (component.component_id if component else lead.component_hint or "unassigned",
                 unit.build_unit_id if unit else None, component, unit)
 
@@ -954,8 +962,22 @@ class _Assembler:
                neighborhood: Mapping[str, Any] | None = None) -> tuple[str, bytes]:
         leads = sorted(menu, key=lambda item: (SEVERITY_ORDER[item[0].effective_severity], item[0].observation_id))
         lead_ids = sorted(item[0].observation_id for item in leads)
+        artifact_records = {
+            lead.observation_id: [
+                record if kind == "finding_lead" else {
+                    **record, "provenance": [],
+                    "provenance_omitted": record["provenance_omitted"] + len(record["provenance"])}
+                for record in self.artifact_context.get(lead.observation_id, ([],))[0]]
+            for lead, *_ in leads}
+        artifact_refs = set()
+        for records in artifact_records.values():
+            for artifact in records:
+                artifact_refs.add(artifact["identity"])
+                for relation in artifact["provenance"]:
+                    artifact_refs.update((relation["source_id"], relation["target_id"]))
+                    artifact_refs.update(command["ref"] for command in relation["commands"])
         entities = sorted({*lead_ids, *scope_record["source_ids"], *scope_record["artifact_ids"],
-                           *(item.id for item in context)})
+                           *(item.id for item in context), *artifact_refs})
         shard_hashes = sorted({*(item[0].shard_sha256 for item in leads),
                                *(item.shard_sha256 for item in context if item.shard_sha256), *graph_shards,
                                *(self.correlation_hashes if any(item[0].family in {"source_sast", "codeql"}
@@ -982,9 +1004,12 @@ class _Assembler:
             "assembly_rule": ASSEMBLY_RULE, "scope": dict(scope_record),
             "partition": {"number": partition[0], "count": partition[1]}, "rank": rank,
             "persona": None, "stack_profile": None,
-            "lead_menu": [lead_record(*item, weaknesses=self.weaknesses(item[0]),
+            "lead_menu": [{**lead_record(*item, weaknesses=self.weaknesses(item[0]),
                                       admission=admission_reasons(item[0], self.settings)
-                                      if kind == "finding_lead" else None) for item in leads],
+                                      if kind == "finding_lead" else None),
+                           **({"artifacts": artifact_records[item[0].observation_id]}
+                              if artifact_records[item[0].observation_id] else {})}
+                          for item in leads],
             "evidence": sorted((_evidence(item[0]) for item in leads), key=lambda value: value["entity_id"]),
             "context": [item.record() for item in context],
             "neighborhood": dict(neighborhood) if neighborhood is not None
@@ -1018,6 +1043,10 @@ class _Assembler:
         if lead.duplicate_of:
             context.append(context_entry(lead.duplicate_of, "duplicate_of"))
         context.extend(context_entry(identity, "flow") for identity in lead.flow_ids)
+        artifact_records, artifact_entries, artifact_gaps = self.artifact_context.get(
+            lead.observation_id, ([], [], ()))
+        binary_only = bool(artifact_records) and lead.path is None
+        context.extend(artifact_entries)
         context.extend(self.graph.lead_context(lead.observation_id))
         partition_key = f"lead/{lead.observation_id}"
         memory = self.memory.lead_context(lead.path, lead.start_line, partition_key)
@@ -1042,15 +1071,27 @@ class _Assembler:
             context_gaps.append(ScopeGap(CALLER_PRODUCER, partition_key, "unavailable",
                                          "no accepted fact names the function enclosing the lead's line; callers "
                                          "are not listed"))
-        families, graph_shards, graph_gaps = self.graph.families(unit_id, (lead.path,) if lead.path else (),
-                                                                 partition_key)
+        families, graph_shards, graph_gaps = (self.graph.families(
+            unit_id, (lead.path,) if lead.path else (), partition_key) if not binary_only else ([], [], []))
         capped, omitted, gaps = self._cap(context, partition_key, lead.family)
         neighborhood, nb_entries, nb_gaps = self.lead_neighborhood(lead, partition_key, unit_id)
         gaps.extend(nb_gaps)
         gaps.extend(graph_gaps)
         gaps.extend(context_gaps)
-        gaps.extend(gap for gap in self.collection.gaps if gap.producer == lead.family)
-        if not lead.location_exact:
+        gaps.extend(lead.coverage_gaps)
+        gaps.extend(artifact_gaps)
+        subjects = {lead.observation_id, partition_key, *(identity for identity, _ in lead.related)}
+        if lead.path:
+            subjects.add(lead.path)
+        gaps.extend(gap for gap in self.collection.gaps if gap.scope in subjects)
+        # Reference-feed limitations belong only to the advisories actually joined to this lead.
+        for advisory in (lead.advisory or {}).get("advisories", ()):
+            for feed, reference in advisory.get("feeds", {}).items():
+                if reference.get("stale"):
+                    gaps.append(ScopeGap(feed, partition_key, "stale", "joined advisory reference feed is stale"))
+            gaps.extend(ScopeGap("advisory_reference", partition_key, "partial", str(reason))
+                        for reason in advisory.get("gaps", ()))
+        if not lead.location_exact and not artifact_records:
             gaps.append(ScopeGap(lead.family, partition_key, "ambiguous",
                                  "lead location is unresolved or ambiguous; no source line is cited"))
         scope_record = {"component_id": component_id, "trust_boundary_id": None, "build_unit_id": unit_id,
@@ -1067,7 +1108,7 @@ class _Assembler:
                 obligations=OBLIGATIONS[lead.family],
                 gaps=visible, truncation={"omitted_leads": 0, "omitted_context": omitted, "next_partition": None},
                 graph_families=families, graph_shards=graph_shards,
-                graph_scopes=self.graph.scopes(unit_id, (lead.path,) if lead.path else ()),
+                graph_scopes=self.graph.scopes(unit_id, (lead.path,) if lead.path else ()) if not binary_only else (),
                 neighborhood=neighborhood)
             if len(body) <= self.settings.max_package_bytes:
                 gaps = visible
@@ -1117,7 +1158,10 @@ class _Assembler:
             key = f"{unit.key}#{number:05d}"
             following = f"{unit.key}#{number + 1:05d}" if number + 1 < count else None
             return self._build(
-                kind="hunt", lead_family=None, scope_record={**scope_record, "partition_key": key},
+                kind="hunt", lead_family=None, scope_record={
+                    **scope_record, "partition_key": key,
+                    "artifact_ids": sorted({identity for lead, *_ in chunk for identity, role in lead.related
+                                            if role == "artifact"})},
                 partition=(number, count), rank=rank, menu=chunk, context=context, obligations=OBLIGATIONS["hunt"],
                 gaps=[*gaps, *graph_gaps, *missing], truncation={"omitted_leads": 0, "omitted_context": omitted,
                                                                  "next_partition": following},
@@ -1125,7 +1169,7 @@ class _Assembler:
                 neighborhood=neighborhood)
 
         def split(chunk: list) -> list[list]:
-            _identity, body = render(chunk, 99_998, 99_999)  # widest numbering bounds the final size
+            _identity, body = render(chunk, 99_997, 99_999)  # include the non-final continuation pointer
             if len(body) <= self.settings.max_package_bytes:
                 return [chunk]
             if len(chunk) <= 1:
@@ -1141,6 +1185,8 @@ class _Assembler:
         packages = []
         for number, chunk in enumerate(chunks):
             package_id, body = render(chunk, number, len(chunks))
+            if len(body) > self.settings.max_package_bytes:
+                raise IntegrityError(f"hunt partition of {unit.key} exceeds max_package_bytes after numbering")
             packages.append(Package(package_id, "hunt", "hunt", None, f"{unit.key}#{number:05d}",
                                     tuple(sorted(item[0].observation_id for item in chunk)), unit.key, body))
         return packages

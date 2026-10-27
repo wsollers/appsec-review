@@ -111,6 +111,11 @@ class ResumePlanner:
                     reasons.append(f"artifact changed: {artifact.get('path')}")
             except (KeyError, OSError):
                 reasons.append("artifact identity is corrupt")
+        try:
+            from appsec_review.storage.shared import verify_handoff
+            verify_handoff(self.run_root, handoff)
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            reasons.append(f"shared provenance integrity failed: {exc}")
         return reasons, handoff_hash
 
     def accepted(self, job: Job, upstream: Mapping[str, str]) -> tuple[tuple[str, ...], str | None]:

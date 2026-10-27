@@ -24,7 +24,11 @@ values: dict[str, object] = {
     "APPSEC_COMPOSE_PROJECT": project_name(platform),
 }
 host_keys = {"APPSEC_UID", "APPSEC_GID", "APPSEC_DOCKER_GID", "APPSEC_CLAUDE_BINARY",
-             "APPSEC_CLAUDE_CONFIG_DIR", "APPSEC_CLAUDE_STATE_FILE"}
+             "APPSEC_CLAUDE_CONFIG_DIR", "APPSEC_CLAUDE_STATE_FILE", "APPSEC_COPILOT_CONFIG_DIR"}
+copilot_home = Path(os.environ.get("APPSEC_COPILOT_HOME") or
+                    Path.home() / ".config" / "appsec-review" / "copilot")
+if copilot_home.is_dir():
+    values["APPSEC_COPILOT_CONFIG_DIR"] = copilot_home.resolve()
 if platform != "windows":
     values.update(APPSEC_UID=os.getuid(), APPSEC_GID=os.getgid())
     socket = Path("/var/run/docker.sock")

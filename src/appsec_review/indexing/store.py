@@ -49,6 +49,11 @@ def accepted_handoff(run_root: Path, job_id: str) -> AcceptedHandoff | None:
     handoff = json.loads(path.read_text(encoding="utf-8"))
     if handoff.get("schema") != HANDOFF_SCHEMA or handoff.get("status") != "ACCEPTED":
         raise ValueError(f"handoff is not accepted: {job_id}")
+    from appsec_review.storage.shared import verify_handoff, consume_handoff
+    # Legacy handoffs may predate resolving_paths; their original contract is unchanged.
+    if "resolving_paths" in handoff:
+        verify_handoff(run_root, handoff)
+        consume_handoff(run_root, handoff)
     return AcceptedHandoff(job_id, handoff, sha, path.relative_to(run_root.resolve()).as_posix())
 
 

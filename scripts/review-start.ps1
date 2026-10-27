@@ -11,7 +11,7 @@ param(
     [string]$Target,
     [string]$Overlay,
     [ValidateSet('record', 'replay', 'off')][string]$Recording,
-    [ValidateSet('dev', 'prod')][string]$Profile,
+    [ValidateSet('dev', 'prod', 'copilot-dev', 'copilot-prod')][string]$Profile,
     [string]$RunId,
     [double]$IdWait,
     [switch]$DryRun,

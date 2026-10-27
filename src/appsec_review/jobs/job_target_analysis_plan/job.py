@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from concurrent.futures import ThreadPoolExecutor
+from appsec_review.storage.shared import PublicationThreadPoolExecutor as ThreadPoolExecutor
 from dataclasses import replace
 from dataclasses import asdict
 import hashlib
@@ -61,13 +61,12 @@ def publish_guidance_bundle(run_root: Path, *, persona: str, role: str, guidance
     files = {"persona.md": persona.encode("utf-8"), "role.md": role.encode("utf-8"),
              "task.md": guidance.encode("utf-8"),
              "model-identity.json": canonical_json({**identity, "guidance_sha256": guidance_sha})}
+    from appsec_review.storage.shared import publish_named
     for name, payload in files.items():
         path = bundle_root / name
-        if path.exists():
-            if path.read_bytes() != payload:
-                raise ValueError(f"accepted guidance bundle changed: {guidance_sha}/{name}")
-        else:
-            atomic_bytes(path, payload)
+        if path.is_file() and path.read_bytes() != payload:
+            raise ValueError(f"accepted guidance bundle changed: {guidance_sha}/{name}")
+        publish_named(run_root, path, payload, namespace="guidance", computation=identity)
     return guidance_sha
 
 

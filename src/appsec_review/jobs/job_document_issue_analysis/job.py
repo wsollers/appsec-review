@@ -10,12 +10,15 @@ from typing import Any, Mapping
 from jsonschema import Draft202012Validator
 
 from appsec_review.application_paths import application_asset
-from appsec_review.document_issues import SCHEMA, analyze_document_hunts, verify_document_issue_ledger
+from appsec_review.document_issues import (
+    SCHEMA, analyze_document_hunts, verify_document_issue_inputs, verify_document_issue_ledger,
+)
 from appsec_review.indexing.store import accepted_handoff
 from appsec_review.retrieval import RetrievalCore
 from appsec_review.retrieval.core import resolve_context_manifest
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
-from appsec_review.storage import atomic_json, file_sha256
+from appsec_review.storage import canonical_json, file_sha256
+from appsec_review.storage.shared import SharedArtifacts, put_bytes, verify_reference
 
 from .datasets import CONSUMES, DATASETS
 
@@ -82,23 +85,34 @@ def build_job() -> Job:
                    and item["sha256"] == file_sha256(directory / "manifest.json")
                    for item in handoff.handoff["artifacts"]):
             raise ValueError("review package manifest is not bound to its accepted handoff")
-        ledger = analyze_document_hunts(core, directory,
-            max_files=unit.job.config.settings["max_source_files"],
-            max_file_bytes=unit.job.config.settings["max_source_file_bytes"])
+        shared = SharedArtifacts.for_job(unit.job)
+        computation = {"accepted_manifest_sha256": core.manifest_sha256,
+                       "package_manifest_sha256": file_sha256(directory / "manifest.json"),
+                       "settings": dict(unit.job.config.settings),
+                       "implementation_sha256": identity, "target_snapshot": unit.job.source_fingerprint}
+        fingerprint = hashlib.sha256(canonical_json(computation)).hexdigest()
+        hit = shared.lookup("document-issues", fingerprint)
+        if hit is None:
+            ledger = analyze_document_hunts(core, directory,
+                max_files=unit.job.config.settings["max_source_files"],
+                max_file_bytes=unit.job.config.settings["max_source_file_bytes"])
+        else:
+            value, receipt = hit
+            verify_document_issue_inputs(
+                core, directory, max_files=unit.job.config.settings["max_source_files"],
+                max_file_bytes=unit.job.config.settings["max_source_file_bytes"])
+            ledger = verify_document_issue_ledger(core, verify_reference(run_root, value["object"]))
         schema_path = _schema_path()
         schema = json.loads(schema_path.read_text(encoding="utf-8"))
         Draft202012Validator(schema).validate(ledger)
-        path = run_root / "data" / "document-issues" / ledger["content_sha256"] / "ledger.json"
-        if path.exists():
-            from appsec_review.retrieval.model import canonical_json
-            if path.read_bytes() != canonical_json(ledger) + b"\n":
-                raise ValueError("existing document issue ledger changed bytes")
+        if hit is None:
+            artifact = put_bytes(run_root, canonical_json(ledger))
+            receipt = shared.computed("document-issues", fingerprint, artifact, computation=computation)
         else:
-            atomic_json(path, ledger)
-        artifact = {"path": path.relative_to(run_root).as_posix(),
-                    "sha256": file_sha256(path), "size_bytes": path.stat().st_size}
+            artifact = value["object"]
         unit.job.events.write("DOCUMENT_ISSUES_PUBLISHED", **ledger["counts"])
         return {"schema": SCHEMA, "artifact": artifact, "artifacts": [artifact],
+                "shared_receipt": receipt, "reused": hit is not None,
                 "counts": ledger["counts"],
                 "gaps": [UNADJUDICATED_GAP, *(gap["gap_id"] for candidate in ledger["candidates"]
                                               for gap in candidate["coverage_gaps"])],
@@ -107,6 +121,7 @@ def build_job() -> Job:
     units = (Unit("analysis.map_and_adjudicate", analyze, output_validators=(_validate_output,)),)
     sources = [Path(__file__), Path(__file__).with_name("datasets.py"),
                Path(__file__).parents[2] / "document_issues.py",
+               Path(__file__).parents[2] / "storage" / "shared.py",
                _schema_path()]
     identity = hashlib.sha256(b"".join(path.read_bytes() for path in sources)).hexdigest()
     return Job(JOB_ID, "document_issue_analysis", UnitExecutor(units).execute,

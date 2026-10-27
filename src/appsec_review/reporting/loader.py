@@ -237,7 +237,7 @@ def _int(value: Any) -> int:
 def _all_receipts(reader: RunReader) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     for path in sorted((reader.data / "jobs" / JOB / "cells").glob("cell-*/attempt-*.json")):
-        value = reader.read_json(path, "cell receipt")
+        value = reader.read_cell_receipt(path)
         if isinstance(value, dict):
             out.append(value)
     return out

@@ -19,8 +19,11 @@ import re
 from typing import Any
 
 from appsec_review.indexing.store import AcceptedHandoff, digest, shard_key, shard_summary
-from appsec_review.runtime.datasets import METADATA_ROUTE, DatasetDeclaration
+from appsec_review.runtime.datasets import (
+    METADATA_ROUTE, RUNTIME_SHARED_NAMESPACES, DatasetDeclaration, read_dataset_contract,
+)
 from appsec_review.storage import file_sha256
+from appsec_review.storage.shared import audit_file
 
 
 ROW_SCHEMA = "appsec-review/dataset-inventory-row/1"
@@ -70,11 +73,18 @@ def _runtime_declaration(output_kind: str, step: str, family: str, schema: str, 
                               artifacts=patterns, query_route=METADATA_ROUTE, reason=reason)
 
 
-def runtime_claims(job_steps: Mapping[str, Sequence[str]]) -> list[Claim]:
+def runtime_claims(job_steps: Mapping[str, Sequence[str]], *,
+                   shared_namespaces: Sequence[str] = ()) -> list[Claim]:
     """Datasets written by the job runtime itself for every configured job and step."""
     claims: list[Claim] = []
     for job_id, steps in sorted(job_steps.items()):
         base = f"data/jobs/{job_id}"
+        if shared_namespaces:
+            claims.append(Claim(job_id, "lifecycle", "shared_publication_receipts", _runtime_declaration(
+                "shared_publication_receipts", "lifecycle", "execution_receipts",
+                "appsec-review/shared-receipt/1", "Pinned immutable publication and consumption receipts.",
+                tuple(f"{base}/attempts/*/shared/{name}/*.json" for name in shared_namespaces),
+                "provenance is not accepted evidence", sensitivity="sensitive", disposition="protected")))
         claims.append(Claim(job_id, "lifecycle", "attempt_receipts", _runtime_declaration(
             "attempt_receipts", "lifecycle", "execution_receipts", "appsec-review/job-handoff/1",
             "Attempt claims, status, results, handoffs, event logs and the attempt's pinned retrieval "
@@ -96,6 +106,11 @@ def runtime_claims(job_steps: Mapping[str, Sequence[str]]) -> list[Claim]:
                 "unit results may embed exact recipes, host paths and unredacted records; only status, counts "
                 "and hashes are published", sensitivity="sensitive", disposition="protected")))
     run_level = (
+        ("shared_immutable_artifacts", "execution_receipts", "appsec-review/shared-receipt/1",
+         "Exact-byte objects and immutable computation-to-producer receipt references.",
+         ("data/shared/objects/*", "data/shared/requests/*/*/*.json", "data/shared/named/*/*.json"),
+         "untrusted shared outputs; receipts prove provenance, not publication acceptance", "sensitive",
+         "protected"),
         ("run_configuration", "configuration", "appsec-review/run-configuration/2",
          "Run-bound source and resolved configuration.", ("data/configuration/**",),
          "configuration is hash-pinned per run; enabled lanes are visible as inventory rows", "internal",
@@ -135,11 +150,14 @@ class FileGroup:
     count: int = 0
     size_bytes: int = 0
     listing: Any = field(default_factory=hashlib.sha256)
+    samples: list[str] = field(default_factory=list)
 
     def add(self, relative: str, size: int) -> None:
         self.count += 1
         self.size_bytes += size
         self.listing.update(f"{relative}\0{size}\n".encode())
+        if len(self.samples) < 5:
+            self.samples.append(relative)
 
     def as_dict(self) -> dict[str, Any]:
         return {"file_count": self.count, "size_bytes": self.size_bytes,
@@ -155,15 +173,19 @@ class RunTree:
     file_count: int
     truncated: bool
     scan_errors: list[str]
+    ownership: dict[tuple[str, str, str, str], FileGroup] = field(default_factory=dict)
+    attempts: dict[tuple[str, str], dict[str, Any]] = field(default_factory=dict)
+    claim_errors: list[str] = field(default_factory=list)
 
 
 class FileClaims:
     """Match run-relative paths to the dataset that owns them; runtime receipts win over jobs."""
 
     def __init__(self, claims: Iterable[Claim]):
+        self.claims = tuple(claims)
         self.files: list[tuple[re.Pattern[str], Claim]] = []
         self.trees: list[tuple[re.Pattern[str], Claim]] = []
-        for claim in claims:
+        for claim in self.claims:
             for pattern in claim.declaration.artifacts:
                 if pattern.endswith("/**"):
                     self.trees.append((compile_glob(pattern[:-3]), claim))
@@ -178,16 +200,72 @@ class FileClaims:
         return next((claim for pattern, claim in self.files if pattern.fullmatch(path)), None)
 
 
-def scan_run_tree(run_root: Path, claims: FileClaims, *, max_files: int, sample_limit: int = 50) -> RunTree:
+def scan_run_tree(run_root: Path, claims: FileClaims, *, max_files: int, sample_limit: int = 50,
+                  run_id: str | None = None, target_snapshot: str | None = None) -> RunTree:
     """Enumerate the run-owned ``data/`` tree in deterministic order without reading file content."""
     groups: dict[tuple[str, str, str], FileGroup] = {}
     shard_files: dict[str, int] = {}
     unaccounted: list[str] = []
     scan_errors: list[str] = []
+    claim_errors: list[str] = []
+    ownership: dict[tuple[str, str, str, str], FileGroup] = {}
+    attempts: dict[tuple[str, str], dict[str, Any]] = {}
+    known_jobs = {claim.job_id for claim in claims.claims} - {RUNTIME}
     state = {"files": 0, "unaccounted": 0, "truncated": False}
     root = Path(run_root)
 
-    def visit(directory: Path, relative: str, owner: Claim | None) -> None:
+    def attempt_contract(directory: Path, relative: str, job_id: str, attempt_id: str) -> FileClaims:
+        reference = f"{relative}/claim.json"
+        provenance: dict[str, Any] = {
+            "attempt_id": attempt_id, "dagster_run_id": None, "claim": None,
+            "contract_basis": "current_declarations_legacy_attempt", "dataset_contract_sha256": None,
+        }
+        attempts[(job_id, attempt_id)] = provenance
+        path = directory / "claim.json"
+        if not path.exists() and not path.is_symlink():
+            provenance["contract_basis"] = "current_declarations_missing_claim"
+            return claims
+        try:
+            if path.is_symlink():
+                raise ValueError("attempt claim must not be a symlink")
+            raw = path.read_bytes()
+            claim = json.loads(raw)
+            if not isinstance(claim, dict) or claim.get("job_id") != job_id \
+                    or claim.get("attempt_id") != attempt_id or claim.get("attempt_path") != relative \
+                    or (run_id is not None and claim.get("run_id") != run_id):
+                raise ValueError("attempt claim identity differs from its run/job/attempt path")
+            if target_snapshot is not None and claim.get("source_fingerprint") not in {target_snapshot, "none", None}:
+                raise ValueError("attempt claim target snapshot differs from the run")
+            orchestration = claim.get("orchestration", {})
+            if not isinstance(orchestration, dict) or not all(
+                    isinstance(key, str) and isinstance(value, str) for key, value in orchestration.items()):
+                raise ValueError("invalid attempt orchestration correlation")
+            provenance["claim"] = {"path": reference, "sha256": hashlib.sha256(raw).hexdigest()}
+            if orchestration.get("system") == "dagster":
+                provenance["dagster_run_id"] = orchestration.get("run_id")
+            if "dataset_contract" not in claim:
+                return claims
+            document = claim["dataset_contract"]
+            if not isinstance(document, dict):
+                raise ValueError("invalid attempt dataset contract")
+            steps, declarations = read_dataset_contract(document, job_id)
+            provenance.update(contract_basis="pinned_attempt_contract",
+                              dataset_contract_sha256=document["sha256"])
+            return FileClaims([*runtime_claims({job_id: steps},
+                               shared_namespaces=document.get("shared_namespaces", ())),
+                               *(Claim(job_id, item.step, item.output_kind, item) for item in declarations)])
+        except (OSError, ValueError, TypeError) as exc:
+            claim_errors.append(f"{reference}: {type(exc).__name__}: {exc}")
+            provenance["contract_basis"] = "invalid_attempt_claim"
+            return FileClaims(())
+
+    def visit(directory: Path, relative: str, owner: Claim | None, matcher: FileClaims,
+              attempt_id: str = "") -> None:
+        match = re.fullmatch(r"data/jobs/([^/]+)/attempts/([^/]+)", relative)
+        if match and match[1] in known_jobs:
+            attempt_id = match[2]
+            matcher = attempt_contract(directory, relative, match[1], attempt_id)
+            owner = None
         try:
             entries = sorted(os.scandir(directory), key=lambda entry: entry.name)
         except OSError as exc:
@@ -203,7 +281,7 @@ def scan_run_tree(run_root: Path, claims: FileClaims, *, max_files: int, sample_
                 scan_errors.append(f"{path}: {type(exc).__name__}")
                 continue
             if is_dir:
-                visit(Path(entry.path), path, owner or claims.tree(path))
+                visit(Path(entry.path), path, owner or matcher.tree(path), matcher, attempt_id)
                 continue
             state["files"] += 1
             if state["files"] > max_files:
@@ -214,9 +292,16 @@ def scan_run_tree(run_root: Path, claims: FileClaims, *, max_files: int, sample_
             except OSError as exc:
                 scan_errors.append(f"{path}: {type(exc).__name__}")
                 continue
-            claim = owner or claims.file(path)
+            claim = owner or matcher.file(path)
+            if path.startswith("data/shared/") or re.fullmatch(
+                    r"data/jobs/[^/]+/attempts/[^/]+/shared/.*", path):
+                try:
+                    audit_file(root, path)
+                except (OSError, ValueError, KeyError, TypeError) as exc:
+                    scan_errors.append(f"{path}: invalid shared provenance: {exc}")
             if claim is not None:
                 groups.setdefault(claim.key, FileGroup()).add(path, size)
+                ownership.setdefault((*claim.key, attempt_id), FileGroup()).add(path, size)
             elif path.startswith("data/indices/"):
                 shard_files[path] = size
             else:
@@ -226,11 +311,11 @@ def scan_run_tree(run_root: Path, claims: FileClaims, *, max_files: int, sample_
 
     data = root / "data"
     if data.is_dir():
-        visit(data, "data", None)
+        visit(data, "data", None, claims)
     else:
         scan_errors.append("data: missing_run_data_directory")
     return RunTree(groups, shard_files, unaccounted, state["unaccounted"], min(state["files"], max_files),
-                   bool(state["truncated"]), scan_errors)
+                   bool(state["truncated"]), scan_errors, ownership, attempts, claim_errors)
 
 
 def dataset_id(run_id: str, job_id: str, step: str, scope: str, output_kind: str) -> str:
@@ -295,6 +380,8 @@ class InventoryInputs:
     restored_shards: Sequence[Mapping[str, Any]] = ()
     shard_conflicts: Sequence[str] = ()
     max_files: int = 500_000
+    file_job_steps: Mapping[str, Sequence[str]] | None = None
+    file_declarations: Mapping[str, Sequence[DatasetDeclaration]] | None = None
 
 
 def _owasp_shards(run_root: Path) -> tuple[list[Mapping[str, Any]], str | None]:
@@ -323,21 +410,29 @@ def build_inventory(inputs: InventoryInputs) -> dict[str, Any]:
     def warn(code: str, job_id: str, subject: str, detail: str) -> None:
         warnings.append({"code": code, "job_id": job_id, "subject": subject[:512], "detail": detail[:1024]})
 
-    claims = runtime_claims(inputs.job_steps)
-    for job_id, declarations in sorted(inputs.declarations.items()):
-        steps = inputs.job_steps.get(job_id, ())
+    file_job_steps = inputs.job_steps if inputs.file_job_steps is None else inputs.file_job_steps
+    file_declarations = inputs.declarations if inputs.file_declarations is None else inputs.file_declarations
+    claims = runtime_claims(file_job_steps, shared_namespaces=RUNTIME_SHARED_NAMESPACES)
+    for job_id, declarations in sorted(file_declarations.items()):
+        if job_id not in file_job_steps:
+            violate("undeclared_job", job_id, job_id, "file owner is not registered in the run configuration")
+            continue
+        steps = file_job_steps[job_id]
         for declaration in declarations:
             if declaration.step not in steps:
                 violate("unknown_step", job_id, declaration.output_kind,
                         f"declared step {declaration.step} is not in the resolved configuration")
             claims.append(Claim(job_id, declaration.step, declaration.output_kind, declaration))
     file_claims = FileClaims(claims)
-    tree = scan_run_tree(run_root, file_claims, max_files=inputs.max_files)
+    tree = scan_run_tree(run_root, file_claims, max_files=inputs.max_files, run_id=inputs.run_id,
+                        target_snapshot=inputs.target_snapshot)
     if tree.truncated:
         violate("run_tree_truncated", RUNTIME, "data",
                 f"run tree enumeration stopped at {inputs.max_files} files; publication completeness is unknown")
     for error in tree.scan_errors:
         violate("run_tree_unreadable", RUNTIME, error, "run-owned files could not be enumerated")
+    for error in tree.claim_errors:
+        violate("invalid_attempt_claim", RUNTIME, error, "attempt provenance or pinned output contract is invalid")
 
     rows: list[dict[str, Any]] = []
     seen_ids: set[str] = set()
@@ -455,6 +550,8 @@ def build_inventory(inputs: InventoryInputs) -> dict[str, Any]:
                 refs.append({"reference": path, "sha256": str(artifact.get("sha256"))})
 
     for claim in claims:
+        if claim.job_id != RUNTIME and claim.job_id not in inputs.job_steps:
+            continue
         declaration = claim.declaration
         if declaration.disposition == "indexed" and not declaration.artifacts:
             continue
@@ -465,14 +562,16 @@ def build_inventory(inputs: InventoryInputs) -> dict[str, Any]:
             continue  # backing files of an indexed dataset are accounted by its shard rows
         add_row(claim.job_id, declaration, "run",
                 artifacts={**group.as_dict(), "references": artifact_refs.get(claim.key, [])},
+                producer={"job": claim.job_id, "attempt_id": None, "handoff_sha256": None,
+                          "basis": "file_ownership"},
                 coverage={"state": "complete", "reason": None, "gaps": [], "gap_count": 0, "truncation_count": 0})
         emitted[(claim.job_id, declaration.output_kind)] = 1
 
     for claim in claims:
+        if claim.job_id != RUNTIME and claim.job_id not in inputs.job_steps:
+            continue
         declaration = claim.declaration
         if (claim.job_id, declaration.output_kind) in emitted or claim.job_id == RUNTIME:
-            continue
-        if claim.key in tree.groups:
             continue
         ran = inputs.handoffs.get(claim.job_id) is not None
         statuses = [status for unit, status in inputs.unit_statuses.get(claim.job_id, {}).items()
@@ -500,6 +599,21 @@ def build_inventory(inputs: InventoryInputs) -> dict[str, Any]:
             violate("indexed_without_route", row["job_id"], row["output_kind"], "indexed dataset has no query route")
         if row["disposition"] in {"artifact_only", "protected"} and not row["exception_reason"]:
             violate("exception_without_reason", row["job_id"], row["output_kind"], "missing exception reason")
+    file_ownership = []
+    for (job_id, step, output_kind, attempt_id), group in sorted(tree.ownership.items()):
+        provenance = tree.attempts.get((job_id, attempt_id), {
+            "attempt_id": None, "dagster_run_id": None, "claim": None,
+            "contract_basis": "shared_or_run_scoped", "dataset_contract_sha256": None,
+        })
+        file_ownership.append({
+            "job_id": job_id, "step": step, "output_kind": output_kind,
+            "accounting_only": True, "in_publication_stage": job_id in inputs.job_steps,
+            **provenance, **group.as_dict(), "sample_paths": group.samples,
+        })
+    for (job_id, attempt_id), provenance in sorted(tree.attempts.items()):
+        if provenance["contract_basis"] == "current_declarations_missing_claim":
+            warn("attempt_provenance_unavailable", job_id, attempt_id,
+                 "files match current declarations but no attempt claim identifies their invocation")
     for job_id, upstream in sorted(inputs.consumes.items()):
         if inputs.handoffs.get(job_id) is None:
             continue
@@ -518,6 +632,7 @@ def build_inventory(inputs: InventoryInputs) -> dict[str, Any]:
     return {
         "schema": INVENTORY_SCHEMA, "run_id": inputs.run_id, "target_snapshot": inputs.target_snapshot,
         "rows": rows, "disposition_counts": dict(sorted(counts.items())),
+        "file_ownership": file_ownership,
         "run_tree": {"file_count": tree.file_count, "truncated": tree.truncated,
                      "scan_errors": tree.scan_errors[:50],
                      "unaccounted_count": tree.unaccounted_count, "unreferenced_index_files": len(unreferenced)},

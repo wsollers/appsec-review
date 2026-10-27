@@ -36,7 +36,8 @@ DATASETS = (
             indexes=("precomputed",), prefixes=("qs-",), route="query_precomputed; query_observations"),
     artifact_only("derived_checkpoints", "precompute", "precomputed", "appsec-review/derived-shard/1",
                   "Content-addressed reuse checkpoints for derived link and product shards.",
-                  artifacts=("data/indexing/checkpoints/**",),
+                  artifacts=("data/indexing/checkpoints/**",
+                             "data/jobs/job_review_data_indexing/attempts/*/shared/derived-index/*.json"),
                   reason="reuse bookkeeping; the shards themselves are indexed"),
     artifact_only("fts_image_validation", "fts", "inventory", "appsec-review/sqlite-fts-validation/1",
                   "Sanitized FTS document stream, image-built FTS5 database, container receipts and the "

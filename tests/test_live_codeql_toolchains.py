@@ -142,6 +142,48 @@ def test_live_codeql_inventory_matches_the_pinned_extractors_and_query_packs(
     assert inventory["custom_query_packs"]["cpp"][0]["query_id"] == "cert-cpp"
 
 
+@pytest.mark.parametrize(("profile", "runtime_user"), [("source", "1000:1000"), ("native", "10001:10001")])
+def test_live_precompiled_queries_are_readable_by_runtime_user(
+        tmp_path: Path, profile: str, runtime_user: str) -> None:
+    config = load_config(ROOT / "appsec-review.toml")
+    settings = config.job("job_codeql_analysis").typed_settings
+    assert settings is not None
+    if not _image_available(settings.source_image_tag):
+        pytest.skip("licensed pinned CodeQL image is not locally available")
+    if profile == "source":
+        tag, image_id = settings.source_image_tag, settings.source_image_id
+    else:
+        selected = profiles_from_settings(config.job("job_project_build").settings["profiles"])[profile]
+        tag, image_id = selected.tag, selected.image_id
+    image = CodeQLImageResolver(
+        repository_root=ROOT, metadata_root=tmp_path / "metadata", settings=settings,
+    ).resolve(build_image_tag=tag, build_image_id=image_id, runtime_user=runtime_user)[0]
+    probe = """
+import os
+from pathlib import Path
+assert os.getuid() != 0
+count = 0
+def fail(error):
+    raise error
+for directory, _, files in os.walk('/opt/codeql/qlpacks', onerror=fail):
+    for name in files:
+        if name.endswith('.qlx'):
+            with (Path(directory) / name).open('rb') as stream:
+                assert stream.read(1), name
+            count += 1
+assert count > 0, 'No bundled precompiled queries found'
+print(count)
+"""
+    result = subprocess.run(
+        ["docker", "run", "--rm", "--network", "none", "--read-only",
+         "--cap-drop", "ALL", "--security-opt", "no-new-privileges",
+         "--user", runtime_user, "--entrypoint", "python3", image.image_id, "-c", probe],
+        capture_output=True, text=True, timeout=120, check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert int(result.stdout.strip()) > 0
+
+
 @pytest.mark.parametrize(
     ("language", "profile", "mode", "source_subroot", "commands"),
     LIVE_SCOPES, ids=[value[0] for value in LIVE_SCOPES],

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import importlib.util
 import json
 import shutil
@@ -115,6 +116,22 @@ def test_continue_on_error_still_returns_failure(monkeypatch, tmp_path: Path) ->
     assert by_id["base-python"]["status"] == "passed"
 
 
+@pytest.mark.parametrize("family", ["native-toolchain", "java", "dotnet"])
+def test_ubuntu_buildenv_snapshot_has_pinned_https_bootstrap(family: str) -> None:
+    dockerfile = (ROOT / "containers" / "buildenv" / family / "Dockerfile").read_text()
+    trust_source = _final_base(ROOT / "containers" / "bases" / "python" / "Dockerfile")
+    bootstrap = (
+        f"COPY --from={trust_source} /etc/ssl/certs/ca-certificates.crt "
+        "/etc/ssl/certs/ca-certificates.crt"
+    )
+    assert "@sha256:" in trust_source
+    assert bootstrap in dockerfile
+    assert 'APT::Snapshot "20261015T070000Z";' in dockerfile
+    assert "/etc/apt/apt.conf.d/50snapshot" in dockerfile
+    assert dockerfile.index(bootstrap) < dockerfile.index("apt-get")
+    assert "apt-get -o APT::Update::Error-Mode=any update" in dockerfile
+
+
 def test_parallel_builds_never_exceed_jobs(monkeypatch, tmp_path: Path) -> None:
     catalog = container_build.load_catalog()
     monkeypatch.setattr(container_build, "RUN_ROOT", tmp_path)
@@ -139,6 +156,36 @@ def test_parallel_builds_never_exceed_jobs(monkeypatch, tmp_path: Path) -> None:
                               all=False, jobs=2, continue_on_error=True)
     assert container_build.execute_build(args, catalog) == 0
     assert maximum == 2
+
+
+def test_osv_functional_smoke_allows_the_runtime_user_to_write(monkeypatch, tmp_path: Path) -> None:
+    feed = tmp_path / "data" / "feeds" / "osv"
+    snapshot = feed / "snapshots" / "fixture"
+    (snapshot / "sources").mkdir(parents=True)
+    data = b"fixture database"
+    (snapshot / "sources" / "PyPI.zip").write_bytes(data)
+    (snapshot / "manifest.json").write_text(json.dumps({
+        "files": {"sources/PyPI.zip": {
+            "size_bytes": len(data), "sha256": hashlib.sha256(data).hexdigest(),
+        }},
+    }))
+    (feed / "current.json").write_text(json.dumps({"snapshot_id": "fixture"}))
+    monkeypatch.setattr(container_build, "ROOT", tmp_path)
+    monkeypatch.setattr(container_build, "RUN_ROOT", tmp_path / "runs")
+    monkeypatch.setattr(container_build, "runtime_args", lambda policy: ["docker", "run"])
+
+    def run(argv, **kwargs):
+        mount = next(value for value in argv if value.endswith(",dst=/scratch"))
+        output = Path(mount.split("src=", 1)[1].split(",dst=", 1)[0])
+        assert output.stat().st_mode & 0o002
+        (output / "result.json").write_text('{"package": "django"}')
+        return subprocess.CompletedProcess(argv, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(container_build.subprocess, "run", run)
+    catalog = {"by_id": {"tool-osv-scanner": {"tag": "fixture/osv"}}}
+    assert container_build.functional_smoke(
+        ["tool-osv-scanner"], catalog, {"timeout_seconds": 10},
+    ) == 0
 
 
 @pytest.mark.skipif(not _usable_bash() or not shutil.which("pwsh"),

@@ -110,6 +110,13 @@ def accepted_feed_pins(run_root: Path) -> tuple[Mapping[str, Any] | None, str | 
     feeds = document.get("feeds")
     if not isinstance(feeds, Mapping):
         return None, f"{INDEXING_JOB} {INPUTS_UNIT} artifact pins no reference feeds"
+    from appsec_review.storage.feed_provenance import consume_pin
+    try:
+        for pin in feeds.values():
+            if pin.get("status") == "pinned":
+                consume_pin(run_root, pin)
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        return None, f"pinned reference feed provenance is unavailable ({type(exc).__name__}: {exc})"
     return feeds, None
 
 

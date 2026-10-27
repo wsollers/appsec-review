@@ -95,6 +95,10 @@ def resolve_accepted_manifest(run_root: Path) -> tuple[Path, str]:
     manifest_sha = str(pointer.get("manifest_sha256", ""))
     if not _artifact_in_handoff(handoff, manifest_path.relative_to(run_root).as_posix(), manifest_sha):
         raise RetrievalIntegrityError("accepted manifest is not bound to its producer handoff")
+    from appsec_review.storage.shared import verify_handoff, consume_handoff
+    if "resolving_paths" in handoff:
+        verify_handoff(run_root, handoff)
+        consume_handoff(run_root, handoff)
     return manifest_path, manifest_sha
 
 

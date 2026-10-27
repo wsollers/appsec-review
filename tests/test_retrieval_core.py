@@ -4,8 +4,10 @@ from concurrent.futures import ThreadPoolExecutor
 import json
 import os
 from pathlib import Path
+import sqlite3
 import subprocess
 import sys
+import threading
 
 import pytest
 
@@ -554,3 +556,125 @@ def test_builder_collapses_identical_entities_and_rejects_conflicting_ones(tmp_p
     with pytest.raises(ValueError, match="conflicting entities"):
         conflicting.build()
     assert not conflicting.path.exists()
+
+
+def test_builder_reuses_identical_shard_without_replacing_it(tmp_path: Path) -> None:
+    builder, source, _ = _builder_fixture(tmp_path)
+    builder.add_entity(EntityRecord(LogicalIdentity.parse(source), "server", "server", "", {"kind": "elf"}))
+    builder.add_coverage("artifacts", "partial", "missing symbols")
+    digest = builder.build()
+    before = builder.path.stat()
+    contents = builder.path.read_bytes()
+
+    assert builder.build() == digest
+    assert builder.path.read_bytes() == contents
+    assert builder.path.stat().st_ino == before.st_ino
+    assert builder.path.stat().st_mtime_ns == before.st_mtime_ns
+    assert list(tmp_path.iterdir()) == [builder.path]
+
+
+@pytest.mark.parametrize("change", ["entity", "relation", "coverage", "fingerprint", "snapshot", "corrupt"])
+def test_builder_rejects_different_or_corrupt_existing_shard(tmp_path: Path, change: str) -> None:
+    builder, source, action = _builder_fixture(tmp_path)
+    builder.build()
+    if change == "entity":
+        builder.add_entity(EntityRecord(LogicalIdentity.parse(source), "server", "server", "", {}))
+    elif change == "relation":
+        builder.add_relation(RelationRecord(RelationKind.GENERATED_FROM, source, action, True, 1.0))
+    elif change == "coverage":
+        builder.add_coverage("artifacts", "unavailable", "missing")
+    elif change == "fingerprint":
+        builder.fingerprint = "e" * 64
+    elif change == "snapshot":
+        builder.target_snapshot = "t" * 64
+    else:
+        builder.path.write_bytes(b"corrupt")
+    before = builder.path.read_bytes()
+    with pytest.raises(ValueError, match="immutable index shard"):
+        builder.build()
+    assert builder.path.read_bytes() == before
+    assert list(tmp_path.iterdir()) == [builder.path]
+
+
+@pytest.mark.parametrize("dangling", [False, True])
+def test_builder_rejects_existing_symlink(tmp_path: Path, dangling: bool) -> None:
+    builder, _, _ = _builder_fixture(tmp_path)
+    builder.build()
+    target = tmp_path / "other.sqlite"
+    builder.path.rename(target)
+    try:
+        builder.path.symlink_to(target)
+    except OSError as exc:
+        pytest.skip(f"symlinks unavailable: {exc}")
+    contents = target.read_bytes()
+    if dangling:
+        target.unlink()
+    with pytest.raises(ValueError, match="immutable index shard"):
+        builder.build()
+    assert builder.path.is_symlink()
+    if not dangling:
+        assert target.read_bytes() == contents
+
+
+@pytest.mark.parametrize("conflicting", [False, True])
+def test_builder_concurrent_publication_never_overwrites(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch, conflicting: bool) -> None:
+    builders = [_builder_fixture(tmp_path)[0] for _ in range(2)]
+    if conflicting:
+        builders[1].add_coverage("artifacts", "partial", "missing symbols")
+    barrier = threading.Barrier(2)
+    real_link = os.link
+
+    def publish(source, destination):
+        barrier.wait(timeout=10)
+        return real_link(source, destination)
+
+    monkeypatch.setattr("appsec_review.retrieval.index.os.link", publish)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        futures = [pool.submit(builder.build) for builder in builders]
+        results, errors = [], []
+        for future in futures:
+            try:
+                results.append(future.result())
+            except ValueError as exc:
+                errors.append(str(exc))
+    assert len(errors) == int(conflicting)
+    assert all("immutable index shard" in error for error in errors)
+    assert set(results) == {file_sha256(builders[0].path)}
+    assert list(tmp_path.iterdir()) == [builders[0].path]
+    with sqlite3.connect(builders[0].path) as database:
+        assert database.execute("PRAGMA integrity_check").fetchone() == ("ok",)
+
+
+def test_builder_removes_only_its_own_temporary_files_after_failure(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    builder, _, _ = _builder_fixture(tmp_path)
+    abandoned = tmp_path / "shard.sqlite.building"
+    abandoned.write_bytes(b"another writer")
+    real_connect = sqlite3.connect
+
+    def fail_connection(path):
+        Path(path).write_bytes(b"incomplete database")
+        raise sqlite3.OperationalError("injected connection failure")
+
+    monkeypatch.setattr("appsec_review.retrieval.index.sqlite3.connect", fail_connection)
+    with pytest.raises(sqlite3.OperationalError, match="injected"):
+        builder.build()
+    assert not builder.path.exists()
+    assert list(tmp_path.iterdir()) == [abandoned]
+    assert abandoned.read_bytes() == b"another writer"
+    monkeypatch.setattr("appsec_review.retrieval.index.sqlite3.connect", real_connect)
+    assert builder.build() == file_sha256(builder.path)
+
+
+def test_builder_does_not_publish_after_link_failure(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    builder, _, _ = _builder_fixture(tmp_path)
+
+    def fail_publish(source, destination):
+        raise OSError("injected publication failure")
+
+    monkeypatch.setattr("appsec_review.retrieval.index.os.link", fail_publish)
+    with pytest.raises(OSError, match="injected publication"):
+        builder.build()
+    assert not list(tmp_path.iterdir())

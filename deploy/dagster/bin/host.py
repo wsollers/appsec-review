@@ -41,6 +41,20 @@ def read_environment(path: Path) -> dict[str, str]:
                 if "=" in line and not line.lstrip().startswith("#"))
 
 
+def deployment_profile(environment: Path) -> str:
+    values = read_environment(environment) if environment.is_file() else {}
+    profile = os.environ.get("APPSEC_REVIEW_PROFILE") or values.get("APPSEC_REVIEW_PROFILE") or "dev"
+    if profile not in {"dev", "prod", "copilot-dev", "copilot-prod"}:
+        raise RuntimeError(f"unknown runtime profile: {profile}")
+    return profile
+
+
+def provider_overlay(platform: str, profile: str) -> str:
+    if profile in {"copilot-dev", "copilot-prod"}:
+        return "compose.copilot.yaml"
+    return "compose.windows.yaml" if platform == "windows" else "compose.claude.yaml"
+
+
 def validate_deployment(repository: Path, environment: Path, platform: str) -> None:
     if platform != actual_platform():
         raise RuntimeError(f"requested {platform}, but this host is {actual_platform()}")

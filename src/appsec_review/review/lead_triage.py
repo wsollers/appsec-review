@@ -38,12 +38,14 @@ from appsec_review.review.lead_triage_settings import (
 from appsec_review.review.references import CweReference
 from appsec_review.review.scoring.cwe_impact import DERIVATION_RULE, IMPACT_CLASSES, ImpactCatalog, derive
 from appsec_review.review.secret_redaction import redact_source_line
-from appsec_review.storage import atomic_json
+from appsec_review.storage import canonical_json
+from appsec_review.storage.shared import SharedArtifacts, put_bytes, reference, safe_path, verify_reference
 
 TRIAGE_RULE = "appsec-review/lead-triage/1"
 ARTIFACT_SCHEMA = "appsec-review/lead-triage/1"
 RESULT_SCHEMA = "appsec-review/lead-triage-result/1"
 CACHE_SCHEMA = "appsec-review/lead-triage-cache/1"
+OBJECT_SCHEMA = "appsec-review/lead-triage-object/1"
 GUIDANCE_SCHEMA = "appsec-review/guidance-bundle-triage/1"
 ROLE = "lead_triager"
 TASK = "lead_severity"
@@ -348,30 +350,58 @@ def _cache_path(cache_dir: Path, fingerprint: str) -> Path:
     return Path(cache_dir) / f"{fingerprint}.json"
 
 
-def cache_read(cache_dir: Path | None, fingerprint: str, lead_id: str) -> dict[str, Any] | None:
-    if cache_dir is None:
+def cache_read(cache_dir: Path | None, fingerprint: str, lead_id: str, *,
+               shared: SharedArtifacts | None = None) -> dict[str, Any] | None:
+    receipt = None
+    if shared is not None:
+        hit = shared.lookup("lead-triage", fingerprint)
+        if hit is not None:
+            value, receipt = hit
+            path = verify_reference(shared.run_root, value["object"])
+            if value["legacy"] is None:
+                document = json.loads(path.read_bytes())
+                if document.get("schema") != OBJECT_SCHEMA or document.get("item", {}).get("lead_id") != lead_id:
+                    raise ValueError("shared triage result identity mismatch")
+                return {**document, "batch_id": value["computation"]["batch_id"], "shared_receipt": receipt}
+        elif cache_dir is not None:
+            path = _cache_path(cache_dir, fingerprint)
+        else:
+            return None
+    elif cache_dir is not None:
+        path = _cache_path(cache_dir, fingerprint)
+    else:
         return None
-    path = _cache_path(cache_dir, fingerprint)
-    try:
-        document = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
+    if shared is not None:
+        safe_path(shared.run_root, path.relative_to(shared.run_root).as_posix())
+    if not path.exists():
         return None
+    if path.is_symlink():
+        raise ValueError("triage cache must not be a symlink")
+    document = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(document, dict):
+        raise ValueError("invalid triage cache document")
     body = {key: value for key, value in document.items() if key != "entry_sha256"}
-    if (not isinstance(document, dict) or document.get("schema") != CACHE_SCHEMA
-            or document.get("fingerprint") != fingerprint or document.get("lead_id") != lead_id
-            or document.get("entry_sha256") != sha256_hex(body)):
-        return None
-    return document
+    if (document.get("schema") != CACHE_SCHEMA or document.get("fingerprint") != fingerprint
+            or document.get("lead_id") != lead_id or document.get("entry_sha256") != sha256_hex(body)):
+        raise ValueError("triage cache identity/hash mismatch")
+    if shared is not None and receipt is None:
+        _, receipt = shared.legacy("lead-triage", fingerprint, reference(shared.run_root, path),
+                                   computation={"finding_fingerprint": fingerprint})
+    return {**document, "shared_receipt": receipt}
 
 
 def cache_write(cache_dir: Path | None, fingerprint: str, lead_id: str, item: Mapping[str, Any],
-                batch: Mapping[str, Any]) -> None:
-    if cache_dir is None:
-        return
-    body = {"schema": CACHE_SCHEMA, "fingerprint": fingerprint, "lead_id": lead_id, "item": dict(item),
-            "batch_id": batch["batch_id"], "request_sha256": batch["request_sha256"],
-            "model_profile": batch["model_profile"]}
-    atomic_json(_cache_path(cache_dir, fingerprint), {**body, "entry_sha256": sha256_hex(body)})
+                batch: Mapping[str, Any], *, shared: SharedArtifacts | None = None) -> dict[str, Any] | None:
+    if shared is None:
+        if cache_dir is not None:
+            raise ValueError("triage cache publication requires an attempt provenance context")
+        return None
+    if item.get("lead_id") != lead_id:
+        raise ValueError("triage result lead identity mismatch")
+    obj = put_bytes(shared.run_root, canonical_json({"schema": OBJECT_SCHEMA, "item": dict(item)}))
+    return shared.computed("lead-triage", fingerprint, obj, computation={
+        "finding_fingerprint": fingerprint, "request_sha256": batch["request_sha256"],
+        "model_profile": batch["model_profile"], "batch_id": batch["batch_id"]})
 
 
 # ---------------------------------------------------------------------------------------------- the run
@@ -423,7 +453,7 @@ def _catalog_record(reference: CweReference | None, impact: ImpactCatalog | None
 
 def run_triage(leads: Sequence[Lead], *, settings: TriageSettings, profile: Any, infer: Callable[..., Any],
                read_excerpt: ExcerptReader, reference: CweReference | None, guidance: TriageGuidance,
-               schemas: Any, cache_dir: Path | None = None) -> TriageOutcome:
+               schemas: Any, cache_dir: Path | None = None, shared: SharedArtifacts | None = None) -> TriageOutcome:
     """Triage every ``unknown`` lead of ``leads``: table, CWE catalog, then batched model turns.
 
     Never raises for a model failure: an undecided lead keeps ``unknown`` and a named gap.
@@ -461,13 +491,14 @@ def run_triage(leads: Sequence[Lead], *, settings: TriageSettings, profile: Any,
     todo: list[_Pending] = []
     version = guidance.version
     for entry in capped:
-        hit = cache_read(cache_dir, entry.fingerprint, entry.lead.observation_id)
+        hit = cache_read(cache_dir, entry.fingerprint, entry.lead.observation_id, shared=shared)
         if hit is None:
             todo.append(entry)
             continue
         reused += 1
         rows[entry.lead.observation_id] = _from_item(entry, hit["item"], version, settings, origin="cache",
                                                      batch_id=hit.get("batch_id"))
+        rows[entry.lead.observation_id]["shared_receipt"] = hit["shared_receipt"]
 
     catalog = {"cwe_catalog_version": (reference.version or reference.snapshot_id) if reference is not None
                and reference.source == "mitre_catalog" else None,
@@ -507,7 +538,8 @@ def run_triage(leads: Sequence[Lead], *, settings: TriageSettings, profile: Any,
             item = items[position]
             rows[lead_id] = _from_item(entry, item, version, settings, origin="model", batch_id=batch_id)
             record["results"].append(item)
-            cache_write(cache_dir, entry.fingerprint, lead_id, item, record)
+            rows[lead_id]["shared_receipt"] = cache_write(
+                cache_dir, entry.fingerprint, lead_id, item, record, shared=shared)
 
     ordered = [rows[lead.observation_id] for lead in unknown]
     document = {

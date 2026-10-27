@@ -24,7 +24,7 @@ record. Only :class:`IntegrityError` propagates. The lane's events are sealed in
 from __future__ import annotations
 
 from collections import defaultdict
-from concurrent.futures import ThreadPoolExecutor
+from appsec_review.storage.shared import PublicationThreadPoolExecutor as ThreadPoolExecutor
 from dataclasses import asdict, dataclass, field, replace
 import json
 from pathlib import Path
@@ -175,10 +175,9 @@ class ReviewContext:
                 self._bundles[key] = cached
         identity = cached["bundle"]["sha256"]
         with self._lock:
-            pin = identity not in self._pinned
-            self._pinned.add(identity)
-        if pin:
-            pin_bundle(self.run_root, cached["bundle"])
+            if identity not in self._pinned:
+                pin_bundle(self.run_root, cached["bundle"])
+                self._pinned.add(identity)
         return cached
 
     def package_view(self, work: PackageWork) -> PackageView:
@@ -1069,7 +1068,7 @@ def _judge_request_blind(plan: _JudgePlan) -> tuple[bool, str]:
         joined = b"\n".join(cell.requests)
         leaked = sorted(marker for marker in plan.markers if marker.encode("utf-8") in joined)
         if sidecar is not None:
-            atomic_json(sidecar, {"schema": "appsec-review/judge-request-check/1", "cell_id": cell.cell_id,
+            _publish_check(sidecar, {"schema": "appsec-review/judge-request-check/1", "cell_id": cell.cell_id,
                                   "attempt": cell.record.attempts, "markers_sha256": digest,
                                   "request_sha256s": [sha256_hex(item.decode("utf-8")) for item in cell.requests],
                                   "contains_forbidden_marker": bool(leaked), "leaked": leaked[:8]})
@@ -1080,6 +1079,7 @@ def _judge_request_blind(plan: _JudgePlan) -> tuple[bool, str]:
         check = None
     if not check or check.get("markers_sha256") != digest:
         return False, "judge_request_unverified"
+    _consume_check(sidecar)
     if check.get("contains_forbidden_marker"):
         return False, f"judge_request_contains_identifier:{(check.get('leaked') or ['?'])[0]}"
     return True, ""
@@ -1336,7 +1336,7 @@ def _verifier_request_bytes(ctx: ReviewContext, verifier: _Cell, markers: Sequen
     if verifier.requests:
         joined = b"\n".join(verifier.requests)
         encoded = [marker.encode("utf-8") for marker in markers]
-        atomic_json(sidecar, {"schema": "appsec-review/verifier-request-check/1", "cell_id": verifier.cell_id,
+        _publish_check(sidecar, {"schema": "appsec-review/verifier-request-check/1", "cell_id": verifier.cell_id,
                               "attempt": verifier.record.attempts, "markers_sha256": digest,
                               "request_sha256s": [sha256_hex(item.decode("utf-8")) for item in verifier.requests],
                               "contains_forbidden_marker": any(marker in joined for marker in encoded)})
@@ -1348,7 +1348,25 @@ def _verifier_request_bytes(ctx: ReviewContext, verifier: _Cell, markers: Sequen
     if not check or check.get("markers_sha256") != digest or check.get("contains_forbidden_marker"):
         # Fail closed: the forbidden marker itself stands in for unverifiable request bytes.
         return markers[0].encode("utf-8") if markers else b"\x00unverified-verifier-request"
+    _consume_check(sidecar)
     return b""
+
+
+def _publish_check(path: Path, document: Mapping[str, Any]) -> None:
+    from appsec_review.storage import canonical_json
+    from appsec_review.storage.shared import current, publish_named
+    owner = current()
+    publish_named(owner.run_root if owner is not None else path.parent, path,
+                  canonical_json(document), namespace="cell-check",
+                  computation={"cell_id": document["cell_id"],
+                               "markers_sha256": document["markers_sha256"]})
+
+
+def _consume_check(path: Path) -> None:
+    from appsec_review.storage.shared import current, consume_named
+    owner = current()
+    if owner is not None:
+        consume_named(owner.run_root, path, namespace="cell-check")
 
 
 # ------------------------------------------------------------------------------------------------
