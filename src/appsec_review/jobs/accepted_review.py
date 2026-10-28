@@ -8,6 +8,7 @@ accepted fields. Any disagreement is an :class:`IntegrityError`, which fails the
 from __future__ import annotations
 
 from dataclasses import dataclass
+import hashlib
 from pathlib import Path, PurePosixPath
 from typing import Any, Mapping, Sequence
 
@@ -23,7 +24,7 @@ from appsec_review.storage import canonical_json
 
 REVIEW_JOB = "job_inference_security_review"
 REVIEW_SCHEMA = "appsec-review/inference-security-review/1"
-HANDOFF_SCHEMA = "appsec-review/inference-review-handoff/2"
+HANDOFF_SCHEMA = "appsec-review/inference-review-handoff/3"
 DIMENSIONS = ("technical_severity", "exploitability_confidence", "environmental_business_impact",
               "remediation_priority")
 
@@ -143,18 +144,26 @@ def _verify_ledger(run_root: Path, outputs: Mapping[str, Any], review: Mapping[s
     return receipt_ref, ledger_ref, projection_ref, ledger
 
 
-def _verify_package_manifests(run_root: Path, outputs: Mapping[str, Any], review: Mapping[str, Any]) -> None:
+def _verify_package_manifests(run_root: Path, outputs: Mapping[str, Any], review: Mapping[str, Any]
+                             ) -> list[dict[str, str]]:
     contents = {}
+    bindings = []
     for lane in ("lead", "hunt"):
-        document = read_bound_json(run_root, _ref(_unit_output(outputs, f"packages.assemble_{lane}_packages")
-                                                  .get("artifact"), f"{lane} package set"))
+        set_ref = _ref(_unit_output(outputs, f"packages.assemble_{lane}_packages").get("artifact"), f"{lane} package set")
+        document = read_bound_json(run_root, set_ref)
         reference = _ref(document.get("package_manifest"), f"{lane} package manifest")
         manifest = verify_package_manifest(resolve_bound(run_root, reference))
         _require(manifest["content_sha256"] == document["package_manifest_content_sha256"],
                  f"{lane} package manifest does not match its lane document")
         contents[lane] = manifest["content_sha256"]
+        bindings.extend((set_ref, reference))
+        for package in document["packages"]:
+            package_ref = _ref(package, f"{lane} review package")
+            resolve_bound(run_root, package_ref)
+            bindings.append(package_ref)
     _require(contents["hunt"] == review["package_manifest_sha256"],
              "package manifest does not match the handoff")
+    return bindings
 
 
 def load_accepted_review(run_root: Path, schemas: SchemaSet, *, max_packages: int) -> VerifiedReview:
@@ -176,16 +185,20 @@ def load_accepted_review(run_root: Path, schemas: SchemaSet, *, max_packages: in
     errors = schemas.errors("handoff", review)
     _require(not errors, f"review handoff does not satisfy its schema: {'; '.join(errors[:3])}")
     _require(review["schema"] == HANDOFF_SCHEMA, "review handoff schema is unsupported")
-    scope = read_bound_json(run_root, _ref(_unit_output(outputs, "scope.accept_manifest").get("artifact"),
-                                           "accepted scope"))
+    _require(review["run_id"] == run_root.name, "accepted review belongs to another run")
+    scope_ref = _ref(_unit_output(outputs, "scope.accept_manifest").get("artifact"), "accepted scope")
+    scope = read_bound_json(run_root, scope_ref)
     _require(scope.get("manifest_sha256") == review["accepted_manifest_sha256"],
              "accepted manifest identity does not match the handoff")
     _require("package_manifest_sha256" in review and "coverage_matrix" in review,
              "review handoff lacks its package manifest or coverage matrix")
     _require(len(review["finding_packages"]) <= max_packages,
              f"{len(review['finding_packages'])} finding packages exceed the configured bound of {max_packages}")
-    _verify_package_manifests(run_root, outputs, review)
+    package_bindings = _verify_package_manifests(run_root, outputs, review)
     receipt_ref, ledger_ref, projection_ref, ledger = _verify_ledger(run_root, outputs, review)
+    from appsec_review.jobs.job_inference_security_review.chains import verify_publication
+    chain_ref = _ref(review["attack_chain_manifest"], "attack chain manifest")
+    chain_manifest = verify_publication(run_root, ledger, chain_ref, schemas, review["run_id"])
 
     coverage_ref = _ref(review["coverage_matrix"], "coverage matrix")
     coverage = read_bound_json(run_root, coverage_ref)
@@ -196,6 +209,7 @@ def load_accepted_review(run_root: Path, schemas: SchemaSet, *, max_packages: in
                                     "score set")["path"]).parent / "scores"
     scores: dict[str, tuple[dict[str, str], Mapping[str, Any]]] = {}
     for item in review["score_packages"]:
+        _require(item["score_id"] not in scores, "score package is listed twice")
         reference = {"path": (score_root / f"{item['score_id']}.json").as_posix(), "sha256": item["sha256"]}
         package = read_bound_json(run_root, reference)
         errors = schemas.errors("score-package", package)
@@ -221,6 +235,11 @@ def load_accepted_review(run_root: Path, schemas: SchemaSet, *, max_packages: in
                  "finding package provenance does not match the handoff")
         _require(package["ship_block"]["policy_sha256"] == review["ship_block"]["policy_sha256"],
                  "finding package ship-block policy hash does not match the handoff")
+        memberships = sorted(chain_id for chain_id, chain in ledger.attack_chains.items()
+                             if chain.decision is not None
+                             and chain.decision.status.value in ("confirmed", "qualified_supported")
+                             and package["claim_id"] in (item.claim_id for item in chain.proposal.components))
+        _require(package["attack_chains"] == memberships, "finding chain memberships disagree with the ledger")
         _require(set(package["scores"]) <= set(scores), "finding package names a score package the handoff lacks")
         judged = package["judge_verdict"]
         recorded = {item.verdict_id: item for item in ledger.judge_verdicts.get(package["claim_id"], ())}
@@ -231,7 +250,11 @@ def load_accepted_review(run_root: Path, schemas: SchemaSet, *, max_packages: in
         findings.append((reference, package))
 
     listed = {item["finding_package_id"]: item["sha256"] for item in review["finding_packages"]}
+    _require(len(listed) == len(findings) and len({package["claim_id"] for _, package in findings}) == len(findings),
+             "finding packages contain duplicate identities or claims")
     for candidate in review["poc_candidates"]:
+        _require(candidate["poc_basis"]["sha256"] == hashlib.sha256(
+            canonical_json(candidate["poc_basis"]["brief"])).hexdigest(), "PoC candidate basis digest is invalid")
         reference = candidate["finding_package"]
         package = next((value for _ref, value in findings if value["finding_package_id"] == reference["finding_package_id"]),
                        None)
@@ -264,7 +287,8 @@ def load_accepted_review(run_root: Path, schemas: SchemaSet, *, max_packages: in
                  for reference, package in sorted(findings, key=lambda row: row[1]["finding_package_id"])]
     job_handoff_ref = {"path": accepted.path, "sha256": accepted.sha256}
     bindings = {(item["path"], item["sha256"]) for item in (
-        job_handoff_ref, review_ref, receipt_ref, ledger_ref, projection_ref, coverage_ref,
+        job_handoff_ref, review_ref, receipt_ref, ledger_ref, projection_ref, coverage_ref, scope_ref, chain_ref,
+        *(item["artifact"] for item in chain_manifest["items"]), *package_bindings,
         *review["shards"], *(reference for reference, _ in findings), *(reference for reference, _ in scores.values()))}
     accounting = review["accounting"]
     document = {
