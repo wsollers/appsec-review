@@ -649,15 +649,22 @@ The unit of review capacity is the **review team**: `red_per_team` (default 3) r
     effective guard or control (`blue_control`), the other seeks a reachability or configuration
     break (`blue_reachability`). The blues never see each other's output.
   - *The verifier* stays blind under [R6](#r6-independence).
-- **Concurrency.** `review_teams` (default 5) is the number of teams that may run at once on the
-  host. A local overlay commonly sets it to 1. Teams are slots in one application-owned
+- **Concurrency.** `review_teams` (3 dev / 7 prod, including Copilot equivalents) is the number of
+  teams that may run at once within one run. A local overlay may lower it. Teams are slots in one application-owned
   cross-process semaphore, built on the kernel file locks in `storage/lock.py` and held under the
   run's data directory. Both lane units acquire teams from it, so `review_teams = 1` means exactly
-  one team on the machine regardless of how many Dagster units are active.
+  one team in that run regardless of how many Dagster units are active. Concurrent runs have
+  separate semaphores; this is not a host-wide call limit. The Dagster `inference_teams` pool
+  remains two lane units. Model-call concurrency is phase-dependent (up to three calls per
+  team for discovery/review, four for judges); see the
+  [operational limits](../operations/inference-security-review.md#effective-production-assignments-and-bounds).
 - **Scheduling.** The scheduler is fair-share and work-conserving. The next free team goes to the
   lane that has consumed the smaller fraction of its budget share. A lane with no queued packages
   releases its unused share to the other lane. Packages within a lane are taken in canonical
-  order: by rank, then `package_id`.
+  order: a bounded exploratory prefix alternates medium/low in rank/ID order within severity,
+  then ordinary packages by rank and `package_id`. Admission uses the same medium/low
+  alternation with lead-identity ordering, reassigning unused severity slots. Production
+  enables 20 exploratory packages; development exploration stays off.
 - **Semantics.** `review_teams` and pool limits are capacity, not semantics: they are excluded
   from every cell fingerprint, so runs at different concurrency reuse each other's cells. Budgets,
   team composition, caps, and lane shares are semantic: they decide what gets reviewed, and they
@@ -669,9 +676,13 @@ Budgets are expressed per lane in team-packages, with cell-level caps beneath th
 
 - A positive integer `budget_team_packages` is the job total. `lead_budget_share` (default 0.5)
   splits it between the lanes, and unused share flows to the other lane as described above.
-  `budget_team_packages = "all"` instead admits both complete generated package queues without
-  package-count truncation or lane-share quotas. `prod` and `copilot-prod` select `"all"`; `dev`
-  and `copilot-dev` retain 200. The run-wide budget still counts every launched package.
+  `budget_team_packages = "all"` removes that package-count budget but not the finite active-claim
+  ceiling. If package allocations exceed `max_active_claims`, fair-share/work-conserving allocation
+  is applied under the claim cap before launching teams; every allocated package receives at
+  least one claim slot and omitted packages record explicit budget gaps instead of running with
+  zero slots. `prod` and `copilot-prod` select `"all"` and 1,000 active claims; `dev`
+  and `copilot-dev` retain 200 packages and 500 active claims. Unused claim allocations are not
+  recycled; per-package caps remain 3 lead / 5 hunt. The run-wide budget counts every launched package.
 - Each cell is bounded by its model profile's turn, token, query, and timeout caps from
   [R2](#r2-worker-transport-and-bounded-retrieval-loop).
 - `max_model_turns` and the token totals are hard job ceilings. Reaching any ceiling stops new team
@@ -1059,7 +1070,7 @@ max_active_claims = 500
 max_attack_chains = 50
 
 [jobs.job_inference_security_review.settings.teams]
-review_teams = 5                 # capacity only; local overlay commonly sets 1; not fingerprinted
+review_teams = 3                 # dev; prod profile sets 7; capacity only, not fingerprinted
 red_per_team = 3
 blue_per_team = 2
 verifier_per_team = 1

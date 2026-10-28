@@ -86,7 +86,13 @@ model_profile = "strong"
 
 [jobs.job_inference_security_review.settings.lanes]
 exploration_enabled = true
-exploration_reserve = 1
+exploration_reserve = 20
+
+[jobs.job_inference_security_review.settings.teams]
+review_teams = 7
+
+[jobs.job_inference_security_review.settings.rounds]
+max_active_claims = 1000
 
 [jobs.job_poc_generation.settings.models.default]
 provider = "copilot-sdk"

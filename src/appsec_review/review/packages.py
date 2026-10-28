@@ -38,6 +38,7 @@ from collections import Counter, defaultdict
 from collections.abc import Iterable, Mapping
 from dataclasses import asdict, dataclass, fields
 import hashlib
+from itertools import zip_longest
 import json
 from pathlib import Path
 from typing import Any
@@ -69,7 +70,7 @@ from appsec_review.storage.atomic import canonical_json
 
 
 PACKAGE_SCHEMA = "appsec-review/review-package/6"
-ASSEMBLY_RULE = "appsec-review/assemble-review-packages/9"
+ASSEMBLY_RULE = "appsec-review/assemble-review-packages/10"
 GRAPH_CONTEXT_RULE = "appsec-review/package-graph-context/2"
 CALLER_ROLE = "caller"
 CALLER_PRODUCER = "code_graph_callers"
@@ -237,9 +238,10 @@ def admission_reasons(lead: Lead, settings: PackageSettings) -> list[str]:
 def admitted_leads(collection: LeadCollection, settings: PackageSettings) -> list[Lead]:
     urgent = [lead for lead in collection.leads
               if admission_reasons(lead, settings) and admission_reasons(lead, settings) != ["exploration_reserve"]]
-    exploratory = sorted((lead for lead in collection.leads
-                          if admission_reasons(lead, settings) == ["exploration_reserve"]),
-                         key=lambda lead: (SEVERITY_ORDER[lead.effective_severity], lead.observation_id))
+    populations = [sorted((lead for lead in collection.leads if lead.effective_severity == severity
+                           and admission_reasons(lead, settings) == ["exploration_reserve"]),
+                          key=lambda lead: lead.observation_id) for severity in ("medium", "low")]
+    exploratory = [lead for pair in zip_longest(*populations) for lead in pair if lead is not None]
     return urgent + exploratory[:settings.exploration_reserve]
 
 

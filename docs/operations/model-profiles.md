@@ -58,9 +58,12 @@ use `claude-sonnet-5.5`, preserving distinct-model verification. Inference-revie
 60,000 model turns, 600,000,000 input tokens, 60,000,000 output tokens, 200,000 retrieval queries
 and 86,400 seconds. These are limits, not consumption targets.
 
-Both production profiles set `budgets.budget_team_packages = "all"`. Every generated lead and hunt
-package is eligible for a team launch: there is no package-count cutoff or fixed lane-share quota.
-For example, queues of 485 lead and 114 hunt packages admit all 599, not 100 per lane. This does not
+Both production profiles set `budgets.budget_team_packages = "all"` and
+`rounds.max_active_claims = 1000`. There is no separate package-count budget, but package launches
+are bounded by claim capacity: every launched package receives at least one claim slot.
+When packages exceed 1,000, fair-share allocation across both lanes selects launches and records
+explicit cutoffs for the rest. For example, queues of 485 lead and 114 hunt packages admit all
+599 with nonzero allocations, not 100 per lane. This does not
 guarantee completion: token, turn, query, time, per-cell and concurrency safeguards remain in force,
 and exhaustion still records explicit gaps. `dev` and `copilot-dev` keep the 200-package ceiling and
 fair-share allocation. Existing runs retain their frozen settings; changing these profiles does not
@@ -156,16 +159,23 @@ rejected with a message that names the key.
 | `jobs.job_inference_security_review.settings.roles.<role>` (the role must exist in the base) | `model_profile` |
 | `jobs.job_inference_security_review.settings.budgets` | `budget_team_packages` (positive integer or `"all"`), `max_model_turns`, `max_input_tokens`, `max_output_tokens`, `max_retrieval_queries`, `timeout_seconds` |
 | `jobs.job_inference_security_review.settings.lanes` | `exploration_enabled` (Boolean), `exploration_reserve` (positive integer) |
+| `jobs.job_inference_security_review.settings.teams` | `review_teams` (integer 1-64, capacity only) |
+| `jobs.job_inference_security_review.settings.rounds` | `max_active_claims` (integer 1-100,000) |
 
 Medium/low exploration is **on in `prod` and `copilot-prod`**, and remains **off in `dev` and
-`copilot-dev`**. Both production files explicitly set `exploration_enabled = true` and preserve
-`exploration_reserve = 1`: at most one otherwise-unadmitted medium/low lead package, selected
-by effective severity then identity, inside the existing allocation and usage budget. Medium
-leads take priority over low leads; this is not exhaustive coverage of both severities.
+`copilot-dev`**. Both production files explicitly set `exploration_enabled = true` and
+`exploration_reserve = 20`: bounded otherwise-unadmitted medium/low packages alternate between
+severities, in identity order within each severity, with unused slots going to the other population.
+When both are plentiful this selects 10 medium and 10 low; launch-time cutoffs preserve the same
+alternation (medium first for a single-slot tie). This is not exhaustive coverage of both severities.
 Informational leads and unknown-severity handling do not change. Package-local follow-ups retain
 three rounds and stop after one stable round; only confirmed, in-scope seeds unlock local
-round-1+ variants. No model, budget, concurrency, OWASP, or PoC enablement changes accompany this
-switch. See [effective assignments and limits](inference-security-review.md#effective-production-assignments-and-bounds)
+round-1+ variants. No model, usage-budget, OWASP, or PoC enablement changes accompany this
+coverage policy. The approved coverage follow-up sets 7 production / 3 development concurrent
+teams and raises production active-claim capacity to 1,000 (dev stays 500), with fair launch
+cutoffs instead of zero-claim reviews. All other model, usage, and round limits are retained.
+See the [resolved comparison and cutoff policy](inference-security-review.md#resolved-coverage-limits-and-cutoffs)
+and [effective assignments](inference-security-review.md#effective-production-assignments-and-bounds)
 for providers, models, personas, skills, pools, and residual gaps. Existing runs retain frozen
 settings; offline verification does not imply a live production run.
 
