@@ -1,0 +1,45 @@
+{
+  "schema": "appsec-review/owasp-catalog/1",
+  "family": "MASVS",
+  "version": "2.1.0",
+  "authority": "control",
+  "fixture": true,
+  "upstream": {
+    "repository": "https://github.com/OWASP/owasp-masvs",
+    "ref": "v2.1.0",
+    "commit": "8e133d09f4140518ed04cc254b18be9ff4990ffc",
+    "license": "CC-BY-SA-4.0"
+  },
+  "records": [
+    {
+      "id": "MASVS-STORAGE-1",
+      "title": "Secure storage",
+      "text": "Fixture control: verify sensitive mobile data storage protections.",
+      "domain": "mobile_platform",
+      "profiles": ["L1", "L2"],
+      "component_roles": ["android_mobile", "ios_mobile"],
+      "evidence_mode": "artifact_configuration",
+      "required_tools": ["mobile_source_index"]
+    },
+    {
+      "id": "MASVS-NETWORK-1",
+      "title": "Secure network communication",
+      "text": "Fixture control: verify mobile network communication protections.",
+      "domain": "mobile_platform",
+      "profiles": ["L1", "L2"],
+      "component_roles": ["android_mobile", "ios_mobile", "network"],
+      "evidence_mode": "dynamic_runtime",
+      "required_tools": ["mobile_runtime_test"]
+    },
+    {
+      "id": "MASVS-CRYPTO-1",
+      "title": "Approved cryptography",
+      "text": "Fixture control: verify mobile cryptographic use and key handling.",
+      "domain": "cryptography_data_protection",
+      "profiles": ["L2"],
+      "component_roles": ["android_mobile", "ios_mobile", "cryptography_data_protection"],
+      "evidence_mode": "static_source",
+      "required_tools": ["mobile_source_index"]
+    }
+  ]
+}
