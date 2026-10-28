@@ -16,7 +16,9 @@ import time
 import uuid
 from typing import TYPE_CHECKING, Any, Callable, Iterable, Mapping, Sequence
 
+from appsec_review.interchange import decode_handoff
 from appsec_review.observability import PipelineLog
+from appsec_review.observability.spans import count_work
 from appsec_review.retrieval.index import (
     INDEX_NAMES, MANIFEST_SCHEMA, IndexIdentity, load_verified_manifest, write_manifest,
 )
@@ -89,16 +91,21 @@ def resolve_accepted_manifest(run_root: Path) -> tuple[Path, str]:
         raise RetrievalIntegrityError("accepted index pointer escapes run")
     if file_sha256(handoff_path) != pointer.get("handoff_sha256"):
         raise RetrievalIntegrityError("accepted handoff integrity mismatch")
-    handoff = json.loads(handoff_path.read_text(encoding="utf-8"))
-    if handoff.get("status") != "ACCEPTED" or handoff.get("schema") != "appsec-review/job-handoff/1":
-        raise RetrievalGap("index producer handoff is not accepted")
+    relative = handoff_path.relative_to(run_root).parts
+    if len(relative) != 6 or relative[:2] != ("data", "jobs") or relative[3] != "attempts":
+        raise RetrievalIntegrityError("accepted handoff producer path is invalid")
+    count_work("handoff_validations")
+    try:
+        handoff = decode_handoff(json.loads(handoff_path.read_text(encoding="utf-8")),
+                                 run_id=run_root.name, job_id=relative[2])
+    except ValueError as exc:
+        raise RetrievalIntegrityError("index producer handoff is not accepted") from exc
     manifest_sha = str(pointer.get("manifest_sha256", ""))
     if not _artifact_in_handoff(handoff, manifest_path.relative_to(run_root).as_posix(), manifest_sha):
         raise RetrievalIntegrityError("accepted manifest is not bound to its producer handoff")
     from appsec_review.storage.shared import verify_handoff, consume_handoff
-    if "resolving_paths" in handoff:
-        verify_handoff(run_root, handoff)
-        consume_handoff(run_root, handoff)
+    verify_handoff(run_root, handoff)
+    consume_handoff(run_root, handoff)
     return manifest_path, manifest_sha
 
 
@@ -131,10 +138,12 @@ def _accepted_handoff(run_root: Path, job_id: str, expected_sha256: str) -> tupl
     if len(matches) != 1:
         raise RetrievalIntegrityError(f"expected exactly one accepted handoff for {job_id}")
     path = matches[0]
-    handoff = json.loads(path.read_text(encoding="utf-8"))
-    if (handoff.get("schema") != "appsec-review/job-handoff/1" or
-            handoff.get("status") != "ACCEPTED" or handoff.get("job_id") != job_id):
-        raise RetrievalIntegrityError(f"invalid accepted handoff for {job_id}")
+    count_work("handoff_validations")
+    try:
+        handoff = decode_handoff(json.loads(path.read_text(encoding="utf-8")),
+                                 run_id=run_root.name, job_id=job_id)
+    except ValueError as exc:
+        raise RetrievalIntegrityError(f"invalid accepted handoff for {job_id}") from exc
     return handoff, path
 
 
@@ -419,7 +428,14 @@ class RetrievalCore:
 
     @staticmethod
     def _entity(row: sqlite3.Row, index: str) -> dict[str, Any]:
-        payload = RetrievalCore._safe_payload(json.loads(row["payload_json"]))
+        raw = json.loads(row["payload_json"])
+        payload = RetrievalCore._safe_payload(raw)
+        if row["kind"] == EntityKind.TOOL_OBSERVATION.value:
+            from .observations import observation_projection
+            if "common" not in raw:
+                payload["common"] = RetrievalCore._safe_common(observation_projection(raw).as_dict())
+                payload["provenance_gaps"] = ["provenance_unavailable"]
+                count_work("provenance_gaps")
         value = {
             "identity": row["identity"], "kind": row["kind"], "native_id": row["native_id"],
             "name": row["name"], "payload": payload, "index": index,
@@ -439,6 +455,40 @@ class RetrievalCore:
         return value
 
     @staticmethod
+    def _safe_common(value: Any) -> dict[str, Any]:
+        from appsec_review.interchange import observation_metadata_from_mapping
+        common = observation_metadata_from_mapping(value).as_dict()
+        # Only the closed common-reference fields may retain canonical artifact paths.
+        references = common.pop("evidence_refs")
+        result = RetrievalCore._safe_payload(common, depth=1)
+        projected = []
+        for reference in references:
+            safe = RetrievalCore._safe_payload(reference, depth=1)
+            for field in ("artifact", "execution_reference", "retention_receipt"):
+                artifact = reference[field]
+                if artifact is None:
+                    continue
+                path = artifact["path"]
+                pattern = {
+                    "artifact": r"data/shared/objects/[0-9a-f]{64}",
+                    "retention_receipt": (
+                        r"data/jobs/[a-z][a-z0-9_]*/attempts/attempt_[0-9]+/"
+                        r"shared/native-output/[0-9a-f]{64}\.json"),
+                    "execution_reference": (
+                        r"data/(?:codeql/scopes/[^/]+/queries/.+/executions/query|"
+                        r"jobs/[a-z][a-z0-9_]*/attempts/attempt_[0-9]+/.+)/receipt\.json"),
+                }[field]
+                if not re.fullmatch(pattern, path):
+                    raise RetrievalIntegrityError("common observation artifact path is outside its allowed namespace")
+                if field == "artifact" and path != f"data/shared/objects/{artifact['sha256']}":
+                    raise RetrievalIntegrityError("common native artifact identity mismatch")
+                safe[field]["path"] = path
+            projected.append(safe)
+        result["evidence_refs"] = projected
+        count_work("observation_references", len(references))
+        return result
+
+    @staticmethod
     def _safe_payload(value: Any, *, depth: int = 0) -> Any:
         """Defense in depth: never serialize protected command or raw-content fields."""
         denied = re.compile(
@@ -448,7 +498,8 @@ class RetrievalCore:
         if depth > 6:
             return "<truncated>"
         if isinstance(value, Mapping):
-            return {str(key)[:128]: RetrievalCore._safe_payload(child, depth=depth + 1)
+            return {str(key)[:128]: (RetrievalCore._safe_common(child) if key == "common" and depth == 0
+                                   else RetrievalCore._safe_payload(child, depth=depth + 1))
                     for key, child in list(value.items())[:200]
                     if not denied.fullmatch(str(key)) and str(key) != "path"}
         if isinstance(value, (list, tuple)):

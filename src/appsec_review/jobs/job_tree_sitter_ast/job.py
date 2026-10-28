@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from appsec_review.interchange import decode_handoff
+
 from collections.abc import Callable, Mapping
 from concurrent.futures import as_completed
 from appsec_review.storage.shared import PublicationThreadPoolExecutor as ThreadPoolExecutor
@@ -53,8 +55,7 @@ def _accepted_handoff(run_root: Path, job_id: str) -> tuple[Mapping[str, Any], s
         raise ValueError(f"accepted {job_id} handoff is required")
     pointer = json.loads(pointer_path.read_text(encoding="utf-8"))
     handoff = _read_verified(run_root, {"path": pointer["handoff_path"], "sha256": pointer["handoff_sha256"]})
-    if handoff.get("schema") != "appsec-review/job-handoff/1" or handoff.get("status") != "ACCEPTED":
-        raise ValueError(f"{job_id} handoff is not accepted")
+    handoff = decode_handoff(handoff, run_id=run_root.name, job_id=job_id)
     return handoff, str(pointer["handoff_sha256"])
 
 

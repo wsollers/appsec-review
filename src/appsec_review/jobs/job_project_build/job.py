@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from appsec_review.interchange import decode_handoff
+
 from collections.abc import Mapping, Sequence
 import hashlib
 import json
@@ -876,9 +878,7 @@ def load_accepted_builds(run_root: Path) -> Mapping[str, Any]:
     if file_sha256(handoff_path) != value["handoff_sha256"]:
         raise ValueError("project-build handoff identity changed")
     handoff = json.loads(handoff_path.read_text(encoding="utf-8"))
-    if (handoff.get("schema") != "appsec-review/job-handoff/1" or handoff.get("status") != "ACCEPTED" or
-            handoff.get("job_id") != "job_project_build"):
-        raise ValueError("project-build handoff is not accepted")
+    handoff = decode_handoff(handoff, run_id=run_root.name, job_id="job_project_build")
     artifact = handoff["outputs"]["acceptance.publish_handoff"]["artifact"]
     path = (run_root / str(artifact.get("path", ""))).resolve()
     if run_root.resolve() not in path.parents or not path.is_file() or path.is_symlink():

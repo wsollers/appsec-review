@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from appsec_review.interchange import decode_handoff
+
 from collections.abc import Mapping, Sequence
 from appsec_review.storage.shared import PublicationThreadPoolExecutor as ThreadPoolExecutor
 from datetime import datetime, timezone
@@ -120,9 +122,7 @@ def load_accepted_language_build(run_root: Path) -> Mapping[str, Any]:
     pointer = json.loads(pointer_path.read_text(encoding="utf-8"))
     handoff = _safe_artifact(run_root, {"path": pointer.get("handoff_path"),
                                       "sha256": pointer.get("handoff_sha256")})
-    if (handoff.get("schema") != "appsec-review/job-handoff/1" or handoff.get("status") != "ACCEPTED" or
-            handoff.get("job_id") != "job_language_build"):
-        raise ValueError("language-build handoff is not accepted")
+    handoff = decode_handoff(handoff, run_id=run_root.name, job_id="job_language_build")
     published = handoff.get("outputs", {}).get("acceptance.publish_handoff", {})
     identity = published.get("artifact") if isinstance(published, Mapping) else None
     if not isinstance(identity, Mapping):

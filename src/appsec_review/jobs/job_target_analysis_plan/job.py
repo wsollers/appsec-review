@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from appsec_review.interchange import decode_handoff
+
 from collections.abc import Mapping
 from appsec_review.storage.shared import PublicationThreadPoolExecutor as ThreadPoolExecutor
 from dataclasses import replace
@@ -95,8 +97,7 @@ def _accepted_catalog(run_root: Path) -> dict[str, Any]:
         raise ValueError("accepted job_target_catalog handoff is required")
     pointer = json.loads(pointer_path.read_text(encoding="utf-8"))
     handoff = _read_artifact(run_root, {"path": pointer["handoff_path"], "sha256": pointer["handoff_sha256"]})
-    if handoff.get("schema") != "appsec-review/job-handoff/1" or handoff.get("status") != "ACCEPTED":
-        raise ValueError("target catalog handoff is not accepted")
+    handoff = decode_handoff(handoff, run_id=run_root.name, job_id="job_target_catalog")
     published = handoff.get("outputs", {}).get("publish_catalog.publish_handoff", {})
     catalog = _read_artifact(run_root, published.get("artifact", {}))
     if catalog.get("schema") != "appsec-review/target-catalog/1":
@@ -139,8 +140,7 @@ def load_accepted_plan(run_root: Path) -> Mapping[str, Any]:
         raise ValueError("accepted job_target_analysis_plan handoff is required")
     pointer = json.loads(pointer_path.read_text(encoding="utf-8"))
     handoff = _read_artifact(Path(run_root), {"path": pointer["handoff_path"], "sha256": pointer["handoff_sha256"]})
-    if handoff.get("schema") != "appsec-review/job-handoff/1" or handoff.get("status") != "ACCEPTED":
-        raise ValueError("analysis plan handoff is not accepted")
+    handoff = decode_handoff(handoff, run_id=Path(run_root).name, job_id="job_target_analysis_plan")
     identity = handoff.get("outputs", {}).get("plan_acceptance.publish_handoff", {}).get("artifact")
     plan = _read_artifact(Path(run_root), identity or {})
     if plan.get("schema") != PLAN_SCHEMA:
