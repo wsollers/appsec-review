@@ -20,7 +20,7 @@ from appsec_review.retrieval.model import canonical_json
 from appsec_review.review.scope import accept_manifest
 from appsec_review.storage import atomic_json, file_sha256
 from tests.fixtures.inference_review.builder import (
-    FILES, FIXTURE_SECRET, SECRET_FILE, build_accepted_index_set,
+    FEEDS, FILES, FIXTURE_SECRET, SECRET_FILE, build_accepted_index_set,
 )
 
 
@@ -31,7 +31,7 @@ NATIVE = "component:0002"
 
 @pytest.fixture(scope="module")
 def seed_publication(tmp_path_factory):
-    return build_accepted_index_set(tmp_path_factory.mktemp("seed"), secrets=True)
+    return build_accepted_index_set(tmp_path_factory.mktemp("seed"), secrets=True, omit_feeds=FEEDS)
 
 
 @pytest.fixture
