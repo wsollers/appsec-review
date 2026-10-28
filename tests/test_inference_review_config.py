@@ -231,6 +231,9 @@ def test_capacity_overlay_can_be_named_by_environment(tmp_path: Path, monkeypatc
     (f"[jobs.{JOB}]\nworkers = 1\n", "rejected: jobs.job_inference_security_review.workers"),
     (f"[jobs.{JOB}.settings.teams]\nreview_teams = \"1\"\n", "review_teams must be an integer"),
     ("[orchestration.dagster.pools]\ninference_teams = 1.5\n", "pool limit is invalid"),
+    ("[review_policy]\nmode = \"strict\"\n", "rejected: review_policy.mode"),
+    ("[review_policy.resources]\ngpu = 1\n", "rejected: review_policy.resources.gpu"),
+    ("[review_policy.resources]\nio_slots = \"4\"\n", "review_policy.resources.io_slots must be an integer"),
     ("", "must be a non-empty table"),
 ])
 def test_capacity_overlay_rejects_every_other_key(tmp_path: Path, overlay: str, message: str) -> None:
@@ -243,10 +246,33 @@ def test_capacity_overlay_values_are_still_range_checked(tmp_path: Path) -> None
         _variant(tmp_path, overlay=f"[jobs.{JOB}.settings.teams]\nreview_teams = 0\n")
     with pytest.raises(ValueError, match="pool limits must be between 1 and 64"):
         _variant(tmp_path, overlay="[orchestration.dagster.pools]\ninference_teams = 0\n")
+    with pytest.raises(ValueError, match="review_policy.resources.io_slots must be a positive integer"):
+        _variant(tmp_path, overlay="[review_policy.resources]\nio_slots = 0\n")
+
+
+def test_capacity_overlay_sets_the_resource_budget(tmp_path: Path) -> None:
+    base = _variant(tmp_path / "base")
+    config = _variant(tmp_path / "overlaid", overlay="[review_policy.resources]\nio_slots = 4\n")
+    assert base.review_policy.resources.io_slots == 1
+    assert config.review_policy.resources.io_slots == 4
+    assert config.review_policy.resources.cpu == base.review_policy.resources.cpu
+    resolved = json.loads(config.resolved_json)
+    assert resolved["review_policy"]["resources"]["io_slots"] == 4
+    assert resolved["configuration_overlay"]["keys"] == ["review_policy.resources.io_slots"]
+
+
+def test_checked_in_prod_capacity_overlay_loads() -> None:
+    config = load_config(ROOT / "appsec-review.toml", overlay=ROOT / "test/acceptance/prod-capacity-overlay.toml",
+                         profile="prod")
+    assert config.review_policy.resources.io_slots == 4
+    assert config.dagster.pool_limits["scanner"] == 4
+    assert _settings(config).teams.review_teams == 3
+    assert config.profile == "prod"
 
 
 def test_capacity_key_allowlist_is_exposed() -> None:
-    assert CAPACITY_KEYS == (f"jobs.{JOB}.settings.teams.review_teams", "orchestration.dagster.pools.*")
+    assert CAPACITY_KEYS == (f"jobs.{JOB}.settings.teams.review_teams", "orchestration.dagster.pools.*",
+                             "review_policy.resources.*")
     assert overlay_capacity_keys({"orchestration": {"dagster": {"pools": {"index": 2}}}}) == (
         "orchestration.dagster.pools.index",)
 

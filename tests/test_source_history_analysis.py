@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import ast
+from dataclasses import replace
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -8,6 +10,7 @@ import resource
 import shutil
 import subprocess
 from fractions import Fraction
+import weakref
 
 import pytest
 
@@ -27,10 +30,13 @@ from appsec_review.jobs.job_source_history_analysis.settings import FilterRules
 from appsec_review.jobs.job_source_history_analysis.sources import blob_id, history_identity, resolve_git_source
 from appsec_review.jobs.job_target_analysis_plan import build_job as build_plan, load_accepted_plan
 from appsec_review.jobs.job_target_catalog import build_job as build_catalog
+from appsec_review.observability import EventLog
 from appsec_review.retrieval import RetrievalCore
 from appsec_review.runtime import GraphRunner, plan_jobs
+from appsec_review.runtime.job import JobContext
 from appsec_review.runtime.resume import job_config_sha256
-from appsec_review.storage import file_sha256
+from appsec_review.runtime.units import UnitContext
+from appsec_review.storage import atomic_json, file_sha256
 
 
 ROOT = Path(__file__).parents[1]
@@ -150,10 +156,21 @@ def emulate_tree_sitter(request_path: Path, output_path: Path, target: Path) -> 
     records = []
     for item in request["files"]:
         data = (target / item["path"]).read_bytes()
-        nodes = tree_sitter_nodes(data)
-        records.append({"kind": "file", "path": item["path"], "status": "SUCCEEDED", "sha256": item["sha256"],
-                        "bytes": len(data), "grammar": "python", "root_has_error": False,
-                        "node_count": len(nodes), "truncated": False, "nodes": nodes})
+        if request["language"] == "C":
+            assert data == b"int value;\n", "the emulator supports only this minimal C fixture"
+            nodes = [{"ordinal_path": [], "field": None, "type": "translation_unit", "named": True,
+                      "error": False, "missing": False, "extra": False, "has_error": False,
+                      "start_byte": 0, "end_byte": len(data), "start_point": [0, 0], "end_point": [1, 0]}]
+            grammar = "c"
+        else:
+            nodes = tree_sitter_nodes(data)
+            grammar = "python"
+        maximum = min(request.get("max_nodes", len(nodes)), request.get("max_scope_nodes", len(nodes)))
+        truncated = len(nodes) > maximum
+        nodes = nodes[:maximum]
+        records.append({"kind": "file", "path": item["path"], "status": "PARTIAL" if truncated else "SUCCEEDED",
+                        "sha256": item["sha256"], "bytes": len(data), "grammar": grammar, "root_has_error": False,
+                        "node_count": len(nodes), "truncated": truncated, "nodes": nodes})
     output_path.write_text(json.dumps({
         "schema": "appsec-review/tree-sitter-container-output/1",
         "tool": {"id": "tool-tree-sitter", "version": TREE_SITTER_LOCK["tool_version"],
@@ -178,6 +195,10 @@ class LocalDocker:
             assert len(argv) == 4 and argv[3] in self.containers, argv
             self.containers.remove(argv[3])
             return CommandOutcome(0, b"", b"")
+        if argv[:3] == ["docker", "container", "inspect"]:
+            if argv[3] in self.containers:
+                return CommandOutcome(0, b"true\n", b"")
+            return CommandOutcome(1, b"", f"Error: No such container: {argv[3]}\n".encode())
         if argv[:2] == ["docker", "inspect"]:
             return CommandOutcome(0, b'[{"Source":"/work","Destination":"/work"}]\n', b"")
         if argv[:3] == ["docker", "image", "inspect"]:
@@ -231,6 +252,12 @@ class LocalDocker:
                 return f"{flag}={host(path)}"
             return host(value)
 
+        if entrypoint == "/usr/local/bin/python":
+            from appsec_review.container_runtime.measurement import unavailable_resources
+            assert arguments[0] == "/opt/appsec/measurement.py"
+            atomic_json(Path(host(arguments[2])), unavailable_resources("fixture_has_no_cgroup"))
+            separator = arguments.index("--")
+            entrypoint, arguments = arguments[separator + 1], arguments[separator + 2:]
         if entrypoint == "/opt/appsec/parser.py":
             self.runs.append({"arguments": arguments, "environment": environment, "exit": 0, "tool": "tree-sitter"})
             if self.tree_sitter_fails:
@@ -386,6 +413,216 @@ def run_graph(config, target: Path, docker: LocalDocker, *, run_id: str | None =
 
 def outputs(outcome) -> dict:
     return outcome["jobs"]["job_source_history_analysis"]["result"]["outputs"]
+
+
+def symbol_unit(tmp_path: Path, sources: dict[str, tuple[str, str]], *, bounds: dict | None = None) -> UnitContext:
+    config = load_config(ROOT / "appsec-review.toml").job("job_source_history_analysis")
+    if bounds:
+        config = replace(config, settings={**config.settings, "symbols": {**config.settings["symbols"], **bounds}})
+    target, run_root = tmp_path / "target", tmp_path / "run"
+    run_root.mkdir(parents=True)
+    eligible = {}
+    for path, (language, text) in sources.items():
+        write(target, path, text)
+        eligible[path] = {"language": language, "exact": True, "size_bytes": len(text.encode()),
+                          "sha256": hashlib.sha256(text.encode()).hexdigest()}
+    signals = run_root / "signals.json"
+    atomic_json(signals, {"files": {path: {"rank_eligibility": "eligible", "churn_lines": 1} for path in sources}})
+    attempt = run_root / "data/jobs/job_source_history_analysis/attempts/attempt_0001"
+    context = JobContext(
+        run_id="symbol-fixture", attempt_id="attempt_0001", trigger="test", repository_root=ROOT,
+        run_root=run_root, attempt_root=attempt, metadata_root=tmp_path / "metadata",
+        orchestration={}, config=config, events=EventLog(attempt / "logs/events.jsonl"), target_root=target)
+    return UnitContext(
+        context, "analyze.symbol_spans", "analyze", "symbol_spans", attempt / "steps/analyze/tasks/symbol_spans",
+        {"resolve_sources.bind_snapshot": {"eligible": eligible},
+         "analyze.compute_signals": {"artifact": {"path": "signals.json", "sha256": file_sha256(signals)}}})
+
+
+def invoke_symbols(unit: UnitContext, docker: LocalDocker, *, executor_type=ContainerExecutor):
+    job = build_job(executor_factory=lambda context: executor_type(
+        load_catalog(context.job.repository_root), context.job.run_root, runner=docker))
+    return next(item for item in job.units if item.unit_id == unit.unit_id).handler(unit)
+
+
+def test_symbols_bound_163_files_and_release_raw_trees_before_next_invocation(tmp_path: Path, monkeypatch) -> None:
+    class Nodes(list):
+        pass
+
+    nodes_seen = []
+    decode = json.loads
+
+    def tracked_decode(*args, **kwargs):
+        value = decode(*args, **kwargs)
+        if isinstance(value, dict) and value.get("schema") == "appsec-review/tree-sitter-container-output/1":
+            for record in value["records"]:
+                record["nodes"] = Nodes(record["nodes"])
+                nodes_seen.append(weakref.ref(record["nodes"]))
+        return value
+
+    monkeypatch.setattr(json, "loads", tracked_decode)
+
+    class TrackingDocker(LocalDocker):
+        def __init__(self):
+            super().__init__()
+            self.requests = []
+            self.active = self.peak = 0
+
+        def __call__(self, argv, timeout):
+            if argv[:2] != ["docker", "run"]:
+                return super().__call__(argv, timeout)
+            assert all(reference() is None for reference in nodes_seen), "raw AST retained across invocations"
+            self.active += 1
+            self.peak = max(self.peak, self.active)
+            try:
+                result = super().__call__(argv, timeout)
+                scratch = next(value.split("src=", 1)[1].split(",dst=", 1)[0]
+                               for value in argv if isinstance(value, str) and ",dst=/scratch" in value)
+                self.requests.append((Path(scratch), json.loads((Path(scratch) / "request.json").read_text())))
+                return result
+            finally:
+                self.active -= 1
+
+    sources = {f"src/part-{index:03}/same.py": ("Python", "def check(value):\n    if value:\n        return 1\n")
+               for index in range(163)}
+    documents, identities = [], []
+    for name in ("first", "second"):
+        unit = symbol_unit(tmp_path / name, sources)
+        docker = TrackingDocker()
+        result = invoke_symbols(unit, docker)
+        assert result["terminal_status"] == "SUCCEEDED" and not result["gaps"]
+        assert len(docker.requests) == 163 and docker.peak == 1
+        assert len({scratch for scratch, _ in docker.requests}) == 163
+        assert [request["files"][0]["path"] for _, request in docker.requests] == sorted(sources)
+        for scratch, request in docker.requests:
+            assert len(request["files"]) == 1
+            item = request["files"][0]
+            assert item["sha256"] == hashlib.sha256(sources[item["path"]][1].encode()).hexdigest()
+            assert request["max_nodes"] == request["max_scope_nodes"] == 200_000
+            assert request["max_file_bytes"] == 1_048_576
+            receipt = json.loads((scratch / "execution.json").read_text())
+            assert receipt["exit_code"] == 0
+            assert receipt["limits"]["memory"] == "1g" and receipt["limits"]["pids"] == 256
+        identities.append([(scratch.relative_to(unit.unit_root).as_posix(), request["scope_id"])
+                           for scratch, request in docker.requests])
+        documents.append(json.loads((unit.job.run_root / result["artifact"]["path"]).read_text()))
+    assert documents[0] == documents[1] and identities[0] == identities[1]
+    assert len(documents[0]["files"]) == 163 and len(nodes_seen) == 326
+    assert all(reference() is None for reference in nodes_seen)
+    from appsec_review.jobs.job_source_history_analysis.symbols import extract
+    for path, (_, text) in sources.items():
+        expected = extract({"nodes": tree_sitter_nodes(text.encode()), "status": "SUCCEEDED",
+                            "root_has_error": False, "truncated": False}, text.encode(), "Python", path)
+        assert documents[0]["files"][path] == json.loads(json.dumps(expected))
+
+
+def test_symbols_keep_mixed_languages_and_same_basenames_separate(tmp_path: Path) -> None:
+    sources = {"b/same.py": ("Python", "VALUE = 1\n"), "a/same.c": ("C", "int value;\n"),
+               "a/same.py": ("Python", "VALUE = 2\n")}
+    unit = symbol_unit(tmp_path, sources)
+    result = invoke_symbols(unit, LocalDocker())
+    document = json.loads((unit.job.run_root / result["artifact"]["path"]).read_text())
+    assert document["statuses"] == {path: "complete" for path in sources}
+    requests = [json.loads(path.read_text()) for path in unit.unit_root.glob("scratch/tree-sitter/*/*/request.json")]
+    assert {request["language"] for request in requests} == {"Python", "C"}
+    assert {request["files"][0]["path"] for request in requests} == set(sources)
+    assert len({request["scope_id"] for request in requests}) == 3
+
+
+@pytest.mark.parametrize("extra_nodes", (0, 1))
+def test_symbols_keep_exact_node_boundary_and_named_truncation(tmp_path: Path, extra_nodes: int) -> None:
+    source = "def check(value):\n    if value:\n        return 1\n"
+    count = len(tree_sitter_nodes(source.encode()))
+    unit = symbol_unit(tmp_path, {"a.py": ("Python", source)},
+                       bounds={"max_nodes_per_file": count - extra_nodes})
+    result = invoke_symbols(unit, LocalDocker())
+    document = json.loads((unit.job.run_root / result["artifact"]["path"]).read_text())
+    assert document["files"]["a.py"]["status"] == ("partial" if extra_nodes else "complete")
+    assert ("node_limit_reached" in result["gaps"]) is bool(extra_nodes)
+
+
+def test_symbols_name_oversized_and_syntax_error_coverage(tmp_path: Path) -> None:
+    class SyntaxErrorDocker(LocalDocker):
+        def __call__(self, argv, timeout):
+            outcome = super().__call__(argv, timeout)
+            if argv[:2] == ["docker", "run"]:
+                scratch = next(value.split("src=", 1)[1].split(",dst=", 1)[0]
+                               for value in argv if isinstance(value, str) and ",dst=/scratch" in value)
+                path = Path(scratch) / "output.json"
+                document = json.loads(path.read_text())
+                document["records"][0]["root_has_error"] = True
+                atomic_json(path, document)
+            return outcome
+
+    unit = symbol_unit(tmp_path, {"bad.c": ("C", "int value;\n"), "large.c": ("C", " " * 32)},
+                       bounds={"max_file_bytes": 16})
+    docker = SyntaxErrorDocker()
+    result = invoke_symbols(unit, docker)
+    document = json.loads((unit.job.run_root / result["artifact"]["path"]).read_text())
+    assert len(docker.runs) == 1
+    assert document["statuses"] == {"bad.c": "partial", "large.c": "unavailable:symbol_file_too_large"}
+    assert set(result["gaps"]) == {"parse_errors_present", "symbol_file_too_large"}
+
+
+@pytest.mark.parametrize("damage", ("hash", "duplicate", "unrequested", "scope", "image"))
+def test_symbols_reject_invalid_output_before_next_file(tmp_path: Path, damage: str) -> None:
+    class DamagedDocker(LocalDocker):
+        def __call__(self, argv, timeout):
+            outcome = super().__call__(argv, timeout)
+            if argv[:2] == ["docker", "run"]:
+                scratch = next(value.split("src=", 1)[1].split(",dst=", 1)[0]
+                               for value in argv if isinstance(value, str) and ",dst=/scratch" in value)
+                path = Path(scratch) / "output.json"
+                document = json.loads(path.read_text())
+                if damage == "hash":
+                    document["records"][0]["sha256"] = "0" * 64
+                elif damage == "duplicate":
+                    document["records"].append(document["records"][0])
+                elif damage == "unrequested":
+                    document["records"][0]["path"] = "b.py"
+                elif damage == "scope":
+                    document["scope_id"] = "wrong"
+                atomic_json(path, document)
+            return outcome
+
+    class ChangedImageExecutor(ContainerExecutor):
+        def execute(self, request):
+            result = super().execute(request)
+            return replace(result, image_id="sha256:" + "0" * 64) if damage == "image" else result
+
+    unit = symbol_unit(tmp_path, {"a.py": ("Python", "VALUE = 1\n"), "b.py": ("Python", "VALUE = 2\n")})
+    docker = DamagedDocker()
+    with pytest.raises(ValueError, match="Tree-sitter"):
+        invoke_symbols(unit, docker, executor_type=ChangedImageExecutor)
+    assert len(docker.runs) == 1
+    assert len(list(unit.unit_root.glob("scratch/tree-sitter/*/*/execution.json"))) == 1
+    assert not (unit.unit_root / "artifacts/symbols.json").exists()
+
+
+def test_symbols_stop_on_second_invocation_oom_and_preserve_receipt(tmp_path: Path) -> None:
+    from appsec_review.runtime import execution_safety as safety
+    from tests.test_review_stop_policy import _running
+
+    class OomDocker(LocalDocker):
+        def __call__(self, argv, timeout):
+            if argv[:2] == ["docker", "run"] and len(self.runs) == 1:
+                self.containers.add(argv[argv.index("--name") + 1])
+                self.runs.append({"tool": "tree-sitter", "exit": 137})
+                return CommandOutcome(137, b"", b"fixture OOM", oom_killed=True)
+            return super().__call__(argv, timeout)
+
+    unit = symbol_unit(tmp_path, {f"{index}.py": ("Python", "VALUE = 1\n") for index in range(3)})
+    docker = OomDocker()
+    with _running(tmp_path / "safety") as guardian:
+        with pytest.raises(safety.ReviewStopped, match="tool-tree-sitter execution failed"):
+            invoke_symbols(unit, docker)
+        assert guardian.state["first_error"]["action"] == "scanner.tool-tree-sitter"
+    assert len(docker.runs) == 2 and not docker.containers
+    receipts = [json.loads(path.read_text()) for path in unit.unit_root.glob("scratch/tree-sitter/*/*/execution.json")]
+    assert len(receipts) == 2
+    failure = next(receipt for receipt in receipts if receipt["exit_code"] == 137)
+    assert failure["oom_killed"] is True and failure["cleanup"] == "PENDING"
+    assert not (unit.unit_root / "artifacts/symbols.json").exists()
 
 
 def test_parsers_tolerate_hostile_paths_and_message_bytes() -> None:

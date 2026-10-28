@@ -246,8 +246,9 @@ def _cataloged_docker_available() -> bool:
     return IMAGE == DEFAULT_IMAGE and _docker_available()
 
 
-@pytest.mark.skipif(not _docker_available(), reason="locked Tree-sitter image is not locally available")
 def test_live_container_parses_mult_project_multilanguage_fixture_and_proves_identity(tmp_path: Path) -> None:
+    if not _docker_available():
+        pytest.skip("locked Tree-sitter image is not locally available")
     catalog = tomllib.loads((ROOT / "containers" / "catalog.toml").read_text(encoding="utf-8"))
     cataloged = next(item for item in catalog["images"] if item["id"] == "tool-tree-sitter")
     inspected = subprocess.run(["docker", "image", "inspect", IMAGE, "--format", "{{.Id}}"],
@@ -308,9 +309,9 @@ def test_live_container_parses_mult_project_multilanguage_fixture_and_proves_ide
     assert bounded_output["records"][0]["node_count"] == 1
 
 
-@pytest.mark.skipif(not _cataloged_docker_available(),
-                    reason="cataloged Tree-sitter image is not locally available")
 def test_real_graph_is_parallel_queryable_complete_and_resumable(tmp_path: Path) -> None:
+    if not _cataloged_docker_available():
+        pytest.skip("cataloged Tree-sitter image is not locally available")
     base = load_config(ROOT / "appsec-review.toml")
     runtime = replace(base.runtime, runs_dir=tmp_path / "runs", data_dir=tmp_path / "data",
                       metadata_dir=tmp_path / "metadata")
@@ -338,3 +339,39 @@ def test_real_graph_is_parallel_queryable_complete_and_resumable(tmp_path: Path)
     resumed = GraphRunner(config, jobs).run(target_root=FIXTURE, source_fingerprint=fingerprint,
                                             run_id=outcome["run_id"])
     assert [item["action"] for item in resumed["decisions"]] == ["REUSE", "REUSE", "REUSE"]
+
+
+def test_both_callers_share_metrics_and_ast_reuse_is_not_an_invocation(tmp_path: Path) -> None:
+    from dataclasses import asdict
+    from appsec_review.container_runtime import ContainerExecutor, load_catalog
+    from appsec_review.jobs.job_tree_sitter_ast.job import _grammar_locks
+    from appsec_review.jobs.job_tree_sitter_ast.scope_execution import parse_scope
+    from appsec_review.observability import aggregate_run_metrics
+    from tests.test_source_history_analysis import LocalDocker, invoke_symbols, symbol_unit
+
+    unit = symbol_unit(tmp_path, {"python/app.py": ("Python", "def check():\n    return 1\n")})
+    docker = LocalDocker()
+    invoke_symbols(unit, docker)
+    locks, assets = _grammar_locks(ROOT)
+    tool = load_catalog(ROOT).tool("tool-tree-sitter")
+    config = load_config(ROOT / "appsec-review.toml").job("job_tree_sitter_ast")
+    ast_unit = replace(unit, job=replace(unit.job, config=config), unit_id="parse.scope", step_id="parse",
+                       task_id="scope", outputs={"load.accepted_inputs": {
+                           "grammar_locks": {key: asdict(value) for key, value in locks.items()},
+                           "asset_lock": assets, "image_id": tool.expected_image_id}})
+    scope = _scope(digest=file_sha256(unit.job.target_root / "python/app.py"))
+    scope = replace(scope, files=({**scope.files[0],
+                                  "size_bytes": (unit.job.target_root / "python/app.py").stat().st_size},))
+    factory = lambda context: ContainerExecutor(load_catalog(ROOT), context.job.run_root, runner=docker)
+    first = parse_scope(ast_unit, asdict(scope), factory)
+    second = parse_scope(ast_unit, asdict(scope), factory)
+    assert not first["index_reused"] and second["index_reused"]
+    assert first["tree_sitter_invocation_id"] == second["tree_sitter_invocation_id"]
+    summary = aggregate_run_metrics(unit.job.run_root)["tree_sitter"]
+    assert summary["invocation_count"] == 2 and summary["reused_scope_count"] == 1
+    assert len({row["invocation_id"] for row in summary["invocations"]}) == 2
+    assert {row["job_id"] for row in summary["by_job_attempt"]} == {
+        "job_source_history_analysis", "job_tree_sitter_ast"}
+    assert summary["counts"]["files_parsed"] == {"value": 2, "complete": True}
+    assert summary["measurements"]["memory_peak_bytes"]["value"] is None
+    assert summary["incomplete_accounting"], "mocked counters must not be reported as measured zeros"

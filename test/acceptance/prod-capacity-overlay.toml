@@ -1,0 +1,20 @@
+# Production host capacity overlay: four concurrent container I/O slots instead of the checked-in one.
+#
+# Select with `scripts/stack-restart --profile prod --overlay prod-capacity-overlay.toml`, or
+# APPSEC_REVIEW_CONFIG_OVERLAY. Only one overlay applies at a time. The ledger in
+# runs/metadata/resource-admission is shared by every run on the host and admits against the lowest
+# limit among active leases, so a concurrent run without this overlay pulls admission back to one slot.
+#
+# Four 2-CPU/1.5 GiB scanners fit the 8-CPU/10 GiB budget. The Dagster scanner pool matches the slots,
+# so queued scanner steps wait in Dagster rather than spend their tool timeout in admission.
+#
+# Three review teams (each 3 red, 2 blue, 1 verifier) run up to 18 model calls at once. Teams are
+# bounded by the model service's rate limits rather than host CPU, so this stays below the default 5.
+[jobs.job_inference_security_review.settings.teams]
+review_teams = 3
+
+[review_policy.resources]
+io_slots = 4
+
+[orchestration.dagster.pools]
+scanner = 4
