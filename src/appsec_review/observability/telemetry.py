@@ -827,9 +827,12 @@ def _review_flow_metrics(records: list[Mapping[str, Any]]) -> Mapping[str, Any]:
 
 
 def aggregate_run_metrics(run_root: Path) -> Mapping[str, Any]:
+    from appsec_review.jobs.job_openvex_export.metrics import aggregate_openvex_metrics
+
     records, torn = PipelineLog(run_root).read()
     for record in records:
         validate_event(record)
+    openvex = aggregate_openvex_metrics(Path(run_root), records)
     tree_sitter = _tree_sitter_metrics(Path(run_root), records)
     raw_event_count = len(records)
     raw_event_counts = Counter(str(record["event_type"]) for record in records)
@@ -1053,6 +1056,7 @@ def aggregate_run_metrics(run_root: Path) -> Mapping[str, Any]:
             "review": _review_metrics(Path(run_root), records),
             "owasp": _owasp_metrics(Path(run_root), records),
             "review_flow": _review_flow_metrics(records),
+            "openvex": openvex,
             "tree_sitter": tree_sitter,
             "codeql": _codeql_metrics(Path(run_root), records),
             "torn_tail_ignored": torn}
