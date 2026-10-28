@@ -423,9 +423,9 @@ def _plan_candidate(unit: UnitContext, settings: PocGenerationSettings,
     headers = Headers(located.unit)
     brief = build_brief(candidate, finding=item["finding"], package=package, view=view, sink=sink,
                         unit=located.unit, headers=headers, settings=settings)
-    unresolved = [gap for gap in brief.gaps if gap.startswith("poc_basis label")]
+    unresolved = [gap for gap in brief.gaps if gap.startswith("poc_basis identity")]
     if unresolved and len(unresolved) >= len(candidate.poc_basis.entry) + len(candidate.poc_basis.path):
-        entry["terminal"] = _terminal(INSUFFICIENT_EVIDENCE, "no poc_basis label resolves in the package view")
+        entry["terminal"] = _terminal(INSUFFICIENT_EVIDENCE, "no poc_basis identity resolves in the package view")
         return entry
     document_ref = _write_json(unit, f"briefs/{candidate.claim_id}.json", brief.document)
     entry["brief"] = document_ref

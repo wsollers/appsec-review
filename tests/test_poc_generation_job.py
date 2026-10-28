@@ -377,10 +377,13 @@ def test_an_include_outside_the_project_is_refused_before_any_compiler_runs(chai
 
 
 def test_a_handoff_without_the_required_candidate_field_is_an_integrity_failure(chain) -> None:
-    chain.prepare([])
+    from appsec_review.jobs.job_final_publication_gate.verify import load_accepted_review
+
+    chain.restore()
     chain.inject(None)
-    with pytest.raises(IntegrityError):
-        chain.run_poc(Writer({}))
+    with pytest.raises(IntegrityError, match="poc_candidates"):
+        load_accepted_review(chain.run_root, SchemaSet(ROOT / "docs" / "schemas" / "inference-security-review"),
+                             max_packages=10000)
     assert not (chain.run_root / CLAIM_DIR).exists()
 
 
