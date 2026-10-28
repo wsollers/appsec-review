@@ -1,16 +1,19 @@
 # OpenVEX findings export
 
-Status: **certified-gate adaptation in progress**, reconciled against
-`ede3c107b16aedebc97c2659372ac9ae80fde348` (including strict contracts at `f4f746bf`).
+Status: **certified-gate implementation assembled**, reconciled against
+`e628041cd734d854e749aa4e373bdc718d9a7363` (including strict contracts at `f4f746bf`,
+projection at `e6d64442`, shared certified-gate reader at `090bb402` and input verifier at
+`2f467134`).
 The user selected **standalone post-gate export; preserve gate-only reporting**.
 This document supersedes the earlier OpenVEX report-link/fan-in proposal throughout:
 enabled PoC/remediation/dossiers precede one final gate, and export/report are independent
 post-gate peers. The report never discovers or consumes OpenVEX output.
 
 At this source boundary, frozen settings, strict gate `/2` capability/attachment contracts,
-review `/3` identities and standalone topology are reconciled. The real input verifier and
-projector are still being adapted; this is not final `/2` execution validation. Exact
-focused-unit, packaging and manual-validation results belong in
+review `/3` identities and standalone topology are reconciled, with the shared certified-gate
+reader and exporter input verifier/projector implemented. Combined focused verification and
+final exact-main reconciliation remain separately tracked. Exact focused-unit, packaging
+and manual-validation results belong in
 [the implementation record](../reviews/openvex-export-implementation.md), not inferred from
 schema-valid synthetic fixtures.
 
@@ -52,7 +55,7 @@ upstream contract. Observed boundaries at the reconciliation base:
 | `jobs/accepted_review.py`, `jobs/job_poc_generation/inputs.py` | Pre-gate consumers use accepted review `/3` and scope; they do not depend on a post-completion gate. No exporter cycle is introduced. |
 | `jobs/job_poc_generation/` | Writes developer test functions and validates/compiles them. It never links or executes them. `compile_verified` is not exploitation; `compile_failed` does not refute a finding. |
 | Completion producers | Chains are review-owned before seal; enabled PoC, planning, validation and dossier jobs precede the single gate. Capability/status/artifact certification is not execution proof or finding reassessment. |
-| `job_openvex_export/contracts.py`, `projection.py`, `inputs.py` | Strict records require gate `/2` capabilities/attachments and certified membership. At the pinned base the real verifier/projector adaptation is unfinished; contracts alone do not prove execution readiness. |
+| `job_openvex_export/contracts.py`, `projection.py`, `inputs.py` | Strict records, input verification and projection implement gate `/2` capabilities/attachments and certified membership, using the shared accepted-gate reader. Assembled implementation is not evidence of real accepted whole-chain execution. |
 | `jobs/job_review_intake/job.py`, `jobs/job_target_acquisition/job.py` | Intake may copy acquisition provenance into the run; direct local targets can lack repository/commit provenance. Accepted snapshot identity is always the fallback, not a guessed Git commit. |
 | `runtime/runner.py`, `resume.py`, `job.py` | Full resolved configuration is immutable per run. Resume already checks settings, upstream handoff hashes, declared component releases, artifacts, and validation identities. No new runtime cache framework is needed. |
 | `jobs/bound_artifacts.py`, `indexing/store.py` | Reuse accepted-handoff and run-relative hash-bound artifact readers. A corrupt/unsafe existing pointer must not masquerade as an absent job. |
@@ -334,8 +337,9 @@ Algorithm:
 
 Gate certification must be reverified through the gate's exact certified-snapshot boundary,
 including the accepted completion context; reconstructing the earlier review-only gate is
-insufficient. The input owner is adapting this reader against the unchanged report snapshot
-proof. Reuse accepted-handoff/bound-artifact helpers, typed settings and protected storage;
+insufficient. The exporter now uses the shared accepted-gate reader extracted from the unchanged
+report snapshot proof. Reuse accepted-handoff/bound-artifact helpers, typed settings and
+protected storage;
 do not invent a second optional-producer discovery policy.
 Do not mutate finding-package/2, adjudication, claim ledger, or gate buckets.
 
@@ -725,7 +729,7 @@ worktree. Install dependencies only after a selected command reports missing dep
 a dependency manifest changes. Keep all disposable state under the unique listed basetemp.
 
 The concrete contract/settings/wiring/documentation selectors below are supported at the pinned
-base. They do not execute the unfinished real input/projection adaptation. Explicitly authorized
+base. They do not replace focused input/projection/handler verification. Explicitly authorized
 Windows sessions substitute `.\.venv\Scripts\python.exe` and Windows filesystem separators:
 
 ```text
@@ -733,7 +737,7 @@ Windows sessions substitute `.\.venv\Scripts\python.exe` and Windows filesystem 
 .venv/bin/python -m pytest -q tests/test_documentation.py tests/test_skill_separation.py tests/test_docs_sync.py --basetemp=test/tmp/openvex-docs
 ```
 
-After adaptation, implementation owners also select focused input, projection, job-handler,
+Implementation owners also select focused input, projection, job-handler,
 metrics and actual gate/report units, recording exact commands and commits. The old
 OpenVEX-report unit selectors were removed with the unsupported report API; do not restore
 them. Do not call a scripted whole review chain a unit test simply because it uses no network.
@@ -744,7 +748,7 @@ gaps without weakening tests or claiming their assertions passed.
 ### Manual integration/acceptance still required
 
 Current repository guidance reserves integration, acceptance and live Dagster validation to
-the user unless explicitly requested. After completed adaptation, a real accepted
+the user unless explicitly requested. A real accepted
 review/completion -> certified gate -> standalone export path must exercise accepted hashes,
 replays, tamper rejection and nonexecution assurance; independent gate-only report publication
 must remain unchanged. Live/in-process/multiprocess orchestration must verify pre-gate completion,
@@ -792,19 +796,22 @@ future product decisions, not implementation assumptions.
 ## 16. Reconciliation and remaining validation
 
 This revision reconciles the nine assigned documentation surfaces with the frozen completion
-boundary and strict OpenVEX contracts at `ede3c107`. It removes the former report-link/fan-in
-proposal, not the pre-gate completion path. Contract fixtures with certified attachments
+boundary and assembled certified-gate implementation at `e628041c`. It removes the former
+report-link/fan-in proposal, not the pre-gate completion path. Contract fixtures with certified attachments
 prove strict shapes/reference membership; they do not prove real filesystem acceptance.
 
-The real `/2` input/certificate reader and projector adaptation remain in progress at the
-named base. Later implementation commits and their precise focused results are recorded by
-the coordinator in [the implementation record](../reviews/openvex-export-implementation.md).
-Do not treat this document or its commands as evidence that those later changes were exercised.
+The real `/2` input/certificate reader and projector are implemented at the named base.
+Combined focused exporter/snapshot/publication verification and final exact-main reconciliation
+remain tracked by the coordinator in
+[the implementation record](../reviews/openvex-export-implementation.md).
+Do not treat this status update or its commands as a final combined result.
 
-Earlier installed-wheel pure projection/offline fallback passed against the earlier schema
-closure. It did not establish a self-contained application; the isolated standalone job import
-without configured guidance failed on missing `pipeline/guidance/registry.json`.
-The new nine-resource `/2` closure needs its own exact-commit installed-wheel check.
-Full installed-job execution, integration, acceptance, live Dagster and full-suite validation
-are not claimed. Keep known unrelated missing target-document links and Windows symlink
-privilege gaps explicit rather than weakening checks.
+The coordinator's isolated installed-only wheel proof at `212f21a8` verifies the seven
+schemas plus lock/license, the transitive report-item definition, canonical assembly and
+semantic validation with synthetic gate `/2` context, not a real accepted run. Exact
+wheel/source proof belongs in the implementation record. This does not establish a
+self-contained application; the earlier isolated standalone job import without configured
+guidance failed on missing `pipeline/guidance/registry.json`.
+Full installed-job execution, real accepted whole-chain, integration, acceptance, Linux,
+live Dagster and full-suite validation are not claimed. Keep known unrelated missing
+target-document links and Windows symlink privilege gaps explicit rather than weakening checks.

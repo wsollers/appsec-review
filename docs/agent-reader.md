@@ -27,10 +27,10 @@ Relevant bounded procedures and design references:
 - [`operations/poc-generation.md`](operations/poc-generation.md) — `job_poc_generation`: the `poc_writer` turn, AST/compile checks, immutable protected attempt outputs, pre-gate `/2` outcomes and explicit manual admission.
 - [`architecture/openvex-export.md`](architecture/openvex-export.md) — standalone affected-only OpenVEX
   export: issuer/action inputs, source-snapshot/full-configuration identity, protected companion,
-  certified gate `/2` context, gate-only reporting and telemetry; adaptation in progress.
+  assembled certified gate `/2` reader/verifier/projector, gate-only reporting and telemetry.
 - [`operations/openvex-export.md`](operations/openvex-export.md) — OpenVEX configuration,
   certified-gate/independent-export diagrams, operator status, privacy and metrics refresh;
-  final `/2` execution validation remains unclaimed.
+  whole-chain/manual validation and final exact-main reconciliation remain separately tracked.
 - [`operations/final-report.md`](operations/final-report.md) — `job_final_publication_gate` and `job_final_report_publication`: re-verification of the accepted review handoff, publishable / verification backlog / withheld accounting, named limitations, `final-report.json` and the deterministic Markdown (PDF is a later step).
 - [`architecture/evidence-completion-and-remediation.md`](architecture/evidence-completion-and-remediation.md) —
   delivered completion source and approved dossier decisions: compile-only PoC before one final gate,

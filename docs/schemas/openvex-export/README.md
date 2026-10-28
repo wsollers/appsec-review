@@ -1,10 +1,12 @@
 # OpenVEX shared contracts
 
 These are the **strict shared contracts for standalone post-gate export**, reconciled at
-`ede3c107b16aedebc97c2659372ac9ae80fde348` (including `f4f746bf`). The repository has an
+`e628041cd734d854e749aa4e373bdc718d9a7363` (including `f4f746bf`). The repository has an
 exporter job, registry/CLI/Dagster wiring, typed TOML settings, protected datasets, operator
-status and metrics; real input verifier/projector adaptation to the certified `/2` boundary
-is still in progress at this base. Synthetic contracts do not establish final execution.
+status and metrics. The shared certified-gate reader and exporter input verifier/projector
+are assembled for the `/2` boundary. Combined focused results and final exact-main reconciliation
+are tracked in the [implementation record](../../reviews/openvex-export-implementation.md);
+synthetic contracts do not establish real accepted whole-chain execution.
 The [OpenVEX design](../../architecture/openvex-export.md) and
 [operator guide](../../operations/openvex-export.md) describe the boundary.
 For upstream publication contracts, the
@@ -174,13 +176,15 @@ for upstream OpenVEX or retrieve the JSON-LD context. Source resources take prec
 an existing corrupt/incomplete source directory is an error, not a fallback trigger.
 Contract tests exercise the offline registry against a synthetic installed-directory layout.
 
-An earlier exact-wheel pure projection/offline fallback passed using `sys.prefix/share`
-resources with the previous schema closure; the `/2` nine-resource closure still needs an
-exact-commit installed-wheel recheck. That check does not establish a self-contained
+The coordinator's isolated installed-only wheel proof at `212f21a8` verified all seven
+schemas plus lock/license using `sys.prefix/share` resources, including the transitive
+report-item definition, canonical assembly and semantic validation with synthetic gate `/2`
+context. This is not a real accepted run or final exact-main source proof; precise packaging
+results belong in the implementation record. It does not establish a self-contained
 application: the earlier standalone job import without application resources failed because
 `pipeline/guidance/registry.json` was missing. A configured application checkout/guidance
 is still required for complete job imports/execution. No full installed-job execution,
-integration, acceptance or live Dagster result is claimed here.
+real accepted whole-chain, integration, acceptance, Linux or live Dagster result is claimed here.
 
 ## Test fixtures and verification
 
@@ -212,5 +216,5 @@ Focused Windows unit command (explicitly authorized for this isolated worktree):
 ```
 
 Integration, acceptance and live Dagster runs remain manual. Unit boundary examples
-establish neither real-run acceptance nor completed `/2` runtime/metrics adaptation.
+establish neither real-run acceptance nor final combined runtime/metrics verification.
 Final-report publication remains independently gate-only.
