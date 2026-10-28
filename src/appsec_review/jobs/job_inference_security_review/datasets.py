@@ -56,6 +56,11 @@ DATASETS = (
                              _A + "/steps/publication/tasks/publish_claim_ledger/**"),
                   reason="the claim ledger is the review's single authority record; a scoped finding query is "
                          "planned with final publication"),
+    protected("attack_chains", "attack_chains", "inference_review", "appsec-review/attack-chain-manifest/1",
+              "Pre-seal chain proposals, independent challenge receipts, terminal artifacts and exact manifest.",
+              artifacts=(_A + "/steps/attack_chains/**",),
+              reason="continuity evidence and model proposals are protected review material; only the final "
+                     "gate may project confirmed or qualified chain summaries"),
     artifact_only("scores_and_findings", "publication", "inference_review", "appsec-review/finding-package/2",
                   "Independent score packages, confirmed/supported finding packages and the accepted handoff.",
                   artifacts=(_A + "/steps/scoring/**", _A + "/steps/publication/tasks/publish_handoff/**"),
