@@ -383,7 +383,9 @@ def build_job(*, providers: Providers = registry_providers,
                                         shared=SharedArtifacts.for_job(unit.job))
             status = {"SUCCEEDED": "complete", "UNAVAILABLE": "unavailable"}.get(published["terminal_status"], "partial")
             unit.job.events.write("PRECOMPUTED_PRODUCT_PUBLISHED", query_set=query_set, status=status,
-                                  fact_count=published["counts"].get("entities", 0), reused=published["reused"])
+                                  fact_count=published["counts"].get("entities", 0), reused=published["reused"],
+                                  gap_count=len(published["gaps"]),
+                                  owasp_manifest_sha256=inputs["owasp"], unit_id=unit.unit_id)
             return {"query_set": query_set, "rule_version": version, "status": status,
                     "fact_count": published["counts"].get("entities", 0), "reused": published["reused"],
                     "counts": published["counts"], "gaps": published["gaps"], "index_identity": published["index_identity"],

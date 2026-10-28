@@ -235,6 +235,7 @@ def review_context(*, run_root: Path, run_id: str, attempt_root: Path, repositor
     query_sets = set(_read(Path(run_root), scope_out["artifact"])["query_sets"])
     return ReviewContext(
         run_root=Path(run_root), run_id=run_id, repository_root=root, settings=settings, core=core, infer=infer,
+        attempt_id=Path(attempt_root).name,
         receipts_root=Path(run_root) / "data" / "jobs" / JOB_ID / "cells",
         budget=JobBudget(Path(attempt_root) / "budget", settings.budgets),
         semaphore=ReviewTeamSemaphore.for_run(Path(run_root), settings.teams.review_teams),
