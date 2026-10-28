@@ -41,7 +41,7 @@ TARGET_ENVIRONMENT = "APPSEC_REVIEW_TARGET"
 SYSTEM_ENVIRONMENT = "APPSEC_REVIEW_SYSTEM"
 TARGET_INDEPENDENT_JOBS = frozenset({
     "job_model_connectivity", "job_image_pin_verification", "job_target_acquisition", "job_third_party_data_sync",
-    "job_inference_security_review", "job_final_publication_gate", "job_poc_generation",
+    "job_inference_security_review", "job_final_publication_gate", "job_openvex_export", "job_poc_generation",
     "job_final_report_publication",
     "job_remediation_planning", "job_remediation_validation", "job_dossier_publication",
 })

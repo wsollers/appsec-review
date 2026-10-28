@@ -44,6 +44,38 @@ def test_disabled_jobs_are_transparent_and_closure_is_transitive() -> None:
         "job_review_intake", "job_target_catalog")
 
 
+@pytest.mark.parametrize("export_enabled,poc_enabled", [(False, False), (False, True),
+                                                       (True, False), (True, True)])
+def test_standalone_export_preserves_pre_gate_poc_and_gate_only_reporting(
+        export_enabled: bool, poc_enabled: bool) -> None:
+    registered = {
+        "job_model_connectivity", "job_review_intake", "job_target_catalog",
+        "job_target_analysis_plan", "job_review_data_indexing", "job_review_package_assembly",
+        "job_document_issue_analysis", "job_inference_security_review",
+        "job_final_publication_gate", "job_final_report_publication",
+    }
+    tails = tuple(job_id for job_id, enabled in (
+        ("job_openvex_export", export_enabled), ("job_poc_generation", poc_enabled)) if enabled)
+    registered.update(tails)
+    dependencies = wave1_dependencies(registered)
+    assert dependencies is not None
+    assert dependencies["job_final_report_publication"] == ("job_final_publication_gate",)
+    if poc_enabled:
+        assert dependencies["job_poc_generation"] == ("job_inference_security_review",)
+        assert "job_poc_generation" in dependencies["job_final_publication_gate"]
+    if export_enabled:
+        assert dependencies["job_openvex_export"] == ("job_final_publication_gate",)
+        assert "job_inference_security_review" in upstream_closure("job_openvex_export", dependencies, registered)
+        assert "job_openvex_export" not in upstream_closure("job_final_report_publication", dependencies, registered)
+    seen = set()
+    for job_id, upstream in dependencies.items():
+        assert set(upstream) <= seen
+        seen.add(job_id)
+    depended_on = {job_id for upstream in dependencies.values() for job_id in upstream}
+    assert set(dependencies) - depended_on == (
+        {"job_final_report_publication", "job_openvex_export"} if export_enabled else {"job_final_report_publication"})
+
+
 def test_enabled_owasp_uses_tags_graph_and_classification_before_hunting() -> None:
     config = load_config(ROOT / "appsec-review.toml")
     jobs = dict(config.jobs)

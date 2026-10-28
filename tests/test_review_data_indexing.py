@@ -725,11 +725,13 @@ def test_inventory_audit_matrices_links_and_fts_validation(accepted) -> None:
         cursor = page["pagination"]["next_cursor"]
         if cursor is None:
             break
-    # PoC is enabled before the gate; only the two disabled analysis sources are absent.
+    disabled = {job_id for job_id, job in config.jobs.items() if job.settings.get("enabled") is False}
     expected_sources = {source if source != "secret_leads" else "<redacted>"
-                        for source, *_ in input_matrix.INPUT_SOURCES} - {"joern_cpg", "svf_points_to"}
+                        for source, producers, *_ in input_matrix.INPUT_SOURCES
+                        if any(producer.removeprefix("planned:") not in disabled for producer in producers)}
     assert {item["payload"]["source"] for item in sources} == expected_sources
     assert len(sources) == len(expected_sources)
+    assert all(item["payload"]["source"] != "joern_cpg" for item in sources)
     language = core.query_dataset_inventory(cell_type="language", limit=100)["results"]
     native = next(item["payload"] for item in language if item["payload"]["language"] == "c/c++")
     assert native["lanes"]["cpg_graph"]["state"] == "unavailable" and native["lanes"]["codeql"]["state"] == "complete"
@@ -1094,26 +1096,25 @@ def test_input_matrix_names_the_graph_producer_and_resolves_planned_producers_on
     assert not any("job_cpg_analysis" in item for item in discrepancies)
 
 
-DOWNSTREAM = ("job_remediation_planning", "job_remediation_validation", "job_final_publication_gate",
+DOWNSTREAM = ("job_poc_generation", "job_remediation_planning", "job_remediation_validation",
+              "job_dossier_publication", "job_final_publication_gate", "job_openvex_export",
               "job_final_report_publication")
 
 
-def test_downstream_review_consumers_are_registered_without_changing_legacy_handoff_labels() -> None:
+def test_downstream_review_consumers_preserve_certified_completion_order() -> None:
     from appsec_review.jobs.job_inference_security_review.datasets import PLANNED_CONSUMER_JOBS, PLANNED_CONSUMERS
     from appsec_review.runtime.registry import builtin_registry
 
     planned = {producer for _source, producers, *_ in input_matrix.INPUT_SOURCES for producer in producers
                if producer.startswith("planned:")}
-    remediation = DOWNSTREAM[:2]
     assert not {f"planned:{job}" for job in DOWNSTREAM} & planned
     named = {producer for _source, producers, *_ in input_matrix.INPUT_SOURCES for producer in producers}
     assert set(DOWNSTREAM) <= named
-    assert PLANNED_CONSUMER_JOBS == DOWNSTREAM
-    completion = ("job_poc_generation", *remediation, "job_dossier_publication", *DOWNSTREAM[2:])
-    assert tuple(consumer for consumer, _ in input_matrix.PLANNED_CONSUMERS) == completion
-    # Every consumed producer is an upstream input or an earlier completion job.
+    assert PLANNED_CONSUMER_JOBS == tuple(
+        job for job in DOWNSTREAM if job not in {"job_poc_generation", "job_dossier_publication"})
+    assert tuple(consumer for consumer, _ in input_matrix.PLANNED_CONSUMERS) == DOWNSTREAM
     for index, (_consumer, producers) in enumerate(input_matrix.PLANNED_CONSUMERS):
-        earlier = set(completion[:index])
+        earlier = set(DOWNSTREAM[:index])
         assert set(producers) <= {"job_inference_security_review", "job_language_build"} | earlier
     assert all(item["status"] == "planned" and item["reads"] for item in PLANNED_CONSUMERS)
     # Remediation reads only confirmed findings (decision 4); never the verification backlog.
@@ -1121,7 +1122,11 @@ def test_downstream_review_consumers_are_registered_without_changing_legacy_hand
     assert "verification_backlog" not in reads["job_remediation_planning"] | reads["job_remediation_validation"]
     assert "remediation_intake" in reads["job_remediation_planning"]
     registered = set(builtin_registry().job_ids())
-    assert set(completion) <= registered
+    assert set(DOWNSTREAM) <= registered
+    rows, discrepancies = input_matrix.reconcile([], [], [], {}, "job_review_data_indexing")
+    states = {item["source"]: item["producer_states"] for item in rows}
+    assert states["remediation_plans"] == [{"producer": "job_remediation_planning", "status": "unregistered"}]
+    assert states["publication_gate_decisions"] == [{"producer": "job_final_publication_gate", "status": "unregistered"}]
     rows, discrepancies = input_matrix.reconcile(registered, [], [], {}, "job_review_data_indexing")
     states = {item["source"]: item["producer_states"] for item in rows}
     for source, producer in (("remediation_plans", "job_remediation_planning"),
@@ -1131,7 +1136,7 @@ def test_downstream_review_consumers_are_registered_without_changing_legacy_hand
     assert {item["source"]: item["producer_states"][0]["status"] for item in rows}[
         "final_report_publications"] == "not_executed"
     assert not any(job in item for item in discrepancies for job in DOWNSTREAM)
-    # Once registered, a planned name resolves to the job itself without a matrix change.
+    assert builtin_registry().build("job_final_report_publication").consumes == ("job_final_publication_gate",)
     assert input_matrix.resolve_producer("planned:job_final_publication_gate", {"job_final_publication_gate"}) == \
         "job_final_publication_gate"
 

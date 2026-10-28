@@ -124,6 +124,7 @@ INPUT_SOURCES: tuple[tuple[str, tuple[str, ...], str, tuple[str, ...], tuple[str
     ("remediation_validations", ("job_remediation_validation",), "artifact_only", (), ("coverage",)),
     ("dossiers", ("job_dossier_publication",), "protected", (), ("coverage",)),
     ("publication_gate_decisions", ("job_final_publication_gate",), "artifact_only", (), ("coverage",)),
+    ("openvex_exports", ("job_openvex_export",), "protected", (), ("coverage",)),
     ("final_report_publications", ("job_final_report_publication",), "artifact_only", (), ("coverage",)),
     # Proof-of-concept unit-test functions for the claims the judge agreed with: developer-facing files, hash-bound
     # by the handoff and shown by the final report; compile-checked, never linked or run.
@@ -140,6 +141,7 @@ PLANNED_CONSUMERS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("job_final_publication_gate", ("job_inference_security_review", "job_poc_generation",
                                   "job_remediation_planning", "job_remediation_validation",
                                   "job_dossier_publication")),
+    ("job_openvex_export", ("job_final_publication_gate", "job_inference_security_review")),
     ("job_final_report_publication", ("job_final_publication_gate",)),
 )
 

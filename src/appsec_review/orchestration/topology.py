@@ -217,6 +217,8 @@ def wave1_dependencies(registered: Set[str]) -> dict[str, tuple[str, ...]] | Non
                 job_id for job_id in (review, "job_poc_generation", "job_remediation_planning",
                                      "job_remediation_validation", "job_dossier_publication")
                 if job_id in wave_dependencies)
+        if "job_openvex_export" in registered and "job_final_publication_gate" in wave_dependencies:
+            wave_dependencies["job_openvex_export"] = ("job_final_publication_gate",)
         if "job_final_report_publication" in registered and "job_final_publication_gate" in wave_dependencies:
             wave_dependencies["job_final_report_publication"] = ("job_final_publication_gate",)
     return wave_dependencies

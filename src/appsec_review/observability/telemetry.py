@@ -1130,9 +1130,12 @@ def _native_sbom_metrics(run_root: Path, records: list[Mapping[str, Any]]) -> Ma
 
 
 def aggregate_run_metrics(run_root: Path) -> Mapping[str, Any]:
+    from appsec_review.jobs.job_openvex_export.metrics import aggregate_openvex_metrics
+
     records, torn = PipelineLog(run_root).read()
     for record in records:
         validate_event(record)
+    openvex = aggregate_openvex_metrics(Path(run_root), records)
     tree_sitter = _tree_sitter_metrics(Path(run_root), records)
     native_sbom = _native_sbom_metrics(Path(run_root), records)
     raw_event_count = len(records)
@@ -1358,6 +1361,7 @@ def aggregate_run_metrics(run_root: Path) -> Mapping[str, Any]:
             "completion": completion_metrics(records),
             "owasp": _owasp_metrics(Path(run_root), records),
             "review_flow": _review_flow_metrics(records),
+            "openvex": openvex,
             "tree_sitter": tree_sitter,
             "native_sbom": native_sbom,
             "codeql": _codeql_metrics(Path(run_root), records),

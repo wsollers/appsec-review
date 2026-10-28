@@ -1,9 +1,21 @@
 # OpenVEX findings export
 
-Status: **design for implementation; not implemented**. Reconciled against
-`2ee310f05b12bdcdf5baa4deb2b3b5c628330678` (Merge correlated OWASP and review-flow telemetry),
-which contains the originally required baseline `fcac43068d17f139a9d94393b03fe128c6127f12`.
-Both ancestry checks passed in the design agent's isolated worktree.
+Status: **certified-gate implementation assembled**, reconciled against
+`e628041cd734d854e749aa4e373bdc718d9a7363` (including strict contracts at `f4f746bf`,
+projection at `e6d64442`, shared certified-gate reader at `090bb402` and input verifier at
+`2f467134`).
+The user selected **standalone post-gate export; preserve gate-only reporting**.
+This document supersedes the earlier OpenVEX report-link/fan-in proposal throughout:
+enabled PoC/remediation/dossiers precede one final gate, and export/report are independent
+post-gate peers. The report never discovers or consumes OpenVEX output.
+
+At this source boundary, frozen settings, strict gate `/2` capability/attachment contracts,
+review `/3` identities and standalone topology are reconciled, with the shared certified-gate
+reader and exporter input verifier/projector implemented. Combined focused verification and
+final exact-main reconciliation remain separately tracked. Exact focused-unit, packaging
+and manual-validation results belong in
+[the implementation record](../reviews/openvex-export-implementation.md), not inferred from
+schema-valid synthetic fixtures.
 
 The coordinator selected a small v1: explicit immutable pre-run TOML issuer/action inputs,
 reviewed-source-snapshot products, and the existing accepted-handoff lifecycle. There is no
@@ -31,17 +43,19 @@ composition, external vulnerability-ID inference, or `not_affected`, `fixed`, an
 
 ## 2. Current source evidence
 
-These are observed implementation contracts, not assumptions from older design documents.
+The [completion architecture](evidence-completion-and-remediation.md) supplies the frozen
+upstream contract. Observed boundaries at the reconciliation base:
 
 | Surface | Observed behavior and consequence |
 | --- | --- |
-| `jobs/job_final_publication_gate/verify.py`, `classify.py`, `job.py` | Re-verify accepted review artifacts, ledger/projection, packages, scores, both lead and hunt package-manifest hashes, and ship-block accounting. Every package is in `publishable`, `verification_backlog`, or `withheld`. Export must not bypass withholding. |
+| `jobs/job_final_publication_gate/verify.py`, `attachments.py`, `classify.py`, `job.py` | Gate `/2` certifies review `/3`, package/ledger/score/policy identities, five capabilities and closed sanitized attachments after enabled producers. Every package belongs to `publishable`, `verification_backlog` or `withheld`. Export cannot bypass withholding. |
 | `docs/schemas/inference-security-review/finding-package.schema.json` | `finding-package/2` holds confirmed/supported state, resolving evidence IDs, scoring references, independence, ship-block information, and only `safe_regression_artifact` under remediation inputs. It has no accepted action advice or approved release-product mapping. |
 | `jobs/job_inference_security_review/job.py` | `scope.accept_manifest` publishes `accepted-scope.json` with `target_snapshot`, `manifest_sha256`, and `manifest_path`. Bind that artifact explicitly; do not assume the gate already binds every scope artifact. |
-| `jobs/job_final_report_publication/job.py`, `report.py` | Report is a deterministic gate projection. It separately reads an accepted optional PoC handoff and does not display stale PoC output. |
-| `jobs/job_poc_generation/inputs.py` | Reuses the gate's review verifier and resolves accepted scope through the accepted review job handoff. Useful prior art, not a required exporter dependency. |
+| `jobs/job_final_report_publication/job.py`, `report.py`, `datasets.py` | Report `/2` is a deterministic certified-gate projection. Its `CONSUMES` is exactly the gate; it reads neither producer latest pointers nor export status/files. |
+| `jobs/accepted_review.py`, `jobs/job_poc_generation/inputs.py` | Pre-gate consumers use accepted review `/3` and scope; they do not depend on a post-completion gate. No exporter cycle is introduced. |
 | `jobs/job_poc_generation/` | Writes developer test functions and validates/compiles them. It never links or executes them. `compile_verified` is not exploitation; `compile_failed` does not refute a finding. |
-| Job registry and job package directories | No attack-chain, remediation, or dossier publisher exists at the reconciled base. Do not design against fictional accepted manifests for those surfaces. |
+| Completion producers | Chains are review-owned before seal; enabled PoC, planning, validation and dossier jobs precede the single gate. Capability/status/artifact certification is not execution proof or finding reassessment. |
+| `job_openvex_export/contracts.py`, `projection.py`, `inputs.py` | Strict records, input verification and projection implement gate `/2` capabilities/attachments and certified membership, using the shared accepted-gate reader. Assembled implementation is not evidence of real accepted whole-chain execution. |
 | `jobs/job_review_intake/job.py`, `jobs/job_target_acquisition/job.py` | Intake may copy acquisition provenance into the run; direct local targets can lack repository/commit provenance. Accepted snapshot identity is always the fallback, not a guessed Git commit. |
 | `runtime/runner.py`, `resume.py`, `job.py` | Full resolved configuration is immutable per run. Resume already checks settings, upstream handoff hashes, declared component releases, artifacts, and validation identities. No new runtime cache framework is needed. |
 | `jobs/bound_artifacts.py`, `indexing/store.py` | Reuse accepted-handoff and run-relative hash-bound artifact readers. A corrupt/unsafe existing pointer must not masquerade as an absent job. |
@@ -71,8 +85,18 @@ Vendor the schema unchanged at
 `docs/schemas/openvex-export/upstream/openvex-v0.2.0.schema.json`; an adjacent
 `upstream.lock.json` records upstream repository, commit, URLs, source hashes and license
 attribution. Check licensing before redistribution. Pin updates are reviewed changes, not
-runtime downloads. Package the verified schema/lock for installed runtime use, including a
-wheel-resource test. The run manifest records the schema and exporter validation-profile hashes.
+runtime downloads. The unchanged upstream license is CC0-1.0. The strict offline closure is
+**seven schemas plus license and lock = nine run-owned snapshots**: local
+common/manifest/result, upstream OpenVEX, and final-report common/gate/report schemas.
+`final-report.schema.json` is needed only for PoC-item definitions referenced by gate `/2`,
+not for report data discovery. Preserve exact pinned bytes.
+
+Local OpenVEX manifest/result/handoff identities remain `/1` on the pre-issued contract;
+the validation-profile digest changes to bind gate `/2` and its closure. No old runtime
+export is migrated or made compatible by relaxing schema validation. The companion records
+schema and validation-profile hashes. Installed-resource fallback supports pure projection/
+offline validation, not a self-contained application: configured checkout/guidance resources
+remain required for full job imports/execution, including `pipeline/guidance/registry.json`.
 
 Requirements relevant to v1:
 
@@ -124,8 +148,9 @@ restricted ASCII URI/IRI forms; do not assume optional format-checker packages a
    fail closed, not as empty success or row-level skip.
 9. **Replay:** canonical bytes depend on accepted pins, frozen policy, schema and exporter
    release. No wall clock, attempt serial, PID or runtime timing enters artifact identity.
-10. **Integration:** existing gate/upstream handoff dependencies invalidate export/report.
-    No mutable approval store, runtime identity hook, or new acceptance job.
+10. **Integration:** export consumes certified gate/review identities; report remains gate-only.
+    No export-to-report dependency, live optional attachment discovery, mutable approval store,
+    runtime identity hook or new acceptance job.
 11. **Dispatch:** disabled by default; disabled means no automatic or manual dispatch in v1.
     Configure and enable before run creation. No new exception in `MANUAL_JOB_IDS`.
 12. **Publication:** only the existing runner accepts the handoff after final byte/schema/
@@ -286,10 +311,11 @@ Algorithm:
 1. Read accepted gate with `accepted_handoff`; require correct job/schema/run and published
    item count. Missing required gate fails. Inspect existing pointer safety so symlink/corrupt
    pointers do not become "not run." Re-hash every gate binding using existing bound readers.
-2. Use `load_accepted_review`, then rebuild
-   `classifier.gate_document(..., classifier.classify(...))` and require exact equality with
-   accepted gate. This catches stale review/gate pairings, bad state/bucket/score/ship-block
-   projections, non-exact accounting and both package-manifest identity mismatches.
+2. Verify the exact certified `/2` gate snapshot and its accepted review `/3` identity through
+   the shared certification boundary. Re-prove nested capability/attachment membership and
+   immutable bindings, accepted review/package/ledger/scores/policy identities, exact accounting
+   and both lead/hunt package-manifest pins. Do not reconstruct a review-only gate or reread
+   live optional producer latest pointers as a substitute for the certified snapshot.
 3. Resolve `scope.accept_manifest` via the bound accepted review job handoff. Validate its
    run/schema/manifest identity, bind its artifact, and verify the referenced accepted manifest
    through existing manifest verification. Read only bounded metadata, never target files.
@@ -299,19 +325,29 @@ Algorithm:
 5. Account every gate package. Only publishable confirmed packages become affected.
    Unrated severity, pending distinct verification, incomplete review or judge disagreement do
    not override gate eligibility; preserve their accepted limitations and policy separately.
-6. Use gate-bound evidence links only. PoC/chain/dossier availability is not a filter.
-   Current gate unavailable-input reasons remain named limitations; do not probe unrelated
-   live PoC/chain output. Report's existing optional PoC behavior remains independent.
+6. Preserve exact gate `/2` `capabilities`, `attachments`, limitations and certified bindings.
+   Every nested input/capability/attachment reference must already be in the gate binding set;
+   adding a reference to export inventory is not certification. PoC/chain/dossier availability
+   is not an eligibility filter. Never probe live optional producer output to complete a snapshot.
 7. Validate and write outputs under the existing attempt layout. Zero eligible findings
    means no `openvex.json` file/reference, only explicit result/companion accounting.
 8. Before acceptance, re-read accepted gate/review pointers and require original pins, re-hash
    inputs and outputs, reassemble and compare canonical bytes. A concurrent change fails the
    attempt. The runner alone publishes its accepted handoff/latest pointer.
 
-Reuse `artifact_ref`, `read_bound_json`, `resolve_bound`, `accepted_handoff`, typed settings
-patterns and protected storage writers. A small public `verify_accepted_gate` helper inside
-export inputs is acceptable; avoid a general refactor of PoC/review internals.
+Gate certification must be reverified through the gate's exact certified-snapshot boundary,
+including the accepted completion context; reconstructing the earlier review-only gate is
+insufficient. The exporter now uses the shared accepted-gate reader extracted from the unchanged
+report snapshot proof. Reuse accepted-handoff/bound-artifact helpers, typed settings and
+protected storage;
+do not invent a second optional-producer discovery policy.
 Do not mutate finding-package/2, adjudication, claim ledger, or gate buckets.
+
+Mutable job `latest.json` and the exact `data/indices/accepted.json` admission pointers
+are measured, bounded and reproved internally, not durable export evidence bindings.
+Immutable accepted handoffs and their certified artifacts stay bound. This distinction
+allows a legitimate newer pointer to make the current operator view stale without
+corrupting an old export's historical evidence.
 
 ## 9. Exact accounting, output schemas and integrity
 
@@ -346,7 +382,7 @@ Result `outcome`:
 
 | Value | Meaning / runtime disposition |
 | --- | --- |
-| `exported` | Nonempty valid document, no gate `kind: gap` limitations; `SUCCEEDED`. Gate not-run limitations are still retained. |
+| `exported` | Nonempty valid document, no gate `kind: gap` limitations; `SUCCEEDED`. Policy-not-run and notice limitations remain visible. |
 | `exported_with_gaps` | Nonempty valid document with gate gap limitations; `COMPLETED_WITH_GAPS`. |
 | `no_statements` | No publishable confirmed gate packages, including empty gate/all backlog/all withheld; no VEX file, null reference, named non-clean gap, `COMPLETED_WITH_GAPS`. |
 
@@ -366,7 +402,7 @@ Companion required sections:
 | Section | Contents |
 | --- | --- |
 | Provenance | Run, exporter release/validation profile, schema pin, gate/review job+document refs, accepted scope/manifest refs, snapshot/repository source, both package-manifest identities, ledger/projection/ship-block policy hashes, separately named review settings/full configuration hashes. |
-| Review context | Verbatim accepted review status/accounting, coverage summary, limitations/gap IDs, ship-block summary, distinct-verification warning. Never blend score dimensions or reinterpret missing values. |
+| Review context | Verbatim accepted review status/accounting, coverage, limitations/gap IDs, ship-block summary, verification warning and exact gate `/2` capabilities/attachments. Never blend score dimensions or reinterpret missing values. |
 | Products | Source snapshot IRI, repository identity basis, observed configuration/build qualifications and explicit source-not-release statement. |
 | Packages | Sorted package ref/hash, claim/adjudication/verification IDs, bucket/disposition/reason, statement ID or null, accepted score projections+refs, independence, ship-block projection, direct/analyst-assessed evidence relation IDs and gaps. |
 | Statement mapping | Statement ID, canonical array index, vulnerability/product identities, source package/claim ref, action settings identity, resolving evidence refs. |
@@ -382,6 +418,27 @@ Avoid hash cycles: serialize OpenVEX first; manifest hashes it but not itself; r
 manifest/document; runtime handoff hashes result and transitively binds artifacts.
 Hash binding is integrity, not a signature or proof of issuer identity.
 
+`capabilities` accounts for PoC, attack chains, remediation planning, remediation validation
+and dossiers, with `enabled`, disposition, bounded reason, handoff/summary references,
+item/omitted/gap counts and nonexecution assurance. Dispositions are `SKIPPED_POLICY`,
+`SKIPPED_NA`, `GAP`, `SUCCEEDED`. `attachments` contains the closed sanitized reference/status
+projections, not protected payloads. Only limitation `kind = gap` changes a nonempty export
+to `exported_with_gaps`; policy `not_run` and `compile_only_nonexecution` `notice` remain
+distinct. The legacy `unavailable_inputs` field is rejected, not filled with plausible defaults.
+
+| Certified capability disposition | Meaning, not a vulnerability verdict |
+| --- | --- |
+| `SKIPPED_POLICY` | Disabled/not admitted in the frozen policy; discovered output is ignored. |
+| `SKIPPED_NA` | Accepted exact empty eligible scope without gaps; not clean target coverage. |
+| `GAP` | Enabled expected work absent, failed, capped or otherwise gap-accounted. |
+| `SUCCEEDED` | Accepted status/nested bindings verified; not exploit execution or proof of a fix. |
+
+Gate classification remains authoritative: missing asserted PoC reference matches produce
+`poc_outcome_unavailable`; asserted finding chain IDs absent from certified chain attachments
+produce `attack_chain_unavailable`. Mere absence of optional enrichment does not withhold an
+otherwise eligible base finding. Export preserves the gate's chosen bucket/reasons, not a
+second reassessment.
+
 `openvex-result.json` contains exactly local schema/run/outcome, gate identity, manifest
 reference, OpenVEX reference/null, statement/included/excluded counts, and named gaps.
 The acceptance unit returns `schema`, `artifact` pointing to result, `item_count` equal to
@@ -393,7 +450,7 @@ Dataset declarations use family `inference_review`, disposition `protected`, sen
 
 | `output_kind` | Claimed files |
 | --- | --- |
-| `openvex_verified_inputs` | Load-unit artifacts and run-local pinned schema/lock copies. |
+| `openvex_verified_inputs` | Load-unit artifacts and nine run-local pinned schema/license/lock snapshots. |
 | `openvex_documents` | Only assembled `openvex.json`. |
 | `openvex_export_accounting` | Manifest/result and acceptance artifacts. |
 
@@ -460,28 +517,40 @@ identity in existing resume contracts; missing declarations must not silently al
 Do not configure arbitrary schema/context URLs, statuses, model settings, public destinations
 or general remediation tools.
 
-## 11. Orchestration, CLI and final-report integration
+## 11. Standalone orchestration and gate-only reporting
 
-Register export in `runtime/registry.py`, CLI `POST_INDEX_JOB_IDS`, target-independent launch
-policy and `orchestration/topology.py`. It follows gate; report remains the single terminal.
-Optional PoC/export are siblings for Dagster; direct CLI runs them sequentially:
+The shared registry/CLI/Dagster topology registers export as target independent and places it
+after certification. Enabled completion producers precede the single gate. Chains are part
+of accepted review `/3`; the following diagram compresses completion dependencies, not an
+instruction to invent handoffs for disabled jobs:
 
-```text
-review -> gate -> optional OpenVEX --+
-             \-> optional PoC -----+-> final report
+```mermaid
+flowchart LR
+    Review["Review /3: chains before seal"] --> PoC["Enabled PoC"]
+    PoC --> Plan["Enabled remediation planning"]
+    Plan --> Validate["Enabled remediation validation"]
+    Validate --> Dossiers["Enabled dossiers"]
+    Dossiers --> Gate["Single certified gate /2"]
+    Review --> Gate
+    Gate --> Report["Gate-only final report /2"]
+    Gate --> Export["Standalone OpenVEX export if enabled"]
 ```
 
-The report waits on each enabled optional tail, or directly on gate when neither is enabled.
-Export reads gate/review, not PoC; report continues its separate compile-only PoC projection.
-No exporter/report dependency cycle. Direct graph ordering, Dagster dependencies, standalone
-upstream handoffs and resume propagation must agree for all four enabled combinations.
-Do not create a PoC evidence prerequisite for affected.
+Report source, schema and `CONSUMES` stay **exactly gate-only**. Export consumes gate/review
+identity and uses only the gate's already certified enhancement context; it cannot search
+current producer latest pointers for missing attachments. There are no OpenVEX report fields,
+file links, export publication limitations or exporter-to-report wait edge.
+This replaces, rather than coexists with, the original report-link/fan-in proposal.
+
+The direct CLI dispatches export before report serially, so a failed export can stop that
+driver before report dispatch. This is not a report-input dependency or a promise to continue
+after failure. Dagster exposes independent gate-dependent peers; standalone report publication
+requires only the certified gate. No gate/PoC/export/report dependency cycle is introduced.
 
 Standalone invocation after enabling in original run configuration:
 
 ```text
 appsec-review run job_openvex_export --run-id <id> --upstream-from-run
-appsec-review run job_final_report_publication --run-id <id> --upstream-from-run
 ```
 
 Disabled export stays outside automatic dispatch and is refused manually; no new
@@ -489,29 +558,31 @@ Disabled export stays outside automatic dispatch and is refused manually; no new
 dependencies and job settings/release identities provide cache invalidation; change no
 generic runtime claim/hook machinery.
 
-Add optional closed `openvex_export` to final-report JSON schema/builder/Markdown and export
-to report `CONSUMES`. Keep `/1` only as an additive optional block preserving historical
-reports; old required fields and review/ship-block semantics remain unchanged.
+No report rerun is required by export. Recertify completion changes through the gate, not a
+later optional lookup. Review claims, score dimensions and ship-block semantics stay unchanged.
+
+Protected export status and metrics expose the following **operator-only** states.
+The historical class names `ExportReportView` and `ExportReportState` are retained APIs,
+not authority to add report fields:
 
 | Consumer state | Required behavior |
 | --- | --- |
 | `disabled` | Frozen export setting false; no new review gap merely for disabling. No OpenVEX file lookup or link. |
-| `not_run` | Enabled but no accepted export, e.g. standalone report dispatched early; explicit missing-export publication limitation, no file link. |
+| `not_run` | Enabled but no accepted export; explicit non-clean export gap, no file link or invented counts. |
 | `available` | Current nonempty accepted export; verify its handoff/result/manifest/document, schemas, bytes and exact gate/review/config identity; show counts and local hashes/refs. |
 | `no_statements` | Current accepted empty export; explicit zero/reasons, companion link, no document link, not a clean verdict. |
 | `stale` | Valid export belongs to another gate/review/config/release; do not link document, explain rerun is needed. |
-| Export failure | Not an accepted report-block state: normal graph execution stops at the failed export and does not produce a refreshed report. Existing runtime failure receipts/events expose the failure. |
+| Export failure | No new accepted status. Existing runtime failure receipts/events expose the failed attempt; never turn it into `no_statements`. |
 
-Normal enabled export failure blocks report completion in both orchestrators. No global
-fail-open behavior or new latest-failure receipt viewer is introduced. A standalone report
-may describe missing/stale accepted export state but cannot represent a failed attempt as a
-new accepted export. A previous immutable accepted export remains usable only if all current
-gate/review/configuration/release pins and bytes still match; link its exact accepted handoff,
-never claim it is the failed attempt's output. Changed-input or corrupt prior outputs are not
-fallbacks. Corrupt handoffs/manifests/documents are report integrity failures, not caught
-"not run"/stale success.
-Availability gaps affect publication limitations/completion, not claim state, gate counts or
-ship-block decisions. Never infer acceptance from file presence or a telemetry event.
+Unavailable states have null output references/counts; only a verified accepted empty export
+has exact zeros and a companion/result with no document. Corruption is an export-reader
+integrity failure, not a missing/stale success. `read_accepted_export` rehashes immutable inputs,
+all runtime-declared artifacts and canonical reassembly for historical accepted bundles.
+`load_export` additionally re-proves current authority before exposing current output.
+Valid new gate/review pointers make old output stale, not corrupted historical bytes.
+A previous accepted output is never claimed to be a failed attempt's output.
+The report does not inspect any of these states; missing/empty/stale export changes neither
+report publication limitations nor gate/claim/ship-block accounting.
 
 ## 12. First-class telemetry and metrics
 
@@ -564,18 +635,35 @@ Duration buckets (seconds): `0.01, 0.05, 0.1, 0.5, 1, 5, 15, 30, 60, 120, +Inf`.
 Size buckets (bytes):
 `1024, 4096, 16384, 65536, 262144, 1048576, 4194304, 16777216, 33554432, +Inf`.
 Histogram JSON contains cumulative fixed buckets, `count`, `sum`, and measured/unmeasured
-counts. Reuse/unmeasured crash produces no fake zero-duration sample.
+counts. Missing measurements produce null `sum`, distinct from measured zero.
+Reuse/unmeasured crash produces no fake zero-duration sample. No document-size sample exists
+for an accepted empty export.
 
 Also expose `configured_enabled`, `latest_state`, latest accepted counts, zero-filled
 exclusions and telemetry gaps/conflicts. `disabled`/`not_run` are explicit states, not successful
 attempts. Failed/unreadable artifacts have null accepted counts with a named gap, not zeros.
-Semantic counts come from bounded hash-verified accepted result sources, not only events.
+Semantic counts come from full bounded/hash-verified accepted outputs and exact reassembly,
+not only events. The metric wrapper can record current-reader failure as `latest_state = stale`
+with `latest_accepted_output_unavailable`; this is an explicit accounting gap, not integrity
+success or a report field.
 
 Deduplicate lifecycle by `(run_id, job_id, attempt_id, invocation_id)` and accepted semantic
 counts by accepted handoff digest. Real separate attempts count separately; distinguish
 cumulative work from latest accepted output. A completed domain event followed by failed
 runtime finalization does not increment accepted statements/bytes. Conflicting duplicate
-terminals or a missing terminal produce telemetry gaps rather than double counts.
+terminals or a missing terminal produce telemetry gaps rather than double counts. Reuse
+correlation prefers `invocation_id`, then `dagster_run_id`, then stable `event_id`.
+
+Only latest state/`latest_accepted` require current authority through `load_export`.
+Cumulative semantics independently reverify each historical accepted bundle through
+`read_accepted_export`, deduplicated by accepted handoff digest. Valid pointer advancement
+may stale latest without discarding historical semantic work. Tampered/unreadable historical
+bytes retain known execution counts, but make their semantic contribution unknown with a
+named gap; without a verifiable accepted output semantic totals are null.
+
+Runtime's ordinary snapshot occurs before `HANDOFF_ACCEPTED`; a later job snapshot or
+`appsec-review metrics --run-id <id>` refreshes acceptance-backed semantics. No runtime
+sequencing rewrite is needed. A pre-acceptance snapshot is not an accepted-empty verdict.
 
 No finding/claim/product/run IDs, hashes, filesystem paths, repository/issuer/advice text,
 source, credentials, or unbounded error/model strings as metric labels. Run/job/attempt/span
@@ -609,23 +697,24 @@ unaffected. A hash authenticates bytes, not scope correctness or issuer authorit
 
 ## 14. Executable verification contract
 
-Implement focused unit tests for each chunk using synthetic accepted fixtures and spies;
-no live model/network/container/target scan. New test files below are proposed executable
-names. Shared fixtures belong to the contract owner, not parallel workers.
+Focused units use synthetic accepted fixtures and spies, without live
+model/network/container/target scans. The required guarantees below are not claims that
+all `/2` execution paths have passed at this pinned base. Shared fixtures explicitly distinguish
+in-memory strict contracts from a real accepted run/certificate boundary.
 
 | Suite | Required assertions |
 | --- | --- |
 | Contracts/schema | Raw upstream schema/lock hash, draft and installed-resource availability; valid document passes offline Draft202012Validator; missing action/author/time/version and unknown properties fail; empty statements fail upstream; schema-valid empty action/products, tool author, wrong context and invalid IRI/date fail semantics. |
 | Settings | Exact keys; enabled missing issuer/action/repository rejected even with zero findings; disabled defaults valid; invalid nonempty values rejected; bool-as-int, all bound edges and one past; byte-vs-character limits; no provider/model/reasoning keys; task topology and prerequisites exact. |
-| Inputs/products | Re-prove gate equals classifier output; both package-manifest hashes, ledger/scores/policy/scope/config pins; operator-declared repo versus matching/mismatching accepted acquisition; source identity not Git/branch/release; no guessed artifact hashes/purls; no current-target access. |
+| Inputs/products | Re-prove the certified `/2` snapshot, capabilities/attachments and all nested certified references, with no live optional discovery; both package-manifest hashes, ledger/scores/policy/scope/config pins; operator-declared repo versus accepted acquisition; no guessed release/artifact/purl identity or target access. |
 | Selection/accounting | Mixed publishable confirmed, supported backlog, confirmed withheld: each counted once, only publishable affected; state/bucket contradiction fails; missing severity/distinct verification and incomplete review retain original limitations without altering eligibility. |
 | Unsupported statuses | Refuted/contradicted/unreachable observations, PoC absence/failure/compile success or failed/skipped coverage never create not_affected/fixed/under_investigation; supported does not become affected. No PoC/chain/dossier prerequisite. |
 | Empty/limits | Zero packages/all backlog/all withheld yield accepted no_statements, null ref, absent VEX file, explicit gap and exact zeros/reasons. Invalid config is not no_statements. Output/input/ref/timeout boundary failures create no accepted subset or empty success. |
 | Identity/replay | Permute input list/map/binding order and runtime scheduling; same pins produce identical bytes/IDs; valid UTC normalization, trailing LF/UTF-8; changed advice/author/product/gate timestamp/release changes identity; old ID not overwritten; no self-hash cycle or duplicate statements. |
 | Integrity | Tamper gate pointer/doc, review handoff, lead/hunt manifests, scope, accepted manifest, ledger/projection, package/score/policy, frozen configuration, schema pin and each output separately. Cross-run/symlink/escape, changed pointer between load/accept and stale gate after review rerun fail closed; no broad skip or stale fallback. |
-| Report/CLI/topology units | Disabled excluded/refused manually; all four PoC/export combinations retain one report terminal; no cycles/PoC dependency in export; standalone upstream sets exact; available/empty/not-run/stale blocks correct; failed export blocks normal report completion, no changed-input fallback; corrupt export fails report; historical reports remain valid; review/ship-block dimensions unchanged. |
+| Export-reader/CLI/topology units | Disabled excluded/refused manually; enabled completion producers precede one gate; report depends on gate only, independent of export; standalone upstream sets exact; current available/empty/not-run/stale views and historical immutable readers verified separately; corrupt export fails its reader, not gate-only report; no changed-input fallback or review/ship-block changes. |
 | Inventory/privacy | All emitted datasets claimed once/protected; absent doc reason correct; no source/advice/secrets/PoC code in events/metric labels; only metadata route; no automatic upload or external schema/context fetch. |
-| Metrics | Fresh/reused/failed/empty exact counts; accepted-only bytes/statements; exclusion sum exact; zero vs unavailable; histogram boundary/cumulative counts; duplicate/conflicting terminals, torn log and pre-domain/missing-terminal accounting; same log deterministic summary; timing absent from deterministic artifacts. |
+| Metrics | Fresh/reused/failed/empty exact counts; historical accepted-only bytes/statements distinct from current latest; tampered historical bytes preserve execution counts but invalidate semantic contribution with gap; exclusion sum; zero vs unavailable; histogram boundaries, no fake empty-size sample; duplicate/conflicting/missing terminals and acceptance-refresh accounting. |
 
 Use doubles that fail on inference, source traversal, Git/subprocess/container calls and URL
 retrieval. Assert required output shape and exact byte-size thresholds, not merely a validator
@@ -639,124 +728,64 @@ the user's explicit session permission. Confirm `appsec_review.__file__` is insi
 worktree. Install dependencies only after a selected command reports missing dependencies or
 a dependency manifest changes. Keep all disposable state under the unique listed basetemp.
 
-The following POSIX commands are the implementation contract; explicitly authorized Windows
-sessions substitute `.\.venv\Scripts\python.exe` and Windows filesystem separators:
+The concrete contract/settings/wiring/documentation selectors below are supported at the pinned
+base. They do not replace focused input/projection/handler verification. Explicitly authorized
+Windows sessions substitute `.\.venv\Scripts\python.exe` and Windows filesystem separators:
 
 ```text
-.venv/bin/python -m pytest -q tests/test_openvex_contracts.py tests/test_openvex_settings.py --basetemp=test/tmp/openvex-contracts
-.venv/bin/python -m pytest -q tests/test_openvex_inputs.py --basetemp=test/tmp/openvex-inputs
-.venv/bin/python -m pytest -q tests/test_openvex_projection.py --basetemp=test/tmp/openvex-projection
-.venv/bin/python -m pytest -q tests/test_openvex_metrics.py tests/test_review_metrics.py --basetemp=test/tmp/openvex-metrics
-.venv/bin/python -m pytest -q tests/test_openvex_job_units.py tests/test_openvex_report_units.py tests/orchestration/test_topology.py tests/test_config.py tests/test_job_selection.py --basetemp=test/tmp/openvex-integration-units
+.venv/bin/python -m pytest -q tests/test_openvex_contracts.py tests/test_openvex_settings.py tests/test_openvex_wiring.py --basetemp=test/tmp/openvex-contract-wiring
 .venv/bin/python -m pytest -q tests/test_documentation.py tests/test_skill_separation.py tests/test_docs_sync.py --basetemp=test/tmp/openvex-docs
 ```
 
-The integration owner adds focused cases in existing registry/launch/CLI/publication unit
-files as appropriate, inspecting markers/fixtures before selecting tests. Do not call a
-scripted whole review chain a unit test simply because it uses no network.
+Implementation owners also select focused input, projection, job-handler,
+metrics and actual gate/report units, recording exact commands and commits. The old
+OpenVEX-report unit selectors were removed with the unsupported report API; do not restore
+them. Do not call a scripted whole review chain a unit test simply because it uses no network.
+The repository-wide documentation check has known missing target-document links outside
+this feature; Windows runtime-skill symlink tests can fail without privilege. Record such
+gaps without weakening tests or claiming their assertions passed.
 
 ### Manual integration/acceptance still required
 
 Current repository guidance reserves integration, acceptance and live Dagster validation to
-the user unless explicitly requested. Specify, but do not automatically execute:
-
-```text
-.venv/bin/python -m pytest -q tests/test_openvex_export_chain.py tests/test_final_report.py --basetemp=test/tmp/openvex-chain
-.venv/bin/python -m pytest -q tests/orchestration/dagster/test_openvex_export.py --basetemp=test/tmp/openvex-dagster
-```
-
-The first drives a scripted accepted review -> gate -> export -> report through the actual
-runner, asserting accepted hashes, replays/tamper rejection and unchanged optional compile-only
-PoC behavior. The second verifies in-process and multiprocess graph tail fan-in and
-enabled-export failure blocking. Network/model/container must remain disabled.
+the user unless explicitly requested. A real accepted
+review/completion -> certified gate -> standalone export path must exercise accepted hashes,
+replays, tamper rejection and nonexecution assurance; independent gate-only report publication
+must remain unchanged. Live/in-process/multiprocess orchestration must verify pre-gate completion,
+no cycles, and independent post-gate peers rather than the removed report fan-in.
+These are remaining validation objectives, not claims that executable acceptance selectors
+or completed runs exist at this base.
 Report exact tested commit, commands, results, environment gaps and outstanding manual checks;
 unit success is not a claim that integration/acceptance ran. No full-suite default.
 
 Definition of done: correct affected-only scope/advice; offline schema+semantic validity;
 exact non-clean empty/error accounting; tamper/stale/replay guarantees using existing
-lifecycle; CLI/graph/report/inventory parity; protected disclosure; measured/tested telemetry;
+lifecycle; CLI/graph/gate-only-report/inventory parity; protected disclosure; measured/tested telemetry;
 all focused units pass; docs truthful about what is implemented and manually unverified.
 
-## 15. Ownership partition and coordinator handoff
+## 15. Public implementation boundaries
 
-The coordinator owns integration decisions and shared-file arbitration. Each agent starts in
-an isolated app worktree containing an exact supplied contract commit, confirms ancestry with
-`git merge-base --is-ancestor <contract-commit> HEAD`, commits with the required coauthor,
-does not push, and reports branch/commit/APIs/tests/deviations. This design agent starts no
-other agents and changes only this document.
-
-### Wave 0: shared contract, one owner
-
-Own new `job_openvex_export/contracts.py`, `settings.py`, `__init__.py`,
-`jobs/engineering_contracts.py`, local/upstream schema files/lock,
-`tests/test_openvex_contracts.py`, `tests/test_openvex_settings.py` and
-`tests/openvex_support.py`. Freeze enums, typed records, schema hashes, identity helpers,
-text/bounds/errors, settings and fixture shapes before parallel implementation.
-Do not add a half-working registry entry. Contract tests import no unimplemented chunks.
-
-Public API contract:
+The [shared-contract reference](../schemas/openvex-export/README.md) defines exact frozen
+records, enums, schema pins and identity helpers. The public function boundaries are:
 
 ```text
 verify_inputs(run_root, settings, repository_root) -> VerifiedInputs
-assemble_export(verified_inputs, settings, exporter_release) -> ExportBundle
+assemble_export(verified_inputs, settings, exporter_release, *, output_prefix) -> ExportBundle
 validate_export(bundle, verified_inputs, settings) -> None
-load_export_for_report(run_root, gate_reference, resolved_config_sha256) -> ExportReportView
-aggregate_openvex_metrics(run_root, validated_events) -> Mapping
-build_job(repository_root=None) -> Job
+read_accepted_export(run_root, handoff, settings, repository_root) -> ExportBundle
+load_export(run_root, settings, repository_root, *, exporter_release, gate_handoff=None) -> ExportReportView
+aggregate_openvex_metrics(run_root, records, *, repository_root=None) -> dict
+build_job(*, repository_root=None) -> Job
 ```
 
 `VerifiedInputs` is immutable verified state, not unvalidated free-form dictionaries.
 `ExportBundle` holds document/null, companion/result bodies and canonical bytes; pure assembly
-does not write or emit events. Filesystem access uses platform `Path`; artifact wire paths
-remain the repository's existing run-relative POSIX format. Proper enums/guards/types, no
-unnecessary casts or new generic framework.
+does not write or emit events. `output_prefix` is explicit, never inferred.
+Filesystem access uses platform `Path`; wire paths remain run-relative POSIX strings.
+Current-state and historical accepted readers are intentionally distinct. None adds
+final-report consumption or a publication route.
 
-### Wave 1: independent files after contract commit
-
-| Chunk | Exclusive files | Deliverable / command |
-| --- | --- | --- |
-| Input verification | New `job_openvex_export/inputs.py`; `tests/test_openvex_inputs.py` | Accepted gate/review/scope/config verifier, bounded identity resolution and source-product provenance. Run `openvex-inputs` selector. |
-| Projection/validation | New `job_openvex_export/projection.py`, `validation.py`; `tests/test_openvex_projection.py` | Pure canonical document/manifest/result assembly, exact selection/accounting/IDs and offline schema/semantic validation. Run `openvex-projection` selector. |
-| Telemetry | New `job_openvex_export/metrics.py`; `observability/telemetry.py`; `tests/test_openvex_metrics.py` | Bounded event/metric contracts, summaries, counters/histograms, artifact-backed accepted totals and failure/empty/reuse accounting. Run `openvex-metrics` selector. No changes to runtime/events/spans internals. |
-
-Chunks import the frozen contracts, never edit them silently. Contract concerns return to
-its owner. Coordinator merges one verified chunk at a time, checking file ownership and the
-combined focused unit set.
-
-### Wave 2: final integration, one owner after Wave 1
-
-Own new `job_openvex_export/job.py`, `datasets.py`, `reporting.py`; central
-`appsec-review.toml`, `config/loader.py`, `runtime/registry.py`, target-independent declarations
-in `runtime/launch.py`, `orchestration/topology.py`, only necessary Dagster adapter wiring,
-`cli.py`, final-report package/schema, installed-schema packaging in `pyproject.toml`,
-inventory expectations if needed, and all integration/report unit tests.
-No generic changes to `runtime/job.py`, `runner.py` or `resume.py`.
-
-This owner alone wires accepted handoffs, event emission, resource deadlines, protected writes,
-standalone/automatic topology, report states, schema resources and publication audit. It
-alone adjusts existing registry/config/CLI/report/inventory assertions. Own new
-`tests/test_openvex_job_units.py`, `tests/test_openvex_report_units.py`,
-`tests/test_openvex_export_chain.py`, and
-`tests/orchestration/dagster/test_openvex_export.py`. Run focused units automatically;
-write and report manual acceptance selectors without claiming they ran.
-
-### Documentation agent after the design
-
-The coordinator starts the requested documentation agent with this exact design commit and
-eventual contract/implementation commits. It may draft proposed docs during implementation,
-but reconciles against merged source before calling them shipped.
-Proposed exclusive files: `docs/operations/openvex-export.md`, relevant navigation in
-`docs/agent-reader.md`, `docs/operations/final-report.md`, `docs/operations/metrics.md`, and
-README feature/CLI notes. Coordinator arbitrates overlaps and updates this design's status
-after implementation; do not edit `docs/docs-sync.json` without the full prescribed pass.
-
-Required diagrams: accepted-gate/config trust/data flow to OpenVEX+protected companion;
-optional PoC/export tail fan-in; nonempty/empty/failure report-state flow.
-Document issuer/action setup, source-not-release identity, immutable-run restriction,
-disabled/manual refusal, internal-only disclosure, validated example, metrics and compile-only
-PoC distinction. Run the `openvex-docs` selectors.
-
-### Remaining choices and final landing
+### Remaining product scope
 
 No open product choice blocks the narrowed v1. Operators must supply the actual issuer,
 accurate common action statement and stable repository/system IRI for each enabled run;
@@ -764,6 +793,25 @@ the design deliberately supplies no fake defaults. Per-finding actions, verified
 artifact/purl mapping, stronger issuer authentication/signing and external publication are
 future product decisions, not implementation assumptions.
 
-Design-only handoff is one commit modifying this document only. The coordinator owns
-subsequent implementation/docs agents, merged focused unit verification and the user's
-requested local-main merge/commit. This agent does not touch local main, push or create a PR.
+## 16. Reconciliation and remaining validation
+
+This revision reconciles the nine assigned documentation surfaces with the frozen completion
+boundary and assembled certified-gate implementation at `e628041c`. It removes the former
+report-link/fan-in proposal, not the pre-gate completion path. Contract fixtures with certified attachments
+prove strict shapes/reference membership; they do not prove real filesystem acceptance.
+
+The real `/2` input/certificate reader and projector are implemented at the named base.
+Combined focused exporter/snapshot/publication verification and final exact-main reconciliation
+remain tracked by the coordinator in
+[the implementation record](../reviews/openvex-export-implementation.md).
+Do not treat this status update or its commands as a final combined result.
+
+The coordinator's isolated installed-only wheel proof at `212f21a8` verifies the seven
+schemas plus lock/license, the transitive report-item definition, canonical assembly and
+semantic validation with synthetic gate `/2` context, not a real accepted run. Exact
+wheel/source proof belongs in the implementation record. This does not establish a
+self-contained application; the earlier isolated standalone job import without configured
+guidance failed on missing `pipeline/guidance/registry.json`.
+Full installed-job execution, real accepted whole-chain, integration, acceptance, Linux,
+live Dagster and full-suite validation are not claimed. Keep known unrelated missing
+target-document links and Windows symlink privilege gaps explicit rather than weakening checks.

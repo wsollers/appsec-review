@@ -176,16 +176,20 @@ event, rather than misclassifying generic step lifecycle lists. The same 770-rec
 retaining true producer buckets; the parent reports 48 focused Windows metric/log/review passes.
 These are attributed historical results, not tests newly executed by this documentation session.
 
-OpenVEX shared settings/contracts, schema locks and design documents exist, but no exporter
-job/configuration/dataset/metrics producer is registered. It is not counted as a 43rd job or a
-dossier input. Its inherited post-gate PoC sibling diagram and report `/1` proposal predate
-current pre-gate PoC and certified report `/2`; future implementation must reconcile them
-explicitly. The operations boundary now names that mismatch without claiming exporter delivery.
+At this completion-only checkpoint, OpenVEX shared settings/contracts, schema locks and design
+documents existed, but no exporter job/configuration/dataset/metrics producer was registered.
+It was not counted as an additional job or a dossier input. Its inherited post-gate PoC sibling
+diagram and report `/1` proposal predated pre-gate PoC and certified report `/2`.
 Final `967d1c7f` reconciles the shared records and fixtures with gate `/2` only: legacy `/1`
 and `unavailable_inputs` are rejected, every nested input/capability/attachment reference must
 belong to certified gate bindings, and offline transitive schema hashes are refreshed.
 The [shared-contract README](../schemas/openvex-export/README.md) records this boundary;
-it does not implement filesystem acceptance, export assembly or report fan-in.
+the contracts-only checkpoint did not implement filesystem acceptance or export assembly.
+Later standalone OpenVEX implementation over completed main `c47e3fea` supplies the registered
+disabled exporter, three protected dataset kinds and metrics, without changing gate-only report
+consumption. Its separate [implementation record](openvex-export-implementation.md) records
+focused verification and remaining manual gaps; those later changes do not enlarge the
+historical completion acceptance claims below.
 
 ### Acceptance ledger
 

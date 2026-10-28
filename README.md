@@ -535,10 +535,15 @@ model_connectivity -> image_pin_verification -> target_acquisition -> review_int
   -> code_graph_index -> security_tagging
   -> owasp_control_assessment (enabled by default)
   -> review_data_indexing -> review_package_assembly
-  -> document_issue_analysis -> inference_security_review
+  -> document_issue_analysis -> inference_security_review (chains before seal)
   -> poc_generation -> remediation_planning -> remediation_validation -> dossier_publication
-  -> final_publication_gate -> final_report_publication
+  -> final_publication_gate -> openvex_export (opt-in; only when enabled)
+  -> final_report_publication
 ```
+
+The completion producers above run before one certified gate when enabled. The direct driver
+dispatches post-gate export and report sequentially, but they are independent graph peers:
+the report consumes only the gate snapshot, never OpenVEX output.
 
 Start a review from the repository root with the virtual environment active:
 
@@ -638,22 +643,29 @@ workspace and never runs a produced binary; see
 review and pre-gate completion evidence, and the report reads only that certified gate snapshot to
 write `final-report.json` and a deterministic `final-report.md`; see
 [`docs/operations/final-report.md`](docs/operations/final-report.md).
-`poc_generation`, remediation planning/validation, and dossier publication run automatically before
-the gate for new reviews. PoC generation writes bounded test/control functions that are compiled,
-never linked or run. Frozen runs retain their resolved settings; a disabled frozen PoC job requires
-explicit authenticated manual admission. See [`docs/operations/poc-generation.md`](docs/operations/poc-generation.md),
-[`docs/operations/remediation.md`](docs/operations/remediation.md), and
-[`docs/operations/dossier-publication.md`](docs/operations/dossier-publication.md).
+Enabled PoC generation, remediation planning/validation and dossier publication run **before**
+the single final gate by default for new reviews. PoC and remediation checks are compile-only:
+functions are never linked or run, and checks establish neither runtime reproduction nor a verified
+fix. New-run defaults do not change frozen historical configurations; manual
+disabled PoC output requires explicit gate admission. See
+[`docs/operations/poc-generation.md`](docs/operations/poc-generation.md),
+[remediation](docs/operations/remediation.md) and [dossiers](docs/operations/dossier-publication.md).
 
-**Planned, not implemented:** `job_openvex_export` will produce deterministic, model-free
+`job_openvex_export` produces deterministic, model-free
 OpenVEX `affected` statements only for the accepted gate's publishable confirmed findings,
-with a protected evidence/limitations companion. It is designed to be disabled by default,
+with a protected evidence/limitations companion. It is disabled by default,
 including refusal of manual dispatch while disabled, and requires explicit immutable pre-run
 issuer/action/repository settings. Products identify the reviewed source snapshot and full
 configuration, not a released binary or version range; local export does not authorize public
-disclosure. See the [design](docs/architecture/openvex-export.md) and
-[draft operator guide and diagrams](docs/operations/openvex-export.md). The current graph above
-does not yet include this job.
+disclosure. Empty exports retain explicit non-clean accounting without writing an invalid empty
+OpenVEX document. The user-selected boundary is **standalone post-gate export with gate-only reporting**:
+OpenVEX is not a report field, attachment or prerequisite. At source
+`e628041c`, strict gate `/2` contracts, shared certified-gate reader, exporter input verifier
+and projector are assembled. Combined focused verification and final exact-main reconciliation
+are tracked in the [implementation record](docs/reviews/openvex-export-implementation.md);
+this is not a claim of real accepted whole-chain, integration, acceptance or live Dagster validation.
+See the [design](docs/architecture/openvex-export.md) and
+[operator guide and diagrams](docs/operations/openvex-export.md).
 
 See [`docs/operations/wave1-review.md`](docs/operations/wave1-review.md).
 

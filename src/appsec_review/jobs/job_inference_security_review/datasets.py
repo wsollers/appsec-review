@@ -22,6 +22,8 @@ PLANNED_CONSUMERS: tuple[dict[str, object], ...] = tuple(
         ("job_remediation_validation", ("remediation_intake",)),
         ("job_final_publication_gate", ("accounting", "finding_packages", "score_packages", "ship_block",
                                         "verification_backlog", "coverage_matrix", "gap_ids")),
+        ("job_openvex_export", ("accounting", "finding_packages", "score_packages", "ship_block",
+                                "verification_backlog", "coverage_matrix", "gap_ids")),
         ("job_final_report_publication", ("finding_packages", "verification_backlog", "ship_block",
                                           "score_packages")),
     ))
