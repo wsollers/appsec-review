@@ -1,5 +1,14 @@
 # Operating proof-of-concept generation
 
+**Completion transition (proposed):** this page describes the implemented post-gate producer at
+contract commit `5f5548d`. The [completion design](../architecture/evidence-completion-and-remediation.md)
+moves PoC before the single final gate, replaces mutable `data/poc/<claim-id>/` packaging with
+immutable attempt-owned artifacts, and adds explicit nonexecution assurance and protected
+[per-outcome dossiers](dossier-publication.md). Those input/path/schema/topology changes are
+not implemented at this baseline. [Dossier data inventory](../architecture/dossier-data-inventory.md)
+enumerates the actual accepted inputs and bounded retrieval; compiling either function still
+does not observe its behavior.
+
 `job_poc_generation` writes, for each finding the judge agreed is correct, a **proof-of-concept unit-test
 function** that a developer can add to a test target and watch in a debugger, and checks that it **compiles**
 against the project's own build. It is the second half of the design in

@@ -32,8 +32,9 @@ GRAPH_JOB_IDS = ("job_model_connectivity", "job_image_pin_verification", "job_re
                  "job_review_prioritization", "job_code_graph_index", "job_review_data_indexing")
 # Consumers of the accepted index that run after the resumable graph.
 POST_INDEX_JOB_IDS = ("job_review_package_assembly", "job_document_issue_analysis",
-                      "job_inference_security_review", "job_final_publication_gate",
-                      "job_poc_generation", "job_final_report_publication")
+                      "job_inference_security_review", "job_poc_generation",
+                      "job_remediation_planning", "job_remediation_validation", "job_dossier_publication",
+                      "job_final_publication_gate", "job_final_report_publication")
 # Jobs that are outside the automatic graph while ``settings.enabled`` is false and that an operator may still
 # dispatch directly on a finished run (`run <job> --run-id <id> --upstream-from-run`). Every other disabled job
 # is refused: disabling it means "do not run it".
@@ -56,6 +57,8 @@ def parser() -> argparse.ArgumentParser:
                      help="target checkout for target-reading jobs (default: APPSEC_REVIEW_TARGET)")
     run.add_argument("--upstream-from-run", action="store_true",
                      help="bind the run's accepted handoffs of the upstream jobs wave1_review would pass")
+    run.add_argument("--admit-manual-poc", action="store_true",
+                     help="explicitly bind a manually run, disabled PoC job when rerunning the final gate")
 
     start = commands.add_parser("start", help="start the deterministic review graph")
     start.add_argument("--target", type=Path, required=True)
@@ -104,6 +107,9 @@ def parser() -> argparse.ArgumentParser:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = parser().parse_args(argv)
+    if getattr(args, "admit_manual_poc", False) and (
+            args.job_id != "job_final_publication_gate" or not args.upstream_from_run or not args.run_id):
+        parser().error("--admit-manual-poc requires run job_final_publication_gate --run-id --upstream-from-run")
     config = load_config(args.config, profile=args.profile)
     if args.command == "schedules":
         schedules = {
@@ -230,7 +236,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.upstream_from_run:
         if not args.run_id:
             parser().error("--upstream-from-run requires --run-id")
-        entry = next((item for item in describe_wave1(config, registry, include=MANUAL_JOB_IDS & {args.job_id})["jobs"]
+        included = MANUAL_JOB_IDS & {args.job_id}
+        if args.admit_manual_poc:
+            included = included | {"job_poc_generation"}
+        entry = next((item for item in describe_wave1(config, registry, include=included)["jobs"]
                       if item["job_id"] == args.job_id), None)
         if entry is None:
             raise ValueError(f"job is not in wave1_review: {args.job_id}")

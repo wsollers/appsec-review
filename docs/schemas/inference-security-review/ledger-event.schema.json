@@ -52,6 +52,45 @@
   },
   "allOf": [
     {
+      "if": {"properties": {"kind": {"const": "chain_proposed"}}},
+      "then": {
+        "properties": {
+          "subject_id": {"$ref": "chain-records.schema.json#/$defs/chain_id"},
+          "body": {
+            "type": "object", "additionalProperties": false, "required": ["proposal", "artifact"],
+            "properties": {
+              "proposal": {"$ref": "chain-records.schema.json#/$defs/proposal"},
+              "artifact": {"$ref": "chain-records.schema.json#/$defs/artifact"}
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {"properties": {"kind": {"const": "chain_challenged"}}},
+      "then": {
+        "properties": {
+          "subject_id": {"$ref": "chain-records.schema.json#/$defs/challenge_id"},
+          "body": {
+            "type": "object", "additionalProperties": false, "required": ["challenge"],
+            "properties": {"challenge": {"$ref": "chain-records.schema.json#/$defs/challenge"}}
+          }
+        }
+      }
+    },
+    {
+      "if": {"properties": {"kind": {"const": "chain_decided"}}},
+      "then": {
+        "properties": {
+          "subject_id": {"$ref": "chain-records.schema.json#/$defs/chain_id"},
+          "body": {
+            "type": "object", "additionalProperties": false, "required": ["decision"],
+            "properties": {"decision": {"$ref": "chain-records.schema.json#/$defs/decision"}}
+          }
+        }
+      }
+    },
+    {
       "if": {
         "properties": {
           "kind": {
