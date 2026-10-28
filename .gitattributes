@@ -1,11 +1,6 @@
 # Hash-pinned, hand-authored graph-export recordings and goldens: byte-exact, never end-of-line converted.
-tests/fixtures/graph/codeql_export/ruby-synthetic/** -text
-tests/fixtures/graph/expected/ruby-synthetic/** -text
-tests/fixtures/graph/codeql_export/go-synthetic/** -text
-tests/fixtures/graph/expected/go-synthetic/** -text
-tests/fixtures/graph/codeql_export/java-synthetic/** -text
-tests/fixtures/graph/expected/java-synthetic/** -text
-tests/fixtures/graph/codeql_export/python-synthetic/** -text
-tests/fixtures/graph/expected/python-synthetic/** -text
-tests/fixtures/graph/codeql_export/swift-synthetic/** -text
-tests/fixtures/graph/expected/swift-synthetic/** -text
+tests/fixtures/graph/** -text
+# Shell scripts run inside Linux/WSL and containers: always LF, whatever core.autocrlf says.
+*.sh text eol=lf
+# CodeQL packs are hashed over their LF bytes and compiled inside Linux containers.
+rules/codeql-graph-export/** text eol=lf
