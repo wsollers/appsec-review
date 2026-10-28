@@ -11,6 +11,7 @@ from appsec_review.jobs.job_artifact_indexing import build_job as artifact_job
 from appsec_review.jobs.job_dependency_intelligence import (
     HttpResponse, build_job as dependency_job, load_accepted_dependency_intelligence,
 )
+from appsec_review.jobs.job_target_catalog import build_job as catalog_job
 from appsec_review.retrieval import IndexBuilder, IndexIdentity, index_fingerprint, write_manifest
 from appsec_review.runtime import GraphRunner, Job, JobRunner, Unit, UnitExecutor
 from appsec_review.storage import atomic_json, canonical_json, file_sha256
@@ -81,7 +82,7 @@ def _prepare(workspace: LaneWorkspace):
     atomic_json(manifest_path, manifest)
     native["workspace_manifest"] = _identity(root, manifest_path)
     _publish_changed_language_receipts(root, receipts, accepted, handoff, latest)
-    GraphRunner(config, [_recorded_empty_sbom_job(), artifact_job()]).run(
+    GraphRunner(config, [catalog_job(), _recorded_empty_sbom_job(), artifact_job()]).run(
         run_id=RUN_ID, target_root=target, source_fingerprint=snapshot)
     return config, target, snapshot, root, cache_root
 

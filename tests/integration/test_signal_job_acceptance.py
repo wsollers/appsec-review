@@ -11,6 +11,7 @@ import pytest
 from appsec_review.acceptance.lanes import LaneWorkspace
 from appsec_review.jobs.job_artifact_indexing import build_job as artifact_job
 from appsec_review.jobs.job_profile_data import build_job as profile_job, load_accepted_profile_data
+from appsec_review.jobs.job_target_catalog import build_job as catalog_job
 from appsec_review.jobs.job_test_coverage import build_job as coverage_job, load_accepted_test_coverage
 from appsec_review.runtime import GraphRunner
 from appsec_review.storage import atomic_json, file_sha256
@@ -62,7 +63,7 @@ def _prepare(workspace: LaneWorkspace):
     atomic_json(manifest_path, manifest)
     receipt["workspace_manifest"] = _identity(run_root, manifest_path)
     _publish_changed_language_receipts(run_root, receipts, accepted, handoff, latest)
-    GraphRunner(config, [artifact_job()]).run(
+    GraphRunner(config, [catalog_job(), artifact_job()]).run(
         run_id=RUN_ID, target_root=target, source_fingerprint=snapshot)
     return config, target, snapshot, run_root
 
