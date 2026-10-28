@@ -508,6 +508,11 @@ host fetched the official listing and archive and verified the published SHA-256
 
 ## Run a review
 
+For a full Dagster review, start with the
+[review startup guide: required inputs, features and flags](docs/operations/review-startup.md).
+It includes PowerShell/WSL and Linux launch sequences, all `review-start` options, and the
+TOML-only feature gates. The direct CLI below runs a smaller graph.
+
 The direct CLI runs this linear graph:
 
 ```text
@@ -724,13 +729,15 @@ python deploy/dagster/bin/smoke.py --platform linux --mode feeds
 Use `--platform wsl` from WSL or `--platform windows` from native PowerShell. The smoke runner
 checks for active runs and executes one live sync at a time.
 
-Launch the full review graph:
+Launch the full review graph through the guarded operator script. It prints a Dagster UUID and an
+application run id; replace `DAGSTER_UUID` below with the printed UUID. See the
+[startup feature and flag reference](docs/operations/review-startup.md) to choose the target,
+profile, capacity overlay or first-error policy.
 
 ```bash
-dagsterRunId=$(python3 -c 'import uuid; print(uuid.uuid4())')
-docker compose --env-file deploy/dagster/.env -f deploy/dagster/compose.yaml exec -T webserver dagster job launch -w /opt/dagster/home/workspace.yaml -l appsec_review -j wave1_review --run-id "$dagsterRunId"
-python3 deploy/dagster/bin/review_run.py watch --run-id "$dagsterRunId"
-python deploy/dagster/bin/verify.py --run-id "$dagsterRunId" --evidence "runs/metadata/dagster-verification/$dagsterRunId.json"
+scripts/review-start.sh
+scripts/review-watch.sh --run DAGSTER_UUID
+python deploy/dagster/bin/verify.py --run-id DAGSTER_UUID --evidence runs/metadata/dagster-verification/DAGSTER_UUID.json
 ```
 
 After you change application code, rebuild and reload only the code location:
