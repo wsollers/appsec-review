@@ -502,7 +502,8 @@ def test_jvm_detached_instrumentation_is_not_hashed_on_publication_or_resume(tmp
     from appsec_review.jobs.job_language_build import job as generic, jvm
 
     unit, dispatch, accepted, calls, _events = _isolated_jvm_action(tmp_path, monkeypatch, mode)
-    supplied = unit.job.run_root / "data/build/jvm/units/jvm-fixture/instrumentation"
+    supplied = (unit.job.run_root / "data" / "build" / "jvm" / "units" /
+                dispatch["build_unit_id"] / "attempts" / unit.job.attempt_id / "instrumentation")
     evidence = supplied.with_name("instrumentation-evidence")
     hashed = []
     original = file_sha256
