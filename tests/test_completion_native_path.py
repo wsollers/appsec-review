@@ -23,6 +23,7 @@ from appsec_review.jobs.job_remediation_validation import build_job as validatio
 from appsec_review.observability import PipelineLog
 from appsec_review.observability.telemetry import aggregate_run_metrics
 from appsec_review.reporting.dossier_render import render_dossier
+from appsec_review.review.secret_redaction import redact_source_line
 from tests import poc_support, remediation_support as support
 from tests.final_report_support import GATE, REPORT, job_tables, run_job
 from tests.fixtures.inference_review.acceptance import JOB, write_config, write_overlay
@@ -180,16 +181,31 @@ def test_real_native_review_through_all_completion_lanes(tmp_path_factory):
     dossiers = summaries[DOSSIERS]
     assert dossiers["counts"]["by_kind"] == {"confirmed_finding": len(confirmed), "poc": 1}
     assert dossiers["counts"]["items"] == dossiers["counts"]["by_status"]["rendered"] == len(confirmed) + 1
-    assert dossiers["omitted"] == [] and dossiers["gaps"] == []
+    assert dossiers["omitted"] == []
+    findings = {item["finding_package_id"]: item for item in before_packages}
+    dossier_gaps = set()
     for item in dossiers["items"]:
         assert item["status"] == "rendered" and item["files"]["pdf"] is not None
-        assert read_bound_json(root, item["files"]["json"])["finding"]["claim_id"] == item["finding"]["claim_id"]
+        model = read_bound_json(root, item["files"]["json"])
+        assert model["finding"]["claim_id"] == item["finding"]["claim_id"]
+        assert model["sources"]
+        inherited = set(findings[item["finding"]["finding_package_id"]]["gap_ids"])
+        if any(source["upstream_truncated"] for source in model["sources"]):
+            inherited.add("source_excerpt_truncated: accepted retrieval returned bounded source")
+        if item["finding"]["claim_id"] == outcome["claim_id"]:
+            inherited.update(outcome["gaps"])
+        assert model["gaps"] == [redact_source_line(gap, assignments=False) for gap in sorted(inherited)]
+        assert item["gap_ids"] == sorted(set(model["gaps"]))
+        dossier_gaps.update(item["gap_ids"])
+    assert dossiers["gaps"] == sorted(dossier_gaps)
 
     run(gate_job(repository_root=support.ROOT), "acceptance.publish_handoff", (JOB, *jobs[:4]))
     gate = summaries[GATE]
     assert gate["ship_block"] == before_ship_block
-    assert [{key: value for key, value in item.items() if key not in {"bucket", "withheld_reasons"}}
-            for item in gate["packages"]] == before_packages
+    gate_packages = [{key: value for key, value in item.items() if key not in {"bucket", "withheld_reasons"}}
+                     for item in gate["packages"]]
+    assert sorted(gate_packages, key=lambda item: item["finding_package_id"]) == sorted(
+        before_packages, key=lambda item: item["finding_package_id"])
     assert gate["package_counts"]["withheld"] == 0
     for capability, producer in (("poc_generation", POC), ("remediation_planning", PLAN),
                                  ("remediation_validation", VALIDATE), ("dossiers", DOSSIERS)):
@@ -197,7 +213,10 @@ def test_real_native_review_through_all_completion_lanes(tmp_path_factory):
         assert record["enabled"] and record["handoff"]["sha256"] == accepted[producer].sha256
         assert record["item_count"] == len(gate["attachments"][capability])
     assert gate["capabilities"]["poc_generation"]["disposition"] == "SUCCEEDED"
-    assert gate["capabilities"]["dossiers"]["disposition"] == "SUCCEEDED"
+    dossier_disposition = "GAP" if dossier_gaps else "SUCCEEDED"
+    assert gate["capabilities"]["dossiers"]["disposition"] == dossier_disposition
+    assert gate["capabilities"]["dossiers"]["gap_count"] == max(
+        len(dossier_gaps), sum(bool(item["gap_ids"]) for item in dossiers["items"]))
     for binding in gate["bindings"]:
         resolve_bound(root, binding)
 
@@ -251,9 +270,14 @@ def test_real_native_review_through_all_completion_lanes(tmp_path_factory):
     assert adapter["flags"]["baseline_attempted.true"] == adapter["flags"]["patched_attempted.true"] == 1
     dossier_event = event("dossiers", "DOSSIER_PUBLICATION_PUBLISHED")
     assert dossier_event["counters"]["item_count"] == dossier_event["counters"]["rendered_count"] == len(confirmed) + 1
+    assert dossier_event["counters"]["gap_count"] == len(dossier_gaps)
+    render_events = metrics["lanes"]["dossiers"]["events"]["DOSSIER_RENDER_COMPLETED"]
+    assert render_events["count"] == render_events["outcomes"]["rendered"] == len(confirmed) + 1
+    assert render_events["counters"]["gap_count"] == sum(len(item["gap_ids"]) for item in dossiers["items"])
     gate_event = event("publication_gate", "FINAL_PUBLICATION_GATE_CAPABILITIES_VERIFIED")
     assert gate_event["counters"]["attachment_count"] == sum(map(len, gate["attachments"].values()))
     assert gate_event["outcomes"]["dispositions.poc_generation.SUCCEEDED"] == 1
+    assert gate_event["outcomes"]["dispositions.dossiers." + dossier_disposition] == 1
     report_event = event("report_publication", "FINAL_REPORT_ASSEMBLED")
     assert report_event["counters"]["publishable_count"] == len(report["findings"])
     assert report_event["counters"]["withheld_count"] == 0
