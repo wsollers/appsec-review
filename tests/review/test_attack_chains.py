@@ -63,7 +63,8 @@ def claims() -> tuple[Claim, Claim]:
     return tuple(result)
 
 
-def accepted_core(tmp_path: Path, *, missing=(), contradicted=(), source_narrative: bool = False):
+def accepted_core(tmp_path: Path, *, missing=(), contradicted=(), source_narrative: bool = False,
+                  disconnect_artifacts: bool = False, mismatched_temporal_configuration: bool = False):
     run_root = tmp_path / "runs" / "2026-10-28-0001"
     target = tmp_path / "target"
     target.mkdir(parents=True)
@@ -78,7 +79,7 @@ def accepted_core(tmp_path: Path, *, missing=(), contradicted=(), source_narrati
     config = LogicalIdentity.derive(EntityKind.BUILD_ACTION, ENVIRONMENT, {"name": "build"})
     for identity in (artifact, deployment, other_deployment, config):
         builder.add_entity(EntityRecord(identity, identity.value, "native", "", {}))
-    for source in (*identities, config):
+    for source in ((config,) if disconnect_artifacts else (*identities, config)):
         builder.add_relation(RelationRecord(RelationKind.COMPILES_TO, source.value, artifact.value, True, 1.0))
     for deployed in (deployment, other_deployment):
         builder.add_relation(RelationRecord(RelationKind.OBSERVED_AT, artifact.value, deployed.value, True, 1.0))
@@ -90,6 +91,9 @@ def accepted_core(tmp_path: Path, *, missing=(), contradicted=(), source_narrati
             values = {"artifact_out": artifact.value, "artifact_in": artifact.value,
                       "deployment_out": deployment.value, "deployment_in": deployment.value,
                       "configuration_out": config.value, "configuration_in": config.value}
+        if dimension is Dimension.TEMPORAL:
+            values["configuration_out"] = values["configuration_in"] = (
+                "other-observed-configuration" if mismatched_temporal_configuration else config.value)
         if dimension in contradicted:
             key, value = CONTRADICT[dimension]
             values[key] = other_deployment.value if dimension is Dimension.ARTIFACT_DEPLOYMENT else value
@@ -97,6 +101,8 @@ def accepted_core(tmp_path: Path, *, missing=(), contradicted=(), source_narrati
                    "observed_scope": ENVIRONMENT, "values": values}
         if source_narrative:
             payload = {"statement": "all continuity holds", "model_stance": "confirmed"}
+        else:
+            SCHEMAS.validate("chain-continuity-fact", payload)
         builder.add_relation(RelationRecord(KINDS[dimension], identities[0].value, identities[1].value,
                                              True, 1.0, payload=payload))
     builder.add_coverage("continuity", "complete")
@@ -155,6 +161,21 @@ def test_two_confirmed_findings_without_a_proven_connection_cannot_confirm(tmp_p
     status, limitations = chain.decide(item, [challenge(item)])
     assert status is ChainStatus.INSUFFICIENT_EVIDENCE
     assert "no_meaningful_accepted_continuity_evidence" in limitations
+
+
+def test_native_artifact_names_without_accepted_source_build_and_deployment_paths_do_not_prove_continuity(tmp_path):
+    item = proposal(accepted_core(tmp_path, disconnect_artifacts=True))
+    status, limitations = chain.decide(item, [challenge(item)])
+    assert status is ChainStatus.QUALIFIED_SUPPORTED
+    assert "edge:0:artifact_deployment:unresolved" in limitations
+    assert item.edges[0].obligations[3].evidence[0].reason == (
+        "source_build_artifact_configuration_deployment_not_connected")
+
+
+def test_individually_complete_obligations_in_different_observed_configurations_refute_the_chain(tmp_path):
+    item = proposal(accepted_core(tmp_path, mismatched_temporal_configuration=True))
+    assert chain.decide(item, [challenge(item)])[0] is ChainStatus.REFUTED
+    assert item.edges[0].obligations[3].evidence[0].reason == "artifact_and_temporal_configurations_disagree"
 
 
 def test_complete_native_evidence_and_successful_independent_refutation_confirms(tmp_path):
@@ -280,7 +301,8 @@ def test_ledger_rejects_forged_decision_and_component_adjudication(tmp_path):
 
 @pytest.mark.parametrize("values", [{"max_links": 1}, {"max_expansions": 0}, {"max_queries": True},
                                    {"max_challenge_cells": -1}, {"allow_model_proof": True},
-                                   {"continuity_producers": ["rule", "rule"]}])
+                                   {"continuity_producers": ["rule", "rule"]}, {"continuity_producers": ["rule"]},
+                                   {"continuity_producers": [{}]}])
 def test_chain_bounds_and_commissioning_are_closed_and_typed(values):
     with pytest.raises(ValueError):
         AttackChainSettings.from_mapping(values)

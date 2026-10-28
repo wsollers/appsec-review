@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://appsec-review.local/schemas/inference-security-review/chain-continuity-fact.schema.json",
+  "description": "Countable only as an exact unambiguous accepted relation between the edge's source endpoints, in the observed scope, from a centrally commissioned deterministic producer. Equality is evaluated by the application, not asserted by a model. Artifact, build/configuration and deployment identities must additionally resolve and connect through accepted build/deployment relations.",
+  "type": "object", "additionalProperties": false,
+  "required": ["schema", "dimension", "observed_scope", "values"],
+  "properties": {
+    "schema": {"const": "appsec-review/chain-continuity-fact/1"},
+    "dimension": {"$ref": "chain-records.schema.json#/$defs/dimension"},
+    "observed_scope": {"$ref": "#/$defs/text"},
+    "values": {"type": "object"}
+  },
+  "allOf": [
+    {"if": {"properties": {"dimension": {"const": "identity"}}}, "then": {"properties": {"values": {"$ref": "#/$defs/identity"}}}},
+    {"if": {"properties": {"dimension": {"const": "privilege"}}}, "then": {"properties": {"values": {"$ref": "#/$defs/privilege"}}}},
+    {"if": {"properties": {"dimension": {"const": "trust_boundary"}}}, "then": {"properties": {"values": {"$ref": "#/$defs/trust_boundary"}}}},
+    {"if": {"properties": {"dimension": {"const": "artifact_deployment"}}}, "then": {"properties": {"values": {"$ref": "#/$defs/artifact_deployment"}}}},
+    {"if": {"properties": {"dimension": {"const": "temporal"}}}, "then": {"properties": {"values": {"$ref": "#/$defs/temporal"}}}}
+  ],
+  "$defs": {
+    "text": {"type": "string", "minLength": 1, "maxLength": 2000},
+    "privileges": {"type": "array", "maxItems": 64, "uniqueItems": true, "items": {"$ref": "#/$defs/text"}},
+    "identity": {
+      "type": "object", "additionalProperties": false, "required": ["output_identity", "input_identity"],
+      "properties": {"output_identity": {"$ref": "#/$defs/text"}, "input_identity": {"$ref": "#/$defs/text"}}
+    },
+    "privilege": {
+      "type": "object", "additionalProperties": false,
+      "required": ["principal_out", "principal_in", "provided", "required"],
+      "properties": {
+        "principal_out": {"$ref": "#/$defs/text"}, "principal_in": {"$ref": "#/$defs/text"},
+        "provided": {"$ref": "#/$defs/privileges"},
+        "required": {"allOf": [{"$ref": "#/$defs/privileges"}, {"minItems": 1}]}
+      }
+    },
+    "trust_boundary": {
+      "type": "object", "additionalProperties": false,
+      "required": ["destination_zone", "source_zone", "transport_out", "transport_in", "enforcement_point_out", "enforcement_point_in"],
+      "properties": {
+        "destination_zone": {"$ref": "#/$defs/text"}, "source_zone": {"$ref": "#/$defs/text"},
+        "transport_out": {"$ref": "#/$defs/text"}, "transport_in": {"$ref": "#/$defs/text"},
+        "enforcement_point_out": {"$ref": "#/$defs/text"}, "enforcement_point_in": {"$ref": "#/$defs/text"}
+      }
+    },
+    "artifact_deployment": {
+      "type": "object", "additionalProperties": false,
+      "required": ["artifact_out", "artifact_in", "deployment_out", "deployment_in", "configuration_out", "configuration_in"],
+      "properties": {
+        "artifact_out": {"$ref": "common.schema.json#/$defs/entity_id"}, "artifact_in": {"$ref": "common.schema.json#/$defs/entity_id"},
+        "deployment_out": {"$ref": "common.schema.json#/$defs/entity_id"}, "deployment_in": {"$ref": "common.schema.json#/$defs/entity_id"},
+        "configuration_out": {"$ref": "common.schema.json#/$defs/entity_id"}, "configuration_in": {"$ref": "common.schema.json#/$defs/entity_id"}
+      }
+    },
+    "temporal": {
+      "type": "object", "additionalProperties": false,
+      "required": ["a_start", "a_end", "b_start", "b_end", "output_at", "input_at", "version_out", "version_in", "configuration_out", "configuration_in"],
+      "properties": {
+        "a_start": {"type": "integer"}, "a_end": {"type": "integer"},
+        "b_start": {"type": "integer"}, "b_end": {"type": "integer"},
+        "output_at": {"type": "integer"}, "input_at": {"type": "integer"},
+        "version_out": {"$ref": "#/$defs/text"}, "version_in": {"$ref": "#/$defs/text"},
+        "configuration_out": {"$ref": "#/$defs/text"}, "configuration_in": {"$ref": "#/$defs/text"}
+      }
+    }
+  }
+}

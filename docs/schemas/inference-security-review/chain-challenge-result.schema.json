@@ -4,7 +4,7 @@
   "type": "object", "additionalProperties": false, "required": ["chain_id", "checks", "gaps"],
   "properties": {
     "chain_id": {"$ref": "chain-records.schema.json#/$defs/chain_id"},
-    "gaps": {"$ref": "chain-records.schema.json#/$defs/texts"},
+    "gaps": {"$ref": "chain-records.schema.json#/$defs/worker_gaps"},
     "checks": {
       "type": "array", "minItems": 5, "maxItems": 35, "uniqueItems": true,
       "items": {
