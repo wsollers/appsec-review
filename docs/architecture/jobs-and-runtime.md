@@ -36,6 +36,11 @@ full native all-lane acceptance remains pending. Registration and unit coverage 
 [dossier inventory change map](dossier-data-inventory.md#8-completion-change-map-and-unresolved-integration)
 lists the central config/schema/version, target-independent dispatch, CLI/Dagster, resume and
 dataset/input-matrix surfaces that must change together.
+Combined source `6975aef2` retains main's topology-derived CLI `_graph_order` rather than restoring
+a separate hardcoded job list. Both required hunt/lead package-manifest hashes are checked by the
+shared `/3` reader, and PoC briefs resolve entry/path entity identities rather than display labels.
+OpenVEX shared contracts/settings and design documents are present, but no exporter is registered
+or configured; it is not part of the 42-job count or current terminal-report dependencies.
 In both graphs, enabled prioritization and code-graph indexing feed security tagging,
 then OWASP consumes accepted tag-cloud/classification context before review data indexing and
 package/hunt/red-blue assembly. Tags are routing, not control proof. The OWASP job is enabled by

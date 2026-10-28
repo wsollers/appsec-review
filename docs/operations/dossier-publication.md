@@ -35,6 +35,12 @@ load.verify_inputs -> dossiers.create -> acceptance.publish_handoff
 `load_inputs` uses the shared accepted-review verifier, exact claim/package/hash binding and source
 manifest. It verifies optional producer summary/item/gap accounting, confirmed-only remediation,
 planning-to-validation identity, all nested artifact references and the chain manifest.
+At combined source `6975aef2`, review `/3` requires and verifies both separate hunt and lead
+package-manifest content hashes. Additional accepted binary/syntax/system-acquisition surfaces
+are cataloged in the inventory, not automatically copied wholesale into a dossier: source
+projection still reads only cited direct/analyst-assessed identities through bounded,
+hash-verified `read_excerpt`. Missing source, trimming and redaction remain explicit dossier
+limitations even when telemetry measurement gaps are zero.
 `verify_snapshot` rehashes inputs and rejects accepted pointers that changed during publication.
 The final publication checks that rendered plus omitted rows exactly partition confirmed findings
 and accepted PoC outcomes. Source and producer integrity failures are not ordinary render gaps.

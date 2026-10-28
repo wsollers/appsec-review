@@ -63,8 +63,9 @@ or vulnerabilities.
 The [completion telemetry contract](../architecture/telemetry.md#evidence-completion-tracking-commissioned)
 requires PoC, chain, remediation, dossier and final-publication tracking from their first
 implementation. The existing `metrics` command and summary path remain the operating surface;
-no separate backend is needed. Integration `b702eb7` adds `completion` to `run-metrics/3`, with
-`completion-process-metrics/1` semantics. This is observational attempted-work accounting, not
+no separate backend is needed. Integration `b702eb7` first added `completion` to `run-metrics/3`;
+combined source `6975aef2` retains `completion-process-metrics/1` in the current `run-metrics/4`.
+This is observational attempted-work accounting, not
 accepted findings or runtime proof. Checkpoint `18eae9f` adds actual status/capability/flag
 parity and nonadditive limits; final `dd9c9ad` adds real chain/PoC/gate/report events.
 Source support is not proof every candidate or model-usage dimension was measured.
@@ -106,6 +107,9 @@ appended producer events update the summary without recounting old events. Full 
 acceptance additionally checks actual producer events through persisted
 `data/telemetry/summary.json`; track that separately in the
 [implementation record](../reviews/evidence-completion-documentation-inventory.md).
+The parent reports the focused certified-report count/persistence tests passed on Windows and
+Linux; combined main-plus-feature and actual-producer all-lane validation remain pending.
+Zero `completion.measurement_gap_count` is not zero review/source/redaction coverage gaps.
 
 Check frozen run settings before interpreting an absent lane. The
 [new-run rollout decision](../architecture/evidence-completion-and-remediation.md#11-parallel-implementation-decisions)
