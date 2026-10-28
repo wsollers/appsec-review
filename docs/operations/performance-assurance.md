@@ -313,6 +313,15 @@ implied by a fixture-validation allowance or by the unlimited package-count sett
 backend/cleanup/reconciliation commissioning remains a rollout gate; fixture admission does not
 establish available production capacity.
 
+A capacity overlay may set `review_policy.resources.*` for one host. The checked-in
+[`test/acceptance/prod-capacity-overlay.toml`](../../test/acceptance/prod-capacity-overlay.toml)
+raises `io_slots` to 4, so four 2-CPU/1,536 MiB scanners fit the CPU and memory budget, and lowers
+the Dagster `scanner` pool to match. The admission ledger is shared across runs on the host and
+admits against the lowest limit among active leases, so a concurrent run without the overlay
+restores one-slot admission. A scanner's admission wait counts against its tool `timeout_seconds`;
+an admission timeout is a named gap. With the image builder service enabled, overlap with a build on
+the same engine is still rejected regardless of `io_slots`, and a native operator contract must
+declare the same budget.
 Persistent service/daemon overhead also consumes the aggregate budget while the service is idle.
 With even one CPU held for that lifetime inside the eight-CPU budget, an eight-CPU compiled
 database or export-compilation action cannot be admitted while the service remains alive.

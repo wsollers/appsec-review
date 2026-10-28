@@ -24,6 +24,7 @@ codeql_runner = "appsec-codeql-runner-6aaa1cc6"
 
 [review_policy.resources]
 # Budget available to review actions AFTER operator-reserved host/service headroom.
+# A capacity overlay may raise these per host (test/acceptance/prod-capacity-overlay.toml sets io_slots = 4).
 cpu = 8
 memory_mb = 10240
 io_slots = 1

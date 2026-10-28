@@ -17,7 +17,7 @@ from urllib.parse import unquote, urlparse
 from .binary_decompilation import BinaryDecompilationSettings, parse_binary_decompilation
 from .banned_functions import BannedFunctions, parse_banned_functions
 from .exclusions import PathExclusions, global_exclusions, job_exclusions
-from .assurance import ReviewPolicy, parse_review_policy
+from .assurance import ResourceBudget, ReviewPolicy, parse_review_policy
 
 
 class ProcessingMode(str, Enum):
@@ -682,8 +682,9 @@ def _apply_profile(document: dict[str, Any], profile: Mapping[str, Any]) -> None
 def overlay_capacity_keys(document: object) -> tuple[str, ...]:
     """Validate a local capacity overlay and return the dotted keys it sets.
 
-    The overlay may set only ``CAPACITY_KEYS``: the inference review's team count and Dagster pool
-    limits. Every other key, and every empty table, is rejected.
+    The overlay may set only ``CAPACITY_KEYS``: the inference review's team count, Dagster pool
+    limits and the host resource budget (``review_policy.resources``). Every other key, and every
+    empty table, is rejected.
     """
     from .inference_review import JOB_ID
 
@@ -696,7 +697,7 @@ def overlay_capacity_keys(document: object) -> tuple[str, ...]:
                              ", ".join(sorted(f"{field}.{key}" if field else str(key) for key in unknown)))
         return value
 
-    root = table(document, "", {"jobs", "orchestration"})
+    root = table(document, "", {"jobs", "orchestration", "review_policy"})
     keys: list[str] = []
     if "jobs" in root:
         jobs = table(root["jobs"], "jobs", {JOB_ID})
@@ -714,6 +715,13 @@ def overlay_capacity_keys(document: object) -> tuple[str, ...]:
             if not re.fullmatch(r"[a-z][a-z0-9_]{0,63}", str(name)) or type(limit) is not int:
                 raise ValueError(f"configuration overlay pool limit is invalid: {name}")
             keys.append(f"orchestration.dagster.pools.{name}")
+    if "review_policy" in root:
+        policy = table(root["review_policy"], "review_policy", {"resources"})
+        resources = table(policy["resources"], "review_policy.resources", set(ResourceBudget().view()))
+        for name, value in sorted(resources.items()):
+            if type(value) is not int:
+                raise ValueError(f"configuration overlay review_policy.resources.{name} must be an integer")
+            keys.append(f"review_policy.resources.{name}")
     return tuple(keys)
 
 
@@ -734,6 +742,12 @@ def _apply_overlay(document: dict[str, Any], overlay: Mapping[str, Any]) -> None
         if not isinstance(pools, dict):
             raise ValueError("[orchestration.dagster.pools] must be a table")
         pools.update(overlay["orchestration"]["dagster"]["pools"])
+    if "review_policy" in overlay:
+        policy = document.setdefault("review_policy", {})
+        resources = policy.setdefault("resources", {}) if isinstance(policy, dict) else None
+        if not isinstance(resources, dict):
+            raise ValueError("[review_policy.resources] must be a table")
+        resources.update(overlay["review_policy"]["resources"])
 
 
 def _path(root: Path, value: object, field: str) -> Path:
