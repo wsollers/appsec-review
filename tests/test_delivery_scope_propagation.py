@@ -267,6 +267,7 @@ def test_ast_scope_excludes_platform_but_not_generated_origin():
 
 
 def test_generated_source_is_scored_from_fake_accepted_ast(tmp_path, monkeypatch):
+    from appsec_review.config.assurance import ReviewPolicy
     from appsec_review.jobs.job_review_prioritization import job as priority
     from appsec_review.jobs.job_review_prioritization.syntax import Node
 
@@ -278,13 +279,13 @@ def test_generated_source_is_scored_from_fake_accepted_ast(tmp_path, monkeypatch
     digest = file_sha256(source)
     files = {path: {"sha256": digest, "size_bytes": len(payload), "language": "JavaScript",
                     "generated": True, "scope_role": "deliverable", "component_id": "fixture"}}
+    shard = tmp_path / "shard.jsonl"
+    shard.write_bytes(json.dumps({"path": path, "file_sha256": digest,
+                                  "location": {"producer_location": {"grammar": "javascript"}}}).encode() + b"\n")
     loaded = {"files_artifact": "files", "inputs": {"tree_sitter_artifact": "tree"}}
-    documents = {"files": files, "tree": {"dispositions": [{"artifact": "shard"}]}}
+    documents = {"files": files, "tree": {"dispositions": [
+        {"artifact": {"path": "shard.jsonl", "sha256": file_sha256(shard)}}]}}
     monkeypatch.setattr(priority, "read_json", lambda root, identity: documents[identity])
-    monkeypatch.setattr(priority, "read_lines", lambda *args: [{
-        "path": path, "file_sha256": digest,
-        "location": {"producer_location": {"grammar": "javascript"}},
-    }])
     root = Node("program", None, True, False, 0, len(payload), 1, 1, 1, len(payload))
     monkeypatch.setattr(priority, "build_tree", lambda rows: (root, 0))
     monkeypatch.setattr(priority, "_settings", lambda _: {
@@ -293,15 +294,15 @@ def test_generated_source_is_scored_from_fake_accepted_ast(tmp_path, monkeypatch
         "max_signals_per_file": 100, "max_import_records": 100,
         "custom_parsing_min_operations": 1, "custom_parsing_min_density": 0.1,
         "state_mutation_min_operations": 1,
+        "syntax_metrics_reservation": {"cpu": 1, "memory_mb": 64, "io_slots": 0, "admission_timeout_seconds": 5},
     })
-    written = {}
-    monkeypatch.setattr(priority, "_write", lambda unit, name, value: written.setdefault(name, value))
     unit = SimpleNamespace(job=SimpleNamespace(run_root=tmp_path, target_root=tmp_path,
+                                               metadata_root=tmp_path / "metadata", review_policy=ReviewPolicy(),
                                                events=SimpleNamespace(write=lambda *args, **kwargs: None)),
-                           output=lambda _: loaded)
+                           unit_id="extract.syntax_metrics", unit_root=tmp_path / "unit", output=lambda _: loaded)
     task = next(item for item in priority.build_job().units if item.unit_id == "extract.syntax_metrics")
     result = task.handler(unit)
     assert result["file_count"] == 1
-    row = written["syntax-facts.json"]["files"][path]
+    row = json.loads((tmp_path / "unit" / "artifacts" / "syntax-facts.json").read_text(encoding="utf-8"))["files"][path]
     assert row["generated"] and row["scope_role"] == "deliverable"
     assert not any("generated_file_not_scored" in gap for gap in result["gaps"])
