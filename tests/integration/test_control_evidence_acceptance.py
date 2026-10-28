@@ -26,6 +26,7 @@ from appsec_review.jobs.job_review_intake import build_job as intake_job
 from appsec_review.jobs.job_target_analysis_plan import build_job as plan_job
 from appsec_review.jobs.job_target_catalog import build_job as catalog_job
 from appsec_review.observability import write_run_metrics
+from appsec_review.owasp_workbench.standards import digest
 from appsec_review.retrieval import RetrievalCore
 from appsec_review.storage import file_sha256
 from appsec_review.runtime import GraphRunner
@@ -43,8 +44,16 @@ DOCUMENT = (
 def _prepare(workspace):
     text = (ROOT / "appsec-review.toml").read_text(encoding="utf-8")
     text = text.replace('fts_image_validation = "optional"', 'fts_image_validation = "disabled"')
-    text = text.replace('catalog_path = "data/reference/owasp/fixtures/',
-                        'catalog_path = "tests/fixtures/acceptance_controls/owasp/')
+    def fixture_catalog(match):
+        relative = "tests/fixtures/acceptance_controls/owasp/" + match.group(1)
+        document = json.loads((ROOT / relative).read_text(encoding="utf-8"))
+        assert document["fixture"] is True
+        return f'catalog_path = "{relative}"\ncatalog_sha256 = "{digest(document)}"'
+
+    text, catalogs = re.subn(
+        r'catalog_path = "data/reference/owasp/(?:fixtures|catalogs)/([^"]+)"\n'
+        r'catalog_sha256 = "[a-f0-9]{64}"', fixture_catalog, text)
+    assert catalogs == 5, "every standard must select its explicitly pinned tiny fixture"
     text = re.sub(r'(?m)^feed_root = "([^"]+)"',
                   lambda match: "feed_root = " + json.dumps(
                       str(workspace.root / match.group(1))), text)

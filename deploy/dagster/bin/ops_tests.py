@@ -355,6 +355,9 @@ def _stop_linux_tree(process: subprocess.Popen, generation: str, deadline: float
 
 def acceptance_environment(workspace) -> dict[str, str]:
     """Do not inherit deployment selection, credentials, SDK endpoints or pytest overrides."""
+    from appsec_review.acceptance.lanes import STATIC_REFERENCE_INPUTS
+    from appsec_review.storage import file_sha256
+
     allowed = {"PATH", "SYSTEMROOT", "WINDIR", "COMSPEC", "PATHEXT", "SYSTEMDRIVE",
                "LANG", "LC_ALL", "TZ", "NUMBER_OF_PROCESSORS"}
     environment = {key: value for key, value in os.environ.items() if key.upper() in allowed}
@@ -365,7 +368,14 @@ def acceptance_environment(workspace) -> dict[str, str]:
     dagster = workspace.root / "dagster"
     dagster.mkdir(exist_ok=True)
     environment.update(workspace.environment())
+    references = {}
+    for relative in STATIC_REFERENCE_INPUTS:
+        path = workspace.repository / relative
+        if path.resolve() != path or not path.is_file():
+            raise ValueError(f"acceptance static reference is missing or redirected: {relative}")
+        references[relative] = file_sha256(path)
     environment.update({
+        "APPSEC_ACCEPTANCE_STATIC_INPUTS": json.dumps(references, sort_keys=True),
         "HOME": str(home), "USERPROFILE": str(home), "APPDATA": str(home),
         "LOCALAPPDATA": str(home), "TEMP": str(temporary), "TMP": str(temporary),
         "TMPDIR": str(temporary), "DAGSTER_HOME": str(dagster),
@@ -584,6 +594,7 @@ def run_acceptance(args: argparse.Namespace, root: Path) -> int:
             result["working_tree_dirty"] = bool(status.stdout.strip())
             for relative in {
                     "appsec-review.toml", "tests/acceptance_plugin.py", "deploy/dagster/bin/ops_tests.py",
+                    *json.loads(acceptance_environment(workspace)["APPSEC_ACCEPTANCE_STATIC_INPUTS"]),
                     *(node.split("::", 1)[0] for node in nodes)}:
                 path = root / relative
                 if path.is_file():

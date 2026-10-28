@@ -15,6 +15,10 @@ from appsec_review.observability.spans import OperationSpan, operation_span
 
 
 _NAME = re.compile(r"[a-z][a-z0-9-]{0,63}")
+STATIC_REFERENCE_INPUTS = (
+    "data/reference/taxonomy/vocabulary.json",
+    "data/reference/taxonomy/crosswalk.json",
+)
 
 
 class LaneTier(str, Enum):
