@@ -1,7 +1,8 @@
 # Evidence completion and remediation
 
 Status: implementation contract, partially delivered; no change to execution authorization.
-Original inspected baseline: `d2b64774`. Source reconciliation: `b702eb7`, `7641fa5`, `18eae9f`,
+Original inspected baseline: `d2b64774`. Source reconciliation through `dd9c9ad`
+(including `b702eb7`, `7641fa5`, `18eae9f`, `e769645f`, `dd1f8018`, `c44eddc1`),
 2026-10-28.
 
 The [dossier data inventory](dossier-data-inventory.md) records the source-verified available
@@ -12,10 +13,11 @@ their limits; the [documentation implementation record](../reviews/evidence-comp
 tracks reconciliation and acceptance gaps.
 
 The chain, remediation and dossier producers, central configuration/registration/pre-gate graph
-and completion metrics now exist. The shared reader now accepts review `/3` and verifies nested
-chain/package bindings. Gate/PoC final contracts and report snapshot consumption are still pending.
-Chain/base-coverage isolation and the live seeded PDF also remain follow-ups. The graph being
-registered is therefore **not** a claim of end-to-end operational acceptance. The sections below
+and completion metrics now exist. The shared reader accepts review `/3`; chain/base completeness
+isolation, immutable PoC `/2`, five-capability gate `/2` and gate-only report `/2` are delivered.
+The owner-verified [seeded PDF sample](../operations/dossier-publication.md#verified-seeded-sample)
+is retained; full native all-lane semantics and Linux real-review remediation acceptance remain
+follow-ups. Delivered source is therefore **not** a claim of end-to-end operational acceptance. The sections below
 retain the original design rationale and requirements; current delivered data is enumerated in
 the [inventory reconciliation](dossier-data-inventory.md#delivered-source-and-remaining-integration).
 

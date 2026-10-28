@@ -1,24 +1,20 @@
 # Operating proof-of-concept generation
 
-**Partial completion integration (`b702eb7`):** the registered graph now moves PoC before the
-single final gate and enables it for new configurations. The handler/publication contract below
-is still the old gate-coupled implementation from `5f5548d`, not an operational recipe for that new
-graph. Its replacement will use
-immutable attempt-owned artifacts and add explicit nonexecution assurance and protected
-[per-outcome dossiers](dossier-publication.md). Final PoC/gate `/2` contracts are pending;
-checkpoint `18eae9f` aligns the shared `/3` review reader and verifies PoC-basis digests.
-Old frozen runs are not silently enabled or upgraded.
+**Delivered contract (`c44eddc1`, integrated by `dd9c9ad`):** PoC reads the shared verified
+review directly, before the single final gate. New configurations enable it automatically;
+old frozen settings and exact-version contracts are not rewritten. Source, compile records and
+provenance are immutable attempt-owned protected developer artifacts. Separate
+[per-outcome dossiers](dossier-publication.md) precede gate certification.
 [Dossier data inventory](../architecture/dossier-data-inventory.md)
 enumerates the actual accepted inputs and bounded retrieval; compiling either function still
 does not observe its behavior.
 
 The CLI now parses explicit gate re-admission as
 `run job_final_publication_gate --run-id <id> --upstream-from-run --admit-manual-poc`.
-It is restricted to that job with both preceding flags. End-to-end digest authentication awaits
-the final gate contract; no ordinary `latest.json` discovery is permission to activate a disabled
-manual PoC.
-
-## Legacy handler reference
+It is restricted to that job with both preceding flags. The gate authenticates the exact accepted
+PoC digest in its upstream identity; ordinary `latest.json` discovery cannot activate a disabled
+manual PoC. Full native all-lane acceptance is still separate from this source contract and the
+owner-verified [seeded PDF sample](dossier-publication.md#verified-seeded-sample).
 
 `job_poc_generation` writes, for each finding the judge agreed is correct, a **proof-of-concept unit-test
 function** that a developer can add to a test target and watch in a debugger, and checks that it **compiles**
@@ -31,12 +27,12 @@ took where that document left a choice open are in its section 8.
 - The pipeline **never executes it**. It parses it, runs deterministic validators on the clang AST, compiles it
   (syntax, plain object, sanitizer object) and checks that the symbols the object needs resolve. Nothing is linked
   into an executable and nothing is run.
-- At the original contract baseline the job was shipped disabled and invoked by hand on a
-  finished run; current new-configuration defaults are enabled as noted above.
+- The job is enabled for new configurations; a frozen older configuration can still require
+  explicit manual production and gate admission.
 
 ```text
-job_final_publication_gate -> job_poc_generation -> job_final_report_publication   (only when enabled)
-job_final_publication_gate -> job_final_report_publication                           (shipped: disabled)
+job_inference_security_review -> enabled PoC / remediation / dossiers
+                             -> one job_final_publication_gate -> job_final_report_publication
 ```
 
 ## Invoking it
@@ -49,18 +45,27 @@ operator's command is the consent (`cli.MANUAL_JOB_IDS`). Every other disabled j
 appsec-review run job_poc_generation --run-id <run-id> --upstream-from-run
 ```
 
-`--upstream-from-run` binds the run's accepted handoffs of the jobs that would precede it in the graph (the gate,
-the review, the language build and the rest), exactly as the graph would. The job needs, in that run:
+`--upstream-from-run` binds accepted upstream review/language-build identities, never a gate
+dependency. The job uses, in that run:
 
-- an accepted `job_final_publication_gate` handoff and the accepted `job_inference_security_review` handoff it was
-  built from (both are re-verified from bytes);
+- an accepted `job_inference_security_review` handoff, re-verified directly by
+  `jobs/accepted_review.py` with review `/3`, package/ledger/chain bindings and exact candidate identity;
 - a `poc_candidates` array in the review handoff (below);
-- an accepted `job_language_build` handoff with a successful native build unit that compiled the sink's file, its
-  hash-bound workspace and the build image on the local daemon.
+- for native compile coverage, an accepted `job_language_build` handoff with a successful unit that
+  compiled the sink's file, its hash-bound workspace and the pinned image on the local daemon.
+  Missing/unsupported custody produces an accounted candidate status/gap, not execution or a source fallback.
 
-Then re-run `job_final_report_publication` on the run: when the PoC handoff is accepted and was produced from the
-current gate handoff, the report's `poc_outcomes` shows the outcomes. A PoC handoff built from an older gate handoff
-is *stale*: the report says so and shows nothing from it. Running the job again fixes that.
+For a disabled manual PoC, explicitly certify it before publishing the report:
+
+```text
+appsec-review run job_final_publication_gate --run-id <run-id> --upstream-from-run --admit-manual-poc
+appsec-review run job_final_report_publication --run-id <run-id> --upstream-from-run
+```
+
+Enabled dossier/remediation producers must agree with the same accepted upstream snapshot.
+Stale/mixed identities are integrity failures, not silently omitted attachments. Reporting never
+discovers later PoC output; rerendering a report cannot certify it. This manual recertification
+is not a gate cycle in the automatic graph and does not change the frozen configuration.
 
 To make it part of the graph, set `jobs.job_poc_generation.settings.enabled = true` in the central configuration. The
 resolved configuration of a run is frozen when the run starts, so a job enabled afterwards is run manually against the
@@ -78,12 +83,13 @@ that the policy asks to document. The reader (`jobs/job_poc_generation/candidate
 | --- | --- |
 | `claim_id`, `package_id` | the claim and the review package it was raised on |
 | `state`, `judge_verdict` | the ledger state and the de-shuffled judge verdict |
-| `poc_basis` | `{sha256, value}`: the bounded brief of review-protocol-v2 section 6.6; `sha256` is the SHA-256 of the canonical JSON of `value` |
+| `poc_basis` | `{sha256, brief}`: the bounded brief of review-protocol-v2 section 6.6; `sha256` is the SHA-256 of canonical JSON of `brief` |
 | `finding_package` | `{finding_package_id, sha256}`, which must match the review handoff's finding package of that claim |
 | `evidence_refs` | the evidence the claim rests on |
 
-A handoff **without** the field is an older run: the job completes `COMPLETED_WITH_GAPS` with the named gap
-`no_poc_candidates` and publishes an empty, valid handoff. An empty array is a run with nothing to document. A field
+A parser-level absent-field path names `no_poc_candidates`; it does not make an older review
+schema acceptable to the strict shared `/3` reader or upgrade an old frozen run. An empty accepted
+array is a run with nothing to document. A field
 that does not match the documented shape, or a candidate that disagrees with the verified finding package, is an
 integrity failure.
 
@@ -95,7 +101,7 @@ The central configuration must define exactly this topology:
 load.verify_inputs -> plan.briefs -> write.poc_writer -> validate.policy -> compile.build_check -> package.files -> publish.publish_handoff
 ```
 
-1. **`load.verify_inputs`** re-verifies the accepted gate and review handoffs with the gate's own helpers and reads
+1. **`load.verify_inputs`** re-verifies the accepted review directly with the shared reader and reads
    `poc_candidates`. Confirmed claims are attempted first, in claim-id order, up to `max_candidates`; the rest are named
    in the gap `candidate_bound_reached`.
 2. **`plan.briefs`** decides what can be attempted and builds each brief from the finding package, the `poc_basis` with
@@ -107,8 +113,9 @@ load.verify_inputs -> plan.briefs -> write.poc_writer -> validate.policy -> comp
 3. **`write.poc_writer`** runs the model (below).
 4. **`validate.policy`** assembles the file, runs the textual checks and then the AST validators in the build image.
 5. **`compile.build_check`** runs the compile check.
-6. **`package.files`** writes `data/poc/<claim-id>/`.
-7. **`publish.publish_handoff`** validates and publishes `poc-generation.json` and the handoff.
+6. **`package.files`** writes new attempt-owned `candidates/<claim-id>/` directories and refuses an existing candidate directory.
+7. **`publish.publish_handoff`** rehashes all captured review bindings, rejects changed accepted-review pointers,
+   validates and publishes `poc-generation/2` and handoff `/2`.
 
 ### The writer
 
@@ -190,7 +197,8 @@ links; the tests assert this on every recorded argv.
 
 ## Outputs
 
-Under `runs/<run-id>/data/poc/<claim-id>/` (only for a candidate with a source: `compile_verified`, `compile_failed`,
+Under `runs/<run-id>/data/jobs/job_poc_generation/attempts/<a>/steps/package/tasks/files/candidates/<claim-id>/`
+(only for a candidate with a source: `compile_verified`, `compile_failed`,
 `artifact_generated`, `policy_denied`):
 
 | File | Contents |
@@ -200,12 +208,17 @@ Under `runs/<run-id>/data/poc/<claim-id>/` (only for a candidate with a source: 
 | `README.md` | what it shows, where to add it, setup, breakpoints, the expected observation, the writer's notes and limitations; model text is in code spans or fenced blocks that cannot be closed from inside |
 | `provenance.json` | hashes of the poc_basis, brief, review package, source, settings, guidance bundle and writer receipt, the model, the upstream handoffs, the build unit, workspace manifest and image ([`provenance.schema.json`](../schemas/poc-generation/provenance.schema.json)) |
 
-The handoff (`appsec-review/poc-generation-handoff/1`, summary [`poc-generation.schema.json`](../schemas/poc-generation/poc-generation.schema.json))
+The handoff (`appsec-review/poc-generation-handoff/2`, summary [`poc-generation.schema.json`](../schemas/poc-generation/poc-generation.schema.json))
 lists **every** attempted candidate with its status, reason, a description of at most 300 characters, the function names,
 the four file references and the brief and writer-receipt references (each with its SHA-256). Statuses other than
 `compile_verified` and `not_applicable` are named gaps, so the job finishes `COMPLETED_WITH_GAPS`. Datasets declare every
-file (`poc_generation_summary`, `poc_writer_cells` (protected: briefs hold target source text) and `poc_reproducers`
-(`data/poc/**`)), and the input matrix names the job as the producer of `poc_generation`.
+file (`poc_generation_summary` artifact-only/internal; `poc_writer_cells` and `poc_reproducers`
+protected/sensitive), and the input matrix names the job as the producer of `poc_generation`.
+Summary, candidate and provenance `/2` records carry `execution: not_performed_by_policy`,
+`runtime_verified: false`, `result_id: null`. Every accepted review candidate is either a terminal
+row or an exact `omitted_claims` entry; the gate verifies that partition, status counts, basis,
+finding binding, upstream review/build identity and nested receipts. Retries never replace files
+bound by an earlier accepted attempt.
 
 ## Settings
 
@@ -213,7 +226,7 @@ file (`poc_generation_summary`, `poc_writer_cells` (protected: briefs hold targe
 
 | Key | Meaning |
 | --- | --- |
-| `enabled` | membership in the automatic graph; shipped `false` |
+| `enabled` | membership in the automatic graph; `true` for new configurations |
 | `workers` | candidates processed concurrently inside a step |
 | `max_candidates` | candidates attempted per run |
 | `accepted_judge_verdicts` | verdicts a candidate may carry; `["red_correct"]` |
@@ -227,6 +240,15 @@ file (`poc_generation_summary`, `poc_writer_cells` (protected: briefs hold targe
 The shipped writer profile uses the model the rest of the pipeline already depends on, so enabling the job adds no model
 to the preflight. Change `models.default` (or add a profile and point `roles.poc_writer` at it) for a stronger writer.
 `settings_sha256` in each provenance file covers the validator policy, the build settings and the writer profile.
+
+## Process telemetry
+
+`POC_GENERATION_INPUTS_VERIFIED`, `POC_WRITER_COMPLETED`, `POC_COMPILE_CHECKED` and
+`POC_GENERATION_PUBLISHED` record bounded candidate/omission/outcome counts, policy/build failures,
+duration where emitted and nonexecution. `completion.lanes.poc_generation` retains all seven
+real statuses; source/functions/prompts/diagnostics do not become event payloads. Stage/retry
+work is not the number of unique accepted candidates, and missing model usage is not zero.
+See [metrics operations](metrics.md).
 
 ## What the job never does
 

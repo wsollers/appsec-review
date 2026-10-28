@@ -12,7 +12,11 @@ completeness/ledger/publication sealing. Typed `chain_proposed`, `chain_challeng
 events remain in the single `ledger-event/1` stream; a protected `attack-chain-manifest/1` binds
 proposals, challenges and terminal artifacts. Publication now emits `inference-review-handoff/3`.
 Checkpoint `18eae9f` aligns the shared `/3` reader and ledger-bound chain membership/publication
-verification. Chain/base-coverage isolation remains an integration follow-up.
+verification. `dd1f8018` adds exact chain actor/terminal-cell/original-receipt checks and
+`stages.base_review_projection`: enhancement cells/gaps remain in the full ledger but are excluded
+from base completeness arithmetic. Ordinary failed/capped chain work cannot downgrade independent
+base findings; enhancement limitations still reach publication. Missing/duplicate/corrupt chain
+cells or receipts remain integrity failures.
 Downstream confirmed-finding dossiers and remediation must reference the exact
 accepted findings, adjudications, evidence and scores without changing their state or shipment
 decision. The [dossier data inventory](../architecture/dossier-data-inventory.md) distinguishes
@@ -25,6 +29,10 @@ Default `settings.attack_chains` bounds are 4 links, 100 expansions, 8 candidate
 The five continuity dimensions are identity, privilege, trust boundary, artifact/deployment and
 temporal. Refutation must be independent; a required weakest-link verifier must also be
 model-distinct. Deterministic `attack-chain-continuity/1` evaluates native values, not model stance.
+Each native edge resolution separately bounds and charges every physical `trace`/`find` query;
+exhaustion leaves all its obligations unresolved. Artifact/configuration/deployment identities
+must resolve and connect; conflicting artifact/temporal configuration identities contradict
+continuity. Evidence caps cannot turn a retained prefix into proof of omitted rows.
 
 `continuity_producers=[]` by default: no native deployment-continuity exporter is commissioned.
 Source/build facts and seed prose therefore cannot manufacture a confirmed deployed chain.
@@ -33,6 +41,12 @@ counted continuity gives `insufficient_evidence`, contradiction gives `refuted`.
 upgrade its component findings or sum their severities. See
 [`review/attack_chains.py`](../../src/appsec_review/review/attack_chains.py) and the
 [completion contract](../architecture/evidence-completion-and-remediation.md).
+
+`INFERENCE_REVIEW_ATTACK_CHAIN_COMPOSITION_COMPLETED`,
+`INFERENCE_REVIEW_ATTACK_CHAIN_CHALLENGE_COMPLETED` and
+`INFERENCE_REVIEW_ATTACK_CHAINS_PUBLISHED` record bounded candidates/frontier/challenges/
+independence/outcomes/gaps/durations. Read [completion metrics](metrics.md) as attempted work,
+not accepted chain evidence; source/seed/model prose never enters these event payloads.
 
 ## Model selection and upgrade
 

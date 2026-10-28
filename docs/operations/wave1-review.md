@@ -42,9 +42,11 @@ PoC/planning/validation/dossiers depend on their enabled producers before the ga
 running a second gate or creating a gate-to-PoC cycle. Its dependency graph is assembled from the registered,
 configured jobs and is summarized in [`../../deploy/dagster/README.md`](../../deploy/dagster/README.md).
 
-**Integration boundary:** the graph is registered, but final review `/3` acceptance, pre-gate
-PoC/gate/report contracts, chain/base-coverage isolation and the real PDF sample are still pending
-source reconciliation. Do not infer end-to-end readiness from graph construction or new defaults.
+**Acceptance boundary:** final `dd9c9ad` aligns review `/3`, pre-gate PoC/gate/report `/2`,
+immutable protected outputs, exact capability/snapshot binding and chain/base completeness isolation.
+The owner-verified [seeded PDF sample](dossier-publication.md#verified-seeded-sample) is retained;
+full native all-lane semantic acceptance remains pending. Do not infer
+end-to-end readiness from graph construction, new defaults or isolated unit coverage.
 See [remediation](remediation.md), [dossier publication](dossier-publication.md) and the
 [implementation record](../reviews/evidence-completion-documentation-inventory.md).
 

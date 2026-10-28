@@ -12,14 +12,15 @@ silently use another image. Build/smoke ownership remains with the image-produci
 **Dossier boundary (implemented producer):** [dossier publication](dossier-publication.md) is a semantic job
 commissioned by the [completion design](../architecture/evidence-completion-and-remediation.md#11-parallel-implementation-decisions),
 not this standalone diagnostic renderer. It retains protected per-confirmed-finding and
-per-PoC-outcome JSON/LaTeX/PDF/receipts before the final gate, reuse the hardened image/template,
+per-PoC-outcome JSON/LaTeX/PDF/receipts before the final gate, reuses the hardened image/template,
 and reports failed PDF rendering as a gap while keeping source artifacts. Its closed loader does
 not copy this tool's arbitrary review interchange into developer dossiers or public output.
 Only sanitized summaries/statuses and artifact references belong in public projections.
 `reporting/dossier_render.py` reuses the commissioned executor/template, retains
-`dossier-rendering-receipt/1`, and removes only its run-owned input/scratch staging. Final
-gate/PoC/read-version integration and the actual seeded dossier PDF remain pending at this source
-boundary; the older sample below is not acceptance of that new path.
+`dossier-rendering-receipt/1`, and removes only its run-owned input/scratch staging. Final `dd9c9ad`
+now certifies these refs in gate/report `/2`. The owner-verified
+[seeded dossier sample](dossier-publication.md#verified-seeded-sample) is retained; full native
+all-lane semantics remain pending. The older sample below is not acceptance of that new path.
 [Dossier data inventory](../architecture/dossier-data-inventory.md) records inputs and visibility.
 
 ## What it renders

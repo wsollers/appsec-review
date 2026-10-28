@@ -3,7 +3,8 @@
 Status: producers `6278e580`, central wiring `b702eb7` and follow-up `e769645f`, 2026-10-28. Planning and validation
 are real registered jobs, enabled in new configurations by the user's rollout decision.
 The shared reader now verifies review `/3` and nested chain/package bindings (`18eae9f`).
-**End-to-end acceptance is pending**: final PoC/gate/report contracts and consumption remain pending.
+Final gate/report `/2` now certify these exact plan/patch/upstream attachments (`dd9c9ad`).
+**End-to-end acceptance is pending**: full native all-lane and Linux real-review semantic acceptance.
 Existing frozen configurations are not rewritten or silently enabled by new defaults.
 
 These jobs attach proposals/checks to immutable accepted findings. They do not edit the user
@@ -100,8 +101,8 @@ as worker guidance. These are provenance records, not dossier raw-prompt payload
 
 The registered target-independent `run <job> --run-id <id> --upstream-from-run` surface binds
 accepted upstream job handoffs. Do not treat it as an old-run migration or bypass pending
-final consumer integration. For final publication, use the gate-certified snapshot once its
-final contract is integrated, not later mutable `latest.json` discovery.
+consumer acceptance. For final publication, use the implemented gate-certified snapshot,
+not later mutable `latest.json` discovery.
 
 Summaries are artifact-only/internal; source contexts, patches, model/semantic/compiler receipts
 are protected/sensitive attempt artifacts. Public reports receive sanitized statuses and bound
