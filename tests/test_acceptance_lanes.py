@@ -41,6 +41,57 @@ def test_control_fixture_selects_only_explicitly_pinned_abridged_catalogs(tmp_pa
                for source in settings.values())
 
 
+def test_dependency_fixture_keeps_package_local_debug_runtime_and_qa_observations(tmp_path: Path, monkeypatch) -> None:
+    import json
+    from types import SimpleNamespace
+
+    from appsec_review.jobs.job_dependency_intelligence.discovery import discover_native_dependencies
+    from appsec_review.jobs.job_dependency_intelligence.integration import native_bounds
+    from appsec_review.jobs.job_dependency_intelligence.resolution import normalize_dependencies
+    from tests.integration import test_dependency_job_acceptance as fixture
+
+    monkeypatch.setattr(fixture, "GraphRunner", lambda *args: SimpleNamespace(run=lambda **kwargs: None))
+    workspace = LaneWorkspace.create(tmp_path, "dependency-config")
+    config, _target, snapshot, root, _cache = fixture._prepare(workspace)
+    pointer = json.loads((root / "data/jobs/job_language_build/latest.json").read_bytes())
+    handoff = json.loads((root / pointer["handoff_path"]).read_bytes())
+    accepted = handoff["outputs"]["acceptance.publish_handoff"]["artifact"]
+    receipt = json.loads((root / accepted["path"]).read_bytes())["receipts"][0]
+    build = root / receipt["workspace"]
+    manifest = json.loads((root / receipt["workspace_manifest"]["path"]).read_bytes())
+    scope = {"domain": "workspace", "root_id": receipt["build_unit_id"]}
+    files = [{**scope, "path": relative, "sha256": digest,
+              "size_bytes": (build / relative).stat().st_size,
+              "upstream": receipt["workspace_manifest"],
+              "backing": fixture._identity(root, build / relative)}
+             for relative, digest in manifest["files"].items()]
+    protected = receipt["protected_compile_commands"]
+    commands = json.loads((root / protected["path"]).read_bytes())["rows"]
+    discovery = discover_native_dependencies(
+        source_fingerprint=snapshot, files=files,
+        invocations=[{**command, **scope, "directory": ".",
+                      "evidence_source": {"artifact": protected, "json_pointer": f"/rows/{index}"}}
+                     for index, command in enumerate(commands)],
+        artifacts=[{**artifact, **scope, "path": artifact["workspace_path"],
+                    "evidence_source": {"artifact": accepted,
+                                        "json_pointer": f"/receipts/0/artifacts/{index}"}}
+                   for index, artifact in enumerate(receipt["artifacts"])],
+        read_file=lambda record, limit: (build / record["path"]).read_bytes()[:limit],
+        bounds=native_bounds(config.job("job_dependency_intelligence").settings))
+    settings = config.job("job_dependency_intelligence").settings
+    dependencies, _ = normalize_dependencies(
+        [], [], discovery["candidates"], supported_hosts=settings["repository_hosts"],
+        max_dependencies=settings["dependency_limit"])
+    assert len(dependencies) == 2
+    assert {row["name"]: row["maximal_exposure"] for row in dependencies} == {
+        "tiny": "PROD", "tiny-alias": "QA"}, [
+            (row["name"], row["exposure_evidence"],
+             [(candidate["package_root"], candidate["observations"])
+              for candidate in row["native_candidates"]]) for row in dependencies]
+    tiny = next(row for row in dependencies if row["name"] == "tiny")
+    assert {row["exposure"] for row in tiny["exposure_evidence"]} == {"DEBUG", "PROD"}
+
+
 def test_acceptance_uses_isolated_roots_and_production_telemetry(tmp_path: Path) -> None:
     production = tmp_path / "runs" / "live"
     production.mkdir(parents=True)
