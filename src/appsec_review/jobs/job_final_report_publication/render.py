@@ -154,7 +154,8 @@ def render_markdown(report: Mapping[str, Any], *, evidence_ids: int, gap_ids: in
               f"gaps by class: {_counts({k: v for k, v in accounting['gaps_by_class'].items() if v})}", ""]
     lines += _section("Findings (confirmed)", report["findings"], settings, "No confirmed finding packages are publishable.")
     lines += ["## Attack chains", "", f"Status {code(report['attack_chains']['status'])}: {plain(report['attack_chains']['reason'])}"]
-    lines += [f"- {code(item)}" for item in report["attack_chains"]["items"]] + [""]
+    lines += [f"- {code(item['chain_id'])}: {code(item['status'])}; "
+              f"artifact {code(item['artifact']['path'])}" for item in report["attack_chains"]["items"]] + [""]
     lines += ["## Proof-of-trigger outcomes", "",
               f"Status {code(report['poc_outcomes']['status'])}: {plain(report['poc_outcomes']['reason'])}"]
     for item in report["poc_outcomes"]["items"]:
@@ -168,6 +169,26 @@ def render_markdown(report: Mapping[str, Any], *, evidence_ids: int, gap_ids: in
                 lines.append("  - files: " + ", ".join(code(item["files"][key]["path"]) for key in (
                     "source", "compile", "readme", "provenance")))
     lines += [""]
+    lines += ["Execution and negative controls: **not performed by policy**. Compilation is not runtime proof.", ""]
+    for key, title, artifact_key in (("remediation_planning", "Remediation proposals", "plan"),
+                                     ("remediation_validation", "Remediation validation", "validation")):
+        section = report[key]
+        lines += [f"## {title}", "", plain(section["reason"])]
+        for item in section["items"]:
+            artifact = item[artifact_key]
+            lines.append(f"- {code(item['finding']['finding_package_id'])}: {code(item['status'])}; "
+                         + (f"artifact {code(artifact['path'])}" if artifact else "no artifact available"))
+        lines += ["", "These attachments do not change finding state or shipment decisions. "
+                  "No regression was executed.", ""]
+    lines += ["## Protected developer dossiers", "", plain(report["dossiers"]["reason"])]
+    for item in report["dossiers"]["items"]:
+        lines.append(f"- {code(item['dossier_id'])} ({code(item['kind'])}): {code(item['status'])}; "
+                     + ", ".join(f"{key} {code(ref['path'])}" for key, ref in item["files"].items() if ref is not None))
+    lines += ["", "Dossier contents are protected developer artifacts, not embedded public report content.", ""]
+    lines += ["## Capability accounting", ""]
+    lines += [f"- {code(name)}: {code(record['disposition'])}; outcomes {record['item_count']}, "
+              f"omitted {record['omitted_count']}, gaps {record['gap_count']}"
+              for name, record in sorted(report["capabilities"].items())] + [""]
     lines += _section("Verification backlog (unconfirmed)", report["verification_backlog"], settings,
                       "The verification backlog is empty.", unconfirmed=True)
     lines += ["## Withheld packages", ""]

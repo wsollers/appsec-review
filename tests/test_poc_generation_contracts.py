@@ -21,6 +21,7 @@ from appsec_review.guidance import load_registry
 from appsec_review.guidance.skills import runtime_skill_records
 from appsec_review.indexing import input_matrix
 from appsec_review.jobs.job_inference_security_review.schemas import SchemaSet
+from appsec_review.jobs.completion_contracts import nonexecution_assurance
 from appsec_review.jobs.job_poc_generation import JOB_ID, build_job, buildcheck
 from appsec_review.jobs.job_poc_generation.datasets import CONSUMES, DATASETS
 from appsec_review.jobs.job_poc_generation.policy import Expectation, check_ast, numeric_requirement
@@ -31,6 +32,7 @@ from appsec_review.runtime import active_job_ids, job_is_enabled
 from appsec_review.runtime.datasets import validate_declarations
 from appsec_review.runtime.launch import TARGET_JOBS
 from appsec_review.runtime.registry import builtin_registry
+from appsec_review.review.models import IntegrityError
 from tests import poc_support
 from tests.fixtures.poc_generation import relay
 
@@ -69,7 +71,7 @@ def candidate(**changes) -> dict:
            "functions": {"test_function": "poc_x", "negative_control": "poc_y", "expected_observation": "overflow"},
            "files": {key: {"path": f"data/poc/{CLAIM}/{key}.json", "sha256": "6" * 64}
                      for key in ("source", "compile", "readme", "provenance")},
-           "brief": None, "writer_receipt": None, "gaps": []}
+           "brief": None, "writer_receipt": None, "gaps": [], **nonexecution_assurance()}
     row.update(changes)
     return row
 
@@ -79,12 +81,12 @@ def summary(*rows) -> dict:
     for row in rows:
         counts[row["status"]] += 1
     ref = {"path": "data/jobs/x/handoff.json", "sha256": "7" * 64}
-    return {"schema": "appsec-review/poc-generation/1", "run_id": "2026-10-21-0001",
-            "upstream": {"gate_handoff": ref, "gate_document": ref, "review_job_handoff": ref,
+    return {"schema": "appsec-review/poc-generation/2", "run_id": "2026-10-21-0001",
+            "upstream": {"review_job_handoff": ref,
                          "review_handoff": ref, "manifest": ref, "language_build_handoff_sha256": None},
             "execution_policy": "nothing is linked into an executable and nothing is run",
             "settings_sha256": "8" * 64, "counts": {"candidates": len(rows), "omitted": 0, "by_status": counts},
-            "candidates": list(rows), "omitted_claims": [], "gaps": []}
+            "candidates": list(rows), "omitted_claims": [], "gaps": [], **nonexecution_assurance()}
 
 
 def mutated(document, *edits):
@@ -172,23 +174,31 @@ def test_the_compile_record_and_provenance_written_by_the_job_satisfy_their_sche
                                      mutated(deepcopy(record), (("policy", "verdict"), "maybe"))])
     (candidate_,) = parse_candidates([candidate_entry(claim_id=CLAIM)])
     run_root = tmp_path / "run"
-    files = write_candidate(
-        run_root, candidate=candidate_, finding={"title": "memory_corruption"}, answer=answer, status="compile_verified",
+    arguments = dict(
+        candidate=candidate_, finding={"title": "memory_corruption"}, answer=answer, status="compile_verified",
         reason="ok", source_text=text, language="cxx", compile_record=outcome.record, violations=[],
         policy_verdict="passed", facts=unit.command.facts(),
-        provenance={"claim_id": CLAIM, "package_id": candidate_.package_id,
+        provenance={"claim_id": CLAIM, "package_id": candidate_.package_id, "run_id": "test-run",
                     "finding_package": {"finding_package_id": FINDING, "sha256": "4" * 64}, "state": "confirmed",
                     "judge_verdict": "red_correct", "poc_basis_sha256": "5" * 64, "brief_sha256": "6" * 64,
                     "package_sha256": "7" * 64, "source_sha256": "8" * 64, "settings_sha256": "9" * 64,
                     "status": "compile_verified", "guidance_bundle_sha256": None, "writer_receipt_sha256": None,
                     "model": {"provider": "p", "model": "m", "reasoning": "r"}, "upstream": {},
                     "source_tree": None, "image": {"image_id": None}})
+    first_root = run_root / "data" / "jobs" / JOB_ID / "attempts" / "a1" / "candidates"
+    files = write_candidate(run_root, output_root=first_root, **arguments)
+    original = {key: (run_root / ref["path"]).read_bytes() for key, ref in files.items()}
+    with pytest.raises(IntegrityError, match="immutable"):
+        write_candidate(run_root, output_root=first_root, **arguments)
+    retried = write_candidate(run_root, output_root=first_root.parent.parent / "a2" / "candidates", **arguments)
+    assert retried["source"]["path"] != files["source"]["path"]
+    assert all((run_root / ref["path"]).read_bytes() == original[key] for key, ref in files.items())
     provenance = json.loads((run_root / files["provenance"]["path"]).read_text(encoding="utf-8"))
     agree("provenance", provenance, [mutated(deepcopy(provenance), (("claim_id",), "claim-x")),
                                      mutated(deepcopy(provenance), (("files",), KeyError))])
     written = json.loads((run_root / files["compile"]["path"]).read_text(encoding="utf-8"))
     assert SCHEMAS.errors("compile-record", written) == [] and written["policy"]["verdict"] == "passed"
-    assert sorted(path.name for path in (run_root / "data" / "poc" / CLAIM).iterdir()) == [
+    assert sorted(path.name for path in (run_root / files["source"]["path"]).parent.iterdir()) == [
         "README.md", "compile.json", "poc_parse_header_overlong_name.cpp", "provenance.json"]
 
 
@@ -263,13 +273,13 @@ def test_each_non_example_in_the_skill_is_refused_by_a_validator() -> None:
 # ------------------------------------------------------------------------------------------------- wiring
 
 
-def test_the_job_is_registered_configured_and_disabled_by_default() -> None:
+def test_the_job_is_registered_configured_and_enabled_compile_only_by_default() -> None:
     config = load_config(ROOT / "appsec-review.toml")
     assert JOB_ID in builtin_registry().job_ids() and config.job(JOB_ID).name == "poc_generation"
-    assert job_is_enabled(config, JOB_ID) is False
-    assert JOB_ID not in active_job_ids(config, (*GRAPH_JOB_IDS, *POST_INDEX_JOB_IDS))
-    assert JOB_ID in POST_INDEX_JOB_IDS and POST_INDEX_JOB_IDS.index("job_final_publication_gate") < \
-        POST_INDEX_JOB_IDS.index(JOB_ID) < POST_INDEX_JOB_IDS.index("job_final_report_publication")
+    assert job_is_enabled(config, JOB_ID) is True
+    assert JOB_ID in active_job_ids(config, (*GRAPH_JOB_IDS, *POST_INDEX_JOB_IDS))
+    assert POST_INDEX_JOB_IDS.index("job_inference_security_review") < POST_INDEX_JOB_IDS.index(JOB_ID) < \
+        POST_INDEX_JOB_IDS.index("job_final_publication_gate") < POST_INDEX_JOB_IDS.index("job_final_report_publication")
     assert {unit.unit_id for unit in build_job().units} == {
         "load.verify_inputs", "plan.briefs", "write.poc_writer", "validate.policy", "compile.build_check",
         "package.files", "publish.publish_handoff"}
@@ -281,17 +291,17 @@ def test_the_job_reads_no_target_tree_so_it_is_not_a_target_job() -> None:
     assert JOB_ID not in TARGET_JOBS and JOB_ID in set(builtin_registry().job_ids()) - TARGET_JOBS
 
 
-def test_when_enabled_the_job_sits_between_the_gate_and_the_report_and_when_disabled_it_is_transparent() -> None:
+def test_poc_precedes_the_gate_and_the_report_reads_only_the_gate() -> None:
     config = load_config(ROOT / "appsec-review.toml")
     registry = builtin_registry()
     enabled = {job for job in registry.job_ids() if job_is_enabled(config, job)}
-    off = wave1_dependencies(enabled)
+    off = wave1_dependencies(enabled - {JOB_ID})
     on = wave1_dependencies(enabled | {JOB_ID})
     assert JOB_ID not in off and off["job_final_report_publication"] == ("job_final_publication_gate",)
-    assert on[JOB_ID] == ("job_final_publication_gate",)
-    assert on["job_final_report_publication"] == (JOB_ID,)
+    assert "job_inference_security_review" in on[JOB_ID] and "job_final_publication_gate" not in on[JOB_ID]
+    assert on["job_final_report_publication"] == ("job_final_publication_gate",)
     order = list(on)
-    assert order.index("job_final_publication_gate") < order.index(JOB_ID) < order.index("job_final_report_publication")
+    assert order.index(JOB_ID) < order.index("job_final_publication_gate") < order.index("job_final_report_publication")
     # one terminal job in both graphs
     for graph in (off, on):
         depended = {dependency for values in graph.values() for dependency in values}
@@ -299,12 +309,15 @@ def test_when_enabled_the_job_sits_between_the_gate_and_the_report_and_when_disa
 
 
 def test_a_disabled_poc_job_still_gets_its_upstream_handoffs_for_a_manual_run() -> None:
+    from dataclasses import replace
     config = load_config(ROOT / "appsec-review.toml")
+    poc = config.job(JOB_ID)
+    config = replace(config, jobs={**config.jobs, JOB_ID: replace(poc, settings={**poc.settings, "enabled": False})})
     registry = builtin_registry()
     assert JOB_ID not in [job["job_id"] for job in describe_wave1(config, registry)["jobs"]]
     entry = next(job for job in describe_wave1(config, registry, include={JOB_ID})["jobs"] if job["job_id"] == JOB_ID)
-    assert entry["dependencies"] == ["job_final_publication_gate"]
-    assert {"job_final_publication_gate", "job_inference_security_review", "job_language_build"} <= set(
+    assert "job_final_publication_gate" not in entry["dependencies"]
+    assert {"job_inference_security_review", "job_language_build"} <= set(
         entry["upstream_handoffs"])
     assert MANUAL_JOB_IDS == {JOB_ID}
 
@@ -323,9 +336,9 @@ def test_the_dataset_declarations_are_valid_and_name_the_real_steps_and_consumer
     steps = set(config.job(JOB_ID).steps)
     assert {item.step for item in DATASETS} <= steps
     assert {item.disposition for item in DATASETS} == {"artifact_only", "protected"}
-    assert set(CONSUMES) == {"job_final_publication_gate", "job_inference_security_review", "job_language_build"}
+    assert set(CONSUMES) == {"job_inference_security_review", "job_language_build"}
     assert "job_poc_generation" in __import__(
-        "appsec_review.jobs.job_final_report_publication.datasets", fromlist=["CONSUMES"]).CONSUMES
+        "appsec_review.jobs.job_final_publication_gate.datasets", fromlist=["CONSUMES"]).CONSUMES
 
 
 def test_the_input_matrix_names_the_job_as_the_producer_of_its_outputs() -> None:

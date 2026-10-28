@@ -4,6 +4,18 @@ Status: design; implementation follows this document. It extends
 [review protocol v2](review-protocol-v2.md) and does not change the claim ledger rules (R4 predicates, R5
 adjudication, R6 independence) or evidence admissibility.
 
+Completion reconciliation (`dd9c9ad`): judge candidates now use canonical
+`poc_basis: {sha256, brief}`. The never-executed producer reads shared verified review `/3`
+directly, writes immutable protected PoC/provenance `/2`, then dossiers and one final gate precede
+gate-only report `/2`. New configurations enable the lane; frozen disabled runs require explicit
+authenticated manual admission. [Operations](../operations/poc-generation.md) are the current
+source-backed recipe. The historical owner all-lane result at `039b24e4` uses offline
+model/compiler/renderer boundary doubles and is separate from the real
+[seeded PDF sample](../operations/dossier-publication.md#verified-seeded-sample).
+Neither authorizes live reproduction or current-main reviews; the
+[acceptance ledger](../reviews/evidence-completion-documentation-inventory.md#acceptance-ledger)
+records focused consumer compatibility and remaining user-owned current-main/manual validation.
+
 ## 1. What the owner decided
 
 - Red develops the information a proof of concept can be generated from (`poc_basis`, protocol section 6.6).
@@ -120,13 +132,13 @@ Each entry carries `claim_id`, `package_id`, `state`, `judge_verdict`, `poc_basi
 
 ## 5. `job_poc_generation`
 
-Position: after `job_final_publication_gate`, before `job_final_report_publication`. The report reads the PoC
-handoff when present and shows its outcome; when the job is disabled the report keeps its current "not run"
-limitation.
+Position: after the accepted inference review and native build, before dossier publication and
+the single final gate. The report reads certified outcomes only from gate `/2`, never an optional
+producer discovered later. Disabled/unadmitted work gets policy disposition, not a clean verdict.
 
 ### 5.1 Steps
 
-1. **load**: verify the gate and review handoffs from bytes (same helpers as the gate) and read `poc_candidates`.
+1. **load**: verify review `/3` from bytes with the shared accepted-review reader and read `poc_candidates`.
 2. **plan**: per candidate, build the brief from the finding package, `poc_basis`, the labelled package view, the
    struct and function declarations at the sink, and the build facts for the translation unit that contains the sink
    function (compiler, include paths, defines, standard).
@@ -194,11 +206,14 @@ finding), `artifact_generated` (the build image or object files are unavailable,
 
 ### 5.5 Output
 
-Under `runs/<run-id>/data/poc/<claim-id>/`: `poc_<name>.cpp` (both functions and the includes), `compile.json`
+Under `runs/<run-id>/data/jobs/job_poc_generation/attempts/<a>/steps/package/tasks/files/candidates/<claim-id>/`:
+`poc_<name>.cpp` (both functions and the includes), `compile.json`
 (commands, exit codes, diagnostics, symbol check), `README.md` (what it shows, where to add it, expected
 observation, breakpoints, limitations) and `provenance.json` (hashes of the brief, package, source tree and image).
-Published datasets declare every file. The report shows status, a bounded description and the function source in a
-PoC box; the full reproducer stays in the run directory for the developer.
+Published datasets declare every file; source and writer cells are protected. The public report
+shows only gate-certified compile-only status, function names and hash-bound refs, never function
+source. Bounded source may appear in the separate protected PoC dossier. Existing candidate
+directories are refused; retries publish a new attempt rather than replacing accepted bytes.
 
 ## 6. Open questions
 
@@ -328,23 +343,26 @@ them touches the claim ledger, R5, R6 or the judge. Operating details are in
 1. **The candidate contract.** The job reads `poc_candidates` from the verified review handoff as an array of
    `{claim_id, package_id, state, judge_verdict, poc_basis: {sha256, brief}, finding_package: {finding_package_id, sha256},
    evidence_refs}` (schema `docs/schemas/poc-generation/poc-candidate.schema.json`, reader `candidates.py`). `poc_basis.sha256`
-   is `sha256(canonical_json(brief))` (`review.identity.sha256_hex`). Entry and path carry resolved entity identities;
-   the brief builder binds them to rows in the labelled package view. The reader validates the complete review handoff
-   against the producer's schema and cross-checks each entry against the verified finding package (id, digest, claim,
-   state and judge verdict). A missing or malformed field is an integrity failure; an empty array means no candidates.
+   is `sha256(canonical_json(brief))` (`review.identity.sha256_hex`). The strict `/3` shared reader
+   and candidate parser cross-check finding/package/basis/claim/state identity. Entry and path
+   contain resolved entity identities bound to rows in the labelled package view, not worker-local
+   labels. No property-stripping validator or implicit old-run schema upgrade bypasses shared
+   review acceptance; a missing required field or malformed input is an integrity failure.
+   An empty accepted array means no candidates.
 2. **Not a target job; manual while disabled.** The job reads no target tree: the source copy is the run's accepted
    `job_language_build` workspace (re-hashed file by file against its manifest), the compile command is the exact captured argv
    of the sink's translation unit from the protected compile database, and the labelled package view comes from the retrieval
    core pinned to the review's accepted manifest. It is therefore deliberately absent from `launch.TARGET_JOBS` (like the review,
-   the gate and the report) and runs with no target root and the `none` source fingerprint. `settings.enabled` (shipped `false`)
+   the gate and the report) and runs with no target root and the `none` source fingerprint. `settings.enabled` (new-run default `true`)
    only decides membership in the automatic graphs. Because a finished run's resolved configuration is frozen, a direct dispatch
    of a *disabled* job normally refused by `cli` is allowed for this job alone (`cli.MANUAL_JOB_IDS`), and
    `topology.describe_wave1(..., include=...)` gives it the upstream handoffs it would have in the graph.
-3. **Graph position.** Enabled: `job_final_publication_gate -> job_poc_generation -> job_final_report_publication` (one terminal
-   job in both graphs). Disabled: the report follows the gate exactly as before. The report reads the run's accepted PoC handoff
-   when one exists, re-proves the summary and every file it names, and shows its outcomes in `poc_outcomes`; when none exists the
-   block is the previous "not run" text and the report is unchanged. A PoC handoff built from a different gate handoff is stale
-   and is reported as such, never shown.
+3. **Graph position.** Review -> enabled PoC/planning/validation/dossiers -> one gate -> report,
+   with one terminal report in both graphs. Gate `/2` verifies accepted `/2` outcomes and all
+   nested refs; report `/2` projects that snapshot only. For a disabled manual PoC,
+   `--admit-manual-poc` on gate `run --run-id ... --upstream-from-run` authenticates its exact
+   upstream digest without changing frozen settings. Stale/mixed attachments fail certification;
+   finding state, scores and shipment decisions never change.
 4. **The role is a runtime skill, not an inference role.** Inference role records in `pipeline/guidance/registry.json` are bound
    to `review.models.Role`, which the judge work owns, and the review cell executor (`review.cells.run_cell`) is bound to that
    enum and to manifest-scoped capabilities. `poc_writer` is therefore registered as a role record with a responsibility, its
@@ -377,7 +395,8 @@ them touches the claim ledger, R5, R6 or the judge. Operating details are in
    `BuildContainerExecutor` gained a `network` argument (default `bridge`, unchanged for every other job); this job uses
    `none`, since it compiles already-fetched source.
 10. **Scratch.** The validate and compile steps each make their own hash-verified copy of the workspace under their unit root
-    and remove it afterwards; the two objects are hashed and discarded, so `data/poc/` holds only the four developer files.
+    and remove it afterwards; the two objects are hashed and discarded, so the immutable candidate directory
+    holds only the four protected developer files.
 11. **Model.** The shipped writer profile reuses the pipeline's existing model so enabling the job adds nothing to the model
     preflight (which walks every job's settings, enabled or not). A stronger writer is a configuration change.
 12. **Open.** The judge work must emit exactly the shape of decision 1 (the hash definition in particular). The job rebuilds the

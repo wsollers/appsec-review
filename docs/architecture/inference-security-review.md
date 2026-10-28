@@ -11,9 +11,20 @@ distinctness, remediation intake, the planned downstream job names, the closed
 CWE impact class are implemented ([decisions](#decisions-and-open-questions) 1, 2, 4, 6, 8, 9, 10
 and 11), as are evidence-driven scoring (`score-factors/1`, `application_risk_matrix/3`) and
 code-graph evidence (`evidence-admissibility/3`, `query_code_graph`, package graph context). The
-remaining parts of slices 2-4 (CVSS v4 and SSVC providers, which the scoring registry skips while
-unimplemented, PoC, chains, global round barriers and cross-package variant hunts) remain design only, and no live-model
-acceptance has run.
+CVSS v4/SSVC providers, global round barriers and cross-package variant hunts remain design only.
+Compile-only PoC generation exists; `ec9257bf` adds real pre-seal chain composition/challenges,
+and integration `b702eb7` adds remediation/dossier producers, automatic new-configuration defaults,
+pre-gate ordering and completion metrics. Checkpoint `18eae9f` aligns shared `/3` review acceptance
+and extends metric parity. Integration `dd9c9ad` delivers PoC/gate/report `/2` and chain/base
+completeness isolation. The owner-verified
+[seeded PDF sample](../operations/dossier-publication.md#verified-seeded-sample) is separate from
+the historical owner all-lane result at `039b24e4`, which uses offline model/compiler/renderer
+boundary doubles. The [acceptance ledger](../reviews/evidence-completion-documentation-inventory.md#acceptance-ledger)
+keeps that bounded pass and focused consumer compatibility distinct from live reproduction and
+user-owned current-main validation.
+The [completion contract](evidence-completion-and-remediation.md) preserves the user's compile-only,
+never-executed policy; any executor diagrams/sketches below are historical unimplemented design,
+not new runtime authorization. See the [source inventory](dossier-data-inventory.md).
 Package-local follow-up rounds are now implemented inside each team: accepted, re-resolved
 supported/confirmed claims supply known-claim context, only confirmed claims seed variants, and
 semantic stability plus existing budgets bound repetition. This is not the global round-controller
@@ -70,38 +81,42 @@ producer may be unavailable, but its accepted coverage shard and gap must be pre
 is frozen for the lifetime of this review attempt; newly accepted upstream evidence creates a new
 manifest identity and selective invalidation, never an in-place update.
 
-The proposed application graph is:
+The registered completion graph at `b702eb7` is:
 
 ```text
 accepted analysis/index manifest
   -> job_inference_security_review
+     -> job_poc_generation
      -> job_remediation_planning
      -> job_remediation_validation
+     -> job_dossier_publication
      -> job_final_publication_gate
         -> job_final_report_publication
 ```
 
-Downstream contracts are exact:
+Enabled optional producers precede one final gate; new defaults enable all four, but frozen old
+runs are unchanged. Integration `dd9c9ad` aligns producer/consumer versions. Downstream
+contracts and the implemented slice's limits are:
 
 | Consumer | Packages consumed | Explicitly not consumed |
 |---|---|---|
-| `job_remediation_planning` | the handoff's `remediation_intake` (confirmed final finding packages only, decision 4), score packages, evidence requests that remain gaps, safe regression-test specifications derived from successful PoCs | the `verification_backlog` (supported findings), raw worker narratives, rejected claims, raw PoC payloads |
-| `job_remediation_validation` | finding identity and evidence, remediation proposal, safe regression-test artifact, sanitized PoC result/observed signal, score policy identity | the PoC executor, production credentials, offensive tooling |
+| `job_poc_generation` | shared verified review `/3`, exact candidate/finding/basis/evidence and native build custody; immutable protected `/2` outputs | final gate as an upstream dependency, runtime execution |
+| `job_remediation_planning` | exactly confirmed `remediation_intake`, counted evidence and bounded accepted native source; creates separate safe regression specifications | supported backlog, rejected claims, raw worker narratives, PoC context in this slice (`poc_handoff: null`) |
+| `job_remediation_validation` | accepted confirmed finding/evidence, exact planning handoff/patch, safe regression specification and native build custody | PoC context, generated regression execution, production credentials, offensive tooling |
+| `job_dossier_publication` | accepted findings/projection/source manifest, available PoC and remediation attachments, chain manifest; closed protected projection | raw prompts/transcripts/secrets, unaccepted source, the final gate |
 | `job_final_publication_gate` | accepted claim-ledger manifest, exact claim accounting, finding-package manifest, score-package manifest, attack-chain manifest, sanitized PoC status manifest, completeness and coverage gaps | unaccepted shards or model transcripts |
 | `job_final_report_publication` | publishable finding packages, separate score dimensions, confirmed/qualified chain packages, PoC outcome summaries, limitations/gaps | reusable exploit code, sensitive queries, secrets, raw prompts, private scratch artifacts |
 | retrieval finding index publisher (inside final publication) | sanitized final finding packages and their resolving citations | proposed/duplicate/out-of-scope claims unless the operator requests an internal audit view |
 
 No remediation or report job may reinterpret a claim state or a `ship-block-policy/1` status. It
-projects the accepted state and provenance from this job. The four job names are fixed (decision
-8): each is a producer in `indexing/input_matrix.py` (`INPUT_SOURCES` and
-`PLANNED_CONSUMERS`), and the handoff's `planned_consumers` lists them with the handoff fields each
-reads (`jobs/job_inference_security_review/datasets.py::PLANNED_CONSUMERS`; its `status` is the
-decision-8 reservation of the name, not a build status). `job_final_publication_gate` and
-`job_final_report_publication` are implemented ([operations](../operations/final-report.md)); the
-two remediation jobs are still `planned:` producers and are not built. Until they exist the gate
-records them as the named limitations `remediation_planning_not_run` and
-`remediation_validation_not_run`, and it records the absent attack-chain and PoC status manifests as
-unavailable inputs.
+projects the accepted state and provenance from this job. Central `indexing/input_matrix.py`
+now names actual remediation/dossier producers and the pre-gate consumer graph. Older
+`datasets.py::PLANNED_CONSUMERS` metadata still records the original four reservations; its
+`planned` status is not a current build-status claim and full metadata reconciliation is pending.
+Gate `/2` now replaces unconditional absence text with verified five-capability accounting;
+report `/2` consumes only that certified snapshot. See
+[remediation operations](../operations/remediation.md), [dossier operations](../operations/dossier-publication.md)
+and [final publication](../operations/final-report.md).
 
 ## Dagster graph
 
@@ -1446,7 +1461,10 @@ Normative schemas live under `docs/schemas/inference-security-review/` as each s
 Closed versioned schemas exist for the red discovery result, blue and verifier results, worker
 turns, cell records, claims, evidence relations, adjudication, gaps, ledger events, score packages
 (`score-package/3`), finding packages (`finding-package/2`) and the handoff
-(`inference-review-handoff/2`); the PoC, attack-chain and completeness schemas remain to be defined.
+(`inference-review-handoff/3` from the chain writer). Chain proposal/challenge/terminal/manifest
+schemas now exist, with typed chain events in `ledger-event/1`. The shared reader now accepts
+handoff `/3` and verifies chain/package bindings; final PoC/publication contract changes are not
+silently treated as backwards-compatible.
 They use closed objects, bounded strings/arrays, enums for state, and reusable definitions for
 artifact/evidence references.
 The following documents are concise shape examples; hashes are shortened only for readability.
@@ -1621,8 +1639,11 @@ This tree is the original proposal. The implemented layout differs: the job pack
 `lead_families`, `ledger`, `models`, `obligations`, `packages`, `ranking`, `red_discovery`,
 `references`, `scope`, `ship_block`, `teams`, `units` and the `scoring/` package
 (`application_matrix_v3`, `cwe_impact`, `evidence_source`, `factors`, `interface`, `risk_model`);
-`review/rounds.py`, `review/poc/`, `review/attack_chains.py` and the CVSS/SSVC providers do not
-exist. Guidance composition lives in `src/appsec_review/guidance/`.
+`review/attack_chains.py` and job-local `chains.py` now implement continuity policy and pre-seal
+composition/challenges; `jobs/accepted_review.py` is the shared reader and downstream
+`job_remediation_*` / `job_dossier_publication` packages now exist. `review/rounds.py`,
+`review/poc/` and the CVSS/SSVC providers do not exist. Guidance composition lives in
+`src/appsec_review/guidance/`.
 
 ```text
 src/appsec_review/
@@ -2299,7 +2320,8 @@ both lanes, and one score dimension. It does not execute PoCs, run variant hunts
 
 ### Dependencies and current gaps
 
-- The opt-in OWASP assessment publishes accepted applicability/result/coverage shards with typed
+- OWASP assessment is enabled by default across shipped profiles; the frozen job setting can
+  explicitly opt out. It publishes accepted applicability/result/coverage shards with typed
   original evidence identities before indexing, package assembly and hunt/red-blue review. It uses
   prior tagging/tag-cloud, graph and classification context only for bounded routing. Complete
   pinned catalogs are present, but only four narrow Python static procedures are implemented;

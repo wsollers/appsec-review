@@ -66,6 +66,72 @@ never evidence that the corresponding scope is clean. `finding_states` counts on
 finding transitions; scanner observations and CodeQL SARIF result counts are not confirmed defects
 or vulnerabilities.
 
+## Completion rollout tracking
+
+The [completion telemetry contract](../architecture/telemetry.md#evidence-completion-tracking-commissioned)
+requires PoC, chain, remediation, dossier and final-publication tracking from their first
+implementation. The existing `metrics` command and summary path remain the operating surface;
+no separate backend is needed. Integration `b702eb7` first added `completion` to `run-metrics/3`;
+combined source `6975aef2` retains `completion-process-metrics/1` in the current `run-metrics/4`.
+This is observational attempted-work accounting, not
+accepted findings or runtime proof. Checkpoint `18eae9f` adds actual status/capability/flag
+parity and nonadditive limits; final `dd9c9ad` adds real chain/PoC/gate/report events.
+Source support is not proof every candidate or model-usage dimension was measured.
+
+Use `completion.lanes.<lane>.observed` and `.events.<event>` for the seven fixed lane buckets
+listed in [telemetry architecture](../architecture/telemetry.md#evidence-completion-tracking-commissioned).
+Each event reports `count`, allowlisted `counters`/`outcomes`, fixed `flags`/`dimensions`,
+`limits`, `unavailable_token_measurements` and `duration_ms.{count,p50,p95,max,summed_work}`.
+Configured dossier/source/evidence limits are observed `{min,max}` ranges, **never sums**.
+Capability attachment/gap/omission counts, enabled/disposition maps, explicit manual admission,
+render/adapter-attempt flags and fixed kind/role/adapter dimensions are retained where emitted.
+Enabled/disposition capability maps belong to `FINAL_PUBLICATION_GATE_CAPABILITIES_VERIFIED`.
+Generic step lifecycle disposition lists are not capability maps or measurement failures.
+`FINAL_REPORT_ASSEMBLED.counters.certified_outcome_counts.<capability>` counts the gate-certified
+attachment rows reported for each fixed capability. These are counts, not dispositions or unique
+findings, and do not establish reproduction or a fixed finding.
+`unavailable_token_measurements` counts explicit-null token fields;
+`counters.usage_unavailable_count` counts producer-reported missing-usage turns instead.
+Neither means a missing field was measured as zero. An unobserved lane is not an observed zero.
+`measurement_gap_count` and bounded `measurement_gaps` identify invalid emitted readings; they
+do not independently prove all expected candidates/stages were measured.
+
+Operators must be able to follow stage and candidate progress, terminal dispositions, caps,
+coverage/integrity gaps, retry/reuse, adapter/render failures and durations. Correlate individual
+outcomes by run/attempt and accepted artifact identities, while grouping rollups by bounded
+lane/stage/status/error class. Compare accepted candidate/attachment manifests with event totals:
+raw lifecycle volume is not the number of unique eligible findings, proposals or rendered PDFs.
+Report missing/duplicate/conflicting process coverage explicitly rather than hiding it in success
+counts. Model usage applies only where actually emitted; missing provider tokens/cache/cost data
+must remain unavailable, not zero. Remediation follow-up `e769645f` now preserves per-dimension
+unknown totals as null, genuine measured zero and unavailable-turn metadata. An invocation with
+no completed turns has null totals and an unavailable flag even though its unavailable-turn count
+is zero. Generic lifecycle events do not substitute for missing candidate/outcome measurements.
+Checkpoint `0ece65d3` includes chain `not_launched` outcomes and a real `CellStatus`-shaped map
+regression, resolving that aggregate allowlist gap. These remain attempted-work observations,
+not accepted evidence or proof that no challenge was omitted.
+
+Generation unit tests cover the persisted summary, deterministic replay, stale-cache replacement
+and unchanged source-log bytes, not just the in-memory aggregate. They also verify that newly
+appended producer events update the summary without recounting old events. The owner-reported
+historical `039b24e4` all-lane check also verifies actual producer events and derived completion
+summary counts through seven lanes, with offline compiler/model/renderer boundary doubles.
+`b9e69d17` scopes capability enabled/disposition maps to the gate certification event; generic
+step lifecycle lists are not capability maps. Replaying the same owner log preserves producer
+buckets while removing 23 false measurement gaps; the native result reports zero.
+This does not erase the scenario's four inherited/source dossier gaps. Track bounded results,
+focused consumer compatibility and remaining current-main/manual validation in the
+[acceptance ledger](../reviews/evidence-completion-documentation-inventory.md#acceptance-ledger).
+The parent reports focused certified-report count/persistence tests passed on Windows and Linux;
+this docs revision permits Linux-only validation. Zero `completion.measurement_gap_count`
+is not zero review/source/redaction coverage gaps or proof of live runtime behavior.
+
+Check frozen run settings before interpreting an absent lane. The
+[new-run rollout decision](../architecture/evidence-completion-and-remediation.md#11-parallel-implementation-decisions)
+does not enable producers in old immutable configurations. Automatic validation and compile-only
+PoC still record no runtime execution; no throughput or successful build metric establishes
+reproduction, a passing negative control or a fixed finding. Neither stream nor its metrics may
+include raw source, patches, PoC payloads, prompts or credentials.
 ## Planned OpenVEX metrics
 
 **Design only; not implemented at baseline `b7c31ba23af840f14cc919d56b8c557ffdb2d010`.**

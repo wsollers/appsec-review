@@ -6,6 +6,48 @@ This page covers operator settings for `job_inference_security_review` (Dagster 
 `[jobs.job_inference_security_review]`. Each run freezes them into
 `runs/<run-id>/data/configuration/`.
 
+**Delivered chain stages (`ec9257bf`, integrated by `b702eb7`):** `attack_chains.compose_candidates`,
+`attack_chains.refute_edges`, `attack_chains.verify_weakest_links` run after scoring and before
+completeness/ledger/publication sealing. Typed `chain_proposed`, `chain_challenged`, `chain_decided`
+events remain in the single `ledger-event/1` stream; a protected `attack-chain-manifest/1` binds
+proposals, challenges and terminal artifacts. Publication now emits `inference-review-handoff/3`.
+Checkpoint `18eae9f` aligns the shared `/3` reader and ledger-bound chain membership/publication
+verification. `dd1f8018` adds exact chain actor/terminal-cell/original-receipt checks and
+`stages.base_review_projection`: enhancement cells/gaps remain in the full ledger but are excluded
+from base completeness arithmetic. Ordinary failed/capped chain work cannot downgrade independent
+base findings; enhancement limitations still reach publication. Missing/duplicate/corrupt chain
+cells or receipts remain integrity failures.
+Downstream confirmed-finding dossiers and remediation must reference the exact
+accepted findings, adjudications, evidence and scores without changing their state or shipment
+decision. The [dossier data inventory](../architecture/dossier-data-inventory.md) distinguishes
+the available review/graph/document/build evidence from missing runtime/deployment
+gaps.
+
+Default `settings.attack_chains` bounds are 4 links, 100 expansions, 8 candidates/composition,
+100 challenge cells, 12 queries, 4 turns, 8 evidence rows/obligation and 65536 response bytes;
+`settings.rounds.max_attack_chains` is 50. Frontiers/caps and unsuccessful challenges retain gaps.
+The five continuity dimensions are identity, privilege, trust boundary, artifact/deployment and
+temporal. Refutation must be independent; a required weakest-link verifier must also be
+model-distinct. Deterministic `attack-chain-continuity/1` evaluates native values, not model stance.
+Each native edge resolution separately bounds and charges every physical `trace`/`find` query;
+exhaustion leaves all its obligations unresolved. Artifact/configuration/deployment identities
+must resolve and connect; conflicting artifact/temporal configuration identities contradict
+continuity. Evidence caps cannot turn a retained prefix into proof of omitted rows.
+
+`continuity_producers=[]` by default: no native deployment-continuity exporter is commissioned.
+Source/build facts and seed prose therefore cannot manufacture a confirmed deployed chain.
+Supported components cap the chain at `qualified_supported`; missing challenges/no meaningful
+counted continuity gives `insufficient_evidence`, contradiction gives `refuted`. A chain cannot
+upgrade its component findings or sum their severities. See
+[`review/attack_chains.py`](../../src/appsec_review/review/attack_chains.py) and the
+[completion contract](../architecture/evidence-completion-and-remediation.md).
+
+`INFERENCE_REVIEW_ATTACK_CHAIN_COMPOSITION_COMPLETED`,
+`INFERENCE_REVIEW_ATTACK_CHAIN_CHALLENGE_COMPLETED` and
+`INFERENCE_REVIEW_ATTACK_CHAINS_PUBLISHED` record bounded candidates/frontier/challenges/
+independence/outcomes/gaps/durations. Read [completion metrics](metrics.md) as attempted work,
+not accepted chain evidence; source/seed/model prose never enters these event payloads.
+
 ## Model selection and upgrade
 
 The checked-in models are the `dev` profile. Real reviews select the `prod` profile, which uses more

@@ -90,7 +90,7 @@ def test_registered_job_is_resolved_with_the_registry_set_and_package_bounds() -
     assert "pending_jobs" not in resolved
     assert resolved["jobs"][JOB]["settings"]["teams"]["review_teams"] == 3
     assert tuple(config.job(JOB).steps) == ("scope", "triage", "packages", "lead_review", "hunt_review", "merge",
-                                            "adjudicate", "scoring", "completeness", "publication")
+                                            "adjudicate", "scoring", "attack_chains", "completeness", "publication")
     from appsec_review.review.packages import PackageSettings
     packages = PackageSettings.from_review_settings(_settings(config))
     assert packages.admit_severities == ("critical", "high", "unknown")
@@ -332,11 +332,20 @@ def test_pool_mapping_is_job_aware() -> None:
     assert _pool_for("lead_review.teams", JOB) == "inference_teams"
     assert _pool_for("hunt_review.teams", JOB) == "inference_teams"
     assert _pool_for("scoring.score_claims", JOB) == "inference_score"
+    for task in ("compose_candidates", "refute_candidates", "verify_weakest_links"):
+        assert _pool_for(f"attack_chains.{task}", JOB) == "inference_teams"
     assert _pool_for("publication.publish_claim_ledger", JOB) == "lifecycle"
     assert _pool_for("publication.publish_handoff", JOB) == "lifecycle"
     for unit in ("scope.accept_manifest", "packages.assemble_hunt_packages", "merge.claims",
                  "adjudicate.apply_policy", "completeness.audit"):
         assert _pool_for(unit, JOB) == "application"
+    from appsec_review.runtime.registry import builtin_registry
+    for job_id in ("job_remediation_planning", "job_remediation_validation", "job_dossier_publication"):
+        for unit in builtin_registry().build(job_id).units:
+            step = unit.unit_id.split(".", 1)[0]
+            expected = ("lifecycle" if step == "acceptance" else
+                        "inference_teams" if step == "assess" else "application")
+            assert _pool_for(unit.unit_id, job_id) == expected
     # Existing mappings for every other job are unchanged, with or without a job id.
     for job_id in (None, "job_owasp_control_assessment", "job_cpp_compiled_analysis"):
         assert _pool_for("validation.validate", job_id) == "owasp_validator"

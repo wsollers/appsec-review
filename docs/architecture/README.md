@@ -80,15 +80,29 @@ Repository authority remains in [`../../AGENTS.md`](../../AGENTS.md). This page 
   answers, and how stances become ledger states.
 - [`review-judge-and-poc.md`](review-judge-and-poc.md) — the judge role (A/B shuffled sides), PoC candidates, and
   `job_poc_generation`: a never-executed, compile-checked unit-test function for developers.
-- [`evidence-completion-and-remediation.md`](evidence-completion-and-remediation.md) — proposed end-to-end
+- [`evidence-completion-and-remediation.md`](evidence-completion-and-remediation.md) — delivered source for
   PoC publication, evidence-qualified attack chains, remediation planning and assurance-labelled
   validation, with one final gate after all producers; preserves compile-only PoC policy.
+- [`dossier-data-inventory.md`](dossier-data-inventory.md) — source-verified dossier input, query,
+  index/shard, producer, dataset visibility and provenance inventory; available evidence versus
+  admissibility, missing capabilities and the completion architecture change map.
+- [`../operations/dossier-publication.md`](../operations/dossier-publication.md) — implemented protected
+  per-confirmed-finding and per-PoC-outcome dossier publication before the final gate,
+  retained JSON/LaTeX/PDF/receipts, nonexecution assurance and render-gap behavior.
+- [`../reviews/evidence-completion-documentation-inventory.md`](../reviews/evidence-completion-documentation-inventory.md) —
+  documentation inventory/reconciliation record, source baselines, outstanding implementation
+  details and known target-link check baseline.
+- [`../operations/remediation.md`](../operations/remediation.md) — confirmed-only exact patch
+  planning, safe regression specifications, bounded nonexecuting native syntax validation,
+  protected receipts, automatic new-run defaults and remaining acceptance gaps.
+- [`../operations/poc-generation.md`](../operations/poc-generation.md) — `job_poc_generation`:
+  compile-only test/control functions, immutable protected attempt files, enabled new-run pre-gate
+  ordering and explicit authenticated manual admission for frozen disabled runs.
 - [`openvex-export.md`](openvex-export.md) — planned affected-only deterministic OpenVEX export,
   immutable issuer/action inputs, reviewed-source identity, protected evidence companion,
   optional-tail report fan-in and telemetry (design only, not implemented).
 - [`../operations/openvex-export.md`](../operations/openvex-export.md) — draft operator setup,
   trust/dataflow and report-state diagrams, output/accounting semantics, privacy and recovery.
-- [`../operations/poc-generation.md`](../operations/poc-generation.md) — `job_poc_generation`: compile-checked proof-of-concept unit-test functions (no `main`, never run) for findings the judge agreed with; shipped disabled and run by hand.
 - [`indexing-and-query-reuse.md`](indexing-and-query-reuse.md) — review-data indexing and reusable
   query design.
 - [`code-graph-precomputation.md`](code-graph-precomputation.md) — the authoritative code-graph

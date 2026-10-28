@@ -515,6 +515,10 @@ PROFILE_MODEL_JOBS: tuple[str, ...] = (
     "job_target_analysis_plan", "job_project_build", "job_post_build_security_assessment",
     "job_dependency_intelligence", "job_owasp_control_assessment")
 PROFILE_NAMED_MODEL_JOBS: tuple[str, ...] = ("job_poc_generation",)
+PROFILE_COMPLETION_MODEL_JOBS: Mapping[str, str] = MappingProxyType({
+    "job_remediation_planning": "writer",
+    "job_remediation_validation": "reviewer",
+})
 PROFILE_JOB_MODEL_KEYS: Mapping[str, type] = MappingProxyType({
     "provider": str, "model": str, "reasoning": str, "max_input_tokens": int, "max_output_tokens": int,
     "timeout_seconds": int, "retries": int})
@@ -607,7 +611,8 @@ def profile_override_keys(document: object) -> tuple[str, ...]:
         return [f"{field}.{key}" for key in values]
 
     root = table(document, "", {"jobs"})
-    jobs = table(root["jobs"], "jobs", {*PROFILE_MODEL_JOBS, *PROFILE_NAMED_MODEL_JOBS, JOB_ID})
+    jobs = table(root["jobs"], "jobs", {
+        *PROFILE_MODEL_JOBS, *PROFILE_NAMED_MODEL_JOBS, *PROFILE_COMPLETION_MODEL_JOBS, JOB_ID})
     keys: list[str] = []
     for job_id in sorted(jobs):
         field = f"jobs.{job_id}"
@@ -630,6 +635,11 @@ def profile_override_keys(document: object) -> tuple[str, ...]:
                 if not _NAME.fullmatch(str(name)):
                     raise ValueError(f"configuration profile model profile name is invalid: {name}")
                 keys += typed(models[name], f"{field}.settings.models.{name}", PROFILE_REVIEW_MODEL_KEYS)
+            continue
+        if job_id in PROFILE_COMPLETION_MODEL_JOBS:
+            model_field = PROFILE_COMPLETION_MODEL_JOBS[job_id]
+            settings = table(job["settings"], f"{field}.settings", {model_field})
+            keys += typed(settings[model_field], f"{field}.settings.{model_field}", PROFILE_REVIEW_MODEL_KEYS)
             continue
         settings = table(job["settings"], f"{field}.settings", {"models", "roles", "budgets", "lanes", "teams", "rounds"})
         for section, key in (("teams", "review_teams"), ("rounds", "max_active_claims")):
@@ -686,6 +696,10 @@ def _apply_profile(document: dict[str, Any], profile: Mapping[str, Any]) -> None
             named = ("jobs", job_id, "settings", "models")
             for name, values in settings["models"].items():
                 base_table((*named, name)).update(values)
+            continue
+        if job_id in PROFILE_COMPLETION_MODEL_JOBS:
+            model_field = PROFILE_COMPLETION_MODEL_JOBS[job_id]
+            base_table(("jobs", job_id, "settings", model_field)).update(settings[model_field])
             continue
         review = ("jobs", job_id, "settings")
         for section in ("lanes", "teams", "rounds"):
@@ -1121,6 +1135,15 @@ def load_config(path: str | Path = "appsec-review.toml", *, overlay: str | Path 
         elif job_id == "job_inference_security_review":
             from .inference_review import parse_inference_review_settings
             typed_settings = parse_inference_review_settings(settings)
+        elif job_id == "job_dossier_publication":
+            from appsec_review.jobs.job_dossier_publication.settings import DossierPublicationSettings
+            typed_settings = DossierPublicationSettings.from_mapping(settings)
+        elif job_id == "job_remediation_planning":
+            from .remediation import RemediationPlanningSettings
+            typed_settings = RemediationPlanningSettings.from_mapping(settings)
+        elif job_id == "job_remediation_validation":
+            from .remediation import RemediationValidationSettings
+            typed_settings = RemediationValidationSettings.from_mapping(settings)
         elif job_id == "job_owasp_control_assessment":
             from .owasp import parse_settings as parse_owasp_settings
             typed_settings = parse_owasp_settings(settings)
@@ -1148,6 +1171,11 @@ def load_config(path: str | Path = "appsec-review.toml", *, overlay: str | Path 
             build_capture=resolved_capture,
             exclusions=job_exclusions(job_id, value, excluded_globally),
         )
+    validation = jobs.get("job_remediation_validation")
+    planning = jobs.get("job_remediation_planning")
+    if (validation is not None and validation.settings["enabled"]
+            and (planning is None or not planning.settings["enabled"])):
+        raise ValueError("job_remediation_validation requires enabled job_remediation_planning")
     codeql_job = jobs.get("job_codeql_analysis")
     if codeql_job is not None:
         # One run-bound seeding definition: CodeQL's export_queries is the source, every other seeded

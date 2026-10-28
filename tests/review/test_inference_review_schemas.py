@@ -22,7 +22,8 @@ ROOT = Path(__file__).resolve().parents[2] / "docs" / "schemas" / "inference-sec
 NAMES = ("common", "ledger-event", "claim", "evidence-relation", "cell-record", "gap", "worker-turn",
          "red-discovery-result", "blue-result", "verifier-result", "adjudication", "score-package", "finding-package", "handoff",
          "red-compact", "blue-compact", "verifier-compact", "judge-result-compact", "judge-result",
-         "lead-triage-result", "compact-investigation")
+         "lead-triage-result", "compact-investigation", "chain-records", "chain-composer-result",
+         "chain-challenge-result", "chain-continuity-fact", "attack-chain", "attack-chain-manifest")
 SCHEMAS = {name: json.loads((ROOT / f"{name}.schema.json").read_text()) for name in NAMES}
 REGISTRY = Registry().with_resources(
     (schema["$id"], Resource.from_contents(schema)) for schema in SCHEMAS.values())
@@ -452,6 +453,7 @@ def _handoff_review_fields(intake=(), backlog=()) -> dict:
     rows = [*intake, *backlog]
     return {"package_manifest_sha256": SHA, "lead_package_manifest_sha256": SHA,
             "remediation_intake": list(intake), "verification_backlog": list(backlog),
+            "attack_chain_manifest": {"path": "data/chains/manifest.json", "sha256": SHA},
             "ship_block": {**summarize({"lane": row["lane"], "status": row["ship_block_status"]} for row in rows),
                            "policy_sha256": SHA},
             "verification": {"require_distinct_model_for_ship_blocking": True,
@@ -476,7 +478,7 @@ def test_handoff_partitions_remediation_intake_from_the_verification_backlog(tmp
                  "lane": "hunt", "ship_block_status": "needs_verification", "label": "unconfirmed",
                  "missing_predicates": ["source_to_sink_reachability"], "gap_ids": [ident("gap")]}
     handoff = {
-        "schema": "appsec-review/inference-review-handoff/2", "run_id": "run-1", "accepted_manifest_sha256": SHA,
+        "schema": "appsec-review/inference-review-handoff/3", "run_id": "run-1", "accepted_manifest_sha256": SHA,
         "status": "DEGRADED", "configuration_sha256": SHA, "ledger_head_sha256": projection.head,
         "projection_sha256": projection.sha256(), "accounting": accounting.to_json(), "shards": [],
         "finding_packages": [{"finding_package_id": item["finding_package_id"], "sha256": SHA}
@@ -510,7 +512,7 @@ def test_handoff_accepts_exact_accounting_only(tmp_path: Path) -> None:
     accounting = exact_accounting(projection, expected, {"package-a": models.Lane.LEAD, "package-h": models.Lane.HUNT},
                                   incomplete_gap_ratio=0.25)
     handoff = {
-        "schema": "appsec-review/inference-review-handoff/2", "run_id": "run-1", "accepted_manifest_sha256": SHA,
+        "schema": "appsec-review/inference-review-handoff/3", "run_id": "run-1", "accepted_manifest_sha256": SHA,
         "status": "DEGRADED",
         "configuration_sha256": SHA, "ledger_head_sha256": projection.head, "projection_sha256": projection.sha256(),
         "accounting": accounting.to_json(), "shards": [{"path": "data/ledger/lead.jsonl", "schema":
@@ -627,7 +629,7 @@ def test_the_handoff_lists_poc_candidates_and_counts_judge_verdicts(tmp_path: Pa
         "by_outcome": {"red_correct": 0, "blue_correct": 0, "partly": 0, "neither": 0, "unresolved": 0},
         "model_distinct": 0, "not_model_distinct": 0}
     handoff = {
-        "schema": "appsec-review/inference-review-handoff/2", "run_id": "run-1", "accepted_manifest_sha256": SHA,
+        "schema": "appsec-review/inference-review-handoff/3", "run_id": "run-1", "accepted_manifest_sha256": SHA,
         "status": "DEGRADED", "configuration_sha256": SHA, "ledger_head_sha256": projection.head,
         "projection_sha256": projection.sha256(), "accounting": accounting.to_json(), "shards": [],
         "finding_packages": [], "score_packages": [], "gap_ids": [gap.gap_id for gap in projection.gaps],

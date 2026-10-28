@@ -18,12 +18,16 @@
     "limitations",
     "gap_ids",
     "renderers",
-    "notices"
+    "notices", "capabilities", "remediation_planning", "remediation_validation", "dossiers"
   ],
   "properties": {
     "schema": {
-      "const": "appsec-review/final-report/1"
+      "const": "appsec-review/final-report/2"
     },
+    "capabilities": {"$ref": "common.schema.json#/$defs/capabilities"},
+    "remediation_planning": {"$ref": "common.schema.json#/$defs/planning_section"},
+    "remediation_validation": {"$ref": "common.schema.json#/$defs/validation_section"},
+    "dossiers": {"$ref": "common.schema.json#/$defs/dossier_section"},
     "run_id": {
       "$ref": "common.schema.json#/$defs/short_text"
     },
@@ -153,7 +157,7 @@
         "items": {
           "type": "array",
           "items": {
-            "$ref": "common.schema.json#/$defs/record_id"
+            "$ref": "common.schema.json#/$defs/chain_attachment"
           },
           "maxItems": 1000,
           "uniqueItems": true
@@ -186,24 +190,20 @@
             "required": [
               "finding_package_id",
               "status",
-              "result_id"
+              "result_id", "claim_id", "description", "functions", "files", "execution", "runtime_verified"
             ],
             "properties": {
+              "execution": {"const": "not_performed_by_policy"},
+              "runtime_verified": {"const": false},
               "finding_package_id": {
                 "$ref": "common.schema.json#/$defs/finding_package_id"
               },
               "status": {
-                "$ref": "common.schema.json#/$defs/token"
+                "enum": ["compile_verified", "compile_failed", "artifact_generated", "policy_denied",
+                         "insufficient_evidence", "not_applicable", "unsafe_to_attempt"]
               },
               "result_id": {
-                "oneOf": [
-                  {
-                    "$ref": "common.schema.json#/$defs/record_id"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ]
+                "type": "null"
               },
               "claim_id": {
                 "$ref": "common.schema.json#/$defs/claim_id"

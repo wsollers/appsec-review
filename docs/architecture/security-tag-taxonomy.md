@@ -663,7 +663,7 @@ Rendering rules:
 ## Placement in the pipeline
 
 `job_security_tagging` runs after CodeQL, review prioritization and code-graph indexing in both
-the direct CLI graph and `wave1_review` when enabled. The opt-in OWASP assessment follows tagging,
+the direct CLI graph and `wave1_review` when enabled. The default-enabled OWASP assessment follows tagging,
 using accepted assignments and
 distinct-subject tag-cloud counts as bounded routing context, not proof; absent tags are unknown.
 There is no OWASP-to-tagging dependency. Review data indexing closes the producer wave before

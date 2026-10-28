@@ -240,8 +240,15 @@ def test_package_budget_profile_selection_preserves_other_safeguards(profile, ex
     assert resolved["rounds"]["max_active_claims"] == (1000 if production else 500)
     assert review.retry == _review(dev).retry
     assert config.dagster.pool_limits == dev.dagster.pool_limits
-    for job_id in ("job_owasp_control_assessment", "job_poc_generation"):
-        assert config.job(job_id).settings["enabled"] is False
+    assert config.job("job_owasp_control_assessment").settings["enabled"] is False
+
+
+@pytest.mark.parametrize("profile", ["dev", "copilot-dev", "prod", "copilot-prod"])
+def test_profiles_preserve_automatic_completion_defaults(profile) -> None:
+    config = load_config(ROOT / "appsec-review.toml", profile=profile)
+    for job_id in ("job_poc_generation", "job_remediation_planning",
+                   "job_remediation_validation", "job_dossier_publication"):
+        assert config.job(job_id).settings["enabled"] is True
 
 
 @pytest.mark.parametrize(("section", "key", "value"), [

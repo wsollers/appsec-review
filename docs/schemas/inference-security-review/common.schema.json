@@ -300,7 +300,10 @@
         "state_transition",
         "gap_recorded",
         "cell_terminal",
-        "judge_verdict"
+        "judge_verdict",
+        "chain_proposed",
+        "chain_challenged",
+        "chain_decided"
       ]
     },
     "evidence_request_outcome": {

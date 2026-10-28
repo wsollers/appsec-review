@@ -159,11 +159,14 @@ def test_gate_document_is_schema_valid_and_every_binding_is_hash_pinned(chain: C
     assert {item["path"] for item in gate["inputs"].values()} <= bound
     assert {item["path"] for item in gate["packages"]} <= bound
     review = review_handoff(chain)
+    assert gate["review"]["lead_package_manifest_sha256"] == review["lead_package_manifest_sha256"]
     assert {item["path"] for item in review["shards"]} <= bound
     for item in gate["bindings"]:
         assert file_sha256(chain.run_root / item["path"]) == item["sha256"]
-    assert gate["unavailable_inputs"]["attack_chain_manifest"]["state"] == "unavailable"
-    assert gate["unavailable_inputs"]["poc_status_manifest"]["state"] == "unavailable"
+    chain_manifest = json.loads((chain.run_root / review["attack_chain_manifest"]["path"]).read_text())
+    assert gate["capabilities"]["attack_chains"]["summary"] == review["attack_chain_manifest"]
+    assert gate["capabilities"]["attack_chains"]["item_count"] == len(chain_manifest["items"])
+    assert gate["capabilities"]["poc_generation"]["disposition"] == "SKIPPED_POLICY"
 
 
 def test_degraded_review_is_surfaced_as_named_limitations_and_not_a_failure(chain: Chain) -> None:
@@ -175,10 +178,10 @@ def test_degraded_review_is_surfaced_as_named_limitations_and_not_a_failure(chai
         assert by_id[identity]["kind"] == "gap", identity
     assert by_id["gaps_recorded"]["count"] == len(gate["gap_ids"]) > 0
     assert "not a release decision" in by_id["decision_pending"]["statement"]
-    # Remediation planning and validation do not exist yet: named limitations, not failures.
-    for identity in ("remediation_planning_not_run", "remediation_validation_not_run", "attack_chain_composition_not_run",
-                     "poc_lane_not_run"):
+    # Optional jobs absent from this fixture's frozen config were not admitted; chains actually ran.
+    for identity in ("remediation_planning_not_run", "remediation_validation_not_run", "poc_lane_not_run"):
         assert by_id[identity]["kind"] == "not_run", identity
+    assert "attack_chain_composition_not_run" not in by_id
     assert [item["limitation_id"] for item in gate["limitations"]] == [
         identity for identity in gate_classify.LIMITATION_ORDER if identity in by_id]
     assert chain.read(GATE, "acceptance.publish_handoff", "status.json")["status"] == "SUCCEEDED"
@@ -228,7 +231,11 @@ def test_report_json_is_schema_valid_and_contains_the_required_sections(chain: C
             assert score["technical_severity"]["rating"] in {"low", "medium", "high", "critical", None}
     assert report["attack_chains"] == {"status": "none_available", "reason": report["attack_chains"]["reason"], "items": []}
     assert report["poc_outcomes"]["status"] == "none_available" and report["poc_outcomes"]["items"] == []
-    assert "not built" in report["attack_chains"]["reason"] and "plan-only" in report["poc_outcomes"]["reason"]
+    chains = gate["capabilities"]["attack_chains"]
+    assert chains["enabled"] and chains["disposition"] == "GAP" and chains["gap_count"] > 0
+    assert chains["summary"] == review_handoff(chain)["attack_chain_manifest"]
+    assert report["attack_chains"]["reason"] == chains["reason"]
+    assert "frozen configuration" in report["poc_outcomes"]["reason"]
     assert report["renderers"]["pdf"]["state"] == "not_rendered"
     assert report["provenance"]["gate_handoff"]["sha256"] == chain.pointer_sha(GATE)
     assert report["provenance"]["gate_document"]["sha256"] == file_sha256(
@@ -245,7 +252,7 @@ def test_report_artifacts_are_hash_pinned_by_the_accepted_handoff(chain: Chain) 
     for reference in (json_ref, markdown_ref):
         assert file_sha256(chain.run_root / reference["path"]) == reference["sha256"]
     assert {json_ref["path"], markdown_ref["path"]} <= {item["path"] for item in handoff["artifacts"]}
-    assert outputs["acceptance.publish_handoff"]["schema"] == "appsec-review/final-report-handoff/1"
+    assert outputs["acceptance.publish_handoff"]["schema"] == "appsec-review/final-report-handoff/2"
 
 
 def test_markdown_is_the_deterministic_rendering_of_the_json(chain: Chain) -> None:
@@ -304,6 +311,44 @@ def test_every_run_owned_file_the_jobs_write_is_claimed_by_a_dataset(chain: Chai
 
 
 # ---------------------------------------------------------------------------------------------- integrity
+
+
+@pytest.mark.parametrize("bad_lane", [None, "lead", "hunt", "missing_lead"])
+def test_shared_review_reader_checks_both_manifest_identities_and_keeps_source_bindings(
+    tmp_path: Path, monkeypatch, bad_lane: str | None,
+) -> None:
+    from appsec_review.jobs import accepted_review
+
+    def reference(name: str, digest: str) -> dict[str, str]:
+        return {"path": f"data/{name}.json", "sha256": digest * 64}
+
+    outputs, documents, manifests, expected = {}, {}, {}, []
+    review = {"package_manifest_sha256": "1" * 64, "lead_package_manifest_sha256": "2" * 64}
+    for lane, digest in (("hunt", "1"), ("lead", "2")):
+        package_set = reference(f"{lane}-set", "3")
+        manifest = reference(f"{lane}-manifest", "4")
+        package = reference(f"{lane}-package", "5")
+        outputs[f"packages.assemble_{lane}_packages"] = {"artifact": package_set}
+        documents[package_set["path"]] = {
+            "package_manifest": manifest, "package_manifest_content_sha256": digest * 64,
+            "packages": [package],
+        }
+        manifests[manifest["path"]] = {"content_sha256": digest * 64}
+        expected.extend((package_set, manifest, package))
+    monkeypatch.setattr(accepted_review, "read_bound_json", lambda _root, ref: documents[ref["path"]])
+    monkeypatch.setattr(accepted_review, "resolve_bound", lambda _root, ref: ref["path"])
+    monkeypatch.setattr(accepted_review, "verify_package_manifest", lambda path: manifests[path])
+    if bad_lane == "missing_lead":
+        review.pop("lead_package_manifest_sha256")
+    elif bad_lane is not None:
+        review["lead_package_manifest_sha256" if bad_lane == "lead" else "package_manifest_sha256"] = "0" * 64
+    if bad_lane is None:
+        bindings = accepted_review._verify_package_manifests(tmp_path, outputs, review)
+        assert sorted(bindings, key=lambda ref: ref["path"]) == sorted(expected, key=lambda ref: ref["path"])
+    else:
+        lane = "lead" if bad_lane == "missing_lead" else bad_lane
+        with pytest.raises(IntegrityError, match=f"{lane} package manifest does not match the handoff"):
+            accepted_review._verify_package_manifests(tmp_path, outputs, review)
 
 
 def _first(chain: Chain, key: str) -> dict[str, str]:
@@ -509,6 +554,7 @@ def _clean(verified: dict[str, Any]) -> dict[str, Any]:
     value["coverage"] = {**value["coverage"], "summary": {"reviewed": value["coverage"]["rows"]}}
     value["verification"] = {**value["verification"], "distinct": True, "warning": None}
     value["gap_ids"], value["possible_duplicate_pairs"] = [], 0
+    value["capabilities"]["attack_chains"].update(disposition="SKIPPED_NA", gap_count=0, omitted_count=0)
     for package in value["packages"]:
         package["ship_block"] = {**package["ship_block"], "status": "not_ship_blocking", "reasons": []}
         package["gap_ids"] = []
@@ -518,10 +564,10 @@ def _clean(verified: dict[str, Any]) -> dict[str, Any]:
 def test_a_clean_review_is_publishable_and_not_run_stages_never_change_that(verified: dict[str, Any]) -> None:
     result = gate_classify.classify(_clean(verified))
     assert result["status"] == "PUBLISHABLE"
-    assert {item["kind"] for item in result["limitations"]} == {"not_run"}
-    assert [item["limitation_id"] for item in result["limitations"]] == [
-        "remediation_planning_not_run", "remediation_validation_not_run", "attack_chain_composition_not_run",
-        "poc_lane_not_run"]
+    assert {item["kind"] for item in result["limitations"]} == {"not_run", "notice"}
+    assert {item["limitation_id"] for item in result["limitations"]} == {
+        "remediation_planning_not_run", "remediation_validation_not_run",
+        "poc_lane_not_run", "dossiers_not_run", "compile_only_nonexecution"}
     assert result["package_counts"]["exact"] is True
 
 
@@ -693,7 +739,7 @@ def _mutations(document: dict[str, Any], kind: str):
         return mutated
 
     yield "extra property", edit(lambda value: value.update(narrative="x"))
-    yield "bad schema const", edit(lambda value: value.update(schema="appsec-review/final-report/2"))
+    yield "bad schema const", edit(lambda value: value.update(schema="appsec-review/final-report/99"))
     yield "missing limitations", edit(lambda value: value.pop("limitations"))
     yield "inexact accounting", edit(lambda value: counts(value).update(exact=False))
     yield "unknown publication status", edit(lambda value: status(value).update({key: "CLEAN"}))
@@ -714,7 +760,7 @@ def test_closed_validator_agrees_with_jsonschema_on_valid_and_mutated_documents(
             assert closed.errors(name, mutated), (name, label)
 
 
-def test_the_two_limitation_kinds_are_the_only_ones_a_document_may_carry(chain: Chain) -> None:
+def test_undeclared_limitation_kinds_are_refused(chain: Chain) -> None:
     report = report_document(chain)
     report["limitations"][0]["kind"] = "failure"
     assert not validator("final-report").is_valid(report)
@@ -728,18 +774,20 @@ def test_registry_topology_and_terminal_job() -> None:
     from appsec_review.config import load_config as load
 
     config, registry = load(ROOT / "appsec-review.toml"), builtin_registry()
-    assert {GATE, REPORT} <= set(registry.job_ids()) and len(registry.job_ids()) == 38
-    assert not {"job_remediation_planning", "job_remediation_validation"} & set(registry.job_ids())
+    optional = {"job_poc_generation", "job_remediation_planning", "job_remediation_validation", "job_dossier_publication"}
+    assert {GATE, REPORT, "job_binary_evidence_indexing"} | optional <= set(registry.job_ids())
     jobs = {item["job_id"]: item for item in describe_wave1(config, registry)["jobs"]}
-    assert jobs[GATE]["dependencies"] == [JOB] and jobs[REPORT]["dependencies"] == [GATE]
+    assert set(jobs[GATE]["dependencies"]) == {JOB} | optional and jobs[REPORT]["dependencies"] == [GATE]
     assert {GATE, JOB} <= set(jobs[REPORT]["upstream_handoffs"]) and JOB in jobs[GATE]["upstream_handoffs"]
     depended = {dependency for item in jobs.values() for dependency in item["dependencies"]}
     assert set(jobs) - depended == {REPORT}                       # exactly one terminal job
     assert config.job(GATE).name == "final_publication_gate" and config.job(REPORT).name == "final_report_publication"
 
 
-def test_disabled_gate_makes_the_report_transparent_and_the_review_terminal() -> None:
-    registered = {job_id for job_id in builtin_registry().job_ids() if job_id not in {"job_third_party_data_sync", GATE}}
+def test_disabled_completion_jobs_make_the_review_terminal() -> None:
+    registered = set(builtin_registry().job_ids()) - {
+        "job_third_party_data_sync", GATE, "job_poc_generation", "job_remediation_planning",
+        "job_remediation_validation", "job_dossier_publication"}
     dependencies = wave1_dependencies(registered)
     assert REPORT not in dependencies and GATE not in dependencies
     depended = {dependency for values in dependencies.values() for dependency in values}
@@ -750,15 +798,17 @@ def test_disabled_gate_makes_the_report_transparent_and_the_review_terminal() ->
 def test_cli_graph_places_the_new_jobs_after_the_review() -> None:
     from appsec_review import cli
 
-    # job_poc_generation sits between the gate and the report; it is disabled by default and so absent from the graph
-    assert cli.POST_INDEX_JOB_IDS[-4:] == (JOB, GATE, "job_poc_generation", REPORT)
+    completion = (JOB, "job_poc_generation", "job_remediation_planning", "job_remediation_validation",
+                  "job_dossier_publication", GATE, REPORT)
+    assert cli.POST_INDEX_JOB_IDS[-len(completion):] == completion
 
 
 def test_review_data_indexing_does_not_audit_its_own_consumers() -> None:
-    from appsec_review.jobs.job_review_data_indexing.job import registry_providers
+    from appsec_review.jobs.job_review_data_indexing.job import DOWNSTREAM_JOBS, registry_providers
 
     job_ids, declarations, _consumes = registry_providers()
-    assert not {JOB, GATE, REPORT} & set(job_ids) and not {GATE, REPORT} & set(declarations)
+    assert {JOB, GATE, REPORT} <= DOWNSTREAM_JOBS
+    assert {JOB, GATE, REPORT} <= set(job_ids) and {GATE, REPORT} <= set(declarations)
 
 
 def test_settings_are_typed_and_strictly_validated() -> None:
@@ -783,14 +833,18 @@ def test_settings_are_typed_and_strictly_validated() -> None:
 def test_datasets_and_handoff_contracts_are_declared() -> None:
     from appsec_review.jobs import engineering_contracts as contracts
 
-    assert contracts.FINAL_PUBLICATION_GATE_HANDOFF_SCHEMA == "appsec-review/final-publication-gate-handoff/1"
-    assert contracts.FINAL_REPORT_HANDOFF_SCHEMA == "appsec-review/final-report-handoff/1"
-    assert contracts.FINAL_PUBLICATION_GATE_SCHEMA == "appsec-review/final-publication-gate/1"
-    assert contracts.FINAL_REPORT_SCHEMA == "appsec-review/final-report/1"
+    assert contracts.FINAL_PUBLICATION_GATE_HANDOFF_SCHEMA == "appsec-review/final-publication-gate-handoff/2"
+    assert contracts.FINAL_REPORT_HANDOFF_SCHEMA == "appsec-review/final-report-handoff/2"
+    assert contracts.FINAL_PUBLICATION_GATE_SCHEMA == "appsec-review/final-publication-gate/2"
+    assert contracts.FINAL_REPORT_SCHEMA == "appsec-review/final-report/2"
     registry = builtin_registry()
-    assert registry.build(GATE).consumes == (JOB,) and registry.build(REPORT).consumes == (
-        GATE, "job_poc_generation")
+    assert registry.build(GATE).consumes == (JOB, "job_poc_generation", "job_remediation_planning",
+                                            "job_remediation_validation", "job_dossier_publication")
+    assert registry.build(REPORT).consumes == (GATE,)
     assert registry.build(GATE).schema_identity == contracts.FINAL_PUBLICATION_GATE_HANDOFF_SCHEMA
     assert registry.build(REPORT).schema_identity == contracts.FINAL_REPORT_HANDOFF_SCHEMA
-    # The implementation identity covers the package sources, so a code change re-executes the job.
-    assert registry.build(GATE).implementation_identity != registry.build(REPORT).implementation_identity
+    config = load_config(ROOT / "appsec-review.toml")
+    releases = config.review_policy.releases
+    for job_id in (GATE, REPORT):
+        assert registry.build(job_id).identities(ROOT, releases)["implementation"] == releases.values.get(
+            job_id, releases.values.get("platform", "undeclared"))

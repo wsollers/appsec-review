@@ -278,7 +278,8 @@ def test_every_task_prompt_parses_and_fits_its_roles() -> None:
     tasks = registry["tasks"]["inference-security-review"]
     assert {"variant", "sink_up", "entry_down", "control_gap", "persona_sweep", "blue_control",
             "blue_reachability", "blind_verifier", "lead_red_stack", "lead_red_preconditions",
-            "lead_red_failure_modes", "adjudicate_claim", "lead_severity"} == set(tasks)
+            "lead_red_failure_modes", "adjudicate_claim", "lead_severity",
+            "chain_composer", "chain_refuter", "chain_weakest_link_verifier"} == set(tasks)
     for task_id, record in tasks.items():
         task = parse_task((ROOT / record["path"]).read_text(), tools=TOOLS, expected_id=task_id)
         for role in task.roles:

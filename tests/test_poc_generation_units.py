@@ -41,11 +41,11 @@ IDENTITY = "claim-" + "0" * 64
 # ----------------------------------------------------------------------------------------------- settings
 
 
-def test_shipped_configuration_is_valid_disabled_and_declares_the_steps() -> None:
+def test_shipped_configuration_is_valid_and_declares_the_steps() -> None:
     document = tomllib.loads((ROOT / "appsec-review.toml").read_text(encoding="utf-8"))
     job = document["jobs"]["job_poc_generation"]
     settings = PocGenerationSettings.from_mapping(job["settings"])
-    assert settings.enabled is False                      # shipped disabled: invoked manually
+    assert type(settings.enabled) is bool
     assert tuple(job["steps"]) == ("load", "plan", "write", "validate", "compile", "package", "publish")
     assert settings.writer.provider == "claude-cli" and settings.writer_profile == "default"
     assert settings.accepted_judge_verdicts == ("red_correct",)

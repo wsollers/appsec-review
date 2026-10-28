@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://appsec-review.local/schemas/inference-security-review/chain-composer-result.schema.json",
+  "type": "object", "additionalProperties": false, "required": ["candidates", "gaps"],
+  "properties": {
+    "gaps": {"$ref": "chain-records.schema.json#/$defs/worker_gaps"},
+    "candidates": {
+      "type": "array", "maxItems": 50,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["objective", "component_claim_ids", "edges", "prerequisites", "rationale"],
+        "properties": {
+          "objective": {"type": "string", "minLength": 1, "maxLength": 1000},
+          "component_claim_ids": {"type": "array", "minItems": 2, "maxItems": 8, "uniqueItems": true, "items": {"$ref": "common.schema.json#/$defs/claim_id"}},
+          "edges": {
+            "type": "array", "minItems": 1, "maxItems": 7,
+            "items": {
+              "type": "object", "additionalProperties": false, "required": ["output_entity", "input_entity"],
+              "properties": {
+                "output_entity": {"$ref": "common.schema.json#/$defs/entity_id"},
+                "input_entity": {"$ref": "common.schema.json#/$defs/entity_id"}
+              }
+            }
+          },
+          "prerequisites": {"$ref": "chain-records.schema.json#/$defs/texts"},
+          "rationale": {"type": "string", "maxLength": 2000}
+        }
+      }
+    }
+  }
+}

@@ -526,7 +526,7 @@ model_connectivity -> image_pin_verification -> target_acquisition -> review_int
   -> ci_configuration_analysis -> source_history_analysis
   -> target_analysis_plan
   -> project_build -> language_build -> tree_sitter_ast -> change_context_analysis
-  -> artifact_indexing -> test_coverage -> profile_data -> artifact_security_analysis
+  -> artifact_indexing -> test_coverage -> profile_data -> debug_symbol_indexing -> artifact_security_analysis
   -> evidence_collection -> cpp_compiled_analysis -> clang_static_analysis
   -> sanitizer_build -> cpp_symbol_index -> cpg_analysis (deprecated; only when enabled)
   -> svf_alias_analysis (opt-in; only when enabled) -> binary_evidence_indexing
@@ -535,8 +535,9 @@ model_connectivity -> image_pin_verification -> target_acquisition -> review_int
   -> code_graph_index -> security_tagging
   -> owasp_control_assessment (enabled by default)
   -> review_data_indexing -> review_package_assembly
-  -> document_issue_analysis -> inference_security_review -> final_publication_gate
-  -> poc_generation (opt-in; only when enabled) -> final_report_publication
+  -> document_issue_analysis -> inference_security_review
+  -> poc_generation -> remediation_planning -> remediation_validation -> dossier_publication
+  -> final_publication_gate -> final_report_publication
 ```
 
 Start a review from the repository root with the virtual environment active:
@@ -633,13 +634,16 @@ third-party metadata sync remains standalone.
 `sanitizer_build` rebuilds the accepted native units with AddressSanitizer and UBSan in its own
 workspace and never runs a produced binary; see
 [`docs/operations/sanitizer-build.md`](docs/operations/sanitizer-build.md).
-`final_publication_gate` and `final_report_publication` call no model: they re-verify the accepted
-inference review and write `final-report.json` and a deterministic `final-report.md`; see
+`final_publication_gate` and `final_report_publication` call no model: the gate certifies the accepted
+review and pre-gate completion evidence, and the report reads only that certified gate snapshot to
+write `final-report.json` and a deterministic `final-report.md`; see
 [`docs/operations/final-report.md`](docs/operations/final-report.md).
-`poc_generation` is an optional job between them, shipped disabled and run by hand on a finished run
-(`appsec-review run job_poc_generation --run-id <id> --upstream-from-run`): a model writes a unit-test function with no
-`main` for each finding the judge agreed with, deterministic validators and a compile check in the build image verify it,
-and nothing is linked or run; see [`docs/operations/poc-generation.md`](docs/operations/poc-generation.md).
+`poc_generation`, remediation planning/validation, and dossier publication run automatically before
+the gate for new reviews. PoC generation writes bounded test/control functions that are compiled,
+never linked or run. Frozen runs retain their resolved settings; a disabled frozen PoC job requires
+explicit authenticated manual admission. See [`docs/operations/poc-generation.md`](docs/operations/poc-generation.md),
+[`docs/operations/remediation.md`](docs/operations/remediation.md), and
+[`docs/operations/dossier-publication.md`](docs/operations/dossier-publication.md).
 
 **Planned, not implemented:** `job_openvex_export` will produce deterministic, model-free
 OpenVEX `affected` statements only for the accepted gate's publishable confirmed findings,

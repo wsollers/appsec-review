@@ -1,7 +1,29 @@
 # Evidence completion and remediation
 
-Status: proposed design, not an implementation or a change to execution authorization.
-Inspected baseline: `d2b64774`, 2026-10-28.
+Status: implementation contract, partially delivered; no change to execution authorization.
+Original inspected baseline: `d2b64774`. Source reconciliation through `dd9c9ad`
+(including `b702eb7`, `7641fa5`, `18eae9f`, `e769645f`, `dd1f8018`, `c44eddc1`),
+stable `a709a10b` and contracts-only OpenVEX handoff `967d1c7f`, 2026-10-28.
+
+The [dossier data inventory](dossier-data-inventory.md) records the source-verified available
+inputs, bounded queries/indexes, producer ownership, visibility and evidence gaps at contract
+commit `5f5548d` and the delivered integration. [Dossier operations](../operations/dossier-publication.md)
+and [remediation operations](../operations/remediation.md) describe the implemented producers and
+their limits; the [documentation implementation record](../reviews/evidence-completion-documentation-inventory.md)
+tracks reconciliation and acceptance gaps.
+
+The chain, remediation and dossier producers, central configuration/registration/pre-gate graph
+and completion metrics now exist. The shared reader accepts review `/3`; chain/base completeness
+isolation, immutable PoC `/2`, five-capability gate `/2` and gate-only report `/2` are delivered.
+The owner-verified [seeded PDF sample](../operations/dossier-publication.md#verified-seeded-sample)
+is retained. The [bounded acceptance ledger](../reviews/evidence-completion-documentation-inventory.md#acceptance-ledger)
+records historical owner source `039b24e4`: two native checks passed, including all seven lanes
+with offline model/compiler/renderer boundary doubles, unchanged findings and deterministic
+report retry. This is **not** live reproduction, current-main authorization or a full-repository
+clean result. Focused OpenVEX consumer compatibility passes separately; user-owned current-main
+manual validation remains distinct. The sections below
+retain the original design rationale and requirements; current delivered data is enumerated in
+the [inventory reconciliation](dossier-data-inventory.md#delivered-source-and-remaining-integration).
 
 ## Recommendation
 
@@ -16,7 +38,7 @@ execute them**. A compiled function is developer documentation, not an observed 
 Runtime proof, automatic patch application to a target, and automatic release clearance are not
 part of this proposal.
 
-## 1. What is missing today
+## 1. What was missing at the original baseline
 
 The gap is partly missing implementation and partly publication ordering:
 
@@ -422,3 +444,18 @@ These decisions bind the implementation partitions:
 10. The manager owns central TOML/config-loader wiring, registry, orchestration, input matrix and
     final end-to-end integration. Implementation agents own disjoint producers and focused tests.
     No agent pushes, opens a PR, merges main or edits user-owned targets.
+11. The user selected **Run both automatically for new reviews** for remediation planning and
+    bounded nonexecuting validation. After implementation acceptance, central defaults will enable
+    both for new configurations; automatic compile-only PoC and dossier publication are also
+    intended. This is a rollout decision, not a claim about the inspected baseline defaults.
+    Existing runs keep their immutable frozen configuration, including disabled capabilities:
+    changing checkout defaults must not silently activate them on resume or rewrite old runs.
+    Automatic processing grants no runtime execution, reproduction or `fixed` assurance.
+12. Bake telemetry and metrics into the first implementation of every completion lane. Reuse
+    `context.events`, the canonical run stream and `observability.telemetry.aggregate_run_metrics` /
+    `data/telemetry/summary.json`, not a separate service. Track stages/candidates, terminal
+    outcomes, caps, gaps, durations, retries and adapter/render failures, with model usage where
+    emitted. Use low-cardinality aggregates and resolving identities; never log source, patches,
+    PoC/prompt contents or credentials. Missing usage and integrity/coverage gaps remain explicit.
+    The [telemetry architecture](telemetry.md#evidence-completion-tracking-commissioned) records the
+    implementation/reconciliation boundary.
