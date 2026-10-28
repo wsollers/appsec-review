@@ -1,0 +1,7 @@
+name: appsec-review/graph-export-ruby
+version: 1.0.0
+description: >-
+  appsec-review code-graph export queries for Ruby (appsec-review/codeql-graph-export/1).
+  Table queries made of primitive-column query predicates only; this is not a SARIF suite.
+dependencies:
+  codeql/ruby-all: 7.0.0

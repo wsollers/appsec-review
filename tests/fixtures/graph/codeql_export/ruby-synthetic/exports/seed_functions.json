@@ -1,0 +1,1 @@
+{"bqrs_sha256":"88a8a10254b7964150f96bc1195c0fdda698e7bcf995be122df03c26d19d6c4b","columns":["seed_path","seed_start_line","seed_end_line","function_name","function_path","function_start_line","function_start_column"],"query_id":"seed_functions","row_count":0,"rows":[],"schema":"appsec-review/codeql-graph-export/1","truncated":false}

@@ -1,0 +1,260 @@
+{
+  "schema": "appsec-review/graph-export-expected-facts/1",
+  "fixture": "ruby-synthetic",
+  "description": "Semantic floor for the Ruby graph-export pack over source/synthetic.rb. Only lines and semantic columns are matched so the live tier can hold a pinned-image export to the same expectations.",
+  "expectations": [
+    {
+      "case": "remote_to_sql",
+      "query_id": "sink_sites",
+      "where": {
+        "sink_start_line": 21,
+        "model": "SqlExecution",
+        "api": "find_by_sql"
+      }
+    },
+    {
+      "case": "remote_to_sql",
+      "query_id": "path_flows",
+      "where": {
+        "source_start_line": 20,
+        "sink_start_line": 21,
+        "argument_index": 0
+      }
+    },
+    {
+      "case": "remote_to_sql",
+      "query_id": "source_sites",
+      "where": {
+        "source_start_line": 20,
+        "model": "RemoteFlowSource"
+      }
+    },
+    {
+      "case": "remote_to_command",
+      "query_id": "sink_sites",
+      "where": {
+        "sink_start_line": 27,
+        "model": "SystemCommandExecution",
+        "api": "system"
+      }
+    },
+    {
+      "case": "remote_to_command",
+      "query_id": "path_flows",
+      "where": {
+        "source_start_line": 25,
+        "sink_start_line": 29,
+        "argument_index": 0
+      }
+    },
+    {
+      "case": "remote_to_path",
+      "query_id": "sink_sites",
+      "where": {
+        "sink_start_line": 14,
+        "model": "FileSystemAccess",
+        "api": "read"
+      }
+    },
+    {
+      "case": "remote_to_path",
+      "query_id": "path_flows",
+      "where": {
+        "source_start_line": 43,
+        "sink_start_line": 14,
+        "argument_index": 0
+      }
+    },
+    {
+      "case": "remote_to_path",
+      "query_id": "path_edges",
+      "where": {
+        "source_start_line": 43,
+        "sink_start_line": 14,
+        "to_start_line": 13,
+        "edge_kind": "call"
+      }
+    },
+    {
+      "case": "remote_to_ssrf",
+      "query_id": "sink_sites",
+      "where": {
+        "sink_start_line": 34,
+        "model": "HttpClientRequest",
+        "argument_index": 0
+      }
+    },
+    {
+      "case": "remote_to_ssrf",
+      "query_id": "path_flows",
+      "where": {
+        "source_start_line": 33,
+        "sink_start_line": 34
+      }
+    },
+    {
+      "case": "remote_to_deserialization",
+      "query_id": "sink_sites",
+      "where": {
+        "sink_start_line": 39,
+        "model": "UnsafeDeserialization",
+        "api": "load"
+      }
+    },
+    {
+      "case": "remote_to_deserialization",
+      "query_id": "path_flows",
+      "where": {
+        "source_start_line": 38,
+        "sink_start_line": 39
+      }
+    },
+    {
+      "case": "argv_source",
+      "query_id": "source_sites",
+      "where": {
+        "source_start_line": 64,
+        "model": "LocalFlowSource",
+        "declared_in": "ARGV"
+      }
+    },
+    {
+      "case": "argv_source",
+      "query_id": "path_flows",
+      "where": {
+        "source_start_line": 64,
+        "sink_start_line": 64
+      }
+    },
+    {
+      "case": "environment_source",
+      "query_id": "source_sites",
+      "where": {
+        "source_start_line": 65,
+        "model": "LocalFlowSource",
+        "declared_in": "ENV"
+      }
+    },
+    {
+      "case": "environment_source",
+      "query_id": "path_flows",
+      "where": {
+        "source_start_line": 65,
+        "sink_start_line": 66
+      }
+    },
+    {
+      "case": "sanitized_path",
+      "query_id": "sink_sites",
+      "where": {
+        "sink_start_line": 8,
+        "model": "FileSystemAccess",
+        "dominating_sanitizer_count": 1
+      }
+    },
+    {
+      "case": "sanitized_path",
+      "query_id": "path_sanitizers",
+      "where": {
+        "sink_start_line": 8,
+        "sanitizer_start_line": 8,
+        "api": "basename"
+      }
+    },
+    {
+      "case": "dominating_guard",
+      "query_id": "guards",
+      "where": {
+        "sink_start_line": 27,
+        "guard_state": "dominating",
+        "polarity": "true_branch",
+        "condition_start_line": 26,
+        "comparison_operator": "==",
+        "constrains_sink_operand": "true"
+      }
+    },
+    {
+      "case": "non_dominating_guard",
+      "query_id": "guards",
+      "where": {
+        "sink_start_line": 29,
+        "guard_state": "non_dominating",
+        "condition_start_line": 26
+      }
+    },
+    {
+      "case": "cross_function_summary",
+      "query_id": "flow_summaries",
+      "where": {
+        "function_name": "CachedStore::fetch",
+        "from_kind": "parameter",
+        "from_index": 0,
+        "to_kind": "sink",
+        "to_model": "FileSystemAccess"
+      }
+    },
+    {
+      "case": "cross_function_summary",
+      "query_id": "flow_summaries",
+      "where": {
+        "function_name": "Cli::query",
+        "from_kind": "parameter",
+        "from_index": 0,
+        "to_kind": "return"
+      }
+    },
+    {
+      "case": "virtual_dispatch",
+      "query_id": "call_sites",
+      "where": {
+        "caller_name": "UsersController::read_file",
+        "call_start_line": 43,
+        "callee_name": "Store::fetch",
+        "dispatch": "virtual_resolved"
+      }
+    },
+    {
+      "case": "virtual_dispatch",
+      "query_id": "call_sites",
+      "where": {
+        "caller_name": "UsersController::read_file",
+        "call_start_line": 43,
+        "callee_name": "CachedStore::fetch",
+        "dispatch": "virtual_resolved"
+      }
+    },
+    {
+      "case": "unresolved_reflective_call",
+      "query_id": "call_sites",
+      "where": {
+        "caller_name": "UsersController::dispatch_action",
+        "call_start_line": 48,
+        "dispatch": "unresolved_indirect"
+      }
+    },
+    {
+      "case": "unresolved_reflective_call",
+      "query_id": "sink_sites",
+      "where": {
+        "sink_start_line": 48,
+        "model": "CodeExecution.reflective"
+      }
+    },
+    {
+      "case": "range_not_applicable",
+      "query_id": "ranges",
+      "where": {
+        "sink_start_line": 21,
+        "applicability": "not_applicable"
+      }
+    },
+    {
+      "case": "range_not_applicable",
+      "query_id": "ranges",
+      "where": {
+        "sink_start_line": 27,
+        "applicability": "not_applicable"
+      }
+    }
+  ]
+}
