@@ -26,6 +26,21 @@ def test_lane_contract_bounds_selection_and_workers() -> None:
             LaneSpec(**{"name": spec.name, "nodes": spec.nodes, **changes})
 
 
+def test_control_fixture_selects_only_explicitly_pinned_abridged_catalogs(tmp_path: Path) -> None:
+    from appsec_review.owasp_workbench.standards import load_catalogs
+    from tests.integration.test_control_evidence_acceptance import ROOT, _prepare
+
+    workspace = LaneWorkspace.create(tmp_path, "control-config")
+    config, _ = _prepare(workspace)
+    settings = config.job("job_owasp_control_assessment").settings["standards"]
+    catalogs = load_catalogs(ROOT, settings)
+    assert len(catalogs) == 5
+    assert all(catalog.fixture and catalog.coverage["completeness"] == "abridged_fixture"
+               for catalog in catalogs.values())
+    assert all(source["catalog_path"].startswith("tests/fixtures/acceptance_controls/owasp/")
+               for source in settings.values())
+
+
 def test_acceptance_uses_isolated_roots_and_production_telemetry(tmp_path: Path) -> None:
     production = tmp_path / "runs" / "live"
     production.mkdir(parents=True)

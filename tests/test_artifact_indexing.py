@@ -42,7 +42,8 @@ def _identity(run_root: Path, path: Path) -> dict[str, object]:
             "size_bytes": path.stat().st_size}
 
 
-def _seed(tmp_path: Path, *, source_files: dict[str, str] | None = None):
+def _seed(tmp_path: Path, *, source_files: dict[str, str] | None = None,
+          build_families: tuple[str, ...] = ("native", "dotnet", "wasm", "python")):
     config_path = tmp_path / "appsec-review.toml"
     config_text = (ROOT / "appsec-review.toml").read_text(encoding="utf-8")
     if "[jobs.job_artifact_indexing]" not in config_text:
@@ -101,6 +102,8 @@ workers = 1
     receipts = []
     action_entities = []
     for ordinal, (unit_id, family, artifacts_spec) in enumerate(specifications, 1):
+        if family not in build_families:
+            continue
         workspace = run_root / "data" / "build" / family / unit_id / "workspace"
         workspace.mkdir(parents=True)
         artifacts = []
@@ -195,6 +198,20 @@ workers = 1
         "manifest_path": manifest_identity["path"], "manifest_sha256": manifest_identity["sha256"],
     })
     return config, target, snapshot, run_root, receipts, accepted_path, handoff_path, latest
+
+
+@pytest.mark.parametrize("families", [("native",), ("native", "dotnet")])
+def test_recorded_build_fixture_can_bound_families_without_changing_receipt_contract(
+        tmp_path: Path, families: tuple[str, ...]) -> None:
+    _, _, _, root, receipts, accepted_path, handoff_path, _ = _seed(
+        tmp_path, build_families=families)
+    assert tuple(receipt["family"] for receipt in receipts) == families
+    assert all(receipt["schema"] == "appsec-review/language-build-receipt/1" for receipt in receipts)
+    accepted = json.loads(accepted_path.read_text(encoding="utf-8"))
+    assert accepted["receipts"] == receipts
+    handoff = json.loads(handoff_path.read_text(encoding="utf-8"))
+    reference = handoff["outputs"]["acceptance.publish_handoff"]["artifact"]
+    assert file_sha256(root / reference["path"]) == reference["sha256"]
 
 
 def _publish_changed_language_receipts(run_root: Path, receipts: list[dict], accepted_path: Path,
