@@ -16,8 +16,8 @@ from appsec_review.jobs.cataloging import source_fingerprint
 # The deterministic review graph in execution order; ``start``, ``resume`` and ``--force-from`` all
 # use it. ``job_image_pin_verification`` runs after the model gate and before intake and fails the run
 # when any enabled catalog image or configured image-ID pin does not resolve on the local daemon to
-# exactly its pinned image; it never builds an image. ``job_code_graph_index``
-# consumes CodeQL and prioritization output and must precede the indexing job that accounts for it.
+# exactly its pinned image; it never builds an image. The code graph and security tags contextualize
+# OWASP before data indexing, hunt assembly and red/blue investigation.
 GRAPH_JOB_IDS = ("job_model_connectivity", "job_image_pin_verification", "job_review_intake", "job_target_catalog",
                  "job_source_history_analysis",
                  "job_target_analysis_plan", "job_tree_sitter_ast",
@@ -29,7 +29,8 @@ GRAPH_JOB_IDS = ("job_model_connectivity", "job_image_pin_verification", "job_re
                  "job_cpp_symbol_index", "job_cpg_analysis",
                  "job_evidence_collection", "job_dependency_intelligence", "job_change_context_analysis",
                  "job_codeql_analysis",
-                 "job_review_prioritization", "job_code_graph_index", "job_review_data_indexing")
+                 "job_review_prioritization", "job_code_graph_index", "job_security_tagging",
+                 "job_owasp_control_assessment", "job_review_data_indexing")
 # Consumers of the accepted index that run after the resumable graph.
 POST_INDEX_JOB_IDS = ("job_review_package_assembly", "job_document_issue_analysis",
                       "job_inference_security_review", "job_final_publication_gate",
