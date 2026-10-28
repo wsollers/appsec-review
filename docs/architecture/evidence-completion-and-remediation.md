@@ -388,3 +388,37 @@ Acceptance must cover:
 The design is complete when these capabilities have real producers, accepted contracts, exact
 accounting and truthful publication. It deliberately does not claim that compile-only
 demonstrations reproduce vulnerabilities or that build-checked patches prove remediation.
+
+## 11. Parallel implementation decisions
+
+The user authorized parallel implementation and dossier rendering on 2026-10-28, and selected
+one document dossier per **confirmed finding**, irrespective of source-code or document origin.
+These decisions bind the implementation partitions:
+
+1. Preserve compile-only PoCs and nonexecuting remediation checks; no new runtime authorization.
+2. Keep chains in the inference job and its single ledger, before review publication.
+3. Use `jobs/completion_contracts.py` for shared schema identifiers, exact finding bindings,
+   dossier kinds and nonexecution assurance. Reuse `ProcessingDisposition` for capability states.
+4. Remediation summary records use `items`, `gaps`, `upstream` and `run_id`; each item carries
+   `finding: {claim_id, finding_package_id, sha256}`. Each producer's
+   `acceptance.publish_handoff` output binds its schema, summary artifact, item count, gaps and
+   terminal status, following the existing semantic-job publication pattern.
+5. Add `job_dossier_publication` after evidence/remediation producers and before the final gate.
+   It consumes accepted review and optional PoC/remediation handoffs, never the gate. The gate
+   certifies the dossier manifest; the final report exposes artifact references and render status.
+6. Produce one confirmed-finding dossier per confirmed package and one PoC dossier per accepted
+   PoC candidate outcome, including unsuccessful/unavailable outcomes with explicit limitations.
+   Retain deterministic dossier JSON, LaTeX source, PDF when rendered, and rendering receipts as
+   immutable run artifacts. Failed rendering retains LaTeX and a named gap, never a fake PDF.
+7. Dossiers are protected developer artifacts. They may include bounded resolving source excerpts
+   and inert PoC function text, but no credentials, raw prompts or arbitrary model transcripts.
+   Public report projections contain only sanitized descriptions, statuses and artifact references.
+8. Reuse the commissioned LaTeX container, template/palette and hardened execution path. The
+   rendering agent owns building/smoking that image on this host; no other agent changes image pins
+   or prunes Docker state. Actual PDF rendering, not only a mock, is required for the seeded sample.
+9. The documentation agent owns architecture/operations reconciliation and a source-verified
+   dossier input inventory that distinguishes available evidence, bounded queries/indexes,
+   unavailable capabilities, visibility and resolving provenance.
+10. The manager owns central TOML/config-loader wiring, registry, orchestration, input matrix and
+    final end-to-end integration. Implementation agents own disjoint producers and focused tests.
+    No agent pushes, opens a PR, merges main or edits user-owned targets.
