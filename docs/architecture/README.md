@@ -73,6 +73,9 @@ Repository authority remains in [`../../AGENTS.md`](../../AGENTS.md). This page 
   answers, and how stances become ledger states.
 - [`review-judge-and-poc.md`](review-judge-and-poc.md) — the judge role (A/B shuffled sides), PoC candidates, and
   `job_poc_generation`: a never-executed, compile-checked unit-test function for developers.
+- [`evidence-completion-and-remediation.md`](evidence-completion-and-remediation.md) — proposed end-to-end
+  PoC publication, evidence-qualified attack chains, remediation planning and assurance-labelled
+  validation, with one final gate after all producers; preserves compile-only PoC policy.
 - [`../operations/poc-generation.md`](../operations/poc-generation.md) — `job_poc_generation`: compile-checked proof-of-concept unit-test functions (no `main`, never run) for findings the judge agreed with; shipped disabled and run by hand.
 - [`indexing-and-query-reuse.md`](indexing-and-query-reuse.md) — review-data indexing and reusable
   query design.
