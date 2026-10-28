@@ -59,8 +59,11 @@
    "counts": {},
    "facts": 11,
    "family": "range_fact",
-   "gaps": [],
-   "status": "complete"
+   "gaps": [
+    "range_analysis_not_performed: the javascript export does not perform semantic range analysis; empty exports are not proof of a bound",
+    "not_applicable: all 11 exported sink operands are outside the integral range model; no interval is computed"
+   ],
+   "status": "partial"
   }
  ],
  "facts": [
@@ -6856,7 +6859,7 @@
     "exact": true,
     "family": "range_fact",
     "gaps": [
-     "not_applicable: the operand is not integral; no interval is computed"
+     "not_applicable: the javascript export does not perform range analysis; no interval is computed"
     ],
     "producer": {
      "catalog_version": "appsec-review/graph-catalog/1",
@@ -6866,7 +6869,7 @@
      "tool_version": "2.27.0"
     },
     "result": {
-     "analysis": "codeql-simple-range-analysis",
+     "analysis": "not-performed",
      "applicability": "not_applicable",
      "conversions": [],
      "interval": null,
@@ -6953,7 +6956,7 @@
     "exact": true,
     "family": "range_fact",
     "gaps": [
-     "not_applicable: the operand is not integral; no interval is computed"
+     "not_applicable: the javascript export does not perform range analysis; no interval is computed"
     ],
     "producer": {
      "catalog_version": "appsec-review/graph-catalog/1",
@@ -6963,7 +6966,7 @@
      "tool_version": "2.27.0"
     },
     "result": {
-     "analysis": "codeql-simple-range-analysis",
+     "analysis": "not-performed",
      "applicability": "not_applicable",
      "conversions": [],
      "interval": null,
@@ -7050,7 +7053,7 @@
     "exact": true,
     "family": "range_fact",
     "gaps": [
-     "not_applicable: the operand is not integral; no interval is computed"
+     "not_applicable: the javascript export does not perform range analysis; no interval is computed"
     ],
     "producer": {
      "catalog_version": "appsec-review/graph-catalog/1",
@@ -7060,7 +7063,7 @@
      "tool_version": "2.27.0"
     },
     "result": {
-     "analysis": "codeql-simple-range-analysis",
+     "analysis": "not-performed",
      "applicability": "not_applicable",
      "conversions": [],
      "interval": null,
@@ -7147,7 +7150,7 @@
     "exact": true,
     "family": "range_fact",
     "gaps": [
-     "not_applicable: the operand is not integral; no interval is computed"
+     "not_applicable: the javascript export does not perform range analysis; no interval is computed"
     ],
     "producer": {
      "catalog_version": "appsec-review/graph-catalog/1",
@@ -7157,7 +7160,7 @@
      "tool_version": "2.27.0"
     },
     "result": {
-     "analysis": "codeql-simple-range-analysis",
+     "analysis": "not-performed",
      "applicability": "not_applicable",
      "conversions": [],
      "interval": null,
@@ -7244,7 +7247,7 @@
     "exact": true,
     "family": "range_fact",
     "gaps": [
-     "not_applicable: the operand is not integral; no interval is computed"
+     "not_applicable: the javascript export does not perform range analysis; no interval is computed"
     ],
     "producer": {
      "catalog_version": "appsec-review/graph-catalog/1",
@@ -7254,7 +7257,7 @@
      "tool_version": "2.27.0"
     },
     "result": {
-     "analysis": "codeql-simple-range-analysis",
+     "analysis": "not-performed",
      "applicability": "not_applicable",
      "conversions": [],
      "interval": null,
@@ -7341,7 +7344,7 @@
     "exact": true,
     "family": "range_fact",
     "gaps": [
-     "not_applicable: the operand is not integral; no interval is computed"
+     "not_applicable: the javascript export does not perform range analysis; no interval is computed"
     ],
     "producer": {
      "catalog_version": "appsec-review/graph-catalog/1",
@@ -7351,7 +7354,7 @@
      "tool_version": "2.27.0"
     },
     "result": {
-     "analysis": "codeql-simple-range-analysis",
+     "analysis": "not-performed",
      "applicability": "not_applicable",
      "conversions": [],
      "interval": null,
@@ -7438,7 +7441,7 @@
     "exact": true,
     "family": "range_fact",
     "gaps": [
-     "not_applicable: the operand is not integral; no interval is computed"
+     "not_applicable: the javascript export does not perform range analysis; no interval is computed"
     ],
     "producer": {
      "catalog_version": "appsec-review/graph-catalog/1",
@@ -7448,7 +7451,7 @@
      "tool_version": "2.27.0"
     },
     "result": {
-     "analysis": "codeql-simple-range-analysis",
+     "analysis": "not-performed",
      "applicability": "not_applicable",
      "conversions": [],
      "interval": null,
@@ -7535,7 +7538,7 @@
     "exact": true,
     "family": "range_fact",
     "gaps": [
-     "not_applicable: the operand is not integral; no interval is computed"
+     "not_applicable: the javascript export does not perform range analysis; no interval is computed"
     ],
     "producer": {
      "catalog_version": "appsec-review/graph-catalog/1",
@@ -7545,7 +7548,7 @@
      "tool_version": "2.27.0"
     },
     "result": {
-     "analysis": "codeql-simple-range-analysis",
+     "analysis": "not-performed",
      "applicability": "not_applicable",
      "conversions": [],
      "interval": null,
@@ -7632,7 +7635,7 @@
     "exact": true,
     "family": "range_fact",
     "gaps": [
-     "not_applicable: the operand is not integral; no interval is computed"
+     "not_applicable: the javascript export does not perform range analysis; no interval is computed"
     ],
     "producer": {
      "catalog_version": "appsec-review/graph-catalog/1",
@@ -7642,7 +7645,7 @@
      "tool_version": "2.27.0"
     },
     "result": {
-     "analysis": "codeql-simple-range-analysis",
+     "analysis": "not-performed",
      "applicability": "not_applicable",
      "conversions": [],
      "interval": null,
@@ -7729,7 +7732,7 @@
     "exact": true,
     "family": "range_fact",
     "gaps": [
-     "not_applicable: the operand is not integral; no interval is computed"
+     "not_applicable: the javascript export does not perform range analysis; no interval is computed"
     ],
     "producer": {
      "catalog_version": "appsec-review/graph-catalog/1",
@@ -7739,7 +7742,7 @@
      "tool_version": "2.27.0"
     },
     "result": {
-     "analysis": "codeql-simple-range-analysis",
+     "analysis": "not-performed",
      "applicability": "not_applicable",
      "conversions": [],
      "interval": null,
@@ -7826,7 +7829,7 @@
     "exact": true,
     "family": "range_fact",
     "gaps": [
-     "not_applicable: the operand is not integral; no interval is computed"
+     "not_applicable: the javascript export does not perform range analysis; no interval is computed"
     ],
     "producer": {
      "catalog_version": "appsec-review/graph-catalog/1",
@@ -7836,7 +7839,7 @@
      "tool_version": "2.27.0"
     },
     "result": {
-     "analysis": "codeql-simple-range-analysis",
+     "analysis": "not-performed",
      "applicability": "not_applicable",
      "conversions": [],
      "interval": null,

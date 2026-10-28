@@ -103,11 +103,17 @@ def language_matrix(shards: ShardSet, lead_languages: Mapping[str, int], *,
     for row in shards.entities(shards.select(index="source", job="job_target_catalog"), kinds=("source_file",)):
         source_counts[canonical_language(row["payload"].get("language"))] += 1
     syntax: dict[str, list[str]] = defaultdict(list)
+    scope_languages: dict[str, str] = {}
     for shard in shards.select(index="analysis", job="job_tree_sitter_ast"):
         shard_id = str(shard.get("shard_id"))
+        producer = shard.get("producer", {})
+        scope_languages.update({str(scope): canonical_language(language)
+                                for scope, language in producer.get("scope_languages", {}).items()})
         if shard_id.startswith("tree-sitter-coverage-"):
             continue
-        syntax[canonical_language(shard.get("producer", {}).get("language") or shard_id.split("-")[0])].append(shard_id)
+        language = canonical_language(producer.get("language"))
+        scope_languages[str(producer.get("scope_id") or shard_id)] = language
+        syntax[language].append(shard_id)
     syntax_states = {}
     for row in shards.coverage(shards.select(index="analysis", job="job_tree_sitter_ast", prefix="tree-sitter-coverage-")):
         syntax_states[str(row["area"])] = row["status"]
@@ -123,7 +129,7 @@ def language_matrix(shards: ShardSet, lead_languages: Mapping[str, int], *,
     rows = []
     for language in sorted(set(source_counts) | set(syntax) | set(codeql) | set(graph)):
         native = language == "c/c++"
-        scope_states = [state for scope, state in syntax_states.items() if canonical_language(scope.split("-")[0]) == language]
+        scope_states = [state for scope, state in syntax_states.items() if scope_languages.get(scope) == language]
         row = {
             "cell_type": "language", "language": language, "source_files": source_counts.get(language, 0),
             "lanes": {

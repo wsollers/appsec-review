@@ -8203,7 +8203,7 @@
      "tool_version": "2.27.0"
     },
     "result": {
-     "analysis": "codeql-simple-range-analysis",
+     "analysis": "codeql-constant-and-sign-analysis",
      "applicability": "not_applicable",
      "conversions": [],
      "interval": null,
@@ -8300,7 +8300,7 @@
      "tool_version": "2.27.0"
     },
     "result": {
-     "analysis": "codeql-simple-range-analysis",
+     "analysis": "codeql-constant-and-sign-analysis",
      "applicability": "not_applicable",
      "conversions": [],
      "interval": null,
@@ -8397,7 +8397,7 @@
      "tool_version": "2.27.0"
     },
     "result": {
-     "analysis": "codeql-simple-range-analysis",
+     "analysis": "codeql-constant-and-sign-analysis",
      "applicability": "not_applicable",
      "conversions": [],
      "interval": null,
@@ -8494,7 +8494,7 @@
      "tool_version": "2.27.0"
     },
     "result": {
-     "analysis": "codeql-simple-range-analysis",
+     "analysis": "codeql-constant-and-sign-analysis",
      "applicability": "not_applicable",
      "conversions": [],
      "interval": null,
@@ -8591,7 +8591,7 @@
      "tool_version": "2.27.0"
     },
     "result": {
-     "analysis": "codeql-simple-range-analysis",
+     "analysis": "codeql-constant-and-sign-analysis",
      "applicability": "not_applicable",
      "conversions": [],
      "interval": null,
@@ -8688,7 +8688,7 @@
      "tool_version": "2.27.0"
     },
     "result": {
-     "analysis": "codeql-simple-range-analysis",
+     "analysis": "codeql-constant-and-sign-analysis",
      "applicability": "not_applicable",
      "conversions": [],
      "interval": null,
@@ -8781,7 +8781,7 @@
      "tool_version": "2.27.0"
     },
     "result": {
-     "analysis": "codeql-simple-range-analysis",
+     "analysis": "codeql-constant-and-sign-analysis",
      "applicability": "integral",
      "conversions": [],
      "interval": {
@@ -8877,7 +8877,7 @@
      "tool_version": "2.27.0"
     },
     "result": {
-     "analysis": "codeql-simple-range-analysis",
+     "analysis": "codeql-constant-and-sign-analysis",
      "applicability": "integral",
      "conversions": [
       {
@@ -9000,7 +9000,7 @@
      "tool_version": "2.27.0"
     },
     "result": {
-     "analysis": "codeql-simple-range-analysis",
+     "analysis": "codeql-constant-and-sign-analysis",
      "applicability": "not_applicable",
      "conversions": [],
      "interval": null,
@@ -9097,7 +9097,7 @@
      "tool_version": "2.27.0"
     },
     "result": {
-     "analysis": "codeql-simple-range-analysis",
+     "analysis": "codeql-constant-and-sign-analysis",
      "applicability": "not_applicable",
      "conversions": [],
      "interval": null,
@@ -9194,7 +9194,7 @@
      "tool_version": "2.27.0"
     },
     "result": {
-     "analysis": "codeql-simple-range-analysis",
+     "analysis": "codeql-constant-and-sign-analysis",
      "applicability": "not_applicable",
      "conversions": [],
      "interval": null,

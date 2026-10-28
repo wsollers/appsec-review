@@ -593,7 +593,13 @@ def _label_rows(rows: list[Any], labels: LabelTable) -> None:
 
 
 def _grant_graph_row(row: Any, capability: CellCapability, granted: set[str]) -> None:
-    if not isinstance(row, dict) or not capability.graph_row_in_scope(row):
+    if not isinstance(row, dict):
+        return
+    if capability.syntax_row_in_scope(row):
+        # Grant only the row actually returned, not enclosing identifiers or sibling file nodes.
+        granted.add(row["identity"])
+        return
+    if not capability.graph_row_in_scope(row):
         return
     granted.add(row["identity"])
     granted.update(identity for identity in _identities(row.get("payload"))
