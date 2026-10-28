@@ -622,7 +622,7 @@ class JobRunner:
         for unit_id, output in result.get("outputs", {}).items():
             if isinstance(output, Mapping):
                 handoff_outputs[unit_id] = {key: output[key] for key in (
-                    "schema", "artifact", "identity", "pointer", "metadata_path", "item_count",
+                    "schema", "artifact", "graph_export_artifact", "identity", "pointer", "metadata_path", "item_count",
                     "gaps", "index_manifest", "index_identity", "terminal_status", "dispositions",
                 ) if key in output}
         identities = job.identities(self.config.runtime.repository_root, self.config.review_policy.releases)

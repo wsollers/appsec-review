@@ -538,6 +538,18 @@ def test_node_native_failure_does_not_mask_source_scope() -> None:
                "no exact replayable command set" in gap for gap in plan.gaps)
 
 
+@pytest.mark.parametrize("status,gaps,expected", [
+    ("SUCCEEDED", [], "SUCCEEDED"),
+    ("NOT_APPLICABLE", [], "SUCCEEDED"),
+    ("SUCCEEDED", ["bounded export truncated"], "COMPLETED_WITH_GAPS"),
+    ("SKIPPED", ["no seeds"], "COMPLETED_WITH_GAPS"),
+    ("FAILED", ["export timed out"], "COMPLETED_WITH_GAPS"),
+])
+def test_publication_status_accounts_for_graph_export_coverage(status, gaps, expected):
+    assert publication_status([], [{"terminal_status": "SUCCEEDED"}],
+                              exports=[{"export_status": status, "gaps": gaps}]) == expected
+
+
 def test_java_commands_without_roles_derive_order_from_accepted_recipe() -> None:
     java = receipt("java", "jvm", "build-unit-aaaaaaaaaaaaaaaaaaaa",
                    commands=[{"ordinal": 1}, {"ordinal": 2}])
