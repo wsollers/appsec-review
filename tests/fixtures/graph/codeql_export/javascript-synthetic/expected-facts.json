@@ -1,0 +1,325 @@
+{
+  "schema": "appsec-review/graph-export-expected-facts/1",
+  "fixture": "javascript-synthetic",
+  "description": "Semantic floor for the javascript graph-export pack over source/: each expectation needs at least one row of its export whose named columns equal the given values. Shared by the offline check of the hand-authored recording and the live tier.",
+  "expectations": [
+    {
+      "case": "remote_to_sql",
+      "query_id": "sink_sites",
+      "where": {
+        "model": "SqlInjection::Sink",
+        "api": "query",
+        "function_name": "handleSql"
+      }
+    },
+    {
+      "case": "remote_to_sql",
+      "query_id": "path_flows",
+      "where": {
+        "source_path": "app.js",
+        "source_start_line": 17,
+        "source_start_column": 25,
+        "sink_path": "app.js",
+        "sink_start_line": 17,
+        "sink_start_column": 3
+      }
+    },
+    {
+      "case": "remote_to_sql",
+      "query_id": "path_edges",
+      "where": {
+        "sink_path": "app.js",
+        "sink_start_line": 17,
+        "sink_start_column": 3,
+        "from_function": "handleSql",
+        "to_function": "buildQuery",
+        "edge_kind": "call"
+      }
+    },
+    {
+      "case": "remote_to_command",
+      "query_id": "path_flows",
+      "where": {
+        "source_path": "app.js",
+        "source_start_line": 21,
+        "source_start_column": 16,
+        "sink_path": "app.js",
+        "sink_start_line": 25,
+        "sink_start_column": 3
+      }
+    },
+    {
+      "case": "remote_to_command",
+      "query_id": "sink_sites",
+      "where": {
+        "model": "CommandInjection::Sink",
+        "api": "exec",
+        "declared_in": "child_process"
+      }
+    },
+    {
+      "case": "remote_to_path_sanitized",
+      "query_id": "sink_sites",
+      "where": {
+        "model": "TaintedPath::Sink",
+        "api": "readFileSync",
+        "dominating_sanitizer_count": 1
+      }
+    },
+    {
+      "case": "remote_to_path_sanitized",
+      "query_id": "path_sanitizers",
+      "where": {
+        "sink_path": "app.js",
+        "sink_start_line": 30,
+        "sink_start_column": 3,
+        "api": "basename"
+      }
+    },
+    {
+      "case": "remote_to_ssrf",
+      "query_id": "sink_sites",
+      "where": {
+        "model": "RequestForgery::Sink",
+        "api": "get",
+        "declared_in": "http"
+      }
+    },
+    {
+      "case": "remote_to_ssrf",
+      "query_id": "path_flows",
+      "where": {
+        "source_path": "app.js",
+        "source_start_line": 34,
+        "source_start_column": 18,
+        "sink_path": "app.js",
+        "sink_start_line": 35,
+        "sink_start_column": 3
+      }
+    },
+    {
+      "case": "remote_to_deserialization",
+      "query_id": "sink_sites",
+      "where": {
+        "model": "api",
+        "api": "unserialize",
+        "declared_in": "node-serialize",
+        "argument_index": 0
+      }
+    },
+    {
+      "case": "remote_to_deserialization",
+      "query_id": "path_flows",
+      "where": {
+        "source_path": "app.js",
+        "source_start_line": 39,
+        "source_start_column": 16,
+        "sink_path": "app.js",
+        "sink_start_line": 40,
+        "sink_start_column": 3
+      }
+    },
+    {
+      "case": "remote_to_html",
+      "query_id": "sink_sites",
+      "where": {
+        "model": "ReflectedXss::Sink",
+        "api": "send"
+      }
+    },
+    {
+      "case": "remote_to_html",
+      "query_id": "call_sites",
+      "where": {
+        "callee_name": "<indirect:res.send>",
+        "dispatch": "unresolved_indirect"
+      }
+    },
+    {
+      "case": "argv_source",
+      "query_id": "source_sites",
+      "where": {
+        "model": "ThreatModelSource.commandargs",
+        "source_type": "process.argv",
+        "function_name": "runFromArgs"
+      }
+    },
+    {
+      "case": "argv_source",
+      "query_id": "path_flows",
+      "where": {
+        "source_path": "cli.js",
+        "source_start_line": 9,
+        "source_start_column": 14,
+        "sink_path": "cli.js",
+        "sink_start_line": 5,
+        "sink_start_column": 3
+      }
+    },
+    {
+      "case": "env_source",
+      "query_id": "source_sites",
+      "where": {
+        "model": "ThreatModelSource.environment",
+        "source_type": "process.env"
+      }
+    },
+    {
+      "case": "env_source",
+      "query_id": "path_flows",
+      "where": {
+        "source_path": "cli.js",
+        "source_start_line": 13,
+        "source_start_column": 14,
+        "sink_path": "cli.js",
+        "sink_start_line": 5,
+        "sink_start_column": 3
+      }
+    },
+    {
+      "case": "api_source_and_log_sink",
+      "query_id": "source_sites",
+      "where": {
+        "model": "api",
+        "api": "question",
+        "declared_in": "readline-sync",
+        "node_kind": "return_value",
+        "index": -1
+      }
+    },
+    {
+      "case": "api_source_and_log_sink",
+      "query_id": "path_flows",
+      "where": {
+        "source_path": "cli.js",
+        "source_start_line": 17,
+        "source_start_column": 18,
+        "sink_path": "cli.js",
+        "sink_start_line": 18,
+        "sink_start_column": 3
+      }
+    },
+    {
+      "case": "guarded_sink",
+      "query_id": "guards",
+      "where": {
+        "sink_path": "app.js",
+        "sink_start_line": 23,
+        "sink_start_column": 5,
+        "guard_state": "dominating",
+        "polarity": "true_branch",
+        "constrains_sink_operand": "true",
+        "comparison_operator": "==="
+      }
+    },
+    {
+      "case": "unguarded_sink",
+      "query_id": "guards",
+      "where": {
+        "sink_path": "app.js",
+        "sink_start_line": 25,
+        "sink_start_column": 3,
+        "guard_state": "non_dominating"
+      }
+    },
+    {
+      "case": "unguarded_sink",
+      "query_id": "guards",
+      "where": {
+        "sink_path": "app.js",
+        "sink_start_line": 25,
+        "sink_start_column": 3,
+        "guard_state": "none"
+      }
+    },
+    {
+      "case": "flow_summary",
+      "query_id": "flow_summaries",
+      "where": {
+        "function_name": "buildQuery",
+        "from_kind": "parameter",
+        "from_index": 0,
+        "to_kind": "return",
+        "flow_kind": "taint"
+      }
+    },
+    {
+      "case": "flow_summary",
+      "query_id": "flow_summaries",
+      "where": {
+        "function_name": "runCommand",
+        "to_kind": "sink",
+        "to_name": "execSync",
+        "to_model": "CommandInjection::Sink"
+      }
+    },
+    {
+      "case": "flow_summary",
+      "query_id": "flow_summaries",
+      "where": {
+        "function_name": "handleFile",
+        "from_kind": "global",
+        "from_name": "ROOT"
+      }
+    },
+    {
+      "case": "virtual_dispatch",
+      "query_id": "call_sites",
+      "where": {
+        "caller_name": "persist",
+        "callee_name": "MemoryStore::save",
+        "dispatch": "virtual_resolved",
+        "candidate_count": 2
+      }
+    },
+    {
+      "case": "virtual_dispatch",
+      "query_id": "call_sites",
+      "where": {
+        "caller_name": "persist",
+        "callee_name": "FileStore::save",
+        "dispatch": "virtual_resolved",
+        "candidate_count": 2
+      }
+    },
+    {
+      "case": "unresolved_indirect_call",
+      "query_id": "call_sites",
+      "where": {
+        "caller_name": "invoke",
+        "callee_name": "<indirect:obj[name]>",
+        "dispatch": "unresolved_indirect",
+        "candidate_count": 0
+      }
+    },
+    {
+      "case": "external_call",
+      "query_id": "call_sites",
+      "where": {
+        "callee_name": "execSync",
+        "callee_declared_in": "child_process",
+        "dispatch": "external_undefined"
+      }
+    },
+    {
+      "case": "crypto_random",
+      "query_id": "sink_sites",
+      "where": {
+        "model": "api",
+        "api": "random",
+        "declared_in": "Math",
+        "argument_index": -1
+      }
+    },
+    {
+      "case": "range_not_applicable",
+      "query_id": "ranges",
+      "where": {
+        "sink_path": "app.js",
+        "sink_start_line": 17,
+        "sink_start_column": 3,
+        "applicability": "not_applicable"
+      }
+    }
+  ]
+}
