@@ -3,22 +3,46 @@
 This directory holds the hash-pinned CodeQL export queries, the column contract and the
 source/sink catalog for code-graph precomputation
 ([`docs/architecture/code-graph-precomputation.md`](../../docs/architecture/code-graph-precomputation.md),
-chunk C1). It is rule data. It defines no job, prompt or worker guidance. Only C/C++ is covered in
-this change.
+chunk C1). It is rule data. It defines no job, prompt or worker guidance. It covers C/C++, C#,
+Go, Java/Kotlin, JavaScript/TypeScript, Python, Ruby, Rust and Swift, one pack per language.
 
 | Path | Content |
 |---|---|
 | `cpp/` | The query pack `appsec-review/graph-export-cpp` 1.0.0: `qlpack.yml`, `graph-export.qls`, the shared library `GraphExport.qll`, the seven graph queries `CallSites`, `SinkSites`, `SourceSites`, `FlowSummaries`, `Paths`, `Guards` and `Ranges`, and the two seeded-scope reports `Seeds` and `Neighborhood`. |
-| `columns.json` | `appsec-review/codeql-graph-export-columns/1`: the closed, ordered column contract for every export `query_id`. This is the C1 → C3 format contract. |
+| `csharp/`, `go/`, `java/`, `javascript/`, `python/`, `ruby/`, `rust/`, `swift/` | The same twelve files as `appsec-review/graph-export-<language>` 1.0.0 over that language's `codeql/<language>-all` library. `java/` also covers Kotlin and `javascript/` also covers TypeScript. |
+| `columns.json` | `appsec-review/codeql-graph-export-columns/1`: the closed, ordered column contract for every export `query_id`, shared by every language. This is the C1 → C3 format contract. |
 | `catalog.json`, `catalog.schema.json` | `appsec-review/graph-catalog/1`: classifies export rows into the closed `SinkClass`/`SourceClass` vocabularies of `src/appsec_review/graph/contract.py`. |
 
-## Status: live-unverified
+## Live verification
 
-The QL is written against the `codeql/cpp-all` library bundled with the pinned CodeQL 2.27.0 CLI,
-but the repository's offline CI has no CodeQL image, so it has not been compiled.
-`tests/live/test_codeql_graph_export_live.py` compiles and runs it on the pinned image and
-compares the result with the native recording. The recorded fixtures are hand-authored until that
-test refreshes the native one (see each fixture's `provenance.json`).
+Every pack except Swift has been compiled and run with the CodeQL 2.27.0 CLI in
+`audit-codeql:custom-2.27.0`, built from this repository on a Linux (WSL 2) Docker host with
+`containers/tools/codeql/build-source-image.sh` (see
+[`containers/tools/codeql/README.md`](../../containers/tools/codeql/README.md)). The library
+versions bundled in that image equal the `library` pins in `rules/registry.toml`.
+
+Each language has a hand-authored synthetic recording under
+`tests/fixtures/graph/codeql_export/<language>-synthetic/` and an `expected-facts.json` that states
+the semantic floor as rows that must exist. The offline test `tests/graph/test_<language>_export.py`
+holds the recording to it, and the live test `tests/live/test_codeql_graph_export_<language>_live.py`
+(C/C++: `tests/live/test_codeql_graph_export_live.py`) builds a real database from the fixture's
+`source/` in the pinned image and holds the live export to the same file. The C/C++ native
+recording (`tests/fixtures/graph/codeql_export/native/`) is copied from the live export; it is
+refreshed, never hand-edited.
+
+| Language | Live result | Notes |
+|---|---|---|
+| C/C++ | passes | Native recording refreshed from the live export (it includes the CMake compiler-id sources the build traces under `codeql-build/`). |
+| Java/Kotlin | passes | |
+| Python | QL fixed | `path_sanitizers` also matches a sanitizer call that the path graph steps over (`safe = realpath(filename)`). |
+| Ruby | QL fixed | A concept anchored at its own operand (ActiveRecord `find_by_sql`) is reported at the receiving call, and catalog sanitizer calls get an argument-to-result taint step so flows through `File.basename` stay visible. |
+| Go | expectation fixed | The cross-function flow enters `lookup` through a `call` edge; the hand-authored expectation of a `return` edge was wrong. |
+| JavaScript/TypeScript | needs Node | CodeQL's TypeScript extractor needs Node.js, which the source image lacks; the live test runs in the `node` build profile. |
+| C#, Rust | see the live tests | C# extracts in the .NET SDK build profile; Rust in the `rust` profile. |
+| Swift | deferred | CodeQL extracts Swift only on macOS. The pack compiles but has no pin, `rules/registry.toml` keeps it `state = "deferred"`, and its live test skips on Linux. |
+
+Live tests need the pinned images on the local Docker host and take 13-35 minutes each, most of it
+database creation and a cold pack compile in a fresh test run.
 
 ## Export contract
 
@@ -131,15 +155,18 @@ export --database <db-copy> --pack <staged-pack-dir> --columns <staged columns.j
 ```
 
 `appsec_review.codeql.runtime.graph_export_arguments` builds this argv. The job stages a copy of
-`cpp/` and of `columns.json` into scratch, together with a disposable copy of the database: the
-pack is repository-owned and is not part of the licensed image. The runner then:
+the scope language's pack directory and of `columns.json` into scratch, together with a disposable
+copy of the database: the pack is repository-owned and is not part of the licensed image. The
+runner then:
 
 1. checks that the staged pack's location-independent tree hash (`sha256  relative/path` lines,
    sorted by relative path), file count, `qlpack.yml`, suite and `columns.json` equal
-   `export_query_packs.cpp` in `containers/tools/codeql/assets.lock.json`;
-2. relies on the compile cache populated beforehand by the separate `compile` action (or
-   `containers/build.py query-packs --warm`; cold 10-22 minutes, warm about 45 seconds),
-   compiles every query once (`codeql query compile`), then runs `codeql database run-queries
+   `export_query_packs.<language>` in `containers/tools/codeql/assets.lock.json`;
+2. relies on the compile cache populated beforehand by the separate `compile` action (cold 10-22
+   minutes, warm about 45 seconds). The cache volume is keyed by the declared CodeQL and runner
+   releases and the runtime user, so it is shared across runs: a pack compiles cold only after
+   one of those, or the pack's own bytes, change. It then compiles every query once (`codeql query
+   compile`, a cache hit) and runs `codeql database run-queries
    --threads --ram --external=exportScope=<scope.csv> --external=exportSeed=<seeds.csv> -- <db>
    <pack>/<query>.ql` for each query file;
 3. for each `query_id` in `columns.json` order, runs `codeql bqrs info --format=json` to get the
@@ -179,10 +206,18 @@ the tests enforce this.
 
 ## Changing the pack or catalog
 
-1. Edit the QL, `columns.json` or `catalog.json`.
-2. Recompute the `export_query_packs.cpp` entry in `containers/tools/codeql/assets.lock.json`:
-   the tree hash and file count of `cpp/`, and the SHA-256 of `qlpack.yml`, `graph-export.qls`,
-   `columns.json` and `catalog.json`. `tests/test_codeql_export_runner.py` fails until they agree.
+1. Edit the QL, `columns.json` or `catalog.json`. Packs are hashed over their LF bytes
+   (`.gitattributes` keeps `rules/codeql-graph-export/**` at `eol=lf` on every checkout).
+2. Recompute the `export_query_packs.<language>` entry in `containers/tools/codeql/assets.lock.json`
+   for every language the change touches (a `columns.json` or `catalog.json` change touches all of
+   them): the tree hash and file count of `<language>/`, and the SHA-256 of `qlpack.yml`,
+   `graph-export.qls`, `columns.json` and `catalog.json`. Mirror the same values in that language's
+   `[[jobs.job_codeql_analysis.settings.languages.<language>.export_queries]]` block in
+   `appsec-review.toml`. `tests/test_codeql_export_runner.py` fails until they agree.
 3. Update `jobs.job_codeql_analysis.settings.asset_lock_sha256` in `appsec-review.toml` to the
-   new lock SHA-256.
-4. Run the live tier and refresh `tests/fixtures/graph/codeql_export/native/` in the same change.
+   new lock SHA-256 (the lock is pinned by its exact LF bytes).
+4. Run the language's live test on a Linux Docker host with the pinned image. For C/C++, copy the
+   live native export over `tests/fixtures/graph/codeql_export/native/exports/` in the same change.
+   When a live row legitimately differs from a hand-authored synthetic recording or expectation,
+   fix the recording or `expected-facts.json` in the same change and regenerate the golden with
+   `APPSEC_REVIEW_REGENERATE_GRAPH_GOLDEN=1`.

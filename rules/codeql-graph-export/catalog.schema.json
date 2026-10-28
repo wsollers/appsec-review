@@ -5,102 +5,824 @@
   "description": "Classifies CodeQL graph-export sink and source rows into the closed SinkClass and SourceClass vocabularies of src/appsec_review/graph/contract.py. A row no rule matches is unclassified; the catalog never assigns unclassified itself.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema", "revision", "attacker_reachable_sources", "languages"],
+  "required": [
+    "schema",
+    "revision",
+    "attacker_reachable_sources",
+    "languages"
+  ],
   "properties": {
-    "schema": {"const": "appsec-review/graph-catalog/1"},
-    "revision": {"type": "integer", "minimum": 1},
+    "schema": {
+      "const": "appsec-review/graph-catalog/1"
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 1
+    },
     "attacker_reachable_sources": {
-      "type": "array", "uniqueItems": true, "minItems": 1,
-      "items": {"$ref": "#/$defs/source_class"}
+      "type": "array",
+      "uniqueItems": true,
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/source_class"
+      }
     },
     "languages": {
       "type": "object",
       "additionalProperties": false,
       "minProperties": 1,
-      "properties": {"cpp": {"$ref": "#/$defs/language"}}
+      "properties": {
+        "cpp": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/language"
+            },
+            {
+              "$ref": "#/$defs/models_cpp"
+            }
+          ]
+        },
+        "java": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/language"
+            },
+            {
+              "$ref": "#/$defs/models_java"
+            }
+          ]
+        },
+        "javascript": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/language"
+            },
+            {
+              "$ref": "#/$defs/models_javascript"
+            }
+          ]
+        },
+        "python": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/language"
+            },
+            {
+              "$ref": "#/$defs/models_python"
+            }
+          ]
+        },
+        "ruby": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/language"
+            },
+            {
+              "$ref": "#/$defs/models_ruby"
+            }
+          ]
+        },
+        "go": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/language"
+            },
+            {
+              "$ref": "#/$defs/models_go"
+            }
+          ]
+        },
+        "csharp": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/language"
+            },
+            {
+              "$ref": "#/$defs/models_csharp"
+            }
+          ]
+        },
+        "rust": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/language"
+            },
+            {
+              "$ref": "#/$defs/models_rust"
+            }
+          ]
+        },
+        "swift": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/language"
+            },
+            {
+              "$ref": "#/$defs/models_swift"
+            }
+          ]
+        }
+      }
     }
   },
   "$defs": {
+    "models_cpp": {
+      "description": "The closed model vocabulary the cpp pack's SinkSites and SourceSites queries emit.",
+      "properties": {
+        "sinks": {
+          "items": {
+            "properties": {
+              "match": {
+                "properties": {
+                  "model": {
+                    "enum": [
+                      "FormattingFunction",
+                      "AllocationFunction",
+                      "ArrayFunction.output",
+                      "CommandExecutionFunction",
+                      "RemoteFlowSinkFunction",
+                      "ArrayExprWrite"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "sources": {
+          "items": {
+            "properties": {
+              "match": {
+                "properties": {
+                  "model": {
+                    "enum": [
+                      "RemoteFlowSource",
+                      "LocalFlowSource",
+                      "FlowSource"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "models_java": {
+      "description": "The closed model vocabulary the java pack's SinkSites and SourceSites queries emit: java-all models-as-data sink kinds and source classes.",
+      "properties": {
+        "sinks": {
+          "items": {
+            "properties": {
+              "match": {
+                "properties": {
+                  "model": {
+                    "enum": [
+                      "sql-injection",
+                      "command-injection",
+                      "path-injection",
+                      "request-forgery",
+                      "url-redirection",
+                      "ldap-injection",
+                      "xpath-injection",
+                      "template-injection",
+                      "html-injection",
+                      "js-injection",
+                      "log-injection",
+                      "response-splitting",
+                      "unsafe-deserialization",
+                      "jndi-injection",
+                      "mvel-injection",
+                      "ognl-injection",
+                      "groovy-injection",
+                      "jexl-injection",
+                      "xslt-injection",
+                      "fragment-injection"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "sources": {
+          "items": {
+            "properties": {
+              "match": {
+                "properties": {
+                  "model": {
+                    "enum": [
+                      "RemoteFlowSource",
+                      "LocalUserInput",
+                      "SourceNode"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "models_javascript": {
+      "description": "The closed model vocabulary the javascript pack's SinkSites and SourceSites queries emit.",
+      "properties": {
+        "sinks": {
+          "items": {
+            "properties": {
+              "match": {
+                "properties": {
+                  "model": {
+                    "enum": [
+                      "SqlInjection::Sink",
+                      "CommandInjection::Sink",
+                      "TaintedPath::Sink",
+                      "RequestForgery::Sink",
+                      "CodeInjection::Sink",
+                      "UnsafeDeserialization::Sink",
+                      "ReflectedXss::Sink",
+                      "ServerSideUrlRedirect::Sink",
+                      "Xxe::Sink",
+                      "XpathInjection::Sink",
+                      "RegExpInjection::Sink"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "sources": {
+          "items": {
+            "properties": {
+              "match": {
+                "properties": {
+                  "model": {
+                    "enum": [
+                      "RemoteFlowSource",
+                      "ThreatModelSource.commandargs",
+                      "ThreatModelSource.environment",
+                      "ThreatModelSource.response",
+                      "ThreatModelSource.file",
+                      "ThreatModelSource.database",
+                      "ThreatModelSource.stdin",
+                      "ThreatModelSource"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "models_python": {
+      "description": "The closed model vocabulary the python pack's SinkSites and SourceSites queries emit.",
+      "properties": {
+        "sinks": {
+          "items": {
+            "properties": {
+              "match": {
+                "properties": {
+                  "model": {
+                    "enum": [
+                      "SqlExecution",
+                      "NoSqlExecution",
+                      "SystemCommandExecution",
+                      "FileSystemAccess",
+                      "HttpClientRequest",
+                      "Decoding.mayExecuteInput",
+                      "CodeExecution",
+                      "LdapExecution",
+                      "XPathExecution",
+                      "XmlParsing",
+                      "TemplateConstruction",
+                      "HttpRedirectResponse",
+                      "ResponseHeaderWrite",
+                      "RegexExecution",
+                      "Logging",
+                      "HttpResponse"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "sources": {
+          "items": {
+            "properties": {
+              "match": {
+                "properties": {
+                  "model": {
+                    "enum": [
+                      "RemoteFlowSource",
+                      "ThreatModelSource"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "models_ruby": {
+      "description": "The closed model vocabulary the ruby pack's SinkSites and SourceSites queries emit.",
+      "properties": {
+        "sinks": {
+          "items": {
+            "properties": {
+              "match": {
+                "properties": {
+                  "model": {
+                    "enum": [
+                      "SqlExecution",
+                      "SqlConstruction",
+                      "SystemCommandExecution",
+                      "CodeExecution",
+                      "CodeExecution.reflective",
+                      "FileSystemAccess",
+                      "HttpClientRequest",
+                      "UnsafeDeserialization",
+                      "XmlParserCall",
+                      "XPathExecution",
+                      "LdapExecution",
+                      "TemplateRendering",
+                      "HttpRedirectResponse",
+                      "HeaderWriteAccess",
+                      "RegexExecution",
+                      "Logging",
+                      "HttpResponse"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "sources": {
+          "items": {
+            "properties": {
+              "match": {
+                "properties": {
+                  "model": {
+                    "enum": [
+                      "RemoteFlowSource",
+                      "LocalFlowSource"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "models_go": {
+      "description": "The closed model vocabulary the go pack's SinkSites and SourceSites queries emit.",
+      "properties": {
+        "sinks": {
+          "items": {
+            "properties": {
+              "match": {
+                "properties": {
+                  "model": {
+                    "enum": [
+                      "SQL::QueryString",
+                      "SystemCommandExecution",
+                      "FileSystemAccess",
+                      "Http::ClientRequest",
+                      "Http::Redirect",
+                      "Http::HeaderWrite",
+                      "Http::ResponseBody",
+                      "LoggerCall",
+                      "UnmarshalingFunction"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "sources": {
+          "items": {
+            "properties": {
+              "match": {
+                "properties": {
+                  "model": {
+                    "enum": [
+                      "RemoteFlowSource",
+                      "sourceModel",
+                      "SourceNode"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "models_csharp": {
+      "description": "The closed model vocabulary the csharp pack's SinkSites and SourceSites queries emit.",
+      "properties": {
+        "sinks": {
+          "items": {
+            "properties": {
+              "match": {
+                "properties": {
+                  "model": {
+                    "enum": [
+                      "SqlInjection.Sink",
+                      "CommandInjection.Sink",
+                      "TaintedPath.Sink",
+                      "UnsafeDeserialization.Sink",
+                      "CodeInjection.Sink",
+                      "LdapInjection.Sink",
+                      "XPathInjection.Sink",
+                      "Xss.Sink",
+                      "UrlRedirect.Sink",
+                      "RegexInjection.Sink",
+                      "LogForging.Sink",
+                      "XmlEntityInjection.Sink",
+                      "ResourceInjection.Sink",
+                      "ArrayCreation.length"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "sources": {
+          "items": {
+            "properties": {
+              "match": {
+                "properties": {
+                  "model": {
+                    "enum": [
+                      "RemoteFlowSource",
+                      "LocalFlowSource",
+                      "StoredFlowSource",
+                      "SourceNode",
+                      "ExternalSource"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "models_rust": {
+      "description": "The closed model vocabulary the rust pack's SinkSites and SourceSites queries emit (rust-all models-as-data sink kinds and threat models).",
+      "properties": {
+        "sinks": {
+          "items": {
+            "properties": {
+              "match": {
+                "properties": {
+                  "model": {
+                    "enum": [
+                      "sql-injection",
+                      "command-injection",
+                      "path-injection",
+                      "request-url",
+                      "log-injection",
+                      "html-injection",
+                      "alloc-size",
+                      "alloc-layout",
+                      "pointer-access",
+                      "disable-certificate",
+                      "hasher-input",
+                      "credentials-key",
+                      "credentials-iv",
+                      "credentials-nonce"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "sources": {
+          "items": {
+            "properties": {
+              "match": {
+                "properties": {
+                  "model": {
+                    "enum": [
+                      "remote",
+                      "commandargs",
+                      "environment",
+                      "file",
+                      "stdin",
+                      "database"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "models_swift": {
+      "description": "The closed model vocabulary the swift pack's SinkSites and SourceSites queries emit.",
+      "properties": {
+        "sinks": {
+          "items": {
+            "properties": {
+              "match": {
+                "properties": {
+                  "model": {
+                    "enum": [
+                      "SqlInjectionSink",
+                      "CommandInjectionSink",
+                      "PathInjectionSink",
+                      "UnsafeUnpackSink",
+                      "XxeSink",
+                      "UnsafeJsEvalSink",
+                      "UncontrolledFormatStringSink",
+                      "UnsafeWebViewFetchSink",
+                      "CleartextLoggingSink",
+                      "PredicateInjectionSink"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "sources": {
+          "items": {
+            "properties": {
+              "match": {
+                "properties": {
+                  "model": {
+                    "enum": [
+                      "RemoteFlowSource",
+                      "LocalFlowSource",
+                      "FlowSource"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "sink_class": {
-      "enum": ["memory_write", "memory_read", "allocation_size", "format_string", "command_execution",
-               "path_access", "sql_query", "code_injection", "deserialization", "integer_conversion",
-               "crypto_misuse", "log_output"]
+      "enum": [
+        "memory_write",
+        "memory_read",
+        "allocation_size",
+        "format_string",
+        "command_execution",
+        "path_access",
+        "sql_query",
+        "code_injection",
+        "deserialization",
+        "integer_conversion",
+        "crypto_misuse",
+        "log_output",
+        "server_side_request",
+        "xml_external_entity",
+        "ldap_query",
+        "xpath_query",
+        "html_output",
+        "template_injection",
+        "url_redirect",
+        "header_injection",
+        "regex_injection",
+        "unsafe_reflection"
+      ]
     },
     "source_class": {
-      "enum": ["remote", "local_user", "argv", "environment", "file", "ipc", "database", "internal"]
+      "enum": [
+        "remote",
+        "local_user",
+        "argv",
+        "environment",
+        "file",
+        "ipc",
+        "database",
+        "internal"
+      ]
     },
-    "api": {"type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"},
+    "api": {
+      "type": "string",
+      "pattern": "^[A-Za-z_$][A-Za-z0-9_$]*$"
+    },
     "declared_in": {
-      "description": "Basenames of declaring headers; a row matches when any of its declared_in basenames is listed.",
-      "type": "array", "minItems": 1, "uniqueItems": true,
-      "items": {"type": "string", "pattern": "^[A-Za-z0-9_+.-]+$"}
+      "description": "Basenames of declaring headers (C/C++) or the declaring module, package, namespace or type (managed languages); a row matches when any of its declared_in values is listed.",
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9_+.:/@$-]+$"
+      }
     },
     "sink_model": {
-      "enum": ["FormattingFunction", "AllocationFunction", "ArrayFunction.output", "CommandExecutionFunction",
-               "RemoteFlowSinkFunction", "ArrayExprWrite"]
+      "description": "A CodeQL model class name; each language's models_<language> definition closes the vocabulary.",
+      "type": "string",
+      "pattern": "^[A-Za-z][A-Za-z0-9_.:-]*$"
     },
-    "source_model": {"enum": ["RemoteFlowSource", "LocalFlowSource", "FlowSource"]},
+    "source_model": {
+      "description": "A CodeQL model class name; each language's models_<language> definition closes the vocabulary.",
+      "type": "string",
+      "pattern": "^[A-Za-z][A-Za-z0-9_.:-]*$"
+    },
     "language": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["model_library", "export_pack", "sinks", "sources", "sanitizers"],
+      "required": [
+        "model_library",
+        "export_pack",
+        "sinks",
+        "sources",
+        "sanitizers"
+      ],
       "properties": {
-        "model_library": {"type": "string", "pattern": "^codeql/[a-z0-9-]+$"},
-        "export_pack": {"type": "string", "pattern": "^appsec-review/graph-export-[a-z0-9-]+$"},
-        "sinks": {"type": "array", "items": {"$ref": "#/$defs/sink_rule"}},
-        "sources": {"type": "array", "items": {"$ref": "#/$defs/source_rule"}},
-        "sanitizers": {"type": "array", "items": {"$ref": "#/$defs/sanitizer_rule"}}
+        "model_library": {
+          "type": "string",
+          "pattern": "^codeql/[a-z0-9-]+$"
+        },
+        "export_pack": {
+          "type": "string",
+          "pattern": "^appsec-review/graph-export-[a-z0-9-]+$"
+        },
+        "sinks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/sink_rule"
+          }
+        },
+        "sources": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/source_rule"
+          }
+        },
+        "sanitizers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/sanitizer_rule"
+          }
+        }
       }
     },
     "sink_rule": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["rule_id", "match", "sink_class", "cwe_family"],
+      "required": [
+        "rule_id",
+        "match",
+        "sink_class",
+        "cwe_family"
+      ],
       "properties": {
-        "rule_id": {"type": "string", "pattern": "^[a-z]+\\.sink\\.(api|model)\\.[a-z0-9_.-]+$"},
+        "rule_id": {
+          "type": "string",
+          "pattern": "^[a-z]+\\.sink\\.(api|model)\\.[a-z0-9_.-]+$"
+        },
         "match": {
           "oneOf": [
-            {"type": "object", "additionalProperties": false,
-             "required": ["api", "declared_in", "argument_index"],
-             "properties": {"api": {"$ref": "#/$defs/api"}, "declared_in": {"$ref": "#/$defs/declared_in"},
-                            "argument_index": {"type": "integer", "minimum": -1}}},
-            {"type": "object", "additionalProperties": false, "required": ["model"],
-             "properties": {"model": {"$ref": "#/$defs/sink_model"}}}
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "api",
+                "declared_in",
+                "argument_index"
+              ],
+              "properties": {
+                "api": {
+                  "$ref": "#/$defs/api"
+                },
+                "declared_in": {
+                  "$ref": "#/$defs/declared_in"
+                },
+                "argument_index": {
+                  "type": "integer",
+                  "minimum": -1
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "model"
+              ],
+              "properties": {
+                "model": {
+                  "$ref": "#/$defs/sink_model"
+                }
+              }
+            }
           ]
         },
-        "sink_class": {"$ref": "#/$defs/sink_class"},
-        "cwe_family": {"type": "string", "pattern": "^CWE-[1-9][0-9]*$"}
+        "sink_class": {
+          "$ref": "#/$defs/sink_class"
+        },
+        "cwe_family": {
+          "type": "string",
+          "pattern": "^CWE-[1-9][0-9]*$"
+        }
       }
     },
     "source_rule": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["rule_id", "match", "source_class"],
+      "required": [
+        "rule_id",
+        "match",
+        "source_class"
+      ],
       "properties": {
-        "rule_id": {"type": "string", "pattern": "^[a-z]+\\.source\\.(api|model)\\.[a-z0-9_.-]+$"},
+        "rule_id": {
+          "type": "string",
+          "pattern": "^[a-z]+\\.source\\.(api|model)\\.[a-z0-9_.-]+$"
+        },
         "match": {
           "oneOf": [
-            {"type": "object", "additionalProperties": false, "required": ["api", "declared_in", "index"],
-             "properties": {"api": {"$ref": "#/$defs/api"}, "declared_in": {"$ref": "#/$defs/declared_in"},
-                            "index": {"type": "integer", "minimum": -1}}},
-            {"type": "object", "additionalProperties": false, "required": ["model"],
-             "properties": {"model": {"$ref": "#/$defs/source_model"},
-                            "source_type": {"type": "string", "minLength": 1}}}
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "api",
+                "declared_in",
+                "index"
+              ],
+              "properties": {
+                "api": {
+                  "$ref": "#/$defs/api"
+                },
+                "declared_in": {
+                  "$ref": "#/$defs/declared_in"
+                },
+                "index": {
+                  "type": "integer",
+                  "minimum": -1
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "model"
+              ],
+              "properties": {
+                "model": {
+                  "$ref": "#/$defs/source_model"
+                },
+                "source_type": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            }
           ]
         },
-        "source_class": {"$ref": "#/$defs/source_class"}
+        "source_class": {
+          "$ref": "#/$defs/source_class"
+        }
       }
     },
     "sanitizer_rule": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["rule_id", "api", "declared_in", "applies_to"],
+      "required": [
+        "rule_id",
+        "api",
+        "declared_in",
+        "applies_to"
+      ],
       "properties": {
-        "rule_id": {"type": "string", "pattern": "^[a-z]+\\.sanitizer\\.[a-z0-9_.-]+$"},
-        "api": {"$ref": "#/$defs/api"},
-        "declared_in": {"$ref": "#/$defs/declared_in"},
-        "applies_to": {"type": "array", "minItems": 1, "uniqueItems": true,
-                       "items": {"$ref": "#/$defs/sink_class"}}
+        "rule_id": {
+          "type": "string",
+          "pattern": "^[a-z]+\\.sanitizer\\.[a-z0-9_.-]+$"
+        },
+        "api": {
+          "$ref": "#/$defs/api"
+        },
+        "declared_in": {
+          "$ref": "#/$defs/declared_in"
+        },
+        "applies_to": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/sink_class"
+          }
+        }
       }
     }
   }

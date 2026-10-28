@@ -16,6 +16,7 @@ import pytest
 
 from appsec_review.codeql.runtime import EXPORT_MANIFEST_NAME, EXPORT_MANIFEST_SCHEMA, graph_export_arguments
 from appsec_review.config import CodeQLExportSettings, parse_codeql_settings
+from appsec_review.config.assurance import ComponentReleases, ReviewPolicy
 from appsec_review.config.codeql import SEED_DEPTH_CEILING
 from appsec_review.graph.contract import EXPORT_SCHEMA
 from appsec_review import seeding
@@ -332,6 +333,8 @@ class SeededExecutor:
 def _unit(tmp_path: Path, databases: list[dict[str, Any]], manifests: list[dict[str, str]], settings=None):
     run_root = tmp_path / "run"
     job = SimpleNamespace(run_root=run_root, repository_root=ROOT, source_fingerprint=SNAPSHOT, events=Events(),
+                          review_policy=ReviewPolicy(releases=ComponentReleases(
+                              {"codeql_runner": "fixture-1", "export_cpp": "fixture-1"})),
                           attempt_root=run_root / "data" / "jobs" / JOB / "attempts" / "attempt_0001",
                           config=SimpleNamespace(typed_settings=settings or _settings("seeded")))
     outputs = {"database.scopes": {"databases": databases},

@@ -1,0 +1,245 @@
+{
+  "schema": "appsec-review/graph-export-expected-facts/1",
+  "fixture": "go-synthetic",
+  "description": "Semantic floor for the Go graph-export pack over source/main.go. Each case in provenance.json is stated here as rows that must exist: every `where` column must equal the given value in at least one row of the named export. Only line numbers and semantic columns are matched, so the same file holds for the hand-authored recording and for a live export. tests/graph/test_go_export.py holds the recording to it offline; tests/live/test_codeql_graph_export_go_live.py holds the pinned-image export to it.",
+  "expectations": [
+    {
+      "case": "sql_cross_function_flow",
+      "query_id": "path_flows",
+      "where": {
+        "source_start_line": 47,
+        "sink_start_line": 42,
+        "argument_index": 0
+      }
+    },
+    {
+      "case": "sql_cross_function_flow",
+      "query_id": "path_edges",
+      "where": {
+        "source_start_line": 47,
+        "sink_start_line": 42,
+        "edge_kind": "call",
+        "to_function": "lookup"
+      }
+    },
+    {
+      "case": "two_sources_one_command",
+      "query_id": "path_flows",
+      "where": {
+        "source_start_line": 69,
+        "sink_start_line": 69,
+        "argument_index": 0
+      }
+    },
+    {
+      "case": "two_sources_one_command",
+      "query_id": "path_edges",
+      "where": {
+        "source_start_line": 69,
+        "sink_start_line": 69,
+        "from_display": "call to Getenv"
+      }
+    },
+    {
+      "case": "argv_and_environment_sources",
+      "query_id": "source_sites",
+      "where": {
+        "source_start_line": 69,
+        "model": "sourceModel",
+        "source_type": "commandargs",
+        "node_kind": "expression"
+      }
+    },
+    {
+      "case": "argv_and_environment_sources",
+      "query_id": "source_sites",
+      "where": {
+        "source_start_line": 69,
+        "model": "sourceModel",
+        "source_type": "environment",
+        "node_kind": "return_value",
+        "api": "Getenv",
+        "declared_in": "os"
+      }
+    },
+    {
+      "case": "sanitized_path",
+      "query_id": "path_sanitizers",
+      "where": {
+        "sink_start_line": 50,
+        "argument_index": 0,
+        "api": "Clean"
+      }
+    },
+    {
+      "case": "sanitized_path",
+      "query_id": "sink_sites",
+      "where": {
+        "sink_start_line": 50,
+        "model": "FileSystemAccess",
+        "api": "Open",
+        "dominating_sanitizer_count": 1
+      }
+    },
+    {
+      "case": "ssrf_sink",
+      "query_id": "sink_sites",
+      "where": {
+        "sink_start_line": 52,
+        "argument_index": 0,
+        "model": "Http::ClientRequest",
+        "api": "Get",
+        "declared_in": "net/http"
+      }
+    },
+    {
+      "case": "deserialization_sink",
+      "query_id": "sink_sites",
+      "where": {
+        "sink_start_line": 53,
+        "argument_index": 0,
+        "model": "api",
+        "api": "NewDecoder",
+        "declared_in": "encoding/gob"
+      }
+    },
+    {
+      "case": "dominating_guard",
+      "query_id": "guards",
+      "where": {
+        "sink_start_line": 56,
+        "argument_index": 1,
+        "guard_state": "dominating",
+        "polarity": "true_branch",
+        "condition_start_line": 55,
+        "comparison_operator": "<",
+        "constrains_sink_operand": "true"
+      }
+    },
+    {
+      "case": "non_dominating_guard",
+      "query_id": "guards",
+      "where": {
+        "sink_start_line": 58,
+        "argument_index": 1,
+        "guard_state": "non_dominating",
+        "condition_start_line": 55
+      }
+    },
+    {
+      "case": "non_dominating_guard",
+      "query_id": "guards",
+      "where": {
+        "sink_start_line": 58,
+        "argument_index": 1,
+        "guard_state": "none"
+      }
+    },
+    {
+      "case": "guard_bounded_range",
+      "query_id": "ranges",
+      "where": {
+        "sink_start_line": 56,
+        "argument_index": 1,
+        "applicability": "integral",
+        "upper": "99"
+      }
+    },
+    {
+      "case": "narrowing_conversion",
+      "query_id": "range_conversions",
+      "where": {
+        "sink_start_line": 58,
+        "argument_index": 1,
+        "step": 1,
+        "kind": "narrowing",
+        "from_type": "int",
+        "to_type": "int32"
+      }
+    },
+    {
+      "case": "narrowing_conversion",
+      "query_id": "range_conversions",
+      "where": {
+        "sink_start_line": 58,
+        "argument_index": 1,
+        "step": 2,
+        "kind": "promotion",
+        "from_type": "int32",
+        "to_type": "int"
+      }
+    },
+    {
+      "case": "flow_summary_helper",
+      "query_id": "flow_summaries",
+      "where": {
+        "function_name": "quote",
+        "from_kind": "parameter",
+        "from_index": 0,
+        "to_kind": "return"
+      }
+    },
+    {
+      "case": "interface_dispatch",
+      "query_id": "call_sites",
+      "where": {
+        "caller_name": "dispatch",
+        "call_start_line": 29,
+        "callee_name": "Upper::Handle",
+        "dispatch": "virtual_resolved",
+        "candidate_count": 2
+      }
+    },
+    {
+      "case": "interface_dispatch",
+      "query_id": "call_sites",
+      "where": {
+        "caller_name": "dispatch",
+        "call_start_line": 29,
+        "callee_name": "Lower::Handle",
+        "dispatch": "virtual_resolved",
+        "candidate_count": 2
+      }
+    },
+    {
+      "case": "unresolved_function_value",
+      "query_id": "call_sites",
+      "where": {
+        "caller_name": "Apply",
+        "call_start_line": 34,
+        "dispatch": "unresolved_indirect"
+      }
+    },
+    {
+      "case": "function_value_resolved",
+      "query_id": "call_sites",
+      "where": {
+        "caller_name": "serve",
+        "call_start_line": 64,
+        "callee_name": "quote",
+        "dispatch": "function_pointer_resolved"
+      }
+    },
+    {
+      "case": "reflective_call",
+      "query_id": "call_sites",
+      "where": {
+        "caller_name": "serve",
+        "call_start_line": 65,
+        "callee_name": "Value::Call",
+        "callee_declared_in": "reflect",
+        "dispatch": "external_undefined"
+      }
+    },
+    {
+      "case": "unclassified_sink",
+      "query_id": "sink_sites",
+      "where": {
+        "sink_start_line": 60,
+        "argument_index": 0,
+        "model": "UnmarshalingFunction",
+        "api": "Unmarshal"
+      }
+    }
+  ]
+}

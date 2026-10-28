@@ -171,11 +171,13 @@ this work.
 
 ## 7. Live-unverified
 
-- The export pack has never run in the pinned CodeQL image. The native and synthetic recordings
-  are hand-authored (`tests/fixtures/graph/codeql_export/*/provenance.json`), so query correctness,
-  row shapes on real databases, bounds and timing are unverified.
-- `tests/live/test_codeql_graph_export_live.py` and `tests/live/test_code_graph_live.py` skip
-  without the image. `deploy/dagster/verification/code-graph-acceptance.json` does not exist.
+- Status at the time of this review: the export pack had never run in the pinned CodeQL image and
+  the recordings were hand-authored. Since then the image builds from this repository on any Linux
+  Docker host, every pack except Swift has compiled and run in it, and the C/C++ native recording
+  is copied from a live export (per-language results:
+  `rules/codeql-graph-export/README.md#live-verification`). The synthetic recordings remain
+  hand-authored and are checked by the per-language live tests.
+- `deploy/dagster/verification/code-graph-acceptance.json` does not exist.
 - The `appsec-multi-vuln` C/C++ scope has not produced a `dataflow_path` or `guard_fact`; the live
   tier's multi-vuln build commands (CMake) are an assumption until an operator runs it.
 - No live model has cited a graph fact; the review path is proven with an injected worker only.
@@ -198,11 +200,10 @@ this work.
 
 ## 9. Next work
 
-- **Live acceptance.** Run both live tiers with the pinned image; refresh the native recording from
-  the live export; write `deploy/dagster/verification/code-graph-acceptance.json`; fix what the real
-  rows reveal.
-- **More languages** (A6): Java/Kotlin, JavaScript/TypeScript and Python export packs and catalog
-  sections, each with recorded fixtures.
+- **Live acceptance.** Done for the export packs (native recording refreshed from the live
+  export); still to do: write `deploy/dagster/verification/code-graph-acceptance.json`.
+- **More languages** (A6): done for C#, Go, Java/Kotlin, JavaScript/TypeScript, Python, Ruby and
+  Rust; Swift waits for a macOS executor.
 - **Clang second producer** (design section 12, partially implemented): K4 is complete as the
   standalone `job_clang_static_analysis`/`tool-clang-static-analysis` producer with bounded
   source-mapped observations and gaps. K1 IR debug locations, K2 macro-precise locations, K3 LLVM

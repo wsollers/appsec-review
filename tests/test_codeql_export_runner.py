@@ -413,7 +413,7 @@ def _query_predicates() -> dict[str, tuple[str, list[tuple[str, str]]]]:
 
 
 def test_columns_contract_is_closed_and_equals_the_ql_query_predicates() -> None:
-    assert set(COLUMNS) == {"schema", "export_schema", "languages"} and set(COLUMNS["languages"]) == {"cpp"}
+    assert set(COLUMNS) == {"schema", "export_schema", "languages"} and {"cpp"} <= set(COLUMNS["languages"])
     assert COLUMNS["export_schema"] == contract.EXPORT_SCHEMA
     assert RUNNER.export_queries(COLUMNS, "cpp") == QUERIES
     predicates = _query_predicates()
@@ -703,7 +703,7 @@ def test_compile_action_does_not_verify_supplied_payload(tmp_path: Path, monkeyp
     assert fake.calls
 
 
-def test_executor_compile_action_has_its_own_timeout_resources_and_a_run_private_declared_cache(
+def test_executor_compile_action_has_its_own_timeout_resources_and_a_declared_release_cache(
         tmp_path: Path) -> None:
     settings = SimpleNamespace(inventory_timeout_seconds=30, database_timeout_seconds=30,
                                query_timeout_seconds=30, output_bytes=1024, threads=2, ram_mb=1024,
@@ -734,4 +734,4 @@ def test_executor_compile_action_has_its_own_timeout_resources_and_a_run_private
         assert command[command.index("--network") + 1] == "none"
         assert command[-3:] == ("compile", "--language", "cpp")
         volumes.update(value for value in command if value.startswith("type=volume,src=appsec-codeql-compile-"))
-    assert len(volumes) == 1, "derived images within one run and declared release share one compile cache"
+    assert len(volumes) == 1, "derived images under one declared release share one compile cache"

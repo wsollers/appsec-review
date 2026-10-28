@@ -1,0 +1,8 @@
+# Hash-pinned, hand-authored graph-export recordings and goldens: byte-exact, never end-of-line converted.
+tests/fixtures/graph/** -text
+# Shell scripts run inside Linux/WSL and containers: always LF, whatever core.autocrlf says.
+*.sh text eol=lf
+# CodeQL packs are hashed over their LF bytes and compiled inside Linux containers.
+rules/codeql-graph-export/** text eol=lf
+# The asset lock is pinned by its exact bytes (asset_lock_sha256 in appsec-review.toml).
+containers/tools/codeql/assets.lock.json text eol=lf

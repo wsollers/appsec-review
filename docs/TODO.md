@@ -304,11 +304,12 @@ implementation:
   `seed_depth` and `seed_limit` from the numbers;
 - measure one batched `codeql database run-queries` over all queries against serial runs;
 - make `query-packs --warm` a routine step of the host image procedure after a CodeQL image
-  rebuild (the compile is now a separate cached action that `query-packs --warm` precompiles; the
-  pipeline no longer builds images, see `docs/operations/image-pin-verification.md`), and make the
-  live CodeQL tests opt-in;
-- add seeded packs for Java/Kotlin, JavaScript/TypeScript and Python using the same two external
-  predicates (`exportScope`, `exportSeed`);
+  rebuild, as a compile check (it fills a platform volume keyed by the image id; review runs share
+  a separate cache keyed by the declared CodeQL and runner releases, so only the first run after a
+  release change compiles cold; see `docs/operations/codeql-analysis.md`), and make the live
+  CodeQL tests opt-in;
+- measure the seeded packs for Java/Kotlin, JavaScript/TypeScript, Python, Ruby, Go, C# and Rust
+  (they use the same two external predicates, `exportScope` and `exportSeed`);
 - profile the slow `job_evidence_collection` tests.
 
 ## Measure and extend seeded Clang neighborhoods
@@ -550,12 +551,28 @@ build. The wrapper also forces `python3` into every build image.
    captures invalidate build checkpoints.
 5. Re-run the capture benchmark (plain, wrapped, captured) and record per-call cost before and
    after.
-## Build the dataflow, contract, and deployment evidence lanes
+## Prove and extend the dataflow lane; build the contract and deployment lanes
 
-Implement the planned jobs and queries in
-[`architecture/evidence-sources-and-dataflow-retrieval.md`](architecture/evidence-sources-and-dataflow-retrieval.md),
-starting with CodeQL-exported C/C++ dataflow summaries and `query_dataflow`. Unresolved indirect
-calls, unmodeled externals, and path/depth limits must be published as gaps.
+The planned `query_dataflow` tool and `job_dataflow_summary`/`job_reachability_linking` jobs are
+superseded by `query_code_graph`, the `job_codeql_analysis` export step and `job_code_graph_index`
+([`architecture/code-graph-precomputation.md`](architecture/code-graph-precomputation.md)). For
+C/C++ that lane is built end to end: `dataflow_path`, `entry_point`, `guard_fact`, `range_fact` and
+`flow_summary` facts reach packages, admissibility and scoring. Remaining:
+
+1. Run the operator live tier on the review host with the pinned CodeQL image:
+   `python -m pytest -q tests/live/test_codeql_graph_export_live.py tests/live/test_code_graph_live.py`.
+   Refresh `tests/fixtures/graph/codeql_export/native` from the diff (set its provenance `recording`
+   to `live`), and fix the pack, or the expectation if the pack is right, for any failure of the
+   synthetic dataflow expectations (`tests/fixtures/graph/codeql_export/synthetic/expected-facts.json`).
+   The native fixture has no sources or sinks, so only the synthetic test proves the dataflow
+   families.
+2. Add export packs and catalog sections for Java/Kotlin, then JavaScript/TypeScript, then Python
+   (code-graph-precomputation.md section 8), each with its own recorded fixture and expectations.
+   Go, C# and Rust follow once their CodeQL databases succeed; PHP has no CodeQL extractor.
+3. Implement the contract and deployment lanes planned in
+   [`architecture/evidence-sources-and-dataflow-retrieval.md`](architecture/evidence-sources-and-dataflow-retrieval.md).
+
+Unresolved indirect calls, unmodeled externals, and path/depth limits must be published as gaps.
 
 ## Acquire dynamic execution evidence
 

@@ -1,0 +1,28 @@
+{
+  "schema": "appsec-review/graph-export-fixture-provenance/1",
+  "fixture": "javascript-synthetic",
+  "recording": "hand-authored",
+  "live_refreshable": false,
+  "source_root": "source",
+  "export_directory": "exports",
+  "description": "Hand-authored appsec-review/codeql-graph-export/1 objects over source/app.js, source/cli.js and source/store.ts, written to be consistent with rules/codeql-graph-export/javascript. They are a deliberately chosen subset of what the pack would export: synthetic default-constructor calls (new FileStore(), new MemoryStore()), flow summaries from route-handler parameters through property reads, and intermediate declaration nodes of the path graph are omitted; display strings are source text rather than CodeQL's abbreviated toString(). They are not a CodeQL recording. bqrs_sha256 values are SHA-256 of the text 'hand-authored synthetic bqrs <query_id>'. The manifest pack hashes are computed over the pack directory and columns.json at authoring time and are not checked by load_graph_exports.",
+  "cases": {
+    "remote_to_sql": "Express req.query.id flows through buildQuery (a cross-function flow) into pg pool.query (SqlInjection::Sink -> sql_query).",
+    "remote_to_command": "req.query.host reaches child_process exec (CommandInjection::Sink -> command_execution).",
+    "remote_to_path_sanitized": "req.query.file passes path.basename (a catalog sanitizer, listed on the path and dominating the sink) before fs.readFileSync (TaintedPath::Sink -> path_access).",
+    "remote_to_ssrf": "req.query.url reaches http.get (RequestForgery::Sink -> server_side_request).",
+    "remote_to_deserialization": "req.body reaches node-serialize unserialize, a catalog API sink that suppresses the UnsafeDeserialization model on the same call.",
+    "remote_to_html": "req.query.name reaches res.send (ReflectedXss::Sink -> html_output) through an untracked receiver, so the call itself is unresolved_indirect.",
+    "argv_source": "process.argv is a commandargs threat-model source and flows into runCommand's execSync.",
+    "env_source": "process.env is an environment threat-model source and flows into runCommand's execSync.",
+    "api_source_and_log_sink": "readline-sync question is a catalog API source (no javascript-all model) feeding console.log (catalog API log_output sink) and execSync.",
+    "guarded_sink": "cp.exec(host) inside `if (host === \"localhost\")` has a dominating true_branch guard that constrains the operand.",
+    "unguarded_sink": "cp.exec(\"nslookup \" + host) after the if has only a non_dominating condition and an explicit none row.",
+    "flow_summary": "buildQuery summarises parameter 0 -> return (taint); runCommand parameter 0 -> execSync sink (data); handleFile reads module-scope ROOT into the readFileSync sink (taint).",
+    "virtual_dispatch": "s.save(key) on a Store that is a MemoryStore or FileStore resolves to two candidates (virtual_resolved, candidate_count 2).",
+    "unresolved_indirect_call": "obj[name]() is a computed-member call with no resolvable target (unresolved_indirect).",
+    "external_call": "Calls into imported modules or global objects without source-root targets are external_undefined with their modules in callee_declared_in.",
+    "crypto_random": "Math.random() is a catalog API sink on the call itself (argument -1, crypto_misuse).",
+    "range_not_applicable": "JavaScript has no integral range semantics: every sink gets a not_applicable range row and range_conversions is empty."
+  }
+}

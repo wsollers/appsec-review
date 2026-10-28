@@ -1,0 +1,266 @@
+{
+  "schema": "appsec-review/graph-export-expected-facts/1",
+  "fixture": "java-synthetic",
+  "description": "Semantic floor for the java graph-export pack over source/app/*.java. Each case in provenance.json is stated here as rows that must exist: every `where` column must equal the given value in at least one row of the named export. Only line numbers and semantic columns are matched, so the same file holds for the hand-authored recording and for a live export. tests/graph/test_java_export.py holds the recording to it offline; tests/live/test_codeql_graph_export_java_live.py holds the pinned-image export to it.",
+  "expectations": [
+    {
+      "case": "virtual_dispatch",
+      "query_id": "call_sites",
+      "where": {
+        "caller_name": "app.Server::serve(java.net.ServerSocket)",
+        "call_start_line": 32,
+        "callee_name": "app.FileStore::save(java.lang.String)",
+        "dispatch": "virtual_resolved"
+      }
+    },
+    {
+      "case": "virtual_dispatch",
+      "query_id": "call_sites",
+      "where": {
+        "caller_name": "app.Server::serve(java.net.ServerSocket)",
+        "call_start_line": 32,
+        "callee_name": "app.MemoryStore::save(java.lang.String)",
+        "dispatch": "virtual_resolved"
+      }
+    },
+    {
+      "case": "unresolved_reflective_call",
+      "query_id": "call_sites",
+      "where": {
+        "caller_name": "app.Server::invokeNamed(java.lang.String)",
+        "call_start_line": 67,
+        "dispatch": "unresolved_indirect"
+      }
+    },
+    {
+      "case": "two_paths_to_one_sink",
+      "query_id": "path_flows",
+      "where": {
+        "source_start_line": 25,
+        "sink_start_line": 46,
+        "argument_index": 0
+      }
+    },
+    {
+      "case": "two_paths_to_one_sink",
+      "query_id": "path_flows",
+      "where": {
+        "source_start_line": 4,
+        "sink_start_line": 46,
+        "argument_index": 0
+      }
+    },
+    {
+      "case": "dominating_guard",
+      "query_id": "guards",
+      "where": {
+        "sink_start_line": 51,
+        "argument_index": 0,
+        "guard_state": "dominating",
+        "polarity": "true_branch",
+        "condition_start_line": 50,
+        "comparison_operator": "<",
+        "rhs_kind": "constant",
+        "rhs_value": "64"
+      }
+    },
+    {
+      "case": "non_dominating_guard",
+      "query_id": "guards",
+      "where": {
+        "sink_start_line": 53,
+        "argument_index": 0,
+        "guard_state": "non_dominating",
+        "condition_start_line": 50
+      }
+    },
+    {
+      "case": "non_dominating_guard",
+      "query_id": "guards",
+      "where": {
+        "sink_start_line": 53,
+        "argument_index": 0,
+        "guard_state": "none"
+      }
+    },
+    {
+      "case": "sanitized_path",
+      "query_id": "sink_sites",
+      "where": {
+        "sink_start_line": 58,
+        "argument_index": 0,
+        "model": "path-injection",
+        "dominating_sanitizer_count": 1
+      }
+    },
+    {
+      "case": "sanitized_path",
+      "query_id": "path_sanitizers",
+      "where": {
+        "source_start_line": 25,
+        "sink_start_line": 58,
+        "sanitizer_start_line": 57,
+        "api": "getCanonicalPath"
+      }
+    },
+    {
+      "case": "cross_function_summary",
+      "query_id": "flow_summaries",
+      "where": {
+        "function_name": "app.Server::buildQuery(java.lang.String)",
+        "from_kind": "parameter",
+        "from_index": 0,
+        "to_kind": "return",
+        "flow_kind": "taint"
+      }
+    },
+    {
+      "case": "cross_function_summary",
+      "query_id": "path_flows",
+      "where": {
+        "source_start_line": 25,
+        "sink_start_line": 42,
+        "argument_index": 0
+      }
+    },
+    {
+      "case": "sql_sink",
+      "query_id": "sink_sites",
+      "where": {
+        "sink_start_line": 42,
+        "argument_index": 0,
+        "model": "api",
+        "api": "executeQuery"
+      }
+    },
+    {
+      "case": "command_sink",
+      "query_id": "sink_sites",
+      "where": {
+        "sink_start_line": 46,
+        "argument_index": 0,
+        "model": "api",
+        "api": "exec"
+      }
+    },
+    {
+      "case": "path_sink_model",
+      "query_id": "sink_sites",
+      "where": {
+        "sink_start_line": 51,
+        "argument_index": 0,
+        "model": "path-injection",
+        "api": "FileOutputStream"
+      }
+    },
+    {
+      "case": "ssrf_sink",
+      "query_id": "sink_sites",
+      "where": {
+        "sink_start_line": 62,
+        "argument_index": -1,
+        "model": "request-forgery",
+        "api": "openStream"
+      }
+    },
+    {
+      "case": "ssrf_sink",
+      "query_id": "path_flows",
+      "where": {
+        "source_start_line": 5,
+        "sink_start_line": 62,
+        "argument_index": -1
+      }
+    },
+    {
+      "case": "deserialization_sink",
+      "query_id": "sink_sites",
+      "where": {
+        "sink_start_line": 34,
+        "argument_index": -1,
+        "model": "api",
+        "api": "readObject"
+      }
+    },
+    {
+      "case": "deserialization_sink",
+      "query_id": "path_flows",
+      "where": {
+        "source_start_line": 34,
+        "sink_start_line": 34,
+        "argument_index": -1
+      }
+    },
+    {
+      "case": "reflection_sink",
+      "query_id": "sink_sites",
+      "where": {
+        "sink_start_line": 66,
+        "argument_index": 0,
+        "model": "api",
+        "api": "forName"
+      }
+    },
+    {
+      "case": "log_sink_model",
+      "query_id": "sink_sites",
+      "where": {
+        "sink_start_line": 19,
+        "argument_index": 1,
+        "model": "log-injection",
+        "api": "log"
+      }
+    },
+    {
+      "case": "remote_source_model",
+      "query_id": "source_sites",
+      "where": {
+        "source_start_line": 25,
+        "model": "RemoteFlowSource",
+        "node_kind": "return_value",
+        "api": "getInputStream"
+      }
+    },
+    {
+      "case": "api_source_remote",
+      "query_id": "source_sites",
+      "where": {
+        "source_start_line": 15,
+        "model": "api",
+        "node_kind": "return_value",
+        "api": "getRequestBody"
+      }
+    },
+    {
+      "case": "argv_source",
+      "query_id": "source_sites",
+      "where": {
+        "source_start_line": 4,
+        "model": "LocalUserInput",
+        "source_type": "commandargs",
+        "node_kind": "parameter",
+        "index": 0
+      }
+    },
+    {
+      "case": "environment_source",
+      "query_id": "source_sites",
+      "where": {
+        "source_start_line": 5,
+        "model": "LocalUserInput",
+        "source_type": "environment",
+        "node_kind": "return_value",
+        "api": "getenv"
+      }
+    },
+    {
+      "case": "not_applicable_range",
+      "query_id": "ranges",
+      "where": {
+        "sink_start_line": 46,
+        "argument_index": 0,
+        "applicability": "not_applicable"
+      }
+    }
+  ]
+}
