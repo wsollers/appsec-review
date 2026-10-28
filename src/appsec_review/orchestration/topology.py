@@ -197,15 +197,17 @@ def wave1_dependencies(registered: Set[str]) -> dict[str, tuple[str, ...]] | Non
     if "job_final_publication_gate" in registered and "job_inference_security_review" in registered:
         # The gate only projects the accepted review handoff and the artifacts it binds.
         wave_dependencies["job_final_publication_gate"] = ("job_inference_security_review",)
+    if "job_openvex_export" in registered and "job_final_publication_gate" in registered:
+        wave_dependencies["job_openvex_export"] = ("job_final_publication_gate",)
     if "job_poc_generation" in registered and "job_final_publication_gate" in registered:
         # Optional (disabled by default): proof-of-concept functions for the claims the judge agreed with.
         # It reads the accepted gate and review and the accepted native build, and the report shows its outcome.
         wave_dependencies["job_poc_generation"] = ("job_final_publication_gate",)
     if "job_final_report_publication" in registered and "job_final_publication_gate" in registered:
-        # The report reads the accepted gate handoff (and the PoC handoff when the PoC job ran) and is the one
-        # terminal job of the graph. A disabled PoC job is transparent: the report follows the gate.
-        wave_dependencies["job_final_report_publication"] = (
-            ("job_poc_generation",) if "job_poc_generation" in wave_dependencies else ("job_final_publication_gate",))
+        # Optional publications are siblings; the report closes every enabled tail.
+        wave_dependencies["job_final_report_publication"] = tuple(
+            job_id for job_id in ("job_openvex_export", "job_poc_generation")
+            if job_id in wave_dependencies) or ("job_final_publication_gate",)
     return wave_dependencies
 
 
