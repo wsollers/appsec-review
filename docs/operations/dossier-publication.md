@@ -5,7 +5,10 @@ fixed in `7641fa5` (2026-10-28). The semantic job, protected loader, renderer, t
 receipts are implemented. Checkpoint `18eae9f` aligns shared review `/3` acceptance and nested
 bindings. Final `dd9c9ad` delivers PoC/gate/report `/2` and exact dossier membership/file/receipt
 certification. The owner verified the [seeded PDF sample](#verified-seeded-sample), accepted
-review `/3` to dossier path and repeat rendering. **Full native all-lane acceptance remains pending**.
+review `/3` to dossier path and repeat rendering. Historical native all-lane source `039b24e4`
+also passed with offline model/compiler/renderer boundary doubles; see the
+[bounded acceptance ledger](../reviews/evidence-completion-documentation-inventory.md#acceptance-ledger).
+Neither result is live reproduction, current-main authorization or a full-repository clean result.
 The [source-verified data inventory](../architecture/dossier-data-inventory.md) lists actual
 producer/index/query/provenance surfaces and unavailable capabilities.
 
@@ -150,7 +153,7 @@ do not hand-edit them or substitute protected real-review material.
 ## Process telemetry
 
 Use existing correlated `context.events` and
-[run metrics](metrics.md#completion-rollout-tracking-pending-integration), not a new backend.
+[run metrics](metrics.md#completion-rollout-tracking), not a new backend.
 Required observations include stage/candidate progress, eligible/terminal dossier counts,
 source-retention and PDF-render outcomes, duration, caps, timeout/render/adapter failures and
 coverage/integrity/cleanup gaps. Correlate by run/attempt and safe artifact identity, with
@@ -191,8 +194,8 @@ public. Every format must preserve:
 
 The [rollout decision](../architecture/evidence-completion-and-remediation.md#11-parallel-implementation-decisions)
 is wired as automatic planning, bounded validation, compile-only PoC and dossier defaults for new
-configurations; rollout acceptance still depends on full native semantics, separately from the
-verified seeded sample. Existing runs retain their
+configurations. The historical owner all-lane pass with controlled boundary doubles is separate
+from the real seeded sample and from current-main/manual operational acceptance. Existing runs retain their
 frozen settings: new checkout defaults must not silently enable a previously disabled producer
 when resuming or publishing an old run. Automatic processing does not authorize runtime execution
 or imply reproduction or a fixed finding.
@@ -213,9 +216,10 @@ run; never rewrite an old run's frozen release/configuration. Final gate `/2` ve
 membership/cap partitions and optional upstream identities, then certifies one snapshot; report
 `/2` reads only its sanitized status/ref projection and rehashes that binding set.
 
-Before calling the new end-to-end graph operational, complete native all-lane semantic acceptance.
-The verified seeded sample does not close that gap. Final contracts, explicit manual admission, capability combinations,
-tamper rejection and deterministic/public-protected projection now have source-defined regression
-coverage, but producer factories and unit tests alone
-are not that acceptance result. Track checks and remaining gaps in the
-[implementation record](../reviews/evidence-completion-documentation-inventory.md).
+The historical `039b24e4` check validates genuine review-emitted candidate flow, exact gap inheritance
+and deterministic report retry through all seven lanes, with doubled compiler/model/renderer
+boundaries. It reports three rendered dossier outcomes and four inherited/source gaps; those
+rendered outcomes are not live PDFs. The real sample above independently exercises rendering.
+Neither establishes live compiler/runtime reproduction, production model efficacy or a clean
+repository. Track focused consumer compatibility and remaining user-owned current-main/manual validation
+in the [acceptance ledger](../reviews/evidence-completion-documentation-inventory.md#acceptance-ledger).

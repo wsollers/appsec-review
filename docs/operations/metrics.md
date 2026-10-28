@@ -58,7 +58,7 @@ never evidence that the corresponding scope is clean. `finding_states` counts on
 finding transitions; scanner observations and CodeQL SARIF result counts are not confirmed defects
 or vulnerabilities.
 
-## Completion rollout tracking (pending integration)
+## Completion rollout tracking
 
 The [completion telemetry contract](../architecture/telemetry.md#evidence-completion-tracking-commissioned)
 requires PoC, chain, remediation, dossier and final-publication tracking from their first
@@ -105,13 +105,18 @@ not accepted evidence or proof that no challenge was omitted.
 
 Generation unit tests cover the persisted summary, deterministic replay, stale-cache replacement
 and unchanged source-log bytes, not just the in-memory aggregate. They also verify that newly
-appended producer events update the summary without recounting old events. Full all-lane
-acceptance additionally checks actual producer events through persisted
-`data/telemetry/summary.json`; track that separately in the
-[implementation record](../reviews/evidence-completion-documentation-inventory.md).
-The parent reports the focused certified-report count/persistence tests passed on Windows and
-Linux; combined main-plus-feature and actual-producer all-lane validation remain pending.
-Zero `completion.measurement_gap_count` is not zero review/source/redaction coverage gaps.
+appended producer events update the summary without recounting old events. The owner-reported
+historical `039b24e4` all-lane check also verifies actual producer events and derived completion
+summary counts through seven lanes, with offline compiler/model/renderer boundary doubles.
+`b9e69d17` scopes capability enabled/disposition maps to the gate certification event; generic
+step lifecycle lists are not capability maps. Replaying the same owner log preserves producer
+buckets while removing 23 false measurement gaps; the native result reports zero.
+This does not erase the scenario's four inherited/source dossier gaps. Track bounded results,
+focused consumer compatibility and remaining current-main/manual validation in the
+[acceptance ledger](../reviews/evidence-completion-documentation-inventory.md#acceptance-ledger).
+The parent reports focused certified-report count/persistence tests passed on Windows and Linux;
+this docs revision permits Linux-only validation. Zero `completion.measurement_gap_count`
+is not zero review/source/redaction coverage gaps or proof of live runtime behavior.
 
 Check frozen run settings before interpreting an absent lane. The
 [new-run rollout decision](../architecture/evidence-completion-and-remediation.md#11-parallel-implementation-decisions)

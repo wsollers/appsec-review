@@ -32,7 +32,10 @@ gate/report `/2`, authenticated disabled-manual-PoC admission and chain/base com
 Gate certification rehashes nested optional artifacts and freezes capability/attachment accounting;
 the report never discovers later producers. The
 [seeded PDF sample](../operations/dossier-publication.md#verified-seeded-sample) is owner-verified;
-full native all-lane acceptance remains pending. Registration and unit coverage do not establish it. The
+the historical owner `039b24e4` all-lane result uses offline model/compiler/renderer boundary
+doubles. Its bounded pass is not live reproduction or a full-repository/current-main acceptance;
+see the [acceptance ledger](../reviews/evidence-completion-documentation-inventory.md#acceptance-ledger).
+Registration and unit coverage alone establish neither. The
 [dossier inventory change map](dossier-data-inventory.md#8-completion-change-map-and-unresolved-integration)
 lists the central config/schema/version, target-independent dispatch, CLI/Dagster, resume and
 dataset/input-matrix surfaces that must change together.

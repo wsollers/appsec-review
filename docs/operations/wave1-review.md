@@ -55,10 +55,12 @@ configured jobs and is summarized in [`../../deploy/dagster/README.md`](../../de
 **Acceptance boundary:** final `dd9c9ad` aligns review `/3`, pre-gate PoC/gate/report `/2`,
 immutable protected outputs, exact capability/snapshot binding and chain/base completeness isolation.
 The owner-verified [seeded PDF sample](dossier-publication.md#verified-seeded-sample) is retained;
-full native all-lane semantic acceptance remains pending. Do not infer
-end-to-end readiness from graph construction, new defaults or isolated unit coverage.
+the historical owner `039b24e4` all-lane check separately passes with offline
+model/compiler/renderer boundary doubles. Its bounded result is not live reproduction,
+full-repository clean acceptance or authorization for a new current-main review. Do not infer
+operational readiness from graph construction, new defaults or isolated unit coverage.
 See [remediation](remediation.md), [dossier publication](dossier-publication.md) and the
-[implementation record](../reviews/evidence-completion-documentation-inventory.md).
+[acceptance ledger](../reviews/evidence-completion-documentation-inventory.md#acceptance-ledger).
 The shared enabled direct/Dagster OWASP chain is **prioritization → code graph → security tagging/tag cloud →
 OWASP → review data indexing → package assembly → hunt and red/blue/independent verification**,
 with accepted source/component/build/static evidence also feeding OWASP. Tagging and prioritization

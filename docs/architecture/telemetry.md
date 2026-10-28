@@ -163,6 +163,15 @@ Each lane contains `observed` and `events`. Each event has the following closed 
 | `unavailable_token_measurements` | Number of explicit-null `input_tokens`, `output_tokens`, `cache_tokens` measurements, not missing turns. Separately, `counters.usage_unavailable_count`, when emitted by a producer, counts turns with unavailable usage. Omitted fields are not invented as zero or counted as explicit nulls. |
 | `duration_ms` | `count`, `p50`, `p95`, `max`, `summed_work`; summaries are null when no duration was emitted. |
 
+Capability `enabled`/`dispositions` maps are admitted only for
+`FINAL_PUBLICATION_GATE_CAPABILITIES_VERIFIED` in the publication-gate lane (`b9e69d17`).
+Generic step lifecycle disposition lists are not capability maps or measurement failures.
+The [historical owner all-lane result](../reviews/evidence-completion-documentation-inventory.md#acceptance-ledger)
+at `039b24e4` observes all seven lanes with zero measurement gaps while preserving legitimate
+review/source/redaction gaps. It uses offline model/compiler/renderer boundary doubles, not live
+runtime reproduction. Zero telemetry gaps does not establish complete evidence or current-main
+acceptance.
+
 Invalid/nonfinite/negative/oversized measurements and invalid capability/outcome mappings increment
 `measurement_gap_count`; at most 200 named `measurement_gaps` are retained.
 `COUNTERS`, `OUTCOMES`, `OUTCOME_FIELDS`, `LIMITS`, `CAPABILITIES`, `CAPABILITY_COUNTERS`, `FLAGS`

@@ -19,8 +19,10 @@ Only sanitized summaries/statuses and artifact references belong in public proje
 `reporting/dossier_render.py` reuses the commissioned executor/template, retains
 `dossier-rendering-receipt/1`, and removes only its run-owned input/scratch staging. Final `dd9c9ad`
 now certifies these refs in gate/report `/2`. The owner-verified
-[seeded dossier sample](dossier-publication.md#verified-seeded-sample) is retained; full native
-all-lane semantics remain pending. The older sample below is not acceptance of that new path.
+[seeded dossier sample](dossier-publication.md#verified-seeded-sample) is retained. The historical
+native all-lane check at `039b24e4` uses a renderer double and is not another live PDF result;
+see the [acceptance ledger](../reviews/evidence-completion-documentation-inventory.md#acceptance-ledger).
+The older sample below is not acceptance of that new path.
 [Dossier data inventory](../architecture/dossier-data-inventory.md) records inputs and visibility.
 
 ## What it renders

@@ -8,8 +8,11 @@ one gate-certified snapshot after every enabled producer, including protected
 [dossiers](dossier-publication.md). Its exact inputs, visibility and unresolved integration
 surfaces are cataloged in the [dossier inventory](../architecture/dossier-data-inventory.md).
 New defaults do not rewrite old frozen configurations. The owner-verified
-[seeded dossier PDF sample](dossier-publication.md#verified-seeded-sample) is separate from full
-native all-lane semantics, which remain pending and are not implied by these source contracts.
+[seeded dossier PDF sample](dossier-publication.md#verified-seeded-sample) is separate from the
+historical `039b24e4` all-lane check with offline model/compiler/renderer boundary doubles.
+The [acceptance ledger](../reviews/evidence-completion-documentation-inventory.md#acceptance-ledger)
+records that bounded pass, focused consumer compatibility and remaining manual/current-main validation; neither result
+is a full-repository clean verdict or live reproduction.
 
 `job_final_publication_gate` and `job_final_report_publication` are the terminal publication jobs of
 `wave1_review`. They turn the accepted `job_inference_security_review` handoff into the pipeline's
@@ -198,6 +201,10 @@ PoC failure never contradicts the finding, and a compiled PoC cannot upgrade it 
 **Design only; not implemented at baseline `b7c31ba23af840f14cc919d56b8c557ffdb2d010`.**
 Shared settings/contracts are present at combined source `6975aef2`, but no exporter job,
 dataset, configuration entry or runtime report integration is registered.
+Final shared-contract checkpoint `967d1c7f` accepts only gate `/2`, rejects legacy `/1`
+and requires nested input/capability/attachment refs within certified gate bindings.
+Its [contract/fixture reconciliation](../schemas/openvex-export/README.md) changes neither
+gate/common producer source nor report links/fan-in; the owner reports 309 focused Linux passes.
 The [OpenVEX design](../architecture/openvex-export.md) proposes optional model-free
 `job_openvex_export` after the accepted gate. Its baseline post-gate PoC sibling diagram and
 `final-report/1` projection predate the current completion graph: PoC now precedes the gate
@@ -273,8 +280,12 @@ validation against `jsonschema` and the closed validator, and that every file th
 claimed by a dataset declaration. `tests/test_completion_publication.py` covers optional capability
 combinations, disabled/manual admission, exact candidate/finding/plan/dossier/chain bindings,
 snapshot-only reporting, tamper rejection and public/protected separation.
-Source-defined test coverage and owner-reported passes are not full native all-lane, live-model,
-PDF or Dagster acceptance; see the [implementation record](../reviews/evidence-completion-documentation-inventory.md).
+The separate owner-reported `039b24e4` native check passes genuine review-emitted candidate flow,
+sanitized gate-only report, ignored corrupted optional pointers and deterministic second
+JSON/Markdown hashes with offline model/compiler/renderer boundary doubles. Real PDF sample
+checks remain separate. These are not live-model/runtime reproduction, full-repository clean
+acceptance or authorization for new Dagster/review runs; see the
+[acceptance ledger](../reviews/evidence-completion-documentation-inventory.md#acceptance-ledger).
 
 `FINAL_PUBLICATION_GATE_CAPABILITIES_VERIFIED`, `FINAL_PUBLICATION_GATE_REVIEW_VERIFIED`,
 `FINAL_PUBLICATION_GATE_PUBLISHED`, `FINAL_REPORT_ASSEMBLED` and `FINAL_REPORT_PUBLISHED` expose

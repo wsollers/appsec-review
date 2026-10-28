@@ -3,7 +3,7 @@
 Status: implementation contract, partially delivered; no change to execution authorization.
 Original inspected baseline: `d2b64774`. Source reconciliation through `dd9c9ad`
 (including `b702eb7`, `7641fa5`, `18eae9f`, `e769645f`, `dd1f8018`, `c44eddc1`),
-2026-10-28.
+stable `a709a10b` and contracts-only OpenVEX handoff `967d1c7f`, 2026-10-28.
 
 The [dossier data inventory](dossier-data-inventory.md) records the source-verified available
 inputs, bounded queries/indexes, producer ownership, visibility and evidence gaps at contract
@@ -16,8 +16,12 @@ The chain, remediation and dossier producers, central configuration/registration
 and completion metrics now exist. The shared reader accepts review `/3`; chain/base completeness
 isolation, immutable PoC `/2`, five-capability gate `/2` and gate-only report `/2` are delivered.
 The owner-verified [seeded PDF sample](../operations/dossier-publication.md#verified-seeded-sample)
-is retained; full native all-lane semantics and Linux real-review remediation acceptance remain
-follow-ups. Delivered source is therefore **not** a claim of end-to-end operational acceptance. The sections below
+is retained. The [bounded acceptance ledger](../reviews/evidence-completion-documentation-inventory.md#acceptance-ledger)
+records historical owner source `039b24e4`: two native checks passed, including all seven lanes
+with offline model/compiler/renderer boundary doubles, unchanged findings and deterministic
+report retry. This is **not** live reproduction, current-main authorization or a full-repository
+clean result. Focused OpenVEX consumer compatibility passes separately; user-owned current-main
+manual validation remains distinct. The sections below
 retain the original design rationale and requirements; current delivered data is enumerated in
 the [inventory reconciliation](dossier-data-inventory.md#delivered-source-and-remaining-integration).
 
