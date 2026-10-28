@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from appsec_review.observability.events import PipelineLog
+from appsec_review.observability.completion import completion_metrics
 from appsec_review.storage import atomic_json, canonical_json
 from appsec_review.storage import file_sha256
 
@@ -597,6 +598,7 @@ def aggregate_run_metrics(run_root: Path) -> Mapping[str, Any]:
             "completed_work_count": sum(1 for item in records if str(item["event_type"]).endswith(
                 ("SUCCEEDED", "COMPLETED", "COMPLETED_WITH_GAPS", "REUSED"))),
             "review": _review_metrics(Path(run_root), records),
+            "completion": completion_metrics(records),
             "torn_tail_ignored": torn}
 
 

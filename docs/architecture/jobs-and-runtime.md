@@ -22,6 +22,15 @@ jobs that are not in the direct graph. Both surfaces end with `job_inference_sec
 single terminal job. Both surfaces use the same semantic registry and accepted-handoff format. The exact operator-visible distinction is documented in
 [`../operations/wave1-review.md`](../operations/wave1-review.md).
 
+**Pending completion topology:** the [completion design](evidence-completion-and-remediation.md)
+moves compile-only PoC generation before a single final gate, keeps chain composition in the
+review ledger before sealing, and adds confirmed-only remediation and protected dossier
+publication before the gate. At contract commit `5f5548d`, these topology changes and new jobs
+are not registered; shared constants alone do not add runnable jobs. The
+[dossier inventory change map](dossier-data-inventory.md#8-completion-change-map-and-unresolved-integration)
+lists the central config/schema/version, target-independent dispatch, CLI/Dagster, resume and
+dataset/input-matrix surfaces that must change together. Existing behavior below is the baseline.
+
 A boolean at `[jobs.<job_id>.settings].enabled` is the generic job dispatch gate. Missing means
 enabled. `false` makes the job transparent: it is absent from direct and Dagster graphs, takes no
 inputs, publishes no handoff or artifacts, and is excluded from the run inventory. Nested feature

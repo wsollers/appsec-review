@@ -112,11 +112,18 @@ _JOB_STEP_POOLS: Mapping[str, Mapping[str, str]] = {
         "lead_review": "inference_teams",
         "hunt_review": "inference_teams",
         "scoring": "inference_score",
+        "attack_chains": "inference_teams",
         "publication": "lifecycle",
     },
+    "job_remediation_planning": {"assess": "inference_teams", "acceptance": "lifecycle"},
+    "job_remediation_validation": {"assess": "inference_teams", "acceptance": "lifecycle"},
+    "job_dossier_publication": {"acceptance": "lifecycle"},
 }
 _JOB_DEFAULT_POOLS: Mapping[str, str] = {"job_inference_security_review": "application",
-                                         "job_code_graph_index": "index"}
+                                         "job_code_graph_index": "index",
+                                         "job_remediation_planning": "application",
+                                         "job_remediation_validation": "application",
+                                         "job_dossier_publication": "application"}
 
 
 def _pool_for(unit_id: str, job_id: str | None = None) -> str:

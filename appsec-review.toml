@@ -2430,6 +2430,18 @@ risk_ratings = ["medium", "high", "critical"]
 [jobs.job_inference_security_review.settings.verification]
 require_distinct_model_for_ship_blocking = true
 
+[jobs.job_inference_security_review.settings.attack_chains]
+max_links = 4
+max_expansions = 100
+max_candidates_per_composition = 8
+max_challenge_cells = 100
+max_queries = 12
+max_turns = 4
+max_evidence_per_obligation = 8
+max_result_bytes = 65536
+# Only commissioned exact producer identities can establish structured continuity, never model prose.
+continuity_producers = []
+
 # Lead severity triage (docs/operations/lead-severity-triage.md). A lead whose scanner reported no severity gets
 # an audited assessed severity before package assembly: first the deterministic table below
 # (lead-severity-rules/1), then the pinned MITRE CWE catalog (cwe-impact-derivation/1), then a short model pass
@@ -2615,6 +2627,12 @@ workers = 1
 workers = 1
 [jobs.job_inference_security_review.steps.scoring.tasks.score_claims]
 
+[jobs.job_inference_security_review.steps.attack_chains]
+workers = 1
+[jobs.job_inference_security_review.steps.attack_chains.tasks.compose_candidates]
+[jobs.job_inference_security_review.steps.attack_chains.tasks.refute_edges]
+[jobs.job_inference_security_review.steps.attack_chains.tasks.verify_weakest_links]
+
 [jobs.job_inference_security_review.steps.completeness]
 workers = 1
 [jobs.job_inference_security_review.steps.completeness.tasks.audit]
@@ -2656,10 +2674,9 @@ workers = 1
 # Nothing is linked into an executable and nothing is run by the pipeline. The job reads no target tree:
 # it uses the accepted native build workspace, compile database and image of job_language_build.
 #
-# SHIPPED DISABLED. enabled only decides membership in the automatic graph: when true the job sits after
-# job_final_publication_gate and job_final_report_publication follows it; when false the report follows the
-# gate exactly as before. It is invoked manually on a finished run with
-# `appsec-review run job_poc_generation --run-id <id> --upstream-from-run`, which is allowed while disabled.
+# Automatic compile-only generation runs after inference and before the final gate. A disabled job may
+# still run manually with `appsec-review run job_poc_generation --run-id <id> --upstream-from-run`.
+# Its output is admitted into a disabled lane only by rerunning the gate with --admit-manual-poc.
 #
 # max_candidates bounds the candidates attempted (confirmed claims first). accepted_judge_verdicts are the
 # judge verdicts a candidate may carry. bounds, policy and build are the closed lists and numbers the
@@ -2670,7 +2687,7 @@ name = "poc_generation"
 workers = 1
 
 [jobs.job_poc_generation.settings]
-enabled = false
+enabled = true
 workers = 1
 max_candidates = 16
 accepted_judge_verdicts = ["red_correct"]
@@ -2807,10 +2824,134 @@ workers = 1
 workers = 1
 [jobs.job_poc_generation.steps.publish.tasks.publish_handoff]
 
+# Confirmed-only remediation proposes inert exact-byte patches and never changes the target. Validation
+# replays only the bounded native syntax adapter; build_checked never means runtime-fixed.
+[jobs.job_remediation_planning]
+name = "remediation_planning"
+workers = 1
+
+[jobs.job_remediation_planning.settings]
+enabled = true
+
+[jobs.job_remediation_planning.settings.bounds]
+max_candidates = 16
+max_packages = 10000
+max_source_files = 8
+max_source_bytes = 64000
+max_patch_files = 4
+max_patch_bytes = 64000
+max_file_bytes = 262144
+max_edits = 32
+max_list_items = 32
+max_text_chars = 4000
+max_workspace_files = 100000
+max_workspace_bytes = 1073741824
+
+[jobs.job_remediation_planning.settings.writer]
+provider = "claude-cli"
+model = "claude-haiku-5-5"
+reasoning = "high"
+max_input_tokens = 64000
+max_output_tokens = 16000
+max_turns = 6
+max_queries = 4
+timeout_seconds = 600
+
+[jobs.job_remediation_planning.steps.load]
+workers = 1
+[jobs.job_remediation_planning.steps.load.tasks.verify_inputs]
+
+[jobs.job_remediation_planning.steps.assess]
+workers = 1
+[jobs.job_remediation_planning.steps.assess.tasks.propose]
+
+[jobs.job_remediation_planning.steps.acceptance]
+workers = 1
+[jobs.job_remediation_planning.steps.acceptance.tasks.publish_handoff]
+
+[jobs.job_remediation_validation]
+name = "remediation_validation"
+workers = 1
+
+[jobs.job_remediation_validation.settings]
+enabled = true
+adapters = ["native_syntax"]
+command_timeout_seconds = 120
+output_bytes = 65536
+
+[jobs.job_remediation_validation.settings.bounds]
+max_candidates = 16
+max_packages = 10000
+max_source_files = 8
+max_source_bytes = 64000
+max_patch_files = 4
+max_patch_bytes = 64000
+max_file_bytes = 262144
+max_edits = 32
+max_list_items = 32
+max_text_chars = 4000
+max_workspace_files = 100000
+max_workspace_bytes = 1073741824
+
+[jobs.job_remediation_validation.settings.reviewer]
+provider = "claude-cli"
+model = "claude-haiku-5-5"
+reasoning = "high"
+max_input_tokens = 64000
+max_output_tokens = 8000
+max_turns = 2
+max_queries = 0
+timeout_seconds = 600
+
+[jobs.job_remediation_validation.steps.load]
+workers = 1
+[jobs.job_remediation_validation.steps.load.tasks.verify_inputs]
+
+[jobs.job_remediation_validation.steps.assess]
+workers = 1
+[jobs.job_remediation_validation.steps.assess.tasks.validate]
+
+[jobs.job_remediation_validation.steps.acceptance]
+workers = 1
+[jobs.job_remediation_validation.steps.acceptance.tasks.publish_handoff]
+
+# Protected developer dossiers retain exact JSON, LaTeX, PDF and receipt bytes before the final gate.
+# A rendering failure retains LaTeX and a named gap, never an invented PDF.
+[jobs.job_dossier_publication]
+name = "dossier_publication"
+workers = 1
+
+[jobs.job_dossier_publication.settings]
+enabled = true
+render_pdf = true
+max_packages = 10000
+max_dossiers = 20000
+max_artifact_bytes = 16777216
+max_source_excerpts = 4
+max_evidence_rows = 24
+max_text_chars = 1800
+max_code_lines = 40
+max_code_chars = 4000
+image_tag = "appsec-review/tool-report-latex:1.0.0"
+image_id = "sha256:1dd77c969bba00168bc3128e5ee8290328dd06c09ecd4d845618c3c6336530e4"
+render_timeout_seconds = 600
+
+[jobs.job_dossier_publication.steps.load]
+workers = 1
+[jobs.job_dossier_publication.steps.load.tasks.verify_inputs]
+
+[jobs.job_dossier_publication.steps.dossiers]
+workers = 1
+[jobs.job_dossier_publication.steps.dossiers.tasks.create]
+
+[jobs.job_dossier_publication.steps.acceptance]
+workers = 1
+[jobs.job_dossier_publication.steps.acceptance.tasks.publish_handoff]
+
 # Final report publication (docs/operations/final-report.md): the terminal job. It reads only the
 # accepted gate handoff and the artifacts the gate binds, and writes final-report.json and a
 # deterministic final-report.md. It calls no model. The two settings only shorten identifier lists in
-# the Markdown; the JSON always carries every identifier. PDF rendering is a later step.
+# the Markdown; the JSON always carries every identifier. Protected dossier PDFs are certified by the gate.
 [jobs.job_final_report_publication]
 name = "final_report_publication"
 workers = 1
