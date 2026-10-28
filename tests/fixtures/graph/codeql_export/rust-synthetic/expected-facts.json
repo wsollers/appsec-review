@@ -1,29 +1,32 @@
 {
   "schema": "appsec-review/graph-export-expected-facts/1",
   "fixture": "rust-synthetic",
-  "description": "Semantic floor for the Rust graph-export pack over source/. Each case in provenance.json is stated here as rows that must exist: every `where` column must equal the given value in at least one row of the named export. Only line numbers and semantic columns are matched, so the same file holds for the hand-authored recording and for a live export. tests/graph/test_rust_export.py holds the recording to it offline; tests/live/test_codeql_graph_export_rust_live.py holds the pinned-image export to it.",
+  "description": "Semantic floor for the Rust graph-export pack over source/. Each case in provenance.json is stated here as rows that must exist: every `where` column must equal the given value in at least one row of the named export. Only line numbers and semantic columns are matched, so the same file holds for the recording and for a live export. tests/graph/test_rust_export.py holds the recording to it offline; tests/live/test_codeql_graph_export_rust_live.py holds the pinned-image export to it. known_gaps lists rows the cases call for that CodeQL 2.27.0 (codeql/rust-all 0.2.21) does not produce; both tiers require each one to stay unmet, so a CodeQL upgrade that closes a gap fails loudly and the row is promoted into expectations.",
   "expectations": [
-    {"case": "remote_to_sql", "query_id": "path_flows", "where": {"source_start_line": 37, "sink_start_line": 20, "argument_index": 0}},
     {"case": "remote_to_sql", "query_id": "sink_sites", "where": {"sink_start_line": 20, "argument_index": 0, "model": "sql-injection", "api": "execute"}},
-    {"case": "remote_to_command", "query_id": "path_flows", "where": {"source_start_line": 37, "sink_start_line": 42, "argument_index": 0}},
-    {"case": "remote_to_ssrf", "query_id": "path_flows", "where": {"source_start_line": 37, "sink_start_line": 62, "argument_index": 1}},
+    {"case": "remote_to_command", "query_id": "sink_sites", "where": {"sink_start_line": 42, "argument_index": 0, "model": "command-injection", "api": "new"}},
     {"case": "remote_to_ssrf", "query_id": "sink_sites", "where": {"sink_start_line": 62, "argument_index": 1, "model": "request-url"}},
     {"case": "remote_to_deserialization", "query_id": "sink_sites", "where": {"sink_start_line": 66, "argument_index": 0, "model": "api", "api": "from_str", "declared_in": "serde_json"}},
-    {"case": "remote_to_deserialization", "query_id": "path_flows", "where": {"source_start_line": 37, "sink_start_line": 66, "argument_index": 0}},
     {"case": "argv_and_env_sources", "query_id": "source_sites", "where": {"source_start_line": 83, "model": "commandargs"}},
     {"case": "argv_and_env_sources", "query_id": "source_sites", "where": {"source_start_line": 86, "model": "environment"}},
     {"case": "argv_and_env_sources", "query_id": "source_sites", "where": {"source_start_line": 37, "model": "remote"}},
     {"case": "argv_and_env_sources", "query_id": "path_flows", "where": {"source_start_line": 86, "sink_start_line": 52, "argument_index": 0}},
-    {"case": "sanitized_path", "query_id": "path_sanitizers", "where": {"source_start_line": 83, "sink_start_line": 57, "sanitizer_start_line": 56, "api": "canonicalize"}},
     {"case": "sanitized_path", "query_id": "sink_sites", "where": {"sink_start_line": 57, "model": "path-injection", "dominating_sanitizer_count": 1}},
     {"case": "guarded_sink", "query_id": "guards", "where": {"sink_start_line": 47, "argument_index": 0, "guard_state": "dominating", "polarity": "true_branch", "condition_start_line": 46, "comparison_operator": "<"}},
     {"case": "guarded_sink", "query_id": "path_flows", "where": {"source_start_line": 83, "sink_start_line": 47, "argument_index": 0}},
     {"case": "unguarded_sink", "query_id": "guards", "where": {"sink_start_line": 42, "argument_index": 0, "guard_state": "none"}},
-    {"case": "cross_function_flow_summary", "query_id": "flow_summaries", "where": {"function_name": "rust_synthetic::as_owned", "from_kind": "parameter", "from_index": 0, "to_kind": "return"}},
-    {"case": "cross_function_flow_summary", "query_id": "flow_summaries", "where": {"function_name": "rust_synthetic::fetch_url", "from_kind": "parameter", "to_kind": "sink", "to_index": 1, "to_model": "request-url"}},
-    {"case": "virtual_dispatch", "query_id": "call_sites", "where": {"caller_name": "rust_synthetic::main", "call_start_line": 79, "callee_name": "<rust_synthetic::SqlStore as rust_synthetic::Store>::save", "dispatch": "virtual_resolved"}},
-    {"case": "virtual_dispatch", "query_id": "call_sites", "where": {"caller_name": "rust_synthetic::main", "call_start_line": 79, "callee_name": "<rust_synthetic::NullStore as rust_synthetic::Store>::save", "dispatch": "virtual_resolved"}},
-    {"case": "unresolved_indirect_call", "query_id": "call_sites", "where": {"caller_name": "rust_synthetic::main", "call_start_line": 89, "dispatch": "unresolved_indirect"}},
+    {"case": "cross_function_flow_summary", "query_id": "flow_summaries", "where": {"function_name": "rust-synthetic::as_owned", "from_kind": "parameter", "from_index": 0, "to_kind": "return", "flow_kind": "taint"}},
+    {"case": "cross_function_flow_summary", "query_id": "flow_summaries", "where": {"function_name": "rust-synthetic::fetch_url", "from_kind": "parameter", "to_kind": "sink", "to_index": 1, "to_model": "request-url"}},
+    {"case": "virtual_dispatch", "query_id": "call_sites", "where": {"caller_name": "rust-synthetic::main", "call_start_line": 79, "callee_name": "<rust-synthetic::SqlStore as rust-synthetic::Store>::save", "dispatch": "virtual_resolved", "candidate_count": 2}},
+    {"case": "virtual_dispatch", "query_id": "call_sites", "where": {"caller_name": "rust-synthetic::main", "call_start_line": 79, "callee_name": "<rust-synthetic::NullStore as rust-synthetic::Store>::save", "dispatch": "virtual_resolved", "candidate_count": 2}},
+    {"case": "unresolved_indirect_call", "query_id": "call_sites", "where": {"caller_name": "rust-synthetic::main", "call_start_line": 89, "callee_name": "<indirect:bump>", "dispatch": "unresolved_indirect"}},
     {"case": "not_applicable_range", "query_id": "ranges", "where": {"sink_start_line": 20, "argument_index": 0, "applicability": "not_applicable"}}
+  ],
+  "known_gaps": [
+    {"case": "remote_to_sql", "gap": "rust_summarized_body_prunes_remote_flow", "query_id": "path_flows", "where": {"source_start_line": 37, "sink_start_line": 20, "argument_index": 0}},
+    {"case": "remote_to_command", "gap": "rust_summarized_body_prunes_remote_flow", "query_id": "path_flows", "where": {"source_start_line": 37, "sink_start_line": 42, "argument_index": 0}},
+    {"case": "remote_to_ssrf", "gap": "rust_summarized_body_prunes_remote_flow", "query_id": "path_flows", "where": {"source_start_line": 37, "sink_start_line": 62, "argument_index": 1}},
+    {"case": "remote_to_deserialization", "gap": "rust_summarized_body_prunes_remote_flow", "query_id": "path_flows", "where": {"source_start_line": 37, "sink_start_line": 66, "argument_index": 0}},
+    {"case": "sanitized_path", "gap": "rust_canonicalize_summary_does_not_propagate", "query_id": "path_sanitizers", "where": {"source_start_line": 83, "sink_start_line": 57, "sanitizer_start_line": 56, "api": "canonicalize"}}
   ]
 }

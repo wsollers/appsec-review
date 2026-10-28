@@ -1,7 +1,7 @@
 """Rust code-graph export (appsec-review/graph-export-rust): pack, catalog and offline recording.
 
-The hand-authored recording under tests/fixtures/graph/codeql_export/rust-synthetic is held to the
-fixture's expected-facts.json (the same floor the live tier applies to a pinned-image export) and
+The live recording under tests/fixtures/graph/codeql_export/rust-synthetic (CodeQL 2.27.0) is held to
+the fixture's expected-facts.json (the same floor the live tier applies to a pinned-image export) and
 normalized against its source staged under the target path ``crate/`` with CodeQL scope root
 ``crate``. The golden output lives in tests/fixtures/graph/expected/rust-synthetic/normalized.json;
 regenerate it with ``APPSEC_REVIEW_REGENERATE_GRAPH_GOLDEN=1`` after an intended rule change and
@@ -188,8 +188,13 @@ def test_recording_meets_every_expectation_and_every_case_is_expected() -> None:
     document = load_expectations(FIXTURE)
     assert document["fixture"] == "rust-synthetic"
     assert unmet(exports, document) == []
-    cases = json.loads((FIXTURE / "provenance.json").read_text(encoding="utf-8"))["cases"]
-    assert {item["case"] for item in document["expectations"]} == set(cases)
+    provenance = json.loads((FIXTURE / "provenance.json").read_text(encoding="utf-8"))
+    assert provenance["recording"] == "live" and provenance["live_refreshable"] is True
+    assert {item["case"] for item in document["expectations"]} == set(provenance["cases"])
+    gaps = document["known_gaps"]
+    assert {item["case"] for item in gaps} <= set(provenance["cases"])
+    assert {item["gap"] for item in gaps} == set(provenance["known_gaps"])
+    assert len(unmet(exports, {"expectations": gaps})) == len(gaps), "a known gap is met: promote it"
 
 
 def test_recorded_locations_resolve_against_the_fixture_source() -> None:
@@ -228,8 +233,8 @@ def test_rust_recording_normalizes_into_every_family(normalized) -> None:
     counts = Counter(fact.family.value for fact in normalized.facts)
     assert set(counts) == {family.value for family in c.Family}
     assert set(FAMILY_QUERIES) == {family.value for family in c.Family}
-    assert dict(counts) == {"call_site": 41, "sink_site": 7, "entry_point": 5, "flow_summary": 7,
-                            "dataflow_path": 7, "guard_fact": 7, "range_fact": 7}
+    assert dict(counts) == {"call_site": 41, "sink_site": 7, "entry_point": 5, "flow_summary": 6,
+                            "dataflow_path": 2, "guard_fact": 7, "range_fact": 7}
     sinks = Counter(fact.payload["result"]["sink_class"] for fact in _family(normalized, "sink_site"))
     assert sinks == {"command_execution": 2, "path_access": 2, "sql_query": 1, "server_side_request": 1,
                      "deserialization": 1}
@@ -237,9 +242,8 @@ def test_rust_recording_normalizes_into_every_family(normalized) -> None:
     assert sources == {"remote": 1, "argv": 1, "environment": 1, "file": 2}
     pairs = {(fact.payload["result"]["source"]["source_class"], fact.payload["result"]["sink"]["sink_class"])
              for fact in _family(normalized, "dataflow_path")}
-    assert pairs == {("remote", "sql_query"), ("remote", "command_execution"), ("remote", "server_side_request"),
-                     ("remote", "deserialization"), ("argv", "command_execution"), ("argv", "path_access"),
-                     ("environment", "path_access")}
+    # Remote-source pairs are the known gap rust_summarized_body_prunes_remote_flow (CodeQL 2.27.0).
+    assert pairs == {("argv", "command_execution"), ("environment", "path_access")}
     for fact in normalized.facts:
         entity = fact.to_entity()
         assert entity.payload["admissibility"] == c.admissibility(fact.payload)
@@ -263,7 +267,7 @@ def test_guards_ranges_dispatch_and_sanitizers_are_published_honestly(normalized
     summaries = {fact.payload["result"]["function"]["display"]: fact.payload["result"]
                  for fact in _family(normalized, "flow_summary")}
     assert {"kind": "return", "index": -1} == {
-        key: summaries["rust_synthetic::as_owned"]["pairs"][0]["to"][key] for key in ("kind", "index")}
+        key: summaries["rust-synthetic::as_owned"]["pairs"][0]["to"][key] for key in ("kind", "index")}
 
 
 def test_rust_fixture_matches_the_golden_output(normalized) -> None:
