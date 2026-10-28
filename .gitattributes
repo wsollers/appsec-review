@@ -1,0 +1,2 @@
+tests/fixtures/graph/codeql_export/java-synthetic/** -text
+tests/fixtures/graph/expected/java-synthetic/** -text
