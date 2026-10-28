@@ -106,8 +106,17 @@ appsec-review resume --run-id <run> --system storefront
 concurrently, or re-verifies those already acquired, and writes the system manifest. Only then is
 the composed `targets/<system>` root fingerprinted and the remaining jobs planned and run against
 it, so intake, cataloging and discovery each run once over all components. The gate always runs
-again on resume, so a resumed run re-verifies the components but never fetches into or edits them;
-downstream jobs are reused while the composed tree is unchanged.
+again on resume, so a resumed run re-verifies the components but never fetches into or edits them.
+Downstream reuse also requires unchanged accepted inputs and source-history identities; an unchanged
+composed tree alone does not establish that the Git metadata is unchanged.
+
+There is no second source-history wiring step. After intake and cataloging, history discovers
+eligible sources from the accepted system and component manifests, analyzes each available Git or
+review-export checkout at its pinned acquired revision, and maps its paths back under the composed
+root. The system root itself need not contain `.git`. Unsupported history sources, including
+Perforce, remain named gaps; they do not prevent analysis of the available Git components.
+See [source-history operations](source-history-analysis.md) for credentials, policy opt-outs,
+revision binding, and coverage.
 
 The gate records `target-acquisition-plan.json`, `target-acquisition-result.json` (per-component
 status, action, acquisition id and manifest hash) and a hash-checked copy of the system manifest
@@ -126,8 +135,10 @@ appsec-review acquire-target --system storefront --component engine     # select
 appsec-review acquire-target --system storefront --verify-only          # read-only re-check
 ```
 
-`--system` repeats; `--component` repeats and needs exactly one `--system`. `--verify-only` checks
-every component and the composed tree against the system manifest and writes nothing. The command
+These are acquisition selectors, not additional history-wiring options. `--system` repeats;
+`--component` repeats and needs exactly one `--system`. `--verify-only` checks
+every component and the composed tree against the system manifest and writes nothing; it cannot be
+combined with `--component`. The command
 prints one JSON result per system, with a `components` entry per component. Exit codes:
 
 - `0`: every system is `COMPLETE` or `VERIFIED` with no gaps.
@@ -220,15 +231,19 @@ it into the run as `target-acquisition.json`. It records the acquisition id, ide
 manifest hash, and whether the reviewed tree matches the acquired tree. The intake handoff lists
 the acquisition gaps.
 
-For a `review_export` component, the component result's `change_context` names the review export.
-Pin it in the change-context settings:
+For a `review_export` component, its `change_context` result identifies the acquired review export
+and its hash. History automatically verifies and retains those records with their component
+identity; change-context's default review source consumes them. Do **not** copy each component's
+export path and hash into the single change-context configuration to connect it. Explicit
+`review.source = "none"` remains a deny, and `"export"` remains an operator-selected override for a
+single source, not a way to assign one global export across a composed system's repositories.
+See [change-context operations](change-context-analysis.md#review-records).
 
-```toml
-[jobs.job_change_context_analysis.settings.review]
-source = "export"
-export_path = "data/target-acquisitions/storefront/components/web-mr-42/review-records.json"
-export_sha256 = "<change_context.export_sha256 from the acquisition result>"
-```
+Source-history records retain the component's acquisition/repository identity, pinned revision,
+source-relative path, and composed target path. Thus `service/src/auth.py` and
+`web-mr-42/src/auth.py` remain separate evidence even when both source-relative paths are
+`src/auth.py`. Discovery neither enables a new provider nor authorizes credentialed network access;
+GitHub enrichment still obeys its configured endpoint, credentials, bounds, and explicit deny.
 
 ## Not covered
 

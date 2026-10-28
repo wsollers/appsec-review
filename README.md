@@ -383,7 +383,10 @@ The `job_target_acquisition` gate acquires every component in parallel into
 `targets/<system>/<component>/` before intake, and discovery then runs once over the composed
 `targets/<system>/` root. `appsec-review acquire-target --system <id>` does the same outside a run.
 Acquisition writes hash-pinned manifests, records failed components as named gaps, and never
-touches an existing checkout. See
+touches an existing checkout. Source history automatically processes eligible acquired components
+at their pinned revisions and maps evidence to the composed root; acquired review records feed
+change-context without separate per-repository wiring. Unsupported or unavailable history remains
+a named gap, and live enrichment still requires the configured credentials and endpoint policy. See
 [`docs/operations/target-acquisition.md`](docs/operations/target-acquisition.md).
 
 ## Build the tool container images
@@ -595,7 +598,7 @@ configuration other than `appsec-review.toml`; `logs` also filters by `--step`, 
 `--attempt`; `plan-resume` accepts the same `--force-from <job-id>` as `resume`; and
 `appsec-review run <job-id> [--run-id <run-id>] [--trigger manual|schedule]` dispatches one job,
 optionally into an existing run. Three further subcommands run outside a review graph:
-`appsec-review acquire-target [--target <id>] [--verify-only]` (hash-pinned Git, Perforce or
+`appsec-review acquire-target [--system <id>] [--verify-only]` (hash-pinned Git, Perforce or
 review-export acquisition into `targets/`; see
 [`docs/operations/target-acquisition.md`](docs/operations/target-acquisition.md)),
 `appsec-review binary-decompile` (pre-run Ghidra decompilation; see

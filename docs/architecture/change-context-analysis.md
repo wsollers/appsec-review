@@ -47,7 +47,7 @@ accepted handoffs:
 |---|---|---|
 | normalized in-window changes, rename mapping, bulk flags | history `changes.json` | every per-change signal |
 | change classification (`fix`, `security_fix`, basis) | history `classification.json` | repeated repairs, fix-on-fix |
-| GitHub review facts | history `github-enrichment.json` | review speed when `review.source = "github_enrichment"` |
+| GitHub review facts and automatically retained acquired review records | accepted source-history artifacts | review speed when `review.source = "github_enrichment"` |
 | raw first-parent log (protected) and walked-change count | history `acquire.git_history` | lifetime ownership only |
 | snapshot binding (`exact` / divergent files) | history result | location reliability |
 | hotspot attention ranks | history `signals.json` | published alongside, never weighted |
@@ -66,7 +66,7 @@ container that history already uses: `blame --porcelain` at the snapshot for the
 | Source | Configuration | Required for | Without it |
 |---|---|---|---|
 | Local Git (via history) | always | sprawl, repeated repairs, fix-on-fix, test churn, lifetime ownership | whole lane `unavailable` with the history reason (for example `no_git_metadata`) |
-| Review records | `review.source = "github_enrichment"` (default) or `"export"` | fast/stale approvals, unapproved mainline changes; observed `merged_at` landing time | review metrics `unavailable` (`review_records_disabled`, `review_records_unavailable:<reason>`); missing commits make them `partial` |
+| Review records | `review.source = "github_enrichment"` (default, including acquired review exports), `"export"` override, or `"none"` deny | fast/stale approvals, unapproved mainline changes; observed `merged_at` landing time | review metrics `unavailable` (`review_records_disabled`, `review_records_unavailable:<reason>`); missing commits make them `partial` |
 | Time zone | `schedule.time_zone` (IANA) | off-hours | `unavailable` (`time_zone_not_configured`, `time_zone_database_unavailable`) |
 | Deployment events | `deployments.enabled`, pinned export | pre-deployment proximity | `unavailable` (`deployment_disabled`, `deployment_export_*`) |
 | Test association rules | `test_association.enabled` | untested production/contract churn | `unavailable` (`test_association_disabled`) |
@@ -110,8 +110,15 @@ Export schemas:
 `{"pull_request": null, "direct_push": true}`. Timestamps must be RFC 3339 with an explicit offset.
 Organization identities are pseudonymous hashes, so the export never needs plaintext emails.
 
-Target acquisition (`start --system` or `acquire-target`) writes a review-records export for each
-GitLab merge request, Gerrit change, or Azure DevOps pull request component. It also writes the hash to pin. See
+Target acquisition (`start --system` or `acquire-target`) writes a review-records export and its
+hash for each GitLab merge request, Gerrit change, or Azure DevOps pull request component. Source
+history automatically verifies and retains these records per source; change-context's default
+review source consumes them before considering that source's GitHub facts, without manual
+per-component export settings. Explicit `"none"` still denies review signals, while `"export"`
+selects an operator-pinned override for a single source. Global review and deployment exports are
+not attributed across multiple repositories: `review_export_source_ambiguous` and
+`deployment_export_source_ambiguous` leave the corresponding metrics unavailable. Records and
+changes retain their source identities so equal commit ids in separate repositories do not collide. See
 [`../operations/target-acquisition.md`](../operations/target-acquisition.md). Approval times that a
 provider does not report stay `null` and become a named acquisition gap.
 
@@ -222,8 +229,10 @@ is surviving-line authorship. Lifetime ownership is separate from history's in-w
 
 ## Index schema and retrieval
 
-The job publishes the immutable shard `history/change-context` and composes it into the accepted
-manifest (all upstream shards, including `history/git-history`, are retained).
+The job publishes immutable source-scoped `history/change-context-<source-key>` shards and composes
+them into the accepted manifest, retaining all upstream history shards. A source rooted at `.` retains
+the `history/change-context` shard name. `query_change_context` reads and paginates across all these
+accepted source shards; equal commit ids or review numbers in separate sources remain distinct.
 
 | Entity kind | Native id | Content |
 |---|---|---|

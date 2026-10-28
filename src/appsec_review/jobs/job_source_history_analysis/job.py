@@ -4,7 +4,7 @@ from appsec_review.interchange import decode_handoff
 
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
-from dataclasses import asdict
+from dataclasses import asdict, replace
 import hashlib
 import json
 import os
@@ -21,6 +21,9 @@ from appsec_review.retrieval import (
 from appsec_review.retrieval.core import resolve_context_manifest
 from appsec_review.retrieval.index import load_verified_manifest
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
+from appsec_review.jobs.source_lanes import (
+    combine_indexes, map_commits, per_source, source_identity, source_key, source_of as lane_source, target_path,
+)
 from appsec_review.storage import atomic_json, canonical_json, file_sha256
 from appsec_review.swift_policy import (
     SWIFT_KNOWN_GAP, filter_swift_files, reject_swift_derived, swift_enabled_from_run,
@@ -38,7 +41,8 @@ from .github import GitHubClient, GitHubSettings, Transport, enrich
 from .hotspots import SII_IDENTITY, TRANSFORMS, score as sii_score
 from .lines import FIX_ON_FIX_IDENTITY, LINE_HISTORY_IDENTITY, FileLines, attribute, fix_on_fix, parse_file_history
 from .settings import HistorySettings, parse_settings
-from .sources import GitSource, blob_id, history_identity, resolve_git_source
+from .sources import GitSource, blob_id, history_identity
+from .discovery import discover_sources, read_pinned
 from .symbols import COMPLEXITY_IDENTITY, SYMBOL_IDENTITY, extract, tree_sitter_language
 from .window import WINDOW_IDENTITY
 from appsec_review.jobs.job_source_history_analysis.datasets import CONSUMES, DATASETS
@@ -177,7 +181,12 @@ def _load_inputs(run_root: Path) -> dict[str, Any]:
     artifacts = catalog["artifacts"]
     partition = _read(run_root, artifacts["repository_discovery.partition_repository"])
     components = _read(run_root, artifacts["component_discovery.catalog_components"])
+    acquisition = intake.get("fingerprint", {}).get("acquisition")
+    acquisition_document = _read(run_root, {"path": acquisition["manifest"],
+                                           "sha256": acquisition["manifest_sha256"]}) if acquisition else None
     return {"source_fingerprint": catalog["source_fingerprint"], "catalog_handoff_sha256": catalog_sha,
+            "acquisition": acquisition_document,
+            "acquisition_sha256": acquisition.get("manifest_sha256") if acquisition else None,
             "files": [{**{key: item[key] for key in ("path", "sha256", "size_bytes")}, "language": item.get("language")}
                       for item in partition.get("files", ())],
             "components": [{"component_id": item["component_id"], "root": item.get("root") or "."}
@@ -209,7 +218,8 @@ def load_accepted_hotspots(run_root: Path) -> Mapping[str, Any] | None:
         return None
     identity = history.get("hotspots", {}).get("artifact")
     if identity is None:
-        return {"schema": HOTSPOT_SCHEMA, "status": "unavailable", "reason": history["sources"]["git"]["reason"],
+        return {"schema": HOTSPOT_SCHEMA, "status": "unavailable",
+                "reason": history["sources"].get("git", {}).get("reason", "no_bound_history"),
                 "entries": [], "handoff_sha256": history["handoff_sha256"]}
     document = _read(Path(run_root), identity)
     if document.get("schema") != HOTSPOT_SCHEMA or document.get("target_snapshot") != history["target_snapshot"]:
@@ -219,6 +229,15 @@ def load_accepted_hotspots(run_root: Path) -> Mapping[str, Any] | None:
 
 def _settings(context) -> HistorySettings:
     return parse_settings(context.config.settings)
+
+
+def _run_history_identity(target_root: Path | None, run_root: Path) -> str:
+    catalog = run_root / "data" / "jobs" / "job_target_catalog" / "latest.json"
+    if not catalog.is_file():
+        return history_identity(target_root)
+    inputs = _load_inputs(run_root)
+    roots = tuple(str(item["root"]) for item in inputs["components"])
+    return history_identity(target_root, roots)
 
 
 def _github_settings(github: Mapping[str, Any], token: str | None) -> GitHubSettings:
@@ -299,7 +318,7 @@ def build_job(*, executor_factory: ExecutorFactory | None = None,
 
     def runner(unit: UnitContext) -> GitRunner:
         return GitRunner(factory(unit), unit.job.target_root or Path(), unit.unit_root / "scratch", source_of(unit),
-                         _limits(unit))
+                         _limits(unit), path_prefix=lane_source(unit).get("root", "."))
 
     def eligible_of(unit: UnitContext) -> Mapping[str, Mapping[str, Any]]:
         return unit.output("resolve_sources.bind_snapshot")["eligible"]
@@ -319,28 +338,70 @@ def build_job(*, executor_factory: ExecutorFactory | None = None,
         if inputs["source_fingerprint"] != unit.job.source_fingerprint:
             raise ValueError("graph target fingerprint does not match the accepted catalog")
         target = unit.job.target_root
-        if swift_count and not inputs["files"] and not unit.job.tools.enable_swift:
-            git = GitSource("SKIPPED_POLICY", "swift_execution_disabled")
-        elif not settings.git_enabled:
-            git = GitSource("SKIPPED_POLICY", "git_history_disabled")
-        elif target is None:
-            git = GitSource("SKIPPED_NA", "no_target")
+        if target is None:
+            descriptors = [{"source_id": ".", "root": ".", "git": GitSource("SKIPPED_NA", "no_target").as_dict()}]
         else:
             try:
-                git = resolve_git_source(target)
+                descriptors = discover_sources(
+                    target=target, repository=unit.job.repository_root, acquisition=inputs["acquisition"],
+                    components=inputs["components"], api_base=str(settings.github["api_base"]),
+                    acquisition_sha256=inputs.get("acquisition_sha256"))
             except (OSError, ValueError) as exc:
-                git = GitSource("GAP", f"git_metadata_unreadable:{type(exc).__name__}")
-        github = ("SKIPPED_POLICY", "github_enrichment_disabled") if not settings.github["enabled"] else (
-            ("PENDING", "awaiting_git_history") if git.decision == "SUCCEEDED" else ("SKIPPED_NA", "no_git_history"))
-        unit.job.events.write("SOURCE_HISTORY_RESOLVED", git_decision=git.decision, git_reason=git.reason,
-                              github_decision=github[0])
-        gaps = [git.reason] if git.decision == "GAP" else []
-        if swift_count and not unit.job.tools.enable_swift:
-            gaps.append(SWIFT_KNOWN_GAP)
-        return {"identity": history_identity(target), "git": git.as_dict(),
-                "github": {"decision": github[0], "reason": github[1]}, "inputs": inputs,
-                "configured_exclusions": configured,
-                "gaps": gaps, "terminal_status": git.decision if git.decision in SKIPPED else _status(gaps)}
+                reason = (str(exc) if str(exc) in {"history_metadata_discovery_bound_reached",
+                                                  "history_source_count_bound_reached"} else
+                          "source_discovery_unavailable:" + type(exc).__name__)
+                unit.job.events.write("SOURCE_HISTORY_DISCOVERY_FAILED", error_type=type(exc).__name__)
+                descriptors = [{"source_id": ".", "root": ".", "git": GitSource("GAP", reason).as_dict()}]
+        identity = _run_history_identity(target, unit.job.run_root)
+        results = {}
+        for descriptor in descriptors:
+            git = GitSource(**descriptor["git"])
+            if swift_count and not inputs["files"] and not unit.job.tools.enable_swift:
+                git = GitSource("SKIPPED_POLICY", "swift_execution_disabled")
+            elif not settings.git_enabled:
+                git = GitSource("SKIPPED_POLICY", "git_history_disabled")
+            repository = descriptor.get("github_repository")
+            # A singular operator override remains valid only for a single source.
+            if len(descriptors) == 1 and settings.github["repository"]:
+                repository = settings.github["repository"]
+            github = (("SKIPPED_POLICY", "github_enrichment_disabled") if settings.github["enabled"] is False else
+                      ("SKIPPED_NA", "no_git_history") if git.decision != "SUCCEEDED" else
+                      ("SKIPPED_NA", "github_repository_unavailable") if not repository else
+                      ("PENDING", "awaiting_git_history"))
+            root = descriptor["root"]
+            owned_files = [item for item in inputs["files"] if
+                           (root == "." or item["path"].startswith(root + "/")) and not any(
+                               other["root"] != root and other["root"].startswith("" if root == "." else root + "/")
+                               and item["path"].startswith(other["root"] + "/") for other in descriptors)]
+            gaps = [git.reason] if git.decision == "GAP" else []
+            if swift_count and not unit.job.tools.enable_swift:
+                gaps.append(SWIFT_KNOWN_GAP)
+            source = {key: value for key, value in descriptor.items() if key != "git"}
+            source["github_repository"] = repository
+            source["source_count"] = len(descriptors)
+            result = {"identity": identity, "source": source, "git": git.as_dict(),
+                      "github": {"decision": github[0], "reason": github[1]},
+                      "inputs": {**inputs, "files": owned_files},
+                      "configured_exclusions": configured, "gaps": gaps,
+                      "terminal_status": git.decision if git.decision in SKIPPED else _status(gaps)}
+            export = descriptor.get("review_export")
+            if export:
+                try:
+                    document = read_pinned(unit.job.repository_root, export["export_path"],
+                                           export["export_sha256"], limit=64 * 1024 * 1024)
+                    result["review_records"] = _write(
+                        replace(unit, unit_root=unit.unit_root / "sources" / source_key(source)),
+                        "acquired-review-records.json", document)
+                except (KeyError, OSError, ValueError) as exc:
+                    gaps.append(f"acquired_review_records_unavailable:{type(exc).__name__}")
+                    result["terminal_status"] = "PARTIAL"
+            results[source["source_id"]] = result
+            unit.job.events.write("SOURCE_HISTORY_RESOLVED", source_id=source["source_id"],
+                                  git_decision=git.decision, git_reason=git.reason, github_decision=github[0])
+        if len(results) == 1 and descriptors[0]["root"] == ".":
+            return next(iter(results.values()))
+        gaps = sorted({f"{key}:{gap}" for key, value in results.items() for gap in value["gaps"]})
+        return {"identity": identity, "by_source": results, "gaps": gaps, "terminal_status": _status(gaps)}
 
     def bind(unit: UnitContext) -> Mapping[str, Any]:
         resolved = unit.output("resolve_sources.resolve_history_source")
@@ -357,7 +418,8 @@ def build_job(*, executor_factory: ExecutorFactory | None = None,
             return {"binding": "unavailable", "eligible": {}, "gaps": ["git_execution_failed:ls-tree"],
                     "executions": [tree_run.execution], "terminal_status": "PARTIAL",
                     "dispositions": [{"disposition": "GAP", "reason": "git_execution_failed"}]}
-        tree = parse_tree(tree_run.stdout)
+        root = lane_source(unit).get("root", ".")
+        tree = {target_path(root, path): value for path, value in parse_tree(tree_run.stdout).items()}
         target = (unit.job.target_root or Path()).resolve()
         eligible: dict[str, dict[str, Any]] = {}
         divergent: list[str] = []
@@ -377,6 +439,9 @@ def build_job(*, executor_factory: ExecutorFactory | None = None,
             if not exact:
                 divergent.append(path)
             eligible[path] = {"sha256": item["sha256"], "size_bytes": len(data), "exact": exact,
+                              "source_id": lane_source(unit).get("source_id", "."),
+                              "source_path": path if root == "." else path[len(root) + 1:],
+                              "source_root": root, "pinned_revision": lane_source(unit).get("pinned_revision"),
                               "blob_id": entry["oid"], "language": item.get("language"),
                               "line_count": sum(1 for line in data.splitlines() if line.strip()),
                               "span_lines": max(1, data.count(b"\n") + (0 if data.endswith(b"\n") or not data else 1))}
@@ -397,6 +462,7 @@ def build_job(*, executor_factory: ExecutorFactory | None = None,
         if untracked:
             gaps.append("untracked_path")
         document = {"schema": "appsec-review/source-history-binding/1", "binding": binding,
+                    "source": lane_source(unit),
                     "snapshot_commit": source.snapshot_commit, "object_format": source.object_format,
                     "divergent_paths": divergent, "untracked_paths": untracked, "submodule_paths": submodules,
                     "tree_entry_count": len(tree), "matched_count": matched}
@@ -461,7 +527,7 @@ def build_job(*, executor_factory: ExecutorFactory | None = None,
                 "argv_identity": run.execution["argv_identity"],
                 "file_size_limit_bytes": run.execution["file_size_limit_bytes"],
                 "receipt": _artifact(unit.job.run_root, unit.job.run_root / run.execution["receipt_path"])},
-                "source": {"snapshot_commit": source.snapshot_commit, "object_format": source.object_format,
+                "source": {**lane_source(unit), "snapshot_commit": source.snapshot_commit, "object_format": source.object_format,
                            "history_identity": unit.output("resolve_sources.resolve_history_source")["identity"]}}
         return {"raw_log": retained["log"], "raw_messages": retained["messages"],
                 "executions": executions, "image_id": runs[0][1].execution["image_id"],
@@ -483,12 +549,14 @@ def build_job(*, executor_factory: ExecutorFactory | None = None,
                     "resource_limits": _limits(unit).as_dict(),
                     "resource_limit": {"disposition": "LIMIT_REACHED", "mechanism": "bounded-record-parser",
                                        "producers": ["log"], "partial_output": "rejected"}}
+        map_commits(commits, lane_source(unit).get("root", "."))
         normalized = history_signals.normalize(
             commits, current_paths=eligible_of(unit), shallow=source_of(unit).shallow,
             window_months=settings.history_window_months, max_changes=settings.max_changes,
             bulk_threshold=settings.bulk_change_file_threshold)
         walked = [str(item["commit"]) for item in commits[:settings.max_changes]]
         document = {"schema": "appsec-review/source-history-changes/2", "normalizer": history_signals.NORMALIZER_IDENTITY,
+                    "source": lane_source(unit),
                     "window": WINDOW_IDENTITY, "anchor_time": normalized["anchor_time"],
                     "window_start": normalized.get("window_start"), "walked_commits": walked,
                     "changes": normalized["changes"]}
@@ -505,7 +573,11 @@ def build_job(*, executor_factory: ExecutorFactory | None = None,
             return {"terminal_status": resolved["decision"], "reason": resolved["reason"], "gaps": [], "facts_count": 0}
         if "artifact" not in normalized:
             return {"terminal_status": "SKIPPED_NA", "reason": "no_git_history", "gaps": [], "facts_count": 0}
-        configured = _settings(unit.job).github
+        configured = {**_settings(unit.job).github,
+                      "repository": lane_source(unit).get("github_repository") or _settings(unit.job).github["repository"]}
+        if not os.environ.get(str(configured["token_env"])):
+            return {"terminal_status": "PARTIAL", "reason": "github_credentials_missing",
+                    "gaps": ["github_credentials_missing"], "facts_count": 0}
         settings = _github_settings(configured, os.environ.get(str(configured["token_env"])) or None)
         changes = _read(unit.job.run_root, normalized["artifact"])["changes"]
         result = enrich(GitHubClient(settings, github_transport), str(source_of(unit).snapshot_commit),
@@ -873,6 +945,7 @@ def build_job(*, executor_factory: ExecutorFactory | None = None,
                 deleted = sum(record["deleted"] for record in records)
                 lines_count = int(symbol["nonblank_lines"])
                 symbols[symbol["symbol_id"]] = {
+                    "source": lane_source(unit), "source_path": eligible[path]["source_path"],
                     **{key: symbol[key] for key in ("symbol_id", "qualified_name", "name", "kind", "language",
                                                     "start_line", "end_line", "start_column", "end_column",
                                                     "start_byte", "end_byte", "cyclomatic_complexity",
@@ -939,7 +1012,8 @@ def build_job(*, executor_factory: ExecutorFactory | None = None,
             if fix is None:
                 fix = {"status": "complete", "count": 0, "events": [], "undetermined": [], "candidate_pair_count": 0}
             files[path] = {
-                **value, "young_line_share": shares.get(path), "co_change_partners": partners.get(path, []),
+                **value, "source": lane_source(unit), "source_path": eligible[path]["source_path"],
+                "young_line_share": shares.get(path), "co_change_partners": partners.get(path, []),
                 "line_history_status": line_statuses.get(path, "not_requested"),
                 "symbol_status": symbol_statuses.get(path, "not_requested"),
                 "cyclomatic_complexity": complexity["cyclomatic"] if complexity else None,
@@ -1054,7 +1128,9 @@ def build_job(*, executor_factory: ExecutorFactory | None = None,
                                "normalization": scores["normalization"], "constant_metrics": scores["constant_metrics"],
                                "weights": weights, "complexity_metric": metric, "population": scores["population"],
                                "tiers": scores["tiers"]},
-                    "snapshot": snapshot, "source": {"path": path, "sha256": facts["sha256"], "blob_id": facts["blob_id"]},
+                    "snapshot": snapshot, "source": {"repository": lane_source(unit), "path": path,
+                                                     "source_path": facts["source_path"],
+                                                     "sha256": facts["sha256"], "blob_id": facts["blob_id"]},
                     "location": location, "window": window, "coverage_gaps": gaps, "authority": AUTHORITY}
 
         top_n = settings.hotspot_count
@@ -1089,7 +1165,8 @@ def build_job(*, executor_factory: ExecutorFactory | None = None,
             ranked=ranked, normalized=normalized, acquired=unit.output("acquire.git_history"),
             github=unit.output("acquire.github_enrichment"),
         )
-        shard_id = "git-history"
+        source = lane_source(unit)
+        shard_id = "git-history" + (f"-{source_key(source)}" if source.get("root", ".") != "." else "")
         path = unit.job.run_root / "data" / "indices" / "history" / shard_id / f"{fingerprint}.sqlite"
         eligible = eligible_of(unit)
         target = (unit.job.target_root or Path()).resolve()
@@ -1099,7 +1176,9 @@ def build_job(*, executor_factory: ExecutorFactory | None = None,
             return SourceLocation(
                 target_snapshot=snapshot, path=file_path, file_sha256=facts["sha256"], start_byte=0,
                 end_byte=int(facts["size_bytes"]), start_line=1, end_line=int(facts["span_lines"]),
-                start_column=1, end_column=1, producer_location={"vcs": "git", "scope": scope},
+                start_column=1, end_column=1, producer_location={"vcs": "git", "scope": scope,
+                    **source_identity(source), "source_path": facts["source_path"],
+                    "snapshot_commit": source_of(unit).snapshot_commit},
                 mapping_method="git-blob-binding" if facts["exact"] else "git-path-binding",
                 confidence=1.0 if facts["exact"] else 0.5, ambiguous=not facts["exact"])
 
@@ -1109,7 +1188,8 @@ def build_job(*, executor_factory: ExecutorFactory | None = None,
                 start_byte=int(value["start_byte"]), end_byte=int(value["end_byte"]),
                 start_line=int(value["start_line"]), end_line=int(value["end_line"]),
                 start_column=int(value["start_column"]), end_column=int(value["end_column"]),
-                producer_location={"vcs": "git", "scope": scope, "symbol_id": value["symbol_id"]},
+                producer_location={"vcs": "git", "scope": scope, "symbol_id": value["symbol_id"],
+                                   **source_identity(source), "source_path": eligible[value["path"]]["source_path"]},
                 mapping_method="tree-sitter-byte-and-point-exact", confidence=1.0)
 
         if not path.exists():
@@ -1121,12 +1201,13 @@ def build_job(*, executor_factory: ExecutorFactory | None = None,
             for change in changes_doc["changes"]:
                 if change["change_id"] not in relevant:
                     continue
-                identity = LogicalIdentity.derive(EntityKind.CHANGE, snapshot, {"vcs": "git", "change_id": change["change_id"]})
+                identity = LogicalIdentity.derive(EntityKind.CHANGE, snapshot, {
+                    "vcs": "git", **source_identity(source), "change_id": change["change_id"]})
                 change_ids[change["change_id"]] = identity.value
                 label = classes.get(change["change_id"], {})
                 payload = {"vcs": "git", "change_id": change["change_id"], "commit_time": change["commit_time"],
                            "author": change["author"], "file_count": change["file_count"], "bulk": change["bulk"],
-                           "classification": label}
+                           "classification": label, "source": source}
                 text = " ".join(["change", change["change_id"],
                                  *(key for key in ("fix", "security_fix", "revert", "formatting") if label.get(key)),
                                  *label.get("security_references", ())])
@@ -1134,10 +1215,12 @@ def build_job(*, executor_factory: ExecutorFactory | None = None,
             components: dict[str, str] = {}
             for component_id, value in sorted((signals_doc or {}).get("components", {}).items()):
                 identity = LogicalIdentity.derive(EntityKind.HISTORY_SIGNAL, snapshot,
-                                                  {"scope": "component", "component_id": component_id})
+                                                  {"scope": "component", "component_id": component_id,
+                                                   **source_identity(source)})
                 components[component_id] = identity.value
                 builder.add_entity(EntityRecord(identity, f"component:{component_id}", component_id,
-                    f"history component {component_id} churn {value['churn_lines']} changes {value['change_count']}", value))
+                    f"history component {component_id} churn {value['churn_lines']} changes {value['change_count']}",
+                    {**value, "source": source}))
             file_ids: dict[str, str] = {}
             for file_path, value in sorted((signals_doc or {}).get("files", {}).items()):
                 identity = LogicalIdentity.derive(EntityKind.HISTORY_SIGNAL, snapshot, {"scope": "file", "path": file_path})
@@ -1175,9 +1258,9 @@ def build_job(*, executor_factory: ExecutorFactory | None = None,
                 builder.add_entity(EntityRecord(identity, f"hotspot:{item['scope']}:{key}", key,
                     f"hotspot {item['scope']} {key} tier {item['tier']} rank {item['rank']} sii {item['score']}",
                     item, location))
-                source = file_ids.get(key) if item["scope"] == "file" else symbol_ids.get(key)
-                if source is not None:
-                    builder.add_relation(RelationRecord(RelationKind.DERIVED_FROM, identity.value, source, True, 1.0))
+                signal_id = file_ids.get(key) if item["scope"] == "file" else symbol_ids.get(key)
+                if signal_id is not None:
+                    builder.add_relation(RelationRecord(RelationKind.DERIVED_FROM, identity.value, signal_id, True, 1.0))
             git_status = resolved["git"]["decision"]
             status = ("unavailable" if git_status != "SUCCEEDED" or signals_doc is None
                       else "partial" if history_gaps else "complete")
@@ -1202,13 +1285,14 @@ def build_job(*, executor_factory: ExecutorFactory | None = None,
                 builder.add_coverage(name.replace("_", "-"), "unavailable", reason)
             builder.build()
         identity = IndexIdentity("history", "appsec-review/retrieval-index/2", file_sha256(path), fingerprint,
-                                 _rel(unit.job.run_root, path), {"job": "job_source_history_analysis", "vcs": "git"},
+                                 _rel(unit.job.run_root, path), {"job": "job_source_history_analysis", "vcs": "git",
+                                                               **source_identity(source)},
                                  tuple(gaps), shard_id)
         upstream_path, upstream_sha = resolve_context_manifest(unit.job)
         upstream, _ = load_verified_manifest(unit.job.run_root, upstream_path, upstream_sha)
         base = [IndexIdentity(**{**item, "gaps": tuple(item.get("gaps", ()))}) for item in upstream["indexes"]
                 if item.get("producer", {}).get("job") != "job_source_history_analysis"]
-        manifest_path = unit.job.run_root / "data" / "indices" / "manifests" / f"source-history-{unit.job.attempt_id}.json"
+        manifest_path = unit.job.run_root / "data" / "indices" / "manifests" / f"{shard_id}-{unit.job.attempt_id}.json"
         write_manifest(manifest_path, run_id=unit.job.run_id, target_snapshot=snapshot, target_root=target,
                        indexes=[*base, identity],
                        upstream_manifests=({"path": _rel(unit.job.run_root, upstream_path), "sha256": upstream_sha},))
@@ -1218,7 +1302,7 @@ def build_job(*, executor_factory: ExecutorFactory | None = None,
 
     def publish(unit: UnitContext) -> Mapping[str, Any]:
         resolved = unit.output("resolve_sources.resolve_history_source")
-        if resolved["identity"] != history_identity(unit.job.target_root):
+        if resolved["identity"] != _run_history_identity(unit.job.target_root, unit.job.run_root):
             raise ValueError("target history changed during source history analysis")
         settings = _settings(unit.job)
         gaps, observations = gaps_and_observations(unit)
@@ -1231,6 +1315,9 @@ def build_job(*, executor_factory: ExecutorFactory | None = None,
         file_ranking = [{"path": path, "sha256": eligible[path]["sha256"], "rank": files[path]["sii"]["rank"],
                          "tier": files[path]["sii"]["tier"], "score": files[path]["sii"]["score"],
                          "churn_lines": files[path]["churn_lines"], "change_count": files[path]["change_count"],
+                         "source_id": lane_source(unit).get("source_id", "."),
+                         "source_path": eligible[path]["source_path"],
+                         "pinned_revision": lane_source(unit).get("pinned_revision"),
                          "component_id": files[path]["component_id"]}
                         for path in signals_doc.get("file_ranking", [])[:settings.ranking_top_n]]
         component_ranking = [{"component_id": key, "rank": components[key]["priority"]["rank"],
@@ -1243,7 +1330,8 @@ def build_job(*, executor_factory: ExecutorFactory | None = None,
         decision = git["decision"] if git["decision"] != "SUCCEEDED" or not gaps else "SUCCEEDED"
         document = {
             "schema": SCHEMA, "target_snapshot": unit.job.source_fingerprint, "history_identity": resolved["identity"],
-            "authority": AUTHORITY,
+            "authority": AUTHORITY, "source": lane_source(unit),
+            "review_records": resolved.get("review_records"),
             "sources": {"git": {key: git[key] for key in ("decision", "reason", "object_format", "mainline_ref",
                                                           "snapshot_commit", "head_commit")},
                         "github": {"decision": unit.output("acquire.github_enrichment")["terminal_status"],
@@ -1278,6 +1366,37 @@ def build_job(*, executor_factory: ExecutorFactory | None = None,
             output["dispositions"] = retriable
         return output
 
+    def publish_sources(unit: UnitContext, output: Mapping[str, Any]) -> Mapping[str, Any]:
+        documents = {key: _read(unit.job.run_root, value["artifact"])
+                     for key, value in output["by_source"].items()}
+        settings = _settings(unit.job)
+        entries = [entry for value in documents.values() if value["hotspots"]["artifact"]
+                   for entry in _read(unit.job.run_root, value["hotspots"]["artifact"])["entries"]]
+        hotspots = {"schema": HOTSPOT_SCHEMA, "target_snapshot": unit.job.source_fingerprint,
+                    "hotspot_count": settings.hotspot_count, "selection": "top entries per source",
+                    "entries": entries, "authority": AUTHORITY,
+                    "sources": [{"source_id": key, "artifact": value["hotspots"]["artifact"]}
+                                for key, value in documents.items() if value["hotspots"]["artifact"]]}
+        manifest = unit.output("publish.index_history")["manifest"]
+        document = {
+            "schema": SCHEMA, "target_snapshot": unit.job.source_fingerprint,
+            "history_identity": unit.output("resolve_sources.resolve_history_source")["identity"],
+            "authority": AUTHORITY, "decision": "SUCCEEDED" if any(
+                value["sources"]["git"]["decision"] == "SUCCEEDED" for value in documents.values()) else "GAP",
+            "sources": {"repositories": [{"source_id": key, "source": value["source"],
+                                         **value["sources"], "artifact": output["by_source"][key]["artifact"]}
+                                        for key, value in documents.items()]},
+            "ranking": {"identity": SII_IDENTITY, "scope": "per-source",
+                        "files": [{**item, "source_id": key} for key, value in documents.items()
+                                  for item in value["ranking"]["files"]],
+                        "components": [{**item, "source_id": key} for key, value in documents.items()
+                                       for item in value["ranking"]["components"]]},
+            "hotspots": {"schema": HOTSPOT_SCHEMA, "artifact": _write(unit, "hotspots.json", hotspots)},
+            "gaps": output["gaps"], "index_manifest": manifest,
+        }
+        return {"schema": SCHEMA, "artifact": _write(unit, "source-history.json", document),
+                "index_manifest": manifest, "item_count": sum(value["item_count"] for value in output["by_source"].values())}
+
     units = (
         Unit("resolve_sources.resolve_history_source", resolve),
         Unit("resolve_sources.bind_snapshot", bind, ("resolve_sources.resolve_history_source",)),
@@ -1296,7 +1415,13 @@ def build_job(*, executor_factory: ExecutorFactory | None = None,
         Unit("publish.index_history", index, ("analyze.rank",)),
         Unit("publish.publish_handoff", publish, ("publish.index_history",)),
     )
+    units = tuple(replace(item, handler=per_source(
+        item.handler, "resolve_sources.resolve_history_source",
+        combine_indexes if item.unit_id == "publish.index_history" else
+        publish_sources if item.unit_id == "publish.publish_handoff" else None))
+        if item.unit_id != "resolve_sources.resolve_history_source" else item for item in units)
     return Job("job_source_history_analysis", "source_history_analysis", UnitExecutor(units).execute,
                input_validators=(_validate,), schema_identity=SCHEMA,
                units=units, input_identity=history_identity,
+               run_input_identity=_run_history_identity,
                datasets=DATASETS, consumes=CONSUMES)

@@ -4,8 +4,8 @@ Only derived review-process facts are retained: whether a commit arrived through
 whether someone other than the author approved it, whether the approval covered the merged head,
 whether the author merged it, sanitized label names, and the review timeline (creation, merge,
 final-head commit time, and each other-reviewer approval's time and reviewed commit).  Titles,
-bodies, comments, and account names are never stored.  The repository identity and API host come
-only from central configuration.
+bodies, comments, and account names are never stored. The API host comes only from central
+configuration; repository identities may be discovered without trusting target-owned endpoints.
 """
 
 from __future__ import annotations
@@ -31,10 +31,15 @@ MAX_RESPONSE_BYTES = 4 * 1024 * 1024
 PAGINATION_IDENTITY = "appsec-review/github-link-pagination/1"
 
 
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
 def default_transport(url: str, headers: Mapping[str, str], timeout: int) -> tuple[int, Mapping[str, str], bytes]:
     request = urllib.request.Request(url, headers=dict(headers), method="GET")
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
+        with urllib.request.build_opener(_NoRedirect()).open(request, timeout=timeout) as response:
             return response.status, dict(response.headers), response.read(MAX_RESPONSE_BYTES + 1)
     except urllib.error.HTTPError as exc:
         return exc.code, dict(exc.headers or {}), exc.read(MAX_RESPONSE_BYTES + 1)
@@ -53,7 +58,8 @@ class GitHubSettings:
 
     def __post_init__(self) -> None:
         parsed = urllib.parse.urlsplit(self.api_base)
-        if parsed.scheme != "https" or not parsed.hostname or parsed.query or parsed.fragment:
+        if (parsed.scheme != "https" or not parsed.hostname or parsed.query or parsed.fragment
+                or parsed.username or parsed.password):
             raise ValueError("GitHub API base must be an https URL without query or fragment")
         if not _REPOSITORY.fullmatch(self.repository) or ".." in self.repository:
             raise ValueError("GitHub repository must be owner/name")
@@ -101,7 +107,10 @@ class GitHubClient:
                    "User-Agent": "appsec-review-source-history/1"}
         if self.settings.token:
             headers["Authorization"] = f"Bearer {self.settings.token}"
-        status, response_headers, body = self.transport(url, headers, self.settings.timeout_seconds)
+        try:
+            status, response_headers, body = self.transport(url, headers, self.settings.timeout_seconds)
+        except OSError as exc:
+            raise ValueError(f"github_transport_unavailable:{type(exc).__name__}") from exc
         bucket = str(status)
         self.statuses[bucket] = self.statuses.get(bucket, 0) + 1
         if len(body) > MAX_RESPONSE_BYTES:
@@ -285,6 +294,9 @@ def enrich(client: GitHubClient, snapshot_commit: str, commits: list[str]) -> di
     except BudgetExhausted as exc:
         retriable = str(exc) == "github_rate_limited"
         return result(["github_rate_limited" if retriable else "github_request_budget_exhausted"])
+    except ValueError:
+        retriable = True
+        return result(["github_snapshot_unavailable"])
     snapshot.update({"status": response.status, "response_sha256": response.sha256})
     if response.status in {401, 403}:
         return result(["github_permission_denied"])

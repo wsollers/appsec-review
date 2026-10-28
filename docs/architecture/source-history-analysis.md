@@ -1,8 +1,9 @@
 # Source history analysis
 
-Status: local Git, optional GitHub enrichment, line-level fix-on-fix matching, Tree-sitter
-function-level signals and complexity, the Security Instability Index (SII), and the bounded hotspot
-index are implemented in `src/appsec_review/jobs/job_source_history_analysis/`. Perforce is designed below but not built;
+Status: automatic local Git source discovery, credential-gated GitHub enrichment, line-level
+fix-on-fix matching, Tree-sitter function-level signals and complexity, the Security Instability
+Index (SII), and the bounded hotspot index are implemented in
+`src/appsec_review/jobs/job_source_history_analysis/`. Perforce is designed below but not built;
 see [`../TODO.md`](../TODO.md). Operator guidance is in
 [`../operations/source-history-analysis.md`](../operations/source-history-analysis.md).
 
@@ -11,9 +12,9 @@ see [`../TODO.md`](../TODO.md). Operator guidance is in
 `job_source_history_analysis` reads the version-control history behind the reviewed snapshot and
 publishes bounded, resolvable *instability signals*. These identify files and components that
 changed often or recently, were touched by many authors, went through fix and revert cycles, or
-changed together with other files. Files and functions are ranked by a 0–100 Security Instability
-Index with Tier 1/2/3 bands. The top N of each are published as an immutable, retrieval-queryable
-hotspot index, and the analysis plan uses the file ranking to order review attention.
+changed together with other files. Files and functions are ranked per source by a 0–100 Security
+Instability Index with Tier 1/2/3 bands. The top N of each are published as an immutable,
+retrieval-queryable hotspot index, and the analysis plan uses the file ranking to order review attention.
 
 The lane is a prioritization producer, not a vulnerability producer:
 
@@ -29,7 +30,7 @@ The lane is a prioritization producer, not a vulnerability producer:
 | Source | Acquisition | Network | Status |
 |---|---|---|---|
 | Local Git (`.git` inside the target, any host) | fixed read-only argv in `tool-git` | none | implemented, enabled |
-| GitHub enrichment | bounded REST reads of PR and review facts for known commits | configured API host | implemented, disabled by default |
+| GitHub enrichment | bounded REST reads of PR and review facts for known commits | configured API host, credential required | implemented, automatic identity discovery by default; explicit `false` denies |
 | Perforce export bundle | operator-supplied, hash-pinned `p4 -ztag -Mj` export | none | planned |
 | Perforce server | read-only `p4` queries in `tool-p4` | configured `P4PORT` only | planned |
 
@@ -38,7 +39,8 @@ GitHub only adds review-process facts on top of it.
 
 ## Decisions
 
-- History follows the first-parent chain of `main`, else `master`, else `HEAD`. A `HEAD` that
+- Acquired sources follow the first-parent chain at the component's pinned acquisition revision.
+  Direct-checkout history follows `main`, else `master`, else `HEAD`. A direct-checkout `HEAD` that
   differs from the mainline is recorded as the `head_differs_from_mainline` observation.
 - The ranking is the SII over relative churn, revision frequency, author entropy, and complexity,
   with weights in TOML. Every other signal is published alongside it, unweighted.
@@ -73,27 +75,43 @@ is a sibling of CI configuration analysis, and the plan waits for both. The job 
 
 The inventory excludes `.git`, so the source fingerprint does not cover history. A history-only
 change, such as an amended message or a rewritten ancestor with the same tree, needs another check.
-`Job.input_identity` is a cheap, deterministic probe that hashes the resolved source decision,
-mainline ref, snapshot commit, object format, and shallow boundary. The runner records the probe
+The `appsec-review/source-history-identity/2` input probe hashes bounded discovered source decisions,
+refs, selected commits, object formats, shallow boundaries, and local Git configuration bytes,
+including repository roots from the accepted catalog. The runner records the probe
 value in the claim and handoff. The resume planner re-probes against the graph target, and a
 mismatch reruns the job and invalidates everything downstream. The job's publish unit re-probes
 before publishing, so a history that changes mid-run fails the attempt instead of being accepted.
 
 ## Source resolution and snapshot binding
 
-`resolve_history_source` produces exactly one Git decision, using the shared `SUCCEEDED`,
-`SKIPPED_NA`, `SKIPPED_POLICY`, or `GAP` vocabulary. It reads only the following, each with a size
-bound:
+Source discovery consumes the accepted acquisition manifest for a composed system, verifies the
+component manifests and identities, and selects eligible sources at their pinned revisions.
+Without acquisition metadata it uses bounded discovery at the target root, catalog component
+roots, and first-level locations, never an inference-time recursive scan. Each source retains
+its acquisition/repository identity, source-relative path and composed target path; change and
+review identities are source-scoped. Partial source successes survive another source's gap.
+Acquired review exports are automatically hash-verified and retained for change-context's
+default review source.
+
+Direct discovery is bounded to 4,096 catalog roots/first-level entries and 256 actual sources;
+bound exhaustion is reported as a coverage gap.
+
+Each Git source uses the shared `SUCCEEDED`, `SKIPPED_NA`, `SKIPPED_POLICY`, or `GAP` vocabulary.
+The bounded local resolver reads:
 
 - `HEAD`, the loose ref or `packed-refs` entry, and `shallow`;
 - `objects/info/alternates`; and
 - format keys from `config` (`extensions.objectformat`, `extensions.refstorage`, partial-clone
   markers).
 
-Nothing else in the target's configuration is used. The checks are:
+Only bounded `origin` identity metadata is additionally eligible for automatic GitHub repository
+resolution. An approved acquisition URL can also supply identity. Neither supplies API endpoints:
+`github.com` is eligible with the public API base; an enterprise API base recognizes its configured
+host instead. Missing credentials means a named gap with no request. Target hooks, helpers, includes, and commands are
+never executed. The local Git checks are:
 
-- **Location:** a `.git` directory at the target root, or a `.git` file whose `gitdir:` resolves
-  inside the target. A gitdir outside the target or a symlinked `.git` is
+- **Location:** a `.git` directory at the selected source root, or a `.git` file whose `gitdir:`
+  resolves inside that source. An escaping gitdir or a symlinked `.git` is
   `GAP: history_source_outside_target`. No `.git` is `SKIPPED_NA: no_git_metadata`, and
   `settings.git.enabled = false` is `SKIPPED_POLICY`.
 - **Unsupported layouts:**
@@ -162,13 +180,16 @@ appears and that identities are not rewritten.
 
 ## GitHub enrichment
 
-GitHub enrichment is disabled by default. When enabled, the repository identity and API base come
-only from central configuration, and the token comes from the environment variable named by
-`token_env`. The job:
+GitHub enrichment defaults to `enabled = "auto"`; `true` also permits discovery, while explicit
+`false` denies requests. Repository identity comes from the approved acquisition URL or bounded
+literal `origin` metadata, restricted to the host recognized by central `api_base`. The legacy
+`repository` override applies only when exactly one source is discovered. The API endpoint always
+comes from central configuration. The token comes from the variable named by `token_env`;
+`github_credentials_missing` means no request is made. For each eligible source, the job:
 
 1. confirms that the snapshot commit exists in the configured repository; then
 2. looks up the associated pull request for each in-window commit, newest first, until the request
-   budget is spent.
+   budget is spent. Request and pagination bounds apply separately per source.
 
 For each pull request it retains only derived facts:
 
@@ -185,14 +206,15 @@ approval's submission time and reviewed commit. Titles, bodies, comments, and ac
 stored. Rate limiting is a retriable
 `github_rate_limited` gap, so resume reruns the job. An exhausted budget, missing pulls, or
 permission errors are named gaps. Enrichment runs in the application process over HTTPS, like NVD
-sync, not in the network-disabled Git container.
+sync, not in the network-disabled Git container. Redirects are refused.
 
 ## Signals
 
 ### Window
 
-The window is `history_window_months` (M, default 6) calendar months ending at the mainline
+The window is `history_window_months` (M, default 6) calendar months ending at each source's selected
 snapshot commit's committer time, read as UTC (`appsec-review/history-window/calendar-months-utc/1`).
+This is the acquisition pin for an acquired source, or the selected mainline tip for a direct source.
 Wall-clock time is never used, so the same inputs give byte-identical outputs. The start keeps the
 anchor's day of month and time of day. When that day does not exist in the start month, it clamps to
 the month's last day:
@@ -216,7 +238,7 @@ rename counts toward the current `app/helpers.py`. A shallow boundary inside the
 
 ### Revision semantics
 
-History follows the mainline's first-parent chain. `change_count` therefore counts distinct
+History follows the selected snapshot's first-parent chain. `change_count` therefore counts distinct
 first-parent commits. A pull request merged with a merge commit counts once, and the commits on its
 branch are not counted separately. Its diff is the merge's diff against the first parent. A
 squash-merged or rebased pull request counts as the commits that land on the mainline. Every
@@ -489,7 +511,7 @@ deterministic tie-break.
 
 | Requested statistic | Implementation |
 |---|---|
-| Six-month window | `history_window_months` (default 6) calendar months in UTC, anchored to the mainline snapshot commit, with month-end and leap-year clamping |
+| Six-month window | `history_window_months` (default 6) calendar months in UTC per source, anchored to its selected snapshot commit, with month-end and leap-year clamping |
 | Added, deleted, total churn | `lines_added`, `lines_deleted`, and `churn_lines` per file, component, and symbol; per-change values kept in each file's `changes`; `relative_churn` against current non-blank lines |
 | Revision frequency | `change_count` (distinct first-parent commits) and `revision_frequency` (per month); first-parent semantics stated in every output. Individual commits on merged branches are still not counted |
 | Developer ownership | `author_count`, `author_commit_shares`, Shannon `author_entropy`, `minor_author_count`, `top_author_share`, and recency-weighted churn |
@@ -535,8 +557,10 @@ Outputs keep identity exposure low:
 ### Hotspot index
 
 `hotspots.json` (`appsec-review/history-hotspots/1`) is immutable and run-owned. It is hash-pinned
-by the accepted document and holds the top `hotspot_count` (N, default 10) ranked files and the top
-N ranked symbols of the M-month window. Its JSON schema is
+by the accepted document. Each source contributes the top `hotspot_count` (N, default 10) ranked
+files and the top N ranked symbols of its M-month window. Multi-source output aggregates these
+source-local entries, not a single globally normalized ranking; the selected window, revision,
+and ranking population remain in each referenced source artifact. Its JSON schema is
 [`../schemas/history-hotspots.schema.json`](../schemas/history-hotspots.schema.json). Each entry
 (`appsec-review/history-hotspot/1`) has:
 
@@ -566,7 +590,8 @@ query this bounded index, or retrieval below, and never rescan Git or the target
 
 ### Retrieval
 
-The `history` index has one shard per run, `git-history`, which holds:
+The `history` index composes source-scoped shards into the accepted run manifest. Each source's
+history shard holds:
 
 - a `history_signal` entity per file, with a whole-file `SourceLocation` (non-exact and ambiguous
   for divergent files);
@@ -591,7 +616,8 @@ Coverage rows are:
 - `pull-request-timing` and `deployment-timing`, always `unavailable`.
 
 The shard is composed into the accepted manifest and is queryable through `find`, `search`, `trace`,
-and `coverage`. For example, `find(kind="hotspot", indexes=["history"])` returns at most 2N entries.
+and `coverage`. For example, `find(kind="hotspot", indexes=["history"])` queries the source-local
+hotspots; each source contributes at most 2N entries.
 
 ## Consumers
 
@@ -671,9 +697,9 @@ formatting_balance_tolerance = 0.1
 enabled = true
 
 [jobs.job_source_history_analysis.settings.github]
-enabled = false
+enabled = "auto"             # false denies enrichment
 api_base = "https://api.github.com"
-repository = ""              # owner/name when enabled
+repository = ""              # optional owner/name override for a single source
 token_env = "GITHUB_TOKEN"
 max_requests = 2000
 timeout_seconds = 30
@@ -697,8 +723,8 @@ Validation rejects:
 - tier shares that leave no Tier 3;
 - filter patterns that are absolute or contain empty or dot segments;
 - malformed label lists; and
-- for enabled GitHub, a non-HTTPS API base, a malformed `owner/name`, or a `token_env` that is not
-  an environment-variable name.
+- for GitHub `"auto"` or `true`, a non-HTTPS API base, user information in that URL, a malformed
+  nonempty `owner/name` override, or a `token_env` that is not an environment-variable name.
 
 The runtime identity covers the catalog entries for `tool-git` and `tool-tree-sitter`.
 
@@ -711,7 +737,7 @@ The runtime identity covers the catalog entries for `tool-git` and `tool-tree-si
 | `history_source_outside_target` | `GAP` | gitfile or `.git` symlink escapes the target |
 | `linked_worktree_not_supported`, `unsupported_ref_storage`, `unsupported_object_format`, `shallow_file_invalid` | `GAP` | repository layout not supported |
 | `partial_clone_objects_missing`, `alternates_unresolvable` | `GAP` | objects unreadable offline |
-| `history_not_of_snapshot` | `GAP` | the mainline tree does not describe the reviewed files |
+| `history_not_of_snapshot` | `GAP` | the selected source tree does not describe the reviewed files |
 | `working_tree_divergent`, `untracked_path` | `GAP` | some file attribution unavailable or non-exact |
 | `tree_listing_truncated` | `GAP` | tree listing exceeded the output bound |
 | `submodule_history_not_followed` | `GAP` | gitlinks present (see TODO) |

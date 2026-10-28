@@ -224,7 +224,7 @@ class JobRunner:
             "resolved_config_sha256": self.config.resolved_sha256,
             "review_policy": self.config.review_policy.view(),
             "upstream_handoffs": dict(upstream_handoffs or {}),
-            "input_identity": job.probe_input_identity(target_root),
+            "input_identity": job.probe_input_identity(target_root, run_root),
             "job_config_sha256": job_config_sha256(self.config, job.job_id),
             "unit_ids": [unit.unit_id for unit in job.units],
             "component_identities": job.identities(

@@ -4,7 +4,7 @@ from appsec_review.interchange import decode_handoff
 
 from collections import defaultdict
 from collections.abc import Callable, Mapping
-from dataclasses import asdict
+from dataclasses import asdict, replace
 import hashlib
 import json
 from pathlib import Path
@@ -23,6 +23,9 @@ from appsec_review.retrieval import (
 from appsec_review.retrieval.core import resolve_context_manifest
 from appsec_review.retrieval.index import load_verified_manifest
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
+from appsec_review.jobs.source_lanes import (
+    combine_indexes, map_commits, per_source, source_identity, source_key, source_of,
+)
 from appsec_review.storage import atomic_bytes, atomic_json, canonical_json, file_sha256
 
 from . import metrics as change_metrics
@@ -163,7 +166,7 @@ def build_job(*, executor_factory: ExecutorFactory | None = None) -> Job:
         history_settings = _resolved_job_settings(unit.job.run_root, "job_source_history_analysis")
         limits = GitLimits.from_settings(history_settings["git"])
         return GitRunner(factory(unit), unit.job.target_root or Path(), unit.unit_root / "scratch", source,
-                         limits)
+                         limits, path_prefix=source_of(unit).get("root", "."))
 
     def load_history(unit: UnitContext) -> Mapping[str, Any]:
         _settings(unit.job)
@@ -177,20 +180,48 @@ def build_job(*, executor_factory: ExecutorFactory | None = None) -> Job:
         document = load_accepted_history(run_root)
         assert document is not None
         outputs = _accepted_outputs(run_root, handoff)
-        git = dict(outputs["resolve_sources.resolve_history_source"]["git"])
+        resolved = outputs["resolve_sources.resolve_history_source"]
+        if "by_source" not in resolved:
+            return load_history_source(unit, catalog, handoff_sha, document, outputs)
+        results = {}
+        for key, value in resolved["by_source"].items():
+            lane_outputs = {name: item["by_source"][key] for name, item in outputs.items()}
+            try:
+                results[key] = load_history_source(
+                    replace(unit, unit_root=unit.unit_root / "sources" / source_key(value["source"])),
+                    catalog, handoff_sha, document, lane_outputs)
+            except (OSError, ValueError) as exc:
+                gap = f"history_source_unavailable:{type(exc).__name__}"
+                unit.job.events.write("CHANGE_CONTEXT_SOURCE_UNAVAILABLE", source_id=key, error_type=type(exc).__name__)
+                results[key] = {
+                    "available": False, "reason": gap, "gaps": [gap], "terminal_status": "PARTIAL",
+                    "source": value["source"], "git": value["git"],
+                    "history_handoff_sha256": handoff_sha, "history_identity": document["history_identity"],
+                }
+        gaps = sorted({f"{key}:{gap}" for key, value in results.items() for gap in value.get("gaps", ())})
+        return {"by_source": results, "gaps": gaps, "terminal_status": _status(gaps)}
+
+    def load_history_source(unit: UnitContext, catalog: Mapping[str, Any], handoff_sha: str,
+                            document: Mapping[str, Any], outputs: Mapping[str, Any]) -> Mapping[str, Any]:
+        run_root = unit.job.run_root
+        resolved = outputs["resolve_sources.resolve_history_source"]
+        git = dict(resolved["git"])
         normalized = outputs["acquire.normalize_changes"]
+        source_gaps = list(outputs["publish.publish_handoff"].get("gaps", ()))
         base = {"history_handoff_sha256": handoff_sha, "history_identity": document["history_identity"],
-                "history_gaps": list(document.get("gaps", ())), "git": git,
+                "history_gaps": source_gaps, "git": git,
+                "source": resolved.get("source", {}), "review_records": resolved.get("review_records"),
                 "components": catalog["components"], "catalog_handoff_sha256": catalog["catalog_handoff_sha256"],
                 "snapshot_commit": git.get("snapshot_commit")}
         if git["decision"] != "SUCCEEDED" or "artifact" not in normalized:
             reason = git.get("reason") if git["decision"] != "SUCCEEDED" else "no_bound_history"
             unit.job.events.write("CHANGE_CONTEXT_HISTORY_UNAVAILABLE", reason=reason)
-            return {**base, "available": False, "reason": reason, "gaps": [], "terminal_status": "SKIPPED_NA"}
+            return {**base, "available": False, "reason": reason,
+                    "gaps": source_gaps, "terminal_status": "PARTIAL" if source_gaps else "SKIPPED_NA"}
         eligible = outputs["resolve_sources.bind_snapshot"]["eligible"]
         history_settings = _resolved_job_settings(run_root, "job_source_history_analysis")
         raw_log = outputs["acquire.git_history"]["raw_log"]
-        commits = parse_log(_read_bytes(run_root, raw_log))
+        commits = map_commits(parse_log(_read_bytes(run_root, raw_log)), resolved.get("source", {}).get("root", "."))
         walked = int(normalized["walked_change_count"])
         lifetime = history_signals.normalize(
             commits[:walked], current_paths=eligible, shallow=(), window_months=None, max_changes=walked,
@@ -209,7 +240,7 @@ def build_job(*, executor_factory: ExecutorFactory | None = None) -> Job:
                 files[path][change["author"]] += 1
             for component in {change_metrics.component_of(path, roots) for path in touched} - {None}:
                 components[str(component)][change["author"]] += 1
-        gaps = []
+        gaps = list(source_gaps)
         if len(commits) > walked:
             gaps.append("lifetime_history_truncated")
         if git.get("shallow"):
@@ -252,11 +283,19 @@ def build_job(*, executor_factory: ExecutorFactory | None = None) -> Job:
         if review_source == "none":
             review_gaps = ["review_records_disabled"]
         elif review_source == "export":
-            document, data, review_gaps = load_export(repository, target, settings.review.export, "review")
-            keep("review", data)
-            if document is not None:
-                reviews, review_gaps = review_records_from_export(document)
-                reviews = reviews if not review_gaps else None
+            if loaded.get("source", {}).get("source_count", 1) > 1:
+                review_gaps = ["review_export_source_ambiguous"]
+            else:
+                document, data, review_gaps = load_export(repository, target, settings.review.export, "review")
+                keep("review", data)
+                if document is not None:
+                    reviews, review_gaps = review_records_from_export(document)
+                    reviews = reviews if not review_gaps else None
+        elif loaded.get("review_records"):
+            document = _read(unit.job.run_root, loaded["review_records"])
+            reviews, review_gaps = review_records_from_export(document)
+            reviews = reviews if not review_gaps else None
+            review_source = "acquired_export"
         elif not loaded.get("available"):
             review_gaps = ["review_records_unavailable:no_git_history"]
         elif loaded.get("github") is None:
@@ -268,10 +307,13 @@ def build_job(*, executor_factory: ExecutorFactory | None = None) -> Job:
         sources["review"] = {"source": review_source, "status": _source_status(review_gaps, reviews is not None),
                              "gaps": sorted(set(review_gaps)), "record_count": len(reviews or {})}
         deployments, deployment_gaps = None, []
-        document, data, deployment_gaps = load_export(repository, target, settings.deployments.export, "deployment")
-        keep("deployment", data)
-        if document is not None:
-            deployments, deployment_gaps = deployments_from_export(document, settings.deployments.environments)
+        if settings.deployments.export.enabled and loaded.get("source", {}).get("source_count", 1) > 1:
+            deployment_gaps = ["deployment_export_source_ambiguous"]
+        else:
+            document, data, deployment_gaps = load_export(repository, target, settings.deployments.export, "deployment")
+            keep("deployment", data)
+            if document is not None:
+                deployments, deployment_gaps = deployments_from_export(document, settings.deployments.environments)
         sources["deployment"] = {"status": _source_status(deployment_gaps, deployments is not None),
                                  "gaps": deployment_gaps, "event_count": len((deployments or {}).get("events", ())),
                                  "environments": list(settings.deployments.environments)}
@@ -612,7 +654,8 @@ def build_job(*, executor_factory: ExecutorFactory | None = None) -> Job:
 
     def coverage_rows(unit: UnitContext) -> list[tuple[str, str, str | None]]:
         loaded = history(unit)
-        sources = unit.output("load.external_sources")["sources"]
+        external = unit.output("load.external_sources")
+        sources = external.get("sources", {})
         available = bool(loaded.get("available"))
         rows = [("git-change-context",
                  "unavailable" if not available else "partial" if loaded.get("gaps") or loaded.get("classification_gaps") else "complete",
@@ -621,7 +664,7 @@ def build_job(*, executor_factory: ExecutorFactory | None = None) -> Job:
         for name, area in (("review", "review-records"), ("deployment", "deployment-events"),
                            ("schedule", "off-hours-schedule"), ("test_association", "test-association"),
                            ("organization", "organization-membership")):
-            value = sources[name]
+            value = sources.get(name, {"status": "unavailable", "gaps": external.get("gaps", ())})
             status = value["status"] if available else "unavailable"
             rows.append((area, status, "; ".join(value["gaps"]) or (None if available else "no_git_history")))
         attribution = unit.output("attribute.line_attribution")
@@ -644,7 +687,8 @@ def build_job(*, executor_factory: ExecutorFactory | None = None) -> Job:
         signals_doc = _read(run_root, ranked["artifact"]) if "artifact" in ranked else None
         records = (_read(run_root, unit.output("analyze.change_signals")["artifact"])["changes"]
                    if "artifact" in unit.output("analyze.change_signals") else {})
-        sources_doc = _read(run_root, unit.output("load.external_sources")["artifact"])
+        external = unit.output("load.external_sources")
+        sources_doc = _read(run_root, external["artifact"]) if "artifact" in external else {}
         gaps = all_gaps(unit)
         producer_artifacts = [value["artifact"] for value in (ranked, unit.output("analyze.change_signals"),
                                                               unit.output("load.external_sources")) if "artifact" in value]
@@ -655,12 +699,15 @@ def build_job(*, executor_factory: ExecutorFactory | None = None) -> Job:
                            "config": hashlib.sha256(canonical_json(dict(unit.job.config.settings))).hexdigest()},
             parser_identity="change-context-records/1", normalizer_identity=change_metrics.TEST_ASSOCIATION_IDENTITY,
             mapping_identity="git-blob-binding+tree-sitter-span/1")
-        path = run_root / "data" / "indices" / "history" / SHARD_ID / f"{fingerprint}.sqlite"
+        source = source_of(unit)
+        shard_id = SHARD_ID + (f"-{source_key(source)}" if source.get("root", ".") != "." else "")
+        path = run_root / "data" / "indices" / "history" / shard_id / f"{fingerprint}.sqlite"
         eligible = loaded.get("eligible", {})
         if not path.exists():
-            builder = IndexBuilder(path, name="history", fingerprint=fingerprint, target_snapshot=snapshot, shard_id=SHARD_ID)
+            builder = IndexBuilder(path, name="history", fingerprint=fingerprint, target_snapshot=snapshot, shard_id=shard_id)
             change_ids: dict[str, str] = {}
-            review_ids: dict[str, str] = {}
+            review_ids: dict[int, str] = {}
+            review_system = sources_doc.get("sources", {}).get("review", {}).get("source", settings.review.source)
             deployment_ids: dict[str, str] = {}
             deployments = {item["deployment_id"]: item for item in (sources_doc.get("deployments") or {}).get("events", ())}
 
@@ -668,7 +715,8 @@ def build_job(*, executor_factory: ExecutorFactory | None = None) -> Job:
                 if change_id in change_ids:
                     return change_ids[change_id]
                 record = records[change_id]
-                identity = LogicalIdentity.derive(EntityKind.CHANGE, snapshot, {"vcs": "git", "change_id": change_id})
+                identity = LogicalIdentity.derive(EntityKind.CHANGE, snapshot, {
+                    "vcs": "git", **source_identity(source), "change_id": change_id})
                 change_ids[change_id] = identity.value
                 flags = [name for name, value in (
                     ("sprawling", record["sprawl"]["sprawling"]), ("off_hours", record["schedule"].get("off_hours")),
@@ -678,7 +726,7 @@ def build_job(*, executor_factory: ExecutorFactory | None = None) -> Job:
                     ("fast_review", record["review"].get("fast_approval") or record["review"].get("fast_merge")),
                     ("untested_production", record["tests"].get("untested_production"))) if value]
                 payload = {**record, "producer": PRODUCER, "rules": change_metrics.RULES_IDENTITY,
-                           "snapshot_commit": loaded["snapshot_commit"], "flags": flags}
+                           "snapshot_commit": loaded["snapshot_commit"], "flags": flags, "source": source}
                 builder.add_entity(EntityRecord(identity, change_id, change_id[:12],
                                                 " ".join(["change context change", change_id, *flags]), payload))
                 review = (record["facts"].get("review_record") or {})
@@ -686,11 +734,13 @@ def build_job(*, executor_factory: ExecutorFactory | None = None) -> Job:
                     number = int(review["pull_request"])
                     if number not in review_ids:
                         review_identity = LogicalIdentity.derive(EntityKind.REVIEW_UNIT, snapshot,
-                                                                 {"system": settings.review.source, "pull_request": number})
+                                                                 {"system": review_system, "pull_request": number,
+                                                                  **source_identity(source)})
                         review_ids[number] = review_identity.value
                         builder.add_entity(EntityRecord(review_identity, f"pr:{number}", f"pull request {number}",
                                                         f"review unit pull request {number}",
-                                                        {**review, "producer": PRODUCER, "source": settings.review.source}))
+                                                        {**review, "producer": PRODUCER, "source": review_system,
+                                                         "repository_source": source}))
                     builder.add_relation(RelationRecord(RelationKind.SUPPORTS, review_ids[number], identity.value, True, 1.0))
                 deployment_id = record["deployment"].get("deployment_id")
                 if deployment_id in deployments:
@@ -735,7 +785,8 @@ def build_job(*, executor_factory: ExecutorFactory | None = None) -> Job:
                                             "start_line": (value.get("function") or {}).get("start_line"),
                                             "end_line": (value.get("function") or {}).get("end_line"),
                                             "type": (value.get("function") or {}).get("type")}}[scope]
-                    identity = LogicalIdentity.derive(EntityKind.CHANGE_CONTEXT_SIGNAL, snapshot, native)
+                    identity = LogicalIdentity.derive(EntityKind.CHANGE_CONTEXT_SIGNAL, snapshot, {
+                        **native, **source_identity(source)})
                     unit_ids[(scope, key)] = identity.value
                     flags = sorted(name for name, metric in value["metrics"].items() if metric)
                     name = (value.get("function") or {}).get("name") or key
@@ -743,7 +794,8 @@ def build_job(*, executor_factory: ExecutorFactory | None = None) -> Job:
                     payload.update({"producer": PRODUCER, "rules": change_metrics.RULES_IDENTITY,
                                     "priority_identity": change_metrics.PRIORITY_IDENTITY, "authority": AUTHORITY,
                                     "snapshot_commit": loaded["snapshot_commit"], "rank": value["priority"]["rank"],
-                                    "score": value["priority"]["score"]})
+                                    "score": value["priority"]["score"], "source": source,
+                                    "source_path": eligible.get(key, {}).get("source_path")})
                     text = (f"change context {value['scope']} {name} rank {value['priority']['rank']} "
                             f"score {value['priority']['score']} " + " ".join(flags))
                     builder.add_entity(EntityRecord(identity, f"{value['scope']}:{key}", name, text, payload, location))
@@ -762,12 +814,13 @@ def build_job(*, executor_factory: ExecutorFactory | None = None) -> Job:
                 builder.add_coverage(area, status, gap)
             builder.build()
         identity = IndexIdentity("history", "appsec-review/retrieval-index/2", file_sha256(path), fingerprint,
-                                 _rel(run_root, path), {"job": PRODUCER, "vcs": "git"}, tuple(gaps), SHARD_ID)
+                                 _rel(run_root, path), {"job": PRODUCER, "vcs": "git", **source_identity(source)},
+                                 tuple(gaps), shard_id)
         upstream_path, upstream_sha = resolve_context_manifest(unit.job)
         upstream, _ = load_verified_manifest(run_root, upstream_path, upstream_sha)
         base = [IndexIdentity(**{**item, "gaps": tuple(item.get("gaps", ()))}) for item in upstream["indexes"]
                 if item.get("producer", {}).get("job") != PRODUCER]
-        manifest_path = run_root / "data" / "indices" / "manifests" / f"change-context-{unit.job.attempt_id}.json"
+        manifest_path = run_root / "data" / "indices" / "manifests" / f"{shard_id}-{unit.job.attempt_id}.json"
         write_manifest(manifest_path, run_id=unit.job.run_id, target_snapshot=snapshot,
                        target_root=(unit.job.target_root or Path()).resolve(), indexes=[*base, identity],
                        upstream_manifests=({"path": _rel(run_root, upstream_path), "sha256": upstream_sha},))
@@ -794,9 +847,9 @@ def build_job(*, executor_factory: ExecutorFactory | None = None) -> Job:
         document = {
             "schema": SCHEMA, "target_snapshot": unit.job.source_fingerprint, "authority": AUTHORITY,
             "history_handoff_sha256": loaded["history_handoff_sha256"], "history_identity": loaded["history_identity"],
-            "snapshot_commit": loaded.get("snapshot_commit"),
-            "sources": unit.output("load.external_sources")["sources"],
-            "raw_exports": unit.output("load.external_sources")["raw_exports"],
+            "snapshot_commit": loaded.get("snapshot_commit"), "source": loaded.get("source"),
+            "sources": unit.output("load.external_sources").get("sources", {}),
+            "raw_exports": unit.output("load.external_sources").get("raw_exports", {}),
             "rules": {"change": change_metrics.RULES_IDENTITY, "tests": change_metrics.TEST_ASSOCIATION_IDENTITY,
                       "attribution": ATTRIBUTION_IDENTITY, "priority": change_metrics.PRIORITY_IDENTITY},
             "priority": {"weights": dict(settings.priority_weights), "top": top, "signals": ranked.get("artifact")},
@@ -815,6 +868,27 @@ def build_job(*, executor_factory: ExecutorFactory | None = None) -> Job:
             output["dispositions"] = retriable
         return output
 
+    def publish_sources(unit: UnitContext, output: Mapping[str, Any]) -> Mapping[str, Any]:
+        documents = {key: _read(unit.job.run_root, value["artifact"])
+                     for key, value in output["by_source"].items()}
+        first = next(iter(documents.values()))
+        manifest = unit.output("publish.index_change_context")["manifest"]
+        document = {
+            "schema": SCHEMA, "target_snapshot": unit.job.source_fingerprint, "authority": AUTHORITY,
+            "history_handoff_sha256": first["history_handoff_sha256"], "history_identity": first["history_identity"],
+            "sources": [{"source_id": key, "source": value["source"], "snapshot_commit": value["snapshot_commit"],
+                         "coverage": value["coverage"], "artifact": output["by_source"][key]["artifact"]}
+                        for key, value in documents.items()],
+            "priority": {"scope": "per-source", "top": {
+                scope: [{**item, "source_id": key} for key, value in documents.items()
+                        for item in value["priority"]["top"][scope]]
+                for scope in ("files", "functions", "components")}},
+            "coverage": [{**item, "source_id": key} for key, value in documents.items() for item in value["coverage"]],
+            "gaps": output["gaps"], "index_manifest": manifest,
+        }
+        return {"schema": SCHEMA, "artifact": _write(unit, "change-context.json", document),
+                "index_manifest": manifest, "item_count": sum(value["item_count"] for value in output["by_source"].values())}
+
     units = (
         Unit("load.accepted_history", load_history),
         Unit("load.external_sources", external, ("load.accepted_history",)),
@@ -827,6 +901,11 @@ def build_job(*, executor_factory: ExecutorFactory | None = None) -> Job:
         Unit("publish.index_change_context", index, ("analyze.rank",)),
         Unit("publish.publish_handoff", publish, ("publish.index_change_context",)),
     )
+    units = tuple(replace(item, handler=per_source(
+        item.handler, "load.accepted_history",
+        combine_indexes if item.unit_id == "publish.index_change_context" else
+        publish_sources if item.unit_id == "publish.publish_handoff" else None))
+        if item.unit_id != "load.accepted_history" else item for item in units)
     return Job(PRODUCER, "change_context_analysis", UnitExecutor(units).execute, input_validators=(_validate,),
                schema_identity=SCHEMA, units=units,
                datasets=DATASETS, consumes=CONSUMES)

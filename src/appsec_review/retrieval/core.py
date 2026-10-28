@@ -1140,7 +1140,8 @@ class RetrievalCore:
             found: list[dict[str, Any]] = []
             gaps: list[str] = []
             candidates = [item for item in self.indexes.get("history", ())
-                          if str(item.get("shard_id", "")) == "change-context"]
+                          if str(item.get("shard_id", "")) == "change-context" or
+                          str(item.get("shard_id", "")).startswith("change-context-")]
             if not candidates:
                 gaps.append("accepted change-context index is unavailable")
             for identity in candidates:
@@ -1160,12 +1161,14 @@ class RetrievalCore:
                 with self._database(identity, deadline) as database:
                     for row in database.execute(sql, values):
                         item = self._entity(row, "history")
-                        item["shard_id"] = "change-context"
+                        item["shard_id"] = identity["shard_id"]
                         found.append(item)
-                    gaps.extend(f"history/change-context: {row['area']}: {row['status']}: {row['gap']}"
+                    gaps.extend(f"history/{identity['shard_id']}: {row['area']}: {row['status']}: {row['gap']}"
                                 for row in database.execute(
                                     "SELECT area, status, gap FROM coverage WHERE status != 'complete' ORDER BY area"))
-                gaps.extend(f"history/change-context: {gap}" for gap in identity.get("gaps", ()))
+                gaps.extend(f"history/{identity['shard_id']}: {gap}" for gap in identity.get("gaps", ()))
+            found.sort(key=lambda item: (item["payload"].get("scope", ""), int(item["payload"].get("rank", 0)),
+                                         item["shard_id"], item["identity"]))
             return found[offset:offset + limit], gaps, len(found) > offset + limit, offset
         return self._execute("query_change_context", parameters, operation)
 
