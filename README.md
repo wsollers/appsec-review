@@ -478,7 +478,7 @@ model_connectivity -> image_pin_verification -> review_intake -> target_catalog 
   -> cpg_analysis (deprecated; only when enabled) -> evidence_collection -> dependency_intelligence
   -> change_context_analysis -> codeql_analysis -> review_prioritization
   -> code_graph_index -> security_tagging
-  -> owasp_control_assessment (opt-in; only when enabled)
+  -> owasp_control_assessment (enabled by default)
   -> review_data_indexing -> review_package_assembly
   -> document_issue_analysis -> inference_security_review -> final_publication_gate
   -> poc_generation (opt-in; only when enabled) -> final_report_publication
@@ -538,8 +538,10 @@ enabled registered review job except the standalone
 order is an execution order rather than a claim that every adjacent job consumes its predecessor.
 `third_party_data_sync` remains a separate scheduled metadata job.
 
-The opt-in [OWASP assessment](docs/architecture/owasp-control-workbench.md) is shipped disabled
-with `mode = "assessment"`. In both direct and Dagster graphs the enabled chain is accepted source/component/
+The [OWASP assessment](docs/architecture/owasp-control-workbench.md) is enabled by default
+with `mode = "assessment"` in all shipped profiles. Set
+`jobs.job_owasp_control_assessment.settings.enabled = false` to opt out before freezing a run.
+In both direct and Dagster graphs the enabled chain is accepted source/component/
 build/static information → prioritization/code graph → security tagging/tag cloud → OWASP →
 review data indexing (`control_evidence`) → package assembly → hunt and red/blue/independent
 verification. Tags and classifications route work, never prove controls. Full pinned catalogs

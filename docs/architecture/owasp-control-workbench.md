@@ -2,8 +2,9 @@
 
 The workbench is a bounded, evidence-backed stage **before hunt/package assembly and red/blue
 review**. It assesses named control subjects, not application compliance or customer safety.
-The job is shipped disabled (`settings.enabled = false`); its configured mode is `assessment`.
-Enabling it does not authorize target execution.
+The job is enabled by default (`settings.enabled = true`) in `assessment` mode across all shipped
+profiles. Set `settings.enabled = false` to opt out before freezing a run. Assessment does not
+authorize target execution.
 
 ## Placement and authority
 
@@ -19,7 +20,7 @@ flowchart TD
   R --> G
   G --> T[Security tagging / tag cloud]
   R --> T
-  P --> O[OWASP control assessment - opt-in]
+  P --> O[OWASP control assessment - enabled by default]
   R --> O
   G --> O
   T -->|bounded routing context, not proof| O
@@ -31,8 +32,8 @@ flowchart TD
 ```
 
 Direct `start`/`resume`/`plan-resume` and Dagster select this chain when the jobs are enabled.
-Direct `--force-from` accepts tagging or OWASP only when enabled; OWASP remains disabled by
-default. This is shared OWASP ordering, not full graph parity: the direct graph still omits
+Direct `--force-from` accepts tagging or OWASP only when enabled; OWASP is enabled by
+default but can be explicitly disabled. This is shared OWASP ordering, not full graph parity: the direct graph still omits
 CI/post-build branches, and third-party sync remains standalone. See
 [wave 1 operations](../operations/wave1-review.md).
 
@@ -154,6 +155,41 @@ membership, binding and duplicate-row ambiguity checks remain enforced.
 - Models, budgets, timeouts, retries and all bounds: central TOML, documented in
   [OWASP operations](../operations/owasp-control-assessment.md#settings).
 - Exact composed bundles: `runs/<run-id>/data/guidance/<bundle-sha256>/`.
+
+### Control-area persona, role and runtime-skill assignment
+
+`owasp_workbench.guidance.assign` selects the registered persona from each applicability row's
+control domain. `partition_work` batches only compatible domains, personas, evidence modes and
+tool requirements, within the configured limits. It does not send every control to a generic
+reviewer or create a separate framework per control.
+
+| Control domain | Assigned persona | Loaded specialist fragment |
+|---|---|---|
+| Authentication, session and identity | `authentication_session` | `authentication_session` |
+| Authorization and access control | `authorization_access_control` | `authorization_access_control` |
+| Cryptography and data protection | `cryptography_data_protection` | `cryptography_data_protection` |
+| Web and API surface | `api_web` | `network_api_surface` |
+| Mobile platform | `mobile_platform` | `mobile_platform` |
+| Build and supply chain | `build_supply_chain` | `build_supply_chain` |
+| Deployment and operations | `deployment_operations` | `cloud_container_deployment` |
+
+The two migrated fragment names are explicit aliases in `pipeline/guidance/registry.json`.
+Personas supply viewpoint, effective controls, false-positive cautions, predicate evidence and
+hand-offs; they do not replace the concrete proof procedure or expand authority.
+
+| Inference role | Registered runtime skill | Responsibility |
+|---|---|---|
+| `control_assessor` | `effective-control-verification` | Investigate named obligations against accepted evidence and propose scoped outcomes |
+| `independent_reviewer` | `predicate-verification` | Independently assess the same original obligations/evidence in a fresh blinded context, without the worker answer or transcript |
+
+Both calls retain the batch's domain persona. Skills are shared role-specific procedures, not
+bespoke skills for every catalog entry. They are loaded only through
+`appsec_review.guidance.skills.load_runtime_skill` for this allowed job. Each request's exact
+role/persona/skill/task bundle is hash-pinned; guidance changes invalidate dependent reuse.
+Citation resolution and final disposition are application checks, not extra model agreement.
+Registered classifier/router/verifier/adjudicator responsibilities do not imply that separate
+model calls occur at every deterministic stage. A specialist persona never makes an unsupported
+language, control or runtime/manual obligation assessable.
 
 Offline acceptance exercises full-catalog publications, adverse/benign/dissent outcomes,
 configured source caps, qualification isolation, projection, packages, actual scripted

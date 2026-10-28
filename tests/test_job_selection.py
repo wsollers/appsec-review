@@ -5,12 +5,14 @@ import json
 from dataclasses import replace
 from pathlib import Path
 import re
+import shutil
 
 import pytest
 
 from appsec_review import cli
 from appsec_review.cli import GRAPH_JOB_IDS, main
 from appsec_review.config import load_config
+from appsec_review.config.owasp import AssessmentMode
 from appsec_review.jobs.job_review_data_indexing.job import _resolved_steps
 from appsec_review.orchestration.topology import describe_wave1
 from appsec_review.runtime import active_job_ids
@@ -64,6 +66,40 @@ def test_job_level_enabled_flag_is_generic(tmp_path: Path) -> None:
 def test_direct_dispatch_rejects_disabled_cpg_job() -> None:
     with pytest.raises(ValueError, match="job is disabled by configuration: job_cpg_analysis"):
         main(["--config", str(ROOT / "appsec-review.toml"), "run", "job_cpg_analysis"])
+
+
+@pytest.mark.parametrize("profile", ["dev", "prod", "copilot-dev", "copilot-prod"])
+def test_owasp_assessment_is_enabled_by_default_in_every_profile(profile: str) -> None:
+    config = load_config(ROOT / "appsec-review.toml", profile=profile)
+    owasp = config.job("job_owasp_control_assessment")
+    assert owasp.typed_settings.enabled is True
+    assert owasp.typed_settings.mode is AssessmentMode.ASSESSMENT
+    assert owasp.settings["model"]["enabled"] is True
+    assert owasp.settings["models"][owasp.settings["reviewer_profile"]]["enabled"] is True
+    chain = (
+        "job_review_prioritization", "job_code_graph_index", "job_security_tagging",
+        "job_owasp_control_assessment", "job_review_data_indexing",
+        "job_review_package_assembly", "job_inference_security_review",
+    )
+    selected = active_job_ids(config, (*cli.GRAPH_JOB_IDS, *cli.POST_INDEX_JOB_IDS))
+    assert tuple(job_id for job_id in selected if job_id in chain) == chain
+    described = describe_wave1(config, builtin_registry())
+    assert tuple(item["job_id"] for item in described["jobs"] if item["job_id"] in chain) == chain
+
+
+@pytest.mark.parametrize("profile", ["dev", "prod", "copilot-dev", "copilot-prod"])
+def test_owasp_explicit_opt_out_is_preserved_in_every_profile(tmp_path: Path, profile: str) -> None:
+    path = tmp_path / "appsec-review.toml"
+    source = (ROOT / "appsec-review.toml").read_text(encoding="utf-8")
+    path.write_text(_set_enabled(source, "job_owasp_control_assessment", False), encoding="utf-8")
+    shutil.copytree(ROOT / "profiles", tmp_path / "profiles")
+    config = load_config(path, profile=profile)
+    assert config.job("job_owasp_control_assessment").typed_settings.enabled is False
+    assert "job_owasp_control_assessment" not in active_job_ids(config, GRAPH_JOB_IDS)
+    wave = describe_wave1(config, builtin_registry())
+    assert "job_owasp_control_assessment" not in {item["job_id"] for item in wave["jobs"]}
+    assert {"job_security_tagging", "job_review_data_indexing"} <= {
+        item["job_id"] for item in wave["jobs"]}
 
 
 @pytest.mark.parametrize("command", ["start", "resume", "plan-resume"])

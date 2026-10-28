@@ -2,7 +2,7 @@
 
 `job_review_data_indexing` precedes `job_review_package_assembly` in both the direct review graph
 (`appsec-review start`) and the Dagster `wave1_review` graph. It follows `job_code_graph_index`,
-`job_security_tagging` and the opt-in OWASP assessment when those jobs are enabled on either
+`job_security_tagging` and the default-enabled OWASP assessment when those jobs are enabled on either
 surface. It accounts for every
 dataset the run produced, restores shards a manifest rewrite dropped, publishes cross-domain links
 and the stage-1 precomputed query sets, and publishes the dataset inventory as an indexed dataset.
@@ -44,7 +44,8 @@ All bounds are in `[jobs.job_review_data_indexing.settings]` in `appsec-review.t
 ### OWASP projection and custody
 
 The shared enabled direct/Dagster order is tagging/tag cloud → OWASP → this job → package assembly →
-hunt/red-blue/independent verification. The OWASP job is disabled by default; absence produces
+hunt/red-blue/independent verification. The OWASP job is enabled by default; if explicitly
+disabled, its absence produces
 an unavailable `control_evidence` gap, not full coverage. Qualification-only publications remain
 explicitly non-production-eligible.
 

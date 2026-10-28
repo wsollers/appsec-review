@@ -10,6 +10,7 @@ import pytest
 from appsec_review.guidance import GuidanceError, load_registry, load_runtime_skill, render_prompt, verify_bundle
 from appsec_review.guidance.compose import bundle_sha256, section_sha256
 from appsec_review.guidance.skills import select_review_procedures
+from appsec_review.owasp_workbench.guidance import assign as workbench_assign
 from appsec_review.owasp_workbench.guidance import compose as workbench_compose
 from appsec_review.review.models import IntegrityError
 from tests.test_guidance_compose import ROOT, _compose, repo, taxonomy
@@ -156,6 +157,30 @@ def test_workbench_selects_role_appropriate_procedure_without_changing_responsib
         bundle["sha256"] = bundle_sha256(bundle)
         with pytest.raises(IntegrityError, match="procedure source hash"):
             verify_bundle(bundle)
+
+
+@pytest.mark.parametrize(("role", "skill"), [
+    ("control_assessor", "effective-control-verification"),
+    ("independent_reviewer", "predicate-verification"),
+])
+def test_workbench_control_area_assignments_match_documented_composed_guidance(role, skill):
+    registry = load_registry(ROOT)
+    documentation = (ROOT / "docs" / "architecture" / "owasp-control-workbench.md").read_text(
+        encoding="utf-8")
+    assert f"| `{role}` | `{skill}` |" in documentation
+    for domain, persona in registry["assignment"]["domain_persona"].items():
+        assignment = workbench_assign(registry, role=role, domain=domain)
+        assert assignment == {"role": role, "persona": persona}
+        task = {"task_id": domain, "question": "Assess the named obligation against original evidence.",
+                "proof_obligations": [], "prohibited_claims": ["component-wide safety"]}
+        bundle = workbench_compose(ROOT, **assignment, task=task)
+        source_id = registry["persona_migrations"].get(persona, persona)
+        assert f"| `{persona}` | `{source_id}` |" in documentation
+        assert bundle["persona"]["id"] == persona
+        assert bundle["persona"]["source_id"] == source_id
+        assert bundle["role"]["id"] == role
+        assert [item["id"] for item in bundle["procedures"]] == [skill]
+        assert verify_bundle(bundle) == bundle["sha256"]
 
 
 def test_hand_offs_are_visible_but_not_delegation(repo, taxonomy):

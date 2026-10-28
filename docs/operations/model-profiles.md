@@ -177,8 +177,9 @@ See [review admission and rounds](inference-security-review.md#opt-in-mediumlow-
 | inference review `models.strong` (new) | `claude-opus-5-5` | high | 200000 | 64000 | 2400 |
 | PoC generation `models.default` | `claude-sonnet-5-5` | high | 200000 | 32000 | 600 |
 
-OWASP remains disabled by its separate job-level `settings.enabled = false`; selecting a model
-profile does not enable it. Base/dev worker and reviewer use `claude-haiku-5-5`; `copilot-dev`
+OWASP is enabled by default in all shipped profiles. Its separate job-level `settings.enabled = false`
+opts out before a run is frozen; selecting a model profile does not override that gate.
+Base/dev worker and reviewer use `claude-haiku-5-5`; `copilot-dev`
 selects `copilot-sdk`/`claude-haiku-5.5` for both. `copilot-prod` selects
 `claude-sonnet-5.5` for the worker and `claude-opus-5.5` for the reviewer. Independent review means
 a fresh blinded request over original evidence without the worker answer/transcript; model

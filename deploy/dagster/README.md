@@ -241,7 +241,7 @@ codeql_analysis + review_prioritization + code_graph_index
   -> security_tagging
 post_build_security_assessment + evidence_collection + artifact_security_analysis
   + tree_sitter_ast + codeql_analysis + review_prioritization + code_graph_index
-  + security_tagging -> owasp_control_assessment (opt-in)
+  + security_tagging -> owasp_control_assessment (enabled by default)
 test_coverage + profile_data + dependency_intelligence + security_tagging + owasp_control_assessment
   -> review_data_indexing -> review_package_assembly -> document_issue_analysis
   -> inference_security_review -> final_publication_gate -> final_report_publication
@@ -290,20 +290,21 @@ also waiting for the compiled C/C++ branch when present. Cross-language CodeQL c
 declared catalog, language-build, artifact, C++,
 post-build, static-evidence, tree-sitter, and change-context publications. The code-graph job then
 normalizes accepted CodeQL exports and cross-check inputs. Review prioritization and code-graph
-indexing precede security tagging; the opt-in OWASP assessment consumes their bounded accepted
+indexing precede security tagging; the default-enabled OWASP assessment consumes their bounded accepted
 classification/tag-cloud context, never treating it as control proof. `review_data_indexing` waits for every enabled leaf
 and audits the composed accepted view. Each evidence
 branch has scan, normalize, and producer-owned index nodes. Its cheap manifest barrier waits for a
 truthful terminal disposition from every static branch, verifies every immutable shard, and then
 publication moves the accepted pointer. OWASP assessment waits for the static-evidence,
 post-build, prioritization, graph and tagging branches, then precedes package assembly, hunting and
-red/blue/independent verification. It is shipped disabled with assessment mode configured; worker
+red/blue/independent verification. It is enabled by default in assessment mode across shipped profiles; worker
 and fresh blinded reviewer inference are implemented, but live-model efficacy is not established.
 Only four narrow Python static procedures are supported despite complete pinned catalogs.
 See [OWASP operations](../../docs/operations/owasp-control-assessment.md). The direct CLI
 also selects the enabled prioritization → code graph → tagging → OWASP → indexing chain.
 Its `start`/`resume`/`plan-resume` and `--force-from` paths retain disabled-job filtering; OWASP
-remains disabled by default. CI/post-build branches remain Dagster additions, and third-party sync
+can be explicitly disabled with `jobs.job_owasp_control_assessment.settings.enabled = false`
+before freezing a run. CI/post-build branches remain Dagster additions, and third-party sync
 remains standalone; the full topologies are not identical.
 The configured multiprocess executor allows unrelated branches to overlap;
 Grype alone waits for Syft.

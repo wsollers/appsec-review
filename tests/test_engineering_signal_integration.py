@@ -64,9 +64,11 @@ def test_engineering_signal_dagster_dependencies_match_current_orchestration() -
             "evidence_collection__finalize", "cpp_compiled_analysis__finalize"} == \
         upstream("dependency_intelligence__begin")
     assert "code_graph_index__finalize" in upstream("security_tagging__begin")
+    assert {"security_tagging__finalize", "code_graph_index__finalize",
+            "review_prioritization__finalize"} <= upstream("owasp_control_assessment__begin")
     review_upstream = upstream("review_data_indexing__begin")
     assert {"test_coverage__finalize", "profile_data__finalize",
-            "dependency_intelligence__finalize", "security_tagging__finalize"} <= review_upstream
+            "dependency_intelligence__finalize", "owasp_control_assessment__finalize"} <= review_upstream
 
 
 def _direct_graph_block(path: str, marker: str) -> str:
@@ -170,4 +172,3 @@ def test_context_cap_retains_dependency_and_scorecard_roles() -> None:
     chosen, omitted, gaps = assembler._cap(context, "unit", "lane_b_hunt")
     assert {item.role for item in chosen} == {"dependency", "openssf_scorecard"}
     assert omitted == 4 and gaps[0].state == "truncated"
-

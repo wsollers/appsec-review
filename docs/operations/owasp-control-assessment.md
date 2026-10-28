@@ -1,9 +1,12 @@
 # Operating the OWASP control-assessment stage
 
-`job_owasp_control_assessment` is shipped **disabled**; `mode = "assessment"` is the configured
-default. Its worker and reviewer profiles are enabled for use when the job is explicitly enabled.
+`job_owasp_control_assessment` is **enabled by default** in `mode = "assessment"` across all
+shipped profiles. Its worker and reviewer profiles are enabled.
 It performs bounded accepted-index/source assessment, never target execution or a compliance audit.
 See the [workbench architecture](../architecture/owasp-control-workbench.md) for proof boundaries.
+The [assignment table](../architecture/owasp-control-workbench.md#control-area-persona-role-and-runtime-skill-assignment)
+documents the seven control-area personas and the assessor/reviewer runtime skills. Inspect the
+run's pinned guidance bundles to see the exact assignments used.
 
 ## Prerequisites and placement
 
@@ -16,14 +19,15 @@ verification. Prioritization and tagging do not depend on OWASP.
 
 Direct CLI `start`, `resume` and `plan-resume` also select security tagging and OWASP after
 prioritization/code-graph indexing and before review data indexing. Normal enabled-job filtering
-applies: OWASP remains absent by default, and `resume`/`plan-resume --force-from` can name tagging
+applies: OWASP is selected by default, and `resume`/`plan-resume --force-from` can name tagging
 or OWASP only when that job is enabled. This does not add Dagster's CI/post-build branches or
 standalone third-party sync to the direct graph. A standalone dispatch must use the run's accepted
 upstream handoffs and snapshot, not an arbitrary source tree.
 
-For assessment, enable the job in central configuration before freezing a new run, retain
-`mode = "assessment"` and enabled worker/reviewer profiles, and configure the intended provider,
-models and budgets. Assessment rejects qualification catalogs and a run-owned qualification input.
+For assessment, retain `enabled = true`, `mode = "assessment"` and enabled worker/reviewer profiles,
+and configure the intended provider, models and budgets before freezing a new run. Set
+`jobs.job_owasp_control_assessment.settings.enabled = false` in central configuration to opt out;
+model profiles do not override this gate. Assessment rejects qualification catalogs and a run-owned qualification input.
 An unsupported provider or invalid bounds fail configuration validation.
 
 Qualification requires explicit `mode = "qualification"`, both selected model profiles disabled,
@@ -37,7 +41,7 @@ The closed typed settings parser rejects missing/unknown keys and out-of-range v
 
 | Key | Default | Allowed | Meaning |
 |---|---|---|---|
-| `enabled` | false | boolean | Generic job dispatch gate |
+| `enabled` | true | boolean | Generic job dispatch gate; false explicitly opts out |
 | `mode` | `assessment` | `assessment`, `qualification` | Accepted target assessment or explicit synthetic exercise |
 | `reviewer_profile` | `reviewer` | configured `models` key | Fresh blinded reviewer model profile |
 | `asvs_level` | 2 | 1, 2, 3 | Upstream ASVS level selection |
@@ -52,7 +56,7 @@ The closed typed settings parser rejects missing/unknown keys and out-of-range v
 | `max_turns` | 4 | 1–16 | Turns per bounded investigation |
 | `max_queries` | 12 | 1–100 | Model-requested retrieval budget per investigation |
 | `dynamic_authorized` | false | boolean | Authorization policy, not adapter availability; no runtime/manual evidence adapter is implemented |
-| `model.*` | enabled, `claude-cli`, `claude-haiku-5-5`, `medium`, 24000 / 6000 tokens, 120 s, 1 retry | complete selected model profile | Worker policy; job remains disabled independently |
+| `model.*` | enabled, `claude-cli`, `claude-haiku-5-5`, `medium`, 24000 / 6000 tokens, 120 s, 1 retry | complete selected model profile | Worker policy; separate job-level gate controls dispatch |
 | `models.reviewer.*` | same as worker | complete selected model profile | Separate fresh request context using original evidence, no prior worker answer/transcript |
 | `parser_versions.*` | `component_rules`, `applicability_rules`, `batching_rules`, `result_validator` = `"1"` | strings | Versioned parser/validator fingerprint inputs |
 | `standards.<family>` | complete catalog pins in TOML | pinned catalog path/hash and upstream identity | Reviewed ASVS, MASVS, MASTG and risk-context catalogs |

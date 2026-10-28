@@ -7,13 +7,14 @@
   configured worker and fresh blinded reviewer calls; four site-bound Python static procedures;
   accepted original-evidence custody and scoped outcomes with named unresolved coverage.
 - Implemented in direct and Dagster graphs: accepted classification/prioritization/code graph → security tagging/tag
-  cloud → opt-in OWASP → review data indexing/`control_evidence` → lead/hunt packages →
+  cloud → default-enabled OWASP → review data indexing/`control_evidence` → lead/hunt packages →
   red/blue/independent verifier requests. Tags route work; they do not prove controls.
 - Verified offline: full-catalog publications, adverse/benign/dissent outcomes, configured caps,
   qualification isolation, projection/lead/package delivery, actual scripted review-role requests,
   original-source retrieval and indirect-proof guards. This is not live-provider efficacy.
 - [x] Integrate the same enabled tagging/OWASP chain into direct CLI `start`/`resume`/`plan-resume`,
-  including `--force-from` routing and rejection of disabled jobs. OWASP remains disabled by default.
+  including `--force-from` routing and rejection of disabled jobs. OWASP is enabled by default
+  across all shipped profiles, with an explicit job-level opt-out.
   This closes the missing chain, not CI/post-build or standalone metadata-sync topology differences.
 - [ ] Run authorized live-model efficacy/budget acceptance. Scripted `Infer` doubles establish
   contract behavior, not real-provider analytical quality.
