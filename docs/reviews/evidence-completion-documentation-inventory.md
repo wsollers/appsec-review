@@ -6,7 +6,8 @@ Inspected source: `5f5548da3d039f73c7d6858d2b28a4593a264efe`; ancestry verified 
 merged into the isolated documentation branch, followed by checkpoints `18eae9f`, `e769645f`,
 `3f28d871`, final integration `dd9c9ad`, dossier rendering follow-up `e9a8333a` and metric
 parity `0ece65d3` (source checkpoint `885175060097870a1b12a085bccd356a55b56157`);
-final contract/acceptance gaps are recorded below.
+then combined source `6975aef29eb09e1fb57385db98cb7d859108e362`, which contains documentation
+correction `bcb982c4` and main `093f26d5`. Final contract/acceptance gaps are recorded below.
 The controlling delivery decisions are
 [completion design section 11](../architecture/evidence-completion-and-remediation.md#11-parallel-implementation-decisions).
 This is a documentation implementation record, not evidence that the full new pipeline runs.
@@ -17,11 +18,12 @@ The [dossier data inventory](../architecture/dossier-data-inventory.md) records:
 
 - accepted configuration/guidance/review/package/ledger/evidence/adjudication/independence/score/
   shipment/coverage identities and resolver references;
-- all 19 public retrieval tool names, bounded selectors, graph modes, neighborhood families and
-  consumer-specific source windows; 17 logical indexes and their shard ownership;
+- all 20 public retrieval tool names, bounded selectors, syntax/graph modes, neighborhood families
+  and consumer-specific source windows; 18 logical SQLite indexes and their shard ownership,
+  plus the separate six-family OWASP store;
 - all 16 allowed precomputed query-set names, the 10 actual producers and 6 pending products;
-- all 120 baseline dataset output kinds / 37 modules, expanded to 126 kinds / 40 integrated modules, separated into
-  indexed, artifact-only and protected sensitivity/disposition;
+- all 120 baseline dataset output kinds / 37 modules, first expanded to 126 / 40 and now
+  **132 kinds / 42 registered/configured producers**: 46 indexed, 57 artifact-only, 29 protected;
 - source/build/document, CodeQL/Clang/AST/IR/CPG/SVF, artifact/dependency/CVE/SBOM,
   CI/IaC/hardening, coverage/profile/history/change/control/tag/prioritization data, and
   compile-only PoC/developer artifacts, with explicit provenance and evidence ceilings.
@@ -30,7 +32,9 @@ Sources were inspected as repository implementation, not target/evaluator data.
 No target checkout, evaluator ground truth, runtime skill instructions, raw prompt or credential
 was loaded for this work. No product/config/schema/test/container/pin edits were authored here;
 delivered implementation commits were merged for source verification.
-No broad `docs-sync` reconciliation was performed and `docs/docs-sync.json` is unchanged.
+The relevant `docs-sync` procedure was applied to the bounded effective-input/consumer delta,
+not the entire unrelated main history. Main's inherited `docs/docs-sync.json` remains at
+`aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4`; no new watermark is asserted by this feature checkpoint.
 
 ## Documentation map
 
@@ -100,6 +104,8 @@ Important source-verified distinctions for integration:
 | Chain final | Charges every physical native `trace`/`find` under per-edge/run budgets; incomplete/capped evidence cannot prove continuity, configuration contradictions refute it. Exact actor/terminal-cell/original-receipt checks and `base_review_projection` isolate ordinary enhancement failures/gaps from base completeness while retaining full ledger/publication accounting. |
 | `e9a8333ab8b3914ccdb8b8ec90186cbb8c282a6e` | Template checksum/rerun warning covers changed `.toc` even when `LastPage` is unchanged; preserves chain identity text in the protected dossier projection. No image pin change. Owner reports actual navigation/determinism acceptance; retained sample references are recorded separately from all-lane semantics. |
 | `0ece65d3c37af71a131c8f071d68b648feaf9133` | Adds actual chain `not_launched` outcomes and a complete `CellStatus`-shaped aggregate regression, resolving the reported status allowlist gap. Parent reports 25 metric/log regressions passing. |
+| `6975aef29eb09e1fb57385db98cb7d859108e362` | Merges main `093f26d5`, preserving topology-derived CLI `_graph_order` and linear direct execution over the same enabled jobs as Dagster. Registry/config/producer declarations now total 42 jobs / 132 datasets; accepted binary shards, syntax-only navigation, OWASP full-citation projection and expanded telemetry are inventoried. Both required hunt/lead manifest hashes are checked; PoC brief entry/path identities resolve through `ref`, never display labels. Source integration is not acceptance. |
+| `dbfe7973`, `872ca63df503d6cac562487c3bb5db3f47d9998d` | Generation regressions persist/replay summaries, replace stale caches, preserve source-log bytes, incorporate newly appended events without recounting old events, and retain fixed `certified_outcome_counts` including zero. Source has the report-count checkpoint at `872ca63d`; it is not an outcome-disposition field. |
 | Shared review acceptance | Now verifies `/3`, run identity, duplicate identities, canonical PoC-basis digest, individual review-package refs and ledger-bound chain publication/memberships. The reader mismatch is resolved; real producer registration is still not a full accepted-run result. |
 | Remediation operations | Added a focused operating page for exact inert patch bytes, confirmed-only accounting, seven assurance dimensions, native syntax-only coverage, defaults/profiles, protected artifacts, statuses and telemetry. |
 | Dossier operations | Reconciled exact units, source/producer verification, bounds/pin, attempt-owned files, closed projection, render status/receipt and failure-retention behavior from source. |
@@ -134,10 +140,46 @@ corrected snapshots; QA is rerunning two baseline classifiers with line-ending c
 Those reruns remain pending. The earlier counts and the narrow preflight baseline attribution
 must not be promoted to a broad clean-baseline claim.
 
-The user reiterated unit coverage for telemetry/metrics generation. The parent is adding a
-persistence/replay/source-log-immutability regression, while the all-lane owner checks actual
-producer events through the persisted metrics summary. These are pending validation additions,
-not delivered product-behavior changes or a completed all-lane result.
+The user reiterated unit coverage for telemetry/metrics generation. The initially pending
+persistence/replay/source-log-immutability regression is now delivered in `dbfe7973`, with
+certified report count coverage in `872ca63d`. The all-lane owner still checks actual producer
+events through the persisted metrics summary. Unit generation coverage does not itself close
+that separate all-lane acceptance boundary.
+
+## Combined-source checkpoint and current acceptance
+
+The current inventory was remeasured directly from source `6975aef2`, not old document counts.
+New `job_target_acquisition` supplies run-owned system/component provenance before intake;
+`job_binary_evidence_indexing` re-verifies intake-frozen Ghidra publications and publishes
+bounded `binary` shards/pseudo-C. New `query_syntax` reads exact signed source/AST projections
+from Tree-sitter `analysis` shards. These surfaces do not establish deployment, semantic binding,
+flow, guard sufficiency or vulnerabilities merely because retrieval succeeds. Dossiers still
+project only cited, bounded accepted material; there is no automatic wholesale dataset inclusion.
+
+`run-metrics/4` adds CodeQL execution/query views while retaining completion semantics `/1`,
+OWASP/review-flow, Tree-sitter receipt/resource accounting and correlated nullable model usage.
+Zero completion measurement gaps is distinct from legitimate review evidence/source/redaction
+gaps; the all-lane owner's `ab25bff8` checkpoint now checks that propagation. This is an attributed
+test checkpoint, not a local full native result or automatically accepted combined run.
+
+OpenVEX shared settings/contracts, schema locks and design documents exist, but no exporter
+job/configuration/dataset/metrics producer is registered. It is not counted as a 43rd job or a
+dossier input. Its inherited post-gate PoC sibling diagram and report `/1` proposal predate
+current pre-gate PoC and certified report `/2`; future implementation must reconcile them
+explicitly. The operations boundary now names that mismatch without claiming exporter delivery.
+
+| Reported validation | Current attribution / limit |
+| --- | --- |
+| Prior LF-exact `afbbc875` suite | Parent reports passed. This is a prior checkpoint, not combined main acceptance. |
+| Remediation `68915bb7bc7abd15013030761f9bd22e9e09e279` | Owner reports Linux 256 passed / zero skips on the exact remediation snapshot. It does not certify every combined lane. |
+| Dossier `e9a8333a` | Owner reports 387 passed / 14 skipped, including two real PDF tests; sample/gallery and receipt hashes remain as recorded. |
+| Certified report metrics `872ca63d` | Parent reports focused tests passed on Windows and Linux, covering summary persistence/replay/cache/source-log integrity. |
+| Two baseline assertions | QA now reproduces both on an LF-verified baseline and passes shell/golden controls. This supersedes their earlier pending narrow classification; the contaminated broad baseline remains incomplete, not acceptance. |
+| Combined main-plus-feature Linux suite | 111-file validation is ongoing. The first attempt exposed root-user/capability environment failures; retry runs unprivileged uid 1000. No final result is claimed here. |
+| Actual-producer all-lane semantics | Still pending. Review/source/redaction gaps must propagate even when telemetry measurement-gap count is zero. |
+
+This checkpoint does not advance the main sync watermark or change product/schema/image bytes.
+The dossier image gallery and sample files inherited from main are preserved.
 
 ## Retained sample and release boundary
 
@@ -197,3 +239,23 @@ configured-limit/counter vocabularies; a full zero-valued cell-status map introd
 gap. The seeded-sample section anchor and whitespace check pass. Root/status inspection shows
 only the 18 intended documentation files changed, with no disposable root output or authored
 product changes. Real PDF and native test results above remain attributed, not local executions.
+
+At combined source `6975aef2`, a standard-library AST/TOML check matches all 42 registry/config/job
+declaration identities and every exact dataset disposition column: 132 kinds (46 indexed,
+57 artifact-only, 29 protected). It also verifies the exact 20 tool names, 18 index names,
+16 query-set names and all current graph sink-class values against the inventory. No target
+or evaluator data was scanned.
+
+The checkout initially lacked pytest; dependencies were installed into its own `.venv`, and
+`appsec_review.__file__` was verified inside this worktree before running the relevant
+documentation/skill-separation/sync-record/completion-metrics selection. Result: **26 passed,
+two failed**. One failure is the same two known missing target links; the other is Windows
+`WinError 1314` when the existing skill-separation test creates a symlink without the required
+host privilege. Neither was hidden by editing tests, targets or skip policy. All completion
+metric and sync-record tests in that selection passed; this is not broad pipeline acceptance.
+The ten implemented `PRODUCT_SETS`/`PRODUCT_RULES` and six pending query names are checked
+separately rather than counting all API vocabulary as produced data. Post-edit links still have
+exactly the two known target failures; whitespace checks pass. Only seven scoped documentation
+files change relative to `6975aef2`; the inherited watermark, gallery and samples are unchanged.
+The checkout-local environment is retained for later checks; this selection's named
+`test/tmp/docs-combined-6975` fixture directory is removed after verification.

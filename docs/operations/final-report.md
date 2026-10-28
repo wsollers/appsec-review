@@ -196,15 +196,20 @@ PoC failure never contradicts the finding, and a compiled PoC cannot upgrade it 
 ### Planned OpenVEX export projection
 
 **Design only; not implemented at baseline `b7c31ba23af840f14cc919d56b8c557ffdb2d010`.**
-The [OpenVEX design](../architecture/openvex-export.md) adds an optional model-free
-`job_openvex_export` after the accepted gate, as a sibling of optional PoC generation, with
-both enabled tails feeding the one final report terminal. The current topology above does
-not yet include it. Normal graph execution must stop on enabled-export failure rather
+Shared settings/contracts are present at combined source `6975aef2`, but no exporter job,
+dataset, configuration entry or runtime report integration is registered.
+The [OpenVEX design](../architecture/openvex-export.md) proposes optional model-free
+`job_openvex_export` after the accepted gate. Its baseline post-gate PoC sibling diagram and
+`final-report/1` projection predate the current completion graph: PoC now precedes the gate
+and report `/2` reads only certified bindings. Future exporter implementation must reconcile
+that boundary explicitly, not restore a gate-to-PoC dependency or claim the design is active.
+The current topology above does not yet include it. The design requires normal graph execution
+to stop on enabled-export failure rather
 than publish a refreshed report. The [draft operator guide](openvex-export.md) covers
 immutable issuer/action setup, source identity, outputs, privacy and flow diagrams.
 
-The planned optional `openvex_export` block is additive to `final-report/1`; historical reports
-without it remain valid. It links only accepted, reverified run-local artifacts and never
+The original planned optional `openvex_export` block targeted `final-report/1`; there is no such
+implemented block in the current `/2` report. The design links only accepted, reverified run-local artifacts and never
 changes claim state, gate buckets, score dimensions or ship-block decisions.
 
 | Planned report state | Projection |

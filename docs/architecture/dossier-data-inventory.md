@@ -4,7 +4,10 @@ Status: source-verified inventory, initially at contract commit
 `5f5548da3d039f73c7d6858d2b28a4593a264efe`, reconciled through integration `b702eb7`
 and assurance fix `7641fa5`, then reader/metric checkpoint `18eae9f`, remediation `e769645f` and
 index-admission `3f28d871`, final integration `dd9c9ad`, rendering `e9a8333a` and metric parity
-`0ece65d3`, 2026-10-28. This is a catalog of implemented input surfaces,
+`0ece65d3`, then combined source `6975aef29eb09e1fb57385db98cb7d859108e362`
+(including main `093f26d5`), 2026-10-28. The combined inventory contains **42 registered/configured
+jobs, 132 dataset kinds, 20 public retrieval tools, 18 logical SQLite indexes and 16 allowed
+query sets (10 produced, 6 pending)**. This is a catalog of implemented input surfaces,
 **not** evidence that a particular run produced them. Chain, remediation and dossier producers,
 central wiring, process metrics, immutable PoC `/2`, gate/report `/2` and chain/base isolation now
 exist. The owner verified the seeded PDF sample; full native all-lane semantics remain unaccepted. Shared completion
@@ -25,7 +28,7 @@ A separate **PoC dossier** is required for every accepted PoC candidate outcome,
 unsuccessful or unavailable outcomes; a supported claim can therefore have a PoC dossier without
 becoming a confirmed finding.
 
-These are proposed downstream projections. Dossier rendering must not adjudicate a claim,
+These are implemented downstream projections. Dossier rendering must not adjudicate a claim,
 re-score it, strengthen its evidence, or clear its shipment decision. The authoritative existing
 records are the accepted inference handoff, its verified single claim ledger, exact finding and
 score packages, and the accepted evidence manifest. `FindingBinding` contains exactly
@@ -40,7 +43,9 @@ The distinction between **available**, **admissible**, and **publishable** is es
 | Accepted artifact / shard | Exact run-owned bytes, schema, producing attempt and upstream identities have been accepted. Acceptance alone is not a security finding. | [`indexing/store.py`](../../src/appsec_review/indexing/store.py), `accepted_handoff`; [`jobs/bound_artifacts.py`](../../src/appsec_review/jobs/bound_artifacts.py), `resolve_bound`, `read_bound_json`; [`retrieval/index.py`](../../src/appsec_review/retrieval/index.py), `load_verified_manifest` |
 | Evidence relation | A citation resolves to accepted bytes with a predicate-specific admissibility class and completeness flag. | [`review/evidence.py`](../../src/appsec_review/review/evidence.py), `resolve_relation`, `classify`, `satisfies`; [`review/admission.py`](../../src/appsec_review/review/admission.py) |
 | Adjudication / finding | Deterministic obligations and independent verification determine state, independently of model agreement or document rendering. | [`review/adjudication.py`](../../src/appsec_review/review/adjudication.py), `adjudicate`; [`review/independence.py`](../../src/appsec_review/review/independence.py), `verify_independence` |
+| Protected dossier projection | Only cited direct/analyst-assessed relation rows, bounded resolving excerpts and allowlisted finding/score/chain/PoC/remediation/provenance fields enter the model. Inventory availability does not automatically copy every dataset into it. | [`job_dossier_publication/job.py`](../../src/appsec_review/jobs/job_dossier_publication/job.py), `_excerpts`, `_chains`, `_remediation`; [`reporting/dossiers.py`](../../src/appsec_review/reporting/dossiers.py), `build_dossier` |
 | Public projection | Only approved fields and hash-bound references leave the protected developer artifact. | Shared [`jobs/accepted_review.py`](../../src/appsec_review/jobs/accepted_review.py), `project_finding`, `project_score`; [`job_final_publication_gate/attachments.py`](../../src/appsec_review/jobs/job_final_publication_gate/attachments.py) certifies closed attachment projections. Report assembly reads only that certified snapshot. |
+| Planned export | OpenVEX design, typed shared settings/contracts and schema locks exist; no registered exporter, dataset declaration, commissioned output or metrics section exists at this checkpoint. | [`jobs/job_openvex_export/contracts.py`](../../src/appsec_review/jobs/job_openvex_export/contracts.py), [`settings.py`](../../src/appsec_review/jobs/job_openvex_export/settings.py); [design](openvex-export.md). It is not a 43rd job or a dossier input. |
 
 Only complete `direct` and `direct_for_mapped_predicate` relations count toward obligations.
 `analyst_assessed` and `indirect` evidence remains useful context, not counted proof. The six closed
@@ -59,6 +64,8 @@ against a target for this document. Target-owned guidance is not dossier authori
 | Input | Effective data available now | Provenance, restrictions and dossier use |
 | --- | --- | --- |
 | Intake and source scope | Run id, target snapshot / source fingerprint, accepted catalog, exclusions, source and artifact intake, project/component/build-unit partitions. | [`job_review_intake/job.py`](../../src/appsec_review/jobs/job_review_intake/job.py), `resolved_configuration`; [`jobs/cataloging.py`](../../src/appsec_review/jobs/cataloging.py); [`job_target_catalog/job.py`](../../src/appsec_review/jobs/job_target_catalog/job.py). Host paths and complete intake documents are not public output. An excluded file is outside observed coverage, not safe. |
+| Acquired system provenance | Requested system/component identities, pinned acquisition plan/result, run-owned system-manifest copy/hash and component gaps; intake binds the composed source fingerprint. | [`job_target_acquisition/job.py`](../../src/appsec_review/jobs/job_target_acquisition/job.py), `selection.resolve_system`, `acquisition.acquire_components`, `publication.publish_handoff`; [operations](../operations/target-acquisition.md). Direct `--target` has no requested-system acquisition. A source component pin is not a deployed product/version identity. |
+| Frozen binary publications | Intake binds configured binary hash, Ghidra publication identity/manifest hash and availability; indexing re-verifies them, builds bounded binary shards and detaches hash-bound pseudo-C into the run. | [`job_binary_evidence_indexing/job.py`](../../src/appsec_review/jobs/job_binary_evidence_indexing/job.py), `accepted_binary_evidence`, `verified_publication`; `source_resolution.publish_binary_source`. Functions/calls require a resolving binary/address/line anchor; imports/strings are navigation, not citeable proof. |
 | Frozen configuration | Original TOML layers, runtime profile, capacity overlay, canonical resolved JSON, configuration manifest and resolved SHA-256; job-local settings, policy hashes and opaque operator release declarations. | [`config/loader.py`](../../src/appsec_review/config/loader.py), [`runtime/runner.py`](../../src/appsec_review/runtime/runner.py), `runtime/job.py::Job.identities`. Use frozen configuration, not checkout defaults. Supplied platform payloads are excluded from customer-source fingerprinting; retained rendering template provenance is not automatic code/template reuse invalidation. Follow [operator releases](../operations/performance-assurance.md#operator-declared-releases), never rewrite frozen declarations. |
 | Guidance identity | Hash-pinned bundle, registry/fragments/procedures and generated capability/budget receipt identities; provider/model/reasoning and role assignments. | [`guidance/compose.py`](../../src/appsec_review/guidance/compose.py), `bundle_sha256`; `data/guidance/<bundle-sha256>/`. Record hashes and allowed metadata, never copy raw guidance/prompts into a dossier or reinterpret it as evidence. |
 | Accepted review scope | Accepted retrieval manifest hash/path, source snapshot, package manifest hash, exact shard set, evidence map and scope gaps. | [`review/scope.py`](../../src/appsec_review/review/scope.py), `AcceptedScope`; inference `scope.accept_manifest`. No broad target scan or later mutable accepted pointer substitutes for this identity. |
@@ -72,7 +79,7 @@ against a target for this document. Target-owned guidance is not dossier authori
 | Scores and shipment | Separate technical severity, exploitability confidence, environmental/business impact, remediation priority; provider/native values, missing factors, severity bounds and cited score identities; exact `ship-block-policy/1` result. | [`review/scoring/`](../../src/appsec_review/review/scoring/), [`review/ship_block.py`](../../src/appsec_review/review/ship_block.py), `decide`. Default `application_risk_matrix/3` decides technical severity. Null remediation priority stays null; planner text, CVSS/SSVC context and chain severity sums must not replace it. |
 | Accounting | Expected/terminal cells, lanes, failed/capped/not-launched work, duplicates, coverage matrix, gap classes, incomplete-gap ratio and accepted review outcome. | [`review/accounting.py`](../../src/appsec_review/review/accounting.py); inference stages `audit`, `coverage_matrix`, `completeness_gaps`, `remediation_partition`. Keep review coverage distinct from later enhancement/render coverage. |
 | Process telemetry | Run/job/attempt/step/task and invocation identities, lifecycle/duration/reuse/disposition/gap counters, receipt-resolved review/build/CodeQL scope, resource/work measurements and emitted model usage; fixed completion-lane event/outcome/counter/duration views. | [`observability/events.py`](../../src/appsec_review/observability/events.py), `PipelineLog`, `EventLog`; [`observability/telemetry.py`](../../src/appsec_review/observability/telemetry.py), `aggregate_run_metrics`, `_receipt_json`, `emit_model_event`; [`observability/completion.py`](../../src/appsec_review/observability/completion.py), `completion_metrics`. Operational context only; producer instrumentation and unknown-usage gaps remain separate from aggregate availability. |
-| Judge PoC basis | Exact finding/package binding, supported/confirmed state, accepted judge verdict, `poc_basis` brief/hash and evidence refs. | Inference stages `poc_candidates`; [`job_poc_generation/candidates.py`](../../src/appsec_review/jobs/job_poc_generation/candidates.py). Basis labels resolve through the accepted package view; a judge's approval is not runtime proof. |
+| Judge PoC basis | Exact finding/package binding, supported/confirmed state, accepted judge verdict, `poc_basis` brief/hash and evidence refs. | Inference stages `poc_candidates`; [`job_poc_generation/candidates.py`](../../src/appsec_review/jobs/job_poc_generation/candidates.py), `brief.build_brief`. Entry/path use exact entity identities resolved through package-view `ref` rows, not display labels. Unknowns remain limitations, not invented evidence. Unresolved basis identities stop before writer dispatch; a judge's approval is not runtime proof. |
 | Compile-only developer artifact | Inert test/control source, setup/debugger instructions, policy verdict, classified compiler commands, syntax/object/sanitizer-object checks, symbol checks, diagnostics and artifact/provenance hashes. | [`job_poc_generation/brief.py`](../../src/appsec_review/jobs/job_poc_generation/brief.py), `build_brief`; [`buildctx.py`](../../src/appsec_review/jobs/job_poc_generation/buildctx.py), `AcceptedBuilds`; [`buildcheck.py`](../../src/appsec_review/jobs/job_poc_generation/buildcheck.py), [`package.py`](../../src/appsec_review/jobs/job_poc_generation/package.py). Protected files now live under immutable `package.files` attempt paths; existing candidate directories are refused, not replaced. |
 | Attack chains | Pre-seal proposals, blind refutation/required weakest-link challenges, typed single-ledger events, terminal artifacts and exact manifest accounting. | [`job_inference_security_review/chains.py`](../../src/appsec_review/jobs/job_inference_security_review/chains.py), [`review/attack_chains.py`](../../src/appsec_review/review/attack_chains.py). Five continuity dimensions require commissioned native facts; the default producer allowlist is empty. Source narrative or seed prose cannot establish deployment continuity. |
 | Remediation | Confirmed-only outcomes, inert exact byte-edit patches, separate regression specifications, independent semantic assessments, bounded static/native syntax comparisons and cleanup receipts. | [`job_remediation_planning/job.py`](../../src/appsec_review/jobs/job_remediation_planning/job.py), [`job_remediation_validation/job.py`](../../src/appsec_review/jobs/job_remediation_validation/job.py); [operations](../operations/remediation.md). PoC context is not consumed in this slice (`poc_handoff: null`), despite ordering after PoC. No runtime regression or target mutation. |
@@ -81,6 +88,9 @@ against a target for this document. Target-owned guidance is not dossier authori
 
 The shared accepted-review verifier now accepts handoff `/3` and re-hashes the ledger, individual
 lead/hunt review packages and their manifests, findings, scores, coverage, scope and chain artifacts.
+The hunt manifest content hash must equal required `package_manifest_sha256`; the separate lead
+manifest content hash must equal required `lead_package_manifest_sha256`. Both identities are
+retained in the verified review spine; verifying only one lane does not certify the other.
 It checks run identity, duplicate finding/claim/score identities, canonical PoC-basis digest and
 finding chain membership against the ledger, retaining these nested refs in its bindings.
 It also verifies the chain manifest through `chains.verify_publication`
@@ -96,7 +106,8 @@ The complete public tool catalog is
 [`mcp/owasp.py`](../../src/appsec_review/mcp/owasp.py). Implementations are
 [`retrieval/core.py::RetrievalCore`](../../src/appsec_review/retrieval/core.py),
 [`retrieval/graph.py`](../../src/appsec_review/retrieval/graph.py) and
-[`retrieval/neighborhood.py`](../../src/appsec_review/retrieval/neighborhood.py).
+[`retrieval/neighborhood.py`](../../src/appsec_review/retrieval/neighborhood.py), with syntax-only
+navigation in [`retrieval/syntax.py`](../../src/appsec_review/retrieval/syntax.py).
 These query accepted indexes; none launches CodeQL, parses arbitrary IR/CPG, or scans a target tree.
 
 Unless noted, `limit` is 1-100 (also constrained by the consumer's configured maximum).
@@ -121,6 +132,7 @@ pagination/truncation; exhausted bounds are never evidence of absence.
 | `query_change_context` | `scope` (`file`, `function`, `component`), `path`, `component`, `signal` | Ranked review-priority context; exact signal vocabulary below. |
 | `query_hotspots` | `scope` (`file`, `function`), `path`, `min_score` 0-100 | Priority-index metrics, evidence links and rank; not finding severity or an assertion of a flaw. |
 | `query_precomputed` | required `query_set`; `subject`, `path` | Sixteen allowed names, only ten currently produced; see [query sets](#5-precomputed-query-sets-and-cross-domain-links). |
+| `query_syntax` | required `mode` (`definitions`, `calls`, `imports`, `references`) and exact `source_file` or `ast_node` `subject`; optional exact written `name` (maximum 512 UTF-8 bytes) | Build-independent accepted Tree-sitter `analysis` projections, not semantic binding/call/dataflow. Default page 20, at most 100/core cap; an AST subject further bounds the byte span. Manifest/request-bound cursor; all names/imports/call targets remain unresolved. |
 | `query_code_graph` | required `mode`, `subject`; `depth` 1-4, `sink_class`, `source_class` | Nine closed modes; subject kinds and applicable filters below. Reads accepted graph facts only. |
 | `list_codeql_databases` | `language` | Accepted database cards: scope/language/root/build unit, seed ledger, depth/mode, family coverage, upstream producers and gaps. Language syntax is bounded to 64 characters. |
 | `query_codeql_neighborhood` | required `database`; exactly one of `seed` (`path:line`), `symbol`, `observation`; `direction` (`callers`, `callees`, `both`), `depth` 0-4, `include` | `include`: `calls`, `sinks`, `entry_points`, `guards`, `ranges`, `paths`, `flow`, `diagnostics`, `symbols`, `cpg`; default calls/sinks. Seeded scope/depth/frontier restrictions still apply. |
@@ -157,7 +169,10 @@ or `departed_dominant_owner`.
 Source classes: `remote`, `local_user`, `argv`, `environment`, `file`, `ipc`, `database`,
 `internal`, `unclassified`. Sink classes: `memory_write`, `memory_read`, `allocation_size`,
 `format_string`, `command_execution`, `path_access`, `sql_query`, `code_injection`,
-`deserialization`, `integer_conversion`, `crypto_misuse`, `log_output`, `unclassified`.
+`deserialization`, `integer_conversion`, `crypto_misuse`, `log_output`,
+`server_side_request`, `xml_external_entity`, `ldap_query`, `xpath_query`, `html_output`,
+`template_injection`, `url_redirect`, `header_injection`, `regex_injection`,
+`unsafe_reflection`, `unclassified`.
 Only the contract's attacker-reachable source classes can directly support attacker input control.
 
 Exact location, complete coverage, acceptable cross-check state (`agree` or `not_covered`),
@@ -166,6 +181,14 @@ An unresolved indirect call, unsupported range, ambiguous mapping or partial/dis
 cross-check cannot silently become a direct proof. A dominating guard is not necessarily an
 effective bound: `graph.bounds.fact_bounds_destination` and the citing role determine whether a
 guard contradiction counts or is weakened to `qualifies`.
+
+The graph catalog now has language aliases for C/C++, Java/Kotlin, JavaScript/TypeScript,
+Python, Ruby, Go, C#, Rust and Swift; a catalog alias is not accepted extraction/coverage.
+`graph.normalize.RANGE_ANALYSIS_METHODS` distinguishes C++ simple range analysis, Java range
+analysis, C# constant/sign analysis, Go constants/dominating guards and Swift literal-only
+analysis. JavaScript/Python/Ruby/Rust exports are `not-performed`; empty/nonintegral ranges
+remain explicit family/operand gaps, not proof of a bound. See
+[CodeQL graph facts](code-graph-precomputation.md) for per-language commissioned coverage.
 
 Producer settings default to call depth 3, 200 neighbors/function, 8 paths/sink, 40 path steps,
 16 guards/sink, 200000 facts/family/scope, 256 MiB export, 1800-second export timeout.
@@ -193,10 +216,18 @@ These are distinct surfaces; granting one does not grant another:
 | Inference cell | [`review/capability.py`](../../src/appsec_review/review/capability.py), `CellCapability.authorize`, grants a subset of catalog tools (not OWASP in-process) plus application-only `expand`. | Package entity/index/query-set/graph-family/scope grants, page/depth/response caps and per-cell/run budgets apply. Locator convenience is limited to displayed package paths. `expand` accepts label/ref/files navigation and still runs authorized typed requests, with helper call depth capped at 3. |
 | Chain continuity resolver | [`review/attack_chains.py`](../../src/appsec_review/review/attack_chains.py), `resolve_edge`, `_artifact_resolution`; job `chains.py::_BoundedResolutionCore`. | `trace(identity=output_entity, relations=..., depth=1, limit=max_page_size)` over `SAME_AS`, `FLOWS_TO`, `SUPPORTS`, `GENERATED_FROM`, `COMPILES_TO`, `LINKS_INTO`, `OBSERVED_AT`; artifact/configuration/deployment identities use `find(identity, limit=1)` and native artifact traces at depth `min(3,max_depth)`, limit `min(100,max_results)`. Each physical `trace`/`find` charges the run budget and per-edge resolution budget (default 12). Exhaustion resets obligations unresolved; truncated/gapped/ambiguous/capped evidence cannot prove continuity. |
 | Labelled package view | [`review/package_view.py`](../../src/appsec_review/review/package_view.py), `build_view`; source/function, type, sink, range, guard, caller/callee, flow, entry, memory, build, tag and gap labels. | Library defaults: 48 KiB view, 160 function lines, 6 type declarations; fallback window is +/-12 lines, type extent 30 lines, displayed line 200 characters. Trimming has explicit omissions and material gaps; remaining gaps/corroboration have hash-referenced JSONL pages. Secret lead lines are redacted. A display label is not a durable evidence id. |
-| Source resolver | `RetrievalCore.read_source_lines`, `read_excerpt`; [`retrieval/source_resolution.py`](../../src/appsec_review/retrieval/source_resolution.py), `read_source_bytes`. | Re-resolves an accepted location and exact file hash; UTF-8, source-byte and excerpt bounds. Ordinary target bytes must still match. Accepted generated source has detached immutable backing bound to artifact/build unit, source hash, build handoff, logical path, target and run; no mutable build-workspace fallback. Source verification limit is 16 MiB. |
+| Source resolver | `RetrievalCore.read_source_lines`, `read_excerpt`; [`retrieval/source_resolution.py`](../../src/appsec_review/retrieval/source_resolution.py), `read_source_bytes`. | Re-resolves an accepted location and exact file hash; UTF-8, source-byte and excerpt bounds. Ordinary target bytes must still match. Generated backing binds artifact/build handoff; binary backing binds publication/binary/function address. Both detach immutable run-owned bytes and verify run, target, logical path and source digest; no mutable workspace/publication fallback. Source verification limit is 16 MiB; backing metadata limit is 8192 bytes. |
 | PoC writer | [`job_poc_generation/writer.py`](../../src/appsec_review/jobs/job_poc_generation/writer.py), `read_source`, `find_declaration`, answered by the application, not general model tools. | Hash-verified accepted native workspace and include scope; `read_source` at most 120 lines; declarations/types bounded by brief settings/file counts/bytes. Exact compile argv/environment remains protected; writer sees safe classified facts. |
 | Remediation writer | [`job_remediation_planning/inputs.py`](../../src/appsec_review/jobs/job_remediation_planning/inputs.py), `SourceReader.resolve`, `retrieve`. | `find(identity, limit=1)` joins counted evidence to accepted native workspace hashes; defaults admit 8 files / 64000 total bytes, 262144 bytes/file ceiling and 32 evidence rows. A request names exactly `path`, `start_line`, `end_line`, at most 120 lines, within admitted files. No user-target fallback. |
 | Dossier producer | `job_dossier_publication.job._excerpts`, accepted review/projection and hash-bound source manifest. | Sorted cited direct/analyst-assessed identities, default 4 excerpts, `read_excerpt(context_lines=2)`, 24 evidence rows, 40 lines / 4000 characters per code block. Trimming/redaction/omissions remain explicit; it does not gain a general model retrieval grant. |
+
+`query_syntax` reads only `job_tree_sitter_ast` analysis shards using the partial SQLite
+`syntax_lookup` expression index over source identity/category/written name; it never reparses
+or accepts a query program/path/glob. Exact signed source-file grants admit returned nodes, not
+AST-kind prefixes or sibling paths. Missing mappings, parse errors and bounded projections remain
+coverage gaps. AST evidence is direct only for construct existence; interpreting guards, flow
+or input control stays analyst-assessed, never direct merely because navigation succeeded.
+[Tree-sitter architecture](tree-sitter-ast.md#bounded-syntax-navigation) lists the language subsets.
 
 Native continuity payloads are **supported contract vocabulary, not currently commissioned
 deployment evidence**. `resolve_edge` admits only an exact accepted relation between the edge's
@@ -221,7 +252,7 @@ target document or source-only producer to invent deployed identity/privilege/ti
 
 ## 4. Physical indexes, shards and producer ownership
 
-The 17 logical retrieval indexes are defined by
+The 18 logical retrieval indexes are defined by
 [`retrieval/index.py::INDEX_NAMES`](../../src/appsec_review/retrieval/index.py).
 Each immutable SQLite/FTS shard carries `name`, `shard_id`, schema, SHA-256, fingerprint,
 run-relative path, producer and gaps. Its `entities`, `locations`, `relations`, `coverage`,
@@ -237,7 +268,7 @@ No single file named after an index should be assumed when it has multiple shard
 | `artifacts` | `job_artifact_indexing`: `catalog-*`, `members-*`, `relations-*` | Produced/accepted-input artifact identities, formats, content hashes, archive members and build relations; `query_artifacts`, `resolve_evidence`. |
 | `build_security` | `job_post_build_security_assessment` | Accepted compile/link/artifact hardening observations, symbols/sections and coverage; `query_build_security`. |
 | `compiled` | `job_cpp_compiled_analysis`: `cpp-*-binary` | Binary symbols and resolving source/build relationships, not a deployed process. |
-| `analysis` | Catalog declarations; Tree-sitter syntax/coverage; target plan (`target-analysis-plan*`); C++ `cpp-*-ast`, `cpp-*-ir` and blocked branches; clangd `clangd-*`; SVF `svf-cpp-scope-*`, `svf-coverage-*`; test/profile `test-coverage-*`, `profile-data-*` | AST/IR/symbols, planning, alias/memory, coverage/profile facts; `find`, `trace`, `read_excerpt`, precomputed joins, and scoped neighborhood copies where produced. |
+| `analysis` | Catalog declarations; Tree-sitter syntax/coverage; target plan (`target-analysis-plan*`); C++ `cpp-*-ast`, `cpp-*-ir` and blocked branches; clangd `clangd-*`; SVF `svf-cpp-scope-*`, `svf-coverage-*`; test/profile `test-coverage-*`, `profile-data-*` | AST/IR/symbols, planning, alias/memory, coverage/profile facts; `query_syntax` for Tree-sitter projections, `find`, `trace`, `read_excerpt`, precomputed joins, and scoped neighborhood copies where produced. |
 | `observations` | Evidence collection per tool; CodeQL `codeql-*`; Clang `clang-static-*`, `clang-static-coverage-*`; C++ `cpp-*-infer`; CI `ci_*`; artifact scans `artifact-security*`; Joern `joern-*`, `joern-coverage-*` | Normalized scanner evidence, severity/suppression/duplicate/location/flow metadata and coverage; `query_observations`, `query_codeql`, `query_ci_configuration`. Coverage-only output is not successful semantic analysis. |
 | `evidence` | CI `ci_findings*` | Correlated canonical CI findings; resolve to observations/source. The entity kind `finding_package` here is not sufficient to make it an inference-confirmed package. |
 | `history` | `job_source_history_analysis`: `git-history*`; `job_change_context_analysis`: `change-context*` | Pseudonymous history/churn/hotspot/change/review/deployment-context signals; `query_change_context`, `find`, `trace`. |
@@ -248,15 +279,27 @@ No single file named after an index should be assumed when it has multiple shard
 | `precomputed` | `job_review_data_indexing`: `qs-<query_set>` | Ten currently commissioned bounded products below, each pinned to the exact shards/rules/settings it read; `query_precomputed`. |
 | `inventory` | `job_review_data_indexing` inventory; `job_dependency_intelligence`: `dependency-intelligence*` | Dataset/audit/coverage matrices and dependency/repository/Scorecard context. Distinguish inventory producer and entity kind; `query_dataset_inventory`, artifact/precomputed joins. |
 | `graph` | `job_code_graph_index`: `graph-<scope_id>-<family>`, `graph-<scope_id>-database`, `graph-<scope_id>-producers` | CodeQL-first normalized facts, database cards, bounded producer-neighborhood copies; `query_code_graph`, database/neighborhood tools. |
+| `binary` | `job_binary_evidence_indexing`: `binary-<binary_id>` (128-character shard-id cap) | `binary_function`, `binary_call_site`, `binary_import`, `binary_string`, `CONTAINS`/`CALLS`/`REFERENCES`; existing `search`, `find`, `trace`, `read_excerpt`, `coverage`, not a new binary query tool or CodeQL graph shard. |
 
-OWASP is a separate accepted JSON-shard store, not an eighteenth SQLite index. Its six families
-and resolver are listed in the query table. Ghidra binary-decompilation publications are also a
-separate hash-addressed pre-run facility:
+OWASP remains a separate accepted JSON-shard store, not a nineteenth SQLite index. Its six families
+and resolver are listed in the query table. Ghidra binary-decompilation publications remain a
+separate hash-addressed pre-run facility, now admitted through the frozen intake and binary job:
 [`binary_decompilation/publication.py`](../../src/appsec_review/binary_decompilation/publication.py),
 `publish_export` / publication verification, retain program, functions, calls, imports, exports,
 strings, gaps, hash-bound pseudo-C and p-code by binary/function address. Native decompilation is
-not managed-bytecode evidence. These files are **not** an automatically granted dossier query or
-graph proof; an accepted run binding and resolving artifact references are still required.
+not managed-bytecode evidence. Detached pseudo-C lives under `data/binary-evidence/sources/`,
+with logical path `@binary/<binary-sha256>/<function-address>.c`; `binary_anchor` requires that path
+to match the entity payload and pseudo-C lines. Imports/strings have no citeable source location.
+Under `predicate-admission/2`, anchored functions/calls are direct for `affected_construct` only,
+analyst-assessed for input control/reachability/guards, and indirect for configuration/impact.
+The dossier can retain a cited bounded resolving excerpt, not bulk Ghidra tables or fabricated
+semantic/deployment proof.
+
+Central binary-index defaults cap 200000 functions, 1000000 call sites, 20000 imports,
+200000 strings, 64 string cross-references, 4096 characters/string and 65536 text bytes/entity.
+Truncation, unresolved/unlocated calls, unavailable/managed publications and unapplied debug
+symbols remain gaps. No managed decompiler or binary-only `start --binary` review is commissioned;
+see [binary architecture](binary-decompilation.md) and [operations](../operations/binary-decompilation.md).
 
 ## 5. Precomputed query sets and cross-domain links
 
@@ -277,7 +320,7 @@ use the exact tools above, especially `query_dataset_inventory`.
 | `scanner_correlation` | Source-SAST observations, suppression/duplicate mappings, exact source spans, syntax, dispositions; complete partitioned high/critical and unknown lead menus plus membership audit. | Nominates claims; tool findings are direct only for the rule's predicate mapping. A complete lead menu cannot be silently truncated. |
 | `ci_trust` | CI observations/canonical records grouped by workflow and security categories, same-workflow path candidates, deployment-event count. | Always qualified for unresolved dynamic/reusable/external workflows and absent CI-to-build/artifact/deployment identity mapping. Co-location is not a proven privilege path. |
 | `history_context` | History, change context, hotspots/priority, exact history/source links plus metric vectors (including accepted coverage/profile/dependency context). | Churn, ownership, approval timing and sampled hotness rank work; they do not prove a flaw or that missing tests mean no testing. |
-| `control_evidence` | Accepted OWASP control results with applicability/status, resolving evidence citations and workbench row/shard references. | Unresolved freeform citations stay gaps; the referenced workbench is authoritative for its assessment, not an independent runtime observation. |
+| `control_evidence` | Accepted OWASP control results with applicability/status, worker/independent obligations, contradictory evidence, observations, coverage/bounds and manifest/shard/row references. `indexing.products.load_control_assessment` expands hash-verified full authority instead of trusting a depth-bounded payload and re-resolves typed citations against pinned upstream evidence. | Eligibility requires assessment mode, applicable/conditional status, not-satisfied control, resolving evidence and an anchored adverse mechanism. It nominates a provisional review lead; it is analyst-assessed context, never direct vulnerability or component-safety/runtime proof. Qualification-only/unresolved citations stay gaps. |
 | `reference_intelligence` | Accepted weakness/CWE references joined to the pinned MITRE catalog, source observation identities and general weakness metadata. | Reference context is indirect for every target predicate. |
 | `document_context` | Exact method/route joins among OpenAPI, Postman and recognized unit-test requests; DFD boundary/threat-model joins; member ids/counts, source locations and gaps. | Declarations/intent only. AsyncAPI/protobuf/GraphQL records can be indexed without being included in these route joins. No declaration or test proves enforcement. |
 | `hotspot_context` | `pending_follow_up`: stage-3 composition with accepted graph families. | Named API support is not an implemented product. |
@@ -307,8 +350,9 @@ the pin a finding used. See [dependency intelligence](dependency-intelligence.md
 
 ## 6. Per-dataset visibility and retention
 
-This table accounts for all 126 `DATASETS` output kinds in the 40 integrated job `datasets.py` modules
-(120 kinds / 37 modules at the original contract baseline).
+This table accounts for all 132 `DATASETS` output kinds in the 42 integrated job `datasets.py` modules:
+46 indexed, 57 artifact-only and 29 protected declarations
+(120 kinds / 37 modules at the original contract baseline; 126 / 40 before the main integration).
 Each producer name links to that declaration, which owns artifact patterns, schema and query route;
 the [physical index catalog](#4-physical-indexes-shards-and-producer-ownership) identifies its shards.
 These declarations are **not** actual run
@@ -326,7 +370,8 @@ sanitized public references do not make those bytes public.
 | --- | --- | --- | --- |
 | [`job_model_connectivity`](../../src/appsec_review/jobs/job_model_connectivity/datasets.py) | none | `model_connectivity` | none |
 | [`job_image_pin_verification`](../../src/appsec_review/jobs/job_image_pin_verification/datasets.py) | none | `image_pin_verification` | none |
-| [`job_review_intake`](../../src/appsec_review/jobs/job_review_intake/datasets.py) | none | `model_preflight`, `review_intake` | none |
+| [`job_target_acquisition`](../../src/appsec_review/jobs/job_target_acquisition/datasets.py) | none | `target_acquisition` | none |
+| [`job_review_intake`](../../src/appsec_review/jobs/job_review_intake/datasets.py) | none | `model_preflight`, `binary_evidence`, `review_intake` | none |
 | [`job_target_catalog`](../../src/appsec_review/jobs/job_target_catalog/datasets.py) | `source_files`, `declaration_symbols`, `components`, `target_documents`, `build_units` | `target_artifact_inputs`, `catalog_documents` | none |
 | [`job_target_analysis_plan`](../../src/appsec_review/jobs/job_target_analysis_plan/datasets.py) | `analysis_plan` | `analysis_plan_documents` A(s) | `planning_model_transcripts` |
 | [`job_source_history_analysis`](../../src/appsec_review/jobs/job_source_history_analysis/datasets.py) | `history_signals` | `history_documents` | `raw_git_history`, `history_tool_io` |
@@ -340,6 +385,7 @@ sanitized public references do not make those bytes public.
 | [`job_cpp_compiled_analysis`](../../src/appsec_review/jobs/job_cpp_compiled_analysis/datasets.py) | `cpp_build_graph`, `clang_ast`, `llvm_ir`, `infer_observations`, `binary_symbols`, `cpp_blocked_branches` | `cpp_plan_and_summary` A(s) | `cpp_case_material` |
 | [`job_clang_static_analysis`](../../src/appsec_review/jobs/job_clang_static_analysis/datasets.py) | `clang_static_observations`, `clang_static_scope_coverage` | `clang_static_summary` | `clang_static_raw` |
 | [`job_cpp_symbol_index`](../../src/appsec_review/jobs/job_cpp_symbol_index/datasets.py) | `clangd_symbols`, `clangd_coverage` | `clangd_summary` | `clangd_tool_io` |
+| [`job_binary_evidence_indexing`](../../src/appsec_review/jobs/job_binary_evidence_indexing/datasets.py) | `binary_functions` | `binary_pseudo_c`, `binary_evidence_summary` | none |
 | [`job_svf_alias_analysis`](../../src/appsec_review/jobs/job_svf_alias_analysis/datasets.py) | `svf_alias_sets`, `svf_alias_scope_coverage` | `svf_alias_summary` | `svf_alias_raw` |
 | [`job_cpg_analysis`](../../src/appsec_review/jobs/job_cpg_analysis/datasets.py) | `cpg_graph_coverage`, `cpg_scope_coverage` | `cpg_summary` | `cpg_binary` |
 | [`job_sanitizer_build`](../../src/appsec_review/jobs/job_sanitizer_build/datasets.py) | none | `sanitizer_build_summary` | `sanitizer_build_workspaces` |
@@ -350,7 +396,7 @@ sanitized public references do not make those bytes public.
 | [`job_test_coverage`](../../src/appsec_review/jobs/job_test_coverage/datasets.py) | `test_coverage` | `test_coverage_handoff` | none |
 | [`job_profile_data`](../../src/appsec_review/jobs/job_profile_data/datasets.py) | `profile_data` | `profile_data_handoff` | none |
 | [`job_dependency_intelligence`](../../src/appsec_review/jobs/job_dependency_intelligence/datasets.py) | `dependency_context` | `scorecard_responses`, `dependency_intelligence_handoff` | none |
-| [`job_owasp_control_assessment`](../../src/appsec_review/jobs/job_owasp_control_assessment/datasets.py) | `owasp_workbench` (separate store) | `owasp_documents` | none |
+| [`job_owasp_control_assessment`](../../src/appsec_review/jobs/job_owasp_control_assessment/datasets.py) | `owasp_workbench` (separate store) | `owasp_documents` | `owasp_model_receipts` |
 | [`job_review_prioritization`](../../src/appsec_review/jobs/job_review_prioritization/datasets.py) | `priority_items` | `prioritization_documents` | none |
 | [`job_security_tagging`](../../src/appsec_review/jobs/job_security_tagging/datasets.py) | `tag_assignments` | `tagging_documents` | none |
 | [`job_third_party_data_sync`](../../src/appsec_review/jobs/job_third_party_data_sync/datasets.py) | none | none | `feed_sync_work` (published snapshots are pinned separately) |
@@ -391,13 +437,21 @@ before central redaction, and raw patches/PoCs must never be logged under arbitr
 
 `aggregate_run_metrics` / `write_run_metrics` in
 [`observability/telemetry.py`](../../src/appsec_review/observability/telemetry.py) produce
-`data/telemetry/summary.json` (`run-metrics/3`) from that stream, not from a target scan.
+`data/telemetry/summary.json` (`run-metrics/4`) from that stream, not from a target scan.
 Available views include event and deduplicated lifecycle counts/conflicts/gaps, job/task and
 operation timing, queue/reuse/disposition/work/throughput counters, bounded slow-operation
 rankings, resource admissions/spans, emitted model invocations/tokens, authoritative
 `FINDING_TRANSITION` counts and receipt-resolved source/build/artifact/CodeQL review metrics.
 Overlapping spans are not additive resource totals. Missing model usage/cost and absent platform
 measurements retain null/unavailable reasons where producers preserve them.
+
+| Added operational view | Source identity / available measurements | Interpretation boundary |
+| --- | --- | --- |
+| `owasp` | `_owasp_metrics` resolves `OWASP_ASSESSMENT_RECORDED` hash-bound workbench reports: publication attempts/latest denominator, input retrieval versus source/citation resolution, requested expansions, model dispositions/roles/replay and verified reuse. | Latest invalid/missing receipts leave coverage unavailable, not an older-success fallback. Assessment counters and protected `owasp_model_receipts` are not independent evidence. |
+| `review_flow` | `_review_flow_metrics` retains control-evidence/package/lane milestones, manifest pins and latest disposition per attempt/cell, fresh dispatch/query counts and verified reuse. | Reused historical retrievals are not fresh queries. Missing milestones mean unrecorded execution, not zero work. |
+| `model_invocations` | Shared `observability/model_calls.py::call_model` emits correlated transport starts/completions, job/attempt/task/role/persona/cell/package/batch identities, request/guidance hashes, served identities and nullable usage. | Transport success does not validate assessment output. Recorded replay is separately labelled and excludes historic tokens/new-inference totals; raw requests/responses/source/errors are not copied into logs/dossiers. |
+| `tree_sitter` | `_tree_sitter_metrics`, `tree-sitter-metrics/1`, verifies start/execution/output receipts and invocation/run/job/attempt identity; per-invocation file/node/truncation/resource counts, job-attempt groups, reuse, summed duration, elapsed window, covered wall time and concurrency. | Missing/conflicting/changed receipts create accounting gaps. Missing resources remain null; peak memory is the maximum individual container peak, not concurrent aggregate memory. |
+| `codeql` | `_codeql_metrics`, `codeql-execution-metrics/1`, resolves action execution receipts plus `codeql-query-metrics/1`; database/analyze/compile/export rows grouped by pack/language/source language and pack-language, bounded per-query/rule rows and timings. | Reused/skipped actions count but do not enter fresh runtime statistics. Missing per-query source or runtime is a named gap, not zero analysis. |
 
 The summary now also contains `completion`, with
 `appsec-review/completion-process-metrics/1` semantics. Seven fixed lanes report `observed` and
@@ -408,6 +462,11 @@ This is attempted event-scoped work, including retries, not unique accepted find
 stage summaries must not be added. An unobserved lane is not an observed zero or a complete
 missing-producer audit. Remediation `e769645f` now preserves unknown token dimensions as null and
 genuine measured zeros, with explicit missing-turn/no-completed-turn metadata.
+`872ca63d` adds fixed `certified_outcome_counts` to capability counters, including genuine zero
+counts; report attachment counts are not disposition strings or unique finding counts.
+Persistence/replay tests cover stale-summary replacement, idempotent regeneration, unchanged
+source-log bytes and newly appended events without recounting old work. Legitimate source,
+evidence or redaction gaps in dossiers/review remain distinct from zero telemetry measurement gaps.
 
 These are regenerable operational views, not another retrieval index or an evidence-admission
 route. Hash-bound metric receipts resolve run-owned artifacts; malformed/changed/escaping receipts
@@ -479,32 +538,41 @@ typed defaults/profiles, registration, input matrix, CLI/Dagster ordering and co
 `7641fa5` restores assurance validation within full schema-validated producer rows. Checkpoint
 `18eae9f` includes shared reader `/3` alignment (`6f168400`) and metric parity. Final integration
 `dd9c9ad` contains chain isolation/hardening `dd1f8018`, PoC/gate/report `c44eddc1`, remediation
-`e769645f` and index-admission `3f28d871`.
+`e769645f` and index-admission `3f28d871`. Combined checkpoint `6975aef2` merges main `093f26d5`
+with that completion lane, retaining topology-derived CLI order, both required review manifest
+hashes, identity-resolved PoC briefs and summary persistence/report-count regressions.
 
 | Delivered surface | Source-verified state / remaining boundary |
 | --- | --- |
 | Shared review reader | `jobs/accepted_review.py` verifies handoff `/3`, ledger-bound chain publication/memberships, original actor/cell receipts, nested review-package refs, run identity, duplicate identities and the PoC-basis digest. |
-| Pre-gate topology | Direct and Dagster graphs register PoC, planning, validation and dossiers before one gate, then the report. New configurations enable all four; frozen old configurations remain immutable. Validation without planning is rejected. PoC has no gate dependency; report consumes only the gate. |
+| Pre-gate topology | Registry and central config contain the same 42 jobs. CLI `_graph_order` derives its pre-/post-index split from `wave1_dependencies`; direct execution remains linear while Dagster follows dependencies over the same enabled jobs. Acquisition/binary indexing, security tagging and OWASP are retained before indexing; PoC/planning/validation/dossiers precede one gate/report. New configurations enable all four completion jobs; old frozen settings remain immutable. PoC has no gate dependency. |
 | Chains | Three pre-seal units, strict native continuity policy, protected dataset/manifest and exact actor-receipt accounting exist. `stages.base_review_projection` validates exact enhancement-cell coverage while excluding those cells/gaps from base completeness accounting; the full ledger/projection retains them and publication exposes enhancement gaps separately. Integrity failures still fail. |
 | PoC / gate / report | Immutable protected PoC attempt files and exact `/2` producer/provenance contracts; gate `/2` verifies all optional nested artifacts, candidate partitions and five-capability accounting; report `/2` consumes only the frozen certified snapshot. Disabled manual PoC requires explicit authenticated upstream admission, never silent pointer discovery. |
 | Remediation | Real planning/validation producers and `/1` strict schemas, exact-patch format and `native_syntax` adapter exist. Job-scoped validated role bundles are hash-pinned; uncommissioned native profiles retain manual outcomes. Neither PoC context nor regression-function compilation is commissioned. |
 | Dossiers | Real semantic job, strict typed bounds, closed projection, hardened renderer and `dossier-rendering-receipt/1` exist. Gate certification is implemented. Owner-verified seeded PDFs, navigation and repeat rendering are recorded in [operations](../operations/dossier-publication.md#verified-seeded-sample); full native all-lane evidence remains pending. |
-| Metrics | `run-metrics/3.completion` has fixed lanes/statuses/capability/flag/dimension maps, nonadditive limits, separate null-token measurements/missing-turn counters and observational semantics. Actual chain/PoC/gate/report events now join remediation/dossier events. `0ece65d3` adds real `CellStatus.not_launched` parity; unmeasured usage remains unknown, not invented zero. |
+| Metrics | `run-metrics/4.completion` preserves `completion-process-metrics/1` alongside OWASP/review-flow/Tree-sitter/CodeQL/model views. Fixed lane/status/capability maps include `not_launched` and certified report outcome counts; limits are nonadditive and unknown tokens remain unavailable. Persisted-summary/cache/replay/source-log-integrity regressions exist; full actual-producer all-lane acceptance remains separate. |
 | Index admission / resume inventory | `3f28d871` excludes the three new completion consumers from active pre-review acceptance. `registry_providers` still returns **all registered file owners and dataset declarations** for resume auditing; do not remove downstream ownership just because its output is not yet a pre-review input. |
+| OpenVEX | Shared contract/settings/schema-lock and design/operations documents only. No `build_job`, registry/config entry, dataset publication, exporter/report wiring or emitted `openvex` metrics section exists; the inherited `/1` report/post-gate-PoC proposal must be reconciled with current `/2` completion ordering before implementation. |
 
 Current versions are explicit, not implicit upgrades of old accepted runs:
 
 | Contract family | Delivered identities / source |
 | --- | --- |
 | Review | `inference-review-handoff/3`, `ledger-event/1`, `finding-package/2`, `score-package/3`; shared `jobs/accepted_review.py` and inference schemas. Typed chain events did not bump the ledger to `/2`. |
+| Source navigation / admission | `syntax-projection/1`, generated/binary source backing `/1`, `predicate-admission/2`; syntax navigation is unresolved, and located binary functions/calls require exact binary/address/line anchors. These do not upgrade arbitrary retrieved rows to counted proof. |
 | PoC | `poc-generation/2`, `poc-generation-handoff/2`, `poc-provenance/2`, candidate schema `/2`; [PoC operations](../operations/poc-generation.md). Existing `/2` publication constants live in shared [`jobs/engineering_contracts.py`](../../src/appsec_review/jobs/engineering_contracts.py). |
 | Chains / remediation / dossiers | `attack-chain/1`, `attack-chain-manifest/1`, `remediation-plan/1`, `remediation-planning/1`, `remediation-planning-handoff/1`, `remediation-validation/1`, `remediation-validations/1`, `remediation-validation-handoff/1`, `dossier/1`, `dossier-publication/1`, `dossier-publication-handoff/1` in [`jobs/completion_contracts.py`](../../src/appsec_review/jobs/completion_contracts.py), alongside `FindingBinding` and shared nonexecution assurance. |
 | Rendering | `dossier-rendering-receipt/1`; exact template tree/files and configured renderer/image/settings refs. Public Markdown renderer is `final-report-markdown/2`; consolidated public PDF remains not rendered. |
 | Final publication | `final-publication-gate/2`, `final-publication-gate-handoff/2`, `final-report/2`, `final-report-handoff/2`; shared engineering constants and [final-report schemas](../schemas/final-report/). |
-| Telemetry | `telemetry-event/1`, `run-metrics/3` and `completion-process-metrics/1`; observational operator data, not evidence-admission schemas. |
+| Telemetry | `telemetry-event/1`, `run-metrics/4`, `completion-process-metrics/1`, `tree-sitter-metrics/1`, `codeql-execution-metrics/1`; observational operator data, not evidence-admission schemas. Completion was first added to `/3`; current `/4` also includes CodeQL action/query views. |
 
 Full native all-lane semantics, Linux real-review remediation acceptance and residual historical
 consumer metadata remain unresolved here. The seeded PDF sample and reported metric parity
 correction are reconciled, not remaining acceptance gaps.
+The parent reports the exact remediation Linux suite at `68915bb7` passed 256 / zero skips,
+and certified report metric tests passed on Windows and Linux; these bounded checks do not certify
+combined source `6975aef2`. Its 111-file main-plus-feature Linux validation and actual-producer
+all-lane run are still pending. Initial root-user/capability environment failures are not
+silently treated as product passes; retry is unprivileged uid 1000.
 No target scan, assumed deployment, compilation or generic metrics pass substitutes for those
 acceptance results.

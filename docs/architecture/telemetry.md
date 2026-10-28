@@ -91,6 +91,13 @@ vendored paths have a `vendor`, `vendors`, or `third_party` segment; and tests h
 Generated, vendored, and test files remain in language totals and are also reported as explicit
 subtotals. Bounded, excluded, undecodable, or missing catalog input is a source coverage gap.
 
+The additive `tree_sitter` view (`appsec-review/tree-sitter-metrics/1`) re-verifies correlated
+start, execution and validated-output receipts, including invocation/run/job/attempt identity.
+It reports per-invocation outcomes/resources/files/nodes/truncation, job-attempt groups and reuse;
+timing separates summed invocation work, elapsed window, covered wall time and maximum concurrency.
+Missing or conflicting receipts/resources keep explicit gaps, nulls and completeness flags.
+`memory_peak_bytes` is the maximum individual container peak, not concurrent aggregate memory.
+
 Build outcomes come from accepted language-build receipts. A reused successful receipt counts as
 reuse rather than fresh success; any receipt with producer gaps also increments the gap count.
 Artifact reference totals count each build-unit-to-artifact edge. Content-deduplicated totals count
@@ -135,7 +142,9 @@ canonical pipeline stream and regenerable `data/telemetry/summary.json`. No sepa
 backend or Azure service is requested.
 
 [`observability/completion.py::completion_metrics`](../../src/appsec_review/observability/completion.py)
-adds `completion` to `appsec-review/run-metrics/3` without changing the existing review views.
+first added `completion` to `appsec-review/run-metrics/3`; combined source `6975aef2` retains
+the same `completion-process-metrics/1` semantics in `run-metrics/4`, alongside the existing
+review and new CodeQL/OWASP/review-flow/Tree-sitter views.
 Its `semantics` is `appsec-review/completion-process-metrics/1`, with
 `authority: observational_process_metrics_not_security_evidence`. Fixed lanes are
 `attack_chains`, `poc_generation`, `remediation_planning`, `remediation_validation`, `dossiers`,
@@ -147,7 +156,7 @@ Each lane contains `observed` and `events`. Each event has the following closed 
 | Field | Meaning and bounded dimensions |
 | --- | --- |
 | `count`, `counters`, `outcomes` | Event count, allowlisted attempted-work sums and closed statuses; outcome maps retain their `outcomes`, `outcome_counts`, `by_kind` or `by_status` prefix. All seven actual PoC statuses are accepted: `compile_verified`, `compile_failed`, `artifact_generated`, `policy_denied`, `insufficient_evidence`, `not_applicable`, `unsafe_to_attempt`. Native adapter outcomes include `passed`, `baseline_failed`, `patched_failed`, `unsafe`. |
-| Capability maps | `attachment_counts`, `gap_counts`, `omitted_counts` become prefixed counters; `dispositions` become prefixed outcomes and Boolean `enabled` values become flags. Only `poc_generation`, `attack_chains`, `remediation_planning`, `remediation_validation`, `dossiers` are valid capabilities. These are event observations, not a replacement for frozen configuration or accepted manifests. |
+| Capability maps | `attachment_counts`, `gap_counts`, `omitted_counts`, `certified_outcome_counts` become prefixed counters; `dispositions` become prefixed outcomes and Boolean `enabled` values become flags. Only `poc_generation`, `attack_chains`, `remediation_planning`, `remediation_validation`, `dossiers` are valid capabilities. These are event observations, not a replacement for frozen configuration or accepted manifests. |
 | `flags` | Counts by Boolean value for `explicit_poc_admission`, `frontier_truncated`, `pdf_requested`, `render_failed`, `baseline_attempted`, `patched_attempted`, `usage_unavailable`, and the fixed capability `enabled` map. |
 | `dimensions` | `kind`: `confirmed_finding`, `poc`, `refuter`, `weakest_link_verifier`; `adapter`: `native_syntax`; `role`: `remediation_writer`, `remediation_reviewer`. No arbitrary identity becomes a label. |
 | `limits` | Per-event observed `{min,max}` ranges for `max_dossiers`, `max_source_excerpts`, `max_evidence_rows`. Configured limits are **never summed** across retries or counted as work. |
