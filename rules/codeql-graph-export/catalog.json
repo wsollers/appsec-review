@@ -708,6 +708,272 @@
           ]
         }
       ]
+    },
+    "go": {
+      "model_library": "codeql/go-all",
+      "export_pack": "appsec-review/graph-export-go",
+      "sinks": [
+        {
+          "rule_id": "go.sink.api.gob.newdecoder",
+          "match": {
+            "api": "NewDecoder",
+            "declared_in": [
+              "encoding/gob"
+            ],
+            "argument_index": 0
+          },
+          "sink_class": "deserialization",
+          "cwe_family": "CWE-502"
+        },
+        {
+          "rule_id": "go.sink.api.net.dial",
+          "match": {
+            "api": "Dial",
+            "declared_in": [
+              "net"
+            ],
+            "argument_index": 1
+          },
+          "sink_class": "server_side_request",
+          "cwe_family": "CWE-918"
+        },
+        {
+          "rule_id": "go.sink.api.syscall.exec",
+          "match": {
+            "api": "Exec",
+            "declared_in": [
+              "syscall"
+            ],
+            "argument_index": 0
+          },
+          "sink_class": "command_execution",
+          "cwe_family": "CWE-78"
+        },
+        {
+          "rule_id": "go.sink.api.rand.intn",
+          "match": {
+            "api": "Intn",
+            "declared_in": [
+              "math/rand"
+            ],
+            "argument_index": -1
+          },
+          "sink_class": "crypto_misuse",
+          "cwe_family": "CWE-338"
+        },
+        {
+          "rule_id": "go.sink.api.strings.repeat",
+          "match": {
+            "api": "Repeat",
+            "declared_in": [
+              "strings"
+            ],
+            "argument_index": 1
+          },
+          "sink_class": "allocation_size",
+          "cwe_family": "CWE-789"
+        },
+        {
+          "rule_id": "go.sink.model.sql.querystring",
+          "match": {
+            "model": "SQL::QueryString"
+          },
+          "sink_class": "sql_query",
+          "cwe_family": "CWE-89"
+        },
+        {
+          "rule_id": "go.sink.model.systemcommandexecution",
+          "match": {
+            "model": "SystemCommandExecution"
+          },
+          "sink_class": "command_execution",
+          "cwe_family": "CWE-78"
+        },
+        {
+          "rule_id": "go.sink.model.filesystemaccess",
+          "match": {
+            "model": "FileSystemAccess"
+          },
+          "sink_class": "path_access",
+          "cwe_family": "CWE-22"
+        },
+        {
+          "rule_id": "go.sink.model.http.clientrequest",
+          "match": {
+            "model": "Http::ClientRequest"
+          },
+          "sink_class": "server_side_request",
+          "cwe_family": "CWE-918"
+        },
+        {
+          "rule_id": "go.sink.model.http.redirect",
+          "match": {
+            "model": "Http::Redirect"
+          },
+          "sink_class": "url_redirect",
+          "cwe_family": "CWE-601"
+        },
+        {
+          "rule_id": "go.sink.model.http.headerwrite",
+          "match": {
+            "model": "Http::HeaderWrite"
+          },
+          "sink_class": "header_injection",
+          "cwe_family": "CWE-113"
+        },
+        {
+          "rule_id": "go.sink.model.http.responsebody",
+          "match": {
+            "model": "Http::ResponseBody"
+          },
+          "sink_class": "html_output",
+          "cwe_family": "CWE-79"
+        },
+        {
+          "rule_id": "go.sink.model.loggercall",
+          "match": {
+            "model": "LoggerCall"
+          },
+          "sink_class": "log_output",
+          "cwe_family": "CWE-117"
+        }
+      ],
+      "sources": [
+        {
+          "rule_id": "go.source.api.syscall.getenv",
+          "match": {
+            "api": "Getenv",
+            "declared_in": [
+              "syscall"
+            ],
+            "index": -1
+          },
+          "source_class": "environment"
+        },
+        {
+          "rule_id": "go.source.model.remote",
+          "match": {
+            "model": "RemoteFlowSource"
+          },
+          "source_class": "remote"
+        },
+        {
+          "rule_id": "go.source.model.commandargs",
+          "match": {
+            "model": "sourceModel",
+            "source_type": "commandargs"
+          },
+          "source_class": "argv"
+        },
+        {
+          "rule_id": "go.source.model.environment",
+          "match": {
+            "model": "sourceModel",
+            "source_type": "environment"
+          },
+          "source_class": "environment"
+        },
+        {
+          "rule_id": "go.source.model.file",
+          "match": {
+            "model": "sourceModel",
+            "source_type": "file"
+          },
+          "source_class": "file"
+        },
+        {
+          "rule_id": "go.source.model.stdin",
+          "match": {
+            "model": "sourceModel",
+            "source_type": "stdin"
+          },
+          "source_class": "local_user"
+        },
+        {
+          "rule_id": "go.source.model.database",
+          "match": {
+            "model": "sourceModel",
+            "source_type": "database"
+          },
+          "source_class": "database"
+        },
+        {
+          "rule_id": "go.source.model.sourcemodel",
+          "match": {
+            "model": "sourceModel"
+          },
+          "source_class": "local_user"
+        },
+        {
+          "rule_id": "go.source.model.sourcenode",
+          "match": {
+            "model": "SourceNode"
+          },
+          "source_class": "local_user"
+        }
+      ],
+      "sanitizers": [
+        {
+          "rule_id": "go.sanitizer.filepath.clean",
+          "api": "Clean",
+          "declared_in": [
+            "path/filepath"
+          ],
+          "applies_to": [
+            "path_access"
+          ]
+        },
+        {
+          "rule_id": "go.sanitizer.filepath.rel",
+          "api": "Rel",
+          "declared_in": [
+            "path/filepath"
+          ],
+          "applies_to": [
+            "path_access"
+          ]
+        },
+        {
+          "rule_id": "go.sanitizer.filepath.evalsymlinks",
+          "api": "EvalSymlinks",
+          "declared_in": [
+            "path/filepath"
+          ],
+          "applies_to": [
+            "path_access"
+          ]
+        },
+        {
+          "rule_id": "go.sanitizer.filepath.base",
+          "api": "Base",
+          "declared_in": [
+            "path/filepath"
+          ],
+          "applies_to": [
+            "path_access"
+          ]
+        },
+        {
+          "rule_id": "go.sanitizer.regexp.quotemeta",
+          "api": "QuoteMeta",
+          "declared_in": [
+            "regexp"
+          ],
+          "applies_to": [
+            "regex_injection"
+          ]
+        },
+        {
+          "rule_id": "go.sanitizer.html.escapestring",
+          "api": "EscapeString",
+          "declared_in": [
+            "html"
+          ],
+          "applies_to": [
+            "html_output"
+          ]
+        }
+      ]
     }
   }
 }

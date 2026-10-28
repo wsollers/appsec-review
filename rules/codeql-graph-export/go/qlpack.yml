@@ -1,0 +1,7 @@
+name: appsec-review/graph-export-go
+version: 1.0.0
+description: >-
+  appsec-review code-graph export queries for Go (appsec-review/codeql-graph-export/1).
+  Table queries made of primitive-column query predicates only; this is not a SARIF suite.
+dependencies:
+  codeql/go-all: 7.3.1
