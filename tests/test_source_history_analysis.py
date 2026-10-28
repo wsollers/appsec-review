@@ -393,7 +393,7 @@ def configured(tmp_path: Path, *, github: bool = False, replacements: tuple[tupl
         assert old in text, old
         text = text.replace(old, new)
     if github:
-        text = text.replace('[jobs.job_source_history_analysis.settings.github]\nenabled = false',
+        text = text.replace('[jobs.job_source_history_analysis.settings.github]\nenabled = "auto"',
                             '[jobs.job_source_history_analysis.settings.github]\nenabled = true')
         text = text.replace('repository = ""\ntoken_env = "GITHUB_TOKEN"', 'repository = "acme/widget"\ntoken_env = "GITHUB_TOKEN"')
     (tmp_path / "appsec-review.toml").write_text(text, encoding="utf-8")
@@ -1286,9 +1286,9 @@ def test_github_pagination_inputs_bind_job_identity(tmp_path: Path) -> None:
 def test_configured_exclusions_leave_the_catalog_and_history_with_their_scope(tmp_path: Path) -> None:
     config = configured(tmp_path, replacements=(
         ('[exclusions]\npatterns = [".gitignore"]\n', '[exclusions]\npatterns = [".gitignore", ".gitattributes"]\n'),
-        ("[jobs.job_source_history_analysis.settings.github]\nenabled = false",
+        ('[jobs.job_source_history_analysis.settings.github]\nenabled = "auto"',
          '[jobs.job_source_history_analysis.exclusions]\npatterns = ["app/helpers.py"]\n\n'
-         "[jobs.job_source_history_analysis.settings.github]\nenabled = false"),
+         '[jobs.job_source_history_analysis.settings.github]\nenabled = "auto"'),
     ))
     target = tmp_path / "target"
     build_repository(target)

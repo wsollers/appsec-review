@@ -61,15 +61,26 @@ def _prepare(workspace: LaneWorkspace):
     build_root = root / native["workspace"]
     manifest_path = root / native["workspace_manifest"]["path"]
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    for artifact in native["artifacts"]:
+        previous = artifact["workspace_path"]
+        relative = "packages/tiny/lib/" + previous.rsplit("/", 1)[-1]
+        path = build_root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        (build_root / previous).replace(path)
+        manifest["files"].pop(previous)
+        manifest["files"][relative] = file_sha256(path)
+        artifact.update(_identity(root, path), workspace_path=relative)
     for name in ("tiny", "tiny-alias"):
-        relative = f"lib/pkgconfig/{name}.pc"
+        relative = f"packages/{name}/lib/pkgconfig/{name}.pc"
         path = build_root / relative
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(f"Name: {name}\nVersion: 1.0\nURL: {REPOSITORY}\n", encoding="utf-8")
         manifest["files"][relative] = file_sha256(path)
     commands = [
-        {"command_id": "recorded-debug-link", "argv": ["clang", "-g", "main.o", "-ltiny"]},
-        {"command_id": "recorded-qa-link", "argv": ["clang", "main.o", "-ltiny-alias"],
+        {"command_id": "recorded-debug-link",
+         "argv": ["clang", "-g", "packages/tiny/lib/main.o", "packages/tiny/lib/libtiny.a"]},
+        {"command_id": "recorded-qa-link",
+         "argv": ["clang", "packages/tiny/lib/main.o", "packages/tiny-alias/lib/libtiny-alias.a"],
          "configuration": "integration-test"},
     ]
     for command in commands:

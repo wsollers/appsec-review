@@ -12,6 +12,7 @@ from dataclasses import asdict, dataclass, field
 import hashlib
 import json
 from pathlib import Path
+from itertools import islice
 import re
 from typing import Any
 
@@ -21,7 +22,9 @@ MAX_PACKED_REFS_BYTES = 64 * 1024 * 1024
 MAINLINE_REFS = ("refs/heads/main", "refs/heads/master")
 _HEX = {"sha1": re.compile(r"[0-9a-f]{40}"), "sha256": re.compile(r"[0-9a-f]{64}")}
 _REF_NAME = re.compile(r"refs/[A-Za-z0-9._/-]{1,240}")
-IDENTITY_SCHEMA = "appsec-review/source-history-identity/1"
+IDENTITY_SCHEMA = "appsec-review/source-history-identity/2"
+MAX_SOURCES = 256
+MAX_DISCOVERY_ENTRIES = 4096
 
 
 @dataclass(frozen=True, slots=True)
@@ -46,7 +49,9 @@ class GitSource:
 
 
 def _read(path: Path, limit: int = MAX_METADATA_BYTES) -> bytes | None:
-    if path.is_symlink() or not path.is_file():
+    if path.is_symlink() or any(parent.is_symlink() for parent in path.parents):
+        raise ValueError("git metadata symlinks are not supported")
+    if not path.is_file():
         return None
     with path.open("rb") as stream:
         data = stream.read(limit + 1)
@@ -189,13 +194,54 @@ def resolve_git_source(target_root: Path) -> GitSource:
                      tuple(sorted(set(shallow))), tuple(observations))
 
 
-def history_identity(target_root: Path | None) -> str:
+def metadata_roots(target: Path, known: tuple[str, ...] = ()) -> list[str]:
+    """Bounded first-level discovery, plus roots already named by the accepted catalog."""
+    if len(known) > MAX_DISCOVERY_ENTRIES:
+        raise ValueError("history_metadata_discovery_bound_reached")
+    for root in known:
+        if root == ".":
+            continue
+        if (Path(root).is_absolute() or "\\" in root or any(
+                part in {"", ".", ".."} for part in root.split("/"))):
+            raise ValueError("history metadata root is unsafe")
+        candidate = target / root
+        if target.resolve() not in candidate.resolve().parents or any(
+                parent.is_symlink() for parent in (candidate, *candidate.parents)):
+            raise ValueError("history metadata root escapes target")
+    roots = {".", *known}
+    entries = list(islice(target.iterdir(), MAX_DISCOVERY_ENTRIES + 1))
+    if len(entries) > MAX_DISCOVERY_ENTRIES:
+        raise ValueError("history_metadata_discovery_bound_reached")
+    for entry in entries:
+        if not entry.is_symlink() and entry.is_dir() and (
+                (entry / ".git").exists() or (entry / ".git").is_symlink()):
+            roots.add(entry.name)
+    if len(roots) > MAX_DISCOVERY_ENTRIES:
+        raise ValueError("history_metadata_discovery_bound_reached")
+    roots = {root for root in roots if ((target / root / ".git").exists() or
+                                        (target / root / ".git").is_symlink())}
+    if len(roots) > MAX_SOURCES:
+        raise ValueError("history_source_count_bound_reached")
+    return sorted(roots or {"."})
+
+
+def history_identity(target_root: Path | None, known: tuple[str, ...] = ()) -> str:
     """Cheap deterministic identity of the history the job would analyze, for resume planning."""
     if target_root is None:
         source: dict[str, Any] = {"decision": "SKIPPED_NA", "reason": "no_target"}
     else:
         try:
-            source = resolve_git_source(Path(target_root)).as_dict()
+            target = Path(target_root)
+            source = {}
+            for root in metadata_roots(target, known):
+                try:
+                    value = resolve_git_source(target / root).as_dict()
+                    git_dir, _ = locate_git_dir(target / root)
+                    config = _read(git_dir / "config") if git_dir else None
+                    value["config_sha256"] = hashlib.sha256(config or b"").hexdigest()
+                except (OSError, ValueError) as exc:
+                    value = {"decision": "GAP", "reason": f"metadata_unreadable:{type(exc).__name__}"}
+                source[root] = value
         except (OSError, ValueError) as exc:
             source = {"decision": "GAP", "reason": f"metadata_unreadable:{type(exc).__name__}"}
     payload = json.dumps({"schema": IDENTITY_SCHEMA, "git": source}, sort_keys=True, separators=(",", ":"))

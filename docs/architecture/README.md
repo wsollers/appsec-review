@@ -103,11 +103,12 @@ Repository authority remains in [`../../AGENTS.md`](../../AGENTS.md). This page 
 - [`../operations/poc-generation.md`](../operations/poc-generation.md) — `job_poc_generation`:
   compile-only test/control functions, immutable protected attempt files, enabled new-run pre-gate
   ordering and explicit authenticated manual admission for frozen disabled runs.
-- [`openvex-export.md`](openvex-export.md) — standalone affected-only deterministic OpenVEX export,
-  immutable issuer/action inputs, reviewed-source identity, protected evidence companion,
+- [`openvex-export.md`](openvex-export.md) — default-on standalone affected-only deterministic
+  local OpenVEX generation/validation, truthful tool author and accepted-snapshot namespace,
+  immutable overrides, protected evidence companion,
   certified gate `/2` reader/verifier/projector and telemetry; gate-only report preserved,
-  combined verification and final landing tracked separately.
-- [`../operations/openvex-export.md`](../operations/openvex-export.md) — operator setup,
+  exact verification and policy-change landing tracked separately.
+- [`../operations/openvex-export.md`](../operations/openvex-export.md) — no-setup defaults and explicit opt-out/overrides,
   certified-gate dataflow and independent post-gate outputs, export-status diagrams,
   accounting, privacy, metrics refresh and remaining validation limits.
 - [`indexing-and-query-reuse.md`](indexing-and-query-reuse.md) — review-data indexing and reusable

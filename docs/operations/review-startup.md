@@ -110,8 +110,9 @@ does **not** enable medium/low lead exploration. See [model profiles](model-prof
 limits and distinct-model verification behavior.
 
 For an approved host capacity increase, select the checked-in
-`prod-capacity-overlay.toml` instead of `none`. It sets three review teams, four I/O slots and
-a scanner pool of four; it does not raise CPU or RAM. It is not implied by `--profile prod`.
+`prod-capacity-overlay.toml` instead of `none`. It sets four I/O slots and a scanner pool of
+four and keeps the selected profile's review-team count; it does not raise CPU or RAM. It is not
+implied by `--profile prod`.
 Confirm the host and builder topology can support it first. A resource-budget mismatch with
 an active run or recorded lease is refused even with `--force`.
 
@@ -126,6 +127,7 @@ their frozen configuration.
 | Feature | Checked-in default / setting | What you need to do |
 | --- | --- | --- |
 | Applicable static scanners, builds, artifact analysis, CodeQL, code-graph/index creation, inference review and final publication | Included automatically when enabled and applicable. CodeQL has `jobs.job_codeql_analysis.settings.enabled = true`. | No per-tool launch flags. Supply the images, metadata and build prerequisites; missing or failed coverage remains a named gap, not a clean result. |
+| Source history and acquired review metadata | Local Git discovery is automatic; `jobs.job_source_history_analysis.settings.github.enabled = "auto"`. | No second repository-wiring flag for `start --system` or `start --target`. GitHub enrichment needs an eligible identity and the configured token; explicit `false` denies it. Acquired review records are reused by default unless change-context review policy denies or overrides them. See [source-history operations](source-history-analysis.md). |
 | Full assessment branches | Dagster includes CI configuration analysis, post-build security assessment, OWASP control assessment and security tagging. | Use `review-start` / `wave1_review`; these branches are absent from the direct CLI graph. |
 | ASan/UBSan rebuild evidence | `jobs.job_sanitizer_build.settings.enabled = true` | No opt-in needed. Rebuilds accepted native units; does **not** execute produced binaries. See [sanitizer builds](sanitizer-build.md). |
 | SVF points-to cross-checks | `jobs.job_svf_alias_analysis.settings.enabled = false` | Set `true` and provision the pinned SVF image and accepted C/C++ inputs. See [SVF analysis](svf-alias-analysis.md). |

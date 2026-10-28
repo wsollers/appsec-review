@@ -36,7 +36,7 @@ def settings_mapping(*, enabled: bool = False, **overrides: Any) -> dict[str, An
 
 def enabled_settings(**overrides: Any) -> OpenVexExportSettings:
     return OpenVexExportSettings.from_mapping({
-        **settings_mapping(enabled=True), "author": "Example Security Team",
+        **settings_mapping(enabled=True), "author_kind": "organization", "author": "Example Security Team", "role": "",
         "action_statement": "Disable the synthetic test endpoint.",
         "repository_iri": "https://example.test/repository", **overrides,
     })
@@ -232,7 +232,10 @@ def make_verified_inputs(
                                         else len(c.canonical_bytes({"fixture": Path(ref.path).stem})))
                       for ref in all_refs)
     return c.VerifiedInputs(
-        run_id, provenance, c.SourceIdentity(settings.repository_iri, c.RepositoryIdentityBasis.OPERATOR_DECLARED,
+        run_id, provenance, c.SourceIdentity(
+            settings.repository_iri or c.snapshot_repository_iri(c.json_sha256("synthetic-snapshot")),
+            c.RepositoryIdentityBasis.OPERATOR_DECLARED if settings.repository_iri
+            else c.RepositoryIdentityBasis.SOURCE_SNAPSHOT,
                                              c.json_sha256("synthetic-snapshot"), None, ("Synthetic test configuration",)),
         gate_completed_at, settings.settings_sha256(), gate, findings, inventory,
     )

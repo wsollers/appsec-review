@@ -15,6 +15,7 @@ import pytest
 
 from appsec_review.jobs.job_openvex_export import contracts as c, inputs
 from appsec_review.jobs.job_openvex_export.settings import OpenVexExportSettings
+from appsec_review.interchange import HANDOFF_SCHEMA, decode_handoff
 from appsec_review.review.models import IntegrityError
 
 from tests.openvex_input_support import AcceptedInputDisk
@@ -27,6 +28,195 @@ def assert_failure(call, reason: c.ExportFailureReason, phase: c.ExportPhase = c
     assert caught.value.reason == reason
     assert caught.value.phase == phase
     return caught.value
+
+
+def repin_gate_handoff(disk, handoff):
+    reference = disk.put(disk.gate_job_ref["path"], handoff)
+    disk.put(f"data/jobs/{inputs.GATE_JOB}/latest.json",
+             {"handoff_path": reference["path"], "handoff_sha256": reference["sha256"]})
+
+
+def test_common_envelopes_use_the_real_shared_reader_and_bind_accounting_before_authority(tmp_path, monkeypatch):
+    disk = AcceptedInputDisk(tmp_path, monkeypatch)
+    reader = inputs.BoundedInputReader(disk.root, disk.settings)
+    original = inputs.accepted_handoff
+    seen = []
+
+    def accepted(root, job):
+        admitted = {ref.path: ref for ref in reader.inventory}
+        handoff = disk.gate_handoff
+        assert handoff["schema"] == HANDOFF_SCHEMA
+        assert decode_handoff(handoff, run_id=root.name, job_id=job) == handoff
+        for raw in handoff["artifacts"]:
+            assert admitted[raw["path"]] == c.SizedArtifactRef.from_mapping(raw)
+        seen.append(job)
+        return original(root, job)
+
+    monkeypatch.setattr(inputs, "accepted_handoff", accepted)
+    accepted = inputs._accepted(reader, inputs.GATE_JOB)
+    assert accepted.handoff == disk.gate_handoff
+    assert seen == [inputs.GATE_JOB]
+    paths = {ref.path for ref in reader.inventory}
+    attempt = disk.gate_handoff["resolving_paths"]["attempt"]
+    assert {attempt + "/claim.json", attempt + "/result.json", attempt + "/outcomes.json",
+            attempt + "/steps/acceptance/tasks/publish_handoff/status.json",
+            attempt + "/steps/acceptance/tasks/publish_handoff/result.json"} <= paths
+
+
+def test_disk_publisher_retains_explicit_artifacts_attempt_and_raw_completion_time(tmp_path, monkeypatch):
+    disk = AcceptedInputDisk(tmp_path, monkeypatch)
+    artifact = disk.put("data/extra/runtime.bin", b"opaque retained data, not a JSON control document")
+    handoff = disk.handoff(inputs.GATE_JOB, disk.gate_handoff["outputs"])
+    handoff.update({"attempt_id": "explicit", "artifacts": [artifact],
+                    "completed_at": "2026-10-28T15:00:00+01:30"})
+    reference = disk.publish(inputs.GATE_JOB, handoff)
+    reader = inputs.BoundedInputReader(disk.root, disk.settings)
+    accepted = inputs._accepted(reader, inputs.GATE_JOB)
+    assert reference["path"] == f"data/jobs/{inputs.GATE_JOB}/attempts/explicit/handoff.json"
+    assert accepted.handoff == handoff
+    assert handoff["completed_at"] == "2026-10-28T15:00:00+01:30"
+    assert c.ArtifactRef(**artifact) in {ref.reference for ref in reader.inventory}
+
+
+def test_common_accounting_source_inventory_is_not_permission_to_open_target_paths(tmp_path, monkeypatch):
+    disk = AcceptedInputDisk(tmp_path, monkeypatch)
+    target = tmp_path / "DO-NOT-ACCESS-TARGET" / "source.c"
+    disk.gate_handoff["outputs"]["acceptance.publish_handoff"]["source_files"] = [
+        {"path": str(target), "sha256": c.json_sha256("source inventory identity, not run evidence")}]
+    disk.publish(inputs.GATE_JOB, disk.gate_handoff)
+    original = Path.open
+
+    def no_target(path, *args, **kwargs):
+        assert path != target
+        return original(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", no_target)
+    inputs._accepted(inputs.BoundedInputReader(disk.root, disk.settings), inputs.GATE_JOB)
+
+
+@pytest.mark.parametrize("mutation", ["legacy", "incomplete", "duplicate_artifact", "input_hash"])
+def test_legacy_or_structurally_invalid_common_envelopes_fail_before_shared_authority(tmp_path, monkeypatch, mutation):
+    disk = AcceptedInputDisk(tmp_path, monkeypatch)
+    handoff = deepcopy(disk.gate_handoff)
+    if mutation == "legacy":
+        handoff["schema"] = "appsec-review/job-handoff/1"
+    elif mutation == "incomplete":
+        handoff.pop("outcomes")
+    elif mutation == "duplicate_artifact":
+        handoff["artifacts"].append(deepcopy(handoff["artifacts"][0]))
+    else:
+        handoff["input_set_sha256"] = c.json_sha256("recomputed outer handoff, invalid inner identity")
+    repin_gate_handoff(disk, handoff)
+    spy = Mock(side_effect=AssertionError("shared authority must not read malformed envelope"))
+    monkeypatch.setattr(inputs, "accepted_handoff", spy)
+    assert_failure(lambda: inputs._accepted(inputs.BoundedInputReader(disk.root, disk.settings), inputs.GATE_JOB),
+                   c.ExportFailureReason.SCHEMA_INVALID)
+    spy.assert_not_called()
+
+
+@pytest.mark.parametrize("suffix", [
+    "/claim.json", "/result.json", "/outcomes.json",
+    "/steps/acceptance/tasks/publish_handoff/status.json",
+    "/steps/acceptance/tasks/publish_handoff/result.json",
+])
+def test_every_common_accounting_file_is_bounded_before_shared_authority(tmp_path, monkeypatch, suffix):
+    disk = AcceptedInputDisk(tmp_path, monkeypatch)
+    attempt = disk.gate_handoff["resolving_paths"]["attempt"]
+    (disk.root / (attempt + suffix)).write_bytes(b"tampered accounting")
+    spy = Mock(side_effect=AssertionError("shared authority must not read corrupt accounting"))
+    monkeypatch.setattr(inputs, "accepted_handoff", spy)
+    assert_failure(lambda: inputs._accepted(inputs.BoundedInputReader(disk.root, disk.settings), inputs.GATE_JOB),
+                   c.ExportFailureReason.INPUT_TAMPERED)
+    spy.assert_not_called()
+
+
+def test_declared_common_artifact_size_is_not_trusted(tmp_path, monkeypatch):
+    disk = AcceptedInputDisk(tmp_path, monkeypatch)
+    handoff = deepcopy(disk.gate_handoff)
+    handoff["artifacts"][0]["size_bytes"] += 1
+    repin_gate_handoff(disk, handoff)
+    spy = Mock(side_effect=AssertionError("sized declarations must be measured first"))
+    monkeypatch.setattr(inputs, "accepted_handoff", spy)
+    assert_failure(lambda: inputs._accepted(inputs.BoundedInputReader(disk.root, disk.settings), inputs.GATE_JOB),
+                   c.ExportFailureReason.INPUT_TAMPERED)
+    spy.assert_not_called()
+
+
+@pytest.mark.parametrize("surface", ["result_run_path", "shared_receipt"])
+def test_common_accounting_transitive_references_are_bounded_before_authority(tmp_path, monkeypatch, surface):
+    disk = AcceptedInputDisk(tmp_path, monkeypatch)
+    handoff = deepcopy(disk.gate_handoff)
+    large = disk.put("retained.bin", b"x" * 100000)
+    if surface == "result_run_path":
+        name = handoff["resolving_paths"]["result"]
+        document = json.loads((disk.root / name).read_bytes())
+        document["retained_artifact"] = {"run_path": large["path"], "sha256": large["sha256"]}
+    else:
+        name = handoff["resolving_paths"]["attempt"] + "/shared/synthetic/" + "a" * 64 + ".json"
+        document = {"object": {"run_path": large["path"], "sha256": large["sha256"]}}
+    reference = disk.put(name, document)
+    reference["size_bytes"] = (disk.root / name).stat().st_size
+    handoff["artifacts"] = [raw for raw in handoff["artifacts"] if raw["path"] != name] + [reference]
+    repin_gate_handoff(disk, handoff)
+    spy = Mock(side_effect=AssertionError("transitive accounting must be bounded before shared authority"))
+    monkeypatch.setattr(inputs, "accepted_handoff", spy)
+    settings = replace(disk.settings, max_artifact_bytes=50000)
+    assert_failure(lambda: inputs._accepted(inputs.BoundedInputReader(disk.root, settings), inputs.GATE_JOB),
+                   c.ExportFailureReason.BOUND_EXCEEDED)
+    spy.assert_not_called()
+
+
+@pytest.mark.parametrize("kind", ["bindings", "bytes"])
+def test_common_envelope_accounting_counts_once_and_obeys_lowered_limits(tmp_path, monkeypatch, kind):
+    disk = AcceptedInputDisk(tmp_path, monkeypatch)
+    reader = inputs.BoundedInputReader(disk.root, disk.settings)
+    inputs._accepted(reader, inputs.GATE_JOB)
+    inventory = reader.inventory
+    settings = replace(disk.settings, max_bindings=len(inventory),
+                       max_artifact_bytes=max(ref.size_bytes for ref in inventory),
+                       max_total_input_bytes=sum(ref.size_bytes for ref in inventory))
+    exact = inputs.BoundedInputReader(disk.root, settings)
+    inputs._accepted(exact, inputs.GATE_JOB)
+    inputs._accepted(exact, inputs.GATE_JOB)
+    assert exact.inventory == inventory
+    settings = replace(settings, **({"max_bindings": len(inventory) - 1} if kind == "bindings" else
+                                   {"max_total_input_bytes": settings.max_total_input_bytes - 1}))
+    spy = Mock(side_effect=AssertionError("lowered envelope bound must fail before authority"))
+    monkeypatch.setattr(inputs, "accepted_handoff", spy)
+    assert_failure(lambda: inputs._accepted(inputs.BoundedInputReader(disk.root, settings), inputs.GATE_JOB),
+                   c.ExportFailureReason.BOUND_EXCEEDED)
+    spy.assert_not_called()
+
+
+def test_rehashed_common_outcomes_still_need_authoritative_task_accounting(tmp_path, monkeypatch):
+    disk = AcceptedInputDisk(tmp_path, monkeypatch)
+    handoff = deepcopy(disk.gate_handoff)
+    document = json.loads((disk.root / handoff["outcomes"]["path"]).read_bytes())
+    document["coverage"]["gap_count"] += 1
+    reference = disk.put(handoff["outcomes"]["path"], document)
+    reference["size_bytes"] = (disk.root / reference["path"]).stat().st_size
+    handoff["outcomes"] = reference
+    handoff["artifacts"] = [reference if raw["path"] == reference["path"] else raw for raw in handoff["artifacts"]]
+    repin_gate_handoff(disk, handoff)
+    error = assert_failure(
+        lambda: inputs._accepted(inputs.BoundedInputReader(disk.root, disk.settings), inputs.GATE_JOB),
+        c.ExportFailureReason.INPUT_TAMPERED)
+    assert "outcomes differ" in str(error.__cause__)
+
+
+def test_common_accounting_bytes_are_reproved_after_shared_authority(tmp_path, monkeypatch):
+    disk = AcceptedInputDisk(tmp_path, monkeypatch)
+    reader = inputs.BoundedInputReader(disk.root, disk.settings)
+    original = inputs.accepted_handoff
+
+    def accepted(root, job):
+        result = original(root, job)
+        (root / result.handoff["resolving_paths"]["result"]).write_bytes(b"changed after authority")
+        return result
+
+    monkeypatch.setattr(inputs, "accepted_handoff", accepted)
+    inputs._accepted(reader, inputs.GATE_JOB)
+    assert_failure(reader.reprove, c.ExportFailureReason.INPUT_TAMPERED)
 
 
 @pytest.mark.parametrize("buckets", [(), ("publishable",), ("verification_backlog",), ("withheld",),
@@ -424,6 +614,19 @@ def test_deadline_is_checked_at_start_and_after_upstream_verifier(tmp_path, monk
         assert_failure(disk.verify, c.ExportFailureReason.TIMED_OUT)
 
 
+@pytest.mark.parametrize("acquisition", [None, "https://example.test/repository", "git@example.test:private/repository"])
+def test_automatic_identity_needs_no_repository_setup_or_publication_claim(tmp_path, monkeypatch, acquisition):
+    disk = AcceptedInputDisk(tmp_path, monkeypatch, settings=OpenVexExportSettings(), acquisition=acquisition)
+    verified = disk.verify()
+    assert verified.source.repository_iri == c.snapshot_repository_iri(disk.snapshot)
+    assert verified.source.repository_identity_basis == c.RepositoryIdentityBasis.SOURCE_SNAPSHOT
+    assert verified.source.target_snapshot == disk.snapshot
+    assert (verified.source.acquisition is not None) is (acquisition is not None)
+    assert any("no repository publisher" in value for value in verified.source.qualifications)
+    assert "private/repository" not in repr(verified.source)
+    inputs.reprove_inputs(disk.root, verified, disk.settings, ROOT)
+
+
 def test_matching_acquisition_qualifies_identity_without_guessing_product_hash(tmp_path, monkeypatch):
     disk = AcceptedInputDisk(tmp_path, monkeypatch, acquisition=enabled_settings().repository_iri)
     verified = disk.verify()
@@ -503,7 +706,8 @@ def test_rehashed_configuration_is_still_pinned_by_accepted_job_handoffs(tmp_pat
     disk.resolved["configuration_profile"]["name"] = "changed profile"
     reference = disk.put(disk.config_ref["path"], disk.resolved)
     disk.put(disk.config_manifest_ref["path"], {"resolved_sha256": reference["sha256"]})
-    assert_failure(disk.verify, c.ExportFailureReason.INPUT_STALE)
+    error = assert_failure(disk.verify, c.ExportFailureReason.INPUT_TAMPERED)
+    assert isinstance(error.__cause__, ValueError)
 
 
 def test_rehashed_review_settings_cannot_disagree_with_semantic_review_hash(tmp_path, monkeypatch):
@@ -567,7 +771,9 @@ def test_accepted_handoff_identity_is_not_inferred_from_its_filename(tmp_path, m
     field, value = {"cross_run": ("run_id", "another-run"), "nonaccepted": ("status", "FAILED"),
                     "wrong_job": ("job_id", inputs.REVIEW_JOB)}[kind]
     disk.gate_handoff[field] = value
-    disk.publish(inputs.GATE_JOB, disk.gate_handoff)
+    reference = disk.put(disk.gate_job_ref["path"], disk.gate_handoff)
+    disk.put(f"data/jobs/{inputs.GATE_JOB}/latest.json",
+             {"handoff_path": reference["path"], "handoff_sha256": reference["sha256"]})
     assert_failure(disk.verify, c.ExportFailureReason.IDENTITY_CONFLICT)
 
 
@@ -621,8 +827,16 @@ def test_directories_are_not_input_files(tmp_path):
 def test_rehashed_job_snapshot_qualification_cannot_swap_scope(tmp_path, monkeypatch, field):
     disk = AcceptedInputDisk(tmp_path, monkeypatch)
     disk.gate_handoff[field] = c.json_sha256("another snapshot")
-    disk.publish(inputs.GATE_JOB, disk.gate_handoff)
-    assert_failure(disk.verify, c.ExportFailureReason.IDENTITY_CONFLICT)
+    if field == "source_fingerprint":
+        disk.publish(inputs.GATE_JOB, disk.gate_handoff)
+        error = assert_failure(disk.verify, c.ExportFailureReason.INPUT_TAMPERED)
+        assert "evidence identity" in str(error.__cause__)
+    else:
+        reference = disk.put(disk.gate_job_ref["path"], disk.gate_handoff)
+        disk.put(f"data/jobs/{inputs.GATE_JOB}/latest.json",
+                 {"handoff_path": reference["path"], "handoff_sha256": reference["sha256"]})
+        error = assert_failure(disk.verify, c.ExportFailureReason.SCHEMA_INVALID)
+        assert "contradictory handoff target identities" in str(error.__cause__)
 
 
 @pytest.mark.parametrize("kind", ["perforce", "system", "revision_swap"])

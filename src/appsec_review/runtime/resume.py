@@ -100,8 +100,8 @@ class ResumePlanner:
                 job.job_id, sorted(set(self.config.job(job.job_id).steps)
                                    | {unit.unit_id.split(".")[0] for unit in job.units}), job.datasets)["sha256"]),
         }
-        if job.input_identity is not None:
-            checks["input"] = (handoff.get("input_identity"), job.probe_input_identity(self.target_root))
+        if job.input_identity is not None or job.run_input_identity is not None:
+            checks["input"] = (handoff.get("input_identity"), job.probe_input_identity(self.target_root, self.run_root))
         reasons = [f"{label} identity changed" for label, pair in checks.items() if pair[0] != pair[1]]
         if not handoff.get("artifacts"):
             reasons.append("accepted handoff has no artifact identities")

@@ -195,9 +195,12 @@ include raw source, patches, PoC payloads, prompts or credentials.
 The additive `openvex` section has semantics `appsec-review/openvex-metrics/1` in the
 existing run-owned summary, preserving completion/OWASP/review-flow metrics. It is an
 **export operator view**, not a final-report block: report `/2` remains gate-only.
-At `e628041c`, strict gate `/2` contracts/wiring, the shared certified-gate reader and exporter
-input verifier/projector are assembled. Combined focused results and final exact-main
-reconciliation belong in the [implementation record](../reviews/openvex-export-implementation.md);
+At `74d93127`, automatic protected-local export is enabled by default with a truthful tool
+author, conservative action and exact accepted-source namespace, without operator setup.
+Explicit disable is opt-out; historical frozen disabled runs remain `disabled`, with no new
+acceptance or synthetic success. The metric source/semantics and independent gate-only report
+are unchanged. Exact focused results and policy-change landing belong in the
+[implementation record](../reviews/openvex-export-implementation.md);
 the metric contract below is not evidence of a real accepted whole-chain or live execution.
 No Prometheus, exporter SDK or network endpoint is added. See the
 [operator guide](openvex-export.md) and

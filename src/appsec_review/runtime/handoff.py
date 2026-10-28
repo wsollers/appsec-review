@@ -43,7 +43,8 @@ _REFERENCE_FIELDS = {
 }
 _SOURCE_DATA_FIELDS = {
     "files", "source_files", "source_metrics", "artifact_candidates", "source_inventory",
-    "sources", "input_files", "source_inputs", "native_files", "file_inventory", "payload", "records", "findings", "raw",
+    "sources", "input_files", "source_inputs", "native_files", "native_artifacts",
+    "file_inventory", "payload", "records", "findings", "raw",
 }
 
 
@@ -86,7 +87,8 @@ def collect_artifacts(root: Path, *values: Any) -> list[dict[str, Any]]:
                     if previous != ref:
                         raise ValueError("result artifact has conflicting identities")
             for name, child in value.items():
-                collect(child, declared=name in _REFERENCE_FIELDS or _REFERENCE_FIELD.fullmatch(name) is not None,
+                collect(child, declared=name not in _SOURCE_DATA_FIELDS and (
+                            name in _REFERENCE_FIELDS or _REFERENCE_FIELD.fullmatch(name) is not None),
                         source_data=source_data or name in _SOURCE_DATA_FIELDS)
         elif isinstance(value, (list, tuple)):
             for child in value:

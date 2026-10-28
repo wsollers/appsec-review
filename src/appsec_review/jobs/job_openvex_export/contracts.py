@@ -88,6 +88,7 @@ _MARKUP = re.compile(r"<[/!A-Za-z][^>]*>|```|`")
 
 
 class AuthorKind(StrEnum):
+    TOOL = "tool"
     INDIVIDUAL = "individual"
     ORGANIZATION = "organization"
 
@@ -133,6 +134,7 @@ class DispositionReason(StrEnum):
 
 
 class RepositoryIdentityBasis(StrEnum):
+    SOURCE_SNAPSHOT = "source_snapshot"
     OPERATOR_DECLARED = "operator_declared"
     ACCEPTED_ACQUISITION = "accepted_acquisition"
 
@@ -337,6 +339,10 @@ def normalize_timestamp(value: str) -> str:
         timespec="microseconds").replace("+00:00", "Z")
 
 
+def snapshot_repository_iri(target_snapshot: str) -> str:
+    return f"urn:appsec-review:source:{require_sha256(target_snapshot)}"
+
+
 def source_product_id(repository_iri: str, target_snapshot: str, resolved_config_sha256: str) -> str:
     validate_repository_iri(repository_iri)
     return (f"urn:appsec-review:source-snapshot:{json_sha256(repository_iri)}:"
@@ -475,7 +481,10 @@ class SourceIdentity:
         validate_repository_iri(self.repository_iri)
         require_sha256(self.target_snapshot)
         object.__setattr__(self, "repository_identity_basis", RepositoryIdentityBasis(self.repository_identity_basis))
-        if (self.repository_identity_basis == RepositoryIdentityBasis.ACCEPTED_ACQUISITION) != (
+        if self.repository_identity_basis == RepositoryIdentityBasis.SOURCE_SNAPSHOT:
+            if self.repository_iri != snapshot_repository_iri(self.target_snapshot):
+                raise ValueError("automatic source identity must match its accepted snapshot")
+        elif (self.repository_identity_basis == RepositoryIdentityBasis.ACCEPTED_ACQUISITION) != (
                 self.acquisition is not None):
             raise ValueError("accepted acquisition basis requires its exact artifact reference")
         if self.acquisition is not None and type(self.acquisition) is not ArtifactRef:
@@ -748,7 +757,7 @@ def output_reference(output_prefix: str, filename: str, payload: bytes) -> Sized
 
 # Exact resources consumed by the offline validator, including transitive accepted-gate definitions.
 SCHEMA_SHA256: Mapping[str, str] = MappingProxyType({
-    "common.schema.json": "f49fdd4cf6da94fb8484784d54b8f863200ee5d0a65b9ca82da3d1620bb1afec",
+    "common.schema.json": "a90bbf40647f6652d2439885b9e446471aadbc6c534d342881ea34f85f737f29",
     "manifest.schema.json": "64aed63dd5cc0df74d8d0b332c8a9a532d3764fcb7f100594174fa3f0f7dbfd9",
     "result.schema.json": "b5321b7f4e736e55149ca3fce67b073c460e1f3473fc9b45eb40c0db0ace018a",
     "../final-report/common.schema.json": "97cd0bd8b73d5c72da0280233d57add71bef1f9ded8b6be64dcced968bd7e7d9",

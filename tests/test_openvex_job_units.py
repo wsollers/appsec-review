@@ -12,6 +12,7 @@ import pytest
 
 from appsec_review.config import load_config
 from appsec_review.config.assurance import parse_review_policy
+from appsec_review.interchange import handoff_input_projection, input_set_sha256
 from appsec_review.jobs.job_openvex_export.contracts import (
     ArtifactRef, ExportError, ExportReportState, JOB_ID, OPENVEX_EXPORT_HANDOFF_SCHEMA,
     SizedArtifactRef, VerifiedInputs, canonical_bytes,
@@ -47,8 +48,8 @@ class ExportUnits:
                 "run_id": disk.gate["run_id"], "job_id": JOB_ID, "attempt_id": "unit",
             }),
         )
-        self.implementation_identity = policy.releases.values.get(JOB_ID, policy.releases.values.get("platform"))
-        self.release = "undeclared" if self.implementation_identity is None else self.implementation_identity
+        self.implementation_identity = self.job.identities(ROOT, policy.releases)["implementation"]
+        self.release = self.implementation_identity
         disk.put((attempt / "claim.json").relative_to(disk.root).as_posix(), {
             "started_at": datetime.now(timezone.utc).isoformat(),
         })
@@ -98,7 +99,7 @@ class ExportUnits:
             "artifacts": list(artifacts.values()),
         })
         self.reference = ArtifactRef.from_mapping(self.disk.publish(JOB_ID, handoff))
-        return handoff
+        return json.loads((self.disk.root / self.reference.path).read_bytes())
 
     def view(self, **overrides):
         return load_export(self.disk.root, self.disk.settings, ROOT,
@@ -108,6 +109,12 @@ class ExportUnits:
     def result(self):
         reference = self.outputs["export.assemble"]["artifact"]
         return json.loads((self.disk.root / reference["path"]).read_bytes())
+
+
+def altered_handoff(disk, handoff):
+    handoff["input_set_sha256"] = input_set_sha256(handoff_input_projection(handoff))
+    return ArtifactRef.from_mapping(disk.put(
+        f"data/jobs/{JOB_ID}/attempts/unit/altered-handoff.json", handoff))
 
 
 def test_output_reader_uses_its_explicit_byte_bound_and_rejects_wrong_measured_size(tmp_path):
@@ -145,6 +152,22 @@ def test_output_reader_rejects_a_hardlink_created_during_read(tmp_path, monkeypa
     with pytest.raises(ExportError):
         reporting.read_output(tmp_path, reference, enabled_settings(), max_bytes=len(payload))
     assert calls[0] == 2
+
+
+@pytest.mark.parametrize("buckets", [(), ("publishable",)])
+def test_checked_in_defaults_generate_verify_and_accept_without_setup(tmp_path, monkeypatch, buckets):
+    settings = load_config(ROOT / "appsec-review.toml", profile="dev", overlay="").job(JOB_ID).typed_settings
+    disk = AcceptedInputDisk(tmp_path, monkeypatch, buckets=buckets, settings=settings)
+    units = ExportUnits(disk)
+    units.assemble()
+    units.accept()
+    bundle = read_accepted_export(disk.root, units.reference, disk.settings, ROOT)
+    assert bundle.result["statement_count"] == len(buckets)
+    assert bundle.manifest["products"][0]["repository_identity_basis"] == "source_snapshot"
+    assert (bundle.document is not None) is bool(buckets)
+    if bundle.document is not None:
+        assert bundle.document["author"] == "AppSec Review"
+    assert units.view().state == (ExportReportState.AVAILABLE if buckets else ExportReportState.NO_STATEMENTS)
 
 
 @pytest.mark.parametrize("buckets", [(), ("publishable",), ("verification_backlog",), ("withheld",),
@@ -242,18 +265,18 @@ def test_release_or_report_gate_mismatch_is_stale_without_any_output_links(tmp_p
         assert view.document is view.manifest is view.result is view.statement_count is None
 
 
-def test_undeclared_export_release_matches_nullable_runtime_identity_not_a_declared_release(tmp_path, monkeypatch):
+def test_undeclared_export_release_matches_common_runtime_identity_not_a_declared_release(tmp_path, monkeypatch):
     disk = AcceptedInputDisk(tmp_path, monkeypatch)
     units = ExportUnits(disk)
     units.assemble()
     handoff = units.accept()
     assert units.release == "undeclared"
-    assert handoff["implementation_identity"] is None
+    assert handoff["implementation_identity"] == "undeclared"
     bundle = read_accepted_export(disk.root, units.reference, disk.settings, ROOT)
     assert bundle.manifest["provenance"]["exporter_release"] == "undeclared"
     assert units.view().state == ExportReportState.AVAILABLE
     handoff["implementation_identity"] = "different-declared-release"
-    reference = ArtifactRef.from_mapping(disk.publish(JOB_ID, handoff))
+    reference = altered_handoff(disk, handoff)
     with pytest.raises(ExportError):
         read_accepted_export(disk.root, reference, disk.settings, ROOT)
 
@@ -265,6 +288,7 @@ def test_a_new_valid_gate_pointer_does_not_invalidate_old_bytes_but_makes_export
     units.accept()
     handoff = deepcopy(disk.gate_handoff)
     handoff["completed_at"] = "2026-10-28T15:00:00+00:00"
+    handoff["input_set_sha256"] = input_set_sha256(handoff_input_projection(handoff))
     reference = disk.put("data/jobs/job_final_publication_gate/attempts/two/handoff.json", handoff)
     disk.put("data/jobs/job_final_publication_gate/latest.json", {
         "handoff_path": reference["path"], "handoff_sha256": reference["sha256"],
@@ -295,10 +319,39 @@ def test_historical_reader_reproves_the_whole_runtime_artifact_declaration(tmp_p
         handoff["artifacts"].append(dict(handoff["artifacts"][0]))
     else:
         reference = disk.put("data/jobs/job_openvex_export/attempts/unit/receipt.json", {"status": "SUCCEEDED"})
-        handoff["artifacts"].append(reference)
+        handoff["artifacts"].append({**reference, "size_bytes": (disk.root / reference["path"]).stat().st_size})
         path = disk.root / reference["path"]
         path.write_bytes(path.read_bytes() + b" ")
-    reference = ArtifactRef.from_mapping(disk.publish(JOB_ID, handoff))
+    reference = altered_handoff(disk, handoff)
+    with pytest.raises(ExportError):
+        read_accepted_export(disk.root, reference, disk.settings, ROOT)
+
+
+@pytest.mark.parametrize("mutation", ["legacy_schema", "claim_upstream", "outcome_coverage"])
+def test_historical_reader_requires_authentic_common_envelope_accounting(tmp_path, monkeypatch, mutation):
+    disk = AcceptedInputDisk(tmp_path, monkeypatch)
+    units = ExportUnits(disk)
+    units.assemble()
+    units.accept()
+    handoff = json.loads((disk.root / units.reference.path).read_bytes())
+    if mutation == "legacy_schema":
+        handoff["schema"] = "appsec-review/job-handoff/1"
+    else:
+        path = (f"data/jobs/{JOB_ID}/attempts/unit/claim.json" if mutation == "claim_upstream"
+                else handoff["outcomes"]["path"])
+        document = json.loads((disk.root / path).read_bytes())
+        if mutation == "claim_upstream":
+            document["upstream_handoffs"] = {"forged": "f" * 64}
+        else:
+            document["coverage"] = {"disposition": "partial", "gap_count": 1, "retry_required": False}
+            handoff["coverage"] = document["coverage"]
+        reference = {**disk.put(path, document), "size_bytes": (disk.root / path).stat().st_size}
+        for item in handoff["artifacts"]:
+            if item["path"] == path:
+                item.update(reference)
+        if mutation == "outcome_coverage":
+            handoff["outcomes"] = reference
+    reference = altered_handoff(disk, handoff)
     with pytest.raises(ExportError):
         read_accepted_export(disk.root, reference, disk.settings, ROOT)
 
@@ -327,7 +380,7 @@ def test_new_local_json_is_not_accepted_with_duplicate_keys_even_after_ref_rehas
     for artifact in handoff["artifacts"]:
         if artifact["path"] == reference["path"]:
             artifact["sha256"] = digest
-    ref = ArtifactRef.from_mapping(disk.publish(JOB_ID, handoff))
+    ref = altered_handoff(disk, handoff)
     with pytest.raises(ExportError):
         read_accepted_export(disk.root, ref, disk.settings, ROOT)
 

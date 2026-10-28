@@ -191,9 +191,11 @@ def history_priority(history: Mapping[str, Any] | None, catalog: Mapping[str, An
     return {
         "status": status, "reason": reason, "handoff_sha256": history.get("handoff_sha256"),
         "history_identity": history.get("history_identity"), "ranking": ranking.get("identity"),
-        "components": [{key: item[key] for key in ("component_id", "rank", "score", "churn_lines", "change_count")}
+        "components": [{**{key: item[key] for key in ("component_id", "rank", "score", "churn_lines", "change_count")},
+                        **{key: item[key] for key in ("source_id",) if key in item}}
                        for item in ranking.get("components", ()) if item.get("component_id") in components],
-        "files": [{key: item[key] for key in ("path", "sha256", "rank", "score", "churn_lines", "change_count")}
+        "files": [{**{key: item[key] for key in ("path", "sha256", "rank", "score", "churn_lines", "change_count")},
+                   **{key: item[key] for key in ("source_id", "source_path", "pinned_revision") if key in item}}
                   for item in ranking.get("files", ()) if hashes.get(str(item.get("path"))) == item.get("sha256")],
     }
 
