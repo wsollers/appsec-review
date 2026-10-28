@@ -98,7 +98,8 @@ Repository authority remains in [`../../AGENTS.md`](../../AGENTS.md). This page 
   ordering and explicit authenticated manual admission for frozen disabled runs.
 - [`openvex-export.md`](openvex-export.md) — standalone affected-only deterministic OpenVEX export,
   immutable issuer/action inputs, reviewed-source identity, protected evidence companion,
-  certified gate `/2` contracts and telemetry; gate-only report preserved, adaptation in progress.
+  certified gate `/2` reader/verifier/projector and telemetry; gate-only report preserved,
+  combined verification and final landing tracked separately.
 - [`../operations/openvex-export.md`](../operations/openvex-export.md) — operator setup,
   certified-gate dataflow and independent post-gate outputs, export-status diagrams,
   accounting, privacy, metrics refresh and remaining validation limits.

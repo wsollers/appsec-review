@@ -124,8 +124,10 @@ include raw source, patches, PoC payloads, prompts or credentials.
 The additive `openvex` section has semantics `appsec-review/openvex-metrics/1` in the
 existing run-owned summary, preserving completion/OWASP/review-flow metrics. It is an
 **export operator view**, not a final-report block: report `/2` remains gate-only.
-At `ede3c107`, strict gate `/2` contracts/wiring are reconciled but real verifier/projector
-adaptation is incomplete; the metric contract below is not a claim of final `/2` execution.
+At `e628041c`, strict gate `/2` contracts/wiring, the shared certified-gate reader and exporter
+input verifier/projector are assembled. Combined focused results and final exact-main
+reconciliation belong in the [implementation record](../reviews/openvex-export-implementation.md);
+the metric contract below is not evidence of a real accepted whole-chain or live execution.
 No Prometheus, exporter SDK or network endpoint is added. See the
 [operator guide](openvex-export.md) and
 [telemetry design](../architecture/openvex-export.md#12-first-class-telemetry-and-metrics).

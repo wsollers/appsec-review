@@ -1,12 +1,12 @@
 # OpenVEX findings export
 
-**Certified-gate adaptation in progress at
-`ede3c107b16aedebc97c2659372ac9ae80fde348`.** The user-selected architecture is standalone
-post-gate export with gate-only reporting. Strict contracts/settings and the shared topology
-reflect gate `/2`, review `/3`; real input verifier/projector adaptation is not yet complete
-at this base. This guide separates that required boundary from delivered settings and operator
-interfaces. It does not claim final `/2` execution, integration, acceptance or live Dagster
-validation. See the [design](../architecture/openvex-export.md) and
+**Certified-gate implementation assembled at
+`e628041cd734d854e749aa4e373bdc718d9a7363`.** The user-selected architecture is standalone
+post-gate export with gate-only reporting. Strict contracts/settings, shared certified-gate
+reader, exporter input verifier/projector and topology reflect gate `/2`, review `/3`.
+Combined focused verification and final exact-main reconciliation remain separately tracked;
+this guide does not claim real accepted whole-chain, integration, acceptance, Linux or live
+Dagster validation. See the [design](../architecture/openvex-export.md) and
 [verification record](../reviews/openvex-export-implementation.md).
 
 ## What this export means
@@ -317,8 +317,12 @@ can stale latest without invalidating historical work. Tampered/unreadable histo
 preserve known execution counts but make their semantic contribution unknown with a named gap.
 
 Focused offline unit files cover settings/contracts, input custody, projection/validation,
-handler deadlines, export consumers, topology/wiring and metrics. At the pinned reconciliation
-base, strict contract/wiring tests do not establish that the real `/2` verifier/projector has
-finished adaptation. This documentation pass does not establish final `/2` execution,
-integration, acceptance, live Dagster, full-suite or updated installed-wheel validation.
-Those checks remain unverified until separately recorded; unit success alone cannot establish them.
+handler deadlines, export consumers, topology/wiring and metrics. The certified `/2` reader,
+verifier and projector are implemented at this base; exact combined focused results and final
+source proof belong in the [verification record](../reviews/openvex-export-implementation.md).
+The coordinator's isolated installed-only wheel proof at `212f21a8` verifies all nine resource
+pins, the transitive report-item definition, canonical assembly and semantic validation using
+synthetic gate `/2` context, not a real accepted run. It does not establish a self-contained
+application or full installed-job execution. Real accepted whole-chain, integration, acceptance,
+Linux, live Dagster and full-suite validation remain unclaimed; unit/pure-boundary success
+alone cannot establish them.

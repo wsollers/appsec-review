@@ -644,8 +644,10 @@ configuration, not a released binary or version range; local export does not aut
 disclosure. Empty exports retain explicit non-clean accounting without writing an invalid empty
 OpenVEX document. The user-selected boundary is **standalone post-gate export with gate-only reporting**:
 OpenVEX is not a report field, attachment or prerequisite. At source
-`ede3c107`, strict gate `/2` contracts and topology are reconciled; exporter verifier/projector
-adaptation is still in progress, not evidence of final `/2` execution validation.
+`e628041c`, strict gate `/2` contracts, shared certified-gate reader, exporter input verifier
+and projector are assembled. Combined focused verification and final exact-main reconciliation
+are tracked in the [implementation record](docs/reviews/openvex-export-implementation.md);
+this is not a claim of real accepted whole-chain, integration, acceptance or live Dagster validation.
 See the [design](docs/architecture/openvex-export.md) and
 [operator guide and diagrams](docs/operations/openvex-export.md).
 

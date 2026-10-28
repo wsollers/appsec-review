@@ -199,7 +199,7 @@ PoC failure never contradicts the finding, and a compiled PoC cannot upgrade it 
 ### Standalone OpenVEX is not a report input
 
 The user selected standalone post-gate export while preserving gate-only reporting.
-At `ede3c107b16aedebc97c2659372ac9ae80fde348`, report dependencies and `CONSUMES` are exactly
+At `e628041cd734d854e749aa4e373bdc718d9a7363`, report dependencies and `CONSUMES` are exactly
 `job_final_publication_gate`; report `/2` has no `openvex_export` block, output links or
 live optional attachment discovery. This supersedes the earlier OpenVEX report-link/fan-in
 proposal, not the pre-gate completion design.
@@ -214,9 +214,11 @@ on a failed export before reaching report dispatch, but that ordering does not a
 dependency; standalone report publication still requires only its valid certified gate.
 
 The [OpenVEX operator guide](openvex-export.md) covers the issuer/action configuration,
-source identity, standalone outputs, privacy and status recovery. Its certified-gate verifier
-and projector adaptation is still in progress at this source boundary; no final `/2` export
-execution, integration, acceptance or live Dagster result is claimed here.
+source identity, standalone outputs, privacy and status recovery. The certified-gate shared
+reader, exporter input verifier and projector are assembled at this source boundary.
+The [implementation record](../reviews/openvex-export-implementation.md) tracks combined
+focused verification and final exact-main reconciliation; no real accepted whole-chain,
+integration, acceptance, Linux or live Dagster result is claimed here.
 
 ### What the report never contains
 
