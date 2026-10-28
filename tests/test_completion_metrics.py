@@ -73,5 +73,36 @@ def test_missing_model_usage_is_not_fabricated_as_zero_tokens() -> None:
     }])
     event = report["lanes"]["remediation_planning"]["events"]["REMEDIATION_MODEL_COMPLETED"]
     assert event["counters"] == {"output_tokens": 15}
-    assert event["usage_unavailable_count"] == 1
+    assert event["unavailable_token_measurements"] == 1
     assert event["duration_ms"]["p95"] is None
+
+
+def test_real_producer_statuses_caps_and_manual_admission_are_counted() -> None:
+    report = completion_metrics([
+        {"job_id": "job_poc_generation", "event_type": "POC_GENERATION_PUBLISHED",
+         "details": {"by_status": {"artifact_generated": 1, "policy_denied": 2, "unsafe_to_attempt": 3}}},
+        {"job_id": "job_final_publication_gate", "event_type": "FINAL_PUBLICATION_GATE_CAPABILITIES_VERIFIED",
+         "details": {"explicit_poc_admission": True, "enabled": {"poc_generation": False},
+                     "dispositions": {"poc_generation": "SUCCEEDED", "dossiers": "GAP"},
+                     "attachment_counts": {"dossiers": 2}, "omitted_counts": {"dossiers": 1}}},
+        {"job_id": "job_remediation_validation", "event_type": "REMEDIATION_VALIDATION_ADAPTER_COMPLETED",
+         "details": {"adapter": "native_syntax", "outcome": "baseline_failed", "baseline_attempted": True,
+                     "patched_attempted": False, "failure_count": 1}},
+    ])
+    assert report["measurement_gap_count"] == 0
+    gate = report["lanes"]["publication_gate"]["events"]["FINAL_PUBLICATION_GATE_CAPABILITIES_VERIFIED"]
+    assert gate["flags"] == {"enabled.poc_generation.false": 1, "explicit_poc_admission.true": 1}
+    assert gate["counters"] == {"attachment_counts.dossiers": 2, "omitted_counts.dossiers": 1}
+    assert gate["outcomes"]["dispositions.dossiers.GAP"] == 1
+    adapter = report["lanes"]["remediation_validation"]["events"]["REMEDIATION_VALIDATION_ADAPTER_COMPLETED"]
+    assert adapter["dimensions"] == {"adapter.native_syntax": 1}
+    assert adapter["outcomes"] == {"baseline_failed": 1}
+
+
+def test_configured_limits_are_ranges_not_additive_retry_work() -> None:
+    record = {"job_id": "job_dossier_publication", "event_type": "DOSSIER_BATCH_PLANNED",
+              "details": {"admitted": 2, "max_dossiers": 10}}
+    report = completion_metrics([record, record])
+    event = report["lanes"]["dossiers"]["events"]["DOSSIER_BATCH_PLANNED"]
+    assert event["counters"] == {"admitted": 4}
+    assert event["limits"] == {"max_dossiers": {"min": 10, "max": 10}}
