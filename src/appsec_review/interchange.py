@@ -5,7 +5,7 @@ that its referenced bytes exist or that a reported vulnerability is confirmed.
 """
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass, fields, is_dataclass
 from enum import StrEnum
 import hashlib
 import json
@@ -125,15 +125,25 @@ def _strings(value: Any, label: str) -> tuple[str, ...]:
     return result
 
 
+def _wire(value: Any) -> Any:
+    if is_dataclass(value) and not isinstance(value, type):
+        return {field.name: _wire(getattr(value, field.name)) for field in fields(value)}
+    if isinstance(value, Mapping):
+        return {key: _wire(child) for key, child in value.items()}
+    if isinstance(value, (tuple, list)):
+        return [_wire(child) for child in value]
+    return value
+
+
 def _canonical(value: Any) -> bytes:
-    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False,
+    return json.dumps(_wire(value), sort_keys=True, separators=(",", ":"), ensure_ascii=False,
                       allow_nan=False).encode("utf-8")
 
 
 class _Record:
     def as_dict(self) -> dict[str, Any]:
         # JSON round-tripping also rejects accidental non-wire values.
-        return json.loads(_canonical(asdict(self)))
+        return json.loads(_canonical(self))
 
 
 @dataclass(frozen=True, slots=True)

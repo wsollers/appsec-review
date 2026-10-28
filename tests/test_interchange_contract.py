@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+from types import MappingProxyType
 
 import pytest
 
@@ -125,6 +126,17 @@ def test_input_hash_is_deterministic_and_target_sensitive():
     assert input_set_sha256({"b": 2, "a": 1}) == input_set_sha256({"a": 1, "b": 2})
     assert input_set_sha256({"a": 1}) != input_set_sha256({"a": 2})
     assert gap_id({"unit": "a"}) != gap_id({"unit": "b"})
+
+
+def test_read_only_mappings_serialize_without_pickle_or_mutation():
+    severity = MappingProxyType({"value": "unknown", "native": "UNKNOWN", "basis": "unmapped", "rule": "severity/1"})
+    record = ObservationMetadata("other", "observation", "fixture", "rule", severity, (), (), "fixture/1")
+    document = record.as_dict()
+    assert document["reported_severity"] == dict(severity)
+    document["reported_severity"]["value"] = "high"
+    assert severity["value"] == "unknown"
+    identity = MappingProxyType({"nested": MappingProxyType({"value": (1, 2)})})
+    assert input_set_sha256(identity) == input_set_sha256({"nested": {"value": [1, 2]}})
 
 
 def test_handoff_round_trip_and_identity_checks():
