@@ -600,3 +600,159 @@ def test_synthetic_publication_reaches_actual_red_blue_and_verifier_requests(tmp
             assert "statement" not in request.task_input["input"]["claim"]
             text = json.dumps(asdict(request))
             assert NARRATIVES["C2"] not in text and "blue rationale" not in text
+
+
+def test_full_pinned_catalog_reuses_verified_publication_and_component_work(tmp_path, monkeypatch):
+    """All selected real catalog identities survive; synthetic unknown rows share original citations."""
+    from collections import Counter
+    from time import perf_counter
+
+    from appsec_review.config import load_config
+    from appsec_review.owasp_workbench.standards import control_records, load_catalogs
+    from appsec_review.storage import shared
+
+    fixture = _fixture(tmp_path)
+    scope = accept_manifest(fixture.run_root)
+    settings = load_config(ROOT / "appsec-review.toml").job("job_owasp_control_assessment").settings
+    controls = control_records(load_catalogs(ROOT, settings["standards"]),
+                              asvs_level=settings["asvs_level"], masvs_profile=settings["masvs_profile"])
+    resolver = EvidenceResolver(RetrievalCore(fixture.runs_dir, fixture.run_id), scope)
+    first, second = _references(fixture)
+    rows = []
+    for component in scope.components:
+        reference = resolver.materialize(component.identity, component_id=component.component_id)["reference"]
+        for control in controls:
+            row_id = component.component_id + ":" + control["control_identity"]
+            if component.component_id == COMPONENT and control["control_identity"].endswith(":V1.2.4"):
+                row = _record(first, second, row_id=row_id)
+                row["control_identity"] = control["control_identity"]
+            else:
+                row = {"row_id": row_id, "control_identity": control["control_identity"],
+                       "component_id": component.component_id, "assessment_mode": "assessment",
+                       "applicability": "conditional", "control_status": "cannot_verify",
+                       "verification_status": "unresolved", "lead_eligible": False,
+                       "obligations": [], "observations": [], "evidence_used": [reference],
+                       "limitations": ["Original component declaration is not implemented-control proof"],
+                       "gaps": ["No supported source proof procedure for this selected control"]}
+            rows.append(row)
+    assert len(rows) >= 500
+    publication = _publish(fixture, rows)
+    component_ids = {component.identity for component in scope.components}
+    lookups, hashes, consumptions = Counter(), Counter(), Counter()
+    query = EvidenceResolver.query
+    hash_file = products.file_sha256
+    consume = shared.consume_named
+    manifest_path = fixture.run_root / publication["path"]
+    published = json.loads(manifest_path.read_text(encoding="utf-8"))
+    shard_path = fixture.run_root / published["shards"][0]["path"]
+    authority_paths = {manifest_path, shard_path}
+
+    def bounded_query(self, method, **parameters):
+        if method == "find":
+            identity = parameters["identity"]
+            lookups[identity] += 1
+            if identity in component_ids:
+                assert lookups[identity] <= 3, "a shared component citation was resolved again for another row"
+        return query(self, method, **parameters)
+
+    def counted_hash(path):
+        if Path(path) in authority_paths:
+            hashes[Path(path)] += 1
+        return hash_file(path)
+
+    def counted_consume(root, path, **parameters):
+        if Path(path) in authority_paths:
+            consumptions[Path(path)] += 1
+        return consume(root, path, **parameters)
+
+    monkeypatch.setattr(EvidenceResolver, "query", bounded_query)
+    monkeypatch.setattr(products, "file_sha256", counted_hash)
+    monkeypatch.setattr(shared, "consume_named", counted_consume)
+    started = perf_counter()
+    downstream = project_and_assemble(fixture)
+    elapsed = perf_counter() - started
+    assert len(downstream.product_rows) == len(rows)
+    assert {row["payload"]["result"]["workbench_reference"]["row_id"] for row in downstream.product_rows} == {
+        row["row_id"] for row in rows}
+    assert all(row["payload"]["result"]["unresolved_evidence"] == 0 for row in downstream.product_rows)
+    assert sum(row["payload"]["result"]["control_status"] == "cannot_verify"
+               for row in downstream.product_rows) == len(rows) - 1
+    assert len([lead for lead in downstream.collection.leads if lead.family == "owasp_control"]) == 1
+    assert {identity: lookups[identity] for identity in component_ids} == {
+        identity: 3 for identity in component_ids}
+    assert hashes == Counter({shard_path: 3, manifest_path: 2})
+    assert consumptions == Counter({shard_path: 3, manifest_path: 3})
+    assert downstream.assembly.packages
+    assert all(len(package.body) <= downstream.assembly.manifest["settings"]["max_package_bytes"]
+               for package in downstream.assembly.packages)
+    assert any(gap.producer == "owasp_control" and "max_package_bytes" in gap.reason
+               for gap in downstream.assembly.gaps)
+    assert any(entry.get("control_assessment", {}).get("control_status") == "not_satisfied"
+               for view in downstream.views.values() for entry in view.document["other_context"])
+    print(json.dumps({"catalog_control_rows": len(rows), "component_find_queries": sum(
+        lookups[identity] for identity in component_ids), "original_find_queries": sum(lookups.values()),
+        "authority_hash_checks": sum(hashes.values()), "authority_consumptions": sum(consumptions.values()),
+        "downstream_seconds": round(elapsed, 3)}, sort_keys=True))
+
+
+def test_control_citation_cache_requires_the_full_original_binding(tmp_path):
+    fixture = _fixture(tmp_path)
+    first, second = _references(fixture)
+    _publish(fixture, [_record(first, second)])
+    resolver = products._control_resolver(fixture.run_root, fixture.snapshot, owasp_status(fixture.run_root))
+    expected = resolver.resolve(first, component_id=COMPONENT)
+    for field, value in (
+        ("run_id", "foreign-run"), ("target_snapshot", "target-sha256:" + "0" * 64),
+        ("component_id", "component:0002"), ("build_unit_id", "unaccepted-unit"),
+        ("content_sha256", "0" * 64), ("resolved", True),
+        ("publication", {**first["publication"], "sha256": "0" * 64}),
+        ("locator", {**first["locator"], "lines": [1, 2]}),
+        ("locator", {**first["locator"], "source_custody": {"unaccepted": True}}),
+    ):
+        changed = deepcopy(first)
+        changed[field] = value
+        with pytest.raises(ValueError):
+            resolver.resolve(changed, component_id=COMPONENT)
+    with pytest.raises(ValueError, match="different or unresolved component"):
+        resolver.resolve(first, component_id="component:0002")
+    assert resolver.resolve(first, component_id=COMPONENT) == expected
+
+
+def test_control_authority_cache_is_scoped_to_run_snapshot_manifest_shard_and_row(downstream):
+    fixture, _row, artifacts = downstream
+    compact = artifacts.product_rows[0]["payload"]["result"]
+    cache = {}
+    expected = products.load_control_assessment(fixture.run_root, fixture.snapshot, compact, cache=cache)
+    assert expected["production_eligible"]
+    with pytest.raises(ValueError, match="different target snapshot"):
+        products.load_control_assessment(fixture.run_root, "target-sha256:" + "0" * 64, compact, cache=cache)
+    other_run_root = fixture.run_root.parent / "another-accepted-run"
+    with pytest.raises((ValueError, OSError)):
+        products.load_control_assessment(other_run_root, fixture.snapshot, compact, cache=cache)
+    for field, value in (("row_id", "missing-control"), ("shard_id", "different-shard"),
+                         ("path", "../outside.json"), ("sha256", "0" * 64),
+                         ("manifest_sha256", "0" * 64)):
+        changed = deepcopy(compact)
+        changed["workbench_reference"][field] = value
+        with pytest.raises(ValueError):
+            products.load_control_assessment(fixture.run_root, fixture.snapshot, changed, cache=cache)
+    assert products.load_control_assessment(fixture.run_root, fixture.snapshot, compact, cache=cache) == expected
+
+
+def test_control_authority_row_index_keeps_duplicate_identities_ambiguous(tmp_path):
+    fixture = _fixture(tmp_path)
+    first, second = _references(fixture)
+    valid = _record(first, second, row_id="unique")
+    duplicate = _record(first, second, row_id="ambiguous")
+    _publish(fixture, [valid, duplicate, duplicate])
+    publication = owasp_status(fixture.run_root)
+    [shard] = publication["shards"]
+    reference = {"manifest_path": publication["manifest_path"],
+                 "manifest_sha256": publication["manifest_sha256"],
+                 **{key: shard[key] for key in ("shard_id", "path", "sha256")}, "row_id": "unique"}
+    cache = {}
+    assert products.load_control_assessment(fixture.run_root, fixture.snapshot,
+        {"workbench_reference": reference}, cache=cache)["production_eligible"]
+    with pytest.raises(ValueError, match="missing or ambiguous"):
+        products.load_control_assessment(fixture.run_root, fixture.snapshot,
+            {"workbench_reference": {**reference, "row_id": "ambiguous"}}, cache=cache)
