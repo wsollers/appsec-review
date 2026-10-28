@@ -12,6 +12,10 @@ import time
 from typing import Any
 
 from appsec_review.container_runtime import ContainerExecutor, ExecutionRequest, Mount, load_catalog
+from appsec_review.interchange import decode_handoff
+from appsec_review.provenance import (
+    consume_native_references, retain_native_output, select_native, validate_observation_provenance,
+)
 from appsec_review.jobs.job_evidence_collection.adapters import (
     Applicability,
     ScanCatalog,
@@ -167,9 +171,8 @@ def load_target_catalog(run_root: Path) -> ScanCatalog:
     handoff_path = (run_root / latest["handoff_path"]).resolve()
     if run_root.resolve() not in handoff_path.parents or file_sha256(handoff_path) != latest["handoff_sha256"]:
         raise ValueError("target catalog handoff identity mismatch")
-    handoff = json.loads(handoff_path.read_text(encoding="utf-8"))
-    if handoff.get("status") != "ACCEPTED" or handoff.get("schema") != "appsec-review/job-handoff/1":
-        raise ValueError("target catalog handoff is not accepted")
+    handoff = decode_handoff(json.loads(handoff_path.read_text(encoding="utf-8")),
+                             run_id=run_root.name, job_id="job_target_catalog")
     published = handoff.get("outputs", {}).get("publish_catalog.publish_handoff", {})
     catalog_doc = _read_artifact(run_root, published["artifact"])
     if catalog_doc.get("schema") != "appsec-review/target-catalog/1":
@@ -489,6 +492,12 @@ def _write_evidence(unit: UnitContext, adapter: ToolAdapter, catalog: ScanCatalo
     )
     envelope["not_applicable_inputs"] = not_applicable_summary(not_applicable)
     atomic_json(destination, envelope)
+    if envelope["records"]:
+        provenance_receipt = validate_observation_provenance(
+            unit.job.run_root, envelope["records"], parser_identity=adapter.parser_identity,
+            events=unit.job.events, unit_id=unit.unit_id)
+        envelope["provenance_receipt"] = provenance_receipt
+        atomic_json(destination, envelope)
     return envelope, destination
 
 
@@ -520,6 +529,7 @@ class _InvocationOutcome:
     not_applicable: list[InputDecision] = field(default_factory=list)
     error_class: str | None = None
     attempt: int = 0
+    native_outputs: list[dict[str, Any]] = field(default_factory=list)
 
 
 def osv_project_groups(paths: Iterable[str],
@@ -697,8 +707,53 @@ def _run_invocation(unit: UnitContext, adapter: ToolAdapter, catalog: ScanCatalo
                 raise RuntimeError(f"{adapter.tool_id} output artifact exceeded its byte bound{subject}")
             if output not in outcome.raw_paths:
                 outcome.raw_paths = (*outcome.raw_paths, output)
+            payload = output.read_bytes()
+            pinned_output = {"path": output.relative_to(unit.job.run_root).as_posix(),
+                             "sha256": hashlib.sha256(payload).hexdigest(), "size_bytes": len(payload)}
             try:
-                parsed = adapter.parse(output.read_bytes())
+                parsed = adapter.parse(payload)
+            except ValueError:
+                retained = retain_native_output(
+                    unit.job.run_root, output, parser_identity=adapter.parser_identity,
+                    complete=not (result.stdout_truncated if output == attempt_paths[0] else False),
+                    native_result_count=0, expected=pinned_output,
+                    execution_reference=_artifact(unit.job.run_root, attempt_paths[2]),
+                    events=unit.job.events, unit_id=unit.unit_id)
+                outcome.native_outputs.append(retained.as_dict())
+                raise RuntimeError(f"{adapter.tool_id} parser incompatibility{subject}") from None
+            assembled_truncated = (adapter.tool_id == "tool-blint"
+                                   and bool(json.loads(payload).get("truncated")))
+            retained = retain_native_output(
+                unit.job.run_root, output, parser_identity=adapter.parser_identity,
+                complete=not assembled_truncated and not (
+                    result.stdout_truncated if output == attempt_paths[0] else False),
+                native_result_count=len(parsed), expected=pinned_output,
+                execution_reference=_artifact(unit.job.run_root, attempt_paths[2]),
+                events=unit.job.events, unit_id=unit.unit_id)
+            outcome.native_outputs.append(retained.as_dict())
+            try:
+                report_refs = {}
+                for record in parsed:
+                    native = retained
+                    if record.get("_native_report"):
+                        report = str(record["_native_report"])
+                        if report != "findings.json" or adapter.tool_id != "tool-blint":
+                            raise ValueError("unexpected native report source")
+                        if report not in report_refs:
+                            native_path = scratch / report
+                            report_refs[report] = retain_native_output(
+                                unit.job.run_root, native_path, parser_identity=adapter.parser_identity,
+                                complete=True,
+                                native_result_count=len(json.loads(native_path.read_bytes()).get("findings", [])),
+                                execution_reference=_artifact(unit.job.run_root, attempt_paths[2]),
+                                events=unit.job.events, unit_id=unit.unit_id)
+                            outcome.native_outputs.append(report_refs[report].as_dict())
+                        native = report_refs[report]
+                    selector = record.get("_native_selector")
+                    if selector is not None:
+                        record["_native_refs"] = [select_native(native, selector).as_dict()]
+                    elif not record.get("gap_only"):
+                        raise ValueError("parser omitted the exact native result selector")
                 observations, parser_gaps, reported_not_applicable = _separate_parser_diagnostics(
                     parsed, adapter.tool_id)
                 reject_swift_derived(
@@ -881,6 +936,7 @@ def _execute_tool(unit: UnitContext, adapter: ToolAdapter, catalog: ScanCatalog,
         checkpoint = None if retry_required or not reusable else _valid_checkpoint(unit.job.run_root, checkpoint_path)
         if checkpoint is not None:
             prior = checkpoint["output"]
+            consume_native_references(unit.job.run_root, prior.get("native_outputs", ()))
             unit.job.events.write(
                 "TOOL_CHECKPOINT_REUSED", unit_id=unit.unit_id, tool_id=adapter.tool_id,
                 tool_identity={"name": tool.name, "version": tool.version, "image_id": image_id},
@@ -944,6 +1000,8 @@ def _execute_tool(unit: UnitContext, adapter: ToolAdapter, catalog: ScanCatalog,
             "not_applicable_inputs": envelope["not_applicable_inputs"],
             "checkpoint_identity": identity,
             "retry_count": max(outcome.attempt for outcome in outcomes),
+            "native_outputs": [ref for outcome in outcomes for ref in outcome.native_outputs],
+            "provenance_receipt": envelope.get("provenance_receipt"),
         }
         if partitioned:
             output_value["invocations"] = [
@@ -981,7 +1039,7 @@ def _execute_tool(unit: UnitContext, adapter: ToolAdapter, catalog: ScanCatalog,
 def _normalize_tool(unit: UnitContext, scan_unit: str) -> Mapping[str, Any]:
     output = dict(unit.output(scan_unit))
     evidence = _read_artifact(unit.job.run_root, output["artifact"])
-    if evidence.get("schema") != "appsec-review/static-tool-evidence/1":
+    if evidence.get("schema") != "appsec-review/static-tool-evidence/2":
         raise ValueError("scanner evidence envelope schema mismatch")
     if evidence.get("terminal_status") != output.get("terminal_status"):
         raise ValueError("scanner disposition changed before normalization")
@@ -1039,8 +1097,13 @@ def _build_producer_shard(unit: UnitContext, normalize_unit: str) -> Mapping[str
         source_id = None
         if location_value:
             target_path = (unit.job.target_root or Path()) / location_value["path"]
+            if not target_path.is_file():
+                raise ValueError("static evidence accepted source is unavailable")
             if target_path.is_file():
-                source_sha = file_sha256(target_path)
+                source_sha = location_value.get("source_sha256")
+                if (not isinstance(source_sha, str) or target_path.is_symlink()
+                        or file_sha256(target_path) != source_sha):
+                    raise ValueError("static evidence source hash differs from accepted catalog")
                 data = target_path.read_bytes()
                 line_offsets = [0, *(match.end() for match in re.finditer(b"\n", data))]
                 start_line, end_line = int(location_value["start_line"]), int(location_value["end_line"])

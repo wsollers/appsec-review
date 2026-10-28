@@ -17,6 +17,10 @@ from appsec_review.retrieval import (EntityKind, EntityRecord, IndexBuilder, Ind
     LogicalIdentity, RelationKind, RelationRecord, index_fingerprint, write_manifest)
 from appsec_review.retrieval.index import INDEX_SCHEMA, load_verified_manifest
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
+from appsec_review.interchange import decode_handoff
+from appsec_review.provenance import (
+    consume_native_references, retain_native_output, validate_observation_provenance,
+)
 from appsec_review.storage import atomic_bytes, atomic_json, canonical_json, file_sha256
 from appsec_review.tool_inputs import (
     InputDecision, bounded_diagnostic, not_applicable_summary, osv_missing_ecosystem_gap,
@@ -29,15 +33,15 @@ from appsec_review.jobs.delivery_scope import (
 
 from .findings import FINDING_NORMALIZER, RECORD_SCHEMA, scan_records
 from .formats import ArchiveLimits, builtin_observation, classify
-from .scanners import ADAPTERS, ContainerScannerRunner
+from .scanners import ADAPTERS, ContainerScannerRunner, native_result_count
 from appsec_review.config.evidence_collection import memory_limit
 from appsec_review.jobs.job_artifact_security_analysis.datasets import CONSUMES, DATASETS
 
 
 SCHEMA = "appsec-review/artifact-security-analysis/1"
 OBSERVATION_SCHEMA = "appsec-review/artifact-security-observation/1"
-PARSER_IDENTITY = "appsec-review/artifact-security-parsers/2+" + POLICY_IDENTITY
-NORMALIZER_IDENTITY = "appsec-review/artifact-security-normalizer/1"
+PARSER_IDENTITY = "appsec-review/artifact-security-parsers/3+" + POLICY_IDENTITY
+NORMALIZER_IDENTITY = "appsec-review/artifact-security-normalizer/2"
 # The observations shard is a function of the scan results (parser and normalizer identities, which also key the
 # scan checkpoints) and of the splitting of a scan into one summary and per-finding records (``findings.py``).
 # Changing only the splitting re-indexes without re-running a scanner.
@@ -238,7 +242,10 @@ def _scan_one(unit: UnitContext, artifact: Mapping[str, Any], capability: str,
             raise FrameworkIntegrityError("artifact-security checkpoint fingerprint changed")
         for identity in prior.get("raw_artifacts", ()):
             _safe_file(unit.job.run_root, identity)
-        return {**prior, "reused": True}
+        consume_native_references(unit.job.run_root, [
+            *([prior["native_output"]] if prior.get("native_output") else []),
+            *prior.get("native_reports", {}).values()])
+        return {**prior, "reused": True, "result_artifact": _identity(unit.job.run_root, checkpoint)}
     root = unit.job.attempt_root / "artifacts" / "asa" / artifact["artifact_id"][-12:] / capability
     root.mkdir(parents=True, exist_ok=True)
     started = time.monotonic()
@@ -253,6 +260,9 @@ def _scan_one(unit: UnitContext, artifact: Mapping[str, Any], capability: str,
     parser_payload: bytes | None = None
     not_applicable: Mapping[str, Any] | None = None
     execution_receipt: Mapping[str, Any] | None = None
+    parser_complete = True
+    native_report_paths: Mapping[str, str] = {}
+    parser_limit = int(settings["parser_input_limit_bytes"])
     tool_identity: Mapping[str, Any] = (dict(resolved_tool_identity) if resolved_tool_identity else
         {"scanner": scanner_identity, "rules": scanner_identity, "image": None})
     def stop(reason: str, *, action: str, expected: bool = False) -> None:
@@ -270,6 +280,7 @@ def _scan_one(unit: UnitContext, artifact: Mapping[str, Any], capability: str,
         if capability in {"inventory", "native", "jvm", "packages", "wasm"}:
             observation, gaps = builtin_observation(path, classification, capability, limits)
             stdout = canonical_json(observation)
+            parser_payload = stdout
         elif runner is None:
             stop("artifact scanner executor is unavailable", action="artifact.scan")
             exit_code = None
@@ -280,16 +291,28 @@ def _scan_one(unit: UnitContext, artifact: Mapping[str, Any], capability: str,
             stdout, stderr = bytes(raw.get("stdout", b"")), bytes(raw.get("stderr", b""))
             exit_code, timed_out = raw.get("exit_code"), bool(raw.get("timed_out", False))
             parser_payload = bytes(raw["payload"]) if "payload" in raw else None
+            native_report_paths = raw.get("native_reports", {})
+            receipt_value = raw.get("execution_receipt")
+            execution_receipt = receipt_value if isinstance(receipt_value, Mapping) else None
+            parser_complete = not bool(raw.get("payload_truncated", raw.get("truncated", False)))
+            if parser_payload is None and not isinstance(raw.get("observation"), Mapping):
+                parser_payload = stdout
+            if parser_payload is not None and len(parser_payload) > parser_limit:
+                parser_complete = False
+                gaps.append(f"{capability} parser input exceeded its configured byte bound")
             supplied = raw.get("observation")
             if isinstance(supplied, Mapping):
                 observation = supplied
-            elif not timed_out and exit_code in ADAPTERS[capability].accepted_exit_codes and not raw.get("truncated"):
+            elif not timed_out and exit_code in ADAPTERS[capability].accepted_exit_codes and parser_complete:
                 try:
                     observation = ADAPTERS[capability].parse(
                         parser_payload if parser_payload is not None else stdout)
                 except (ValueError, UnicodeError, ET.ParseError) as exc:
                     stop(f"artifact output parse failed: {type(exc).__name__}", action="artifact.parse")
                     gaps.append(f"{capability} scanner output could not be parsed: {type(exc).__name__}: {exc}")
+            if observation.get("_parser_truncated") or observation.get("truncated"):
+                parser_complete = False
+                gaps.append(f"{capability} parser or report assembly was truncated")
             tool_identity = raw.get("tool_identity", tool_identity)
             receipt_value = raw.get("execution_receipt")
             execution_receipt = receipt_value if isinstance(receipt_value, Mapping) else None
@@ -337,8 +360,34 @@ def _scan_one(unit: UnitContext, artifact: Mapping[str, Any], capability: str,
     stdout_identity = _stream(unit, root, "stdout.bin", stdout, stream_limit, tail)
     stderr_identity = _stream(unit, root, "stderr.bin", stderr, stream_limit, tail)
     raw_artifacts = [stdout_identity, stderr_identity]
+    native_output = None
+    native_reports = {}
     if parser_payload is not None:
-        raw_artifacts.append(_stream(unit, root, "parser-input.bin", parser_payload, stream_limit, tail))
+        parser_identity = _stream(unit, root, "parser-input.bin", parser_payload, parser_limit, 0)
+        raw_artifacts.append(parser_identity)
+        native_output = retain_native_output(
+            unit.job.run_root, root / "parser-input.bin", parser_identity=PARSER_IDENTITY,
+            expected=parser_identity, complete=parser_complete and not parser_identity["truncated"],
+            native_result_count=int(observation.get("_native_result_count", native_result_count(observation))),
+            execution_reference=execution_receipt,
+            events=unit.job.events, unit_id=unit.unit_id).as_dict()
+        if parser_identity["truncated"]:
+            observation = {}
+    else:
+        gaps.append("provenance_unavailable: scanner supplied no exact parser input")
+    for report, relative in native_report_paths.items():
+        if report != "findings.json" or capability != "blint":
+            raise FrameworkIntegrityError("unexpected native scanner report source")
+        from appsec_review.storage.shared import safe_path
+        native_path = safe_path(unit.job.run_root, relative)
+        if native_path.stat().st_size > parser_limit:
+            gaps.append("blint native findings report exceeded its configured byte bound")
+            observation = {}
+            continue
+        native_reports[report] = retain_native_output(
+            unit.job.run_root, native_path, parser_identity=PARSER_IDENTITY, complete=True,
+            native_result_count=len(json.loads(native_path.read_bytes()).get("findings", [])),
+            execution_reference=execution_receipt, events=unit.job.events, unit_id=unit.unit_id).as_dict()
     safety.check_running()
     result = {"schema": OBSERVATION_SCHEMA, "fingerprint": fingerprint,
         "artifact_id": artifact["artifact_id"], "artifact": {key: artifact.get(key) for key in
@@ -351,12 +400,13 @@ def _scan_one(unit: UnitContext, artifact: Mapping[str, Any], capability: str,
         "observation": observation, "gaps": gaps, "exit_code": exit_code, "timed_out": timed_out,
         "duration_ms": int((time.monotonic() - started) * 1000),
         "raw_artifacts": raw_artifacts, "execution_receipt": execution_receipt,
+        "native_output": native_output, "native_reports": native_reports,
         "reused": False, "not_applicable": not_applicable,
         "terminal_status": ("SKIPPED_NA" if not_applicable is not None else
                             "COMPLETED_WITH_GAPS" if gaps else "SUCCEEDED")}
     checkpoint.parent.mkdir(parents=True, exist_ok=True)
     atomic_json(checkpoint, result)
-    return result
+    return {**result, "result_artifact": _identity(unit.job.run_root, checkpoint)}
 
 
 def _validate_config(context, _result) -> None:
@@ -365,7 +415,7 @@ def _validate_config(context, _result) -> None:
     for step, tasks in TOPOLOGY.items():
         if tuple(context.config.step(step).tasks) != tasks:
             raise ValueError(f"artifact-security task order mismatch: {step}")
-    required = {"timeout_seconds", "stream_limit_bytes", "diagnostic_tail_bytes", "archive_member_limit",
+    required = {"timeout_seconds", "stream_limit_bytes", "parser_input_limit_bytes", "diagnostic_tail_bytes", "archive_member_limit",
                 "archive_expanded_bytes", "archive_member_bytes", "archive_ratio_limit", "archive_depth_limit",
                 "scanner_identities"}
     if not required <= set(context.config.settings):
@@ -386,8 +436,7 @@ def load_accepted_artifact_security_analysis(run_root: Path) -> Mapping[str, Any
     pointer = json.loads(pointer_path.read_text(encoding="utf-8"))
     handoff = json.loads(_safe_file(run_root, {"path": pointer.get("handoff_path"),
                                               "sha256": pointer.get("handoff_sha256")}).read_text(encoding="utf-8"))
-    if handoff.get("schema") != "appsec-review/job-handoff/1" or handoff.get("status") != "ACCEPTED" or handoff.get("job_id") != "job_artifact_security_analysis":
-        raise ValueError("artifact-security-analysis handoff is not accepted")
+    decode_handoff(handoff, run_id=run_root.name, job_id="job_artifact_security_analysis")
     identity = handoff.get("outputs", {}).get("acceptance.publish_handoff", {}).get("artifact")
     if not isinstance(identity, Mapping): raise ValueError("artifact-security publication is unavailable")
     if not any(item.get("path") == identity.get("path") and item.get("sha256") == identity.get("sha256")
@@ -488,6 +537,9 @@ def build_job(*, scanner_runner: ScannerRunner | None = None) -> Job:
                         PurePosixPath(str(artifact.get("workspace_path") or artifact["path"])).name,
                         f"produced artifact {row['classification']['format']}", artifact))
                 summary, findings = scan_records(row)
+                validate_observation_provenance(
+                    unit.job.run_root, (record.payload for record in (summary, *findings)),
+                    parser_identity=PARSER_IDENTITY, events=unit.job.events, unit_id=unit.unit_id)
                 evidence = {"evidence_identities": [{"relative_path": raw["path"], "sha256": raw["sha256"],
                     "byte_count": raw["byte_count"], "captured_bytes": raw["captured_bytes"],
                     "truncated": raw["truncated"]} for raw in row["raw_artifacts"]],

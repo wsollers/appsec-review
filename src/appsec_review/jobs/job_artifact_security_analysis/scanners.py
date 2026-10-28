@@ -23,18 +23,30 @@ from appsec_review.osv_offline import (
 )
 from appsec_review.tool_inputs import osv_ecosystem, osv_missing_ecosystem_gap, osv_reported_no_package_sources
 from appsec_review.storage import file_sha256
+from appsec_review.provenance import xml_selector
 from appsec_review.runtime import execution_safety as safety
 
 
-def _bounded(value: Any, *, depth: int = 0) -> Any:
+def _bounded(value: Any, *, depth: int = 0, truncations: set[str] | None = None) -> Any:
+    if truncations is None:
+        truncations = set()
     if depth > 8:
+        truncations.add("depth")
         return "<depth-limit>"
     if isinstance(value, Mapping):
-        return {str(key)[:128]: _bounded(child, depth=depth + 1)
+        if len(value) > 2_000:
+            truncations.add("object_members")
+        if any(len(str(key)) > 128 for key in value):
+            truncations.add("object_key")
+        return {str(key)[:128]: _bounded(child, depth=depth + 1, truncations=truncations)
                 for key, child in list(value.items())[:2_000]}
     if isinstance(value, list):
-        return [_bounded(child, depth=depth + 1) for child in value[:20_000]]
+        if len(value) > 20_000:
+            truncations.add("array_items")
+        return [_bounded(child, depth=depth + 1, truncations=truncations) for child in value[:20_000]]
     if isinstance(value, str):
+        if len(value) > 65_536:
+            truncations.add("string")
         return value[:65_536]
     if value is None or isinstance(value, (bool, int, float)):
         return value
@@ -45,8 +57,26 @@ def parse_json(payload: bytes) -> Mapping[str, Any]:
     if len(payload) > 64 * 1024 * 1024:
         raise ValueError("scanner JSON exceeds parser byte bound")
     raw = json.loads(payload.decode("utf-8")) if payload.strip() else {}
-    value = _bounded(raw)
-    return value if isinstance(value, Mapping) else {"records": value}
+    truncations: set[str] = set()
+    value = _bounded(raw, truncations=truncations)
+    return {**(value if isinstance(value, Mapping) else {"records": value}),
+            "_parser_truncated": bool(truncations), "_parser_bounds": sorted(truncations),
+            "_native_result_count": native_result_count(raw)}
+
+
+def native_result_count(value: Any) -> int:
+    if not isinstance(value, Mapping):
+        return len(value) if isinstance(value, list) else 0
+    for key in ("findings", "matches", "artifacts"):
+        if isinstance(value.get(key), list):
+            return len(value[key])
+    results = value.get("results")
+    if isinstance(results, list):
+        return sum(len(package.get("vulnerabilities", []))
+                   for result in results if isinstance(result, Mapping)
+                   for package in result.get("packages", []) if isinstance(package, Mapping)
+                   if isinstance(package.get("vulnerabilities", []), list))
+    return 0
 
 
 def parse_spotbugs(payload: bytes) -> Mapping[str, Any]:
@@ -54,14 +84,22 @@ def parse_spotbugs(payload: bytes) -> Mapping[str, Any]:
         raise ValueError("SpotBugs XML exceeds parser byte bound")
     root = ET.fromstring(payload.decode("utf-8"))
     findings = []
-    for bug in root.findall(".//BugInstance")[:20_000]:
-        source = bug.find("SourceLine")
+    bugs = [element for element in root.iter() if element.tag.rsplit("}", 1)[-1] == "BugInstance"]
+    ordinals: dict[str, int] = {}
+    for bug in bugs[:20_000]:
+        ordinal = ordinals.get(bug.tag, 0)
+        ordinals[bug.tag] = ordinal + 1
+        source = next((element for element in bug if element.tag.rsplit("}", 1)[-1] == "SourceLine"), None)
         findings.append({"type": bug.get("type"), "category": bug.get("category"),
             "priority": bug.get("priority"), "class": (source.get("classname") if source is not None else None),
             "source": (source.get("sourcepath") if source is not None else None),
             "start": (source.get("start") if source is not None else None),
-            "end": (source.get("end") if source is not None else None)})
-    return {"findings": findings, "finding_count": len(findings)}
+            "end": (source.get("end") if source is not None else None),
+            "_native_selector": xml_selector(bug, ordinal).as_dict()})
+    return {"findings": findings, "finding_count": len(findings),
+            "finding_count_reported": len(bugs), "_parser_truncated": len(bugs) > 20_000,
+            "_native_result_count": len(bugs),
+            "_parser_bounds": ["array_items"] if len(bugs) > 20_000 else []}
 
 
 @dataclass(frozen=True, slots=True)
@@ -219,5 +257,8 @@ class ContainerScannerRunner:
         return {"stdout": stdout, "stderr": stderr, "exit_code": result.exit_code,
             "timed_out": result.timed_out, "truncated": result.stdout_truncated or result.stderr_truncated,
             "payload": payload, "tool_identity": identity,
+            "payload_truncated": result.stdout_truncated if not output.is_file() else False,
+            "native_reports": ({"findings.json": (scratch / "findings.json").relative_to(self.run_root).as_posix()}
+                               if capability == "blint" and (scratch / "findings.json").is_file() else {}),
             "execution_receipt": {"path": result.receipt_path,
                                   "sha256": file_sha256(self.run_root / result.receipt_path)}}

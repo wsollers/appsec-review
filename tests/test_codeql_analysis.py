@@ -701,6 +701,10 @@ def test_sarif_contract_rejects_malformed_top_level() -> None:
 
 
 def _normalization_fixture(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    from tests.test_native_result_provenance import make_owner
+    from appsec_review.storage import shared
+    owner = make_owner(tmp_path)
+    monkeypatch.setattr(shared, "current", lambda: owner)
     from appsec_review.jobs.job_codeql_analysis import job as codeql_job
 
     settings = SimpleNamespace(sarif_bytes_limit=1024 * 1024, result_limit=100, concurrency=2)
@@ -887,7 +891,7 @@ def test_normalize_scope_rejects_conflicting_or_corrupt_shard(
     else:
         queries[0]["gaps"] = ["different evidence with unchanged producer identity"]
     before = path.read_bytes()
-    with pytest.raises(ValueError, match="immutable index shard"):
+    with pytest.raises(ValueError, match="immutable (index shard|shared artifact)"):
         _normalize_one(unit, queries[0])
     assert path.read_bytes() == before
 

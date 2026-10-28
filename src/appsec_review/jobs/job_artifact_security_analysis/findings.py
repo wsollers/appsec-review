@@ -26,11 +26,12 @@ from typing import Any
 from appsec_review.retrieval.observations import (
     RECORD_KIND_FINDING, RECORD_KIND_SUMMARY, normalize_reported_severity,
 )
+from appsec_review.provenance import common_metadata, json_selector, select_native
 
 RECORD_SCHEMA = "appsec-review/artifact-security-record/2"
 # Version of the scan-result -> record splitting below. It is part of the observations shard fingerprint, not of
 # the scan checkpoint fingerprint: scanner receipts stay reusable when only this normalization changes.
-FINDING_NORMALIZER = "appsec-review/artifact-security-findings/1"
+FINDING_NORMALIZER = "appsec-review/artifact-security-findings/2"
 MESSAGE_BOUND = 512
 FIELD_BOUND = 128
 FINDING_BOUND = 5_000          # findings kept per scan; a scan above it reports the truncation as a gap
@@ -69,10 +70,12 @@ class Finding:
     tool_id: str
     subject: str                      # what the finding is about inside the artifact (binary, package, class)
     fields: Mapping[str, Any]         # bounded scanner-specific facts kept on the observation
+    selector: Mapping[str, Any]
+    native_report: str | None = None
 
 
 def _blint(observation: Mapping[str, Any]) -> Iterator[Finding]:
-    for item in _list(observation.get("findings")):
+    for index, item in enumerate(_list(observation.get("findings"))):
         item = _mapping(item)
         check = _text(item.get("id"))
         if check is None:
@@ -80,11 +83,13 @@ def _blint(observation: Mapping[str, Any]) -> Iterator[Finding]:
         binary = _text(item.get("filename") or item.get("exe_name")) or "unknown"
         yield Finding(check, _text(item.get("severity")), _text(item.get("title"), MESSAGE_BOUND) or check,
                       CATEGORY_BINARY_HARDENING, "tool-blint", os.path.basename(binary) or binary,
-                      {"binary": binary, "exe_type": _text(item.get("exe_type"))})
+                      {"binary": binary, "exe_type": _text(item.get("exe_type"))},
+                      item.get("_native_selector", json_selector("findings", index).as_dict()),
+                      item.get("_native_report"))
 
 
 def _spotbugs(observation: Mapping[str, Any]) -> Iterator[Finding]:
-    for item in _list(observation.get("findings")):
+    for index, item in enumerate(_list(observation.get("findings"))):
         item = _mapping(item)
         check = _text(item.get("type"))
         if check is None:
@@ -98,11 +103,12 @@ def _spotbugs(observation: Mapping[str, Any]) -> Iterator[Finding]:
         location = {key: _text(item.get(key)) for key in ("source", "start", "end") if _text(item.get(key))}
         yield Finding(check, severity, f"{check} in {cls}"[:MESSAGE_BOUND], CATEGORY_BYTECODE, "tool-spotbugs", cls,
                       {"native_priority": priority, "bug_category": _text(item.get("category")),
-                       "native_location": location or None})
+                       "native_location": location or None},
+                      item.get("_native_selector", json_selector("findings", index).as_dict()))
 
 
 def _grype(observation: Mapping[str, Any]) -> Iterator[Finding]:
-    for match in _list(observation.get("matches")):
+    for index, match in enumerate(_list(observation.get("matches"))):
         match = _mapping(match)
         vulnerability, package = _mapping(match.get("vulnerability")), _mapping(match.get("artifact"))
         check = _text(vulnerability.get("id"))
@@ -114,17 +120,17 @@ def _grype(observation: Mapping[str, Any]) -> Iterator[Finding]:
                       f"{check} affects {subject}"[:MESSAGE_BOUND], CATEGORY_VULNERABILITY, "tool-grype", subject,
                       {"package_name": name, "package_version": version, "advisory_id": check,
                        # advisory_pairs (indexing.links) reads exactly this one match, as it read the whole list
-                       "observation": {"matches": [match]}})
+                       "observation": {"matches": [match]}}, json_selector("matches", index).as_dict())
 
 
 def _osv(observation: Mapping[str, Any]) -> Iterator[Finding]:
-    for result in _list(observation.get("results")):
-        for entry in _list(_mapping(result).get("packages")):
+    for result_index, result in enumerate(_list(observation.get("results"))):
+        for package_index, entry in enumerate(_list(_mapping(result).get("packages"))):
             entry = _mapping(entry)
             package = _mapping(entry.get("package"))
             name, version = _text(package.get("name")), _text(package.get("version"))
             subject = f"{name}@{version}" if name and version else name or "unknown"
-            for vulnerability in _list(entry.get("vulnerabilities")):
+            for index, vulnerability in enumerate(_list(entry.get("vulnerabilities"))):
                 vulnerability = _mapping(vulnerability)
                 check = _text(vulnerability.get("id"))
                 if check is None:
@@ -138,7 +144,9 @@ def _osv(observation: Mapping[str, Any]) -> Iterator[Finding]:
                                "ecosystem": _text(package.get("ecosystem")),
                                "aliases": [_text(item) for item in _list(vulnerability.get("aliases"))[:16]
                                            if _text(item)],
-                               "cvss_vectors": [item for item in vectors if item][:4]})
+                               "cvss_vectors": [item for item in vectors if item][:4]},
+                              json_selector("results", result_index, "packages", package_index,
+                                            "vulnerabilities", index).as_dict())
 
 
 SPLITTERS: Mapping[str, Callable[[Mapping[str, Any]], Iterator[Finding]]] = {
@@ -192,9 +200,10 @@ def scan_records(scan: Mapping[str, Any]) -> tuple[Record, tuple[Record, ...]]:
     kept = found[:FINDING_BOUND]
     if len(found) > FINDING_BOUND:
         gaps.append(f"{capability} reported {len(found)} findings; only the first {FINDING_BOUND} are recorded")
+        outcome = "completed_with_gaps"
     base = {key: scan.get(key) for key in ("artifact", "classification", "capability", "scanner_identity",
                                            "tool_identity", "gaps", "raw_artifacts", "attempt_identity", "exit_code",
-                                           "timed_out", "duration_ms")}
+                                           "timed_out", "duration_ms", "result_artifact")}
     summary_payload = {
         **base, "gaps": gaps, "schema": RECORD_SCHEMA, "record_kind": RECORD_KIND_SUMMARY,
         "category": summary_category(capability), "scan_fingerprint": fingerprint,
@@ -203,6 +212,12 @@ def scan_records(scan: Mapping[str, Any]) -> tuple[Record, tuple[Record, ...]]:
         "findings_complete": (outcome == "completed" and len(found) <= FINDING_BOUND) if splitter is not None else None,
         "observation": _summary_observation(capability, observation, len(kept), len(found)),
     }
+    summary_ref = scan.get("native_output")
+    summary_payload["common"] = common_metadata(
+        {**summary_payload, "tool_id": scan.get("tool_identity", {}).get("scanner") or capability,
+         "native_rule_id": capability},
+        evidence_refs=(summary_ref,) if summary_ref else (), payload_schema=RECORD_SCHEMA,
+        record_kind=RECORD_KIND_SUMMARY, gaps=("provenance_unavailable",) if not summary_ref else ())
     summary = Record(RECORD_KIND_SUMMARY, {"fingerprint": fingerprint}, fingerprint, capability,
                      f"{capability} scan of {artifact.get('path')}: {outcome}, "
                      f"{len(kept) if splitter is not None else 'no'} finding(s)", summary_payload)
@@ -221,6 +236,12 @@ def scan_records(scan: Mapping[str, Any]) -> tuple[Record, tuple[Record, ...]]:
             "subject": finding.subject, "subject_artifact": canonical, "occurrence": occurrence,
             **{key: value for key, value in finding.fields.items() if value not in (None, [], {})},
         }
+        native = (scan.get("native_reports", {}).get(finding.native_report)
+                  if finding.native_report else summary_ref)
+        references = (select_native(native, finding.selector).as_dict(),) if native else ()
+        payload["common"] = common_metadata(
+            payload, evidence_refs=references, payload_schema=RECORD_SCHEMA,
+            gaps=("provenance_unavailable",) if not references else ())
         native_id = f"{fingerprint}:{finding.check_id}:{finding.subject}:{occurrence}"
         records.append(Record(RECORD_KIND_FINDING, identity_key, native_id[:512], finding.check_id,
                               f"{capability} {finding.check_id} {finding.subject}: {finding.message}"[:1024],

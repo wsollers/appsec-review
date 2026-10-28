@@ -19,6 +19,7 @@ from appsec_review.retrieval import IndexBuilder, IndexIdentity, RetrievalCore, 
 from appsec_review.retrieval.index import INDEX_SCHEMA
 from appsec_review.runtime import GraphRunner, plan_jobs
 from appsec_review.storage import RunStore, atomic_json, file_sha256
+from tests.handoff_fixture import write_fixture_handoff
 
 
 ROOT = Path(__file__).parents[1]
@@ -178,7 +179,7 @@ def _fixture(tmp_path: Path, payload: bytes = b"\0asm\x01\0\0\0", *, disable_gry
                 "size_bytes": accepted_path.stat().st_size}
     handoff_path = run_root / "data" / "jobs" / "job_language_build" / "attempts" / "attempt_0001" / "handoff.json"
     handoff_path.parent.mkdir(parents=True)
-    atomic_json(handoff_path, {"schema": "appsec-review/job-handoff/1", "status": "ACCEPTED",
+    write_fixture_handoff(run_root, handoff_path, {"status": "ACCEPTED",
         "job_id": "job_language_build", "attempt_id": "attempt_0001", "artifacts": [accepted, manifest],
         "outputs": {"acceptance.publish_handoff": {"artifact": accepted, "index_manifest": manifest}}})
     pointer = handoff_path.parents[2] / "latest.json"
@@ -195,7 +196,7 @@ def _fixture(tmp_path: Path, payload: bytes = b"\0asm\x01\0\0\0", *, disable_gry
     indexing_handoff_path = (run_root / "data" / "jobs" / "job_artifact_indexing" / "attempts" /
                              "attempt_0001" / "handoff.json")
     indexing_handoff_path.parent.mkdir(parents=True)
-    atomic_json(indexing_handoff_path, {"schema": "appsec-review/job-handoff/1", "status": "ACCEPTED",
+    write_fixture_handoff(run_root, indexing_handoff_path, {"status": "ACCEPTED",
         "job_id": "job_artifact_indexing", "attempt_id": "attempt_0001",
         "artifacts": [indexing_summary, manifest],
         "outputs": {"acceptance.publish_handoff": {"artifact": indexing_summary, "index_manifest": manifest}}})
