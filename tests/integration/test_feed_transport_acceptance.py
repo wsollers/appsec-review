@@ -1,8 +1,8 @@
 """Loopback TLS through the real KEV downloader, normalizer and atomic publisher.
 
 The certificate is test-only. No public feed, database-building tool or daemon is used.
-The interrupted fixture is invalid JSON and is rejected by normalization, not by transport
-length checking. Valid-JSON prefix truncation remains a separate, reproduced downloader gap.
+Both invalid-JSON and valid-JSON prefix truncation must fail transport length checking before
+normalization or publication. Headerless streaming remains bounded by the configured byte limit.
 """
 from __future__ import annotations
 
@@ -31,6 +31,7 @@ from tests.fixtures.reference_feeds import kev_document, kev_entry
 ROOT = Path(__file__).resolve().parents[2]
 TLS = ROOT / "tests" / "fixtures" / "acceptance_feeds"
 PAYLOAD = json.dumps(kev_document([kev_entry("CVE-2026-0001")]), sort_keys=True).encode()
+VALID_JSON_PREFIX = json.dumps(kev_document([]), sort_keys=True).encode()
 BYTE_LIMIT = len(PAYLOAD) + 32
 
 
@@ -51,18 +52,21 @@ def _https_feed():
             declared = len(body)
             if self.path == "/interrupted":
                 body = PAYLOAD[: len(PAYLOAD) // 2]
+            elif self.path == "/valid-json-interrupted":
+                body = VALID_JSON_PREFIX
+                declared = len(body) * 2
             elif self.path.startswith("/oversize"):
                 body = b"x" * (BYTE_LIMIT + 1)
                 declared = len(body)
             self.send_response(200)
-            if self.path != "/oversize-stream":
+            if self.path not in {"/oversize-stream", "/stream"}:
                 self.send_header("Content-Length", str(declared))
             self.send_header("ETag", '"acceptance-kev"')
             self.send_header("Last-Modified", "Tue, 27 Oct 2026 00:00:00 GMT")
             self.end_headers()
             self.wfile.write(body)
             self.wfile.flush()
-            if self.path == "/interrupted":
+            if self.path in {"/interrupted", "/valid-json-interrupted"}:
                 self.connection.shutdown(socket.SHUT_WR)
 
         def log_message(self, *_args):
@@ -122,13 +126,14 @@ def _complete(workspace, started, **details):
     assert elapsed < 15, f"local feed case exceeded 15 seconds: {elapsed:.3f}s; {workspace.root}"
 
 
-def test_real_https_fetch_publishes_hash_pinned_tiny_kev(acceptance_workspace, monkeypatch):
+@pytest.mark.parametrize("path", ["/ok", "/stream"], ids=["declared-exact", "stream-exact"])
+def test_real_https_fetch_publishes_hash_pinned_tiny_kev(acceptance_workspace, monkeypatch, path):
     workspace = LaneWorkspace.create(acceptance_workspace.root, "feed-tls-success")
     monkeypatch.setenv("SSL_CERT_FILE", str(TLS / "localhost.crt.pem"))
     monkeypatch.setenv("NO_PROXY", "127.0.0.1,localhost")
     started = time.monotonic()
     with workspace.span("acceptance.feed_tls_success"), _https_feed() as (url, requests):
-        settings = _settings(workspace, url + "/ok")
+        settings = replace(_settings(workspace, url + path), max_source_bytes=len(PAYLOAD))
         fetched, verified = _cycle(settings, workspace.root / "fetch")
         source = fetched["source"]
         assert source["url"] == settings.url
@@ -144,6 +149,7 @@ def test_real_https_fetch_publishes_hash_pinned_tiny_kev(acceptance_workspace, m
                              uri=True) as db:
             assert db.execute("SELECT cve_id FROM kev").fetchall() == [("CVE-2026-0001",)]
         assert len(requests) == 1
+        assert requests[0]["path"] == path
         assert requests[0]["user_agent"] == "appsec-review-kev-sync/1"
         assert requests[0]["tls"].startswith("TLS")
         assert verified["record_count"] == 1
@@ -151,7 +157,8 @@ def test_real_https_fetch_publishes_hash_pinned_tiny_kev(acceptance_workspace, m
 
 
 @pytest.mark.parametrize(("path", "error", "message"), [
-    ("/interrupted", ValueError, "not valid JSON"),
+    ("/interrupted", ValueError, "Content-Length mismatch"),
+    ("/valid-json-interrupted", ValueError, "Content-Length mismatch"),
     ("/oversize-declared", ValueError, "byte bound"),
     ("/oversize-stream", ValueError, "byte bound"),
     ("/status", urllib.error.HTTPError, "503"),
@@ -168,21 +175,30 @@ def test_real_https_failure_preserves_last_good_pointer(
         pointer = settings.feed_root / "current.json"
         original = pointer.read_bytes()
         snapshots = sorted((settings.feed_root / "snapshots").iterdir())
-        with pytest.raises(error, match=message):
-            _cycle(replace(settings, url=url + path), workspace.root / "failed-fetch")
+        try:
+            with pytest.raises(error, match=message) as rejected:
+                _cycle(replace(settings, url=url + path), workspace.root / "failed-fetch")
+        finally:
+            if path == "/valid-json-interrupted":
+                partial = workspace.root / "failed-fetch" / "known_exploited_vulnerabilities.json"
+                workspace.emit("ACCEPTANCE_CONTENT_LENGTH_CHECK",
+                               declared_bytes=len(VALID_JSON_PREFIX) * 2,
+                               received_bytes=partial.stat().st_size if partial.is_file() else None,
+                               pointer_unchanged=pointer.read_bytes() == original)
         if path == "/interrupted":
-            # The real downloader returns the partial bytes; normalization must prevent publication.
             partial = workspace.root / "failed-fetch" / "known_exploited_vulnerabilities.json"
             assert partial.read_bytes() == PAYLOAD[: len(PAYLOAD) // 2]
-            workspace.emit("ACCEPTANCE_NAMED_GAP", gap_id="G-B9",
-                           reason="downloader does not reject Content-Length underflow itself",
-                           valid_json_prefix_interruption="known_defect_not_covered_as_passing")
+        elif path == "/valid-json-interrupted":
+            assert partial.read_bytes() == VALID_JSON_PREFIX
+            assert str(rejected.value) == (
+                f"download Content-Length mismatch: expected {len(VALID_JSON_PREFIX) * 2} bytes, "
+                f"received {len(VALID_JSON_PREFIX)}: {url}{path}")
         assert pointer.read_bytes() == original
         assert sorted((settings.feed_root / "snapshots").iterdir()) == snapshots
         assert verify_current(settings.feed_root, "kev")["manifest_sha256"] == accepted["manifest_sha256"]
         assert [row["path"] for row in requests] == ["/ok", path]
         assert all(row["tls"].startswith("TLS") for row in requests)
         workspace.emit("ACCEPTANCE_FAILURE_REJECTED", case=path, expected_error=error.__name__,
-                       rejection_stage="normalize" if path == "/interrupted" else "download",
+                       rejection_stage="download",
                        publication_pointer_sha256=hashlib.sha256(original).hexdigest())
     _complete(workspace, started, failure_case=path, tls_requests=len(requests))
