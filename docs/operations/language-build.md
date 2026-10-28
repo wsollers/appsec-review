@@ -431,17 +431,17 @@ fingerprinting installed software. Unrelated query-pack declarations do not inva
 
 ### Immutable retry publication
 
-The retry-isolation producer follow-up is pending integration. Its required execution root is
+Fresh generic, JVM, and WASM builds use the attempt-scoped execution root
 `data/build/<family>/units/<build-unit-id>/attempts/<attempt-id>/` within the run, with `workspace/`,
 workspace manifests, protected commands, and JVM instrumentation/evidence under that attempt.
 Execution capture keeps its existing
 `data/build/<family>/units/<build-unit-id>/attempts/<attempt-id>/execution-capture/` path; the
 attempt segment must not be added twice.
 
-The invariant applies even when a sibling unit failed: forcing a later attempt must not rewrite
+Attempt isolation applies even when a sibling unit failed: forcing a later attempt does not rewrite
 workspace manifests, artifacts, or other bytes bound by an earlier accepted partial handoff.
-Successful checkpoint reuse returns the prior pinned workspace and artifact references rather
-than copying a previously accepted workspace into a new mutable unit directory. Read the
+Successful checkpoint reuse verifies and returns the prior pinned workspace and artifact references
+rather than copying a previously accepted workspace into a new mutable unit directory. Read the
 receipt's workspace reference rather than constructing a path from the latest attempt ID.
 Existing `build_workspaces` protected dataset declarations cover these family trees.
 

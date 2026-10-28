@@ -5,9 +5,10 @@ consumers, and receipt-derived metrics are integrated in source. This record rec
 checkpoint `4798b33a`, metrics checkpoint `7820273f`, runtime hardening `177446e3`/`59d799ef`,
 consumer follow-up `ca5b4240`, and native failure-path follow-up `c1aed046`. Parent producer
 reconciliation `68899ae5` separates analysis-plan numeric counts from typed dispositions.
-Final consolidated parent regression results remain pending; this is not live deployment acceptance.
-A producer retry-isolation follow-up is also pending: a previously accepted failed-sibling
-workspace manifest must remain immutable across a forced later language-build attempt.
+Final parent source checkpoint `04a64189` includes language-build retry isolation `0f7a25cf`,
+native edge-case hardening `f87696c6`, and the final boundary/instrumentation fixtures.
+The parent-reported final gates are recorded below with baseline exclusions and platform limits;
+this is not full-suite or live deployment acceptance.
 
 ## Settled decisions
 
@@ -111,6 +112,10 @@ provenance stay explicit. Compact Grype/Syft/BLint projections keep raw result i
 embedding bulky native records. Empty JSON fails parsing, and source hashes are checked before
 static shard reuse. Native lifecycle events explicitly carry the publication owner's actor
 identities; reference/byte work counters include verified reuse consumption, not fresh execution.
+Native follow-up `f87696c6` restricts JSON-pointer array indexes to ASCII decimal digits and
+guards native-result counting against malformed non-list OSV package collections. Its verified
+offline-feed fixture corrects the all-reuse expectation without weakening conservative `BLOCKED`
+retry policy. No wire or version identifiers change.
 
 The common retrieval projection preserves the semantic `secret` class and validated selectors
 and references. Arbitrary payload fields remain redacted. A malformed common record fails;
@@ -119,10 +124,12 @@ This does not make old handoffs operationally admissible.
 
 The parent JVM retry regression exposed a related producer gap: unit-root workspaces/manifests
 could be rewritten by a forced retry even though the earlier partial handoff remained accepted.
-The [language-build retry contract](../operations/language-build.md#immutable-retry-publication)
-requires attempt-scoped execution roots, preserves the existing attempt-scoped capture path,
-and returns prior pinned references on successful cache reuse. Its exact producer commit and
-final verification remain pending rather than claimed here.
+Producer fix `0f7a25cf` implements the
+[language-build retry contract](../operations/language-build.md#immutable-retry-publication)
+for generic, JVM, and WASM builds: fresh execution roots are attempt-scoped, capture paths retain
+their existing single attempt segment, and successful cache reuse verifies and returns prior
+pinned references without copying or deleting old execution roots. The final parent gates
+verify prior accepted handoff integrity across sibling retry/reuse and rejection after later tampering.
 
 Metrics consume `HANDOFF_*.handoff_reference`, `NATIVE_OUTPUT_RETAINED.retention_receipt`, and
 `OBSERVATION_PROVENANCE_VALIDATED.provenance_receipt`. Receipt computation, bytes, actor identity,
@@ -131,6 +138,26 @@ distinct artifact counts/bytes; identical reference coalescing differs from pres
 observation-to-result edges. Reuse is not fresh scanner execution.
 
 ## Verification and limits
+
+The parent reported these final results; they are separate from this documentation checkout's
+local results and are not additive:
+
+| Gate | Source checkpoint | Result | Duration |
+| --- | --- | --- | --- |
+| Integrated core, nine files plus the corrected actual static Graph reuse test | `04a64189` | 303 passed, 2 actual-symlink skips | 401.11 s |
+| Expanded eleven-file baseline-supported gate | `04a64189` | 254 passed, 2 skipped, 48 deselected | 664.35 s |
+| Generic/native and WASM sibling retry, reuse, and tamper gate, five cases | `0f7a25cf` | 5 passed | 642.72 s |
+
+The expanded gate excludes exactly the 48 failed/error test IDs independently observed at baseline
+`fcac4306`: that baseline run had 254 passed, 41 failed, 2 skipped, and 7 errors. No new failures
+remain in the supported expanded cases. JVM sibling retry/tamper and both strict/managed detached
+instrumentation fixtures pass in the final expanded gate. The five-case gate uses the same
+producer source as `04a64189`.
+
+These are scoped regression results, not an unqualified full-suite pass. The excluded baseline
+cases and other environment gaps remain explicit: Windows permissions/read-only staging and
+actual-symlink privileges, POSIX executable/symlink/custody assumptions, CRLF-sensitive locked
+taxonomy/AST fixtures, and optional dependencies are not resolved by this slice.
 
 Local focused verification at source checkpoint `0369ac27` (parent `4798b33a`, the exact
 `7820273f` metrics patch, and final runtime/consumer/native patches listed above):
@@ -149,9 +176,8 @@ and local links in owned changed pages. The documentation/skill/docs-sync test g
 links, and Windows `WinError 1314` in the runtime-skill symlink rejection test. Neither was
 repaired by changing unrelated documentation, target checkouts, or security checks.
 
-Final parent regression results will be recorded separately from these local results. No live
-scanner images, real target review, Dagster deployment acceptance, or performance threshold is
-established by synthetic/unit verification. Native provenance is implemented for the concrete
+No live scanner images, real target review, Dagster deployment acceptance, or performance threshold
+is established by synthetic/unit verification. Native provenance is implemented for the concrete
 three-lane slice, not universally for every producer. Retention computations do not attest
 scanner origin; protected raw output remains outside inference retrieval.
 
