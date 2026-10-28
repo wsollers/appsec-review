@@ -266,6 +266,7 @@ def test_checked_in_prod_capacity_overlay_loads() -> None:
                          profile="prod")
     assert config.review_policy.resources.io_slots == 4
     assert config.dagster.pool_limits["scanner"] == 4
+    assert _settings(config).teams.review_teams == 3
     assert config.profile == "prod"
 
 

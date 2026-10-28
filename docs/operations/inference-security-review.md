@@ -113,8 +113,9 @@ from cell fingerprints, so runs with different team counts reuse each other's ce
 identical canonical outputs.
 
 [`test/acceptance/prod-capacity-overlay.toml`](../../test/acceptance/prod-capacity-overlay.toml)
-raises `io_slots` to 4 and the Dagster `scanner` pool to 4 for production hosts; the checked-in
-default stays at one slot. See [performance assurance](performance-assurance.md) for its limits.
+raises `io_slots` to 4 and the Dagster `scanner` pool to 4 for production hosts, and runs 3 review
+teams; the checked-in default stays at one slot. See [performance assurance](performance-assurance.md)
+for its limits.
 
 ## Routing, follow-up rounds, and coverage
 
