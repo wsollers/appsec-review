@@ -21,6 +21,14 @@ native-reference count, and complete/incomplete/truncated batches. Registered jo
 `by_job`; closed `integrity_gap_codes` classify failures without path/rule/message labels.
 Read each section's `accounting_complete`: a null count with an integrity gap is not a measured zero.
 
+Observation `provenance_complete_count` and `provenance_incomplete_count` partition observation
+counts by receipt completeness; `provenance_gap_count` is the receipt-computed sum of common
+`gap_ids`, not an adjudicated finding count. Root `duplicate_events` identifies duplicate event
+identities. Receipt references are `HANDOFF_*.handoff_reference`,
+`NATIVE_OUTPUT_RETAINED.retention_receipt`, and
+`OBSERVATION_PROVENANCE_VALIDATED.provenance_receipt`; metrics verify those artifacts before
+using their computations.
+
 Use `review.source_by_language`, `review.projects`, `review.build_units`, and `review.artifacts` for
 scope and throughput. Artifact `reference_*` values answer how much work build units reference;
 `deduplicated_*` values answer how many distinct content objects were produced. Do not substitute

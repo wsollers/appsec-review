@@ -49,8 +49,10 @@ A rejection may use a null handoff reference only when a safe diagnostic publica
 Accepted events retain `handoff_path`, `handoff_sha256`, and `completion_status` for existing
 consumers. Validation events describe publication work, not repeated validation on checkpoint reuse.
 
-`NATIVE_OUTPUT_RETAINED` and `OBSERVATION_PROVENANCE_VALIDATED` bind immutable retention/provenance
-receipts. They describe retained bytes and resolving observation references, not scanner-origin
+`NATIVE_OUTPUT_RETAINED.retention_receipt` and
+`OBSERVATION_PROVENANCE_VALIDATED.provenance_receipt` bind immutable retention/provenance
+receipts; handoff events use `handoff_reference`. They describe retained bytes and resolving
+observation references, not scanner-origin
 attestation or vulnerability confirmation. Emit bounded identities, durations, counts, and hashes,
 never raw reports, source, argv, secrets, or per-result message text. The fixed work-counter names
 are `handoff_validations`, `native_output_references`, `native_output_bytes`,
@@ -66,7 +68,12 @@ The closed groups are `handoffs`, `native_outputs`, `observations`, registered-j
 and `integrity_gap_codes`. Section `accounting_complete` distinguishes measured accounting from
 missing evidence; invalid/missing receipts yield null counts, not invented zeros. Rollups retain
 coverage/execution/gap-code dimensions but never rule/path/hash/package/message labels.
-The receipt is authoritative, not the presence of a summary field. This section records the integration contract, not evidence
+Observation rollups also distinguish `provenance_complete_count` from
+`provenance_incomplete_count` using receipt completeness, and `provenance_gap_count` sums common
+observation `gap_ids` from the receipt computation. Root `duplicate_events` reports repeated
+event identities without inflating the verified publication or receipt totals.
+The receipt is authoritative, not the presence of a summary field. This section records the
+integration contract, not evidence
 that a deployed runtime has already adopted it.
 
 ## Existing derived views
