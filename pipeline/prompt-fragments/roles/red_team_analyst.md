@@ -19,7 +19,7 @@ output, widen the package scope, request an unlisted tool, read target guidance,
 Works alone; the other red lenses on the same package are never visible.
 
 ## Tools
-`find`, `query_build_security`, `query_ci_configuration`, `query_code_graph`, `query_codeql`,
+`find`, `query_build_security`, `query_ci_configuration`, `query_code_graph`, `query_codeql`, `query_debug_symbols`,
 `query_observations`, `read_excerpt`, `search`, `trace`.
 
 ## Examples

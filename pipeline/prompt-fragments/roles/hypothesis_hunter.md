@@ -20,7 +20,7 @@ Works alone. Receives known claim identities and statements in the unit, never t
 them.
 
 ## Tools
-`coverage`, `find`, `query_code_graph`, `query_codeql`, `query_hotspots`, `query_observations`,
+`coverage`, `find`, `query_code_graph`, `query_codeql`, `query_debug_symbols`, `query_hotspots`, `query_observations`,
 `query_precomputed`, `read_excerpt`, `search`, `trace`.
 
 ## Examples

@@ -14,12 +14,14 @@ from appsec_review.graph.contract import FAMILY_KINDS, GRAPH_INDEX, QUERY_CODE_G
 from appsec_review.mcp.adapter import RetrievalMcpAdapter
 from appsec_review.retrieval.graph import request_error as graph_request_error
 from appsec_review.retrieval.model import canonical_json
+from appsec_review.debug_symbols.contract import INDEX_NAME as DEBUG_SYMBOL_INDEX, QUERY_TOOL as QUERY_DEBUG_SYMBOLS
+from appsec_review.retrieval.debug_symbols import ARGUMENTS as DEBUG_SYMBOL_ARGUMENTS, request_error, row_in_scope
 from appsec_review.retrieval.neighborhood import (
     LIST_CODEQL_DATABASES, QUERY_CODEQL_NEIGHBORHOOD, SUMMARY_KIND)
 
 
 _REVIEW_TOOLS = frozenset({"find", "read_excerpt", "query_precomputed", QUERY_CODE_GRAPH,
-                           LIST_CODEQL_DATABASES, QUERY_CODEQL_NEIGHBORHOOD})
+                           LIST_CODEQL_DATABASES, QUERY_CODEQL_NEIGHBORHOOD, QUERY_DEBUG_SYMBOLS})
 # Canonical review roles (code-graph-precomputation.md 5.4) plus the earlier short aliases.
 _ROLE_TOOLS = {
     "hypothesis_hunter": _REVIEW_TOOLS,
@@ -194,6 +196,15 @@ class ScopedRetrievalMcpAdapter:
                 raise ValueError("query is outside review package")
             if args.get("limit", 20) > grant["max_page_size"] or args.get("depth", 1) > grant["max_depth"]:
                 raise ValueError("page or depth exceeds review capability")
+        elif name == QUERY_DEBUG_SYMBOLS:
+            if (DEBUG_SYMBOL_INDEX not in grant["indexes"] or set(args) - DEBUG_SYMBOL_ARGUMENTS or
+                request_error(args) or any(args[key] not in entities for key in ("subject", "artifact_identity")
+                                           if args.get(key) is not None)):
+                raise ValueError("query is outside review package")
+            if args.get("mode") == "graph_links" and GRAPH_INDEX not in grant["indexes"]:
+                raise ValueError("query is outside review package")
+            if args.get("limit", 20) > grant["max_page_size"]:
+                raise ValueError("page exceeds review capability")
         elif name == LIST_CODEQL_DATABASES:
             if GRAPH_INDEX not in grant["indexes"] or set(args) - _LIST_ARGUMENTS:
                 raise ValueError("query is outside review package")
@@ -230,6 +241,14 @@ class ScopedRetrievalMcpAdapter:
                 granted.add(item["identity"])
                 granted.update(identity for identity in _identities(item.get("payload"))
                                if identity.split(":", 2)[1] in _GRAPH_ROW_KINDS)
+            elif name == QUERY_DEBUG_SYMBOLS:
+                if (DEBUG_SYMBOL_INDEX not in grant["indexes"] or
+                    not row_in_scope(item, lambda identity: identity in entities, grant["graph_scopes"])):
+                    raise ValueError("retrieval result escaped review package")
+                if args.get("artifact_identity") and item["payload"]["artifact_identity"] != args["artifact_identity"]:
+                    raise ValueError("retrieval result escaped review artifact")
+                granted.add(item["identity"])
+                granted.update(link["graph_identity"] for link in item.get("graph_links", ()))
             elif item.get("identity") not in entities:
                 raise ValueError("retrieval result escaped review package")
         self._granted |= granted
