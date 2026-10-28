@@ -1,5 +1,6 @@
 """Offline execution contracts for routing, bounded rounds, admission and residual coverage."""
-from dataclasses import replace
+from dataclasses import fields, replace
+import json
 from types import SimpleNamespace
 
 import pytest
@@ -15,7 +16,7 @@ from appsec_review.retrieval.core import RetrievalCore
 from appsec_review.review.accounting import exact_accounting
 from appsec_review.review.ledger import merge_shards, project
 from appsec_review.review.lead_families import collect_leads
-from appsec_review.review.models import Lane
+from appsec_review.review.models import CellStatus, Lane, Role
 from appsec_review.review.packages import PackageSettings, admission_reasons, assemble_packages
 from appsec_review.review.scope import accept_manifest
 from appsec_review.runtime.runner import JobRunner
@@ -123,10 +124,145 @@ def test_medium_low_exploration_is_opt_in_and_bounded(tmp_path):
     informational = replace(collect_leads(scope).leads[0], reported_severity="info", advisory=None)
     assert not admission_reasons(informational, PackageSettings(exploration_enabled=True))
     assert len(completeness_gaps((), (), admission=excluded)) == len(excluded)
-    for profile in ("dev", "prod"):
-        settings = load_config(ROOT / "appsec-review.toml", profile=profile).job(JOB).typed_settings
-        assert settings.lanes.exploration_enabled is False
-        assert "info" not in settings.lanes.lead_admission
+
+
+@pytest.mark.parametrize("profile", ["dev", "copilot-dev", "prod", "copilot-prod"])
+@pytest.mark.parametrize("severity", ["medium", "low"])
+def test_resolved_profiles_admit_bounded_exploration(tmp_path, profile, severity):
+    config = load_config(ROOT / "appsec-review.toml", profile=profile)
+    settings = config.job(JOB).typed_settings
+    enabled = profile in {"prod", "copilot-prod"}
+    assert settings.lanes.exploration_enabled is enabled
+    assert settings.lanes.exploration_reserve == 1
+    assert "info" not in settings.lanes.lead_admission
+    assert json.loads(config.resolved_json)["jobs"][JOB]["settings"]["lanes"]["exploration_enabled"] is enabled
+    scope = accept_manifest(builder.build_accepted_index_set(tmp_path).run_root)
+    collection = collect_leads(scope)
+    # Keep urgent and informational leads, with only the requested exploratory severity competing.
+    collection = replace(collection, leads=tuple(
+        lead for lead in collection.leads if lead.effective_severity not in {"medium", "low"}
+        or lead.effective_severity == severity))
+    assembly = assemble_packages(scope, PackageSettings.from_review_settings(settings), collection=collection)
+    explored = [item for item in assembly.manifest["admission"]
+                if item["status"] == "admitted" and item["reasons"] == ["exploration_reserve"]]
+    assert len(explored) == int(enabled)
+    assert all(item["effective_severity"] == severity for item in explored)
+    assert all(item["status"] == "not_admitted" for item in assembly.manifest["admission"]
+               if item["effective_severity"] == "info")
+
+
+@pytest.mark.parametrize(("budget", "reserve"), [("all", 4), (1, 1), (2, 2), (200, 4)])
+def test_package_settings_bound_exploration_for_all_and_finite_budgets(budget, reserve):
+    settings = load_config(ROOT / "appsec-review.toml", profile="prod").job(JOB).typed_settings
+    settings = replace(settings, lanes=replace(settings.lanes, exploration_reserve=4),
+                       budgets=replace(settings.budgets, budget_team_packages=budget))
+    assert PackageSettings.from_review_settings(settings).exploration_reserve == reserve
+
+
+@pytest.mark.parametrize("profile", ["prod", "copilot-prod"])
+def test_production_rounds_use_actual_models_and_confirmed_local_variant_seeds(prepared, profile):
+    settings = load_config(ROOT / "appsec-review.toml", profile=profile).job(JOB).typed_settings
+
+    def infer(request, *, timeout_seconds):
+        if request.role == "hypothesis_hunter":
+            return prepared.infer._lead_red(request, "lead_red_stack", request.task_input["input"])
+        return prepared.infer(request, timeout_seconds=timeout_seconds)
+
+    recording = Recording(infer)
+    ctx = prepared.context(recording, **{item.name: getattr(settings, item.name) for item in fields(settings)})
+    scope = accept_manifest(prepared.fixture.run_root)
+    assembly = assemble_packages(scope, PackageSettings.from_review_settings(settings))
+    package = next(item for item in assembly.packages
+                   if item.kind == "hunt" and prepared.fixture.ids["ci_high"] in item.lead_ids)
+    doc = package.document()
+    work = PackageWork(package.package_id, Lane.HUNT, package.sha256, doc, (0, package.package_id),
+                       doc["input_fingerprint"], tuple(doc["retrieval"]["entity_ids"]), package.unit_key)
+    result = run_team(ctx, work, launch=True)
+    assert result.launched and all(cell.status is CellStatus.SUCCEEDED for cell in result.cells)
+    assert 1 < len(result.rounds) <= settings.rounds.max_rounds == 3
+    assert result.rounds[-1]["stop_reason"] == "stable"
+    assert result.rounds[0]["variant_seed_ids"]
+    variants = [request for request in recording.requests if request.task_input["task"] == "variant"]
+    assert variants
+    for request in variants:
+        assert request.task_input["input"]["round"] >= 1
+        seeds = request.task_input["input"]["variant_seeds"]
+        assert seeds and all(seed["state"] == "confirmed" for seed in seeds)
+        assert {seed["claim_id"] for seed in seeds} <= {claim.claim_id for claim in result.claims}
+        assert all(seed["adjudication_id"] and seed["policy_sha256"] and seed["evidence_labels"] for seed in seeds)
+    assert {request.role for request in recording.requests} == {
+        "hypothesis_hunter", "blue_team_refuter", "independent_verifier", "adjudication_judge"}
+    for request in recording.requests:
+        model = settings.profile_for(Role(request.role))
+        assert (request.provider, request.model, request.reasoning) == (model.provider, model.model, model.reasoning)
+        expected_skills = {
+            "hypothesis_hunter": ["generative-investigation"],
+            "blue_team_refuter": ["effective-control-verification"],
+            "independent_verifier": ["predicate-verification"],
+            "adjudication_judge": ["conflict-resolution"],
+        }[request.role]
+        if request.task_input["task"] == "control_gap":
+            expected_skills.append("effective-control-verification")
+        bundle = next(item["bundle"] for item in ctx._bundles.values()
+                      if item["bundle"]["sha256"] == request.guidance_bundle_sha256)
+        procedures = next(section for section in bundle["sections"] if section["name"] == "procedures")
+        assert [item["id"] for item in procedures["items"]] == expected_skills
+        assert all(item["text"] in request.guidance_text for item in procedures["items"])
+        assert request.persona in ctx.covers
+        assert request.stack_profile == result.routing["stack"]
+        if request.role == "adjudication_judge":
+            assert request.persona == "generalist"
+    known, _ = _round_state(ctx, work, result)
+    supported = replace(work, round_index=1, known_claims=tuple({**seed, "state": "supported"} for seed in known))
+    assert all(cell.strategy != "variant" for cell in _red_cells(ctx, supported, route(ctx, supported)))
+    assert all(request.task_input["input"]["round"] > 0 for request in variants)
+    assert ctx.budget.snapshot().team_packages[Lane.HUNT] == 1
+    assert any(gap.reason == "cross_package_and_cross_lane_variant_seeds_unavailable" for gap in result.gaps)
+
+
+@pytest.mark.parametrize("profile", ["prod", "copilot-prod"])
+def test_production_exploration_is_scheduled_with_follow_up_rounds(prepared, profile):
+    settings = load_config(ROOT / "appsec-review.toml", profile=profile).job(JOB).typed_settings
+    ctx = prepared.context(prepared.infer, **{item.name: getattr(settings, item.name) for item in fields(settings)})
+    scope = accept_manifest(prepared.fixture.run_root)
+    assembly = assemble_packages(scope, PackageSettings.from_review_settings(settings))
+    package = next(item for item in assembly.packages if item.kind == "finding_lead"
+                   and item.document()["lead_menu"][0]["admission_reasons"] == ["exploration_reserve"])
+    doc = package.document()
+    work = PackageWork(package.package_id, Lane.LEAD, package.sha256, doc, (0, package.package_id),
+                       doc["input_fingerprint"], tuple(doc["retrieval"]["entity_ids"]), package.unit_key)
+    lane = run_lane(ctx, Lane.LEAD, [work], other_lane_count=0, ledger_path=prepared.tmp / "prod-lane.jsonl",
+                    stream="lead_review.teams", signal_dir=prepared.tmp / "prod-signals")
+    assert lane["launched"] == [work.package_id]
+    assert lane["exploration"][work.package_id]["status"] == "explored"
+    assert ctx.budget.snapshot().team_packages[Lane.LEAD] == 1
+    assert {item["round"] for item in lane["capabilities"]} == {0, 1}
+
+
+def test_production_all_packages_keeps_the_shared_active_claim_bound(tmp_path, monkeypatch):
+    from appsec_review.jobs.job_inference_security_review import teams
+
+    settings = load_config(ROOT / "appsec-review.toml", profile="prod").job(JOB).typed_settings
+    counts = {Lane.LEAD: 485, Lane.HUNT: 114}
+    assigned = {}
+
+    def record_allocation(ctx, work, *, launch, not_launched_reason):
+        assert launch
+        assigned[work.package_id] = work.active_claim_limit
+        return teams.TeamResult(work.package_id, work.lane, work.unit_key, launched=True)
+
+    monkeypatch.setattr(teams, "run_team", record_allocation)
+    for lane, count in counts.items():
+        packages = [PackageWork(f"{lane.value}-{index:04d}", lane, "a" * 64, {}, (index, str(index)),
+                                "fixture", (), None) for index in range(count)]
+        result = run_lane(SimpleNamespace(settings=settings), lane, packages,
+                          other_lane_count=sum(counts.values()) - count,
+                          ledger_path=tmp_path / lane.value / "ledger.jsonl",
+                          stream=f"{lane.value}_review.teams", signal_dir=tmp_path / "signals")
+        assert len(result["launched"]) == count
+    assert sum(assigned.values()) == settings.rounds.max_active_claims == 500
+    assert sum(value == 0 for value in assigned.values()) == 99
+    assert assigned["hunt-0014"] == 1 and assigned["hunt-0015"] == 0
 
 
 @pytest.mark.parametrize(("old", "new"), [

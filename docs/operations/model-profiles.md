@@ -157,11 +157,17 @@ rejected with a message that names the key.
 | `jobs.job_inference_security_review.settings.budgets` | `budget_team_packages` (positive integer or `"all"`), `max_model_turns`, `max_input_tokens`, `max_output_tokens`, `max_retrieval_queries`, `timeout_seconds` |
 | `jobs.job_inference_security_review.settings.lanes` | `exploration_enabled` (Boolean), `exploration_reserve` (positive integer) |
 
-Medium/low exploration is **off in both profiles**. Production's larger budget does not opt in.
-Set `exploration_enabled = true` explicitly for the selected profile to admit up to
-`exploration_reserve` otherwise-unadmitted medium/low packages within the existing lead allocation
-and total budget. It does not admit informational leads or change unknown-severity handling.
-See [review admission and rounds](inference-security-review.md#opt-in-mediumlow-exploration).
+Medium/low exploration is **on in `prod` and `copilot-prod`**, and remains **off in `dev` and
+`copilot-dev`**. Both production files explicitly set `exploration_enabled = true` and preserve
+`exploration_reserve = 1`: at most one otherwise-unadmitted medium/low lead package, selected
+by effective severity then identity, inside the existing allocation and usage budget. Medium
+leads take priority over low leads; this is not exhaustive coverage of both severities.
+Informational leads and unknown-severity handling do not change. Package-local follow-ups retain
+three rounds and stop after one stable round; only confirmed, in-scope seeds unlock local
+round-1+ variants. No model, budget, concurrency, OWASP, or PoC enablement changes accompany this
+switch. See [effective assignments and limits](inference-security-review.md#effective-production-assignments-and-bounds)
+for providers, models, personas, skills, pools, and residual gaps. Existing runs retain frozen
+settings; offline verification does not imply a live production run.
 
 ## The prod values
 
@@ -174,6 +180,7 @@ See [review admission and rounds](inference-security-review.md#opt-in-mediumlow-
 | OWASP blinded `models.reviewer` | `claude-opus-5-5` | high | 200000 | 32000 | 600 |
 | `job_project_build` | `claude-sonnet-5-5` | medium | 128000 | 16000 | 600 |
 | inference review `models.default` | `claude-sonnet-5-5` | high | 200000 | 64000 | 1800 |
+| inference review `models.triage` | `claude-sonnet-5-5` | medium | 64000 | 16000 | 600 |
 | inference review `models.strong` (new) | `claude-opus-5-5` | high | 200000 | 64000 | 2400 |
 | PoC generation `models.default` | `claude-sonnet-5-5` | high | 200000 | 32000 | 600 |
 
