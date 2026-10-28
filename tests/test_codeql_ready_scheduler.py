@@ -186,7 +186,7 @@ def test_compile_cache_requires_declarations_and_is_shared_across_runs(tmp_path)
     first = compile_cache_volume(image, executor.run_root)
     assert first == compile_cache_volume(image, tmp_path / "other-run")
     assert first != compile_cache_volume(replace(image, component_release_id="codeql-2"), executor.run_root)
-    assert first != compile_cache_volume(replace(image, runner_release_id="runner-2"), executor.run_root)
+    assert first == compile_cache_volume(replace(image, runner_release_id="runner-2"), executor.run_root)
     executor.image = replace(image, component_release_id=None)
     assert executor._compile_cache("10001:10001") is None
 

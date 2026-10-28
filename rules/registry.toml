@@ -33,7 +33,7 @@ suite = "graph-export.qls"
 image = "audit-codeql:custom-2.27.0"
 library = "codeql/cpp-all@12.1.0"
 verify = "check-only"
-# `query-packs --warm` fully compiles this pack into the platform warm volume (keyed by image id).
+# `query-packs --warm` fully compiles this pack into the shared compile cache review runs mount.
 warm = true
 state = "enabled"
 description = "Repository-authored code-graph export tables (call sites, sources, sinks, guards, paths, ranges, flow summaries)."

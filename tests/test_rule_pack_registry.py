@@ -106,7 +106,7 @@ def test_the_export_pack_is_registered_for_a_warm_compile() -> None:
     assert not any(pack.get("warm") for pack in packs.values() if pack["engine"] != "codeql")
 
 
-def test_platform_warm_compile_is_separate_from_customer_run_caches(
+def test_platform_warm_compile_fills_the_cache_review_runs_mount(
         tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from types import SimpleNamespace
 
@@ -128,10 +128,13 @@ def test_platform_warm_compile_is_separate_from_customer_run_caches(
     ok, detail = builder._codeql_warm(pack, tmp_path / "warm.log")
     assert ok
 
+    import tomllib
+    release = tomllib.loads((ROOT / "appsec-review.toml").read_text(encoding="utf-8"))[
+        "review_policy"]["releases"]["codeql"]
     derived = CodeQLImage("appsec-review/codeql-derived-image/2", "a" * 64, image_id, "b", "t", "c", "t",
-                          "10001:10001", "d" * 64, "e" * 64, False, "m")
-    volume = builder.compile_cache_volume(image_id)
-    assert compile_cache_volume(derived, tmp_path / "run") != volume and volume in detail
+                          "10001:10001", release, "runner-x", False, "m")
+    volume = builder.compile_cache_volume()
+    assert compile_cache_volume(derived, tmp_path / "run") == volume and volume in detail
     [argv] = seen
     assert f"type=volume,src={volume},dst=/codeql-cache" in argv
     assert any(value.endswith(",dst=/scratch/export/pack,readonly") for value in argv)

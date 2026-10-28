@@ -512,29 +512,33 @@ def cache_owner() -> str:
     return CACHE_FALLBACK_OWNER
 
 
-def compile_cache_volume(image_id: str) -> str:
-    """Name of the platform warm-compile volume, keyed by the CodeQL image id.
+def compile_cache_volume() -> str:
+    """Name of the shared CodeQL compile cache that review runs mount.
 
-    Deliberately separate from the review job's release-keyed cache
-    (appsec_review.codeql.runtime.compile_cache_volume): warming it proves the packs compile in the
-    image and measures the cold cost, but does not warm a review run.
+    Mirrors ``appsec_review.codeql.runtime.compile_cache_volume``: keyed only by the declared
+    CodeQL release and the uid that reads it, so a warm compile here is exactly what runs reuse and
+    nothing recompiles until the CodeQL distribution changes (or a pack's own bytes change).
     """
-    return "appsec-codeql-compile-" + hashlib.sha256(image_id.encode()).hexdigest()[:16]
+    with (ROOT / "appsec-review.toml").open("rb") as stream:
+        release = tomllib.load(stream)["review_policy"]["releases"]["codeql"]
+    identity = json.dumps({"codeql": release, "user": cache_owner()}, sort_keys=True,
+                          separators=(",", ":"), ensure_ascii=False) + "\n"
+    return "appsec-codeql-compile-" + hashlib.sha256(identity.encode()).hexdigest()[:24]
 
 
 def _codeql_warm(pack: dict[str, Any], log_path: Path) -> tuple[bool, str]:
-    """Really compile every query of a CodeQL pack into the platform warm-compile volume.
+    """Really compile every query of a CodeQL pack into the shared compile cache runs mount.
 
     ``--check-only`` stops before query planning, so it misses errors that only appear when a query
     is planned. This does the full compile once, offline, into the volume named from the pinned
-    CodeQL image id, at the pack path the job uses.
+    CodeQL release, at the pack path the job uses.
     """
     inspected = subprocess.run([docker_binary(), "image", "inspect", pack["image"], "--format", "{{.Id}}"],
                                capture_output=True, text=True, check=False)
     image_id = inspected.stdout.strip()
     if inspected.returncode != 0 or not image_id:
         return False, f"image {pack['image']} is not present"
-    volume = compile_cache_volume(image_id)
+    volume = compile_cache_volume()
     owner = cache_owner()
     root = safe_path(pack["path"])
     for argv in ([docker_binary(), "volume", "create", "--label", "appsec-review=codeql-compile-cache", volume],
