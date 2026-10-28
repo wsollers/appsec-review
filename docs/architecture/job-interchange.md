@@ -1,9 +1,11 @@
 # Job interchange and native-result provenance
 
 The shared contracts are implemented in
-[`interchange.py`](../../src/appsec_review/interchange.py). Runtime publication, scanner adoption,
-retrieval admission, and metrics integration are being implemented alongside these contracts;
-the presence of a type or schema alone does not establish that every producer uses it.
+[`interchange.py`](../../src/appsec_review/interchange.py). Runtime publication, operational
+consumers, receipt-derived metrics, and the static-evidence, CodeQL, and produced-artifact provenance
+slice are integrated. The presence of a type or schema does not establish that every producer
+uses native provenance or that a deployment has been accepted. See the
+[implementation record](../reviews/job-interchange-implementation.md).
 
 The [JSON Schema](../schemas/job-interchange.schema.json) uses Draft 2020-12 and local `$ref`s only.
 Its root accepts a handoff, outcomes document, common observation metadata, native-result reference,
@@ -36,8 +38,9 @@ job's output in a scanner-shaped document or replace existing index manifests.
 
 An accepted publication can have partial, unavailable, not-applicable, or policy-skipped coverage.
 `complete` requires zero gaps and no retry. A failed framework execution cannot be accepted.
-Diagnostic publications remain `REJECTED` and must not update accepted/latest pointers.
-They must also preserve any already-published accepted handoff and outcomes bytes.
+Diagnostic publications use separate `rejected-handoff.json` and `rejected-outcomes.json` files,
+remain `REJECTED`, and never update accepted/latest pointers. They preserve any already-published
+accepted `handoff.json` and `outcomes.json` bytes.
 Acceptance verifies a publication contract; it does not certify complete analysis or a clean target.
 
 The detailed `appsec-review/job-outcomes/1` artifact accounts for `UnitOutcome` and `ProducerGap`
@@ -49,8 +52,14 @@ remain distinguishable. Unknown producer statuses classify as unavailable, never
 
 The outcomes root is `{schema, run_id, job_id, attempt_id, target_snapshot, units, gaps, coverage}`.
 `units` and `gaps` are arrays of serialized shared records; `coverage` is the same summary bound by
-the handoff. The runtime admission API is `verify_outcomes(run_root, handoff)` and
-`verify_handoff_integrity(run_root, handoff, accepted_only=True)`, separate from structural decoding.
+the handoff. In [`runtime/handoff.py`](../../src/appsec_review/runtime/handoff.py),
+`build_outcomes` derives accounting from the claim's unit topology, verified task terminal receipts,
+and explicitly declared producer status/gaps, not arbitrary nested tool payloads or narrative text.
+`verify_outcomes(run_root, handoff)` reconstructs that document and requires canonical equality;
+`verify_handoff_integrity(run_root, handoff, accepted_only=True)` also verifies frozen configuration,
+claim/input/dataset identities, result binding, and required outputs. Both are separate from
+structural decoding. `INVALID_COMPILE_DATABASE` and `BLOCKED_BY_COMPILE` are nonretryable;
+verified `coverage.retry_required` drives producer retry planning.
 
 ## Validation and identity boundaries
 
@@ -90,10 +99,23 @@ specific original result and parser identity. Its selector is `document` with nu
 with `{start, end}`. Execution and retention receipt references are explicit references or null;
 `complete` describes retained-result completeness, not total scanner coverage.
 
+[`provenance.py`](../../src/appsec_review/provenance.py) provides `retain_native_output`,
+`select_native`, `verify_native_reference`, `common_metadata`, and
+`validate_observation_provenance`. Retention detaches the exact parser-input bytes into
+`data/shared/objects/<sha256>` and records an immutable `shared/native-output` receipt.
+Operational native verification requires that content-addressed path and a verified retention
+receipt, even though a missing receipt is representable as null in the pure wire type.
+`verify_native_reference(..., resolve=True)` resolves a selector; publication validates observation
+selectors once against retained bytes instead of reparsing scanner reports during inference.
+XML ordinals are zero-based among elements with the exact expanded XML tag. Byte ranges use
+start-inclusive, end-exclusive offsets.
+
 A retention receipt proves what the application retained, not scanner origin. Execution evidence
 and scanner identity are separate. Partitioned/merged output must cite each original invocation
 and original result selector, not pretend a synthesized aggregate came directly from the scanner.
-Duplicate references remain references; deduplicating storage must not discard provenance edges.
+Normalization coalesces identical native-reference values, but retains distinct selectors and
+invocation identities supporting a collapsed observation. Deduplicating storage must not discard
+those distinct provenance edges. The pure wire schema also permits repeated reference entries.
 Capture or normalization bounds require explicit truncation/completeness and coverage gaps.
 
 `appsec-review/observation/1` is common metadata attached to a domain-owned record. It contains:
@@ -103,6 +125,13 @@ basis, and mapping rule. Classes distinguish SAST, secret, dependency, configura
 binary, diagnostic, and other evidence; record kinds distinguish finding-shaped scanner output,
 scan summaries, and observations. Even `record_kind = "finding"` is not adjudicated confirmation.
 Empty evidence references are structurally possible; they are not proof of provenance.
+
+Retrieval prefers validated common metadata for scanner, rule, severity, and class. Legacy
+indexed observations without it receive a semantic projection with empty native references and
+an explicit `provenance_unavailable` gap; malformed common metadata fails rather than falling
+back. This is not permission to admit a legacy `/1` handoff. The closed common projection
+preserves the semantic `secret` class and safe canonical reference/selector fields while ordinary
+payload redaction remains unchanged.
 
 The concrete provenance slice covers static evidence collection, CodeQL SARIF normalization, and
 produced-artifact scanners. Producer-specific paths outside that slice remain named provenance

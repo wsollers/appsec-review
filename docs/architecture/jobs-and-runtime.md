@@ -13,8 +13,9 @@ The shared [job interchange contract](job-interchange.md) upgrades this envelope
 It separates admission from execution and coverage, binds evidence target identity independently
 of the resume source fingerprint, and references detailed unit outcomes rather than inlining them.
 Failed framework attempts are rejected diagnostics, never accepted/latest publications. Historical
-`/1` handoffs require a rerun (`handoff_schema_changed`), not an in-place conversion. Shared types
-are available; runtime adoption is being integrated as described on the contract page.
+`/1` handoffs require a rerun (`handoff_schema_changed`), not an in-place conversion. Runtime,
+operational consumers, and the concrete scanner provenance slice use the upgraded contract.
+Rejected diagnostics have separate immutable files and preserve accepted publication history.
 
 The generic resume planner walks jobs in graph order. Once a job cannot be reused, it schedules that
 job and invalidates the transitive downstream closure. It never treats time as proof of freshness.

@@ -65,12 +65,17 @@ Tool observations remain evidence/leads and the envelope deliberately contains n
 
 The [interchange provenance upgrade](../architecture/job-interchange.md) introduces shared
 observation metadata and native-result references for this lane while preserving scanner-specific
-fields. This integration uses evidence schema `/2` and normalizer `static-evidence/4`; an older
+fields. The implementation uses evidence schema `/2` and normalizer `static-evidence/4`; an older
 `/1` envelope must not be relabeled as upgraded evidence. Each reference identifies retained original bytes,
 selector, parser, completeness, and available execution/retention receipts. For partitioned OSV
 launches, the provenance must name the original invocation result, not only
 `osv-scanner-merged.json`. Retention hashes attest application retention, not scanner origin.
 Truncation, unavailable provenance, and unmapped locations remain named gaps.
+
+When equivalent normalized observations collapse, distinct native result selectors/invocations
+are merged into their common evidence references. Identical reference values are coalesced;
+distinct original results are not discarded. Publication validates those selectors against detached
+bytes and retains the provenance-validation receipt in the evidence envelope.
 
 Every producer emits an immutable SQLite shard. Retrieval fans out deterministically across shards
 by target-relative path, native rule, component, package, advisory, language, and evidence ID. A

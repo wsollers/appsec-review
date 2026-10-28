@@ -32,8 +32,12 @@ protected report bodies or secret values. Safe metadata visibility is not permis
 reports through inference. Source locations still resolve against the accepted catalog file hash.
 The first provenance slice is static evidence collection, CodeQL, and produced-artifact scanners;
 unupgraded producer paths remain explicit provenance gaps rather than implied full coverage.
-Repeated native references retain every observation-to-result edge even when storage deduplicates
-the bytes. Publication auditing and strict/managed target binding still apply at admission.
+Distinct selectors/invocations retain their observation-to-result edges even when normalization
+coalesces an identical reference or storage deduplicates bytes. Publication auditing and
+strict/managed target binding still apply at admission. Common metadata is a closed, typed
+projection: its safe reference paths and semantic labels survive indexing/retrieval, while
+arbitrary producer payloads remain subject to ordinary redaction. Observations lacking common
+metadata get an explicit unavailable-provenance projection, not invented native evidence.
 
 **Default rule:** every gathered or generated dataset gets a run-owned inventory record and
 coverage disposition. Index its safe, bounded identities, facets, locations, relationships, and

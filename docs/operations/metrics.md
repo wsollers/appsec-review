@@ -5,16 +5,17 @@ rebuilds `runs/<run-id>/data/telemetry/summary.json` and prints the same documen
 the target repository. All review-scope values resolve through receipt paths and SHA-256 identities
 recorded in the run telemetry stream.
 
-The integrating [job interchange telemetry](../architecture/telemetry.md#interchange-instrumentation)
+The [job interchange telemetry](../architecture/telemetry.md#interchange-instrumentation)
 adds a receipt-verified `interchange` section (`appsec-review/interchange-metrics/1`) in
 `appsec-review/run-metrics/5`. It separates handoff admission, execution, coverage, native retention,
-and observation provenance. Until that integration is deployed, existing `/4` summaries lack this
-section; absence is not zero provenance work. Do not copy claimed event counts into reports:
+and observation provenance. Historical `/4` summaries lack this section; absence is not zero
+provenance work. Do not copy claimed event counts into reports:
 retention/provenance receipt bytes and computations must verify first. Duplicate publication/receipt
 identities must not inflate totals, and reused results must not count as fresh scanner execution.
 
 The new section groups handoff `accepted`, `rejected`, `validated`, unit/retry counts,
-`coverage_dispositions`, `execution_statuses`, `producer_gap_codes`, and validation `duration_ms`.
+`coverage_dispositions`, `execution_statuses`, `producer_gap_codes`, and publication `duration_ms`
+(`count`, `sum`, `p50`, `p95`, `max`, once per publication).
 `native_outputs` distinguishes reference count from distinct artifact count/bytes, retained
 completeness/truncation, and native result count. `observations` distinguishes observation count,
 native-reference count, and complete/incomplete/truncated batches. Registered job IDs bound
@@ -23,11 +24,17 @@ Read each section's `accounting_complete`: a null count with an integrity gap is
 
 Observation `provenance_complete_count` and `provenance_incomplete_count` partition observation
 counts by receipt completeness; `provenance_gap_count` is the receipt-computed sum of common
-`gap_ids`, not an adjudicated finding count. Root `duplicate_events` identifies duplicate event
+`gap_ids`, not an adjudicated finding count. `interchange.duplicate_events` identifies duplicate event
 identities. Receipt references are `HANDOFF_*.handoff_reference`,
 `NATIVE_OUTPUT_RETAINED.retention_receipt`, and
 `OBSERVATION_PROVENANCE_VALIDATED.provenance_receipt`; metrics verify those artifacts before
 using their computations.
+
+Interchange aggregation handles at most 100,000 relevant events. `accounting_bound_exceeded`
+means affected totals are incomplete; do not interpret a partial duration distribution, `by_job`,
+or known gap-code subtotal as complete when `accounting_complete` is false. An unavailable
+section reports an explicit `<section>_unavailable` integrity code and null affected totals,
+even when another section is measurable.
 
 Use `review.source_by_language`, `review.projects`, `review.build_units`, and `review.artifacts` for
 scope and throughput. Artifact `reference_*` values answer how much work build units reference;

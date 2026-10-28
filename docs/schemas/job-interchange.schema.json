@@ -248,7 +248,7 @@
         "reported_severity": {"$ref": "#/$defs/reportedSeverity"},
         "evidence_refs": {
           "type": "array",
-          "description": "Reference multiplicity is meaningful; duplicate native references are retained.",
+          "description": "Repeated entries are structurally allowed. Producer normalization may coalesce identical reference values but preserves distinct selectors and invocation identities.",
           "items": {"$ref": "#/$defs/nativeResultReference"}
         },
         "gap_ids": {"$ref": "#/$defs/gapIds"},
