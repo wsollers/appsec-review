@@ -138,7 +138,7 @@ def test_configured_control_evidence_preserves_document_intent_and_reports_missi
         assert workers and all(row["details"]["model_calls"] == 0 for row in workers)
         metrics = json.loads((run_root / "data" / "telemetry" / "summary.json").read_text(
             encoding="utf-8"))
-        assert metrics["schema"] == "appsec-review/run-metrics/4" and metrics["event_count"] > 0
+        assert metrics["schema"] == "appsec-review/run-metrics/5" and metrics["event_count"] > 0
         assert any(row["event_type"] == "PRECOMPUTED_PRODUCT_PUBLISHED"
                    and row["details"]["query_set"] == "control_evidence" for row in events)
         assert any(row["event_type"] == "RETRIEVAL_QUERY" for row in events)

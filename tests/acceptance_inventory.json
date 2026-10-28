@@ -208,8 +208,8 @@
     },
     {
       "id": "review-candidate", "gap_ids": ["G-C1"], "case_deadline_seconds": 120,
-      "nodes": ["tests/integration/test_authentic_poc_contract.py::test_real_review_gate_and_poc_planning_use_authoritative_contracts"],
-      "boundary": "Actual unmodified review -> gate -> candidate verification/brief -> no-build planning",
+      "nodes": ["tests/integration/test_authentic_poc_contract.py::test_real_review_and_poc_planning_use_authoritative_contracts"],
+      "boundary": "Actual unmodified accepted review -> candidate verification/brief -> no-build planning, independent of publication gate",
       "variants": ["eligible", "resolved-entry-path", "evidence-identity", "strict-risk", "dispatch-refused-without-build"],
       "substitutions": ["Scripted external model and explicitly recorded source-bound graph/surface evidence"],
       "prerequisites": [], "deferrals": ["Actual current compiler compatibility is not exercised; existing detailed compile tests are preserved"]

@@ -36,10 +36,13 @@ def test_current_accepted_identity_state_and_bucket_survive_to_final_report(curr
         result = evaluate_current_report([defect], chain.run_root, schema_root=ROOT)
     assert not result.failed, result.as_dict()
     assert defect.finding_package_id in result.found[defect.id][0]
-    for changed in (replace(defect, claim_id="claim-" + "0" * 64),
-                    replace(defect, finding_package_id="finding-" + "0" * 64),
-                    replace(defect, state="supported"), replace(defect, bucket="verification_backlog")):
-        assert evaluate_current_report([changed], chain.run_root, schema_root=ROOT).missed == [defect.id]
+    changed = [
+        replace(defect, id="wrong-claim", claim_id="claim-" + "0" * 64),
+        replace(defect, id="wrong-finding", finding_package_id="finding-" + "0" * 64),
+        replace(defect, id="wrong-state", state="supported"),
+        replace(defect, id="wrong-bucket", bucket="verification_backlog"),
+    ]
+    assert evaluate_current_report(changed, chain.run_root, schema_root=ROOT).missed == [item.id for item in changed]
 
 
 def test_missing_current_report_is_a_gap_not_scanner_success(current):

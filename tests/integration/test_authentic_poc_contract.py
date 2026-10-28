@@ -14,9 +14,9 @@ from appsec_review.jobs.job_poc_generation.candidates import parse_candidates
 from appsec_review.jobs.job_poc_generation.inputs import verify_inputs
 from appsec_review.jobs.job_inference_security_review.schemas import SchemaSet
 from appsec_review.review.models import IntegrityError
-from tests.final_report_support import GATE, REPORT, Chain, job_tables, run_job, gate_job, report_job
+from tests.final_report_support import GATE, REPORT, Chain, environment, job_tables, run_job, gate_job, report_job
 from tests.fixtures.inference_review.acceptance import JOB, write_config, write_overlay
-from tests.fixtures.inference_review.builder import build_accepted_index_set
+from tests.fixtures.inference_review.builder import RUN_ID, build_accepted_index_set
 from tests.fixtures.inference_review.fake_infer import ScriptedInfer
 from tests.poc_chain import poc_tables
 
@@ -125,7 +125,21 @@ class BasisInfer(ScriptedInfer):
         return answer
 
 
-def authentic_chain(lane: LaneWorkspace, *, basis=True, benign=False, blocked=False, ci_only=False):
+def authentic_chain(lane: LaneWorkspace, *, basis=True, benign=False, blocked=False, ci_only=False,
+                    publish_gate=True):
+    from appsec_review.config import load_config
+    from appsec_review.runtime import JobRunner
+
+    config = write_config(
+        lane.root, lane.runs_dir,
+        overrides={"budget_team_packages": 1, "hunt_max_units": 0, "max_rounds": 1,
+                   "red_per_team": 1, "blue_per_team": 1, "verifier_per_team": 1},
+        extra=job_tables("job_review_data_indexing") + job_tables("job_third_party_data_sync")
+              + job_tables(GATE) + job_tables(REPORT)
+              + poc_tables(max_candidates=2))
+    env = {"APPSEC_REVIEW_CONFIG_OVERLAY": str(write_overlay(lane.root, 1))}
+    with environment(env):
+        JobRunner(load_config(config))._bind_configuration(lane.runs_dir / RUN_ID)
     omit = ("opengrep", "codeql", "osv", "priority", "history", "tags", "scanner_correlation",
             "dependency_advisories", "gitleaks")
     fixture = build_accepted_index_set(lane.root / "data", runs_dir=lane.runs_dir,
@@ -135,23 +149,19 @@ def authentic_chain(lane: LaneWorkspace, *, basis=True, benign=False, blocked=Fa
     if not ci_only:
         attach_call_chain(fixture)
     (fixture.run_root / "data" / "jobs" / JOB / "cells").mkdir(parents=True, exist_ok=True)
-    config = write_config(
-        lane.root, lane.runs_dir,
-        overrides={"budget_team_packages": 1, "hunt_max_units": 1, "max_rounds": 1,
-                   "red_per_team": 1, "blue_per_team": 1, "verifier_per_team": 1},
-        extra=job_tables("job_third_party_data_sync") + job_tables(GATE) + job_tables(REPORT)
-              + poc_tables(max_candidates=2))
-    env = {"APPSEC_REVIEW_CONFIG_OVERLAY": str(write_overlay(lane.root, 1))}
     infer = BasisInfer({"ids": fixture.ids, "basis": basis, "benign": benign,
                         "trace": str(lane.root / "scripted-turns.jsonl"),
                         **({"fail_roles": ["red_team_analyst", "hypothesis_hunter"]} if blocked else {})})
     from appsec_review.jobs.job_inference_security_review import build_job
 
     chain = Chain(lane.root, fixture, config, env)
+    index_pointer = json.loads((fixture.run_root / "data" / "indices" / "accepted.json").read_text())
     with lane.span("review"):
-        run_job(config, build_job(infer=infer, repository_root=ROOT), fixture.run_id, env=env)
-    with lane.span("gate"):
-        run_job(config, gate_job(), fixture.run_id, chain.upstream(JOB), env)
+        run_job(config, build_job(infer=infer, repository_root=ROOT), fixture.run_id,
+                {"job_review_data_indexing": index_pointer["handoff_sha256"]}, env)
+    if publish_gate:
+        with lane.span("gate"):
+            run_job(config, gate_job(), fixture.run_id, chain.upstream(JOB), env)
     return chain
 
 
@@ -159,7 +169,7 @@ def authentic_chain(lane: LaneWorkspace, *, basis=True, benign=False, blocked=Fa
 def authentic():
     lane = acceptance_lane("authentic-poc-contract")
     with lane.span("chain"):
-        chain = authentic_chain(lane)
+        chain = authentic_chain(lane, publish_gate=False)
     lane.emit("ACCEPTANCE_CASE_FINISHED", case="authentic-review-gate")
     return lane, chain
 
@@ -191,7 +201,7 @@ def test_current_review_producer_is_read_by_poc_consumer() -> None:
     assert candidate.state == "supported"
 
 
-def test_real_review_gate_and_poc_planning_use_authoritative_contracts(authentic):
+def test_real_review_and_poc_planning_use_authoritative_contracts(authentic):
     from appsec_review.jobs.job_poc_generation import build_job
     from appsec_review.jobs.job_poc_generation.brief import build_brief
     from appsec_review.jobs.job_poc_generation.inputs import load_package, retrieval_core, sink_of
@@ -205,7 +215,7 @@ def test_real_review_gate_and_poc_planning_use_authoritative_contracts(authentic
     handoff = chain.handoff(JOB)
     documents = [read_bound_json(chain.run_root, handoff["outputs"][f"{name}_review.teams"]["artifact"])
                  for name in ("lead", "hunt")]
-    assert sum(len(document["launched"]) for document in documents) <= 2
+    assert sum(len(document["launched"]) for document in documents) <= 1
     assert all(len(rounds) <= 1 for document in documents for rounds in document["rounds"].values())
     for candidate in inputs.candidates:
         assert candidate.state in {"supported", "confirmed"}
@@ -237,7 +247,7 @@ def test_real_review_gate_and_poc_planning_use_authoritative_contracts(authentic
 def test_authentic_empty_candidates_are_not_a_missing_field():
     lane = acceptance_lane("authentic-poc-empty")
     with lane.span("chain"):
-        chain = authentic_chain(lane, basis=False)
+        chain = authentic_chain(lane, basis=False, publish_gate=False)
         inputs = verified(chain)
         assert inputs.candidates == ()
     lane.emit("ACCEPTANCE_CASE_FINISHED", case="legitimate-empty")
