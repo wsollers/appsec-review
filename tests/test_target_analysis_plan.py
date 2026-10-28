@@ -74,6 +74,9 @@ def test_buildable_project_names_disabled_model_as_a_gap(tmp_path: Path) -> None
     }
     assert {item["build_system"] for item in plan["build_topology"]["build_systems"]} == {"python"}
     assert outcome["jobs"]["job_target_analysis_plan"]["status"]["status"] in {"SUCCEEDED", "COMPLETED_WITH_GAPS"}
+    publication = outcome["jobs"]["job_target_analysis_plan"]["result"]["outputs"]["plan_acceptance.publish_handoff"]
+    assert publication["disposition_counts"]["selected_scanners"] == len(plan["scanner_selections"])
+    assert "dispositions" not in publication
 
 
 class _Model:

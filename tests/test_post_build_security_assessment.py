@@ -224,6 +224,8 @@ def test_job_topology_is_parallel_per_case_and_publishes_after_all_shards() -> N
 
 def _post_build_config(root: Path, *, model_enabled: bool = False) -> Path:
     lines = ["[runtime]", 'runs_dir = "runs"', 'data_dir = "data"', 'metadata_dir = "runs/metadata"',
+             "", "[jobs.job_cpp_compiled_analysis]", 'name = "fixture"',
+             "[jobs.job_cpp_compiled_analysis.settings]", 'lane = "cpp"',
              "", "[jobs.job_post_build_security_assessment]", 'name = "post_build_security_assessment"',
              "workers = 4", "", "[jobs.job_post_build_security_assessment.settings.model]",
              f"enabled = {'true' if model_enabled else 'false'}", 'provider = "fixture"', 'model = "fixture"', 'reasoning = "medium"',
@@ -294,15 +296,17 @@ def _accepted_cpp_fixture(tmp_path: Path, *, colliding_object_names: bool = Fals
     atomic_json(result_path, result)
     manifest_path = run_root / "data" / "indices" / "manifests" / "cpp.json"
     write_manifest(manifest_path, run_id=RUN_ID, target_snapshot="snapshot", target_root=target, indexes=())
-    result_artifact = {"path": result_path.relative_to(run_root).as_posix(), "sha256": file_sha256(result_path)}
     manifest_artifact = {"path": manifest_path.relative_to(run_root).as_posix(), "sha256": file_sha256(manifest_path)}
+    outputs["acceptance.publish_handoff"] = {"index_manifest": manifest_artifact}
+    atomic_json(result_path, result)
+    result_artifact = {"path": result_path.relative_to(run_root).as_posix(), "sha256": file_sha256(result_path)}
     handoff_path = attempt / "handoff.json"
     from tests.handoff_fixture import write_fixture_handoff
     write_fixture_handoff(run_root, handoff_path, {"job_id": "job_cpp_compiled_analysis",
         "attempt_id": "attempt_0001", "status": "ACCEPTED", "completion_status": "SUCCEEDED",
         "source_fingerprint": "snapshot", "artifacts": [result_artifact, manifest_artifact],
         "resolving_paths": {"result": result_artifact["path"]},
-        "outputs": {"acceptance.publish_handoff": {"index_manifest": manifest_artifact}}})
+        "outputs": outputs})
     handoff_sha = file_sha256(handoff_path)
     latest = run_root / "data" / "jobs" / "job_cpp_compiled_analysis" / "latest.json"
     atomic_json(latest, {"schema": "appsec-review/latest-handoff/1", "attempt_id": "attempt_0001",
@@ -322,8 +326,8 @@ def _cpp_handoffs(runs: Path) -> dict[str, str]:
 
 
 def test_job_consumes_accepted_handoff_logs_gaps_and_reuses_immutable_shards(tmp_path: Path) -> None:
-    runs, target = _accepted_cpp_fixture(tmp_path)
     config = load_config(_post_build_config(tmp_path))
+    runs, target = _accepted_cpp_fixture(tmp_path)
     runner, job = JobRunner(config), build_job()
     first = runner.run(job, run_id=RUN_ID, target_root=target, source_fingerprint="snapshot",
                        upstream_handoffs=_cpp_handoffs(runs))
@@ -363,8 +367,8 @@ def test_job_consumes_accepted_handoff_logs_gaps_and_reuses_immutable_shards(tmp
 
 
 def test_index_resolves_colliding_object_basenames_by_build_relative_path(tmp_path: Path) -> None:
-    runs, target = _accepted_cpp_fixture(tmp_path, colliding_object_names=True)
     config = load_config(_post_build_config(tmp_path))
+    runs, target = _accepted_cpp_fixture(tmp_path, colliding_object_names=True)
     result = JobRunner(config).run(
         build_job(), run_id=RUN_ID, target_root=target, source_fingerprint="snapshot",
         upstream_handoffs=_cpp_handoffs(runs),
@@ -382,9 +386,9 @@ def test_index_resolves_colliding_object_basenames_by_build_relative_path(tmp_pa
 
 
 def test_job_rejects_target_drift_after_cpp_acceptance(tmp_path: Path) -> None:
-    runs, target = _accepted_cpp_fixture(tmp_path)
     config = load_config(_post_build_config(tmp_path))
-    with pytest.raises(RuntimeError, match="load.accepted_cpp_build"):
+    runs, target = _accepted_cpp_fixture(tmp_path)
+    with pytest.raises(ValueError, match="claimed upstream handoff belongs to a different target"):
         JobRunner(config).run(
             build_job(), run_id=RUN_ID, target_root=target,
             source_fingerprint="changed-after-cpp-acceptance",
@@ -392,8 +396,10 @@ def test_job_rejects_target_drift_after_cpp_acceptance(tmp_path: Path) -> None:
         )
     receipt = json.loads((runs / RUN_ID / "data" / "jobs" /
                           "job_post_build_security_assessment" / "attempts" / "attempt_0001" /
-                          "steps" / "load" / "tasks" / "accepted_cpp_build" / "status.json").read_text(encoding="utf-8"))
-    assert receipt["error"]["message"] == "post-build target snapshot differs from accepted build"
+                          "status.json").read_text(encoding="utf-8"))
+    assert receipt["error"]["message"] == "claimed upstream handoff belongs to a different target"
+    assert not (runs / RUN_ID / "data" / "jobs" / "job_post_build_security_assessment" /
+                "attempts" / "attempt_0001" / "steps").exists()
 
 
 def _context_inference(request: ModelRequest, *, timeout_seconds: int) -> ModelResult:
@@ -412,8 +418,8 @@ def _context_inference(request: ModelRequest, *, timeout_seconds: int) -> ModelR
 
 
 def test_bounded_inference_records_tokens_and_validates_observations(tmp_path: Path) -> None:
-    runs, target = _accepted_cpp_fixture(tmp_path)
     config = load_config(_post_build_config(tmp_path, model_enabled=True))
+    runs, target = _accepted_cpp_fixture(tmp_path)
     outcome = JobRunner(config).run(build_job(infer=_context_inference),
         run_id=RUN_ID, target_root=target, source_fingerprint="snapshot",
         upstream_handoffs=_cpp_handoffs(runs))

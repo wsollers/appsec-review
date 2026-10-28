@@ -361,5 +361,5 @@ def test_accepted_publication_verifies_handoff_index_and_hashes(tmp_path: Path) 
     assert payload["maximal_exposure"] == "QA"
     assert payload["exposure_evidence"] == exposure["exposure_evidence"]
     index_path.write_bytes(b"changed")
-    with pytest.raises(ValueError, match="index integrity mismatch"):
+    with pytest.raises(ValueError, match="(?:index|target evidence) integrity mismatch"):
         load_accepted_dependency_intelligence(run_root)
