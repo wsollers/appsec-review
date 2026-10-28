@@ -1,0 +1,144 @@
+tests/fixtures/debug_symbols/tiny.elf:	file format elf64-x86-64
+
+.debug_info contents:
+0x00000000: Compile Unit: length = 0x0000007b, format = DWARF32, version = 0x0005, unit_type = DW_UT_compile, abbr_offset = 0x0000, addr_size = 0x08 (next unit at 0x0000007f)
+
+0x0000000c: DW_TAG_compile_unit
+              DW_AT_producer	("Ubuntu clang version 18.1.3 (1ubuntu1)")
+              DW_AT_language	(DW_LANG_C11)
+              DW_AT_name	("tests/fixtures/debug_symbols/tiny.c")
+              DW_AT_str_offsets_base	(0x00000008)
+              DW_AT_stmt_list	(0x00000000)
+              DW_AT_comp_dir	("fixture")
+              DW_AT_low_pc	(0x0000000000401000)
+              DW_AT_high_pc	(0x000000000040104a)
+              DW_AT_addr_base	(0x00000008)
+
+0x00000023:   DW_TAG_base_type
+                DW_AT_name	("int")
+                DW_AT_encoding	(DW_ATE_signed)
+                DW_AT_byte_size	(0x04)
+
+0x00000027:   DW_TAG_subprogram
+                DW_AT_low_pc	(0x0000000000401000)
+                DW_AT_high_pc	(0x000000000040102f)
+                DW_AT_frame_base	(DW_OP_reg6 RBP)
+                DW_AT_name	("entry")
+                DW_AT_decl_file	("fixture/tests/fixtures/debug_symbols/tiny.c")
+                DW_AT_decl_line	(3)
+                DW_AT_prototyped	(true)
+                DW_AT_type	(0x00000023 "int")
+                DW_AT_external	(true)
+
+0x00000036:     DW_TAG_variable
+                  DW_AT_location	(DW_OP_fbreg -16)
+                  DW_AT_name	("p")
+                  DW_AT_decl_file	("fixture/tests/fixtures/debug_symbols/tiny.c")
+                  DW_AT_decl_line	(3)
+                  DW_AT_type	(0x0000005d "Pair")
+
+0x00000041:     NULL
+
+0x00000042:   DW_TAG_subprogram
+                DW_AT_low_pc	(0x0000000000401030)
+                DW_AT_high_pc	(0x000000000040104a)
+                DW_AT_frame_base	(DW_OP_reg6 RBP)
+                DW_AT_name	("add")
+                DW_AT_decl_file	("fixture/tests/fixtures/debug_symbols/tiny.c")
+                DW_AT_decl_line	(2)
+                DW_AT_prototyped	(true)
+                DW_AT_type	(0x00000023 "int")
+
+0x00000051:     DW_TAG_formal_parameter
+                  DW_AT_location	(DW_OP_fbreg -8)
+                  DW_AT_name	("p")
+                  DW_AT_decl_file	("fixture/tests/fixtures/debug_symbols/tiny.c")
+                  DW_AT_decl_line	(2)
+                  DW_AT_type	(0x00000079 "Pair *")
+
+0x0000005c:     NULL
+
+0x0000005d:   DW_TAG_structure_type
+                DW_AT_name	("Pair")
+                DW_AT_byte_size	(0x10)
+                DW_AT_decl_file	("fixture/tests/fixtures/debug_symbols/tiny.c")
+                DW_AT_decl_line	(1)
+
+0x00000062:     DW_TAG_member
+                  DW_AT_name	("left")
+                  DW_AT_type	(0x00000023 "int")
+                  DW_AT_decl_file	("fixture/tests/fixtures/debug_symbols/tiny.c")
+                  DW_AT_decl_line	(1)
+                  DW_AT_data_member_location	(0x00)
+
+0x0000006b:     DW_TAG_member
+                  DW_AT_name	("right")
+                  DW_AT_type	(0x00000075 "long long")
+                  DW_AT_decl_file	("fixture/tests/fixtures/debug_symbols/tiny.c")
+                  DW_AT_decl_line	(1)
+                  DW_AT_data_member_location	(0x08)
+
+0x00000074:     NULL
+
+0x00000075:   DW_TAG_base_type
+                DW_AT_name	("long long")
+                DW_AT_encoding	(DW_ATE_signed)
+                DW_AT_byte_size	(0x08)
+
+0x00000079:   DW_TAG_pointer_type
+                DW_AT_type	(0x0000005d "Pair")
+
+0x0000007e:   NULL
+
+.debug_line contents:
+debug_line[0x00000000]
+Line table prologue:
+    total_length: 0x00000078
+          format: DWARF32
+         version: 5
+    address_size: 8
+ seg_select_size: 0
+ prologue_length: 0x00000037
+ min_inst_length: 1
+max_ops_per_inst: 1
+ default_is_stmt: 1
+       line_base: -5
+      line_range: 14
+     opcode_base: 13
+standard_opcode_lengths[DW_LNS_copy] = 0
+standard_opcode_lengths[DW_LNS_advance_pc] = 1
+standard_opcode_lengths[DW_LNS_advance_line] = 1
+standard_opcode_lengths[DW_LNS_set_file] = 1
+standard_opcode_lengths[DW_LNS_set_column] = 1
+standard_opcode_lengths[DW_LNS_negate_stmt] = 0
+standard_opcode_lengths[DW_LNS_set_basic_block] = 0
+standard_opcode_lengths[DW_LNS_const_add_pc] = 0
+standard_opcode_lengths[DW_LNS_fixed_advance_pc] = 1
+standard_opcode_lengths[DW_LNS_set_prologue_end] = 0
+standard_opcode_lengths[DW_LNS_set_epilogue_begin] = 0
+standard_opcode_lengths[DW_LNS_set_isa] = 1
+include_directories[  0] = "fixture"
+file_names[  0]:
+           name: "tests/fixtures/debug_symbols/tiny.c"
+      dir_index: 0
+   md5_checksum: f27c19b020faad2c1fe1cf271d1c64aa
+
+Address            Line   Column File   ISA Discriminator OpIndex Flags
+------------------ ------ ------ ------ --- ------------- ------- -------------
+0x0000000000401000      3      0      0   0             0       0  is_stmt
+0x0000000000401008      3     31      0   0             0       0  is_stmt prologue_end
+0x0000000000401020      3     50      0   0             0       0 
+0x0000000000401029      3     43      0   0             0       0  epilogue_begin
+0x0000000000401030      2      0      0   0             0       0  is_stmt
+0x0000000000401038      2     48      0   0             0       0  is_stmt prologue_end
+0x000000000040103c      2     51      0   0             0       0 
+0x000000000040103e      2     63      0   0             0       0 
+0x0000000000401042      2     66      0   0             0       0 
+0x0000000000401046      2     56      0   0             0       0 
+0x0000000000401048      2     41      0   0             0       0  epilogue_begin
+0x000000000040104a      2     41      0   0             0       0  end_sequence
+
+
+.debug_ranges contents:
+
+.debug_rnglists contents:
