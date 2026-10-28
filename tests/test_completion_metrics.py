@@ -55,12 +55,17 @@ def test_metrics_regeneration_replaces_stale_cache_without_mutating_or_recountin
     log.write("DOSSIER_PUBLICATION_PUBLISHED", run_id=tmp_path.name,
               job_id="job_dossier_publication", attempt_id="attempt_0001",
               details={"rendered_count": 1, "gap_count": 0})
+    log.write("FINAL_REPORT_ASSEMBLED", run_id=tmp_path.name,
+              job_id="job_final_report_publication", attempt_id="attempt_0001",
+              details={"certified_outcome_counts": {"dossiers": 1, "attack_chains": 0}})
     authoritative = log.path.read_bytes()
     latest = write_run_metrics(tmp_path)
     lanes = latest["completion"]["lanes"]
     assert lanes["poc_generation"]["events"]["POC_GENERATION_PUBLISHED"]["count"] == 1
     assert lanes["dossiers"]["events"]["DOSSIER_PUBLICATION_PUBLISHED"]["counters"] == {
         "gap_count": 0, "rendered_count": 1}
+    assert lanes["report_publication"]["events"]["FINAL_REPORT_ASSEMBLED"]["counters"] == {
+        "certified_outcome_counts.attack_chains": 0, "certified_outcome_counts.dossiers": 1}
     assert latest["completion"]["measurement_gaps"] == []
     assert json.loads(summary.read_text(encoding="utf-8")) == latest
     assert write_run_metrics(tmp_path) == latest
@@ -105,6 +110,21 @@ def test_missing_model_usage_is_not_fabricated_as_zero_tokens() -> None:
     assert event["duration_ms"]["p95"] is None
 
 
+@pytest.mark.parametrize("counts", [
+    {"dossiers": True}, {"dossiers": -1}, {"dossiers": "1"}, {"dossiers": 2**63},
+    {"untrusted-capability-prose": 1},
+])
+def test_invalid_certified_report_counts_are_named_gaps_without_untrusted_labels(counts) -> None:
+    report = completion_metrics([{
+        "job_id": "job_final_report_publication", "event_type": "FINAL_REPORT_ASSEMBLED",
+        "details": {"certified_outcome_counts": counts},
+    }])
+    assert report["measurement_gap_count"] == 1
+    event = report["lanes"]["report_publication"]["events"]["FINAL_REPORT_ASSEMBLED"]
+    assert event["counters"] == {}
+    assert "untrusted-capability-prose" not in json.dumps(report)
+
+
 def test_real_producer_statuses_caps_and_manual_admission_are_counted() -> None:
     report = completion_metrics([
         {"job_id": "job_poc_generation", "event_type": "POC_GENERATION_PUBLISHED",
@@ -116,6 +136,10 @@ def test_real_producer_statuses_caps_and_manual_admission_are_counted() -> None:
         {"job_id": "job_remediation_validation", "event_type": "REMEDIATION_VALIDATION_ADAPTER_COMPLETED",
          "details": {"adapter": "native_syntax", "outcome": "baseline_failed", "baseline_attempted": True,
                      "patched_attempted": False, "failure_count": 1}},
+        {"job_id": "job_final_report_publication", "event_type": "FINAL_REPORT_ASSEMBLED",
+         "details": {"certified_outcome_counts": {
+             "attack_chains": 0, "poc_generation": 1, "remediation_planning": 1,
+             "remediation_validation": 1, "dossiers": 2}}},
     ])
     assert report["measurement_gap_count"] == 0
     gate = report["lanes"]["publication_gate"]["events"]["FINAL_PUBLICATION_GATE_CAPABILITIES_VERIFIED"]
@@ -125,6 +149,11 @@ def test_real_producer_statuses_caps_and_manual_admission_are_counted() -> None:
     adapter = report["lanes"]["remediation_validation"]["events"]["REMEDIATION_VALIDATION_ADAPTER_COMPLETED"]
     assert adapter["dimensions"] == {"adapter.native_syntax": 1}
     assert adapter["outcomes"] == {"baseline_failed": 1}
+    publication = report["lanes"]["report_publication"]["events"]["FINAL_REPORT_ASSEMBLED"]
+    assert publication["counters"] == {
+        "certified_outcome_counts.attack_chains": 0, "certified_outcome_counts.poc_generation": 1,
+        "certified_outcome_counts.remediation_planning": 1,
+        "certified_outcome_counts.remediation_validation": 1, "certified_outcome_counts.dossiers": 2}
 
 
 def test_configured_limits_are_ranges_not_additive_retry_work() -> None:

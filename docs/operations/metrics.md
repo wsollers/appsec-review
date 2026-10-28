@@ -65,6 +65,9 @@ Each event reports `count`, allowlisted `counters`/`outcomes`, fixed `flags`/`di
 Configured dossier/source/evidence limits are observed `{min,max}` ranges, **never sums**.
 Capability attachment/gap/omission counts, enabled/disposition maps, explicit manual admission,
 render/adapter-attempt flags and fixed kind/role/adapter dimensions are retained where emitted.
+`FINAL_REPORT_ASSEMBLED.counters.certified_outcome_counts.<capability>` counts the gate-certified
+attachment rows reported for each fixed capability. These are counts, not dispositions or unique
+findings, and do not establish reproduction or a fixed finding.
 `unavailable_token_measurements` counts explicit-null token fields;
 `counters.usage_unavailable_count` counts producer-reported missing-usage turns instead.
 Neither means a missing field was measured as zero. An unobserved lane is not an observed zero.
@@ -86,12 +89,12 @@ Checkpoint `0ece65d3` includes chain `not_launched` outcomes and a real `CellSta
 regression, resolving that aggregate allowlist gap. These remain attempted-work observations,
 not accepted evidence or proof that no challenge was omitted.
 
-Generation acceptance must also cover the persisted summary, deterministic replay and unchanged
-source-log bytes, not just the in-memory aggregate. The parent is adding that unit regression;
-the all-lane owner is checking actual producer events through persisted
-`data/telemetry/summary.json`. These checks remain pending in the
-[implementation record](../reviews/evidence-completion-documentation-inventory.md); synthetic
-event fixtures and earlier aggregate-unit counts do not close this validation boundary.
+Generation unit tests cover the persisted summary, deterministic replay, stale-cache replacement
+and unchanged source-log bytes, not just the in-memory aggregate. They also verify that newly
+appended producer events update the summary without recounting old events. Full all-lane
+acceptance additionally checks actual producer events through persisted
+`data/telemetry/summary.json`; track that separately in the
+[implementation record](../reviews/evidence-completion-documentation-inventory.md).
 
 Check frozen run settings before interpreting an absent lane. The
 [new-run rollout decision](../architecture/evidence-completion-and-remediation.md#11-parallel-implementation-decisions)
