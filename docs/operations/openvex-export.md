@@ -51,6 +51,10 @@ Validation pins eight local resources: six schemas, the upstream license and its
 The loader uses the source schema directory when present, otherwise installed wheel resources;
 an existing corrupt/incomplete source copy fails rather than falling back to another copy.
 It never retrieves a schema or the JSON-LD context during export.
+Installed-resource fallback supports offline schema validation and pure projection, not a
+self-contained installed application. Job execution still requires the configured application
+checkout and guidance resources, including `pipeline/guidance/registry.json`; schema-resource
+availability does not establish full installed-job execution.
 Schema validation alone is insufficient: nonblank action, a real product identity,
 timestamp/IRI rules, exact membership and source/configuration bindings also require semantic
 validation. Hash binding protects byte integrity; it is not a signature or verification of
