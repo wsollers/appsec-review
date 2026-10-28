@@ -104,12 +104,18 @@ output_file_bytes = 2147483648      # RLIMIT_FSIZE for every file the container 
 # debug_symbols_sha256 = "<64 lowercase hex characters>"
 
 [target_acquisition]
-# User-invoked checkout of pinned review targets into new directories under `targets_dir`
-# (`appsec-review acquire-target`). It never pulls, edits, or replaces an existing checkout. Each
-# acquisition writes `records_dir/<id>/manifest.json` with the pinned identity, tree fingerprint,
-# gaps, and artifact hashes; job_review_intake copies that manifest into the run. Credentials never
-# appear here: Git uses the operator's credential helper or ssh agent, and Perforce and review APIs
-# read the environment variables a target names. See docs/operations/target-acquisition.md.
+# Pinned checkout of review systems into new directories under `targets_dir`. A system is composed of
+# one or more components, because one reviewed system may live in more than one source-control
+# system; each component's `kind` defaults to "git". `appsec-review start --system <id>` (or
+# APPSEC_REVIEW_SYSTEM for any driver) makes job_target_acquisition acquire every component in
+# parallel into `targets_dir/<system>/<component>/` before intake fingerprints the composed
+# `targets_dir/<system>` root and discovery runs once over it; `appsec-review acquire-target --system
+# <id>` does the same outside a run. A component whose checkout and record exist is only re-verified;
+# acquisition never pulls, edits, or replaces an existing checkout. Records go to
+# `records_dir/<system>/manifest.json` (the composed tree and every component identity) and
+# `records_dir/<system>/components/<component>/`. Credentials never appear here: Git uses the
+# operator's credential helper or ssh agent, and Perforce and review APIs read the environment
+# variables a component names. See docs/operations/target-acquisition.md.
 targets_dir = "targets"
 records_dir = "data/target-acquisitions"
 git_executable = "git"
@@ -124,17 +130,20 @@ max_file_bytes = 536870912
 max_path_bytes = 4096
 max_submodule_depth = 8              # deeper gitlinks are named gaps
 max_diff_bytes = 67108864            # larger review patches are named gaps
+max_parallel_components = 4          # components of one system acquired concurrently
 allow_local_sources = false          # file:// Git sources and loopback http review APIs; tests only
 #
-# [[target_acquisition.targets]]
-# id = "service-git"
-# kind = "git"
+# [[target_acquisition.systems]]
+# id = "storefront"
+#
+# [[target_acquisition.systems.components]]
+# id = "service"                     # kind defaults to "git"
 # url = "https://git.example.com/team/service.git"
 # commit = "<40 or 64 lowercase hex characters>"
 # submodules = "recursive"           # or "none" (each gitlink is then a named gap)
 #
-# [[target_acquisition.targets]]
-# id = "engine-p4"
+# [[target_acquisition.systems.components]]
+# id = "engine"
 # kind = "perforce"
 # port = "ssl:perforce.example.com:1666"
 # trust_fingerprint = "<colon-separated SHA fingerprint; required for ssl ports>"
@@ -143,16 +152,16 @@ allow_local_sources = false          # file:// Git sources and loopback http rev
 # user_env = "P4USER"
 # ticket_env = "P4_TICKET"
 #
-# [[target_acquisition.targets]]
-# id = "service-mr-42"
+# [[target_acquisition.systems.components]]
+# id = "web-mr-42"
 # kind = "review_export"
 # provider = "gitlab"                # gitlab, gerrit (needs patchset), azure_devops (needs repository, iteration)
 # source = "api"                     # or "bundle" with bundle_path and bundle_sha256
 # api_url = "https://gitlab.example.com"
-# project = "team/service"
+# project = "team/web"
 # change = 42
 # revision = "<reviewed head commit>"
-# clone_url = "https://gitlab.example.com/team/service.git"
+# clone_url = "https://gitlab.example.com/team/web.git"
 # token_env = "GITLAB_TOKEN"
 
 [orchestration.dagster]
@@ -391,6 +400,30 @@ workers = 1
 [jobs.job_image_pin_verification.steps.publication]
 workers = 1
 [jobs.job_image_pin_verification.steps.publication.tasks.publish_handoff]
+
+[jobs.job_target_acquisition]
+name = "target_acquisition"
+workers = 1
+
+[jobs.job_target_acquisition.settings]
+# After the image-pin gate and before review intake, acquire (or read-only re-verify) every component
+# of the system named by `start --system` / APPSEC_REVIEW_SYSTEM, in parallel (bounded by
+# target_acquisition.max_parallel_components), into targets/<system>/. A failed component is a named
+# gap; a system with no available component fails the run. Without a requested system the gate
+# records NOT_REQUESTED and changes nothing. See docs/operations/target-acquisition.md.
+enabled = true
+
+[jobs.job_target_acquisition.steps.selection]
+workers = 1
+[jobs.job_target_acquisition.steps.selection.tasks.resolve_system]
+
+[jobs.job_target_acquisition.steps.acquisition]
+workers = 1
+[jobs.job_target_acquisition.steps.acquisition.tasks.acquire_components]
+
+[jobs.job_target_acquisition.steps.publication]
+workers = 1
+[jobs.job_target_acquisition.steps.publication.tasks.publish_handoff]
 
 [jobs.job_review_intake]
 name = "review_intake"

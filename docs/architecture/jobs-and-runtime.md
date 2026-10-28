@@ -38,6 +38,7 @@ input, output, tool, and acceptance contracts.
 | `job_third_party_data_sync` | NVD (with `index/nvd.sqlite`), OSV, MITRE, CISA KEV, FIRST EPSS and cve-bin-tool feed snapshots (scheduled, outside reviews) | [third-party-data-sync](../operations/third-party-data-sync.md) |
 | `job_model_connectivity` | Mandatory fresh provider/model connectivity gate | [below](#inference-entry-point-and-model-preflight) |
 | `job_image_pin_verification` | Mandatory check that every enabled catalog image and configured image-ID pin resolves locally to exactly its pinned image; any mismatch fails the run. Builds nothing | [image-pin-verification](../operations/image-pin-verification.md) |
+| `job_target_acquisition` | Acquires (or re-verifies) every component of the review system named by `start --system`, in parallel, into `targets/<system>/` before intake; a failed component is a named gap; a no-op without a requested system | [target-acquisition](../operations/target-acquisition.md) |
 | `job_review_intake` | Configuration and target intake; copies a target-acquisition manifest to `target-acquisition.json` and resolves configured binary decompilation publications to `binary-evidence.json` | [below](#inference-entry-point-and-model-preflight) |
 | `job_target_catalog` | Bounded target catalog and source index | [target-analysis-planning](../operations/target-analysis-planning.md) |
 | `job_source_history_analysis` | Git/GitHub history instability signals | [source-history-analysis](../operations/source-history-analysis.md) |
@@ -344,8 +345,37 @@ enabled job's `tag`/`image_id` pin (the project-build profiles) and `source_imag
 `source_image_id` pin (CodeQL), records each pin's pinned and resolved image ID, and fails the run,
 never recording a gap, naming every missing image and moved tag. Images are rebuilt and re-pinned on
 the host by the operator. Setting `jobs.job_image_pin_verification.settings.enabled = false` makes
-intake follow the model gate directly. See
+the next gate follow the model gate directly. See
 [`../operations/image-pin-verification.md`](../operations/image-pin-verification.md).
+
+`job_target_acquisition` is the last pre-intake gate, also always executed and non-propagating.
+A review **system** is composed of one or more components (Git by default, Perforce, or a GitLab,
+Gerrit or Azure DevOps review export), so the target may not exist when the run starts. With
+`start --system <id>` (or `APPSEC_REVIEW_SYSTEM`), `GraphRunner` runs the leading gates with no
+target and source fingerprint `none`, the acquisition gate acquires every component concurrently
+(a worker pool bounded by `target_acquisition.max_parallel_components`) into
+`targets/<system>/<component>/`, or re-verifies those already acquired, and only then fingerprints
+the composed `targets/<system>/` root and plans the remaining jobs against it. Intake, cataloging
+and every discovery branch therefore run once over all components. Because the gate does not
+propagate its handoff, a resume re-verifies the components but reuses downstream work while the
+composed tree is unchanged. Intake binds the acquisition through the system manifest whose
+`target_path` is the reviewed root. Under Dagster, the gate reads the same environment variable and
+`launch_inputs` fingerprints the target lazily for intake. Without a requested system the gate
+records `NOT_REQUESTED`. See [`../operations/target-acquisition.md`](../operations/target-acquisition.md).
+
+```mermaid
+sequenceDiagram
+  participant G as GraphRunner
+  participant A as job_target_acquisition
+  participant W as component workers
+  participant I as job_review_intake and later jobs
+  G->>A: run (target none, fingerprint none)
+  A->>W: acquire or verify each component (bounded pool)
+  W-->>A: per-component manifest or named gap
+  A-->>G: system manifest (composed tree hash)
+  G->>G: fingerprint targets/<system>, plan the suffix
+  G->>I: run once over the composed root
+```
 
 ## Target analysis planning
 

@@ -64,8 +64,9 @@ Operations, one page per job or service:
   [`operations/dependency-intelligence.md`](operations/dependency-intelligence.md) — engineering
   security-signal production and recovery.
 - [`operations/cpp-index-jobs.md`](operations/cpp-index-jobs.md) — clangd symbol index and Joern CPG jobs.
-- [`operations/target-acquisition.md`](operations/target-acquisition.md) — pinned Git (with submodules),
-  Perforce, and GitLab/Gerrit/Azure DevOps review-export checkouts into `targets/`.
+- [`operations/target-acquisition.md`](operations/target-acquisition.md) — multi-component review systems:
+  the `job_target_acquisition` gate and `acquire-target` acquire pinned Git (default, with submodules),
+  Perforce, and GitLab/Gerrit/Azure DevOps review-export components in parallel into `targets/<system>/`.
 - [`operations/binary-decompilation.md`](operations/binary-decompilation.md) — pre-run Ghidra decompilation of
   third-party binaries, publications, review intake, `job_binary_evidence_indexing`, and the
   known-binary efficacy check; design in

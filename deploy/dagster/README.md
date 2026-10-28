@@ -125,9 +125,14 @@ docker compose --env-file deploy/dagster/.env -f deploy/dagster/compose.yaml -f 
 
 Choose the Claude subscription login. The Windows host's Claude login is separate from this
 container login; neither is copied into the image or repository.
-For a bounded acceptance target already beneath the read-only `targets/` mount, set
-`APPSEC_REVIEW_TARGET` to its container path for the lifecycle and launch commands; otherwise the
-deployment defaults to `/opt/app/targets/appsec-multi-vuln`.
+`targets/` is mounted writable at `/opt/app/targets`: acquisition creates checkouts there and
+builds write their outputs (binaries, libraries, generated assets) into the checkout. For a target
+already beneath it, set `APPSEC_REVIEW_TARGET` to its container path for the lifecycle and launch
+commands; otherwise the deployment defaults to `/opt/app/targets/appsec-multi-vuln`. To have
+`target_acquisition` acquire a configured multi-component system into `targets/<id>/` before intake,
+set both `APPSEC_REVIEW_SYSTEM=<id>` and `APPSEC_REVIEW_TARGET=/opt/app/targets/<id>` in
+`deploy/dagster/.env`; the code location refuses to start a review when the two disagree. See
+[`../../docs/operations/target-acquisition.md`](../../docs/operations/target-acquisition.md).
 
 The runtime profile is `APPSEC_REVIEW_PROFILE` (`dev` by default; `prod` opts into the more capable
 models and larger token limits from `profiles/prod.toml`, which the image copies next to
@@ -248,7 +253,8 @@ With the current registry and shipped configuration, the cross-job dependencies 
 `wave1_dependencies` in `src/appsec_review/orchestration/topology.py`):
 
 ```text
-model_connectivity -> image_pin_verification -> review_intake -> target_catalog -> ci_configuration_analysis
+model_connectivity -> image_pin_verification -> target_acquisition -> review_intake -> target_catalog
+  -> ci_configuration_analysis
   -> target_analysis_plan
 target_catalog -> source_history_analysis -> target_analysis_plan
 target_catalog -> binary_evidence_indexing
@@ -300,9 +306,11 @@ The code location also defines:
   namespaced `standalone__`; a standalone launch joins the application run named by its
   `appsec/application_run_id` tag, and its input validators require that run's accepted upstream
   handoffs;
-- `ci_configuration_review`: `model_connectivity -> image_pin_verification -> review_intake -> target_catalog ->
+- `ci_configuration_review`: `model_connectivity -> image_pin_verification -> target_acquisition -> review_intake ->
+  target_catalog ->
   ci_configuration_analysis`;
-- `project_build_review`: `model_connectivity -> image_pin_verification -> review_intake -> target_catalog ->
+- `project_build_review`: `model_connectivity -> image_pin_verification -> target_acquisition -> review_intake ->
+  target_catalog ->
   target_analysis_plan -> project_build -> language_build -> artifact_indexing -> artifact_security_analysis`.
 
 The configured schedule and a manual launch enter the same generated semantic DAG. Schedule cron,

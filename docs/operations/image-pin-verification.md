@@ -7,11 +7,11 @@ daemon still holds exactly the pinned images. This document is the one place tha
 ## The gate: `job_image_pin_verification`
 
 `job_image_pin_verification` (Dagster name `image_pin_verification`) runs directly after
-`job_model_connectivity` and before `job_review_intake` in the direct CLI graph and in every
+`job_model_connectivity` and before `job_target_acquisition` and `job_review_intake` in the direct CLI graph and in every
 composite Dagster graph (`wave1_review`, `ci_configuration_review`, `project_build_review`).
 
 ```text
-model_connectivity -> image_pin_verification -> review_intake -> ...
+model_connectivity -> image_pin_verification -> target_acquisition -> review_intake -> ...
 ```
 
 Like the model gate, the job executes on every graph dispatch, including a resume, and its handoff

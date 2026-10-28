@@ -635,7 +635,7 @@ roll up into the parent's components, and how its own `.git` (often under the pa
 - Function attribution only sees surviving lines in the top blamed files; consider bounded
   `log -L` per function for changes whose lines were later rewritten.
 - A deployment-event adapter for common CD systems. GitLab, Gerrit, and Azure DevOps review
-  exports are produced by `acquire-target` (see
+  exports are produced by target acquisition (see
   [`operations/target-acquisition.md`](operations/target-acquisition.md)); validate them against
   live servers.
 - Component relatedness uses nesting and co-change only; add build-graph or ownership-file
