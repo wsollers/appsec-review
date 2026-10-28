@@ -25,10 +25,11 @@ Relevant bounded procedures and design references:
 - [`operations/sanitizer-build.md`](operations/sanitizer-build.md) — `job_sanitizer_build`: ASan/UBSan rebuild of accepted native units, sanitizer settings, the no-execution invariant, ELF runtime evidence, named gaps, and how a later execution stage would consume the handoff.
 - [`operations/test-targets.md`](operations/test-targets.md) — where to get the repositories the reviews and acceptance tests run against (`appsec-multi-vuln`, the pinned commit, the evaluator guide kept outside the repository).
 - [`operations/poc-generation.md`](operations/poc-generation.md) — `job_poc_generation`: the `poc_writer` turn, AST/compile checks, immutable protected attempt outputs, pre-gate `/2` outcomes and explicit manual admission.
-- [`architecture/openvex-export.md`](architecture/openvex-export.md) — standalone affected-only OpenVEX
-  export: issuer/action inputs, source-snapshot/full-configuration identity, protected companion,
+- [`architecture/openvex-export.md`](architecture/openvex-export.md) — automatic standalone affected-only
+  local OpenVEX generation/validation: tool author, no-setup snapshot namespace, strict frozen
+  overrides, source-snapshot/full-configuration identity, protected companion,
   assembled certified gate `/2` reader/verifier/projector, gate-only reporting and telemetry.
-- [`operations/openvex-export.md`](operations/openvex-export.md) — OpenVEX configuration,
+- [`operations/openvex-export.md`](operations/openvex-export.md) — OpenVEX defaults, explicit opt-out/overrides,
   certified-gate/independent-export diagrams, operator status, privacy and metrics refresh;
   whole-chain/manual validation and final exact-main reconciliation remain separately tracked.
 - [`operations/final-report.md`](operations/final-report.md) — `job_final_publication_gate` and `job_final_report_publication`: re-verification of the accepted review handoff, publishable / verification backlog / withheld accounting, named limitations, `final-report.json` and the deterministic Markdown (PDF is a later step).

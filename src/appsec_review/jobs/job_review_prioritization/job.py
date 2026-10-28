@@ -521,22 +521,37 @@ def build_job() -> Job:
         from appsec_review.jobs.job_source_history_analysis import load_accepted_history
         history = load_accepted_history(unit.job.run_root) or {}
         decision = str(history.get("decision"))
-        signals_identity = history.get("ranking", {}).get("signals")
-        if not signals_identity:
-            return {"files": {}, "symbols": {}}, [f"history_hotspots_unavailable: history decision {decision}"], "UNAVAILABLE"
-        document = read_json(unit.job.run_root, signals_identity)
-        if document.get("schema") != "appsec-review/source-history-signals/2":
-            raise ValueError("accepted history signals use an unsupported SII schema")
-        values = {
-            "files": {path: float(value["sii"]["score"]) for path, value in document.get("files", {}).items()
-                      if value.get("sii")},
-            "symbols": {(value["path"], int(value["start_byte"]), int(value["end_byte"])):
-                        float(value["sii"]["score"])
-                        for value in document.get("symbols", {}).values() if value.get("sii")},
-        }
-        status = "EXACT" if history.get("binding") == "exact" else "PARTIAL"
+        repositories = history.get("sources", {}).get("repositories")
+        histories = ([read_json(unit.job.run_root, source["artifact"]) for source in repositories]
+                     if repositories is not None else [history])
+        values: dict[str, dict[Any, float]] = {"files": {}, "symbols": {}}
         gaps = [f"history: {gap}" for gap in history.get("gaps", ())][:20]
-        return values, gaps, status
+        available = False
+        exact = bool(histories)
+        for source in histories:
+            exact = exact and source.get("binding") == "exact"
+            signals_identity = source.get("ranking", {}).get("signals")
+            if not signals_identity:
+                source_id = source.get("source", {}).get("source_id", ".")
+                gaps.append(f"history_hotspots_unavailable: {source_id} history decision {source.get('decision')}")
+                continue
+            available = True
+            document = read_json(unit.job.run_root, signals_identity)
+            if document.get("schema") != "appsec-review/source-history-signals/2":
+                raise ValueError("accepted history signals use an unsupported SII schema")
+            for scope, scores in {
+                "files": {path: float(value["sii"]["score"]) for path, value in document.get("files", {}).items()
+                          if value.get("sii")},
+                "symbols": {(value["path"], int(value["start_byte"]), int(value["end_byte"])):
+                            float(value["sii"]["score"])
+                            for value in document.get("symbols", {}).values() if value.get("sii")},
+            }.items():
+                if values[scope].keys() & scores.keys():
+                    raise ValueError("accepted history sources contain overlapping signal paths")
+                values[scope].update(scores)
+        if not available:
+            return values, [*gaps, f"history_hotspots_unavailable: history decision {decision}"][:20], "UNAVAILABLE"
+        return values, gaps[:20], "EXACT" if exact else "PARTIAL"
 
     def score(unit: UnitContext) -> Mapping[str, Any]:
         settings = _settings(unit.job)

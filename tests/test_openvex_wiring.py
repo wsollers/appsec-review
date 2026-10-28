@@ -36,10 +36,10 @@ def settings_text(text: str, table: str, changes: dict[str, str]) -> str:
 
 
 def export_config(tmp_path: Path, *, disabled_prerequisite: str | None = None,
-                  missing_prerequisite: str | None = None):
+                  missing_prerequisite: str | None = None, enabled: bool = True):
     text = (ROOT / "appsec-review.toml").read_text(encoding="utf-8")
     text = settings_text(text, EXPORT, {
-        "enabled": "true", "author": '"Example security team"',
+        "enabled": str(enabled).lower(), "author": '"Example security team"',
         "action_statement": '"Restrict access until the reviewed findings are remediated."',
         "repository_iri": '"https://example.test/repository"',
     })
@@ -61,15 +61,19 @@ def export_config(tmp_path: Path, *, disabled_prerequisite: str | None = None,
     return load_config(path, profile="dev", overlay="")
 
 
-def test_export_defaults_are_typed_disabled_and_have_no_target_access():
+@pytest.mark.parametrize("profile", ["dev", "prod", "copilot-dev", "copilot-prod"])
+def test_export_defaults_are_typed_automatic_and_have_no_target_access(profile):
     from appsec_review.jobs.job_openvex_export.settings import OpenVexExportSettings
     from appsec_review import cli
 
-    config = load_config(ROOT / "appsec-review.toml", profile="dev", overlay="")
+    config = load_config(ROOT / "appsec-review.toml", profile=profile, overlay="")
     job = config.job(EXPORT)
     assert isinstance(job.typed_settings, OpenVexExportSettings)
-    assert job.typed_settings.enabled is False
-    assert EXPORT not in active_job_ids(config, config.jobs)
+    assert job.typed_settings == OpenVexExportSettings()
+    assert EXPORT in active_job_ids(config, config.jobs)
+    jobs = {item["job_id"]: item for item in describe_wave1(config, builtin_registry())["jobs"]}
+    assert jobs[EXPORT]["dependencies"] == [GATE]
+    assert jobs[REPORT]["dependencies"] == [GATE]
     assert EXPORT not in cli.MANUAL_JOB_IDS
     assert EXPORT in TARGET_INDEPENDENT_JOBS and EXPORT not in TARGET_JOBS
     inputs = launch_inputs(builtin_registry().build(EXPORT), target=ROOT / "not-a-target",
@@ -123,13 +127,14 @@ def test_export_is_a_declared_protected_downstream_dataset_not_an_index_input():
                and item.family == "inference_review" and item.query_route for item in DATASETS)
 
 
-def test_cli_refuses_disabled_export_before_creating_a_run(monkeypatch):
+def test_cli_refuses_explicitly_disabled_export_before_creating_a_run(tmp_path, monkeypatch):
     from appsec_review import cli
 
     def forbidden(*_args, **_kwargs):
         pytest.fail("disabled export must not instantiate a runner")
 
     monkeypatch.setattr(cli, "JobRunner", forbidden)
+    export_config(tmp_path, enabled=False)
     with pytest.raises(ValueError, match="job is disabled by configuration: job_openvex_export"):
-        cli.main(["--config", str(ROOT / "appsec-review.toml"), "--profile", "dev",
+        cli.main(["--config", str(tmp_path / "appsec-review.toml"), "--profile", "dev",
                   "run", EXPORT])

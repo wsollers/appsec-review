@@ -485,14 +485,14 @@ def test_git_only_run_publishes_git_signals_and_names_every_missing_source(tmp_p
     assert result["functions"] == {}
     assert produced(outcome)["publish.publish_handoff"]["terminal_status"] == "PARTIAL"
     gaps = set(produced(outcome)["publish.publish_handoff"]["gaps"])
-    assert {"review_records_unavailable:github_enrichment_disabled", "deployment_disabled", "organization_disabled",
+    assert {"review_records_unavailable:github_repository_unavailable", "deployment_disabled", "organization_disabled",
             "time_zone_not_configured", "function_spans_unavailable:tree_sitter_not_accepted"} <= gaps
 
     core = RetrievalCore(config.runtime.runs_dir, outcome["run_id"])
     rows = coverage(core)
     assert rows["git-change-context"]["status"] == "complete"
     assert rows["review-records"] == {"area": "review-records", "status": "unavailable",
-                                      "gap": "review_records_unavailable:github_enrichment_disabled"}
+                                      "gap": "review_records_unavailable:github_repository_unavailable"}
     assert rows["deployment-events"]["status"] == "unavailable" and rows["organization-membership"]["status"] == "unavailable"
     assert rows["off-hours-schedule"]["gap"] == "time_zone_not_configured"
     assert rows["function-attribution"]["status"] == "unavailable"

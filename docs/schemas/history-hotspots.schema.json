@@ -5,9 +5,14 @@
   "description": "Immutable, run-owned top-N hotspot index of job_source_history_analysis. Scores prioritize review; they are never vulnerability evidence.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema", "target_snapshot", "snapshot", "sii", "window", "hotspot_count", "selection",
-               "revision_semantics", "authority", "populations", "exclusions", "unavailable_signals", "signals",
-               "entries"],
+  "required": ["schema", "target_snapshot", "hotspot_count", "selection", "authority", "entries"],
+  "if": {"properties": {"selection": {"const": "top entries per source"}}},
+  "then": {"required": ["sources"]},
+  "else": {
+    "required": ["snapshot", "sii", "window", "revision_semantics", "populations", "exclusions",
+                 "unavailable_signals", "signals"],
+    "properties": {"entries": {"maxItems": 200}}
+  },
   "properties": {
     "schema": {"const": "appsec-review/history-hotspots/1"},
     "target_snapshot": {"type": "string"},
@@ -32,7 +37,13 @@
     "exclusions": {"type": "object", "additionalProperties": {"type": "integer"}},
     "unavailable_signals": {"type": "array", "items": {"type": "string"}},
     "signals": {"$ref": "#/$defs/artifact"},
-    "entries": {"type": "array", "maxItems": 200, "items": {"$ref": "#/$defs/entry"}}
+    "sources": {
+      "type": "array", "maxItems": 256, "items": {
+        "type": "object", "additionalProperties": false, "required": ["source_id", "artifact"],
+        "properties": {"source_id": {"type": "string"}, "artifact": {"$ref": "#/$defs/artifact"}}
+      }
+    },
+    "entries": {"type": "array", "maxItems": 51200, "items": {"$ref": "#/$defs/entry"}}
   },
   "$defs": {
     "artifact": {
@@ -97,6 +108,7 @@
         "source": {
           "type": "object", "additionalProperties": false, "required": ["path", "sha256", "blob_id"],
           "properties": {"path": {"type": "string"}, "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+                         "repository": {"type": "object"}, "source_path": {"type": "string"},
                          "blob_id": {"type": "string", "pattern": "^([0-9a-f]{40}|[0-9a-f]{64})$"}}
         },
         "location": {

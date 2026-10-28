@@ -29,6 +29,38 @@ def assemble(inputs: c.VerifiedInputs | None = None, settings: Any = None, **kwa
                            output_prefix=OUTPUT_PREFIX, **kwargs)
 
 
+@pytest.mark.parametrize("buckets", [(), ("publishable",), ("publishable", "verification_backlog", "withheld")])
+def test_automatic_defaults_generate_valid_local_files_without_operator_setup(buckets):
+    from appsec_review.jobs.job_openvex_export.settings import OpenVexExportSettings
+
+    settings = OpenVexExportSettings()
+    inputs = make_verified_inputs(buckets, settings=settings)
+    bundle = assemble(inputs, settings)
+    v.validate_export(bundle, inputs, settings)
+    assert bundle.result["statement_count"] == buckets.count("publishable")
+    assert bundle.manifest["products"][0]["repository_identity_basis"] == "source_snapshot"
+    assert bundle.manifest["products"][0]["repository_iri"] == c.snapshot_repository_iri(inputs.source.target_snapshot)
+    if "publishable" in buckets:
+        assert bundle.document["author"] == "AppSec Review"
+        assert bundle.document["role"] == settings.role
+        assert {statement["status"] for statement in bundle.document["statements"]} == {"affected"}
+    else:
+        assert bundle.document is None and bundle.result["outcome"] == "no_statements"
+
+
+def test_automatic_identity_cannot_be_substituted_with_an_operator_assertion():
+    from appsec_review.jobs.job_openvex_export.settings import OpenVexExportSettings
+
+    settings = OpenVexExportSettings()
+    inputs = make_verified_inputs(settings=settings)
+    with pytest.raises(ValueError, match="accepted snapshot"):
+        replace(inputs.source, repository_iri="https://example.test/unverified")
+    inputs = replace(inputs, source=replace(
+        inputs.source, repository_identity_basis=c.RepositoryIdentityBasis.OPERATOR_DECLARED))
+    with pytest.raises(c.ExportError, match="automatic repository identity"):
+        assemble(inputs, settings)
+
+
 def rewrite(
     bundle: c.ExportBundle, change: Callable[[Any, dict, dict], None], *, reidentify: bool = False,
 ) -> c.ExportBundle:

@@ -1,4 +1,4 @@
-"""Exact immutable pre-run issuer/action settings; no run-time approval or advice fallback."""
+"""Frozen automatic local export defaults and explicit operator overrides."""
 from __future__ import annotations
 
 from collections.abc import Mapping
@@ -28,11 +28,14 @@ _TOOL_AUTHOR = re.compile(
 
 @dataclass(frozen=True, slots=True)
 class OpenVexExportSettings:
-    enabled: bool = False
-    author_kind: AuthorKind = AuthorKind.ORGANIZATION
-    author: str = ""
-    role: str = ""
-    action_statement: str = ""
+    enabled: bool = True
+    author_kind: AuthorKind = AuthorKind.TOOL
+    author: str = "AppSec Review"
+    role: str = "Automated local application-security review"
+    action_statement: str = (
+        "Review and remediate the confirmed findings using the accompanying evidence; "
+        "validate any fix before relying on it."
+    )
     repository_iri: str = ""
     max_packages: int = MAX_PACKAGES
     max_bindings: int = MAX_BINDINGS
@@ -58,10 +61,12 @@ class OpenVexExportSettings:
             value = getattr(self, name)
             validate_text(value, max_bytes=self.max_action_bytes if name == "action_statement"
                           else self.max_identifier_bytes, field=name,
-                          empty=name == "role" or not self.enabled, multiline=name == "action_statement")
+                          empty=name in {"role", "repository_iri"} or not self.enabled,
+                          multiline=name == "action_statement")
         if self.repository_iri:
             validate_repository_iri(self.repository_iri, max_bytes=self.max_identifier_bytes)
-        if self.author and (_TOOL_AUTHOR.fullmatch(self.author.strip()) or self.author.strip().lower().endswith("[bot]")):
+        if (self.author_kind != AuthorKind.TOOL and self.author
+                and (_TOOL_AUTHOR.fullmatch(self.author.strip()) or self.author.strip().lower().endswith("[bot]"))):
             raise ValueError("author must identify the issuing individual or organization, not tooling")
 
     @classmethod

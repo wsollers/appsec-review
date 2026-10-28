@@ -2,7 +2,7 @@
 
 `job_source_history_analysis` runs after the accepted target catalog and before
 `job_target_analysis_plan`, in both the direct review graph and Dagster's `wave1_review`. It reads
-the target's local Git history and can optionally enrich it from GitHub. It then:
+the eligible local Git sources discovered for the target and can enrich them from GitHub. It then:
 
 - scores files and functions with the 0–100 Security Instability Index (SII);
 - assigns review tiers; and
@@ -13,7 +13,33 @@ coverage is an explicit skip or a named gap, never a clean result. The design, e
 definition, and the index schema are in
 [`../architecture/source-history-analysis.md`](../architecture/source-history-analysis.md).
 
-## Prerequisites
+## Normal launch procedure
+
+For an acquired system, configure its components once under `target_acquisition.systems` and
+launch the review at the composed root:
+
+```bash
+appsec-review start --system storefront
+```
+
+Acquisition materializes `targets/storefront/<component>/`. History uses the accepted acquisition
+manifest to resolve each component's repository and pinned revision; the composed root does not
+need its own `.git`. Git and review-export checkouts are processed independently, so an unavailable
+source does not discard another component's usable history. Perforce acquisition is supported,
+but Perforce **history analysis** is not: it remains an explicit coverage gap.
+
+For an existing checkout, use the normal target launch:
+
+```bash
+appsec-review start --target targets/my-app
+```
+
+Direct-target discovery checks bounded repository locations rather than requiring an acquisition
+manifest. Neither launch needs a second repository-wiring option. Repeated `--system` and
+`--component` options on `acquire-target` select what to acquire, not which history consumers to
+connect. See [target acquisition](target-acquisition.md) for those selectors.
+
+## Prerequisites and revision binding
 
 Build the `tool-git` and `tool-tree-sitter` images before running against a Git target:
 
@@ -32,9 +58,16 @@ job still ranks files, but complexity is missing. Symbol hotspots, and `same_fun
 matching, are unavailable. These are reported as `tree_sitter_unavailable` or
 `tree_sitter_execution_failed` (retriable) gaps.
 
-The target must be the repository working tree, with `.git` at its root or a `.git` file pointing
-inside it. History follows the first-parent chain of `main`, else `master`, else `HEAD`. The tree
-under review should be that mainline tip:
+Each eligible Git source must retain usable local Git metadata. Direct-target discovery checks
+the target root, accepted catalog component roots, and bounded first-level locations; it does not
+recursively search the target during inference. A `.git` file must resolve inside that source's
+root; linked worktrees and unsupported repository formats remain named gaps.
+Discovery is bounded to 4,096 catalog roots/first-level entries and 256 actual sources; reaching a
+bound leaves explicit coverage gaps rather than silently declaring the remainder covered.
+
+For an acquired component, history follows the first-parent chain ending at its **pinned acquired
+revision**, not a different local `main` tip. For a direct checkout, it uses `main`, else `master`,
+else `HEAD`. Binding compares the reviewed bytes with that source's selected revision:
 
 - files that differ from it are reported as `working_tree_divergent`, and get no line history,
   symbols, or complexity; and
@@ -47,8 +80,8 @@ Unknown keys and out-of-range values fail validation before the job runs.
 
 | Setting | Default | Meaning |
 |---|---|---|
-| `history_window_months` (M) | `6` | Window length in calendar months (1–120). It ends at the mainline snapshot commit's committer time in UTC, not at wall-clock time. A start day that does not exist in its month clamps to the month's last day, so 31 August minus 6 months is 29 February in a leap year and 28 February otherwise. |
-| `hotspot_count` (N) | `10` | The hotspot index holds the top N ranked files and the top N ranked symbols (1–100). |
+| `history_window_months` (M) | `6` | Window length in calendar months (1–120), evaluated separately per source. It ends at the selected snapshot commit's committer time in UTC, not at wall-clock time. A start day that does not exist in its month clamps to the month's last day, so 31 August minus 6 months is 29 February in a leap year and 28 February otherwise. |
+| `hotspot_count` (N) | `10` | Each source's hotspot index holds the top N ranked files and the top N ranked symbols (1–100). |
 | `ranking_top_n` | `200` | Length of the SII file ranking copied into the accepted document for the analysis plan. |
 | `fix_on_fix.interval_days` | `30` | Maximum gap between two fixes matched as fix-on-fix (14–30). |
 | `line_history.max_files`, `line_history.max_file_bytes` | `50`, 1 MiB | Bounds on per-file line-region history, applied to the highest-churn files. |
@@ -65,26 +98,62 @@ Unknown keys and out-of-range values fail validation before the job runs.
 | `co_change_top_k`, `co_change_min_support` | `10`, `3` | Co-change partners kept per file (1–100), and the shared changes needed to report a pair (1–10000). |
 | `fix_labels`, `security_labels` | `bug`, `fix`, `regression`; `security`, `vulnerability` | GitHub pull-request labels, matched case-insensitively, that mark a change as a fix or security fix (basis `github_label`); without a label match, commit-message heuristics apply. Each entry is 1–64 characters. |
 | `[...settings.git] enabled` | `true` | Set to `false` to skip the lane by policy. |
+| `[...settings.github] enabled` | `"auto"` | Discover eligible GitHub identities automatically. `true` also permits discovery; explicit `false` denies enrichment. |
+| `[...settings.github] repository` | empty | Optional `owner/name` override for a single source, not a required mapping for every acquired component. |
 | `[...settings.github] api_base`, `max_requests`, `timeout_seconds` | `https://api.github.com`, `2000`, `30` | GitHub enrichment endpoint (an `https` URL without query or fragment), request budget (1–100000), and per-request timeout in seconds (1–300). |
+| `[...settings.github] per_page`, `max_pages`, `max_records` | `100`, `50`, `5000` | Bounded pagination: records per page, pages per collection, and records per collection. Reaching a bound leaves incomplete coverage. |
 
-To change N or M, edit the TOML and resume the run from the job:
+To change N, M, or any other setting, edit the TOML and start a new run. Existing runs are bound to
+their resolved configuration under `data/configuration/`; resuming with different settings is
+refused. `--force-from` reruns work under the same configuration, not with edited settings:
 
 ```powershell
 appsec-review resume --run-id <run-id> --target <target> --force-from job_source_history_analysis
 ```
 
-The job and everything below it rerun with the new settings.
+The job and everything below it rerun. Use `--system <id>` instead of `--target <target>` for an
+acquired-system run.
 
-GitHub enrichment is off by default. To enable it:
+The automatic GitHub default does not rewrite historical configurations. An existing run whose
+frozen setting is `github.enabled = false` still denies enrichment, even when forced to rerun.
+Start a new run with the updated central settings to adopt `"auto"`; do not edit run-owned
+configuration or accepted pointers.
 
-1. Set `enabled = true` and `repository = "owner/name"` under `[...settings.github]`.
-2. Export the token named by `token_env` (default `GITHUB_TOKEN`) in the environment of the process
-   that runs the job. A read-only token with pull-request read access is enough.
+### GitHub identity, credentials, and network access
 
-The repository identity always comes from this configuration, never from the target's
-`remote.*.url`. The token is never written to argv, logs, artifacts, or retrieval shards.
-Enrichment runs in the application process (like NVD sync), not in the network-disabled Git
-container. Without enrichment, `review_bypass_count` is reported as an unavailable signal.
+The default `github.enabled = "auto"` discovers repository identity from an approved acquisition
+URL or the bounded `origin` URL in local Git metadata. With `api_base = "https://api.github.com"`,
+the recognized repository host is `github.com`; with an enterprise API base, it is that configured
+endpoint's host. Target metadata cannot supply a new API endpoint. Recognized forms include
+`https://github.com/owner/repo.git`, `ssh://git@github.com/owner/repo.git`, and
+`git@github.com:owner/repo.git` (the `.git` suffix is optional). Explicit ports, passwords, query
+strings, fragments, and unsupported URL forms are not used for automatic identity resolution.
+An unresolved or unsupported provider identity records `github_repository_unavailable`, not
+permission to query an arbitrary host. Local Git history remains usable for non-GitHub sources.
+The singular `github.repository` setting remains an optional override only when exactly one
+source is discovered; it is not applied across a composed system's repositories.
+
+Export the token named by `github.token_env` (default `GITHUB_TOKEN`) in the environment of the
+process running the job, with read access to the relevant repositories and pull requests.
+Without that credential, enrichment records `github_credentials_missing` and makes no network
+request; local Git history can still be analyzed. Explicit `github.enabled = false` denies
+enrichment even when a source and token exist.
+
+Discovery does not authorize credentialed access by itself. Requests use the configured API
+endpoint and existing request, pagination, and timeout bounds; redirects are refused. The
+token is never written to argv, logs, artifacts, or retrieval shards. Enrichment runs in the
+application process, not in the network-disabled Git container. Git history does not execute
+target hooks, credential helpers, configuration includes, or target-defined commands. Without
+usable review enrichment, review-derived metrics are unavailable, not zero.
+
+Request and pagination budgets apply separately to each source; the aggregate number of requests
+can therefore exceed one source's `max_requests`.
+
+Acquired review-export components already carry hash-pinned review records. Change-context uses
+those records automatically under its default review source, without a second export-path/hash
+configuration. This is separate from live GitHub access. Explicit `review.source = "none"` still
+denies review signals, and `review.source = "export"` remains a single-source operator override; see
+[change-context operations](change-context-analysis.md#review-records).
 
 ## Retrieving hotspots
 
@@ -93,10 +162,11 @@ tree.
 
 - **In process:**
   `appsec_review.jobs.job_source_history_analysis.load_accepted_hotspots(run_root)` returns the
-  hash-verified `hotspots.json`. Its `entries` hold at most 2N items, in this order: files by rank,
-  then symbols by rank.
+  hash-verified `hotspots.json`. Each source contributes at most 2N entries: files by rank, then
+  symbols by rank. A multi-source result is a collection of source-local top entries, not one
+  global top-N ranking.
 - **Through retrieval (MCP or `RetrievalCore`):** in the `history` index, use:
-  - `find(kind="hotspot", indexes=["history"])` for every hotspot entry;
+  - `find(kind="hotspot", indexes=["history"])` to list hotspots (follow pagination);
   - `find(kind="hotspot", name="app/auth.py::check")` for one symbol;
   - `find(kind="hotspot", path="app/auth.py")` for a file's hotspots;
   - `trace` from a hotspot over `DERIVED_FROM` to reach its file or symbol `history_signal`, and
@@ -112,6 +182,15 @@ Each entry carries:
   span; and
 - `coverage_gaps`.
 
+For composed targets, paths remain relative to the composed root, for example
+`service/src/auth.py`, while the source-relative path is `src/auth.py`. Source-scoped records retain
+`source_id`, repository/acquisition identity, the selected revision, and that path mapping.
+Change and review identities are source-scoped too: the same path or commit id in two repositories
+does not identify the same evidence. Follow the source's retained artifacts and coverage rather
+than treating one component's success as coverage of the entire system.
+When direct discovery finds nested repositories, each file belongs to the most specific discovered
+source root, rather than being attributed to both the parent and nested repository.
+
 ## Interpreting tiers, scores, and gaps
 
 - **Tiers.** Tier 1 is the top 5 % of the ranked population, rounded up, so every non-empty
@@ -121,7 +200,7 @@ Each entry carries:
   - Tier 3 is not "safe": the tiers only order attention.
   - Files and symbols are separate populations, each with its own tiers.
 - **Scores** are relative to one population, window, and run. Do not compare scores across runs or
-  targets.
+  targets, or across independently ranked sources in a composed target.
   - A score of 0 means the unit is lowest on every metric in this population, not that it is
     stable.
   - A constant metric, listed in `constant_metrics`, contributes nothing to any unit.
@@ -142,10 +221,27 @@ Each entry carries:
 
 ### Coverage statuses
 
+Read coverage per source before interpreting the aggregate result. Common discovery and
+integration reasons include:
+
+| Reason | Operator interpretation |
+|---|---|
+| `history_backend_unsupported:perforce` | acquisition succeeded, but this history backend is not implemented |
+| `acquisition_source_unavailable:<type>` | a pinned component record is missing, unreadable, or does not match the accepted acquisition |
+| `acquisition_revision_invalid`, `acquisition_revision_mismatch` | the component cannot be bound to its approved revision; it is not silently replaced by local `main` or a remote |
+| `history_metadata_discovery_bound_reached`, `history_source_count_bound_reached` | direct discovery exceeded a bound; unexamined sources are not covered |
+| `github_repository_unavailable`, `github_credentials_missing` | live review enrichment is unavailable; local history may still be usable |
+| `acquired_review_records_unavailable:<type>` | acquired review metadata could not be verified and retained |
+| `source_failed:<unit>:<type>` | a source-specific execution failed; inspect that source's receipts and gaps |
+
+Aggregate gaps are source-qualified. Successful peer sources still publish their available
+results. Accepted-artifact integrity or publication failures still fail closed rather than
+publishing an apparently complete aggregate.
+
 | Coverage row | `complete` | `partial` | `unavailable` |
 |---|---|---|---|
 | `git-history` | history read with no history gap | some history gap (shallow, divergent, truncated, blame bound, …) | no usable Git source; the gap names why |
-| `github-enrichment` | enrichment succeeded | some requests failed or the budget ran out | disabled or no history |
+| `github-enrichment` | enrichment succeeded | an enrichment artifact exists but requests failed or a bound was reached | no enrichment artifact: disabled, no eligible identity/history, or missing credentials |
 | `line-history` | every ranked exact file within bounds has line regions | some files lack regions | no history |
 | `symbol-spans` | every selected file parsed cleanly | unsupported languages, bounds, parse errors, or Tree-sitter failures | no history |
 | `fix-on-fix` | every candidate fix pair was decided | some pairs are undetermined | no history |
@@ -208,14 +304,23 @@ visible through incomplete-accounting fields.
   - the SII file ranking and component priorities;
   - the hotspot summary and the `hotspots.json` identity; and
   - gaps and observations.
-- The `history/git-history` retrieval shard holds file, component, and symbol `history_signal`
-  entities, `change` entities, `hotspot` entities, and the coverage rows above.
-- The analysis plan's `history_priority` section lists accepted components and files in SII rank
-  order.
+- For composed/multi-source output, `sources.repositories[]` lists source descriptors, decisions,
+  and hash-pinned source-document references; `ranking.scope = "per-source"`. Read those referenced
+  documents for each source's binding, window, revision semantics, and detailed ranking rather than
+  assuming one global window or snapshot commit. The aggregate `hotspots.json` retains schema
+  `appsec-review/history-hotspots/1`, with `selection = "top entries per source"` and
+  `sources[].artifact` references to the source-local hotspot indexes.
+- Source-scoped `history` retrieval shards hold file, component, and symbol `history_signal`
+  entities, `change` entities, `hotspot` entities, and their coverage rows. All accepted source
+  shards are composed into the run's manifest.
+- The analysis plan's `history_priority` section preserves the source identity and per-source
+  ranks of accepted components and files.
 
-Resume reruns the job when the mainline commit, object format, or shallow boundary changes, even if
-the tree bytes did not. The history shard fingerprint binds the ranked signals, hotspots,
-normalized changes, GitHub enrichment artifact, and exact retained Git log/message identities.
+Resume planning and source-history handoff publication re-probe the discovered sources, including
+nested accepted catalog roots. A changed selected commit, source metadata/configuration, object
+format, or shallow boundary can invalidate history even if the tree bytes did not. The input identity now uses
+`appsec-review/source-history-identity/2`. Each history shard fingerprint binds the ranked signals,
+hotspots, normalized changes, GitHub enrichment artifact, and exact retained Git log/message identities.
 It also binds the actual Git image, configured resource bounds, and bounded stream-parser version,
 while retaining the line-history, symbol, complexity, and SII identities. Identical rankings do not
 permit reuse when their retained provenance changes.

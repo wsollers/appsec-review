@@ -1,35 +1,35 @@
 # OpenVEX findings export
 
-Status: **certified-gate implementation assembled**, reconciled against
-`e628041cd734d854e749aa4e373bdc718d9a7363` (including strict contracts at `f4f746bf`,
-projection at `e6d64442`, shared certified-gate reader at `090bb402` and input verifier at
-`2f467134`).
-The user selected **standalone post-gate export; preserve gate-only reporting**.
+Status: **automatic local export**, reconciled against
+`74d931273a383f2f33bac90d3569a070a0ef612d`, containing landed main `83e67b23`.
+The user selected **standalone post-gate export; preserve gate-only reporting**, then
+explicitly required generation and validation by default, not opt-in.
 This document supersedes the earlier OpenVEX report-link/fan-in proposal throughout:
 enabled PoC/remediation/dossiers precede one final gate, and export/report are independent
 post-gate peers. The report never discovers or consumes OpenVEX output.
 
 At this source boundary, frozen settings, strict gate `/2` capability/attachment contracts,
 review `/3` identities and standalone topology are reconciled, with the shared certified-gate
-reader and exporter input verifier/projector implemented. Combined focused verification and
-final exact-main reconciliation remain separately tracked. Exact focused-unit, packaging
-and manual-validation results belong in
+reader and exporter input verifier/projector implemented. Tool-authored defaults and an exact
+accepted-snapshot repository namespace require no operator setup. Exact focused-unit,
+packaging, policy-change landing and manual-validation results belong in
 [the implementation record](../reviews/openvex-export-implementation.md), not inferred from
 schema-valid synthetic fixtures.
 
-The coordinator selected a small v1: explicit immutable pre-run TOML issuer/action inputs,
+The local export uses typed immutable pre-run TOML defaults/overrides,
 reviewed-source-snapshot products, and the existing accepted-handoff lifecycle. There is no
 new approval intake, per-finding consent workflow, generic runtime identity hook, or mutable
 post-run configuration. This document does not authorize public disclosure.
 
 ## 1. Goal and non-goals
 
-Add a deterministic, model-free `job_openvex_export`, downstream of the accepted final
+The deterministic, model-free `job_openvex_export` runs downstream of the accepted final
 publication gate, producing OpenVEX v0.2.0 `affected` statements for **all and only the
-gate's publishable confirmed findings**. An operator explicitly supplies the person or
-organization issuing those assertions and a common action statement applicable to all
-exported findings. Missing required enabled-job inputs are configuration errors, not an
-empty export or an excuse to invent advice.
+gate's publishable confirmed findings**. Generation and verification are automatic for new
+runs: the author is truthfully the tool `AppSec Review`, the action is fixed conservative
+review/remediation guidance, and repository identity defaults to the accepted source snapshot.
+Explicit person/organization, action and repository overrides remain strict and frozen
+before the run. Invalid settings are errors, not an empty export or an excuse to invent advice.
 
 OpenVEX is a compact vulnerability/product/impact-status exchange, not a lossless review
 report. Retain scores, independence, ship-block policy, coverage, limitations, and resolving
@@ -92,7 +92,9 @@ common/manifest/result, upstream OpenVEX, and final-report common/gate/report sc
 not for report data discovery. Preserve exact pinned bytes.
 
 Local OpenVEX manifest/result/handoff identities remain `/1` on the pre-issued contract;
-the validation-profile digest changes to bind gate `/2` and its closure. No old runtime
+the validation-profile digest changes with the pinned closure. The automatic-source policy
+extends the local common-schema identity-basis enum and repins its bytes; upstream OpenVEX
+bytes are unchanged. No old runtime
 export is migrated or made compatible by relaxing schema validation. The companion records
 schema and validation-profile hashes. Installed-resource fallback supports pure projection/
 offline validation, not a self-contained application: configured checkout/guidance resources
@@ -102,7 +104,11 @@ Requirements relevant to v1:
 
 1. Emit UTF-8 JSON with exact `@context: "https://openvex.dev/ns/v0.2.0"`.
 2. Document `@id`, `author`, `timestamp`, `version`, and `statements` are required.
-   `author` MUST identify an individual or organization; automation belongs in `tooling`.
+   The upstream specification requires an individual/organization author. Local policy
+   deliberately identifies the automated author as `AppSec Review` instead of inventing a
+   human/vendor assertion; `author_kind = tool` is local metadata, not an extra OpenVEX field.
+   The document remains schema-validated, with exporter implementation/release in `tooling`;
+   this is not authenticated supplier issuance or a claim to satisfy that upstream author requirement.
 3. An `affected` statement MUST have `action_statement`. The upstream schema accepts blank
    strings; v1 semantics do not.
 4. A complete standalone statement needs vulnerability identity, at least one product, status,
@@ -132,17 +138,18 @@ restricted ASCII URI/IRI forms; do not assume optional format-checker packages a
 2. **Statuses:** only `affected`. Supported findings, refuted/contradicted claims, unreachable
    observations, missing coverage, absent/failed PoCs and compile results imply no other
    OpenVEX status. Do not create statements for ledger claims lacking gate packages.
-3. **Issuer/action:** explicit typed TOML fields, frozen before the run. The operator owns the
-   issuer assertion and exact common action text. There is no synthesized mitigation,
-   automatic target-guidance discovery, title-to-advice conversion, or silent fallback.
+3. **Author/action:** typed TOML defaults/overrides, frozen before the run. Defaults name the
+   tool and conservative common action, not an invented human/vendor issuer or verified fix.
+   Overrides are explicit; no model-synthesized mitigation, target-guidance discovery,
+   title-to-advice conversion or silent fallback is added.
 4. **Product:** one reviewed source-snapshot/configuration product for the reviewed system.
    An accepted source snapshot is not a shipped artifact, release range, or artifact digest.
 5. **Evidence:** scores, independent verification, ship-block status and limitations remain
    separate dimensions in the companion. Missing values never become zero or low risk.
 6. **Optional proof:** PoCs/chains/dossiers are optional linked evidence, never conditions for
    affected. Existing gate withholding remains unchanged; do not "repair" it in this feature.
-7. **Privacy:** generate protected local artifacts only. Enabling export is a deliberate
-   issuer/operator action, not approval to publish files externally.
+7. **Privacy:** automatically generate protected local artifacts only. Neither default generation
+   nor an operator override approves external publication.
 8. **Empty/error:** genuinely zero eligible findings produce accepted `no_statements` with a
    named gap. Missing enabled settings, invalid input, stale state, tamper or bounds failure
    fail closed, not as empty success or row-level skip.
@@ -151,43 +158,46 @@ restricted ASCII URI/IRI forms; do not assume optional format-checker packages a
 10. **Integration:** export consumes certified gate/review identities; report remains gate-only.
     No export-to-report dependency, live optional attachment discovery, mutable approval store,
     runtime identity hook or new acceptance job.
-11. **Dispatch:** disabled by default; disabled means no automatic or manual dispatch in v1.
-    Configure and enable before run creation. No new exception in `MANUAL_JOB_IDS`.
+11. **Dispatch:** enabled by default in checked-in config and typed settings. Explicit disable
+    opts out; disabled runs refuse automatic/manual dispatch with no `MANUAL_JOB_IDS` exception.
+    Historical frozen disabled configurations remain disabled, with no retroactive rebind.
 12. **Publication:** only the existing runner accepts the handoff after final byte/schema/
     semantic/accounting checks. A file or telemetry event is not proof of acceptance.
 
-## 5. Safe immutable issuer/action inputs
+## 5. Safe immutable author/action defaults and overrides
 
-The following operator-owned fields are required when enabled:
+No setup is required for automatic local generation. These typed fields are frozen before
+the run; overrides are optional, not an approval-input workflow:
 
 | Field | Typed contract |
 | --- | --- |
-| `author_kind` | Exactly `individual` or `organization`; never `tool`, model or bot. |
-| `author` | Nonblank bounded person/organization name or identifier; the operator asserts issuance authority. Do not infer the repository owner or claim supplier endorsement. |
-| `role` | Optional nonblank role, omitted from OpenVEX when empty. No automatic "supplier" role. |
-| `action_statement` | Exact operator-authored plain text applying accurately to **all** exported findings for the reviewed product. Nonblank, bounded, no template placeholders or executable markup. |
-| `repository_iri` | Explicit stable absolute `https:` or `urn:` identity for the reviewed repository/system, not a local path, branch, credential-bearing URL, or product release. |
+| `author_kind` | `tool` by default; `individual` and `organization` are explicit alternatives. Tool-only names cannot masquerade as either human/organization kind. |
+| `author` | Default `AppSec Review`; nonblank and bounded while enabled. Explicit individual/organization naming is an operator assertion, never inferred repository ownership or supplier endorsement. |
+| `role` | Default `Automated local application-security review`; optional, omitted from OpenVEX when empty. No supplier role is inferred. |
+| `action_statement` | Default `Review and remediate the confirmed findings using the accompanying evidence; validate any fix before relying on it.` Exact nonblank bounded plain text; optional overrides apply to every statement, with no templates or executable markup. |
+| `repository_iri` | Empty by default: resolve to `urn:appsec-review:source:<accepted_source_snapshot_sha256>`. An explicit absolute ASCII `https:`/`urn:` system IRI must be safe and agree with accepted acquisition when it supplies an external repository identity. |
 
 Selecting a kind cannot mechanically prove a named author is a real organization/person.
-Document the trust boundary: the operator owns this assertion; v1 adds no identity
-verification or signature infrastructure. Reject obvious tool-only identities, empty/unsafe
-values and unsupported kind, but do not claim a heuristic proves organizational authority.
+Document the trust boundary: defaults explicitly identify automation, not an authenticated
+publisher. Operators own any explicit individual/organization assertion; no identity verification
+or signature infrastructure is added. Reject tool-only names declared as those kinds,
+unsupported kinds and unsafe/required-empty fields, but do not claim heuristics prove authority.
 
-Never manufacture "upgrade", "investigate", or "no fix available" advice. An issuer may write
-an accurate statement that no remediation is yet available, but the exporter must not choose
-that fallback. If no accurate common action statement can be approved for all publishable
-findings, the operator cannot enable this v1 export for that run; per-finding advice is a
-future schema/workflow, not an implicit partial-export switch.
+The default action requests review, remediation and validation; it does not assert an available
+fix, select an upgrade or claim successful remediation. Preserve an explicit override exactly
+rather than inventing fallback advice. Per-finding advice remains a future schema/workflow,
+not an implicit partial-export switch.
 
 Reject NUL, unsafe controls, detected embedded credentials, unresolved template markers,
 and text exceeding UTF-8 byte bounds. Preserve accepted text exactly; do not silently redact,
 truncate or normalize it into different advice. Detection cannot prove text contains no
-secrets: explicit operator review remains necessary. Read no target-owned settings or advice.
+secrets: review operator-supplied overrides and any contemplated external disclosure separately.
+Read no target-owned settings or advice.
 
 The full configuration and its hash are already frozen under `data/configuration/`.
 Do not edit them after review, add runtime overrides, or accept an unpinned advice file.
-Changing author/action/repository policy requires a new run. Existing pre-feature runs
-cannot acquire new settings by modifying their stored configuration.
+Changing author/action/repository policy requires a new run. Existing frozen disabled runs
+remain disabled, and pre-feature runs cannot acquire new settings by editing stored configuration.
 
 ## 6. Product and vulnerability identities
 
@@ -197,11 +207,19 @@ contains exploitable code. Store a human-readable scope qualification in both Op
 status note and the companion.
 
 Resolve `target_snapshot` through accepted scope and its verified manifest. Never run Git,
-scan a target, or fingerprint the current checkout during export. `repository_iri` is an
-explicit operator assertion; when accepted acquisition provenance supplies repository identity,
-require agreement rather than silently overriding it. Record whether repository identity is
-`operator_declared` or `accepted_acquisition`. If acquisition provenance does not exist, do not
-invent a commit: the accepted snapshot digest is the exact identity.
+scan a target, or fingerprint the current checkout during export. Empty configured
+`repository_iri` selects automatic mode:
+
+```text
+urn:appsec-review:source:<accepted_source_snapshot_sha256>
+```
+
+Its `repository_identity_basis` is `source_snapshot`, and `SourceIdentity` requires exact
+namespace/snapshot equality. Accepted acquisition is still authenticated and bound when
+present, but automatic mode never promotes it to a guessed external repository, publisher,
+release or distribution URL. If an operator supplies a nonempty IRI, record `operator_declared`
+or `accepted_acquisition` as appropriate and require agreement with any accepted external
+repository identity. Never invent a commit or released-product identity in either mode.
 
 Use one source-product IRI:
 
@@ -209,6 +227,7 @@ Use one source-product IRI:
 urn:appsec-review:source-snapshot:<H(repository_iri)>:<target_snapshot>:<resolved_config_sha256>
 ```
 
+Here `repository_iri` is the resolved automatic or explicit IRI, not the empty settings value.
 `H` is full lowercase SHA-256 over existing `storage.canonical_json` bytes. Validate snapshot
 and configuration values against their existing contracts before embedding them. Using the
 full frozen configuration identity conservatively distinguishes build/profile differences,
@@ -245,7 +264,7 @@ Use existing `storage.canonical_json`: sorted object keys, compact separators, U
 (`ensure_ascii=False`), and one trailing LF. Reject non-finite numeric values before
 serialization. Domain-separate identity hashes with the literal versioned tags below.
 
-The issuer's pre-run enablement delegates issuance of the impact assertions to gate
+The frozen local-generation policy serializes accepted impact assertions after gate
 acceptance. Use the accepted gate job handoff's `completed_at` as the document and statement
 timestamp, normalized to UTC with six fractional digits and `Z`. This is the time of the
 accepted assertion being serialized, not the current export file-write time or a claimed
@@ -468,11 +487,11 @@ name = "openvex_export"
 workers = 1
 
 [jobs.job_openvex_export.settings]
-enabled = false
-author_kind = "organization"
-author = ""
-role = ""
-action_statement = ""
+enabled = true
+author_kind = "tool"
+author = "AppSec Review"
+role = "Automated local application-security review"
+action_statement = "Review and remediate the confirmed findings using the accompanying evidence; validate any fix before relying on it."
 repository_iri = ""
 max_packages = 10000
 max_bindings = 30000
@@ -499,8 +518,9 @@ workers = 1
 
 Implement frozen `OpenVexExportSettings` in the job's `settings.py`, parsed at config load
 and revalidated at admission. All displayed keys are required; unknown keys, bool-as-int,
-unsupported kinds and invalid nonempty inputs are errors even when disabled. Empty issuer/
-action/repository values are allowed only while disabled. Require gate and review enabled
+unsupported kinds and invalid nonempty inputs are errors even when disabled. Author/action
+must be nonblank while enabled; empty role is optional, and empty repository selects automatic
+snapshot identity whether enabled or disabled. Require gate and review enabled
 when automatic export is enabled; fail configuration explicitly if prerequisites are absent.
 
 Displayed numeric defaults are schema hard maxima; operators may lower positive bounds.
@@ -514,6 +534,7 @@ Use monotonic deadlines checked between bounded reads/validation/assembly phases
 resource admission where applicable. No retry loop for bad evidence. Use the central declared
 exporter component release (or established platform release convention), schema and validation
 identity in existing resume contracts; missing declarations must not silently allow reuse.
+The checked-in declaration is `review_policy.releases.job_openvex_export = "openvex-export-2"`.
 Do not configure arbitrary schema/context URLs, statuses, model settings, public destinations
 or general remediation tools.
 
@@ -533,7 +554,7 @@ flowchart LR
     Dossiers --> Gate["Single certified gate /2"]
     Review --> Gate
     Gate --> Report["Gate-only final report /2"]
-    Gate --> Export["Standalone OpenVEX export if enabled"]
+    Gate --> Export["Automatic local OpenVEX export unless opted out"]
 ```
 
 Report source, schema and `CONSUMES` stay **exactly gate-only**. Export consumes gate/review
@@ -547,13 +568,13 @@ driver before report dispatch. This is not a report-input dependency or a promis
 after failure. Dagster exposes independent gate-dependent peers; standalone report publication
 requires only the certified gate. No gate/PoC/export/report dependency cycle is introduced.
 
-Standalone invocation after enabling in original run configuration:
+Standalone invocation for an originally enabled run (the new-run default):
 
 ```text
 appsec-review run job_openvex_export --run-id <id> --upstream-from-run
 ```
 
-Disabled export stays outside automatic dispatch and is refused manually; no new
+Explicitly disabled export stays outside automatic dispatch and is refused manually; no new
 `MANUAL_JOB_IDS` exception. Original frozen settings apply. Existing accepted-handoff
 dependencies and job settings/release identities provide cache invalidation; change no
 generic runtime claim/hook machinery.
@@ -686,8 +707,8 @@ at final acceptance to detect concurrent replacement.
 
 Both files can disclose vulnerabilities. Do not copy to public assets, releases, GitHub
 attachments, repository instructions or outbound storage. No public-audience setting is
-added. Local issuer enablement does not authorize external distribution.
-Common advice is operator-reviewed public-safe plain text, but the companion stays internal:
+added. Default generation or an author override does not authorize external distribution.
+Common advice is fixed default or explicit override plain text, but the companion stays internal:
 paths, evidence, scores/policies are not appended to the small OpenVEX file.
 
 Reject oversized inputs/outputs before acceptance. Count unique references and aggregate
@@ -704,9 +725,9 @@ in-memory strict contracts from a real accepted run/certificate boundary.
 
 | Suite | Required assertions |
 | --- | --- |
-| Contracts/schema | Raw upstream schema/lock hash, draft and installed-resource availability; valid document passes offline Draft202012Validator; missing action/author/time/version and unknown properties fail; empty statements fail upstream; schema-valid empty action/products, tool author, wrong context and invalid IRI/date fail semantics. |
-| Settings | Exact keys; enabled missing issuer/action/repository rejected even with zero findings; disabled defaults valid; invalid nonempty values rejected; bool-as-int, all bound edges and one past; byte-vs-character limits; no provider/model/reasoning keys; task topology and prerequisites exact. |
-| Inputs/products | Re-prove the certified `/2` snapshot, capabilities/attachments and all nested certified references, with no live optional discovery; both package-manifest hashes, ledger/scores/policy/scope/config pins; operator-declared repo versus accepted acquisition; no guessed release/artifact/purl identity or target access. |
+| Contracts/schema | Raw upstream schema/lock hash, draft and installed-resource availability; valid document passes offline Draft202012Validator; missing action/author/time/version and unknown properties fail; empty statements fail upstream; empty action/products, wrong context and invalid IRI/date fail semantics; exact `source_snapshot` namespace is enforced. |
+| Settings | Exact keys; checked-in and typed defaults enable truthful tool author/action with automatic empty repository setting; enabled empty author/action fail even with zero findings; tool names cannot masquerade as individual/organization; explicit opt-out/historical settings remain valid; strict overrides, bool-as-int/bounds/UTF-8/prerequisites exact. |
+| Inputs/products | Re-prove certified `/2` snapshot, capabilities/attachments and nested certified refs without live discovery; both package-manifest, ledger/scores/policy/scope/config pins; automatic snapshot namespace with bound acquisition but no external URL inference; strict explicit IRI/acquisition match; no guessed release/artifact/purl or target access. |
 | Selection/accounting | Mixed publishable confirmed, supported backlog, confirmed withheld: each counted once, only publishable affected; state/bucket contradiction fails; missing severity/distinct verification and incomplete review retain original limitations without altering eligibility. |
 | Unsupported statuses | Refuted/contradicted/unreachable observations, PoC absence/failure/compile success or failed/skipped coverage never create not_affected/fixed/under_investigation; supported does not become affected. No PoC/chain/dossier prerequisite. |
 | Empty/limits | Zero packages/all backlog/all withheld yield accepted no_statements, null ref, absent VEX file, explicit gap and exact zeros/reasons. Invalid config is not no_statements. Output/input/ref/timeout boundary failures create no accepted subset or empty success. |
@@ -787,29 +808,29 @@ final-report consumption or a publication route.
 
 ### Remaining product scope
 
-No open product choice blocks the narrowed v1. Operators must supply the actual issuer,
-accurate common action statement and stable repository/system IRI for each enabled run;
-the design deliberately supplies no fake defaults. Per-finding actions, verified released
+No setup blocks automatic local generation: defaults truthfully identify the tool, supply
+conservative common action and resolve the exact accepted-snapshot namespace. Optional
+individual/organization, action and external IRI overrides remain strict. Per-finding actions, verified released
 artifact/purl mapping, stronger issuer authentication/signing and external publication are
 future product decisions, not implementation assumptions.
 
 ## 16. Reconciliation and remaining validation
 
-This revision reconciles the nine assigned documentation surfaces with the frozen completion
-boundary and assembled certified-gate implementation at `e628041c`. It removes the former
+This revision reconciles operative OpenVEX documentation with automatic generation at
+`74d93127`, on landed standalone gate `/2` main `83e67b23`. It removes the former
 report-link/fan-in proposal, not the pre-gate completion path. Contract fixtures with certified attachments
 prove strict shapes/reference membership; they do not prove real filesystem acceptance.
 
 The real `/2` input/certificate reader and projector are implemented at the named base.
-Combined focused exporter/snapshot/publication verification and final exact-main reconciliation
-remain tracked by the coordinator in
+Exact focused results, policy-change landing and final wheel/source proof are tracked by the coordinator in
 [the implementation record](../reviews/openvex-export-implementation.md).
 Do not treat this status update or its commands as a final combined result.
 
 The coordinator's isolated installed-only wheel proof at `212f21a8` verifies the seven
 schemas plus lock/license, the transitive report-item definition, canonical assembly and
 semantic validation with synthetic gate `/2` context, not a real accepted run. Exact
-wheel/source proof belongs in the implementation record. This does not establish a
+wheel/source proof belongs in the implementation record; that historical pin predates the
+automatic-source enum/common-schema repin and does not qualify the new profile. This does not establish a
 self-contained application; the earlier isolated standalone job import without configured
 guidance failed on missing `pipeline/guidance/registry.json`.
 Full installed-job execution, real accepted whole-chain, integration, acceptance, Linux,
