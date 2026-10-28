@@ -1,8 +1,11 @@
 # Rust and WebAssembly build image
 
-`Dockerfile` installs Rust 1.90.0 (`rustc`, `cargo`, and the `x86_64-unknown-linux-gnu`,
-`wasm32-unknown-unknown` and `wasm32-wasip1` standard libraries) from official release component
-archives listed in `assets.lock.json`. `build.py` downloads each archive and accepts it only at its
+`Dockerfile` installs Rust 1.90.0 (`rustc`, `cargo`, the `x86_64-unknown-linux-gnu`,
+`wasm32-unknown-unknown` and `wasm32-wasip1` standard libraries, and `rust-src`) from official
+release component archives listed in `assets.lock.json`. `rust-src` puts the standard-library
+source under `/opt/rust/lib/rustlib/src/rust/library`; the CodeQL Rust extractor loads it as the
+sysroot, and without it no `std` call (`std::env::args`, `std::process::Command`, `Option::unwrap`)
+resolves, so Rust sources, sinks and dataflow paths are lost. `build.py` downloads each archive and accepts it only at its
 locked size and SHA-256; the Dockerfile verifies the hashes again and runs the components'
 `install.sh` into `/opt/rust`. No rustup and no network access happen inside the image build.
 
