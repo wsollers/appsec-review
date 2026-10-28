@@ -47,8 +47,8 @@ footer{font-size:12px;line-height:1.7;color:var(--muted);padding:24px 2px 0}.hid
 <header>
   <div class="eyebrow">AppSec Review / System map</div>
   <h1>From code to a defensible finding.</h1>
-  <p class="subtitle">How analysis, adversarial review, independent verification and deterministic policy turn a target repository into an evidence-backed decision.</p>
-  <div class="meta"><span>Architecture snapshot &middot; d4905712</span><span>Updated &middot; 21 October 2026</span><span>Interactive &middot; offline &middot; exportable</span></div>
+  <p class="subtitle">How accepted analysis and tag-cloud context feed bounded OWASP assessment before hunting, adversarial review, independent verification and deterministic policy.</p>
+  <div class="meta"><span>OWASP feature snapshot &middot; 6ff64d81</span><span>Updated &middot; 28 October 2026</span><span>Interactive &middot; offline &middot; exportable</span></div>
 </header>
 <main>
   <div class="toolbar">
@@ -63,11 +63,11 @@ footer{font-size:12px;line-height:1.7;color:var(--muted);padding:24px 2px 0}.hid
     <div>
       <div class="paper">
         <div class="paper-title"><strong>01 &mdash; The review, end to end</strong><span>Select a process to inspect its contract</span></div>
-        <div class="viewport"><svg id="flow" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 2130" role="img" aria-labelledby="flow-title flow-desc">
+        <div class="viewport"><svg id="flow" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 2350" role="img" aria-labelledby="flow-title flow-desc">
           <title id="flow-title">Application security review process</title>
-          <desc id="flow-desc">Intake, planning and parallel analysis feed an immutable evidence index. Triaged leads and proactive hunts generate claims. Blue reviewers and a blind verifier investigate independently; a separate judge compares shuffled red and blue positions without setting claim states. Family-specific evidence policy decides claims, followed by scoring, a publication gate and final reporting. Optional proof-of-concept functions are compiled but never executed. HTML and PDF rendering is a separate manual tool.</desc>
+          <desc id="flow-desc">Accepted analysis feeds prioritization, code graph and security tagging. Their bounded tag-cloud and classification context routes opt-in OWASP assessment before indexing, packages, hunting and red/blue/independent verification. Tags are not control proof. OWASP worker and fresh blinded reviewer assessments stay scoped and provisional; all PRECOMPUTED interpretations are indirect for every final predicate. Original evidence must be retrieved. Family-specific policy decides claims, followed by scoring and final publication. Optional proof-of-concept functions are compiled but never executed.</desc>
         </svg></div>
-        <div class="note">*Implemented means the code path exists, not that every analyzer or language has complete coverage. Live review runs informed protocol v2; full end-to-end live acceptance is not claimed here. PoC generation is shipped disabled, and HTML/PDF rendering is manual. Arrows summarize information dependencies, not exact Dagster scheduling.</div>
+        <div class="note">*Implemented means the code path exists, not full coverage. OWASP is shipped disabled; complete pinned catalogs do not imply more than the four supported narrow Python static procedures. Qualification is synthetic and never production-eligible. Live-model OWASP efficacy, runtime adapters, exploit confirmation and safety certification are not established. The integrated OWASP/tagging chain is in Dagster, not the current direct CLI. PoC generation is shipped disabled; HTML/PDF report rendering is manual. Arrows summarize information dependencies, not exact scheduling.</div>
       </div>
       <section id="roadmap-section">
         <div class="section-head"><h2>02 &mdash; Remaining planned extensions</h2><span>Not part of the current executable review path</span></div>
@@ -100,7 +100,7 @@ footer{font-size:12px;line-height:1.7;color:var(--muted);padding:24px 2px 0}.hid
       <div class="principle" style="background:#eef0f8;border-color:#dce0ee"><strong style="color:#555b8c">Compile-verified &ne; runtime-proven</strong>A call edge shows a relationship. A mapped dataflow path supports reachability. The generated PoC is a test function plus a negative control, compiled but never run. Its status cannot promote a claim or change severity.</div>
     </aside>
   </div>
-  <footer>Source-grounded conceptual map of <strong>wsollers/appsec-review</strong> at <strong>d4905712</strong>. Updated from the current job implementations, predicate policy, review protocol v2, and PoC/final-report operations guides. Grouped analysis families are illustrative, not an exhaustive job inventory. No external scripts, fonts, services or runtime dependencies.</footer>
+  <footer>Source-grounded conceptual map of <strong>wsollers/appsec-review</strong>; OWASP feature reconciliation at <strong>6ff64d81</strong>. Diagram authority is the inline node/edge source below; opening this page or exporting SVG regenerates the view. See docs/architecture/owasp-control-workbench.md and docs/operations/owasp-control-assessment.md. Grouped analysis families are illustrative, not an exhaustive job inventory. No external scripts, fonts, services or runtime dependencies.</footer>
 </main>
 <script>
 "use strict";
@@ -157,12 +157,17 @@ const f=init("flow"),r=init("roadmap");
 const arch="docs/architecture/inference-security-review.md",job="src/appsec_review/jobs/job_inference_security_review/job.py";
 phase(f,30,"01","PREPARE THE TARGET & EVIDENCE");
 edge(f,"M 440 151 H 530");edge(f,"M 890 151 H 980");
-edge(f,"M 1180 217 V 275 H 1050");
-edge(f,"M 720 360 V 405 H 370 V 440");edge(f,"M 720 405 H 1070 V 440");
+edge(f,"M 1180 217 V 229 H 370 V 240");
+edge(f,"M 680 305 H 760");
+edge(f,"M 1070 370 V 412 H 1050");
+edge(f,"M 720 520 V 625 H 370 V 660");edge(f,"M 720 625 H 1070 V 660");
 node(f,"intake",60,90,380,127,"Pin the review target",["Source snapshot, scope, configuration"],"INTAKE","Establish the target and the reproducible context for the run.",["Input: a local target checkout and central configuration.","Output: run identity, immutable resolved configuration and target scope.","Target-owned instructions remain data, not review-worker authority."],"README.md; AGENTS.md");
 node(f,"plan",530,90,360,127,"Catalog & plan",["Components, languages, build units"],"PLANNING","Discover what the target contains and determine which analysis capabilities apply.",["Input: target snapshot and configured capabilities.","Output: component inventory, build discovery and analysis plan.","Unsupported or failed capabilities become named gaps, never clean results."],"README.md; docs/architecture/build-environments-and-execution-capture.md");
 node(f,"analysis",980,90,400,127,"Analyze in parallel",["Builds, SAST, CodeQL, SBOM, CI/IaC"],"ANALYSIS FAMILIES","Run applicable deterministic and specialist producers with their dependencies, including build, source, graph, binary, dependency and configuration analysis.",["Input: planned scopes and accepted build/source identities.","Output: run-owned observations, artifacts, source mappings and coverage.","Parallelism is dependency-bound; not every producer can run at the same time."],"README.md; "+arch);
-node(f,"evidence",390,240,660,120,"Freeze the accepted evidence manifest",["Labelled source + graph neighborhoods + build context + gaps"],"SHARED EVIDENCE","Compose accepted analysis shards into one immutable manifest. Protocol v2 packages embed bounded source, graph neighborhoods and build facts under short labels; application-mediated retrieval supplies the rest.",["Input: accepted producer outputs, or their gap/coverage records.","Output: labelled, hash-pinned package views and scoped in-process retrieval.","The application resolves citations; authentic source text is not automatically direct evidence for every predicate."],"docs/architecture/review-protocol-v2.md; src/appsec_review/review/admission.py");
+node(f,"routing",60,240,620,130,"Prioritize, graph & tag code",["Accepted classifications + distinct-subject tag cloud","Bounded routing context, NEVER control proof"],"ACCEPTED INDEX CONTEXT","Review prioritization and code-graph indexing precede security tagging. OWASP consumes accepted component classification, graph context and a bounded tag cloud, not a recursive target-tree scan.",["Tag-cloud counts are distinct-subject lower bounds; missing tags are unknown.","No reverse dependency from tagging or prioritization to OWASP.","The integrated tagging/OWASP chain is Dagster-only at this feature base; direct start/resume still omits both jobs."],"src/appsec_review/orchestration/topology.py; docs/architecture/security-tag-taxonomy.md");
+node(f,"owasp",760,240,620,130,"Assess OWASP controls BEFORE hunting",["Configured worker + fresh BLINDED reviewer","Scoped outcomes; provisional adverse hypotheses"],"IMPLEMENTED / DEFAULT OFF","Opt-in assessment uses original accepted evidence and four reviewed Python static subject procedures. The separate blinded reviewer never sees the worker answer or transcript. Models propose; application checks and derives states.",["Full pinned catalogs: ASVS 345, MASVS 24 controls; MASTG 292 supporting tests; API Top 10 and Top 10: 10 risk-context records each. Inventory is not assessment coverage.","Exactly four Python static procedures: V1.2.4, V6.2.1, V8.2.1, V8.3.1. Unsupported controls/languages and MASVS runtime adapters remain unresolved.","not_satisfied is not exploit confirmation; satisfied is scoped counterevidence, not component safety. Dissent, assumptions, evidence requests and limitations remain.","Assessment is the configured mode but the job is disabled. Qualification is explicit, inference-disabled, synthetic and never production-eligible."],"docs/architecture/owasp-control-workbench.md; src/appsec_review/jobs/job_owasp_control_assessment/job.py");
+node(f,"evidence",390,400,660,120,"Index evidence & assemble review packages",["OWASP control_evidence + original refs + gaps"],"ACCEPTED / PRECOMPUTED CONTEXT","After OWASP, review-data indexing projects accepted results to PRECOMPUTED control_evidence, then assembles provisional lead/hunt packages with authority links and original evidence custody.",["Preserve proof scopes, dissent, counterevidence, assumptions and limitations. A component lead does not invent an exact source line.","Every PRECOMPUTED interpretation is INDIRECT for EVERY final predicate; source-file identity alone is not direct predicate proof.","Red/blue/verifier roles retrieve original evidence and establish their own predicates; duplicate sources do not multiply rank or corroboration."],"docs/architecture/review-package-contract.md; src/appsec_review/indexing/products.py");
+const downstreamStart=f.children.length;
 phase(f,386,"02","DISCOVER, CHALLENGE & VERIFY");
 edge(f,"M 370 565 V 586 H 600 V 610");edge(f,"M 1070 565 V 586 H 840 V 610");
 edge(f,"M 600 730 V 751 H 370 V 775");edge(f,"M 840 730 V 751 H 1070 V 775");
@@ -196,6 +201,9 @@ node(f,"report",980,1720,400,145,"Publish final JSON + Markdown",["Accepted stat
 node(f,"poc",520,1940,400,145,"Generate & compile PoC functions",["Test + negative control; no main","NEVER EXECUTED by the pipeline"],"IMPLEMENTED / DEFAULT OFF","Optional job_poc_generation verifies candidate inputs, prepares a brief, generates two unit-test functions, applies fail-closed textual/AST policy and compiles against the accepted native build.",["Input: current gate, review PoC candidates, resolved entry/path/trigger and an accepted native build.","Checks: syntax, plain object, sanitizer object and symbol resolution. Output: source, compile record, developer write-up and provenance.","compile_verified proves compilation only; result_id stays null. No executable is linked or run. A compile status never changes claim state, score or ship-block policy."],"docs/operations/poc-generation.md; src/appsec_review/jobs/job_poc_generation/job.py");
 node(f,"renderer",980,1940,400,145,"Render detailed HTML / PDF",["Evidence + review-cell timelines","Standalone tool, not a pipeline job"],"IMPLEMENTED / MANUAL","A separate read-only renderer turns a finished run into a self-contained HTML report or a LaTeX/PDF artifact. It provides more review detail than the sanitized publication.",["Input: finished run, final JSON, packages, ledger and bounded inference recordings.","Output: evidence excerpts, model/retrieval timelines, outcomes and provenance with escaped, bounded content.","HTML needs Python; PDF uses the report container. Publication does not invoke this tool and retains PDF not_rendered."],"docs/operations/report-rendering.md; src/appsec_review/reporting/loader.py");
 text(f,60,2115,"Current PoC outputs document how a developer could reproduce a finding; they do not claim an observed trigger.","edge-label");
+const downstream=el("g",{transform:"translate(0 220)"});
+for(const child of Array.from(f.children).slice(downstreamStart))downstream.append(child);
+f.append(downstream);
 phase(r,25,"A","ATTACK CHAINS & BOUNDED EVIDENCE FEEDBACK");
 edge(r,"M 680 172 H 760","","",0,"planned");
 node(r,"chains",60,95,620,155,"Compose & independently refute chains",["Adjudicated findings -> evidence-backed links","Preserve preconditions and disagreement"],"PLANNED","Build candidate attack chains and independently challenge the links. Existing red chain seeds are not confirmed chain packages.",["Input: adjudicated findings and evidence-backed preconditions.","Output: independently challenged chain packages and named gaps.","Multiple confirmed bugs do not automatically establish a usable attack chain."],arch,"planned");
@@ -215,14 +223,14 @@ function exportSvg(){
   out.append(el("rect",{width:1440,height:totalHeight,fill:"white"}));
   out.append(el("style",{},svgStyle));
   text(out,40,50,"APPSEC REVIEW / FROM CODE TO A DEFENSIBLE FINDING","phase");
-  text(out,40,87,"Teal: implemented* (some manual)  |  Dashed violet: planned  |  d4905712 / 21 Oct 2026","node-copy");
+  text(out,40,87,"Teal: implemented* (some opt-in/manual)  |  Dashed violet: planned  |  6ff64d81 / 28 Oct 2026","node-copy");
   for(const[id,y]of [["flow",110],["roadmap",roadmapY]]){
     const g=el("g",{transform:"translate(0 "+y+")"});
     for(const child of document.getElementById(id).children)g.append(child.cloneNode(true));
     g.querySelectorAll(".node").forEach(n=>{n.removeAttribute("tabindex");n.removeAttribute("role");n.removeAttribute("aria-pressed");n.removeAttribute("data-id")});
     out.append(g);
   }
-  text(out,40,flowHeight+160,"*Coverage varies. Live runs informed protocol v2; full live acceptance is not claimed. PoCs are never executed.","edge-label");
+  text(out,40,flowHeight+160,"*OWASP: four Python static procedures, not compliance coverage or live efficacy. PoCs are never executed.","edge-label");
   text(out,40,totalHeight-20,"Discussion proposal (not shown): separate critical-impact verification gate; see the accompanying HTML.","edge-label");
   return new XMLSerializer().serializeToString(out);
 }

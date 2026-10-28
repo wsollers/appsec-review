@@ -63,7 +63,12 @@ shard manifest. It scopes by shard `family` (`standards`, `component-classificat
 `applicability`, `validation-work`, `control-result`, `finding-package`), standard/version/profile,
 control, component, project, evidence mode, validator, batch, disposition, or shard and returns
 explicit pagination, truncation, ambiguity, and coverage gaps. A run without an accepted workbench manifest returns an availability gap, not an
-empty-coverage claim.
+empty-coverage claim. Complete pinned catalogs are not full assessment coverage: only four narrow
+Python static procedures are implemented; qualification/unsupported/unresolved rows remain
+explicit. The MCP-only query is not a review-cell tool. Review cells instead receive the accepted
+PRECOMPUTED `control_evidence` projection in provisional lead/hunt packages, then retrieve original
+evidence through scoped in-process tools. Every PRECOMPUTED interpretation is indirect for every
+final predicate; tags, control labels and source identity alone cannot prove a vulnerability.
 
 `query_codeql` reads only accepted `observations` shards whose shard id starts with `codeql-`.
 Exact filters cover CodeQL language, original source language, scope, build unit, rule, level,

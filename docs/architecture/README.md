@@ -22,7 +22,8 @@ Repository authority remains in [`../../AGENTS.md`](../../AGENTS.md). This page 
 - [`retrieval-surfaces.md`](retrieval-surfaces.md) — retrieval tools, the MCP adapter, review-cell retrieval and
   runtime skills: which consumer reaches the data how.
 - [`tree-sitter-ast.md`](tree-sitter-ast.md) — locked concrete-syntax-tree production and partitioned AST shards.
-- [`owasp-control-workbench.md`](owasp-control-workbench.md) — OWASP applicability, validation, and coverage design.
+- [`owasp-control-workbench.md`](owasp-control-workbench.md) — pre-hunt OWASP flow/diagram, full pinned
+  catalogs versus four Python procedures, evidence custody, blinded review and provisional downstream context.
 - [`security-tag-taxonomy.md`](security-tag-taxonomy.md) — faceted, basis-qualified security
   tag vocabulary, crosswalk, and tag-cloud rollup produced by `job_security_tagging`.
 - [`ci-configuration-analysis.md`](ci-configuration-analysis.md) — CI/CD configuration analysis architecture.
