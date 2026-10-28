@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from array import array
 from collections.abc import Mapping
 from dataclasses import asdict
 import hashlib
@@ -255,6 +256,10 @@ class _Sources:
         self.limit = decision["settings"]["reader"]["max_records"]
         self.rows = []
         self.cache = {}
+        self.by_path = {}
+        self.by_sha256 = {}
+        self.line_offsets = {}
+        self.line_offset_bytes = 0
         prior, _ = load_verified_manifest(
             unit.job.run_root, unit.job.run_root / decision["upstream_manifest"]["path"],
             decision["upstream_manifest"]["sha256"])
@@ -279,6 +284,8 @@ class _Sources:
                     seen.add(identity)
                     self.rows.append({"identity": identity, "path": source_path, "sha256": digest,
                                       "payload": json.loads(payload), "shard": path})
+                    self.by_path.setdefault(source_path, []).append(self.rows[-1])
+                    self.by_sha256.setdefault(digest, []).append(self.rows[-1])
 
     def _bytes(self, row: Mapping[str, Any]) -> bytes:
         digest = row["sha256"]
@@ -309,6 +316,24 @@ class _Sources:
             self.cache[digest] = data
         return data
 
+    def _line_table(self, digest: str, data: bytes) -> array[int] | None:
+        if digest in self.line_offsets:
+            return self.line_offsets[digest]
+        offsets = array("Q", [0])
+        for match in re.finditer(rb"\r\n|\r|\n", data):
+            offsets.append(match.end())
+            if len(offsets) * offsets.itemsize > self.maximum:
+                return None
+        if offsets[-1] != len(data):
+            offsets.append(len(data))
+        size = len(offsets) * offsets.itemsize
+        if size > self.maximum:
+            return None
+        if self.line_offset_bytes + size <= self.maximum:
+            self.line_offsets[digest] = offsets
+            self.line_offset_bytes += size
+        return offsets
+
     def resolve(self, span) -> tuple[Mapping[str, Any] | None, str | None]:
         if not span.checksum or not span.checksum_kind:
             return None, "source_mapping_unverified: checksum unavailable"
@@ -321,23 +346,34 @@ class _Sources:
         if re.fullmatch(r"[0-9a-fA-F]{" + str(expected_length) + "}", span.checksum) is None:
             return None, "source_checksum_invalid"
         recorded = span.path.replace("\\", "/")
-        candidates = [row for row in self.rows if (
-            algorithm == "sha256" and row["sha256"] == span.checksum.lower()
-            or recorded == row["path"] or recorded.endswith("/" + row["path"]))]
+        candidates = {}
+        if algorithm == "sha256":
+            for row in self.by_sha256.get(span.checksum.lower(), ()):
+                candidates[row["identity"]] = row
+        parts = recorded.split("/")
+        for position in range(len(parts)):
+            for row in self.by_path.get("/".join(parts[position:]), ()):
+                candidates[row["identity"]] = row
         matched = []
-        for row in candidates:
+        for identity in sorted(candidates):
+            row = candidates[identity]
             try:
                 data = self._bytes(row)
             except (OSError, ValueError):
                 continue
             if hashlib.new(algorithm, data, usedforsecurity=False).hexdigest() != span.checksum.lower():
                 continue
-            lines = data.splitlines(keepends=True)
-            if (not 1 <= span.line <= len(lines)
-                    or span.column > len(lines[span.line - 1].rstrip(b"\r\n")) + 1):
+            offsets = self._line_table(row["sha256"], data)
+            if offsets is None:
+                return None, "source_line_offset_bound"
+            if not 1 <= span.line < len(offsets):
                 continue
-            start = sum(map(len, lines[:span.line - 1]))
-            matched.append({**row, "start_byte": start, "end_byte": start + len(lines[span.line - 1])})
+            start, end = offsets[span.line - 1], offsets[span.line]
+            if span.column > len(data[start:end].rstrip(b"\r\n")) + 1:
+                continue
+            matched.append({**row, "start_byte": start, "end_byte": end})
+            if len(matched) > 1:
+                return None, "source_checksum_ambiguous"
         if len(matched) != 1:
             return None, "source_checksum_ambiguous" if matched else "source_checksum_unverified"
         return matched[0], None

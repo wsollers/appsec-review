@@ -57,3 +57,30 @@ def test_topology_propagates_symbols_to_downstream_inventory_and_review() -> Non
     assert without_symbols is not None
     assert JOB_ID not in without_symbols
     assert all(JOB_ID not in upstream for upstream in without_symbols.values())
+
+
+@pytest.mark.parametrize("enabled", (True, False))
+def test_dagster_composite_graphs_join_the_default_symbol_producer(tmp_path, enabled) -> None:
+    from appsec_review.orchestration.dagster.adapter import build_definitions
+
+    source = (ROOT / "appsec-review.toml").read_text(encoding="utf-8")
+    if not enabled:
+        source = source.replace(
+            "[jobs.job_debug_symbol_indexing.settings]\nenabled = true",
+            "[jobs.job_debug_symbol_indexing.settings]\nenabled = false", 1)
+    config_path = tmp_path / "appsec-review.toml"
+    config_path.write_text(source, encoding="utf-8")
+    definitions = build_definitions(config_path)
+    for name in ("wave1_review", "project_build_review"):
+        graph = definitions.get_job_def(name).graph
+        prefix = "" if name == "wave1_review" else "project_build_review__"
+        nodes = {node.name for node in graph.node_defs}
+        assert (prefix + "debug_symbol_indexing__decide__target" in nodes) is enabled
+        for lane in ("clang_dwarf", "msvc_pdb"):
+            assert (prefix + "debug_symbol_indexing__extract__" + lane in nodes) is enabled
+        if name == "project_build_review":
+            upstream = graph.dependency_structure.input_to_upstream_outputs_for_node(
+                prefix + "artifact_security_analysis__begin")
+            parents = {output.node_name for outputs in upstream.values() for output in outputs}
+            assert (prefix + "debug_symbol_indexing__finalize" in parents) is enabled
+            assert prefix + "artifact_indexing__finalize" in parents

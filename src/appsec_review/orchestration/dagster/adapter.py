@@ -444,8 +444,10 @@ def build_definitions(
             project_dependencies["job_debug_symbol_indexing"] = ("job_artifact_indexing",)
         if "job_artifact_security_analysis" in registered:
             project_jobs.append(registry.build("job_artifact_security_analysis"))
-            project_dependencies["job_artifact_security_analysis"] = (("job_artifact_indexing",)
-                if "job_artifact_indexing" in registered else ("job_language_build",))
+            artifact_upstream = ("job_artifact_indexing" if "job_artifact_indexing" in registered
+                                 else "job_language_build")
+            project_dependencies["job_artifact_security_analysis"] = (artifact_upstream,) + (
+                ("job_debug_symbol_indexing",) if "job_debug_symbol_indexing" in project_dependencies else ())
         jobs.append(_build_dagster_graph(
             "project_build_review",
              tuple(project_jobs),

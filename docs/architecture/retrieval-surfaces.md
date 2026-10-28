@@ -59,6 +59,14 @@ history. The code graph is seeded around finding locations, not whole-program. T
 is disabled by default. A package carries the identities and, under review protocol v2, the labelled
 neighborhood facts for its lead; everything else is a retrieval-tool call.
 
+The default-on debug-symbol producer adds a separate `debug_symbols` shard for
+the run-selected Clang/DWARF or MSVC/native-PDB lane. `query_debug_symbols`
+provides bounded symbols, address/source ranges, type layouts, inline frames,
+compilation units, coverage and existing graph links. Both review-cell and MCP
+capabilities constrain these reads. This is a retrieval tool, not a runtime
+skill or an interactive debugger; see [the design](debug-symbol-indexing.md) and
+[operations](../operations/debug-symbol-indexing.md).
+
 ## Where to go next
 
 - Tool definitions: `docs/schemas/retrieval-mcp-tools.json`.

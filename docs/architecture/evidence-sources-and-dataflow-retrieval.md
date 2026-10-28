@@ -63,7 +63,7 @@ shard; `planned` = inputs are available but no producer exists yet.
 | Clang AST | `job_cpp_compiled_analysis` | `compiled` (AST) | computed | resolved types, overloads, template instantiations for the accepted flags | other configurations' variants | indexed |
 | Preprocessed source (macros expanded) | planned: `job_cpp_compiled_analysis` `-E` branch | `compiled` (expansion map) | computed | expanded text mapped back to original spans and macro origins | — | planned |
 | LLVM IR (SSA) | `job_cpp_compiled_analysis` | `compiled` (IR) | computed | def-use, memory ops, IR-level CFG | optimized-build behavior unless replayed with the accepted compiler and flags (else non-exact) | indexed |
-| DWARF / debug build | planned: binary branch extension | `compiled` (debug map) | observed | IR/binary entity → source span, inlined frames, variable locations | behavior of stripped release builds without matching build id | planned |
+| DWARF / native PDB | `job_debug_symbol_indexing` | `debug_symbols` | observed / computed source mapping | matching artifact addresses, types/layouts, inline frames and checksum-verified source spans | runtime values, complete call graphs, or another binary's behavior; unsupported formats remain gaps | indexed for admitted ELF/DWARF and PE/native PDB |
 | ELF symbols and hardening | `job_cpp_compiled_analysis`, `job_post_build_security_assessment` | `compiled` (binary), `build_security` | observed / computed | exported symbols, RELRO/PIE/canary/FORTIFY/CFI evidence | exploit infeasibility in general | indexed |
 | Produced artifacts (packages, archives, bytecode, wasm) | `job_artifact_indexing`, `job_artifact_security_analysis` | `artifacts`, `observations` | observed / tool_finding | artifact identity, membership, package CVE matches | reachability of the vulnerable code | indexed |
 | CodeQL database | `job_codeql_analysis` | run-owned artifact (not exposed) | computed | input to dataflow summary export | — | indexed (database) |
@@ -132,6 +132,7 @@ regular expressions, globs, filesystem paths, or shell.
 | `resolve_evidence` | exists | evidence → resolving location/artifact | `identity`, `limit` | |
 | `coverage` | exists | gaps and shard status | `indexes`, `limit`, `cursor` | must be called before any negative conclusion |
 | `query_artifacts` | exists | produced artifacts | identity, kind, build unit, package | |
+| `query_debug_symbols` | exists | accepted DWARF/native PDB metadata | closed mode, artifact identity, subject identity, build-relative address, bounded page | matching artifacts only; source bindings need checksums; no debugger or target execution |
 | `query_build_security` | exists | build flags and hardening | compile unit, linked artifact, configuration | redacted flags only |
 | `query_ci_configuration` | exists | CI/CD | provider, workflow, job, rule | |
 | `query_codeql` | exists | CodeQL observations | language, source language, scope, build unit, rule, level, path, shard | |

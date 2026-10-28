@@ -123,6 +123,10 @@ Matching source records requires a checksum algorithm actually supplied by the
 debug format and verification against accepted source bytes. An absolute debug
 path is never opened. Unbound private source names are omitted or hash-labelled
 in public index payloads; raw names remain in protected evidence.
+Candidate lookup uses bounded accepted path/checksum indices rather than an
+inventory scan for every record. Verified source bytes and byte-line offsets
+are cached within explicit memory bounds; an oversized offset table produces
+`source_line_offset_bound`, not a guessed source span.
 
 ## Query and authority contract
 
@@ -192,5 +196,7 @@ integration, each with its own focused tests. Shared contract changes are
 reconciled by the manager. No image pin is changed without a live build on its
 owning host, and no feature branch is pushed without user authorization.
 
-Implementation status and host-dependent validation limitations are recorded in
-the accompanying implementation report when integration is complete.
+See [operations](../operations/debug-symbol-indexing.md) for approved reader
+configuration, supported formats and normal launch commands. Implementation
+status and host-dependent validation limitations are recorded in the
+[implementation report](../reviews/debug-symbol-indexing-implementation.md).
