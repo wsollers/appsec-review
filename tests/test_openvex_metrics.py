@@ -325,15 +325,43 @@ def test_reuse_invocations_distinguish_same_orchestrator_dispatch(tmp_path, monk
     assert not report["gaps"]
 
 
-def test_uncorrelated_manual_reuse_is_a_named_gap_not_silent_exact_accounting(tmp_path, monkeypatch):
+def test_runtime_event_identity_distinguishes_manual_reuses_without_other_correlation(tmp_path, monkeypatch):
     boundary = AcceptedBoundary(tmp_path, monkeypatch)
     handoff, _ = boundary.publish()
     for _ in range(2):
         event(tmp_path, "JOB_REUSED", handoff_sha256=handoff.sha256)
     report = section(tmp_path)
+    assert report["openvex_export_reuses_total"] == 2
+    assert report["accounting_complete"]
+
+
+def test_reuse_missing_all_dispatch_identities_is_an_explicit_gap(tmp_path, monkeypatch):
+    boundary = AcceptedBoundary(tmp_path, monkeypatch)
+    handoff, _ = boundary.publish()
+    event(tmp_path, "JOB_REUSED", handoff_sha256=handoff.sha256)
+    records, _ = PipelineLog(tmp_path).read()
+    del records[-1]["event_id"]
+    report = metrics.aggregate_openvex_metrics(tmp_path, [*records, records[-1]])
     assert report["openvex_export_reuses_total"] == 1
     assert "reuse_invocation_unavailable" in gap_reasons(report)
     assert not report["accounting_complete"]
+
+
+@pytest.mark.parametrize("conflict", [False, True])
+def test_reuse_event_copies_dedupe_and_conflicting_identity_is_a_gap(tmp_path, monkeypatch, conflict):
+    boundary = AcceptedBoundary(tmp_path, monkeypatch)
+    handoff, _ = boundary.publish()
+    event(tmp_path, "JOB_REUSED", handoff_sha256=handoff.sha256)
+    records, _ = PipelineLog(tmp_path).read()
+    copy = dict(records[-1])
+    if conflict:
+        copy["details"] = {**copy["details"], "handoff_sha256": "b" * 64}
+    report = metrics.aggregate_openvex_metrics(tmp_path, [*records, copy])
+    assert report["openvex_export_reuses_total"] == 1
+    assert report["duplicate_lifecycle_records"] == 1
+    assert bool(report["conflicts"]) is conflict
+    if conflict:
+        assert report["conflicts"][0]["reason"] == "conflicting_reuse_event_identity"
 
 
 def test_duplicates_across_runtime_domain_and_spans_do_not_double_work(tmp_path, monkeypatch):
