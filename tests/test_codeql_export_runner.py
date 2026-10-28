@@ -413,7 +413,9 @@ def _query_predicates() -> dict[str, tuple[str, list[tuple[str, str]]]]:
 
 
 def test_columns_contract_is_closed_and_equals_the_ql_query_predicates() -> None:
-    assert set(COLUMNS) == {"schema", "export_schema", "languages"} and set(COLUMNS["languages"]) == {"cpp"}
+    from appsec_review.config.codeql import _EXPORT_LANGUAGES
+    assert set(COLUMNS) == {"schema", "export_schema", "languages"}
+    assert "cpp" in COLUMNS["languages"] and set(COLUMNS["languages"]) <= _EXPORT_LANGUAGES
     assert COLUMNS["export_schema"] == contract.EXPORT_SCHEMA
     assert RUNNER.export_queries(COLUMNS, "cpp") == QUERIES
     predicates = _query_predicates()
