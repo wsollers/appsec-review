@@ -11,6 +11,7 @@ from appsec_review.mcp.schema import TOOLS
 from appsec_review.orchestration.topology import upstream_closure, wave1_dependencies
 from appsec_review.retrieval.index import INDEX_NAMES
 from appsec_review.runtime.registry import builtin_registry
+from appsec_review.runtime import active_job_ids, job_is_enabled
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -23,6 +24,9 @@ def test_each_target_has_a_registered_decision_and_both_extraction_lanes(target,
     job = builtin_registry().build(JOB_ID)
     assert job.name == config.job(JOB_ID).name
     assert config.job(JOB_ID).settings["compiler_target"] == target
+    assert config.job(JOB_ID).settings["enabled"] is True
+    assert job_is_enabled(config, JOB_ID)
+    assert JOB_ID in active_job_ids(config, GRAPH_JOB_IDS)
     units = {unit.unit_id: unit for unit in job.units}
     assert "decide.target" in units
     for lane in ("extract.clang_dwarf", "extract.msvc_pdb"):

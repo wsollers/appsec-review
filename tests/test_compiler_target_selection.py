@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from dataclasses import replace
 from pathlib import Path
+import subprocess
+import sys
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -43,6 +45,16 @@ def test_target_is_frozen_in_configuration_and_changes_its_identity(monkeypatch)
     assert clang.resolved_sha256 != msvc.resolved_sha256
     assert json.loads(msvc.resolved_json)["compiler_target"] == "msvc"
     assert msvc.job("job_debug_symbol_indexing").settings["compiler_target"] == "msvc"
+
+
+def test_job_settings_cannot_silently_override_the_run_selector(tmp_path) -> None:
+    config = (ROOT / "appsec-review.toml").read_text(encoding="utf-8").replace(
+        "[jobs.job_debug_symbol_indexing.settings]\n",
+        '[jobs.job_debug_symbol_indexing.settings]\ncompiler_target = "msvc"\n', 1)
+    path = tmp_path / "appsec-review.toml"
+    path.write_text(config, encoding="utf-8")
+    with pytest.raises(ValueError, match="selected at run start"):
+        load_config(path, profile="dev")
 
 
 def test_launch_tags_compose_with_profile_selection_and_cache(monkeypatch) -> None:
@@ -169,3 +181,11 @@ def test_cli_resume_restores_frozen_target_before_constructing_the_graph(tmp_pat
                      "plan-resume", "--run-id", "2026-10-28-0001",
                      "--target", str(tmp_path)]) == 0
     assert selected == [CompilerTarget.MSVC]
+
+
+@pytest.mark.parametrize("module", ("retrieval", "observability", "debug_symbols.contract", "config"))
+def test_public_modules_can_be_imported_first_in_a_fresh_interpreter(module) -> None:
+    result = subprocess.run(
+        [sys.executable, "-c", f"import appsec_review.{module}"],
+        cwd=ROOT, capture_output=True, text=True, timeout=30, check=False)
+    assert result.returncode == 0, result.stderr

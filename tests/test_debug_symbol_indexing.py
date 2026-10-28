@@ -45,13 +45,16 @@ def _ref(root, path):
             "size_bytes": path.stat().st_size}
 
 
-def _seed(tmp_path, target="clang", *, debug=False, source_bytes=None, produced=False):
-    root = tmp_path / "run"
+def _seed(tmp_path, target="clang", *, debug=False, source_bytes=None, produced=False,
+          binary_bytes=None, debug_bytes=None, source_path="src/main.cc", run_name="run"):
+    root = tmp_path / run_name
     root.mkdir()
     artifacts = []
     for name, kind, content in [
-        ("bin/private-program", "executable", b"MZfixture" if target == "msvc" else b"\x7fELFfixture"),
-        *([("symbols/private-program.pdb", "debug-information", b"Microsoft C/C++ MSF 7.00\r\nfixture")]
+        ("bin/private-program", "executable", binary_bytes if binary_bytes is not None else
+         b"MZfixture" if target == "msvc" else b"\x7fELFfixture"),
+        *([("symbols/private-program.pdb", "debug-information",
+            debug_bytes if debug_bytes is not None else b"Microsoft C/C++ MSF 7.00\r\nfixture")]
           if debug else []),
     ]:
         artifact = {**put_bytes(root, content), "workspace_path": name, "kind": kind,
@@ -89,13 +92,13 @@ def _seed(tmp_path, target="clang", *, debug=False, source_bytes=None, produced=
             source_ref = put_bytes(root, source_bytes) if source_bytes is not None else None
             source_digest = source_ref["sha256"] if source_ref else "c" * 64
             identity = LogicalIdentity.derive(EntityKind.SOURCE_FILE, SNAPSHOT,
-                                               {"path": "src/main.cc", "sha256": source_digest})
+                                               {"path": source_path, "sha256": source_digest})
             from appsec_review.retrieval.model import SourceLocation
-            location = SourceLocation(SNAPSHOT, "src/main.cc", source_digest, 0,
+            location = SourceLocation(SNAPSHOT, source_path, source_digest, 0,
                                       len(source_bytes or b""), 1, 5, 1, 1, {}, "inventory-exact", 1.0)
-            builder.add_entity(EntityRecord(identity, "src/main.cc", "main.cc",
+            builder.add_entity(EntityRecord(identity, source_path, Path(source_path).name,
                                            source_bytes.decode() if source_bytes else "",
-                                           {"path": "src/main.cc", "sha256": source_digest}, location))
+                                           {"path": source_path, "sha256": source_digest}, location))
         builder.add_coverage("fixture", "complete")
         identities.append(IndexIdentity(index_name, INDEX_SCHEMA, builder.build(), "b" * 64,
                                         path.relative_to(root).as_posix(), {}, (), f"catalog-{index_name}"))

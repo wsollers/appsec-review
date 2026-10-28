@@ -5,9 +5,10 @@ from dataclasses import dataclass, field
 from enum import Enum
 import hashlib
 import json
-from typing import Any, Mapping
+from typing import TYPE_CHECKING, Any, Mapping
 
-from appsec_review.config.compiler_target import CompilerTarget
+if TYPE_CHECKING:
+    from appsec_review.config.compiler_target import CompilerTarget
 
 
 INDEX_NAME = "debug_symbols"
@@ -92,6 +93,8 @@ class Extraction:
 
 
 def selected_path(target: CompilerTarget) -> str:
+    from appsec_review.config.compiler_target import CompilerTarget
+
     if not isinstance(target, CompilerTarget):
         raise ValueError("debug-symbol routing requires a validated compiler target")
     return "clang_dwarf" if target is CompilerTarget.CLANG else "msvc_pdb"

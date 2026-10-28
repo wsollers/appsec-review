@@ -17,6 +17,10 @@
    persisted `decide.target` unit selects `clang_dwarf` or `msvc_pdb`; the
    unselected extraction unit records an explicit skip without invoking its
    reader. Publication joins the selected lane and preserves upstream shards.
+   The job is enabled in the default configuration and normal review graph:
+   usable debug-symbol artifacts are processed automatically, without a separate
+   opt-in or manual job launch. Metrics and telemetry are part of the default
+   producer/retrieval path, not optional instrumentation.
 4. Binary/debug pairing must precede symbol publication. Use embedded DWARF,
    verified ELF build-ID/debug-link association, or PE CodeView/PDB GUID and age.
    Matching basenames, paths, or symbol names are not identity evidence.

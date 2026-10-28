@@ -1175,6 +1175,37 @@ workers = 8
 workers = 1
 [jobs.job_artifact_indexing.steps.acceptance.tasks.publish_handoff]
 
+[jobs.job_debug_symbol_indexing]
+name = "debug_symbol_indexing"
+workers = 2
+
+[jobs.job_debug_symbol_indexing.settings]
+enabled = true
+max_artifacts = 128
+
+[jobs.job_debug_symbol_indexing.settings.reader]
+max_input_bytes = 536870912
+max_output_bytes = 16777216
+max_records = 100000
+max_depth = 128
+timeout_seconds = 120
+# Configure approved host-local LLVM tools with explicit path and sha256 pins in
+# reader.tools.llvm_dwarfdump / reader.tools.llvm_pdbutil. Missing tools are gaps.
+[jobs.job_debug_symbol_indexing.settings.reader.tools]
+
+[jobs.job_debug_symbol_indexing.steps.decide]
+workers = 1
+[jobs.job_debug_symbol_indexing.steps.decide.tasks.target]
+
+[jobs.job_debug_symbol_indexing.steps.extract]
+workers = 2
+[jobs.job_debug_symbol_indexing.steps.extract.tasks.clang_dwarf]
+[jobs.job_debug_symbol_indexing.steps.extract.tasks.msvc_pdb]
+
+[jobs.job_debug_symbol_indexing.steps.acceptance]
+workers = 1
+[jobs.job_debug_symbol_indexing.steps.acceptance.tasks.publish_handoff]
+
 [jobs.job_test_coverage]
 name = "test_coverage"
 workers = 4
