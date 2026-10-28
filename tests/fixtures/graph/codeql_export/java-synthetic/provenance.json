@@ -1,0 +1,30 @@
+{
+  "schema": "appsec-review/graph-export-fixture-provenance/1",
+  "fixture": "java-synthetic",
+  "recording": "hand-authored",
+  "live_refreshable": false,
+  "source_root": "source",
+  "export_directory": "exports",
+  "description": "Hand-authored appsec-review/codeql-graph-export/1 objects over source/app/*.java for the java graph-export pack. They are a deliberately chosen subset of what the pack would export (implicit super() constructor calls, class initializers and some intermediate path nodes are omitted), written to exercise the Java cases; they are not a CodeQL recording. bqrs_sha256 values are SHA-256 of the text 'hand-authored synthetic bqrs <query_id>'. The manifest pack hashes are computed locally over the pack tree and columns.json at authoring time; they are not the host-locked hashes.",
+  "cases": {
+    "virtual_dispatch": "call_sites: serve -> store.save(line), two virtual_resolved candidates (FileStore.save and MemoryStore.save) through interface Store, Server.java line 32",
+    "unresolved_reflective_call": "call_sites: invokeNamed -> method.invoke(null), unresolved_indirect, Server.java line 67",
+    "two_paths_to_one_sink": "path_flows: Socket.getInputStream (Server.java 25) and args (Cli.java 4) both reach Runtime.exec argument 0 at Server.java 46",
+    "dominating_guard": "guards: name.length() < 64 (Server.java 50) dominates new FileOutputStream(name) at line 51, true_branch",
+    "non_dominating_guard": "guards: the same condition does not control new FileOutputStream(name + \".log\") at line 53, which also has a none row",
+    "sanitized_path": "sink_sites and path_sanitizers: getCanonicalPath (Server.java 57) dominates and lies on the flow to new FileOutputStream(canonical) at line 58",
+    "cross_function_summary": "flow_summaries: buildQuery parameter 0 -> return (taint), which carries the flow from lookup into executeQuery at Server.java 42",
+    "sql_sink": "sink_sites: Statement.executeQuery argument 0 at Server.java 42, catalog api rule",
+    "command_sink": "sink_sites: Runtime.exec argument 0 at Server.java 46, catalog api rule",
+    "path_sink_model": "sink_sites: new FileOutputStream(name) argument 0, java-all path-injection model",
+    "ssrf_sink": "sink_sites: URL.openStream qualifier (argument -1) at Server.java 62, java-all request-forgery model",
+    "deserialization_sink": "sink_sites and path_flows: ObjectInputStream.readObject qualifier at Server.java 34, reached from the socket stream on the same line",
+    "reflection_sink": "sink_sites: Class.forName argument 0 at Server.java 66, catalog api rule",
+    "log_sink_model": "sink_sites: System.Logger.log argument 1 at Handler.java 19, java-all log-injection model",
+    "remote_source_model": "source_sites: Socket.getInputStream return value, RemoteFlowSource",
+    "api_source_remote": "source_sites: HttpExchange.getRequestBody return value (Handler.java 15), a catalog api source java-all does not model",
+    "argv_source": "source_sites: main parameter args (Cli.java 4), LocalUserInput commandargs",
+    "environment_source": "source_sites: System.getenv return value (Cli.java 5), LocalUserInput environment",
+    "not_applicable_range": "ranges: every Java sink operand here is a reference (String, URL, stream), so ranges are not_applicable; range_conversions is empty"
+  }
+}

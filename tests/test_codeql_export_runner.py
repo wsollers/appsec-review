@@ -26,6 +26,7 @@ from appsec_review.codeql.runtime import (
     load_asset_lock,
     load_graph_exports,
 )
+from appsec_review.config import codeql as codeql_config
 from appsec_review.graph import contract
 
 ROOT = Path(__file__).parents[1]
@@ -413,7 +414,8 @@ def _query_predicates() -> dict[str, tuple[str, list[tuple[str, str]]]]:
 
 
 def test_columns_contract_is_closed_and_equals_the_ql_query_predicates() -> None:
-    assert set(COLUMNS) == {"schema", "export_schema", "languages"} and {"cpp"} <= set(COLUMNS["languages"])
+    assert set(COLUMNS) == {"schema", "export_schema", "languages"}
+    assert "cpp" in COLUMNS["languages"] and set(COLUMNS["languages"]) <= codeql_config._EXPORT_LANGUAGES
     assert COLUMNS["export_schema"] == contract.EXPORT_SCHEMA
     assert RUNNER.export_queries(COLUMNS, "cpp") == QUERIES
     predicates = _query_predicates()
