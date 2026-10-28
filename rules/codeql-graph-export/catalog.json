@@ -708,6 +708,297 @@
           ]
         }
       ]
+    },
+    "javascript": {
+      "model_library": "codeql/javascript-all",
+      "export_pack": "appsec-review/graph-export-javascript",
+      "sinks": [
+        {
+          "rule_id": "javascript.sink.api.unserialize",
+          "match": {
+            "api": "unserialize",
+            "declared_in": [
+              "node-serialize"
+            ],
+            "argument_index": 0
+          },
+          "sink_class": "deserialization",
+          "cwe_family": "CWE-502"
+        },
+        {
+          "rule_id": "javascript.sink.api.log",
+          "match": {
+            "api": "log",
+            "declared_in": [
+              "console"
+            ],
+            "argument_index": 0
+          },
+          "sink_class": "log_output",
+          "cwe_family": "CWE-117"
+        },
+        {
+          "rule_id": "javascript.sink.api.info",
+          "match": {
+            "api": "info",
+            "declared_in": [
+              "console"
+            ],
+            "argument_index": 0
+          },
+          "sink_class": "log_output",
+          "cwe_family": "CWE-117"
+        },
+        {
+          "rule_id": "javascript.sink.api.warn",
+          "match": {
+            "api": "warn",
+            "declared_in": [
+              "console"
+            ],
+            "argument_index": 0
+          },
+          "sink_class": "log_output",
+          "cwe_family": "CWE-117"
+        },
+        {
+          "rule_id": "javascript.sink.api.error",
+          "match": {
+            "api": "error",
+            "declared_in": [
+              "console"
+            ],
+            "argument_index": 0
+          },
+          "sink_class": "log_output",
+          "cwe_family": "CWE-117"
+        },
+        {
+          "rule_id": "javascript.sink.api.random",
+          "match": {
+            "api": "random",
+            "declared_in": [
+              "Math"
+            ],
+            "argument_index": -1
+          },
+          "sink_class": "crypto_misuse",
+          "cwe_family": "CWE-338"
+        },
+        {
+          "rule_id": "javascript.sink.model.sqlinjection",
+          "match": {
+            "model": "SqlInjection::Sink"
+          },
+          "sink_class": "sql_query",
+          "cwe_family": "CWE-89"
+        },
+        {
+          "rule_id": "javascript.sink.model.commandinjection",
+          "match": {
+            "model": "CommandInjection::Sink"
+          },
+          "sink_class": "command_execution",
+          "cwe_family": "CWE-78"
+        },
+        {
+          "rule_id": "javascript.sink.model.taintedpath",
+          "match": {
+            "model": "TaintedPath::Sink"
+          },
+          "sink_class": "path_access",
+          "cwe_family": "CWE-22"
+        },
+        {
+          "rule_id": "javascript.sink.model.requestforgery",
+          "match": {
+            "model": "RequestForgery::Sink"
+          },
+          "sink_class": "server_side_request",
+          "cwe_family": "CWE-918"
+        },
+        {
+          "rule_id": "javascript.sink.model.codeinjection",
+          "match": {
+            "model": "CodeInjection::Sink"
+          },
+          "sink_class": "code_injection",
+          "cwe_family": "CWE-94"
+        },
+        {
+          "rule_id": "javascript.sink.model.unsafedeserialization",
+          "match": {
+            "model": "UnsafeDeserialization::Sink"
+          },
+          "sink_class": "deserialization",
+          "cwe_family": "CWE-502"
+        },
+        {
+          "rule_id": "javascript.sink.model.reflectedxss",
+          "match": {
+            "model": "ReflectedXss::Sink"
+          },
+          "sink_class": "html_output",
+          "cwe_family": "CWE-79"
+        },
+        {
+          "rule_id": "javascript.sink.model.serversideurlredirect",
+          "match": {
+            "model": "ServerSideUrlRedirect::Sink"
+          },
+          "sink_class": "url_redirect",
+          "cwe_family": "CWE-601"
+        },
+        {
+          "rule_id": "javascript.sink.model.xxe",
+          "match": {
+            "model": "Xxe::Sink"
+          },
+          "sink_class": "xml_external_entity",
+          "cwe_family": "CWE-611"
+        },
+        {
+          "rule_id": "javascript.sink.model.xpathinjection",
+          "match": {
+            "model": "XpathInjection::Sink"
+          },
+          "sink_class": "xpath_query",
+          "cwe_family": "CWE-643"
+        },
+        {
+          "rule_id": "javascript.sink.model.regexpinjection",
+          "match": {
+            "model": "RegExpInjection::Sink"
+          },
+          "sink_class": "regex_injection",
+          "cwe_family": "CWE-730"
+        }
+      ],
+      "sources": [
+        {
+          "rule_id": "javascript.source.api.question",
+          "match": {
+            "api": "question",
+            "declared_in": [
+              "readline-sync"
+            ],
+            "index": -1
+          },
+          "source_class": "local_user"
+        },
+        {
+          "rule_id": "javascript.source.api.prompt",
+          "match": {
+            "api": "prompt",
+            "declared_in": [
+              "readline-sync"
+            ],
+            "index": -1
+          },
+          "source_class": "local_user"
+        },
+        {
+          "rule_id": "javascript.source.model.remote",
+          "match": {
+            "model": "RemoteFlowSource"
+          },
+          "source_class": "remote"
+        },
+        {
+          "rule_id": "javascript.source.model.commandargs",
+          "match": {
+            "model": "ThreatModelSource.commandargs"
+          },
+          "source_class": "argv"
+        },
+        {
+          "rule_id": "javascript.source.model.environment",
+          "match": {
+            "model": "ThreatModelSource.environment"
+          },
+          "source_class": "environment"
+        },
+        {
+          "rule_id": "javascript.source.model.response",
+          "match": {
+            "model": "ThreatModelSource.response"
+          },
+          "source_class": "remote"
+        },
+        {
+          "rule_id": "javascript.source.model.file",
+          "match": {
+            "model": "ThreatModelSource.file"
+          },
+          "source_class": "file"
+        },
+        {
+          "rule_id": "javascript.source.model.database",
+          "match": {
+            "model": "ThreatModelSource.database"
+          },
+          "source_class": "database"
+        },
+        {
+          "rule_id": "javascript.source.model.stdin",
+          "match": {
+            "model": "ThreatModelSource.stdin"
+          },
+          "source_class": "local_user"
+        },
+        {
+          "rule_id": "javascript.source.model.threatmodel",
+          "match": {
+            "model": "ThreatModelSource"
+          },
+          "source_class": "local_user"
+        }
+      ],
+      "sanitizers": [
+        {
+          "rule_id": "javascript.sanitizer.basename",
+          "api": "basename",
+          "declared_in": [
+            "path"
+          ],
+          "applies_to": [
+            "path_access"
+          ]
+        },
+        {
+          "rule_id": "javascript.sanitizer.escape",
+          "api": "escape",
+          "declared_in": [
+            "mysql",
+            "mysql2"
+          ],
+          "applies_to": [
+            "sql_query"
+          ]
+        },
+        {
+          "rule_id": "javascript.sanitizer.escapeid",
+          "api": "escapeId",
+          "declared_in": [
+            "mysql",
+            "mysql2"
+          ],
+          "applies_to": [
+            "sql_query"
+          ]
+        },
+        {
+          "rule_id": "javascript.sanitizer.encodeuricomponent",
+          "api": "encodeURIComponent",
+          "declared_in": [
+            "global"
+          ],
+          "applies_to": [
+            "server_side_request",
+            "url_redirect"
+          ]
+        }
+      ]
     }
   }
 }

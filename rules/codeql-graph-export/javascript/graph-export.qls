@@ -1,0 +1,10 @@
+- description: appsec-review code-graph export for JavaScript/TypeScript (graph-export/1)
+- query: CallSites.ql
+- query: SinkSites.ql
+- query: SourceSites.ql
+- query: FlowSummaries.ql
+- query: Paths.ql
+- query: Guards.ql
+- query: Ranges.ql
+- query: Seeds.ql
+- query: Neighborhood.ql
