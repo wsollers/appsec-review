@@ -267,17 +267,7 @@ def prepare(builds: AcceptedBuilds, unit: BuildUnit, parent: Path, *, name: str,
     folder.mkdir()
     (folder / names.source).write_text(poc_text, encoding="utf-8")
     (folder / names.reducer).write_bytes(REDUCER.read_bytes())
-    _open_permissions(root)
     return Scratch(root, names)
-
-
-def _open_permissions(root: Path) -> None:
-    """The build container's user writes into the scratch copy; the copy is disposable."""
-    for path in (root, *root.rglob("*")):
-        try:
-            path.chmod(0o777 if path.is_dir() else 0o666)
-        except OSError:
-            continue
 
 
 def reduced_ast(step: Step) -> tuple[dict[str, Any] | None, str]:

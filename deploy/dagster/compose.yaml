@@ -5,6 +5,9 @@ x-dagster-environment: &dagster-environment
   DAGSTER_POSTGRES_PASSWORD: ${DAGSTER_POSTGRES_PASSWORD:?Run deploy/dagster/bin/bootstrap.py first}
   APPSEC_REVIEW_CONFIG: /opt/app/appsec-review.toml
   APPSEC_REVIEW_TARGET: ${APPSEC_REVIEW_TARGET:-/opt/app/targets/appsec-multi-vuln}
+  # A configured [[target_acquisition.systems]] id that target_acquisition acquires into targets/<id>/
+  # before intake; APPSEC_REVIEW_TARGET must then be /opt/app/targets/<id>. Empty reviews the target as is.
+  APPSEC_REVIEW_SYSTEM: ${APPSEC_REVIEW_SYSTEM:-}
   # "record" during a stepwise parity walk (docs/processes/local-dagster-parity.md); empty otherwise.
   APPSEC_REVIEW_MODEL_RECORDING: ${APPSEC_REVIEW_MODEL_RECORDING:-}
   # A capacity overlay under /opt/app/test/acceptance (docs/operations/inference-security-review.md); empty otherwise.
@@ -21,7 +24,8 @@ x-dagster-service: &dagster-service
     - dagster-storage:/var/dagster
     - ../../runs:/opt/app/runs
     - ../../data:/opt/app/data
-    - ../../targets:/opt/app/targets:ro
+    # Writable: acquisition creates checkouts here and builds write their outputs into the checkout.
+    - ../../targets:/opt/app/targets
     - ../../rules:/opt/app/rules:ro
     - ../../test/acceptance:/opt/app/test/acceptance:ro
   init: true
@@ -88,7 +92,7 @@ services:
       - dagster-storage:/var/dagster
       - ../../runs:/opt/app/runs
       - ../../data:/opt/app/data
-      - ../../targets:/opt/app/targets:ro
+      - ../../targets:/opt/app/targets
       - ../../rules:/opt/app/rules:ro
       - ../../test/acceptance:/opt/app/test/acceptance:ro
       - ../../containers/tools/codeql/codeql_runner.py:/opt/app/containers/tools/codeql/codeql_runner.py:ro

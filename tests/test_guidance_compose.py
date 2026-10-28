@@ -285,12 +285,14 @@ def test_every_task_prompt_parses_and_fits_its_roles() -> None:
             assert set(task.requests_tools) <= set(registry["roles"][role]["tools"])
 
 
-def test_registered_persona_and_stack_files_validate_when_present() -> None:
+def test_registered_persona_and_stack_files_validate() -> None:
     registry = load_registry(ROOT)
     for kind, table in (("persona", registry["personas"]), ("stack", registry["stacks"])):
         for name, record in table.items():
-            if "path" in record and (ROOT / record["path"]).is_file():
-                parse_fragment((ROOT / record["path"]).read_text(), kind=kind, tools=TOOLS, expected_id=name)
+            if "path" in record:
+                path = ROOT / record["path"]
+                assert path.is_file(), path
+                parse_fragment(path.read_text(), kind=kind, tools=TOOLS, expected_id=name)
 
 
 # --------------------------------------------------------------------------------------------- registry

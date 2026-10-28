@@ -174,13 +174,22 @@ def test_cli_resume_restores_frozen_target_before_constructing_the_graph(tmp_pat
 
     monkeypatch.setattr(cli, "load_config", load)
     monkeypatch.setattr(cli, "active_job_ids", lambda *_args: ())
-    monkeypatch.setattr(cli, "builtin_registry", lambda: SimpleNamespace())
     monkeypatch.setattr(cli, "GraphRunner", graph)
     monkeypatch.setattr(cli, "source_fingerprint", lambda *_args: "test-source")
     assert cli.main(["--config", str(ROOT / "appsec-review.toml"),
                      "plan-resume", "--run-id", "2026-10-28-0001",
                      "--target", str(tmp_path)]) == 0
     assert selected == [CompilerTarget.MSVC]
+
+
+@pytest.mark.parametrize("selection", (("--target", "."), ("--system", "test-system")))
+def test_cli_compiler_selection_preserves_both_target_acquisition_modes(selection) -> None:
+    from appsec_review.cli import parser
+
+    args = parser().parse_args(["start", *selection, "--compiler-target", "msvc"])
+    assert args.compiler_target == "msvc"
+    assert (args.target is not None) == (selection[0] == "--target")
+    assert (args.system is not None) == (selection[0] == "--system")
 
 
 @pytest.mark.parametrize("module", ("retrieval", "observability", "debug_symbols.contract", "config"))

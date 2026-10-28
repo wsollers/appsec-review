@@ -19,6 +19,7 @@ min_string_length="4"
 processor=""
 cspec=""
 loader=""
+debug_symbols=""
 
 fail() {
     echo "ghidra-export: $1" >&2
@@ -43,6 +44,7 @@ while [ "$#" -gt 0 ]; do
         --processor) processor="$2" ;;
         --cspec) cspec="$2" ;;
         --loader) loader="$2" ;;
+        --debug-symbols) debug_symbols="$2" ;;
         *) fail "unknown option $1" ;;
     esac
     shift 2
@@ -60,6 +62,11 @@ done
 [[ -z "$cspec" || "$cspec" =~ ^[A-Za-z0-9._-]+$ ]] || fail "--cspec is not a compiler spec id"
 [[ -z "$loader" || "$loader" =~ ^[A-Za-z0-9]+$ ]] || fail "--loader is not a loader class name"
 [ -f "$input" ] && [ ! -L "$input" ] || fail "input is not a regular file"
+if [ -n "$debug_symbols" ]; then
+    [[ "$debug_symbols" =~ ^/target/[A-Za-z0-9._-]+$ && "$debug_symbols" != "$input" ]] ||
+        fail "--debug-symbols must name another file directly under /target"
+    [ -f "$debug_symbols" ] && [ ! -L "$debug_symbols" ] || fail "debug symbols are not a regular file"
+fi
 
 mkdir -p "$work/home" "$work/tmp" "$work/project" "$output"
 export HOME="$work/home"
@@ -72,8 +79,10 @@ arguments=("$work/project" appsec -import "$input")
 [ -z "$processor" ] || arguments+=(-processor "$processor")
 [ -z "$cspec" ] || arguments+=(-cspec "$cspec")
 [ -z "$loader" ] || arguments+=(-loader "$loader")
+arguments+=(-scriptPath /opt/appsec/ghidra-scripts)
+# The PDB analyzer reads its file option during auto-analysis, so it is set before analysis.
+[ -z "$debug_symbols" ] || arguments+=(-preScript AppsecLoadDebugSymbols.java "debug_symbols=$debug_symbols")
 arguments+=(
-    -scriptPath /opt/appsec/ghidra-scripts
     -postScript AppsecExportProgram.java
         "output=$output"
         "decompile_timeout=$decompile_timeout"

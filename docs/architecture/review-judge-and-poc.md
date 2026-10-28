@@ -326,13 +326,12 @@ them touches the claim ledger, R5, R6 or the judge. Operating details are in
 [`../operations/poc-generation.md`](../operations/poc-generation.md).
 
 1. **The candidate contract.** The job reads `poc_candidates` from the verified review handoff as an array of
-   `{claim_id, package_id, state, judge_verdict, poc_basis: {sha256, value}, finding_package: {finding_package_id, sha256},
+   `{claim_id, package_id, state, judge_verdict, poc_basis: {sha256, brief}, finding_package: {finding_package_id, sha256},
    evidence_refs}` (schema `docs/schemas/poc-generation/poc-candidate.schema.json`, reader `candidates.py`). `poc_basis.sha256`
-   is `sha256(canonical_json(value))` (`review.identity.sha256_hex`). The reader is strict and cross-checks each entry against
-   the verified finding package (id, digest, claim, state). A handoff without the field is an older run (named gap
-   `no_poc_candidates`, empty valid handoff); a malformed field is an integrity failure. The handoff schema belongs to the judge
-   work, so the job validates the review handoff against the existing schema *without* the property (a thin wrapper around the
-   closed validator) and validates the property itself; nothing changes when the schema learns the property.
+   is `sha256(canonical_json(brief))` (`review.identity.sha256_hex`). Entry and path carry resolved entity identities;
+   the brief builder binds them to rows in the labelled package view. The reader validates the complete review handoff
+   against the producer's schema and cross-checks each entry against the verified finding package (id, digest, claim,
+   state and judge verdict). A missing or malformed field is an integrity failure; an empty array means no candidates.
 2. **Not a target job; manual while disabled.** The job reads no target tree: the source copy is the run's accepted
    `job_language_build` workspace (re-hashed file by file against its manifest), the compile command is the exact captured argv
    of the sink's translation unit from the protected compile database, and the labelled package view comes from the retrieval
@@ -355,12 +354,12 @@ them touches the claim ledger, R5, R6 or the judge. Operating details are in
    Moving the role into the inference registry later is a mechanical change.
 5. **Retrieval.** The writer's two in-process requests are `read_source` and `find_declaration`, served from the hash-verified
    accepted workspace and bounded by lines, bytes, queries and turns. The brief already carries the finding, the `poc_basis` with
-   resolved labels, the package view, the declarations at the sink and the safe build facts; retrieval is for the rest.
+   its entry and path identities resolved against the labelled package view, the package view, the declarations at the sink and the safe build facts; retrieval is for the rest.
 6. **A decline form.** The answer may instead be `{decline: {status, why}}` with `insufficient_evidence`, `not_applicable` or
    `unsafe_to_attempt`, because section 5.4 lists those statuses but 5.2 gives the writer no way to reach them.
 7. **Statuses.** `not_applicable`: the judge verdict is not accepted, or no accepted native build compiled the sink's file.
    `insufficient_evidence`: no usable `poc_basis` (an entry, a path and a trigger), no known sink function (hunt packages have
-   none), unresolved labels, or a writer that produced no usable answer. `artifact_generated`: the build image, the accepted
+   none), no `poc_basis` entry or path identity that resolves in the package view, or a writer that produced no usable answer. `artifact_generated`: the build image, the accepted
    workspace or the accepted objects were unavailable when the validators or the compile check needed them. `compile_failed`:
    the code did not parse, did not compile, or needs a symbol neither the project nor a runtime library defines.
    `policy_denied` is final: the schema leaves names and sizes loose so the writer cannot repair a `main` away.
@@ -382,5 +381,6 @@ them touches the claim ledger, R5, R6 or the judge. Operating details are in
 11. **Model.** The shipped writer profile reuses the pipeline's existing model so enabling the job adds nothing to the model
     preflight (which walks every job's settings, enabled or not). A stronger writer is a configuration change.
 12. **Open.** The judge work must emit exactly the shape of decision 1 (the hash definition in particular). The job rebuilds the
-    package view with the same limits as the review cells so the labels in `poc_basis` resolve; if the review changes how
-    labels are assigned the plan step reports unresolved labels as `insufficient_evidence` rather than guessing.
+    package view with the same limits as the review cells so the entity identities in `poc_basis` resolve against the
+    rows' `ref`; each identity that does not resolve is a brief gap, and when none resolves the plan step reports
+    `insufficient_evidence` rather than guessing.

@@ -5,6 +5,8 @@ import os
 import re
 from pathlib import Path
 
+import pytest
+
 
 ROOT = Path(__file__).resolve().parents[1]
 TARGET = ROOT / "targets" / "appsec-multi-vuln"
@@ -59,6 +61,20 @@ def test_guide_lock_contains_identity_only() -> None:
     assert set(lock["target"]) == {"repository", "commit"}
 
 
+EVALUATOR_MARKERS = ("appsec-multi-vuln-guide", "native-ground-truth", "native-provenance")
+
+
+def leaked_evaluator_material(runs: Path) -> list[str]:
+    leaked: list[str] = []
+    for path in runs.rglob("*"):
+        if not path.is_file() or path.suffix.lower() not in {".json", ".jsonl", ".toml", ".md"}:
+            continue
+        text = path.read_text(encoding="utf-8", errors="replace").lower()
+        if any(value in text for value in EVALUATOR_MARKERS):
+            leaked.append(path.relative_to(runs).as_posix())
+    return sorted(leaked)
+
+
 def test_evaluator_guide_is_outside_target_and_run_roots() -> None:
     guide = Path(
         os.environ.get("APPSEC_EVALUATOR_GUIDE", ROOT.parent / "appsec-multi-vuln-guide")
@@ -68,12 +84,25 @@ def test_evaluator_guide_is_outside_target_and_run_roots() -> None:
     assert guide != target and guide not in target.parents and target not in guide.parents
     assert guide != runs and guide not in runs.parents and runs not in guide.parents
 
-    forbidden = ("appsec-multi-vuln-guide", "native-ground-truth", "native-provenance")
-    leaked: list[str] = []
-    for path in runs.rglob("*"):
-        if not path.is_file() or path.suffix.lower() not in {".json", ".jsonl", ".toml", ".md"}:
-            continue
-        text = path.read_text(encoding="utf-8", errors="replace").lower()
-        if any(value in text for value in forbidden):
-            leaked.append(path.relative_to(runs).as_posix())
+
+def test_leak_scan_flags_evaluator_material_in_a_fixture_run(tmp_path: Path) -> None:
+    run = tmp_path / "runs" / "2026-10-27-0001" / "data"
+    (run / "configuration").mkdir(parents=True)
+    (run / "configuration" / "resolved.toml").write_text('target = "targets/appsec-multi-vuln"\n', encoding="utf-8")
+    (run / "findings.jsonl").write_text('{"id": "f-1", "summary": "bounded claim"}\n', encoding="utf-8")
+    (run / "notes.bin").write_text("native-ground-truth", encoding="utf-8")
+    runs = tmp_path / "runs"
+    assert leaked_evaluator_material(runs) == []
+
+    (run / "report.md").write_text("See ../appsec-multi-vuln-guide/answers\n", encoding="utf-8")
+    (run / "evidence.json").write_text('{"source": "Native-Provenance"}\n', encoding="utf-8")
+    assert leaked_evaluator_material(runs) == [
+        "2026-10-27-0001/data/evidence.json", "2026-10-27-0001/data/report.md"]
+
+
+def test_existing_run_artifacts_do_not_contain_evaluator_material() -> None:
+    runs = (ROOT / "runs").resolve()
+    if not any(path.is_file() and path.name != ".gitignore" for path in runs.rglob("*")):
+        pytest.skip("no run artifacts in this checkout to scan")
+    leaked = leaked_evaluator_material(runs)
     assert not leaked, "evaluator material leaked into run artifacts: " + ", ".join(leaked)

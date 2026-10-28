@@ -59,6 +59,8 @@ class ModelResult:
     output_tokens: int | None = None
     cache_tokens: int | None = None
     raw_response: str | None = None
+    served_model: str | None = None
+    served_provider: str | None = None
 
 
 class Infer(Protocol):

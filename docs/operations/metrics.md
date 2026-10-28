@@ -65,3 +65,56 @@ as missing coverage. A missing, changed, escaped, or malformed receipt is an int
 never evidence that the corresponding scope is clean. `finding_states` counts only authoritative
 finding transitions; scanner observations and CodeQL SARIF result counts are not confirmed defects
 or vulnerabilities.
+
+## Planned OpenVEX metrics
+
+**Design only; not implemented at baseline `b7c31ba23af840f14cc919d56b8c557ffdb2d010`.**
+The [OpenVEX design](../architecture/openvex-export.md#12-first-class-telemetry-and-metrics)
+specifies an additive `openvex` section with semantics `appsec-review/openvex-metrics/1`
+in the existing run-owned summary, preserving OWASP/review-flow metrics. No Prometheus,
+exporter SDK or network endpoint is planned. See the [draft operator guide](openvex-export.md)
+for eligibility, outcomes and protected output handling.
+
+| Planned field | Meaning |
+| --- | --- |
+| `openvex_export_attempts_total` | Terminal fresh attempts by `outcome`: `exported`, `exported_with_gaps`, `no_statements`, `failed`, reconciled against runtime terminals. |
+| `openvex_export_reuses_total` | Runtime `JOB_REUSED`, without a new duration sample. |
+| `openvex_export_failures_total` | Failures by closed `phase` and `reason`, including pre-domain admission failure from runtime `JOB_FAILED`. |
+| `openvex_export_statements_total` | Accepted fresh statements only, with `status = affected`; explicit zero for accepted empty results. |
+| `openvex_export_findings_total` | Every gate package once per accepted fresh result, by `disposition = included/excluded` and `reason = included/gate_verification_backlog/gate_withheld`. |
+| `openvex_export_document_bytes_total` | Actual canonical document bytes from accepted fresh nonempty results. |
+| `openvex_export_duration_seconds` | Measured fresh wall-duration histogram by terminal outcome; failures included when measurable. |
+| `openvex_export_phase_duration_seconds` | Fresh operation-duration histograms by phase; inclusive measurements are not necessarily exclusive work. |
+| `openvex_export_document_bytes` | Accepted fresh nonempty document-size histogram. |
+
+Planned phases are `load`, `assemble`, `validate`, `accept`; operation stages are
+`openvex.verify_inputs`, `openvex.assemble`, `openvex.validate`, `openvex.accept`.
+Failure reasons are restricted to `configuration_invalid`, `input_missing`, `input_stale`,
+`input_tampered`, `identity_conflict`, `schema_invalid`, `semantic_invalid`, `bound_exceeded`,
+`timed_out`, `io_error`, `internal_error`. Diagnostics must not become unbounded labels.
+
+Duration buckets in seconds are
+`0.01, 0.05, 0.1, 0.5, 1, 5, 15, 30, 60, 120, +Inf`;
+document-size buckets in bytes are
+`1024, 4096, 16384, 65536, 262144, 1048576, 4194304, 16777216, 33554432, +Inf`.
+Histogram JSON contains cumulative fixed buckets, `count`, `sum` and measured/unmeasured
+counts. Reuse, crashes or missing measurements do not supply fake zero durations.
+
+The section is also intended to expose `configured_enabled`, `latest_state`, latest
+accepted counts, zero-filled exclusions and telemetry gaps/conflicts. `disabled` and
+`not_run` are not successful attempts. Missing/unreadable accepted artifacts yield null
+accepted counts with a named gap, not zeros. Read counts from bounded, hash-verified
+accepted results, not just emitted events; distinguish cumulative work from latest output.
+
+The event sequence is designed around `OPENVEX_EXPORT_STARTED`,
+`OPENVEX_INPUTS_VERIFIED`, `OPENVEX_EXPORT_ACCOUNTED`, `OPENVEX_EXPORT_COMPLETED`
+and `OPENVEX_EXPORT_FAILED`. A completed domain event followed by failed runner
+finalization must not increment accepted statements/bytes. Lifecycle deduplication uses
+`(run_id, job_id, attempt_id, invocation_id)`; semantic totals deduplicate accepted handoff
+digests. Missing/conflicting terminal records are telemetry gaps, not fabricated success.
+Timing stays in logs/receipts/summary, outside deterministic document/manifest/result bytes.
+
+No finding/claim/product/run IDs, hashes, filesystem paths, repository/issuer/action text,
+source, credentials or model/error strings are permitted as metric labels. Run/job/attempt/
+span identifiers are structured log correlation only. Counts cannot establish handoff
+acceptance, issuer authority, exploit execution, absence of vulnerabilities or shipping approval.

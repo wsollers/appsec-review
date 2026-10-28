@@ -30,8 +30,10 @@ _SHA256 = re.compile(r"[0-9a-f]{64}")
 
 
 def gate_ids(registered: Set[str]) -> tuple[str, ...]:
-    """Pre-intake gates in dispatch order: the live model check, then the image-pin verification."""
-    return tuple(job_id for job_id in ("job_model_connectivity", "job_image_pin_verification")
+    """Pre-intake gates in dispatch order: the live model check, the image-pin verification, then the
+    acquisition of every component of the requested review system (a recorded no-op without one)."""
+    return tuple(job_id for job_id in ("job_model_connectivity", "job_image_pin_verification",
+                                       "job_target_acquisition")
                  if job_id in registered)
 
 
@@ -106,6 +108,9 @@ def wave1_dependencies(registered: Set[str]) -> dict[str, tuple[str, ...]] | Non
     for job_id in ("job_cpp_symbol_index", "job_cpg_analysis", "job_svf_alias_analysis"):
         if job_id in registered and "job_cpp_compiled_analysis" in registered:
             wave_dependencies[job_id] = ("job_cpp_compiled_analysis",)
+    if "job_binary_evidence_indexing" in registered:
+        # Reads only the binary publications intake froze; a leaf that data indexing closes.
+        wave_dependencies["job_binary_evidence_indexing"] = ("job_target_catalog",)
     if "job_post_build_security_assessment" in registered:
         wave_dependencies["job_post_build_security_assessment"] = (("job_cpp_compiled_analysis",)
             if "job_cpp_compiled_analysis" in registered else
@@ -143,7 +148,7 @@ def wave1_dependencies(registered: Set[str]) -> dict[str, tuple[str, ...]] | Non
         # Prioritization reads the accepted Tree-sitter, history, Semgrep, and CodeQL handoffs and
         # publishes a retrieval shard, so it follows the last manifest publisher before tagging.
         wave_dependencies["job_review_prioritization"] = tuple(job_id for job_id in (
-            "job_codeql_analysis", "job_owasp_control_assessment") if job_id in registered) or tuple(
+            "job_codeql_analysis",) if job_id in registered) or tuple(
             job_id for job_id in ("job_evidence_collection", "job_tree_sitter_ast") if job_id in registered)
     if "job_code_graph_index" in registered and "job_codeql_analysis" in registered:
         # The graph index reads the accepted CodeQL exports and observations, the clangd/IR/AST shards
@@ -162,13 +167,20 @@ def wave1_dependencies(registered: Set[str]) -> dict[str, tuple[str, ...]] | Non
                                   "job_clang_static_analysis",
                                   "job_post_build_security_assessment", "job_evidence_collection",
                                   "job_tree_sitter_ast", "job_change_context_analysis") if job_id in registered]
-        if "job_owasp_control_assessment" in registered:
-            tagging_dependencies.append("job_owasp_control_assessment")
         if "job_review_prioritization" in wave_dependencies:
             tagging_dependencies.append("job_review_prioritization")
         if "job_code_graph_index" in wave_dependencies:
             tagging_dependencies.append("job_code_graph_index")
         wave_dependencies["job_security_tagging"] = tuple(tagging_dependencies or ("job_target_analysis_plan",))
+    if "job_owasp_control_assessment" in registered:
+        # OWASP consumes classification, the tag cloud's accepted assignments and code-graph
+        # context. It precedes data-index projection, hunt assembly and red/blue investigation.
+        original = wave_dependencies.pop("job_owasp_control_assessment")
+        wave_dependencies["job_owasp_control_assessment"] = tuple(dict.fromkeys((
+            *original,
+            *(job_id for job_id in ("job_review_prioritization", "job_code_graph_index",
+                                    "job_security_tagging") if job_id in wave_dependencies),
+        )))
     if "job_review_data_indexing" in registered:
         # The dataset inventory audits every accepted publisher, so it closes the wave after the last
         # enabled producer on every branch and keeps exactly one terminal job. Derive the leaves

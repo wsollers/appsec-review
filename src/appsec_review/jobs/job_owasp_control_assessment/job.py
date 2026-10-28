@@ -6,9 +6,11 @@ import json
 from pathlib import Path
 from typing import Any
 
-from appsec_review.jobs.job_target_analysis_plan import load_accepted_plan
+from appsec_review.config.owasp import AssessmentMode, parse_settings
+from appsec_review.applicability import resolved_configuration_identity
+from appsec_review.inference import Infer
 from appsec_review.observability import PipelineLog
-from appsec_review.retrieval.core import resolve_context_manifest
+from appsec_review.retrieval.core import RetrievalCore, resolve_context_manifest
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from appsec_review.storage import atomic_json, file_sha256
 from appsec_review.owasp_workbench import (
@@ -18,6 +20,9 @@ from appsec_review.owasp_workbench import (
     standards_manifest, verify_results,
 )
 from appsec_review.jobs.job_owasp_control_assessment.datasets import CONSUMES, DATASETS
+from appsec_review.owasp_workbench.assessment import run_batch
+from appsec_review.owasp_workbench.evidence import EvidenceResolver, accepted_inputs
+from appsec_review.review.scope import accept_manifest
 
 
 SCHEMA = "appsec-review/owasp-workbench-result/1"
@@ -59,66 +64,59 @@ def _validate_config(context, _result) -> None:
         if tuple(context.config.step(step).tasks) != tasks:
             raise ValueError(f"OWASP workbench task order mismatch: {step}")
     settings = context.config.settings
-    required = {"asvs_level", "masvs_profile", "max_batch_size", "max_components_per_batch",
-                "max_components", "dynamic_authorized", "model", "standards", "parser_versions"}
-    if not required <= set(settings):
-        raise ValueError("OWASP workbench central settings are incomplete")
-    if settings["asvs_level"] not in {1, 2, 3} or settings["masvs_profile"] not in {"L1", "L2"}:
-        raise ValueError("OWASP profile selection is invalid")
-    for key, maximum in (("max_batch_size", 64), ("max_components_per_batch", 16),
-                         ("max_components", 128)):
-        if type(settings[key]) is not int or not 1 <= settings[key] <= maximum:
-            raise ValueError(f"OWASP configured bound is invalid: {key}")
-    model = settings["model"]
-    model_required = {"provider", "model", "reasoning", "max_input_tokens", "max_output_tokens",
-                      "timeout_seconds", "retries"}
-    if not isinstance(model, Mapping) or not model_required <= set(model):
-        raise ValueError("OWASP worker model configuration is incomplete")
-    if type(settings["dynamic_authorized"]) is not bool:
-        raise ValueError("OWASP dynamic authorization setting must be a boolean")
-    load_catalogs(context.repository_root, _sources(settings))
+    typed = parse_settings(settings)
+    if not typed.enabled:
+        raise ValueError("OWASP job is disabled by settings.enabled")
+    catalogs = load_catalogs(context.repository_root, _sources(settings))
+    if typed.mode is AssessmentMode.ASSESSMENT:
+        from appsec_review.inference import PROVIDERS
+        if any(catalog.fixture for catalog in catalogs.values()):
+            raise ValueError("assessment requires complete acquired catalogs, not qualification fixtures")
+        for model in (settings["model"], settings["models"][typed.reviewer_profile]):
+            if model["provider"] not in PROVIDERS:
+                raise ValueError(f"unsupported OWASP inference transport: {model['provider']}")
 
 
 def _fixture_or_accepted_inputs(unit: UnitContext) -> dict[str, Any]:
+    typed = parse_settings(unit.job.config.settings)
     fixture = unit.job.run_root / "data" / "inputs" / "owasp-workbench.json"
-    if fixture.is_file():
+    if typed.mode is AssessmentMode.QUALIFICATION:
+        if not fixture.is_file():
+            raise ValueError("explicit qualification mode requires the run-owned qualification input")
         document = json.loads(fixture.read_text(encoding="utf-8"))
         if document.get("schema") != "appsec-review/owasp-workbench-input/1":
             raise ValueError("OWASP fixture input schema is unsupported")
         return {"components": document.get("components", []), "evidence": document.get("evidence", []),
                 "retrieval_manifest": document.get("retrieval_manifest", {"fixture": file_sha256(fixture)}),
-                "input_mode": "run_owned_fixture"}
-    plan = load_accepted_plan(unit.job.run_root)
-    components = []
-    for raw in plan.get("components", ()):
-        paths = [str(item.get("path", "")) for item in raw.get("scope", ())]
-        lower = [path.lower() for path in paths]
-        tags = []
-        languages = []
-        if any("androidmanifest.xml" in path for path in lower):
-            tags.append("android")
-            languages.append("kotlin")
-        if any(path.endswith("info.plist") for path in lower):
-            tags.append("ios")
-            languages.append("swift")
-        if any(path.endswith(("package.json", ".tsx", ".jsx")) for path in lower):
-            tags.append("frontend")
-            languages.append("typescript")
-        if not tags and paths:
-            tags.append("application")
-        root_hash = hashlib.sha256("\n".join(paths).encode()).hexdigest()
-        components.append({"target_id": "accepted-target", "project_id": "accepted-project",
-            "component_id": str(raw["component_id"]), "paths": paths, "languages": languages,
-            "frameworks": [], "tags": tags, "evidence": [{"source_identity":
-            f"accepted-plan:{raw['component_id']}", "artifact_sha256": root_hash,
-            "lines": [1, 1]}]})
-    manifest_path, manifest_sha = resolve_context_manifest(unit.job)
-    return {"components": components, "evidence": [],
-            "retrieval_manifest": {"path": manifest_path.relative_to(unit.job.run_root).as_posix(),
-                                   "sha256": manifest_sha}, "input_mode": "accepted_indexes"}
+                "input_mode": "run_owned_fixture", "assessment_mode": "qualification",
+                "limitations": ["qualification input is synthetic and cannot establish customer target safety"]}
+    if fixture.exists():
+        raise ValueError("qualification input is not accepted in assessment mode")
+    core, path = _core(unit)
+    expected = unit.job.evidence_target_snapshot
+    if expected is not None and core.manifest["target_snapshot"] != expected:
+        raise ValueError("OWASP accepted evidence target differs from the job's authenticated target")
+    return {**accepted_inputs(core, typed, manifest_path=path), "assessment_mode": "assessment"}
 
 
-def build_job(*, fail_cell: str | None = None) -> Job:
+def _core(unit: UnitContext) -> tuple[RetrievalCore, Path]:
+    path, sha256 = resolve_context_manifest(unit.job)
+    return RetrievalCore(unit.job.run_root.parent, unit.job.run_id, manifest_path=path,
+                         manifest_sha256=sha256), path
+
+
+def _resolver(unit: UnitContext) -> EvidenceResolver:
+    core, path = _core(unit)
+    return EvidenceResolver(core, accept_manifest(unit.job.run_root, manifest_path=path,
+                                                  manifest_sha256=core.manifest_sha256),
+                            max_source_lines=parse_settings(unit.job.config.settings).max_source_lines)
+
+
+def build_job(*, fail_cell: str | None = None, infer: Infer | None = None) -> Job:
+    def transport():
+        from appsec_review.inference import infer as default_infer
+        return infer or default_infer
+
     def ingest(unit: UnitContext) -> Mapping[str, Any]:
         manifest = standards_manifest(_catalogs(unit))
         return {"manifest": manifest, "artifact": _artifact(unit, "standards-manifest.json", manifest),
@@ -139,7 +137,8 @@ def build_job(*, fail_cell: str | None = None) -> Job:
     def classify(unit: UnitContext) -> Mapping[str, Any]:
         loaded = unit.output("characterization.load_inputs")
         values = characterize_components(loaded["components"],
-                                         max_components=int(unit.job.config.settings["max_components"]))
+            max_components=int(unit.job.config.settings["max_components"]),
+            assessment_mode=loaded["assessment_mode"])
         artifact = _artifact(unit, "component-classifications.json", {
             "schema": "appsec-review/component-classification-set/1", "components": values})
         return {"classifications": values, "artifact": artifact,
@@ -149,7 +148,8 @@ def build_job(*, fail_cell: str | None = None) -> Job:
         rows = build_applicability(_catalogs(unit),
             unit.output("characterization.classify_components")["classifications"],
             unit.output("standards_selection.select_profiles")["selection"],
-            dynamic_authorized=bool(unit.job.config.settings["dynamic_authorized"]))
+            dynamic_authorized=bool(unit.job.config.settings["dynamic_authorized"]),
+            assessment_mode=parse_settings(unit.job.config.settings).mode.value)
         artifact = _artifact(unit, "applicability.json", {
             "schema": "appsec-review/control-applicability-set/1", "rows": rows})
         counts = {outcome: sum(row["outcome"] == outcome for row in rows)
@@ -175,7 +175,9 @@ def build_job(*, fail_cell: str | None = None) -> Job:
         output = {}
         for batch in unit.output("batching.partition_work")["work"]["batches"]:
             values = list(build_finding_packages(batch, rows, controls, classifications,
-                loaded["evidence"], retrieval_manifest=loaded["retrieval_manifest"]))
+                loaded["evidence"], retrieval_manifest=loaded["retrieval_manifest"],
+                assessment_mode=loaded["assessment_mode"],
+                max_subjects=parse_settings(unit.job.config.settings).max_subjects_per_control))
             task = {"task_id": batch["batch_id"],
                     "question": "Assess only the supplied control-component proof obligations.",
                     "proof_obligations": [item["proof_obligations"] for item in values],
@@ -192,11 +194,15 @@ def build_job(*, fail_cell: str | None = None) -> Job:
 
     def make_cell(cell_id: str):
         def cell(unit: UnitContext) -> Mapping[str, Any]:
+            settings = unit.job.config.settings
+            typed = parse_settings(settings)
             work = unit.output("batching.partition_work")["work"]
             packages_by_batch = unit.output("batching.build_packages")["packages"]
             index = CELLS.index(cell_id)
             assigned = [batch for position, batch in enumerate(work["batches"])
                         if position % len(CELLS) == index]
+            admitted = {batch["batch_id"] for batch in work["batches"][:typed.max_batches]}
+            resolver = _resolver(unit) if typed.mode is AssessmentMode.ASSESSMENT else None
             results = []
             log = PipelineLog(unit.job.run_root)
             for batch in assigned:
@@ -205,7 +211,18 @@ def build_job(*, fail_cell: str | None = None) -> Job:
                     step_id="validation", task_id=cell_id, details={"batch_id": batch["batch_id"],
                     "model": dict(unit.job.config.settings["model"]), "cell": cell_id})
                 result = assess_batch(batch, packages_by_batch[batch["batch_id"]],
-                                      fail=fail_cell == cell_id)
+                    fail=fail_cell == cell_id or batch["batch_id"] not in admitted,
+                    assessment_mode=typed.mode.value,
+                    worker=(lambda request: run_batch(repository_root=unit.job.repository_root,
+                        run_root=unit.job.run_root, batch=request["batch"], packages=request["packages"],
+                        settings=typed, worker_profile=settings["model"],
+                        reviewer_profile=settings["models"][typed.reviewer_profile],
+                        resolver=resolver, infer=transport(), independent=False,
+                        attempt_id=unit.job.attempt_id, unit_id=unit.unit_id))
+                    if resolver is not None else None)
+                if batch["batch_id"] not in admitted:
+                    for row in result["results"]:
+                        row["gaps"] = ["batch not launched: max_batches cap; row remains accounted and unresolved"]
                 results.append(result)
                 evidence_used = sorted({citation["source_identity"] for item in result["results"]
                                         for citation in item.get("evidence_used", ())})
@@ -226,8 +243,29 @@ def build_job(*, fail_cell: str | None = None) -> Job:
         return cell
 
     def verify(unit: UnitContext) -> Mapping[str, Any]:
+        settings = unit.job.config.settings
+        typed = parse_settings(settings)
         batches = [batch for cell in CELLS for batch in unit.output(f"validation.{cell}")["batch_results"]]
-        verified = verify_results(batches)
+        reviewed_batches = []
+
+        def review(batch):
+            if "worker" not in batch:
+                reviewed_batches.append(batch)
+                return batch
+            bid = batch["batch_id"]
+            original = next(item for item in unit.output("batching.partition_work")["work"]["batches"]
+                            if item["batch_id"] == bid)
+            value = run_batch(repository_root=unit.job.repository_root, run_root=unit.job.run_root,
+                batch=original, packages=unit.output("batching.build_packages")["packages"][bid],
+                settings=typed, worker_profile=settings["model"],
+                reviewer_profile=settings["models"][typed.reviewer_profile], resolver=_resolver(unit),
+                infer=transport(), worker_result=batch["worker"],
+                validation_retrieval=batch["metrics"].get("retrieval"),
+                attempt_id=unit.job.attempt_id, unit_id=unit.unit_id)
+            reviewed_batches.append(value)
+            return value
+
+        verified = verify_results(batches, assessment_mode=typed.mode.value, reviewer=review)
         gap_count = sum(len(value.get("gaps", ())) for value in verified)
         states = [observation.get("state") for value in verified
                   for observation in value.get("observations", ())]
@@ -241,6 +279,7 @@ def build_job(*, fail_cell: str | None = None) -> Job:
             "gap_count": gap_count})
         value = {"schema": "appsec-review/verified-control-results/1", "results": verified}
         return {"verified_results": verified, "artifact": _artifact(unit, "verified-results.json", value),
+                "batch_results": reviewed_batches,
                 "gap_count": gap_count, "terminal_status": "COMPLETED_WITH_GAPS" if gap_count else "SUCCEEDED"}
 
     def join(unit: UnitContext) -> Mapping[str, Any]:
@@ -264,7 +303,7 @@ def build_job(*, fail_cell: str | None = None) -> Job:
         fingerprints = fingerprint_inputs(standards=standards, selection=selection,
             classifications=classifications, rows=rows, batches=work["batches"],
             retrieval_manifest=unit.output("characterization.load_inputs")["retrieval_manifest"],
-            configuration_sha256=unit.job.config.settings.get("configuration_sha256", unit.job.source_fingerprint),
+            configuration_sha256=resolved_configuration_identity(unit.job.run_root),
             guidance_bundle_sha256=guidance_hash, model_identity=unit.job.config.settings["model"],
             parser_versions=unit.job.config.settings["parser_versions"])
         shards = [publish_shard(unit.job.run_root, family="standards", shard_id="selected",
@@ -291,19 +330,52 @@ def build_job(*, fail_cell: str | None = None) -> Job:
                 "guidance": guidance_hash}))
         accepted = unit.output("characterization.load_inputs")["retrieval_manifest"]
         manifest = publish_manifest(unit.job.run_root, run_id=unit.job.run_id, shards=shards,
-            accepted_upstream_manifest=accepted, configuration_sha256=str(
-            unit.job.config.settings.get("configuration_sha256", unit.job.source_fingerprint)))
+            accepted_upstream_manifest=accepted,
+            configuration_sha256=resolved_configuration_identity(unit.job.run_root),
+            assessment_bounds={"max_source_lines": parse_settings(unit.job.config.settings).max_source_lines},
+            assessment_mode=parse_settings(unit.job.config.settings).mode.value)
         return {"manifest": manifest, "fingerprints": fingerprints, "shard_count": len(shards)}
 
     def publish(unit: UnitContext) -> Mapping[str, Any]:
         joined = unit.output("join.deterministic_join")["joined"]
         validation = {cell: unit.output(f"validation.{cell}")["failed_batch_count"] for cell in CELLS}
         value = {"schema": SCHEMA, "selection": unit.output("standards_selection.select_profiles")["selection"],
+                 "assessment_mode": parse_settings(unit.job.config.settings).mode.value,
                  "control_results": unit.output("join.deterministic_join")["artifact"],
                  "index_manifest": unit.output("publication.publish_indexes")["manifest"],
                  "accounting": joined["accounting"], "failed_batches_by_cell": validation,
                  "gaps": sorted({gap for result in joined["results"] for gap in result["gaps"]})}
-        return {"artifact": _artifact(unit, "owasp-workbench-result.json", value),
+        results = joined["results"]
+        value["coverage"] = {
+            "catalog_controls": sum(len(catalog.records) for family, catalog in _catalogs(unit).items()
+                                    if family in {"ASVS", "MASVS"}),
+            "selected_controls": value["selection"]["control_count"], "selected_rows": len(results),
+            "applicable_rows": sum(row["applicability"] in {"applicable", "conditional"} for row in results),
+            "dispatched_rows": sum(row["worker_attempt_count"] > 0 for row in results),
+            "reused_rows": sum(row["execution_completion"] == "reused" for row in results),
+            "assessed_rows": sum(row["assessment_mode"] == "assessment" and row["control_status"] in {
+                "satisfied", "not_satisfied"} for row in results),
+            "independent_review_attempted_rows": sum(row["reviewer_attempt_count"] > 0 for row in results),
+            "independently_reviewed_rows": sum(row["verification_status"] in {
+                "independently_assessed", "dissent"} for row in results),
+            "unresolved_rows": sum(row["coverage_completeness"] == "unresolved"
+                                    or row["control_status"] == "cannot_verify" for row in results),
+            "lead_producing_rows": sum(row["lead_eligible"] for row in results),
+        }
+        value["limitations"] = [
+            *unit.output("standards_selection.ingest_catalogs")["manifest"]["gaps"],
+            *unit.output("characterization.load_inputs").get("limitations", []),
+            "Source procedures establish only their named subjects, not complete control or component safety.",
+            "Runtime/manual evidence ingestion and live-model efficacy are separate, unpassed gates.",
+        ]
+        value["telemetry"] = [batch["metrics"] for batch in unit.output(
+            "verification.independent_review").get("batch_results", [])]
+        value["input_retrieval"] = unit.output("characterization.load_inputs").get("retrieval_metrics", {})
+        value["gaps"] = sorted(set([*value["gaps"], *value["limitations"]]))
+        artifact = _artifact(unit, "owasp-workbench-result.json", value)
+        unit.job.events.write("OWASP_ASSESSMENT_RECORDED", unit_id=unit.unit_id,
+                              metrics_receipt=artifact)
+        return {"artifact": artifact,
                 "index_manifest": value["index_manifest"], "accounting": value["accounting"],
                 "gap_count": len(value["gaps"]), "terminal_status":
                 "COMPLETED_WITH_GAPS" if value["gaps"] or any(validation.values()) else "SUCCEEDED"}

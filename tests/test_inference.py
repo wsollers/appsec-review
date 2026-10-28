@@ -8,6 +8,7 @@ import stat
 import pytest
 
 from appsec_review import inference
+from appsec_review.config import load_config
 from appsec_review.inference import ModelRequest, ModelResult, claude_cli, infer
 from appsec_review.jobs.job_target_analysis_plan.planning import PROPOSAL_SCHEMA
 from appsec_review.runtime.registry import builtin_registry
@@ -15,14 +16,16 @@ from appsec_review.runtime.registry import builtin_registry
 
 SOURCE = Path(__file__).parents[1] / "src" / "appsec_review"
 VALUE = {"schema": PROPOSAL_SCHEMA, "component_proposals": [], "build_recipes": []}
+MODEL = load_config(SOURCE.parents[1] / "appsec-review.toml").jobs["job_target_analysis_plan"].settings["model"]
+MODEL_NAME, REASONING = str(MODEL["model"]), str(MODEL["reasoning"])
 
 
 def _request(provider: str) -> ModelRequest:
     return ModelRequest(
         schema=PROPOSAL_SCHEMA, persona="devops", role="build engineer", guidance="bounded",
         summary={"build_units": []}, allowed_scanners=(), allowed_build_systems=(), allowed_components=(),
-        allowed_paths=(), allowed_build_units=(), provider=provider, model="claude-haiku-5-5",
-        reasoning="medium", max_input_tokens=32000, max_output_tokens=8000)
+        allowed_paths=(), allowed_build_units=(), provider=provider, model=MODEL_NAME,
+        reasoning=REASONING, max_input_tokens=32000, max_output_tokens=8000)
 
 
 def test_infer_selects_the_transport_named_on_the_request(monkeypatch) -> None:
@@ -40,8 +43,7 @@ def test_infer_selects_the_transport_named_on_the_request(monkeypatch) -> None:
     assert infer(_request("claude-cli"), timeout_seconds=7).proposal == VALUE
     assert infer(_request("anthropic-api"), timeout_seconds=9).proposal == VALUE
     assert infer(_request("copilot-sdk"), timeout_seconds=11).proposal == VALUE
-    assert seen == [("cli", "claude-haiku-5-5", 7), ("api", "claude-haiku-5-5", 9),
-                    ("copilot", "claude-haiku-5-5", 11)]
+    assert seen == [("cli", MODEL_NAME, 7), ("api", MODEL_NAME, 9), ("copilot", MODEL_NAME, 11)]
 
 
 def test_infer_rejects_a_provider_without_a_transport() -> None:
@@ -76,8 +78,8 @@ def test_claude_cli_transport_grants_no_tools_and_never_uses_api_credentials(tmp
     assert result.proposal == VALUE and (result.input_tokens, result.output_tokens) == (5, 3)
     invocation = json.loads(record.read_text(encoding="utf-8"))
     argv = invocation["argv"]
-    assert argv[argv.index("--model") + 1] == "claude-haiku-5-5"
-    assert argv[argv.index("--effort") + 1] == "medium"
+    assert argv[argv.index("--model") + 1] == MODEL_NAME
+    assert argv[argv.index("--effort") + 1] == REASONING
     assert argv[argv.index("--allowedTools") + 1] == ""
     assert invocation["key"] is None
     assert invocation["stdin"]["response_schema"] == PROPOSAL_SCHEMA

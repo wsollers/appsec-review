@@ -21,8 +21,9 @@ Every pack except Swift has been compiled and run with the CodeQL 2.27.0 CLI in
 [`containers/tools/codeql/README.md`](../../containers/tools/codeql/README.md)). The library
 versions bundled in that image equal the `library` pins in `rules/registry.toml`.
 
-Each language has a hand-authored synthetic recording under
-`tests/fixtures/graph/codeql_export/<language>-synthetic/` and an `expected-facts.json` that states
+Each language has a synthetic recording under
+`tests/fixtures/graph/codeql_export/<language>-synthetic/` (hand-authored, except Rust's, which is
+a live recording) and an `expected-facts.json` that states
 the semantic floor as rows that must exist. The offline test `tests/graph/test_<language>_export.py`
 holds the recording to it, and the live test `tests/live/test_codeql_graph_export_<language>_live.py`
 (C/C++: `tests/live/test_codeql_graph_export_live.py`) builds a real database from the fixture's
@@ -32,13 +33,14 @@ refreshed, never hand-edited.
 
 | Language | Live result | Notes |
 |---|---|---|
-| C/C++ | passes | Native recording refreshed from the live export (it includes the CMake compiler-id sources the build traces under `codeql-build/`). |
+| C/C++ | passes | Native recording refreshed from the live export. `GraphExport.qll` `sourcePath()` excludes the CMake compiler-id sources the build traces under `codeql-build/CMakeFiles/`, which do not resolve against target sources. |
 | Java/Kotlin | passes | |
 | Python | QL fixed | `path_sanitizers` also matches a sanitizer call that the path graph steps over (`safe = realpath(filename)`). |
 | Ruby | QL fixed | A concept anchored at its own operand (ActiveRecord `find_by_sql`) is reported at the receiving call, and catalog sanitizer calls get an argument-to-result taint step so flows through `File.basename` stay visible. |
 | Go | expectation fixed | The cross-function flow enters `lookup` through a `call` edge; the hand-authored expectation of a `return` edge was wrong. |
-| JavaScript/TypeScript | needs Node | CodeQL's TypeScript extractor needs Node.js, which the source image lacks; the live test runs in the `node` build profile. |
-| C#, Rust | see the live tests | C# extracts in the .NET SDK build profile; Rust in the `rust` profile. |
+| JavaScript/TypeScript | needs Node | CodeQL's TypeScript extractor needs Node.js, which the source image lacks; the live test runs in the `node` build profile. No live result is recorded in the repository. |
+| C# | pinned, no recorded result | The pack is pinned with the others; the live test extracts in the `dotnet` build profile. No live result is recorded in the repository. |
+| Rust | recorded live | Runs in the `rust` profile, whose `rust-wasm` build image ships `rust-src` so the extractor resolves `std`. `exports/` is the byte-exact live CodeQL 2.27.0 export (see the fixture's `provenance.json`). Closure calls export as `unresolved_indirect`. Two named gaps stay open in `expected-facts.json` `known_gaps` (`rust_summarized_body_prunes_remote_flow` for the remote-to-SQL, command, SSRF and deserialization paths; `rust_canonicalize_summary_does_not_propagate` for the `canonicalize` sanitizer); the live test fails once CodeQL closes either, so it is promoted to an expectation. |
 | Swift | deferred | CodeQL extracts Swift only on macOS. The pack compiles but has no pin, `rules/registry.toml` keeps it `state = "deferred"`, and its live test skips on Linux. |
 
 Live tests need the pinned images on the local Docker host and take 13-35 minutes each, most of it
@@ -165,8 +167,8 @@ runner then:
 2. relies on the compile cache populated beforehand by the separate `compile` action (cold 10-22
    minutes, warm about 45 seconds). The cache volume is keyed by the declared CodeQL release and
    the runtime user, so it is shared across runs: a pack compiles cold only after the CodeQL
-   release or the pack's own bytes change, and `containers/build.py query-packs --warm` fills it
-   ahead of any run. It then compiles every query once (`codeql query
+   release or the pack's own bytes change, and `scripts/compile-codeql-queries.sh` (a wrapper over
+   `containers/build.py query-packs --warm`) fills it ahead of any run. It then compiles every query once (`codeql query
    compile`, a cache hit) and runs `codeql database run-queries
    --threads --ram --external=exportScope=<scope.csv> --external=exportSeed=<seeds.csv> -- <db>
    <pack>/<query>.ql` for each query file;
@@ -222,3 +224,7 @@ the tests enforce this.
    When a live row legitimately differs from a hand-authored synthetic recording or expectation,
    fix the recording or `expected-facts.json` in the same change and regenerate the golden with
    `APPSEC_REVIEW_REGENERATE_GRAPH_GOLDEN=1`.
+5. Recompile the changed packs into the shared compile cache before starting review runs:
+   `scripts/compile-codeql-queries.sh --language <language>` (Windows:
+   `scripts\compile-codeql-queries.ps1 -Language <language>`, which runs it in WSL). See
+   [Compiling CodeQL queries](../../docs/operations/codeql-analysis.md#compiling-codeql-queries).

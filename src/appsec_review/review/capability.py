@@ -26,6 +26,7 @@ from appsec_review.debug_symbols.contract import INDEX_NAME as DEBUG_SYMBOL_INDE
 from appsec_review.retrieval.debug_symbols import request_error as debug_symbol_request_error, row_in_scope
 from appsec_review.retrieval.index import INDEX_NAMES
 from appsec_review.retrieval.neighborhood import LIST_CODEQL_DATABASES, QUERY_CODEQL_NEIGHBORHOOD
+from appsec_review.retrieval.syntax import QUERY_SYNTAX, row_in_scope as syntax_row_in_scope
 from appsec_review.review.identity import sha256_hex
 from appsec_review.review.models import IntegrityError, Role
 
@@ -66,6 +67,7 @@ TOOL_INDEXES: Mapping[str, frozenset[str]] = {
     LIST_CODEQL_DATABASES: frozenset({GRAPH_INDEX}),
     QUERY_CODEQL_NEIGHBORHOOD: frozenset({GRAPH_INDEX}),
     QUERY_DEBUG_SYMBOLS: frozenset({DEBUG_SYMBOL_INDEX}),
+    QUERY_SYNTAX: frozenset({"analysis"}),
 }
 INDEX_PARAMETER_TOOLS = frozenset({"search", "find", "coverage"})
 IDENTITY_TOOLS = frozenset({"read_excerpt", "trace", "resolve_evidence"})
@@ -259,6 +261,9 @@ class CellCapability:
         return DEBUG_SYMBOL_INDEX in self.indexes and row_in_scope(
             row, lambda identity: self.entity_in_scope(identity) or identity in granted, self.graph_scopes)
 
+    def syntax_row_in_scope(self, row: Mapping[str, Any]) -> bool:
+        return "analysis" in self.indexes and syntax_row_in_scope(row, self.entities)
+
     def authorize(self, request: Any, *, queries_used: int = 0,
                   granted: frozenset[str] | set[str] = frozenset(),
                   labels: Mapping[str, str] | None = None,
@@ -341,6 +346,8 @@ class CellCapability:
         for key in sorted(set(parameters) & IDENTITY_PARAMETERS):
             if not (self.entity_in_scope(parameters[key]) or parameters[key] in granted):
                 return deny("entity_out_of_scope", f"{key} is outside the package entity scope")
+        if tool == QUERY_SYNTAX and parameters["subject"] not in {*self.entities, *granted}:
+            return deny("entity_out_of_scope", "syntax navigation requires an exact source or returned AST grant")
         if tool in IDENTITY_TOOLS and "identity" not in parameters:
             return deny("schema_violation", f"{tool} requires an identity")
         normalized = dict(parameters)
@@ -374,6 +381,8 @@ class CellCapability:
             return deny("depth_cap_exceeded", "graph closure depth exceeds the cell depth cap")
         if tool == QUERY_CODEQL_NEIGHBORHOOD and int(parameters.get("depth", 0)) > self.max_depth:
             return deny("depth_cap_exceeded", "neighborhood depth exceeds the cell depth cap")
+        if tool in {LIST_CODEQL_DATABASES, QUERY_CODEQL_NEIGHBORHOOD}:
+            normalized["graph_scopes"] = list(self.graph_scopes)
         if queries_used >= self.max_queries:
             return deny("query_cap_exceeded", "the cell query budget is exhausted")
         return Authorized(tool, normalized, sha256_hex({"tool": tool, "parameters": normalized}), line)

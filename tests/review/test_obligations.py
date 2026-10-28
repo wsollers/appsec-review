@@ -36,7 +36,6 @@ def test_precondition_vocabulary_is_closed() -> None:
 
 def test_policy_hash_is_stable_and_covers_rule_tables(monkeypatch: pytest.MonkeyPatch) -> None:
     assert len(obligations.POLICY_SHA256) == 64
-    assert obligations._policy_document() == obligations._policy_document()
     assert obligations.POLICY_SHA256 == obligations.sha256_hex(obligations._policy_document())
     monkeypatch.setattr(obligations, "CONFIGURATION_SCOPED", frozenset())
     assert obligations.sha256_hex(obligations._policy_document()) != obligations.POLICY_SHA256

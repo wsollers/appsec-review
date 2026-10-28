@@ -15,6 +15,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from urllib.parse import unquote, urlparse
 
 from .binary_decompilation import BinaryDecompilationSettings, parse_binary_decompilation
+from .target_acquisition import TargetAcquisitionSettings, parse_target_acquisition
 from .banned_functions import BannedFunctions, parse_banned_functions
 from .exclusions import PathExclusions, global_exclusions, job_exclusions
 from .assurance import ResourceBudget, ReviewPolicy, parse_review_policy
@@ -548,6 +549,7 @@ class AppConfig:
     overlay_path: Path | None = None
     overlay_sha256: str | None = None
     binary_decompilation: BinaryDecompilationSettings = BinaryDecompilationSettings()
+    target_acquisition: TargetAcquisitionSettings = TargetAcquisitionSettings()
     banned_functions: BannedFunctions = BannedFunctions()
     profile: str = DEFAULT_PROFILE
     profile_path: Path | None = None
@@ -581,7 +583,7 @@ def profile_override_keys(document: object) -> tuple[str, ...]:
     A profile may set only: the ``model`` table of the five model-calling jobs
     (``PROFILE_JOB_MODEL_KEYS``), model profiles of the inference review
     (``PROFILE_REVIEW_MODEL_KEYS``), ``model_profile`` of its roles, and its ``budgets``
-    (``PROFILE_BUDGET_KEYS``), plus the two explicit lane exploration settings. Every other key,
+    (``PROFILE_BUDGET_KEYS``), the two lane exploration settings, team capacity and active-claim cap. Every other key,
     wrong type and empty table is rejected by name.
     """
     from .inference_review import JOB_ID, parse_team_package_budget
@@ -611,8 +613,15 @@ def profile_override_keys(document: object) -> tuple[str, ...]:
         field = f"jobs.{job_id}"
         job = table(jobs[job_id], field, {"settings"})
         if job_id in PROFILE_MODEL_JOBS:
-            settings = table(job["settings"], f"{field}.settings", {"model"})
-            keys += typed(settings["model"], f"{field}.settings.model", PROFILE_JOB_MODEL_KEYS)
+            settings = table(job["settings"], f"{field}.settings",
+                             {"model", "models"} if job_id == "job_owasp_control_assessment" else {"model"})
+            if "model" in settings:
+                keys += typed(settings["model"], f"{field}.settings.model", PROFILE_JOB_MODEL_KEYS)
+            if "models" in settings:
+                for name, model in table(settings["models"], f"{field}.settings.models").items():
+                    if name != "reviewer":
+                        raise ValueError("OWASP profiles may override only the reviewer model")
+                    keys += typed(model, f"{field}.settings.models.{name}", PROFILE_JOB_MODEL_KEYS)
             continue
         if job_id in PROFILE_NAMED_MODEL_JOBS:
             settings = table(job["settings"], f"{field}.settings", {"models"})
@@ -622,7 +631,10 @@ def profile_override_keys(document: object) -> tuple[str, ...]:
                     raise ValueError(f"configuration profile model profile name is invalid: {name}")
                 keys += typed(models[name], f"{field}.settings.models.{name}", PROFILE_REVIEW_MODEL_KEYS)
             continue
-        settings = table(job["settings"], f"{field}.settings", {"models", "roles", "budgets", "lanes"})
+        settings = table(job["settings"], f"{field}.settings", {"models", "roles", "budgets", "lanes", "teams", "rounds"})
+        for section, key in (("teams", "review_teams"), ("rounds", "max_active_claims")):
+            if section in settings:
+                keys += typed(settings[section], f"{field}.settings.{section}", {key: int})
         if "lanes" in settings:
             keys += typed(settings["lanes"], f"{field}.settings.lanes",
                           {"exploration_enabled": bool, "exploration_reserve": int})
@@ -665,7 +677,10 @@ def _apply_profile(document: dict[str, Any], profile: Mapping[str, Any]) -> None
     for job_id, job in profile["jobs"].items():
         settings = job["settings"]
         if job_id in PROFILE_MODEL_JOBS:
-            base_table(("jobs", job_id, "settings", "model")).update(settings["model"])
+            if "model" in settings:
+                base_table(("jobs", job_id, "settings", "model")).update(settings["model"])
+            for name, values in settings.get("models", {}).items():
+                base_table(("jobs", job_id, "settings", "models", name)).update(values)
             continue
         if job_id in PROFILE_NAMED_MODEL_JOBS:
             named = ("jobs", job_id, "settings", "models")
@@ -673,8 +688,9 @@ def _apply_profile(document: dict[str, Any], profile: Mapping[str, Any]) -> None
                 base_table((*named, name)).update(values)
             continue
         review = ("jobs", job_id, "settings")
-        if "lanes" in settings:
-            base_table((*review, "lanes")).update(settings["lanes"])
+        for section in ("lanes", "teams", "rounds"):
+            if section in settings:
+                base_table((*review, section)).update(settings[section])
         for name, values in settings.get("models", {}).items():
             models = base_table((*review, "models"))
             models.setdefault(name, {}).update(values)
@@ -846,6 +862,7 @@ def load_config(path: str | Path = "appsec-review.toml", *, overlay: str | Path 
 
     build_capture = _build_capture(document.get("build_capture"), field="build_capture")
     binary_decompilation = parse_binary_decompilation(document.get("binary_decompilation"), repository_root)
+    target_acquisition = parse_target_acquisition(document.get("target_acquisition"), repository_root)
     banned_functions = parse_banned_functions(document.get("banned_functions"))
     resolved_document["build_capture"]["mode"] = build_capture.mode.value
 
@@ -1104,6 +1121,9 @@ def load_config(path: str | Path = "appsec-review.toml", *, overlay: str | Path 
         elif job_id == "job_inference_security_review":
             from .inference_review import parse_inference_review_settings
             typed_settings = parse_inference_review_settings(settings)
+        elif job_id == "job_owasp_control_assessment":
+            from .owasp import parse_settings as parse_owasp_settings
+            typed_settings = parse_owasp_settings(settings)
         elif job_id == "job_image_pin_verification":
             from .image_pin_verification import parse_image_pin_verification_settings
             typed_settings = parse_image_pin_verification_settings(settings)
@@ -1179,6 +1199,7 @@ def load_config(path: str | Path = "appsec-review.toml", *, overlay: str | Path 
         profile_path=profile_source,
         profile_sha256=profile_sha256,
         binary_decompilation=binary_decompilation,
+        target_acquisition=target_acquisition,
         banned_functions=banned_functions,
         review_policy=review_policy,
         compiler_target=selected_compiler,

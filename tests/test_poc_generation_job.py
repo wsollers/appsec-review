@@ -28,7 +28,7 @@ from appsec_review.storage import file_sha256
 from tests import poc_support
 from tests.final_report_support import GATE, REPORT
 from tests.fixtures.poc_generation import relay
-from tests.poc_chain import POC, Writer, build_chain, generated_text, ast_by_source
+from tests.poc_chain import BASIS, POC, Writer, build_chain, generated_text, ast_by_source
 
 ROOT = Path(__file__).parents[1]
 CLAIM_DIR = "data/poc"
@@ -90,9 +90,9 @@ def scenario(chain, tmp_path_factory, candidates, scripts, executor=None, *, rep
 
 @pytest.fixture(scope="module")
 def mixed(chain, tmp_path_factory):
-    """Candidate 1 is good, candidate 2 carries the judge verdict ``partly``, the third is beyond the bound."""
+    """Candidate 1 is good, candidate 2 lacks a trigger, and the third is beyond the bound."""
     a = chain.findings[0]["claim_id"]
-    candidates = [chain.candidate(0), chain.candidate(1, verdict="partly"), chain.candidate(2)]
+    candidates = [chain.candidate(0), chain.candidate(1, basis={**BASIS, "trigger": []}), chain.candidate(2)]
     return scenario(chain, tmp_path_factory, candidates, {a: [relay.answer()]}, report=True)
 
 
@@ -102,7 +102,7 @@ def test_the_job_publishes_one_handoff_with_every_attempted_candidate_and_names_
     assert set(published) == {"schema", "artifact", "item_count", "gaps", "terminal_status"}   # what a handoff keeps
     counts = summary["counts"]
     assert counts["candidates"] == 2 and counts["omitted"] == 1
-    assert counts["by_status"]["compile_verified"] == 1 and counts["by_status"]["not_applicable"] == 1
+    assert counts["by_status"]["compile_verified"] == 1 and counts["by_status"]["insufficient_evidence"] == 1
     assert any(gap.startswith("candidate_bound_reached") for gap in published["gaps"])
     assert published["terminal_status"] == "COMPLETED_WITH_GAPS"
     assert [row["claim_id"] for row in summary["candidates"]] == [mixed.candidates[0]["claim_id"],
@@ -170,8 +170,9 @@ def test_the_brief_carries_the_finding_the_basis_the_declarations_and_the_build_
     row = rows_of(mixed)[claim]
     brief = read(mixed, row["brief"]["path"])
     assert brief["schema"] == "appsec-review/poc-writer-brief/1" and brief["claim"]["state"] == "confirmed"
-    assert brief["poc_basis"] == mixed.candidates[0]["poc_basis"]["value"]
-    assert sorted(brief["poc_basis_labels"]) == ["E1", "F1", "F2"]
+    assert brief["poc_basis"] == mixed.candidates[0]["poc_basis"]["brief"]
+    assert set(brief["poc_basis_labels"]) == set(BASIS["entry"] + BASIS["path"])
+    assert sorted(row["label"] for row in brief["poc_basis_labels"].values()) == ["E1", "F1", "F2"]
     assert brief["sink"] == {"name": relay.SINK, "path": "src/packet.cpp", "line": 7, "symbol": "asr:symbol:" + "4" * 64}
     text = "\n".join(line for item in brief["declarations"] for line in item["text"])
     assert "parse_header(const std::uint8_t *data, std::size_t size, Header &out);" in text and "char name[16];" in text
@@ -189,7 +190,7 @@ def test_the_brief_carries_the_finding_the_basis_the_declarations_and_the_build_
 def test_a_candidate_the_job_cannot_attempt_gets_a_status_and_no_files(mixed) -> None:
     claim = mixed.candidates[1]["claim_id"]
     row = rows_of(mixed)[claim]
-    assert row["status"] == "not_applicable" and "partly" in row["reason"]
+    assert row["status"] == "insufficient_evidence" and "trigger" in row["reason"]
     assert row["files"] is None and row["functions"] is None and row["brief"] is None
     assert not (mixed.run_root / CLAIM_DIR / claim).exists()
     assert mixed.candidates[2]["claim_id"] not in rows_of(mixed)
@@ -239,7 +240,7 @@ def test_the_report_shows_the_poc_outcomes_when_the_poc_job_ran_on_this_gate(mix
     report = unit_json(mixed, "report.assemble", "final-report.json", REPORT)
     outcomes = report["poc_outcomes"]
     assert outcomes["status"] == "available" and outcomes["reason"] == POC_REASON
-    assert [item["status"] for item in outcomes["items"]] == ["compile_verified", "not_applicable"]
+    assert [item["status"] for item in outcomes["items"]] == ["compile_verified", "insufficient_evidence"]
     first = outcomes["items"][0]
     assert first["claim_id"] == mixed.candidates[0]["claim_id"] and first["result_id"] is None
     assert first["functions"] == {"test_function": relay.TEST_NAME, "negative_control": relay.CONTROL_NAME}
@@ -321,8 +322,7 @@ def test_a_policy_denied_and_a_compile_failed_candidate_keep_their_source_as_dat
 def test_writer_declines_unusable_bases_and_missing_answers_are_named_statuses(chain, tmp_path_factory) -> None:
     a, b = chain.findings[0]["claim_id"], chain.findings[1]["claim_id"]
     decline = {"action": "final", "result": {"decline": {"status": "unsafe_to_attempt", "why": "needs a socket"}}}
-    no_trigger = {"entry": ["E1"], "path": ["F1"], "trigger": [], "input_format": "x", "preconditions": [],
-                  "expected_observation": "x", "unknowns": []}
+    no_trigger = {**BASIS, "trigger": []}
     run = scenario(chain, tmp_path_factory, [chain.candidate(0), chain.candidate(1, basis=no_trigger)],
                    {a: [decline]})
     rows = rows_of(run)
@@ -376,21 +376,15 @@ def test_an_include_outside_the_project_is_refused_before_any_compiler_runs(chai
 # ------------------------------------------------------------------------------------ the candidate input
 
 
-def test_a_handoff_without_poc_candidates_completes_with_the_named_gap_and_an_empty_valid_handoff(chain) -> None:
-    chain.prepare(None)
-    chain.run_poc(Writer({}))
-    published = chain.handoff(POC)["outputs"]["publish.publish_handoff"]
-    summary = chain.summary()
-    assert published["terminal_status"] == "COMPLETED_WITH_GAPS" and published["item_count"] == 0
-    assert any(gap.startswith("no_poc_candidates") for gap in published["gaps"])
-    assert summary["candidates"] == [] and summary["counts"]["candidates"] == 0
-    assert SchemaSet(ROOT / "docs" / "schemas" / "poc-generation").errors("poc-generation", summary) == []
+def test_a_handoff_without_the_required_candidate_field_is_an_integrity_failure(chain) -> None:
+    from appsec_review.jobs.job_final_publication_gate.verify import load_accepted_review
+
+    chain.restore()
+    chain.inject(None)
+    with pytest.raises(IntegrityError, match="poc_candidates"):
+        load_accepted_review(chain.run_root, SchemaSet(ROOT / "docs" / "schemas" / "inference-security-review"),
+                             max_packages=10000)
     assert not (chain.run_root / CLAIM_DIR).exists()
-    executor = chain.built["executor"]
-    assert executor.calls == []
-    chain.run_report()
-    outcomes = chain.read(REPORT, "report.assemble", "final-report.json")["poc_outcomes"]
-    assert outcomes["status"] == "none_available" and "no_poc_candidates" in outcomes["reason"]
 
 
 def test_an_empty_candidate_list_is_a_run_with_nothing_to_document_not_a_gap(chain) -> None:
@@ -405,12 +399,13 @@ def test_an_empty_candidate_list_is_a_run_with_nothing_to_document_not_a_gap(cha
                                               "sha256": "0" * 64}),
     lambda c: c.candidate(0, state="supported" if c.findings[0]["state"] == "confirmed" else "confirmed"),
     lambda c: c.candidate(0, claim_id=c.findings[1]["claim_id"]),
-    lambda c: {**c.candidate(0), "poc_basis": {"sha256": "1" * 64, "value": c.candidate(0)["poc_basis"]["value"]}},
+    lambda c: c.candidate(0, judge_verdict="partly"),
+    lambda c: {**c.candidate(0), "poc_basis": {"sha256": "1" * 64, "brief": c.candidate(0)["poc_basis"]["brief"]}},
     lambda c: {**c.candidate(0), "surprise": True},
 ])
 def test_candidates_that_disagree_with_the_verified_review_fail_the_job(chain, mutate) -> None:
-    chain.prepare([mutate(chain)])
     with pytest.raises(IntegrityError):
+        chain.prepare([mutate(chain)])
         chain.run_poc(Writer({}))
 
 
@@ -518,12 +513,12 @@ def test_a_report_in_the_previous_shape_still_validates_and_renders(mixed) -> No
         "Proof-of-trigger outcomes")[1].split("## ")[0]
 
 
-def test_the_default_package_view_is_built_from_the_accepted_review_and_unresolved_labels_are_named(chain) -> None:
+def test_the_default_package_view_is_built_from_the_accepted_review_and_unresolved_identities_are_named(chain) -> None:
     """Without the stub view the job builds the real labelled view; the fixture package has no entry point or call
-    path, so none of the basis labels resolve and the candidate is insufficient_evidence, not a guess."""
+    path, so none of the basis identities resolve and the candidate is insufficient_evidence, not a guess."""
     a = chain.findings[0]["claim_id"]
     chain.prepare([chain.candidate(0)])
     chain.run_poc(Writer({}), view_factory=None)
     row = chain.rows()[a]
-    assert row["status"] == "insufficient_evidence" and "label" in row["reason"] and row["files"] is None
+    assert row["status"] == "insufficient_evidence" and "identity" in row["reason"] and row["files"] is None
     assert chain.built["executor"].calls == []

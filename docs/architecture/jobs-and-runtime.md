@@ -13,14 +13,24 @@ job and invalidates the transitive downstream closure. It never treats time as p
 The graph holds a kernel-backed per-run claim lock across planning and execution so two resume
 processes cannot claim the same run concurrently.
 
-The direct CLI currently exercises this mechanism with a linear review graph from
-`job_model_connectivity` through `job_document_issue_analysis`. Dagster builds the broader, branched
-`wave1_review` topology from every registered, configured, enabled job except
-`job_third_party_data_sync`, adding the CI configuration, post-build, OWASP, and security-tagging
-jobs that are not in the direct graph. Both surfaces end with `job_inference_security_review`,
+The direct CLI runs the same jobs as Dagster's `wave1_review`, in a topological order derived from
+`orchestration.topology.wave1_dependencies`; Dagster builds the branched topology from every
+registered, configured, enabled job except `job_third_party_data_sync`, and the CLI executes it
+linearly. Both refuse to start when the registered and configured jobs differ. Both surfaces end with `job_inference_security_review`,
 `job_final_publication_gate` and `job_final_report_publication`, in that order; the report is the
 single terminal job. Both surfaces use the same semantic registry and accepted-handoff format. The exact operator-visible distinction is documented in
 [`../operations/wave1-review.md`](../operations/wave1-review.md).
+
+In both graphs, enabled prioritization and code-graph indexing feed security tagging,
+then OWASP consumes accepted tag-cloud/classification context before review data indexing and
+package/hunt/red-blue assembly. Tags are routing, not control proof. The OWASP job is enabled by
+default in assessment mode across shipped profiles; it selects the same chain in direct
+`start`/`resume`/`plan-resume` and Dagster. Direct `--force-from` accepts tagging/OWASP only when
+enabled, and `jobs.job_owasp_control_assessment.settings.enabled = false` explicitly opts out.
+CI/post-build and standalone metadata-sync differences remain; this is not full graph
+parity. The [workbench design](owasp-control-workbench.md) describes the four supported
+Python static procedures, separate blinded reviewer, provisional result boundary and named
+unresolved coverage.
 
 A boolean at `[jobs.<job_id>.settings].enabled` is the generic job dispatch gate. Missing means
 enabled. `false` makes the job transparent: it is absent from direct and Dagster graphs, takes no
@@ -31,7 +41,7 @@ input, output, tool, and acceptance contracts.
 
 ## Registered jobs
 
-`runtime/registry.py` registers 37 jobs. Each has a `[jobs.<job_id>]` table in
+`runtime/registry.py` registers 38 jobs. Each has a `[jobs.<job_id>]` table in
 `appsec-review.toml`, and its Dagster job is named from that table's `name`.
 
 | Job | Purpose | Operations |
@@ -39,7 +49,8 @@ input, output, tool, and acceptance contracts.
 | `job_third_party_data_sync` | NVD (with `index/nvd.sqlite`), OSV, MITRE, CISA KEV, FIRST EPSS and cve-bin-tool feed snapshots (scheduled, outside reviews) | [third-party-data-sync](../operations/third-party-data-sync.md) |
 | `job_model_connectivity` | Mandatory fresh provider/model connectivity gate | [below](#inference-entry-point-and-model-preflight) |
 | `job_image_pin_verification` | Mandatory check that every enabled catalog image and configured image-ID pin resolves locally to exactly its pinned image; any mismatch fails the run. Builds nothing | [image-pin-verification](../operations/image-pin-verification.md) |
-| `job_review_intake` | Configuration and target intake | [below](#inference-entry-point-and-model-preflight) |
+| `job_target_acquisition` | Acquires (or re-verifies) every component of the review system named by `start --system`, in parallel, into `targets/<system>/` before intake; a failed component is a named gap; a no-op without a requested system | [target-acquisition](../operations/target-acquisition.md) |
+| `job_review_intake` | Configuration and target intake; copies a target-acquisition manifest to `target-acquisition.json` and resolves configured binary decompilation publications to `binary-evidence.json` | [below](#inference-entry-point-and-model-preflight) |
 | `job_target_catalog` | Bounded target catalog and source index | [target-analysis-planning](../operations/target-analysis-planning.md) |
 | `job_source_history_analysis` | Git/GitHub history instability signals | [source-history-analysis](../operations/source-history-analysis.md) |
 | `job_ci_configuration_analysis` | CI/CD configuration analysis | [ci-configuration-analysis](../operations/ci-configuration-analysis.md) |
@@ -58,6 +69,7 @@ input, output, tool, and acceptance contracts.
 | `job_sanitizer_build` | ASan/UBSan rebuild of accepted native units in a separate workspace; catalogues instrumented outputs and proves instrumentation from the ELF, never executes them | [sanitizer-build](../operations/sanitizer-build.md) |
 | `job_cpp_symbol_index` | clangd symbol index | [cpp-index-jobs](../operations/cpp-index-jobs.md) |
 | `job_cpg_analysis` | Joern code property graph (deprecated; shipped `settings.enabled = false`) | [cpp-index-jobs](../operations/cpp-index-jobs.md) |
+| `job_binary_evidence_indexing` | Bounded `binary` retrieval shards over the Ghidra publications that review intake froze; not applicable when no binary is configured | [binary-decompilation](../operations/binary-decompilation.md) |
 | `job_post_build_security_assessment` | Build-hardening assessment | [post-build-security-assessment](../operations/post-build-security-assessment.md) |
 | `job_evidence_collection` | Deterministic static evidence | [static-analysis](../operations/static-analysis.md) |
 | `job_dependency_intelligence` | Declared, SBOM, linker and loader dependency identity with OpenSSF Scorecard context | [dependency-intelligence](../operations/dependency-intelligence.md) |
@@ -344,8 +356,37 @@ enabled job's `tag`/`image_id` pin (the project-build profiles) and `source_imag
 `source_image_id` pin (CodeQL), records each pin's pinned and resolved image ID, and fails the run,
 never recording a gap, naming every missing image and moved tag. Images are rebuilt and re-pinned on
 the host by the operator. Setting `jobs.job_image_pin_verification.settings.enabled = false` makes
-intake follow the model gate directly. See
+the next gate follow the model gate directly. See
 [`../operations/image-pin-verification.md`](../operations/image-pin-verification.md).
+
+`job_target_acquisition` is the last pre-intake gate, also always executed and non-propagating.
+A review **system** is composed of one or more components (Git by default, Perforce, or a GitLab,
+Gerrit or Azure DevOps review export), so the target may not exist when the run starts. With
+`start --system <id>` (or `APPSEC_REVIEW_SYSTEM`), `GraphRunner` runs the leading gates with no
+target and source fingerprint `none`, the acquisition gate acquires every component concurrently
+(a worker pool bounded by `target_acquisition.max_parallel_components`) into
+`targets/<system>/<component>/`, or re-verifies those already acquired, and only then fingerprints
+the composed `targets/<system>/` root and plans the remaining jobs against it. Intake, cataloging
+and every discovery branch therefore run once over all components. Because the gate does not
+propagate its handoff, a resume re-verifies the components but reuses downstream work while the
+composed tree is unchanged. Intake binds the acquisition through the system manifest whose
+`target_path` is the reviewed root. Under Dagster, the gate reads the same environment variable and
+`launch_inputs` fingerprints the target lazily for intake. Without a requested system the gate
+records `NOT_REQUESTED`. See [`../operations/target-acquisition.md`](../operations/target-acquisition.md).
+
+```mermaid
+sequenceDiagram
+  participant G as GraphRunner
+  participant A as job_target_acquisition
+  participant W as component workers
+  participant I as job_review_intake and later jobs
+  G->>A: run (target none, fingerprint none)
+  A->>W: acquire or verify each component (bounded pool)
+  W-->>A: per-component manifest or named gap
+  A-->>G: system manifest (composed tree hash)
+  G->>G: fingerprint targets/<system>, plan the suffix
+  G->>I: run once over the composed root
+```
 
 ## Target analysis planning
 

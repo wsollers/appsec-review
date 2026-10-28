@@ -197,7 +197,7 @@ def _json_value(value: Any, owner: str) -> Any:
 
 def compose_bundle(repository_root: Path, *, role: str, persona: str, stack: str, task: str,
                    task_input: Mapping[str, Any], capability: Mapping[str, Any], vocabulary: Vocabulary,
-                   crosswalk: Crosswalk, job: str = REVIEW_JOB) -> dict[str, Any]:
+                   crosswalk: Crosswalk, job: str = REVIEW_JOB, binary_evidence: bool = False) -> dict[str, Any]:
     """Assemble one hash-pinned inference guidance bundle, or fail before dispatch."""
     root = Path(repository_root)
     registry = load_registry(root)
@@ -216,7 +216,7 @@ def compose_bundle(repository_root: Path, *, role: str, persona: str, stack: str
     _require(not unlisted, f"task {task} requests a tool absent from role {role}: {', '.join(unlisted)}")
     procedures = [
         load_runtime_skill(root, name, job_id=f"job_{job.replace('-', '_')}", fallback_to_package=False)
-        for name in select_review_procedures(role=role, task=task)
+        for name in select_review_procedures(role=role, task=task, binary_evidence=binary_evidence)
     ]
     for procedure in procedures:
         validate_procedure_text(f"procedure {procedure.name}", procedure.body, tools)

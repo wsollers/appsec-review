@@ -152,3 +152,92 @@ def test_platform_warm_compile_fills_the_cache_review_runs_mount(
 def test_warm_flag_is_parsed_and_skips_packs_that_are_not_registered() -> None:
     args = _builder().parser().parse_args(["query-packs", "--warm", "cert-cpp-coding-standards"])
     assert args.warm is True
+
+
+def test_only_packs_without_precompiled_queries_are_warmed() -> None:
+    """The image's standard packs and the CERT pack ship .qlx; warming them only wastes hours."""
+    packs = {pack["id"]: pack for pack in _registry()["packs"]}
+    assert packs["cert-cpp-coding-standards"].get("warm") is False
+    assert packs["cert-cpp-coding-standards"].get("warm_skip_reason")
+    warmed = {pack["id"] for pack in packs.values() if pack.get("warm")}
+    assert warmed and all(packs[name]["path"].startswith("rules/codeql-graph-export/") for name in warmed)
+
+
+def _warm_args(builder, *argv: str):
+    return builder.parser().parse_args(["query-packs", "--warm", *argv])
+
+
+def test_warm_compiles_sequentially_with_the_requested_languages_ram_and_threads(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    builder = _builder()
+    calls: list[tuple[str, int | None, int | None]] = []
+    monkeypatch.setattr(builder, "running_warm_containers", lambda: [])
+    monkeypatch.setattr(builder, "RUN_ROOT", tmp_path)
+    monkeypatch.setattr(builder, "_codeql_warm", lambda pack, log, *, threads, ram_mb:
+                        calls.append((pack["id"], threads, ram_mb)) or (True, "ok"))
+    rc = builder.query_packs(_warm_args(builder, "--language", "go,java", "--language", "cpp",
+                                        "--ram", "6500", "--threads", "4"), {})
+    assert rc == 0
+    assert calls == [("graph-export-cpp", 4, 6500), ("graph-export-java", 4, 6500),
+                     ("graph-export-go", 4, 6500)]
+    output = capsys.readouterr().out
+    assert "cert-cpp-coding-standards" in output and "precompiled" in output
+
+
+def test_warm_dry_run_prints_the_compile_and_runs_nothing(
+        monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    builder = _builder()
+    monkeypatch.setattr(builder, "running_warm_containers", lambda: [])
+    monkeypatch.setattr(builder, "_codeql_warm", lambda *a, **k: pytest.fail("dry run compiled"))
+    monkeypatch.setattr(builder.subprocess, "run", lambda *a, **k: pytest.fail("dry run ran a command"))
+    assert builder.query_packs(_warm_args(builder, "--dry-run", "--language", "go"), {}) == 0
+    output = capsys.readouterr().out
+    assert "WOULD   graph-export-go" in output and "--ram=7000" in output and "--threads=8" in output
+    assert "dst=/scratch/export/pack,readonly" in output and "dry_run=true" in output
+
+
+def test_warm_refuses_while_another_compile_runs_and_rejects_unknown_languages(
+        monkeypatch: pytest.MonkeyPatch) -> None:
+    builder = _builder()
+    monkeypatch.setattr(builder, "running_warm_containers", lambda: ["warm-export-python"])
+    monkeypatch.setattr(builder, "_codeql_warm", lambda *a, **k: pytest.fail("compiled while busy"))
+    assert builder.query_packs(_warm_args(builder, "--language", "go"), {}) == 3
+    assert builder.query_packs(_warm_args(builder, "--language", "go", "--dry-run"), {}) == 3
+    assert builder.query_packs(_warm_args(builder, "--language", "nope", "--allow-concurrent"), {}) == 2
+    with pytest.raises(SystemExit):
+        _warm_args(builder, "--ram", "0")
+
+
+def test_compile_script_wraps_the_warm_compile_and_has_a_powershell_twin() -> None:
+    import os
+    import shutil
+    import subprocess
+    import sys
+
+    script = ROOT / "scripts" / "compile-codeql-queries.sh"
+    text = script.read_text(encoding="utf-8")
+    assert text.startswith("#!/usr/bin/env bash\n") and "set -euo pipefail" in text and "\r" not in text
+    assert os.access(script, os.X_OK) and "query-packs --warm" in text
+    twin = (ROOT / "scripts" / "compile-codeql-queries.ps1").read_text(encoding="utf-8")
+    assert "Set-StrictMode -Version Latest" in twin and "wsl.exe" in twin and "compile-codeql-queries.sh" in twin
+    for option in ("$Language", "$Ram", "$Threads", "$DryRun", "$AllowConcurrent", "$Distro", "$Help"):
+        assert option in twin
+    if shutil.which("bash") is None or os.name == "nt":
+        return
+    environment = {**os.environ, "APPSEC_PYTHON": sys.executable}
+    helped = subprocess.run(["bash", str(script), "--help"], text=True, capture_output=True, env=environment,
+                            cwd="/", timeout=60, check=False)
+    assert helped.returncode == 0
+    assert "usage: scripts/compile-codeql-queries.sh" in helped.stdout
+    assert "scripts/compile-codeql-queries.ps1" in helped.stdout and "--dry-run" in helped.stdout
+    bad = subprocess.run(["bash", str(script), "--threads", "zero"], text=True, capture_output=True,
+                         env=environment, cwd="/", timeout=60, check=False)
+    assert bad.returncode == 2
+
+
+def test_warm_compile_passes_the_memory_budget_to_codeql() -> None:
+    builder = _builder()
+    pack = {pack["id"]: pack for pack in _registry()["packs"]}["graph-export-go"]
+    argv = builder._warm_argv(pack, "image", "volume", "1000:1000", *builder._warm_settings(pack, None, None))
+    assert "--threads=8 --ram=7000" in argv[-1]
+    assert argv[argv.index("--name") + 1].startswith(builder.WARM_CONTAINER_PREFIX)

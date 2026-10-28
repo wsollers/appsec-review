@@ -29,20 +29,23 @@ TARGET_JOBS = frozenset({
     "job_artifact_security_analysis", "job_evidence_collection", "job_dependency_intelligence",
     "job_cpp_compiled_analysis",
     "job_clang_static_analysis", "job_svf_alias_analysis", "job_sanitizer_build",
-    "job_cpp_symbol_index", "job_cpg_analysis", "job_codeql_analysis", "job_code_graph_index",
+    "job_cpp_symbol_index", "job_cpg_analysis", "job_binary_evidence_indexing", "job_codeql_analysis", "job_code_graph_index",
     "job_post_build_security_assessment", "job_owasp_control_assessment",
     "job_ci_configuration_analysis", "job_tree_sitter_ast", "job_source_history_analysis",
     "job_change_context_analysis", "job_review_prioritization", "job_security_tagging",
     "job_review_data_indexing", "job_review_package_assembly", "job_document_issue_analysis",
 })
 TARGET_ENVIRONMENT = "APPSEC_REVIEW_TARGET"
+# The configured ``[[target_acquisition.systems]]`` id that ``job_target_acquisition`` acquires before
+# intake. Unset means no acquisition is requested and the gate is a recorded no-op.
+SYSTEM_ENVIRONMENT = "APPSEC_REVIEW_SYSTEM"
 TARGET_INDEPENDENT_JOBS = frozenset({
-    "job_model_connectivity", "job_image_pin_verification", "job_third_party_data_sync",
+    "job_model_connectivity", "job_image_pin_verification", "job_target_acquisition", "job_third_party_data_sync",
     "job_inference_security_review", "job_final_publication_gate", "job_poc_generation",
     "job_final_report_publication",
 })
 TARGET_INDEPENDENT_METADATA_JOBS = frozenset({
-    "job_model_connectivity", "job_image_pin_verification", "job_third_party_data_sync",
+    "job_model_connectivity", "job_image_pin_verification", "job_target_acquisition", "job_third_party_data_sync",
 })
 
 
@@ -55,15 +58,25 @@ class LaunchInputs:
     upstream_handoffs: Mapping[str, str] = field(default_factory=dict)
 
 
-def configured_target(repository_root: Path) -> Path:
-    """The target a launch reviews: ``APPSEC_REVIEW_TARGET``, else the repository's default corpus."""
+def configured_target(repository_root: Path, targets_dir: str = "targets") -> Path:
+    """The target a launch reviews: the composed root of the system named by ``APPSEC_REVIEW_SYSTEM``, else
+    ``APPSEC_REVIEW_TARGET``, else the repository's default corpus.
+
+    When both are set they must agree, so a deployment never acquires one tree and reviews another."""
 
     from appsec_review.config.native_dagster import native_execution_requested
     if native_execution_requested():
         from appsec_review.orchestration.dagster.native import validate_native_launch
         return Path(validate_native_launch().target_root)
     # Do not resolve symlinks/stat the checkout before we know the job reads it.
-    return Path(os.environ.get(TARGET_ENVIRONMENT, Path(repository_root) / "targets" / "appsec-multi-vuln")).absolute()
+    system, target = os.environ.get(SYSTEM_ENVIRONMENT, ""), os.environ.get(TARGET_ENVIRONMENT, "")
+    if system:
+        root = (Path(repository_root) / targets_dir / system).absolute()
+        if target and os.path.normpath(Path(target).absolute()) != os.path.normpath(root):
+            raise ValueError(f"{TARGET_ENVIRONMENT}={target} disagrees with {SYSTEM_ENVIRONMENT}={system}; "
+                             f"set {TARGET_ENVIRONMENT}={root} or unset it")
+        return root
+    return Path(target or Path(repository_root) / "targets" / "appsec-multi-vuln").absolute()
 
 
 def launch_inputs(job: Job, *, target: Path, upstream_handoffs: Mapping[str, str]) -> LaunchInputs:

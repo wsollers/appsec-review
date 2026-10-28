@@ -34,12 +34,12 @@ def _hold_team(root: str, slots: int, lane: str, active, peak, guard, rounds: in
                 active.value -= 1
 
 
-@pytest.mark.parametrize("slots", [1, 3])
+@pytest.mark.parametrize("slots", [1, 3, 7])
 def test_semaphore_never_exceeds_its_slots_across_processes(tmp_path: Path, slots: int) -> None:
     active, peak, guard = _CONTEXT.Value("i", 0), _CONTEXT.Value("i", 0), _CONTEXT.Lock()
     workers = [_CONTEXT.Process(target=_hold_team, args=(
         str(tmp_path / "teams"), slots, (Lane.LEAD, Lane.HUNT)[index % 2].value, active, peak, guard, 4))
-        for index in range(6)]
+        for index in range(max(6, slots + 2))]
     for worker in workers:
         worker.start()
     for worker in workers:

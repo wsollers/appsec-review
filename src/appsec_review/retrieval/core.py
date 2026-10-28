@@ -1233,6 +1233,11 @@ class RetrievalCore:
         return query_debug_symbols(self, mode=mode, artifact_identity=artifact_identity, subject=subject,
                                    address=address, limit=limit, cursor=cursor)
 
+    def query_syntax(self, *, mode: str, subject: str, name: str | None = None,
+                     limit: int = 20, cursor: str | None = None) -> dict[str, Any]:
+        from .syntax import query_syntax
+        return query_syntax(self, mode=mode, subject=subject, name=name, limit=limit, cursor=cursor)
+
     def query_code_graph(
         self, *, mode: str, subject: str, depth: int | None = None, sink_class: str | None = None,
         source_class: str | None = None, limit: int = 20, cursor: str | None = None,

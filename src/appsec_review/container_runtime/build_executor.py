@@ -26,7 +26,7 @@ from appsec_review.runtime.resources import (
 from appsec_review.storage import atomic_json, canonical_json
 from appsec_review.runtime import execution_safety as safety
 from .catalog import load_catalog
-from .identity import application_runtime_user
+from .identity import application_runtime_user, grant_runtime_user
 from .build_capture import (
     PATH_FIELDS, REQUIRED_EVENT_KINDS, BuildExecutionRecorder, CaptureScope, record_strace_files,
 )
@@ -226,20 +226,8 @@ class BuildContainerExecutor:
             self.runner(("docker", "rm", "--force", command[command.index("--name") + 1]), 60)
 
     def _make_workspace_writable(self, root: Path) -> None:
-        """Ensure the application identity can update its run-owned source copy."""
-        container_uid = int(application_runtime_user(self.profile.user).split(":", 1)[0])
-        for path in (root, *root.rglob("*")):
-            if path.is_symlink():
-                continue
-            mode = path.stat().st_mode
-            try:
-                if path.is_dir():
-                    path.chmod(((mode & ~0o022) | 0o700) if native_execution_requested() else mode | 0o007)
-                elif path.is_file():
-                    path.chmod(((mode & ~0o022) | 0o600) if native_execution_requested() else mode | 0o006)
-            except PermissionError:
-                if path.stat().st_uid != container_uid:
-                    raise
+        """Give the build container's identity owner-only write access to its run-owned source copy."""
+        grant_runtime_user(root, application_runtime_user(self.profile.user), recursive=True, writable_files=True)
 
     def _restrict_workspace(self, root: Path) -> None:
         """Close the build container's write window: no group- or world-writable workspace entry."""
@@ -655,8 +643,8 @@ class BuildContainerExecutor:
                     not re.fullmatch(r"sha256:[0-9a-f]{64}", image_id) or
                     (tool.expected_image_id is not None and image_id != tool.expected_image_id)):
                 raise RuntimeError("pinned gitleaks image is unavailable or changed")
-            scan_root.chmod(0o777)
             runtime_user = application_runtime_user(tool.user)
+            grant_runtime_user(scan_root, runtime_user)
             command = [
                 "docker", "run", "--rm", "--name", _container_name(), "--network", "none", "--read-only",
                 "--user", runtime_user, "--cap-drop", "ALL", "--security-opt",

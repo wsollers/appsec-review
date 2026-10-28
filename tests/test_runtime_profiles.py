@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from dataclasses import replace
 from pathlib import Path
 import shutil
 
@@ -192,7 +193,8 @@ def test_the_semantic_settings_hash_differs_between_profiles() -> None:
 BAD = [
     ("[runtime]\nruns_dir = 'elsewhere'\n", "rejected: runtime"),
     ("[jobs.job_review_intake.settings.model_preflight]\ntimeout_seconds = 1\n", "rejected: jobs.job_review_intake"),
-    (f"[jobs.{JOB}.settings.teams]\nreview_teams = 1\n", f"rejected: jobs.{JOB}.settings.teams"),
+    (f"[jobs.{JOB}.settings.teams]\nred_per_team = 1\n", f"rejected: jobs.{JOB}.settings.teams.red_per_team"),
+    (f"[jobs.{JOB}.settings.rounds]\nmax_rounds = 4\n", f"rejected: jobs.{JOB}.settings.rounds.max_rounds"),
     (f"[jobs.{JOB}.settings.verification]\nrequire_distinct_model_for_ship_blocking = false\n",
      "settings.verification"),
     (f"[jobs.{JOB}.settings.budgets]\nbudget_team_packages = 'unlimited'\n", "budgets.budget_team_packages"),
@@ -228,10 +230,39 @@ def test_package_budget_profile_selection_preserves_other_safeguards(profile, ex
     dev = load_config(ROOT / "appsec-review.toml", profile="dev")
     assert review.budgets.budget_team_packages == expected
     assert json.loads(config.resolved_json)["jobs"][JOB]["settings"]["budgets"]["budget_team_packages"] == expected
-    assert review.teams == _review(dev).teams
-    assert review.lanes == _review(dev).lanes
+    production = expected == "all"
+    assert review.teams == replace(_review(dev).teams, review_teams=7 if production else 3)
+    assert review.rounds == replace(_review(dev).rounds, max_active_claims=1000 if production else 500)
+    assert review.lanes == replace(_review(dev).lanes, exploration_enabled=production,
+                                   exploration_reserve=20 if production else 1)
+    resolved = json.loads(config.resolved_json)["jobs"][JOB]["settings"]
+    assert resolved["teams"]["review_teams"] == (7 if production else 3)
+    assert resolved["rounds"]["max_active_claims"] == (1000 if production else 500)
     assert review.retry == _review(dev).retry
     assert config.dagster.pool_limits == dev.dagster.pool_limits
+    for job_id in ("job_owasp_control_assessment", "job_poc_generation"):
+        assert config.job(job_id).settings["enabled"] is False
+
+
+@pytest.mark.parametrize(("section", "key", "value"), [
+    ("teams", "review_teams", "true"), ("teams", "review_teams", "0"), ("teams", "review_teams", "65"),
+    ("rounds", "max_active_claims", '"1000"'), ("rounds", "max_active_claims", "0"),
+    ("rounds", "max_active_claims", "100001"),
+])
+def test_profile_capacity_and_claim_bounds_are_typed(tmp_path, section, key, value):
+    path = _checkout(tmp_path, profile_text=f"[jobs.{JOB}.settings.{section}]\n{key} = {value}\n")
+    with pytest.raises(ValueError, match=key):
+        load_config(path, profile="prod")
+
+
+def test_profile_team_capacity_is_overridable_without_changing_claim_policy(tmp_path):
+    path = _checkout(tmp_path)
+    overlay = tmp_path / "capacity.toml"
+    overlay.write_text(f"[jobs.{JOB}.settings.teams]\nreview_teams = 2\n", encoding="utf-8")
+    base = _review(load_config(path, profile="prod"))
+    changed = _review(load_config(path, profile="prod", overlay=overlay))
+    assert base.teams.review_teams == 7 and changed.teams.review_teams == 2
+    assert replace(changed, teams=base.teams) == base
 
 
 @pytest.mark.parametrize("value,expected", [('"all"', "all"), ("1", 1), ("599", 599)])
