@@ -47,7 +47,8 @@ def _prepare(workspace: LaneWorkspace):
     base = workspace.root / "fixture"
     base.mkdir()
     config, target, snapshot, run_root, receipts, accepted, handoff, latest = _seed(
-        base, source_files={"src/main.c": "int hot(void) { return 1; }\nint main(void) { return hot(); }\n"})
+        base, source_files={"src/main.c": "int hot(void) { return 1; }\nint main(void) { return hot(); }\n"},
+        build_families=("native", "dotnet"))
     assert config.runtime.runs_dir.is_relative_to(workspace.root)
     receipt = receipts[0]
     build_root = run_root / receipt["workspace"]

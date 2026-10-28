@@ -3,8 +3,8 @@
 The configured OWASP producer currently supplies no assessment evidence on the accepted-plan
 path. These cases deliberately do not invent evidence or publish synthetic accepted shards.
 Positive source-bound control assessment and the inference-review consumer remain unverified.
-The tiny standards fixtures are byte-for-byte copies of the repository's pinned fixture catalogs,
-relocated outside protected production data for the acceptance guard.
+The tiny standards fixtures retain their committed bytes and abridged-fixture markers. This lane
+explicitly pins those fixtures rather than the complete production catalogs in the default config.
 """
 from __future__ import annotations
 

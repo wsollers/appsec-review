@@ -53,7 +53,8 @@ def _recorded_empty_sbom_job() -> Job:
 def _prepare(workspace: LaneWorkspace):
     base = workspace.root / "fixture"
     base.mkdir()
-    config, target, snapshot, root, receipts, accepted, handoff, latest = _seed(base)
+    config, target, snapshot, root, receipts, accepted, handoff, latest = _seed(
+        base, build_families=("native",))
     settings = config.job("job_dependency_intelligence").settings["scorecard"]
     cache_root = config.runtime.repository_root / settings["cache_root"]
     workspace.require_owned_path(cache_root)

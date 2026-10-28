@@ -232,6 +232,22 @@ def test_guard_allows_only_pinned_static_taxonomy_reads_and_never_mutation(tmp_p
     assert outcome["exit_code"] == 0 and outcome["cleanup"]["confirmed"], outcome
 
 
+def test_guard_rejects_changed_static_reference_identity_before_running_tests(tmp_path: Path, monkeypatch) -> None:
+    environment = ops_tests.acceptance_environment
+
+    def wrong_pin(workspace):
+        result = environment(workspace)
+        result["APPSEC_ACCEPTANCE_STATIC_INPUTS"] = json.dumps({
+            "data/reference/taxonomy/vocabulary.json": "0" * 64})
+        return result
+
+    monkeypatch.setattr(ops_tests, "acceptance_environment", wrong_pin)
+    outcome, _ = execute(tmp_path, "def test_must_not_run():\n    assert False\n")
+    assert outcome["exit_code"] != 0 and outcome["cleanup"]["confirmed"], outcome
+    assert "acceptance static reference identity changed" in Path(outcome["log"]).read_text(
+        encoding="utf-8")
+
+
 def test_suite_deadline_includes_collection_cases_and_cleanup(tmp_path: Path, monkeypatch) -> None:
     case_file = tmp_path / "test_suite.py"
     case_file.write_text("import time\ndef test_first(): time.sleep(60)\ndef test_second(): time.sleep(60)\n",
