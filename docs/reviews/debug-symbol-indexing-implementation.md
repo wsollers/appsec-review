@@ -75,7 +75,7 @@ remain null with metric gaps. Names and private paths are not metric labels.
 
 ## Verification
 
-The final feature acceptance revision is
+The pre-merge feature acceptance revision is
 `9e47a80f4f312a19fa23af5e6f95a27eabfa4ea3`, tested on Windows with a
 checkout-local Python 3.14 environment. **245 feature tests passed**:
 
@@ -151,3 +151,49 @@ portable .NET PDB, split/supplementary DWARF, unsupported location expressions,
 separated inline-code chunks and unavailable source checksums remain named
 coverage gaps. Native PDB inline ranges come from bounded native binary
 annotations, not invented procedure-wide fallback intervals.
+
+## Main reconciliation and execution follow-up
+
+Main `093f26d5846d61465dc2b5228fba33ca60605643` was merged without rebasing in
+`409fab6ad3cb2b0420cf5ef96a9ab12e92401040`. Fourteen conflicting files were
+reconciled, retaining main's topology-derived CLI `_graph_order()`, both target
+acquisition modes, binary evidence, syntax retrieval, CodeQL neighborhood
+capabilities and role permissions alongside debug-symbol retrieval. The CLI
+resume unit fixture now uses the real registry validation, and new parser cases
+cover compiler selection with both `--target` and `--system`.
+
+The user explicitly permitted this session to finish the merge and focused
+unit checks on its existing Windows worktree after main introduced the
+Linux/WSL-only development rule. **342 focused unit tests passed** on the
+committed merge:
+
+```powershell
+.venv\Scripts\python.exe -m pytest `
+  tests\test_compiler_target_selection.py `
+  tests\test_debug_symbol_workflow.py `
+  tests\test_debug_symbol_retrieval.py `
+  tests\test_debug_symbol_metrics.py `
+  tests\test_debug_symbol_indexing.py `
+  tests\test_debug_symbol_source_bounds.py `
+  tests\test_retrieval_interfaces.py `
+  tests\test_syntax_retrieval.py `
+  tests\test_guidance_compose.py `
+  tests\test_guidance_routing.py `
+  tests\review\test_capability.py `
+  tests\review\test_cell_retrieval.py `
+  tests\test_job_selection.py `
+  tests\orchestration\test_topology.py `
+  --basetemp=test\tmp\debug-symbol-main-merge-final -q
+```
+
+No live review, integration or acceptance run was performed for this merge.
+The published tool-catalog parity and the additive capability/scoping behavior
+passed their unit checks.
+
+The user subsequently questioned the host-local executable prerequisite.
+Reusing the exact approved compiler image recorded in each accepted build
+receipt, through fresh restricted execution with read-only accepted artifacts,
+is the proposed correction; it is **not implemented in this revision**.
+Reader availability and an approved fallback for prebuilt artifacts still need
+an explicit execution contract. The merge monitor was asked to hold landing
+rather than treat conflict resolution as completion of that operational work.
