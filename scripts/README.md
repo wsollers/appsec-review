@@ -47,7 +47,7 @@ Logic: `deploy/dagster/bin/ops.py` and `review_run.py`. Details:
 
 | Script | Purpose |
 | --- | --- |
-| `run-tests.sh` / `.ps1` | Run a named pytest suite with a unique base temp under `test/tmp/` and a log file; reports failures listed in `known-failures.txt` as known. Details: [`operator-scripts.md`](../docs/operations/operator-scripts.md#run-tests). |
+| `run-tests.sh` / `.ps1` | Run a named pytest suite with a unique base temp under `test/tmp/` and a log file; legacy suites report `known-failures.txt` entries as known. `--acceptance PROFILE` / `-Acceptance PROFILE` instead selects strict isolated acceptance (at most two workers), without known-failure exemptions. Details: [`operator-scripts.md`](../docs/operations/operator-scripts.md#run-tests), [acceptance guide](../docs/operations/bounded-acceptance.md). |
 | `clean-temp.sh` / `.ps1` | Remove disposable state under `test/tmp/` (dry run unless `--yes`). Details: [`operator-scripts.md`](../docs/operations/operator-scripts.md#clean-temp). |
 
 ## Support files

@@ -343,6 +343,34 @@ scripts/clean-temp.sh --docker
 
 ## run-tests
 
+### Explicit acceptance profiles
+
+`--acceptance <profile>` (`-Acceptance <profile>`) selects the separate bounded acceptance
+driver, not one of the legacy suites below. For example:
+
+```bash
+scripts/run-tests.sh --acceptance quick --workers 1 --dry-run
+scripts/run-tests.sh --acceptance graphs --workers 1
+```
+
+```powershell
+.\scripts\run-tests.ps1 -Acceptance quick -Workers 1 -DryRun
+.\scripts\run-tests.ps1 -Acceptance graphs -Workers 1
+```
+
+Acceptance requires the checkout's own virtual environment, always treats missing/skipped/failed
+required coverage as failure, and writes its result/logs/fixture runs only under a unique
+`test/tmp/acceptance/` root. `--workers` (`-Workers`) defaults to 1 and permits at most 2.
+`--deadline` / `-Deadline` and `--case-deadline` / `-CaseDeadline` only lower profile caps.
+Legacy suites, arbitrary pytest arguments, `--parallel` and `--background` cannot be combined
+with acceptance; the known-failure exemption below does not apply.
+
+See [bounded integration acceptance](bounded-acceptance.md) for profile selections, prerequisites,
+strict collection and cleanup, output schemas, budgets, unimplemented optional profiles and the
+shared-host caveat. The driver does not use a production Dagster endpoint or restart the stack.
+
+### Legacy pytest suites
+
 `run-tests` wraps pytest. It uses the checkout's `.venv` (`.venv/bin/python` or
 `.venv\Scripts\python.exe`); in a worktree without one it falls back to the main checkout's venv and
 sets `PYTHONPATH=src` so the worktree's code is the code under test. Each run gets

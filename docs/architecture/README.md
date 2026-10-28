@@ -2,6 +2,9 @@
 
 Repository authority remains in [`../../AGENTS.md`](../../AGENTS.md). This page is navigation only.
 
+- [`bounded-acceptance.md`](bounded-acceptance.md) - isolated producer/consumer acceptance,
+  scripted external boundaries, current-report oracle authority, process supervision and evidence
+  limits; [operator guide](../operations/bounded-acceptance.md).
 - [`../operations/report-rendering.md`](../operations/report-rendering.md) — the LaTeX/PDF and single-page HTML report renderer, its box legend, scripts and image.
 - [`jobs-and-runtime.md`](jobs-and-runtime.md) — semantic jobs, resumability, Dagster, and current analysis lanes.
 - [`job-interchange.md`](job-interchange.md) — versioned job envelopes, outcomes, native-result

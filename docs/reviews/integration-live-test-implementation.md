@@ -3,6 +3,26 @@
 Implementation record for the approved integration/live coverage plan, based on `fcac4306`.
 The original audits and approval plan are retained in the coordinating session's Library.
 
+Operator instructions are in [bounded integration acceptance](../operations/bounded-acceptance.md);
+the [architecture](../architecture/bounded-acceptance.md) describes the authentic seams and
+current-report oracle. This is a revision-bound implementation/evidence record, not a claim that
+all inventory members or optional live profiles have executed.
+
+## Current reconciliation checkpoint
+
+The documentation checkpoint is `bfe7f38b`, containing latest-main `d4cd9737` completion,
+OpenVEX and interchange changes. The W0 driver/inventory, W2 process/transport, W3 controls/feed,
+W4 graph/helper and authentic review/oracle work are integrated. Final public-driver
+calibration is still in progress. Do not describe latest-main `quick` as green or its
+under-ten-minute target as achieved on the strength of the older measurements below.
+
+Framework fixtures now use `tests.handoff_fixture.write_fixture_handoff` for `handoff/2`.
+Review/gate/report domain `/2` contracts remain unchanged. The final-report job is gate-only,
+with no OpenVEX fan-in. The current-report oracle delegates to certified `load_accepted_gate`
+and source-resolving current accepted-manifest validation; scanner hits or orphan/historical
+shards cannot establish final survival. PoC planning consumes the direct accepted review and
+strict candidate eligibility, and does not dispatch compilers/models without an accepted build.
+
 ## Shared decisions
 
 1. Acceptance state lives only under a unique `test/tmp/acceptance/<invocation>/<lane>/`.
@@ -80,3 +100,80 @@ protocol now returns a null-id JSON-RPC parse error and continues. A separate ow
 test confirms review-style heartbeat events remain in a disjoint stream while acceptance
 events are written. It passed in 1.91 seconds (3.67 seconds wall). This demonstrates local
 process/storage isolation, not zero CPU/I/O contention with a production review.
+
+## Integrated seams and narrow corrections
+
+- **W0 public execution:** `run-tests --acceptance <profile>` reads exact inventory obligations,
+  supervises collection and individual cases, always applies strict adequacy, and emits a
+  revision/source-bound result. The ordinary 60-second case cap has explicit 15/30/120-second
+  obligation exceptions. The quick target is under ten minutes with a hard twelve-minute cap,
+  not a completed final calibration.
+- **W2 local execution:** real Dagster multiprocess configuration, worker death/resume,
+  durable submission/reconciliation, MCP stdio discovery/error recovery, record/replay and
+  sensor paths have bounded selections. The supervisor uses Windows Job Objects or Linux
+  subreaper/identity-based cleanup; Linux-specific execution is not proven on Windows.
+- **W3 controls/feeds:** configured source/standards normalization and loopback TLS use real
+  application normalization/publication. A positive source-bound OWASP assessment/review hook
+  remains absent. Valid JSON with a truncated HTTPS `Content-Length` is now rejected rather
+  than accepted as a complete response.
+- **W4 graphs/helpers:** source-resolving recorded graph rows reach actual semantic consumers;
+  safe/unguarded, same-row and vacuous-subject negatives are explicit. The SQLite helper is an
+  actual local CLI. This does not establish current CodeQL/graph-engine compatibility.
+- **Authentic review/oracle:** real accepted review/gate/PoC planning and current final-report
+  authority replace synthetic cross-contract assumptions. Benign/blocked publication and
+  corrupted/stale accepted bytes are distinct from raw scanner detection.
+
+The narrow production corrections observed by these seams are MCP malformed-first-message
+parse-first/null-id recovery (without stale-id reuse), dependency context fingerprinting and
+truncated HTTPS response rejection. Other work was not removed merely to turn the selection
+green: the detailed PoC unit/job tests remain present.
+
+## Revision-specific measurements
+
+These are different evidence classes. A focused pytest result, a guarded nested-plugin run
+and a public W0 invocation are not interchangeable. Times are stated at the scope actually
+reported; setup duration is unavailable unless captured separately.
+
+| Revision / scope | Recorded outcome | Limitation |
+| --- | --- | --- |
+| `bbcbf0b1`, public `signals` | 3/3 passed, 161.535 s | Public-driver evidence for that revision only; not latest-main quick calibration |
+| Before latest-main merge, direct authentic review/oracle | 13 passed, reported 304.33 s | Direct test timing, not public W0; exact tested revision/setup duration not supplied in this handoff |
+| `ec653020`, W4 focused tests | 40 passed, 18.09 s wall | Focused tests, not public W0 |
+| `ec653020`, W4 local audit | 22 passed, 15.15 s wall | Local audit, not public W0 |
+| Earlier W3 public controls/feed selection | 6 passed, 110.830 s | Control body 87.355 s; feed bodies below 1 s; older selection/revision |
+| `495f4300`, public TLS selection after truncation fix | 7 passed, 27.654 s | TLS cases only, not a final integrated profile |
+| `495f4300`, related focused tests | 15 passed, reported 5.99 s | Focused test timing, not public W0 |
+| `ec48a7c0`, W2 nested Windows warm runs with exact extracted W0 guard/plugin | 14/14 selected cases passed in each of 216.859 / 218.118 / 214.753 s, cleanup confirmed | Three guarded nested runs, not integrated public-driver calibration |
+| Same W2 measurements | Maximum tagged case 52.435 s including cleanup, below its 60 s cap | Does not establish every new integrated case's budget |
+| Latest-main reconciliation, first public `review` attempt | 6 cases failed, 49.071 s | Active coordinator debugging; neither a passing profile nor a final diagnosis |
+
+Final result paths, exact calibration revision, working-tree/source identities, per-case budgets,
+collection/setup overhead and cleanup must come from the corresponding public driver's
+`result.json` and referenced process artifacts before updating the integrated budget claim.
+Do not reconstruct unavailable setup metrics by subtracting unrelated test-body timings.
+
+## Named remaining gaps and baseline failures
+
+- Linux guardian and peer-credential cases are implemented but unexecuted in the Windows
+  measurements; actual WSL dispatch is also unexecuted. Windows PowerShell with a private
+  transport is not WSL/native compatibility evidence.
+- The pinned `DagsterRun` lacks `create_timestamp`; queue-delay timing is unavailable.
+- Actual native containers/daemon/provider compatibility, cold builds, current CodeQL,
+  Lua/native variants and the full runtime/language matrix have not been authorized/executed.
+  The `tools`, `deployed`, `provider`, `guidance`, `codeql-warm` and `native` public profiles
+  deliberately fail as unimplemented, not successfully skipped.
+- Positive source-bound OWASP assessment-to-review remains unverified. Unknown original
+  recorded-feed production cannot be claimed as a real live computation.
+- New triage/referral/presentation joins belong to the separate W5 workstream and remain
+  unverified at this checkpoint.
+- Two existing ELF catalog tests assert an exact gap count and fail after the new
+  `delivery_fact_unavailable` gap. The dependency verifier error-wording discrepancy described
+  above is also baseline. Neither is silently converted into passing acceptance.
+
+The acceptance guard is a regression guard, not a hostile-code sandbox. Fixture subprocesses
+must use invocation-owned, short Windows working directories and must not run child git; the
+supervisor exports `APPSEC_ACCEPTANCE_TESTED_COMMIT`. All state and production-format telemetry
+remain in unique `test/tmp/acceptance/` roots with separate private runs/driver/HOME/TEMP and
+DAGSTER_HOME. No target, production run/data tree or production service is needed. This permits
+concurrent process/storage isolation but makes no zero-contention CPU/I/O guarantee; serial is
+the default and host load still affects calibration.
