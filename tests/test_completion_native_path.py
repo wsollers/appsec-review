@@ -102,6 +102,9 @@ def test_real_native_review_through_all_completion_lanes(tmp_path_factory):
         assert handoff is not None, job.job_id
         accepted[job.job_id] = handoff
         publication = handoff.handoff["outputs"][unit]
+        if job.job_id in jobs:
+            expected_status = "COMPLETED_WITH_GAPS" if publication["gaps"] else "SUCCEEDED"
+            assert publication["terminal_status"] == handoff.handoff["completion_status"] == expected_status
         summaries[job.job_id] = read_bound_json(root, publication["artifact"])
         return publication
 
@@ -109,6 +112,7 @@ def test_real_native_review_through_all_completion_lanes(tmp_path_factory):
     run(review_job(infer=infer, repository_root=support.ROOT), "publication.publish_handoff", ())
     review = summaries[JOB]
     verified = load_accepted_review(root, SchemaSet(support.ROOT / SCHEMA_DIRECTORY), max_packages=10000).document
+    projection = read_bound_json(root, verified["inputs"]["projection"])
     before_packages = deepcopy(verified["packages"])
     before_ship_block = deepcopy(verified["ship_block"])
     candidates = review["poc_candidates"]
@@ -189,7 +193,16 @@ def test_real_native_review_through_all_completion_lanes(tmp_path_factory):
         model = read_bound_json(root, item["files"]["json"])
         assert model["finding"]["claim_id"] == item["finding"]["claim_id"]
         assert model["sources"]
-        inherited = set(findings[item["finding"]["finding_package_id"]]["gap_ids"])
+        finding = findings[item["finding"]["finding_package_id"]]
+        inherited = set(finding["gap_ids"])
+        cited = set(finding["direct_evidence"]) | set(finding["analyst_assessed_evidence"])
+        entities = {relation["entity_id"] for relation in projection["relations"][finding["claim_id"]]
+                    if relation["relation_id"] in cited}
+        source_ids = {source["entity_id"] for source in model["sources"]}
+        assert source_ids <= entities
+        unresolved = entities - source_ids
+        assert all(identity.startswith("asr:build_action:") for identity in unresolved)
+        inherited.update("source_excerpt_unavailable: " + identity for identity in unresolved)
         if any(source["upstream_truncated"] for source in model["sources"]):
             inherited.add("source_excerpt_truncated: accepted retrieval returned bounded source")
         if item["finding"]["claim_id"] == outcome["claim_id"]:
@@ -261,10 +274,12 @@ def test_real_native_review_through_all_completion_lanes(tmp_path_factory):
     poc_event = event("poc_generation", "POC_GENERATION_PUBLISHED")
     assert poc_event["counters"]["candidate_count"] == poc_event["counters"]["compile_verified_count"] == 1
     assert poc_event["outcomes"]["by_status.compile_verified"] == 1
-    assert event("remediation_planning", "REMEDIATION_PLANNING_PUBLISHED")["outcomes"][
-        "outcome_counts.proposal_generated"] >= 1
-    assert event("remediation_validation", "REMEDIATION_VALIDATION_PUBLISHED")["outcomes"][
-        "outcome_counts.build_checked"] >= 1
+    planning_event = event("remediation_planning", "REMEDIATION_PLANNING_PUBLISHED")
+    assert planning_event["outcomes"]["outcome_counts.proposal_generated"] == 1
+    assert planning_event["outcomes"]["outcome_counts.manual_design_required"] == len(confirmed) - 1
+    validation_event = event("remediation_validation", "REMEDIATION_VALIDATION_PUBLISHED")
+    assert validation_event["outcomes"]["outcome_counts.build_checked"] == 1
+    assert validation_event["outcomes"]["outcome_counts.manual_validation_required"] == len(confirmed) - 1
     adapter = event("remediation_validation", "REMEDIATION_VALIDATION_ADAPTER_COMPLETED")
     assert adapter["outcomes"]["passed"] == 1
     assert adapter["flags"]["baseline_attempted.true"] == adapter["flags"]["patched_attempted.true"] == 1

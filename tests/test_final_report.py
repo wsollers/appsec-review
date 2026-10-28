@@ -230,7 +230,10 @@ def test_report_json_is_schema_valid_and_contains_the_required_sections(chain: C
             assert score["technical_severity"]["rating"] in {"low", "medium", "high", "critical", None}
     assert report["attack_chains"] == {"status": "none_available", "reason": report["attack_chains"]["reason"], "items": []}
     assert report["poc_outcomes"]["status"] == "none_available" and report["poc_outcomes"]["items"] == []
-    assert "frozen configuration" in report["attack_chains"]["reason"]
+    chains = gate["capabilities"]["attack_chains"]
+    assert chains["enabled"] and chains["disposition"] == "GAP" and chains["gap_count"] > 0
+    assert chains["summary"] == review_handoff(chain)["attack_chain_manifest"]
+    assert report["attack_chains"]["reason"] == chains["reason"]
     assert "frozen configuration" in report["poc_outcomes"]["reason"]
     assert report["renderers"]["pdf"]["state"] == "not_rendered"
     assert report["provenance"]["gate_handoff"]["sha256"] == chain.pointer_sha(GATE)
