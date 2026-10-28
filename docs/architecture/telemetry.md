@@ -84,15 +84,36 @@ controls classification; the command is read-only.
 
 The user requires telemetry and metrics from the first implementation of the
 [completion lanes](evidence-completion-and-remediation.md#11-parallel-implementation-decisions),
-not instrumentation added after rollout. At inventory baseline `5f5548d`, the existing event writer
-and generic aggregations are available, but completion-specific producer events and summary
-fields remain pending integration. Reconcile their exact names and schema version from source;
-this table is the tracking requirement, not an implemented event catalog.
+not instrumentation added after rollout. Integration `b702eb7` adds completion aggregates and
+remediation/dossier events to the existing system. Final PoC/gate/report/chain instrumentation
+and producer-level unknown-usage preservation are still being reconciled. The table below records
+the complete tracking requirement, not a claim that every producer already emits every dimension.
 
 Reuse [`EventLog.write`](../../src/appsec_review/observability/events.py) through `context.events`
 and [`aggregate_run_metrics`](../../src/appsec_review/observability/telemetry.py), retaining the
 canonical pipeline stream and regenerable `data/telemetry/summary.json`. No separate telemetry
 backend or Azure service is requested.
+
+[`observability/completion.py::completion_metrics`](../../src/appsec_review/observability/completion.py)
+adds `completion` to `appsec-review/run-metrics/3` without changing the existing review views.
+Its `semantics` is `appsec-review/completion-process-metrics/1`, with
+`authority: observational_process_metrics_not_security_evidence`. Fixed lanes are
+`attack_chains`, `poc_generation`, `remediation_planning`, `remediation_validation`, `dossiers`,
+`publication_gate`, `report_publication`. Chains are selected by inference `step_id=attack_chains`
+or the `INFERENCE_REVIEW_ATTACK_CHAIN` event prefix; other lanes map fixed job ids.
+
+Each lane contains `observed` and `events`. Each event has `count`, allowlisted `counters` and
+`outcomes`, `usage_unavailable_count` for explicit-null token fields, and duration
+`count`, `p50`, `p95`, `max`, `summed_work` (null when no duration was emitted).
+Invalid/nonfinite/negative/oversized counters or durations and invalid outcome mappings increment
+`measurement_gap_count`; at most 200 named `measurement_gaps` are retained.
+`COUNTERS`, `OUTCOMES`, `OUTCOME_FIELDS` are closed in the source module. Aggregate counters
+exclude arbitrary text, candidate ids, paths, provider prose and raw payloads.
+
+These are event-scoped **attempted work**: retries count; neither stage totals nor overlapping
+durations may be summed as unique candidates or end-to-end wall time. `observed=false` is not a
+measured zero or a complete missing-producer audit. Producer manifests, frozen config and
+integrity/coverage accounting remain necessary.
 
 | Surface | Required process observations |
 | --- | --- |

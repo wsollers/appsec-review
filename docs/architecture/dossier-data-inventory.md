@@ -1,10 +1,11 @@
 # Dossier data, queries and provenance
 
-Status: source-verified inventory at contract commit
-`5f5548da3d039f73c7d6858d2b28a4593a264efe`, 2026-10-28. This is a catalog of
-implemented input surfaces, **not** evidence that a particular run produced them. Completion,
-remediation and dossier publication remain proposed at this commit, except for the shared
-constants and binding helpers in
+Status: source-verified inventory, initially at contract commit
+`5f5548da3d039f73c7d6858d2b28a4593a264efe`, reconciled through integration `b702eb7`
+and assurance fix `7641fa5`, 2026-10-28. This is a catalog of implemented input surfaces,
+**not** evidence that a particular run produced them. Chain, remediation and dossier producers,
+central wiring and process metrics now exist; final gate/PoC contracts and chain isolation still
+await integration. Shared schema identities and assurance remain in
 [`completion_contracts.py`](../../src/appsec_review/jobs/completion_contracts.py).
 The delivery contract is
 [evidence completion, section 11](evidence-completion-and-remediation.md#11-parallel-implementation-decisions);
@@ -36,7 +37,7 @@ The distinction between **available**, **admissible**, and **publishable** is es
 | Accepted artifact / shard | Exact run-owned bytes, schema, producing attempt and upstream identities have been accepted. Acceptance alone is not a security finding. | [`indexing/store.py`](../../src/appsec_review/indexing/store.py), `accepted_handoff`; [`jobs/bound_artifacts.py`](../../src/appsec_review/jobs/bound_artifacts.py), `resolve_bound`, `read_bound_json`; [`retrieval/index.py`](../../src/appsec_review/retrieval/index.py), `load_verified_manifest` |
 | Evidence relation | A citation resolves to accepted bytes with a predicate-specific admissibility class and completeness flag. | [`review/evidence.py`](../../src/appsec_review/review/evidence.py), `resolve_relation`, `classify`, `satisfies`; [`review/admission.py`](../../src/appsec_review/review/admission.py) |
 | Adjudication / finding | Deterministic obligations and independent verification determine state, independently of model agreement or document rendering. | [`review/adjudication.py`](../../src/appsec_review/review/adjudication.py), `adjudicate`; [`review/independence.py`](../../src/appsec_review/review/independence.py), `verify_independence` |
-| Public projection | Only approved fields and hash-bound references leave the protected developer artifact. | Existing [`job_final_publication_gate/verify.py`](../../src/appsec_review/jobs/job_final_publication_gate/verify.py), `project_finding`, `project_score`; proposed attachment certification in [section 8 of the design](evidence-completion-and-remediation.md#8-gate-limitations-and-reporting) |
+| Public projection | Only approved fields and hash-bound references leave the protected developer artifact. | Shared [`jobs/accepted_review.py`](../../src/appsec_review/jobs/accepted_review.py), `project_finding`, `project_score`; gate compatibility exports remain in `job_final_publication_gate/verify.py`. Final attachment certification is still pending. |
 
 Only complete `direct` and `direct_for_mapped_predicate` relations count toward obligations.
 `analyst_assessed` and `indirect` evidence remains useful context, not counted proof. The six closed
@@ -67,12 +68,14 @@ against a target for this document. Target-owned guidance is not dossier authori
 | Independence and judge | Actor/provider/model/fresh-conversation facts; separate provider/model distinctness, verifier evidence receipts; shuffled/de-shuffled judge verdicts and per-predicate citations, including disagreement with state. | [`review/independence.py`](../../src/appsec_review/review/independence.py), [`review/judge.py`](../../src/appsec_review/review/judge.py). An independent actor is mandatory for confirmation; distinct-model policy separately affects shipment blocking. Raw actor conversations are not dossier material. |
 | Scores and shipment | Separate technical severity, exploitability confidence, environmental/business impact, remediation priority; provider/native values, missing factors, severity bounds and cited score identities; exact `ship-block-policy/1` result. | [`review/scoring/`](../../src/appsec_review/review/scoring/), [`review/ship_block.py`](../../src/appsec_review/review/ship_block.py), `decide`. Default `application_risk_matrix/3` decides technical severity. Null remediation priority stays null; planner text, CVSS/SSVC context and chain severity sums must not replace it. |
 | Accounting | Expected/terminal cells, lanes, failed/capped/not-launched work, duplicates, coverage matrix, gap classes, incomplete-gap ratio and accepted review outcome. | [`review/accounting.py`](../../src/appsec_review/review/accounting.py); inference stages `audit`, `coverage_matrix`, `completeness_gaps`, `remediation_partition`. Keep review coverage distinct from later enhancement/render coverage. |
-| Process telemetry | Run/job/attempt/step/task and invocation identities, lifecycle/duration/reuse/disposition/gap counters, receipt-resolved review/build/CodeQL scope, resource/work measurements and emitted model usage. | [`observability/events.py`](../../src/appsec_review/observability/events.py), `PipelineLog`, `EventLog`; [`observability/telemetry.py`](../../src/appsec_review/observability/telemetry.py), `aggregate_run_metrics`, `_receipt_json`, `emit_model_event`. Operational context only; missing process coverage or usage is not zero or proof that a target is clean. Completion-lane tracking is commissioned, not implemented at this baseline. |
+| Process telemetry | Run/job/attempt/step/task and invocation identities, lifecycle/duration/reuse/disposition/gap counters, receipt-resolved review/build/CodeQL scope, resource/work measurements and emitted model usage; fixed completion-lane event/outcome/counter/duration views. | [`observability/events.py`](../../src/appsec_review/observability/events.py), `PipelineLog`, `EventLog`; [`observability/telemetry.py`](../../src/appsec_review/observability/telemetry.py), `aggregate_run_metrics`, `_receipt_json`, `emit_model_event`; [`observability/completion.py`](../../src/appsec_review/observability/completion.py), `completion_metrics`. Operational context only; producer instrumentation and unknown-usage gaps remain separate from aggregate availability. |
 | Judge PoC basis | Exact finding/package binding, supported/confirmed state, accepted judge verdict, `poc_basis` value/hash and evidence refs. | Inference stages `poc_candidates`; [`job_poc_generation/candidates.py`](../../src/appsec_review/jobs/job_poc_generation/candidates.py). Basis labels resolve through the accepted package view; a judge's approval is not runtime proof. |
 | Compile-only developer artifact | Inert test/control source, setup/debugger instructions, policy verdict, classified compiler commands, syntax/object/sanitizer-object checks, symbol checks, diagnostics and artifact/provenance hashes. | [`job_poc_generation/brief.py`](../../src/appsec_review/jobs/job_poc_generation/brief.py), `build_brief`; [`buildctx.py`](../../src/appsec_review/jobs/job_poc_generation/buildctx.py), `AcceptedBuilds`; [`buildcheck.py`](../../src/appsec_review/jobs/job_poc_generation/buildcheck.py), [`package.py`](../../src/appsec_review/jobs/job_poc_generation/package.py). Current mutable `data/poc/<claim-id>/` packaging is a known change boundary, not safe immutable retry storage. |
-| Chains / remediation / dossiers | Shared versioned schema ids, exact `FindingBinding`, capability/kind/status enums and `nonexecution_assurance()` exist. Full producer manifests, patches, validations and dossier receipts do not yet exist at this baseline. | [`completion_contracts.py`](../../src/appsec_review/jobs/completion_contracts.py). Chain seeds are untrusted hints, not accepted chains. See [change map](#8-completion-change-map-and-unresolved-integration). |
+| Attack chains | Pre-seal proposals, blind refutation/required weakest-link challenges, typed single-ledger events, terminal artifacts and exact manifest accounting. | [`job_inference_security_review/chains.py`](../../src/appsec_review/jobs/job_inference_security_review/chains.py), [`review/attack_chains.py`](../../src/appsec_review/review/attack_chains.py). Five continuity dimensions require commissioned native facts; the default producer allowlist is empty. Source narrative or seed prose cannot establish deployment continuity. |
+| Remediation | Confirmed-only outcomes, inert exact byte-edit patches, separate regression specifications, independent semantic assessments, bounded static/native syntax comparisons and cleanup receipts. | [`job_remediation_planning/job.py`](../../src/appsec_review/jobs/job_remediation_planning/job.py), [`job_remediation_validation/job.py`](../../src/appsec_review/jobs/job_remediation_validation/job.py); [operations](../operations/remediation.md). PoC context is not consumed in this slice (`poc_handoff: null`), despite ordering after PoC. No runtime regression or target mutation. |
+| Dossiers | Closed protected model, bounded redacted excerpts/inert PoC source, per-finding/PoC-outcome membership, immutable JSON/LaTeX/PDF/receipt references and omitted/render-gap accounting. | [`job_dossier_publication/job.py`](../../src/appsec_review/jobs/job_dossier_publication/job.py), [`reporting/dossiers.py`](../../src/appsec_review/reporting/dossiers.py), [`dossier_render.py`](../../src/appsec_review/reporting/dossier_render.py); [operations](../operations/dossier-publication.md). Registered producer availability is not completed gate certification or real-run PDF evidence. |
 
-The existing gate verifier re-hashes the ledger, package manifests, findings, scores and coverage,
+The shared accepted-review verifier re-hashes the ledger, package manifests, findings, scores and coverage,
 and proves that `remediation_intake` (confirmed) and `verification_backlog` (supported) exactly
 partition accepted finding packages. Its current projection is intentionally narrower than a
 developer dossier. A dossier needing the claim, adjudication or evidence content must resolve the
@@ -183,6 +186,8 @@ These are distinct surfaces; granting one does not grant another:
 | Labelled package view | [`review/package_view.py`](../../src/appsec_review/review/package_view.py), `build_view`; source/function, type, sink, range, guard, caller/callee, flow, entry, memory, build, tag and gap labels. | Library defaults: 48 KiB view, 160 function lines, 6 type declarations; fallback window is +/-12 lines, type extent 30 lines, displayed line 200 characters. Trimming has explicit omissions and material gaps; remaining gaps/corroboration have hash-referenced JSONL pages. Secret lead lines are redacted. A display label is not a durable evidence id. |
 | Source resolver | `RetrievalCore.read_source_lines`, `read_excerpt`; [`retrieval/source_resolution.py`](../../src/appsec_review/retrieval/source_resolution.py), `read_source_bytes`. | Re-resolves an accepted location and exact file hash; UTF-8, source-byte and excerpt bounds. Ordinary target bytes must still match. Accepted generated source has detached immutable backing bound to artifact/build unit, source hash, build handoff, logical path, target and run; no mutable build-workspace fallback. Source verification limit is 16 MiB. |
 | PoC writer | [`job_poc_generation/writer.py`](../../src/appsec_review/jobs/job_poc_generation/writer.py), `read_source`, `find_declaration`, answered by the application, not general model tools. | Hash-verified accepted native workspace and include scope; `read_source` at most 120 lines; declarations/types bounded by brief settings/file counts/bytes. Exact compile argv/environment remains protected; writer sees safe classified facts. |
+| Remediation writer | [`job_remediation_planning/inputs.py`](../../src/appsec_review/jobs/job_remediation_planning/inputs.py), `SourceReader.resolve`, `retrieve`. | `find(identity, limit=1)` joins counted evidence to accepted native workspace hashes; defaults admit 8 files / 64000 total bytes, 262144 bytes/file ceiling and 32 evidence rows. A request names exactly `path`, `start_line`, `end_line`, at most 120 lines, within admitted files. No user-target fallback. |
+| Dossier producer | `job_dossier_publication.job._excerpts`, accepted review/projection and hash-bound source manifest. | Sorted cited direct/analyst-assessed identities, default 4 excerpts, `read_excerpt(context_lines=2)`, 24 evidence rows, 40 lines / 4000 characters per code block. Trimming/redaction/omissions remain explicit; it does not gain a general model retrieval grant. |
 
 ## 4. Physical indexes, shards and producer ownership
 
@@ -272,7 +277,8 @@ the pin a finding used. See [dependency intelligence](dependency-intelligence.md
 
 ## 6. Per-dataset visibility and retention
 
-This table accounts for all 120 `DATASETS` output kinds in the 37 baseline job `datasets.py` modules.
+This table accounts for all 126 `DATASETS` output kinds in the 40 integrated job `datasets.py` modules
+(120 kinds / 37 modules at the original contract baseline).
 Each producer name links to that declaration, which owns artifact patterns, schema and query route;
 the [physical index catalog](#4-physical-indexes-shards-and-producer-ownership) identifies its shards.
 These declarations are **not** actual run
@@ -321,8 +327,11 @@ source declaration is currently `artifact_only/internal`.
 | [`job_review_data_indexing`](../../src/appsec_review/jobs/job_review_data_indexing/datasets.py) | `cross_domain_links`, `precomputed_products`, `dataset_inventory` | `accepted_input_summary`, `derived_checkpoints`, `fts_image_validation`, `dataset_audit_report`, `coverage_matrices` | none |
 | [`job_review_package_assembly`](../../src/appsec_review/jobs/job_review_package_assembly/datasets.py) | none | `review_packages` | none |
 | [`job_document_issue_analysis`](../../src/appsec_review/jobs/job_document_issue_analysis/datasets.py) | none | `document_issue_ledger` | none |
-| [`job_inference_security_review`](../../src/appsec_review/jobs/job_inference_security_review/datasets.py) | none | `accepted_scope`, `review_packages`, `claim_ledger`, `scores_and_findings` | `lead_triage`, `review_cells` |
+| [`job_inference_security_review`](../../src/appsec_review/jobs/job_inference_security_review/datasets.py) | none | `accepted_scope`, `review_packages`, `claim_ledger`, `scores_and_findings` | `lead_triage`, `review_cells`, `attack_chains` |
 | [`job_poc_generation`](../../src/appsec_review/jobs/job_poc_generation/datasets.py) | none | `poc_generation_summary`, `poc_reproducers` | `poc_writer_cells` |
+| [`job_remediation_planning`](../../src/appsec_review/jobs/job_remediation_planning/datasets.py) | none | `remediation_planning_summary` | `remediation_proposals` |
+| [`job_remediation_validation`](../../src/appsec_review/jobs/job_remediation_validation/datasets.py) | none | `remediation_validation_summary` | `remediation_validation_receipts` |
+| [`job_dossier_publication`](../../src/appsec_review/jobs/job_dossier_publication/datasets.py) | none | none | `dossier_publications` |
 | [`job_final_publication_gate`](../../src/appsec_review/jobs/job_final_publication_gate/datasets.py) | none | `publication_gate_decisions` | none |
 | [`job_final_report_publication`](../../src/appsec_review/jobs/job_final_report_publication/datasets.py) | none | `final_report_publications` | none |
 
@@ -358,15 +367,23 @@ operation timing, queue/reuse/disposition/work/throughput counters, bounded slow
 rankings, resource admissions/spans, emitted model invocations/tokens, authoritative
 `FINDING_TRANSITION` counts and receipt-resolved source/build/artifact/CodeQL review metrics.
 Overlapping spans are not additive resource totals. Missing model usage/cost and absent platform
-measurements retain null/unavailable reasons.
+measurements retain null/unavailable reasons where producers preserve them.
+
+The summary now also contains `completion`, with
+`appsec-review/completion-process-metrics/1` semantics. Seven fixed lanes report `observed` and
+per-event counts, allowlisted counters/outcomes, explicit-null usage counts and duration
+count/p50/p95/max/summed-work. Invalid measurements retain a total and at most 200 named gaps.
+This is attempted event-scoped work, including retries, not unique accepted findings; overlapping
+stage summaries must not be added. An unobserved lane is not an observed zero or a complete
+missing-producer audit. The remediation model emitter's unknown-to-zero conversion is a pending
+producer correction at this source boundary.
 
 These are regenerable operational views, not another retrieval index or an evidence-admission
 route. Hash-bound metric receipts resolve run-owned artifacts; malformed/changed/escaping receipts
 remain integrity gaps. Dossiers may retain safe scope/status references and omissions, not raw
 logs or prompts. [Telemetry architecture](telemetry.md#evidence-completion-tracking-commissioned)
 and [metrics operations](../operations/metrics.md#completion-rollout-tracking-pending-integration)
-record the required completion-stage/candidate/adapter/render tracking and low-cardinality rollups,
-whose exact events and aggregate fields await implementation reconciliation.
+record actual completion aggregates, producer events and remaining instrumentation gaps.
 
 ## 7. Engineering evidence and explicit gaps
 
@@ -387,6 +404,7 @@ whose exact events and aggregate fields await implementation reconciliation.
 | Controls / tags / priority | OWASP applicability/control results, cited evidence, taxonomy/crosswalk/basis-qualified tags, complexity/coupling/boundary heuristics and LLM prioritization context. | Assessment, tag basis or review priority is not accepted severity, target truth, or independent verification. |
 | Documents / tests / interfaces | Selected design/threat-model/DFD text, headings/threats/boundaries/flows, OpenAPI/Postman requests, AsyncAPI/protobuf/GraphQL operations, recognized test cases/requests and source-backed record spans. | Collection/parser coverage is bounded; target documents describe intent/declarations, never worker authority. Missing tests/controls or route search misses cannot prove missing enforcement. |
 | Sanitizers / PoCs | Instrumented object/binary catalog and instrumentation evidence; generated function/control policy, compile/symbol outcomes and developer files. | Neither pipeline executes the artifacts. No crash, before/after failure, passing negative control, `runtime_verified`, or resolved/fixed finding follows from compilation. |
+| Chains / remediation | Five-dimension native continuity contract, candidate/challenge/ledger receipts; exact baseline-bound patch bytes, semantic assessments, seven validation dimensions, syntax-only baseline/patched diagnostics and cleanup custody. | Empty commissioned continuity allowlist prevents source prose from proving deployed chains. Native syntax covers one exact translation unit, not arbitrary languages, header/new-file/multi-build patches, full rebuilds or semantic/runtime fixes. |
 
 Source implementations for these distinctions include
 [`job_code_graph_index/producers.py`](../../src/appsec_review/jobs/job_code_graph_index/producers.py),
@@ -404,8 +422,9 @@ recognizes a narrow router-call pattern; it is not universal framework resolutio
 
 ## 8. Completion change map and unresolved integration
 
-This is the documentation reconciliation boundary, not a claim that the producers below shipped.
-Detailed acceptance remains in the [completion design](evidence-completion-and-remediation.md).
+The table preserves the original contract-time change map. Delivered status is summarized below;
+it must not be read as a claim that final end-to-end acceptance has passed. Detailed acceptance
+remains in the [completion design](evidence-completion-and-remediation.md).
 
 | Architectural piece | Baseline / required change | Pages and implementation surfaces to reconcile when merged |
 | --- | --- | --- |
@@ -422,10 +441,23 @@ Detailed acceptance remains in the [completion design](evidence-completion-and-r
 | Telemetry / metrics | Existing correlated events and regenerable `run-metrics/3` support generic lifecycle/usage/scope accounting; add completion lane/stage/candidate outcomes, caps/gaps, adapter/render failures and durations from the outset. | [Telemetry architecture](telemetry.md), [metrics operations](../operations/metrics.md), dossier operations; producer `context.events`, `observability.telemetry.aggregate_run_metrics`, summary schema and focused coverage/redaction tests. Low-cardinality rollups only; no separate backend, raw payloads or inferred runtime/fixed assurance. |
 | Resume / audit / acceptance | Fingerprint every consumed artifact/settings/schema/implementation/tool; invalidate only dependent closure; enabled missing/failed/capped differs from disabled/empty scope. | Wave1, jobs/runtime, indexing/dossier operations, implementation record; resume/manual dispatch/Dagster parity, exact candidate partitions, tamper tests, deterministic outputs and actual PDF evidence. |
 
-Unresolved at this inventory baseline: final producer/summary shapes beyond the shared constants,
-registered topology and defaults; actual chain manifest/ledger event version; final review/PoC/gate/
-report schema versions; protected dossier dataset declarations and loader allowlist; exact render
-receipt/manifest fields; availability of safe validation adapters; end-to-end accepted-run and
-live PDF evidence; completion-specific telemetry event/aggregate names and coverage. None is
-substituted with a target scan, an assumed deployment, or a compile
-success. A later source-verified reconciliation should name the implementation commits and checks.
+### Delivered source and remaining integration
+
+Integration `b702eb7` contains chain `ec9257bf`, dossier `065f736c`, remediation `6278e580`,
+typed defaults/profiles, registration, input matrix, CLI/Dagster ordering and completion metrics;
+`7641fa5` restores assurance validation within full schema-validated producer rows.
+
+| Delivered surface | Source-verified state / remaining boundary |
+| --- | --- |
+| Shared review reader | `jobs/accepted_review.py` is extracted and reused. It still expects review handoff `/2` while chain publication emits `/3`; the final version-aligned reader is pending. |
+| Pre-gate topology | Direct and Dagster graphs register PoC, planning, validation and dossiers before one gate, then the report. New configurations enable all four; frozen old configurations remain immutable. Validation without planning is rejected. PoC/gate/report producer contracts must still catch up to that graph. |
+| Chains | Three pre-seal units, native continuity policy, protected dataset and manifest exist. Chain/base-finding coverage isolation remains a known follow-up; do not claim independent base findings are unaffected until that fix is verified. |
+| Remediation | Real planning/validation producers and `/1` strict schemas, exact-patch format and `native_syntax` adapter exist. Non-native/architectural work retains manual outcomes; neither PoC context nor regression-function compilation is commissioned. |
+| Dossiers | Real semantic job, strict typed bounds, closed projection, hardened renderer and `dossier-rendering-receipt/1` exist. Final gate certification and actual seeded PDF evidence remain pending. |
+| Metrics | `run-metrics/3.completion` exists with fixed lanes and observational semantics. Producer events are partial; final PoC/gate/report/chain instrumentation and unknown remediation usage still need reconciliation. |
+
+Final gate/PoC `/2` publication contracts, shared `/3` review acceptance, final report attachment
+projection, explicit-manual-PoC authentication end to end, chain/base isolation, residual dataset
+consumer metadata, complete producer telemetry and the real seeded PDF/sample remain unresolved
+here. No target scan, assumed deployment, compilation or generic metrics pass substitutes for
+those acceptance results.
