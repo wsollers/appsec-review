@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 import dataclasses
+import gc
 from dataclasses import dataclass, field
 import hashlib
 import json
@@ -113,6 +114,7 @@ class PocChain:
         return self.base.parent / f"{self.base.name}-accepted-workspace"
 
     def restore(self) -> None:
+        gc.collect()
         shutil.rmtree(self.base)
         shutil.copytree(self.snapshot, self.base)
 

@@ -239,7 +239,7 @@ def test_poc_and_report_emit_exact_bounded_status_and_certified_output_metrics(m
     def event(job, name):
         records = [json.loads(line) for line in (attempt_root(mixed, job) / "logs" / "events.jsonl").read_text(
             encoding="utf-8").splitlines()]
-        return next(record["details"] for record in records if record["event_type"] == name)
+        return next(record for record in records if record["event"] == name)
 
     published = event(POC, "POC_GENERATION_PUBLISHED")
     assert published["by_status"] == summary_of(mixed)[1]["counts"]["by_status"]
