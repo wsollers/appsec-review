@@ -126,7 +126,7 @@ library = "codeql/rust-all@0.2.21"
 verify = "check-only"
 warm = true
 state = "enabled"
-description = "Repository-authored Rust code-graph export tables (call sites, sources, sinks, guards, paths, ranges, flow summaries)."
+description = "Repository-authored Rust code-graph export tables (call sites, sources, sinks, guards, paths, flow summaries; ranges not_applicable)."
 
 [[packs]]
 id = "graph-export-swift"

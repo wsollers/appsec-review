@@ -174,7 +174,7 @@
       "query_suite": "graph-export.qls",
       "query_suite_sha256": "6ce90b13f0ee267d55e2e3f2289b4c021988343a0be486b94e3c0ba49cacbf88",
       "query_pack_sha256": "632020abd5dbe64a238b0ae4b6ab04064cc30f3a8a6f19928a501165f0b30bd1",
-      "tree_sha256": "eb95cb5e33ecd4287c2a459736ed84d418d95bd79cde98881853213e67f01488",
+      "tree_sha256": "2104e6e3908ceeea10b416af79125420d7be2aeffde16e8f169827a1ce4c09ff",
       "file_count": 12,
       "columns_path": "rules/codeql-graph-export/columns.json",
       "columns_sha256": "3ece76a528ea62260e2d4f664bd916671c544b861a0a40980f46707ce6d0f653",

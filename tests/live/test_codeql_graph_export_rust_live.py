@@ -5,8 +5,9 @@ tests/fixtures/graph/codeql_export/rust-synthetic/source, a zero-network Cargo w
 reqwest, rusqlite and serde_json dependencies are offline path stand-ins pinned by Cargo.lock. It
 then runs the hash-pinned appsec-review/graph-export-rust pack through the runner ``export`` action
 and requires the live rows to satisfy every semantic expectation in that fixture's
-expected-facts.json. The recording is hand-authored and not refreshable; this is the tier that
-proves the Rust dataflow families and settles the pack's LIVE-UNVERIFIED canonical names.
+expected-facts.json. It also requires every known_gaps row in that file to stay unmet: a CodeQL
+upgrade that closes one fails here, so the row is promoted into expectations and the recording is
+refreshed from that run's exports/.
 """
 from __future__ import annotations
 
@@ -34,5 +35,8 @@ def test_live_rust_graph_export_pack_meets_the_synthetic_dataflow_expectations(l
                       "rust-synthetic", commands, language="rust")
     live = load_graph_exports(scratch / "exports", bytes_limit=contract.GraphSettings().max_export_bytes)
     assert not [query_id for query_id, document in live.items() if document["truncated"]]
-    failures = unmet(live, load_expectations(FIXTURE))
+    document = load_expectations(FIXTURE)
+    failures = unmet(live, document)
     assert not failures, "\n".join(failures)
+    closed = [gap["gap"] for gap in document["known_gaps"] if not unmet(live, {"expectations": [gap]})]
+    assert not closed, f"known gaps now met by CodeQL; promote them into expectations: {closed}"

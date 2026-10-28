@@ -12,20 +12,8 @@
 // rows: writes through `&mut` parameters and `static` items are a named gap of this pack.
 import rust
 import codeql.rust.dataflow.DataFlow
-private import codeql.rust.dataflow.internal.TaintTrackingImpl as TaintTrackingImpl
+import codeql.rust.dataflow.TaintTracking
 import GraphExport
-
-/**
- * rust-all ships no `localTaint`: local taint is local dataflow plus the default additional taint
- * steps every global taint configuration uses.
- */
-predicate localTaintStep(DataFlow::Node pred, DataFlow::Node succ) {
-  DataFlow::localFlowStep(pred, succ)
-  or
-  TaintTrackingImpl::RustTaintTracking::defaultAdditionalTaintStep(pred, succ, _)
-}
-
-predicate localTaint(DataFlow::Node source, DataFlow::Node sink) { localTaintStep*(source, sink) }
 
 predicate inputNode(
   GraphExport::SourceFunction f, DataFlow::Node n, string kind, int index, string name
@@ -77,7 +65,7 @@ query predicate flow_summaries(
     exists(DataFlow::Node input, DataFlow::Node output |
       inputNode(f, input, from_kind, from_index, from_name) and
       outputNode(f, output, to_kind, to_index, to_name, to_model) and
-      localTaint(input, output)
+      GraphExport::localTaint(input, output)
     ) and
     // A pair is "data" when any witness is plain dataflow, otherwise "taint".
     (

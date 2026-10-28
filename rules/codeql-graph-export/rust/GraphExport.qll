@@ -37,6 +37,8 @@ import codeql.rust.Concepts
 import codeql.rust.controlflow.BasicBlocks
 import codeql.rust.controlflow.ControlFlowGraph
 private import codeql.rust.dataflow.internal.Node as N
+private import codeql.rust.dataflow.internal.TaintTrackingImpl as TT
+private import codeql.rust.dataflow.internal.FlowSummaryImpl as FS
 
 module GraphExport {
   /**
@@ -151,6 +153,31 @@ module GraphExport {
     or
     not exists(nodeFunction(n)) and result = ""
   }
+
+  /** Holds when `a` and `b` lie in the same CFG scope (function or closure body). */
+  predicate sameCallable(DataFlow::Node a, DataFlow::Node b) {
+    a.(N::Node).getCfgScope() = b.(N::Node).getCfgScope()
+  }
+
+  /**
+   * One local (intra-procedural) taint step: a local dataflow step (which includes simple
+   * value-preserving models-as-data summaries), the library's default additional taint step,
+   * or a step through a models-as-data taint summary (`to_string`, `clone`, `canonicalize`).
+   * codeql/rust-all 0.2.21 exports no `TaintTracking::localTaint`; the summary steps are the
+   * ones the shared library provides for exposed local taint relations.
+   */
+  predicate localTaintStep(DataFlow::Node a, DataFlow::Node b) {
+    DataFlow::localFlowStep(a, b)
+    or
+    TT::RustTaintTracking::defaultAdditionalTaintStep(a, b, _) and sameCallable(a, b)
+    or
+    FS::Private::Steps::summaryThroughStepTaint(a, b, _)
+    or
+    FS::Private::Steps::summaryGetterStep(a, _, b, _)
+  }
+
+  /** Local taint in zero or more steps. */
+  predicate localTaint(DataFlow::Node a, DataFlow::Node b) { localTaintStep*(a, b) }
 
   /** Holds in "whole_program" mode, where every function is exported. */
   predicate wholeProgram() { exportScope("whole_program", _) }

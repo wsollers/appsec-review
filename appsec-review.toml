@@ -1454,7 +1454,7 @@ version = "2.27.0"
 commit = "b47b3e59262c95aff4eeb84ac72d09e25a9c37e9"
 cli_sha256 = "5c905275695b4efcaa02ea380f6e60b01310fa3dff0fa8c442bf0638bb46055a"
 license_sha256 = "d0d6cfdc857c1e0153bbd2b6f0d4ab42dfc38acec9b97b2f7f55c1f51ffe9fbf"
-asset_lock_sha256 = "a2e2b25dd08f7caa246873c0fd0c43933e20e5bbfd053872f2a2ac51d46682eb"
+asset_lock_sha256 = "edb0781de3f823aec3603ab402f96a86ceb9bad0506c53d94e7f87803632995d"
 runtime_user = "10001:10001"
 retention = "run-owned"
 concurrency = 2
@@ -1488,6 +1488,18 @@ runner_source = "application"
 source_image_id = "sha256:8a9142b90b8ab80562411b732621a6c358a1e0b55e3cd18826ac0c0b3b702096"
 build_image_id = "sha256:6e0c9f5f8430595d2c08d6ac97acbad733d658c692d26cbecc29afd3e6101aaa"
 runtime_image_id = "sha256:c1dd8158da4044b7a88cef57c2962faf68849298e7fda2e7f116aa5d24107632"
+runtime_user = "1000:1000"
+codeql_release_id = "codeql-2.27.0-cert-v2.62.0"
+runner_release_id = "appsec-codeql-runner-89568569"
+runner_source = "application"
+
+# Rust/wasm build environment (audit-buildenv-rust-wasm:local) with the pinned CodeQL bundle layered
+# by containers/tools/codeql/Dockerfile (BUILD_IMAGE = that environment, RUNTIME_USER = 1000:1000).
+# Host-specific: rebuild with that Dockerfile and replace runtime_image_id on another host.
+[[jobs.job_codeql_analysis.settings.preinstalled_runtimes]]
+source_image_id = "sha256:8a9142b90b8ab80562411b732621a6c358a1e0b55e3cd18826ac0c0b3b702096"
+build_image_id = "sha256:084e077dd3a8ee1c343982b10c31a97a133d4d2bd307b8051440013149fccd92"
+runtime_image_id = "sha256:339cdb172f4f57c8247c972485984a0db7057617730a0ab4ac2efe0c152be35e"
 runtime_user = "1000:1000"
 codeql_release_id = "codeql-2.27.0-cert-v2.62.0"
 runner_release_id = "appsec-codeql-runner-89568569"
@@ -1785,7 +1797,7 @@ query_pack_version = "1.0.0"
 query_suite = "graph-export.qls"
 query_suite_sha256 = "6ce90b13f0ee267d55e2e3f2289b4c021988343a0be486b94e3c0ba49cacbf88"
 query_pack_sha256 = "632020abd5dbe64a238b0ae4b6ab04064cc30f3a8a6f19928a501165f0b30bd1"
-tree_sha256 = "eb95cb5e33ecd4287c2a459736ed84d418d95bd79cde98881853213e67f01488"
+tree_sha256 = "2104e6e3908ceeea10b416af79125420d7be2aeffde16e8f169827a1ce4c09ff"
 file_count = 12
 columns_path = "rules/codeql-graph-export/columns.json"
 columns_sha256 = "3ece76a528ea62260e2d4f664bd916671c544b861a0a40980f46707ce6d0f653"
