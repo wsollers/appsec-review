@@ -56,12 +56,21 @@ violations remain framework failures.
 
 ## Evidence and retrieval
 
-The `appsec-review/static-tool-evidence/1` envelope contains tool/image identity, target fingerprint,
+The `appsec-review/static-tool-evidence/2` envelope contains tool/image identity, target fingerprint,
 applicability, coverage scope, exclusions/gaps, hashed raw artifacts, parser identity, normalized
 records, locations, and terminal status. Native rule IDs/messages are retained, severities are
 normalized, and secret values are redacted before persistence with stable SHA-256 correlation IDs.
 Record, field, raw-stream, and total normalized byte bounds are enforced; truncation becomes a gap.
 Tool observations remain evidence/leads and the envelope deliberately contains no accepted findings.
+
+The [interchange provenance upgrade](../architecture/job-interchange.md) introduces shared
+observation metadata and native-result references for this lane while preserving scanner-specific
+fields. This integration uses evidence schema `/2` and normalizer `static-evidence/4`; an older
+`/1` envelope must not be relabeled as upgraded evidence. Each reference identifies retained original bytes,
+selector, parser, completeness, and available execution/retention receipts. For partitioned OSV
+launches, the provenance must name the original invocation result, not only
+`osv-scanner-merged.json`. Retention hashes attest application retention, not scanner origin.
+Truncation, unavailable provenance, and unmapped locations remain named gaps.
 
 Every producer emits an immutable SQLite shard. Retrieval fans out deterministically across shards
 by target-relative path, native rule, component, package, advisory, language, and evidence ID. A

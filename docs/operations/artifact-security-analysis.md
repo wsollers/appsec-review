@@ -100,6 +100,25 @@ its observations. Standalone retrieval therefore keeps the artifact inventory, i
 target paths with identical bytes, available after security analysis. Observations resolve back to
 exact run-owned raw artifacts without inventing source-line locations for binary inputs.
 
+The [interchange upgrade](../architecture/job-interchange.md) adds common observation metadata
+and native-result references to this scanner lane. The integration keeps
+`appsec-review/artifact-security-record/2` and the existing observation `/1` schema, with additive
+common/provenance metadata; finding normalization moves to `/2`, artifact parsers to `/3`, and
+artifact normalization to `/2` for retained parser-input semantics. Keep original scanner result
+identity, parser, retained byte count/hash, selector, and
+completeness alongside domain-specific artifact/package fields. A synthesized BLint report or
+partitioned result must not replace the original report/invocation provenance. Duplicate
+observation-to-native-result references remain visible even when the file bytes are stored once.
+Only safe metadata enters indexes; retained scanner bodies remain protected run artifacts.
+Missing provenance or bounded/truncated capture is a named gap, not a clean artifact verdict.
+
+Parser-input retention is separate from diagnostic head/tail capture. The integrating typed setting
+`jobs.job_artifact_security_analysis.settings.parser_input_limit_bytes` defaults to 67,108,864
+bytes and must be positive. Retain the full native input within that bound so the parser and result
+selector refer to the same bytes; `stream_limit_bytes` bounds diagnostic streams instead.
+Exceeding the parser-input bound requires explicit partial coverage/truncation rather than parsing
+an unrecorded complete report while citing a truncated diagnostic copy.
+
 Built-in parsers provide bounded inventory and structural metadata. Tool-dependent coverage is
 explicit: unavailable BLint, Syft, Grype, OSV, native-symbol/hardening, JVM bytecode, or full WASM
 policy tooling is recorded as a gap, never as a clean result. Tool output is evidence only and is not

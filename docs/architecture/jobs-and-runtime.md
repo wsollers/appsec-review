@@ -8,6 +8,14 @@ publishes `handoff.json` inside its immutable attempt directory and updates the 
 handoff hashes, resolved and job-local configuration hashes, target fingerprint, implementation,
 schema, validator, tool identity, timestamps, and resolving paths.
 
+The shared [job interchange contract](job-interchange.md) upgrades this envelope to
+`appsec-review/job-handoff/2` without replacing job-specific `outputs` or index manifests.
+It separates admission from execution and coverage, binds evidence target identity independently
+of the resume source fingerprint, and references detailed unit outcomes rather than inlining them.
+Failed framework attempts are rejected diagnostics, never accepted/latest publications. Historical
+`/1` handoffs require a rerun (`handoff_schema_changed`), not an in-place conversion. Shared types
+are available; runtime adoption is being integrated as described on the contract page.
+
 The generic resume planner walks jobs in graph order. Once a job cannot be reused, it schedules that
 job and invalidates the transitive downstream closure. It never treats time as proof of freshness.
 The graph holds a kernel-backed per-run claim lock across planning and execution so two resume

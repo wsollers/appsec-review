@@ -24,6 +24,17 @@ The immutable index manifest remains the authority boundary. Jobs may reuse acce
 shards and artifacts whose hashes and configuration identities match. Retrieval must never parse
 raw source, LLVM IR, or a CPG during an inference call.
 
+The [job interchange contract](job-interchange.md) adds native-result and common observation
+metadata without replacing this SQLite/shard-manifest transport or bounded pagination.
+`shared/native-output` is a runtime-owned dataset namespace. Native-output inventory records
+should expose safe path/hash/size, selector/parser, receipt, completeness, and gap metadata, not
+protected report bodies or secret values. Safe metadata visibility is not permission to read raw
+reports through inference. Source locations still resolve against the accepted catalog file hash.
+The first provenance slice is static evidence collection, CodeQL, and produced-artifact scanners;
+unupgraded producer paths remain explicit provenance gaps rather than implied full coverage.
+Repeated native references retain every observation-to-result edge even when storage deduplicates
+the bytes. Publication auditing and strict/managed target binding still apply at admission.
+
 **Default rule:** every gathered or generated dataset gets a run-owned inventory record and
 coverage disposition. Index its safe, bounded identities, facets, locations, relationships, and
 summaries if they can affect review decisions. Precompute expensive cross-dataset joins and graph

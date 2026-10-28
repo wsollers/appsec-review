@@ -39,8 +39,41 @@ Lifecycle families are:
   immutable, hash-verified run receipts. They make workload, build, artifact, and missing-producer
   scope available to the metrics derivation without copying mutable aggregate counters into events.
 
+## Interchange instrumentation
+
+The [interchange upgrade](job-interchange.md) adds `HANDOFF_VALIDATED` and `HANDOFF_REJECTED`
+alongside `HANDOFF_ACCEPTED`. The integration contract binds `handoff_reference`
+(`path`, `sha256`, `size_bytes`), `duration_ms`, `execution_status`, `admission_status`,
+`coverage_disposition`, `unit_count`, `gap_count`, and `retry_required`.
+A rejection may use a null handoff reference only when a safe diagnostic publication is unavailable.
+Accepted events retain `handoff_path`, `handoff_sha256`, and `completion_status` for existing
+consumers. Validation events describe publication work, not repeated validation on checkpoint reuse.
+
+`NATIVE_OUTPUT_RETAINED` and `OBSERVATION_PROVENANCE_VALIDATED` bind immutable retention/provenance
+receipts. They describe retained bytes and resolving observation references, not scanner-origin
+attestation or vulnerability confirmation. Emit bounded identities, durations, counts, and hashes,
+never raw reports, source, argv, secrets, or per-result message text. The fixed work-counter names
+are `handoff_validations`, `native_output_references`, `native_output_bytes`,
+`observation_references`, and `provenance_gaps`; paths, rule IDs, gap reasons, and arbitrary producer
+status strings must not become unbounded counter labels.
+
+The integrating metrics contract is `appsec-review/run-metrics/5`, adding `interchange` with schema
+`appsec-review/interchange-metrics/1`. It derives publication/receipt identities and verifies the
+referenced bytes and retention/provenance computation instead of trusting event-supplied counts.
+Missing or tampered receipts are named integrity gaps, not zero work. Repeated publication/receipt
+events deduplicate by identity, while reused evidence is not counted as fresh scanner work.
+The closed groups are `handoffs`, `native_outputs`, `observations`, registered-job-only `by_job`,
+and `integrity_gap_codes`. Section `accounting_complete` distinguishes measured accounting from
+missing evidence; invalid/missing receipts yield null counts, not invented zeros. Rollups retain
+coverage/execution/gap-code dimensions but never rule/path/hash/package/message labels.
+The receipt is authoritative, not the presence of a summary field. This section records the integration contract, not evidence
+that a deployed runtime has already adopted it.
+
+## Existing derived views
+
 `appsec-review metrics --run-id <id>` deterministically rebuilds and persists
-`data/telemetry/summary.json` using `appsec-review/run-metrics/4`. It separates end-to-end wall time, per-job wall spans, summed
+`data/telemetry/summary.json` using `appsec-review/run-metrics/5` after interchange integration
+(historical summaries use `/4`). It separates end-to-end wall time, per-job wall spans, summed
 concurrent task time, queue delay, completed and still-running work, reuse, processed counts/bytes,
 critical-path candidates, and bounded p50/p95/max rankings by stable operation identity. The JSONL
 events remain authoritative; the summary is a regenerable operator view.
