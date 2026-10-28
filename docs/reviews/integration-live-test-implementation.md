@@ -33,3 +33,25 @@ jobs and tool/graph boundaries. No agent pushes or changes production host state
 Per-lane measurements, merged commits, reconciliations and outstanding host-dependent
 obligations are recorded here as chunks arrive. No passing lane or runtime claim is made
 by this initial contract.
+
+## Initial measured slices
+
+The shared-contract tests passed three portable cases in 2.04 seconds (4.47 seconds wall);
+the actual directory-symlink case was unavailable without Windows symlink privileges.
+It is not counted as demonstrated symlink coverage.
+
+The coordinator added an accepted signal-job slice: real intake/catalog, artifact indexing,
+all four coverage formats, populated profile indexing and immutable publication. Recorded
+build receipts replace the external compiler boundary. A companion case mutates a profile
+and requires `ProfileIntegrityError`, no accepted publication, and a production-schema
+failure event identifying `normalize.profile_data`.
+
+The two signal cases plus the existing mixed-language artifact-index regression passed:
+3 tests in 116.19 seconds, 118.10 seconds including interpreter startup, under a real
+240-second subprocess watchdog. The signal cases individually assert a 120-second limit;
+the bounded runner adds enforced per-case deadlines when integrated. Fixture job logs and
+driver operation spans remain beneath their own `test/tmp/acceptance/` invocation roots.
+
+An existing broad four-package review-to-report baseline did not finish in several minutes
+and its owned process tree was stopped. It is not a passing result or a quick-lane candidate
+without reduction. No production service, ledger, target, cache or metrics path was changed.

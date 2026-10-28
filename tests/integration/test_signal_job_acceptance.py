@@ -6,6 +6,8 @@ from pathlib import Path
 import sqlite3
 import time
 
+import pytest
+
 from appsec_review.acceptance.lanes import LaneWorkspace
 from appsec_review.jobs.job_artifact_indexing import build_job as artifact_job
 from appsec_review.jobs.job_profile_data import build_job as profile_job, load_accepted_profile_data
@@ -115,3 +117,35 @@ def test_full_signal_jobs_preserve_report_source_and_context_semantics() -> None
     workspace.emit("ACCEPTANCE_CASE_COMPLETED", duration_ms=elapsed * 1000, outcome="passed",
                    fixture_runs_dir=str(config.runtime.runs_dir))
     assert elapsed < 120, f"signal job lane exceeded 120 seconds: {elapsed:.3f}s; {workspace.root}"
+
+
+def test_changed_profile_cannot_publish_an_accepted_signal() -> None:
+    workspace = LaneWorkspace.create(ROOT, "signal-integrity")
+    started = time.monotonic()
+    with workspace.span("acceptance.signal_integrity"):
+        config, target, snapshot, run_root = _prepare(workspace)
+        language_pointer = json.loads((
+            run_root / "data" / "jobs" / "job_language_build" / "latest.json"
+        ).read_text(encoding="utf-8"))
+        language_handoff = json.loads((
+            run_root / language_pointer["handoff_path"]
+        ).read_text(encoding="utf-8"))
+        accepted = language_handoff["outputs"]["acceptance.publish_handoff"]["artifact"]
+        receipts = json.loads((run_root / accepted["path"]).read_text(encoding="utf-8"))["receipts"]
+        profile = next(row for row in receipts[0]["artifacts"] if row["kind"] == "execution-profile")
+        (run_root / profile["path"]).write_bytes(b"forged;hot 9999\n")
+        with pytest.raises(RuntimeError, match="normalize.profile_data"):
+            GraphRunner(config, [profile_job()]).run(
+                run_id=RUN_ID, target_root=target, source_fingerprint=snapshot)
+        assert not (run_root / "data" / "jobs" / "job_profile_data" / "latest.json").exists()
+        records = [json.loads(line) for line in (
+            run_root / "data" / "logs" / "pipeline.jsonl"
+        ).read_text(encoding="utf-8").splitlines()]
+        failures = [row for row in records if row["event_type"] == "TASK_FAILED"
+                    and row["job_id"] == "job_profile_data"]
+        assert failures and failures[-1]["details"]["error_type"] == "ProfileIntegrityError"
+        assert failures[-1]["details"]["unit_id"] == "normalize.profile_data"
+    elapsed = time.monotonic() - started
+    workspace.emit("ACCEPTANCE_CASE_COMPLETED", duration_ms=elapsed * 1000, outcome="passed",
+                   rejected_artifact_sha256=profile["sha256"])
+    assert elapsed < 120, f"signal integrity exceeded 120 seconds: {elapsed:.3f}s; {workspace.root}"
