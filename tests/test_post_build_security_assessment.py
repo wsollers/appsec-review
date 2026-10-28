@@ -187,7 +187,8 @@ def _retrieval_fixture(tmp_path: Path) -> RetrievalCore:
     write_manifest(manifest_path, run_id=RUN_ID, target_snapshot="snapshot", target_root=target, indexes=(index,))
     artifact = {"path": manifest_path.relative_to(run_root).as_posix(), "sha256": file_sha256(manifest_path)}
     handoff_path = attempt / "handoff.json"
-    atomic_json(handoff_path, {"schema": "appsec-review/job-handoff/1", "status": "ACCEPTED",
+    from tests.handoff_fixture import write_fixture_handoff
+    write_fixture_handoff(run_root, handoff_path, {"source_fingerprint": "snapshot", "status": "ACCEPTED",
                                "job_id": "post", "artifacts": [artifact]})
     atomic_json(run_root / "data" / "indices" / "accepted.json", {
         "schema": "appsec-review/accepted-index-set/1", "run_id": RUN_ID,
@@ -296,7 +297,8 @@ def _accepted_cpp_fixture(tmp_path: Path, *, colliding_object_names: bool = Fals
     result_artifact = {"path": result_path.relative_to(run_root).as_posix(), "sha256": file_sha256(result_path)}
     manifest_artifact = {"path": manifest_path.relative_to(run_root).as_posix(), "sha256": file_sha256(manifest_path)}
     handoff_path = attempt / "handoff.json"
-    atomic_json(handoff_path, {"schema": "appsec-review/job-handoff/1", "job_id": "job_cpp_compiled_analysis",
+    from tests.handoff_fixture import write_fixture_handoff
+    write_fixture_handoff(run_root, handoff_path, {"job_id": "job_cpp_compiled_analysis",
         "attempt_id": "attempt_0001", "status": "ACCEPTED", "completion_status": "SUCCEEDED",
         "source_fingerprint": "snapshot", "artifacts": [result_artifact, manifest_artifact],
         "resolving_paths": {"result": result_artifact["path"]},

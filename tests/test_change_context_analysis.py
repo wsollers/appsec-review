@@ -413,7 +413,8 @@ def fake_tree_sitter(run_root: Path, target: Path, snapshot: str, paths: list[st
     atomic_json(accepted, {"schema": "appsec-review/tree-sitter-ast/1", "target_snapshot": snapshot, "dispositions": [
         {"scope_id": "fake", "artifact": {"path": shard.relative_to(run_root).as_posix(), "sha256": file_sha256(shard)}}]})
     handoff = root / "handoff.json"
-    atomic_json(handoff, {"schema": "appsec-review/job-handoff/1", "status": "ACCEPTED", "outputs": {
+    from tests.handoff_fixture import write_fixture_handoff
+    write_fixture_handoff(run_root, handoff, {"source_fingerprint": snapshot, "status": "ACCEPTED", "outputs": {
         "acceptance.publish_handoff": {"artifact": {"path": accepted.relative_to(run_root).as_posix(),
                                                     "sha256": file_sha256(accepted)}}}})
     atomic_json(root.parent.parent / "latest.json", {"handoff_path": handoff.relative_to(run_root).as_posix(),

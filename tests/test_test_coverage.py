@@ -215,7 +215,8 @@ def test_accepted_publication_verifies_handoff_artifact_and_manifest(tmp_path: P
                           "index_manifest": _identity(tmp_path, manifest)})
     summary_identity, manifest_identity = _identity(tmp_path, summary), _identity(tmp_path, manifest)
     handoff = attempt / "handoff.json"
-    atomic_json(handoff, {"schema": "appsec-review/job-handoff/1", "status": "ACCEPTED",
+    from tests.handoff_fixture import write_fixture_handoff
+    write_fixture_handoff(tmp_path, handoff, {"source_fingerprint": snapshot, "status": "ACCEPTED",
                           "job_id": "job_test_coverage", "attempt_id": "attempt_0001",
                           "outputs": {"acceptance.publish_handoff": {
                               "artifact": summary_identity, "index_manifest": manifest_identity}},

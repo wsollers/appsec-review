@@ -175,7 +175,8 @@ workers = 1
                                 "receipts": receipts, "gaps": []})
     accepted_identity = _identity(run_root, accepted_path)
     handoff_path = attempt / "handoff.json"
-    atomic_json(handoff_path, {"schema": "appsec-review/job-handoff/1", "status": "ACCEPTED",
+    from tests.handoff_fixture import write_fixture_handoff
+    write_fixture_handoff(run_root, handoff_path, {"source_fingerprint": snapshot, "status": "ACCEPTED",
         "job_id": "job_language_build", "attempt_id": "attempt_0001",
         "outputs": {"acceptance.publish_handoff": {"artifact": accepted_identity,
                                                      "index_manifest": manifest_identity}},
