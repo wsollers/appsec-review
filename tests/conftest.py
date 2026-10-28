@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import os
 
 import pytest
 
@@ -66,3 +67,26 @@ def pytest_runtest_setup(item: pytest.Item) -> None:
         name = marker.args[0]
         if not (_REPOSITORY_ROOT / "targets" / name).is_dir():
             pytest.skip(f"local review target checkout is absent: targets/{name}")
+
+
+@pytest.fixture
+def acceptance_workspace(tmp_path: Path):
+    """Use the supervisor's immutable workspace, or an isolated workspace for focused unit tests."""
+    import json
+    from appsec_review.acceptance.lanes import LaneWorkspace
+
+    selected = os.environ.get("APPSEC_ACCEPTANCE_ROOT")
+    if selected:
+        root = Path(selected).resolve()
+        owner = json.loads((root / "owner.json").read_text(encoding="utf-8"))
+        workspace = LaneWorkspace(Path(owner["repository"]), root, owner["lane"], owner["invocation_id"])
+        if workspace.runs_dir != Path(os.environ["APPSEC_ACCEPTANCE_RUNS_DIR"]).resolve():
+            raise pytest.UsageError("acceptance job fixture must use invocation-owned runs_dir")
+        return workspace
+    return LaneWorkspace.create(tmp_path, "fixture")
+
+
+@pytest.fixture
+def acceptance_runs_dir(acceptance_workspace) -> Path:
+    """Job fixtures must bind runtime.runs_dir here, never to the checkout's production runs."""
+    return acceptance_workspace.runs_dir

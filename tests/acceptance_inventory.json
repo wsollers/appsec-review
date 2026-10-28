@@ -1,0 +1,141 @@
+{
+  "schema": "appsec-review/acceptance-inventory/1",
+  "profiles": {
+    "quick": {
+      "tier": "hermetic",
+      "deadline_seconds": 720,
+      "case_deadline_seconds": 60,
+      "prerequisites": ["python:pytest"],
+      "obligations": ["harness-contract", "harness-isolation", "harness-owned-fixtures", "inventory-drift"],
+      "deferral": "Only implemented harness obligations are selected. Connected job lanes are added after integration and calibration."
+    },
+    "tools": {
+      "tier": "tool", "deadline_seconds": 480, "case_deadline_seconds": 60,
+      "prerequisites": ["preinstalled-pinned-tools"], "obligations": [],
+      "deferral": "Unimplemented; explicit preinstalled tool selection and permission required. No acquisition fallback."
+    },
+    "deployed": {
+      "tier": "tool", "deadline_seconds": 120, "case_deadline_seconds": 60,
+      "prerequisites": ["authorized-read-only-deployment"], "obligations": [],
+      "deferral": "Unimplemented; no service or deployed API access in quick."
+    },
+    "provider": {
+      "tier": "provider", "deadline_seconds": 180, "case_deadline_seconds": 60,
+      "prerequisites": ["authorized-provider-model"], "obligations": [],
+      "deferral": "Unimplemented; separate authorization, exact provider/model and request budget required."
+    },
+    "guidance": {
+      "tier": "provider", "deadline_seconds": 300, "case_deadline_seconds": 60,
+      "prerequisites": ["authorized-six-call-evaluation"], "obligations": [],
+      "deferral": "Unimplemented; at most six calls after separate authorization. Quick is not model-quality evidence."
+    },
+    "codeql-warm": {
+      "tier": "codeql", "deadline_seconds": 900, "case_deadline_seconds": 900,
+      "prerequisites": ["compatible-warm-codeql-assets"], "obligations": [],
+      "deferral": "Unimplemented; declared runtime/language pilot only. Never warms, pulls or expands automatically."
+    },
+    "native": {
+      "tier": "native", "deadline_seconds": 300, "case_deadline_seconds": 60,
+      "prerequisites": ["commissioned-native-host-and-grants"], "obligations": [],
+      "deferral": "Unimplemented; separate commissioning and exact grants required."
+    }
+  },
+  "obligations": [
+    {
+      "id": "harness-contract", "gap_ids": ["G-H1", "G-H2"],
+      "nodes": ["tests/test_acceptance_lanes.py::test_lane_contract_bounds_selection_and_workers"],
+      "boundary": "Frozen LaneSpec selection, deadline and worker validation",
+      "variants": ["serial-default", "at-most-two-workers", "invalid-budgets"],
+      "substitutions": [], "prerequisites": [], "deferrals": []
+    },
+    {
+      "id": "harness-isolation", "gap_ids": ["G-H1", "G-H5"],
+      "nodes": [
+        "tests/test_acceptance_lanes.py::test_acceptance_uses_isolated_roots_and_production_telemetry",
+        "tests/test_acceptance_lanes.py::test_owned_paths_cannot_escape_or_select_production_state",
+        "tests/test_acceptance_lanes.py::test_acceptance_metrics_remain_separate_while_an_owned_review_process_runs"
+      ],
+      "boundary": "LaneWorkspace to real EventLog/PipelineLog and OperationSpan with production sentinel",
+      "variants": ["distinct-invocations", "cpu-and-explicit-io-availability", "owned-path-rejection", "active-owned-review-heartbeat"],
+      "substitutions": ["Tiny local fixture represents production runs; no real review is read or changed"],
+      "prerequisites": [], "deferrals": ["Symlink-privileged path test is not a required quick selection"]
+    },
+    {
+      "id": "harness-owned-fixtures", "gap_ids": ["G-H1", "G-H3"],
+      "nodes": ["tests/test_acceptance_runner.py::test_owned_job_fixture_and_local_transport"],
+      "boundary": "Supervisor fixture runs directory, real loopback socket and owned file write",
+      "variants": ["windows", "linux"], "substitutions": ["No inference, acquisition, Docker or target checkout"],
+      "prerequisites": [], "deferrals": []
+    },
+    {
+      "id": "inventory-drift", "gap_ids": ["G-H5", "G-A8"],
+      "nodes": [
+        "tests/test_acceptance_inventory.py::test_inventory_matches_active_catalogs",
+        "tests/test_acceptance_inventory.py::test_inventory_selections_and_dispositions",
+        "tests/test_acceptance_inventory.py::test_no_untracked_duplicate_test_definitions"
+      ],
+      "boundary": "Configured job table, MCP TOOLS, model catalogs/transports, and AST test-definition uniqueness",
+      "variants": ["all-configured-jobs", "all-public-MCP-tools", "all-provider-families"],
+      "substitutions": ["Static drift checks are not execution coverage"],
+      "prerequisites": [], "deferrals": ["Known shadowed Go and ELF definitions remain explicit gaps until their owners fix them"]
+    }
+  ],
+  "catalogs": {
+    "jobs": [
+      "job_artifact_indexing", "job_artifact_security_analysis", "job_change_context_analysis",
+      "job_ci_configuration_analysis", "job_clang_static_analysis", "job_code_graph_index",
+      "job_codeql_analysis", "job_cpg_analysis", "job_cpp_compiled_analysis", "job_cpp_symbol_index",
+      "job_dependency_intelligence", "job_document_issue_analysis", "job_evidence_collection",
+      "job_final_publication_gate", "job_final_report_publication", "job_image_pin_verification",
+      "job_inference_security_review", "job_language_build", "job_model_connectivity",
+      "job_owasp_control_assessment", "job_poc_generation", "job_post_build_security_assessment",
+      "job_profile_data", "job_project_build", "job_review_data_indexing", "job_review_intake",
+      "job_review_package_assembly", "job_review_prioritization", "job_sanitizer_build",
+      "job_security_tagging", "job_source_history_analysis", "job_svf_alias_analysis",
+      "job_target_analysis_plan", "job_target_catalog", "job_test_coverage", "job_third_party_data_sync",
+      "job_tree_sitter_ast"
+    ],
+    "mcp_tools": [
+      "coverage", "find", "list_codeql_databases", "query_artifacts", "query_build_security",
+      "query_change_context", "query_ci_configuration", "query_code_graph", "query_codeql",
+      "query_codeql_neighborhood", "query_dataset_inventory", "query_hotspots", "query_observations",
+      "query_owasp_workbench", "query_precomputed", "read_excerpt", "resolve_evidence", "search", "trace"
+    ],
+    "provider_families": ["anthropic-api", "claude-cli", "copilot-sdk", "openai"],
+    "provider_transports": ["anthropic-api", "claude-cli", "copilot-sdk"],
+    "disposition": "Catalog membership detects drift only. All connected execution remains deferred until a specific obligation below proves it."
+  },
+  "deferred_features": [
+    {
+      "id": "build-tools-graphs", "gap_ids": ["G-A1", "G-A2", "G-A3", "G-A4", "G-A5", "G-A6", "G-A7", "G-A8", "G-A9", "G-A10", "G-A11"],
+      "boundary": "Accepted build/tool/parser/history/graph producers and consumer semantics",
+      "nodes": [], "variants": ["language-runtime-matrix", "warm-codeql", "cached-real-tools", "native"],
+      "substitutions": [], "prerequisites": ["Integrated W3/W4 lanes"],
+      "deferrals": ["No broad existing live scripts are quick selections", "No downloads, cold builds or produced-binary execution"]
+    },
+    {
+      "id": "control-plane", "gap_ids": ["G-B1", "G-B2", "G-B3", "G-B4", "G-B5", "G-B6", "G-B7", "G-B8", "G-B9", "G-B10", "G-B11", "G-B12", "G-B13"],
+      "boundary": "Real local/Dagster process lifecycle, replay, transports, MCP and exact selected deployment compatibility",
+      "nodes": [], "variants": ["failure-recovery", "profile-propagation", "stdio-HTTP-TLS", "windows-WSL"],
+      "substitutions": ["Quick external transports must use invocation-owned scripted executables or loopback"],
+      "prerequisites": ["Integrated W2/W3 lanes"], "deferrals": ["Native and deployed compatibility require separate selection and grants"]
+    },
+    {
+      "id": "review-publication", "gap_ids": ["G-C1", "G-C2", "G-C3", "G-C4", "G-C5", "G-C6", "G-C7", "G-C8", "G-C9", "G-C10"],
+      "boundary": "Authentic review/PoC/oracle/control-evidence/publication and final consumer handoffs",
+      "nodes": [], "variants": ["positive", "benign", "blocked", "eligible-empty-corrupt"],
+      "substitutions": ["Scripted model transport does not prove provider compatibility or guidance quality"],
+      "prerequisites": ["Integrated W1/W5 lanes"], "deferrals": ["Provider and guidance evaluation require separate authorization"]
+    }
+  ],
+  "known_duplicate_definitions": [
+    {
+      "node": "tests/test_live_build_toolchains.py::test_live_go_language_build_accepts_syscall_authoritative_capture",
+      "gap_id": "G-A8", "status": "unverified", "reason": "Second definition shadows distinct Go intent; W4 owner must preserve both tests"
+    },
+    {
+      "node": "tests/test_elf_loader_facts.py::test_loader_facts_bounds_the_interpreter_to_its_segment",
+      "gap_id": "G-H5-ELF", "status": "unverified", "reason": "Second definition shadows ELF test; outside W0 ownership"
+    }
+  ]
+}
