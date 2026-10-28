@@ -84,6 +84,10 @@ model_profile = "strong"
 [jobs.job_inference_security_review.settings.roles.adjudication_judge]
 model_profile = "strong"
 
+[jobs.job_inference_security_review.settings.lanes]
+exploration_enabled = true
+exploration_reserve = 1
+
 [jobs.job_poc_generation.settings.models.default]
 provider = "copilot-sdk"
 model = "claude-sonnet-5.5"

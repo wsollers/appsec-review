@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from dataclasses import replace
 from pathlib import Path
 import shutil
 
@@ -229,9 +230,11 @@ def test_package_budget_profile_selection_preserves_other_safeguards(profile, ex
     assert review.budgets.budget_team_packages == expected
     assert json.loads(config.resolved_json)["jobs"][JOB]["settings"]["budgets"]["budget_team_packages"] == expected
     assert review.teams == _review(dev).teams
-    assert review.lanes == _review(dev).lanes
+    assert review.lanes == replace(_review(dev).lanes, exploration_enabled=expected == "all")
     assert review.retry == _review(dev).retry
     assert config.dagster.pool_limits == dev.dagster.pool_limits
+    for job_id in ("job_owasp_control_assessment", "job_poc_generation"):
+        assert config.job(job_id).settings["enabled"] is False
 
 
 @pytest.mark.parametrize("value,expected", [('"all"', "all"), ("1", 1), ("599", 599)])

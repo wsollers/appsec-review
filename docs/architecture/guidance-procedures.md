@@ -21,6 +21,18 @@ and pinning remain supported; old workbench bundle/1 verification remains suppor
 | Independent verifier | Predicate verification |
 | Adjudication judge | Conflict resolution |
 
+These assignments also apply to production medium/low exploratory lead packages and all
+package-local follow-up rounds; `variant` hunters use generative investigation, not a new
+model or skill. Both production profiles enable exploration while both development profiles
+leave it disabled. See the [effective production assignments](../operations/inference-security-review.md#effective-production-assignments-and-bounds)
+for exact providers, model IDs, reasoning, persona/stack routing, job units and pool capacities.
+Runtime skills are model guidance, not pool assignments.
+
+When the accepted retrieval manifest includes a configured binary shard, the composer appends
+`binary-evidence` to each review cell's role/task selection. Coverage-only binary shards do not
+enable it. The selection participates in the guidance-cache key and pinned bundle hash; it is
+never inferred from target-authored instructions.
+
 Selection is deterministic from validated role/task ids, never target text. The procedures are
 registered runtime-worker skills, loaded through `load_runtime_skill` for
 `job_inference_security_review`. Composer loads disable package fallback: a missing selected file
