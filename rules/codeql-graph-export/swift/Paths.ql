@@ -16,6 +16,7 @@
 import swift
 import codeql.swift.dataflow.DataFlow
 import codeql.swift.dataflow.TaintTracking
+private import codeql.swift.dataflow.internal.DataFlowPrivate as DataFlowPrivate
 import GraphExport
 
 module GraphTaintConfig implements DataFlow::ConfigSig {
@@ -54,7 +55,7 @@ predicate onFlow(GraphTaint::PathNode source, GraphTaint::PathNode sink, GraphTa
 }
 
 string edgeKind(GraphTaint::PathNode a, GraphTaint::PathNode b) {
-  if a.getNode().getEnclosingCallable() = b.getNode().getEnclosingCallable()
+  if DataFlowPrivate::nodeGetEnclosingCallable(a.getNode()) = DataFlowPrivate::nodeGetEnclosingCallable(b.getNode())
   then result = "local"
   else
     if b.getNode() instanceof DataFlow::ParameterNode

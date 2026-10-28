@@ -60,7 +60,7 @@ def _query_predicates() -> dict[str, tuple[str, list[tuple[str, str]]]]:
 def _ql_triples(predicate: str) -> set[tuple[str, str, int]]:
     body = LIBRARY.split(f"predicate {predicate}(", 1)[1].split("}", 1)[0]
     return {(module, name, int(arg)) for module, name, arg in
-            re.findall(r'module = "([\w.]+)" and name = "(\w+)" and arg = (-?\d+)', body)}
+            re.findall(r'mod = "([\w.]+)" and name = "(\w+)" and arg = (-?\d+)', body)}
 
 
 @pytest.fixture(scope="module")
@@ -118,7 +118,7 @@ def test_catalog_api_and_model_rules_equal_what_the_queries_can_emit() -> None:
     assert api_rules("sinks", "argument_index") == _ql_triples("apiSinkArgument")
     assert api_rules("sources", "index") == _ql_triples("apiSourceArgument")
     body = LIBRARY.split("predicate sanitizerApi(", 1)[1].split("}", 1)[0]
-    assert set(re.findall(r'module = "([\w.]+)" and name = "(\w+)"', body)) == {
+    assert set(re.findall(r'mod = "([\w.]+)" and name = "(\w+)"', body)) == {
         (module, rule["api"]) for rule in SECTION["sanitizers"] for module in rule["declared_in"]}
     emitted = set(re.findall(r'model = "([\w.]+)"', LIBRARY)) - {"api"}
     sink_models = {rule["match"]["model"] for rule in SECTION["sinks"] if "model" in rule["match"]}

@@ -16,6 +16,7 @@
 import rust
 import codeql.rust.dataflow.DataFlow
 import codeql.rust.dataflow.TaintTracking
+private import codeql.rust.dataflow.internal.Node as N
 import GraphExport
 
 module GraphTaintConfig implements DataFlow::ConfigSig {
@@ -54,7 +55,7 @@ predicate onFlow(GraphTaint::PathNode source, GraphTaint::PathNode sink, GraphTa
 }
 
 string edgeKind(GraphTaint::PathNode a, GraphTaint::PathNode b) {
-  if a.getNode().getEnclosingCallable() = b.getNode().getEnclosingCallable()
+  if a.getNode().(N::Node).getEnclosingCallable() = b.getNode().(N::Node).getEnclosingCallable()
   then result = "local"
   else
     if b.getNode() instanceof DataFlow::ParameterNode

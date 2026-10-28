@@ -18,7 +18,7 @@ import GraphExport
 predicate inputNode(
   GraphExport::SourceFunction f, DataFlow::Node n, string kind, int index, string name
 ) {
-  exists(Parameter p | p = n.(DataFlow::ParameterNode).getParameter() and p.getScope() = f |
+  exists(Parameter p | p = n.(DataFlow::ParameterNode).getParameter() and p.asName().getScope() = f |
     kind = "parameter" and index = p.getPosition() and name = p.getName()
   )
   or
@@ -50,7 +50,7 @@ predicate outputNode(
   )
   or
   exists(Parameter p, Assign a |
-    p.getScope() = f and
+    p.asName().getScope() = f and
     a.getScope() = f and
     parameterStore(p, a.getATarget()) and
     n.asExpr() = a.getValue()
