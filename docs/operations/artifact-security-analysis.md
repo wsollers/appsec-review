@@ -15,9 +15,15 @@ object read-only under its original basename in an otherwise empty target direct
 filename-sensitive tool behavior without copying payloads or mounting the whole shared object store.
 
 The job classifies files from bounded magic bytes plus accepted producer metadata. A filename or
-extension is never sufficient. Supported families include ELF and native objects/libraries,
-PE/COFF and managed assemblies, JVM class and archive outputs, Node/Python/PHP packages and
-generated bundles, WebAssembly modules, and bounded archives. Archive inspection reads directory
+extension never classifies executable, object, or archive content. Supported families include ELF
+and native objects/libraries, PE/COFF and managed assemblies, JVM class and archive outputs,
+Node/Python/PHP packages and generated bundles, WebAssembly modules, and bounded archives. Media and
+asset files are classified into family `media-asset` with a category-prefixed format (`image-png`,
+`audio-ogg`, `font-truetype`, `model-fbx`, `texture-dds`, ...) from the typed declarations in
+`appsec_review.media_assets`: by content first, and by suffix only when the bytes matched no other
+format and the suffix names a media format and nothing else. Ambiguous suffixes (`.obj`, `.mod`,
+`.ts`, `.pak`, `.bin`, ...) are never a fallback; a Wavefront `.obj` is recognized only from its
+geometry directives, so an ELF or COFF `.obj` stays a native object. Archive inspection reads directory
 metadata without extracting or executing members. Traversal, absolute paths, links, excessive
 member count or size, expansion ratios, corrupt containers, and unsupported formats become precise
 coverage gaps.
@@ -25,9 +31,15 @@ coverage gaps.
 Pinned scanners run only on the inputs `appsec_review.tool_inputs` declares for them: BLint on
 ELF, PE/.NET, COFF, Mach-O, and Android packages; SpotBugs on JVM classes and on archives that
 contain `.class` members; osv-scanner on lockfiles and manifests it extracts offline (by file name,
-`OSV_LOCKFILE_ECOSYSTEMS`); Syft and Grype on any produced artifact. An artifact outside a
-scanner's support is never launched and is counted per capability in `not_applicable_inputs` as
-`SKIPPED_NA`, not as a gap. Classification reads bounded member names: a jar holding only
+`OSV_LOCKFILE_ECOSYSTEMS`); Syft and Grype on any produced artifact except media and asset files
+(images, audio, video, fonts, 3D models, textures, game data), in which a package cataloger finds
+nothing. That exclusion is a denylist of positively recognized formats rather than an allowlist,
+because Syft also catalogs by file name and embedded content that classify as `unknown`. An artifact
+outside a scanner's support is never launched and is counted per capability in
+`not_applicable_inputs` as `SKIPPED_NA`, not as a gap; its row in that capability's
+`scope_dispositions` also carries `format`, `input_disposition: SKIPPED_NA`,
+`input_reason_code: INPUT_FORMAT_UNSUPPORTED`, and `input_reason`. A skipped artifact is never
+evidence that it is clean. Classification reads bounded member names: a jar holding only
 `classes.dex` is `dex-archive` and a jar with no `.class` member is `jvm-resource-archive`, so
 neither reaches SpotBugs (which would exit 1 with "No files to analyze could be opened"). Unix `ar`
 archives (`.a` static libraries, Rust `.rlib`) are `ar-archive`: their members are listed from GNU,
