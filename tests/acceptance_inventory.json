@@ -4,10 +4,16 @@
     "quick": {
       "tier": "hermetic",
       "deadline_seconds": 720,
-      "case_deadline_seconds": 60,
+      "case_deadline_seconds": 120,
       "prerequisites": ["python:pytest"],
-      "obligations": ["harness-contract", "harness-isolation", "harness-owned-fixtures", "inventory-drift"],
-      "deferral": "Only implemented harness obligations are selected. Connected job lanes are added after integration and calibration."
+      "obligations": ["harness-contract", "harness-isolation", "harness-owned-fixtures", "inventory-drift", "signal-lifecycle", "dependency-lifecycle", "mcp-error-recovery"],
+      "deferral": "Only individually registered obligations count. Optional tools/platforms and unjoined feature variants remain explicit gaps."
+    },
+    "signals": {
+      "tier": "hermetic", "deadline_seconds": 240, "case_deadline_seconds": 120,
+      "prerequisites": ["python:pytest"],
+      "obligations": ["signal-lifecycle", "dependency-lifecycle"],
+      "deferral": "Recorded compiler/SBOM and HTTP boundaries; no live tool or external service compatibility claim."
     },
     "tools": {
       "tier": "tool", "deadline_seconds": 480, "case_deadline_seconds": 60,
@@ -41,6 +47,33 @@
     }
   },
   "obligations": [
+    {
+      "id": "signal-lifecycle", "gap_ids": ["G-A5", "G-B7"], "case_deadline_seconds": 120,
+      "nodes": [
+        "tests/integration/test_signal_job_acceptance.py::test_full_signal_jobs_preserve_report_source_and_context_semantics",
+        "tests/integration/test_signal_job_acceptance.py::test_changed_profile_cannot_publish_an_accepted_signal"
+      ],
+      "boundary": "Accepted intake/catalog/artifact -> complete coverage/profile jobs -> immutable queryable publication",
+      "variants": ["lcov", "cobertura", "jacoco", "llvm", "folded-hotspots", "hash-tamper"],
+      "substitutions": ["Recorded external compiler receipts", "Scripted model availability catalog"],
+      "prerequisites": [], "deferrals": ["Compiler-generated report provenance and downstream review consumption are separate obligations"]
+    },
+    {
+      "id": "dependency-lifecycle", "gap_ids": ["G-A5"], "case_deadline_seconds": 120,
+      "nodes": ["tests/integration/test_dependency_job_acceptance.py::test_dependency_job_deduplicates_requests_and_publishes_bound_exposure_and_cache_context"],
+      "boundary": "Accepted native metadata/links -> full dependency job twice -> repository/request dedup, exposure and cache publication",
+      "variants": ["DEBUG-and-runtime-conflict", "QA", "one-repository-two-packages", "fresh-cache", "immutable-prior-index"],
+      "substitutions": ["Recorded compiler and empty SBOM publication boundary", "Bounded scripted HTTP response"],
+      "prerequisites": [], "deferrals": ["Current compiler, Syft and public Scorecard compatibility are unverified"]
+    },
+    {
+      "id": "mcp-error-recovery", "gap_ids": ["G-B13"],
+      "nodes": ["tests/test_mcp_jsonrpc_errors.py::test_malformed_message_has_no_stale_id_and_next_request_succeeds"],
+      "boundary": "Actual stdio JSON-RPC loop with malformed first/subsequent messages and recovery",
+      "variants": ["first-message-parse-error", "prior-id-not-reused"],
+      "substitutions": ["Inert retrieval adapter construction; real accepted-run MCP coverage is a separate obligation"],
+      "prerequisites": [], "deferrals": []
+    },
     {
       "id": "harness-contract", "gap_ids": ["G-H1", "G-H2"],
       "nodes": ["tests/test_acceptance_lanes.py::test_lane_contract_bounds_selection_and_workers"],

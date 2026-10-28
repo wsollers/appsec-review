@@ -33,14 +33,24 @@ def owned_workspace(tmp_path: Path) -> LaneWorkspace:
 
 
 def execute(tmp_path: Path, source: str, *, seconds: float = 20,
-            prerequisites: tuple[str, ...] = ()) -> tuple[dict, LaneWorkspace]:
+            prerequisites: tuple[str, ...] = (), tested_commit: str | None = None) -> tuple[dict, LaneWorkspace]:
     path = tmp_path / "test_micro.py"
     path.write_text(source, encoding="utf-8")
     workspace = owned_workspace(tmp_path)
     outcome = ops_tests.supervised_pytest(
         sys.executable, [str(path)], workspace, "micro",
-        deadline=time.monotonic() + seconds, prerequisites=prerequisites)
+        deadline=time.monotonic() + seconds, prerequisites=prerequisites, tested_commit=tested_commit)
     return outcome, workspace
+
+
+def test_supervisor_exports_its_exact_commit_without_a_child_git_process(tmp_path: Path) -> None:
+    commit = "1" * 40
+    outcome, _workspace = execute(tmp_path,
+        "import os\n"
+        "def test_identity():\n"
+        "    assert os.environ['APPSEC_ACCEPTANCE_TESTED_COMMIT'] == '" + commit + "'\n",
+        tested_commit=commit)
+    assert outcome["exit_code"] == 0 and outcome["cleanup"]["confirmed"], outcome
 
 
 def test_owned_job_fixture_and_local_transport(acceptance_runs_dir: Path, acceptance_workspace) -> None:

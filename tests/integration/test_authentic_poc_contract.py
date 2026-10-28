@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from pathlib import Path
 import json
+import os
 
 import pytest
 
@@ -22,6 +23,10 @@ from tests.poc_chain import poc_tables
 ROOT = Path(__file__).resolve().parents[2]
 ENTRY = "asr:entry_point:" + "a" * 64
 HOP = "asr:call_site:" + "b" * 64
+
+
+def acceptance_lane(name: str) -> LaneWorkspace:
+    return LaneWorkspace.create(Path(os.environ.get("APPSEC_ACCEPTANCE_ROOT", ROOT)), name)
 
 
 def attach_call_chain(fixture):
@@ -142,7 +147,7 @@ def authentic_chain(lane: LaneWorkspace, *, basis=True, benign=False, blocked=Fa
 
 @pytest.fixture(scope="module")
 def authentic():
-    lane = LaneWorkspace.create(ROOT, "authentic-poc-contract")
+    lane = acceptance_lane("authentic-poc-contract")
     with lane.span("chain"):
         chain = authentic_chain(lane)
     lane.emit("ACCEPTANCE_CASE_FINISHED", case="authentic-review-gate")
@@ -221,7 +226,7 @@ def test_real_review_gate_and_poc_planning_use_authoritative_contracts(authentic
 
 
 def test_authentic_empty_candidates_are_not_a_missing_field():
-    lane = LaneWorkspace.create(ROOT, "authentic-poc-empty")
+    lane = acceptance_lane("authentic-poc-empty")
     with lane.span("chain"):
         chain = authentic_chain(lane, basis=False)
         inputs = verified(chain)

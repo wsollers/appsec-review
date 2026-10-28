@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-from pathlib import Path
 import sqlite3
 import time
 
@@ -21,7 +20,6 @@ from tests.integration.test_signal_job_acceptance import _available
 from tests.test_artifact_indexing import RUN_ID, _identity, _publish_changed_language_receipts, _seed
 
 
-ROOT = Path(__file__).resolve().parents[2]
 REPOSITORY = "https://github.com/example/tiny-native"
 SCORECARD = b'{"score":7.4,"date":"2026-01-01","checks":[{"name":"Maintained","score":8}]}'
 
@@ -90,8 +88,9 @@ def _prepare(workspace: LaneWorkspace):
     return config, target, snapshot, root, cache_root
 
 
-def test_dependency_job_deduplicates_requests_and_publishes_bound_exposure_and_cache_context() -> None:
-    workspace = LaneWorkspace.create(ROOT, "dependency-jobs")
+def test_dependency_job_deduplicates_requests_and_publishes_bound_exposure_and_cache_context(
+        acceptance_workspace: LaneWorkspace) -> None:
+    workspace = LaneWorkspace.create(acceptance_workspace.root, "dependency-jobs")
     started = time.monotonic()
     calls = []
 

@@ -65,6 +65,10 @@ def test_inventory_selections_and_dispositions() -> None:
         assert set(profile["obligations"]) <= ids
         assert profile["obligations"] or profile["deferral"]
         assert profile["case_deadline_seconds"] <= profile["deadline_seconds"]
+        for item in obligations:
+            if item["id"] in profile["obligations"]:
+                cap = item.get("case_deadline_seconds", 60)
+                assert type(cap) is int and 3 < cap <= profile["case_deadline_seconds"]
     quick = [item for item in obligations if item["id"] in inventory["profiles"]["quick"]["obligations"]]
     assert quick
     assert not any("/live/" in node or "test_live_" in node for item in quick for node in item["nodes"])

@@ -377,7 +377,8 @@ def acceptance_environment(workspace) -> dict[str, str]:
 
 
 def supervised_pytest(python: str, arguments: list[str], workspace, key: str,
-                      *, deadline: float, prerequisites: tuple[str, ...] = ()) -> dict:
+                      *, deadline: float, prerequisites: tuple[str, ...] = (),
+                      tested_commit: str | None = None) -> dict:
     """Run collection or exactly one case under a hard wall-clock budget with owned cleanup."""
     from appsec_review.storage import atomic_json
     from appsec_review.runtime.resources import process_identity
@@ -388,6 +389,8 @@ def supervised_pytest(python: str, arguments: list[str], workspace, key: str,
     outcome_path = directory / "pytest.json"
     exit_path = directory / "exit.json"
     environment = acceptance_environment(workspace)
+    if tested_commit is not None:
+        environment["APPSEC_ACCEPTANCE_TESTED_COMMIT"] = tested_commit
     environment["APPSEC_ACCEPTANCE_OUTCOME"] = str(outcome_path)
     environment["APPSEC_ACCEPTANCE_PREREQUISITES"] = json.dumps(prerequisites)
     # Windows venv launchers can spawn their real interpreter before assignment. Bootstrap
@@ -598,7 +601,7 @@ def run_acceptance(args: argparse.Namespace, root: Path) -> int:
                 result["setup_duration_seconds"] = time.monotonic() - started
                 collection = supervised_pytest(python, ["--collect-only", *nodes], workspace, "collection",
                                                deadline=min(suite_end, time.monotonic() + per_case),
-                                               prerequisites=spec.prerequisites)
+                                               prerequisites=spec.prerequisites, tested_commit=result["commit"])
                 result["collection"] = collection
                 collected = (collection["pytest"] or {}).get("collected", [])
                 result["prerequisites"] = (collection["pytest"] or {}).get("prerequisites", [])
@@ -614,9 +617,14 @@ def run_acceptance(args: argparse.Namespace, root: Path) -> int:
                 else:
                     def execute(node: str) -> dict:
                         key = "case-" + hashlib.sha256(node.encode()).hexdigest()[:16]
+                        limits = [entries[obligation].get("case_deadline_seconds", 60)
+                                  for obligation in selected if any(
+                                      _matches(selection, node) for selection in entries[obligation]["nodes"])]
+                        case_seconds = min(per_case, *limits)
                         outcome = supervised_pytest(python, [node], workspace, key,
-                                                   deadline=min(suite_end, time.monotonic() + per_case))
-                        record = {"node": node, **outcome}
+                                                   deadline=min(suite_end, time.monotonic() + case_seconds),
+                                                   tested_commit=result["commit"])
+                        record = {"node": node, "budget_seconds": case_seconds, **outcome}
                         payload = outcome["pytest"] or {}
                         cases = payload.get("cases", [])
                         record["passed"] = (outcome["outcome"] == "completed" and outcome["exit_code"] == 0

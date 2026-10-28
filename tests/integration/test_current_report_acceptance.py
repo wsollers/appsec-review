@@ -12,12 +12,12 @@ from appsec_review.acceptance.answer_key import Defect, evaluate, evaluate_curre
 from appsec_review.acceptance.lanes import LaneWorkspace
 from appsec_review.acceptance.system import accepted_final_report
 from tests.final_report_support import REPORT, report_job, run_job
-from tests.integration.test_authentic_poc_contract import ROOT, authentic_chain
+from tests.integration.test_authentic_poc_contract import ROOT, acceptance_lane, authentic_chain
 
 
 @pytest.fixture(scope="module")
 def current():
-    lane = LaneWorkspace.create(ROOT, "current-report")
+    lane = acceptance_lane("current-report")
     with lane.span("accepted-report"):
         chain = authentic_chain(lane, ci_only=True)
         run_job(chain.config, report_job(), chain.fixture.run_id, chain.upstream("job_final_publication_gate"), chain.env)
@@ -96,7 +96,7 @@ def test_changed_accepted_bytes_fail_closed(current, part):
 
 @pytest.mark.parametrize("blocked", [False, True], ids=["benign", "blocked"])
 def test_benign_and_blocked_real_reports_never_promote_scanner_detection(blocked):
-    lane = LaneWorkspace.create(ROOT, "current-blocked" if blocked else "current-benign")
+    lane = acceptance_lane("current-blocked" if blocked else "current-benign")
     with lane.span("accepted-report"):
         chain = authentic_chain(lane, ci_only=True, benign=not blocked, blocked=blocked)
         run_job(chain.config, report_job(), chain.fixture.run_id, chain.upstream("job_final_publication_gate"), chain.env)

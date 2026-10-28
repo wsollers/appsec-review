@@ -19,7 +19,6 @@ from appsec_review.storage import atomic_json, file_sha256
 from tests.test_artifact_indexing import RUN_ID, _identity, _publish_changed_language_receipts, _seed
 
 
-ROOT = Path(__file__).resolve().parents[2]
 REPORTS = {
     "coverage/lcov.info": b"SF:src/main.c\nDA:1,1\nDA:2,0\nend_of_record\n",
     "coverage/cobertura.xml": (
@@ -87,8 +86,8 @@ def _entities(run_root: Path, document, kind: str):
     return rows
 
 
-def test_full_signal_jobs_preserve_report_source_and_context_semantics() -> None:
-    workspace = LaneWorkspace.create(ROOT, "signal-jobs")
+def test_full_signal_jobs_preserve_report_source_and_context_semantics(acceptance_workspace: LaneWorkspace) -> None:
+    workspace = LaneWorkspace.create(acceptance_workspace.root, "signal-jobs")
     started = time.monotonic()
     with workspace.span("acceptance.signal_jobs"):
         config, target, snapshot, run_root = _prepare(workspace)
@@ -119,8 +118,8 @@ def test_full_signal_jobs_preserve_report_source_and_context_semantics() -> None
     assert elapsed < 120, f"signal job lane exceeded 120 seconds: {elapsed:.3f}s; {workspace.root}"
 
 
-def test_changed_profile_cannot_publish_an_accepted_signal() -> None:
-    workspace = LaneWorkspace.create(ROOT, "signal-integrity")
+def test_changed_profile_cannot_publish_an_accepted_signal(acceptance_workspace: LaneWorkspace) -> None:
+    workspace = LaneWorkspace.create(acceptance_workspace.root, "signal-integrity")
     started = time.monotonic()
     with workspace.span("acceptance.signal_integrity"):
         config, target, snapshot, run_root = _prepare(workspace)
