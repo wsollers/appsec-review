@@ -5,6 +5,22 @@ rebuilds `runs/<run-id>/data/telemetry/summary.json` and prints the same documen
 the target repository. All review-scope values resolve through receipt paths and SHA-256 identities
 recorded in the run telemetry stream.
 
+The integrating [job interchange telemetry](../architecture/telemetry.md#interchange-instrumentation)
+adds a receipt-verified `interchange` section (`appsec-review/interchange-metrics/1`) in
+`appsec-review/run-metrics/5`. It separates handoff admission, execution, coverage, native retention,
+and observation provenance. Until that integration is deployed, existing `/4` summaries lack this
+section; absence is not zero provenance work. Do not copy claimed event counts into reports:
+retention/provenance receipt bytes and computations must verify first. Duplicate publication/receipt
+identities must not inflate totals, and reused results must not count as fresh scanner execution.
+
+The new section groups handoff `accepted`, `rejected`, `validated`, unit/retry counts,
+`coverage_dispositions`, `execution_statuses`, `producer_gap_codes`, and validation `duration_ms`.
+`native_outputs` distinguishes reference count from distinct artifact count/bytes, retained
+completeness/truncation, and native result count. `observations` distinguishes observation count,
+native-reference count, and complete/incomplete/truncated batches. Registered job IDs bound
+`by_job`; closed `integrity_gap_codes` classify failures without path/rule/message labels.
+Read each section's `accounting_complete`: a null count with an integrity gap is not a measured zero.
+
 Use `review.source_by_language`, `review.projects`, `review.build_units`, and `review.artifacts` for
 scope and throughput. Artifact `reference_*` values answer how much work build units reference;
 `deduplicated_*` values answer how many distinct content objects were produced. Do not substitute
@@ -19,7 +35,8 @@ That zero describes avoided producer execution only. Read `resource_spans` and
 Scope/profile, resource lease and tool invocation identifiers correlate concurrent work;
 inclusive process resource samples must not be added across overlapping spans.
 
-The summary schema is `appsec-review/run-metrics/4`. Use the top-level `codeql` section for CodeQL
+The upgraded summary schema is `appsec-review/run-metrics/5` (historical summaries use `/4`).
+Use the top-level `codeql` section for CodeQL
 execution telemetry: `by_query_pack`, `by_language`, `by_query_pack_language` (pack, then language)
 and `by_source_language` each report `count`, `statuses` (`SUCCEEDED`, `FAILED`, `TIMED_OUT`,
 `SKIPPED`, `REUSED`, zeroes included), `runtime_ms` (`total`, `min`, `max`, `p50`, `p95` over fresh
@@ -57,3 +74,22 @@ as missing coverage. A missing, changed, escaped, or malformed receipt is an int
 never evidence that the corresponding scope is clean. `finding_states` counts only authoritative
 finding transitions; scanner observations and CodeQL SARIF result counts are not confirmed defects
 or vulnerabilities.
+
+## Interchange troubleshooting
+
+For `HANDOFF_REJECTED`, inspect the hash-bound diagnostic handoff and detailed outcomes when
+available. Separate framework `execution_status` from `status` admission and `coverage.disposition`;
+an accepted partial publication is not a failed runtime, and successful execution need not provide
+complete coverage. Read unit status/result references and gap codes before retrying.
+
+A missing, changed, escaped, or malformed handoff, outcomes file, native artifact, retention receipt,
+or provenance receipt is an integrity gap. Preserve it for diagnosis and rerun the affected
+producer; never repair accepted JSON or reset its pointer. A count disagreement is likewise not
+permission to trust the larger number. If receipt metadata is available but its raw report is
+protected, use authorized run-artifact access, not an inference retrieval bypass.
+
+For `handoff_schema_changed`, preserve the `/1` attempt and use `plan-resume`/`resume` to produce
+new `/2` publications and dependent indexes. For scanner failure, missing output, parser failure,
+or truncation, fix the named prerequisite or bound and rerun the affected unit; retain unrelated
+verified checkpoints. Disabled, not-applicable, empty, failed, and inventory-only coverage never
+establish a security-negative result.
