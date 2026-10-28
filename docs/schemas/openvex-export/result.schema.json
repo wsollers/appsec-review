@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://appsec-review.local/schemas/openvex-export/result.schema.json",
+  "title": "OpenVEX export accepted result",
+  "type": "object", "additionalProperties": false,
+  "required": [
+    "schema", "run_id", "outcome", "gate", "manifest", "document", "statement_count",
+    "included_findings", "excluded_findings", "gaps"
+  ],
+  "properties": {
+    "schema": {"const": "appsec-review/openvex-export-result/1"},
+    "run_id": {"$ref": "../final-report/common.schema.json#/$defs/short_text"},
+    "outcome": {"$ref": "common.schema.json#/$defs/outcome"},
+    "gate": {"$ref": "common.schema.json#/$defs/artifact_ref"},
+    "manifest": {"$ref": "common.schema.json#/$defs/manifest_ref"},
+    "document": {"$ref": "common.schema.json#/$defs/nullable_output"},
+    "statement_count": {"$ref": "common.schema.json#/$defs/count"},
+    "included_findings": {"$ref": "common.schema.json#/$defs/count"},
+    "excluded_findings": {"$ref": "common.schema.json#/$defs/count"},
+    "gaps": {"$ref": "common.schema.json#/$defs/gaps"}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"outcome": {"const": "no_statements"}}},
+      "then": {
+        "properties": {
+          "document": {"type": "null"}, "statement_count": {"const": 0}, "included_findings": {"const": 0},
+          "gaps": {"contains": {"const": "openvex_no_publishable_confirmed_findings"}}
+        }
+      },
+      "else": {
+        "properties": {
+          "document": {"$ref": "common.schema.json#/$defs/document_ref"},
+          "statement_count": {"minimum": 1}, "included_findings": {"minimum": 1}
+        }
+      }
+    }
+  ]
+}
