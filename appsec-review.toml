@@ -2192,6 +2192,16 @@ command_token_limit = 4096
 metadata_file_limit = 10000
 metadata_bytes_per_file = 1048576
 inference_candidate_bytes = 32768
+native_source_bytes_limit = 67108864
+native_root_limit = 2048
+native_evidence_limit = 50000
+native_evidence_per_candidate = 32
+native_field_bytes = 4096
+native_path_chars = 512
+sbom_input_bytes = 16777216
+sbom_element_limit = 100000
+sbom_output_bytes = 33554432
+sbom_conversion_timeout_seconds = 120
 repository_hosts = ["github.com", "gitlab.com"]
 
 [jobs.job_dependency_intelligence.settings.model]
@@ -2234,6 +2244,7 @@ workers = 4
 
 [jobs.job_dependency_intelligence.steps.publication]
 workers = 1
+[jobs.job_dependency_intelligence.steps.publication.tasks.publish_sbom]
 [jobs.job_dependency_intelligence.steps.publication.tasks.publish_context]
 
 [jobs.job_dependency_intelligence.steps.acceptance]

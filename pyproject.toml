@@ -35,6 +35,9 @@ dagster = [
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+"appsec_review.jobs.job_dependency_intelligence" = ["schemas/*.json", "schemas/*.txt", "schemas/*.md"]
+
 [tool.setuptools.data-files]
 "share/appsec-review/schemas" = ["docs/schemas/review-packages.schema.json"]
 
