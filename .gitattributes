@@ -1,0 +1,2 @@
+tests/fixtures/graph/codeql_export/swift-synthetic/** -text
+tests/fixtures/graph/expected/swift-synthetic/** -text
