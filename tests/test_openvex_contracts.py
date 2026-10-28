@@ -207,7 +207,9 @@ def test_gate_acceptance_timestamp_normalizes_without_a_clock(timestamp: str) ->
 
 
 @pytest.mark.parametrize("timestamp", ["2026-10-28", "2026-10-28T10:00:00", "2026-02-30T00:00:00Z",
-                                      "2026-10-28T00:00:00-00:00", "2026-10-28T00:00:00.1234567Z", "now"])
+                                      "2026-10-28T00:00:00-00:00", "2026-10-28T00:00:00.1234567Z",
+                                      "2026-10-28T14:00:00+01:60", "2026-10-28T14:00:00-01:60",
+                                      "2026-10-28T14:00:00+24:00", "2026-10-28T14:00:00-24:00", "now"])
 def test_invalid_or_lossy_time_is_rejected(timestamp: str) -> None:
     with pytest.raises(ValueError):
         c.normalize_timestamp(timestamp)

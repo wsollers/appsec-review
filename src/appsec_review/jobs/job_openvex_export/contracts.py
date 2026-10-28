@@ -73,7 +73,9 @@ SIZE_BUCKETS = (1024, 4096, 16384, 65536, 262144, 1048576, 4194304, 16777216, 33
 JsonObject = Mapping[str, Any]
 _SHA256 = re.compile(r"[0-9a-f]{64}")
 _RUN_PATH = re.compile(r"[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*")
-_RFC3339 = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})")
+_RFC3339 = re.compile(
+    r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)"
+)
 _CREDENTIAL = re.compile(
     r"(?:[a-z][a-z0-9+.-]*://[^\s/]*@|-----BEGIN [A-Z ]*PRIVATE KEY-----|"
     r"\b(?:password|passwd|api[_-]?key|access[_-]?token|secret)\s*[:=]\s*\S+|"
