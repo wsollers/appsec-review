@@ -10,12 +10,13 @@ all inventory members or optional live profiles have executed.
 
 ## Current reconciliation checkpoint
 
-The initial documentation checkout is `bfe7f38b`, containing latest-main `d4cd9737` completion,
-OpenVEX and interchange changes. The W0 driver/inventory, W2 process/transport, W3 controls/feed,
-W4 graph/helper and authentic review/oracle work are integrated. Final public-driver
-calibration is still in progress; the latest parent evidence below is from `6265bbc7`, followed
-by the narrow guard/catalog correction `19c7c000`. Do not describe latest-main `quick` as green or its
-under-ten-minute target as achieved on the strength of the older measurements below.
+The initial documentation checkout was `bfe7f38b`, containing latest-main `d4cd9737` completion,
+OpenVEX and interchange changes. The documentation branch now also contains exact parent
+inventory/harness revision `09cbf227`, including merged W5 consumer tip `06a4ea6c` and W3
+qualification work `e50b5a3e` through parent `091295d7`. W0/W2/W3/W4 and authentic
+review/oracle implementations are integrated, but final public-profile calibration remains
+incomplete. Do not describe latest-main `quick` as green or its under-ten-minute target as
+achieved on the strength of the older measurements below.
 
 Framework fixtures now use `tests.handoff_fixture.write_fixture_handoff` for `handoff/2`.
 The current review domain is `/3`, while gate/report domains remain `/2`; these are independent
@@ -44,7 +45,7 @@ revision-scoped; fixture corrections and reduced work alone do not complete publ
 W5's interim public W0-supervised attempt exposed a shared guard/source incompatibility after
 `bfe7f38b`: `tests/acceptance_plugin.py` rejected all reads beneath repository `data/`, while
 the real review job's `_taxonomy` reads tracked
-`data/reference/taxonomy/vocabulary.json`. All three new consumer nodes therefore fail at
+`data/reference/taxonomy/vocabulary.json`. All three new consumer nodes therefore failed at
 `packages.assemble_lead_packages` with `PermissionError`; owned cleanup is confirmed with zero
 remaining processes. This was a shared runner-policy blocker, not evidence that the consumer
 joins passed or that production mutable-data access should be enabled. The narrow `19c7c000`
@@ -91,7 +92,7 @@ now explicitly select and re-pin all five tiny abridged OWASP catalogs instead o
 the newly expanded production catalogs. Guard/inventory focused validation passed 7 tests in
 8.81 seconds; it is not a whole-profile result. At that checkpoint W5 was instructed to merge
 the correction and rerun. Its later final exact-node guarded result is recorded below; named
-profile enrollment and whole-quick verification remain outstanding.
+profile execution and whole-quick verification remain outstanding.
 
 The coordinating session obtained explicit native Windows authorization. That authorization
 does not commission Linux, WSL, native containers or other sessions; Linux remains unverified.
@@ -121,8 +122,9 @@ All node names below have prefix `tests/integration/test_review_consumer_accepta
 | `test_authentic_publication_renders_counts_states_gaps_and_provenance` | 95.71 s | 114.521 / 110.380 s |
 | `test_worker_referral_deduplicates_next_round_after_foreign_repair` | 36.40 s | 53.864 / 49.779 s |
 
-This is **not a named inventory/profile CLI run**. Enrollment and integrated profile
-calibration remain coordinator-owned and outstanding. Earlier larger consumer fixtures hit
+This is **not a named inventory/profile CLI run**. Parent `09cbf227` subsequently enrolls these
+three nodes in `consumers`; named public CLI execution and integrated profile calibration
+remain coordinator-owned and outstanding. Earlier larger consumer fixtures hit
 execution cutoffs despite confirmed cleanup; the final CI-only reduction removes unrelated
 build/component/reference shards and all feeds, retains source/CI observations and leaves
 missing facts as gaps. It uses the existing typed synthetic accepted-index producer fixture
@@ -157,6 +159,96 @@ The remaining consumer limits are substantive:
   execution and optional live/native/provider/CodeQL capabilities are not established.
 - Three bounded nodes do not make all W5 obligations, any named profile or the whole quick
   lane exhaustive or verified.
+
+### Current qualification and tiny-signal corrections
+
+W3 `e50b5a3e` passed the real supervised controls case in 65.490 seconds with zero remaining
+owned children; focused configuration validation was reported at 2.48 seconds. The fixture
+explicitly selects `QUALIFICATION`, disables inference, pins five tiny abridged catalogs and
+uses authentic accepted document/catalog context through Workbench retrieval. Qualification
+rows remain non-lead-eligible with `fixture_only` / `qualification_only` dispositions and
+missing-evidence gaps. Current application code has real assessment mode; the earlier
+description that the configured producer lacks an assessment hook is obsolete. Genuine
+assessment, positive assessment/source binding, precomputed control facts and the review join
+remain unverified by this lane.
+
+At `5d7a35c4`, the exact-node supervised full signal positive passed in 99.837 seconds including
+cleanup. The bounded fixture uses tiny native receipts and one missing-signal-family receipt,
+retains the real catalog and artifact producers, and avoids unrelated intake work. An earlier
+whole `signals` attempt at `b9e55009` failed in 80.607 seconds because it omitted the required
+catalog; the correction retains that producer rather than supplying accepted catalog output.
+The later exact-node pass is not proof that the full signals profile passed.
+
+### Later public review and Windows filesystem failures
+
+The public `review` profile at `5d7a35c4` **failed** after six cases in 593.872 seconds:
+
+| Case | Supervised outcome |
+| --- | --- |
+| Native candidate / direct review-to-PoC | Timeout, 117.022 s |
+| Current-report oracle | Timeout, 117.021 s |
+| Explicit empty candidates | Passed, 71.472 s |
+| Corrupt review | Passed, 70.298 s |
+| Benign report | Passed, 106.284 s |
+| Blocked report | Passed, 107.337 s |
+
+These timings remain revision-bound. The candidate/oracle tiny-fixture performance follow-up
+is separate work; four passing cases do not make this profile pass.
+
+Intermittent Windows `WinError 5` also occurred while renaming an owned TLS stage directory.
+The coordinator retained that failure at
+`test/tmp/acceptance/acceptance-28503037d3224b5296fb4b848fd86851/controls/result.json`.
+No retry-to-green, production-directory workaround or reliable whole-controls green claim is
+made from that result.
+
+### Final declared inventory and harness checkpoint
+
+Parent `09cbf227` keeps the representative quick ceiling at 720 seconds and moves exhaustive
+negative variants into explicit full profiles without deleting coverage: `signals` retains
+signal integrity; `graphs` retains bad helper inputs; `controls` retains TLS negatives;
+`process` retains other submission barriers, MCP integrity and invalid-profile refusal.
+The `consumers` profile enrolls the three W5 nodes with a 360-second suite ceiling and
+120-second per-node exceptions. `process` is now 480 seconds with a 120-second case ceiling
+and explicit startup/replay exceptions; still-ordinary obligations retain their 60-second caps.
+Signals/controls/graphs/review remain 240/240/180/600 seconds. Serial remains default; at most
+two workers are opt-in. The collected result, not an estimated quick count, supplies the
+execution denominator.
+
+Each process now records `static_input_identities`; mismatch against the suite's source
+identities fails the case even when pytest succeeded. The guard also treats descriptor
+`O_TRUNC` and `O_APPEND` as mutation. The changed harness/inventory/lanes focused unit set
+passed 42 tests with one host-symlink skip in 59.27 seconds, using base-temp
+`test/tmp/acceptance-final-harness-unit`. That host capability remains a named gap; this is
+not a passing acceptance profile or a reason to ignore required skips.
+
+### Candidate/oracle performance follow-up: partial result, not a green review
+
+W5 follow-up `b72e79a9bfb1511fe6a73ee0d5d8949d82c5d8ed`, based on merge `1e47a65b`
+containing parent `5d7a35c4` and preserving `06a4ea6c`, changes only the two assigned
+candidate/oracle test files. It changes no shared helper, guard, inventory, schema, durability
+rule or cap. One distinct minimal-fixture attempt used the real supervisor/audit plugin,
+serial execution, 120 seconds per node including a three-second cleanup reserve, and a
+360-second group allowance.
+
+- `test_real_review_and_poc_planning_use_authoritative_contracts` passed in 112.285527 seconds
+  supervised wall / 108.840833 seconds pytest span (109.99 seconds pytest console). It uses
+  one native lead, real graph/source references, an explicit strict high/critical risk
+  assertion and direct accepted review -> actual no-build PoC planning. No model/compiler
+  execution is dispatched by PoC planning.
+- `test_current_report_bound_oracle_matrix` timed out at 117.024162 seconds before its fixture
+  returned; **no oracle assertion was reached**. The CI-only fixture completed review in
+  42.663572 seconds and gate in 39.910998 seconds. Report finalization emitted
+  `HANDOFF_VALIDATED` and `JOB_COMPLETED_WITH_GAPS`, but had not emitted `HANDOFF_ACCEPTED`
+  before timeout. Intermediate lifecycle events are not accepted report/oracle proof.
+- The group took 229.923300 seconds. Both Windows Job Object cleanups confirmed zero
+  remaining owned processes. The artifact in the consumer checkout is
+  `test/tmp/acceptance/acceptance-4dc38d6786e040108b39bc3d2401944c/review-reconciled-public/result.json`,
+  with process logs/outcomes/supervisor records and production metrics version 5 retained
+  under the same root.
+
+The exhaustive oracle remains unverified under its 120-second cap. Representative/exhaustive
+obligation splitting or separate authorized harness performance work needs explicit ownership;
+this result is neither a cap escalation nor retry-to-green evidence.
 
 ## Shared decisions
 
@@ -248,9 +340,10 @@ process/storage isolation, not zero CPU/I/O contention with a production review.
   sensor paths have bounded selections. The supervisor uses Windows Job Objects or Linux
   subreaper/identity-based cleanup; Linux-specific execution is not proven on Windows.
 - **W3 controls/feeds:** configured source/standards normalization and loopback TLS use real
-  application normalization/publication. A positive source-bound OWASP assessment/review hook
-  remains absent. Valid JSON with a truncated HTTPS `Content-Length` is now rejected rather
-  than accepted as a complete response.
+  application normalization/publication. The bounded control producer explicitly uses
+  qualification, not genuine assessment; positive assessment/source binding, precomputed facts
+  and the review join remain unverified. Valid JSON with a truncated HTTPS `Content-Length`
+  is now rejected rather than accepted as a complete response.
 - **W4 graphs/helpers:** source-resolving recorded graph rows reach actual semantic consumers;
   safe/unguarded, same-row and vacuous-subject negatives are explicit. The SQLite helper is an
   actual local CLI. This does not establish current CodeQL/graph-engine compatibility.
@@ -284,7 +377,13 @@ reported; setup duration is unavailable unless captured separately.
 | `6265bbc7`, public `quick` | Failed: 39/45 cases passed, 717.061 s, cleanup confirmed | Six failures detailed above; not a whole-profile green result |
 | `19c7c000`, guard/inventory focused validation | 7 passed, reported 8.81 s | Narrow correction validation only; later W5 exact-node result below, whole quick still pending |
 | `06a4ea6c`, W5 final direct tests | 3 passed, 181.27 s pytest / 183.725 s wall | Direct execution, not a named profile |
-| `06a4ea6c`, W5 exact-node supervisor/plugin | 3/3 passed, 225.664 s group, all owned trees empty after cleanup | Actual guarded boundary, but no named inventory/profile CLI enrollment or integrated quick claim |
+| `06a4ea6c`, W5 exact-node supervisor/plugin | 3/3 passed, 225.664 s group, all owned trees empty after cleanup | Actual guarded boundary, but not a named profile CLI run; later `consumers` enrollment does not retroactively change that |
+| `e50b5a3e`, W3 explicit qualification | Supervised pass, 65.490 s, cleanup zero; configuration validation reported 2.48 s | Qualification only, not genuine assessment or the full controls profile |
+| `b9e55009`, public `signals` | Failed, 80.607 s, required catalog missing | Producer omission corrected later; not a passing baseline |
+| `5d7a35c4`, exact-node signal positive | Passed, 99.837 s including cleanup | Real catalog retained; not a whole signals profile pass |
+| `5d7a35c4`, public `review` | Failed, six cases, 593.872 s | Candidate/oracle timed out; four other cases passed |
+| `09cbf227`, focused harness/inventory/lanes units | 42 passed, one host-symlink skip, 59.27 s | Direct unit validation; symlink capability and public calibration remain gaps |
+| `b72e79a9`, exact-node candidate/oracle follow-up | Candidate passed 112.285527 s; oracle timed out 117.024162 s; group 229.923300 s, both cleanups zero | No oracle assertion reached; not a green review profile |
 
 Final result paths, exact calibration revision, working-tree/source identities, per-case budgets,
 collection/setup overhead and cleanup must come from the corresponding public driver's
@@ -301,11 +400,14 @@ Do not reconstruct unavailable setup metrics by subtracting unrelated test-body 
   Lua/native variants and the full runtime/language matrix have not been authorized/executed.
   The `tools`, `deployed`, `provider`, `guidance`, `codeql-warm` and `native` public profiles
   deliberately fail as unimplemented, not successfully skipped.
-- Positive source-bound OWASP assessment-to-review remains unverified. Unknown original
+- Genuine OWASP assessment, positive assessment/source binding, precomputed facts and the
+  review join remain unverified by the bounded qualification lane. Unknown original
   recorded-feed production cannot be claimed as a real live computation.
-- Three bounded W5 triage/referral/presentation nodes have exact-node guarded evidence above;
-  named-profile enrollment/integrated calibration and the listed specialist, renderer-selection,
-  saturation and cross-lane obligations remain unverified.
+- Three bounded W5 triage/referral/presentation nodes have exact-node guarded evidence above
+  and are enrolled in `consumers`; named-profile execution/integrated calibration and the
+  listed specialist, renderer-selection, saturation and cross-lane obligations remain unverified.
+- The latest tiny candidate passes its exact-node bound, but the exhaustive current-report
+  oracle still times out before assertions. No final whole-profile quick/review green is established.
 - Two existing ELF catalog tests assert an exact gap count and fail after the new
   `delivery_fact_unavailable` gap. The dependency verifier error-wording discrepancy described
   above is also baseline. Neither is silently converted into passing acceptance.

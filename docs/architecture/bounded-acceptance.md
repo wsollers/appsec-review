@@ -36,13 +36,13 @@ measurement into evidence for newly added cases.
 
 | Seam | Application behavior exercised | Boundary not established by that evidence |
 | --- | --- | --- |
-| Signals | Intake/catalog to artifact indexing, coverage formats, profile indexing, source/context semantics and immutable publication | Current compilers and full produced-binary/tool compatibility |
+| Signals | Real catalog to artifact indexing, coverage formats, profile indexing, source/context semantics and immutable publication over tiny recorded build receipts | Current compilers and full produced-binary/tool compatibility |
 | Dependencies | Accepted build/SBOM input to metadata normalization, repository deduplication, Scorecard retention, exposure indexing and cache-bound immutable publication | Live compiler/Syft/Scorecard availability |
 | Graphs/helpers | Source-resolving graph rows to real consumers; safe/unguarded and same-row positive/negative semantics; real SQLite helper build/verify/query | Current graph-engine/CodeQL exports and complete language matrix |
 | Process/control plane | Real subprocess/Dagster configuration, worker death/resume, durable intent/reconciliation, MCP stdio errors/recovery, record/replay and sensor observations | Deployed service, provider and native commissioning; Linux paths need Linux execution |
-| Controls/feeds | Configured document/standards normalization and real tiny loopback HTTPS fetch/publication/failure preservation | Positive source-bound assessment/review hook and public-feed live computation |
+| Controls/feeds | Explicit OWASP qualification, authentic document/catalog context, accepted Workbench retrieval and real tiny loopback HTTPS fetch/publication/failure preservation | Genuine assessment, positive assessment/source binding, precomputed control facts, review join and public-feed live computation |
 | Review/publication | Real review producer, accepted review/gate, PoC eligibility/planning and current final-report consumer/oracle | Real model quality, compiler execution, PoC success and optional OpenVEX/completion fan-in |
-| Triage/referral/presentation | Real triage ordering/admission and bound review handoff; foreign-anchor repair, next-round referral deduplication and stable convergence; accepted gate/report counts, states, gaps and provenance rendered to HTML/LaTeX | Named-profile enrollment, specialist dispatch/resolution, cross-package/lane referrals, saturation and stale/historical renderer selection |
+| Triage/referral/presentation | Real triage ordering/admission and bound review handoff; foreign-anchor repair, next-round referral deduplication and stable convergence; accepted gate/report counts, states, gaps and provenance rendered to HTML/LaTeX | Named-profile CLI execution, specialist dispatch/resolution, cross-package/lane referrals, saturation and stale/historical renderer selection |
 
 Scripted inference answers only the external model boundary. Recorded receipts/rows answer only
 the declared compiler, graph or HTTP boundary. Assertions must consume the application's accepted
@@ -50,6 +50,20 @@ output rather than separately inventing both sides of a producer/consumer contra
 Useful negatives include corrupt bytes, missing fields versus an explicitly empty candidate
 list, stale identities, cache-context changes, truncated transports and blocked/benign findings.
 Skipped/unavailable coverage stays a named gap, not evidence that a target is clean.
+
+Inventory revision `09cbf227` separates representative `quick` from full signals, graphs,
+process, controls and review matrices without removing negative variants. It enrolls the
+three consumer nodes in a separate `consumers` profile. The ordinary 60-second limit and
+explicit 15/30/120-second obligation caps remain distinct from suite caps; process startup/replay
+has explicit 120-second allowances within its 480-second suite.
+
+The application supports genuine OWASP assessment mode, but this bounded control fixture
+explicitly uses `QUALIFICATION` with worker/reviewer inference disabled and five pinned
+abridged catalogs. Accepted Workbench rows are `qualification_only` / `fixture_only`,
+non-lead-eligible, and retain missing-evidence gaps. Document/source integrity and accepted
+context are exercised; positive assessment/source binding, precomputed facts and review
+consumption are not. Older claims that the configured producer lacks an assessment hook are
+not descriptions of current application capability.
 
 ## Review, PoC and final-survival authority
 
@@ -87,6 +101,7 @@ and scripts only the external inference callable. Its real review, gate and repo
 not injected. CI-only fixtures omit unrelated build/component/reference shards and feeds;
 missing facts remain gaps. Three exact nodes passed under the actual supervisor/plugin, but
 that is not a named inventory/profile CLI execution or exhaustive consumer coverage.
+The later `09cbf227` enrollment does not retroactively turn that run into named-profile proof.
 
 The renderer test has one authentic hash-bound current publication. `reporting.sources.RunReader`
 still selects by globs rather than a current-accepted renderer API; this test does not establish
@@ -116,6 +131,11 @@ and `data/reference/taxonomy/crosswalk.json`. Their identities are validated bef
 hook is installed and recorded in source identities. All mutations and other protected data
 remain denied; this is not general production-data access. The guard is not a hostile-code
 sandbox.
+
+Each supervised process records its pinned static input identities; the driver rejects a
+case whose identities disagree with the suite's source hashes, even after successful pytest
+execution. Mutation detection includes descriptor truncation/append flags. These checks do
+not replace the named timing and host-dependent gaps in the implementation record.
 
 The process gate, Windows Job Object and Linux subreaper supply owned-tree lifecycle control.
 Collection, execution and cleanup all consume declared deadlines; unconfirmed cleanup is failure.

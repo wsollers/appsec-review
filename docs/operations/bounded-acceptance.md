@@ -53,18 +53,24 @@ Remove `-DryRun` / `--dry-run` to execute the inspected selection. Dry run print
 | Hermetic profile | Connected selection | Suite cap |
 | --- | --- | --- |
 | `quick` | Representative harness/isolation, signals/dependencies, graph/helper, process recovery/MCP, controls/TLS, authentic review and current-report oracle obligations | 720 s |
-| `signals` | Accepted intake/catalog/artifact/coverage/profile and dependency/exposure/cache flows | 240 s |
-| `graphs` | Source-resolving recorded graph consumers, same-row semantic matching and real local SQLite helper CLI | 180 s |
-| `process` | Actual local/Dagster workers, configuration propagation, failure/recovery, durable submission, MCP, record/replay and failure sensor | 360 s |
+| `signals` | Real catalog/artifact/coverage/profile flows, signal-integrity negative and dependency/exposure/cache flows | 240 s |
+| `graphs` | Source-resolving recorded graph consumers, same-row semantic matching and real local SQLite helper CLI, including bad inputs | 180 s |
+| `process` | Actual local/Dagster workers, configuration/refusal, failure/recovery, all submission barriers, MCP integrity, record/replay and failure sensor | 480 s |
 | `process-linux` | Linux guardian/process-tree and Unix listener/peer-credential obligations | 180 s |
 | `process-windows` | Actual PowerShell dispatch with an invocation-owned compiled transport | 60 s |
-| `controls` | Configured control-source normalization and actual loopback HTTPS publication/failure preservation | 240 s |
+| `controls` | Explicit OWASP qualification with document/catalog context and accepted Workbench retrieval; loopback HTTPS, including negative matrix | 240 s |
 | `review` | Authentic review/gate/PoC planning, empty/corrupt review, current-report oracle, benign/blocked final publication | 600 s |
+| `consumers` | Real triage/admission, next-round referral repair/deduplication/convergence and accepted report HTML/LaTeX rendering | 360 s |
 
 This table summarizes the inventory, not a promise that every profile has passed. `quick` is
-representative, not the union of all hermetic profiles. For example, graph-negative,
-record/replay/sensor, benign/blocked and OS-specific cases have additional bounded selections.
-Inspect the inventory at the commit under test for the exact selection.
+representative, not the union of all hermetic profiles. Inventory revision `09cbf227` keeps the
+negative matrices in explicit full profiles instead of removing variants: signal integrity in
+`signals`, helper bad inputs/graph-matcher negatives in `graphs`, TLS negatives in `controls`,
+and submission barriers/MCP integrity/invalid process profile/record-replay-sensor in `process`.
+Empty/corrupt and benign/blocked review variants remain in `review`; the three consumer nodes
+are enrolled in `consumers`, not `quick`. OS-specific cases have their own selections.
+Inspect the inventory at the commit under test for the exact selection; collection supplies
+the actual case count, not a fixed count copied from an older quick result.
 
 The selectable `tools`, `deployed`, `provider`, `guidance`, `codeql-warm` and `native` profiles
 currently have no executable obligations. Actual invocation fails with `profile_not_implemented`;
@@ -77,9 +83,11 @@ provider, discover credentials or authorize deployment/native access.
 - Serial execution is the default and the recommended calibration mode. `--workers 2`
   (`-Workers 2`) is the maximum; it schedules isolated case subprocesses, not `pytest -n auto`.
 - An ordinary case has a 60-second hard cap. Explicit obligation exceptions are 15 seconds for
-  loopback feed transport, 30 seconds for the helper CLI, and 120 seconds for the heavier
-  signals/dependency, controls and review/oracle cases. Profile-level 120-second maxima do not
-  silently grant every case that allowance.
+  loopback feed transport, 30 seconds for the helper CLI, and 120 seconds for declared
+  signals/dependency, controls, review/oracle, consumer and process-startup/replay obligations.
+  `process` has a 120-second profile case ceiling to account for current-main startup and
+  cleanup; obligations still marked 60 seconds retain that cap. Profile-level 120-second
+  maxima do not silently grant every case that allowance.
 - `quick` targets less than ten minutes, with a hard twelve-minute suite ceiling. This is a
   design target pending final integrated public-driver calibration, not an achieved benchmark.
 - `--deadline` / `-Deadline` and `--case-deadline` / `-CaseDeadline` can only lower declared
@@ -118,9 +126,13 @@ inventory SHA-256, source-file SHA-256 identities, Python versions, selected/col
 selected/executed/failed/skipped/unexecuted obligations, prerequisites, case outcomes, cleanup
 and `coverage_status`. From parent correction `19c7c000`, source identities also record the
 two allowed pinned static taxonomy inputs. Source identities cover the declared files recorded
-by the driver;
-they are not an attestation of every transitive dependency. A dirty result must not be described
-as testing only the named commit.
+by the driver; they are not an attestation of every transitive dependency. A dirty result must
+not be described as testing only the named commit.
+
+From `09cbf227`, each supervised process also records `static_input_identities`. A mismatch
+against the suite's source identities fails that case as `static_reference_changed_during_suite`,
+even when pytest otherwise succeeded. Hash pinning is checked at the documented validation
+boundaries; it is not a hostile-code or arbitrary-host-mutation guarantee.
 
 Each supervised process retains `pytest.log`, `pytest.json` and `supervisor.json`. Preserve
 these alongside the result when reporting a failure; read the named node's log instead of
@@ -147,6 +159,7 @@ production service commands, and no shared Docker cleanup. Parent correction `19
 permits reads of exactly `data/reference/taxonomy/vocabulary.json` and
 `data/reference/taxonomy/crosswalk.json`, pinned by the supervisor and hash-validated before
 guard installation. It permits no mutation of those files and no other protected-data access.
+Descriptor flags `O_TRUNC` and `O_APPEND`, as well as writable/create modes, count as mutation.
 Redirected scratch roots and paths escaping the invocation are rejected. The guard catches
 accidental regressions; it is **not a hostile-code sandbox** or proof that arbitrary native
 code cannot access the host.
@@ -182,16 +195,20 @@ For new fixtures:
 Current results do not authorize or demonstrate actual WSL dispatch, native containers/daemon
 compatibility, provider access, cold builds, current CodeQL exports, Lua/native-variant
 compatibility or a full language/runtime matrix. The unknown original producer of a recorded
-feed is not a real live-computation claim. Positive source-bound OWASP assessment-to-review
-integration remains absent; the controls case proves the configured source-evidence path and
-its named missing-assessment gap. The pinned Dagster run object lacks `create_timestamp`, so
+feed is not a real live-computation claim. The application has real OWASP assessment mode;
+the bounded controls case deliberately selects `QUALIFICATION`, disables inference and pins
+five tiny abridged catalogs. It exercises authentic document/catalog context and accepted
+Workbench retrieval, with non-lead-eligible qualification-only rows, not genuine assessment.
+Genuine assessment, positive assessment/source binding, precomputed control facts and the
+review join remain unverified. The pinned Dagster run object lacks `create_timestamp`, so
 queue-delay timing is unavailable.
 
 At `06a4ea6c`, three triage/referral/presentation nodes passed through the real
 `supervised_pytest` and `tests.acceptance_plugin` boundary in 225.664 seconds, with all owned
 Windows trees cleaned up. Each used a measured 120-second real-job exception and the serial
 group had a 360-second cap. This was an exact-node supervised execution, **not** a named
-inventory/profile CLI run; it does not change the profile table above or establish final
+inventory/profile CLI run. Revision `09cbf227` now enrolls those nodes in `consumers`, but
+the named public CLI run is still pending and the earlier result does not establish final
 integrated calibration.
 
 These cases prove bounded triage/admission, next-round referral deduplication/foreign-anchor
@@ -202,3 +219,9 @@ rejection. `unresolved_specialist_referral:ci_cd_pipeline` remains a gap rather 
 specialist resolution. The implementation record retains exact nodes, commit, timings,
 artifacts and these limitations; do not treat direct tests or guarded exact-node results as a
 passing named public profile.
+
+Latest candidate/oracle follow-up `b72e79a9` passed the minimal native candidate case but
+timed out the exhaustive current-report oracle before its fixture returned. No oracle
+assertion was reached. This is a material remaining 120-second adequacy gap, not accepted
+report proof or a green `review`/`quick` profile; intermediate validated/completed job events
+cannot substitute for accepted final output.
