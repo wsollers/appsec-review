@@ -10,6 +10,10 @@ from __future__ import annotations
 import math
 from typing import Any, Mapping
 
+from appsec_review.interchange import (
+    ObservationMetadata, RecordKind, gap_id, observation_metadata_from_mapping,
+)
+
 
 SEVERITY_RULE = "appsec-review/reported-severity/1"
 REPORTED_SEVERITIES = ("critical", "high", "medium", "low", "info", "unknown")
@@ -52,9 +56,16 @@ _CLASS_BY_CATEGORY = {
     "binary": "binary", "binary_hardening": "binary", "tool_diagnostic": "diagnostic",
 }
 
+def common_of(payload: Mapping[str, Any]) -> ObservationMetadata | None:
+    """Absence permits legacy semantics; a malformed common record never does."""
+    return observation_metadata_from_mapping(payload["common"]) if "common" in payload else None
+
 
 def scanner_of(payload: Mapping[str, Any]) -> str:
     """Return the indexed scanner/provider identity without consulting raw output."""
+    common = common_of(payload)
+    if common is not None:
+        return common.scanner
     tool = payload.get("tool_identity")
     for value in (payload.get("tool_id"), payload.get("scanner_identity"), payload.get("producer"),
                   tool.get("id") if isinstance(tool, Mapping) else None, payload.get("tool")):
@@ -64,6 +75,9 @@ def scanner_of(payload: Mapping[str, Any]) -> str:
 
 
 def rule_of(payload: Mapping[str, Any]) -> str:
+    common = common_of(payload)
+    if common is not None:
+        return common.rule_id
     for key in ("native_rule_id", "rule_id", "rule"):
         value = payload.get(key)
         if isinstance(value, str) and value:
@@ -72,6 +86,9 @@ def rule_of(payload: Mapping[str, Any]) -> str:
 
 
 def native_severity_of(payload: Mapping[str, Any]) -> str:
+    common = common_of(payload)
+    if common is not None:
+        return common.reported_severity["native"]
     for key in ("native_severity", "producer_level", "level", "severity"):
         value = payload.get(key)
         if value not in (None, ""):
@@ -81,6 +98,9 @@ def native_severity_of(payload: Mapping[str, Any]) -> str:
 
 def classify(payload: Mapping[str, Any]) -> str:
     """Observation class; CodeQL results are source-SAST leads by producer identity."""
+    common = common_of(payload)
+    if common is not None:
+        return common.observation_class
     if scanner_of(payload) == "codeql":
         return "source_sast"
     return _CLASS_BY_CATEGORY.get(str(payload.get("category") or "").lower(), "other")
@@ -88,6 +108,9 @@ def classify(payload: Mapping[str, Any]) -> str:
 
 def normalize_reported_severity(payload: Mapping[str, Any]) -> dict[str, str]:
     """Return ``{value, native, basis, rule}`` for one indexed observation payload."""
+    common = common_of(payload)
+    if common is not None:
+        return dict(common.reported_severity)
     native = native_severity_of(payload)
     score = payload.get("security_severity")
     if score is not None and not isinstance(score, bool):
@@ -107,3 +130,17 @@ def normalize_reported_severity(payload: Mapping[str, Any]) -> dict[str, str]:
     if label in _LABELS:
         return {"value": _LABELS[label], "native": native, "basis": "native-label", "rule": SEVERITY_RULE}
     return {"value": "unknown", "native": native, "basis": "unmapped-native-severity", "rule": SEVERITY_RULE}
+
+
+def observation_projection(payload: Mapping[str, Any]) -> ObservationMetadata:
+    """Project legacy indexed semantics without inventing native evidence provenance."""
+    common = common_of(payload)
+    if common is not None:
+        return common
+    scanner, rule = scanner_of(payload), rule_of(payload)
+    return ObservationMetadata(
+        classify(payload), payload.get("record_kind", RecordKind.OBSERVATION), scanner, rule,
+        normalize_reported_severity(payload), (),
+        (gap_id({"code": "provenance_unavailable", "scanner": scanner, "rule_id": rule}),),
+        str(payload.get("schema") or "unversioned"),
+    )

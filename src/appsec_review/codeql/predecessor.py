@@ -11,6 +11,7 @@ from tempfile import TemporaryDirectory
 import time
 from typing import Any, Mapping
 
+from appsec_review.interchange import decode_handoff
 from appsec_review.observability.spans import count_work, operation_span
 from appsec_review.runtime.resources import Reservation, ResourceAdmission
 from appsec_review.storage import atomic_json, bounded_file_lock, canonical_json, file_sha256
@@ -112,10 +113,9 @@ def _handoff(reader: _Reader, source: Path, selection):
     if len(matches) != 1:
         raise ValueError("predecessor selection requires exactly one matching accepted handoff")
     handoff, path = matches[0]
-    if (handoff.get("schema") != "appsec-review/job-handoff/1" or handoff.get("status") != "ACCEPTED"
-            or handoff.get("job_id") != JOB
-            or ("run_id" in handoff and handoff["run_id"] != source.name)
-            or path != f"data/jobs/{JOB}/attempts/{handoff.get('attempt_id')}/handoff.json"):
+    count_work("handoff_validations")
+    handoff = decode_handoff(handoff, run_id=source.name, job_id=JOB)
+    if path != f"data/jobs/{JOB}/attempts/{handoff.get('attempt_id')}/handoff.json":
         raise ValueError("predecessor handoff is not an accepted CodeQL attempt")
     references = handoff.get("artifacts")
     if (not isinstance(references, list) or any(
