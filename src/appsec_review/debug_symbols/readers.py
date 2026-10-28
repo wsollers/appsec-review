@@ -192,7 +192,7 @@ def extract_symbols(
             records, gaps = parse_dwarf(text, limits)
         else:
             from appsec_review.debug_symbols._reader_pdb import parse_pdb
-            records, gaps = parse_pdb(text, pe_image, limits)
+            records, gaps = parse_pdb(text, pe_image, limits, native_pdb=debug)
         gaps.update(format_gaps)
         if time.monotonic() - started > limits["timeout_seconds"]:
             raise ReaderFailure("tool_timeout")

@@ -184,7 +184,8 @@ def test_genuine_optimized_inline_ancestry(tmp_path, target, binary, debug, outp
     if target is CompilerTarget.CLANG:
         assert frames[0].ranges
     else:
-        assert not frames[0].ranges and "inline_ranges_unavailable" in result.gaps
+        assert [(interval.start, interval.end) for interval in frames[0].ranges] == [(0x1000, 0x100f)]
+        assert "inline_ranges_unavailable" not in result.gaps
     assert "optimized_debug_information" in result.gaps
 
 
@@ -438,3 +439,146 @@ def test_supplementary_dwarf_is_refused_before_any_external_lookup(tmp_path):
     result = extract_symbols(binary, None, target=CompilerTarget.CLANG, settings=settings(tmp_path),
                             runner=lambda *a, **k: pytest.fail("supplementary lookup reached exporter"))
     assert not result.records and "dwarf_supplementary_unavailable" in result.gaps
+
+
+@pytest.mark.parametrize("address,contained", [(0xfff, False), (0x1000, True), (0x100e, True),
+                                               (0x100f, False), (0x1010, False)])
+def test_genuine_pdb_inline_address_boundaries(tmp_path, address, contained):
+    result = extract_symbols(FIXTURES / "inline.exe", FIXTURES / "inline.pdb",
+                            target=CompilerTarget.MSVC, settings=settings(tmp_path, "llvm_pdbutil"),
+                            runner=fixture_runner("inline.pdb.yaml"))
+    frames = [record for record in result.records if record.kind is RecordKind.INLINE_FRAME
+              and any(interval.start <= address < interval.end for interval in record.ranges)]
+    assert bool(frames) is contained
+    assert not any("inline_ranges" in gap for gap in result.gaps)
+    if frames:
+        assert frames[0].name == "add"
+        assert next(record for record in result.records if record.key == frames[0].parent_key).name == "entry"
+
+
+def _mutated_inline_pdb(tmp_path, annotations):
+    data = bytearray((FIXTURES / "inline.pdb").read_bytes())
+    header = struct.pack("<HHIII", 18, 0x114d, 100, 224, 4098)
+    position = data.index(header) + len(header)
+    assert len(annotations) == 4
+    data[position:position + 4] = annotations
+    path = tmp_path / "mutated-inline.pdb"
+    path.write_bytes(data)
+    return path
+
+
+@pytest.mark.parametrize("annotations,gap", [
+    (b"\x0e\x00\x04\x0f", "inline_annotation_opcode_unsupported"),
+    (b"\x0b\x00\x04\xc0", "inline_annotations_malformed"),
+    (b"\x0b\x00\x04\x7f", "inline_annotation_address_invalid"),
+    (b"\x0b\x00\x03\x0f", "inline_annotation_ranges_ambiguous"),
+    (b"\x02\x01\x04\x0f", "inline_separated_code_unavailable"),
+])
+def test_native_inline_bad_annotations_keep_frame_but_no_guessed_ranges(tmp_path, annotations, gap):
+    pdb = _mutated_inline_pdb(tmp_path, annotations)
+    result = extract_symbols(FIXTURES / "inline.exe", pdb, target=CompilerTarget.MSVC,
+                            settings=settings(tmp_path, "llvm_pdbutil"),
+                            runner=fixture_runner("inline.pdb.yaml"))
+    frame = next(record for record in result.records if record.kind is RecordKind.INLINE_FRAME)
+    assert not frame.ranges and gap in result.gaps
+    assert "inline_ranges_unavailable" in result.gaps
+    assert any(record.kind is RecordKind.SYMBOL for record in result.records)
+
+
+def test_native_inline_export_parent_mismatch_is_not_guessed(tmp_path):
+    output = (FIXTURES / "inline.pdb.yaml").read_text().replace(
+        "PtrParent:       100", "PtrParent:       101")
+    result = extract_symbols(FIXTURES / "inline.exe", FIXTURES / "inline.pdb",
+                            target=CompilerTarget.MSVC, settings=settings(tmp_path, "llvm_pdbutil"),
+                            runner=lambda *a, **k: output)
+    frame = next(record for record in result.records if record.kind is RecordKind.INLINE_FRAME)
+    assert not frame.ranges and "inline_native_export_mismatch" in result.gaps
+
+
+@pytest.mark.parametrize("annotations,expected", [
+    (bytes.fromhex("0b00040f"), [(0, 15)]),
+    (bytes.fromhex("010203040406"), [(2, 12)]),
+    (bytes.fromhex("0b00040303020402"), [(0, 3), (5, 7)]),
+    (bytes.fromhex("0c04020c0307"), [(2, 6), (9, 12)]),
+    (bytes.fromhex("0b00060105000701080109010a020d04040f"), [(0, 15)]),
+    (bytes.fromhex("0b00048080"), [(0, 128)]),
+    (bytes.fromhex("0b0004c0004000"), [(0, 16384)]),
+    (bytes.fromhex("0b00040f0000"), [(0, 15)]),
+])
+def test_codeview_decoder_common_unsigned_signed_and_combined_ops(annotations, expected):
+    from appsec_review.debug_symbols._reader_codeview import decode_inline_ranges
+    ranges = decode_inline_ranges(annotations, procedure_size=20000, max_records=100)
+    assert [(interval.start, interval.end) for interval in ranges] == expected
+
+
+@pytest.mark.parametrize("annotations,gap", [
+    (b"\x0b", "inline_annotations_malformed"),
+    (b"\x04\x80", "inline_annotations_malformed"),
+    (b"\x04\xc0\x00", "inline_annotations_malformed"),
+    (b"\x04\xe0\x00\x00\x00", "inline_annotations_malformed"),
+    (bytes.fromhex("0b00040f0e"), "inline_annotation_opcode_unsupported"),
+    (bytes.fromhex("0b00040f0001"), "inline_annotations_malformed"),
+    (bytes.fromhex("0b00040f00000000"), "inline_annotations_malformed"),
+    (bytes.fromhex("0b000400"), "inline_annotation_ranges_ambiguous"),
+    (bytes.fromhex("0b00030f"), "inline_annotation_ranges_ambiguous"),
+    (bytes.fromhex("0c08000c0801"), "inline_annotation_ranges_ambiguous"),
+])
+def test_codeview_decoder_rejects_malformed_and_ambiguous_ranges(annotations, gap):
+    from appsec_review.debug_symbols._reader_codeview import decode_inline_ranges
+    from appsec_review.debug_symbols._reader_binary import ReaderFailure
+    with pytest.raises(ReaderFailure, match=gap):
+        decode_inline_ranges(annotations, procedure_size=100, max_records=100)
+
+
+def test_codeview_decoder_has_opcode_and_address_bounds():
+    from appsec_review.debug_symbols._reader_codeview import decode_inline_ranges
+    from appsec_review.debug_symbols._reader_binary import ReaderFailure
+    with pytest.raises(ReaderFailure, match="record_limit"):
+        decode_inline_ranges(bytes.fromhex("0b00040f"), procedure_size=100, max_records=1)
+    with pytest.raises(ReaderFailure, match="inline_annotation_address_invalid"):
+        decode_inline_ranges(bytes.fromhex("0b00040f"), procedure_size=14, max_records=100)
+
+
+def test_native_inline_addresses_are_section_and_procedure_relative(tmp_path):
+    data = bytearray((FIXTURES / "inline.pdb").read_bytes())
+    header = struct.pack("<HHIIII", 46, 0x1110, 0, 228, 0, 16)
+    position = data.index(header)
+    assert struct.unpack_from("<I", data, position + 32)[0] == 0
+    struct.pack_into("<I", data, position + 32, 32)
+    pdb = tmp_path / "nonzero-procedure.pdb"
+    pdb.write_bytes(data)
+    output = (FIXTURES / "inline.pdb.yaml").read_text().replace(
+        "FunctionType:    4104\n              Offset:          0",
+        "FunctionType:    4104\n              Offset:          32",
+    )
+    result = extract_symbols(FIXTURES / "inline.exe", pdb, target=CompilerTarget.MSVC,
+                            settings=settings(tmp_path, "llvm_pdbutil"), runner=lambda *a, **k: output)
+    frame = next(record for record in result.records if record.kind is RecordKind.INLINE_FRAME)
+    assert [(interval.start, interval.end) for interval in frame.ranges] == [(0x1020, 0x102f)]
+    assert "inline_ranges_unavailable" not in result.gaps
+
+
+def test_native_inline_procedure_export_mismatch_does_not_rebase_guess(tmp_path):
+    output = (FIXTURES / "inline.pdb.yaml").read_text().replace(
+        "FunctionType:    4104\n              Offset:          0",
+        "FunctionType:    4104\n              Offset:          32",
+    )
+    result = extract_symbols(FIXTURES / "inline.exe", FIXTURES / "inline.pdb",
+                            target=CompilerTarget.MSVC, settings=settings(tmp_path, "llvm_pdbutil"),
+                            runner=lambda *a, **k: output)
+    frame = next(record for record in result.records if record.kind is RecordKind.INLINE_FRAME)
+    assert not frame.ranges and "inline_native_export_mismatch" in result.gaps
+
+
+def test_native_inline_damaged_parent_pointer_is_not_followed(tmp_path):
+    data = bytearray((FIXTURES / "inline.pdb").read_bytes())
+    header = struct.pack("<HHIII", 18, 0x114d, 100, 224, 4098)
+    position = data.index(header)
+    struct.pack_into("<I", data, position + 4, 192)
+    pdb = tmp_path / "bad-parent.pdb"
+    pdb.write_bytes(data)
+    result = extract_symbols(FIXTURES / "inline.exe", pdb, target=CompilerTarget.MSVC,
+                            settings=settings(tmp_path, "llvm_pdbutil"),
+                            runner=fixture_runner("inline.pdb.yaml"))
+    frame = next(record for record in result.records if record.kind is RecordKind.INLINE_FRAME)
+    assert not frame.ranges and "inline_native_parent_invalid" in result.gaps
