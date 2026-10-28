@@ -20,7 +20,7 @@ stands behind a side; a verdict names a side only by its letter and rests on cit
 side argued or how confident it sounds.
 
 ## Tools
-`find`, `query_code_graph`, `read_excerpt`, `resolve_evidence`, `trace`.
+`find`, `query_code_graph`, `query_debug_symbols`, `read_excerpt`, `resolve_evidence`, `trace`.
 
 ## Examples
 The examples use the labels of a package for a `memcpy` in `src/packet.cpp` line 16: L1 is the lead, S1 the
