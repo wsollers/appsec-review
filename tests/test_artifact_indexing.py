@@ -42,7 +42,7 @@ def _identity(run_root: Path, path: Path) -> dict[str, object]:
             "size_bytes": path.stat().st_size}
 
 
-def _seed(tmp_path: Path):
+def _seed(tmp_path: Path, *, source_files: dict[str, str] | None = None):
     config_path = tmp_path / "appsec-review.toml"
     config_text = (ROOT / "appsec-review.toml").read_text(encoding="utf-8")
     if "[jobs.job_artifact_indexing]" not in config_text:
@@ -75,6 +75,10 @@ workers = 1
     target = tmp_path / "target"
     target.mkdir()
     (target / "README.md").write_text("fixture\n", encoding="utf-8")
+    for relative, content in (source_files or {}).items():
+        path = target / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
     snapshot = source_fingerprint(target)
     run_root = config.runtime.runs_dir / RUN_ID
     run_root.mkdir(parents=True)
