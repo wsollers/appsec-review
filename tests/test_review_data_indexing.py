@@ -725,9 +725,10 @@ def test_inventory_audit_matrices_links_and_fts_validation(accepted) -> None:
         cursor = page["pagination"]["next_cursor"]
         if cursor is None:
             break
-    # job_cpg_analysis, job_svf_alias_analysis and job_poc_generation are disabled by default, so their input
-    # sources are absent.
-    assert len(sources) == len(input_matrix.INPUT_SOURCES) - 3
+    disabled = {job_id for job_id, job in config.jobs.items() if job.settings.get("enabled") is False}
+    expected_sources = {source for source, producers, *_ in input_matrix.INPUT_SOURCES
+                        if any(producer.removeprefix("planned:") not in disabled for producer in producers)}
+    assert len(sources) == len(expected_sources)
     assert all(item["payload"]["source"] != "joern_cpg" for item in sources)
     language = core.query_dataset_inventory(cell_type="language", limit=100)["results"]
     native = next(item["payload"] for item in language if item["payload"]["language"] == "c/c++")
@@ -1094,11 +1095,11 @@ def test_input_matrix_names_the_graph_producer_and_resolves_planned_producers_on
 
 
 DOWNSTREAM = ("job_remediation_planning", "job_remediation_validation", "job_final_publication_gate",
-              "job_final_report_publication")
+              "job_openvex_export", "job_final_report_publication")
 
 
 def test_downstream_review_consumers_are_registered_as_planned_producers_by_name() -> None:
-    """Decision 8: the four downstream job names are fixed before any of them is built."""
+    """Named review consumers include the optional deterministic OpenVEX projection."""
     from appsec_review.jobs.job_inference_security_review.datasets import PLANNED_CONSUMER_JOBS, PLANNED_CONSUMERS
     from appsec_review.runtime.registry import builtin_registry
 
@@ -1106,7 +1107,7 @@ def test_downstream_review_consumers_are_registered_as_planned_producers_by_name
                if producer.startswith("planned:")}
     remediation = DOWNSTREAM[:2]
     assert {f"planned:{job}" for job in remediation} <= planned
-    assert not {f"planned:{job}" for job in DOWNSTREAM[2:]} & planned          # the gate and report are real producers
+    assert not {f"planned:{job}" for job in DOWNSTREAM[2:]} & planned
     named = {producer for _source, producers, *_ in input_matrix.INPUT_SOURCES for producer in producers}
     assert set(DOWNSTREAM[2:]) <= named
     assert PLANNED_CONSUMER_JOBS == DOWNSTREAM
@@ -1121,8 +1122,8 @@ def test_downstream_review_consumers_are_registered_as_planned_producers_by_name
     assert "verification_backlog" not in reads["job_remediation_planning"] | reads["job_remediation_validation"]
     assert "remediation_intake" in reads["job_remediation_planning"]
     # The remediation jobs are not built: they are planned, never registered, and reconcile reports
-    # them as planned. The publication gate and the final report are built and registered.
-    built = {"job_final_publication_gate", "job_final_report_publication"}
+    # them as planned. The publication gate, exporter and final report are built and registered.
+    built = {"job_final_publication_gate", "job_openvex_export", "job_final_report_publication"}
     assert set(DOWNSTREAM) & set(builtin_registry().job_ids()) == built
     rows, discrepancies = input_matrix.reconcile([], [], [], {}, "job_review_data_indexing")
     states = {item["source"]: item["producer_states"] for item in rows}

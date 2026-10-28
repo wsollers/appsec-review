@@ -37,6 +37,9 @@ where = ["src"]
 
 [tool.setuptools.data-files]
 "share/appsec-review/schemas" = ["docs/schemas/review-packages.schema.json"]
+"share/appsec-review/schemas/openvex-export" = ["docs/schemas/openvex-export/*.json"]
+"share/appsec-review/schemas/openvex-export/upstream" = ["docs/schemas/openvex-export/upstream/*"]
+"share/appsec-review/schemas/final-report" = ["docs/schemas/final-report/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

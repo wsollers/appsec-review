@@ -497,6 +497,7 @@
               "job_remediation_planning",
               "job_remediation_validation",
               "job_final_publication_gate",
+              "job_openvex_export",
               "job_final_report_publication"
             ]
           },

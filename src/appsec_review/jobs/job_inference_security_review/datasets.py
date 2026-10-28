@@ -14,14 +14,16 @@ _A = _J + "/attempts/*"
 # The single input is the accepted run/index manifest; its producer handoff is the data-indexing job.
 CONSUMES = ("job_review_data_indexing",)
 # Decision 8: the downstream jobs that consume this job's handoff, fixed by name before they exist.
-# Each is a ``planned:`` producer in ``indexing/input_matrix.py``; ``reads`` names the handoff fields
-# it consumes. Remediation reads only ``remediation_intake`` (confirmed findings, decision 4).
+# Producers are resolved by ``indexing/input_matrix.py``; ``reads`` names their handoff inputs.
+# Remediation reads only ``remediation_intake`` (confirmed findings, decision 4).
 PLANNED_CONSUMERS: tuple[dict[str, object], ...] = tuple(
     {"job_id": job_id, "status": "planned", "reads": list(reads)} for job_id, reads in (
         ("job_remediation_planning", ("remediation_intake", "score_packages", "gap_ids")),
         ("job_remediation_validation", ("remediation_intake",)),
         ("job_final_publication_gate", ("accounting", "finding_packages", "score_packages", "ship_block",
                                         "verification_backlog", "coverage_matrix", "gap_ids")),
+        ("job_openvex_export", ("accounting", "finding_packages", "score_packages", "ship_block",
+                                "verification_backlog", "coverage_matrix", "gap_ids")),
         ("job_final_report_publication", ("finding_packages", "verification_backlog", "ship_block",
                                           "score_packages")),
     ))

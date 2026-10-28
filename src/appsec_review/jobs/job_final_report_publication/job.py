@@ -4,7 +4,8 @@ Units: ``load.accepted_gate`` re-verifies the accepted ``job_final_publication_g
 gate document and every artifact the gate binds, ``report.assemble`` writes the schema-validated
 ``final-report.json``, ``report.render`` renders ``final-report.md`` from that JSON, and
 ``acceptance.publish_handoff`` re-proves both files and publishes the hash-pinned handoff. The job
-calls no model and reads nothing the gate does not bind. PDF rendering is a later step.
+calls no model and reads accepted gate state plus separately verified optional PoC/OpenVEX
+publications. PDF rendering is a later step.
 """
 from __future__ import annotations
 
@@ -108,6 +109,16 @@ def build_job(*, repository_root: Path | None = None) -> Job:
     def _poc(unit: UnitContext, gate_handoff: Mapping[str, str]) -> dict[str, Any] | None:
         return load_poc(unit.job.run_root, SchemaSet(_root(unit) / POC_SCHEMA_ROOT), gate_handoff)
 
+    def _openvex(unit: UnitContext, gate_handoff: Mapping[str, str]) -> dict[str, Any] | None:
+        from appsec_review.jobs.job_openvex_export.reporting import (
+            frozen_export_settings, load_export, report_section,
+        )
+        settings, release = frozen_export_settings(unit.job.run_root)
+        if settings is None:
+            return None
+        return report_section(load_export(unit.job.run_root, settings, _root(unit),
+                                          exporter_release=release, gate_handoff=gate_handoff))
+
     def load(unit: UnitContext) -> Mapping[str, Any]:
         run_root = unit.job.run_root
         try:
@@ -141,6 +152,7 @@ def build_job(*, repository_root: Path | None = None) -> Job:
                 "gate_status": gate["status"], "review_status": gate["review"]["status"],
                 "package_counts": counts, "binding_count": len(gate["bindings"]),
                 "poc": None if poc is None else {"handoff": poc["handoff"], "stale": poc["stale"]},
+                "openvex": _openvex(unit, gate_handoff),
                 "gaps": [], "terminal_status": "SUCCEEDED"}
 
     def assemble(unit: UnitContext) -> Mapping[str, Any]:
@@ -149,8 +161,11 @@ def build_job(*, repository_root: Path | None = None) -> Job:
         poc = _poc(unit, loaded["gate_handoff"])
         if (None if poc is None else {"handoff": poc["handoff"], "stale": poc["stale"]}) != loaded["poc"]:
             raise IntegrityError("the PoC handoff changed between load and assemble")
+        openvex = _openvex(unit, loaded["gate_handoff"])
+        if openvex != loaded["openvex"]:
+            raise IntegrityError("the OpenVEX acceptance changed between load and assemble")
         report = build_report(gate, gate_handoff=loaded["gate_handoff"], gate_document=loaded["gate_document"],
-                              configuration_profile=_configuration_profile(unit.job.run_root), poc=poc)
+                              configuration_profile=_configuration_profile(unit.job.run_root), poc=poc, openvex=openvex)
         _check(_schemas(unit), "final-report", report)
         path = unit.unit_root / REPORT_JSON
         atomic_json(path, report)
@@ -183,6 +198,8 @@ def build_job(*, repository_root: Path | None = None) -> Job:
             raise IntegrityError("final-report.md is not the rendering of final-report.json")
         if report["provenance"]["gate_handoff"] != loaded["gate_handoff"]:
             raise IntegrityError("final report is not bound to the accepted gate handoff")
+        if _openvex(unit, loaded["gate_handoff"]) != report.get("openvex_export"):
+            raise IntegrityError("the OpenVEX acceptance changed before report publication")
         gaps = [f"{item['limitation_id']}: {item['statement']}"[:300] for item in report["limitations"]
                 if item["kind"] == "gap"]
         counts = report["summary"]["package_counts"]

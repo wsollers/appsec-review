@@ -1122,6 +1122,9 @@ def load_config(path: str | Path = "appsec-review.toml", *, overlay: str | Path 
         elif job_id == "job_evidence_collection":
             from .evidence_collection import parse_evidence_collection_settings
             typed_settings = parse_evidence_collection_settings(settings)
+        elif job_id == "job_openvex_export":
+            from appsec_review.jobs.job_openvex_export.settings import OpenVexExportSettings
+            typed_settings = OpenVexExportSettings.from_mapping(settings)
         jobs[job_id] = JobConfig(
             job_id=job_id,
             name=str(value.get("name", "")),
@@ -1133,6 +1136,11 @@ def load_config(path: str | Path = "appsec-review.toml", *, overlay: str | Path 
             build_capture=resolved_capture,
             exclusions=job_exclusions(job_id, value, excluded_globally),
         )
+    openvex_job = jobs.get("job_openvex_export")
+    if openvex_job is not None and openvex_job.settings["enabled"]:
+        for prerequisite in ("job_final_publication_gate", "job_inference_security_review"):
+            if prerequisite not in jobs or jobs[prerequisite].settings.get("enabled", True) is not True:
+                raise ValueError(f"enabled job_openvex_export requires enabled {prerequisite}")
     codeql_job = jobs.get("job_codeql_analysis")
     if codeql_job is not None:
         # One run-bound seeding definition: CodeQL's export_queries is the source, every other seeded

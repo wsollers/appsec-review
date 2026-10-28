@@ -728,7 +728,7 @@ def test_registry_topology_and_terminal_job() -> None:
     from appsec_review.config import load_config as load
 
     config, registry = load(ROOT / "appsec-review.toml"), builtin_registry()
-    assert {GATE, REPORT} <= set(registry.job_ids()) and len(registry.job_ids()) == 38
+    assert {GATE, REPORT, "job_openvex_export"} <= set(registry.job_ids()) and len(registry.job_ids()) == 40
     assert not {"job_remediation_planning", "job_remediation_validation"} & set(registry.job_ids())
     jobs = {item["job_id"]: item for item in describe_wave1(config, registry)["jobs"]}
     assert jobs[GATE]["dependencies"] == [JOB] and jobs[REPORT]["dependencies"] == [GATE]
@@ -750,8 +750,8 @@ def test_disabled_gate_makes_the_report_transparent_and_the_review_terminal() ->
 def test_cli_graph_places_the_new_jobs_after_the_review() -> None:
     from appsec_review import cli
 
-    # job_poc_generation sits between the gate and the report; it is disabled by default and so absent from the graph
-    assert cli.POST_INDEX_JOB_IDS[-4:] == (JOB, GATE, "job_poc_generation", REPORT)
+    # Optional publications are ordered siblings; both are disabled by default.
+    assert cli.POST_INDEX_JOB_IDS[-5:] == (JOB, GATE, "job_openvex_export", "job_poc_generation", REPORT)
 
 
 def test_review_data_indexing_does_not_audit_its_own_consumers() -> None:
@@ -789,7 +789,7 @@ def test_datasets_and_handoff_contracts_are_declared() -> None:
     assert contracts.FINAL_REPORT_SCHEMA == "appsec-review/final-report/1"
     registry = builtin_registry()
     assert registry.build(GATE).consumes == (JOB,) and registry.build(REPORT).consumes == (
-        GATE, "job_poc_generation")
+        GATE, "job_poc_generation", "job_openvex_export")
     assert registry.build(GATE).schema_identity == contracts.FINAL_PUBLICATION_GATE_HANDOFF_SCHEMA
     assert registry.build(REPORT).schema_identity == contracts.FINAL_REPORT_HANDOFF_SCHEMA
     # The implementation identity covers the package sources, so a code change re-executes the job.

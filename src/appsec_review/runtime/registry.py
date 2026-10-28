@@ -83,6 +83,7 @@ def builtin_registry() -> JobRegistry:
     from appsec_review.jobs.job_document_issue_analysis import build_job as build_document_issue_analysis
     from appsec_review.jobs.job_inference_security_review import build_job as build_inference_review
     from appsec_review.jobs.job_final_publication_gate import build_job as build_final_publication_gate
+    from appsec_review.jobs.job_openvex_export.job import build_job as build_openvex_export
     from appsec_review.jobs.job_poc_generation import build_job as build_poc_generation
     from appsec_review.jobs.job_final_report_publication import build_job as build_final_report_publication
 
@@ -129,6 +130,7 @@ def builtin_registry() -> JobRegistry:
     registry.register("job_document_issue_analysis", build_document_issue_analysis)
     registry.register("job_inference_security_review", lambda: build_inference_review(infer=infer))
     registry.register("job_final_publication_gate", build_final_publication_gate)
+    registry.register("job_openvex_export", build_openvex_export)
     registry.register("job_poc_generation", lambda: build_poc_generation(infer=infer))
     registry.register("job_final_report_publication", build_final_report_publication)
     return registry

@@ -52,7 +52,7 @@ TOPOLOGY = {"load": ("accepted_inputs",), "links": ("cross_domain",), "precomput
 Providers = Callable[[], tuple[tuple[str, ...], Mapping[str, Sequence[Any]], Mapping[str, Sequence[str]]]]
 DOWNSTREAM_JOBS = frozenset({
     "job_review_package_assembly", "job_document_issue_analysis", "job_inference_security_review",
-    "job_final_publication_gate", "job_poc_generation", "job_final_report_publication",
+    "job_final_publication_gate", "job_openvex_export", "job_poc_generation", "job_final_report_publication",
 })
 
 

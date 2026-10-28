@@ -1,1 +1,1 @@
-"""Shared OpenVEX contracts; runtime implementations are deliberately not imported."""
+"""Protected local OpenVEX export; ``job.build_job`` supplies its model-free runtime."""
