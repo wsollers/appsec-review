@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from dataclasses import dataclass, field
+import gc
 import json
 import os
 from pathlib import Path
@@ -123,6 +124,7 @@ class Chain:
     def restore(self) -> None:
         """Put the run tree back exactly as it was when the chain finished (after a tamper test)."""
         assert self.snapshot is not None
+        gc.collect()
         shutil.rmtree(self.base)
         shutil.copytree(self.snapshot, self.base)
 
