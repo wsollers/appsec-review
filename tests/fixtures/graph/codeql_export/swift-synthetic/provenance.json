@@ -1,0 +1,25 @@
+{
+  "schema": "appsec-review/graph-export-fixture-provenance/1",
+  "fixture": "swift-synthetic",
+  "recording": "hand-authored",
+  "live_refreshable": false,
+  "source_root": "source",
+  "export_directory": "exports",
+  "description": "Hand-authored appsec-review/codeql-graph-export/1 objects over source/Synthetic.swift. They are a deliberately chosen subset of what the swift pack would export (for example getter calls, default-argument expressions and swift-all summary steps are omitted), written to exercise the swift cases; they are not a CodeQL recording: Swift extraction requires a macOS executor that the pipeline does not yet have. Locations follow the Swift extractor: a span ends at the start column of its last token. bqrs_sha256 values are SHA-256 of the text 'hand-authored synthetic bqrs <query_id>'.",
+  "cases": {
+    "unresolved_indirect_call": "call_sites: notify -> handler(message), a closure parameter, line 71",
+    "virtual_dispatch": "call_sites: persist -> store.save(args[1]) through protocol Store, two virtual_resolved candidates (FileStore.save, MemoryStore.save), line 37",
+    "remote_to_sql": "path_flows: String(contentsOf:) (line 22) reaches sqlite3_exec argument 1 (line 32) through the return of fetchRemote and the call into buildQuery",
+    "argv_to_path": "path_flows: CommandLine.arguments (line 36) reaches FileManager.createFile argument 0 (line 10) through the virtual call store.save",
+    "env_to_command": "path_flows: ProcessInfo.processInfo.environment (line 41) reaches Process.run argument 1 (line 42)",
+    "remote_to_ssrf": "path_flows: String(contentsOf:) (line 22) reaches URLSession.dataTask argument 0 (line 47)",
+    "remote_to_deserialization": "path_flows: Data(contentsOf:) (line 51) reaches NSKeyedUnarchiver.unarchiveTopLevelObjectWithData argument 0 (line 52)",
+    "sanitized_path": "sink_sites and path_sanitizers: resolvingSymlinksInPath (line 56) dominates FileManager.contents(atPath:) (line 57) and lies on the flow to it",
+    "dominating_guard": "guards: count < 64 (line 62) dominates allocate(capacity:) at line 63, true_branch",
+    "non_dominating_guard": "guards: count < 64 (line 62) does not control allocate(capacity:) at line 66",
+    "unknown_range": "ranges: allocate(capacity: count) at line 66 is integral Int with lower and upper unknown",
+    "not_applicable_range": "ranges: the String operand of sqlite3_exec at line 32 is not_applicable",
+    "unclassified_sink": "sink_sites: NSPredicate(format:) argument 0 at line 76, model PredicateInjectionSink, which catalog.json does not classify (no SinkClass fits predicate injection)",
+    "flow_summary": "flow_summaries: buildQuery parameter 0 reaches its return value (taint); FileStore.save parameter 0 reaches the createFile sink (data)"
+  }
+}

@@ -1,0 +1,7 @@
+name: appsec-review/graph-export-python
+version: 1.0.0
+description: >-
+  appsec-review code-graph export queries for Python (appsec-review/codeql-graph-export/1).
+  Table queries made of primitive-column query predicates only; this is not a SARIF suite.
+dependencies:
+  codeql/python-all: 7.2.5
