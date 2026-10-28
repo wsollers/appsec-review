@@ -33,8 +33,6 @@ def job_tables(job_id: str) -> str:
     for line in text[start:].splitlines():
         if line.startswith("[") and job_id not in line:
             break
-        if line.startswith("#") and lines and not lines[-1].strip():
-            break
         lines.append(line)
     return "\n".join(lines) + "\n"
 

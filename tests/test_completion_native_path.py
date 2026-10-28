@@ -5,6 +5,7 @@ from copy import deepcopy
 from dataclasses import replace
 import json
 import shutil
+import tomllib
 
 from appsec_review.inference import ModelResult
 from appsec_review.indexing.store import accepted_handoff
@@ -76,13 +77,19 @@ def native_ast(text):
             "declarations": declarations, "nodes": nodes, "project_declarations": []}
 
 
+def test_completion_job_tables_preserve_every_configured_step():
+    central = tomllib.loads((support.ROOT / "appsec-review.toml").read_text())["jobs"]
+    for job in ("job_third_party_data_sync", POC, PLAN, VALIDATE, DOSSIERS, GATE, REPORT):
+        assert tomllib.loads(job_tables(job))["jobs"][job] == central[job]
+
+
 def test_real_native_review_through_all_completion_lanes(tmp_path_factory):
     base = tmp_path_factory.mktemp("n")
     fixture = build_accepted_index_set(base / "data")
     native_ids = support.add_native_graph_facts(fixture)
     jobs = (POC, PLAN, VALIDATE, DOSSIERS, GATE, REPORT)
-    config = write_config(base, fixture.runs_dir, extra=support.reference_sync_tables() + "".join(
-        job_tables(job) for job in jobs))
+    config = write_config(base, fixture.runs_dir, extra="".join(
+        job_tables(job) for job in ("job_third_party_data_sync", *jobs)))
     env = {"APPSEC_REVIEW_CONFIG_OVERLAY": str(write_overlay(base, 1))}
     root = fixture.run_root
     accepted = {}
