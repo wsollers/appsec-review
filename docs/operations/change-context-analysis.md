@@ -8,8 +8,9 @@ result. Design: [`../architecture/change-context-analysis.md`](../architecture/c
 ## Prerequisites
 
 - An accepted `job_source_history_analysis` in the same run (the job fails without its handoff). If
-  history was skipped, for example because the target has no `.git`, this job publishes
-  `SKIPPED_NA` with every coverage row `unavailable`.
+  no eligible history source is available, this job publishes unavailable coverage with the
+  upstream reasons. A composed system root need not contain `.git`: its acquired Git components
+  are processed independently, and unavailable components do not discard usable source results.
 - The `tool-git` image (`python containers/build.py build tool-git`), used for bounded blame and
   fix-on-fix diffs. If it is unavailable, the affected rows are `*_execution_failed` gaps and the job
   is retried on resume.
@@ -52,12 +53,23 @@ Everything lives under `[jobs.job_change_context_analysis.settings]` in `appsec-
 
 ### Review records
 
-- **GitHub:** enable `[jobs.job_source_history_analysis.settings.github]` (see
-  [`source-history-analysis.md`](source-history-analysis.md)). This job then reuses its accepted
-  facts; it never calls GitHub itself. Budget exhaustion or rate limiting in history becomes
+- **Default (`review.source = "github_enrichment"`):** reuse accepted history facts, including
+  automatically verified review exports from acquired GitLab, Gerrit, or Azure DevOps components.
+  An acquired component export takes precedence over that source's GitHub facts.
+  There is no per-component export-path/hash wiring. For live GitHub facts, history's default
+  `github.enabled = "auto"` resolves eligible repository identities, subject to credentials and
+  endpoint policy; see [source-history operations](source-history-analysis.md).
+  This job never calls a review host itself. Budget exhaustion or rate limiting in history becomes
   `review_records_partial:<gap>` here.
-- **Other hosts or offline runs:** set `review.source = "export"` and supply an
-  `appsec-review/review-records/1` file keyed by mainline commit SHA.
+- **Operator override or offline input:** set `review.source = "export"` and supply a hash-pinned
+  `appsec-review/review-records/1` file keyed by commit SHA for a single source. This remains an
+  explicit override, not a prerequisite for automatically acquired review records.
+- **Policy deny:** `review.source = "none"` disables review signals, including automatic records.
+
+Changes and review records retain their source identity and source-relative/composed path mapping.
+Repeated paths or commit ids in separate repositories are not merged into one source's evidence.
+An acquired export covers the review facts it actually contains, not every commit in that
+component's history; missing approvals, timestamps, or records remain named gaps.
 
 ### Exports
 
@@ -67,6 +79,12 @@ Everything lives under `[jobs.job_change_context_analysis.settings]` in `appsec-
    and set `export_sha256`.
 3. Enable the source. Re-pin after every change to the file; a stale pin yields
    `*_export_hash_mismatch`, and the metric becomes unavailable rather than using unapproved data.
+
+The legacy global review and deployment exports have no repository-scoped attribution. When more
+than one history source is discovered, explicit `review.source = "export"` produces
+`review_export_source_ambiguous`, and an enabled deployment export produces
+`deployment_export_source_ambiguous`; those exports are not read or assigned across repositories.
+Automatically acquired component review exports are already source-scoped and are unaffected.
 
 Organization exports identify people only by `identity_sha256`, the SHA-256 of the lowercased commit
 email, for example `python -c "import hashlib;print(hashlib.sha256('dev@example.com'.lower().encode()).hexdigest())"`.
@@ -79,7 +97,11 @@ Schemas are in the architecture document.
 
 - Accepted `change-context.json`: per-source status and gaps, coverage rows, rules, weights, the
   top-ranked records per scope, pinned export copies, and the index manifest.
-- Retrieval shard `history/change-context`. Query with MCP `query_change_context`:
+- Composed output lists each source and its accepted artifact under `sources[]` and preserves
+  source-local top records with `priority.scope = "per-source"`. Detailed rules, exports, and
+  rankings live in the referenced source documents, not in a globally normalized ranking.
+- Source-scoped change-context shards in the `history` index are composed into the accepted
+  manifest. MCP `query_change_context` reads across those accepted source shards:
 
   ```json
   {"name": "query_change_context", "arguments": {"scope": "component", "limit": 10}}
@@ -100,3 +122,5 @@ changes. Failed Git executions are retriable on resume. Deterministic gaps (disa
 unpinned or mismatched exports, no time zone, truncated or shallow lifetime history) persist until
 configuration or inputs change. Use `--force-from job_change_context_analysis` in the direct graph
 to rebuild only this job; do not edit accepted pointers or delete shards.
+Settings and export-pin changes require a new run: `--force-from` does not replace an existing
+run's frozen resolved configuration.
