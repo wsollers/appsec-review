@@ -121,10 +121,23 @@ agent attributes the Linux preflight `RUN/RUN` versus `RUN/REUSE` failure to pre
 `5f5548da`, not this completion delta. None of those reports is relabelled as a local execution,
 target vulnerability, actual target PoC compile or full native all-lane pass.
 
-The parent additionally reports a frozen native `aeb6d11c` batch with 828 coupled units passed,
+An earlier parent report described a frozen native `aeb6d11c` batch with 828 coupled units passed,
 two deselected and one Dagster C++ AST-to-IR topology assertion failure under baseline
 investigation. The known preflight baseline failure was excluded from that batch. The separately
 delegated native cross-lane semantic run remains pending; neither report is a clean all-lane result.
+
+Subsequent QA stopped incomplete and found that plain `git archive` on Windows converted
+shell/fixture bytes to CRLF. Its contaminated 42 failures / 28 errors cannot classify either the
+product delta or a broad baseline. Byte-exact snapshots require
+`git -c core.autocrlf=false archive <commit>`. The parent is rerunning the 828 coupled cases from
+corrected snapshots; QA is rerunning two baseline classifiers with line-ending controls.
+Those reruns remain pending. The earlier counts and the narrow preflight baseline attribution
+must not be promoted to a broad clean-baseline claim.
+
+The user reiterated unit coverage for telemetry/metrics generation. The parent is adding a
+persistence/replay/source-log-immutability regression, while the all-lane owner checks actual
+producer events through the persisted metrics summary. These are pending validation additions,
+not delivered product-behavior changes or a completed all-lane result.
 
 ## Retained sample and release boundary
 

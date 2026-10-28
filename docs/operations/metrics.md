@@ -86,6 +86,13 @@ Checkpoint `0ece65d3` includes chain `not_launched` outcomes and a real `CellSta
 regression, resolving that aggregate allowlist gap. These remain attempted-work observations,
 not accepted evidence or proof that no challenge was omitted.
 
+Generation acceptance must also cover the persisted summary, deterministic replay and unchanged
+source-log bytes, not just the in-memory aggregate. The parent is adding that unit regression;
+the all-lane owner is checking actual producer events through persisted
+`data/telemetry/summary.json`. These checks remain pending in the
+[implementation record](../reviews/evidence-completion-documentation-inventory.md); synthetic
+event fixtures and earlier aggregate-unit counts do not close this validation boundary.
+
 Check frozen run settings before interpreting an absent lane. The
 [new-run rollout decision](../architecture/evidence-completion-and-remediation.md#11-parallel-implementation-decisions)
 does not enable producers in old immutable configurations. Automatic validation and compile-only
