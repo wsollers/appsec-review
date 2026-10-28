@@ -109,8 +109,9 @@ image copied from another host.
    `export_queries` blocks, following
    [`rules/codeql-graph-export/README.md`](../../../rules/codeql-graph-export/README.md#changing-the-pack-or-catalog).
    Then update `jobs.job_codeql_analysis.settings.asset_lock_sha256`. When `codeql_runner.py`
-   changes, bump `review_policy.releases.codeql_runner`. A new runner release also starts a new
-   shared compile-cache volume, so the first run after it compiles cold.
+   changes, bump `review_policy.releases.codeql_runner`. The shared compile-cache volume is keyed
+   by the declared CodeQL release and runtime user only, so a runner release does not cold the
+   cache; a CodeQL release change does (warm it with `containers/build.py query-packs --warm`).
 4. Run the offline contract tests (`tests/test_codeql_export_runner.py`). Then run the live tiers:
 
    ```text
