@@ -116,7 +116,9 @@ execution failures return 1, while invalid options/profile/deadline selections r
 `appsec-review/acceptance-result/1` records the tested commit, dirty-working-tree flag,
 inventory SHA-256, source-file SHA-256 identities, Python versions, selected/collected nodes,
 selected/executed/failed/skipped/unexecuted obligations, prerequisites, case outcomes, cleanup
-and `coverage_status`. Source identities cover the declared files recorded by the driver;
+and `coverage_status`. From parent correction `19c7c000`, source identities also record the
+two allowed pinned static taxonomy inputs. Source identities cover the declared files recorded
+by the driver;
 they are not an attestation of every transitive dependency. A dirty result must not be described
 as testing only the named commit.
 
@@ -140,10 +142,14 @@ reason; never reinterpret nulls as zero resource consumption.
 The driver strips inherited deployment selection, credentials, SDK endpoints and pytest/plugin
 overrides, and supplies private home/temp/Dagster paths. The plugin guards Python file access,
 mutation, network use and child execution: no repository `targets/`, production `runs/` or
-`data/`, no external network (only loopback/owned local sockets), no production service commands,
-and no shared Docker cleanup. Redirected scratch roots and paths escaping the invocation are
-rejected. The guard catches accidental regressions; it is **not a hostile-code sandbox** or
-proof that arbitrary native code cannot access the host.
+mutable production `data/`, no external network (only loopback/owned local sockets), no
+production service commands, and no shared Docker cleanup. Parent correction `19c7c000`
+permits reads of exactly `data/reference/taxonomy/vocabulary.json` and
+`data/reference/taxonomy/crosswalk.json`, pinned by the supervisor and hash-validated before
+guard installation. It permits no mutation of those files and no other protected-data access.
+Redirected scratch roots and paths escaping the invocation are rejected. The guard catches
+accidental regressions; it is **not a hostile-code sandbox** or proof that arbitrary native
+code cannot access the host.
 
 The supervisor opens the execution gate only after ownership is established. Windows uses a
 private kill-on-close Job Object without breakaway. Linux uses a subreaper with verified
@@ -161,7 +167,7 @@ For new fixtures:
    exports `APPSEC_ACCEPTANCE_TESTED_COMMIT`; use it rather than widening the executable guard.
 4. Use application producers and certified validators at real joins. Write framework
    `handoff/2` fixture envelopes through `tests.handoff_fixture.write_fixture_handoff`; do not
-   replace unchanged review/gate/report domain contracts to make an integration pass.
+   replace the current review `/3` or gate/report `/2` domain contracts to make an integration pass.
    Freeze the actual configuration before synthetic upstream handoffs, and bind their
    explicitly claimed upstream digest. Declare tiny selections such as one lead package and
    no hunt in the test configuration, rather than weakening validation.

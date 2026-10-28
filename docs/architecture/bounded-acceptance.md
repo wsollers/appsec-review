@@ -54,8 +54,9 @@ Skipped/unavailable coverage stays a named gap, not evidence that a target is cl
 
 The authentic fixture attaches source-resolving call-chain evidence to an accepted index set and
 runs the current inference-review job using scripted inference. Framework handoff envelopes use
-`handoff/2` through `tests.handoff_fixture.write_fixture_handoff`. That envelope upgrade does not
-change the review/gate/report domain `/2` contracts.
+`handoff/2` through `tests.handoff_fixture.write_fixture_handoff`. The current review domain is
+`/3`; gate and report domains remain `/2`. These domain versions are separate from the
+framework envelope and must not be changed to make fixture integration pass.
 
 PoC planning consumes the direct accepted review and its strict candidate eligibility rules.
 The native candidate fixture therefore follows review directly, without a prerequisite gate;
@@ -95,7 +96,12 @@ latest-main execution.
 `LaneWorkspace` confines state to a fresh root below `test/tmp/acceptance`; the driver gives it
 private home/temp/Dagster paths and a separate fixture runs directory. An audit-hook regression
 guard rejects accidental protected-tree access, off-root writes, external sockets and unowned
-executables. It is not a hostile-code sandbox.
+executables. Parent correction `19c7c000` permits only two supervisor-hash-pinned read-only
+application inputs under the protected data tree: `data/reference/taxonomy/vocabulary.json`
+and `data/reference/taxonomy/crosswalk.json`. Their identities are validated before the guard
+hook is installed and recorded in source identities. All mutations and other protected data
+remain denied; this is not general production-data access. The guard is not a hostile-code
+sandbox.
 
 The process gate, Windows Job Object and Linux subreaper supply owned-tree lifecycle control.
 Collection, execution and cleanup all consume declared deadlines; unconfirmed cleanup is failure.
