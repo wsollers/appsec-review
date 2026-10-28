@@ -321,7 +321,8 @@ def test_handoff_events_are_hash_bound_closed_metadata_and_not_reemitted_on_reus
 def test_source_inventory_and_pinned_configuration_layers_are_metadata_not_artifact_refs(tmp_path):
     def produce(unit):
         manifest = json.loads((unit.job.run_root / "data/configuration/manifest.json").read_bytes())
-        return {"source_inventory": [{"path": "source.py", "sha256": "a" * 64, "size_bytes": 4}],
+        return {"source_inventory": [{"path": "source.py", "sha256": "a" * 64, "size_bytes": 4},
+                                     {"path": "data/customer.json", "sha256": "a" * 64, "size_bytes": 4}],
                 "artifact_candidates": [{"path": "customer.bin", "sha256": "b" * 64, "size_bytes": 4}],
                 "layers": manifest["sources"]}
     _, _, _, outcome, root = publish(tmp_path, produce)
@@ -332,6 +333,29 @@ def test_source_inventory_and_pinned_configuration_layers_are_metadata_not_artif
         collect_artifacts(root, {"artifact": {"path": "source.py", "sha256": "a" * 64, "size_bytes": 4}})
     with pytest.raises(ValueError):
         collect_artifacts(root, {"artifact": {"path": str(tmp_path / "not-a-frozen-layer"), "sha256": "a" * 64}})
+
+
+def test_scoped_binary_inventory_binds_explicit_run_path_not_display_path(tmp_path):
+    def produce(unit):
+        binary = unit.job.run_root / "data/builds/case/build/app"
+        binary.parent.mkdir(parents=True)
+        binary.write_bytes(b"binary fixture")
+        artifact = {**reference(unit.job.run_root, binary), "kind": "executable",
+                    "artifact_id": "a" * 64}
+        return {"artifacts": [{**artifact, "run_path": artifact["path"], "path": "build/app"}]}
+    _, _, _, outcome, root = publish(tmp_path, produce)
+    binary_ref = next(ref for ref in outcome["handoff"]["artifacts"]
+                      if ref["path"] == "data/builds/case/build/app")
+    verify_handoff_integrity(root, outcome["handoff"])
+    assert collect_artifacts(root, {"artifacts": [{**binary_ref, "path": "build/app",
+                                                  "run_path": binary_ref["path"]}]}) == [binary_ref]
+    for changed in ({"run_path": "data/missing/app"}, {"run_path": "../app"},
+                    {"sha256": "0" * 64}, {"size_bytes": 1}):
+        with pytest.raises(ValueError):
+            collect_artifacts(root, {"artifacts": [{**binary_ref, "path": "build/app",
+                                                    "run_path": binary_ref["path"], **changed}]})
+    with pytest.raises(ValueError):
+        collect_artifacts(root, {"artifacts": [{**binary_ref, "path": "build/app"}]})
 
 
 def test_strict_target_independent_consumer_preserves_unique_upstream_evidence_without_source_access(tmp_path):
@@ -447,3 +471,75 @@ def test_attempt_id_and_reference_location_do_not_change_input_set_hash(tmp_path
     second = runner.run(job, run_id=root.name, source_fingerprint="snapshot")
     assert first["handoff"]["attempt_id"] != second["handoff"]["attempt_id"]
     assert first["handoff"]["input_set_sha256"] == second["handoff"]["input_set_sha256"]
+
+
+@pytest.mark.parametrize("producer", [
+    {"dispositions": {"terminal_status": "FAILED"}},
+    {"gaps": "not a declared gap array"},
+    {"terminal_status": {"status": "FAILED"}},
+    {"gaps": [{"schema": "appsec-review/producer-gap/1", "gap_id": "a" * 64,
+               "code": "producer_reported_gap", "unit_id": "work.only", "scope_id": None,
+               "reason": "missing external proof", "retryable": False,
+               "evidence_refs": [{"path": "data/missing.json", "sha256": "b" * 64, "size_bytes": 4}]}]},
+])
+def test_invalid_producer_declarations_publish_rejected_verified_execution_not_success(tmp_path, producer):
+    config, job, runner = setup(tmp_path, lambda unit: producer)
+    with pytest.raises(ValueError):
+        runner.run(job, source_fingerprint="snapshot")
+    rejected_path, = config.runtime.runs_dir.glob("*/data/jobs/job_fixture/attempts/*/rejected-handoff.json")
+    root = rejected_path.parent.parents[4]
+    handoff = json.loads(rejected_path.read_bytes())
+    assert handoff["status"] == "REJECTED" and handoff["execution_status"] == "SUCCEEDED"
+    assert handoff["coverage"] == {"disposition": "unavailable", "gap_count": 1, "retry_required": False}
+    outcomes = verify_outcomes(root, handoff)
+    assert outcomes["gaps"][0]["code"] == "unknown_producer_status"
+    assert not list(config.runtime.runs_dir.glob("*/data/jobs/job_fixture/latest.json"))
+
+
+@pytest.mark.parametrize("field,value", [
+    ("source_fingerprint", "different-target"), ("evidence_target_snapshot", "different-snapshot"),
+    ("input_manifest_path", "data/missing.json"), ("input_manifest_sha256", "0" * 64),
+    ("upstream_handoffs", {"job_other": "a" * 64}), ("resolved_config_sha256", "0" * 64),
+    ("job_config_sha256", "0" * 64),
+])
+def test_changed_prepared_claim_is_rejected_before_unit_execution(tmp_path, field, value):
+    executed = []
+    _, job, runner = setup(tmp_path, lambda unit: executed.append(True) or {})
+    claim = runner.begin_attempt(job, source_fingerprint="snapshot")
+    changed = {**claim, field: value}
+    with pytest.raises(ValueError, match="claim"):
+        runner.execute_or_reuse_unit(job, changed, "work.only")
+    assert not executed
+
+
+def test_prepared_claim_allows_only_scheduling_annotations_and_json_normalization(tmp_path):
+    _, job, runner = setup(tmp_path, lambda unit: {"value": 7}, datasets=(DECLARATION,))
+    claim = runner.begin_attempt(job, source_fingerprint="snapshot",
+                                 orchestration={"system": "dagster", "run_id": "dagster-run", "node": "prepare"})
+    changed = json.loads(canonical_json(claim))
+    changed["orchestration"]["node"] = "work.only"
+    changed["graph_started_at"] = "scheduling annotation"
+    assert runner.execute_or_reuse_unit(job, changed, "work.only") == {"value": 7}
+
+
+def test_reused_strict_attempt_reverifies_terminal_bytes_at_dispatch(tmp_path):
+    _, job, runner, outcome, root = publish(tmp_path)
+    claim = runner.begin_or_reuse_attempt(job, run_id=root.name, source_fingerprint="snapshot")
+    assert claim["reused"]
+    result = Path(outcome["attempt_root"]) / "steps/work/tasks/only/result.json"
+    result.write_bytes(b"tampered")
+    with pytest.raises(ValueError, match="integrity"):
+        runner.execute_or_reuse_unit(job, claim, "work.only")
+
+
+def test_finalization_retry_preserves_accepted_immutable_handoff(tmp_path):
+    _, job, runner, first, root = publish(tmp_path)
+    attempt = Path(first["attempt_root"])
+    claim = json.loads((attempt / "claim.json").read_bytes())
+    original = (attempt / "handoff.json").read_bytes()
+    retried = runner.finalize_attempt(job, claim)
+    assert retried["reused"]
+    assert retried["handoff_sha256"] == first["handoff_sha256"]
+    assert (attempt / "handoff.json").read_bytes() == original
+    events = [json.loads(line) for line in (attempt / "logs/events.jsonl").read_text().splitlines()]
+    assert sum(event["event"] == "HANDOFF_ACCEPTED" for event in events) == 1

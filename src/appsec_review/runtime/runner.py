@@ -104,29 +104,39 @@ class JobRunner:
         if "review_policy" in claim and claim["review_policy"] != policy.view():
             raise ValueError("attempt claim review policy differs from frozen configuration")
         run_root = self.runs.resolve(str(claim["run_id"]))
+        if (claim.get("job_id") != job.job_id
+                or claim.get("repository_root") != str(self.config.runtime.repository_root)
+                or claim.get("resolved_config_sha256") != self.config.resolved_sha256):
+            raise ValueError("attempt claim job or configuration mismatch")
         if policy.mode is AssuranceMode.FIRST_PARTY_MANAGED:
             from appsec_review.storage.admission import verify_claim
             verify_claim(run_root, claim)
-            if (claim.get("job_id") != job.job_id
-                    or claim.get("repository_root") != str(self.config.runtime.repository_root)
-                    or claim.get("resolved_config_sha256") != self.config.resolved_sha256):
-                raise ValueError("managed attempt claim job or configuration mismatch")
+        persisted = json.loads(safe_path(run_root, str(claim["attempt_path"]) + "/claim.json").read_bytes())
+        if not claim.get("reused"):
+            from appsec_review.storage.admission import claim_identity
+            if canonical_json(claim_identity(claim)) != canonical_json(claim_identity(persisted)):
+                raise ValueError("attempt claim changed after preparation")
         context = self._context(job, claim)
         if policy.mode is AssuranceMode.FIRST_PARTY_MANAGED:
-            persisted = json.loads((context.attempt_root / "claim.json").read_bytes())
             verify_claim(run_root, persisted)
             if not claim.get("reused") and (
                     persisted["managed_claim_authentication"] != claim["managed_claim_authentication"]):
                 raise ValueError("managed attempt claim changed after preparation")
-            if claim.get("reused"):
-                from appsec_review.storage.admission import admit_upstreams
-                from appsec_review.storage.shared import verify_handoff
-                handoff_path = safe_path(run_root, str(claim["handoff_path"]))
-                if file_sha256(handoff_path) != claim["handoff_sha256"]:
-                    raise ValueError("reused handoff changed during Dagster execution")
-                with validation_scope(run_root, target_snapshot=context.evidence_target_snapshot):
-                    admit_upstreams(context, claim.get("upstream_handoffs", {}))
-                    verify_handoff(run_root, json.loads(handoff_path.read_bytes()))
+        if claim.get("reused"):
+            from appsec_review.storage.admission import admit_upstreams
+            handoff_path = safe_path(run_root, str(claim["handoff_path"]))
+            if file_sha256(handoff_path) != claim["handoff_sha256"]:
+                raise ValueError("reused handoff changed during Dagster execution")
+            handoff = json.loads(handoff_path.read_bytes())
+            expected = {"run_id": context.run_id, "job_id": job.job_id, "attempt_id": context.attempt_id,
+                        "source_fingerprint": context.source_fingerprint,
+                        "target_snapshot": context.evidence_target_snapshot,
+                        "upstream_handoff_sha256": dict(claim.get("upstream_handoffs", {}))}
+            if any(handoff.get(key) != value for key, value in expected.items()):
+                raise ValueError("reused claim differs from its accepted handoff")
+            with validation_scope(run_root, target_snapshot=context.evidence_target_snapshot):
+                admit_upstreams(context, claim.get("upstream_handoffs", {}))
+                verify_handoff(run_root, handoff)
         return context
 
     def _context(self, job: Job, claim: Mapping[str, Any]) -> JobContext:
@@ -310,7 +320,9 @@ class JobRunner:
                          "source_fingerprint": source_fingerprint, "upstream_handoffs": upstream,
                          "started_at": handoff["started_at"], "reused": True,
                          "handoff_path": handoff_path.relative_to(run_root).as_posix(),
-                         "handoff_sha256": handoff_hash}
+                         "handoff_sha256": handoff_hash,
+                         "repository_root": str(self.config.runtime.repository_root),
+                         "resolved_config_sha256": self.config.resolved_sha256}
                 for key in ("evidence_target_snapshot", "input_manifest_path", "input_manifest_sha256"):
                     if key in original_claim:
                         claim[key] = original_claim[key]
@@ -358,6 +370,7 @@ class JobRunner:
 
     def _start_step(self, job: Job, context: JobContext, step_id: str) -> None:
         step_root = context.attempt_root / "steps" / step_id
+        step_root = safe_path(context.run_root, step_root.relative_to(context.run_root).as_posix())
         marker = step_root / "lifecycle.json"
         def write() -> None:
             if marker.exists():
@@ -369,6 +382,7 @@ class JobRunner:
 
     def _complete_step(self, job: Job, context: JobContext, step_id: str) -> None:
         step_root = context.attempt_root / "steps" / step_id
+        step_root = safe_path(context.run_root, step_root.relative_to(context.run_root).as_posix())
         marker = step_root / "lifecycle.json"
         def write() -> None:
             current = json.loads(marker.read_text(encoding="utf-8")) if marker.exists() else {}
@@ -380,6 +394,7 @@ class JobRunner:
             for unit in step_units:
                 _, task_id = unit.unit_id.split(".")
                 root = step_root / "tasks" / task_id
+                root = safe_path(context.run_root, root.relative_to(context.run_root).as_posix())
                 if not (root / "status.json").is_file() or not (root / "result.json").is_file():
                     return
                 receipt = json.loads((root / "status.json").read_text(encoding="utf-8"))
@@ -414,7 +429,10 @@ class JobRunner:
         unit = self._unit(job, unit_id)
         step_id, task_id = unit.unit_id.split(".")
         unit_root = context.attempt_root / "steps" / step_id / "tasks" / task_id
+        unit_root = safe_path(context.run_root, unit_root.relative_to(context.run_root).as_posix())
         status_path, result_path = unit_root / "status.json", unit_root / "result.json"
+        safe_path(context.run_root, status_path.relative_to(context.run_root).as_posix())
+        safe_path(context.run_root, result_path.relative_to(context.run_root).as_posix())
         if status_path.is_file() and result_path.is_file():
             status = json.loads(status_path.read_text(encoding="utf-8"))
             if status.get("status") == "SUCCEEDED" and status.get("result_sha256") == file_sha256(result_path):
@@ -442,6 +460,9 @@ class JobRunner:
                 continue
             dependency_step, dependency_task = dependency.split(".")
             root = context.attempt_root / "steps" / dependency_step / "tasks" / dependency_task
+            root = safe_path(context.run_root, root.relative_to(context.run_root).as_posix())
+            safe_path(context.run_root, (root / "status.json").relative_to(context.run_root).as_posix())
+            safe_path(context.run_root, (root / "result.json").relative_to(context.run_root).as_posix())
             if not (root / "status.json").is_file():
                 raise ValueError(f"dependency receipt is unavailable: {dependency}")
             receipt = json.loads((root / "status.json").read_text(encoding="utf-8"))
@@ -483,10 +504,10 @@ class JobRunner:
                        "shard_identity": result.get("index_identity")}
             atomic_json(status_path, receipt)
             disposition = result.get("terminal_status")
-            task_event = ("TASK_COMPLETED_WITH_GAPS" if disposition not in {None, "SUCCEEDED", "NOT_APPLICABLE", "SKIPPED_NA", "SKIPPED_POLICY"}
+            task_event = ("TASK_COMPLETED_WITH_GAPS" if disposition not in (None, "SUCCEEDED", "NOT_APPLICABLE", "SKIPPED_NA", "SKIPPED_POLICY")
                           else "TASK_SUCCEEDED")
             context.events.write(task_event, unit_id=unit_id, producer=result.get("tool_id"),
-                                 disposition=result.get("terminal_status"),
+                                 disposition=disposition if isinstance(disposition, str) else None,
                                  shard_identity=result.get("index_identity"),
                                  duration_ms=max(0, int((datetime.fromisoformat(completed) -
                                                          datetime.fromisoformat(started)).total_seconds() * 1000)))
@@ -580,7 +601,8 @@ class JobRunner:
             coverage_disposition=coverage["disposition"], unit_count=unit_count,
             gap_count=coverage["gap_count"], retry_required=coverage["retry_required"],
             **({"handoff_path": ref["path"], "handoff_sha256": ref["sha256"],
-                "completion_status": handoff["completion_status"]}
+                "completion_status": (handoff["completion_status"] if handoff["completion_status"] in {
+                    "SUCCEEDED", "FAILED", "SKIPPED", "COMPLETED_WITH_GAPS"} else "UNKNOWN")}
                if event == "HANDOFF_ACCEPTED" and handoff is not None and ref is not None else {}))
 
     def _publish_rejection(self, context: JobContext, claim: Mapping[str, Any], original: BaseException) -> None:
@@ -620,6 +642,18 @@ class JobRunner:
 
     def finalize_attempt(self, job: Job, claim: Mapping[str, Any]) -> Mapping[str, Any]:
         context = self._context_from_claim(job, claim)
+        if not claim.get("reused"):
+            latest = safe_path(context.run_root, f"data/jobs/{job.job_id}/latest.json")
+            if latest.is_file():
+                pointer = json.loads(latest.read_bytes())
+                expected_path = context.attempt_root.relative_to(context.run_root).as_posix() + "/handoff.json"
+                if pointer.get("handoff_path") == expected_path:
+                    handoff_path = safe_path(context.run_root, expected_path)
+                    if file_sha256(handoff_path) != pointer["handoff_sha256"]:
+                        raise ValueError("finalized handoff changed during publication retry")
+                    verify_handoff(context.run_root, json.loads(handoff_path.read_bytes()))
+                    claim = {**claim, "reused": True, "handoff_path": expected_path,
+                             "handoff_sha256": pointer["handoff_sha256"]}
         if claim.get("reused"):
             handoff_path = context.run_root / str(claim["handoff_path"])
             handoff = json.loads(handoff_path.read_text(encoding="utf-8"))
@@ -636,7 +670,10 @@ class JobRunner:
             for unit in job.units:
                 step_id, task_id = unit.unit_id.split(".")
                 root = context.attempt_root / "steps" / step_id / "tasks" / task_id
+                root = safe_path(context.run_root, root.relative_to(context.run_root).as_posix())
                 status_path, result_path = root / "status.json", root / "result.json"
+                safe_path(context.run_root, status_path.relative_to(context.run_root).as_posix())
+                safe_path(context.run_root, result_path.relative_to(context.run_root).as_posix())
                 if not status_path.is_file() or not result_path.is_file():
                     raise ValueError(f"unit has no terminal receipt: {unit.unit_id}")
                 receipt = json.loads(status_path.read_text(encoding="utf-8"))

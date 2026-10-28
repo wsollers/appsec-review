@@ -146,16 +146,20 @@ def _frozen(root: Path) -> tuple[dict[str, Any], str]:
     return deepcopy(policy), digest
 
 
-def sign_claim(root: Path, claim: Mapping[str, Any]) -> str:
-    """Seal a prepared managed claim in application custody, outside worker authority."""
+def claim_identity(claim: Mapping[str, Any]) -> dict[str, Any]:
     # Dagster adds scheduling annotations and changes the current op name between processes.
     annotations = {"managed_claim_authentication", "graph_started_at", "prior_graph_completion_status",
                    "completed_handoffs", "resume_decisions"}
     body = {key: value for key, value in claim.items() if key not in annotations}
     body["orchestration"] = {key: value for key, value in claim.get("orchestration", {}).items()
                              if key != "node"}
+    return body
+
+
+def sign_claim(root: Path, claim: Mapping[str, Any]) -> str:
+    """Seal a prepared managed claim in application custody, outside worker authority."""
     return hmac.new(_key(root, create=False), canonical_json({
-        "schema": "appsec-review/managed-claim/1", "claim": body}), hashlib.sha256).hexdigest()
+        "schema": "appsec-review/managed-claim/1", "claim": claim_identity(claim)}), hashlib.sha256).hexdigest()
 
 
 def verify_claim(root: Path, claim: Mapping[str, Any]) -> None:

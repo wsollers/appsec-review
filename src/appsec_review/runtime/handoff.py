@@ -41,6 +41,10 @@ _REFERENCE_FIELDS = {
     "index_manifest", "outcomes", "input_manifest", "object", "dependencies", "evidence_refs",
     "native_output", "native_outputs",
 }
+_SOURCE_DATA_FIELDS = {
+    "files", "source_files", "source_metrics", "artifact_candidates", "source_inventory",
+    "sources", "input_files", "source_inputs", "file_inventory", "payload", "records", "findings", "raw",
+}
 
 
 def _read(root: Path, ref: Mapping[str, Any]) -> dict[str, Any]:
@@ -56,13 +60,14 @@ def collect_artifacts(root: Path, *values: Any) -> list[dict[str, Any]]:
     artifacts: dict[str, dict[str, Any]] = {}
     source_layers: list[Mapping[str, Any]] | None = None
 
-    def collect(value: Any, *, declared: bool = False) -> None:
+    def collect(value: Any, *, declared: bool = False, source_data: bool = False) -> None:
         nonlocal source_layers
         if isinstance(value, Mapping):
-            if "path" in value and "sha256" in value:
+            if ("path" in value or "run_path" in value) and "sha256" in value:
+                relative = value.get("run_path", value.get("path"))
                 # Intake records external configuration identity, not permission to
                 # open that source. Only an exact frozen layer can use this shape.
-                if isinstance(value["path"], str) and Path(value["path"]).is_absolute():
+                if "run_path" not in value and isinstance(relative, str) and Path(relative).is_absolute():
                     if source_layers is None:
                         manifest = json.loads(safe_path(root, "data/configuration/manifest.json").read_bytes())
                         source_layers = manifest["sources"]
@@ -70,8 +75,9 @@ def collect_artifacts(root: Path, *values: Any) -> list[dict[str, Any]]:
                         return
                 # Source inventories also have path/hash/size fields. Those are
                 # not run artifacts; artifact fields and the run's data namespace are.
-                if declared or (isinstance(value["path"], str) and value["path"].startswith("data/")):
-                    path = safe_path(root, value["path"])
+                if "run_path" in value or declared or (
+                        not source_data and isinstance(relative, str) and relative.startswith("data/")):
+                    path = safe_path(root, relative)
                     ref = reference(root, path, expected_sha256=value["sha256"])
                     if "size_bytes" in value and (
                             type(value["size_bytes"]) is not int or value["size_bytes"] != ref["size_bytes"]):
@@ -80,10 +86,11 @@ def collect_artifacts(root: Path, *values: Any) -> list[dict[str, Any]]:
                     if previous != ref:
                         raise ValueError("result artifact has conflicting identities")
             for name, child in value.items():
-                collect(child, declared=name in _REFERENCE_FIELDS or _REFERENCE_FIELD.fullmatch(name) is not None)
+                collect(child, declared=name in _REFERENCE_FIELDS or _REFERENCE_FIELD.fullmatch(name) is not None,
+                        source_data=source_data or name in _SOURCE_DATA_FIELDS)
         elif isinstance(value, (list, tuple)):
             for child in value:
-                collect(child, declared=declared)
+                collect(child, declared=declared, source_data=source_data)
 
     for value in values:
         collect(value, declared=True)
@@ -173,6 +180,71 @@ def frozen_job_config_sha256(document: Mapping[str, Any], job_id: str) -> str:
     return hashlib.sha256(canonical_json(value)).hexdigest()
 
 
+def _producer_outcome(unit_id: str, state: ExecutionStatus, result: Mapping[str, Any],
+                      result_ref: ArtifactReference | None, status_ref: ArtifactReference
+                      ) -> tuple[UnitOutcome, dict[str, ProducerGap]]:
+    refs = tuple(ref for ref in (result_ref, status_ref) if ref is not None)
+    declared: dict[str, ProducerGap] = {}
+    raw_gaps = result.get("gaps", [])
+    if not isinstance(raw_gaps, list):
+        raise ValueError("declared producer gaps must be an array")
+    for raw in raw_gaps:
+        gap = _declared_gap(raw, unit_id, refs)
+        if gap.gap_id in declared and declared[gap.gap_id] != gap:
+            raise ValueError("conflicting producer gap identities")
+        declared[gap.gap_id] = gap
+    status = result.get("terminal_status")
+    if status is not None and (not isinstance(status, str) or not status.strip()):
+        raise ValueError("producer terminal status must be nonempty text")
+    dispositions = result.get("dispositions", [])
+    if not isinstance(dispositions, list):
+        raise ValueError("producer dispositions must be an array")
+    summaries = []
+    statuses = [(status, result.get("coverage_disposition"), None)]
+    for disposition in dispositions:
+        if not isinstance(disposition, Mapping):
+            raise ValueError("producer disposition must be a record")
+        producer = disposition.get("terminal_status")
+        if producer is None:
+            producer = disposition.get("disposition")
+        if producer is not None and not isinstance(producer, str):
+            raise ValueError("producer disposition status must be text")
+        scope = disposition.get("scope_id")
+        statuses.append((producer, disposition.get("coverage_disposition"), scope))
+    for producer, explicit, scope in statuses:
+        summary = _coverage(producer, explicit, has_gaps=bool(declared))
+        summaries.append(summary)
+        unknown = ((producer is not None and producer not in _KNOWN_STATUSES)
+                   or (explicit is not None and _COVERAGE_ALIASES.get(explicit, explicit)
+                       not in set(CoverageDisposition)))
+        if (unknown or summary.disposition == CoverageDisposition.UNAVAILABLE
+                or (summary.disposition == CoverageDisposition.PARTIAL and not declared)):
+            code = (GapCode.UNKNOWN_PRODUCER_STATUS if unknown else
+                    GapCode.PRODUCER_FAILED if summary.retry_required or producer in _DETERMINISTIC_FAILURES
+                    else GapCode.PRODUCER_REPORTED_GAP)
+            # Preserve native status verbatim in accounting, never in telemetry labels.
+            reason = f"producer status: {producer}; coverage disposition: {explicit}"
+            gap = _gap(unit_id, code, reason, retryable=summary.retry_required, scope_id=scope, refs=refs)
+            declared[gap.gap_id] = gap
+    if state is not ExecutionStatus.SUCCEEDED:
+        gap = _gap(unit_id, GapCode.PRODUCER_FAILED if state is ExecutionStatus.FAILED else
+                   GapCode.PRODUCER_BLOCKED, f"task execution: {state}", retryable=True, refs=refs)
+        declared[gap.gap_id] = gap
+    coverage = {item.disposition for item in summaries}
+    if state is not ExecutionStatus.SUCCEEDED or summaries[0].disposition == CoverageDisposition.UNAVAILABLE:
+        disposition = CoverageDisposition.UNAVAILABLE
+    elif CoverageDisposition.UNAVAILABLE in coverage:
+        disposition = CoverageDisposition.PARTIAL
+    elif CoverageDisposition.PARTIAL in coverage or declared:
+        disposition = CoverageDisposition.PARTIAL
+    elif coverage <= {CoverageDisposition.NOT_APPLICABLE, CoverageDisposition.SKIPPED_POLICY}:
+        disposition = (CoverageDisposition.SKIPPED_POLICY if CoverageDisposition.SKIPPED_POLICY in coverage
+                       else CoverageDisposition.NOT_APPLICABLE)
+    else:
+        disposition = CoverageDisposition.COMPLETE
+    return UnitOutcome(unit_id, state, status, disposition, result_ref, status_ref, tuple(sorted(declared))), declared
+
+
 def build_outcomes(root: Path, *, run_id: str, job_id: str, attempt_id: str, target_snapshot: str,
                    unit_ids: Sequence[str], diagnostic: bool = False) -> dict[str, Any]:
     units: list[UnitOutcome] = []
@@ -202,64 +274,21 @@ def build_outcomes(root: Path, *, run_id: str, job_id: str, attempt_id: str, tar
             gap = _gap(unit_id, GapCode.INPUT_UNAVAILABLE, "verified terminal receipt unavailable", retryable=True)
             gaps[gap.gap_id] = gap
             continue
-        refs = tuple(ref for ref in (result_ref, status_ref) if ref is not None)
-        declared: dict[str, ProducerGap] = {}
-        raw_gaps = result.get("gaps", [])
-        if not isinstance(raw_gaps, list):
-            raise ValueError("declared producer gaps must be an array")
-        for raw in raw_gaps:
-            gap = _declared_gap(raw, unit_id, refs)
-            declared[gap.gap_id] = gap
-        status = result.get("terminal_status")
-        if status is not None and (not isinstance(status, str) or not status.strip()):
-            raise ValueError("producer terminal status must be nonempty text")
-        dispositions = result.get("dispositions", [])
-        if not isinstance(dispositions, list):
-            raise ValueError("producer dispositions must be an array")
-        summaries = []
-        statuses = [(status, result.get("coverage_disposition"), None)]
-        for disposition in dispositions:
-            if not isinstance(disposition, Mapping):
-                raise ValueError("producer disposition must be a record")
-            producer = disposition.get("terminal_status")
-            if producer is None:
-                producer = disposition.get("disposition")
-            if producer is not None and not isinstance(producer, str):
-                raise ValueError("producer disposition status must be text")
-            scope = disposition.get("scope_id")
-            statuses.append((producer, disposition.get("coverage_disposition"), scope))
-        for producer, explicit, scope in statuses:
-            summary = _coverage(producer, explicit, has_gaps=bool(declared))
-            summaries.append(summary)
-            unknown = ((producer is not None and producer not in _KNOWN_STATUSES)
-                       or (explicit is not None and _COVERAGE_ALIASES.get(explicit, explicit)
-                           not in set(CoverageDisposition)))
-            if (unknown or summary.disposition == CoverageDisposition.UNAVAILABLE
-                    or (summary.disposition == CoverageDisposition.PARTIAL and not declared)):
-                code = (GapCode.UNKNOWN_PRODUCER_STATUS if unknown else
-                        GapCode.PRODUCER_FAILED if summary.retry_required or producer in _DETERMINISTIC_FAILURES
-                        else GapCode.PRODUCER_REPORTED_GAP)
-                # Preserve native status verbatim in accounting, never in telemetry labels.
-                reason = f"producer status: {producer}; coverage disposition: {explicit}"
-                gap = _gap(unit_id, code, reason, retryable=summary.retry_required, scope_id=scope, refs=refs)
-                declared[gap.gap_id] = gap
-        if state is not ExecutionStatus.SUCCEEDED:
-            gap = _gap(unit_id, GapCode.PRODUCER_FAILED if state is ExecutionStatus.FAILED else
-                       GapCode.PRODUCER_BLOCKED, f"task execution: {state}", retryable=True, refs=refs)
-            declared[gap.gap_id] = gap
-        coverage = {item.disposition for item in summaries}
-        if state is not ExecutionStatus.SUCCEEDED or summaries[0].disposition == CoverageDisposition.UNAVAILABLE:
-            disposition = CoverageDisposition.UNAVAILABLE
-        elif CoverageDisposition.UNAVAILABLE in coverage:
-            disposition = CoverageDisposition.PARTIAL
-        elif CoverageDisposition.PARTIAL in coverage or declared:
-            disposition = CoverageDisposition.PARTIAL
-        elif coverage <= {CoverageDisposition.NOT_APPLICABLE, CoverageDisposition.SKIPPED_POLICY}:
-            disposition = (CoverageDisposition.SKIPPED_POLICY if CoverageDisposition.SKIPPED_POLICY in coverage
-                           else CoverageDisposition.NOT_APPLICABLE)
-        else:
-            disposition = CoverageDisposition.COMPLETE
-        unit = UnitOutcome(unit_id, state, status, disposition, result_ref, status_ref, tuple(sorted(declared)))
+        try:
+            unit, declared = _producer_outcome(unit_id, state, result, result_ref, status_ref)
+            for gap in declared.values():
+                for evidence in gap.evidence_refs:
+                    verify_reference(root, evidence.as_dict())
+        except (OSError, ValueError, KeyError, TypeError):
+            if not diagnostic:
+                raise
+            refs = tuple(ref for ref in (result_ref, status_ref) if ref is not None)
+            gap = _gap(unit_id, GapCode.UNKNOWN_PRODUCER_STATUS, "invalid producer accounting declaration", refs=refs)
+            status = result.get("terminal_status")
+            native_status = status if isinstance(status, str) and status.strip() and "\x00" not in status else None
+            unit = UnitOutcome(unit_id, state, native_status, CoverageDisposition.UNAVAILABLE,
+                               result_ref, status_ref, (gap.gap_id,))
+            declared = {gap.gap_id: gap}
         units.append(unit)
         for identity, gap in declared.items():
             if identity in gaps and gaps[identity] != gap:
