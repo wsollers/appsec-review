@@ -51,7 +51,8 @@ def live_codeql_runtime(tmp_path_factory: pytest.TempPathFactory):
     metadata_root = root / "metadata"
     run_root.mkdir()
     resolver = CodeQLImageResolver(repository_root=ROOT, metadata_root=metadata_root,
-                                   settings=settings, timeout_seconds=1800)
+                                   settings=settings, timeout_seconds=1800,
+                                   releases=config.review_policy.releases)
     images: dict[str, CodeQLImage] = {}
 
     def image_for(profile_name: str) -> CodeQLImage:

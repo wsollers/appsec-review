@@ -35,10 +35,12 @@ def _export(settings, run_root: Path, image_for, name: str, workspace: Path, pro
     scratch = run_root / f"graph-export-{name}"
     shutil.copytree(workspace, scratch / "workspace")
     codeql_image = image_for(profile)
-    _write_replay(scratch / "replay.json", run_root, codeql_image.build_image_id, commands)
+    replay = ("--replay", "replay.json") if commands else ()
+    if commands:
+        _write_replay(scratch / "replay.json", run_root, codeql_image.build_image_id, commands)
     executor = CodeQLExecutor(image=codeql_image, run_root=run_root, settings=settings)
     database = executor.execute("database", (
-        "--mode", mode, "--language", language, "--replay", "replay.json", "--workspace", "workspace",
+        "--mode", mode, "--language", language, *replay, "--workspace", "workspace",
         "--source-subroot", source_subroot, "--database", "database",
         "--threads", str(settings.threads), "--ram", str(settings.ram_mb),
     ), scratch_root=scratch)

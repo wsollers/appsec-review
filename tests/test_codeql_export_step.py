@@ -389,7 +389,10 @@ def test_typed_export_settings_are_strict_and_default_to_the_graph_contract() ->
     assert action_timeout(settings, "export") == settings.export_timeout_seconds == 1800
     assert action_timeout(settings, "compile") == settings.compile_timeout_seconds == 3600
     assert [item.query_id for item in settings.languages["cpp"].export_queries] == ["graph-export-cpp"]
-    assert all(not settings.languages[name].export_queries for name in settings.languages if name != "cpp")
+    exporting = {name for name in settings.languages if settings.languages[name].export_queries}
+    assert exporting == {"cpp", "rust"}
+    for name in exporting:
+        assert [item.query_id for item in settings.languages[name].export_queries] == [f"graph-export-{name}"]
 
     absent = _raw_settings()
     del absent["export_queries"]
