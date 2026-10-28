@@ -111,7 +111,8 @@ def _workspace(url: str, document: dict) -> dict:
         key=lambda item: item["name"],
     )
     expected_sensors = [{"name": name, "sensorState": {"status": "RUNNING"}}
-                        for name in ("wave1_canceled_state", "wave1_failure_state")]
+                        for name in ("wave1_canceled_state", "wave1_failure_state",
+                                     "wave1_step_failure_state")]
     if jobs != expected_jobs or schedules != expected_schedules or sensors != expected_sensors:
         raise SystemExit(
             "semantic definition mismatch: "

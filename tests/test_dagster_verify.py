@@ -25,6 +25,7 @@ def test_workspace_expectations_omit_job_level_disabled_jobs(monkeypatch) -> Non
                 "sensors": [
                     {"name": "wave1_canceled_state", "sensorState": {"status": "RUNNING"}},
                     {"name": "wave1_failure_state", "sensorState": {"status": "RUNNING"}},
+                    {"name": "wave1_step_failure_state", "sensorState": {"status": "RUNNING"}},
                 ],
             }],
         }},
