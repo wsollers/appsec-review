@@ -7,9 +7,10 @@ index-admission `3f28d871`, final integration `dd9c9ad`, rendering `e9a8333a` an
 `0ece65d3`, then combined source `6975aef29eb09e1fb57385db98cb7d859108e362`
 (including main `093f26d5`) and stable `a709a10b` (product trees identical to owner-tested
 `039b24e4`), followed by contracts-only OpenVEX handoff `967d1c7f`, 2026-10-28,
-and reconciliation with main `799ea3c2` for debug symbols and native SBOM evidence.
-The combined inventory contains **43 registered/configured
-jobs, 142 dataset kinds, 21 public retrieval tools, 19 logical SQLite indexes and 16 allowed
+and reconciliation with main `799ea3c2` for debug symbols and native SBOM evidence, then
+standalone OpenVEX integration over completed main `c47e3fea`.
+The combined inventory contains **44 registered/configured
+jobs, 145 dataset kinds, 21 public retrieval tools, 19 logical SQLite indexes and 16 allowed
 query sets (10 produced, 6 pending)**. This is a catalog of implemented input surfaces,
 **not** evidence that a particular run produced them. Chain, remediation and dossier producers,
 central wiring, process metrics, immutable PoC `/2`, gate/report `/2` and chain/base isolation now
@@ -50,7 +51,7 @@ The distinction between **available**, **admissible**, and **publishable** is es
 | Adjudication / finding | Deterministic obligations and independent verification determine state, independently of model agreement or document rendering. | [`review/adjudication.py`](../../src/appsec_review/review/adjudication.py), `adjudicate`; [`review/independence.py`](../../src/appsec_review/review/independence.py), `verify_independence` |
 | Protected dossier projection | Only cited direct/analyst-assessed relation rows, bounded resolving excerpts and allowlisted finding/score/chain/PoC/remediation/provenance fields enter the model. Inventory availability does not automatically copy every dataset into it. | [`job_dossier_publication/job.py`](../../src/appsec_review/jobs/job_dossier_publication/job.py), `_excerpts`, `_chains`, `_remediation`; [`reporting/dossiers.py`](../../src/appsec_review/reporting/dossiers.py), `build_dossier` |
 | Public projection | Only approved fields and hash-bound references leave the protected developer artifact. | Shared [`jobs/accepted_review.py`](../../src/appsec_review/jobs/accepted_review.py), `project_finding`, `project_score`; [`job_final_publication_gate/attachments.py`](../../src/appsec_review/jobs/job_final_publication_gate/attachments.py) certifies closed attachment projections. Report assembly reads only that certified snapshot. |
-| Planned export | OpenVEX design, typed shared settings/contracts and schema locks exist; `967d1c7f` aligns records/fixtures with strict gate `/2` and nested certified binding coverage. No registered exporter, dataset declaration, commissioned output or metrics section exists. | [`jobs/job_openvex_export/contracts.py`](../../src/appsec_review/jobs/job_openvex_export/contracts.py), [`settings.py`](../../src/appsec_review/jobs/job_openvex_export/settings.py); [shared-contract boundary](../schemas/openvex-export/README.md), [design](openvex-export.md). It is not a 43rd job or a dossier input. |
+| Protected standalone export | Disabled-by-default deterministic OpenVEX projects all and only gate-publishable confirmed findings as `affected`, retaining exact certified context and exclusions in a protected companion. This is a separate post-gate consumer, never a dossier or report input. | [`jobs/job_openvex_export/job.py`](../../src/appsec_review/jobs/job_openvex_export/job.py), [`contracts.py`](../../src/appsec_review/jobs/job_openvex_export/contracts.py), [`settings.py`](../../src/appsec_review/jobs/job_openvex_export/settings.py); [shared-contract boundary](../schemas/openvex-export/README.md), [design](openvex-export.md), [verification record](../reviews/openvex-export-implementation.md). Registration and unit coverage do not establish a commissioned real-run output. |
 
 Only complete `direct` and `direct_for_mapped_predicate` relations count toward obligations.
 `analyst_assessed` and `indirect` evidence remains useful context, not counted proof. The six closed
@@ -357,8 +358,8 @@ the pin a finding used. See [dependency intelligence](dependency-intelligence.md
 
 ## 6. Per-dataset visibility and retention
 
-This table accounts for all 142 `DATASETS` output kinds in the 43 integrated job `datasets.py` modules:
-47 indexed, 64 artifact-only and 31 protected declarations
+This table accounts for all 145 `DATASETS` output kinds in the 44 integrated job `datasets.py` modules:
+47 indexed, 64 artifact-only and 34 protected declarations
 (120 kinds / 37 modules at the original contract baseline; 126 / 40 before the main integration).
 Each producer name links to that declaration, which owns artifact patterns, schema and query route;
 the [physical index catalog](#4-physical-indexes-shards-and-producer-ownership) identifies its shards.
@@ -417,6 +418,7 @@ sanitized public references do not make those bytes public.
 | [`job_remediation_validation`](../../src/appsec_review/jobs/job_remediation_validation/datasets.py) | none | `remediation_validation_summary` | `remediation_validation_receipts` |
 | [`job_dossier_publication`](../../src/appsec_review/jobs/job_dossier_publication/datasets.py) | none | none | `dossier_publications` |
 | [`job_final_publication_gate`](../../src/appsec_review/jobs/job_final_publication_gate/datasets.py) | none | `publication_gate_decisions` | none |
+| [`job_openvex_export`](../../src/appsec_review/jobs/job_openvex_export/datasets.py) | none | none | `openvex_verified_inputs`, `openvex_documents`, `openvex_export_accounting` |
 | [`job_final_report_publication`](../../src/appsec_review/jobs/job_final_report_publication/datasets.py) | none | `final_report_publications` | none |
 
 The runtime also owns configuration, attempt/status/unit/handoff/claim and orchestration receipts,
@@ -553,14 +555,14 @@ hashes, identity-resolved PoC briefs and summary persistence/report-count regres
 | Delivered surface | Source-verified state / remaining boundary |
 | --- | --- |
 | Shared review reader | `jobs/accepted_review.py` verifies handoff `/3`, ledger-bound chain publication/memberships, original actor/cell receipts, nested review-package refs, run identity, duplicate identities and the PoC-basis digest. |
-| Pre-gate topology | Registry and central config contain the same 43 jobs. CLI `_graph_order` derives its pre-/post-index split from `wave1_dependencies`; direct execution remains linear while Dagster follows dependencies over the same enabled jobs. Acquisition/binary indexing, debug symbols, security tagging and OWASP are retained before indexing; PoC/planning/validation/dossiers precede one gate/report. New configurations enable all four completion jobs; old frozen settings remain immutable. PoC has no gate dependency. |
+| Pre-gate topology | Registry and central config contain the same 44 jobs. CLI `_graph_order` derives its pre-/post-index split from `wave1_dependencies`; direct execution remains linear while Dagster follows dependencies over the same enabled jobs. Acquisition/binary indexing, debug symbols, security tagging and OWASP are retained before indexing; PoC/planning/validation/dossiers precede one gate. Report and optionally enabled OpenVEX independently consume that gate. New configurations enable all four completion jobs; old frozen settings remain immutable. PoC has no gate dependency. |
 | Chains | Three pre-seal units, strict native continuity policy, protected dataset/manifest and exact actor-receipt accounting exist. `stages.base_review_projection` validates exact enhancement-cell coverage while excluding those cells/gaps from base completeness accounting; the full ledger/projection retains them and publication exposes enhancement gaps separately. Integrity failures still fail. |
 | PoC / gate / report | Immutable protected PoC attempt files and exact `/2` producer/provenance contracts; gate `/2` verifies all optional nested artifacts, candidate partitions and five-capability accounting; report `/2` consumes only the frozen certified snapshot. Disabled manual PoC requires explicit authenticated upstream admission, never silent pointer discovery. |
 | Remediation | Real planning/validation producers and `/1` strict schemas, exact-patch format and `native_syntax` adapter exist. Job-scoped validated role bundles are hash-pinned; uncommissioned native profiles retain manual outcomes. Neither PoC context nor regression-function compilation is commissioned. |
 | Dossiers | Real semantic job, strict typed bounds, closed projection, hardened renderer and `dossier-rendering-receipt/1` exist. Gate certification is implemented. Owner-verified seeded PDFs, navigation and repeat rendering are recorded in [operations](../operations/dossier-publication.md#verified-seeded-sample); the historical all-lane check separately uses a renderer double and preserves inherited/source gaps. |
 | Metrics | `run-metrics/4.completion` preserves `completion-process-metrics/1` alongside OWASP/review-flow/Tree-sitter/CodeQL/model views. Fixed lane/status/capability maps include `not_launched` and certified report outcome counts; limits are nonadditive and unknown tokens remain unavailable. `b9e69d17` scopes enabled/disposition maps to the gate certification event. Historical owner all-lane checks observe seven lanes / zero measurement gaps without clearing review/evidence gaps; current-main/live acceptance remains separate. |
 | Index admission / resume inventory | `3f28d871` excludes the three new completion consumers from active pre-review acceptance. `registry_providers` still returns **all registered file owners and dataset declarations** for resume auditing; do not remove downstream ownership just because its output is not yet a pre-review input. |
-| OpenVEX | Shared contract/settings/schema-lock and design/operations documents only. `967d1c7f` aligns the records and fixtures to gate `/2`, rejects legacy `/1` and requires nested refs within certified bindings. No `build_job`, registry/config entry, dataset publication, exporter/report wiring or emitted `openvex` metrics section exists; the inherited design's `/1` report/post-gate-PoC proposal still needs current `/2` ordering before implementation. |
+| OpenVEX | Registered standalone post-gate exporter with typed disabled configuration, three protected dataset kinds, strict gate `/2` and review `/3` input verification, seven-schema offline closure and canonical affected-only output. Shared accepted-gate snapshot authority rejects uncertified nested refs without optional-head discovery. `run-metrics/4.openvex` distinguishes verified historical accepted contributions from current latest/operator state. Report `/2` remains gate-only with no export links or fan-in. Focused units and installed-only pure-boundary packaging are recorded separately from real-run, integration, acceptance and live validation. |
 
 Current versions are explicit, not implicit upgrades of old accepted runs:
 
