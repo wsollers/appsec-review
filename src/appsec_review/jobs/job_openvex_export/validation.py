@@ -81,7 +81,7 @@ def _registry(documents: dict[str, dict[str, Any]]) -> Registry:
 
 
 def schema_registry(*, repository_root: Path | None = None) -> Registry:
-    """Verify all eight pinned files and expose only the six explicit schema identities."""
+    """Verify pinned schemas, lock and license; expose only the seven schema identities."""
     return _registry(_resources(repository_root))
 
 

@@ -9,7 +9,7 @@ from .settings import OpenVexExportSettings
 
 _REVIEW_CONTEXT_KEYS = (
     "review", "accounting", "ship_block", "verification", "coverage", "limitations",
-    "gap_ids", "unavailable_inputs", "status",
+    "gap_ids", "capabilities", "attachments", "status",
 )
 
 

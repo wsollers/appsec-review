@@ -117,7 +117,7 @@ def test_review_dimensions_and_resolving_evidence_remain_verbatim() -> None:
     assert bundle.result["outcome"] == "exported_with_gaps"
     assert bundle.result["gaps"] == tuple(sorted(
         item["limitation_id"] for item in inputs.gate["limitations"] if item["kind"] == "gap"))
-    assert {item["kind"] for item in bundle.manifest["review_context"]["limitations"]} == {"gap", "not_run"}
+    assert {item["kind"] for item in bundle.manifest["review_context"]["limitations"]} == {"gap", "not_run", "notice"}
     for key, value in bundle.manifest["review_context"].items():
         assert c.canonical_bytes(value) == c.canonical_bytes(inputs.gate[key])
     for row, finding in zip(bundle.manifest["packages"], inputs.findings, strict=True):
@@ -505,7 +505,7 @@ def test_public_offline_resources_source_precedence_and_installed_fallback(tmp_p
     }
 
 
-def test_resource_reader_opens_only_the_eight_pins(monkeypatch: Any) -> None:
+def test_resource_reader_opens_only_the_seven_schema_pins_lock_and_license(monkeypatch: Any) -> None:
     opened = []
     original = Path.open
 
@@ -515,7 +515,7 @@ def test_resource_reader_opens_only_the_eight_pins(monkeypatch: Any) -> None:
 
     monkeypatch.setattr(Path, "open", tracked)
     v.schema_registry(repository_root=ROOT)
-    assert len(opened) == 8
+    assert len(opened) == 9
     assert set(opened) == {(SCHEMAS / relative).resolve() for relative in (
         *c.SCHEMA_SHA256, "upstream/upstream.lock.json", "upstream/LICENSE",
     )}
@@ -588,3 +588,178 @@ def test_no_network_context_or_unknown_schema_retrieval(monkeypatch: Any) -> Non
         validator.validate({})
     with pytest.raises(c.ExportError):
         v.schema_validator("../unknown.schema.json")
+
+
+@pytest.mark.parametrize("review_gap", [False, True])
+def test_gate2_completion_certificate_is_retained_without_changing_eligibility(review_gap: bool) -> None:
+    inputs = make_verified_inputs(("publishable", "publishable", "verification_backlog", "withheld"),
+                                  completion_attachments=True, review_gap=review_gap)
+    bundle = assemble(inputs)
+    v.validate_export(bundle, inputs, enabled_settings())
+    context = bundle.manifest["review_context"]
+    assert "unavailable_inputs" not in context
+    assert set(context) == {"review", "accounting", "ship_block", "verification", "coverage",
+                            "limitations", "gap_ids", "capabilities", "attachments", "status"}
+    for key, value in context.items():
+        assert c.canonical_bytes(value) == c.canonical_bytes(inputs.gate[key])
+    assert bundle.result["statement_count"] == bundle.result["included_findings"] == 2
+    assert bundle.result["excluded_findings"] == 2
+    assert bundle.manifest["accounting"]["exclusion_counts"] == {
+        "gate_verification_backlog": 1, "gate_withheld": 1,
+    }
+    assert bundle.result["outcome"] == "exported_with_gaps"
+    assert set(context["capabilities"]) == {
+        "poc_generation", "attack_chains", "remediation_planning", "remediation_validation", "dossiers",
+    }
+    assert all(record["enabled"] for record in context["capabilities"].values())
+    attachments = context["attachments"]
+    assert attachments["attack_chains"][0]["status"] == "qualified_supported"
+    assert attachments["poc_generation"][0]["status"] == "compile_failed"
+    assert {row["status"] for row in attachments["remediation_planning"]} == {"manual_design_required"}
+    assert {row["status"] for row in attachments["remediation_validation"]} == {"manual_validation_required"}
+    assert {row["kind"] for row in attachments["dossiers"]} == {"confirmed_finding", "poc"}
+    for section in ("poc_generation", "remediation_planning", "remediation_validation"):
+        for row in attachments[section]:
+            assert row["execution"] == "not_performed_by_policy"
+            assert row["runtime_verified"] is False and row["result_id"] is None
+    notice = next(row for row in context["limitations"] if row["limitation_id"] == "compile_only_nonexecution")
+    assert notice["kind"] == "notice" and notice["limitation_id"] not in bundle.result["gaps"]
+    assert {row["finding"]["finding_package_id"] for row in bundle.manifest["packages"]
+            if row["disposition"] == "included"} == {
+                row.finding_package_id for row in inputs.findings if row.bucket == "publishable"}
+    for statement in bundle.document["statements"]:
+        assert statement["status"] == "affected"
+        assert set(statement["products"][0]) == {"@id"}
+        assert "compile" not in statement["action_statement"]
+    assert bundle.manifest["provenance"]["validation_profile_sha256"] == c.VALIDATION_PROFILE_SHA256
+
+
+def test_gate2_completion_notices_are_not_invented_review_gaps() -> None:
+    inputs = make_verified_inputs()
+    bundle = assemble(inputs)
+    v.validate_export(bundle, inputs, enabled_settings())
+    assert {row["kind"] for row in inputs.gate["limitations"]} == {"notice", "not_run"}
+    assert bundle.result["outcome"] == "exported" and bundle.result["gaps"] == ()
+    assert bundle.manifest["review_context"]["limitations"] == inputs.gate["limitations"]
+    assert inputs.gate["capabilities"]["attack_chains"]["disposition"] == "SKIPPED_NA"
+    assert not any(inputs.gate["attachments"].values())
+
+
+@pytest.mark.parametrize("buckets", [(), ("verification_backlog",), ("withheld",)])
+def test_gate2_empty_eligibility_keeps_completion_context_and_nonclean_gap(buckets: tuple[str, ...]) -> None:
+    inputs = make_verified_inputs(buckets)
+    bundle = assemble(inputs)
+    v.validate_export(bundle, inputs, enabled_settings())
+    assert bundle.document is bundle.document_bytes is bundle.document_ref is None
+    assert bundle.result["outcome"] == "no_statements"
+    assert c.NO_STATEMENTS_GAP in bundle.result["gaps"]
+    assert "compile_only_nonexecution" not in bundle.result["gaps"]
+    assert bundle.manifest["review_context"]["capabilities"] == inputs.gate["capabilities"]
+    assert bundle.manifest["review_context"]["attachments"] == inputs.gate["attachments"]
+
+
+@pytest.mark.parametrize("change", [
+    lambda context: context["capabilities"]["attack_chains"].update(gap_count=0),
+    lambda context: context["capabilities"]["dossiers"].update(item_count=0),
+    lambda context: context["capabilities"]["poc_generation"].update(disposition="SUCCEEDED"),
+    lambda context: context["capabilities"]["dossiers"].update(reason="Rewritten certificate."),
+    lambda context: context["capabilities"]["remediation_planning"].update(summary=None),
+    lambda context: context["capabilities"]["remediation_validation"]["handoff"].update(sha256="0" * 64),
+    lambda context: context["attachments"]["poc_generation"][0].update(status="compile_verified"),
+    lambda context: context["attachments"]["poc_generation"][0]["files"]["compile"].update(sha256="0" * 64),
+    lambda context: context["attachments"]["attack_chains"][0].update(status="confirmed"),
+    lambda context: context["attachments"]["attack_chains"][0]["component_claim_ids"].__setitem__(
+        0, "claim-" + "0" * 64),
+    lambda context: context["attachments"]["remediation_planning"][0].update(status="proposal_generated"),
+    lambda context: context["attachments"]["remediation_validation"][0].update(status="build_checked"),
+    lambda context: context["attachments"]["dossiers"][0]["files"]["receipt"].update(sha256="0" * 64),
+    lambda context: context["attachments"]["dossiers"].pop(),
+    lambda context: context["limitations"][-1].update(kind="gap"),
+])
+def test_gate2_schema_valid_certificate_tamper_fails_after_all_output_rehashes(change: Callable) -> None:
+    inputs = make_verified_inputs(("publishable", "publishable"), completion_attachments=True)
+    changed = rewrite(assemble(inputs), lambda d, m, r: change(m["review_context"]), reidentify=True)
+    schema_validator("manifest.schema.json").validate(c.json_body(changed.manifest))
+    schema_validator("result.schema.json").validate(c.json_body(changed.result))
+    with pytest.raises(c.ExportError, match="exactly project") as error:
+        v.validate_export(changed, inputs, enabled_settings())
+    assert error.value.reason == c.ExportFailureReason.SEMANTIC_INVALID
+    assert error.value.phase == c.ExportPhase.VALIDATE
+
+
+@pytest.mark.parametrize("section", ["poc_generation", "remediation_planning", "remediation_validation"])
+def test_gate2_completion_cannot_be_promoted_to_runtime_execution(section: str) -> None:
+    inputs = make_verified_inputs(("publishable", "publishable"), completion_attachments=True)
+    changed = rewrite(assemble(inputs), lambda d, m, r:
+                      m["review_context"]["attachments"][section][0].update(runtime_verified=True))
+    with pytest.raises(c.ExportError) as error:
+        v.validate_export(changed, inputs, enabled_settings())
+    assert error.value.reason == c.ExportFailureReason.SCHEMA_INVALID
+
+
+def test_gate2_completion_changes_only_the_companion_not_openvex_assertions() -> None:
+    inputs = make_verified_inputs(("publishable", "publishable"), completion_attachments=True)
+    bundle = assemble(inputs)
+    plain = assemble(make_verified_inputs(("publishable", "publishable")))
+    assert bundle.document_bytes == plain.document_bytes
+    assert bundle.manifest_bytes != plain.manifest_bytes and bundle.result_bytes != plain.result_bytes
+    gate = c.json_body(inputs.gate)
+    for rows in gate["attachments"].values():
+        rows.reverse()
+    gate["bindings"].reverse()
+    permuted = with_gate(inputs, gate)
+    replay = assemble(permuted)
+    v.validate_export(replay, permuted, enabled_settings())
+    assert replay.document_bytes == bundle.document_bytes
+    assert replay.manifest_bytes != bundle.manifest_bytes
+    assert replay.manifest["review_context"]["attachments"] == permuted.gate["attachments"]
+
+
+def test_gate2_nested_completion_bindings_cover_gate_certificate_and_measured_inventory() -> None:
+    inputs = make_verified_inputs(("publishable", "publishable"), completion_attachments=True)
+    gate_refs = {c.ArtifactRef.from_mapping(ref) for ref in inputs.gate["bindings"]}
+    inventory = {ref.reference for ref in inputs.input_inventory}
+    bundle = assemble(inputs)
+    companion_refs = {c.ArtifactRef.from_mapping(ref) for ref in bundle.manifest["bindings"]}
+    references = []
+
+    def collect(value: Any) -> None:
+        if isinstance(value, dict):
+            if {"path", "sha256"} <= value.keys():
+                references.append(c.ArtifactRef.from_mapping(value))
+            for item in value.values():
+                collect(item)
+        elif isinstance(value, list):
+            for item in value:
+                collect(item)
+
+    collect(c.json_body(inputs.gate["capabilities"]))
+    collect(c.json_body(inputs.gate["attachments"]))
+    assert len(references) > 20
+    assert set(references) <= gate_refs <= inventory == companion_refs
+    for reference in set(references):
+        gate = c.json_body(inputs.gate)
+        gate["bindings"] = [ref for ref in gate["bindings"] if ref["path"] != reference.path]
+        with pytest.raises(ValueError, match="certified bindings"):
+            with_gate(inputs, gate)
+        with pytest.raises(ValueError, match="required input reference"):
+            replace(inputs, input_inventory=tuple(ref for ref in inputs.input_inventory if ref.path != reference.path))
+
+
+def test_gate2_full_completion_context_validates_from_offline_installed_schema_closure(
+    tmp_path: Path, monkeypatch: Any,
+) -> None:
+    installed = installed_resources(tmp_path)
+    monkeypatch.setattr(v.sys, "prefix", str(tmp_path))
+    inputs = make_verified_inputs(("publishable", "publishable"), completion_attachments=True)
+    bundle = assemble(inputs)
+    validator = v.schema_validator("manifest.schema.json", repository_root=tmp_path / "no-checkout")
+    validator.validate(c.json_body(bundle.manifest))
+    report_schema_id = json.loads((installed / "../final-report/final-report.schema.json").read_bytes())["$id"]
+    registry = v.schema_registry(repository_root=tmp_path / "no-checkout")
+    assert len(c.SCHEMA_SHA256) == len(registry) == 7
+    assert registry.get_or_retrieve(report_schema_id)
+    (installed / "../final-report/final-report.schema.json").unlink()
+    with pytest.raises(c.ExportError) as error:
+        v.schema_validator("manifest.schema.json", repository_root=tmp_path / "no-checkout")
+    assert error.value.reason == c.ExportFailureReason.INPUT_MISSING
