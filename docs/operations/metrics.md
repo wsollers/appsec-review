@@ -46,3 +46,28 @@ as missing coverage. A missing, changed, escaped, or malformed receipt is an int
 never evidence that the corresponding scope is clean. `finding_states` counts only authoritative
 finding transitions; scanner observations and CodeQL SARIF result counts are not confirmed defects
 or vulnerabilities.
+
+## Completion rollout tracking (pending integration)
+
+The [completion telemetry contract](../architecture/telemetry.md#evidence-completion-tracking-commissioned)
+requires PoC, chain, remediation, dossier and final-publication tracking from their first
+implementation. The existing `metrics` command and summary path remain the operating surface;
+no separate backend is needed. At baseline `5f5548d`, lane-specific event/aggregate names are not
+implemented. Do not treat their absence in an older summary as zero candidates, zero failures or
+complete coverage; reconcile exact fields after implementation commits arrive.
+
+Operators must be able to follow stage and candidate progress, terminal dispositions, caps,
+coverage/integrity gaps, retry/reuse, adapter/render failures and durations. Correlate individual
+outcomes by run/attempt and accepted artifact identities, while grouping rollups by bounded
+lane/stage/status/error class. Compare accepted candidate/attachment manifests with event totals:
+raw lifecycle volume is not the number of unique eligible findings, proposals or rendered PDFs.
+Report missing/duplicate/conflicting process coverage explicitly rather than hiding it in success
+counts. Model usage applies only where actually emitted; missing provider tokens/cache/cost data
+is unavailable, not zero.
+
+Check frozen run settings before interpreting an absent lane. The
+[new-run rollout decision](../architecture/evidence-completion-and-remediation.md#11-parallel-implementation-decisions)
+does not enable producers in old immutable configurations. Automatic validation and compile-only
+PoC still record no runtime execution; no throughput or successful build metric establishes
+reproduction, a passing negative control or a fixed finding. Neither stream nor its metrics may
+include raw source, patches, PoC payloads, prompts or credentials.
