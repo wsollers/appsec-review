@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from dataclasses import asdict
+import os
 from pathlib import Path
 import time
 
@@ -37,7 +38,7 @@ SNAPSHOT = "f" * 64
 
 @contextmanager
 def _timed_lane(name: str, *, cap_seconds: int = 30):
-    workspace = LaneWorkspace.create(ROOT, name)
+    workspace = LaneWorkspace.create(Path(os.environ.get("APPSEC_ACCEPTANCE_ROOT", ROOT)), name)
     started = time.monotonic()
     with workspace.span(f"acceptance.{name.replace('-', '_')}"):
         yield workspace
@@ -52,6 +53,14 @@ def _timed_lane(name: str, *, cap_seconds: int = 30):
     assert completed and all(row["details"]["terminal_status"] == "SUCCEEDED" for row in completed)
     assert all(row["details"]["duration_ms"] >= 0 for row in completed)
     assert all(row["details"]["resources"]["cpu_user_seconds"] >= 0 for row in completed)
+
+
+def test_timed_lane_inherits_outer_root_without_relocating_source_assets(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("APPSEC_ACCEPTANCE_ROOT", str(tmp_path))
+    with _timed_lane("graph-outer-root") as workspace:
+        assert workspace.repository == tmp_path.resolve() and workspace.repository != ROOT
+        assert workspace.root.is_relative_to(tmp_path.resolve())
+        assert (ROOT / "rules" / "codeql-graph-export" / "columns.json").is_file()
 
 
 def _floor():

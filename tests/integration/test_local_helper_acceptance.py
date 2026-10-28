@@ -31,13 +31,20 @@ DOCUMENTS = [
 ]
 
 
+def _fixture_root(workspace: LaneWorkspace) -> Path:
+    # Keep Windows child cwd/TEMP and SQLite filenames below MAX_PATH when lanes are nested.
+    invocation = workspace.root.parent
+    assert invocation.name == workspace.invocation_id
+    return invocation / "f"
+
+
 def _fixture(workspace: LaneWorkspace):
-    root = workspace.require_owned_path(workspace.root / "fixture")
+    root = _fixture_root(workspace)
     for name in ("input", "output", "home", "tmp"):
         (root / name).mkdir(parents=True)
-    source = root / "input" / "documents.jsonl"
+    source = root / "input" / "d.jsonl"
     _write_documents(source, DOCUMENTS)
-    return root, source, root / "output" / "search.sqlite"
+    return root, source, root / "output" / "q.db"
 
 
 def _write_documents(path: Path, records) -> None:
@@ -45,7 +52,7 @@ def _write_documents(path: Path, records) -> None:
 
 
 def _run_helper(workspace: LaneWorkspace, label: str, *arguments: str):
-    root = workspace.require_owned_path(workspace.root / "fixture")
+    root = _fixture_root(workspace)
     environment = {key: value for key, value in os.environ.items()
                    if key.upper() in {"SYSTEMROOT", "WINDIR", "COMSPEC"}}
     environment.update(workspace.environment())
@@ -109,7 +116,7 @@ def test_real_sqlite_helper_builds_verifies_and_queries_tiny_graph_documents() -
             assert db.execute("SELECT identity FROM search_fts WHERE search_fts MATCH ?",
                               ("compilerid",)).fetchall() == []
         assert file_sha256(index) == digest
-        assert not index.with_suffix(".sqlite.building").exists()
+        assert not index.with_name(index.name + ".building").exists()
         workspace.emit("ACCEPTANCE_HELPER_INDEX_VERIFIED", artifact_sha256=digest, record_count=2,
                        input_sha256=file_sha256(source), runtime=f"SQLite {sqlite3.sqlite_version}")
 
@@ -140,7 +147,7 @@ def test_real_sqlite_helper_rejects_bad_inputs_without_publishing(invalid: str) 
         digest = file_sha256(source)
         completed = _build(workspace, root, source, index, *limits)
         assert completed.returncode == 2 and expected in completed.stderr
-        assert not index.exists() and not index.with_suffix(".sqlite.building").exists()
+        assert not index.exists() and not index.with_name(index.name + ".building").exists()
         assert file_sha256(source) == digest
 
 
