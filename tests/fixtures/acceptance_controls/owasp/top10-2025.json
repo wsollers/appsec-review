@@ -1,0 +1,17 @@
+{
+  "schema": "appsec-review/owasp-catalog/1",
+  "family": "OWASP_TOP_10",
+  "version": "2025",
+  "authority": "routing_context",
+  "fixture": true,
+  "upstream": {
+    "repository": "https://github.com/OWASP/Top10",
+    "ref": "2025",
+    "commit": "66ebc4798d2ca72973967a20264bdeb70dcf0a13",
+    "license": "CC-BY-SA-4.0"
+  },
+  "records": [
+    {"id": "A01:2025", "title": "Access-control risk", "text": "Fixture risk-routing context.", "domain": "authorization_access_control"},
+    {"id": "A03:2025", "title": "Supply-chain risk", "text": "Fixture risk-routing context.", "domain": "build_supply_chain"}
+  ]
+}
