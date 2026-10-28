@@ -1,0 +1,3 @@
+# Byte-exact graph-export fixtures: manifest sizes and hashes cover the LF bytes.
+tests/fixtures/graph/codeql_export/go-synthetic/** -text
+tests/fixtures/graph/expected/go-synthetic/** -text
