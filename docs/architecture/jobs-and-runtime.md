@@ -16,17 +16,19 @@ processes cannot claim the same run concurrently.
 The direct CLI currently exercises this mechanism with a linear review graph from
 `job_model_connectivity` through `job_document_issue_analysis`. Dagster builds the broader, branched
 `wave1_review` topology from every registered, configured, enabled job except
-`job_third_party_data_sync`, adding the CI configuration, post-build, OWASP, and security-tagging
+`job_third_party_data_sync`, adding the CI configuration and post-build
 jobs that are not in the direct graph. Both surfaces end with `job_inference_security_review`,
 `job_final_publication_gate` and `job_final_report_publication`, in that order; the report is the
 single terminal job. Both surfaces use the same semantic registry and accepted-handoff format. The exact operator-visible distinction is documented in
 [`../operations/wave1-review.md`](../operations/wave1-review.md).
 
-In the enabled Dagster branch, prioritization and code-graph indexing feed security tagging,
+In both graphs, enabled prioritization and code-graph indexing feed security tagging,
 then OWASP consumes accepted tag-cloud/classification context before review data indexing and
 package/hunt/red-blue assembly. Tags are routing, not control proof. The OWASP job is shipped
-disabled with assessment mode configured; it does not automatically appear in the direct CLI
-when enabled. The [workbench design](owasp-control-workbench.md) describes the four supported
+disabled with assessment mode configured; enabling it selects the same chain in direct
+`start`/`resume`/`plan-resume` and Dagster. Direct `--force-from` accepts tagging/OWASP only when
+enabled. CI/post-build and standalone metadata-sync differences remain; this is not full graph
+parity. The [workbench design](owasp-control-workbench.md) describes the four supported
 Python static procedures, separate blinded reviewer, provisional result boundary and named
 unresolved coverage.
 

@@ -312,11 +312,12 @@ flowchart TD
   RV -.-> G
 ```
 
-OWASP is shipped disabled. When enabled in Dagster it follows the accepted tag cloud,
+OWASP is shipped disabled. When enabled in either graph it follows the accepted tag cloud,
 prioritization and graph context, and precedes data indexing, package assembly and hunt/red/blue
 review. Its PRECOMPUTED `control_evidence` projection is indirect for every final predicate;
-reviewers must retrieve original evidence. This schematic does not imply parity with the direct
-CLI graph, which still omits OWASP and security tagging. See
+reviewers must retrieve original evidence. The direct CLI shares the enabled prioritization →
+code graph → tagging → OWASP → indexing chain, but not the complete Dagster topology: CI/post-build
+branches remain absent from direct execution and third-party sync remains standalone. See
 [the workbench architecture](owasp-control-workbench.md) for catalog and procedure limits.
 
 Planned job responsibilities:

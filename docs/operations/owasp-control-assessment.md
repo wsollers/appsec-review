@@ -14,10 +14,12 @@ classification and graph context route work; they do not prove control outcomes.
 precedes review data indexing, package assembly, hunting, red/blue review and independent
 verification. Prioritization and tagging do not depend on OWASP.
 
-At feature base `6ff64d81` the direct CLI `start`/`resume` job list still omits OWASP and security
-tagging. Use the enabled Dagster path for the integrated chain; do not assume setting `enabled`
-adds these jobs to the direct graph. A standalone dispatch must use the run's accepted upstream
-handoffs and snapshot, not an arbitrary source tree.
+Direct CLI `start`, `resume` and `plan-resume` also select security tagging and OWASP after
+prioritization/code-graph indexing and before review data indexing. Normal enabled-job filtering
+applies: OWASP remains absent by default, and `resume`/`plan-resume --force-from` can name tagging
+or OWASP only when that job is enabled. This does not add Dagster's CI/post-build branches or
+standalone third-party sync to the direct graph. A standalone dispatch must use the run's accepted
+upstream handoffs and snapshot, not an arbitrary source tree.
 
 For assessment, enable the job in central configuration before freezing a new run, retain
 `mode = "assessment"` and enabled worker/reviewer profiles, and configure the intended provider,

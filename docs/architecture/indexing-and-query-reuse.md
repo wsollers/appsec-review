@@ -306,7 +306,8 @@ admissibility, job topology and implementation plan.
 | `review_package` | all accepted indices and products | compact evidence bundle for a bounded review question | every missing contributing lane and package truncation |
 
 OWASP runs after accepted tag-cloud/classification/graph context and before this indexing stage
-in the enabled Dagster path. Routing tags are not control proof. The projection preserves deep
+in the shared enabled direct/Dagster chain. Routing tags are not control proof. The projection
+preserves deep
 obligations/custody in the workbench authority, re-resolving citations under its published source
 cap; later lead/hunt assembly re-expands it with operation-local verified reuse, never a persistent
 trust cache. Qualification cannot yield production leads. Adverse hypotheses remain provisional;

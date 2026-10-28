@@ -28,7 +28,8 @@ In Dagster's `wave1_review` the job follows CodeQL and precedes code-graph index
 tagging. OWASP consumes these accepted classification/routing products before downstream indexing,
 hunting and red/blue review; prioritization does not wait for OWASP. The final report remains the
 single terminal job. Prioritization is also a standalone Dagster job. The direct CLI runs it after
-Tree-sitter and CodeQL, but still omits security tagging and OWASP.
+Tree-sitter and CodeQL, then code-graph indexing, security tagging and the opt-in OWASP assessment
+before review data indexing. Normal enabled-job selection applies on both surfaces.
 
 | Input | Required | Use |
 |---|---|---|

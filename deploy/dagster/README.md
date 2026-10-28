@@ -300,8 +300,11 @@ post-build, prioritization, graph and tagging branches, then precedes package as
 red/blue/independent verification. It is shipped disabled with assessment mode configured; worker
 and fresh blinded reviewer inference are implemented, but live-model efficacy is not established.
 Only four narrow Python static procedures are supported despite complete pinned catalogs.
-See [OWASP operations](../../docs/operations/owasp-control-assessment.md). The direct CLI still
-omits tagging/OWASP even when enabled; this ordering describes Dagster.
+See [OWASP operations](../../docs/operations/owasp-control-assessment.md). The direct CLI
+also selects the enabled prioritization → code graph → tagging → OWASP → indexing chain.
+Its `start`/`resume`/`plan-resume` and `--force-from` paths retain disabled-job filtering; OWASP
+remains disabled by default. CI/post-build branches remain Dagster additions, and third-party sync
+remains standalone; the full topologies are not identical.
 The configured multiprocess executor allows unrelated branches to overlap;
 Grype alone waits for Syft.
 

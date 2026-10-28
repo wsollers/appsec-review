@@ -8,7 +8,10 @@ when registered (`orchestration/topology.py`). The opt-in `job_owasp_control_ass
 consumes accepted tag assignments and a bounded component tag cloud as routing context, never
 control proof. Tagging does not depend on OWASP. Review data indexing follows all enabled
 producers, then package assembly, document issue analysis and inference review; final report
-publication is terminal. Security tagging and OWASP are still absent from the direct CLI graph.
+publication is terminal. Direct `start`/`resume`/`plan-resume` select the same enabled
+prioritization → code graph → tagging → OWASP → indexing chain; `--force-from` cannot bypass a
+disabled-job gate. OWASP is still shipped disabled. CI/post-build branches remain Dagster additions,
+and third-party metadata sync remains standalone.
 Run it standalone only after an accepted manifest exists; without one the input validator fails the
 job.
 
