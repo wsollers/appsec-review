@@ -55,3 +55,28 @@ driver operation spans remain beneath their own `test/tmp/acceptance/` invocatio
 An existing broad four-package review-to-report baseline did not finish in several minutes
 and its owned process tree was stopped. It is not a passing result or a quick-lane candidate
 without reduction. No production service, ledger, target, cache or metrics path was changed.
+
+The dependency-job slice runs real accepted input loading, native metadata/link normalization,
+repository deduplication, Scorecard response retention, exposure indexing and immutable
+publication twice. Compiler/SBOM input and HTTP response are explicit recorded boundaries;
+this is not evidence that current compiler, Syft or public Scorecard services work. Two
+native dependencies share one repository/request; DEBUG versus runtime evidence resolves to
+PROD without losing either source, while the separate QA dependency remains QA. A second
+accepted attempt uses the private fresh cache without another request and preserves the
+first index bytes.
+
+That second attempt reproduced a production defect: index fingerprints included upstream
+handoffs but omitted changing Scorecard/provenance/cache context, causing an immutable-shard
+conflict. The fingerprint now also binds the exact normalized dependency, Scorecard and gap
+content. The new case passed in a combined 28.70-second run (30.52 seconds wall); that run
+also passed 25 existing dependency cases. One existing integrity-error wording assertion
+failed identically with the pre-change dependency implementation: it expects `index integrity
+mismatch` while the shared verifier returns `target evidence integrity mismatch`. This is a
+named baseline failure, not a passing suite or a reason to weaken acceptance.
+
+The real MCP subprocess workstream found malformed-first-message session termination and
+stale request-id reuse. Focused regressions reproduced both before the correction; the
+protocol now returns a null-id JSON-RPC parse error and continues. A separate owned-process
+test confirms review-style heartbeat events remain in a disjoint stream while acceptance
+events are written. It passed in 1.91 seconds (3.67 seconds wall). This demonstrates local
+process/storage isolation, not zero CPU/I/O contention with a production review.

@@ -356,6 +356,9 @@ def build_job(*, infer: Infer | None = None, scorecard_transport: Transport = ht
         gaps = [*unit.output("resolution.detect_dependencies")["gaps"], *resolved["gaps"],
                 *repositories["gaps"], *scorecard["gaps"]]
         producer_artifacts = [{"job": key, "sha256": value} for key, value in sorted(loaded["upstream_handoffs"].items())]
+        producer_artifacts.append({"dependency_context_sha256": hashlib.sha256(canonical_json({
+            "dependencies": resolved["dependencies"], "scorecards": scorecard["records"], "gaps": gaps,
+        })).hexdigest()})
         fingerprint = index_fingerprint(name="inventory", target_snapshot=unit.job.source_fingerprint,
             producer_artifacts=producer_artifacts,
             tool_identity={"scorecard_api": unit.job.config.settings["scorecard"]["base_url"]},
