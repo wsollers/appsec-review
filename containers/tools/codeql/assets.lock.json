@@ -72,9 +72,24 @@
       "tree_sha256": "730b59ec4ad5bf02315545ce61cd4156f9899aad9078241d25e92795b3c3403b",
       "file_count": 12,
       "columns_path": "rules/codeql-graph-export/columns.json",
-      "columns_sha256": "82001ed547ebda6996c472e202cf784a2c6cb92a38f3781e2802e5bdefc1ebec",
+      "columns_sha256": "3ece76a528ea62260e2d4f664bd916671c544b861a0a40980f46707ce6d0f653",
       "catalog_path": "rules/codeql-graph-export/catalog.json",
-      "catalog_sha256": "33fb9e3961cd6bb883cfe58ba571ee108f34276c704dc2de9060bdd26dcdeebc"
+      "catalog_sha256": "bfdd1c488f32d7e881c150fb00cc23a09ee7139fb8d611545d2e7f28707d8426"
+    },
+    "csharp": {
+      "query_id": "graph-export-csharp",
+      "source_path": "rules/codeql-graph-export/csharp",
+      "query_pack": "appsec-review/graph-export-csharp",
+      "query_pack_version": "1.0.0",
+      "query_suite": "graph-export.qls",
+      "query_suite_sha256": "39367bd368773b73bc2f08c8225ed22ad1ccfdbbec46f76404423275cc03e87a",
+      "query_pack_sha256": "0a49ef58180d4e8030e5d056a10ebcbe7ff41542dc40842cbe26559db5d5edd4",
+      "tree_sha256": "a538e9d576c14d6fd025c9347364cce941c01d7d48bfbaedfa289b47fc18206a",
+      "file_count": 12,
+      "columns_path": "rules/codeql-graph-export/columns.json",
+      "columns_sha256": "3ece76a528ea62260e2d4f664bd916671c544b861a0a40980f46707ce6d0f653",
+      "catalog_path": "rules/codeql-graph-export/catalog.json",
+      "catalog_sha256": "bfdd1c488f32d7e881c150fb00cc23a09ee7139fb8d611545d2e7f28707d8426"
     },
     "go": {
       "query_id": "graph-export-go",
@@ -87,9 +102,9 @@
       "tree_sha256": "86b9772637889717ee94bd3661c0e38dfb24d12dc5700f133827de76472628c7",
       "file_count": 12,
       "columns_path": "rules/codeql-graph-export/columns.json",
-      "columns_sha256": "82001ed547ebda6996c472e202cf784a2c6cb92a38f3781e2802e5bdefc1ebec",
+      "columns_sha256": "3ece76a528ea62260e2d4f664bd916671c544b861a0a40980f46707ce6d0f653",
       "catalog_path": "rules/codeql-graph-export/catalog.json",
-      "catalog_sha256": "33fb9e3961cd6bb883cfe58ba571ee108f34276c704dc2de9060bdd26dcdeebc"
+      "catalog_sha256": "bfdd1c488f32d7e881c150fb00cc23a09ee7139fb8d611545d2e7f28707d8426"
     },
     "java": {
       "query_id": "graph-export-java",
@@ -102,9 +117,9 @@
       "tree_sha256": "8581c202d152a4068fc5bf3096530815f2fc671c05c522862f5b376a78e2a9ce",
       "file_count": 12,
       "columns_path": "rules/codeql-graph-export/columns.json",
-      "columns_sha256": "82001ed547ebda6996c472e202cf784a2c6cb92a38f3781e2802e5bdefc1ebec",
+      "columns_sha256": "3ece76a528ea62260e2d4f664bd916671c544b861a0a40980f46707ce6d0f653",
       "catalog_path": "rules/codeql-graph-export/catalog.json",
-      "catalog_sha256": "33fb9e3961cd6bb883cfe58ba571ee108f34276c704dc2de9060bdd26dcdeebc"
+      "catalog_sha256": "bfdd1c488f32d7e881c150fb00cc23a09ee7139fb8d611545d2e7f28707d8426"
     },
     "javascript": {
       "query_id": "graph-export-javascript",
@@ -117,9 +132,9 @@
       "tree_sha256": "7a4263da449294af74a9d7755636226b5d737ae90f02ba0c714be6cc9dd2fbb0",
       "file_count": 12,
       "columns_path": "rules/codeql-graph-export/columns.json",
-      "columns_sha256": "82001ed547ebda6996c472e202cf784a2c6cb92a38f3781e2802e5bdefc1ebec",
+      "columns_sha256": "3ece76a528ea62260e2d4f664bd916671c544b861a0a40980f46707ce6d0f653",
       "catalog_path": "rules/codeql-graph-export/catalog.json",
-      "catalog_sha256": "33fb9e3961cd6bb883cfe58ba571ee108f34276c704dc2de9060bdd26dcdeebc"
+      "catalog_sha256": "bfdd1c488f32d7e881c150fb00cc23a09ee7139fb8d611545d2e7f28707d8426"
     },
     "python": {
       "query_id": "graph-export-python",
@@ -129,12 +144,12 @@
       "query_suite": "graph-export.qls",
       "query_suite_sha256": "2fd390012848e76aaa07c8e1baf152f5ef8353063b5f29843d71dcd7aab0080b",
       "query_pack_sha256": "7d0808d772fe1feeb5ed03f996d7793aa2884cdf2404a898fcac770ffce33fa7",
-      "tree_sha256": "33732163f7a6e0ac887825df6dbdd6235d750cbd37183031543f043b91c546cb",
+      "tree_sha256": "3fe7ba29be7ba96c9dcd8ca943b41508fafa2e0447763c179ee8aaa2742567a8",
       "file_count": 12,
       "columns_path": "rules/codeql-graph-export/columns.json",
-      "columns_sha256": "82001ed547ebda6996c472e202cf784a2c6cb92a38f3781e2802e5bdefc1ebec",
+      "columns_sha256": "3ece76a528ea62260e2d4f664bd916671c544b861a0a40980f46707ce6d0f653",
       "catalog_path": "rules/codeql-graph-export/catalog.json",
-      "catalog_sha256": "33fb9e3961cd6bb883cfe58ba571ee108f34276c704dc2de9060bdd26dcdeebc"
+      "catalog_sha256": "bfdd1c488f32d7e881c150fb00cc23a09ee7139fb8d611545d2e7f28707d8426"
     },
     "ruby": {
       "query_id": "graph-export-ruby",
@@ -144,12 +159,12 @@
       "query_suite": "graph-export.qls",
       "query_suite_sha256": "fb3c6b1ecbd56e03f1ddeac4d258ad4543f46fc3fa588c2e058b856e4098942b",
       "query_pack_sha256": "9a54ffd33511f1c6ffce058ed8f9d2970bb2ddbdcea11b39630b4d9ba69c49cb",
-      "tree_sha256": "9aa7c4534792cc648c36e29504581b132b6e842f6637faf56b33482e760df490",
+      "tree_sha256": "df8ed537dcb5e0347f33fd3116a305de1dfcbe315df5f15c607586dac813bb78",
       "file_count": 12,
       "columns_path": "rules/codeql-graph-export/columns.json",
-      "columns_sha256": "82001ed547ebda6996c472e202cf784a2c6cb92a38f3781e2802e5bdefc1ebec",
+      "columns_sha256": "3ece76a528ea62260e2d4f664bd916671c544b861a0a40980f46707ce6d0f653",
       "catalog_path": "rules/codeql-graph-export/catalog.json",
-      "catalog_sha256": "33fb9e3961cd6bb883cfe58ba571ee108f34276c704dc2de9060bdd26dcdeebc"
+      "catalog_sha256": "bfdd1c488f32d7e881c150fb00cc23a09ee7139fb8d611545d2e7f28707d8426"
     },
     "rust": {
       "query_id": "graph-export-rust",
@@ -162,9 +177,9 @@
       "tree_sha256": "eb95cb5e33ecd4287c2a459736ed84d418d95bd79cde98881853213e67f01488",
       "file_count": 12,
       "columns_path": "rules/codeql-graph-export/columns.json",
-      "columns_sha256": "82001ed547ebda6996c472e202cf784a2c6cb92a38f3781e2802e5bdefc1ebec",
+      "columns_sha256": "3ece76a528ea62260e2d4f664bd916671c544b861a0a40980f46707ce6d0f653",
       "catalog_path": "rules/codeql-graph-export/catalog.json",
-      "catalog_sha256": "33fb9e3961cd6bb883cfe58ba571ee108f34276c704dc2de9060bdd26dcdeebc"
+      "catalog_sha256": "bfdd1c488f32d7e881c150fb00cc23a09ee7139fb8d611545d2e7f28707d8426"
     }
   },
   "custom_query_acquisition": {

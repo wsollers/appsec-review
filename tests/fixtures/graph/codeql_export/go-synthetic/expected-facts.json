@@ -18,7 +18,7 @@
       "where": {
         "source_start_line": 47,
         "sink_start_line": 42,
-        "edge_kind": "return",
+        "edge_kind": "call",
         "to_function": "lookup"
       }
     },

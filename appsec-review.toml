@@ -898,7 +898,7 @@ image_id = "sha256:6e0c9f5f8430595d2c08d6ac97acbad733d658c692d26cbecc29afd3e6101
 user = "10001:10001"
 [jobs.job_project_build.settings.profiles.rust]
 tag = "audit-buildenv-rust-wasm:local"
-image_id = "sha256:38cc04b72ca8b3fdc739dffc51a8f874ceb0f336abfd84b6830854bbd880a8fc"
+image_id = "sha256:9b358785819745f557cb08dcbd4691f7aba00c0fe6aa7ed38653dfc8812fece1"
 user = "10001:10001"
 [jobs.job_project_build.settings.profiles.go]
 tag = "audit-buildenv-go:local"
@@ -933,7 +933,7 @@ image_id = "sha256:d5df139bd741352cf6dcddb154ce6607dbba4b0f5525c4de36b9953fa720a
 user = "10001:10001"
 [jobs.job_project_build.settings.profiles.wasm]
 tag = "audit-buildenv-rust-wasm:local"
-image_id = "sha256:38cc04b72ca8b3fdc739dffc51a8f874ceb0f336abfd84b6830854bbd880a8fc"
+image_id = "sha256:9b358785819745f557cb08dcbd4691f7aba00c0fe6aa7ed38653dfc8812fece1"
 user = "10001:10001"
 
 [jobs.job_project_build.steps.plan]
@@ -1454,7 +1454,7 @@ version = "2.27.0"
 commit = "b47b3e59262c95aff4eeb84ac72d09e25a9c37e9"
 cli_sha256 = "5c905275695b4efcaa02ea380f6e60b01310fa3dff0fa8c442bf0638bb46055a"
 license_sha256 = "d0d6cfdc857c1e0153bbd2b6f0d4ab42dfc38acec9b97b2f7f55c1f51ffe9fbf"
-asset_lock_sha256 = "3691035e0c6427af369604ed92f0865d7df3bf13a4a4ae30a8e28e7d8be0045d"
+asset_lock_sha256 = "a2e2b25dd08f7caa246873c0fd0c43933e20e5bbfd053872f2a2ac51d46682eb"
 runtime_user = "10001:10001"
 retention = "run-owned"
 concurrency = 2
@@ -1504,7 +1504,9 @@ mode = "seeded"
 seed_depth = 3
 max_seed_depth = 8
 seed_limit = 200
-# The precompile action fills the persistent query compile cache before evaluation. A cold compile
+# The precompile action fills the query compile cache before evaluation. The cache is shared across
+# runs and keyed by the declared CodeQL and runner releases, so a pack compiles cold only after a
+# release or pack change. A cold compile
 # is minutes of CPU, so it has its own timeout and resources, separate from timeout_seconds.
 compile_timeout_seconds = 3600
 compile_threads = 8
@@ -1554,9 +1556,9 @@ query_pack_sha256 = "5a1b7d2794951859393831f0bdaad3ab369718340806862ae3e036fe4e3
 tree_sha256 = "730b59ec4ad5bf02315545ce61cd4156f9899aad9078241d25e92795b3c3403b"
 file_count = 12
 columns_path = "rules/codeql-graph-export/columns.json"
-columns_sha256 = "82001ed547ebda6996c472e202cf784a2c6cb92a38f3781e2802e5bdefc1ebec"
+columns_sha256 = "3ece76a528ea62260e2d4f664bd916671c544b861a0a40980f46707ce6d0f653"
 catalog_path = "rules/codeql-graph-export/catalog.json"
-catalog_sha256 = "33fb9e3961cd6bb883cfe58ba571ee108f34276c704dc2de9060bdd26dcdeebc"
+catalog_sha256 = "bfdd1c488f32d7e881c150fb00cc23a09ee7139fb8d611545d2e7f28707d8426"
 
 [jobs.job_codeql_analysis.settings.languages.go]
 enabled = true
@@ -1590,9 +1592,9 @@ query_pack_sha256 = "03a6e1968bea2877a7023f0dda3bf8fd126218c631035983f47f6716eaa
 tree_sha256 = "86b9772637889717ee94bd3661c0e38dfb24d12dc5700f133827de76472628c7"
 file_count = 12
 columns_path = "rules/codeql-graph-export/columns.json"
-columns_sha256 = "82001ed547ebda6996c472e202cf784a2c6cb92a38f3781e2802e5bdefc1ebec"
+columns_sha256 = "3ece76a528ea62260e2d4f664bd916671c544b861a0a40980f46707ce6d0f653"
 catalog_path = "rules/codeql-graph-export/catalog.json"
-catalog_sha256 = "33fb9e3961cd6bb883cfe58ba571ee108f34276c704dc2de9060bdd26dcdeebc"
+catalog_sha256 = "bfdd1c488f32d7e881c150fb00cc23a09ee7139fb8d611545d2e7f28707d8426"
 
 [jobs.job_codeql_analysis.settings.languages.java]
 enabled = true
@@ -1621,9 +1623,9 @@ query_pack_sha256 = "1852e1e967fba5fb1ee952d43b0a7f9b4f55f8cc34c6bc5d3b11f193f2d
 tree_sha256 = "8581c202d152a4068fc5bf3096530815f2fc671c05c522862f5b376a78e2a9ce"
 file_count = 12
 columns_path = "rules/codeql-graph-export/columns.json"
-columns_sha256 = "82001ed547ebda6996c472e202cf784a2c6cb92a38f3781e2802e5bdefc1ebec"
+columns_sha256 = "3ece76a528ea62260e2d4f664bd916671c544b861a0a40980f46707ce6d0f653"
 catalog_path = "rules/codeql-graph-export/catalog.json"
-catalog_sha256 = "33fb9e3961cd6bb883cfe58ba571ee108f34276c704dc2de9060bdd26dcdeebc"
+catalog_sha256 = "bfdd1c488f32d7e881c150fb00cc23a09ee7139fb8d611545d2e7f28707d8426"
 
 [jobs.job_codeql_analysis.settings.languages.csharp]
 enabled = true
@@ -1644,6 +1646,22 @@ prerequisites = []
 query_id = "security-extended"
 query_suite = "codeql-suites/csharp-security-extended.qls"
 query_suite_sha256 = "7abab2161fc1ffef4b8fa2462b02fb7789c70fb738dc1eee678ab09ea78f7220"
+
+# Must equal export_query_packs.csharp in containers/tools/codeql/assets.lock.json.
+[[jobs.job_codeql_analysis.settings.languages.csharp.export_queries]]
+query_id = "graph-export-csharp"
+source_path = "rules/codeql-graph-export/csharp"
+query_pack = "appsec-review/graph-export-csharp"
+query_pack_version = "1.0.0"
+query_suite = "graph-export.qls"
+query_suite_sha256 = "39367bd368773b73bc2f08c8225ed22ad1ccfdbbec46f76404423275cc03e87a"
+query_pack_sha256 = "0a49ef58180d4e8030e5d056a10ebcbe7ff41542dc40842cbe26559db5d5edd4"
+tree_sha256 = "a538e9d576c14d6fd025c9347364cce941c01d7d48bfbaedfa289b47fc18206a"
+file_count = 12
+columns_path = "rules/codeql-graph-export/columns.json"
+columns_sha256 = "3ece76a528ea62260e2d4f664bd916671c544b861a0a40980f46707ce6d0f653"
+catalog_path = "rules/codeql-graph-export/catalog.json"
+catalog_sha256 = "bfdd1c488f32d7e881c150fb00cc23a09ee7139fb8d611545d2e7f28707d8426"
 
 [jobs.job_codeql_analysis.settings.languages.javascript]
 enabled = true
@@ -1672,9 +1690,9 @@ query_pack_sha256 = "9d6ee801b50e9229483ca651f59f9aa678596e599e330d0b1aa62a5aed1
 tree_sha256 = "7a4263da449294af74a9d7755636226b5d737ae90f02ba0c714be6cc9dd2fbb0"
 file_count = 12
 columns_path = "rules/codeql-graph-export/columns.json"
-columns_sha256 = "82001ed547ebda6996c472e202cf784a2c6cb92a38f3781e2802e5bdefc1ebec"
+columns_sha256 = "3ece76a528ea62260e2d4f664bd916671c544b861a0a40980f46707ce6d0f653"
 catalog_path = "rules/codeql-graph-export/catalog.json"
-catalog_sha256 = "33fb9e3961cd6bb883cfe58ba571ee108f34276c704dc2de9060bdd26dcdeebc"
+catalog_sha256 = "bfdd1c488f32d7e881c150fb00cc23a09ee7139fb8d611545d2e7f28707d8426"
 
 [jobs.job_codeql_analysis.settings.languages.python]
 enabled = true
@@ -1700,12 +1718,12 @@ query_pack_version = "1.0.0"
 query_suite = "graph-export.qls"
 query_suite_sha256 = "2fd390012848e76aaa07c8e1baf152f5ef8353063b5f29843d71dcd7aab0080b"
 query_pack_sha256 = "7d0808d772fe1feeb5ed03f996d7793aa2884cdf2404a898fcac770ffce33fa7"
-tree_sha256 = "33732163f7a6e0ac887825df6dbdd6235d750cbd37183031543f043b91c546cb"
+tree_sha256 = "3fe7ba29be7ba96c9dcd8ca943b41508fafa2e0447763c179ee8aaa2742567a8"
 file_count = 12
 columns_path = "rules/codeql-graph-export/columns.json"
-columns_sha256 = "82001ed547ebda6996c472e202cf784a2c6cb92a38f3781e2802e5bdefc1ebec"
+columns_sha256 = "3ece76a528ea62260e2d4f664bd916671c544b861a0a40980f46707ce6d0f653"
 catalog_path = "rules/codeql-graph-export/catalog.json"
-catalog_sha256 = "33fb9e3961cd6bb883cfe58ba571ee108f34276c704dc2de9060bdd26dcdeebc"
+catalog_sha256 = "bfdd1c488f32d7e881c150fb00cc23a09ee7139fb8d611545d2e7f28707d8426"
 
 [jobs.job_codeql_analysis.settings.languages.ruby]
 enabled = true
@@ -1731,12 +1749,12 @@ query_pack_version = "1.0.0"
 query_suite = "graph-export.qls"
 query_suite_sha256 = "fb3c6b1ecbd56e03f1ddeac4d258ad4543f46fc3fa588c2e058b856e4098942b"
 query_pack_sha256 = "9a54ffd33511f1c6ffce058ed8f9d2970bb2ddbdcea11b39630b4d9ba69c49cb"
-tree_sha256 = "9aa7c4534792cc648c36e29504581b132b6e842f6637faf56b33482e760df490"
+tree_sha256 = "df8ed537dcb5e0347f33fd3116a305de1dfcbe315df5f15c607586dac813bb78"
 file_count = 12
 columns_path = "rules/codeql-graph-export/columns.json"
-columns_sha256 = "82001ed547ebda6996c472e202cf784a2c6cb92a38f3781e2802e5bdefc1ebec"
+columns_sha256 = "3ece76a528ea62260e2d4f664bd916671c544b861a0a40980f46707ce6d0f653"
 catalog_path = "rules/codeql-graph-export/catalog.json"
-catalog_sha256 = "33fb9e3961cd6bb883cfe58ba571ee108f34276c704dc2de9060bdd26dcdeebc"
+catalog_sha256 = "bfdd1c488f32d7e881c150fb00cc23a09ee7139fb8d611545d2e7f28707d8426"
 
 [jobs.job_codeql_analysis.settings.languages.rust]
 enabled = true
@@ -1770,9 +1788,9 @@ query_pack_sha256 = "632020abd5dbe64a238b0ae4b6ab04064cc30f3a8a6f19928a501165f0b
 tree_sha256 = "eb95cb5e33ecd4287c2a459736ed84d418d95bd79cde98881853213e67f01488"
 file_count = 12
 columns_path = "rules/codeql-graph-export/columns.json"
-columns_sha256 = "82001ed547ebda6996c472e202cf784a2c6cb92a38f3781e2802e5bdefc1ebec"
+columns_sha256 = "3ece76a528ea62260e2d4f664bd916671c544b861a0a40980f46707ce6d0f653"
 catalog_path = "rules/codeql-graph-export/catalog.json"
-catalog_sha256 = "33fb9e3961cd6bb883cfe58ba571ee108f34276c704dc2de9060bdd26dcdeebc"
+catalog_sha256 = "bfdd1c488f32d7e881c150fb00cc23a09ee7139fb8d611545d2e7f28707d8426"
 
 [jobs.job_codeql_analysis.settings.languages.actions]
 enabled = true

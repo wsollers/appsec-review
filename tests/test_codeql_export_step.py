@@ -67,10 +67,10 @@ def _settings(mode: str = "whole_program"):
 
 
 def _scope(language: str, root: str, unit: str) -> CodeQLScope:
-    files = ({"path": f"{root}/main.{'cpp' if language == 'cpp' else 'go'}", "sha256": "a" * 64,
+    files = ({"path": f"{root}/main.{'cpp' if language == 'cpp' else language}", "sha256": "a" * 64,
               "size_bytes": 12},)
     return CodeQLScope(SCOPE_SCHEMA, f"codeql-unit-{unit * 24}", language, ("C++",) if language == "cpp"
-                       else ("Go",), "manual", root, files, f"build-unit-{unit * 20}", unit * 64, "e" * 64, True)
+                       else (language.capitalize(),), "manual", root, files, f"build-unit-{unit * 20}", unit * 64, "e" * 64, True)
 
 
 class Events:
@@ -179,8 +179,8 @@ def _never(image, run_root, settings):
 
 
 def test_export_writes_exports_and_manifest_publishes_hashes_and_reuses(tmp_path: Path) -> None:
-    cpp, go = _scope("cpp", "native", "a"), _scope("go", "svc", "b")
-    databases = [_database(tmp_path, cpp), _database(tmp_path, go)]
+    cpp, swift = _scope("cpp", "native", "a"), _scope("swift", "svc", "b")
+    databases = [_database(tmp_path, cpp), _database(tmp_path, swift)]
     unit = _unit(tmp_path, databases)
     executor = FakeExecutor()
     output = _export_scopes(unit, executor_factory=executor.factory)
@@ -188,9 +188,9 @@ def test_export_writes_exports_and_manifest_publishes_hashes_and_reuses(tmp_path
     assert len(executor.calls) == 1 and executor.calls[0][2].name == cpp.scope_id
     assert output["terminal_status"] == "SUCCEEDED" and output["gaps"] == []
     by_scope = {item["scope_id"]: item for item in output["exports"]}
-    exported, skipped = by_scope[cpp.scope_id], by_scope[go.scope_id]
+    exported, skipped = by_scope[cpp.scope_id], by_scope[swift.scope_id]
     assert skipped["export_status"] == "NOT_APPLICABLE" and skipped["gaps"] == []
-    assert "no hash-pinned CodeQL graph export pack for go" in skipped["reason"]
+    assert "no hash-pinned CodeQL graph export pack for swift" in skipped["reason"]
 
     run_root = unit.job.run_root
     exports_root = run_root / "data" / "codeql" / "scopes" / cpp.scope_id / "exports"
@@ -209,10 +209,10 @@ def test_export_writes_exports_and_manifest_publishes_hashes_and_reuses(tmp_path
     index = json.loads((run_root / output["artifact"]["path"]).read_text(encoding="utf-8"))
     assert output["artifact"]["path"].endswith("/artifacts/codeql/graph-exports.json")
     assert index["schema"] == output["schema"] == "appsec-review/codeql-graph-exports/1"
-    assert [item["scope_id"] for item in index["exports"]] == [cpp.scope_id, go.scope_id]
+    assert [item["scope_id"] for item in index["exports"]] == [cpp.scope_id, swift.scope_id]
     assert output["dispositions"] == [
         {"scope_id": cpp.scope_id, "language": "cpp", "action": "export", "terminal_status": "SUCCEEDED"},
-        {"scope_id": go.scope_id, "language": "go", "action": "export", "terminal_status": "NOT_APPLICABLE"}]
+        {"scope_id": swift.scope_id, "language": "swift", "action": "export", "terminal_status": "NOT_APPLICABLE"}]
     export_events = [(name, details) for name, details in unit.job.events.records
                      if details.get("tool_id") == "codeql-graph-export"]
     assert [name for name, _details in export_events] == ["TOOL_INVOCATION_STARTED", "TOOL_INVOCATION_COMPLETED"]
@@ -366,11 +366,11 @@ def test_planning_compares_the_toml_export_block_with_the_lock_entry() -> None:
     assert export_lock_mismatches({**configured, "cpp": []}, lock) == ("cpp",)
     assert export_lock_mismatches({**configured, "go": configured["cpp"]}, lock) == ("go",)
 
-    cpp, go = _scope("cpp", "native", "a"), _scope("go", "svc", "b")
-    planned = plan_graph_exports((cpp, go), enabled=True, export_languages=("cpp",))
+    cpp, swift = _scope("cpp", "native", "a"), _scope("swift", "svc", "b")
+    planned = plan_graph_exports((cpp, swift), enabled=True, export_languages=("cpp",))
     assert [(item["scope_id"], item["disposition"]) for item in planned] == [
-        (cpp.scope_id, "PLANNED"), (go.scope_id, "NOT_APPLICABLE")]
-    assert planned[1]["reason"] == "no hash-pinned CodeQL graph export pack for go"
+        (cpp.scope_id, "PLANNED"), (swift.scope_id, "NOT_APPLICABLE")]
+    assert planned[1]["reason"] == "no hash-pinned CodeQL graph export pack for swift"
     assert {item["disposition"] for item in plan_graph_exports((cpp,), enabled=False,
                                                                export_languages=("cpp",))} == {"NOT_APPLICABLE"}
 
@@ -391,7 +391,7 @@ def test_typed_export_settings_are_strict_and_default_to_the_graph_contract() ->
     pinned = {name: [item.query_id for item in value.export_queries]
               for name, value in settings.languages.items() if value.export_queries}
     assert pinned == {name: [f"graph-export-{name}"] for name in
-                      ("cpp", "go", "java", "javascript", "python", "ruby", "rust")}
+                      ("cpp", "csharp", "go", "java", "javascript", "python", "ruby", "rust")}
 
     absent = _raw_settings()
     del absent["export_queries"]

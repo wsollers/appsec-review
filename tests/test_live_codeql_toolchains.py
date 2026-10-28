@@ -123,7 +123,8 @@ LIVE_SCOPES = (
         (".", ("dotnet", "build", "appsec-fixture.csproj", "--no-restore"),
          {"DOTNET_CLI_HOME": "/tmp/dotnet", "NUGET_PACKAGES": "/scratch/workspace/.nuget/packages"}),
     )),
-    ("javascript", "source", "none", "typescript", ()),
+    # TypeScript extraction needs Node.js on PATH, so like an accepted node build it runs in that environment.
+    ("javascript", "node", "none", "typescript", ()),
     ("python", "source", "none", "python", ()),
     ("ruby", "source", "none", "ruby", ()),
     ("rust", "rust", "none", "rust", ()),
