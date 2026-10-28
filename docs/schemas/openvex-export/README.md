@@ -1,8 +1,9 @@
 # OpenVEX shared contracts
 
-These are **Wave 0 contracts, not an installed exporter**. No registry, dispatch, TOML,
-runtime, report, telemetry aggregation or installed-resource wiring is introduced here.
-The authoritative design is [OpenVEX findings export](../../architecture/openvex-export.md).
+These shared contracts are used by the implemented, disabled-by-default exporter, its
+accepted-output reader, final-report integration and metrics. The authoritative design is
+[OpenVEX findings export](../../architecture/openvex-export.md); verification scope and
+remaining manual checks are in the [implementation record](../../reviews/openvex-export-implementation.md).
 
 The official OpenVEX v0.2.0 schema is retained byte-for-byte under `upstream/`, at commit
 `61b5f885d0f481f48683c93345e49ef1a6e9fdff`. Its SHA-256 is
@@ -38,14 +39,20 @@ inference settings hash) and `references`. Its JSON includes that explicit deriv
 Verified inputs expose `total_input_bytes` and serialize with
 `appsec-review/openvex-verified-inputs/1`. Inventory paths are unique and sorted, cover
 every provenance/gate/finding/score/evidence reference and are bounded individually and
-in aggregate. The input implementation must additionally enforce **lower configured**
+in aggregate. The input verifier additionally enforces **lower configured**
 bounds, all accepted hashes/schemas/cross-identities and current pointer custody.
+Durable inventory excludes exact job `latest.json` admission pointers and
+`data/indices/accepted.json`: they remain measured, bounded and reproved internally,
+but legitimate pointer replacement must not corrupt historical exported evidence.
+The job adds eight immutable run-owned schema/license/lock snapshots. Accordingly,
+`total_input_bytes` describes durable bindings, not all operational metadata read.
 Synthetic record construction is not an acceptance API.
 
-The Wave 1 implementation signatures are:
+The implemented boundary signatures are:
 
 ```python
 verify_inputs(run_root, settings, repository_root) -> VerifiedInputs
+reprove_inputs(run_root, verified_inputs, settings, repository_root) -> None
 assemble_export(verified_inputs, settings, exporter_release, *, output_prefix: str) -> ExportBundle
 validate_export(bundle, verified_inputs, settings) -> None
 ```
@@ -135,9 +142,12 @@ final-report/final-publication-gate.schema.json
 `SCHEMA_SHA256` pins all six schema files; `VALIDATION_PROFILE_SHA256` incorporates
 those pins and the versioned profile. Load them into an explicit offline
 `referencing.Registry` and reject unknown resources; never use the review `SchemaSet`
-for upstream OpenVEX or retrieve the JSON-LD context. Packaging and the actual installed
-wheel-resource test belong to integration; Wave 0 tests exercise the offline registry
-against the same synthetic installed directory layout.
+for upstream OpenVEX or retrieve the JSON-LD context. Source resources are authoritative
+when present, otherwise validation uses `sys.prefix/share/appsec-review/schemas/`.
+No newline normalization is applied to pins. A rebuilt wheel's installed-only schema
+fallback and pure canonical assembly/validation were checked, in addition to the synthetic
+offline-layout units. This does not establish full installed job execution: upstream
+review verification still requires the application's existing guidance/schema resources.
 
 ## Test fixtures and verification
 
@@ -160,5 +170,9 @@ Focused Windows unit command (explicitly authorized for this isolated worktree):
 .\.venv\Scripts\python.exe -m pytest -q tests\test_openvex_contracts.py tests\test_openvex_settings.py --basetemp=test/tmp/openvex-contracts
 ```
 
-Integration, acceptance and live Dagster runs remain manual. Unit boundary examples
-establish neither real-run acceptance nor runtime/report/metrics integration.
+`tests/openvex_input_support.py` additionally provides `AcceptedInputDisk`, a small
+hash-bound filesystem fixture with an explicit `load_accepted_review` authority double.
+Focused job/report handler units and the actual accepted-output-reader/metrics boundary
+use it without claiming a complete real review chain. The implementation record lists
+the delivered selectors and results. Integration, acceptance and live Dagster runs remain
+manual; passing these units does not establish those checks.

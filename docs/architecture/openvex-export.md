@@ -1,6 +1,15 @@
 # OpenVEX findings export
 
-Status: **design for implementation; not implemented**. Reconciled against
+Status: **implementation being adapted to the certified gate/2 boundary**. The user explicitly
+selected standalone post-gate export and preservation of gate-only report/2 publication.
+This supersedes this original design's proposed OpenVEX report links and optional-tail fan-in;
+pre-gate PoC/remediation/dossiers must remain unchanged.
+
+The original design below is retained during reconciliation,
+not evidence of a completed review or deployment. Focused-unit, packaging and manual-validation
+scope is recorded in [the implementation record](../reviews/openvex-export-implementation.md).
+
+The original design was reconciled against
 `2ee310f05b12bdcdf5baa4deb2b3b5c628330678` (Merge correlated OWASP and review-flow telemetry),
 which contains the originally required baseline `fcac43068d17f139a9d94393b03fe128c6127f12`.
 Both ancestry checks passed in the design agent's isolated worktree.
@@ -767,3 +776,34 @@ future product decisions, not implementation assumptions.
 Design-only handoff is one commit modifying this document only. The coordinator owns
 subsequent implementation/docs agents, merged focused unit verification and the user's
 requested local-main merge/commit. This agent does not touch local main, push or create a PR.
+
+## 16. Implementation reconciliation
+
+- The three units, typed central settings, registry, direct CLI/Dagster topology, protected
+  datasets, optional final-report states, offline validation and accepted-only metrics are
+  implemented. The disabled exporter is not a manual-dispatch exception. Enabled PoC and
+  OpenVEX jobs are independent gate tails, both awaited by the final report.
+- `VerifiedInputs.input_inventory` contains durable immutable evidence and the eight run-owned
+  schema/license/lock snapshots. Exact job `latest.json` admission pointers and
+  `data/indices/accepted.json` remain measured, bounded and reproved within input verification,
+  but are not persisted as durable evidence. This permits valid upstream reruns to make an
+  old export stale without falsely treating its historical bytes as tampered.
+- Acceptance rechecks the original current gate/review boundary and exact canonical outputs.
+  The historical accepted-output reader also rehashes every runtime-declared artifact and
+  rejects duplicate artifact paths. The current report reader additionally re-proves upstream
+  authority; stale, absent and disabled states expose no old output links or invented counts.
+- The timeout covers the original runtime claim's attempt start across units. Completion is
+  emitted only after final result reading and the deadline check; a domain completion still
+  does not establish runtime acceptance.
+- The review handoff's closed consumer vocabulary additionally names `job_openvex_export`;
+  existing four-consumer handoffs remain schema-valid. Finding-package/2, adjudication,
+  finding states, gate eligibility and ship-block policy are unchanged.
+- The wheel includes all pinned exporter resources and final-report schema dependencies.
+  Installed-only pure assembly and offline validation work without source resources. A full
+  job still requires the existing application guidance and upstream review resources; this is
+  not a new self-contained application distribution.
+- Focused handler tests use small hash-bound run artifacts with an explicitly doubled upstream
+  review authority, not a fabricated claim that an entire real review chain was exercised.
+  Full integration, acceptance and live Dagster validation remain manual and unexecuted.
+  The concrete delivered selectors are listed in the implementation record rather than the
+  provisional test filenames in the ownership plan above.
