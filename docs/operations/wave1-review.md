@@ -26,13 +26,13 @@ its pin; any missing image or moved tag fails the run (see
 [`image-pin-verification.md`](image-pin-verification.md)). The pipeline never builds images. Setting
 `jobs.job_image_pin_verification.settings.enabled = false` removes that step from both graphs.
 
-The direct graph does not include CI configuration analysis, post-build security assessment, OWASP
-control assessment, or security tagging, and `third_party_data_sync` runs separately (`appsec-review
+The direct graph is derived from the same topology as Dagster's `wave1_review`, so it includes CI
+configuration analysis, post-build security assessment, OWASP control assessment and security
+tagging; `third_party_data_sync` runs separately (`appsec-review
 run job_third_party_data_sync`). Both surfaces run change-context analysis after Tree-sitter AST
 production, review prioritization after CodeQL, review-package assembly after data indexing, and
-document issue analysis after package assembly. Use Dagster's
-`wave1_review`, which includes every registered job whose job-level `settings.enabled` is not false,
-except the standalone `third_party_data_sync` job, when its additional branches are required.
+document issue analysis after package assembly. Dagster's
+`wave1_review` runs the independent branches concurrently; the CLI runs them in one topological order.
 `final_report_publication` is its single terminal job; the gate and the report are described in
 [`final-report.md`](final-report.md). `poc_generation` is an optional job between the gate and the report; it is
 shipped disabled, so it is absent from both graphs unless `jobs.job_poc_generation.settings.enabled = true`, and it is

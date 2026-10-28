@@ -108,12 +108,6 @@ def _copy_source(unit: UnitContext, action: Mapping[str, Any], workspace: Path) 
         retained = workspace / Path(*logical.parts)
         retained.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(dependency, retained)
-    try:
-        workspace.chmod(0o777)
-        for directory in (path for path in workspace.rglob("*") if path.is_dir()):
-            directory.chmod(0o777)
-    except OSError:
-        pass
     return _materialize_build_layout(action, workspace)
 
 

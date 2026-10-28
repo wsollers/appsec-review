@@ -29,8 +29,11 @@ from pathlib import Path
 import subprocess
 from typing import Any, Callable, Mapping, Sequence
 
+from appsec_review.retrieval.core import RetrievalIntegrityError
 from appsec_review.review import advisories as advisory_reference
 from appsec_review.review.identity import sha256_hex
+from appsec_review.review.models import IntegrityError
+from appsec_review.storage.verify import ArtifactIntegrityError
 from appsec_review.review.lead_families import ASSESSED_VALUES, AssessedSeverity, Lead, LeadTriage
 from appsec_review.review.lead_triage_settings import (
     RULE_TABLE_VERSION, TriageRule, TriageSettings,
@@ -241,7 +244,9 @@ def finding_input(lead: Lead, *, settings: TriageSettings, reader: ExcerptReader
     else:
         try:
             lines, reason = reader(lead)
-        except Exception as exc:                  # an unreadable file is a note, never a failure of the batch
+        except (ArtifactIntegrityError, RetrievalIntegrityError, IntegrityError):
+            raise                                 # corrupted evidence stops the run, never becomes a note
+        except (OSError, LookupError, ValueError, UnicodeError) as exc:  # an unreadable file is a note
             lines, reason = None, f"{type(exc).__name__}"
         if lines is None:
             note = _short(reason or "source unavailable", 120)

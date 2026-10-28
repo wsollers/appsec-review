@@ -7,11 +7,14 @@ import stat
 import pytest
 
 from appsec_review import inference
+from appsec_review.config import load_config
 from appsec_review.inference import ModelResult, ReviewModelRequest, infer
 
 TURN_SCHEMA = "appsec-review/worker-turn/1"
 TURN = {"schema": TURN_SCHEMA, "action": "final", "result": {"hypotheses": []}}
 GUIDANCE = "governing rules / role / task guidance"
+MODEL = load_config(Path(__file__).parents[1] / "appsec-review.toml").jobs[
+    "job_target_analysis_plan"].settings["model"]
 
 
 def _request(provider: str) -> ReviewModelRequest:
@@ -19,7 +22,7 @@ def _request(provider: str) -> ReviewModelRequest:
         schema=TURN_SCHEMA, role="hypothesis_hunter", persona="web_api", stack_profile="python_web",
         guidance_bundle_sha256="a" * 64, guidance_text=GUIDANCE, task_input={"task": "hunt/sink_up"},
         transcript=({"turn": 1, "from": "worker", "content": {"action": "retrieve", "requests": []}},),
-        provider=provider, model="claude-opus-5-5", reasoning="high", max_input_tokens=32000,
+        provider=provider, model=str(MODEL["model"]), reasoning=str(MODEL["reasoning"]), max_input_tokens=32000,
         max_output_tokens=8000, repair_errors=("cites unseen identities",), cell_id="cell-" + "b" * 64)
 
 
@@ -55,12 +58,13 @@ def test_claude_cli_sends_review_turns_with_no_tools(tmp_path: Path, monkeypatch
         encoding="utf-8")
     binary.chmod(binary.stat().st_mode | stat.S_IXUSR)
     monkeypatch.setenv("PATH", f"{tmp_path}:{__import__('os').environ['PATH']}")
-    result = infer(_request("claude-cli"), timeout_seconds=30)
+    request = _request("claude-cli")
+    result = infer(request, timeout_seconds=30)
     assert result.proposal == TURN and (result.input_tokens, result.output_tokens) == (7, 2)
     invocation = json.loads(record.read_text(encoding="utf-8"))
     argv = invocation["argv"]
     assert argv[argv.index("--allowedTools") + 1] == ""
-    assert argv[argv.index("--model") + 1] == "claude-opus-5-5"
+    assert argv[argv.index("--model") + 1] == request.model
     prompt = invocation["stdin"]
     assert prompt["guidance"] == GUIDANCE and prompt["task_input"] == {"task": "hunt/sink_up"}
     assert prompt["transcript"][0]["turn"] == 1 and prompt["response_schema"] == TURN_SCHEMA

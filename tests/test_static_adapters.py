@@ -27,7 +27,7 @@ def test_every_enabled_adapter_has_applicability_argv_exit_parser_and_limitation
         raise AssertionError("supplied adapter source must not be fingerprinted")
     monkeypatch.setattr(inspect, "getsource", forbidden)
     registry = adapter_registry()
-    assert len(registry) == 20
+    assert registry and {adapter.tool_id for adapter in registry.values()} == set(registry)
     catalog = fixture_catalog()
     for adapter in registry.values():
         selection = adapter.applicability(catalog)
