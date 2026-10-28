@@ -198,13 +198,12 @@ def test_partition_check_accepts_a_complete_partition(taxonomy) -> None:
     assert result["checked"] > 150
 
 
-def test_registry_lists_every_routed_stack_and_partition_holds_once_personas_exist(taxonomy) -> None:
+def test_registry_lists_every_routed_stack_and_partition_holds(taxonomy) -> None:
     vocabulary, crosswalk = taxonomy
     registry = load_registry(ROOT)
     assert set(registry["stacks"]) == set(STACK_IDS)
     paths = {name: ROOT / record["path"] for name, record in registry["personas"].items() if "path" in record}
-    if not all(path.is_file() for path in paths.values()):
-        pytest.skip("inference persona files are not all present yet")
+    assert paths and all(path.is_file() for path in paths.values())
     tools = load_tool_names(ROOT)
     covers = {name: parse_fragment(path.read_text(), kind="persona", tools=tools, expected_id=name).covers
               for name, path in paths.items()}
