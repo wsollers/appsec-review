@@ -14,8 +14,8 @@ _A = "data/jobs/job_tree_sitter_ast/attempts/*"
 CONSUMES = ('job_review_intake', 'job_target_catalog', 'job_language_build')
 DATASETS = (
     indexed("tree_sitter_ast", "parse", "syntax", "appsec-review/tree-sitter-normalizer/1",
-            "Bounded Tree-sitter AST nodes with byte-exact spans and parent relations, one shard per scope.",
-            indexes=("analysis",), route="find/trace/search index=analysis kind=ast_node"),
+            "Bounded Tree-sitter AST nodes, byte-exact spans, parent relations and unresolved syntax navigation.",
+            indexes=("analysis",), route="query_syntax subject=source_file/ast_node; find/trace/search index=analysis kind=ast_node"),
     indexed("tree_sitter_coverage", "acceptance", "syntax", "appsec-review/tree-sitter-ast/1",
             "Per-scope parse dispositions, including unavailable grammars and truncation.",
             indexes=("analysis",), prefixes=("tree-sitter-coverage-",), route="coverage index=analysis"),
