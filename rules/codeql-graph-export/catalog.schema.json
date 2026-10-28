@@ -41,7 +41,19 @@
           "enum": ["RemoteFlowSource", "LocalFlowSource", "FlowSource"]}}}}}}
       }
     },
-    "models_java": {"description": "Rejects a java section until its pack declares its closed model vocabulary.", "not": {}},
+    "models_java": {
+      "description": "The closed model vocabulary the java pack's SinkSites and SourceSites queries emit: java-all models-as-data sink kinds and source classes.",
+      "properties": {
+        "sinks": {"items": {"properties": {"match": {"properties": {"model": {
+          "enum": ["sql-injection", "command-injection", "path-injection", "request-forgery",
+                   "url-redirection", "ldap-injection", "xpath-injection", "template-injection",
+                   "html-injection", "js-injection", "log-injection", "response-splitting",
+                   "unsafe-deserialization", "jndi-injection", "mvel-injection", "ognl-injection",
+                   "groovy-injection", "jexl-injection", "xslt-injection", "fragment-injection"]}}}}}},
+        "sources": {"items": {"properties": {"match": {"properties": {"model": {
+          "enum": ["RemoteFlowSource", "LocalUserInput", "SourceNode"]}}}}}}
+      }
+    },
     "models_javascript": {"description": "Rejects a javascript section until its pack declares its closed model vocabulary.", "not": {}},
     "models_python": {"description": "Rejects a python section until its pack declares its closed model vocabulary.", "not": {}},
     "models_ruby": {"description": "Rejects a ruby section until its pack declares its closed model vocabulary.", "not": {}},
