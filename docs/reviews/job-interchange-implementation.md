@@ -6,6 +6,8 @@ checkpoint `4798b33a`, metrics checkpoint `7820273f`, runtime hardening `177446e
 consumer follow-up `ca5b4240`, and native failure-path follow-up `c1aed046`. Parent producer
 reconciliation `68899ae5` separates analysis-plan numeric counts from typed dispositions.
 Final consolidated parent regression results remain pending; this is not live deployment acceptance.
+A producer retry-isolation follow-up is also pending: a previously accepted failed-sibling
+workspace manifest must remain immutable across a forced later language-build attempt.
 
 ## Settled decisions
 
@@ -114,6 +116,13 @@ The common retrieval projection preserves the semantic `secret` class and valida
 and references. Arbitrary payload fields remain redacted. A malformed common record fails;
 an absent common record can receive a legacy semantic projection only with unavailable provenance.
 This does not make old handoffs operationally admissible.
+
+The parent JVM retry regression exposed a related producer gap: unit-root workspaces/manifests
+could be rewritten by a forced retry even though the earlier partial handoff remained accepted.
+The [language-build retry contract](../operations/language-build.md#immutable-retry-publication)
+requires attempt-scoped execution roots, preserves the existing attempt-scoped capture path,
+and returns prior pinned references on successful cache reuse. Its exact producer commit and
+final verification remain pending rather than claimed here.
 
 Metrics consume `HANDOFF_*.handoff_reference`, `NATIVE_OUTPUT_RETAINED.retention_receipt`, and
 `OBSERVATION_PROVENANCE_VALIDATED.provenance_receipt`. Receipt computation, bytes, actor identity,
