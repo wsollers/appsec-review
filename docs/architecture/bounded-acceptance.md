@@ -42,7 +42,7 @@ measurement into evidence for newly added cases.
 | Process/control plane | Real subprocess/Dagster configuration, worker death/resume, durable intent/reconciliation, MCP stdio errors/recovery, record/replay and sensor observations | Deployed service, provider and native commissioning; Linux paths need Linux execution |
 | Controls/feeds | Explicit OWASP qualification, authentic document/catalog context, accepted Workbench retrieval and real tiny loopback HTTPS fetch/publication/failure preservation | Genuine assessment, positive assessment/source binding, precomputed control facts, review join and public-feed live computation |
 | Review/publication | Real review producer, accepted review/gate, PoC eligibility/planning and current final-report consumer/oracle | Real model quality, compiler execution, PoC success and optional OpenVEX/completion fan-in |
-| Triage/referral/presentation | Real triage ordering/admission and bound review handoff; foreign-anchor repair, next-round referral deduplication and stable convergence; accepted gate/report counts, states, gaps and provenance rendered to HTML/LaTeX | Named-profile CLI execution, specialist dispatch/resolution, cross-package/lane referrals, saturation and stale/historical renderer selection |
+| Triage/referral/presentation | Real triage ordering/admission and bound review handoff; foreign-anchor repair, next-round referral deduplication and stable convergence; accepted gate/report counts, states, gaps and provenance rendered to HTML/LaTeX | Exhaustive consumer coverage, specialist dispatch/resolution, cross-package/lane referrals, saturation and stale/historical renderer selection |
 
 Scripted inference answers only the external model boundary. Recorded receipts/rows answer only
 the declared compiler, graph or HTTP boundary. Assertions must consume the application's accepted
@@ -50,6 +50,16 @@ output rather than separately inventing both sides of a producer/consumer contra
 Useful negatives include corrupt bytes, missing fields versus an explicitly empty candidate
 list, stale identities, cache-context changes, truncated transports and blocked/benign findings.
 Skipped/unavailable coverage stays a named gap, not evidence that a target is clean.
+
+The latest dependency/native seam corrections retain strict reference authority. Production
+fix `75383329` treats `native_artifacts` rows as source inventory rather than declaring their
+display paths to be run artifacts; nested `evidence_source.artifact` and explicit `run_path`
+references are still collected and verified. Fixture correction `67944818` makes workspace
+manifests and protected compile-command artifacts direct accepted-handoff members.
+Package-local fixture `e9b336e8` separates dependency roots and uses a static QA archive rather
+than accidental SONAME evidence, so a sibling does not acquire false production exposure.
+These are real contract fixes exercised with recorded native inputs, not native execution or
+tool/daemon compatibility proof.
 
 Inventory revision `09cbf227` separates representative `quick` from full signals, graphs,
 process, controls and review matrices without removing negative variants. It enrolls the
@@ -102,6 +112,8 @@ not injected. CI-only fixtures omit unrelated build/component/reference shards a
 missing facts remain gaps. Three exact nodes passed under the actual supervisor/plugin, but
 that is not a named inventory/profile CLI execution or exhaustive consumer coverage.
 The later `09cbf227` enrollment does not retroactively turn that run into named-profile proof.
+There is now separate actual named `consumers` CLI proof at `1ff86556`: 3/3 passed in
+207.438 seconds. It covers these bounded nodes, not the remaining consumer matrices.
 
 The renderer test has one authentic hash-bound current publication. `reporting.sources.RunReader`
 still selects by globs rather than a current-accepted renderer API; this test does not establish
@@ -136,6 +148,19 @@ Each supervised process records its pinned static input identities; the driver r
 case whose identities disagree with the suite's source hashes, even after successful pytest
 execution. Mutation detection includes descriptor truncation/append flags. These checks do
 not replace the named timing and host-dependent gaps in the implementation record.
+
+Frozen parent `1ff86556` contains current main `a8883acc`, source-history/OpenVEX changes and
+the native/reference corrections. Its capacity overlay no longer forces three review teams:
+production/Copilot production profiles retain seven, while the overlay selects four I/O and
+four scanner slots. Explicit one-team acceptance fixtures are bounded test configuration,
+not a description of production capacity or a shared-host reservation.
+
+The named `process` profile has a revision-bound 13/13 public CLI pass at `16a520f4`, and named
+`consumers` passed 3/3 at `1ff86556`; Linux-specific obligations remain outside those proofs.
+An exact-node dependency pass at `1ff86556` likewise does not establish a whole signals/quick
+pass. Planner `81ada94f`'s read-only
+`staged-authentic-producer/private-verified-materialization` proposal awaits user review;
+it has no implemented execution path and grants no budget or validation waiver.
 
 The process gate, Windows Job Object and Linux subreaper supply owned-tree lifecycle control.
 Collection, execution and cleanup all consume declared deadlines; unconfirmed cleanup is failure.

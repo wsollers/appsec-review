@@ -207,9 +207,9 @@ At `06a4ea6c`, three triage/referral/presentation nodes passed through the real
 `supervised_pytest` and `tests.acceptance_plugin` boundary in 225.664 seconds, with all owned
 Windows trees cleaned up. Each used a measured 120-second real-job exception and the serial
 group had a 360-second cap. This was an exact-node supervised execution, **not** a named
-inventory/profile CLI run. Revision `09cbf227` now enrolls those nodes in `consumers`, but
-the named public CLI run is still pending and the earlier result does not establish final
-integrated calibration.
+inventory/profile CLI run. Revision `09cbf227` enrolled those nodes in `consumers`; the later
+actual named public pass at `1ff86556` is recorded below. The earlier exact-node result is
+historical, not a substitute for that named proof or for final integrated calibration.
 
 These cases prove bounded triage/admission, next-round referral deduplication/foreign-anchor
 repair/convergence and authentic accepted gate/report HTML/LaTeX rendering. They do not prove
@@ -230,3 +230,47 @@ fixture completed and oracle evaluation began. This is not merely guard overhead
 Separating representative/exhaustive work requires separately budgeted authenticated producer
 prerequisites or publication/harness performance work; splitting assertions alone is not
 evidence that fresh public fixtures fit.
+
+## Frozen-parent evidence status
+
+The documentation snapshot includes exact parent
+`1ff865561cc79171d56e389ead1c961975234a11` and frozen main `a8883acc`. Evidence below is
+still scoped to each tested revision, not retrospectively to every later merge.
+
+- **Named process profile:** the actual
+  `scripts\run-tests.ps1 -Acceptance process -Workers 1` passed 13/13 in 340.136 seconds at
+  `16a520f4e70c8d1699dda7401a729d7c93515fe4`, with zero remaining owned processes.
+  Result: `test/tmp/acceptance/acceptance-ef2e537e8e5d49c0bcda6a12522c41bc/process/result.json`.
+  This is named-profile proof, unlike earlier nested/exact-node measurements; it does not
+  include the Linux guardian/peer-credential requirements.
+- **Named consumers profile:** the actual
+  `scripts\run-tests.ps1 -Acceptance consumers -Workers 1` passed 3/3 in 207.438 seconds at
+  `1ff865561cc79171d56e389ead1c961975234a11`. The public driver requires confirmed owned
+  cleanup to pass. Result:
+  `test/tmp/acceptance/acceptance-e809aa5c094a4ab8a620d07f602c6044/consumers/result.json`.
+  This supersedes pending named-profile verification, not the remaining specialist,
+  renderer-selection, saturation and cross-lane gaps. No production reviews were inspected
+  or touched; it is not actual concurrent-production-review evidence.
+- **Exact guarded dependency case:** at `1ff86556`, 1/1 passed in 83.9186626 seconds with
+  cleanup zero, including both actual job attempts, cache reuse, immutable indices and exposure
+  assertions. Its isolated root is
+  `test/tmp/acceptance/acceptance-de13d4f4443446f7a0de7bc235d4e812/dependency-final-public/`.
+  `outcome.json` retains the supervisor receipt and `verified-summary.json` discloses a
+  wrapper-only error: the ad-hoc wrapper incorrectly expected supervisor outcome `passed`
+  instead of successful `completed` and exited 1. The raw pytest pass (81.8 seconds) and
+  supervisor receipt were validated without rerunning; neither the wrapper error nor the
+  corrected interpretation is hidden.
+- **Signals budget remains unproved:** separate signal-positive/corruption/dependency
+  measurements total 102.625 + 56.574 + 83.919 = 243.118 seconds **before collection**,
+  above the declared 240-second serial signals ceiling. This is a projection from separate
+  runs, not an actual new integrated failure or a permitted deadline increase.
+- **Overall not green:** quick remains red; the authentic oracle fixture still exhausts the
+  117-second execution allowance before its matrix. Windows `WinError 5`, genuine assessment,
+  and live/provider/native/Linux validation remain gaps. The process/consumers profile passes
+  do not make quick, the full oracle matrix, serial signals scheduling or all consumer
+  capabilities green.
+
+Planner `81ada94f` produced only a read-only
+`staged-authentic-producer/private-verified-materialization` proposal.
+It awaits user review and is not implemented. Do not treat it as
+accepted prerequisite materialization, a validation-cache shortcut or a cap waiver.
