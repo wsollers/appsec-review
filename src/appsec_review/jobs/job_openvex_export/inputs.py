@@ -64,6 +64,13 @@ def _ref(value: Mapping[str, Any]) -> ArtifactRef:
     return ArtifactRef(value["path"], value["sha256"])
 
 
+def _durable_inventory(inventory: tuple[SizedArtifactRef, ...]) -> tuple[SizedArtifactRef, ...]:
+    """Admission pointers are bounded/reproved internally, not durable evidence bindings."""
+    return tuple(reference for reference in inventory
+                 if reference.path != "data/indices/accepted.json"
+                 and re.fullmatch(r"data/jobs/[^/]+/latest\.json", reference.path) is None)
+
+
 class BoundedInputReader:
     """Hash exact run-owned bytes; count unique paths, not repeated verification work.
 
@@ -499,7 +506,7 @@ def verify_inputs(run_root: Path, settings: OpenVexExportSettings, repository_ro
         reader.reprove()
         reader.check_deadline()
         result = VerifiedInputs(reader.root.name, provenance, source, gate_job.handoff["completed_at"],
-                                settings.settings_sha256(), gate, findings, reader.inventory)
+                                settings.settings_sha256(), gate, findings, _durable_inventory(reader.inventory))
         reader.check_deadline()
         return result
 

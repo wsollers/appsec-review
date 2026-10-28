@@ -220,17 +220,22 @@ def test_bound_inventory_cannot_be_substituted_for_filesystem_reproof(tmp_path, 
                    c.ExportFailureReason.INPUT_TAMPERED, c.ExportPhase.ACCEPT)
 
 
-def test_pointer_changed_during_authoritative_verification_fails(tmp_path, monkeypatch):
-    disk = AcceptedInputDisk(tmp_path, monkeypatch)
-    original = inputs.load_accepted_review
+@pytest.mark.parametrize("job", [inputs.GATE_JOB, inputs.REVIEW_JOB, inputs.INTAKE_JOB])
+def test_pointer_changed_during_verification_fails_without_mutating_old_handoff(tmp_path, monkeypatch, job):
+    disk = AcceptedInputDisk(tmp_path, monkeypatch, acquisition=enabled_settings().repository_iri)
+    original = inputs._findings
 
     def changed(*args, **kwargs):
         result = original(*args, **kwargs)
-        disk.gate_handoff["completed_at"] = "2026-10-29T10:00:00Z"
-        disk.publish(inputs.GATE_JOB, disk.gate_handoff)
+        handoff = deepcopy({inputs.GATE_JOB: disk.gate_handoff, inputs.REVIEW_JOB: disk.review_handoff,
+                            inputs.INTAKE_JOB: disk.intake_handoff}[job])
+        handoff["completed_at"] = "2026-10-29T10:00:00Z"
+        reference = disk.put(f"data/jobs/{job}/attempts/two/handoff.json", handoff)
+        disk.put(f"data/jobs/{job}/latest.json",
+                 {"handoff_path": reference["path"], "handoff_sha256": reference["sha256"]})
         return result
 
-    monkeypatch.setattr(inputs, "load_accepted_review", changed)
+    monkeypatch.setattr(inputs, "_findings", changed)
     assert_failure(disk.verify, c.ExportFailureReason.INPUT_TAMPERED)
 
 
@@ -484,3 +489,75 @@ def test_acquisition_without_single_repository_preserves_operator_qualification(
         assert source.repository_identity_basis == c.RepositoryIdentityBasis.ACCEPTED_ACQUISITION
         assert source.acquisition == c.ArtifactRef(**reference)
         assert any("no single repository IRI" in value for value in source.qualifications)
+
+
+def test_admission_pointers_are_measured_but_not_durable_bindings(tmp_path, monkeypatch):
+    disk = AcceptedInputDisk(tmp_path, monkeypatch, acquisition=enabled_settings().repository_iri)
+    reader_type = inputs.BoundedInputReader
+    readers = []
+
+    def tracking_reader(*args, **kwargs):
+        reader = reader_type(*args, **kwargs)
+        readers.append(reader)
+        return reader
+
+    monkeypatch.setattr(inputs, "BoundedInputReader", tracking_reader)
+    verified = disk.verify()
+    operational = {f"data/jobs/{job}/latest.json" for job in (
+        inputs.GATE_JOB, inputs.REVIEW_JOB, inputs.INTAKE_JOB)}
+    full_inventory = readers[0].inventory
+    assert operational <= {reference.path for reference in full_inventory}
+    assert not operational & {reference.path for reference in verified.input_inventory}
+    assert set(verified.input_inventory) == {reference for reference in full_inventory
+                                           if reference.path not in operational}
+    pointer_bytes = sum(reference.size_bytes for reference in full_inventory if reference.path in operational)
+    assert sum(reference.size_bytes for reference in full_inventory) == verified.total_input_bytes + pointer_bytes
+    assert set(verified.provenance.references) <= {reference.reference for reference in verified.input_inventory}
+
+
+def test_durable_inventory_survives_new_gate_pointer_but_current_reproof_is_stale(tmp_path, monkeypatch):
+    disk = AcceptedInputDisk(tmp_path, monkeypatch)
+    verified = disk.verify()
+    original_handoff = (disk.root / disk.gate_job_ref["path"]).read_bytes()
+    handoff = deepcopy(disk.gate_handoff)
+    handoff["completed_at"] = "2026-10-29T10:00:00Z"
+    reference = disk.put(f"data/jobs/{inputs.GATE_JOB}/attempts/two/handoff.json", handoff)
+    disk.put(f"data/jobs/{inputs.GATE_JOB}/latest.json",
+             {"handoff_path": reference["path"], "handoff_sha256": reference["sha256"]})
+    reader = inputs.BoundedInputReader(disk.root, disk.settings, phase=c.ExportPhase.ACCEPT)
+    for bound in verified.input_inventory:
+        reader.read(bound)
+    assert (disk.root / disk.gate_job_ref["path"]).read_bytes() == original_handoff
+    assert reader.read(verified.provenance.gate_handoff) == original_handoff
+    assert disk.verify().provenance.gate_handoff == c.ArtifactRef(**reference)
+    assert_failure(lambda: inputs.reprove_inputs(disk.root, verified, disk.settings, ROOT),
+                   c.ExportFailureReason.INPUT_STALE, c.ExportPhase.ACCEPT)
+
+
+@pytest.mark.parametrize("pointer", ["data/jobs/job_example/latest.json", "data/indices/accepted.json"])
+@pytest.mark.parametrize("bound", ["bindings", "bytes"])
+def test_operational_pointer_bytes_and_references_still_count_toward_bounds(tmp_path, pointer, bound):
+    path = tmp_path / pointer
+    path.parent.mkdir(parents=True)
+    path.write_bytes(b"pointer")
+    (tmp_path / "immutable.json").write_bytes(b"immutable")
+    settings = enabled_settings(max_bindings=1 if bound == "bindings" else 2,
+                                max_artifact_bytes=9, max_total_input_bytes=16 if bound == "bindings" else 15)
+    reader = inputs.BoundedInputReader(tmp_path, settings)
+    reader.pin(pointer)
+    assert inputs._durable_inventory(reader.inventory) == ()
+    assert_failure(lambda: reader.pin("immutable.json"), c.ExportFailureReason.BOUND_EXCEEDED)
+
+
+def test_only_exact_operational_pointer_families_are_omitted(tmp_path):
+    names = ("data/jobs/job_example/latest.json", "data/indices/accepted.json",
+             "data/jobs/job_example/attempts/one/latest.json", "data/indices/original-manifest.json")
+    reader = inputs.BoundedInputReader(tmp_path, enabled_settings())
+    for name in names:
+        path = tmp_path / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"{}")
+        reader.pin(name)
+    assert {reference.path for reference in inputs._durable_inventory(reader.inventory)} == set(names[2:])
+    (tmp_path / names[1]).write_bytes(b'{"changed":true}')
+    assert_failure(reader.reprove, c.ExportFailureReason.INPUT_TAMPERED)
