@@ -14,6 +14,7 @@ from typing import Any, Iterator
 from appsec_review.applicability import resolved_configuration_identity
 from appsec_review.config.inference_review import parse_inference_review_settings, semantic_settings_sha256
 from appsec_review.indexing.store import AcceptedHandoff, accepted_handoff
+from appsec_review.interchange import HANDOFF_SCHEMA as JOB_HANDOFF_SCHEMA, decode_handoff
 from appsec_review.jobs.accepted_review import HANDOFF_SCHEMA, REVIEW_JOB, load_accepted_review, project_score
 from appsec_review.jobs.engineering_contracts import (
     FINAL_PUBLICATION_GATE_HANDOFF_SCHEMA, FINAL_PUBLICATION_GATE_SCHEMA,
@@ -30,7 +31,7 @@ from .contracts import (
     ArtifactRef, ExportError, ExportFailureReason as Reason, ExportPhase, ExportProvenance,
     RepositoryIdentityBasis, SizedArtifactRef, SourceIdentity, VerifiedFinding, VerifiedInputs,
     canonical_bytes, json_sha256, parse_json_bytes, require_run_path,
-    require_sha256, validate_repository_iri,
+    require_sha256, snapshot_repository_iri, validate_repository_iri,
 )
 from .settings import OpenVexExportSettings
 
@@ -65,13 +66,15 @@ def _ref(value: Mapping[str, Any]) -> ArtifactRef:
     return ArtifactRef(value["path"], value["sha256"])
 
 
-def _references(value: Any) -> Iterator[ArtifactRef]:
+def _references(value: Any, *, accounting: bool = False) -> Iterator[ArtifactRef]:
     pending = [value]
     while pending:
         item = pending.pop()
         if isinstance(item, Mapping):
-            if {"path", "sha256"} <= item.keys():
-                yield _ref(item)
+            path = item.get("run_path", item.get("path")) if accounting else item.get("path")
+            if "sha256" in item and ("path" in item or accounting and "run_path" in item) and (
+                    not accounting or "run_path" in item or isinstance(path, str) and path.startswith("data/")):
+                yield ArtifactRef(path, item["sha256"])
             pending.extend(item.values())
         elif isinstance(item, (list, tuple)):
             pending.extend(item)
@@ -207,6 +210,48 @@ def _published(handoff: Mapping[str, Any], unit: str) -> Mapping[str, Any]:
     return result
 
 
+def _preflight_handoff(reader: BoundedInputReader, handoff: Mapping[str, Any]) -> None:
+    """Bound envelope accounting before the shared authority follows any of its references."""
+    pinned = {raw["path"]: SizedArtifactRef.from_mapping(raw) for raw in handoff["artifacts"]}
+    for reference in pinned.values():
+        reader.read(reference)
+    attempt = handoff["resolving_paths"]["attempt"]
+    require_run_path(attempt)
+    pending = [attempt + "/claim.json", handoff["resolving_paths"]["result"], handoff["outcomes"]["path"]]
+    pending.extend(name for name in pinned if re.fullmatch(
+        r"data/jobs/[^/]+/attempts/[^/]+/shared/[^/]+/[^/]+\.json", name))
+    seen: set[str] = set()
+    while pending:
+        reader.check_deadline()
+        name = pending.pop()
+        if name in seen:
+            continue
+        seen.add(name)
+        _require(name in pinned, "handoff accounting reference is not among its artifacts",
+                 Reason.IDENTITY_CONFLICT)
+        document = reader.json(pinned[name])
+        for reference in _references(document, accounting=True):
+            reader.read(reference)
+        if name == attempt + "/claim.json":
+            outcomes = reader.json(pinned[handoff["outcomes"]["path"]])
+            unit_ids = document.get("unit_ids", [unit["unit_id"] for unit in outcomes["units"]])
+            for unit_id in unit_ids:
+                _require(isinstance(unit_id, str)
+                         and re.fullmatch(r"[a-zA-Z0-9_]+\.[a-zA-Z0-9_]+", unit_id) is not None,
+                         "unsafe handoff unit identity", Reason.IDENTITY_CONFLICT)
+                step, task = unit_id.split(".")
+                base = f"{attempt}/steps/{step}/tasks/{task}"
+                pending.append(base + "/status.json")
+        elif name.endswith("/status.json"):
+            if document["status"] == "SUCCEEDED":
+                result = name.removesuffix("/status.json") + "/result.json"
+                _require(result in pinned and pinned[result].sha256 == document["result_sha256"],
+                         "task result is not bound to its terminal receipt", Reason.IDENTITY_CONFLICT)
+                pending.append(result)
+    if handoff["input_manifest"] is not None:
+        _manifest(reader, _ref(handoff["input_manifest"]), reader.root.name, handoff["target_snapshot"])
+
+
 def _accepted(reader: BoundedInputReader, job: str, *, optional: bool = False) -> AcceptedHandoff | None:
     relative = f"data/jobs/{job}/latest.json"
     # lstat custody precedes accepted_handoff: its symlink-as-absent behavior is not safe here.
@@ -221,11 +266,19 @@ def _accepted(reader: BoundedInputReader, job: str, *, optional: bool = False) -
     _require(reference.path.startswith(f"data/jobs/{job}/attempts/"),
              "accepted pointer belongs to another job", Reason.IDENTITY_CONFLICT)
     handoff = reader.json(reference)
-    _require(handoff.get("schema") == "appsec-review/job-handoff/1"
-             and handoff.get("status") == "ACCEPTED" and handoff.get("job_id") == job,
+    _require(handoff.get("schema") == JOB_HANDOFF_SCHEMA, "unsupported common job handoff schema",
+             Reason.SCHEMA_INVALID)
+    _require(handoff.get("status") == "ACCEPTED" and handoff.get("job_id") == job,
              "job handoff is not accepted for the required job", Reason.IDENTITY_CONFLICT)
-    _require(handoff.get("run_id", reader.root.name) == reader.root.name,
+    _require(handoff.get("run_id") == reader.root.name,
              "job handoff belongs to another run", Reason.IDENTITY_CONFLICT)
+    _require(isinstance(handoff.get("artifacts"), list), "common handoff artifacts are not an array",
+             Reason.SCHEMA_INVALID)
+    _require(len(handoff["artifacts"]) <= reader.settings.max_bindings,
+             "common handoff artifact bound exceeded", Reason.BOUND_EXCEEDED)
+    with _errors(reader.phase, Reason.SCHEMA_INVALID):
+        handoff = decode_handoff(handoff, run_id=reader.root.name, job_id=job)
+    _preflight_handoff(reader, handoff)
     reader.check_deadline()
     with _errors(reader.phase, Reason.INPUT_TAMPERED):
         accepted = accepted_handoff(reader.root, job)
@@ -378,6 +431,8 @@ def _scope(reader: BoundedInputReader, scope: Mapping[str, Any], review: Mapping
 
 def _source(reader: BoundedInputReader, settings: OpenVexExportSettings, snapshot: str,
             config_ref: ArtifactRef, resolved: Mapping[str, Any], manifest: Mapping[str, Any]) -> SourceIdentity:
+    automatic = not settings.repository_iri
+    repository_iri = settings.repository_iri or snapshot_repository_iri(snapshot)
     qualifications = [
         "Identity is the accepted reviewed source snapshot and frozen configuration, not a released artifact.",
         "Configuration SHA-256: " + config_ref.sha256,
@@ -389,7 +444,13 @@ def _source(reader: BoundedInputReader, settings: OpenVexExportSettings, snapsho
         qualifications.append("Accepted metadata includes build index shards; this does not assert build success.")
     intake = _accepted(reader, INTAKE_JOB, optional=True)
     acquisition_ref = None
-    basis = RepositoryIdentityBasis.OPERATOR_DECLARED
+    basis = (RepositoryIdentityBasis.SOURCE_SNAPSHOT if automatic
+             else RepositoryIdentityBasis.OPERATOR_DECLARED)
+    if automatic:
+        qualifications.append(
+            "Repository identity is a local namespace derived from the accepted source snapshot; "
+            "no repository publisher, release or distribution identity is asserted."
+        )
     if intake is not None:
         _require(intake.handoff.get("resolved_config_sha256") == config_ref.sha256,
                  "accepted intake configuration is stale", Reason.INPUT_STALE)
@@ -425,12 +486,12 @@ def _source(reader: BoundedInputReader, settings: OpenVexExportSettings, snapsho
                     _require(spec[revision_key] == identity[revision_key],
                              "acquisition source revisions disagree", Reason.IDENTITY_CONFLICT)
             repository = spec.get("url") if spec.get("kind") == "git" else spec.get("clone_url")
-            if repository is not None:
+            if repository is not None and not automatic:
                 with _errors(reader.phase, Reason.IDENTITY_CONFLICT):
                     validate_repository_iri(repository)
                 _require(repository == settings.repository_iri,
                          "operator repository identity conflicts with accepted acquisition", Reason.IDENTITY_CONFLICT)
-            else:
+            elif not automatic:
                 qualifications.append("Acquisition establishes no single repository IRI; repository identity is operator asserted.")
             qualifications.extend((
                 "Accepted acquisition status: " + acquisition["status"],
@@ -438,10 +499,11 @@ def _source(reader: BoundedInputReader, settings: OpenVexExportSettings, snapsho
                 else "Acquired tree differs from the reviewed snapshot; no acquired revision is asserted as the reviewed tree.",
                 "Accepted acquisition gaps SHA-256: " + json_sha256(record["gaps"]),
             ))
-            basis = RepositoryIdentityBasis.ACCEPTED_ACQUISITION
-    if acquisition_ref is None:
+            if not automatic:
+                basis = RepositoryIdentityBasis.ACCEPTED_ACQUISITION
+    if acquisition_ref is None and not automatic:
         qualifications.append("No accepted acquisition provenance supplies a repository or commit; repository identity is operator asserted.")
-    return SourceIdentity(settings.repository_iri, basis, snapshot, acquisition_ref, tuple(qualifications))
+    return SourceIdentity(repository_iri, basis, snapshot, acquisition_ref, tuple(qualifications))
 
 
 def _findings(reader: BoundedInputReader, gate: Mapping[str, Any], review: Mapping[str, Any],

@@ -541,7 +541,7 @@ model_connectivity -> image_pin_verification -> target_acquisition -> review_int
   -> review_data_indexing -> review_package_assembly
   -> document_issue_analysis -> inference_security_review (chains before seal)
   -> poc_generation -> remediation_planning -> remediation_validation -> dossier_publication
-  -> final_publication_gate -> openvex_export (opt-in; only when enabled)
+  -> final_publication_gate -> openvex_export (automatic local generation; explicit opt-out)
   -> final_report_publication
 ```
 
@@ -657,15 +657,18 @@ disabled PoC output requires explicit gate admission. See
 
 `job_openvex_export` produces deterministic, model-free
 OpenVEX `affected` statements only for the accepted gate's publishable confirmed findings,
-with a protected evidence/limitations companion. It is disabled by default,
-including refusal of manual dispatch while disabled, and requires explicit immutable pre-run
-issuer/action/repository settings. Products identify the reviewed source snapshot and full
+with a protected evidence/limitations companion. It is **enabled by default**, with no setup:
+author kind `tool`, author `AppSec Review`, conservative review/remediation/validation advice,
+and an automatic `urn:appsec-review:source:<accepted_source_snapshot_sha256>` repository namespace.
+Explicit pre-run author/action/IRI overrides are strict; `enabled = false` opts out, and frozen
+historical disabled runs remain disabled, including refusal of manual redispatch.
+Products identify the reviewed source snapshot and full
 configuration, not a released binary or version range; local export does not authorize public
 disclosure. Empty exports retain explicit non-clean accounting without writing an invalid empty
 OpenVEX document. The user-selected boundary is **standalone post-gate export with gate-only reporting**:
 OpenVEX is not a report field, attachment or prerequisite. At source
-`e628041c`, strict gate `/2` contracts, shared certified-gate reader, exporter input verifier
-and projector are assembled. Combined focused verification and final exact-main reconciliation
+`74d93127`, checked-in and typed defaults automatically generate/verify protected files without
+models, external publication or signatures. Exact focused verification and policy-change landing
 are tracked in the [implementation record](docs/reviews/openvex-export-implementation.md);
 this is not a claim of real accepted whole-chain, integration, acceptance or live Dagster validation.
 See the [design](docs/architecture/openvex-export.md) and

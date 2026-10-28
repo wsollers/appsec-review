@@ -9,15 +9,17 @@ from appsec_review.jobs.job_openvex_export.settings import OpenVexExportSettings
 from tests.openvex_support import enabled_settings, settings_mapping
 
 
-def test_exact_disabled_defaults_and_frozen_record() -> None:
-    settings = OpenVexExportSettings.from_mapping(settings_mapping())
+def test_exact_automatic_defaults_and_frozen_record() -> None:
+    settings = OpenVexExportSettings.from_mapping(OpenVexExportSettings().to_mapping())
     assert settings == OpenVexExportSettings()
-    assert settings.author_kind == AuthorKind.ORGANIZATION
-    assert not settings.enabled and settings.author == settings.action_statement == settings.repository_iri == ""
+    assert settings.author_kind == AuthorKind.TOOL
+    assert settings.enabled and settings.author == "AppSec Review"
+    assert settings.action_statement and settings.role and settings.repository_iri == ""
+    settings.require_enabled()
     with pytest.raises(FrozenInstanceError):
-        settings.enabled = True
+        settings.enabled = False
     with pytest.raises(ValueError, match="disabled"):
-        settings.require_enabled()
+        replace(settings, enabled=False).require_enabled()
     enabled_settings().require_enabled()
 
 
@@ -35,15 +37,15 @@ def test_unknown_settings_are_not_authority(extra: str) -> None:
         OpenVexExportSettings.from_mapping(settings_mapping(**{extra: "unsafe"}))
 
 
-@pytest.mark.parametrize("name", ["author", "action_statement", "repository_iri"])
-def test_enabled_requires_explicit_issuer_action_repository_even_without_findings(name: str) -> None:
+@pytest.mark.parametrize("name", ["author", "action_statement"])
+def test_enabled_requires_nonempty_author_and_action_even_without_findings(name: str) -> None:
     value = enabled_settings().to_mapping()
     value[name] = ""
     with pytest.raises(ValueError, match=name):
         OpenVexExportSettings.from_mapping(value)
 
 
-@pytest.mark.parametrize("kind", ["tool", "bot", "", "Organization", True, 1, None])
+@pytest.mark.parametrize("kind", ["bot", "", "Organization", True, 1, None])
 def test_author_kind_is_closed_even_when_disabled(kind: object) -> None:
     with pytest.raises(ValueError):
         OpenVexExportSettings.from_mapping(settings_mapping(author_kind=kind))
@@ -53,7 +55,14 @@ def test_author_kind_is_closed_even_when_disabled(kind: object) -> None:
                                    "Copilot App", "GitHub Actions", "dependabot[bot]"])
 def test_tool_only_author_is_not_an_issuer(author: str) -> None:
     with pytest.raises(ValueError, match="issuing"):
-        OpenVexExportSettings.from_mapping(settings_mapping(author=author))
+        OpenVexExportSettings.from_mapping(settings_mapping(author_kind="organization", author=author))
+
+
+def test_tool_authorship_and_automatic_repository_are_explicit_not_a_vendor_claim() -> None:
+    settings = OpenVexExportSettings.from_mapping(settings_mapping(
+        enabled=True, author_kind="tool", author="AppSec Review", repository_iri=""))
+    assert settings.author_kind == AuthorKind.TOOL
+    assert settings.repository_iri == ""
 
 
 @pytest.mark.parametrize("name", ["author", "role", "action_statement", "repository_iri"])
@@ -72,6 +81,7 @@ def test_all_bounds_are_positive_closed_integers(name: str) -> None:
     maximum = defaults[name]
     assert getattr(OpenVexExportSettings.from_mapping(defaults), name) == maximum
     low = {name: 1}
+    low.update(author="a", action_statement="a", role="", repository_iri="")
     if name == "max_total_input_bytes":
         low["max_artifact_bytes"] = 1
     assert getattr(OpenVexExportSettings.from_mapping(settings_mapping(**low)), name) == 1
@@ -145,7 +155,7 @@ def test_settings_identity_is_complete_deterministic_and_detached() -> None:
 
 
 def test_enabled_prerequisites_are_explicit_and_disabled_does_not_dispatch() -> None:
-    disabled = OpenVexExportSettings()
+    disabled = OpenVexExportSettings(enabled=False)
     disabled.validate_prerequisites(gate_enabled=False, review_enabled=False)
     enabled = enabled_settings()
     enabled.validate_prerequisites(gate_enabled=True, review_enabled=True)

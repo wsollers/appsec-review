@@ -780,7 +780,7 @@ def test_registry_topology_and_terminal_job() -> None:
     assert set(jobs[GATE]["dependencies"]) == {JOB} | optional and jobs[REPORT]["dependencies"] == [GATE]
     assert {GATE, JOB} <= set(jobs[REPORT]["upstream_handoffs"]) and JOB in jobs[GATE]["upstream_handoffs"]
     depended = {dependency for item in jobs.values() for dependency in item["dependencies"]}
-    assert set(jobs) - depended == {REPORT}                       # exactly one terminal job
+    assert set(jobs) - depended == {REPORT, "job_openvex_export"}
     assert config.job(GATE).name == "final_publication_gate" and config.job(REPORT).name == "final_report_publication"
 
 

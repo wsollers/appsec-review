@@ -1,10 +1,11 @@
 # OpenVEX shared contracts
 
 These are the **strict shared contracts for standalone post-gate export**, reconciled at
-`e628041cd734d854e749aa4e373bdc718d9a7363` (including `f4f746bf`). The repository has an
+`74d931273a383f2f33bac90d3569a070a0ef612d`, containing landed main `83e67b23`. The repository has an
 exporter job, registry/CLI/Dagster wiring, typed TOML settings, protected datasets, operator
 status and metrics. The shared certified-gate reader and exporter input verifier/projector
-are assembled for the `/2` boundary. Combined focused results and final exact-main reconciliation
+are assembled for the `/2` boundary. Checked-in and typed defaults automatically generate/verify
+protected local outputs, with explicit disable as opt-out. Exact focused results and policy-change landing
 are tracked in the [implementation record](../../reviews/openvex-export-implementation.md);
 synthetic contracts do not establish real accepted whole-chain execution.
 The [OpenVEX design](../../architecture/openvex-export.md) and
@@ -73,7 +74,8 @@ Only genuine zero eligible findings permit an absent document, with zero include
 statement counts, no statement mappings and the named
 `openvex_no_publishable_confirmed_findings` gap. No other accepted status can omit it.
 
-Identity helpers are `source_product_id(repository_iri, target_snapshot,
+Identity helpers are `snapshot_repository_iri(target_snapshot)`,
+`source_product_id(repository_iri, target_snapshot,
 resolved_config_sha256)`, `vulnerability_id(repository_iri, target_snapshot, claim_id)`,
 `statement_id(author, statement_without_id)`, `document_id(document_without_id)`,
 `json_sha256(value)`, `domain_sha256(domain, value)`, and
@@ -106,26 +108,48 @@ a named accounting gap. No final-report consumer or data-discovery route is impl
 ## Settings and trust
 
 `OpenVexExportSettings.from_mapping(value)` requires exactly the design v1 keys, even
-when disabled. Constructor defaults are the documented disabled defaults, not config
+when disabled. Constructor defaults are the documented enabled automatic defaults, not config
 loader fallbacks. Direct construction and `dataclasses.replace` revalidate too.
 `to_mapping()`, `settings_sha256()`, `require_enabled()` and
 `validate_prerequisites(*, gate_enabled: bool, review_enabled: bool)` are public.
 The semantic settings hash is domain-separated over every exact field, including bounds;
 it is not the full frozen resolved-configuration hash.
 
-Enabled settings require an explicit individual/organization issuer, exact accurate
-common action and absolute ASCII HTTPS/URN repository/system identity. Disabled settings
-alone permit empty issuer/action/repository fields; role is optional in either state.
+Defaults are `enabled = true`, `author_kind = tool`, `author = "AppSec Review"`,
+`role = "Automated local application-security review"`,
+`action_statement = "Review and remediate the confirmed findings using the accompanying evidence; validate any fix before relying on it."`
+and empty `repository_iri`. No setup is required. `tool`, `individual`, `organization` are the
+closed author kinds; obvious tool names are forbidden when falsely declared as either of the
+latter kinds. Nonblank author/action are required while enabled. Empty role is optional;
+empty repository selects automatic snapshot identity even while enabled. Nonempty explicit
+IRIs retain strict absolute ASCII HTTPS/URN validation and must agree when accepted acquisition
+establishes an external repository identity.
+
 Nonempty invalid values always fail. Checks reject bool-as-int, excess UTF-8 bytes,
-unsafe controls, common credentials/template markers/markup and obvious tool-only
-issuer names, without altering accepted text. Action may retain ordinary LF/tab
+unsafe controls, common credentials/template markers/markup, without altering accepted text.
+Action may retain ordinary LF/tab
 formatting. URI checks prohibit credentials, query/fragment, branch/commit URL forms,
 invalid escapes and encoded controls. Numeric hard maxima are the checked-in defaults;
 operators may lower positive bounds. An individual input must fit the total input bound.
 
-The operator, not heuristics, asserts issuer authority and reviews advice/secret safety.
-Naming an author is not identity verification or a signature. No fallback advice,
-repository inference, target guidance, external publication or post-run approval exists.
+Automatic identity uses `snapshot_repository_iri`:
+`urn:appsec-review:source:<accepted_source_snapshot_sha256>` with
+`RepositoryIdentityBasis.SOURCE_SNAPSHOT` (`source_snapshot`). `SourceIdentity` rejects any
+different namespace/snapshot pairing. Accepted acquisition is still authenticated/bound if
+present, but never supplies a guessed external repository, publisher or release URL in automatic
+mode. Explicit nonempty IRI mode retains `operator_declared`/`accepted_acquisition` and their
+strict binding rules. Product identity remains
+`urn:appsec-review:source-snapshot:<H(resolved_repository_iri)>:<target_snapshot>:<resolved_config_sha256>`.
+
+The default action is conservative advice, not a remediation/fix claim; explicit overrides remain
+operator assertions, not mechanically verified authority. `author_kind` is local metadata, not
+an added OpenVEX property or a claim of supplier issuance. No model fallback advice, target guidance,
+external publication or post-run approval exists. Explicit disable opts out, while historical
+frozen disabled runs remain disabled without retroactive rebinding. The declared release is
+`openvex-export-2`.
+The pinned upstream specification requires an individual/organization author; truthful tool
+authorship is the local automatic policy, not proof of that normative author requirement.
+JSON schema validity alone cannot establish supplier issuance or author authority.
 
 ## Local wire shapes and offline resources
 
@@ -137,7 +161,11 @@ the exact gate `/2` `capabilities` and `attachments` in place of the removed `/1
 `unavailable_inputs`, including compile-only nonexecution assurances and limitations of
 kind `notice`. Notices are preserved but do not become review gaps. Local OpenVEX
 manifest/result identities remain `/1` on the pre-issued contract; the
-validation-profile digest changes to bind the corrected context and upstream schema pins.
+validation-profile digest changes to bind the corrected context and schema pins.
+The automatic-source extension intentionally repins `common.schema.json` to
+`a90bbf40647f6652d2439885b9e446471aadbc6c534d342881ea34f85f737f29`;
+upstream OpenVEX bytes remain unchanged. The profile digest is derived from the exact pin map,
+not reused from the prior policy.
 No previously issued runtime export is being migrated.
 Package rows nest the **unchanged**
 accepted `finding_projection` with explicit `score_refs`, `evidence_refs`, disposition,
@@ -180,7 +208,8 @@ The coordinator's isolated installed-only wheel proof at `212f21a8` verified all
 schemas plus lock/license using `sys.prefix/share` resources, including the transitive
 report-item definition, canonical assembly and semantic validation with synthetic gate `/2`
 context. This is not a real accepted run or final exact-main source proof; precise packaging
-results belong in the implementation record. It does not establish a self-contained
+results belong in the implementation record. This historical proof predates the automatic-source
+enum/common-schema repin and does not qualify the new profile. It does not establish a self-contained
 application: the earlier standalone job import without application resources failed because
 `pipeline/guidance/registry.json` was missing. A configured application checkout/guidance
 is still required for complete job imports/execution. No full installed-job execution,
@@ -198,6 +227,10 @@ exporter_release=RELEASE)`, `schema_registry(schema_root=SCHEMAS)` and
 `schema_validator(name, schema_root=SCHEMAS)`.
 Fixtures are small, deterministic, schema-valid **synthetic in-memory verified-boundary
 examples**, not disk fixtures that claim to pass real acceptance/custody verification.
+`settings_mapping` deliberately defaults `enabled=False` for negative/dispatch tests;
+`enabled_settings` supplies a synthetic organization override. Neither replaces the
+enabled tool-authored production defaults. Automatic-default cases explicitly pass
+`OpenVexExportSettings()` to test no-setup snapshot identity.
 `buckets` supports empty, all backlog/withheld, mixed and repeated bucket cases;
 `review_gap=True` retains an explicit review limitation. Example identities/advice exist
 only in test support, never as production defaults. The default fixture binds both
