@@ -110,6 +110,7 @@ a silent allowlist. `query_precomputed` is abbreviated `QP`; existing generic `f
 | ASan/UBSan-instrumented native rebuild; `job_sanitizer_build` | Hash-bound catalog of instrumented outputs with the sanitizer runtime evidence read from each ELF, for a later execution stage | Artifact only: protected workspaces and a sanitized handoff summary; nothing is indexed as text ([`../operations/sanitizer-build.md`](../operations/sanitizer-build.md)) | none | `coverage`; no skill |
 | Compile-checked proof-of-concept unit-test functions with compile records and provenance; `job_poc_generation` (optional, shipped disabled) | Developer-facing reproducers for findings the judge agreed with, shown in the final report | Artifact only: `data/poc/<claim-id>/` files hash-bound by the handoff; nothing is indexed as text, linked or executed ([`../operations/poc-generation.md`](../operations/poc-generation.md)) | none | `coverage`; no skill |
 | Joern CPG; `job_cpg_analysis` | Retained CPG artifact | Binary artifact only; not a graph producer in the code-graph plan | none | `coverage` reports unavailable; no skill |
+| Ghidra decompilation publications of configured third-party binaries; `job_review_intake` freezes them, `job_binary_evidence_indexing` indexes them | Review code that ships without source: functions, import callers, call neighbourhoods and strings | Current bounded `binary` shards (`binary_function`, `binary_call_site`, `binary_import`, `binary_string`; `CALLS`/`CONTAINS`/`REFERENCES`); pseudo-C detached into the run and cited by binary hash, function address and line ([`binary-decompilation.md`](binary-decompilation.md)) | none | `core`, `coverage`; registered `binary-evidence` runtime skill attached only when a binary shard exists |
 | CodeQL database and SARIF paths; `job_codeql_analysis`, `job_code_graph_index` | Analyzer leads, ordered flows, and the primary code-graph export (calls, sinks, entry points, summaries, paths, guards, ranges) | Current `observations`, priority flow steps; DB protected; export artifacts `artifact_only`; accepted per-scope/per-family `graph` shards via `job_code_graph_index` | `scanner_correlation`; `graph` index families | `query_codeql`, `query_code_graph`, `QP`; no skill |
 | Post-build flags, hardening and deterministic/model assessments; `job_post_build_security_assessment` | Artifact security posture | Current `build_security`; keep model judgment distinct from measured facts | `build_provenance`, `review_package` | `query_build_security`; existing `post-build-security-assessment` skill is operator-only |
 | CI definitions, permissions, triggers, steps and scanner results; `job_ci_configuration_analysis` | Workflow trust and build/deploy exposure | Current CI observations/evidence; extend typed trust edges | `ci_trust`, `scanner_correlation` | `query_ci_configuration`, `QP`; no skill |
@@ -424,7 +425,7 @@ names or inspects raw run directories.
 `job_review_data_indexing` (operations: [`review-data-indexing.md`](../operations/review-data-indexing.md))
 publishes the accepted inventory before `job_review_package_assembly`. Implemented:
 
-- **Inventory and audit.** All 33 currently registered jobs declare datasets in their own
+- **Inventory and audit.** All 38 currently registered jobs declare datasets in their own
   `datasets.py`. The registry/configuration equality check, rather than this prose count, is the
   acceptance authority.
   The audit compares declarations with the resolved configuration, accepted handoffs, every
@@ -462,7 +463,8 @@ publishes the accepted inventory before `job_review_package_assembly`. Implement
 Remaining gaps after this batch:
 
 - Code-graph production is implemented for the configured C/C++ export pack. Other configured
-  languages publish explicit unavailable family coverage until their export packs exist. The
+  languages publish explicit unavailable family coverage until their export packs (present under
+  `rules/codeql-graph-export/`) are configured and lock-pinned. The
   seven former graph query sets remain retired from `QUERY_SETS`; `query_precomputed` rejects their
   names, and `query_code_graph` is the only graph query surface. The follow-up list
   (`GRAPH_FOLLOW_UP` in `job_review_data_indexing/job.py`) names only `hotspot_context`,

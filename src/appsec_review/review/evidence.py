@@ -41,13 +41,13 @@ EVIDENCE_RELATION_KINDS = frozenset({RelationKind.SUPPORTS, RelationKind.CONTRAD
 SATISFYING_ADMISSIBILITY = frozenset({Admissibility.DIRECT, Admissibility.DIRECT_FOR_MAPPED_PREDICATE})
 
 # R3: kinds whose content can bear on a predicate. What each can establish for WHICH predicate is the
-# closed ``predicate-admission/1`` table (review/admission.py): DIRECT, ANALYST_ASSESSED or INDIRECT.
+# closed ``predicate-admission/2`` table (review/admission.py): DIRECT, ANALYST_ASSESSED or INDIRECT.
 DIRECT_KINDS: frozenset[EntityKind] = frozenset({
     EntityKind.SOURCE_SPAN, EntityKind.AST_NODE, EntityKind.IR_ENTITY, EntityKind.SYMBOL,
     EntityKind.BUILD_ACTION, EntityKind.COMPILE_UNIT, EntityKind.OBJECT_FILE, EntityKind.LIBRARY,
     EntityKind.EXECUTABLE, EntityKind.BUILD_ARTIFACT, EntityKind.PACKAGE, EntityKind.ARCHIVE_MEMBER,
     EntityKind.BYTECODE_MODULE, EntityKind.MANAGED_ASSEMBLY, EntityKind.WASM_MODULE,
-    EntityKind.EVIDENCE_ARTIFACT,
+    EntityKind.EVIDENCE_ARTIFACT, EntityKind.BINARY_FUNCTION, EntityKind.BINARY_CALL_SITE,
 })
 # R3: direct only for the predicate(s) the producing rule's versioned mapping names.
 MAPPED_KINDS: frozenset[EntityKind] = frozenset({EntityKind.TOOL_OBSERVATION})
@@ -77,6 +77,11 @@ _EVIDENCE_BEARING = frozenset({EntityKind.TOOL_OBSERVATION, EntityKind.EVIDENCE_
                                EntityKind.FINDING_PACKAGE})
 if admission.ADMITTED_KINDS != DIRECT_KINDS:     # the table must cover exactly the kinds classify() sends to it
     raise ImportError("predicate-admission table and DIRECT_KINDS differ")
+# Binary-derived kinds: a citation must resolve to a binary hash, a function address and pseudo-C lines.
+BINARY_KINDS: frozenset[EntityKind] = frozenset({
+    EntityKind.BINARY_FUNCTION, EntityKind.BINARY_CALL_SITE, EntityKind.BINARY_IMPORT, EntityKind.BINARY_STRING,
+})
+BINARY_CITATION_GAP = "binary-derived evidence must cite binary hash, function address and pseudo-C line"
 
 # R3 (evidence-admissibility/3): roles that may contradict ``missing_or_ineffective_guard`` with a graph fact.
 # Red's counterevidence is always ``qualifies``.
@@ -125,7 +130,7 @@ def classify(entity_kind: EntityKind | str, predicate: Predicate,
     predicate = Predicate(predicate)
     if kind in REFERENCE_KINDS:            # reference context: indirect for every predicate
         return Admissibility.INDIRECT
-    if kind in DIRECT_KINDS:               # predicate-admission/1: relevance is per (kind, predicate)
+    if kind in DIRECT_KINDS:               # predicate-admission/2: relevance is per (kind, predicate)
         return admission.admission(kind, predicate)
     if kind in MAPPED_KINDS:
         mapped = {Predicate(item) for item in tool_rule_mapping}
@@ -195,6 +200,25 @@ def _locator(entity: Mapping[str, Any]) -> str:
     return f"{entity['index']}/{entity['shard_id']}:{entity['identity']}"
 
 
+def binary_anchor(entity: Mapping[str, Any]) -> tuple[str, str, int, int] | None:
+    """``(binary_sha256, function_address, start_line, end_line)`` of a binary-derived entity.
+
+    Binary evidence is cited by binary hash, function address and pseudo-C line. The anchor exists
+    only when the accepted entity carries a pseudo-C location whose logical path names the same
+    binary and function as its payload; anything else (an import, a string, a function Ghidra did
+    not decompile) has no anchor and cannot be cited as evidence.
+    """
+    from appsec_review.retrieval.source_resolution import parse_binary_source_path
+    location = entity.get("location")
+    payload = entity.get("payload")
+    if not isinstance(location, Mapping) or not isinstance(payload, Mapping):
+        return None
+    parsed = parse_binary_source_path(str(location.get("path", "")))
+    if parsed is None or parsed != (payload.get("binary_sha256"), payload.get("function_address")):
+        return None
+    return parsed[0], parsed[1], int(location["start_line"]), int(location["end_line"])
+
+
 def resolve_relation(core: RetrievalCore, *, claim_id: str, predicate: Predicate, kind: RelationKind,
                      entity_id: str, producing_cell_id: str, retrieval_receipt_sha256: str | None,
                      rule_predicates: Iterable[Predicate] = (), round: int = 0,
@@ -223,6 +247,8 @@ def resolve_relation(core: RetrievalCore, *, claim_id: str, predicate: Predicate
         raise IntegrityError("accepted index returned an entity that differs from the cited identity")
     complete = not found["truncated"]
     excerpt: str | None = None
+    if parsed.kind in BINARY_KINDS and binary_anchor(entity) is None:
+        return gap(BINARY_CITATION_GAP)
     if entity.get("location") is not None:
         response = core.read_excerpt(identity=parsed.value, context_lines=0)
         if not response["results"]:

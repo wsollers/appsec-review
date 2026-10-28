@@ -87,15 +87,16 @@ Everything below is declared in the file named in the last column; nothing else 
 | Built tool, build-environment and CodeQL images | Live, integration and full-tier tests (skipped, naming the missing image) | `containers/catalog.toml` |
 | `NVD_API_KEY` | Authenticated NVD rate during metadata sync | `docs/operations/third-party-data-sync.md` |
 
-**Tool images.** `containers/catalog.toml` is the authoritative list (30 tool images, four runtime
-bases, ten build environments); [`containers/README.md`](containers/README.md) explains building
+**Tool images.** `containers/catalog.toml` is the authoritative list (32 enabled tool images, four
+runtime bases, ten build environments); [`containers/README.md`](containers/README.md) explains building
 them, and each `containers/tools/<name>/tool.toml` or `Dockerfile` pins its inputs. By purpose:
 C/C++ (`native-cpp` toolchain with Clang 18, `clang-static-analysis` with Clang-Tidy and the Static
-Analyzer, `clangd-indexer`, `cppcheck`, `infer`), code property graph and binaries (`joern`,
+Analyzer, `clangd-indexer`, `cppcheck`, `infer`, `svf`), code property graph and binaries (`joern`,
 `ghidra`, `blint`, `tree-sitter`), SAST (`semgrep`, `opengrep`, `gosec`, `pmd`, `spotbugs`,
 `phpstan`, `phpcs`, `psalm`, `mobsfscan`, `shellcheck`), secrets, IaC and CI (`gitleaks`, `checkov`,
 `hadolint`, `actionlint`, `zizmor`), dependencies and SBOM (`trivy`, `grype`, `syft`,
-`osv-scanner`, `cve-bin-tool`, `sbomasm`, `microsoft-sbom-tool`), and support (`git`, `sqlite-fts`).
+`osv-scanner`), report rendering (`report-latex`), and support (`git`, `sqlite-fts`). The
+`cve-bin-tool` image is deferred for redesign, and `sbomasm` and `microsoft-sbom-tool` are replaced by `syft`.
 Clang 18 comes from those images, not from the host; the host needs `clang++-18` only for the
 opt-in live test above.
 
@@ -481,11 +482,12 @@ model_connectivity -> image_pin_verification -> review_intake -> target_catalog 
   -> artifact_indexing -> test_coverage -> profile_data -> artifact_security_analysis
   -> cpp_compiled_analysis -> clang_static_analysis
   -> svf_alias_analysis (opt-in; only when enabled) -> sanitizer_build -> cpp_symbol_index
-  -> cpg_analysis (deprecated; only when enabled) -> evidence_collection -> dependency_intelligence
+  -> cpg_analysis (deprecated; only when enabled) -> binary_evidence_indexing -> evidence_collection
+  -> dependency_intelligence
   -> change_context_analysis -> codeql_analysis -> review_prioritization
   -> code_graph_index -> review_data_indexing -> review_package_assembly
   -> document_issue_analysis -> inference_security_review -> final_publication_gate
-  -> final_report_publication
+  -> poc_generation (optional; only when enabled) -> final_report_publication
 ```
 
 Start a review from the repository root with the virtual environment active:
@@ -517,7 +519,10 @@ Other options: the global `--config <path-or-file-URI>` (before the subcommand) 
 configuration other than `appsec-review.toml`; `logs` also filters by `--step`, `--task`, and
 `--attempt`; `plan-resume` accepts the same `--force-from <job-id>` as `resume`; and
 `appsec-review run <job-id> [--run-id <run-id>] [--trigger manual|schedule]` dispatches one job,
-optionally into an existing run. Two further subcommands run outside a review graph:
+optionally into an existing run. Three further subcommands run outside a review graph:
+`appsec-review acquire-target [--target <id>] [--verify-only]` (hash-pinned Git, Perforce or
+review-export acquisition into `targets/`; see
+[`docs/operations/target-acquisition.md`](docs/operations/target-acquisition.md)),
 `appsec-review binary-decompile` (pre-run Ghidra decompilation; see
 [`docs/operations/binary-decompilation.md`](docs/operations/binary-decompilation.md)) and
 `appsec-review update-image-pins [--write]` (re-pins every configured image-ID pin to the image its

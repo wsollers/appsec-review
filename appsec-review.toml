@@ -89,13 +89,19 @@ output_file_bytes = 2147483648      # RLIMIT_FSIZE for every file the container 
 # One table per binary. `sha256` is the expected hash of the file at `path`; a mismatch refuses
 # the run. `authorization` states why this binary may be reverse-engineered (license term,
 # contract, or ownership) and is recorded in the publication. Optional `processor`,
-# `compiler_spec`, and `loader` override Ghidra's detection.
+# `compiler_spec`, and `loader` override Ghidra's detection. Optional `debug_symbols` names a PDB
+# that Ghidra applies before analysis, pinned by `debug_symbols_sha256`. A review freezes the
+# current publication of every binary listed here; `required = true` makes a missing or stale
+# publication fail review intake instead of becoming a binary_decompilation_unavailable gap.
 #
 # [[binary_decompilation.binaries]]
 # id = "vendor-codec"
 # path = "inputs/vendor/libcodec.so"
 # sha256 = "<64 lowercase hex characters>"
 # authorization = "Vendor agreement 2026-014 section 7 permits security analysis"
+# required = false
+# debug_symbols = "inputs/vendor/libcodec.pdb"        # PE only; omit when there is none
+# debug_symbols_sha256 = "<64 lowercase hex characters>"
 
 [target_acquisition]
 # User-invoked checkout of pinned review targets into new directories under `targets_dir`
@@ -410,6 +416,12 @@ workers = 1
 [jobs.job_review_intake.steps.prepare_target.tasks.resolve_target]
 [jobs.job_review_intake.steps.prepare_target.tasks.validate_target]
 [jobs.job_review_intake.steps.prepare_target.tasks.fingerprint_target]
+
+[jobs.job_review_intake.steps.binary_evidence]
+workers = 1
+# Freezes the verified current publication of each [[binary_decompilation.binaries]] entry (identity
+# and manifest hash). It reads the publication store only; Ghidra runs before submission.
+[jobs.job_review_intake.steps.binary_evidence.tasks.resolve_publications]
 
 [jobs.job_review_intake.steps.publish_intake]
 workers = 1
@@ -1833,6 +1845,34 @@ workers = 1
 [jobs.job_cpp_symbol_index.steps.acceptance]
 workers = 1
 [jobs.job_cpp_symbol_index.steps.acceptance.tasks.publish_handoff]
+
+[jobs.job_binary_evidence_indexing]
+name = "binary_evidence_indexing"
+workers = 1
+
+[jobs.job_binary_evidence_indexing.settings]
+# Bounds per configured binary; each truncation is a named coverage gap. Provisional: tune them from
+# the large-binary measurement in docs/TODO.md.
+max_functions_per_binary = 200000
+max_call_sites_per_binary = 1000000
+max_imports_per_binary = 20000
+max_strings_per_binary = 200000
+max_string_xrefs = 64
+max_string_chars = 4096
+# Retrieval text per function entity (name plus pseudo-C); read_excerpt reads the full pseudo-C.
+max_entity_text_bytes = 65536
+
+[jobs.job_binary_evidence_indexing.steps.load]
+workers = 1
+[jobs.job_binary_evidence_indexing.steps.load.tasks.accepted_publications]
+
+[jobs.job_binary_evidence_indexing.steps.index]
+workers = 1
+[jobs.job_binary_evidence_indexing.steps.index.tasks.binaries]
+
+[jobs.job_binary_evidence_indexing.steps.acceptance]
+workers = 1
+[jobs.job_binary_evidence_indexing.steps.acceptance.tasks.publish_handoff]
 
 [jobs.job_cpg_analysis]
 name = "cpg_analysis"

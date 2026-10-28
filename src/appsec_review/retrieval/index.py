@@ -32,6 +32,7 @@ INDEX_NAMES = (
     "inventory",
     "links", "documents",
     "graph",
+    "binary",
 )
 
 

@@ -13,8 +13,9 @@ job and invalidates the transitive downstream closure. It never treats time as p
 The graph holds a kernel-backed per-run claim lock across planning and execution so two resume
 processes cannot claim the same run concurrently.
 
-The direct CLI currently exercises this mechanism with a linear review graph from
-`job_model_connectivity` through `job_document_issue_analysis`. Dagster builds the broader, branched
+The direct CLI currently exercises this mechanism with a linear review graph of 33 jobs from
+`job_model_connectivity` through `job_final_report_publication` (`GRAPH_JOB_IDS` plus
+`POST_INDEX_JOB_IDS` in `cli.py`). Dagster builds the broader, branched
 `wave1_review` topology from every registered, configured, enabled job except
 `job_third_party_data_sync`, adding the CI configuration, post-build, OWASP, and security-tagging
 jobs that are not in the direct graph. Both surfaces end with `job_inference_security_review`,
@@ -31,7 +32,7 @@ input, output, tool, and acceptance contracts.
 
 ## Registered jobs
 
-`runtime/registry.py` registers 37 jobs. Each has a `[jobs.<job_id>]` table in
+`runtime/registry.py` registers 38 jobs. Each has a `[jobs.<job_id>]` table in
 `appsec-review.toml`, and its Dagster job is named from that table's `name`.
 
 | Job | Purpose | Operations |
@@ -39,7 +40,7 @@ input, output, tool, and acceptance contracts.
 | `job_third_party_data_sync` | NVD (with `index/nvd.sqlite`), OSV, MITRE, CISA KEV, FIRST EPSS and cve-bin-tool feed snapshots (scheduled, outside reviews) | [third-party-data-sync](../operations/third-party-data-sync.md) |
 | `job_model_connectivity` | Mandatory fresh provider/model connectivity gate | [below](#inference-entry-point-and-model-preflight) |
 | `job_image_pin_verification` | Mandatory check that every enabled catalog image and configured image-ID pin resolves locally to exactly its pinned image; any mismatch fails the run. Builds nothing | [image-pin-verification](../operations/image-pin-verification.md) |
-| `job_review_intake` | Configuration and target intake | [below](#inference-entry-point-and-model-preflight) |
+| `job_review_intake` | Configuration and target intake; copies a target-acquisition manifest to `target-acquisition.json` and resolves configured binary decompilation publications to `binary-evidence.json` | [below](#inference-entry-point-and-model-preflight) |
 | `job_target_catalog` | Bounded target catalog and source index | [target-analysis-planning](../operations/target-analysis-planning.md) |
 | `job_source_history_analysis` | Git/GitHub history instability signals | [source-history-analysis](../operations/source-history-analysis.md) |
 | `job_ci_configuration_analysis` | CI/CD configuration analysis | [ci-configuration-analysis](../operations/ci-configuration-analysis.md) |
@@ -58,6 +59,7 @@ input, output, tool, and acceptance contracts.
 | `job_sanitizer_build` | ASan/UBSan rebuild of accepted native units in a separate workspace; catalogues instrumented outputs and proves instrumentation from the ELF, never executes them | [sanitizer-build](../operations/sanitizer-build.md) |
 | `job_cpp_symbol_index` | clangd symbol index | [cpp-index-jobs](../operations/cpp-index-jobs.md) |
 | `job_cpg_analysis` | Joern code property graph (deprecated; shipped `settings.enabled = false`) | [cpp-index-jobs](../operations/cpp-index-jobs.md) |
+| `job_binary_evidence_indexing` | Bounded `binary` retrieval shards over the Ghidra publications that review intake froze; not applicable when no binary is configured | [binary-decompilation](../operations/binary-decompilation.md) |
 | `job_post_build_security_assessment` | Build-hardening assessment | [post-build-security-assessment](../operations/post-build-security-assessment.md) |
 | `job_evidence_collection` | Deterministic static evidence | [static-analysis](../operations/static-analysis.md) |
 | `job_dependency_intelligence` | Declared, SBOM, linker and loader dependency identity with OpenSSF Scorecard context | [dependency-intelligence](../operations/dependency-intelligence.md) |

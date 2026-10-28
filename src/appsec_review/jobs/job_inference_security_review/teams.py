@@ -38,6 +38,11 @@ from appsec_review.guidance.routing import unit_sources
 from appsec_review.guidance.routing import rank_personas
 from appsec_review.inference import ModelResult, ReviewModelRequest
 from appsec_review.retrieval.index import INDEX_NAMES
+from appsec_review.retrieval.model import EntityKind
+
+BINARY_INDEX = "binary"
+BINARY_ENTITY_PREFIXES = tuple(f"asr:{kind.value}:" for kind in (
+    EntityKind.BINARY_FUNCTION, EntityKind.BINARY_CALL_SITE, EntityKind.BINARY_IMPORT, EntityKind.BINARY_STRING))
 from appsec_review.review.budget import JobBudget
 from appsec_review.review.adjudication import adjudicate
 from appsec_review.review.capability import EXPAND_TOOL, IN_PROCESS_TOOLS, CellCapability
@@ -162,14 +167,15 @@ class ReviewContext:
         receipt = {"granted_tools": [name for name in capability.tools if name != EXPAND_TOOL],
                    "max_queries": capability.max_queries,
                    "max_turns": capability.max_turns, "page_size": capability.page_size}
+        binary = BINARY_INDEX in capability.indexes
         key = sha256_hex({"role": role.value, "persona": persona, "stack": stack, "task": task,
-                          "lane": lane.value, "receipt": receipt})
+                          "lane": lane.value, "receipt": receipt, "binary_evidence": binary})
         with self._lock:
             cached = self._bundles.get(key)
         if cached is None:
             cached = compose_bundle(self.repository_root, role=role.value, persona=persona, stack=stack, task=task,
                                     task_input={"lane": lane.value}, capability=receipt,
-                                    vocabulary=self.vocabulary, crosswalk=self.crosswalk)
+                                    vocabulary=self.vocabulary, crosswalk=self.crosswalk, binary_evidence=binary)
             cached = {"bundle": cached, "text": render_prompt(cached)}
             with self._lock:
                 self._bundles[key] = cached
@@ -390,11 +396,14 @@ def _cell(ctx: ReviewContext, work: PackageWork, routing: Mapping[str, Any], *, 
             compact, labels, claim_id=claim.claim_id, schema_errors=schema_errors)
     profile = ctx.profile(role)
     tools = tuple(sorted((set(ctx.role_tools.get(role.value, ())) & IN_PROCESS_TOOLS) | {EXPAND_TOOL}))
+    indexes = tuple(name for name in ctx.index_names if name in INDEX_NAMES)
     capability = CellCapability.issue(
         run_id=ctx.run_id, manifest_sha256=ctx.core.manifest_sha256, package_id=work.package_id,
         package_sha256=work.sha256, role=role, round=work.round_index, tools=tools,
-        indexes=tuple(name for name in ctx.index_names if name in INDEX_NAMES),
+        indexes=indexes,
         entities=(*work.entities, *extra_entities),
+        # Configured binaries are review inputs as a whole, so their decompiled entities are granted by kind.
+        entity_prefixes=BINARY_ENTITY_PREFIXES if BINARY_INDEX in indexes else (),
         graph_scopes=tuple((work.document.get("retrieval") or {}).get("graph_scopes", ())),
         max_queries=max(1, profile.max_queries), max_turns=profile.max_turns,
         page_size=min(100, ctx.max_page_size), max_depth=min(8, ctx.max_depth), max_result_bytes=MAX_RESULT_BYTES)

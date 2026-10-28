@@ -57,8 +57,8 @@ Repository authority remains in [`../../AGENTS.md`](../../AGENTS.md). This page 
 - [`document-evidence-analysis.md`](document-evidence-analysis.md) — target document collection,
   route and boundary analysis, inference access, and the finding handoff design.
 - [`binary-decompilation.md`](binary-decompilation.md) — pre-run Ghidra decompilation of third-party
-  binaries: inputs, the hash-addressed publication store, gaps, how a review references a
-  publication, and the known-binary efficacy comparison.
+  binaries: inputs, the hash-addressed publication store, gaps, review intake and the
+  `job_binary_evidence_indexing` shards a review cites, and the known-binary efficacy comparison.
 - [`../operations/binary-decompilation.md`](../operations/binary-decompilation.md) — registering a
   binary, starting and verifying a decompilation, failures, and the efficacy command.
 - [`telemetry.md`](telemetry.md) — structured event and redaction design.

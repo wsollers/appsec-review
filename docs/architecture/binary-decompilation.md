@@ -22,14 +22,15 @@ review can then reference.
 | Publication store, manifest, verification, `current.json` pointer | Implemented |
 | Known-binary fixture and efficacy comparison | Implemented, run live |
 | Frozen record of configured binaries in each run | Implemented (existing configuration freeze) |
-| `job_review_intake` resolving and recording publications | **Designed, not implemented** |
-| Retrieval indices, MCP tools, and review-worker guidance | **Designed, not implemented** |
-| Reviewing a binary with no source tree at all | **Designed, not implemented** |
-| PE/Mach-O fixtures, debug-symbol inputs, managed-code routing | **Not implemented** |
+| `job_review_intake` resolving and recording publications (`binary_evidence.resolve_publications`, per-binary `required`) | Implemented |
+| `job_binary_evidence_indexing`: bounded `binary` retrieval shards, served by the existing retrieval and MCP tools | Implemented, in the CLI graph and the Dagster wave-1 topology |
+| `binary-evidence` runtime skill and binary citation rule | Implemented |
+| PE fixture with and without a PDB, debug-symbol inputs, managed-code routing | Implemented, tested without Docker; the live Ghidra run of the PE and PDB path is pending ([`../TODO.md`](../TODO.md)) |
+| Reviewing a binary with no source tree at all | Designed below, not implemented |
+| Large-binary measurement and tuned defaults | Not done; needs a large real binary and a Docker host ([`../TODO.md`](../TODO.md)) |
 
-Until the intake step exists, a review does not read a publication. The pre-run command, its
-store, and the lookup a review will use (`resolve_current`) are complete and tested, so the
-remaining work is wiring, not redesign.
+A review now consumes each configured binary's publication: intake freezes it, the index job
+indexes it, and review workers retrieve and cite it.
 
 ## Decisions
 
@@ -72,15 +73,19 @@ remaining work is wiring, not redesign.
  3. appsec-review binary-decompile
       --verify-only                 -->  re-hash the publication for the current image
 
- review submission (designed, not implemented)
- ---------------------------------------------
+ review submission (implemented)
+ -------------------------------
  4. appsec-review start --target ... -->  job_review_intake
-                                            freeze configuration (already records the binaries)
-                                            resolve_current(<sha256>) for each configured binary
-                                            record identity + manifest hash in review-intake.json
+                                            freeze configuration (records the binaries)
+                                            binary_evidence.resolve_publications:
+                                              resolve_current(<sha256>) for each configured binary
+                                              record identity + manifest hash in review-intake.json
                                           job_binary_evidence_indexing
-                                            bounded retrieval indices over the publication
-                                          review workers retrieve functions by address or edge
+                                            re-verify each frozen publication
+                                            bounded `binary` retrieval shard per binary
+                                          job_review_data_indexing composes it into the review index
+                                          review workers retrieve functions by address or edge,
+                                            guided by the `binary-evidence` runtime skill
 ```
 
 ## Inputs
@@ -128,8 +133,16 @@ Each `[[binary_decompilation.binaries]]` table:
 | `processor` | no | Ghidra language id, for example `ARM:LE:32:v8`, when detection is wrong. |
 | `compiler_spec` | no | Ghidra compiler spec id. Requires `processor`. |
 | `loader` | no | Ghidra loader class name, for example `BinaryLoader` for a raw image. |
+| `required` | no | Default `false`. When `true`, a binary with no verifiable publication blocks review intake instead of becoming a gap. |
+| `debug_symbols_path` | no | A separate PDB for a PE binary, absolute or relative to the configuration file. Requires `debug_symbols_sha256`. |
+| `debug_symbols_sha256` | no | Expected SHA-256 of the debug-symbol file. A mismatch refuses the run. |
 
 The repository default configuration declares no binaries.
+
+The debug-symbol file is verified, staged next to the binary under a sanitized name, and loaded by
+`AppsecLoadDebugSymbols.java` before auto-analysis. Its hash enters the publication identity, so the
+same binary with and without a PDB gives two publications. A PDB that Ghidra did not apply is a
+`debug_symbols_not_applied` gap. DWARF embedded in an ELF needs no separate input.
 
 ### Why this command may exceed the central runtime policy
 
@@ -280,6 +293,7 @@ Capacity settings (`memory`, `cpus`, `pids_limit`, `max_heap`, `timeout_seconds`
 | `pcode_unavailable` | script | Pseudo-C exists but no high function was produced. |
 | `function_limit`, `string_limit` | script | Records beyond the configured maximum were not exported. |
 | `managed_code` | normalizer | The program is .NET, JVM, or Dalvik bytecode. Native decompilation is not evidence for it. |
+| `debug_symbols_not_applied` | normalizer | A configured PDB was staged but Ghidra did not apply it. |
 
 ### Failures
 
@@ -308,55 +322,99 @@ The command prints one JSON object per binary with `status`, `binary_sha256`, `i
 
 ## Submitting a review that references a publication
 
-### What works today
+Run `appsec-review binary-decompile --verify-only` first, then `appsec-review start`. The run
+consumes each configured binary's publication through three stages.
 
-- The `[binary_decompilation]` table, including each binary's `id`, `path`, and `sha256`, is part
-  of the configuration document. Every run already freezes that document into
-  `runs/<run-id>/data/configuration/`, so a run records which binaries were configured.
-- `appsec_review.binary_decompilation.resolve_current(data_dir, sha256)` resolves the pointer for
-  a binary hash, verifies the whole publication, and returns its identity and manifest hash. It
-  needs no Docker. A pointer that names another binary, a path outside the store, or an edited
-  manifest is refused.
-- `appsec-review binary-decompile --verify-only` is the operator's gate before
-  `appsec-review start`.
+### Intake: `binary_evidence.resolve_publications`
 
-No review job calls `resolve_current` yet.
-
-### Designed intake contract
-
-`job_review_intake` gains one step, `binary_evidence`, with one task, `resolve_publications`:
+`job_review_intake` has a `binary_evidence` step with one task, `resolve_publications`:
 
 1. Read the frozen `[binary_decompilation]` binaries.
-2. For each, call `resolve_current` with the configured SHA-256.
-3. Record `{id, binary_sha256, identity, manifest_sha256, coverage, gaps}` under `binary_evidence`
-   in `review-intake.json`. From then on the run uses that identity and manifest hash, so moving
-   `current.json` later cannot change a run in progress or a resumed run.
-4. A binary with no verifiable publication becomes a `binary_decompilation_unavailable` gap in the
-   intake handoff. A per-binary `required = true` key will turn that gap into a blocked intake.
+2. For each, call `resolve_current(data_dir, sha256)`, which verifies the whole publication again
+   and needs no Docker. It does not trust the pre-run command's exit code.
+3. Write `binary-evidence.json` (`appsec-review/binary-evidence-intake/1`) with each binary's
+   `binary_id`, `binary_sha256`, `identity`, `manifest_sha256`, publication path, `coverage`, and
+   `gaps`, and reference it by hash under `binary_evidence` in `review-intake.json`. From then on
+   the run uses that identity and manifest hash, so moving `current.json` later cannot change a
+   run in progress or a resumed run.
+4. A binary with no verifiable publication becomes a `binary_decompilation_unavailable` gap. With
+   `required = true` it fails intake instead.
 
-The task verifies the publication again; it does not trust the pre-run command's exit code.
+### Index: `job_binary_evidence_indexing`
 
-### Designed downstream use
+The job depends on `job_target_catalog` (and so on the accepted intake) and runs in the CLI graph
+after `job_cpg_analysis` and in the Dagster wave-1 topology. It reads only the accepted intake
+handoff, re-verifies each frozen publication, and refuses one whose manifest hash, identity, or
+binary hash differs from what intake recorded. For each binary it writes one current `binary`
+retrieval shard:
 
-- **`job_binary_evidence_indexing`** builds bounded retrieval indices from each verified
-  publication: function by address and by name, import to callers, callers and callees within a
-  bounded depth, and a string index. It registers them as a dataset whose records keep the binary
-  hash, function address, and `binary-derived` provenance. This follows the retrieval rule in
-  `AGENTS.md`: workers query indices and never scan the publication tree.
-- **Retrieval tools** expose those queries through the existing MCP gateway.
-- **Review workers** receive a registered runtime skill that states how binary-derived evidence
-  differs from source: names may be invented, types are guesses, inlining hides functions, and
-  recovered text is untrusted data. A finding cites the binary SHA-256, the function address, and
-  `pseudo-c/<address>.c:<line>`, and carries a `binary-derived` basis so scoring can discount it.
-- **Existing binary lanes** (BLint, Syft, Grype, cve-bin-tool) can run on the same file and join on
-  its SHA-256.
+| Entity | Located | Content |
+| --- | --- | --- |
+| `binary_function` | Yes, in `@binary/<sha256>/<address>.c` | Address, name, signature, flags, decompile status; retrieval text is the name and bounded pseudo-C |
+| `binary_call_site` | On the one pseudo-C line that names the callee, else ambiguous or unlocated | Caller, callee, call address, call kind |
+| `binary_import` | Never | Library, name, thunk address |
+| `binary_string` | Never | Address, bounded value, referencing functions |
 
-### Reviewing a binary with no source tree
+Relations: `CONTAINS` (function to its call sites), `CALLS` (call site, and its caller function, to
+the callee function or import, which gives call neighbourhoods and import callers), and `REFERENCES` (function to string,
+thunk to import). Each decompiled function's pseudo-C is detached into
+`data/binary-evidence/sources/` in the run, hash-pinned, so `read_excerpt` and citation
+re-resolution read it like any other accepted source.
 
-`job_review_intake` currently requires a target directory that contains text files. A review whose
-only input is a binary needs a target kind that the catalog, build, and static lanes accept as "no
-source", each publishing `NOT_APPLICABLE`. That is a separate change and is not designed in detail
-here.
+Every record keeps the binary hash, function address, and `provenance: binary-derived`. Workers
+query the index through the existing retrieval and MCP tools (`search`, `find`, `trace`, `read_excerpt`, `coverage`)
+over index name `binary`; they never scan the publication tree.
+
+Bounds are central settings under `[jobs.job_binary_evidence_indexing.settings]`
+(`max_functions_per_binary`, `max_call_sites_per_binary`, `max_imports_per_binary`,
+`max_strings_per_binary`, `max_string_xrefs`, `max_string_chars`, `max_entity_text_bytes`). Each
+truncation, unresolved or unaddressed call, publication gap, incomplete publication coverage,
+unavailable binary, and managed-code program is a named coverage gap, and the job ends
+`COMPLETED_WITH_GAPS`. With no configured binaries the job publishes an empty, `NOT_APPLICABLE`
+shard set, and the composed review index is unchanged.
+
+**Managed-code routing.** When the publication's coverage marks managed code, the job indexes no
+pseudo-C for it and records a gap naming the suitable decompiler: ILSpy for CIL, jadx or CFR for
+JVM, jadx for Dalvik. No managed decompiler runs yet.
+
+### Review: the `binary-evidence` runtime skill and citation rule
+
+`pipeline/skills/binary-evidence/SKILL.md` is a registered runtime skill. Inference review loads
+it only when the review index contains a `binary` shard. It tells workers that names and types
+may be invented, inlining and unresolved indirect calls hide behaviour, truncated or managed code
+proves no absence, and recovered text is data.
+
+The citation rule is enforced, not only stated. `review.evidence.resolve_relation` accepts a
+binary-derived citation only when it carries a pseudo-C location whose path names the same binary
+hash and function address as its payload (`binary_anchor`). A `binary_import` or `binary_string`,
+or a function Ghidra did not decompile, becomes the gap "binary-derived evidence must cite binary
+hash, function address and pseudo-C line".
+
+**Existing binary lanes** (BLint, Syft, Grype, cve-bin-tool) can run on the same file and join on
+its SHA-256.
+
+### Reviewing a binary with no source tree (designed, not implemented)
+
+`job_review_intake` requires a target directory that contains text files. A binary-only review
+needs a distinct target kind:
+
+1. **Request.** `appsec-review start --binary <id>` (repeatable) with no `--target`. The target
+   record gains `kind: "binary"` (source reviews stay `kind: "source"`) and the binary ids. Intake
+   requires every named binary to be configured and treats each as `required = true`.
+2. **Intake.** Skip the source-tree walk and text-file requirement, and write an empty source
+   inventory with the reason `binary-only target`. The `binary_evidence` step is unchanged.
+3. **Source lanes.** The catalog, build, compile-scope, CodeQL, Clang, Infer, Semgrep, clangd and
+   CPG jobs read `kind` from the accepted intake and publish `NOT_APPLICABLE` with that reason, as
+   they already do for an empty scope set. Topology does not change, so one graph serves both
+   kinds.
+4. **Binary lanes.** `job_binary_evidence_indexing` plus the existing file-level binary scanners
+   (BLint, Syft, Grype, cve-bin-tool) pointed at the verified binary files.
+5. **Review.** Packaging seeds candidate weaknesses from `binary_call_site` entities whose callees
+   are known-dangerous imports (`strcpy`, `memcpy`, `system`, and similar), since there are no
+   source scanner observations. The `binary-evidence` skill is mandatory. The report states that
+   the review had no source.
+
+The open decision is the seed list and its bounds; everything else reuses existing contracts.
 
 ## Security model
 
@@ -368,7 +426,8 @@ here.
 | Path or option injection | The staged file name is sanitized. The wrapper validates every option against a pattern and uses no `eval`. Function addresses are validated before they become file names. |
 | Oversized or malformed output | A kernel file-size limit, per-function and per-table bounds, a per-line bound in the normalizer, and strict JSON object checks. |
 | Tampering after publication | The manifest hash chain, verified on every reuse and by `resolve_current`. |
-| Prompt injection through strings or symbols | Publications are labelled as data. No review worker reads them yet; the designed runtime skill must restate this before one does. |
+| Prompt injection through strings or symbols | Publications are labelled as data. The index job stores recovered text only as entity payload, and the `binary-evidence` runtime skill restates that it is data before a worker reads it. |
+| A publication changes under a running review | Intake freezes the identity and manifest hash; the index job re-verifies the publication and each pseudo-C file against them and refuses a mismatch. |
 | Unlicensed reverse engineering | `authorization` is mandatory and recorded. It is a statement by the operator; the tool does not check it. |
 
 ## Known-binary efficacy comparison
@@ -417,14 +476,18 @@ not measure efficacy on C++, on large binaries, or on Windows binaries.
 | `tests/test_ghidra_tool.py` | Catalog registration, asset lock, Dockerfile, closure inventory, wrapper, export script contract | no |
 | `tests/test_binary_decompilation.py` | Configuration, identity, runner argv and limits, publication, schema conformance, reuse, pointer resolution, tampering, failures, gaps, efficacy evaluator, CLI | no (fake runner) |
 | `tests/test_live_ghidra_decompilation.py` | Fixture compile, real Ghidra run, scoring | yes; skipped when the images are absent |
+| `tests/test_binary_evidence_indexing.py` | Intake resolution, `required`, mismatches; end-to-end index, retrieval, `binary_anchor`, citation gaps; not-applicable, unavailable, tampered and truncated cases; PE with and without a PDB; managed-code routing; registry, topology, matrix, runtime skill | no |
 
 ## Limitations
 
 - **Pseudo-C is lossy.** Types are inferred, C++ becomes C with explicit vtable calls, and inlined
-  functions disappear. Debug symbols improve output greatly, and there is no input for a separate
-  PDB or DWARF file yet.
-- **Only an ELF fixture exists.** PE and Mach-O go through the same code but have not been run.
-- **Managed code is detected, not handled.** .NET and JVM bytecode need a managed decompiler.
+  functions disappear. Debug symbols improve output greatly. A separate PDB is accepted for PE
+  binaries; separate DWARF (`.debug` files) is not.
+- **Only an ELF fixture has run live.** The PE fixture with and without a PDB is exercised through
+  the runner, normalizer and index job with a fake Ghidra; the live run needs the rebuilt image.
+  Mach-O has not been run.
+- **Managed code is routed, not decompiled.** The index job records which managed decompiler is
+  needed; none runs.
 - **No source scanners run on the output**, by decision 1.
 - **Large binaries are unmeasured.** The defaults (8 GiB, 4 CPUs, 2 hours) are starting values, not
   tuned ones. All tables are loaded into memory during normalization.
@@ -438,9 +501,14 @@ not measure efficacy on C++, on large binaries, or on Windows binaries.
 
 ## Next slices
 
-1. Intake `binary_evidence` step and the `required` key.
-2. `job_binary_evidence_indexing`, retrieval tools, and the runtime skill.
-3. A PE fixture with and without a PDB, and optional debug-symbol inputs.
-4. Managed-code detection routed to a named gap with a suggested tool.
-5. A "no source" target kind for binary-only reviews.
-6. Advisory scan of the image, a single `base-jdk`, and a pinned catalog `image_id`.
+Slices 1 to 4 of the original list (intake step, index job with retrieval and runtime skill, PE
+and PDB inputs, managed-code routing) are implemented. Remaining, tracked in
+[`../TODO.md`](../TODO.md):
+
+1. Rebuild `tool-ghidra` with `AppsecLoadDebugSymbols.java` and run the PE fixture live, with and
+   without its PDB.
+2. Measure memory, time, and file counts on a large real binary; tune the decompilation and index
+   bounds.
+3. The binary-only target kind designed above.
+4. A managed-code decompiler lane.
+5. Advisory scan of the image, a single `base-jdk`, and a pinned catalog `image_id`.

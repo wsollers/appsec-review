@@ -238,7 +238,9 @@ Configuration lives in `appsec-review.toml`:
   `export` action). The defaults equal the `GraphSettings` contract: 200000, 268435456 and 1800.
 - `[[jobs.job_codeql_analysis.settings.languages.cpp.export_queries]]` must equal
   `export_query_packs.cpp` in `containers/tools/codeql/assets.lock.json` field for field. At most
-  one pack is allowed per language, and only `cpp` may declare one. Planning stops with a
+  one pack is allowed per language, and it must be that language's own pack
+  (`rules/codeql-graph-export/<language>`, `graph-export-<language>`); only `cpp` is configured
+  and lock-pinned in the shipped configuration. Planning stops with a
   framework-integrity failure when any language's block differs from its lock entry. Runtime
   reads the declared pack, column and catalog contracts for execution; it does not fingerprint
   the supplied lock, pack tree, suite or runner. Relevant operator release declarations determine
