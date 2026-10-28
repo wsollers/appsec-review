@@ -16,6 +16,9 @@ Failed framework attempts are rejected diagnostics, never accepted/latest public
 `/1` handoffs require a rerun (`handoff_schema_changed`), not an in-place conversion. Runtime,
 operational consumers, and the concrete scanner provenance slice use the upgraded contract.
 Rejected diagnostics have separate immutable files and preserve accepted publication history.
+Prepared and reused dispatch claims are verified against persisted identities in both assurance
+modes, with managed authentication in addition. Repeated finalization reuses an already accepted
+publication only after revalidating its immutable handoff bytes and binding.
 
 The generic resume planner walks jobs in graph order. Once a job cannot be reused, it schedules that
 job and invalidates the transitive downstream closure. It never treats time as proof of freshness.

@@ -47,7 +47,9 @@ alongside `HANDOFF_ACCEPTED`. Each event binds `handoff_reference`
 `coverage_disposition`, `unit_count`, `gap_count`, and `retry_required`.
 A rejection may use a null handoff reference only when a safe diagnostic publication is unavailable.
 Accepted events retain `handoff_path`, `handoff_sha256`, and `completion_status` for existing
-consumers. Validation events describe publication work, not repeated validation on checkpoint reuse.
+consumers. The event's completion status is bounded to known runtime terminals or `UNKNOWN`;
+native producer status remains in receipt accounting, not arbitrary telemetry labels.
+Validation events describe publication work, not repeated validation on checkpoint reuse.
 
 `NATIVE_OUTPUT_RETAINED.retention_receipt` and
 `OBSERVATION_PROVENANCE_VALIDATED.provenance_receipt` bind immutable retention/provenance
@@ -58,6 +60,9 @@ never raw reports, source, argv, secrets, or per-result message text. The fixed 
 are `handoff_validations`, `native_output_references`, `native_output_bytes`,
 `observation_references`, and `provenance_gaps`; paths, rule IDs, gap reasons, and arbitrary producer
 status strings must not become unbounded counter labels.
+Native retention/provenance events take run/job/attempt identity explicitly from the publication
+owner. Native reference/byte work counters also measure verified reuse consumption; they describe
+logical reference processing, not fresh scanner execution or physical retained occupancy.
 
 The metrics contract is `appsec-review/run-metrics/5`, adding `interchange` with schema
 `appsec-review/interchange-metrics/1`. It derives publication/receipt identities and verifies the

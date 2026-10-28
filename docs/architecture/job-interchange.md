@@ -55,6 +55,10 @@ The outcomes root is `{schema, run_id, job_id, attempt_id, target_snapshot, unit
 the handoff. In [`runtime/handoff.py`](../../src/appsec_review/runtime/handoff.py),
 `build_outcomes` derives accounting from the claim's unit topology, verified task terminal receipts,
 and explicitly declared producer status/gaps, not arbitrary nested tool payloads or narrative text.
+Producer `dispositions` is a typed array of scope records, not a numeric count map. The target
+analysis plan uses `disposition_counts` for selected/skipped scanner and model-call counts.
+Malformed producer arrays reject acceptance; diagnostic reconstruction records unavailable
+coverage and `unknown_producer_status` without treating invalid declarations as success.
 `verify_outcomes(run_root, handoff)` reconstructs that document and requires canonical equality;
 `verify_handoff_integrity(run_root, handoff, accepted_only=True)` also verifies frozen configuration,
 claim/input/dataset identities, result binding, and required outputs. Both are separate from
@@ -65,6 +69,9 @@ Publication binds the frozen `data/configuration/manifest.json`, `resolved.json`
 `appsec-review.toml` files as run artifacts. Source inventory path/hash fields and exact frozen
 source-layer identities are metadata, not authority to open external paths. Declared run-artifact
 fields and run `data/` references still require safe resolution and exact byte verification.
+Source inventories remain source data even when a target-relative filename starts with `data/`.
+For scoped binary results, explicit `run_path` selects the retained run bytes; a display `path`
+does not replace that identity.
 Required-index preflight and input-manifest consumption finish before the publication freezes its
 artifact closure. If later publication I/O fails, the runtime attempts to restore both the job
 latest pointer and accepted-index pointer; rollback errors are attached to the original failure.
@@ -90,6 +97,12 @@ Strict assurance re-verifies referenced evidence at the trust boundary. Managed 
 an authenticated, unique accepted evidence-target binding; it must not select an arbitrary upstream
 snapshot or silently substitute a source fingerprint. Verified upstream disagreement is an
 integrity failure in either mode.
+
+Prepared claims compare canonical dispatch identity with persisted preparation in strict and
+managed modes; managed claims additionally authenticate it. Reused claims reverify accepted
+handoff bytes, run/job/attempt/target/upstream identities, and admission at dispatch.
+An idempotent finalization retry revalidates the immutable accepted handoff before reuse; it does
+not rewrite accepted history or grant freshness based on a pointer alone.
 
 The input-set projection contains `resolved_config_sha256`, `job_config_sha256`,
 `source_fingerprint`, `target_snapshot`, `input_identity`, `dataset_contract_sha256`,
@@ -126,6 +139,12 @@ invocation identities supporting a collapsed observation. Deduplicating storage 
 those distinct provenance edges. The pure wire schema also permits repeated reference entries.
 Capture or normalization bounds require explicit truncation/completeness and coverage gaps.
 
+Bounded reports available after a failed or timed-out invocation are retained as incomplete
+diagnostic evidence. A failed CodeQL action's SARIF is diagnostic-only and produces no normalized
+finding observations. A no-package or `SKIPPED_NA` result retains its available native/execution
+reference closure without becoming security-negative evidence. Empty scanner JSON is a parser
+failure, not an empty successful result.
+
 `appsec-review/observation/1` is common metadata attached to a domain-owned record. It contains:
 `observation_class`, `record_kind`, scanner/rule identity, `reported_severity`, `evidence_refs`,
 `gap_ids`, and `payload_schema`. Severity preserves normalized `value` and nonempty native value,
@@ -140,6 +159,8 @@ an explicit `provenance_unavailable` gap; malformed common metadata fails rather
 back. This is not permission to admit a legacy `/1` handoff. The closed common projection
 preserves the semantic `secret` class and safe canonical reference/selector fields while ordinary
 payload redaction remains unchanged.
+Bytecode-analysis findings classify as `source_sast`; inventory and scanner diagnostics remain
+separate observation classes/record kinds.
 
 The concrete provenance slice covers static evidence collection, CodeQL SARIF normalization, and
 produced-artifact scanners. Producer-specific paths outside that slice remain named provenance

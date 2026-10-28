@@ -77,6 +77,12 @@ are merged into their common evidence references. Identical reference values are
 distinct original results are not discarded. Publication validates those selectors against detached
 bytes and retains the provenance-validation receipt in the evidence envelope.
 
+Reports still available after failure/timeout are retained within bounds as incomplete diagnostics;
+no-package OSV results retain native/execution evidence too. Missing or oversized output becomes a
+named `native_output_unavailable` gap rather than an invented complete report. Empty JSON is a
+parser failure. Catalog-backed source bytes/hashes are checked before producing or reusing the
+observation shard; out-of-catalog native source paths carry `location_unresolved` gaps.
+
 Every producer emits an immutable SQLite shard. Retrieval fans out deterministically across shards
 by target-relative path, native rule, component, package, advisory, language, and evidence ID. A
 cheap final barrier verifies every shard and disposition before publishing the combined manifest.

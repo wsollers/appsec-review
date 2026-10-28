@@ -2,7 +2,9 @@
 
 Status: shared contracts, runtime publication/admission, concrete native provenance, operational
 consumers, and receipt-derived metrics are integrated in source. This record reconciles parent
-checkpoint `4798b33a`, metrics checkpoint `7820273f`, and runtime hardening `177446e3`.
+checkpoint `4798b33a`, metrics checkpoint `7820273f`, runtime hardening `177446e3`/`59d799ef`,
+consumer follow-up `ca5b4240`, and native failure-path follow-up `c1aed046`. Parent producer
+reconciliation `68899ae5` separates analysis-plan numeric counts from typed dispositions.
 Final consolidated parent regression results remain pending; this is not live deployment acceptance.
 
 ## Settled decisions
@@ -65,6 +67,13 @@ restoration attempts for both accepted/latest pointers; a rollback error is an e
 the original failure, not silently reported success. Mixed successful scopes with unavailable
 subscopes remain partial rather than making the entire successful unit unavailable.
 
+Final runtime reconciliation distinguishes scoped binary `run_path` from display `path` and keeps
+source inventories as source metadata even for target-relative `data/*` paths. Canonical prepared
+claims and reused dispatch bindings verify in strict mode as well as managed mode. Malformed
+producer arrays fail accepted accounting but produce safe rejected diagnostic gaps. Idempotent
+finalization verifies accepted immutable state before reuse. Analysis-plan counters are named
+`disposition_counts`; `dispositions` remains a typed array rather than accepting a count map.
+
 `tests/handoff_fixture.py` now creates actual synthetic task result/status receipts, claim,
 frozen configuration, result publication, and canonically reconstructed outcomes. It does not
 silently convert production `/1` handoffs or substitute hashes for changed artifacts.
@@ -76,11 +85,30 @@ Static evidence uses `appsec-review/static-tool-evidence/2` and `static-evidence
 Produced-artifact records retain `appsec-review/artifact-security-record/2` and observation `/1`,
 with findings `/2`, parser `/3+<policy-identity>`, and normalizer `/2`.
 
+The final hardening does not change the settled root format versions:
+
+| Root format | Versioned schema |
+| --- | --- |
+| Shared publication/accounting | `appsec-review/job-handoff/2`, `appsec-review/job-outcomes/1` |
+| Shared observation/provenance | `appsec-review/observation/1`, `appsec-review/native-result-reference/1`, `appsec-review/producer-gap/1` |
+| Input identity | `appsec-review/job-inputs/1` |
+| Retention/validation receipts | `appsec-review/native-output-retention/1`, `appsec-review/observation-provenance-validation/1` inside `appsec-review/shared-receipt/1` |
+| Producer domain publications | `appsec-review/static-tool-evidence/2`, `appsec-review/codeql-analysis-handoff/1`, `appsec-review/artifact-security-analysis/1` |
+| Produced-artifact domain records | `appsec-review/artifact-security-record/2`, `appsec-review/artifact-security-observation/1` |
+| Metrics | `appsec-review/run-metrics/5`, `appsec-review/interchange-metrics/1` |
+
 Artifact parser-input retention is distinct from diagnostic stream capture:
 `parser_input_limit_bytes = 67108864` is a positive configured bound. Overflow is explicit
 incompleteness/coverage loss, not an unretained complete report presented as verifiable provenance.
 Partitioned static scans cite original invocations; CodeQL cites original SARIF result pointers;
 BLint finding provenance cites its original findings report rather than only the assembled report.
+Failure, timeout, and no-package paths retain bounded available reports with their actual
+completeness. Failed CodeQL SARIF remains diagnostic-only, not normalized findings. Artifact
+`SKIPPED_NA` paths retain native/execution closure; diagnostic truncation and missing execution
+provenance stay explicit. Compact Grype/Syft/BLint projections keep raw result identities without
+embedding bulky native records. Empty JSON fails parsing, and source hashes are checked before
+static shard reuse. Native lifecycle events explicitly carry the publication owner's actor
+identities; reference/byte work counters include verified reuse consumption, not fresh execution.
 
 The common retrieval projection preserves the semantic `secret` class and validated selectors
 and references. Arbitrary payload fields remain redacted. A malformed common record fails;
@@ -95,12 +123,15 @@ observation-to-result edges. Reuse is not fresh scanner execution.
 
 ## Verification and limits
 
-Local focused verification at source checkpoint `ad752a42` (parent `4798b33a` plus the exact
-`7820273f` metrics patch): **201 passed, 2 skipped** across `test_interchange_contract`,
+Local focused verification at source checkpoint `0369ac27` (parent `4798b33a`, the exact
+`7820273f` metrics patch, and final runtime/consumer/native patches listed above):
+**237 passed, 2 skipped** across `test_interchange_contract`,
 `test_interchange_schema`, `test_handoff_fixture`, `test_handoff_interchange`,
 `test_native_result_provenance`, and `test_interchange_consumers`. The two skips require actual
 Windows symlink privileges. The suite includes offline schema checks and all five executable
 architecture example documents.
+The earlier pre-hardening checkpoint `ad752a42` passed 201 tests with the same two symlink skips;
+these are checkpoint-specific results, not additive totals.
 
 The initial documentation-only pass also validated 50 positive/negative shared-record cases
 and local links in owned changed pages. The documentation/skill/docs-sync test group had

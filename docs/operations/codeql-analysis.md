@@ -431,6 +431,12 @@ Database and query checkpoint schema/identity are unchanged. A normalizer/proven
 change invalidates derived observations, not an otherwise valid CodeQL database checkpoint.
 SARIF ingestion is not a new external exporter, and raw SARIF bodies are not added to inference.
 
+When a failed action left bounded SARIF, it is retained as incomplete diagnostic evidence with no
+normalized finding observations; an oversized failed report is an explicit native-output gap.
+Missing query execution receipts and unresolved source locations produce provenance gaps.
+Source locations are safely resolved and checked against accepted hashes, not trusted from a
+scanner-supplied path.
+
 ## Acceptance checklist
 
 For a fresh `appsec-multi-vuln` run, verify:
