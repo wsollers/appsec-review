@@ -70,6 +70,18 @@ agents that inspect or change the repository. It is not a prompt for review work
 - Do not merge, auto-merge, rebase, or otherwise land a Dependabot pull request unless the user
   specifically instructs you to merge that pull request.
 
+## Verification
+
+- Verify code changes by running focused unit tests for the area changed and directly affected
+  behavior. Add or update unit tests to cover fixes and prevent regressions.
+- Use the smallest relevant set of unit-test files or cases; do not run the full test suite by
+  default. Apply the same scope after merging changes from another branch.
+- Integration tests, acceptance tests, and live Dagster runs are manual validation owned by the
+  user. Do not run them unless the user explicitly requests them.
+- Record the unit-test commands and results, including failures or coverage gaps. Identify any
+  integration, acceptance, or live Dagster validation still needed; passing unit tests does not
+  establish that those checks passed.
+
 ## Workspace hygiene
 
 - Keep disposable test state under `test/tmp/`. When concurrent or focused pytest sessions need
