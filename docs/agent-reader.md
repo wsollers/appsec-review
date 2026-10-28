@@ -62,6 +62,8 @@ Operations, one page per job or service:
   [`operations/dependency-intelligence.md`](operations/dependency-intelligence.md) — engineering
   security-signal production and recovery.
 - [`operations/cpp-index-jobs.md`](operations/cpp-index-jobs.md) — clangd symbol index and Joern CPG jobs.
+- [`operations/target-acquisition.md`](operations/target-acquisition.md) — pinned Git (with submodules),
+  Perforce, and GitLab/Gerrit/Azure DevOps review-export checkouts into `targets/`.
 - [`operations/binary-decompilation.md`](operations/binary-decompilation.md) — pre-run Ghidra decompilation of
   third-party binaries, publications, and the known-binary efficacy check; design in
   [`architecture/binary-decompilation.md`](architecture/binary-decompilation.md).

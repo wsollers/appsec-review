@@ -2,6 +2,8 @@
 
 from .binary_decompilation import BinaryDecompilationSettings, BinaryRequest, parse_binary_decompilation
 
+from .target_acquisition import TargetAcquisitionSettings, TargetRequest, parse_target_acquisition
+
 from .codeql import (
     CodeQLAnalysisSettings, CodeQLCustomQuerySettings, CodeQLExecutionMode, CodeQLLanguageSettings,
     CodeQLExportQuerySettings, CodeQLExportSettings, CodeQLPackQuerySettings,
@@ -27,6 +29,7 @@ from .loader import (
 
 __all__ = [
     "BinaryDecompilationSettings", "BinaryRequest", "parse_binary_decompilation",
+    "TargetAcquisitionSettings", "TargetRequest", "parse_target_acquisition",
     "AppConfig", "BuildCaptureConfig", "CodeQLAnalysisSettings", "CodeQLCustomQuerySettings", "CodeQLExecutionMode", "CodeQLExportQuerySettings", "CodeQLExportSettings", "CodeQLLanguageSettings", "CodeQLPackQuerySettings", "CppCompiledAnalysisSettings", "DagsterConfig", "DotnetBuildSettings", "GoBuildSettings", "JobConfig", "JvmBuildSettings", "LanguageBuildSettings", "NodeBuildSettings", "RuntimeConfig",
     "PhpBuildSettings", "ProcessingMode", "PythonBuildSettings", "RustBuildSettings", "ScheduleConfig", "StepConfig", "TargetDocumentSettings", "DocumentIssueSettings", "TaskConfig", "ToolCapabilityConfig",
     "WasmBuildSettings", "WasmProducerSettings", "load_config", "parse_codeql_settings",
